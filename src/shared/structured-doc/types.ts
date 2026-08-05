@@ -64,6 +64,20 @@ export interface StructuredDocAppendResult {
   created: boolean
 }
 
+export interface ReplaceRequest {
+  /** Target section, matched as a prefix of the normalized heading (same matching as AppendRequest.section). */
+  section: string
+  /** Raw markdown that becomes the section's ENTIRE new body (heading line is preserved/created). */
+  body: string
+}
+
+export interface StructuredDocReplaceResult {
+  /** Full document content after the replace. */
+  content: string
+  /** True when the target section did not exist and was created at EOF. */
+  created: boolean
+}
+
 /**
  * A per-format structured-document adapter. String-in / string-out keeps the
  * parse tree opaque to callers and the port trivially injectable.
@@ -76,4 +90,6 @@ export interface StructuredDoc {
   query(content: string, q: SectionQuery): StructuredDocQueryResult
   /** Insert an entry under a section; returns the full new document. */
   append(content: string, req: AppendRequest): StructuredDocAppendResult
+  /** Replace a section's entire body; returns the full new document. */
+  replace(content: string, req: ReplaceRequest): StructuredDocReplaceResult
 }

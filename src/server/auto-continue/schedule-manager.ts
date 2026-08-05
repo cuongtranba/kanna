@@ -71,7 +71,8 @@ export class ScheduleManager {
         return
       case "loop_armed":
       case "loop_disarmed":
-        // Loop arm/disarm are durable state markers, not schedule timers.
+      case "loop_run_outcome":
+        // Loop arm/disarm/outcome are durable state markers, not schedule timers.
         return
       default: {
         const _exhaustive: never = event

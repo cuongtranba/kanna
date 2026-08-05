@@ -13,6 +13,17 @@ export interface LoopState {
   /** Timestamp of the `loop_armed` event that armed the current loop. Used by
    *  the Loop Progress panel to exclude delegations from before the arm. */
   armedAt: number
+  /**
+   * Delegated iterations that have failed back-to-back since the last success.
+   * Reset by `loop_armed` and by any successful run. Lets the host disarm a
+   * loop that cannot make progress, instead of re-firing it indefinitely or
+   * relying on the model to give up at the right moment.
+   */
+  consecutiveFailures: number
+  /** The loop's oracle command, or null for a loop armed before this was recorded. */
+  verifyCommand: string | null
+  /** Absolute directory the oracle runs in, or null (see `verifyCommand`). */
+  workdirAbs: string | null
 }
 
 /**
@@ -20,22 +31,39 @@ export interface LoopState {
  * The latest `loop_armed` wins; a later `loop_disarmed` clears it. Pure replay
  * over the same durable event stream `deriveChatSchedules` uses, so it survives
  * restart for free. Used to (a) re-inject the loop prompt on every
- * background-completion wake and (b) tool-block loop-orchestrator turns.
+ * background-completion wake, (b) tool-block loop-orchestrator turns, and
+ * (c) decide when a failing loop has earned an automatic disarm.
  */
 export function deriveLoopState(
   events: readonly AutoContinueEvent[],
   chatId: string,
 ): LoopState | null {
-  let state: LoopState | null = null
+  // `failures` is tracked alongside rather than folded into `state` on every
+  // event: it avoids rebuilding the state object per outcome, and it keeps the
+  // one spread outside the loop where its operand is definitely an object.
+  let state: Omit<LoopState, "consecutiveFailures"> | null = null
+  let failures = 0
   for (const event of events) {
     if (event.chatId !== chatId) continue
     if (event.kind === "loop_armed") {
-      state = { subagentId: event.subagentId, prompt: event.prompt, armedAt: event.timestamp }
+      state = {
+        subagentId: event.subagentId,
+        prompt: event.prompt,
+        armedAt: event.timestamp,
+        verifyCommand: event.verifyCommand ?? null,
+        workdirAbs: event.workdirAbs ?? null,
+      }
+      failures = 0
     } else if (event.kind === "loop_disarmed") {
       state = null
+      failures = 0
+    } else if (event.kind === "loop_run_outcome" && state !== null) {
+      // Outcomes arriving while no loop is armed are ignored, not counted:
+      // they belong to a run the user already stopped.
+      failures = event.ok ? 0 : failures + 1
     }
   }
-  return state
+  return state === null ? null : { ...state, consecutiveFailures: failures }
 }
 
 const EMPTY: ChatSchedulesProjection = { schedules: {}, liveScheduleId: null }

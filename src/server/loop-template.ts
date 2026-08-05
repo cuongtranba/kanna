@@ -11,47 +11,93 @@
  * confines. File creation happens in `loop-template-io.adapter.ts`.
  */
 
+import path from "node:path"
+
 import { confinePathToDir, shellCommandIsParseable } from "./input-validation"
 
 const DEFAULT_TRACKING_FILE = "PROGRESS.md"
 
+/**
+ * Upper bound on `parallelism`, matched to the subagent permit pool's default
+ * concurrency (4). Asking for more would just queue behind permits, so the cap
+ * keeps the rendered promise honest rather than adding real throughput.
+ */
+export const MAX_PARALLELISM = 4
+
 export interface LoopSetupInput {
   /** Human-readable goal. Kept short — the model doesn't need prose here. */
   goal: string
-  /** Verify command run in the project cwd. Exit code 0 = goal met. */
+  /** Verify command run in `workdir`. Exit code 0 = goal met. */
   verifyCommand: string
-  /** Optional path (relative to cwd or absolute-inside-cwd). Default PROGRESS.md at cwd root. */
+  /** Optional path (relative to `workdir`, or absolute inside it). Default PROGRESS.md at its root. */
   trackingFile?: string
   /** Optional starter description of the first chunk written into the skeleton. */
   chunkHint?: string
   /**
    * Subagent the loop delegates each chunk to. Optional: when omitted the
-   * caller's configured `defaultLoopSubagentId` is used. Resolution + roster
-   * membership are validated so the loop never guesses at runtime.
+   * caller's configured `defaultLoopSubagentId` is used. Resolution, roster
+   * membership AND trigger mode are all validated so the loop never discovers
+   * an unusable worker at runtime.
    */
   subagentId?: string
+  /**
+   * Absolute directory the loop works in — where the verify command runs and
+   * where `trackingFile` is rooted. Defaults to the project cwd.
+   *
+   * Exists because the house rule is "always use a git worktree", so the work
+   * routinely lives in a SIBLING directory of the project checkout. Without
+   * this the tracking file is pinned to the project cwd while the branch it
+   * describes lives elsewhere, stranding the plan away from the code. Proving
+   * this is a worktree of the same repo needs git IO, so that check belongs to
+   * the caller, not to this pure module.
+   */
+  workdir?: string
+  /**
+   * How many chunks the orchestrator may delegate in one turn. Default 1
+   * (strictly serial — the historical behaviour). Above 1 the rendered prompt
+   * only permits chunks the plan explicitly marks `[parallel]`, each pinned to
+   * its own worktree, so an unmarked plan stays serial regardless.
+   */
+  parallelism?: number
+  /**
+   * Permit reconciling a git-TRACKED tracking file whose goal differs from
+   * this setup. Off by default: silently rewriting committed sections of a
+   * previous loop's record is data loss. See `assertTrackingFileSafe`.
+   */
+  force?: boolean
 }
 
 /**
- * Loop-setup context the caller supplies: the current subagent roster (id →
- * display name) and the configured default loop subagent. Kept separate from
- * `LoopSetupInput` because it is server state, not model-supplied args.
+ * Loop-setup context the caller supplies: the current subagent roster and the
+ * configured default loop subagent. Kept separate from `LoopSetupInput`
+ * because it is server state, not model-supplied args.
+ *
+ * `triggerMode` is part of the roster on purpose. It used to be dropped at the
+ * call site, so a manual-trigger subagent armed a loop happily and the
+ * `MANUAL_ONLY` refusal only surfaced at the first delegation — one full
+ * iteration later, after the context wipe, with no way back except a human.
  */
 export interface LoopSetupContext {
-  roster: readonly { id: string; name: string }[]
+  roster: readonly { id: string; name: string; triggerMode: "auto" | "manual" }[]
   defaultLoopSubagentId: string | null
 }
 
 export interface ResolvedLoopSetup {
   goal: string
   verifyCommand: string
-  /** Absolute path inside `cwd`. */
+  /** Absolute directory the verify command runs in and the tracking file is rooted at. */
+  workdirAbs: string
+  /** `workdirAbs` relative to the project cwd (`.` when they are the same); the prompt embeds this. */
+  workdirRel: string
+  /** Absolute path inside `workdirAbs`. */
   trackingFileAbs: string
-  /** Path relative to `cwd`; the prompt embeds this. */
+  /** Path relative to `workdirAbs`; the prompt embeds this. */
   trackingFileRel: string
   chunkHint: string | null
   /** Concrete subagent id the loop delegates to (never null after resolve). */
   subagentId: string
+  /** Chunks the orchestrator may delegate per turn (>= 1). */
+  parallelism: number
   /** The full recurring prompt the main agent will re-execute each iteration. */
   prompt: string
   /** Skeleton written when `trackingFileAbs` does not exist yet. */
@@ -66,12 +112,31 @@ function isNonBlankString<T>(v: T): v is T & string {
   return typeof v === "string" && v.trim().length > 0
 }
 
-/** Resolve a user-supplied tracking-file path against `cwd`; reject escapes. */
+/** Resolve a user-supplied tracking-file path against `workdir`; reject escapes. */
 function resolveTrackingFile(
   input: string | undefined,
-  cwd: string,
+  workdir: string,
 ): { abs: string; rel: string } | { error: string } {
-  return confinePathToDir(input ?? DEFAULT_TRACKING_FILE, cwd, "trackingFile")
+  return confinePathToDir(input ?? DEFAULT_TRACKING_FILE, workdir, "trackingFile")
+}
+
+/**
+ * The delegation rule, which is the one clause that varies with `parallelism`.
+ * At the default of 1 the loop is strictly serial. Above 1 we still refuse to
+ * infer independence: only chunks the PLAN marks `[parallel]` may fan out, and
+ * each must name its own worktree, because two workers sharing one checkout
+ * corrupt each other's edits.
+ */
+function renderDelegationRule(parallelism: number): string[] {
+  if (parallelism <= 1) {
+    return ["- Exactly ONE delegate_subagent per turn, then END THE TURN immediately."]
+  }
+  return [
+    `- You may delegate up to ${parallelism} chunks in this turn, but ONLY chunks the plan`,
+    "  explicitly marks `[parallel]`, and each one must name its OWN git worktree",
+    "  — two workers sharing a checkout will corrupt each other's edits.",
+    "  If the chunks are not marked, delegate exactly ONE. Then END THE TURN.",
+  ]
 }
 
 /** Deterministic prompt for the main agent, replayed each loop iteration. */
@@ -80,43 +145,92 @@ function renderLoopPrompt(args: {
   verifyCommand: string
   trackingFileRel: string
   subagentId: string
+  parallelism: number
+  workdirRel: string
 }): string {
-  const { goal, verifyCommand, trackingFileRel, subagentId } = args
+  const { goal, verifyCommand, trackingFileRel, subagentId, parallelism, workdirRel } = args
+  const f = `file: "${trackingFileRel}"`
+  // `.` is the project root; naming it that way reads better than a bare dot
+  // in the middle of a sentence, and keeps the worktree case unambiguous.
+  const workdirPhrase = workdirRel === "." ? "the project root" : workdirRel
+  // The worker's brief. Every tracking-file call names the file explicitly:
+  // omitting it defaulted the worker to PROGRESS.md, which is how a worker
+  // once wrote its progress row into a DIFFERENT loop's committed file.
+  const workerPrompt = [
+    `Do the next chunk in ${trackingFileRel}. All work happens in ${workdirPhrase}.`,
+    `To read the plan, call mcp__kanna__query_tracking_file({ ${f}, sections: [\\"Next chunk\\"] })`,
+    "— by section, never the whole file.",
+    `Verify your work with \`${verifyCommand}\` before you report success.`,
+    "On success: call",
+    `mcp__kanna__append_tracking_row({ ${f}, section: \\"Progress\\", entry: \\"- <date> <chunk> DONE\\", position: \\"top\\" })`,
+    "and then REPLACE the plan's next step with",
+    `mcp__kanna__replace_tracking_section({ ${f}, section: \\"Next chunk\\", body: \\"<the single next chunk, or DONE if the plan is finished>\\" })`,
+    "— replace, never append, or completed chunks pile up and get redone.",
+    "On failure: call",
+    `mcp__kanna__append_tracking_row({ ${f}, section: \\"Failed approaches\\", entry: \\"- <what you tried and why it failed>\\" })`,
+    "so the next iteration does not repeat it.",
+    "Never Read or Edit the whole tracking file. Terminate when done.",
+  ].join(" ")
+
   return [
     "You are the ORCHESTRATOR of an autonomous loop. You do NOT do the work",
     "yourself — you delegate it. Follow these steps EXACTLY every turn:",
     "",
     `1. Read the current plan by SECTION — do NOT read the whole ${trackingFileRel}.`,
-    `   Call mcp__kanna__query_tracking_file({ sections: ["Next chunk", "Progress"], list_limit: 5 })`,
-    `   (defaults to ${trackingFileRel}). This keeps the file off your context as it grows.`,
-    `2. Run the verify command with Bash: \`${verifyCommand}\`. Check its exit code.`,
-    "3. If the verify command exited 0, the goal is met. Print a one-line",
-    `   "GOAL MET: ${goal}" message, then call mcp__kanna__stop_loop({}) and`,
-    "   END THIS TURN. Do NOT call delegate_subagent.",
-    "4. Otherwise, take the \"Next chunk\" from step 1 and delegate it",
-    "   with EXACTLY this call (the subagent is fixed by configuration):",
+    `   Call mcp__kanna__query_tracking_file({ ${f}, sections: ["Next chunk", "Progress"], list_limit: 5 })`,
+    "   This keeps the file off your context as it grows.",
+    `2. Run the verify command (the ORACLE) with Bash, from ${workdirPhrase}:`,
+    `   \`${verifyCommand}\`. Check its exit code.`,
+    "3. Decide, using BOTH signals — the oracle is only a proxy, the plan is the",
+    "   authority. Four cases:",
+    "   (a) oracle exited 0 AND \"Next chunk\" is empty / says DONE → the goal is",
+    `       met. Print "GOAL MET: ${goal}", call mcp__kanna__stop_loop({}) and`,
+    "       END THIS TURN. Do NOT call delegate_subagent.",
+    "   (b) oracle exited 0 BUT \"Next chunk\" still lists real work → the oracle",
+    "       is too weak to define done. Print",
+    "       \"ORACLE TOO WEAK: <what the plan still lists>\", call",
+    "       mcp__kanna__stop_loop({}) and END THIS TURN so a human can tighten",
+    "       it. Do NOT declare the goal met, and do NOT delegate.",
+    "   (c) oracle failed AND \"Next chunk\" has work → normal case, go to step 4.",
+    "   (d) oracle failed BUT \"Next chunk\" is empty → the plan ran out while the",
+    "       goal is unmet. Write the next step yourself with",
+    `       mcp__kanna__replace_tracking_section({ ${f}, section: "Next chunk", body: "<one concrete chunk>" })`,
+    "       then go to step 4.",
+    "4. Delegate the \"Next chunk\" work with EXACTLY this call (the subagent is",
+    "   fixed by configuration):",
     "",
     "     mcp__kanna__delegate_subagent({",
     `       subagent_id: "${subagentId}",`,
     "       run_in_background: true,",
-    `       prompt: "Do the next chunk in ${trackingFileRel}. To read the plan, call mcp__kanna__query_tracking_file (by section — never read the whole file). Verify locally with \`${verifyCommand}\`. On success: call mcp__kanna__append_tracking_row({ section: \\"Progress\\", entry: \\"- <date> <chunk> DONE\\", position: \\"top\\" }) and append the next chunk under \\"Next chunk\\". On failure: append_tracking_row({ section: \\"Failed approaches\\", entry: \\"- <reason>\\" }). Never Read or Edit the whole tracking file. Terminate when done.",`,
+    `       prompt: "${workerPrompt}",`,
     "     })",
     "",
-    "5. End your turn. Kanna will /clear your context and re-fire this exact",
-    `   prompt after the subagent completes. Your ONLY durable state is ${trackingFileRel}.`,
+    "5. If THIS turn began with a task-notification reporting a FAILED run, class",
+    "   the failure before you re-delegate:",
+    "   - INFRA (AUTH_REQUIRED, CAP_EXCEEDED, DEPTH_EXCEEDED, timeout, spawn",
+    "     failure): the work was never attempted. Re-delegate the SAME chunk",
+    "     unchanged and do NOT call stop_loop — Kanna disarms the loop itself",
+    "     after repeated failures, so stopping here just costs a human round-trip.",
+    "   - WORK (the worker ran and could not finish): record it with",
+    `     mcp__kanna__append_tracking_row({ ${f}, section: "Failed approaches", entry: "- <reason>" })`,
+    "     then delegate a DIFFERENT approach to the same chunk.",
+    "6. End your turn. Kanna will /clear your context and re-fire this exact",
+    `   prompt after the worker completes. Your ONLY durable state is ${trackingFileRel}.`,
     "",
     "HARD RULES (do not violate):",
     "- You are the orchestrator. NEVER edit code yourself: do NOT use Edit,",
     "  Write, MultiEdit, or the Task/Agent tool. Kanna blocks these tools in",
     "  loop turns; attempting them wastes the turn.",
     `- NEVER read the whole ${trackingFileRel}. Use mcp__kanna__query_tracking_file`,
-    "  (read) and mcp__kanna__append_tracking_row (write) so the file stays off",
-    "  your context no matter how large it grows.",
-    "- Exactly ONE delegate_subagent per turn, then END THE TURN immediately.",
+    "  (read), mcp__kanna__append_tracking_row and",
+    "  mcp__kanna__replace_tracking_section (write) so the file stays off your",
+    "  context no matter how large it grows.",
+    ...renderDelegationRule(parallelism),
     "- All progress lives in the tracking file, never in your context.",
     "",
     `Goal (for reference): ${goal}`,
     `Verify command: \`${verifyCommand}\``,
+    `Work directory: ${workdirRel}`,
   ].join("\n")
 }
 
@@ -266,6 +380,46 @@ export function reconcileTrackingFile(existing: string, args: SkeletonArgs): Tra
   return { content, changed, actions: changed ? actions : [] }
 }
 
+export type TrackingFileSafety = { ok: true } | { ok: false; error: string }
+
+/**
+ * Second-phase guard, applied by the caller once it has READ the existing
+ * tracking file and asked git whether it is tracked. Pure: the caller does the
+ * IO, this decides.
+ *
+ * `reconcileTrackingFile` rewrites the server-owned `## Goal` / `## Verify
+ * command` sections in place. That is right for a scratch file and wrong for a
+ * committed one: a `setup_loop` for a NEW goal once silently overwrote the
+ * committed record of a previous, finished loop, and the only reason it was
+ * not lost is that a human happened to re-read the file and `git checkout`ed
+ * it. So: if the file is git-tracked and already declares a DIFFERENT goal,
+ * refuse and make the caller pick a different tracking file or pass `force`.
+ *
+ * Deliberately narrow — an untracked file, a matching goal (idempotent
+ * re-arm), or a file with no `## Goal` yet all pass straight through.
+ */
+export function assertTrackingFileSafe(
+  existing: string,
+  args: { goal: string; gitTracked: boolean; force: boolean },
+): TrackingFileSafety {
+  if (!args.gitTracked || args.force) return { ok: true }
+
+  const { sections } = parseSections(existing)
+  const goalSection = sections.find((s) => s.normalizedHeading === "goal")
+  if (!goalSection) return { ok: true }
+
+  const existingGoal = goalSection.lines.slice(1).join("\n").trim()
+  if (existingGoal.length === 0 || existingGoal === args.goal.trim()) return { ok: true }
+
+  return {
+    ok: false,
+    error:
+      "refusing to overwrite a git-tracked tracking file that records a different goal"
+      + ` (existing goal: "${existingGoal.split("\n")[0]}").`
+      + " Pass a different trackingFile for this loop, or force: true to overwrite it.",
+  }
+}
+
 /**
  * Validate + resolve a loop setup. Pure. Returns either a rejection with a
  * flat list of user-facing errors, or the fully-resolved payload the caller
@@ -299,17 +453,46 @@ export function validateLoopSetup(
     : (context.defaultLoopSubagentId ?? null)
   if (!requestedSubagentId) {
     errors.push("subagentId is required: pass it explicitly or set a default loop subagent in Settings")
-  } else if (!context.roster.some((s) => s.id === requestedSubagentId)) {
-    errors.push(`subagentId "${requestedSubagentId}" is not a known subagent`)
+  } else {
+    const worker = context.roster.find((s) => s.id === requestedSubagentId)
+    if (!worker) {
+      errors.push(`subagentId "${requestedSubagentId}" is not a known subagent`)
+    } else if (worker.triggerMode === "manual") {
+      // Arming here would wipe the context and only fail at the first
+      // delegation, one iteration later, with MANUAL_ONLY.
+      errors.push(
+        `subagent "${worker.name}" is manual-trigger and cannot be driven by a loop:`
+        + " the loop delegates automatically, with no @-mention to authorize it."
+        + " Switch it to auto in Settings → Subagents, or pick an auto subagent.",
+      )
+    }
   }
 
-  const resolved = resolveTrackingFile(input.trackingFile, cwd)
+  // The loop's working directory: an explicit worktree, else the project cwd.
+  let workdirAbs = cwd
+  if (input.workdir !== undefined) {
+    if (!isNonBlankString(input.workdir) || !path.isAbsolute(input.workdir)) {
+      errors.push("workdir must be a non-empty absolute path when provided")
+    } else {
+      workdirAbs = path.normalize(input.workdir.trim())
+    }
+  }
+
+  const parallelism = input.parallelism ?? 1
+  if (!Number.isInteger(parallelism) || parallelism < 1 || parallelism > MAX_PARALLELISM) {
+    errors.push(`parallelism must be an integer between 1 and ${MAX_PARALLELISM}`)
+  }
+
+  // Tracking file is rooted at the WORKDIR, so a worktree loop keeps its plan
+  // beside the branch it describes rather than back in the project checkout.
+  const resolved = resolveTrackingFile(input.trackingFile, workdirAbs)
   if ("error" in resolved) errors.push(resolved.error)
 
   if (errors.length > 0) return { ok: false, errors }
   if ("error" in resolved) return { ok: false, errors: [resolved.error] } // unreachable; narrows type
   if (requestedSubagentId === null) return { ok: false, errors: ["internal: subagentId unresolved"] } // narrows type
   const subagentId = requestedSubagentId
+  const workdirRel = workdirAbs === cwd ? "." : (path.relative(cwd, workdirAbs) || ".")
 
   const chunkHint = input.chunkHint?.trim() ? input.chunkHint.trim() : null
   const goal = input.goal.trim()
@@ -319,6 +502,8 @@ export function validateLoopSetup(
     verifyCommand,
     trackingFileRel: resolved.rel,
     subagentId,
+    parallelism,
+    workdirRel,
   })
 
   // Belt-and-suspenders structural check on the rendered prompt. Guards
@@ -333,10 +518,18 @@ export function validateLoopSetup(
     "stop_loop",
     "query_tracking_file",
     "append_tracking_row",
+    "replace_tracking_section",
     "GOAL MET",
+    "ORACLE TOO WEAK",
     "END THIS TURN",
     "/clear",
     "NEVER edit code yourself",
+    // The plan-vs-oracle gate and the failure taxonomy are the two clauses
+    // that keep the loop from terminating early / dying on a transient error.
+    "BOTH",
+    "AUTH_REQUIRED",
+    "do NOT call stop_loop",
+    "Failed approaches",
   ]
   const missing = requiredSubstrings.filter((s) => !prompt.includes(s))
   if (missing.length > 0) {
@@ -351,10 +544,13 @@ export function validateLoopSetup(
     resolved: {
       goal,
       verifyCommand,
+      workdirAbs,
+      workdirRel,
       trackingFileAbs: resolved.abs,
       trackingFileRel: resolved.rel,
       chunkHint,
       subagentId,
+      parallelism,
       prompt,
       skeleton: renderSkeleton({ goal, verifyCommand, chunkHint }),
     },

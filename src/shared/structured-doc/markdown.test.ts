@@ -23,6 +23,24 @@ const DOC = [
   "",
 ].join("\n")
 
+/** A section body holding a nested list + a fence whose text mimics a heading. */
+const FENCED = [
+  "## Next chunk",
+  "Run these steps:",
+  "",
+  "- outer item",
+  "  - nested item",
+  "",
+  "```sh",
+  "## not a heading",
+  "bun run lint",
+  "```",
+  "",
+  "## Notes",
+  "keep me",
+  "",
+].join("\n")
+
 describe("markdownDoc.sections", () => {
   test("lists every level-2 section with normalized headings", () => {
     const secs = markdownDoc.sections(DOC)
@@ -135,5 +153,79 @@ describe("markdownDoc.append", () => {
     const res = markdownDoc.query(appended, { sections: ["progress"], listLimit: 1 })
     expect(res.content).toContain("chunk 4 DONE")
     expect(res.content).toContain("+3 older entries omitted")
+  })
+})
+
+describe("markdownDoc.replace", () => {
+  test("swaps a mid-document section body and drops the old one", () => {
+    const res = markdownDoc.replace(DOC, { section: "goal", body: "typecheck passes" })
+    expect(res.created).toBe(false)
+    expect(res.content).toContain("## Goal")
+    expect(res.content).toContain("typecheck passes")
+    expect(res.content).not.toContain("eslint passes")
+  })
+
+  test("leaves content outside the target section byte-identical", () => {
+    const res = markdownDoc.replace(DOC, { section: "goal", body: "typecheck passes" })
+    const head = DOC.slice(0, DOC.indexOf("## Goal"))
+    const tail = DOC.slice(DOC.indexOf("## Verify command"))
+    expect(res.content.startsWith(head)).toBe(true)
+    expect(res.content.endsWith(tail)).toBe(true)
+  })
+
+  test("replaces the last section and ends with a single trailing newline", () => {
+    const res = markdownDoc.replace(DOC, { section: "next chunk", body: "chunk 5: src/bar" })
+    expect(res.created).toBe(false)
+    expect(res.content).toContain("chunk 5: src/bar")
+    expect(res.content).not.toContain("chunk 4: src/foo")
+    expect(res.content.endsWith("## Next chunk\n\nchunk 5: src/bar\n")).toBe(true)
+  })
+
+  test("an empty body clears the section, leaving just the heading", () => {
+    const res = markdownDoc.replace(DOC, { section: "goal", body: "" })
+    expect(res.created).toBe(false)
+    expect(res.content).not.toContain("eslint passes")
+    expect(res.content).toContain("## Goal\n\n## Verify command")
+  })
+
+  test("creates a missing section at EOF", () => {
+    const res = markdownDoc.replace(DOC, {
+      section: "failed approaches",
+      body: "- generic noop broke variance",
+    })
+    expect(res.created).toBe(true)
+    expect(res.content.startsWith(DOC)).toBe(true)
+    expect(res.content).toContain("## failed approaches")
+    expect(res.content).toContain("- generic noop broke variance")
+  })
+
+  test("prefix-matches the section name", () => {
+    const res = markdownDoc.replace(DOC, { section: "next", body: "chunk 5: src/bar" })
+    expect(res.created).toBe(false)
+    expect(res.content).toContain("## Next chunk")
+    expect(res.content).toContain("chunk 5: src/bar")
+  })
+
+  test("a nested list / fenced body does not eat the following heading", () => {
+    const res = markdownDoc.replace(FENCED, { section: "next chunk", body: "chunk 9: src/bar" })
+    expect(res.created).toBe(false)
+    expect(res.content).not.toContain("nested item")
+    expect(res.content).not.toContain("## not a heading")
+    expect(res.content).not.toContain("```")
+    expect(res.content.endsWith("## Notes\nkeep me\n")).toBe(true)
+    expect(markdownDoc.sections(res.content).map((s) => s.normalized)).toEqual([
+      "next chunk",
+      "notes",
+    ])
+  })
+
+  test("repeated replaces do not accumulate (the loop's Next chunk contract)", () => {
+    const once = markdownDoc.replace(DOC, { section: "next chunk", body: "chunk 5" }).content
+    const twice = markdownDoc.replace(once, { section: "next chunk", body: "chunk 6" }).content
+    expect(twice).not.toContain("chunk 5")
+    expect(twice).not.toContain("chunk 4: src/foo")
+    const res = markdownDoc.query(twice, { sections: ["next chunk"] })
+    expect(res.matched).toEqual(["next chunk"])
+    expect(res.content).toContain("chunk 6")
   })
 })

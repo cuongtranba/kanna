@@ -74,8 +74,29 @@ export type AutoContinueEvent =
       kind: "loop_armed"
       subagentId: string
       prompt: string
+      /**
+       * The oracle + where it runs. Optional because events persisted before
+       * these fields existed replay without them; `run_verify` then refuses
+       * and asks for a re-arm rather than guessing a command to execute.
+       */
+      verifyCommand?: string
+      workdirAbs?: string
+    })
+  | (AutoContinueEventBase & {
+      /**
+       * Outcome of one delegated loop iteration, recorded so the host can see
+       * a loop failing repeatedly and disarm it itself.
+       *
+       * Without this the only backstop was the model's judgement, and a single
+       * transient `AUTH_REQUIRED` was enough to make it call `stop_loop` and
+       * park the run until a human noticed. `deriveLoopState` folds these into
+       * `consecutiveFailures`; a success resets the count.
+       */
+      kind: "loop_run_outcome"
+      ok: boolean
+      errorCode?: string
     })
   | (AutoContinueEventBase & {
       kind: "loop_disarmed"
-      reason: "goal_met" | "user_send" | "chat_deleted"
+      reason: "goal_met" | "user_send" | "chat_deleted" | "repeated_failures"
     })
