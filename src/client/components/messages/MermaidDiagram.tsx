@@ -13,6 +13,7 @@ import { timerAdapter } from "../../adapters/timer.adapter"
 import { domAdapter } from "../../adapters/dom.adapter"
 import type { DomPort } from "../../ports/domPort"
 import { toError } from "../../../shared/errors"
+import { parseMermaidError } from "../../lib/mermaidError"
 import { createLazyLoader, isStaleChunkError } from "../../lib/lazyModule"
 
 interface MermaidModule {
@@ -114,16 +115,32 @@ function MermaidDiagramInner({ source, ports }: { source: string; ports?: Mermai
     )
   }
   if (renderState.status === "error") {
+    const detail = parseMermaidError(errorMessage ?? "")
     return (
       <div className="my-3">
         <div className="flex items-start gap-1.5 text-xs text-destructive mb-1">
           <AlertTriangle className="size-3.5 shrink-0 mt-px" />
-          <span>
-            Couldn&apos;t render this Mermaid diagram
-            {errorMessage ? <span className="text-muted-foreground"> — {errorMessage}</span> : null}
-          </span>
+          <div className="min-w-0">
+            <span>
+              Couldn&apos;t render this Mermaid diagram
+              {detail.line !== null ? (
+                <span className="text-muted-foreground">
+                  {" — line "}
+                  <span className="tabular-nums">{detail.line}</span>
+                </span>
+              ) : null}
+            </span>
+            <div className="text-muted-foreground">{detail.summary}</div>
+            {detail.excerpt ? (
+              // Monospace + `pre`: the caret ruler only means anything while
+              // its column alignment with the excerpt above it survives.
+              <pre className="mt-1 overflow-x-auto rounded-md border border-border bg-muted px-2 py-1 font-mono text-xs leading-snug whitespace-pre text-muted-foreground">
+                {detail.excerpt}
+              </pre>
+            ) : null}
+          </div>
         </div>
-        <MermaidFallbackCodeBlock source={source} />
+        <MermaidFallbackCodeBlock source={source} highlightLine={detail.line ?? undefined} />
       </div>
     )
   }
