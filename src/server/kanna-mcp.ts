@@ -29,6 +29,7 @@ import type { SubagentOrchestrator } from "./subagent-orchestrator"
 import type { LoopSetupInput } from "./loop-template"
 import { confinePathToDir } from "./input-validation"
 import { resolveStructuredDoc } from "../shared/structured-doc/registry"
+import { chunkLabelFromSection } from "../shared/loop-progress"
 import { readDoc, writeDoc } from "./structured-doc-io.adapter"
 import { computeWorkspaceDigest, runVerifyCommand } from "./loop-verify-io.adapter"
 import { getCachedVerify, setCachedVerify } from "./loop-verify-cache"
@@ -111,6 +112,8 @@ export interface KannaMcpArgs extends OfferDownloadArgs {
 export interface ArmedLoopInfo {
   verifyCommand: string | null
   workdirAbs: string | null
+  /** Tracking file relative to `workdirAbs`; null for a loop armed before it was recorded. */
+  trackingFileRel: string | null
 }
 
 export type SetupLoopHandlerResult =
@@ -351,12 +354,19 @@ function buildDelegateSubagentToolList(args: {
   orchestrator?: SubagentOrchestrator
   delegationContext?: KannaMcpDelegationContext
   chatId: string | null
+  cwd: string
+  getArmedLoop?: (chatId: string) => ArmedLoopInfo | null
 }): KannaSdkToolList {
   if (!args.orchestrator || !args.delegationContext || !args.chatId) return []
   const ctx = args.delegationContext
   const chatId = args.chatId
   const orchestrator = args.orchestrator
   const delegate = createDelegateSubagentTool({ orchestrator })
+  const resolveLoopChunkLabel = buildLoopChunkLabelResolver({
+    cwd: args.cwd,
+    chatId,
+    getArmedLoop: args.getArmedLoop,
+  })
 
   return [
     tool(
@@ -384,6 +394,7 @@ function buildDelegateSubagentToolList(args: {
           getParentUserMessageId: ctx.getParentUserMessageId,
           getMentionedSubagentIds: ctx.getMentionedSubagentIds,
           onEntry,
+          resolveLoopChunkLabel,
         }
         const result = await delegate.handler(input, handlerCtx)
         // When keep_alive was requested and the run completed, append the
@@ -617,6 +628,45 @@ const trackingDocError = (text: string) => ({
   isError: true as const,
   content: [{ type: "text" as const, text }],
 })
+
+/**
+ * Deterministic label for the chunk a loop iteration is about to delegate:
+ * the armed loop's tracking file, `## Next chunk` section, first line.
+ *
+ * The delegation prompt itself is server-rendered boilerplate, identical every
+ * iteration, so without this every Progress row read the same. The orchestrator
+ * normally names the chunk in a `[chunk: …]` marker; this is the fallback for
+ * when it does not, and unlike the marker it needs no model cooperation — at
+ * delegate time that section IS the chunk (the worker only rewrites it once it
+ * finishes).
+ *
+ * Returns null whenever anything is unknown (no loop armed, legacy loop with no
+ * recorded tracking file, unreadable / non-markdown file, empty section). The
+ * caller then falls back to the prompt's first line — a missing label must
+ * never fail a delegation.
+ */
+function buildLoopChunkLabelResolver(args: {
+  cwd: string
+  chatId: string
+  getArmedLoop?: (chatId: string) => ArmedLoopInfo | null
+}): (() => Promise<string | null>) | undefined {
+  const getArmedLoop = args.getArmedLoop
+  if (!getArmedLoop) return undefined
+  return async () => {
+    // Resolved per CALL, not per build: tools are built at spawn and
+    // setup_loop arms mid-turn.
+    const loop = getArmedLoop(args.chatId)
+    if (!loop?.trackingFileRel) return null
+    const confined = confinePathToDir(loop.trackingFileRel, loop.workdirAbs ?? args.cwd, "file")
+    if ("error" in confined) return null
+    const doc = resolveStructuredDoc(path.extname(confined.abs))
+    if (!doc) return null
+    const content = await readDoc(confined.abs)
+    if (content === null) return null
+    const label = chunkLabelFromSection(doc.query(content, { sections: ["Next chunk"] }).content)
+    return label.length > 0 ? label : null
+  }
+}
 
 /**
  * `query_tracking_file` + `append_tracking_row`: bound the loop tracking
@@ -897,6 +947,8 @@ export function buildKannaMcpTools(args: KannaMcpArgs): KannaSdkToolList {
       orchestrator: args.subagentOrchestrator,
       delegationContext: args.delegationContext,
       chatId,
+      cwd,
+      getArmedLoop: args.getArmedLoop,
     }),
     ...buildSetupLoopToolList({ setupLoop: args.setupLoop, stopLoop: args.stopLoop, chatId }),
     ...buildTrackingDocToolList({ cwd, chatId, getArmedLoop: args.getArmedLoop }),

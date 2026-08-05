@@ -25,6 +25,7 @@ import type { SessionLifecycleDeps } from "./claude-session-lifecycle"
 import type { SessionErrorHandlerDeps } from "./claude-session-error-handler"
 import type { AutoContinueCommandDeps } from "./claude-autocontinue-commands"
 import type { LoopCommandDeps } from "./claude-loop-commands"
+import { toArmedLoopInfo } from "./claude-loop-commands"
 import type { CancelHandlerDeps } from "./claude-cancel-handler"
 import type { ChatManagementDeps } from "./claude-chat-management"
 import type { SendCommandDeps } from "./claude-send-command"
@@ -224,6 +225,7 @@ export function buildSubagentWiringDeps(agent: AgentCoordinator): SubagentWiring
     readLlmProvider: () => agent.readLlmProvider(),
     subagentPendingKey: (chatId, runId, toolUseId) =>
       agent.subagentPendingKey(chatId, runId, toolUseId),
+    getArmedLoop: (chatId) => toArmedLoopInfo(agent.isLoopArmed(chatId)),
   }
 }
 

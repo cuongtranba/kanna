@@ -1,6 +1,7 @@
 import { z } from "zod"
 import type { TranscriptEntry } from "../../shared/types"
 import type { SubagentOrchestrator } from "../subagent-orchestrator"
+import { parseChunkMarker } from "../../shared/loop-progress"
 
 const InputSchema = z.object({
   subagent_id: z.string().min(1).describe(
@@ -46,6 +47,12 @@ export interface DelegateSubagentContext {
    * long-running subagent runs.
    */
   onEntry?: (entry: TranscriptEntry) => void
+  /**
+   * Deterministic fallback label for a loop iteration, read from the armed
+   * loop's `## Next chunk`. Consulted only when the prompt carries no explicit
+   * `[chunk: …]` marker. Absent for chats with no armed loop.
+   */
+  resolveLoopChunkLabel?: () => Promise<string | null>
 }
 
 export interface DelegateSubagentTool {
@@ -59,6 +66,29 @@ export interface DelegateSubagentTool {
 
 const DESCRIPTION =
   "Hand off focused work to a specialized subagent listed in the system prompt. By default blocks until the subagent finishes and returns its final reply as text. Pass run_in_background:true to launch it without waiting — you get {status:'async_launched', run_id} immediately and the reply arrives as a new turn when it finishes. Brief the subagent like a smart colleague who just walked in: state the goal, what was tried, what to check, any constraints. The subagent cannot see your chat history — distill the context yourself."
+
+/**
+ * The run's Progress-panel label. An explicit `[chunk: …]` marker wins: it is
+ * per-delegation, so under `parallelism > 1` each of the turn's chunks keeps
+ * its own name, which a single shared plan section cannot express. Otherwise
+ * fall back to the armed loop's `## Next chunk`.
+ *
+ * Returns undefined to let the orchestrator derive a label from the prompt.
+ * A resolver failure is swallowed for the same reason: a label is cosmetic and
+ * must never fail a delegation.
+ */
+async function resolveRunLabel(
+  prompt: string,
+  resolveLoopChunkLabel?: () => Promise<string | null>,
+): Promise<string | undefined> {
+  if (parseChunkMarker(prompt) !== null) return undefined
+  if (!resolveLoopChunkLabel) return undefined
+  try {
+    return (await resolveLoopChunkLabel()) ?? undefined
+  } catch {
+    return undefined
+  }
+}
 
 export function createDelegateSubagentTool(deps: {
   orchestrator: SubagentOrchestrator
@@ -100,6 +130,7 @@ export function createDelegateSubagentTool(deps: {
           isError: true,
         }
       }
+      const label = await resolveRunLabel(input.prompt, ctx.resolveLoopChunkLabel)
       const outcome = await deps.orchestrator.delegateRun({
         chatId: ctx.chatId,
         parentUserMessageId,
@@ -110,6 +141,7 @@ export function createDelegateSubagentTool(deps: {
         subagentId: input.subagent_id,
         mentionedSubagentIds,
         prompt: input.prompt,
+        label,
         onEntry: ctx.onEntry,
         keepAlive: input.keep_alive,
         background: input.run_in_background,

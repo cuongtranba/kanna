@@ -23,7 +23,7 @@ import type {
 } from "../shared/types"
 import type { HarnessToolRequest } from "./harness-types"
 import type { ClaudeSessionHandle } from "./harness-types"
-import type { KannaMcpDelegationContext } from "./kanna-mcp"
+import type { ArmedLoopInfo, KannaMcpDelegationContext } from "./kanna-mcp"
 import type { ChatRecord, ProjectRecord, SubagentRunEvent } from "./events"
 import type { ProviderRunStart, SubagentOrchestrator } from "./subagent-orchestrator"
 import type { BuildSubagentProviderRunArgs } from "./subagent-provider-run"
@@ -108,6 +108,12 @@ export interface SubagentWiringDeps {
   }
   readLlmProvider: () => Promise<LlmProviderSnapshot>
   subagentPendingKey: (chatId: string, runId: string, toolUseId: string) => string
+  /**
+   * Live armed-loop slice for the subagent's own kanna-mcp. A loop worker must
+   * resolve its tracking file against the LOOP's workdir (often a sibling
+   * worktree), not the chat cwd. Optional so existing test deps stay valid.
+   */
+  getArmedLoop?: (chatId: string) => ArmedLoopInfo | null
 }
 
 // ---------------------------------------------------------------------------
@@ -174,6 +180,7 @@ export function buildClaudeSubagentStarter(
         oauthBearers,
         restrictedAllowedPaths: a.restrictedAllowedPaths,
         keepAlive: a.keepAlive,
+        getArmedLoop: a.getArmedLoop,
       })
     }
     return deps.startClaudeSessionFn({ ...a, customMcpServers: enabledMcpServers, oauthBearers })
@@ -277,6 +284,7 @@ export function buildSubagentProviderRunForChat(
     claudeDriverIsPty: deps.resolveClaudeDriverPreference() === "pty",
     subagentOrchestrator: deps.subagentOrchestrator,
     delegationContext,
+    getArmedLoop: deps.getArmedLoop,
     codexManager: deps.codexManager,
     onToolRequest,
     globalPromptAppend: deps.getAppSettingsSnapshot().globalPromptAppend,

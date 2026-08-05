@@ -14,6 +14,7 @@ interface DelegateCall {
   subagentId: string
   mentionedSubagentIds: string[]
   prompt: string
+  label?: string
   onEntry?: (entry: TranscriptEntry) => void
   keepAlive?: boolean
   background?: boolean
@@ -77,6 +78,7 @@ describe("createDelegateSubagentTool", () => {
       subagentId: "sa-1",
       mentionedSubagentIds: [],
       prompt: "do the thing",
+      label: undefined,
       onEntry: undefined,
       keepAlive: undefined,
       background: undefined,
@@ -236,5 +238,58 @@ describe("createDelegateSubagentTool", () => {
     expect(seenEntries).toHaveLength(2)
     expect(seenEntries[0].kind).toBe("assistant_text")
     expect(seenEntries[1].kind).toBe("tool_call")
+  })
+})
+
+/**
+ * Progress-row labelling. A loop's delegation prompt is server-rendered
+ * boilerplate identical every iteration, so the label has to come from
+ * somewhere else — the orchestrator's `[chunk: …]` marker, or failing that the
+ * plan's `## Next chunk`.
+ */
+describe("createDelegateSubagentTool — chunk label", () => {
+  const LOOP_PROMPT =
+    "[chunk: <one-line summary of the Next chunk you just read>]"
+    + " Do the next chunk in PROGRESS.md. All work happens in the project root."
+
+  test("marker present → no override; the orchestrator derives it from the prompt", async () => {
+    const { fake, calls } = makeFakeOrchestrator({ status: "completed", runId: "r", text: "ok" })
+    const tool = createDelegateSubagentTool({ orchestrator: fake })
+    await tool.handler(
+      { subagent_id: "sa-1", prompt: "[chunk: Wire session tabs] Do the next chunk in PROGRESS.md." },
+      { ...baseCtx(), resolveLoopChunkLabel: async () => "from the plan" },
+    )
+    expect(calls[0].label).toBeUndefined()
+  })
+
+  test("marker unsubstituted → falls back to the plan's Next chunk", async () => {
+    const { fake, calls } = makeFakeOrchestrator({ status: "completed", runId: "r", text: "ok" })
+    const tool = createDelegateSubagentTool({ orchestrator: fake })
+    await tool.handler(
+      { subagent_id: "sa-1", prompt: LOOP_PROMPT },
+      { ...baseCtx(), resolveLoopChunkLabel: async () => "Wire session tabs to the store" },
+    )
+    expect(calls[0].label).toBe("Wire session tabs to the store")
+  })
+
+  test("no resolver (no loop armed) → no override", async () => {
+    const { fake, calls } = makeFakeOrchestrator({ status: "completed", runId: "r", text: "ok" })
+    const tool = createDelegateSubagentTool({ orchestrator: fake })
+    await tool.handler({ subagent_id: "sa-1", prompt: "ad-hoc work" }, baseCtx())
+    expect(calls[0].label).toBeUndefined()
+  })
+
+  test("a throwing resolver never fails the delegation — a label is cosmetic", async () => {
+    const { fake, calls } = makeFakeOrchestrator({ status: "completed", runId: "r", text: "ok" })
+    const tool = createDelegateSubagentTool({ orchestrator: fake })
+    const result = await tool.handler(
+      { subagent_id: "sa-1", prompt: LOOP_PROMPT },
+      {
+        ...baseCtx(),
+        resolveLoopChunkLabel: async () => { throw new Error("ENOENT") },
+      },
+    )
+    expect(result.isError).toBeFalsy()
+    expect(calls[0].label).toBeUndefined()
   })
 })

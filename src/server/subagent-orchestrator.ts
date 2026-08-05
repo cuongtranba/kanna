@@ -569,6 +569,12 @@ export class SubagentOrchestrator {
     subagentId: string
     prompt: string
     /**
+     * Overrides the label derived from `prompt`. Set by the MCP host when the
+     * prompt is server-rendered loop boilerplate that names no chunk, so the
+     * Progress row can still read as the chunk being worked.
+     */
+    label?: string
+    /**
      * The set of subagent ids the user explicitly @-mentioned for this turn.
      * Required for the MANUAL_ONLY gate: a subagent with `triggerMode === "manual"`
      * is blocked unless its id appears in this set.
@@ -717,6 +723,7 @@ export class SubagentOrchestrator {
         depth: args.depth,
         ancestorSubagentIds: args.ancestorSubagentIds,
         userInstruction: args.prompt,
+        label: args.label,
         onEntry: args.onEntry,
         runId,
       })
@@ -741,6 +748,7 @@ export class SubagentOrchestrator {
       depth: args.depth,
       ancestorSubagentIds: args.ancestorSubagentIds,
       userInstruction: args.prompt,
+      label: args.label,
       onEntry: args.onEntry,
       keepAlive: args.keepAlive,
     })
@@ -773,6 +781,8 @@ export class SubagentOrchestrator {
      * provider run so composeInitialPrompt can render it above the primer.
      */
     userInstruction: string
+    /** Overrides the label derived from `userInstruction` (see {@link delegateRun}). */
+    label?: string
     /** External per-entry sink (see {@link delegateRun}). */
     onEntry?: (entry: TranscriptEntry) => void
     /** When true, passes keepAlive to the provider run and registers a LiveSession on success. */
@@ -781,7 +791,7 @@ export class SubagentOrchestrator {
     runId?: string
   }): Promise<DelegationOutcome> {
     const runId = args.runId ?? crypto.randomUUID()
-    const label = deriveChunkLabel(args.userInstruction)
+    const label = args.label?.trim() || deriveChunkLabel(args.userInstruction)
     await this.deps.store.appendSubagentEvent({
       v: 3,
       type: "subagent_run_started",

@@ -81,6 +81,12 @@ export type AutoContinueEvent =
        */
       verifyCommand?: string
       workdirAbs?: string
+      /**
+       * Tracking file, relative to `workdirAbs`. Lets the host read the plan's
+       * `## Next chunk` at delegate time and label the Progress row with the
+       * chunk being worked. Optional for the same replay reason as above.
+       */
+      trackingFileRel?: string
     })
   | (AutoContinueEventBase & {
       /**

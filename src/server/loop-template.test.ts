@@ -440,6 +440,16 @@ describe("renderLoopPrompt structural invariants", () => {
     expect(prompt).toContain("ORACLE TOO WEAK")
   })
 
+  // Regression: the worker prompt is identical every iteration, so without a
+  // marker naming the chunk, every Progress row read the same boilerplate
+  // ("Do the next chunk in PROGRESS-….md. All work happens in /home/…").
+  test("worker prompt opens with a [chunk: …] marker the orchestrator substitutes", () => {
+    const prompt = __testing.renderLoopPrompt(BASE)
+    expect(prompt).toContain("prompt: \"[chunk: <one-line summary of the Next chunk you just read>]")
+    // And step 4 tells it that this is the one edit it makes.
+    expect(prompt).toContain("only edit you make")
+  })
+
   test("worker replaces (not appends) the Next chunk section", () => {
     const prompt = __testing.renderLoopPrompt(BASE)
     expect(prompt).toContain("replace_tracking_section")

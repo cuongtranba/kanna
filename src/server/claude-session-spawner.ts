@@ -41,6 +41,7 @@ import type { ActiveTurn, ClaudeSessionState, SessionBackgroundTask } from "./cl
 import type { KannaMcpDelegationContext, SetupLoopHandlerResult } from "./kanna-mcp"
 import type { LoopSetupInput } from "./loop-template"
 import type { LoopState } from "./auto-continue/read-model"
+import { toArmedLoopInfo } from "./claude-loop-commands"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import type { StartClaudeSessionPtyArgs } from "./claude-pty/driver"
 import type { SubagentOrchestrator } from "./subagent-orchestrator"
@@ -261,6 +262,10 @@ export async function spawnClaudeTurn(
             isLoopArmed: delegationContext.depth === 0
               ? () => deps.isLoopArmed(chatIdForCtx) !== null
               : undefined,
+            // Deliberately NOT depth-gated like isLoopArmed: the tracking-doc
+            // tools are registered for subagents too, and a worker without the
+            // loop's workdir resolves its tracking file against the chat cwd.
+            getArmedLoop: (id) => toArmedLoopInfo(deps.isLoopArmed(id)),
             toolCallback: deps.toolCallback ?? undefined,
             tunnelGateway: deps.tunnelGateway,
             chatPolicy: deps.resolveChatPolicy(args.chatId),
@@ -297,6 +302,8 @@ export async function spawnClaudeTurn(
             isLoopArmed: delegationContext.depth === 0
               ? () => deps.isLoopArmed(chatIdForCtx) !== null
               : undefined,
+            // See the PTY branch: not depth-gated, on purpose.
+            getArmedLoop: (id) => toArmedLoopInfo(deps.isLoopArmed(id)),
             toolCallback: deps.toolCallback ?? undefined,
             chatPolicy: deps.resolveChatPolicy(args.chatId),
             customMcpServers: enabledMcpServers,
