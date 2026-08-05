@@ -10,6 +10,12 @@ bash scripts/verify-session-tabs.sh
 
 ## Progress (latest first)
 
+- 2026-08-05 chunk 1 paneTree flat model DONE — sessionPanes.ts: PaneTree/Pane types + openPane/closePane/selectPane/nextPane/prevPane; exported from index.ts; index.test.ts: 17 tests covering dedup, close-last, close-active-selects-nearest, keyboard wrap-around; 135 pass / 0 fail
+
+- 2026-08-05 chunk 0.5 chatNavigator port DONE (10 navigate() calls replaced, verify:client-arch 4880/0)
+
+- 2026-08-05 0.4 DONE — AppGlobalProvider created: mounts useAppGlobalState() exactly once at KannaLayout boundary, distributes via React context; useKannaState reads appGlobal via useAppGlobalContext() (removes useResolvedSocket, socket/clipboard from KannaStatePorts); App.tsx split into KannaLayoutInner + KannaLayout wrapper; proof test: 2 consumers + recording fake socket → each of 8 global topics subscribed ONCE; ast-grep + lint + typecheck + 4880 pass / 0 fail. Commit e7cb5233.
+
 - 2026-08-05 0.3 DONE — useAppGlobalState.ts created (~550 lines): 8 global
   socket topics, UI-restart machinery, focus/visibility listeners, all
   settings/MCP/LLM + sidebar/project/stack/import handlers extracted from
@@ -38,18 +44,25 @@ bash scripts/verify-session-tabs.sh
 
 ## Next chunk
 
-**0.4 — AppGlobalProvider: mount useAppGlobalState exactly once at KannaLayout.**
+**0.6 — project-git + project-commands move to app-global, once per distinct projectId**
 
-Create `src/client/app/AppGlobalProvider.tsx` that mounts `useAppGlobalState()`
-exactly once at `KannaLayout` and provides the result via React context.
-`useKannaState` reads it from context instead of calling the hook directly.
+Move `project-git` and `project-commands` socket subscriptions from `useKannaState.ts`
+into `useAppGlobalState.ts`, subscribing once per DISTINCT projectId (the one real
+dedupe case: two tabs open on the same project must not double-subscribe).
+`projectDiffSnapshots` is already keyed by projectId so the snapshot state is fine.
 
-After this, duplicate global subscriptions are impossible BY CONSTRUCTION.
-Do NOT add dedupe/refcounting inside `socket.ts`.
+Steps:
+1. Identify the `project-git` and `project-commands` subscription blocks in
+   `useKannaState.ts` (they subscribe on `activeChatId`'s projectId or similar).
+2. Move them into `useAppGlobalState.ts` under a `useEffect` that tracks the SET
+   of open projectIds, subscribing once and unsubscribing when the last tab for
+   that projectId closes.
+3. `useKannaState` continues to spread the `AppGlobalState` result, so call sites
+   are unchanged.
+4. Confirm `projectDiffSnapshots` is still correctly keyed and mutated.
 
-Test: two hook instances + recording fake socket → each global topic subscribed ONCE.
-
-Verify with `bun run verify:client-arch`. Baseline 4879 pass / 0 fail.
+Verify with: `bun test --conditions production src/client/app/ src/client/stores/ && bun run lint --max-warnings=0`
+Baseline: 4880+ pass / 0 fail (additive/refactor only, no behaviour change)
 
 ## Context for every worker (read this first)
 
