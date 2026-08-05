@@ -10,6 +10,12 @@ bash scripts/verify-session-tabs.sh
 
 ## Progress (latest first)
 
+- 2026-08-05 0.3 DONE — useAppGlobalState.ts created (~550 lines): 8 global
+  socket topics, UI-restart machinery, focus/visibility listeners, all
+  settings/MCP/LLM + sidebar/project/stack/import handlers extracted from
+  useKannaState; re-exports keep all consumers unchanged; useKannaState spread-in
+  pattern; ast-grep + lint + typecheck + 4879 pass / 0 fail. Commit 0ca141ab.
+
 - 2026-08-05 0.2 DONE — chatStateStore created (ChatSlice × 7 fields,
   optimisticProcessing keyed by scopeId, releaseChat, selectChatSlice,
   EMPTY_CHAT_SLICE); 8 fields + 9 actions removed from kannaStateStore; ~30
@@ -32,16 +38,16 @@ bash scripts/verify-session-tabs.sh
 
 ## Next chunk
 
-**0.3 — extract app-global concerns into useAppGlobalState.**
+**0.4 — AppGlobalProvider: mount useAppGlobalState exactly once at KannaLayout.**
 
-Extract from `src/client/app/useKannaState.ts` into new
-`src/client/app/useAppGlobalState.ts`: the 8 global socket topics (sidebar,
-local-projects, update, keybindings, app-settings, push-config,
-pty-instances, followed-sessions), the UI-restart machinery +
-`"kanna:ui-update-restart"` key, the focus/visibilitychange listeners, and
-the settings/MCP/LLM + sidebar/project/stack/import handlers.
-`useKannaState` calls it internally and spreads the result, so `KannaState`
-stays byte-identical and NO consumer changes.
+Create `src/client/app/AppGlobalProvider.tsx` that mounts `useAppGlobalState()`
+exactly once at `KannaLayout` and provides the result via React context.
+`useKannaState` reads it from context instead of calling the hook directly.
+
+After this, duplicate global subscriptions are impossible BY CONSTRUCTION.
+Do NOT add dedupe/refcounting inside `socket.ts`.
+
+Test: two hook instances + recording fake socket → each global topic subscribed ONCE.
 
 Verify with `bun run verify:client-arch`. Baseline 4879 pass / 0 fail.
 
