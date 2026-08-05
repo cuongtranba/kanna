@@ -100,3 +100,15 @@ describe("PaneShell retention", () => {
     expect(html.indexOf("content-chat")).toBeLessThan(html.indexOf("content-changes"))
   })
 })
+
+describe("PaneShell content sizing", () => {
+  test("stacks tab content in a column so it fills the pane width", () => {
+    // Regression: the wrapper was a row flex, which sizes each child to its
+    // CONTENT width — the chat card rendered 24px wide inside a 1117px pane.
+    // Only the terminal escaped, because it happens to carry flex-1.
+    const pane = createPane("p1", [chatTab])
+    const html = renderShell({ ...pane, focusedTabId: chatTab.tabId })
+
+    expect(html).toContain("absolute inset-0 flex min-h-0 min-w-0 flex-col")
+  })
+})

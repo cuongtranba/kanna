@@ -135,7 +135,12 @@ function PaneShellInner({
               <div
                 key={tab.tabId}
                 className={cn(
-                  "absolute inset-0 flex min-h-0 min-w-0",
+                  // flex-COL, not the default row: a row container sizes each
+                  // child to its content width, which collapsed the chat card to
+                  // 24px in a 1117px pane. A column stretches children across
+                  // the cross axis, so any registry content fills the pane
+                  // without needing its own flex-1.
+                  "absolute inset-0 flex min-h-0 min-w-0 flex-col",
                   !isActiveTab && "invisible pointer-events-none",
                 )}
                 inert={!isActiveTab}

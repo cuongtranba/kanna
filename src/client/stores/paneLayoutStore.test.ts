@@ -111,6 +111,9 @@ describe("paneLayoutStore", () => {
   })
 
   test("resizeGroup adjusts one boundary", () => {
+    // Two tabs: splitting a pane's ONLY tab is refused, since it would strand
+    // an empty pane.
+    s().openTab(P, { kind: "chat" })
     s().openTab(P, { kind: "terminal", terminalId: "t1" })
     const paneId = collectPanes(s().getLayout(P).root)[0]!.id
     s().splitPane(P, { tabId: "terminal_2_t1", targetPaneId: paneId, position: "right" })
@@ -131,6 +134,8 @@ describe("paneLayoutStore keyboard commands", () => {
 
   /** A left/right split with the left pane focused. */
   function twoPanes() {
+    // The pane needs a tab to keep; splitting its only tab is refused.
+    s().openTab(P, { kind: "chat" })
     s().openTab(P, { kind: "terminal", terminalId: "t1" })
     const layout = s().getLayout(P)
     const paneId = collectPanes(layout.root)[0].id
@@ -186,6 +191,7 @@ describe("paneLayoutStore keyboard commands", () => {
   })
 
   test("splitFocusedPane splits around the focused pane's active tab", () => {
+    s().openTab(P, { kind: "chat" })
     s().openTab(P, { kind: "terminal", terminalId: "t1" })
 
     s().splitFocusedPane(P, "right")

@@ -57,7 +57,18 @@ export function splitPane(layout: PaneLayout, args: SplitPaneArgs): PaneLayout |
 
   const targetPath = findPanePath(layout.root, targetPaneId)
   if (!targetPath) return null
-  if (!findPaneContainingTab(layout.root, tabId)) return null
+
+  const source = findPaneContainingTab(layout.root, tabId)
+  if (!source) return null
+
+  // Splitting a pane's ONLY tab moves that tab into the new pane and leaves the
+  // source empty — and an empty pane has no tabs, so no close button and no
+  // content: dead space the user cannot remove. Splitting is the only way to
+  // produce one, so it is refused here rather than papered over downstream.
+  //
+  // A tab dragged in from a DIFFERENT pane is unaffected: the target keeps its
+  // own tabs, and the source pane collapsing is the correct outcome.
+  if (source.pane.id === targetPaneId && source.pane.tabs.length <= 1) return null
 
   // Preserve the target even if this detach empties it: splitting a pane's own
   // last tab must not delete the pane we are splitting out of.

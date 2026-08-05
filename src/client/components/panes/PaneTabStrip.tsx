@@ -31,6 +31,8 @@ export interface PaneTabStripProps {
 /** Width of the trailing split buttons, reserved when sizing the tabs. */
 const ACTIONS_WIDTH = 52
 
+const SPLIT_NEEDS_TWO_TABS = "Open another tab to split — a pane cannot be left empty"
+
 export function PaneTabStrip({
   pane,
   isPaneFocused,
@@ -42,6 +44,10 @@ export function PaneTabStrip({
 }: PaneTabStripProps) {
   const viewportWidth = useViewportStore((state) => state.width)
   const canSplit = !isMobileViewport(viewportWidth)
+  // A split moves the active tab into the new pane, so the pane must have
+  // another tab left to show. Splitting its only tab is refused by the engine —
+  // the button must not offer what will not happen.
+  const hasTabToKeep = pane.tabs.length > 1
 
   const layout = computeTabStripLayout({
     availableWidth: width,
@@ -92,8 +98,20 @@ export function PaneTabStrip({
       */}
       {canSplit ? (
         <div className="flex shrink-0 items-center gap-0.5 px-1">
-          <StripAction label="Split right" onClick={handleSplitRight} icon={Columns2} />
-          <StripAction label="Split down" onClick={handleSplitDown} icon={Rows2} />
+          <StripAction
+            label="Split right"
+            disabledReason={SPLIT_NEEDS_TWO_TABS}
+            disabled={!hasTabToKeep}
+            onClick={handleSplitRight}
+            icon={Columns2}
+          />
+          <StripAction
+            label="Split down"
+            disabledReason={SPLIT_NEEDS_TWO_TABS}
+            disabled={!hasTabToKeep}
+            onClick={handleSplitDown}
+            icon={Rows2}
+          />
         </div>
       ) : null}
     </div>
@@ -206,22 +224,39 @@ interface StripActionProps {
   label: string
   icon: React.ComponentType<{ className?: string }>
   onClick: () => void
+  disabled?: boolean
+  /** Shown instead of `label` when disabled, so the tooltip explains why. */
+  disabledReason?: string
 }
 
-function StripAction({ label, icon: Icon, onClick }: StripActionProps) {
+function StripAction({ label, icon: Icon, onClick, disabled, disabledReason }: StripActionProps) {
+  // `aria-disabled` rather than `disabled`: a truly disabled button fires no
+  // pointer events, so the tooltip explaining WHY it is unavailable would never
+  // open, and it would drop out of the focus order too. The handler is guarded
+  // instead.
+  const handleClick = useCallback(() => {
+    if (!disabled) onClick()
+  }, [disabled, onClick])
+
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <button
           type="button"
           aria-label={label}
-          onClick={onClick}
-          className="flex size-[22px] items-center justify-center rounded-sm text-muted-icon hover:bg-muted hover:text-foreground"
+          aria-disabled={disabled}
+          onClick={handleClick}
+          className={cn(
+            "flex size-[22px] items-center justify-center rounded-sm text-muted-icon",
+            disabled ? "cursor-default opacity-40" : "hover:bg-muted hover:text-foreground",
+          )}
         >
           <Icon className="size-3.5" />
         </button>
       </TooltipTrigger>
-      <TooltipContent side="bottom">{label}</TooltipContent>
+      <TooltipContent side="bottom">
+        {disabled && disabledReason ? disabledReason : label}
+      </TooltipContent>
     </Tooltip>
   )
 }

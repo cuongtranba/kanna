@@ -42,7 +42,7 @@ import { useWorkflowsStore, selectRuns } from "../../stores/workflowsStore"
 import { useShallow } from "zustand/react/shallow"
 import type { WorkflowRun } from "../../../shared/workflow-types"
 import type { TranscriptEntry } from "../../../shared/types"
-import { createDefaultLayout, type PaneLayout, type SplitPosition } from "../../lib/paneTree"
+import { collectPanes, createDefaultLayout, type PaneLayout, type SplitPosition } from "../../lib/paneTree"
 import { usePaneLayoutStore } from "../../stores/paneLayoutStore"
 import { SplitContainer } from "../../components/panes/SplitContainer"
 import { PaneShell, type SplitArgs } from "../../components/panes/PaneShell"
@@ -302,6 +302,8 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
   const closeFocusedTab = usePaneLayoutStore((s) => s.closeFocusedTab)
   const splitFocusedPane = usePaneLayoutStore((s) => s.splitFocusedPane)
   const moveTabToPane = usePaneLayoutStore((s) => s.moveTabToPane)
+  const openTab = usePaneLayoutStore((s) => s.openTab)
+  const getPaneLayout = usePaneLayoutStore((s) => s.getLayout)
 
   // One-time seed from the legacy terminal + sidebar stores when the project
   // first loads.  seedFromLegacy is a no-op if the layout already exists.
@@ -316,14 +318,41 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
     })
   }, [projectId, seedFromLegacy, terminalLayout, rightSidebarVisibility, globalRightSidebarSize])
 
+  // Keep the tree's tabs in step with the two sources that own their existence:
+  // the terminal list (server-backed PTYs) and the changes-view toggle.
+  //
+  // Reconciling here rather than at each call site is what makes the navbar
+  // buttons, the keybindings, and the split-terminal action all work — every one
+  // of them writes those sources, and none of them knows about panes. Without
+  // this the tree could only ever hold the tabs the one-time seed gave it.
+  useEffect(() => {
+    if (!projectId) return
+
+    const tabs = collectPanes(getPaneLayout(projectId).root).flatMap((pane) => pane.tabs)
+    const terminalIds = new Set(terminalLayout.terminals.map((terminal) => terminal.id))
+
+    for (const id of terminalIds) {
+      const known = tabs.some(
+        (tab) => tab.target.kind === "terminal" && tab.target.terminalId === id,
+      )
+      if (!known) openTab(projectId, { kind: "terminal", terminalId: id })
+    }
+
+    for (const tab of tabs) {
+      if (tab.target.kind === "terminal" && !terminalIds.has(tab.target.terminalId)) {
+        closeTab(projectId, tab.tabId)
+      }
+    }
+
+    const changesTab = tabs.find((tab) => tab.target.kind === "changes")
+    if (showRightSidebar && !changesTab) openTab(projectId, { kind: "changes" })
+    if (!showRightSidebar && changesTab) closeTab(projectId, changesTab.tabId)
+  }, [projectId, terminalLayout.terminals, showRightSidebar, openTab, closeTab, getPaneLayout])
+
   // Stable pane action callbacks.
   const handleSelectTab = useCallback(
     (tabId: string) => { if (projectId) focusTab(projectId, tabId) },
     [projectId, focusTab],
-  )
-  const handleCloseTab = useCallback(
-    (tabId: string) => { if (projectId) closeTab(projectId, tabId) },
-    [projectId, closeTab],
   )
   const handleSplitPane = useCallback(
     ({ tabId, paneId, position }: SplitArgs) => {
@@ -481,6 +510,30 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
     removeTerminal(currentProjectId, terminalId)
   }, [removeTerminal, state.socket])
 
+  // Closing a tab must close whatever OWNS it, or the reconcile effect above
+  // simply puts the tab straight back. Defined after handleRemoveTerminal, which
+  // it calls.
+  const handleCloseTab = useCallback(
+    (tabId: string) => {
+      if (!projectId) return
+
+      const tab = collectPanes(getPaneLayout(projectId).root)
+        .flatMap((pane) => pane.tabs)
+        .find((candidate) => candidate.tabId === tabId)
+
+      if (tab?.target.kind === "terminal") {
+        handleRemoveTerminal(projectId, tab.target.terminalId)
+        return
+      }
+      if (tab?.target.kind === "changes") {
+        toggleRightSidebar(projectId)
+        return
+      }
+
+      closeTab(projectId, tabId)
+    },
+    [projectId, closeTab, getPaneLayout, handleRemoveTerminal, toggleRightSidebar],
+  )
   const clearShowScrollTimeout = useCallback(() => {
     if (showScrollTimeoutRef.current !== null) {
       timer.clearTimeout(showScrollTimeoutRef.current)
