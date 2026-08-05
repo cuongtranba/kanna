@@ -2650,18 +2650,18 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
   )
 }
 
+/**
+ * Every action's drafted text, parsed into bindings.
+ *
+ * Derived from KEYBINDING_ACTIONS rather than written out action-by-action: the
+ * hand-listed version silently needed editing for each new action, and the
+ * spread over DEFAULT_KEYBINDINGS is what makes the result a total record
+ * without a cast.
+ */
 function buildKeybindingPayload(source: Record<string, string>): Record<KeybindingAction, string[]> {
-  return {
-    toggleEmbeddedTerminal: parseKeybindingInput(source.toggleEmbeddedTerminal ?? ""),
-    toggleRightSidebar: parseKeybindingInput(source.toggleRightSidebar ?? ""),
-    openInFinder: parseKeybindingInput(source.openInFinder ?? ""),
-    openInEditor: parseKeybindingInput(source.openInEditor ?? ""),
-    addSplitTerminal: parseKeybindingInput(source.addSplitTerminal ?? ""),
-    jumpToSidebarChat: parseKeybindingInput(source.jumpToSidebarChat ?? ""),
-    createChatInCurrentProject: parseKeybindingInput(source.createChatInCurrentProject ?? ""),
-    openAddProject: parseKeybindingInput(source.openAddProject ?? ""),
-    newStack: parseKeybindingInput(source.newStack ?? ""),
-    newStackChat: parseKeybindingInput(source.newStackChat ?? ""),
-    jumpToStacks: parseKeybindingInput(source.jumpToStacks ?? ""),
+  const drafted: Partial<Record<KeybindingAction, string[]>> = {}
+  for (const action of KEYBINDING_ACTIONS) {
+    drafted[action] = parseKeybindingInput(source[action] ?? "")
   }
+  return { ...DEFAULT_KEYBINDINGS, ...drafted }
 }

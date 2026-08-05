@@ -46,6 +46,7 @@ import { createDefaultLayout, type PaneLayout } from "../../lib/paneTree"
 import { usePaneLayoutStore } from "../../stores/paneLayoutStore"
 import { SplitContainer } from "../../components/panes/SplitContainer"
 import { PaneShell, type SplitArgs } from "../../components/panes/PaneShell"
+import { isTypingTarget, resolvePaneCommand } from "../../components/panes/paneKeyboard"
 import type { PaneContentRegistry } from "../../components/panes/paneContentRegistry"
 import type { TabPresentationContext } from "../../components/panes/tabPresentation"
 
@@ -295,6 +296,10 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
   const closeTab = usePaneLayoutStore((s) => s.closeTab)
   const splitPane = usePaneLayoutStore((s) => s.splitPane)
   const setGroupSizes = usePaneLayoutStore((s) => s.setGroupSizes)
+  const focusAdjacentPane = usePaneLayoutStore((s) => s.focusAdjacentPane)
+  const cycleFocusedPaneTab = usePaneLayoutStore((s) => s.cycleFocusedPaneTab)
+  const closeFocusedTab = usePaneLayoutStore((s) => s.closeFocusedTab)
+  const splitFocusedPane = usePaneLayoutStore((s) => s.splitFocusedPane)
 
   // One-time seed from the legacy terminal + sidebar stores when the project
   // first loads.  seedFromLegacy is a no-op if the layout already exists.
@@ -626,11 +631,38 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
       if (actionMatchesEvent(resolvedKeybindings, "addSplitTerminal", event)) {
         event.preventDefault()
         addTerminal(projectId)
+        return
+      }
+
+      // Pane commands resolve through one pure mapper, so the whole keyboard
+      // surface is testable without a DOM. The typing flag only suppresses
+      // MODIFIER-LESS bindings — see resolvePaneCommand.
+      const target = event.target
+      const command = resolvePaneCommand(
+        resolvedKeybindings,
+        event,
+        isTypingTarget(target instanceof HTMLElement ? target : null),
+      )
+      if (!command) return
+
+      event.preventDefault()
+      switch (command.kind) {
+        case "focus":
+          focusAdjacentPane(projectId, command.direction)
+          return
+        case "split":
+          splitFocusedPane(projectId, command.position)
+          return
+        case "closeTab":
+          closeFocusedTab(projectId)
+          return
+        case "cycleTab":
+          cycleFocusedPaneTab(projectId, command.delta)
       }
     }
 
     return dom.addWindowListener("keydown", handleGlobalKeydown)
-  }, [addTerminal, dom, handleOpenExternal, handleToggleEmbeddedTerminal, handleToggleRightSidebar, projectId, resolvedKeybindings])
+  }, [addTerminal, closeFocusedTab, cycleFocusedPaneTab, dom, focusAdjacentPane, handleOpenExternal, handleToggleEmbeddedTerminal, handleToggleRightSidebar, projectId, resolvedKeybindings, splitFocusedPane])
 
   useEffect(() => {
     const frameId = timer.requestAnimationFrame(() => {

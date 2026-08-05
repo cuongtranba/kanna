@@ -2,7 +2,9 @@ import { create } from "zustand"
 import { persist } from "zustand/middleware"
 import {
   closeTab as closeTabInLayout,
+  collectPanes,
   createDefaultLayout,
+  findAdjacentPane,
   focusPane as focusPaneInLayout,
   focusTab as focusTabInLayout,
   moveTabToPane as moveTabInLayout,
@@ -12,6 +14,7 @@ import {
   resizeGroup as resizeGroupInLayout,
   setGroupSizes as setGroupSizesInLayout,
   splitPane as splitPaneInLayout,
+  type PaneDirection,
   type PaneLayout,
   type PaneTabTarget,
   type SplitPosition,
@@ -43,6 +46,14 @@ interface PaneLayoutState {
     args: { tabId: string; targetPaneId: string; position: SplitPosition },
   ) => void
   moveTabToPane: (projectId: string, tabId: string, toPaneId: string, index?: number) => void
+  /** Keyboard: move focus to the nearest pane in a direction. */
+  focusAdjacentPane: (projectId: string, direction: PaneDirection) => void
+  /** Keyboard: step the focused pane's active tab, wrapping at both ends. */
+  cycleFocusedPaneTab: (projectId: string, delta: number) => void
+  /** Keyboard: close the focused pane's active tab. */
+  closeFocusedTab: (projectId: string) => void
+  /** Keyboard: split around the focused pane's active tab. */
+  splitFocusedPane: (projectId: string, position: SplitPosition) => void
   reorderPaneTabs: (projectId: string, paneId: string, orderedTabIds: readonly string[]) => void
   resizeGroup: (projectId: string, groupId: string, index: number, deltaRatio: number) => void
   /** Commit a finished drag: absolute fractions, in child order. */
@@ -107,6 +118,48 @@ export const usePaneLayoutStore = create<PaneLayoutState>()(
 
         moveTabToPane: (projectId, tabId, toPaneId, index) =>
           apply(projectId, (layout) => moveTabInLayout(layout, tabId, toPaneId, index)),
+
+        // ─── Keyboard commands ────────────────────────────────────────────────
+        // Each derives its subject (the focused pane, its active tab) INSIDE the
+        // store, so a caller only has to say what the user pressed.
+
+        focusAdjacentPane: (projectId, direction) =>
+          apply(projectId, (layout) => {
+            if (!layout.focusedPaneId) return null
+            const nextId = findAdjacentPane(layout.root, layout.focusedPaneId, direction)
+            return nextId ? focusPaneInLayout(layout, nextId) : null
+          }),
+
+        cycleFocusedPaneTab: (projectId, delta) =>
+          apply(projectId, (layout) => {
+            const pane = collectPanes(layout.root).find((p) => p.id === layout.focusedPaneId)
+            if (!pane || pane.tabs.length === 0) return null
+
+            const current = pane.tabs.findIndex((tab) => tab.tabId === pane.focusedTabId)
+            const from = current === -1 ? 0 : current
+            // Wrap in both directions; `%` alone goes negative for delta -1.
+            const next = (((from + delta) % pane.tabs.length) + pane.tabs.length) % pane.tabs.length
+            return focusTabInLayout(layout, pane.tabs[next].tabId)
+          }),
+
+        closeFocusedTab: (projectId) =>
+          apply(projectId, (layout) => {
+            const pane = collectPanes(layout.root).find((p) => p.id === layout.focusedPaneId)
+            const tabId = pane?.focusedTabId ?? pane?.tabs[0]?.tabId
+            return tabId ? closeTabInLayout(layout, tabId) : null
+          }),
+
+        splitFocusedPane: (projectId, position) => {
+          const layout = layoutFor(get().layouts, projectId)
+          const pane = collectPanes(layout.root).find((p) => p.id === layout.focusedPaneId)
+          const tabId = pane?.focusedTabId ?? pane?.tabs[0]?.tabId
+          if (!pane || !tabId) return
+
+          const ids = takeNodeIds()
+          apply(projectId, (current) =>
+            splitPaneInLayout(current, { tabId, targetPaneId: pane.id, position, ids }),
+          )
+        },
 
         reorderPaneTabs: (projectId, paneId, orderedTabIds) =>
           apply(projectId, (layout) => reorderPaneTabsInLayout(layout, paneId, orderedTabIds)),

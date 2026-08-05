@@ -213,7 +213,25 @@ export type KeybindingAction =
   | "newStack"
   | "newStackChat"
   | "jumpToStacks"
+  | "focusPaneLeft"
+  | "focusPaneRight"
+  | "focusPaneUp"
+  | "focusPaneDown"
+  | "splitPaneRight"
+  | "splitPaneDown"
+  | "closePaneTab"
+  | "nextPaneTab"
+  | "previousPaneTab"
 
+/**
+ * Pane commands deliberately sit on `cmd+ctrl` / `ctrl+alt`.
+ *
+ * `cmd+alt` is already the `jumpToSidebarChat` modifier: holding it reveals the
+ * sidebar number-jump hints regardless of which other key is pressed, so a
+ * `cmd+alt+…` pane binding would flash that overlay on every use. `ctrl+shift`
+ * and `cmd+w` families are reserved by browsers (new incognito window, close
+ * tab) and cannot be prevented from a page.
+ */
 export const DEFAULT_KEYBINDINGS: Record<KeybindingAction, string[]> = {
   toggleEmbeddedTerminal: ["cmd+j", "ctrl+`"],
   toggleRightSidebar: ["cmd+b", "ctrl+b"],
@@ -226,6 +244,15 @@ export const DEFAULT_KEYBINDINGS: Record<KeybindingAction, string[]> = {
   newStack: ["cmd+alt+w"],
   newStackChat: ["cmd+alt+shift+n"],
   jumpToStacks: ["g s"],
+  focusPaneLeft: ["cmd+ctrl+arrowleft", "ctrl+alt+arrowleft"],
+  focusPaneRight: ["cmd+ctrl+arrowright", "ctrl+alt+arrowright"],
+  focusPaneUp: ["cmd+ctrl+arrowup", "ctrl+alt+arrowup"],
+  focusPaneDown: ["cmd+ctrl+arrowdown", "ctrl+alt+arrowdown"],
+  splitPaneRight: ["cmd+ctrl+d", "ctrl+alt+d"],
+  splitPaneDown: ["cmd+ctrl+e", "ctrl+alt+e"],
+  closePaneTab: ["cmd+ctrl+w", "ctrl+alt+q"],
+  nextPaneTab: ["cmd+ctrl+j", "ctrl+alt+j"],
+  previousPaneTab: ["cmd+ctrl+k", "ctrl+alt+k"],
 }
 
 export const KEYBINDING_ACTIONS: readonly KeybindingAction[] = [
@@ -240,6 +267,15 @@ export const KEYBINDING_ACTIONS: readonly KeybindingAction[] = [
   "newStack",
   "newStackChat",
   "jumpToStacks",
+  "focusPaneLeft",
+  "focusPaneRight",
+  "focusPaneUp",
+  "focusPaneDown",
+  "splitPaneRight",
+  "splitPaneDown",
+  "closePaneTab",
+  "nextPaneTab",
+  "previousPaneTab",
 ] satisfies KeybindingAction[]
 
 export interface KeybindingsSnapshot {

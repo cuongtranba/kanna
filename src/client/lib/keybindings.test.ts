@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { DEFAULT_KEYBINDINGS } from "../../shared/types"
 import { bindingMatchesEvent, findMatchingActionBinding, parseKeybindingInput } from "./keybindings"
 import type { KeybindingsSnapshot } from "../../shared/types"
 
@@ -29,6 +30,7 @@ describe("findMatchingActionBinding", () => {
   test("returns the matching binding for multi-binding actions", () => {
     const snapshot: KeybindingsSnapshot = {
       bindings: {
+        ...DEFAULT_KEYBINDINGS,
         toggleEmbeddedTerminal: ["cmd+j"],
         toggleRightSidebar: ["cmd+b"],
         openInFinder: ["cmd+alt+f"],

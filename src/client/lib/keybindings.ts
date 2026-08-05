@@ -12,6 +12,15 @@ export const KEYBINDING_ACTION_LABELS: Record<KeybindingAction, string> = {
   newStack: "New Stack",
   newStackChat: "New Stack Chat",
   jumpToStacks: "Jump To Stacks",
+  focusPaneLeft: "Focus Pane Left",
+  focusPaneRight: "Focus Pane Right",
+  focusPaneUp: "Focus Pane Up",
+  focusPaneDown: "Focus Pane Down",
+  splitPaneRight: "Split Pane Right",
+  splitPaneDown: "Split Pane Down",
+  closePaneTab: "Close Tab",
+  nextPaneTab: "Next Tab",
+  previousPaneTab: "Previous Tab",
 }
 
 export function formatKeybindingInput(bindings: string[] | undefined) {

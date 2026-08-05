@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { DEFAULT_KEYBINDINGS } from "../shared/types"
 import type { KeybindingsSnapshot } from "../shared/types"
 import type { ClientCommand } from "../shared/protocol"
 import { createWsRouter } from "./ws-router"
@@ -22,6 +23,7 @@ class FakeWebSocket {
 
 const DEFAULT_KEYBINDINGS_SNAPSHOT: KeybindingsSnapshot = {
   bindings: {
+    ...DEFAULT_KEYBINDINGS,
     toggleEmbeddedTerminal: ["cmd+j", "ctrl+`"],
     toggleRightSidebar: ["ctrl+b"],
     openInFinder: ["cmd+alt+f"],
