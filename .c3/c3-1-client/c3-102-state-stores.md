@@ -1,7 +1,7 @@
 ---
 id: c3-102
 c3-version: 4
-c3-seal: 74166500d47b92afb028f728a059da4672cf916b13bcd057bafb6d4b246db16e
+c3-seal: 55a83e13b298cb1d5083743bc7e2ae3465e8fd37c991bf7ffacf86ab7e0df022
 title: state-stores
 type: component
 category: foundation
@@ -76,6 +76,7 @@ Owns the browser-side state surface as Zustand stores in three forms: singleton 
 | useSocketStore | OUT | Raw WS transport state (readyState + sendMessage); written only by SocketBridge | c3-101 | src/client/stores/socketStore.ts |
 | useViewportStore | OUT | Measured window size behind one shell-mounted resize subscription; 0 until first measurement | c3-110, c3-111 | src/client/stores/viewportStore.ts |
 | usePaneLayoutStore | OUT | One persisted pane tree per project, seeded from the pre-rewrite layout keys on first read; per-pane UI slices are scoped off it by the pane-scoped store factory | c3-104 | src/client/stores/paneLayoutStore.ts |
+| usePaneDragStore | OUT | Transient tab-drag state (dragged tab, hovered pane, drop intent); every write is value-guarded so a drag does not publish a snapshot per pointer move | c3-104 | src/client/stores/paneDragStore.ts |
 
 ## Change Safety
 

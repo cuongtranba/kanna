@@ -1,6 +1,6 @@
 ---
 id: c3-104
-c3-seal: 3bcf8104bc4b00670d618fea52755efa18a4e16f3666f80626aa9ab61021fece
+c3-seal: bf22d4e20f866da6739e33840751fdc35c1301f78381dd93599430003d206b85
 title: pane-layout
 type: component
 category: foundation
@@ -70,6 +70,10 @@ Owns the pane tree as a pure data structure and the components that render it: a
 | SplitContainer | OUT | Renders the tree as nested resizable groups keyed by stable node id, so a split never remounts a sibling | c3-112 | src/client/components/panes/SplitContainer.tsx |
 | Content registry | IN | Host supplies one renderer per tab kind; panes hold no view-model of their own | c3-112 | src/client/components/panes/paneContentRegistry.ts |
 | Per-project layout store | OUT | Persists one tree per project and seeds from the pre-rewrite layout keys on first read | c3-102 | src/client/stores/paneLayoutStore.ts |
+| Tab retention | OUT | Backgrounded tabs stay mounted — active always, terminals uncapped, the rest by recency to a cap — hidden with visibility:hidden plus inert, never display:none | c3-118 | src/client/components/panes/paneRetention.ts |
+| Phone view | OUT | Below BREAKPOINT_MD the tree flattens to one pane carrying every tab in tree order, so no tab is stranded; unmeasured width (0) renders the tree, not the phone view | c3-110 | src/client/components/panes/mobileLayout.ts |
+| Keyboard commands | OUT | Nine rebindable actions map to pane intents through one pure resolver; each command's subject is derived in the store, and only modifier-less bindings are suppressed while typing | c3-222 | src/client/components/panes/paneKeyboard.ts |
+| Drop geometry | OUT | Pointer over a pane resolves to merge (middle 40% of both axes) or a split toward the proportionally nearest edge; no region of a pane is inert during a drag | c3-112 | src/client/components/panes/paneDropGeometry.ts |
 
 ## Change Safety
 
