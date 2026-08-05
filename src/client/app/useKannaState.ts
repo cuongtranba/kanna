@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react"
-import { useNavigate } from "react-router-dom"
 import { useShallow } from "zustand/react/shallow"
 import { PROVIDERS, type AgentProvider, type AppSettingsPatch, type AppSettingsSnapshot, type AskUserQuestionAnswerMap, type ChatAttachment, type ChatDiffSnapshot, type ChatHistoryPage, type ClaudeAuthSettings, type CloudflareTunnelSettings, type GitWorktree, type KeybindingsSnapshot, type LocalProjectsSnapshot, type LlmProviderSnapshot, type LlmProviderValidationResult, type ModelOptions, type OpenRouterModel, type ProviderCatalogEntry, type PushConfigSnapshot, type QueuedChatMessage, type SidebarChatRow, type SidebarData, type StackSummary, type TranscriptEntry, type UpdateSnapshot, type UserPromptEntry } from "../../shared/types"
 import { NEW_CHAT_COMPOSER_ID, type ComposerState, useChatPreferencesStore } from "../stores/chatPreferencesStore"
@@ -31,6 +30,7 @@ import { domAdapter } from "../adapters/dom.adapter"
 import { timerAdapter } from "../adapters/timer.adapter"
 import type { ProjectRequest } from "./useAppGlobalState"
 import { useAppGlobalContext } from "./AppGlobalProvider"
+import type { ChatNavigatorPort } from "./chatNavigator"
 
 // Re-export pure helpers / types that have moved to useAppGlobalState but
 // are imported by consumers from this module (backward-compat, zero consumer changes).
@@ -643,6 +643,7 @@ export interface KannaState {
   handleOpenExternalPath: (action: "open_finder" | "open_editor", localPath: string) => Promise<void>
   handleOpenLocalLink: (target: OpenLocalLinkTarget, action?: OpenExternalAction, editor?: EditorOpenSettings) => Promise<void>
   handleCompose: () => void
+  chatNavigator: ChatNavigatorPort
   handleAskUserQuestion: (
     toolUseId: string,
     questions: AskUserQuestionItem[],
@@ -680,7 +681,6 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
   const sessStore = ports.sessStore ?? sessionStorageAdapter
   const dom = ports.dom ?? domAdapter
   const timer = ports.timer ?? timerAdapter
-  const navigate = useNavigate()
   // App-global state is owned by AppGlobalProvider (mounted once at KannaLayout).
   // Reading it via context prevents duplicate global socket subscriptions when
   // multiple useKannaState instances mount (one per open chat tab).
@@ -898,8 +898,8 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
     if (pendingChatId === activeChatId) {
       return
     }
-    navigate("/")
-  }, [activeChatId, appGlobal.sidebarReady, chatReady, navigate, pendingChatId, sidebarProjectGroups])
+    appGlobal.chatNavigator.closeChat()
+  }, [activeChatId, appGlobal.chatNavigator, appGlobal.sidebarReady, chatReady, pendingChatId, sidebarProjectGroups])
 
   useEffect(() => {
     if (!chatSnapshot) return
@@ -1226,7 +1226,7 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
           composerStateFromSendOptions(options) ?? chatPreferences.getComposerState(NEW_CHAT_COMPOSER_ID)
         )
         useKannaStateStore.getState().setPendingChatId(result.chatId)
-        navigate(`/chat/${result.chatId}`)
+        appGlobal.chatNavigator.openChat(result.chatId)
       }
       useKannaStateStore.getState().setCommandError(null)
     } catch (error) {
@@ -1239,7 +1239,7 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
       useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
       throw error
     }
-  }, [activeChatId, fallbackLocalProjectPath, localStore, navigate, optimisticScopeId, optimisticUserPrompts, selectedProjectId, serverTranscriptEntries, sessStore, sidebarProjectGroups, socket])
+  }, [activeChatId, appGlobal.chatNavigator, fallbackLocalProjectPath, localStore, optimisticScopeId, optimisticUserPrompts, selectedProjectId, serverTranscriptEntries, sessStore, sidebarProjectGroups, socket])
 
   const handleSteerQueuedMessage = useCallback(async (queuedMessageId: string) => {
     if (!activeChatId) return

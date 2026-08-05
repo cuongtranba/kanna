@@ -9,9 +9,10 @@
  * Architecture: .c3/adr/adr-20260715-client-state-effect-architecture.md
  */
 
-import { createContext, useContext, type ReactNode } from "react"
-import { useParams } from "react-router-dom"
+import { createContext, useContext, useMemo, type ReactNode } from "react"
+import { useNavigate, useParams } from "react-router-dom"
 import { type AppGlobalState, useAppGlobalState } from "./useAppGlobalState"
+import { type ChatNavigatorPort, makeChatNavigator } from "./chatNavigator"
 import { selectChatSlice, useChatStateStore } from "../stores/chatStateStore"
 import { useOptionalKannaSocket } from "./KannaSocketProvider"
 import type { KannaSocket } from "./socket"
@@ -45,6 +46,11 @@ export interface AppGlobalProviderPorts {
    * production shares the one connection the provider owns.
    */
   socket?: KannaSocket
+  /**
+   * Overrides the default chatNavigator (built from useNavigate). For tests
+   * only — production uses makeChatNavigator(useNavigate()).
+   */
+  chatNavigator?: ChatNavigatorPort
 }
 
 // ---------------------------------------------------------------------------
@@ -63,6 +69,12 @@ export function AppGlobalProvider({
   const dom = ports.dom ?? domAdapter
   const timer = ports.timer ?? timerAdapter
   const clipboard = ports.clipboard ?? clipboardAdapter
+
+  // ChatNavigator: one useNavigate() call at the provider boundary, shared by
+  // all useKannaState consumers mounted beneath this provider.
+  const navigate = useNavigate()
+  const defaultChatNavigator = useMemo(() => makeChatNavigator(navigate), [navigate])
+  const chatNavigator = ports.chatNavigator ?? defaultChatNavigator
 
   // Socket: prefer the injected test override; fall back to the provider.
   // Both calls must happen before any conditional throw (hooks rules).
@@ -104,6 +116,7 @@ export function AppGlobalProvider({
     clipboard,
     activeChatId,
     runtime,
+    chatNavigator,
   )
 
   return (

@@ -8,7 +8,7 @@
  */
 
 import { useCallback, useEffect, useMemo } from "react"
-import { useNavigate } from "react-router-dom"
+import { type ChatNavigatorPort } from "./chatNavigator"
 import { type AppSettingsPatch, type AppSettingsSnapshot, type ClaudeAuthSettings, type KeybindingsSnapshot, type LlmProviderSnapshot, type LlmProviderValidationResult, type OpenRouterModel, type PushConfigSnapshot, type UpdateInstallResult, type UpdateSnapshot } from "../../shared/types"
 import type { ChatSnapshot, CloudflareTunnelSettings, GitWorktree, LocalProjectsSnapshot, SidebarChatRow, SidebarData, StackSummary } from "../../shared/types"
 import { NEW_CHAT_COMPOSER_ID, useChatPreferencesStore } from "../stores/chatPreferencesStore"
@@ -364,6 +364,7 @@ export interface AppGlobalState {
   handleOpenExternalPath: (action: "open_finder" | "open_editor", localPath: string) => Promise<void>
   handleOpenLocalLink: (target: OpenLocalLinkTarget, action?: OpenExternalAction, editor?: EditorOpenSettings) => Promise<void>
   handleCompose: () => void
+  chatNavigator: ChatNavigatorPort
 }
 
 // ---------------------------------------------------------------------------
@@ -379,8 +380,8 @@ export function useAppGlobalState(
   clipboard: ClipboardPort,
   activeChatId: string | null,
   runtime: ChatSnapshot["runtime"] | null,
+  chatNavigator: ChatNavigatorPort,
 ): AppGlobalState {
-  const navigate = useNavigate()
   const dialog = useAppDialog()
 
   // ---- store reads -------------------------------------------------------
@@ -917,10 +918,10 @@ export function useAppGlobalState(
     const store = useKannaStateStore.getState()
     store.setSelectedProjectId(projectId)
     store.setPendingChatId(result.chatId)
-    navigate(`/chat/${result.chatId}`)
+    chatNavigator.openChat(result.chatId)
     store.setSidebarOpen(false)
     store.setCommandError(null)
-  }, [activeChatId, navigate, socket])
+  }, [activeChatId, chatNavigator, socket])
 
   const resolveProjectIdForStartChat = useCallback(async (intent: StartChatIntent): Promise<{ projectId: string; localPath?: string }> => {
     if (intent.kind === "project_id") {
@@ -979,13 +980,13 @@ export function useAppGlobalState(
       })
       const store = useKannaStateStore.getState()
       store.setPendingChatId(result.chatId)
-      navigate(`/chat/${result.chatId}`)
+      chatNavigator.openChat(result.chatId)
       store.setSidebarOpen(false)
       store.setCommandError(null)
     } catch (error) {
       useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
     }
-  }, [navigate, socket])
+  }, [chatNavigator, socket])
 
   const handleOpenLocalProject = useCallback(async (localPath: string) => {
     await startChatFromIntent({ kind: "local_path", localPath })
@@ -1022,37 +1023,45 @@ export function useAppGlobalState(
       await socket.command({ type: "chat.delete", chatId: chat.chatId })
       if (chat.chatId === activeChatId) {
         const nextChatId = getNewestRemainingChatId(sidebarProjectGroups, chat.chatId)
-        navigate(nextChatId ? `/chat/${nextChatId}` : "/")
+        if (nextChatId) {
+          chatNavigator.openChat(nextChatId)
+        } else {
+          chatNavigator.closeChat()
+        }
       }
     } catch (error) {
       useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
     }
-  }, [activeChatId, dialog, navigate, sidebarProjectGroups, socket])
+  }, [activeChatId, chatNavigator, dialog, sidebarProjectGroups, socket])
 
   const handleArchiveChat = useCallback(async (chat: SidebarChatRow) => {
     try {
       await socket.command({ type: "chat.archive", chatId: chat.chatId })
       if (chat.chatId === activeChatId) {
         const nextChatId = getNewestRemainingChatId(sidebarProjectGroups, chat.chatId)
-        navigate(nextChatId ? `/chat/${nextChatId}` : "/")
+        if (nextChatId) {
+          chatNavigator.openChat(nextChatId)
+        } else {
+          chatNavigator.closeChat()
+        }
       }
       useKannaStateStore.getState().setCommandError(null)
     } catch (error) {
       useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
     }
-  }, [activeChatId, navigate, sidebarProjectGroups, socket])
+  }, [activeChatId, chatNavigator, sidebarProjectGroups, socket])
 
   const handleOpenArchivedChat = useCallback(async (chatId: string) => {
     try {
       useKannaStateStore.getState().setPendingChatId(chatId)
       await socket.command({ type: "chat.unarchive", chatId })
-      navigate(`/chat/${chatId}`)
+      chatNavigator.openChat(chatId)
       useKannaStateStore.getState().setCommandError(null)
     } catch (error) {
       useKannaStateStore.getState().setPendingChatId(null)
       useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
     }
-  }, [navigate, socket])
+  }, [chatNavigator, socket])
 
   const handleHideProject = useCallback(async (projectId: string) => {
     try {
@@ -1060,13 +1069,13 @@ export function useAppGlobalState(
       useTerminalLayoutStore.getState().clearProject(projectId)
       useRightSidebarStore.getState().clearProject(projectId)
       if (runtime?.projectId === projectId) {
-        navigate("/")
+        chatNavigator.closeChat()
       }
       useKannaStateStore.getState().setCommandError(null)
     } catch (error) {
       useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
     }
-  }, [navigate, runtime, socket])
+  }, [chatNavigator, runtime, socket])
 
   const handleToggleProjectStar = useCallback(async (projectId: string, starred: boolean) => {
     try {
@@ -1155,13 +1164,13 @@ export function useAppGlobalState(
       const store = useKannaStateStore.getState()
       store.setSelectedProjectId(primaryProjectId)
       store.setPendingChatId(result.chatId)
-      navigate(`/chat/${result.chatId}`)
+      chatNavigator.openChat(result.chatId)
       store.setSidebarOpen(false)
       store.setCommandError(null)
     } catch (error) {
       useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
     }
-  }, [activeChatId, navigate, socket])
+  }, [activeChatId, chatNavigator, socket])
 
   const handleListStackWorktrees = useCallback(async (projectId: string): Promise<GitWorktree[]> => {
     try {
@@ -1282,8 +1291,8 @@ export function useAppGlobalState(
       return
     }
 
-    navigate("/")
-  }, [fallbackLocalProjectPath, navigate, selectedProjectId, sidebarProjectGroups, startChatFromIntent])
+    chatNavigator.goHome()
+  }, [chatNavigator, fallbackLocalProjectPath, selectedProjectId, sidebarProjectGroups, startChatFromIntent])
 
   // ---- derive ui restart ------------------------------------------------
 
@@ -1358,6 +1367,7 @@ export function useAppGlobalState(
     handleOpenExternalPath,
     handleOpenLocalLink,
     handleCompose,
+    chatNavigator,
   }
 }
 
