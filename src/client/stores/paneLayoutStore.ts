@@ -202,7 +202,10 @@ export const usePaneLayoutStore = create<PaneLayoutState>()(
         const layouts: Record<string, PaneLayout> = {}
         if (typeof rawLayouts === "object" && rawLayouts !== null) {
           for (const [projectId, layout] of Object.entries(rawLayouts)) {
-            layouts[projectId] = normalizeLayout(layout)
+            const normalized = normalizeLayout(layout)
+            if (collectPanes(normalized.root).some((p) => p.tabs.length > 0)) {
+              layouts[projectId] = normalized
+            }
           }
         }
 
