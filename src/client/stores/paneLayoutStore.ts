@@ -10,6 +10,7 @@ import {
   openTab as openTabInLayout,
   reorderPaneTabs as reorderPaneTabsInLayout,
   resizeGroup as resizeGroupInLayout,
+  setGroupSizes as setGroupSizesInLayout,
   splitPane as splitPaneInLayout,
   type PaneLayout,
   type PaneTabTarget,
@@ -44,6 +45,8 @@ interface PaneLayoutState {
   moveTabToPane: (projectId: string, tabId: string, toPaneId: string, index?: number) => void
   reorderPaneTabs: (projectId: string, paneId: string, orderedTabIds: readonly string[]) => void
   resizeGroup: (projectId: string, groupId: string, index: number, deltaRatio: number) => void
+  /** Commit a finished drag: absolute fractions, in child order. */
+  setGroupSizes: (projectId: string, groupId: string, sizes: readonly number[]) => void
   /** Install a layout derived from the pre-tabs stores, unless one already exists. */
   seedFromLegacy: (projectId: string, legacy: LegacyProjectLayout) => void
   clearProject: (projectId: string) => void
@@ -110,6 +113,9 @@ export const usePaneLayoutStore = create<PaneLayoutState>()(
 
         resizeGroup: (projectId, groupId, index, deltaRatio) =>
           apply(projectId, (layout) => resizeGroupInLayout(layout, groupId, index, deltaRatio)),
+
+        setGroupSizes: (projectId, groupId, sizes) =>
+          apply(projectId, (layout) => setGroupSizesInLayout(layout, groupId, sizes)),
 
         seedFromLegacy: (projectId, legacy) =>
           set((state) => {

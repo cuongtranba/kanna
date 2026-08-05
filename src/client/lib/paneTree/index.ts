@@ -54,6 +54,7 @@ export {
   openTab,
   reorderPaneTabs,
   resizeGroup,
+  setGroupSizes,
   splitPane,
   type OpenTabResult,
   type SplitPaneArgs,

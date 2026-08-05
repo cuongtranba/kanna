@@ -1,4 +1,4 @@
-import { clampPairSizes } from "./sizes"
+import { clampPairSizes, normalizeSizes, redistributeToMinimum } from "./sizes"
 import { buildTabId } from "./tabTarget"
 import {
   collectPanes,
@@ -289,6 +289,37 @@ function findGroupPath(node: PaneNode, groupId: string, path: number[] = []): nu
     }
   }
   return null
+}
+
+/**
+ * Set a group's sizes outright.
+ *
+ * The resize library reports absolute sizes rather than a delta, so this is the
+ * commit path for a finished drag. Sizes are floored and renormalized, which
+ * is the structural clamp — `resizeGroup` remains the pairwise one used for
+ * keyboard nudges, where only the dragged boundary should move.
+ */
+export function setGroupSizes(
+  layout: PaneLayout,
+  groupId: string,
+  sizes: readonly number[],
+): PaneLayout | null {
+  const path = findGroupPath(layout.root, groupId)
+  if (!path) return null
+  const group = getNodeAtPath(layout.root, path)
+  if (!group || !isGroup(group)) return null
+  if (sizes.length !== group.children.length) return null
+
+  const next = redistributeToMinimum(normalizeSizes(sizes, group.children.length))
+  const unchanged = next.every((size, i) => Math.abs(size - (group.sizes[i] ?? 0)) < 1e-6)
+  if (unchanged) return null
+
+  const root = replaceNodeAtPath(
+    layout.root,
+    path,
+    createGroup(group.id, group.direction, group.children, next),
+  )
+  return { ...layout, root }
 }
 
 export function resizeGroup(
