@@ -3,6 +3,7 @@ import {
   createKannaMcpServer,
   type KannaMcpDelegationContext,
   type SetupLoopHandlerResult,
+  type ArmedLoopInfo,
 } from "./kanna-mcp"
 import type { LoopSetupInput } from "./loop-template"
 import { KANNA_MCP_SERVER_NAME } from "../shared/tools"
@@ -108,6 +109,14 @@ export async function startClaudeSession(args: {
   /** Live check: true while an autonomous loop is armed — blocks direct-edit native tools. */
   isLoopArmed?: () => boolean
   /**
+   * Live armed-loop slice for the kanna-mcp tools: the workdir the tracking
+   * file resolves against, the oracle command `run_verify` runs, and the
+   * tracking file the chunk-label fallback reads. Unlike `isLoopArmed` this is
+   * NOT gated to main-agent spawns — a loop's worker subagent needs the same
+   * workdir, or it writes its progress into the wrong checkout.
+   */
+  getArmedLoop?: (chatId: string) => ArmedLoopInfo | null
+  /**
    * Agentic-turn bound passed natively to the SDK query() (Claude Code's
    * per-agent frontmatter maxTurns analog): the SDK stops gracefully and
    * keeps the accumulated output. Used by subagent spawns.
@@ -174,6 +183,7 @@ export async function startClaudeSession(args: {
           restrictedAllowedPaths: args.restrictedAllowedPaths,
           setupLoop: args.setupLoop,
           stopLoop: args.stopLoop,
+          getArmedLoop: args.getArmedLoop,
         }),
         ..._deps.buildUserMcpServers(args.customMcpServers ?? [], args.oauthBearers),
       },

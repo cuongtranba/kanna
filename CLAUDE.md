@@ -969,6 +969,50 @@ repo over a grep in a shell script: a `renderToStaticMarkup` assertion cannot
 be satisfied by an import line, whereas `grep -q SplitContainer` can. Scope the
 oracle to the TERMINAL state of the plan, not the current stage.
 
+**`getArmedLoop` must be SUPPLIED at every spawn site.** `ArmedLoopInfo`
+(`{verifyCommand, workdirAbs, trackingFileRel}`) backs `run_verify`, the
+tracking-doc tools' base dir, and the chunk-label fallback below. It shipped
+declared-but-never-passed, which silently hid `run_verify` entirely and made
+every worktree loop resolve its tracking file against the chat cwd. It is now
+wired from `toArmedLoopInfo(isLoopArmed(chatId))` (the single `LoopState` →
+`ArmedLoopInfo` adapter, `claude-loop-commands.ts`) through BOTH drivers, on
+BOTH the main-turn path (`claude-session-spawner.ts`) and the subagent path
+(`agent-deps-builders.ts` → `claude-subagent-wiring.ts` →
+`subagent-provider-run.ts`). **Do NOT copy `isLoopArmed`'s
+`delegationContext.depth === 0` gate onto it.** That gate is right for
+tool-blocking (only the orchestrator is blocked) and wrong here: the
+tracking-doc tools are registered for subagents too, and a worker without the
+loop's `workdirAbs` writes its progress into the wrong checkout.
+
+## Loop Progress row labels (adr-20260805-loop-chunk-label)
+
+A run's Progress row reads `SubagentRunSnapshot.label`, which
+`deriveChunkLabel(prompt)` derives from the spawn prompt's first line. That is
+right for an ad-hoc delegation (model-authored prompt) and useless for a loop:
+`renderLoopPrompt` joins the worker brief into ONE line starting `Do the next
+chunk in <file>. All work happens in <workdir>.` and asks for it verbatim, so
+every row rendered the same 80-char boilerplate. Two channels now carry chunk
+identity, first-match-wins:
+
+1. **`[chunk: …]` marker** — the worker prompt opens with
+   `[chunk: <one-line summary of the Next chunk you just read>]`, the ONE
+   substitution step 4 asks the orchestrator to make. `parseChunkMarker`
+   (shared, pure) returns null for an unsubstituted `<…>` body so template
+   noise never reaches the UI. Pinned by `"[chunk:"` in the template's
+   `requiredSubstrings`.
+2. **The plan** — absent a usable marker, `buildLoopChunkLabelResolver`
+   (`kanna-mcp.ts`) reads the armed loop's tracking file and takes the first
+   line of `## Next chunk` (`chunkLabelFromSection`). At delegate time that
+   section IS the chunk (the worker rewrites it only after finishing), so this
+   needs no model cooperation — it is what makes the label a guarantee.
+
+The marker wins because it is per-delegation: under `parallelism > 1` one turn
+delegates several chunks and a single shared plan section cannot tell them
+apart. The label rides `delegateRun({label})` → `spawnRun`, which falls back to
+`deriveChunkLabel`. The file read lives in `kanna-mcp.ts` (already an adapter
+importer), so no IO enters `subagent-orchestrator.ts`. A resolver failure is
+swallowed — a label is cosmetic and must never fail a delegation.
+
 ## Structured tracking-file access (mdast — bounds loop context growth)
 
 Both the main orchestrator and its subagents are FRESH Claude spawns every

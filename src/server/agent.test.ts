@@ -3689,7 +3689,7 @@ describe("AgentCoordinator claude integration", () => {
 
     // Pin the armed state to the test toggle — the send() takeover path would
     // otherwise disarm before the spawn check ever sees an armed loop.
-    coordinator.isLoopArmed = () => (armed ? { subagentId: "sa-1", prompt: "loop prompt", armedAt: 0, consecutiveFailures: 0, verifyCommand: null, workdirAbs: null } : null)
+    coordinator.isLoopArmed = () => (armed ? { subagentId: "sa-1", prompt: "loop prompt", armedAt: 0, consecutiveFailures: 0, verifyCommand: null, workdirAbs: null, trackingFileRel: null } : null)
 
     const sendTurn = async (content: string, expectedFinished: number) => {
       await coordinator.send({
@@ -3770,7 +3770,7 @@ describe("AgentCoordinator claude integration", () => {
       },
     })
 
-    coordinator.isLoopArmed = () => (armed ? { subagentId: "sa-1", prompt: "loop prompt", armedAt: 0, consecutiveFailures: 0, verifyCommand: null, workdirAbs: null } : null)
+    coordinator.isLoopArmed = () => (armed ? { subagentId: "sa-1", prompt: "loop prompt", armedAt: 0, consecutiveFailures: 0, verifyCommand: null, workdirAbs: null, trackingFileRel: null } : null)
 
     const sendTurn = async (content: string, expectedFinished: number) => {
       await coordinator.send({

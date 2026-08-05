@@ -11,7 +11,7 @@ import { renderStackProjectsBlock } from "../shared/kanna-system-prompt"
 import type { ClaudeSessionHandle } from "./agent"
 import type { LiveTurnSource, ProviderRunStart } from "./subagent-orchestrator"
 import type { SubagentOrchestrator } from "./subagent-orchestrator"
-import type { KannaMcpDelegationContext } from "./kanna-mcp"
+import type { ArmedLoopInfo, KannaMcpDelegationContext } from "./kanna-mcp"
 import { log } from "../shared/log"
 
 /**
@@ -70,6 +70,7 @@ export interface BuildSubagentProviderRunArgs {
     restrictedAllowedPaths?: string[]
     keepAlive?: boolean
     maxTurns?: number
+    getArmedLoop?: (chatId: string) => ArmedLoopInfo | null
   }) => Promise<ClaudeSessionHandle>
   /**
    * True when the claude driver preference is PTY. PTY claude (interactive
@@ -81,6 +82,13 @@ export interface BuildSubagentProviderRunArgs {
   subagentOrchestrator?: SubagentOrchestrator
   /** Optional — per-spawn delegation context forwarded to kanna-mcp for sub-spawn-sub. */
   delegationContext?: KannaMcpDelegationContext
+  /**
+   * Live armed-loop slice. A loop worker is a plain subagent, but its tracking
+   * file lives in the LOOP's workdir (often a sibling worktree) — without this
+   * its `query/append_tracking_file` calls resolve against the chat cwd and it
+   * writes progress into the wrong checkout.
+   */
+  getArmedLoop?: (chatId: string) => ArmedLoopInfo | null
   codexManager: CodexAppServerManager
   /** Forwards interactive tool requests (AskUserQuestion / ExitPlanMode) to the parent chat's UI handler. */
   onToolRequest: (request: HarnessToolRequest) => Promise<unknown>
@@ -197,6 +205,7 @@ async function runClaudeSubagent(opts: {
     restrictedAllowedPaths: args.allowedPaths,
     keepAlive,
     maxTurns: args.subagent.maxTurns,
+    getArmedLoop: args.getArmedLoop,
   })
   args.abortSignal.addEventListener("abort", () => { session.interrupt() }, { once: true })
 

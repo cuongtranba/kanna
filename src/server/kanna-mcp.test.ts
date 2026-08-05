@@ -6,7 +6,7 @@ import type { TranscriptEntry } from "../shared/types"
 import { buildDelegateProgressEmitter, buildKannaMcpTools, resolveOfferDownload, resolveWorkspaceFile } from "./kanna-mcp"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
 import type { SubagentOrchestrator } from "./subagent-orchestrator"
-import type { KannaMcpDelegationContext, SetupLoopHandlerResult } from "./kanna-mcp"
+import type { ArmedLoopInfo, KannaMcpDelegationContext, SetupLoopHandlerResult } from "./kanna-mcp"
 
 let tempRoot: string
 
@@ -274,6 +274,7 @@ interface FakeOrchestratorState {
     subagentId: string
     prompt: string
     keepAlive: boolean | undefined
+    label: string | undefined
   } | null
   lastSend: { runId: string; prompt: string } | null
   lastClose: { chatId: string; runId: string; reason: string } | null
@@ -302,6 +303,7 @@ function buildKannaMcpForTest(opts: {
         subagentId: args.subagentId,
         prompt: args.prompt,
         keepAlive: args.keepAlive,
+        label: args.label,
       }
       return { status: "completed" as const, runId: "run-42", text: "done" }
     },
@@ -710,6 +712,63 @@ describe("query_tracking_file + append_tracking_row tools", () => {
     })
     expect(res.isError).toBe(true)
     expect(res.content[0].text).toContain("run setup_loop")
+  })
+
+  /**
+   * The deterministic half of the Progress-row label. A loop's delegation
+   * prompt is identical every iteration, so when the orchestrator leaves the
+   * `[chunk: …]` marker unsubstituted the host reads the chunk out of the
+   * plan itself.
+   */
+  describe("delegate_subagent chunk-label fallback", () => {
+    const LOOP_PROMPT =
+      "[chunk: <one-line summary of the Next chunk you just read>]"
+      + " Do the next chunk in PROGRESS.md. All work happens in the project root."
+
+    const withArmedLoop = (overrides: Partial<ArmedLoopInfo> = {}) =>
+      buildKannaMcpForTest({
+        withDelegation: true,
+        extraArgs: {
+          localPath: dir,
+          getArmedLoop: () => ({
+            verifyCommand: "bun run lint",
+            workdirAbs: dir,
+            trackingFileRel: "PROGRESS.md",
+            ...overrides,
+          }),
+        },
+      })
+
+    test("unsubstituted marker → label read from the plan's Next chunk", async () => {
+      const { tools, fakeOrch } = withArmedLoop()
+      await tools.get("delegate_subagent")!.handler({ subagent_id: "s1", prompt: LOOP_PROMPT })
+      expect(fakeOrch.lastDelegate?.label).toBe("chunk 4")
+    })
+
+    test("substituted marker wins over the plan — it is per-delegation", async () => {
+      const { tools, fakeOrch } = withArmedLoop()
+      await tools.get("delegate_subagent")!.handler({
+        subagent_id: "s1",
+        prompt: "[chunk: Wire session tabs] Do the next chunk in PROGRESS.md.",
+      })
+      expect(fakeOrch.lastDelegate?.label).toBeUndefined()
+    })
+
+    test("legacy loop with no recorded tracking file → no label, no failure", async () => {
+      const { tools, fakeOrch } = withArmedLoop({ trackingFileRel: null })
+      const res = await tools.get("delegate_subagent")!.handler({ subagent_id: "s1", prompt: LOOP_PROMPT })
+      expect(res.isError).toBeFalsy()
+      expect(fakeOrch.lastDelegate?.label).toBeUndefined()
+    })
+
+    test("no loop armed → ad-hoc delegations are untouched", async () => {
+      const { tools, fakeOrch } = buildKannaMcpForTest({
+        withDelegation: true,
+        extraArgs: { localPath: dir, getArmedLoop: () => null },
+      })
+      await tools.get("delegate_subagent")!.handler({ subagent_id: "s1", prompt: LOOP_PROMPT })
+      expect(fakeOrch.lastDelegate?.label).toBeUndefined()
+    })
   })
 })
 

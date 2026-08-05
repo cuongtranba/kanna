@@ -24,6 +24,12 @@ export interface LoopState {
   verifyCommand: string | null
   /** Absolute directory the oracle runs in, or null (see `verifyCommand`). */
   workdirAbs: string | null
+  /**
+   * Tracking file relative to `workdirAbs`, or null for a loop armed before
+   * this was recorded. Read at delegate time to label a Progress row with the
+   * chunk being worked when the orchestrator did not name it itself.
+   */
+  trackingFileRel: string | null
 }
 
 /**
@@ -52,6 +58,7 @@ export function deriveLoopState(
         armedAt: event.timestamp,
         verifyCommand: event.verifyCommand ?? null,
         workdirAbs: event.workdirAbs ?? null,
+        trackingFileRel: event.trackingFileRel ?? null,
       }
       failures = 0
     } else if (event.kind === "loop_disarmed") {

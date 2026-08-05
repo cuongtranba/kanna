@@ -32,7 +32,7 @@ import type {
 import type { RunVerifyArgs, RunVerifyResult } from "./loop-verify-io.adapter"
 import type { BackgroundRunOutcome } from "./subagent-orchestrator"
 import type { ClaudeSessionState } from "./claude-session-state"
-import type { SetupLoopHandlerResult } from "./kanna-mcp"
+import type { ArmedLoopInfo, SetupLoopHandlerResult } from "./kanna-mcp"
 import { log } from "../shared/log"
 
 // ---------------------------------------------------------------------------
@@ -435,6 +435,7 @@ export async function setupLoop(
       prompt: resolved.prompt,
       verifyCommand: resolved.verifyCommand,
       workdirAbs: resolved.workdirAbs,
+      trackingFileRel: resolved.trackingFileRel,
     })
 
     const scheduleId = crypto.randomUUID()
@@ -471,6 +472,20 @@ export async function setupLoop(
 /** Current armed-loop state for a chat, or null. Pure replay of the auto-continue log. */
 export function isLoopArmed(deps: LoopCommandDeps, chatId: string): LoopState | null {
   return deriveLoopState(deps.store.getAutoContinueEvents(chatId), chatId)
+}
+
+/**
+ * Narrow the armed loop to the slice the kanna-mcp tools need. Pure, and the
+ * single adapter between the read model and the MCP host so the two spawn
+ * paths (main turn + subagent run) cannot drift.
+ */
+export function toArmedLoopInfo(state: LoopState | null): ArmedLoopInfo | null {
+  if (!state) return null
+  return {
+    verifyCommand: state.verifyCommand,
+    workdirAbs: state.workdirAbs,
+    trackingFileRel: state.trackingFileRel,
+  }
 }
 
 /**

@@ -8,7 +8,7 @@ import { createRuntimeDir, writeRuntimeFile, removeRuntimeDir } from "./runtime-
 import { verifyPtyAuth } from "./auth"
 import { startKannaMcpHttpServer, buildMcpConfigJson, type KannaMcpHttpHandle } from "../kanna-mcp-http"
 import { KANNA_MCP_SERVER_NAME } from "../../shared/tools"
-import type { KannaMcpDelegationContext, SetupLoopHandlerResult } from "../kanna-mcp"
+import type { ArmedLoopInfo, KannaMcpDelegationContext, SetupLoopHandlerResult } from "../kanna-mcp"
 import type { LoopSetupInput } from "../loop-template"
 import type { SubagentOrchestrator } from "../subagent-orchestrator"
 import { parseConfiguredContextWindowFromModelId, timestamped } from "../agent"
@@ -118,6 +118,13 @@ export interface StartClaudeSessionPtyArgs {
   stopLoop?: () => Promise<void>
   /** Evaluated at spawn: when true, add LOOP_BLOCKED tools to --disallowedTools. */
   isLoopArmed?: () => boolean
+  /**
+   * Live armed-loop slice for the kanna-mcp tools (tracking-file workdir,
+   * oracle command, tracking file). Unlike `isLoopArmed` this is NOT gated to
+   * main-agent spawns — a loop's worker subagent needs the same workdir, or it
+   * writes its progress into the wrong checkout.
+   */
+  getArmedLoop?: (chatId: string) => ArmedLoopInfo | null
   /** Enabled user-defined MCP servers, written into mcp-config.json. */
   customMcpServers?: readonly McpServerConfig[]
   /** Pre-resolved oauth bearer tokens keyed by server id. */
@@ -489,6 +496,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
         delegationContext: args.delegationContext,
         setupLoop: args.setupLoop,
         stopLoop: args.stopLoop,
+        getArmedLoop: args.getArmedLoop,
         // PTY has no canUseTool hook — the durable approval protocol is the
         // only host path for AskUserQuestion/ExitPlanMode. Force the shims
         // on regardless of KANNA_MCP_TOOL_CALLBACKS (issue #215). Paired

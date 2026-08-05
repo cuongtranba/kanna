@@ -125,6 +125,9 @@ describe("module surface", () => {
       "listLiveSchedules",
       "setupLoop",
       "stopLoop",
+      // Narrows LoopState → the slice kanna-mcp needs; the single adapter
+      // between the read model and the MCP host, so both spawn paths agree.
+      "toArmedLoopInfo",
     ])
   })
 })

@@ -21,7 +21,26 @@ describe("deriveLoopState", () => {
 
   test("loop_armed → armed state with subagentId + prompt", () => {
     const state = deriveLoopState([armed("c1", "sub-1", "LOOP PROMPT")], "c1")
-    expect(state).toEqual({ subagentId: "sub-1", prompt: "LOOP PROMPT", armedAt: 1_000, consecutiveFailures: 0, verifyCommand: null, workdirAbs: null })
+    expect(state).toEqual({ subagentId: "sub-1", prompt: "LOOP PROMPT", armedAt: 1_000, consecutiveFailures: 0, verifyCommand: null, workdirAbs: null, trackingFileRel: null })
+  })
+
+  test("carries trackingFileRel through; legacy events without it replay as null", () => {
+    // The label fallback reads `## Next chunk` from this file, so a loop armed
+    // before the field existed must degrade to "no fallback", not crash.
+    const withFile: AutoContinueEvent = {
+      v: 3,
+      kind: "loop_armed",
+      timestamp: 1_000,
+      chatId: "c1",
+      scheduleId: "arm-1000",
+      subagentId: "sub-1",
+      prompt: "P",
+      trackingFileRel: "PROGRESS-session-tabs.md",
+      workdirAbs: "/tmp/wt",
+      verifyCommand: "bun run lint",
+    }
+    expect(deriveLoopState([withFile], "c1")?.trackingFileRel).toBe("PROGRESS-session-tabs.md")
+    expect(deriveLoopState([armed("c1", "sub-1", "P")], "c1")?.trackingFileRel).toBeNull()
   })
 
   test("loop_disarmed after loop_armed → null", () => {
@@ -35,7 +54,7 @@ describe("deriveLoopState", () => {
       disarmed("c1", 2_000),
       armed("c1", "sub-2", "P2", 3_000),
     ], "c1")
-    expect(state).toEqual({ subagentId: "sub-2", prompt: "P2", armedAt: 3_000, consecutiveFailures: 0, verifyCommand: null, workdirAbs: null })
+    expect(state).toEqual({ subagentId: "sub-2", prompt: "P2", armedAt: 3_000, consecutiveFailures: 0, verifyCommand: null, workdirAbs: null, trackingFileRel: null })
   })
 
   test("consecutive failures accumulate across iterations", () => {

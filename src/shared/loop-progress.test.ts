@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { buildLoopProgress, deriveChunkLabel } from "./loop-progress"
+import { buildLoopProgress, chunkLabelFromSection, deriveChunkLabel, parseChunkMarker } from "./loop-progress"
 import type { SubagentRunSnapshot } from "./types"
 
 function run(overrides: Partial<SubagentRunSnapshot>): SubagentRunSnapshot {
@@ -53,6 +53,64 @@ describe("deriveChunkLabel", () => {
 
   test("empty prompt → empty string", () => {
     expect(deriveChunkLabel("   \n  ")).toBe("")
+  })
+
+  test("prefers the [chunk: …] marker over the boilerplate that follows it", () => {
+    // The exact shape a loop delegation arrives in: one line, marker first,
+    // then the identical server-rendered worker brief.
+    const prompt =
+      "[chunk: Wire session tabs to the store] Do the next chunk in PROGRESS-session-tabs.md."
+      + " All work happens in /home/cuong/repo/kanna."
+    expect(deriveChunkLabel(prompt)).toBe("Wire session tabs to the store")
+  })
+})
+
+describe("parseChunkMarker", () => {
+  test("reads the marker body, case-insensitively", () => {
+    expect(parseChunkMarker("[chunk: Migrate ChatPage] rest")).toBe("Migrate ChatPage")
+    expect(parseChunkMarker("  [CHUNK:  Trim spaces  ] rest")).toBe("Trim spaces")
+  })
+
+  test("rejects an unsubstituted placeholder so template noise never reaches the UI", () => {
+    expect(parseChunkMarker("[chunk: <one-line summary of the Next chunk you just read>] rest"))
+      .toBeNull()
+  })
+
+  test("null when absent, empty, or not at the head of the prompt", () => {
+    expect(parseChunkMarker("Do the next chunk in PROGRESS.md.")).toBeNull()
+    expect(parseChunkMarker("[chunk:   ] rest")).toBeNull()
+    expect(parseChunkMarker("Prefix [chunk: too late] rest")).toBeNull()
+  })
+
+  test("caps an overlong marker body", () => {
+    const label = parseChunkMarker(`[chunk: ${"x".repeat(200)}] rest`)
+    expect(label?.length).toBe(80)
+    expect(label?.endsWith("…")).toBe(true)
+  })
+})
+
+describe("chunkLabelFromSection", () => {
+  test("first line of the section body, heading dropped", () => {
+    expect(chunkLabelFromSection("## Next chunk\n\nWire session tabs to the store\nDetails here"))
+      .toBe("Wire session tabs to the store")
+  })
+
+  test("strips a list marker the plan wrote", () => {
+    expect(chunkLabelFromSection("## Next chunk\n- Fix Dockerfiles for Berry")).toBe(
+      "Fix Dockerfiles for Berry",
+    )
+  })
+
+  test("empty for a finished or empty plan so the caller falls back", () => {
+    expect(chunkLabelFromSection("## Next chunk\n\nDONE\n")).toBe("")
+    expect(chunkLabelFromSection("## Next chunk\n\n")).toBe("")
+    expect(chunkLabelFromSection("")).toBe("")
+  })
+
+  test("keeps a sub-heading that is the chunk's own first line", () => {
+    expect(chunkLabelFromSection("## Next chunk\n### Stage 4: pane retention")).toBe(
+      "Stage 4: pane retention",
+    )
   })
 })
 

@@ -157,6 +157,11 @@ function renderLoopPrompt(args: {
   // omitting it defaulted the worker to PROGRESS.md, which is how a worker
   // once wrote its progress row into a DIFFERENT loop's committed file.
   const workerPrompt = [
+    // Leading chunk marker: the ONE substitution the orchestrator makes in an
+    // otherwise verbatim call. Everything after it is identical every
+    // iteration, so without the marker the Progress panel showed the same
+    // boilerplate row over and over instead of the chunk being worked.
+    "[chunk: <one-line summary of the Next chunk you just read>]",
     `Do the next chunk in ${trackingFileRel}. All work happens in ${workdirPhrase}.`,
     `To read the plan, call mcp__kanna__query_tracking_file({ ${f}, sections: [\\"Next chunk\\"] })`,
     "— by section, never the whole file.",
@@ -197,13 +202,19 @@ function renderLoopPrompt(args: {
     `       mcp__kanna__replace_tracking_section({ ${f}, section: "Next chunk", body: "<one concrete chunk>" })`,
     "       then go to step 4.",
     "4. Delegate the \"Next chunk\" work with EXACTLY this call (the subagent is",
-    "   fixed by configuration):",
+    "   fixed by configuration), making the ONE substitution marked below:",
     "",
     "     mcp__kanna__delegate_subagent({",
     `       subagent_id: "${subagentId}",`,
     "       run_in_background: true,",
     `       prompt: "${workerPrompt}",`,
     "     })",
+    "",
+    "   Replace `<one-line summary of the Next chunk you just read>` inside the",
+    "   leading `[chunk: …]` marker with a short name for the chunk you are",
+    "   delegating (e.g. `[chunk: Wire session tabs to the store]`). It is how",
+    "   this iteration is labelled in the UI, and it is the only edit you make",
+    "   to that prompt — leave every other word verbatim.",
     "",
     "5. If THIS turn began with a task-notification reporting a FAILED run, class",
     "   the failure before you re-delegate:",
@@ -521,6 +532,9 @@ export function validateLoopSetup(
     "replace_tracking_section",
     "GOAL MET",
     "ORACLE TOO WEAK",
+    // The chunk marker is what makes each Progress row read as the chunk it
+    // worked on rather than the identical boilerplate prompt.
+    "[chunk:",
     "END THIS TURN",
     "/clear",
     "NEVER edit code yourself",
