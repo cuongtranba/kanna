@@ -976,11 +976,14 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
     // `isFocused` is the pane's, so a terminal takes keyboard focus exactly when
     // its pane does. TerminalPane treats 0 as "no request" and focuses on any
     // change, so toggling 0/1 never steals focus from another pane.
-    terminal: (_target, _pane, isFocused) =>
+    terminal: (target, _pane, isFocused) =>
       projectId === null ? null : (
         <TerminalWorkspaceShell
           projectId={projectId}
-          terminalLayout={terminalLayout}
+          terminalLayout={{
+            ...terminalLayout,
+            terminals: terminalLayout.terminals.filter((t) => t.id === target.terminalId),
+          }}
           addTerminal={addTerminal}
           socket={state.socket}
           connectionStatus={state.connectionStatus}
