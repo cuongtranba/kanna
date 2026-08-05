@@ -10,6 +10,8 @@ bash scripts/verify-session-tabs.sh
 
 ## Progress (latest first)
 
+- 2026-08-05 chunk 0.7 DONE — isPrimaryChatInstance(chatId, activeChatId) predicate added to derived.ts with JSDoc; 7 unit tests in derived.test.ts; three route-affecting effects in useKannaState.ts gated (not-in-sidebar bounce, setSelectedProjectId, chat.markRead); activeChatId added to effect-2 dep array; no behaviour change for single-tab case; 528 pass / 0 fail, lint clean
+
 - 2026-08-05 chunk 0.6 DONE — project-git + project-commands moved to useAppGlobalState; subscribes once per distinct open projectId (paneLayoutStore keys + selectedProjectId + runtimeProjectId); sameDiffs/shouldPreserveExistingProjectDiffs moved to useAppGlobalState; no call-site changes; ast-grep + lint + typecheck + 521 tests pass / 0 fail
 
 - 2026-08-05 chunk 1 paneTree flat model DONE — sessionPanes.ts: PaneTree/Pane types + openPane/closePane/selectPane/nextPane/prevPane; exported from index.ts; index.test.ts: 17 tests covering dedup, close-last, close-active-selects-nearest, keyboard wrap-around; 135 pass / 0 fail
@@ -46,31 +48,18 @@ bash scripts/verify-session-tabs.sh
 
 ## Next chunk
 
-**0.7 — isPrimaryChatInstance predicate + gate route-affecting effects**
+**0.8 — Per-chat-tab scoped store**
 
-Add a pure predicate `isPrimaryChatInstance(chatId, activeChatId)` that returns
-true only when the given chatId is the ROUTE chatId (the "primary" instance).
-Gate the three route-affecting side-effects in `useKannaState.ts` behind it:
+New per-chat-tab scoped store via the existing `src/client/lib/createScopedStore.tsx`.
+Move in: `composerStore` (attachments, currentText, mentionQuery, slashQuery, uploadError,
+selectedAttachmentId), `chatNavbarStore.sharePopoverOpen`, and — important —
+`toolGroupExpanded` / `inputHeight` / `showScrollToBottom` OUT of
+`paneScopedStore`, because retention mounts several tabs inside ONE pane
+provider, so those are per-chat-TAB not per-pane. Leave `layoutWidth`,
+`tabRecency`, `diffRenderMode`, `localLinkMenuTarget` on the pane. Leave
+`chatInputStore.drafts` alone (already chatId-keyed).
 
-1. The not-in-sidebar bounce (~lines 1505-1519): fires `closeChat()` to
-   navigate away when the active chat is removed from the sidebar.
-2. `setSelectedProjectId` (~line 1521): sets the selected project when the
-   active chat's project changes.
-3. `chat.markRead` (~line 1529): marks the chat as read.
-
-A BACKGROUND tab (one whose chatId ≠ the route chatId) must never trigger
-these effects — it would yank the app to a different route or steal push focus.
-
-Steps:
-1. Write `isPrimaryChatInstance(chatId: string | null, activeChatId: string | null): boolean`
-   in `src/client/app/derived.ts` (or a new `src/client/app/chatInstance.ts`).
-2. Write a unit test for the predicate (pure function, easy).
-3. In `useKannaState.ts`, gate each of the three effects with `if (!isPrimary) return`.
-   `activeChatId` (the route chatId) is already in scope.
-4. Confirm existing tests still pass — no behaviour change for the single-tab case.
-
-Verify with: `bun test --conditions production src/client/app/ src/client/stores/ && bun run lint --max-warnings=0`
-Baseline: 521+ pass / 0 fail (additive/refactor only, no behaviour change)
+Verify with: `bun run verify:client-arch` (ast-grep + lint + typecheck + test)
 
 ## Context for every worker (read this first)
 

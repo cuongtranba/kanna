@@ -12,7 +12,7 @@ import type { AskUserQuestionItem } from "../components/messages/types"
 import type { OpenLocalLinkTarget } from "../components/messages/shared"
 import { processTranscriptMessages } from "../lib/parseTranscript"
 import { generateUUID } from "../lib/utils"
-import { canCancelStatus, getLatestToolIds, isProcessingStatus } from "./derived"
+import { canCancelStatus, getLatestToolIds, isPrimaryChatInstance, isProcessingStatus } from "./derived"
 import type { KannaSocket, SocketStatus } from "./socket"
 import type { ChatPermissionPolicyOverride, ToolRequestDecision } from "../../shared/permission-policy"
 import { useWorkflowsStore } from "../stores/workflowsStore"
@@ -831,6 +831,9 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
       logKannaState("clearing chat snapshot for non-chat route")
       return
     }
+    // Only the primary tab (route chatId === this instance's chatId) may navigate
+    // away. A background tab must never call closeChat() and yank the route.
+    if (!isPrimaryChatInstance(activeChatId, activeChatId)) return
     if (!appGlobal.sidebarReady || !chatReady) return
     const exists = sidebarProjectGroups.some((group) => group.chats.some((chat) => chat.chatId === activeChatId))
     if (exists) {
@@ -847,14 +850,21 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
 
   useEffect(() => {
     if (!chatSnapshot) return
+    // Only the primary tab may set the globally-selected project. A background tab
+    // must not steal project focus while the user is looking at a different chat.
+    if (!isPrimaryChatInstance(chatSnapshot.runtime.chatId, activeChatId)) return
     useKannaStateStore.getState().setSelectedProjectId(chatSnapshot.runtime.projectId)
     if (pendingChatId === chatSnapshot.runtime.chatId) {
       useKannaStateStore.getState().setPendingChatId(null)
     }
-  }, [chatSnapshot, pendingChatId])
+  }, [activeChatId, chatSnapshot, pendingChatId])
 
   useEffect(() => {
     if (!activeChatId || !appGlobal.sidebarReady) return
+    // Only the primary tab (the one the user is looking at) may push a markRead.
+    // A background tab would steal the read timestamp even though the user has
+    // not seen its messages on the current route.
+    if (!isPrimaryChatInstance(activeChatId, activeChatId)) return
     if (!shouldMarkActiveChatRead(dom)) return
     const activeSidebarChat = sidebarProjectGroups
       .flatMap((group) => group.chats)
