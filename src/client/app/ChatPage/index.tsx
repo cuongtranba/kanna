@@ -19,6 +19,7 @@ import {
   useRightSidebarStore,
 } from "../../stores/rightSidebarStore"
 import { useChatPageStore } from "../../stores/chatPageStore"
+import { ChatTabScopedStore } from "../../stores/chatTabScopedStore"
 import { DEFAULT_PROJECT_TERMINAL_LAYOUT, useTerminalLayoutStore } from "../../stores/terminalLayoutStore"
 import { useTerminalPreferencesStore } from "../../stores/terminalPreferencesStore"
 import { TERMINAL_TOGGLE_ANIMATION_DURATION_MS } from "../terminalToggleAnimation"
@@ -176,19 +177,20 @@ function useLayoutWidth(ref: RefObject<HTMLDivElement | null>) {
 
 function useTranscriptPaddingBottom() {
   const inputRef = useRef<HTMLDivElement>(null)
-  const inputHeight = useChatPageStore((s) => s.inputHeight)
-  const setInputHeight = useChatPageStore((s) => s.setInputHeight)
+  const inputHeight = ChatTabScopedStore.useScopedStore((s) => s.inputHeight)
+  const setInputHeight = ChatTabScopedStore.useScopedStore((s) => s.setInputHeight)
+  const chatTabStoreApi = ChatTabScopedStore.useScopedStoreApi()
 
   const syncInputHeight = useCallback(() => {
     const element = inputRef.current
     if (!element) return
     const measuredHeight = element.getBoundingClientRect().height
-    const current = useChatPageStore.getState().inputHeight
+    const current = chatTabStoreApi.getState().inputHeight
     const next = getNextMeasuredInputHeight(current, measuredHeight)
     if (next !== current) {
       setInputHeight(next)
     }
-  }, [setInputHeight])
+  }, [setInputHeight, chatTabStoreApi])
 
   useLayoutEffect(() => {
     const element = inputRef.current
@@ -247,8 +249,8 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
   const chatInputElementRef = useRef<HTMLTextAreaElement>(null)
   const chatInputRef = useRef<ChatInputHandle | null>(null)
   const { inputRef, syncInputHeight, transcriptPaddingBottom } = useTranscriptPaddingBottom()
-  const showScrollToBottom = useChatPageStore((s) => s.showScrollToBottom)
-  const setShowScrollToBottom = useChatPageStore((s) => s.setShowScrollToBottom)
+  const showScrollToBottom = ChatTabScopedStore.useScopedStore((s) => s.showScrollToBottom)
+  const setShowScrollToBottom = ChatTabScopedStore.useScopedStore((s) => s.setShowScrollToBottom)
   const navigate = useNavigate()
   const handleOpenPtyChat = useCallback((chatId: string) => {
     navigate(`/chat/${chatId}`)

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react"
 import type { PaneLeaf, SplitPosition } from "../../lib/paneTree"
 import { cn } from "../../lib/utils"
 import { PaneScopedStore } from "../../stores/paneScopedStore"
+import { ChatTabRoot } from "../../app/ChatPage/ChatTabRoot"
 import type { PaneContentRegistry } from "./paneContentRegistry"
 import { renderPaneContent } from "./paneContentRegistry"
 import { PaneTabStrip } from "./PaneTabStrip"
@@ -145,7 +146,14 @@ function PaneShellInner({
                 )}
                 inert={!isActiveTab}
               >
-                {renderPaneContent(registry, tab.target, pane, isFocused && isActiveTab)}
+                {/* ChatTabRoot mounts one ChatTabScopedStore per tab so every
+                    chat tab has independent ephemeral UI state (composer text,
+                    attachments, scroll-to-bottom flag, tool-group expansion…).
+                    The outer div keyed by tab.tabId is the reconciliation
+                    boundary; ChatTabRoot adds the store Provider inside it. */}
+                <ChatTabRoot>
+                  {renderPaneContent(registry, tab.target, pane, isFocused && isActiveTab)}
+                </ChatTabRoot>
               </div>
             )
           })}

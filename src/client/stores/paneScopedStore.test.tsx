@@ -23,14 +23,6 @@ function readInitial<T>(selector: (state: Parameters<typeof PaneScopedStore.useS
 }
 
 describe("PaneScopedStore initial state", () => {
-  test("toolGroupExpanded starts empty", () => {
-    expect(readInitial((s) => s.toolGroupExpanded)).toEqual({})
-  })
-
-  test("inputHeight starts at 148", () => {
-    expect(readInitial((s) => s.inputHeight)).toBe(148)
-  })
-
   test("layoutWidth starts at 0", () => {
     expect(readInitial((s) => s.layoutWidth)).toBe(0)
   })
@@ -101,24 +93,6 @@ describe("PaneScopedStore setters", () => {
     store.getState().setLocalLinkMenuTarget({ path: "/tmp/bar", line: 2, column: 3 })
     store.getState().setLocalLinkMenuOpen(true)
     expect(store.getState().localLinkMenuTarget).not.toBeNull()
-  })
-
-  test("resetToolGroupExpanded clears expanded keys", () => {
-    let api: ReturnType<typeof PaneScopedStore.useScopedStoreApi> | null = null
-    function Capture() {
-      api = PaneScopedStore.useScopedStoreApi()
-      return null
-    }
-    renderToStaticMarkup(
-      <PaneScopedStore.Provider init={undefined}>
-        <Capture />
-      </PaneScopedStore.Provider>,
-    )
-    const store = api!
-    store.getState().setToolGroupExpanded((curr) => ({ ...curr, toolA: true }))
-    expect(store.getState().toolGroupExpanded).toEqual({ toolA: true })
-    store.getState().resetToolGroupExpanded()
-    expect(store.getState().toolGroupExpanded).toEqual({})
   })
 
   // Each Provider instance gets its own store — state in one never leaks

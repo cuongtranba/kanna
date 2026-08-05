@@ -12,6 +12,12 @@ import {
   isStopAffordance,
   shouldRefreshPickerOnSelection,
 } from "./ChatInput"
+import { ChatTabScopedStore } from "../../stores/chatTabScopedStore"
+
+/** Wrap element in ChatTabScopedStore.Provider (required since ChatInput uses the scoped store). */
+function withChatTabProvider(child: ReturnType<typeof createElement>) {
+  return createElement(ChatTabScopedStore.Provider, { init: undefined, children: child })
+}
 
 // ---------------------------------------------------------------------------
 // Clipboard item test helper
@@ -225,13 +231,13 @@ describe("shouldRefreshPickerOnSelection", () => {
 describe("ChatInput", () => {
   test("renders the attachment trigger as a button with a sibling hidden file input", () => {
     const html = renderToStaticMarkup(
-      createElement(ChatInput, {
+      withChatTabProvider(createElement(ChatInput, {
         onSubmit: async () => undefined,
         disabled: false,
         canCancel: false,
         activeProvider: null,
         availableProviders: PROVIDERS,
-      }),
+      })),
     )
 
     expect(html).toContain('aria-label="Add attachment"')
@@ -243,13 +249,13 @@ describe("ChatInput", () => {
 
   test("renders the Lexical contenteditable editor (not a textarea)", () => {
     const html = renderToStaticMarkup(
-      createElement(ChatInput, {
+      withChatTabProvider(createElement(ChatInput, {
         onSubmit: async () => undefined,
         disabled: false,
         canCancel: false,
         activeProvider: null,
         availableProviders: PROVIDERS,
-      }),
+      })),
     )
 
     // Lexical renders a contenteditable div, not a textarea
@@ -260,13 +266,13 @@ describe("ChatInput", () => {
 
   test("renders the placeholder text", () => {
     const html = renderToStaticMarkup(
-      createElement(ChatInput, {
+      withChatTabProvider(createElement(ChatInput, {
         onSubmit: async () => undefined,
         disabled: false,
         canCancel: false,
         activeProvider: null,
         availableProviders: PROVIDERS,
-      }),
+      })),
     )
 
     expect(html).toContain("Build something...")
@@ -274,13 +280,13 @@ describe("ChatInput", () => {
 
   test("renders send button with correct aria-label when canCancel=false", () => {
     const html = renderToStaticMarkup(
-      createElement(ChatInput, {
+      withChatTabProvider(createElement(ChatInput, {
         onSubmit: async () => undefined,
         disabled: false,
         canCancel: false,
         activeProvider: null,
         availableProviders: PROVIDERS,
-      }),
+      })),
     )
 
     expect(html).toContain('aria-label="Send message"')
@@ -288,13 +294,13 @@ describe("ChatInput", () => {
 
   test("renders stop button with correct aria-label when canCancel=true", () => {
     const html = renderToStaticMarkup(
-      createElement(ChatInput, {
+      withChatTabProvider(createElement(ChatInput, {
         onSubmit: async () => undefined,
         disabled: false,
         canCancel: true,
         activeProvider: null,
         availableProviders: PROVIDERS,
-      }),
+      })),
     )
 
     expect(html).toContain('aria-label="Stop"')

@@ -42,9 +42,9 @@ import { cn } from "../../lib/utils"
 import { useIsStandalone } from "../../hooks/useIsStandalone"
 import { useChatInputStore } from "../../stores/chatInputStore"
 import {
-  useComposerStore,
+  ChatTabScopedStore,
   type ComposerAttachment as StoreComposerAttachment,
-} from "../../stores/composerStore"
+} from "../../stores/chatTabScopedStore"
 import {
   NEW_CHAT_COMPOSER_ID,
   type ComposerState,
@@ -488,15 +488,15 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
   const composerState = storedComposerState ?? getComposerState(composerChatId)
   const isStandalone = useIsStandalone()
 
-  // ------ Composer store (replaces 5 useState calls) ------
-  const attachments = useComposerStore((state) => state.attachments)
-  const setAttachments = useComposerStore((state) => state.setAttachments)
-  const selectedAttachmentId = useComposerStore((state) => state.selectedAttachmentId)
-  const setSelectedAttachmentId = useComposerStore((state) => state.setSelectedAttachmentId)
-  const uploadError = useComposerStore((state) => state.uploadError)
-  const setUploadError = useComposerStore((state) => state.setUploadError)
-  const currentText = useComposerStore((state) => state.currentText)
-  const setCurrentText = useComposerStore((state) => state.setCurrentText)
+  // ------ Composer store (one per chat tab via ChatTabScopedStore) ------
+  const attachments = ChatTabScopedStore.useScopedStore((state) => state.attachments)
+  const setAttachments = ChatTabScopedStore.useScopedStore((state) => state.setAttachments)
+  const selectedAttachmentId = ChatTabScopedStore.useScopedStore((state) => state.selectedAttachmentId)
+  const setSelectedAttachmentId = ChatTabScopedStore.useScopedStore((state) => state.setSelectedAttachmentId)
+  const uploadError = ChatTabScopedStore.useScopedStore((state) => state.uploadError)
+  const setUploadError = ChatTabScopedStore.useScopedStore((state) => state.setUploadError)
+  const currentText = ChatTabScopedStore.useScopedStore((state) => state.currentText)
+  const setCurrentText = ChatTabScopedStore.useScopedStore((state) => state.setCurrentText)
 
   const uploadQueueRef = useRef<File[]>([])
   const activeUploadsRef = useRef(0)

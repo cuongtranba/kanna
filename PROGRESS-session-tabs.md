@@ -10,6 +10,8 @@ bash scripts/verify-session-tabs.sh
 
 ## Progress (latest first)
 
+- 2026-08-05 0.8 Per-chat-tab scoped store DONE (chatTabScopedStore, ChatTabRoot, PaneShell wrap, all consumers migrated, proof test, ChatInput+ChatNavbar tests updated)
+
 - 2026-08-05 chunk 0.7 DONE — isPrimaryChatInstance(chatId, activeChatId) predicate added to derived.ts with JSDoc; 7 unit tests in derived.test.ts; three route-affecting effects in useKannaState.ts gated (not-in-sidebar bounce, setSelectedProjectId, chat.markRead); activeChatId added to effect-2 dep array; no behaviour change for single-tab case; 528 pass / 0 fail, lint clean
 
 - 2026-08-05 chunk 0.6 DONE — project-git + project-commands moved to useAppGlobalState; subscribes once per distinct open projectId (paneLayoutStore keys + selectedProjectId + runtimeProjectId); sameDiffs/shouldPreserveExistingProjectDiffs moved to useAppGlobalState; no call-site changes; ast-grep + lint + typecheck + 521 tests pass / 0 fail
@@ -48,18 +50,15 @@ bash scripts/verify-session-tabs.sh
 
 ## Next chunk
 
-**0.8 — Per-chat-tab scoped store**
+**0.9 — Split ChatPage/index.tsx**
 
-New per-chat-tab scoped store via the existing `src/client/lib/createScopedStore.tsx`.
-Move in: `composerStore` (attachments, currentText, mentionQuery, slashQuery, uploadError,
-selectedAttachmentId), `chatNavbarStore.sharePopoverOpen`, and — important —
-`toolGroupExpanded` / `inputHeight` / `showScrollToBottom` OUT of
-`paneScopedStore`, because retention mounts several tabs inside ONE pane
-provider, so those are per-chat-TAB not per-pane. Leave `layoutWidth`,
-`tabRecency`, `diffRenderMode`, `localLinkMenuTarget` on the pane. Leave
-`chatInputStore.drafts` alone (already chatId-keyed).
+Split `src/client/app/ChatPage/index.tsx` (1,029 lines) into:
+- `ChatPageShell` (panes, registry, terminal/changes wiring; reads the Outlet)
+- Evolve `src/client/app/ChatPage/ChatTabRoot.tsx` to take `{chatId}`, mount `useKannaState(chatId)` + the ChatTabScopedStore Provider, and render the chat card
 
-Verify with: `bun run verify:client-arch` (ast-grep + lint + typecheck + test)
+Registry still passes the ROUTE chatId in this chunk. Keep the ~40 `state.x` reads verbatim — only their source moves.
+
+Verify with: `bash scripts/verify-session-tabs.sh`
 
 ## Context for every worker (read this first)
 
