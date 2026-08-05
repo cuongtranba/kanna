@@ -1,12 +1,49 @@
 # Session tabs — one tab per open chat
 
 ## Goal
-
-bash scripts/verify-session-tabs.sh exits 0
+Session tabs: one tab per open chat, N open = N tabs, keyboard switching, two chat tabs render two different live transcripts side by side
 
 ## Verify command
-
+```
 bash scripts/verify-session-tabs.sh
+```
+
+## Progress (latest first)
+
+- 2026-08-05 0.2 DONE — chatStateStore created (ChatSlice × 7 fields,
+  optimisticProcessing keyed by scopeId, releaseChat, selectChatSlice,
+  EMPTY_CHAT_SLICE); 8 fields + 9 actions removed from kannaStateStore; ~30
+  call sites in useKannaState threaded with activeChatId; 10 new tests (3
+  mandatory isolation/releaseChat/stable-ref + 7 migrated applyChatOpsEvent
+  tests); ast-grep + lint + typecheck + 4879 pass / 0 fail.
+
+- 2026-08-05 0.1 DONE — WebSocket hoisted to KannaSocketProvider; 2 consumers
+  open exactly 1 connection (new test); cast-free fakePorts added; suite
+  4871 pass / 0 fail. Commit 1a18a110.
+
+## Failed approaches
+
+- Typing test fakes with `as unknown as DomPort` — the cast hid a missing
+  `addServiceWorkerMessageListener` and the test died at runtime inside
+  `KannaSocket.start()`. Declaring the fake as `DomPort` made the compiler name
+  12 more missing members. Never cast a fake.
+- Plain `cmd+1..9` for tab jumping — browsers own those keys; a page cannot
+  intercept them.
+
+## Next chunk
+
+**0.3 — extract app-global concerns into useAppGlobalState.**
+
+Extract from `src/client/app/useKannaState.ts` into new
+`src/client/app/useAppGlobalState.ts`: the 8 global socket topics (sidebar,
+local-projects, update, keybindings, app-settings, push-config,
+pty-instances, followed-sessions), the UI-restart machinery +
+`"kanna:ui-update-restart"` key, the focus/visibilitychange listeners, and
+the settings/MCP/LLM + sidebar/project/stack/import handlers.
+`useKannaState` calls it internally and spreads the result, so `KannaState`
+stays byte-identical and NO consumer changes.
+
+Verify with `bun run verify:client-arch`. Baseline 4879 pass / 0 fail.
 
 ## Context for every worker (read this first)
 
@@ -187,49 +224,3 @@ Behaviour change: 1.1–1.5, 2, 3.
   singleton was only valid while chat STATE was a singleton; after phase 0 that
   premise is gone. Then `/c3 change` for `c3-104` (pane-layout) and `c3-112`
   (chat-page); both are canvas-clean so `change apply` will not be blocked.
-
-## Progress (latest first)
-
-- 2026-08-05 0.1 DONE — WebSocket hoisted to KannaSocketProvider; 2 consumers
-  open exactly 1 connection (new test); cast-free fakePorts added; suite
-  4871 pass / 0 fail. Commit 1a18a110.
-
-## Failed approaches
-
-- Typing test fakes with `as unknown as DomPort` — the cast hid a missing
-  `addServiceWorkerMessageListener` and the test died at runtime inside
-  `KannaSocket.start()`. Declaring the fake as `DomPort` made the compiler name
-  12 more missing members. Never cast a fake.
-- Plain `cmd+1..9` for tab jumping — browsers own those keys; a page cannot
-  intercept them.
-
-## Next chunk
-
-**0.2 — per-chat state store.**
-
-Create `src/client/stores/chatStateStore.ts` with
-`chats: Record<chatId, ChatSlice>`, ChatSlice =
-`{chatSnapshot, olderHistoryEntries, isHistoryLoading, historyCursor,
-hasOlderHistory, chatReady, chatResyncNonce}`. Every action takes chatId
-first; add `releaseChat(chatId)`. Move `optimisticProcessing` to be keyed by
-`scopeId`. Leave `optimisticUserPrompts` as-is (already scope-filtered).
-Export module-level `EMPTY_CHAT_SLICE` + `selectChatSlice(state, chatId)`
-returning a STABLE ref when the chat is absent.
-
-Move those fields OFF `kannaStateStore.ts` but do NOT rename that file — it
-becomes the app-global store. Update the ~30 chat-scoped call sites in
-`src/client/app/useKannaState.ts` to pass `activeChatId` (it is in scope at
-every one), plus the readers in `App.tsx`,
-`ChatPage/index.tsx`, `ChatPage/ChatTranscriptViewport.tsx`, and
-`kannaStateStore.test.ts`.
-
-Behaviour must not change: exactly one chat key is live today.
-
-Write `src/client/stores/chatStateStore.test.ts` asserting at minimum:
-seed chat A and chat B, apply a chat-ops event to A, then B's slice is
-REFERENCE-IDENTICAL (`toBe`), and A's is updated. Also cover `releaseChat`
-dropping only its own key, and `selectChatSlice` returning the same ref for
-an absent chat across two calls.
-
-Verify with `bun run verify:client-arch` (baseline 4871 pass / 0 fail).
-Then update this file's Progress and set the next chunk to 0.3.

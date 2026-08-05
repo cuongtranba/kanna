@@ -29,6 +29,7 @@ import { useWorkflowsStore } from "../stores/workflowsStore"
 import { useFollowedSessionsStore } from "../stores/followedSessionsStore"
 import { useOpenRouterModelsStore } from "../stores/openrouterModelsStore"
 import { useKannaStateStore } from "../stores/kannaStateStore"
+import { useChatStateStore, selectChatSlice } from "../stores/chatStateStore"
 import type { FollowedSessionsSnapshot, WorkflowsSnapshot } from "../../shared/protocol"
 import { log } from "../../shared/log"
 import type { AnyValue } from "../../shared/errors"
@@ -953,6 +954,9 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
   const navigate = useNavigate()
   const socket = useResolvedSocket(ports.socket)
   const dialog = useAppDialog()
+  // Derived early so the chatStateStore selectors below can capture it without
+  // a separate variable hoisted over hook calls.
+  const optimisticScopeId = activeChatId ?? NEW_CHAT_OPTIMISTIC_SCOPE
 
   const sidebarData = useKannaStateStore((state) => state.sidebarData)
   const optimisticSidebarProjectOrder = useKannaStateStore((state) => state.optimisticSidebarProjectOrder)
@@ -967,12 +971,12 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
     clearUiUpdateRestartPhase(sessStore)
     useKannaStateStore.getState().setUiRestartPhase(null)
   }, [sessStore])
-  const chatSnapshot = useKannaStateStore((state) => state.chatSnapshot)
-  const chatResyncNonce = useKannaStateStore((state) => state.chatResyncNonce)
-  const olderHistoryEntries = useKannaStateStore((state) => state.olderHistoryEntries)
-  const isHistoryLoading = useKannaStateStore((state) => state.isHistoryLoading)
-  const historyCursor = useKannaStateStore((state) => state.historyCursor)
-  const hasOlderHistory = useKannaStateStore((state) => state.hasOlderHistory)
+  const chatSnapshot = useChatStateStore((state) => selectChatSlice(state, activeChatId ?? "").chatSnapshot)
+  const chatResyncNonce = useChatStateStore((state) => selectChatSlice(state, activeChatId ?? "").chatResyncNonce)
+  const olderHistoryEntries = useChatStateStore((state) => selectChatSlice(state, activeChatId ?? "").olderHistoryEntries)
+  const isHistoryLoading = useChatStateStore((state) => selectChatSlice(state, activeChatId ?? "").isHistoryLoading)
+  const historyCursor = useChatStateStore((state) => selectChatSlice(state, activeChatId ?? "").historyCursor)
+  const hasOlderHistory = useChatStateStore((state) => selectChatSlice(state, activeChatId ?? "").hasOlderHistory)
   const projectDiffSnapshots = useKannaStateStore((state) => state.projectDiffSnapshots)
   const keybindings = useKannaStateStore((state) => state.keybindings)
   const appSettings = useKannaStateStore((state) => state.appSettings)
@@ -981,7 +985,7 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
   const connectionStatus = useKannaStateStore((state) => state.connectionStatus)
   const sidebarReady = useKannaStateStore((state) => state.sidebarReady)
   const localProjectsReady = useKannaStateStore((state) => state.localProjectsReady)
-  const chatReady = useKannaStateStore((state) => state.chatReady)
+  const chatReady = useChatStateStore((state) => selectChatSlice(state, activeChatId ?? "").chatReady)
   const selectedProjectId = useKannaStateStore((state) => state.selectedProjectId)
   const sidebarOpen = useKannaStateStore((state) => state.sidebarOpen)
   const sidebarCollapsed = useKannaStateStore((state) => state.sidebarCollapsed)
@@ -990,7 +994,7 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
   const startingLocalPath = useKannaStateStore((state) => state.startingLocalPath)
   const pendingChatId = useKannaStateStore((state) => state.pendingChatId)
   const optimisticUserPrompts = useKannaStateStore((state) => state.optimisticUserPrompts)
-  const optimisticProcessing = useKannaStateStore((state) => state.optimisticProcessing)
+  const optimisticProcessing = useChatStateStore((state) => state.optimisticProcessing[optimisticScopeId] ?? null)
   const focusEpoch = useKannaStateStore((state) => state.focusEpoch)
   const sendToStartingProfilesRef = useRef<Map<string, SendToStartingTrace>>(new Map())
   const draftChatIds = useChatInputStore(useShallow((state) => Object.keys(state.drafts).sort()))
@@ -1410,8 +1414,7 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
   useEffect(() => {
     if (!activeChatId) {
       logKannaState("clearing chat snapshot for non-chat route")
-      useKannaStateStore.getState().setChatSnapshot(null)
-      useKannaStateStore.getState().setChatReady(true)
+      // Per-chat slices are keyed by chatId — no mutation needed for the null route.
       return
     }
 
@@ -1422,8 +1425,8 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
       sidebarProjectGroups: sidebarProjectGroupsForLogRef.current.length,
       sidebarChatCount: sidebarProjectGroupsForLogRef.current.reduce((count, group) => count + group.chats.length, 0),
     })
-    useKannaStateStore.getState().setChatSnapshot(null)
-    useKannaStateStore.getState().setChatReady(false)
+    useChatStateStore.getState().setChatSnapshot(activeChatId, null)
+    useChatStateStore.getState().setChatReady(activeChatId, false)
     const unsubscribe = socket.subscribe<ChatSnapshot | null, ChatOpsEvent>({ type: "chat", chatId: activeChatId, recentLimit: INITIAL_CHAT_RECENT_LIMIT }, (snapshot) => {
       if (snapshot?.runtime.chatId) {
         const matchingTrace = [...sendToStartingProfilesRef.current.values()]
@@ -1437,7 +1440,7 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
           }, sessStore, localStore)
         }
       }
-      useKannaStateStore.getState().setChatSnapshot((current) => {
+      useChatStateStore.getState().setChatSnapshot(activeChatId, (current) => {
         const reused = sameChatSnapshotCore(current, snapshot)
         logKannaState("chat snapshot received", {
           subscriptionId,
@@ -1458,17 +1461,17 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
         }
         return current
       })
-      const kannaStore = useKannaStateStore.getState()
-      kannaStore.setHistoryCursor(snapshot?.history.olderCursor ?? null)
-      kannaStore.setHasOlderHistory(snapshot?.history.hasOlder ?? false)
-      kannaStore.setChatReady(true)
-      kannaStore.setCommandError(null)
+      const chatStore = useChatStateStore.getState()
+      chatStore.setHistoryCursor(activeChatId, snapshot?.history.olderCursor ?? null)
+      chatStore.setHasOlderHistory(activeChatId, snapshot?.history.hasOlder ?? false)
+      chatStore.setChatReady(activeChatId, true)
+      useKannaStateStore.getState().setCommandError(null)
     }, (event) => {
       if (event.type !== "chat.ops" || event.chatId !== activeChatId) return
-      const result = useKannaStateStore.getState().applyChatOpsEvent(activeChatId, event)
+      const result = useChatStateStore.getState().applyChatOpsEvent(activeChatId, event)
       if (result === "gap") {
         logKannaState("chat.ops gap — forcing resubscribe", { subscriptionId, activeChatId, fromSeq: event.fromSeq, toSeq: event.toSeq })
-        useKannaStateStore.getState().bumpChatResyncNonce()
+        useChatStateStore.getState().bumpChatResyncNonce(activeChatId)
       }
     })
     return () => {
@@ -1540,11 +1543,12 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
   }, [activeChatId, dom, focusEpoch, sidebarProjectGroups, sidebarReady, socket])
 
   useEffect(() => {
-    const store = useKannaStateStore.getState()
-    store.setOlderHistoryEntries([])
-    store.setIsHistoryLoading(false)
-    store.setHistoryCursor(null)
-    store.setHasOlderHistory(false)
+    if (!activeChatId) return
+    const store = useChatStateStore.getState()
+    store.setOlderHistoryEntries(activeChatId, [])
+    store.setIsHistoryLoading(activeChatId, false)
+    store.setHistoryCursor(activeChatId, null)
+    store.setHasOlderHistory(activeChatId, false)
   }, [activeChatId])
 
   const activeChatSnapshot = useMemo(
@@ -1629,7 +1633,6 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
     () => mergeTranscriptEntries(olderHistoryEntries, activeChatSnapshot?.messages ?? []),
     [activeChatSnapshot?.messages, olderHistoryEntries]
   )
-  const optimisticScopeId = activeChatId ?? NEW_CHAT_OPTIMISTIC_SCOPE
   const optimisticTranscriptEntries = useMemo(
     () => optimisticUserPrompts
       .filter((prompt) => prompt.scopeId === optimisticScopeId)
@@ -1645,7 +1648,7 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
   const latestToolIds = useMemo(() => getLatestToolIds(messages), [messages])
   const runtime = activeChatSnapshot?.runtime ?? null
   const queuedMessages = activeChatSnapshot?.queuedMessages ?? []
-  const optimisticRuntimeStatus = optimisticProcessing?.scopeId === optimisticScopeId && (!runtime || runtime.status === "idle")
+  const optimisticRuntimeStatus = optimisticProcessing !== null && (!runtime || runtime.status === "idle")
     ? "starting"
     : null
   const effectiveRuntimeStatus = optimisticRuntimeStatus ?? runtime?.status ?? null
@@ -1671,16 +1674,16 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
   )
 
   useEffect(() => {
-    if (optimisticProcessing?.scopeId !== optimisticScopeId) {
+    if (!optimisticProcessing) {
       return
     }
     if (runtime?.status && runtime.status !== "idle") {
-      useKannaStateStore.getState().setOptimisticProcessing(null)
+      useChatStateStore.getState().setOptimisticProcessing(optimisticScopeId, null)
     }
   }, [optimisticProcessing, optimisticScopeId, runtime?.status])
 
   useEffect(() => {
-    if (!optimisticProcessing?.ackedAt || optimisticProcessing.scopeId !== optimisticScopeId) {
+    if (!optimisticProcessing?.ackedAt) {
       return
     }
     if (runtime?.status && runtime.status !== "idle") {
@@ -1688,10 +1691,8 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
     }
     const ackedAt = optimisticProcessing.ackedAt
     const timeoutId = timer.setTimeout(() => {
-      useKannaStateStore.getState().setOptimisticProcessing((current) => (
-        current?.scopeId === optimisticScopeId && current.ackedAt === ackedAt
-          ? null
-          : current
+      useChatStateStore.getState().setOptimisticProcessing(optimisticScopeId, (current) => (
+        current?.ackedAt === ackedAt ? null : current
       ))
     }, 300)
     return () => timer.clearTimeout(timeoutId)
@@ -1773,7 +1774,7 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
       return
     }
 
-    useKannaStateStore.getState().setIsHistoryLoading(true)
+    useChatStateStore.getState().setIsHistoryLoading(activeChatId, true)
     try {
       const page = await socket.command<ChatHistoryPage>({
         type: "chat.loadHistory",
@@ -1781,16 +1782,16 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
         beforeCursor: historyCursor,
         limit: CHAT_HISTORY_PAGE_SIZE,
       })
-      const store = useKannaStateStore.getState()
-      store.setOlderHistoryEntries((current) => mergeTranscriptEntries(page.messages, current))
-      store.setHistoryCursor(page.olderCursor)
-      store.setHasOlderHistory(page.hasOlder)
-      store.setCommandError(null)
+      const chatStore = useChatStateStore.getState()
+      chatStore.setOlderHistoryEntries(activeChatId, (current) => mergeTranscriptEntries(page.messages, current))
+      chatStore.setHistoryCursor(activeChatId, page.olderCursor)
+      chatStore.setHasOlderHistory(activeChatId, page.hasOlder)
+      useKannaStateStore.getState().setCommandError(null)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       useKannaStateStore.getState().setCommandError(message)
     } finally {
-      useKannaStateStore.getState().setIsHistoryLoading(false)
+      useChatStateStore.getState().setIsHistoryLoading(activeChatId, false)
     }
   }, [activeChatId, hasOlderHistory, historyCursor, isHistoryLoading, socket])
 
@@ -1963,11 +1964,7 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
     const optimisticId = generateUUID()
     const clientTraceId = generateUUID()
     const signature = getUserPromptSignature(content, attachments)
-    const optimisticScopeId = activeChatId ?? NEW_CHAT_OPTIMISTIC_SCOPE
-    useKannaStateStore.getState().setOptimisticProcessing({
-      scopeId: optimisticScopeId,
-      ackedAt: null,
-    })
+    useChatStateStore.getState().setOptimisticProcessing(optimisticScopeId, { ackedAt: null })
     const sendTrace: SendToStartingTrace = {
       traceId: clientTraceId,
       optimisticId,
@@ -2039,16 +2036,15 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
 
       if (result.queued) {
         useKannaStateStore.getState().setOptimisticUserPrompts((current) => pruneOptimisticOnQueuedAck(current, optimisticId, { queued: true }))
-        useKannaStateStore.getState().setOptimisticProcessing(null)
+        useChatStateStore.getState().setOptimisticProcessing(optimisticScopeId, null)
+      } else if (!activeChatId && result.chatId) {
+        // New chat created: move processing entry from the new-chat scope to the real chatId.
+        useChatStateStore.getState().setOptimisticProcessing(optimisticScopeId, null)
+        useChatStateStore.getState().setOptimisticProcessing(result.chatId, { ackedAt: performance.now() })
       } else {
-        useKannaStateStore.getState().setOptimisticProcessing((current) => {
-          if (!current) return current
-          const nextScopeId = !activeChatId && result.chatId ? result.chatId : current.scopeId
-          return {
-            scopeId: nextScopeId,
-            ackedAt: performance.now(),
-          }
-        })
+        useChatStateStore.getState().setOptimisticProcessing(optimisticScopeId, (current) => (
+          current ? { ackedAt: performance.now() } : current
+        ))
       }
       logSendToStartingTrace(sendTrace, "chat_send_ack_received", {
         resultChatId: result.chatId ?? null,
@@ -2070,7 +2066,7 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
       useKannaStateStore.getState().setCommandError(null)
     } catch (error) {
       useKannaStateStore.getState().setOptimisticUserPrompts((current) => current.filter((prompt) => prompt.id !== optimisticId))
-      useKannaStateStore.getState().setOptimisticProcessing(null)
+      useChatStateStore.getState().setOptimisticProcessing(optimisticScopeId, null)
       logSendToStartingTrace(sendTrace, "handle_send_failed", {
         error: error instanceof Error ? error.message : String(error),
       }, sessStore, localStore)
@@ -2078,7 +2074,7 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
       useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
       throw error
     }
-  }, [activeChatId, fallbackLocalProjectPath, localStore, navigate, optimisticUserPrompts, selectedProjectId, serverTranscriptEntries, sessStore, sidebarProjectGroups, socket])
+  }, [activeChatId, fallbackLocalProjectPath, localStore, navigate, optimisticScopeId, optimisticUserPrompts, selectedProjectId, serverTranscriptEntries, sessStore, sidebarProjectGroups, socket])
 
   const handleSteerQueuedMessage = useCallback(async (queuedMessageId: string) => {
     if (!activeChatId) return
@@ -2086,20 +2082,19 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
     // one. Without an optimistic marker the UI flickers to "done" during that
     // gap. Mirror handleSend: show processing immediately, ack after the
     // command resolves (server has appended the prompt + started the turn).
-    const scopeId = activeChatId
-    useKannaStateStore.getState().setOptimisticProcessing({ scopeId, ackedAt: null })
+    useChatStateStore.getState().setOptimisticProcessing(activeChatId, { ackedAt: null })
     try {
       await socket.command({
         type: "message.steer",
         chatId: activeChatId,
         queuedMessageId,
       })
-      useKannaStateStore.getState().setOptimisticProcessing((current) => (
-        current?.scopeId === scopeId ? { scopeId, ackedAt: performance.now() } : current
+      useChatStateStore.getState().setOptimisticProcessing(activeChatId, (current) => (
+        current ? { ackedAt: performance.now() } : current
       ))
       useKannaStateStore.getState().setCommandError(null)
     } catch (error) {
-      useKannaStateStore.getState().setOptimisticProcessing(null)
+      useChatStateStore.getState().setOptimisticProcessing(activeChatId, null)
       useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
     }
   }, [activeChatId, socket])
