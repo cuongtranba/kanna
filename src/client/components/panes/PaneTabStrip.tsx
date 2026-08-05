@@ -2,6 +2,8 @@ import { Columns2, Rows2, X } from "lucide-react"
 import { useCallback } from "react"
 import type { PaneLeaf, SplitPosition } from "../../lib/paneTree"
 import { cn } from "../../lib/utils"
+import { isMobileViewport } from "../../lib/viewport"
+import { useViewportStore } from "../../stores/viewportStore"
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip"
 import { computeTabStripLayout, TAB_STRIP_HEIGHT } from "./tabStripLayout"
 import { describeTab, type TabPresentationContext } from "./tabPresentation"
@@ -37,10 +39,13 @@ export function PaneTabStrip({
   onCloseTab,
   onSplit,
 }: PaneTabStripProps) {
+  const viewportWidth = useViewportStore((state) => state.width)
+  const canSplit = !isMobileViewport(viewportWidth)
+
   const layout = computeTabStripLayout({
     availableWidth: width,
     tabCount: pane.tabs.length,
-    actionsWidth: ACTIONS_WIDTH,
+    actionsWidth: canSplit ? ACTIONS_WIDTH : 0,
   })
 
   const handleSplitRight = useCallback(() => onSplit("right"), [onSplit])
@@ -80,10 +85,16 @@ export function PaneTabStrip({
         })}
       </div>
 
-      <div className="flex shrink-0 items-center gap-0.5 px-1">
-        <StripAction label="Split right" onClick={handleSplitRight} icon={Columns2} />
-        <StripAction label="Split down" onClick={handleSplitDown} icon={Rows2} />
-      </div>
+      {/*
+        Splitting is meaningless below the md breakpoint: the tree renders as a
+        single pane there, so a split would create a pane the user cannot see.
+      */}
+      {canSplit ? (
+        <div className="flex shrink-0 items-center gap-0.5 px-1">
+          <StripAction label="Split right" onClick={handleSplitRight} icon={Columns2} />
+          <StripAction label="Split down" onClick={handleSplitDown} icon={Rows2} />
+        </div>
+      ) : null}
     </div>
   )
 }

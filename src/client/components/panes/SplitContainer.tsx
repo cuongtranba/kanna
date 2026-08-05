@@ -1,8 +1,11 @@
-import { Fragment, type ReactNode, useCallback } from "react"
+import { Fragment, type ReactNode, useCallback, useMemo } from "react"
 import type { Layout } from "react-resizable-panels"
 import { isGroup, type PaneGroup, type PaneLayout, type PaneLeaf, type PaneNode } from "../../lib/paneTree"
 import { cn } from "../../lib/utils"
+import { isMobileViewport } from "../../lib/viewport"
+import { useViewportStore } from "../../stores/viewportStore"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "../ui/resizable"
+import { flattenLayoutForMobile } from "./mobileLayout"
 
 /**
  * Renders a pane tree as nested resizable groups.
@@ -101,5 +104,24 @@ function NodeView(props: NodeViewProps) {
 }
 
 export function SplitContainer({ layout, ...rest }: SplitContainerProps) {
+  const viewportWidth = useViewportStore((state) => state.width)
+
+  // Below the md breakpoint the tree collapses to one pane carrying every tab
+  // (see flattenLayoutForMobile). `isMobileViewport` is false at width 0 — the
+  // pre-measurement state — so SSR and first paint fall through to the tree
+  // rather than flashing the phone view.
+  const mobilePane = useMemo(
+    () => (isMobileViewport(viewportWidth) ? flattenLayoutForMobile(layout) : null),
+    [viewportWidth, layout],
+  )
+
+  if (mobilePane) {
+    return (
+      <div data-pane-mobile="true" className="flex h-full min-h-0 min-w-0 flex-col">
+        <NodeView {...rest} node={mobilePane} focusedPaneId={mobilePane.id} />
+      </div>
+    )
+  }
+
   return <NodeView {...rest} node={layout.root} focusedPaneId={layout.focusedPaneId} />
 }
