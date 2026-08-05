@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { renderToStaticMarkup } from "react-dom/server"
 import { TooltipProvider } from "../ui/tooltip"
 import { createPane, createTab, type PaneLeaf } from "../../lib/paneTree"
+import { SHELL_TOP_BAND_CLASS } from "../../lib/shellChrome"
 import { PaneTabStrip } from "./PaneTabStrip"
 
 const chat = createTab({ kind: "chat" }, 0)
@@ -81,8 +82,11 @@ describe("PaneTabStrip", () => {
     expect(html).toContain("Split right")
   })
 
-  test("is a fixed-height row", () => {
-    expect(render(createPane("p", [chat]))).toContain("height:36px")
+  // Half of the shell's top-band contract: the strip must read its height from
+  // the shared token, not a local literal, or it drifts out of line with the
+  // sidebar header. The sidebar side is asserted in KannaSidebar.test.tsx.
+  test("takes its height from the shared top-band token", () => {
+    expect(render(createPane("p", [chat]))).toContain(SHELL_TOP_BAND_CLASS)
   })
 })
 

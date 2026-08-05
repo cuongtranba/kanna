@@ -6,7 +6,8 @@ import { cn } from "../../lib/utils"
 import { isMobileViewport } from "../../lib/viewport"
 import { useViewportStore } from "../../stores/viewportStore"
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip"
-import { computeTabStripLayout, TAB_STRIP_HEIGHT } from "./tabStripLayout"
+import { SHELL_TOP_BAND_CLASS } from "../../lib/shellChrome"
+import { computeTabStripLayout } from "./tabStripLayout"
 import { describeTab, type TabPresentationContext } from "./tabPresentation"
 
 /**
@@ -61,8 +62,11 @@ export function PaneTabStrip({
   return (
     <div
       data-pane-tab-strip
-      className="flex shrink-0 items-stretch border-b border-border bg-background"
-      style={{ height: TAB_STRIP_HEIGHT }}
+      className={cn(
+        "flex shrink-0 items-stretch border-b border-border bg-background",
+        // Same band as the sidebar header — see lib/shellChrome.ts.
+        SHELL_TOP_BAND_CLASS,
+      )}
     >
       <div
         className={cn(

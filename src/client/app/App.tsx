@@ -18,6 +18,8 @@ import { useChatSoundPreferencesStore } from "../stores/chatSoundPreferencesStor
 import type { ChatSoundPreference } from "../stores/chatSoundPreferencesStore"
 import { playChatNotificationSound, shouldPlayChatSound } from "../lib/chatSounds"
 import { getChatSoundBurstCount, getNotificationTitleCount } from "./chatNotifications"
+import { cn } from "../lib/utils"
+import { SHELL_CONTENT_CARD_CLASS } from "../lib/shellChrome"
 import { KannaSidebar } from "./KannaSidebar"
 import { ChatPage } from "./ChatPage"
 import { LocalProjectsPage } from "./LocalProjectsPage"
@@ -506,7 +508,12 @@ function KannaLayout({ ports = {} }: { ports?: AppPorts } = {}) {
       ) : null}
       <div className="flex flex-1 min-h-0 overflow-hidden">
         {sidebarElement}
-        <div className="flex flex-1 flex-col overflow-hidden">
+        {/*
+          The outlet is a card inset to match the sidebar's own md:my-2 card, so
+          both columns' top edges — and therefore the sidebar header and the
+          pane tab strip that sit on them — start on the same line.
+        */}
+        <div className={cn("flex flex-1 flex-col overflow-hidden", SHELL_CONTENT_CARD_CLASS)}>
           <Outlet context={state} />
         </div>
       </div>
