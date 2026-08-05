@@ -45,10 +45,40 @@ bash scripts/verify-session-tabs.sh
   12 more missing members. Never cast a fake.
 - Plain `cmd+1..9` for tab jumping — browsers own those keys; a page cannot
   intercept them.
+- **Landing 0.8 without 0.9 (attempted, reverted — see branch
+  `feat/session-tabs-0.8-wip`).** `App.tsx:542` renders
+  `<Route path="/chat/:chatId" element={<ChatPage/>}>`, and `ChatPage` renders
+  `PaneShell` BELOW itself — so the `ChatTabRoot` Provider that `PaneShell`
+  mounts sits *under* `ChatPage`. Once 0.8 moved `inputHeight` into the tab
+  store, `useTranscriptPaddingBottom` (index.tsx:138) read it from above its own
+  Provider, threw `ChatTabScoped: useScopedStore must be used inside its
+  Provider`, and unmounted the whole React tree — every chat opened to a blank
+  white page. **0.8 and 0.9 are one unit**: the change that moves the state down
+  must also move the consumers down.
+- **The oracle stayed GREEN through that crash.** 4910 tests passed while the
+  app was unusable, because every test mounts the Provider by hand and none
+  renders the real `/chat/:chatId` route. Before re-arming, the oracle needs a
+  test that renders the ACTUAL router (jsdom mount of `<App/>` at a chat URL and
+  assert non-empty output) — component-level tests cannot catch a
+  missing-Provider regression.
 
 ## Next chunk
 
-**0.8 — Per-chat-tab scoped store**
+**0.8 + 0.9 together — per-chat-tab scoped store AND the ChatPage split**
+
+These are ONE chunk. Landing 0.8 alone blanks the app (see Failed approaches);
+a first attempt is preserved on branch `feat/session-tabs-0.8-wip` — reuse its
+store/Provider code, but do the ChatPage split in the same commit.
+
+Order inside the chunk:
+1. Split `src/client/app/ChatPage/index.tsx` (1,029 lines) into `ChatPageShell`
+   (panes, registry, terminal/changes wiring — stays ABOVE the Provider) and
+   `ChatTabRoot({chatId})` (mounts the Provider and owns everything that reads
+   tab-scoped state, `useTranscriptPaddingBottom` included).
+2. Only then move the fields into the tab store.
+3. Add a route-level render test (mount the real router at `/chat/:id`, assert
+   non-empty output) — the component-level tests cannot catch this class of bug.
+4. Verify in a BROWSER, not just the suite: open a chat and confirm it renders.
 
 New per-chat-tab scoped store via the existing `src/client/lib/createScopedStore.tsx`.
 Move in: `composerStore` (attachments, currentText, mentionQuery, slashQuery, uploadError,
