@@ -1,7 +1,7 @@
 ---
 id: c3-102
 c3-version: 4
-c3-seal: b56564fe3fd3714d5b51012842123b57085251ae7a243e641065498b2c85f12c
+c3-seal: 74166500d47b92afb028f728a059da4672cf916b13bcd057bafb6d4b246db16e
 title: state-stores
 type: component
 category: foundation
@@ -75,6 +75,7 @@ Owns the browser-side state surface as Zustand stores in three forms: singleton 
 | usePreferencesStore | OUT | Theme, notifications, provider keys | c3-116 | src/client/stores |
 | useSocketStore | OUT | Raw WS transport state (readyState + sendMessage); written only by SocketBridge | c3-101 | src/client/stores/socketStore.ts |
 | useViewportStore | OUT | Measured window size behind one shell-mounted resize subscription; 0 until first measurement | c3-110, c3-111 | src/client/stores/viewportStore.ts |
+| usePaneLayoutStore | OUT | One persisted pane tree per project, seeded from the pre-rewrite layout keys on first read; per-pane UI slices are scoped off it by the pane-scoped store factory | c3-104 | src/client/stores/paneLayoutStore.ts |
 
 ## Change Safety
 
