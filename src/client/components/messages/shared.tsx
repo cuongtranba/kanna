@@ -304,11 +304,15 @@ function extractText(node: ReactNode): string {
 function PreBlockInner({
   children,
   ports = {},
+  copyText,
   ...props
-}: ComponentPropsWithoutRef<"pre"> & { ports?: SharedCopyPorts }) {
+}: ComponentPropsWithoutRef<"pre"> & { ports?: SharedCopyPorts; copyText?: string }) {
   const copied = CopyStateStore.useScopedStore((s) => s.copied)
   const setCopied = CopyStateStore.useScopedStore((s) => s.setCopied)
-  const textContent = extractText(children)
+  // Decorated blocks (line-number gutters) must not leak their chrome into the
+  // clipboard, so the caller may state the payload instead of having it
+  // scraped back out of the rendered children.
+  const textContent = copyText ?? extractText(children)
   const clipboard = ports.clipboard ?? clipboardAdapter
   const timer = ports.timer ?? timerAdapter
 
@@ -341,19 +345,67 @@ function PreBlockInner({
 function PreBlock({
   children,
   ports,
+  copyText,
   ...props
-}: ComponentPropsWithoutRef<"pre"> & { ports?: SharedCopyPorts }) {
+}: ComponentPropsWithoutRef<"pre"> & { ports?: SharedCopyPorts; copyText?: string }) {
   return (
     <CopyStateStore.Provider init={undefined}>
-      <PreBlockInner ports={ports} {...props}>{children}</PreBlockInner>
+      <PreBlockInner ports={ports} copyText={copyText} {...props}>{children}</PreBlockInner>
     </CopyStateStore.Provider>
   )
 }
 
-export function MermaidFallbackCodeBlock({ source, ports }: { source: string; ports?: SharedCopyPorts }) {
+/**
+ * Raw mermaid source, shown when the diagram cannot be drawn (or on demand).
+ *
+ * `highlightLine` turns on a line-number gutter and marks that 1-based line —
+ * without it a "Parse error on line 35" is unactionable, because the reader
+ * has no way to count to 35. One grid owns every row so the gutter column
+ * width is shared and the numbers stay aligned.
+ */
+export function MermaidFallbackCodeBlock({
+  source,
+  ports,
+  highlightLine,
+}: {
+  source: string
+  ports?: SharedCopyPorts
+  highlightLine?: number
+}) {
+  if (highlightLine === undefined) {
+    return (
+      <PreBlock ports={ports}>
+        <code className="block text-xs whitespace-pre language-mermaid">{source}</code>
+      </PreBlock>
+    )
+  }
+
   return (
-    <PreBlock ports={ports}>
-      <code className="block text-xs whitespace-pre language-mermaid">{source}</code>
+    <PreBlock ports={ports} copyText={source}>
+      <code className="grid grid-cols-[auto_1fr] text-xs language-mermaid">
+        {source.split("\n").flatMap((line, index) => {
+          const lineNumber = index + 1
+          const isErrorLine = lineNumber === highlightLine
+          return [
+            <span
+              key={`gutter-${lineNumber}`}
+              aria-hidden="true"
+              className={cn(
+                "select-none pr-3 text-right tabular-nums",
+                isErrorLine ? "bg-muted font-medium text-destructive" : "text-muted-foreground/60"
+              )}
+            >
+              {lineNumber}
+            </span>,
+            <span
+              key={`line-${lineNumber}`}
+              className={cn("whitespace-pre", isErrorLine && "bg-muted text-destructive")}
+            >
+              {line.length > 0 ? line : " "}
+            </span>,
+          ]
+        })}
+      </code>
     </PreBlock>
   )
 }

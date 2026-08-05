@@ -211,3 +211,78 @@ describe("MermaidDiagram — stale chunk after a deploy", () => {
     expect(result.thrown).toBeNull()
   })
 })
+
+// A parse error is only useful if the reader can find the offending line. The
+// raw jison message is three lines with a caret ruler; flattened into prose in
+// a proportional font it pointed at nothing and named a line the reader had no
+// way to count to.
+describe("MermaidDiagram — parse-error diagnostics", () => {
+  const ER_SOURCE = [
+    "erDiagram",
+    "  TENANT_SETTINGS {",
+    "    uuid tenant_id PK",
+    "    jsonb quotas",
+    "  }",
+  ].join("\n")
+
+  const JISON_ERROR = [
+    "Parse error on line 5:",
+    "... jsonb quotas  }  TENANT_SECRETS {",
+    "--------------------^",
+    "Expecting 'ATTRIBUTE_WORD', got 'BLOCK_STOP'",
+  ].join("\n")
+
+  const failingMermaid = async () => ({
+    initialize: () => {},
+    render: async () => { throw new Error(JISON_ERROR) },
+  })
+
+  test("names the failing line and the cause separately", async () => {
+    await renderAndSettle(
+      <MermaidDiagram source={ER_SOURCE} ports={{ loadMermaid: failingMermaid }} />
+    )
+    expect(container!.textContent).toContain("line 5")
+    expect(container!.textContent).toContain("Expecting 'ATTRIBUTE_WORD', got 'BLOCK_STOP'")
+  })
+
+  test("renders the caret excerpt in a monospace block so it stays aligned", async () => {
+    await renderAndSettle(
+      <MermaidDiagram source={ER_SOURCE} ports={{ loadMermaid: failingMermaid }} />
+    )
+    const excerpt = Array.from(container!.querySelectorAll("pre")).find((el) =>
+      (el.textContent ?? "").includes("^")
+    )
+    expect(excerpt).toBeDefined()
+    expect(excerpt!.className).toContain("font-mono")
+    expect(excerpt!.className).toContain("whitespace-pre")
+    // Both excerpt lines survive as real newlines — collapsing them is the bug.
+    expect(excerpt!.textContent).toBe(
+      "... jsonb quotas  }  TENANT_SECRETS {\n--------------------^"
+    )
+  })
+
+  test("numbers the fallback source lines and marks the reported one", async () => {
+    await renderAndSettle(
+      <MermaidDiagram source={ER_SOURCE} ports={{ loadMermaid: failingMermaid }} />
+    )
+    const gutter = Array.from(container!.querySelectorAll("code span")).filter(
+      (el) => el.getAttribute("aria-hidden") === "true"
+    )
+    expect(gutter.map((el) => el.textContent)).toEqual(["1", "2", "3", "4", "5"])
+    const marked = gutter.find((el) => el.textContent === "5")
+    expect(marked!.className).toContain("text-destructive")
+    expect(gutter[0]!.className).not.toContain("text-destructive")
+  })
+
+  test("omits the gutter when the error names no line", async () => {
+    const loadMermaid = async () => ({
+      initialize: () => {},
+      render: async () => { throw new Error("No diagram type detected") },
+    })
+    await renderAndSettle(
+      <MermaidDiagram source={ER_SOURCE} ports={{ loadMermaid }} />
+    )
+    expect(container!.querySelector('code span[aria-hidden="true"]')).toBeNull()
+    expect(container!.textContent).toContain("No diagram type detected")
+  })
+})
