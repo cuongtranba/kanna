@@ -6,8 +6,10 @@ import {
   normalizeServerModel,
   isClaudeSdkProvider,
   openrouterAuthReady,
+  claudeAuthReady,
   getServerProviderCatalog,
   SERVER_PROVIDERS,
+  type ClaudeAuthPoolProbe,
 } from "./provider-catalog"
 import { resolveClaudeApiModelId, PROVIDERS } from "../shared/types"
 import type { LlmProviderSnapshot, CustomModelEntry } from "../shared/types"
@@ -97,6 +99,41 @@ describe("openrouterAuthReady", () => {
   })
   test("false when provider is not openrouter", () => {
     expect(openrouterAuthReady({ ...base, provider: "openai" } as LlmProviderSnapshot)).toBe(false)
+  })
+})
+
+describe("claudeAuthReady", () => {
+  const pool = (hasAny: boolean, usable: boolean): ClaudeAuthPoolProbe => ({
+    hasAnyToken: () => hasAny,
+    hasUsable: () => usable,
+  })
+
+  // Mirrors the main-chat spawn gate (claude-session-spawner.ts), which refuses
+  // ONLY when the pool holds tokens but none are pickable. An absent/empty pool
+  // falls through to the local claude CLI credentials. Subagents must match, or
+  // a user with zero configured OAuth tokens gets a working main chat and
+  // AUTH_REQUIRED on every delegation.
+  test("true when no pool is configured at all — local CLI credentials", () => {
+    expect(claudeAuthReady(null, "chat-1")).toBe(true)
+    expect(claudeAuthReady(undefined, "chat-1")).toBe(true)
+  })
+
+  test("true when the pool exists but holds no tokens — local CLI credentials", () => {
+    expect(claudeAuthReady(pool(false, false), "chat-1")).toBe(true)
+  })
+
+  test("true when the pool has a token usable by this chat", () => {
+    expect(claudeAuthReady(pool(true, true), "chat-1")).toBe(true)
+  })
+
+  test("false only when tokens exist but none are usable — real exhaustion", () => {
+    expect(claudeAuthReady(pool(true, false), "chat-1")).toBe(false)
+  })
+
+  test("scopes usability to the caller's reservation identity", () => {
+    const seen: (string | undefined)[] = []
+    claudeAuthReady({ hasAnyToken: () => true, hasUsable: (r) => (seen.push(r), true) }, "chat-42")
+    expect(seen).toEqual(["chat-42"])
   })
 })
 

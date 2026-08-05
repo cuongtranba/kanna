@@ -631,6 +631,38 @@ the main model then synthesizes it into its own response.
   `user_prompt` entries for UI badges and analytics. The assistant-text
   mention scan and the `chat_send` / dequeue short-circuits are removed.
 
+## Subagent spawn gate — parity with the main chat (adr-20260805-subagent-spawn-gate-parity)
+
+`SubagentOrchestrator` fails a run `AUTH_REQUIRED` when `ProviderRunStart.authReady()`
+returns false. For claude that predicate is `claudeAuthReady(pool, chatId)`
+(`provider-catalog.ts`), and it is the **single definition of the Claude spawn
+gate**:
+
+```ts
+if (!pool || !pool.hasAnyToken()) return true  // local claude CLI credentials
+return pool.hasUsable(reservedFor)
+```
+
+**An OAuth-pool token is required only once the user has configured one.** With
+`claudeAuth.tokens: []` the driver falls through to the local `claude` CLI
+credentials, exactly as `claude-session-spawner.ts` / `quick-response.ts` do
+(their `hasAnyToken() && !picked` refusal is the same condition, kept in that
+form because they also need the picked token — TOCTOU-closed per c3-224). A
+subagent must never be refused where a main-chat turn would spawn: that
+asymmetry gave a working main chat and `AUTH_REQUIRED` on every delegation,
+which presents as "the loop won't set up" because the orchestrator disarms after
+the failed `delegate_subagent`.
+
+`reservedFor` is the **parent** chat id, so a token already reserved by the
+parent counts as usable — subagent runs are sequential under the parent's paused
+turn (see `oauth-token-pool` `isEligible`).
+
+**There is no `claudeAuth.authenticated` setting.** `ClaudeAuthSettings` is
+`{tokens, concurrencyDefault}`; the flag never existed and was never written, so
+a gate that consulted it read every user as unauthenticated. `AppSettingsSnapshot`
+deliberately omits `claudeAuth` so re-reading it is a compile error — do not
+re-add it.
+
 ## Keep-Alive Multi-Turn Subagents (claude SDK + PTY)
 
 `delegate_subagent({ subagent_id, prompt, keep_alive: true })` keeps the

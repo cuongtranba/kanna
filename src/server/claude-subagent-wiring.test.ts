@@ -14,6 +14,7 @@ import {
   type BuildSubagentProviderRunForChatArgs,
 } from "./claude-subagent-wiring"
 import type { ProviderRunStart } from "./subagent-orchestrator"
+import type { Subagent } from "../shared/subagent-types"
 
 // ---------------------------------------------------------------------------
 // Minimal stubs — only what the functions call
@@ -242,5 +243,67 @@ describe("buildSubagentProviderRunForChat", () => {
     expect(typeof result.start).toBe("function")
     // The key builder will be called lazily when onToolRequest fires during a run.
     expect(keyBuilt).toBeNull() // not yet called
+  })
+})
+
+// ---------------------------------------------------------------------------
+// authReady — the subagent spawn gate
+// ---------------------------------------------------------------------------
+
+/**
+ * Regression cover for the AUTH_REQUIRED-on-empty-pool class: the main chat
+ * spawns fine on local claude CLI credentials when no OAuth token is
+ * configured, but every delegation used to fail this preflight, so the loop
+ * orchestrator armed and then died on its first delegate_subagent call.
+ */
+describe("buildSubagentProviderRunForChat — authReady", () => {
+  // ProviderRunStart.authReady() takes no argument — the provider is bound at
+  // construction from the subagent record.
+  const authReadyFor = (deps: SubagentWiringDeps, provider: Subagent["provider"] = "claude") =>
+    buildSubagentProviderRunForChat(deps, {
+      ...BASE_ARGS,
+      subagent: { ...BASE_SUBAGENT, provider },
+    }).authReady()
+
+  const poolWith = (hasAny: boolean, usable: boolean) =>
+    ({
+      hasAnyToken: () => hasAny,
+      hasUsable: () => usable,
+      pickActive: () => null,
+      markUsed: () => {},
+    }) as unknown as SubagentWiringDeps["oauthPool"]
+
+  test("claude is ready with no pool configured — local CLI credentials", async () => {
+    expect(await authReadyFor(makeDeps({ oauthPool: null }))).toBe(true)
+  })
+
+  test("claude is ready with an empty pool — matches the main-chat spawn gate", async () => {
+    expect(await authReadyFor(makeDeps({ oauthPool: poolWith(false, false) }))).toBe(true)
+  })
+
+  test("claude is ready when the pool holds a usable token", async () => {
+    expect(await authReadyFor(makeDeps({ oauthPool: poolWith(true, true) }))).toBe(true)
+  })
+
+  test("claude is NOT ready when tokens exist but none are usable", async () => {
+    expect(await authReadyFor(makeDeps({ oauthPool: poolWith(true, false) }))).toBe(false)
+  })
+
+  test("readiness does not depend on a claudeAuth.authenticated settings flag", async () => {
+    // The flag never existed on ClaudeAuthSettings and was never written; an
+    // empty snapshot must not make claude look unauthenticated.
+    const deps = makeDeps({ oauthPool: poolWith(false, false), getAppSettingsSnapshot: () => ({}) })
+    expect(await authReadyFor(deps)).toBe(true)
+  })
+
+  test("openrouter still gates on its own provider snapshot", async () => {
+    const deps = makeDeps({
+      readLlmProvider: async () => ({ provider: "openrouter", apiKey: "", enabled: true }) as never,
+    })
+    expect(await authReadyFor(deps, "openrouter")).toBe(false)
+  })
+
+  test("non-claude, non-openrouter providers are always ready", async () => {
+    expect(await authReadyFor(makeDeps({ oauthPool: poolWith(true, false) }), "codex")).toBe(true)
   })
 })

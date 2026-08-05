@@ -5032,7 +5032,7 @@ describe("AgentCoordinator subagent mention gating", () => {
       store: store as never,
       onStateChange: () => {},
       getSubagents: () => [makeSubagentRecord({ id: "sa-1", name: "alpha" })],
-      getAppSettingsSnapshot: () => ({ claudeAuth: { authenticated: true } }),
+      getAppSettingsSnapshot: () => ({}),
       startClaudeSession: async (args) => {
         const toolRequest = {
           tool: {
@@ -5126,7 +5126,7 @@ describe("AgentCoordinator subagent mention gating", () => {
       store: store as never,
       onStateChange: () => {},
       getSubagents: () => [makeSubagentRecord({ id: "sa-1", name: "alpha" })],
-      getAppSettingsSnapshot: () => ({ claudeAuth: { authenticated: true } }),
+      getAppSettingsSnapshot: () => ({}),
       startClaudeSession: async (args) => {
         const toolRequest = {
           tool: {
@@ -5220,7 +5220,7 @@ describe("AgentCoordinator subagent mention gating", () => {
       store: store as never,
       onStateChange: () => {},
       getSubagents: () => [makeSubagentRecord({ id: "sa-1", name: "alpha" })],
-      getAppSettingsSnapshot: () => ({ claudeAuth: { authenticated: true } }),
+      getAppSettingsSnapshot: () => ({}),
       startClaudeSession: async (args) => {
         const toolRequest = {
           tool: {
@@ -5292,7 +5292,7 @@ describe("AgentCoordinator subagent mention gating", () => {
       store: store as never,
       onStateChange: () => {},
       getSubagents: () => [],
-      getAppSettingsSnapshot: () => ({ claudeAuth: { authenticated: true } }),
+      getAppSettingsSnapshot: () => ({}),
     })
     // No prior pending — must not throw.
     await coordinator.respondSubagentTool({
@@ -5311,7 +5311,7 @@ describe("AgentCoordinator subagent mention gating", () => {
       store: store as never,
       onStateChange: (chatId) => { if (chatId) emits.push(chatId) },
       getSubagents: () => [makeSubagentRecord({ id: "sa-1", name: "alpha" })],
-      getAppSettingsSnapshot: () => ({ claudeAuth: { authenticated: true } }),
+      getAppSettingsSnapshot: () => ({}),
       startClaudeSession: async () => {
         async function* stream() {
           // Block indefinitely; the orchestrator's abort race resolves the

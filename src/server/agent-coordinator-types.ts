@@ -33,7 +33,11 @@ import type { ModelPrice } from "../shared/token-pricing"
 
 /** App settings snapshot returned by `getAppSettingsSnapshot`. */
 export interface AppSettingsSnapshot {
-  claudeAuth?: { authenticated?: boolean } | null
+  // NOTE: no `claudeAuth` here on purpose. Claude spawn readiness is decided
+  // from the live OAuth pool via `claudeAuthReady` (provider-catalog.ts), not
+  // from a settings flag. A `claudeAuth.authenticated` field once lived here;
+  // nothing ever wrote it, so the one caller that read it treated every user
+  // as unauthenticated. ClaudeAuthSettings is `{tokens, concurrencyDefault}`.
   claudeDriver?: {
     preference?: ClaudeDriverPreference
     lifecycle?: { idleTimeoutMs?: number; maxConcurrent?: number }
