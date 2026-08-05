@@ -163,62 +163,6 @@ function sameQueuedMessages(left: ChatSnapshot["queuedMessages"] | null | undefi
   return left.every((message, index) => sameQueuedMessage(message, right[index]!))
 }
 
-function sameDiffs(left: ChatDiffSnapshot | null | undefined, right: ChatDiffSnapshot | null | undefined) {
-  if (left === right) return true
-  if (!left || !right) return false
-  if (left.status !== right.status) return false
-  if (left.branchName !== right.branchName) return false
-  if (left.defaultBranchName !== right.defaultBranchName) return false
-  if (left.hasOriginRemote !== right.hasOriginRemote) return false
-  if (left.originRepoSlug !== right.originRepoSlug) return false
-  if (left.hasUpstream !== right.hasUpstream) return false
-  if (left.aheadCount !== right.aheadCount) return false
-  if (left.behindCount !== right.behindCount) return false
-  if (left.lastFetchedAt !== right.lastFetchedAt) return false
-  const leftHistory = left.branchHistory?.entries ?? []
-  const rightHistory = right.branchHistory?.entries ?? []
-  if (leftHistory.length !== rightHistory.length) return false
-  const sameBranchHistory = leftHistory.every((entry, index) => {
-    const other = rightHistory[index]
-    return Boolean(other)
-      && entry.sha === other.sha
-      && entry.summary === other.summary
-      && entry.description === other.description
-      && entry.authorName === other.authorName
-      && entry.authoredAt === other.authoredAt
-      && entry.githubUrl === other.githubUrl
-      && entry.tags.length === other.tags.length
-      && entry.tags.every((tag, tagIndex) => tag === other.tags[tagIndex])
-  })
-  if (!sameBranchHistory) return false
-  if (left.files.length !== right.files.length) return false
-  return left.files.every((file, index) => {
-    const other = right.files[index]
-    return Boolean(other)
-      && file.path === other.path
-      && file.changeType === other.changeType
-      && file.isUntracked === other.isUntracked
-      && file.additions === other.additions
-      && file.deletions === other.deletions
-      && file.patchDigest === other.patchDigest
-      && file.mimeType === other.mimeType
-      && file.size === other.size
-  })
-}
-
-function shouldPreserveExistingProjectDiffs(
-  current: ChatDiffSnapshot | null | undefined,
-  next: ChatDiffSnapshot | null | undefined
-) {
-  return Boolean(
-    current
-    && current.status !== "unknown"
-    && next
-    && next.status === "unknown"
-    && next.files.length === 0
-  )
-}
-
 function sameSchedules(left: ChatSnapshot["schedules"] | null | undefined, right: ChatSnapshot["schedules"] | null | undefined) {
   if (left === right) return true
   if (!left || !right) return false
@@ -930,43 +874,8 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
     store.setHasOlderHistory(activeChatId, false)
   }, [activeChatId])
 
-  useEffect(() => {
-    if (!activeProjectId) {
-      return
-    }
-
-    const unsubscribe = socket.subscribe<ChatDiffSnapshot | null>({ type: "project-git", projectId: activeProjectId }, (snapshot) => {
-      useKannaStateStore.getState().setProjectDiffSnapshots((current) => {
-        const nextDiffs = snapshot ?? null
-        if (shouldPreserveExistingProjectDiffs(current[activeProjectId] ?? null, nextDiffs)) {
-          return current
-        }
-        if (sameDiffs(current[activeProjectId] ?? null, nextDiffs)) {
-          return current
-        }
-        return {
-          ...current,
-          [activeProjectId]: nextDiffs,
-        }
-      })
-      useKannaStateStore.getState().setCommandError(null)
-    })
-
-    return unsubscribe
-  }, [activeProjectId, socket])
-
-  // The composer picker's catalog is per project, so it is fetched once per
-  // project rather than per chat — opening another chat in the same project
-  // renders the list from cache with no round trip.
-  useEffect(() => {
-    if (!activeProjectId) {
-      return
-    }
-    return socket.subscribe<ProjectCommandsSnapshot>(
-      { type: "project-commands", projectId: activeProjectId },
-      (snapshot) => { applyProjectCommandsSnapshot(activeProjectId, snapshot) },
-    )
-  }, [activeProjectId, socket])
+  // project-git and project-commands subscriptions live in useAppGlobalState,
+  // subscribing once per distinct open projectId (deduplication for session tabs).
 
   useEffect(() => {
     logKannaState("active snapshot resolved", {

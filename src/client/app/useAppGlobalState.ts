@@ -8,9 +8,10 @@
  */
 
 import { useCallback, useEffect, useMemo } from "react"
+import { useShallow } from "zustand/react/shallow"
 import { type ChatNavigatorPort } from "./chatNavigator"
 import { type AppSettingsPatch, type AppSettingsSnapshot, type ClaudeAuthSettings, type KeybindingsSnapshot, type LlmProviderSnapshot, type LlmProviderValidationResult, type OpenRouterModel, type PushConfigSnapshot, type UpdateInstallResult, type UpdateSnapshot } from "../../shared/types"
-import type { ChatSnapshot, CloudflareTunnelSettings, GitWorktree, LocalProjectsSnapshot, SidebarChatRow, SidebarData, StackSummary } from "../../shared/types"
+import type { ChatDiffSnapshot, ChatSnapshot, CloudflareTunnelSettings, GitWorktree, LocalProjectsSnapshot, ProjectCommandsSnapshot, SidebarChatRow, SidebarData, StackSummary } from "../../shared/types"
 import { NEW_CHAT_COMPOSER_ID, useChatPreferencesStore } from "../stores/chatPreferencesStore"
 import { useRightSidebarStore } from "../stores/rightSidebarStore"
 import { useTerminalLayoutStore } from "../stores/terminalLayoutStore"
@@ -26,6 +27,8 @@ import { usePtyInstancesStore } from "../stores/ptyInstancesStore"
 import { useFollowedSessionsStore } from "../stores/followedSessionsStore"
 import { useOpenRouterModelsStore } from "../stores/openrouterModelsStore"
 import { useKannaStateStore } from "../stores/kannaStateStore"
+import { usePaneLayoutStore } from "../stores/paneLayoutStore"
+import { useSlashCommandsStore } from "../stores/slashCommandsStore"
 import { isRecord } from "../../shared/errors"
 import type { AnyValue } from "../../shared/errors"
 import type { StoragePort } from "../ports/storagePort"
@@ -60,6 +63,74 @@ function readPersistedZustandState(key: string, storage: StoragePort): Record<st
   } catch {
     return null
   }
+}
+
+// ---------------------------------------------------------------------------
+// project-git / project-commands subscription helpers
+// ---------------------------------------------------------------------------
+
+function sameDiffs(left: ChatDiffSnapshot | null | undefined, right: ChatDiffSnapshot | null | undefined): boolean {
+  if (left === right) return true
+  if (!left || !right) return false
+  if (left.status !== right.status) return false
+  if (left.branchName !== right.branchName) return false
+  if (left.defaultBranchName !== right.defaultBranchName) return false
+  if (left.hasOriginRemote !== right.hasOriginRemote) return false
+  if (left.originRepoSlug !== right.originRepoSlug) return false
+  if (left.hasUpstream !== right.hasUpstream) return false
+  if (left.aheadCount !== right.aheadCount) return false
+  if (left.behindCount !== right.behindCount) return false
+  if (left.lastFetchedAt !== right.lastFetchedAt) return false
+  const leftHistory = left.branchHistory?.entries ?? []
+  const rightHistory = right.branchHistory?.entries ?? []
+  if (leftHistory.length !== rightHistory.length) return false
+  const sameBranchHistory = leftHistory.every((entry, index) => {
+    const other = rightHistory[index]
+    return Boolean(other)
+      && entry.sha === other.sha
+      && entry.summary === other.summary
+      && entry.description === other.description
+      && entry.authorName === other.authorName
+      && entry.authoredAt === other.authoredAt
+      && entry.githubUrl === other.githubUrl
+      && entry.tags.length === other.tags.length
+      && entry.tags.every((tag, tagIndex) => tag === other.tags[tagIndex])
+  })
+  if (!sameBranchHistory) return false
+  if (left.files.length !== right.files.length) return false
+  return left.files.every((file, index) => {
+    const other = right.files[index]
+    return Boolean(other)
+      && file.path === other.path
+      && file.changeType === other.changeType
+      && file.isUntracked === other.isUntracked
+      && file.additions === other.additions
+      && file.deletions === other.deletions
+      && file.patchDigest === other.patchDigest
+      && file.mimeType === other.mimeType
+      && file.size === other.size
+  })
+}
+
+function shouldPreserveExistingProjectDiffs(
+  current: ChatDiffSnapshot | null | undefined,
+  next: ChatDiffSnapshot | null | undefined,
+): boolean {
+  return Boolean(
+    current
+    && current.status !== "unknown"
+    && next
+    && next.status === "unknown"
+    && next.files.length === 0
+  )
+}
+
+function applyProjectCommandsSnapshotLocal(
+  subscribedProjectId: string,
+  snapshot: ProjectCommandsSnapshot | null,
+): void {
+  if (!snapshot || snapshot.projectId !== subscribedProjectId) return
+  useSlashCommandsStore.getState().setForProject(snapshot.projectId, snapshot.commands)
 }
 
 function readLegacyBrowserSettingsPatch(storage: StoragePort): AppSettingsPatch | null {
@@ -405,6 +476,9 @@ export function useAppGlobalState(
   const startingLocalPath = useKannaStateStore((state) => state.startingLocalPath)
   // Internal reads (not in return type):
   const selectedProjectId = useKannaStateStore((state) => state.selectedProjectId)
+  // Stable set of projectIds with open pane layouts — used by the per-project subscriptions below.
+  const layoutProjectIds = usePaneLayoutStore(useShallow((state) => Object.keys(state.layouts)))
+  const runtimeProjectId = runtime?.projectId ?? null
 
   // ---- derived -----------------------------------------------------------
 
@@ -518,6 +592,51 @@ export function useAppGlobalState(
       useFollowedSessionsStore.getState().setFollowed(snapshot.chatIds)
     })
   }, [socket])
+
+  // ---- project-level subscriptions (once per distinct open projectId) ------
+  //
+  // Subscribing in useAppGlobalState (rather than useKannaState) ensures that
+  // switching the active chat never tears down a subscription for a project
+  // that is still open in another pane/tab.  The set of open projectIds comes
+  // from three sources — all scalar or useShallow-stable — so the effect only
+  // fires when a project is actually added or removed.
+
+  useEffect(() => {
+    const ids = new Set<string>(layoutProjectIds)
+    if (selectedProjectId) ids.add(selectedProjectId)
+    if (runtimeProjectId) ids.add(runtimeProjectId)
+
+    if (ids.size === 0) return
+
+    const cleanups: (() => void)[] = []
+    ids.forEach((projectId) => {
+      cleanups.push(
+        socket.subscribe<ChatDiffSnapshot | null>(
+          { type: "project-git", projectId },
+          (snapshot) => {
+            useKannaStateStore.getState().setProjectDiffSnapshots((current) => {
+              const nextDiffs = snapshot ?? null
+              if (shouldPreserveExistingProjectDiffs(current[projectId] ?? null, nextDiffs)) return current
+              if (sameDiffs(current[projectId] ?? null, nextDiffs)) return current
+              return { ...current, [projectId]: nextDiffs }
+            })
+            useKannaStateStore.getState().setCommandError(null)
+          },
+        ),
+      )
+      // The composer picker's catalog is per project, so it is fetched once
+      // per project rather than per chat — opening another chat in the same
+      // project renders the list from cache with no round trip.
+      cleanups.push(
+        socket.subscribe<ProjectCommandsSnapshot>(
+          { type: "project-commands", projectId },
+          (snapshot) => { applyProjectCommandsSnapshotLocal(projectId, snapshot) },
+        ),
+      )
+    })
+
+    return () => { cleanups.forEach((fn) => fn()) }
+  }, [layoutProjectIds, runtimeProjectId, selectedProjectId, socket])
 
   // ---- update / UI-restart effects ---------------------------------------
 
