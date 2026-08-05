@@ -1,37 +1,29 @@
-import React, { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, type ComponentProps, type DragEvent, type ReactNode, type RefObject } from "react"
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, type ComponentProps, type DragEvent, type RefObject } from "react"
 import type { DomPort } from "../../ports/domPort"
 import type { TimerPort } from "../../ports/timerPort"
 import { domAdapter } from "../../adapters/dom.adapter"
 import { timerAdapter } from "../../adapters/timer.adapter"
 import { isMobileViewport } from "../../lib/viewport"
 import { type LegendListRef } from "@legendapp/list/react"
-import type { GroupImperativeHandle, Layout } from "react-resizable-panels"
 import { useNavigate, useOutletContext } from "react-router-dom"
 import type { ChatInputHandle } from "../../components/chat-ui/ChatInput"
 import { ChatNavbar } from "../../components/chat-ui/ChatNavbar"
 import { RightSidebar } from "../../components/chat-ui/RightSidebar"
 import { useAppDialog } from "../../components/ui/app-dialog"
 import { Card, CardContent } from "../../components/ui/card"
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "../../components/ui/resizable"
 import { actionMatchesEvent, getResolvedKeybindings } from "../../lib/keybindings"
 import { computeSessionTotals, deriveLatestContextWindowSnapshot } from "../../lib/contextWindow"
-import { cn } from "../../lib/utils"
 import {
   DEFAULT_RIGHT_SIDEBAR_SIZE,
   DEFAULT_RIGHT_SIDEBAR_VISIBILITY_STATE,
-  RIGHT_SIDEBAR_MIN_SIZE_PERCENT,
-  RIGHT_SIDEBAR_MIN_WIDTH_PX,
   useRightSidebarStore,
 } from "../../stores/rightSidebarStore"
 import { useChatPageStore } from "../../stores/chatPageStore"
 import { DEFAULT_PROJECT_TERMINAL_LAYOUT, useTerminalLayoutStore } from "../../stores/terminalLayoutStore"
 import { useTerminalPreferencesStore } from "../../stores/terminalPreferencesStore"
-import { shouldCloseTerminalPane } from "../terminalLayoutResize"
 import { TERMINAL_TOGGLE_ANIMATION_DURATION_MS } from "../terminalToggleAnimation"
-import { useRightSidebarToggleAnimation } from "../useRightSidebarToggleAnimation"
 import { usePushFocus } from "../usePushFocus"
 import { useStickyChatFocus } from "../useStickyChatFocus"
-import { useTerminalToggleAnimation } from "../useTerminalToggleAnimation"
 import type { KannaState } from "../useKannaState"
 import { getNextMeasuredInputHeight, getTranscriptPaddingBottom } from "../useKannaState"
 import { EMPTY_SCHEDULES } from "../KannaTranscript"
@@ -50,6 +42,12 @@ import { useWorkflowsStore, selectRuns } from "../../stores/workflowsStore"
 import { useShallow } from "zustand/react/shallow"
 import type { WorkflowRun } from "../../../shared/workflow-types"
 import type { TranscriptEntry } from "../../../shared/types"
+import { createDefaultLayout, type PaneLayout } from "../../lib/paneTree"
+import { usePaneLayoutStore } from "../../stores/paneLayoutStore"
+import { SplitContainer } from "../../components/panes/SplitContainer"
+import { PaneShell, type SplitArgs } from "../../components/panes/PaneShell"
+import type { PaneContentRegistry } from "../../components/panes/paneContentRegistry"
+import type { TabPresentationContext } from "../../components/panes/tabPresentation"
 
 export {
   getIgnoreFolderEntryFromDiffPath,
@@ -64,9 +62,8 @@ export {
 // most visible on phones. Do not drop min-h-0.
 export const CHAT_PAGE_LAYOUT_ROOT_CLASS = "flex-1 flex flex-col min-h-0 min-w-0 relative"
 
-const TERMINAL_TOGGLE_DURATION_STYLE: React.CSSProperties & { "--terminal-toggle-duration": string } = {
-  "--terminal-toggle-duration": `${TERMINAL_TOGGLE_ANIMATION_DURATION_MS}ms`,
-}
+/** Stable default used as a fallback before a project's layout is seeded. */
+const EMPTY_PANE_LAYOUT: PaneLayout = createDefaultLayout()
 
 function useEmptyStateTyping(showEmptyState: boolean, activeChatId: string | null, timer: TimerPort) {
   const typedEmptyStateText = useChatPageStore((s) => s.typedEmptyStateText)
@@ -211,81 +208,11 @@ function useTranscriptPaddingBottom() {
 }
 
 export function shouldUseMobileRightSidebarOverlay(viewportWidth: number) {
+  // Pure function retained for tests. The pane layout handles all viewports
+  // through SplitContainer so this no longer drives a separate overlay render —
+  // but the breakpoint semantics are preserved so callers depending on the
+  // 768 px boundary are not surprised.
   return isMobileViewport(viewportWidth)
-}
-
-function useMobileRightSidebarOverlayEnabled(dom: DomPort) {
-  const viewportWidth = useChatPageStore((s) => s.viewportWidth)
-  const setViewportWidth = useChatPageStore((s) => s.setViewportWidth)
-
-  useEffect(() => {
-    const updateViewportWidth = () => setViewportWidth(dom.getInnerWidth())
-    updateViewportWidth()
-    return dom.addWindowListener("resize", updateViewportWidth)
-  }, [setViewportWidth, dom])
-
-  return shouldUseMobileRightSidebarOverlay(viewportWidth)
-}
-
-function useFixedTerminalHeight(args: {
-  layoutRootRef: RefObject<HTMLDivElement | null>
-  shouldRenderTerminalLayout: boolean
-  terminalMainSizes: [number, number]
-}) {
-  const fixedTerminalHeight = useChatPageStore((s) => s.fixedTerminalHeight)
-  const setFixedTerminalHeight = useChatPageStore((s) => s.setFixedTerminalHeight)
-
-  useEffect(() => {
-    const element = args.layoutRootRef.current
-    if (!element) return
-
-    const updateHeight = () => {
-      const containerHeight = element.getBoundingClientRect().height
-
-      if (!args.shouldRenderTerminalLayout) {
-        return
-      }
-
-      if (containerHeight <= 0) return
-      const nextHeight = containerHeight * (args.terminalMainSizes[1] / 100)
-      if (nextHeight <= 0) return
-      const current = useChatPageStore.getState().fixedTerminalHeight
-      if (Math.abs(current - nextHeight) >= 1) {
-        setFixedTerminalHeight(nextHeight)
-      }
-    }
-
-    const observer = new ResizeObserver(updateHeight)
-    observer.observe(element)
-    updateHeight()
-
-    return () => observer.disconnect()
-  }, [args.layoutRootRef, args.shouldRenderTerminalLayout, args.terminalMainSizes, setFixedTerminalHeight])
-
-  return fixedTerminalHeight
-}
-
-interface ChatWorkspaceProps {
-  chatCard: ReactNode
-  projectId: string
-  shouldRenderTerminalLayout: boolean
-  showTerminalPane: boolean
-  terminalLayout: ReturnType<typeof useTerminalLayoutStore.getState>["projects"][string]
-  mainPanelGroupRef: RefObject<GroupImperativeHandle | null>
-  terminalPanelRef: RefObject<HTMLDivElement | null>
-  terminalVisualRef: RefObject<HTMLDivElement | null>
-  fixedTerminalHeight: number
-  terminalFocusRequestVersion: number
-  addTerminal: ReturnType<typeof useTerminalLayoutStore.getState>["addTerminal"]
-  socket: KannaState["socket"]
-  connectionStatus: KannaState["connectionStatus"]
-  scrollback: number
-  minColumnWidth: number
-  splitTerminalShortcut?: string[]
-  onTerminalCommandSent?: () => void
-  onRemoveTerminal: (projectId: string, terminalId: string) => void
-  onTerminalLayout: ReturnType<typeof useTerminalLayoutStore.getState>["setTerminalSizes"]
-  onLayoutChanged: (layout: Record<string, number>) => void
 }
 
 type ChatSidebarContentProps = ComponentProps<typeof RightSidebar>
@@ -298,172 +225,6 @@ const ChatSidebarContent = memo((props: ChatSidebarContentProps) => {
     />
   )
 })
-
-interface DesktopSidebarPaneProps {
-  showRightSidebar: boolean
-  sizePercent: number
-  sidebarPanelRef: RefObject<HTMLDivElement | null>
-  sidebarVisualRef: RefObject<HTMLDivElement | null>
-  content: ReactNode
-}
-
-const DesktopSidebarPane = memo(({
-  showRightSidebar,
-  sizePercent,
-  sidebarPanelRef,
-  sidebarVisualRef,
-  content,
-}: DesktopSidebarPaneProps) => {
-  return (
-    <ResizablePanel
-      id="rightSidebar"
-      defaultSize={`${sizePercent}%`}
-      className="min-h-0 min-w-0"
-      elementRef={sidebarPanelRef}
-    >
-      <div
-        ref={sidebarVisualRef}
-        className="h-full min-h-0 overflow-hidden"
-        data-right-sidebar-open={showRightSidebar ? "true" : "false"}
-        data-right-sidebar-animated="false"
-        data-right-sidebar-visual
-        style={TERMINAL_TOGGLE_DURATION_STYLE}
-      >
-        {content}
-      </div>
-    </ResizablePanel>
-  )
-})
-
-interface MobileSidebarPaneProps {
-  projectId: string | null
-  showRightSidebar: boolean
-  sidebarVisualRef: RefObject<HTMLDivElement | null>
-  onClose: () => void
-  content: ReactNode
-}
-
-const MobileSidebarPane = memo(({
-  projectId,
-  showRightSidebar,
-  sidebarVisualRef,
-  onClose,
-  content,
-}: MobileSidebarPaneProps) => {
-  if (!projectId) {
-    return null
-  }
-
-  return (
-    <div
-      className={cn(
-        "absolute inset-0 z-40 transition-opacity duration-300 ease-out",
-        showRightSidebar ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0",
-      )}
-      aria-hidden={showRightSidebar ? undefined : true}
-      data-mobile-right-sidebar-overlay
-    >
-      <button
-        type="button"
-        className="absolute inset-0 bg-black/45"
-        aria-label="Close changes sidebar"
-        onClick={onClose}
-      />
-      <div
-        ref={sidebarVisualRef}
-        className={cn(
-          "absolute inset-y-0 right-0 flex w-[min(92vw,30rem)] max-w-full min-h-0 flex-col overflow-hidden border-l border-border bg-background shadow-2xl transition-transform duration-300 ease-out",
-          "pt-[max(env(safe-area-inset-top),0px)] pb-[max(env(safe-area-inset-bottom),0px)]",
-          showRightSidebar ? "translate-x-0" : "translate-x-full",
-        )}
-        data-right-sidebar-open={showRightSidebar ? "true" : "false"}
-        data-right-sidebar-animated="false"
-        data-right-sidebar-visual
-      >
-        {content}
-      </div>
-    </div>
-  )
-})
-
-function ChatWorkspace({
-  chatCard,
-  projectId,
-  shouldRenderTerminalLayout,
-  showTerminalPane,
-  terminalLayout,
-  mainPanelGroupRef,
-  terminalPanelRef,
-  terminalVisualRef,
-  fixedTerminalHeight,
-  terminalFocusRequestVersion,
-  addTerminal,
-  socket,
-  connectionStatus,
-  scrollback,
-  minColumnWidth,
-  splitTerminalShortcut,
-  onTerminalCommandSent,
-  onRemoveTerminal,
-  onTerminalLayout,
-  onLayoutChanged,
-}: ChatWorkspaceProps) {
-  if (!shouldRenderTerminalLayout) {
-    return <>{chatCard}</>
-  }
-
-  return (
-    <ResizablePanelGroup
-      key={projectId}
-      groupRef={mainPanelGroupRef}
-      orientation="vertical"
-      className="flex-1 min-h-0"
-      onLayoutChanged={onLayoutChanged}
-    >
-      <ResizablePanel id="chat" defaultSize={`${terminalLayout.mainSizes[0]}%`} minSize="25%" className="min-h-0">
-        {chatCard}
-      </ResizablePanel>
-      <ResizableHandle
-        withHandle
-        orientation="vertical"
-        disabled={!showTerminalPane}
-        className={cn(!showTerminalPane && "pointer-events-none opacity-0")}
-      />
-      <ResizablePanel
-        id="terminal"
-        defaultSize={`${terminalLayout.mainSizes[1]}%`}
-        minSize="0%"
-        className="min-h-0"
-        elementRef={terminalPanelRef}
-      >
-        <div
-          ref={terminalVisualRef}
-          className="h-full min-h-0 overflow-hidden relative"
-          data-terminal-open={showTerminalPane ? "true" : "false"}
-          data-terminal-animated="false"
-          data-terminal-visual
-          style={TERMINAL_TOGGLE_DURATION_STYLE}
-        >
-          <TerminalWorkspaceShell
-            projectId={projectId}
-            fixedTerminalHeight={fixedTerminalHeight}
-            terminalLayout={terminalLayout}
-            addTerminal={addTerminal}
-            socket={socket}
-            connectionStatus={connectionStatus}
-            scrollback={scrollback}
-            minColumnWidth={minColumnWidth}
-            splitTerminalShortcut={splitTerminalShortcut}
-            focusRequestVersion={terminalFocusRequestVersion}
-            onTerminalCommandSent={onTerminalCommandSent}
-            onRemoveTerminal={onRemoveTerminal}
-            onTerminalLayout={onTerminalLayout}
-          />
-        </div>
-      </ResizablePanel>
-    </ResizablePanelGroup>
-  )
-}
 
 export interface ChatPagePorts {
   dom?: DomPort
@@ -500,11 +261,8 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
   const addTerminal = useTerminalLayoutStore((store) => store.addTerminal)
   const removeTerminal = useTerminalLayoutStore((store) => store.removeTerminal)
   const toggleVisibility = useTerminalLayoutStore((store) => store.toggleVisibility)
-  const resetMainSizes = useTerminalLayoutStore((store) => store.resetMainSizes)
-  const setMainSizes = useTerminalLayoutStore((store) => store.setMainSizes)
   const setTerminalSizes = useTerminalLayoutStore((store) => store.setTerminalSizes)
   const toggleRightSidebar = useRightSidebarStore((store) => store.toggleVisibility)
-  const setRightSidebarSize = useRightSidebarStore((store) => store.setSize)
   const scrollback = useTerminalPreferencesStore((store) => store.scrollbackLines)
   const minColumnWidth = useTerminalPreferencesStore((store) => store.minColumnWidth)
   const editorPreset = useTerminalPreferencesStore((store) => store.editorPreset)
@@ -524,62 +282,73 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
 
   const hasTerminals = terminalLayout.terminals.length > 0
   const showTerminalPane = Boolean(projectId && terminalLayout.isVisible && hasTerminals)
-  const shouldRenderTerminalLayout = Boolean(projectId && hasTerminals)
   const showRightSidebar = Boolean(projectId && rightSidebarVisibility.isVisible)
-  const shouldRenderRightSidebarLayout = Boolean(projectId)
-  const isMobileRightSidebarOverlay = useMobileRightSidebarOverlayEnabled(dom)
-  const shouldRenderDesktopRightSidebarLayout = shouldRenderRightSidebarLayout && !isMobileRightSidebarOverlay
-  const layoutWidth = useLayoutWidth(layoutRootRef)
-  const clampRightSidebarSize = useCallback((size: number, widthOverride?: number) => {
-    if (!Number.isFinite(size)) {
-      return globalRightSidebarSize
-    }
-    const nextLayoutWidth = widthOverride ?? layoutWidth
-    const minPercentFromWidth = nextLayoutWidth > 0
-      ? (RIGHT_SIDEBAR_MIN_WIDTH_PX / nextLayoutWidth) * 100
-      : RIGHT_SIDEBAR_MIN_SIZE_PERCENT
-    return Math.max(RIGHT_SIDEBAR_MIN_SIZE_PERCENT, minPercentFromWidth, size)
-  }, [globalRightSidebarSize, layoutWidth])
-  const effectiveRightSidebarSize = clampRightSidebarSize(globalRightSidebarSize ?? DEFAULT_RIGHT_SIDEBAR_SIZE)
-  const fixedTerminalHeight = useFixedTerminalHeight({
-    layoutRootRef,
-    shouldRenderTerminalLayout,
-    terminalMainSizes: terminalLayout.mainSizes,
-  })
 
-  const {
-    isAnimating: isTerminalAnimating,
-    mainPanelGroupRef,
-    terminalFocusRequestVersion,
-    terminalPanelRef,
-    terminalVisualRef,
-  } = useTerminalToggleAnimation({
-    showTerminalPane,
-    shouldRenderTerminalLayout,
-    projectId,
-    terminalLayout,
-    chatInputRef: chatInputElementRef,
-  })
-  const {
-    isAnimating: isRightSidebarAnimating,
-    panelGroupRef: rightSidebarPanelGroupRef,
-    sidebarPanelRef,
-    sidebarVisualRef,
-  } = useRightSidebarToggleAnimation({
-    projectId,
-    shouldRenderRightSidebarLayout: shouldRenderDesktopRightSidebarLayout,
-    showRightSidebar,
-    rightSidebarSize: effectiveRightSidebarSize,
-  })
+  // ─── Pane layout ────────────────────────────────────────────────────────────
 
-  // Deliberately NOT a store action: this guard reads isRightSidebarAnimating,
-  // a useRef. The ref must stay a ref — promoting it to store state would make
-  // it reactive and re-render the panel group mid-animation, which is exactly
-  // what the guard exists to prevent.
-  const handleRightSidebarLayoutChanged = useCallback((layout: Layout) => {
-    if (!showRightSidebar || isRightSidebarAnimating.current) return
-    setRightSidebarSize(clampRightSidebarSize(layout.rightSidebar))
-  }, [showRightSidebar, isRightSidebarAnimating, setRightSidebarSize, clampRightSidebarSize])
+  const storedPaneLayout = usePaneLayoutStore((s) => projectId ? s.layouts[projectId] : undefined)
+  const paneLayout = storedPaneLayout ?? EMPTY_PANE_LAYOUT
+
+  const seedFromLegacy = usePaneLayoutStore((s) => s.seedFromLegacy)
+  const focusPane = usePaneLayoutStore((s) => s.focusPane)
+  const focusTab = usePaneLayoutStore((s) => s.focusTab)
+  const closeTab = usePaneLayoutStore((s) => s.closeTab)
+  const splitPane = usePaneLayoutStore((s) => s.splitPane)
+  const setGroupSizes = usePaneLayoutStore((s) => s.setGroupSizes)
+
+  // One-time seed from the legacy terminal + sidebar stores when the project
+  // first loads.  seedFromLegacy is a no-op if the layout already exists.
+  useEffect(() => {
+    if (!projectId) return
+    seedFromLegacy(projectId, {
+      terminals: terminalLayout.terminals,
+      mainSizes: terminalLayout.mainSizes,
+      terminalSizes: terminalLayout.terminals.map((t) => t.size),
+      changesVisible: rightSidebarVisibility.isVisible,
+      changesSizePercent: globalRightSidebarSize ?? DEFAULT_RIGHT_SIDEBAR_SIZE,
+    })
+  }, [projectId, seedFromLegacy, terminalLayout, rightSidebarVisibility, globalRightSidebarSize])
+
+  // Stable pane action callbacks.
+  const handleSelectTab = useCallback(
+    (tabId: string) => { if (projectId) focusTab(projectId, tabId) },
+    [projectId, focusTab],
+  )
+  const handleCloseTab = useCallback(
+    (tabId: string) => { if (projectId) closeTab(projectId, tabId) },
+    [projectId, closeTab],
+  )
+  const handleSplitPane = useCallback(
+    ({ tabId, paneId, position }: SplitArgs) => {
+      if (!projectId) return
+      splitPane(projectId, { tabId, targetPaneId: paneId, position })
+    },
+    [projectId, splitPane],
+  )
+  const handleFocusPane = useCallback(
+    (paneId: string) => { if (projectId) focusPane(projectId, paneId) },
+    [projectId, focusPane],
+  )
+  const handleResizeGroup = useCallback(
+    (groupId: string, sizes: number[]) => { if (projectId) setGroupSizes(projectId, groupId, sizes) },
+    [projectId, setGroupSizes],
+  )
+
+  // Tab-strip presentation context: terminal titles from the legacy store.
+  const presentation = useMemo<TabPresentationContext>(
+    () => ({
+      terminalTitles: Object.fromEntries(
+        terminalLayout.terminals.map((t) => [t.id, t.title]),
+      ),
+    }),
+    [terminalLayout.terminals],
+  )
+
+  // ─── Layout width ────────────────────────────────────────────────────────────
+
+  useLayoutWidth(layoutRootRef)
+
+  // ─── Sidebar actions + diff mode ─────────────────────────────────────────────
 
   const {
     diffRenderMode,
@@ -651,27 +420,6 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
 
     addTerminal(projectId)
   }, [addTerminal, hasTerminals, projectId, toggleVisibility])
-
-  const handleTerminalResize = useCallback((layout: Record<string, number>) => {
-    if (!projectId || !showTerminalPane || isTerminalAnimating.current) {
-      return
-    }
-
-    const chatSize = layout.chat
-    const terminalSize = layout.terminal
-    if (!Number.isFinite(chatSize) || !Number.isFinite(terminalSize)) {
-      return
-    }
-
-    const containerHeight = layoutRootRef.current?.getBoundingClientRect().height ?? 0
-    if (shouldCloseTerminalPane(containerHeight, terminalSize)) {
-      resetMainSizes(projectId)
-      toggleVisibility(projectId)
-      return
-    }
-
-    setMainSizes(projectId, [chatSize, terminalSize])
-  }, [isTerminalAnimating, projectId, resetMainSizes, setMainSizes, showTerminalPane, toggleVisibility])
 
   const handleCloseRightSidebar = useCallback(() => {
     if (!projectId) return
@@ -896,33 +644,13 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
       timer.cancelAnimationFrame(frameId)
       timer.clearTimeout(timeoutId)
     }
-  }, [shouldRenderTerminalLayout, showTerminalPane, syncIsAtEndFromList, timer])
+  }, [showTerminalPane, syncIsAtEndFromList, timer])
 
   useEffect(() => {
     return dom.addWindowListener("resize", () => {
       syncIsAtEndFromList()
     })
   }, [dom, syncIsAtEndFromList])
-
-  useEffect(() => {
-    if (!showRightSidebar || !isMobileRightSidebarOverlay) return
-
-    const previousOverflow = dom.getBodyStyle("overflow")
-    dom.setBodyStyle("overflow", "hidden")
-    return () => {
-      dom.setBodyStyle("overflow", previousOverflow)
-    }
-  }, [dom, isMobileRightSidebarOverlay, showRightSidebar])
-
-  useEffect(() => {
-    if (!showRightSidebar || !isMobileRightSidebarOverlay) return
-
-    return dom.addWindowListener("keydown", (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return
-      event.preventDefault()
-      handleCloseRightSidebar()
-    })
-  }, [dom, handleCloseRightSidebar, isMobileRightSidebarOverlay, showRightSidebar])
 
   useEffect(() => {
     if (!isAtEndRef.current) {
@@ -953,31 +681,75 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
     timer,
   ])
 
-  useLayoutEffect(() => {
-    if (!showRightSidebar || isMobileRightSidebarOverlay || layoutWidth <= 0 || isRightSidebarAnimating.current) {
-      return
+  // ─── Content registry ────────────────────────────────────────────────────────
+
+  const rightSidebarContentProps = useMemo<ComponentProps<typeof ChatSidebarContent> | null>(() => {
+    if (!projectId) {
+      return null
     }
 
-    const clampedRightSidebarSize = clampRightSidebarSize(globalRightSidebarSize, layoutWidth)
-    const currentLayout = rightSidebarPanelGroupRef.current?.getLayout()
-    if (!currentLayout) return
-    if (Math.abs((currentLayout.rightSidebar ?? 0) - clampedRightSidebarSize) < 0.1) {
-      return
+    return {
+      projectId,
+      diffs: state.chatDiffSnapshot ?? EMPTY_DIFF_SNAPSHOT,
+      editorLabel: state.editorLabel,
+      diffRenderMode,
+      wrapLines: wrapDiffLines,
+      onOpenFile: handleOpenDiffFile,
+      onOpenInFinder: handleOpenDiffInFinder,
+      onDiscardFile: handleDiscardDiffFile,
+      onIgnoreFile: handleIgnoreDiffFile,
+      onIgnoreFolder: handleIgnoreDiffFolder,
+      onCopyFilePath: handleCopyDiffFilePath,
+      onCopyRelativePath: handleCopyDiffRelativePath,
+      onLoadPatch: handleLoadDiffPatch,
+      onListBranches: handleListBranches,
+      onPreviewMergeBranch: handlePreviewMergeBranch,
+      onMergeBranch: handleMergeBranch,
+      onCheckoutBranch: handleCheckoutBranch,
+      onCreateBranch: handleCreateBranch,
+      onGenerateCommitMessage: handleGenerateCommitMessage,
+      onInitializeGit: handleInitializeGit,
+      onGetGitHubPublishInfo: handleGetGitHubPublishInfo,
+      onCheckGitHubRepoAvailability: handleCheckGitHubRepoAvailability,
+      onSetupGitHub: handleSetupGitHub,
+      onCommit: handleCommitDiffs,
+      onSyncWithRemote: handleSyncBranch,
+      onDiffRenderModeChange: setDiffRenderMode,
+      onWrapLinesChange: setWrapDiffLines,
+      onClose: handleCloseRightSidebar,
     }
-
-    rightSidebarPanelGroupRef.current?.setLayout({
-      workspace: 100 - clampedRightSidebarSize,
-      rightSidebar: clampedRightSidebarSize,
-    })
   }, [
-    clampRightSidebarSize,
-    globalRightSidebarSize,
-    isRightSidebarAnimating,
-    layoutWidth,
-    rightSidebarPanelGroupRef,
-    showRightSidebar,
-    isMobileRightSidebarOverlay,
+    diffRenderMode,
+    handleCheckGitHubRepoAvailability,
+    handleCheckoutBranch,
+    handleCloseRightSidebar,
+    handleCommitDiffs,
+    handleCopyDiffFilePath,
+    handleCopyDiffRelativePath,
+    handleCreateBranch,
+    handleDiscardDiffFile,
+    handleGenerateCommitMessage,
+    handleGetGitHubPublishInfo,
+    handleIgnoreDiffFile,
+    handleIgnoreDiffFolder,
+    handleInitializeGit,
+    handleListBranches,
+    handleLoadDiffPatch,
+    handleMergeBranch,
+    handleOpenDiffFile,
+    handleOpenDiffInFinder,
+    handlePreviewMergeBranch,
+    handleSetupGitHub,
+    handleSyncBranch,
+    projectId,
+    setDiffRenderMode,
+    setWrapDiffLines,
+    state.chatDiffSnapshot,
+    state.editorLabel,
+    wrapDiffLines,
   ])
+
+  // ─── Chat card ───────────────────────────────────────────────────────────────
 
   const chatCard = (
     <Card
@@ -1093,158 +865,57 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
     </Card>
   )
 
-  const workspace = projectId ? (
-    <ChatWorkspace
-      chatCard={chatCard}
-      projectId={projectId}
-      shouldRenderTerminalLayout={shouldRenderTerminalLayout}
-      showTerminalPane={showTerminalPane}
-      terminalLayout={terminalLayout}
-      mainPanelGroupRef={mainPanelGroupRef}
-      terminalPanelRef={terminalPanelRef}
-      terminalVisualRef={terminalVisualRef}
-      fixedTerminalHeight={fixedTerminalHeight}
-      terminalFocusRequestVersion={terminalFocusRequestVersion}
-      addTerminal={addTerminal}
-      socket={state.socket}
-      connectionStatus={state.connectionStatus}
-      scrollback={scrollback}
-      minColumnWidth={minColumnWidth}
-      splitTerminalShortcut={resolvedKeybindings.bindings.addSplitTerminal}
-      onTerminalCommandSent={scheduleTerminalDiffRefresh}
-      onRemoveTerminal={handleRemoveTerminal}
-      onTerminalLayout={setTerminalSizes}
-      onLayoutChanged={handleTerminalResize}
-    />
-  ) : (
-    chatCard
-  )
+  // ─── Registry ────────────────────────────────────────────────────────────────
 
-  const rightSidebarContentProps = useMemo<ComponentProps<typeof ChatSidebarContent> | null>(() => {
-    if (!projectId) {
-      return null
-    }
+  const registry: PaneContentRegistry = {
+    chat: () => chatCard,
+    changes: () =>
+      rightSidebarContentProps ? (
+        <ChatSidebarContent {...rightSidebarContentProps} />
+      ) : null,
+    terminal: (_target) => (
+      <TerminalWorkspaceShell
+        projectId={projectId!}
+        fixedTerminalHeight={0}
+        terminalLayout={terminalLayout}
+        addTerminal={addTerminal}
+        socket={state.socket}
+        connectionStatus={state.connectionStatus}
+        scrollback={scrollback}
+        minColumnWidth={minColumnWidth}
+        splitTerminalShortcut={resolvedKeybindings.bindings.addSplitTerminal}
+        focusRequestVersion={0}
+        onTerminalCommandSent={scheduleTerminalDiffRefresh}
+        onRemoveTerminal={handleRemoveTerminal}
+        onTerminalLayout={setTerminalSizes}
+      />
+    ),
+  }
 
-    return {
-      projectId,
-      diffs: state.chatDiffSnapshot ?? EMPTY_DIFF_SNAPSHOT,
-      editorLabel: state.editorLabel,
-      diffRenderMode,
-      wrapLines: wrapDiffLines,
-      onOpenFile: handleOpenDiffFile,
-      onOpenInFinder: handleOpenDiffInFinder,
-      onDiscardFile: handleDiscardDiffFile,
-      onIgnoreFile: handleIgnoreDiffFile,
-      onIgnoreFolder: handleIgnoreDiffFolder,
-      onCopyFilePath: handleCopyDiffFilePath,
-      onCopyRelativePath: handleCopyDiffRelativePath,
-      onLoadPatch: handleLoadDiffPatch,
-      onListBranches: handleListBranches,
-      onPreviewMergeBranch: handlePreviewMergeBranch,
-      onMergeBranch: handleMergeBranch,
-      onCheckoutBranch: handleCheckoutBranch,
-      onCreateBranch: handleCreateBranch,
-      onGenerateCommitMessage: handleGenerateCommitMessage,
-      onInitializeGit: handleInitializeGit,
-      onGetGitHubPublishInfo: handleGetGitHubPublishInfo,
-      onCheckGitHubRepoAvailability: handleCheckGitHubRepoAvailability,
-      onSetupGitHub: handleSetupGitHub,
-      onCommit: handleCommitDiffs,
-      onSyncWithRemote: handleSyncBranch,
-      onDiffRenderModeChange: setDiffRenderMode,
-      onWrapLinesChange: setWrapDiffLines,
-      onClose: handleCloseRightSidebar,
-    }
-  }, [
-    diffRenderMode,
-    handleCheckGitHubRepoAvailability,
-    handleCheckoutBranch,
-    handleCloseRightSidebar,
-    handleCommitDiffs,
-    handleCopyDiffFilePath,
-    handleCopyDiffRelativePath,
-    handleCreateBranch,
-    handleDiscardDiffFile,
-    handleGenerateCommitMessage,
-    handleGetGitHubPublishInfo,
-    handleIgnoreDiffFile,
-    handleIgnoreDiffFolder,
-    handleInitializeGit,
-    handleListBranches,
-    handleLoadDiffPatch,
-    handleMergeBranch,
-    handleOpenDiffFile,
-    handleOpenDiffInFinder,
-    handlePreviewMergeBranch,
-    handleSetupGitHub,
-    handleSyncBranch,
-    projectId,
-    setDiffRenderMode,
-    setWrapDiffLines,
-    state.chatDiffSnapshot,
-    state.editorLabel,
-    wrapDiffLines,
-  ])
+  // ─── Layout ──────────────────────────────────────────────────────────────────
 
   return (
     <div ref={layoutRootRef} className={CHAT_PAGE_LAYOUT_ROOT_CLASS}>
-      {shouldRenderDesktopRightSidebarLayout && projectId ? (
-        <ResizablePanelGroup
-          key={`${projectId}-right-sidebar`}
-          groupRef={rightSidebarPanelGroupRef}
-          orientation="horizontal"
-          className="flex-1 min-h-0"
-          onLayoutChange={(layout) => {
-            if (!showRightSidebar || isRightSidebarAnimating.current) {
-              return
-            }
-
-            const clampedRightSidebarSize = clampRightSidebarSize(layout.rightSidebar)
-            if (Math.abs(clampedRightSidebarSize - layout.rightSidebar) < 0.1) {
-              return
-            }
-
-            rightSidebarPanelGroupRef.current?.setLayout({
-              workspace: 100 - clampedRightSidebarSize,
-              rightSidebar: clampedRightSidebarSize,
-            })
-          }}
-          onLayoutChanged={handleRightSidebarLayoutChanged}
-        >
-          <ResizablePanel
-            id="workspace"
-            defaultSize={`${100 - effectiveRightSidebarSize}%`}
-            minSize="20%"
-            className="min-h-0 min-w-0"
-          >
-            {workspace}
-          </ResizablePanel>
-          <ResizableHandle
-            withHandle={false}
-            orientation="horizontal"
-            disabled={!showRightSidebar}
-            className={cn(!showRightSidebar && "pointer-events-none opacity-0")}
-          />
-          <DesktopSidebarPane
-            showRightSidebar={showRightSidebar}
-            sizePercent={effectiveRightSidebarSize}
-            sidebarPanelRef={sidebarPanelRef}
-            sidebarVisualRef={sidebarVisualRef}
-            content={rightSidebarContentProps ? <ChatSidebarContent {...rightSidebarContentProps} /> : null}
-          />
-        </ResizablePanelGroup>
-      ) : (
-        workspace
-      )}
-      {isMobileRightSidebarOverlay ? (
-        <MobileSidebarPane
-          projectId={projectId}
-          showRightSidebar={showRightSidebar}
-          sidebarVisualRef={sidebarVisualRef}
-          onClose={handleCloseRightSidebar}
-          content={rightSidebarContentProps ? <ChatSidebarContent {...rightSidebarContentProps} /> : null}
+      {projectId ? (
+        <SplitContainer
+          layout={paneLayout}
+          renderPane={(pane, isFocused) => (
+            <PaneShell
+              pane={pane}
+              isFocused={isFocused}
+              registry={registry}
+              presentation={presentation}
+              onSelectTab={handleSelectTab}
+              onCloseTab={handleCloseTab}
+              onSplit={handleSplitPane}
+            />
+          )}
+          onFocusPane={handleFocusPane}
+          onResizeGroup={handleResizeGroup}
         />
-      ) : null}
+      ) : (
+        chatCard
+      )}
     </div>
   )
 }

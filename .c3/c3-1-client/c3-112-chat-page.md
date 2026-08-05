@@ -1,7 +1,7 @@
 ---
 id: c3-112
 c3-version: 4
-c3-seal: 6052faabc1d845ad96dc573fedf403c6a4f7f110f3d37fedf70cbaa1ba979207
+c3-seal: 9b2a2cb9f80f5cea696dcf84690f1e07e1db0c9fcaba6202d01a2f4bb7cf1a21
 title: chat-page
 type: component
 category: feature
@@ -39,7 +39,7 @@ Composes the chat route: transcript viewport, input dock, embedded terminal pane
 | Precondition | App-shell mounted and useKannaState returns chat snapshot for sessionId | c3-110 |
 | Input — transcript renderer | Receives entries, dispatches per-kind | c3-113 |
 | Input — chat UI chrome | Composer, pickers, attachments | c3-115 |
-| Input — terminal workspace | Embedded PTY panel | c3-118 |
+| Input — terminal workspace | Terminals render inside a pane as a tab, supplied through the content registry rather than a fixed panel | c3-118 |
 | Internal state | Focus policy state, panel sizes, scroll anchor | c3-102 |
 
 ## Business Flow
@@ -48,7 +48,7 @@ Composes the chat route: transcript viewport, input dock, embedded terminal pane
 | --- | --- | --- |
 | Outcome | Single workspace where user reads agent output and replies | c3-1 |
 | Primary path | Subscribe chatView → render transcript + composer → send command | ref-ws-subscription |
-| Alternate — terminal toggle | Cmd-key opens terminal panel; layout animates | c3-118 |
+| Alternate — terminal toggle | Keybinding opens a terminal as a tab; the user may split it beside the transcript or the changes view | c3-104 |
 | Alternate — sticky focus | Focus policy keeps last-read entry visible during streaming | c3-112 |
 | Failure — session not found | Display banner; allow back-to-projects | c3-117 |
 
@@ -64,7 +64,7 @@ Composes the chat route: transcript viewport, input dock, embedded terminal pane
 | Surface | Direction | Contract | Boundary | Evidence |
 | --- | --- | --- | --- | --- |
 | <ChatPage> route component | OUT | Mounts at /chat/:sessionId, owns layout | c3-110 | src/client/app/ChatPage |
-| Layout slot order | OUT | Sidebar → transcript → composer → terminal | c3-110 | src/client/app/ChatPage |
+| Pane arrangement | OUT | Arrangement is a user-editable pane tree, not a fixed slot order; the route composes the tree and supplies one renderer per tab kind | c3-104 | src/client/app/ChatPage/index.tsx |
 | Focus policy callback | IN | Hooks consumed for sticky scroll | c3-112 | src/client/app/useStickyChatFocus.ts |
 
 ## Change Safety
