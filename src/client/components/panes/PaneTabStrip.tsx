@@ -1,3 +1,4 @@
+import { useDraggable } from "@dnd-kit/core"
 import { Columns2, Rows2, X } from "lucide-react"
 import { useCallback } from "react"
 import type { PaneLeaf, SplitPosition } from "../../lib/paneTree"
@@ -135,8 +136,18 @@ function PaneTab({
     [onClose, tabId],
   )
 
+  // The whole tab is the drag handle. The sensor's small distance threshold is
+  // what keeps a plain click a selection rather than a drag.
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: tabId })
+
   const tab = (
     <div
+      ref={setNodeRef}
+      // Spread first: dnd-kit's attributes carry role="button", and this element
+      // must stay role="tab" for the strip's semantics. Its tabIndex and
+      // aria-describedby (the drag instructions) are still worth keeping.
+      {...attributes}
+      {...listeners}
       role="tab"
       aria-selected={isActive}
       data-tab-id={tabId}
@@ -145,6 +156,9 @@ function PaneTab({
       className={cn(
         "group relative flex shrink-0 cursor-pointer items-center gap-1.5 border-r border-border px-3",
         isActive ? "bg-background text-foreground" : "text-muted-foreground hover:bg-muted/40",
+        // touch-none lets the pointer sensor own the gesture on the strip.
+        "touch-none",
+        isDragging && "opacity-50",
       )}
       style={{ width }}
     >

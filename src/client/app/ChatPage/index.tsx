@@ -42,11 +42,12 @@ import { useWorkflowsStore, selectRuns } from "../../stores/workflowsStore"
 import { useShallow } from "zustand/react/shallow"
 import type { WorkflowRun } from "../../../shared/workflow-types"
 import type { TranscriptEntry } from "../../../shared/types"
-import { createDefaultLayout, type PaneLayout } from "../../lib/paneTree"
+import { createDefaultLayout, type PaneLayout, type SplitPosition } from "../../lib/paneTree"
 import { usePaneLayoutStore } from "../../stores/paneLayoutStore"
 import { SplitContainer } from "../../components/panes/SplitContainer"
 import { PaneShell, type SplitArgs } from "../../components/panes/PaneShell"
 import { isTypingTarget, resolvePaneCommand } from "../../components/panes/paneKeyboard"
+import { PaneDndProvider } from "../../components/panes/PaneDndProvider"
 import type { PaneContentRegistry } from "../../components/panes/paneContentRegistry"
 import type { TabPresentationContext } from "../../components/panes/tabPresentation"
 
@@ -300,6 +301,7 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
   const cycleFocusedPaneTab = usePaneLayoutStore((s) => s.cycleFocusedPaneTab)
   const closeFocusedTab = usePaneLayoutStore((s) => s.closeFocusedTab)
   const splitFocusedPane = usePaneLayoutStore((s) => s.splitFocusedPane)
+  const moveTabToPane = usePaneLayoutStore((s) => s.moveTabToPane)
 
   // One-time seed from the legacy terminal + sidebar stores when the project
   // first loads.  seedFromLegacy is a no-op if the layout already exists.
@@ -337,6 +339,19 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
   const handleResizeGroup = useCallback(
     (groupId: string, sizes: number[]) => { if (projectId) setGroupSizes(projectId, groupId, sizes) },
     [projectId, setGroupSizes],
+  )
+
+  // Drag-and-drop: drop a tab into a pane's middle to merge, onto an edge to split.
+  const handleMoveTab = useCallback(
+    (tabId: string, toPaneId: string) => { if (projectId) moveTabToPane(projectId, tabId, toPaneId) },
+    [projectId, moveTabToPane],
+  )
+  const handleSplitWithTab = useCallback(
+    (tabId: string, paneId: string, position: SplitPosition) => {
+      if (!projectId) return
+      splitPane(projectId, { tabId, targetPaneId: paneId, position })
+    },
+    [projectId, splitPane],
   )
 
   // Tab-strip presentation context: terminal titles from the legacy store.
@@ -929,22 +944,24 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
   return (
     <div ref={layoutRootRef} className={CHAT_PAGE_LAYOUT_ROOT_CLASS}>
       {projectId ? (
-        <SplitContainer
-          layout={paneLayout}
-          renderPane={(pane, isFocused) => (
-            <PaneShell
-              pane={pane}
-              isFocused={isFocused}
-              registry={registry}
-              presentation={presentation}
-              onSelectTab={handleSelectTab}
-              onCloseTab={handleCloseTab}
-              onSplit={handleSplitPane}
-            />
-          )}
-          onFocusPane={handleFocusPane}
-          onResizeGroup={handleResizeGroup}
-        />
+        <PaneDndProvider onMoveTab={handleMoveTab} onSplitWithTab={handleSplitWithTab}>
+          <SplitContainer
+            layout={paneLayout}
+            renderPane={(pane, isFocused) => (
+              <PaneShell
+                pane={pane}
+                isFocused={isFocused}
+                registry={registry}
+                presentation={presentation}
+                onSelectTab={handleSelectTab}
+                onCloseTab={handleCloseTab}
+                onSplit={handleSplitPane}
+              />
+            )}
+            onFocusPane={handleFocusPane}
+            onResizeGroup={handleResizeGroup}
+          />
+        </PaneDndProvider>
       ) : (
         chatCard
       )}
