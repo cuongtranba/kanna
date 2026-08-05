@@ -594,12 +594,51 @@ describe("loadAndReplayLogs", () => {
     expect(cleared).toBe(true)
   })
 
+  // A replayed log can always contain a type this binary does not know: a
+  // branch that was run locally and never landed, or a downgrade after a
+  // newer version wrote the log. `applyStoreEvent` has no default case, so
+  // such an event is a no-op on apply — boot must survive it rather than die
+  // in the .sort() comparator, which no try/catch guards.
+  test("an unknown event type is skipped and the rest of the log still replays", async () => {
+    // Real shape: `turn_resume_attempted` shipped in PR #493 (v0.108.0) on a
+    // branch that never merged, and two of its rows in a dev turns.jsonl
+    // crash-looped the server on every boot.
+    const turns = [
+      JSON.stringify({ v: STORE_VERSION, type: "turn_started", timestamp: 110, chatId: "c1", turnId: "t1" }),
+      JSON.stringify({ v: STORE_VERSION, type: "turn_resume_attempted", timestamp: 120, chatId: "c1", turnId: "t1" }),
+      JSON.stringify({ v: STORE_VERSION, type: "turn_finished", timestamp: 130, chatId: "c1", turnId: "t1" }),
+    ].map((line) => `${line}\n`).join("")
+    const live = JSON.stringify({ v: STORE_VERSION, type: "project_opened", timestamp: 100, projectId: "p1", localPath: "/", title: "T" })
+    const storage = makeStorage({
+      "/data/turns.jsonl": turns,
+      "/data/projects.jsonl": `${live}\n`,
+    })
+
+    const applied: StoreEvent[] = []
+    let clearCalled = false
+    await loadAndReplayLogs(
+      storage, PATHS,
+      () => false,
+      (event) => { applied.push(event) },
+      async () => { clearCalled = true },
+      () => {},
+    )
+
+    // The unknown row is handed to applyEvent (which no-ops on it) but must
+    // not abort the replay — the known turn events on either side survive.
+    // Widened to string: `turn_resume_attempted` is deliberately NOT in the
+    // StoreEvent union — that is the whole point of the fixture.
+    expect(applied.map((e): string => ("type" in e ? e.type : e.kind)))
+      .toEqual(["project_opened", "turn_started", "turn_resume_attempted", "turn_finished"])
+    // An unknown type is NOT a corrupt log — history must not be wiped.
+    expect(clearCalled).toBe(false)
+    expect(storage.readTextSync("/data/turns.jsonl")).toBe(turns)
+  })
+
   // Orchestration is retired (adr-20260802-retire-orchestration-core), but
-  // installs that used it still hold an orch.jsonl on disk. That file must
-  // never re-enter replay: getReplayEventPriority throws on an unknown type
-  // from INSIDE the .sort() comparator, which no try/catch guards — reading
-  // one legacy line would take the whole boot down. The log is also user
-  // data, so it must survive byte-for-byte.
+  // installs that used it still hold an orch.jsonl on disk. That file stays
+  // out of the replay set, and the log is user data, so it must survive
+  // byte-for-byte.
   test("a legacy orch.jsonl is neither replayed nor rewritten", async () => {
     const legacy = [
       JSON.stringify({ v: STORE_VERSION, type: "orch_run_created", timestamp: 50, runId: "run-1", config: {}, tasks: [] }),

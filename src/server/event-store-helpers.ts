@@ -52,14 +52,26 @@ export function logSendToStartingProfile(stage: string, details?: Record<string,
  * `STORE_VERSION` is deliberately NOT bumped when an event is retired — a
  * version mismatch is fail-closed and wipes the user's entire history — so an
  * existing `turns.jsonl` keeps carrying these lines until the next compaction.
- * They apply as no-ops (the apply switch simply has no case for them), but the
- * replay sort below still has to price them, or startup throws on the first
- * legacy line.
+ * They apply as no-ops (the apply switch simply has no case for them); listing
+ * them here prices them at their historical bucket and keeps them off the
+ * unknown-type warning, which is reserved for genuine version drift.
  *
  * - `session_commands_loaded`: the `/` picker's catalog, once persisted per
  *   chat, now derived per project and never stored.
  */
 const RETIRED_EVENT_TYPES = new Set<string>(["session_commands_loaded"])
+
+/**
+ * Sort bucket for an event type this binary does not know.
+ *
+ * A replayed log can always carry a type from a DIFFERENT code version — a
+ * branch that was run locally and never landed, or a downgrade after a newer
+ * build wrote the log. `applyStoreEvent` has no `default` case, so such an
+ * event is a no-op on apply regardless of where it sorts; the only job here is
+ * to keep the comparator a total order. Priced last so an unknown event never
+ * displaces a known one at the same timestamp.
+ */
+export const UNKNOWN_EVENT_PRIORITY = 99
 
 export function getReplayEventPriority(event: StoreEvent): number {
   const discriminator = "type" in event ? event.type : event.kind
@@ -131,9 +143,21 @@ export function getReplayEventPriority(event: StoreEvent): number {
       return 5
     case "tool_request_resolved":
       return 6
+    // Compile-time exhaustiveness is preserved: adding a member to the
+    // StoreEvent union without a case above widens `discriminator` past
+    // `never` and fails the type check. At RUNTIME this branch is only
+    // reachable for a type outside the union — i.e. data written by another
+    // code version — so it warns and prices the event instead of throwing.
+    // Throwing here bricked boot on a single ignorable row (a stray
+    // `turn_resume_attempted` from unmerged PR #493), and it protected
+    // nothing: `applyStoreEvent` no-ops on unknown types anyway.
     default: {
       const _exhaustive: never = discriminator
-      throw new Error(`Unhandled replay event type: ${String(_exhaustive)}`)
+      log.warn(
+        "[kanna/event-store] Skipping unknown replay event type (written by a different version):",
+        String(_exhaustive),
+      )
+      return UNKNOWN_EVENT_PRIORITY
     }
   }
 }
