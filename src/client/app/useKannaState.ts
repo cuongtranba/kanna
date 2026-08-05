@@ -20,6 +20,7 @@ import { processTranscriptMessages } from "../lib/parseTranscript"
 import { generateUUID } from "../lib/utils"
 import { canCancelStatus, getLatestToolIds, isProcessingStatus } from "./derived"
 import { KannaSocket, type SocketStatus } from "./socket"
+import { useOptionalKannaSocket } from "./KannaSocketProvider"
 import type { EditorOpenSettings, ImportSessionsByIdsResult, OpenExternalAction, PtyInstancesEvent } from "../../shared/protocol"
 import type { PtyInstancesSnapshot } from "../../shared/pty-instance"
 import type { ChatPermissionPolicyOverride, ToolRequestDecision } from "../../shared/permission-policy"
@@ -572,27 +573,22 @@ export function shouldMarkActiveChatRead(dom?: Pick<DomPort, "getVisibilityState
   return d.getVisibilityState() === "visible" && d.hasFocus()
 }
 
-function wsUrl(dom: DomPort) {
-  const href = dom.getHref()
-  const protocol = href.startsWith("https://") ? "wss:" : "ws:"
-  // Extract host from href: "https://host:port/path" → "host:port"
-  const url = new URL(href)
-  return `${protocol}//${url.host}/ws`
-}
-
-function useKannaSocket(ports: { dom: DomPort; timer?: import("../ports/timerPort").TimerPort; localStorage?: import("../ports/storagePort").StoragePort; sessionStorage?: import("../ports/storagePort").StoragePort }) {
-  // wsUrl is computed once at mount — the DOM port (and therefore the URL)
-  // never changes during the lifetime of the hook, so the empty dep array is intentional.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const socket = useMemo(() => new KannaSocket(wsUrl(ports.dom), ports), [])
-
-  useEffect(() => {
-    socket.start()
-    return () => {
-      socket.dispose()
-    }
-  }, [socket])
-
+/**
+ * The socket for this hook instance.
+ *
+ * The connection itself is owned by `KannaSocketProvider` above the router, so
+ * that N mounted chat tabs share ONE WebSocket instead of opening one each.
+ * `ports.socket` stays supported so a test can drive the hook without standing
+ * up a provider.
+ */
+function useResolvedSocket(injected: KannaSocket | undefined): KannaSocket {
+  const fromContext = useOptionalKannaSocket()
+  const socket = injected ?? fromContext
+  if (!socket) {
+    throw new Error(
+      "useKannaState needs a KannaSocket: mount a KannaSocketProvider or pass ports.socket",
+    )
+  }
   return socket
 }
 
@@ -941,6 +937,11 @@ export interface KannaStatePorts {
   dom?: DomPort
   timer?: TimerPort
   clipboard?: ClipboardPort
+  /**
+   * Overrides the socket from `KannaSocketProvider`. For tests only —
+   * production shares the one connection the provider owns.
+   */
+  socket?: KannaSocket
 }
 
 export function useKannaState(activeChatId: string | null, ports: KannaStatePorts = {}): KannaState {
@@ -950,7 +951,7 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
   const timer = ports.timer ?? timerAdapter
   const clipboard = ports.clipboard ?? clipboardAdapter
   const navigate = useNavigate()
-  const socket = useKannaSocket({ dom, timer, localStorage: localStore, sessionStorage: sessStore })
+  const socket = useResolvedSocket(ports.socket)
   const dialog = useAppDialog()
 
   const sidebarData = useKannaStateStore((state) => state.sidebarData)

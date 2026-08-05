@@ -26,6 +26,7 @@ import { WorkflowsPage } from "./WorkflowsPage"
 import { AppBootstrap } from "./AppBootstrap"
 import { SharePage } from "./share-view/SharePage"
 import { useKannaState } from "./useKannaState"
+import { KannaSocketProvider } from "./KannaSocketProvider"
 import { useSidebarSwipeGesture } from "./sidebarSwipeGesture"
 import { useViewportSubscription } from "../stores/viewportStore"
 import type { AppSettingsSnapshot } from "../../shared/types"
@@ -533,16 +534,21 @@ function AuthedApp() {
     return <PasswordScreen error={auth.state.error} onSubmit={auth.submitPassword} />
   }
 
+  // The socket provider sits INSIDE the auth gate (an unauthenticated visitor
+  // must not open a connection) but ABOVE the router, so route changes — and,
+  // later, multiple mounted chat tabs — all share the one WebSocket.
   return (
-    <Routes>
-      <Route element={<KannaLayout />}>
-        <Route path="/" element={<LocalProjectsPage />} />
-        <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
-        <Route path="/settings/:sectionId" element={<SettingsPage />} />
-        <Route path="/chat/:chatId" element={<ChatPage />} />
-        <Route path="/workflows/:chatId" element={<WorkflowsPage />} />
-      </Route>
-    </Routes>
+    <KannaSocketProvider>
+      <Routes>
+        <Route element={<KannaLayout />}>
+          <Route path="/" element={<LocalProjectsPage />} />
+          <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
+          <Route path="/settings/:sectionId" element={<SettingsPage />} />
+          <Route path="/chat/:chatId" element={<ChatPage />} />
+          <Route path="/workflows/:chatId" element={<WorkflowsPage />} />
+        </Route>
+      </Routes>
+    </KannaSocketProvider>
   )
 }
 
