@@ -39,7 +39,7 @@ import type { CodexAppServerManager } from "./codex-app-server"
 import type { RealpathFn } from "./paths"
 import { resolveSubagentRoots } from "./paths"
 import { resolveSpawnPaths, resolveStackProjects } from "./claude-session-config"
-import { openrouterAuthReady } from "./provider-catalog"
+import { openrouterAuthReady, claudeAuthReady } from "./provider-catalog"
 import { OAuthPoolUnavailableError } from "./oauth-errors"
 // Type-only import — no IO is pulled in from the SDK session start module.
 import type { startClaudeSession as StartClaudeSessionFn } from "./claude-session-start"
@@ -105,7 +105,6 @@ export interface SubagentWiringDeps {
   buildPoolUnavailableMessage: (reservedFor: string, scopeSuffix: string) => string
   getAppSettingsSnapshot: () => {
     globalPromptAppend?: string
-    claudeAuth?: { authenticated?: boolean } | null
   }
   readLlmProvider: () => Promise<LlmProviderSnapshot>
   subagentPendingKey: (chatId: string, runId: string, toolUseId: string) => string
@@ -286,14 +285,16 @@ export function buildSubagentProviderRunForChat(
         return openrouterAuthReady(await deps.readLlmProvider())
       }
       if (provider === "claude") {
-        const settings = deps.getAppSettingsSnapshot()
+        // Same gate the main chat uses (claudeAuthReady mirrors
+        // claude-session-spawner's `hasAnyToken() && !picked` refusal), so a
+        // user running on local claude CLI credentials with an empty OAuth
+        // pool can delegate exactly as they can chat.
+        //
         // Pass parent chat id so a token already reserved by the parent
         // counts as usable. Subagent runs are sequential under the parent
         // (parent's turn is paused), so sharing the parent's reservation
         // is correct — see oauth-token-pool isEligible.
-        return Boolean(
-          settings.claudeAuth?.authenticated || deps.oauthPool?.hasUsable(args.chatId),
-        )
+        return claudeAuthReady(deps.oauthPool, args.chatId)
       }
       return true
     },
