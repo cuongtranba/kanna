@@ -18,8 +18,18 @@ import { AUTO_CONTINUE_EVENT_VERSION, type AutoContinueEvent } from "./auto-cont
 import { deriveChatSchedules, deriveLoopState, type LoopState } from "./auto-continue/read-model"
 import { timestamped } from "./claude-message-normalizer"
 import { buildTaskNotification } from "./claude-session-config"
-import { validateLoopSetup, reconcileTrackingFile, type LoopSetupInput } from "./loop-template"
-import type { EnsureTrackingFileArgs, EnsureTrackingFileResult } from "./loop-template-io.adapter"
+import {
+  assertTrackingFileSafe,
+  validateLoopSetup,
+  reconcileTrackingFile,
+  type LoopSetupInput,
+} from "./loop-template"
+import type {
+  EnsureTrackingFileArgs,
+  EnsureTrackingFileResult,
+  TrackingFileInspection,
+} from "./loop-template-io.adapter"
+import type { RunVerifyArgs, RunVerifyResult } from "./loop-verify-io.adapter"
 import type { BackgroundRunOutcome } from "./subagent-orchestrator"
 import type { ClaudeSessionState } from "./claude-session-state"
 import type { SetupLoopHandlerResult } from "./kanna-mcp"
@@ -81,6 +91,24 @@ export interface LoopCommandDeps {
   ensureTrackingFile(args: EnsureTrackingFileArgs): Promise<EnsureTrackingFileResult>
 
   /**
+   * IO adapter: read the tracking file + ask git whether it is tracked, so
+   * `assertTrackingFileSafe` can refuse to clobber committed history.
+   */
+  inspectTrackingFile(absPath: string): Promise<TrackingFileInspection>
+
+  /**
+   * IO adapter: true when `workdir` is the project checkout or a git worktree
+   * of the same repository. Bounds where a loop may be pointed.
+   */
+  isWorktreeOfSameRepo(projectCwd: string, workdir: string): Promise<boolean>
+
+  /**
+   * IO adapter: run the loop's verify command (the oracle). Used at arm time
+   * to prove the oracle can fail before the loop is armed.
+   */
+  runVerifyCommand(args: RunVerifyArgs): Promise<RunVerifyResult>
+
+  /**
    * Returns the current armed-loop state for a chat, or null if disarmed.
    * Injected (rather than calling the module-level `isLoopArmed` fn) so
    * AgentCoordinator can be monkey-patched in tests via
@@ -120,15 +148,78 @@ export async function clearClaudeSessionContext(
 }
 
 /**
+ * Consecutive failed iterations after which the host disarms the loop itself.
+ * A backstop, not a tuning knob: three back-to-back failures means the loop is
+ * not making progress, and re-firing it only burns tokens. The model is told
+ * (in the rendered prompt) to retry infra failures rather than stop, so
+ * something has to bound that retry.
+ */
+export const MAX_CONSECUTIVE_LOOP_FAILURES = 3
+
+/**
+ * Budget for the one-shot oracle run at arm time. Generous — a real gate is
+ * lint + typecheck + the full suite — but bounded, so a hanging verify command
+ * fails `setup_loop` fast instead of wedging the arming turn.
+ */
+const ARM_VERIFY_TIMEOUT_MS = 300_000
+
+/**
+ * Disarm a loop that has failed `MAX_CONSECUTIVE_LOOP_FAILURES` times running,
+ * and hand the chat back to the user with the reason. Deliberately still fires
+ * an auto-continue so the failure surfaces in the transcript rather than the
+ * chat simply going quiet.
+ */
+async function disarmFailingLoop(
+  deps: LoopCommandDeps,
+  chatId: string,
+  runId: string,
+  failures: number,
+  notification: string,
+): Promise<void> {
+  try {
+    const now = Date.now()
+    await deps.emitAutoContinueEvent({
+      v: AUTO_CONTINUE_EVENT_VERSION,
+      kind: "loop_disarmed",
+      timestamp: now,
+      chatId,
+      scheduleId: crypto.randomUUID(),
+      reason: "repeated_failures",
+    })
+    await clearClaudeSessionContext(deps, chatId)
+    await deps.store.appendMessage(chatId, timestamped({ kind: "context_cleared" }))
+    await deps.emitAutoContinueEvent({
+      v: AUTO_CONTINUE_EVENT_VERSION,
+      kind: "auto_continue_accepted",
+      timestamp: now,
+      chatId,
+      scheduleId: crypto.randomUUID(),
+      scheduledAt: now,
+      tz: "system",
+      source: "subagent_background",
+      resetAt: now,
+      detectedAt: now,
+      prompt:
+        `${notification}\n\nThe loop has been DISARMED automatically after ${failures}`
+        + " consecutive failed iterations. Do not re-arm it blindly: report the failure"
+        + " reason above to the user and say what needs fixing first.",
+    })
+  } catch (err) {
+    log.warn(`[kanna] disarmFailingLoop failed`, { chatId, runId, err })
+  }
+}
+
+/**
  * Deliver a finished `run_in_background` subagent's result back into the
  * main chat as a fresh turn AND clear the main-agent's Claude session so the
  * next turn starts with a fresh context window. Wired as the orchestrator's
  * `onBackgroundRunComplete` hook.
  *
  * Loop-orchestration invariant: main is stateless-in-context / stateful-in-file.
- * PROGRESS.md is the durability contract; every delivery re-reads it. Subagent
- * output is NOT carried forward as prompt content — the subagent is expected
- * to have written its findings into PROGRESS.md before terminating.
+ * The tracking file is the durability contract; every delivery re-reads it.
+ * Subagent output is NOT carried forward as prompt content — the subagent is
+ * expected to have written its findings into the tracking file before
+ * terminating.
  *
  * See adr-20260711-notification-driven-loop-orchestration.
  */
@@ -153,6 +244,37 @@ export async function deliverSubagentToMain(
   // result since ad-hoc background delegations have no tracking file.
   const armed = isLoopArmed(deps, chatId)
   const notification = buildTaskNotification(runId, outcome, { includeResult: !armed })
+
+  // Record the iteration's outcome so a loop that cannot make progress is
+  // disarmed by the HOST rather than by the model's judgement. Previously a
+  // single transient AUTH_REQUIRED was enough for the orchestrator to call
+  // stop_loop and park the run until a human noticed; now the prompt tells it
+  // to retry infra failures, and this counter is what stops an infinite retry.
+  let failuresAfterThisRun = 0
+  if (armed) {
+    const ok = outcome.status === "completed"
+    failuresAfterThisRun = ok ? 0 : armed.consecutiveFailures + 1
+    try {
+      await deps.emitAutoContinueEvent({
+        v: AUTO_CONTINUE_EVENT_VERSION,
+        kind: "loop_run_outcome",
+        timestamp: Date.now(),
+        chatId,
+        scheduleId: crypto.randomUUID(),
+        ok,
+        errorCode: outcome.status === "failed" ? outcome.errorCode : undefined,
+      })
+    } catch (err) {
+      // Non-fatal: losing one outcome row only weakens the backstop.
+      log.warn(`[kanna] loop_run_outcome emit failed`, { chatId, runId, err })
+    }
+  }
+
+  if (armed && failuresAfterThisRun >= MAX_CONSECUTIVE_LOOP_FAILURES) {
+    await disarmFailingLoop(deps, chatId, runId, failuresAfterThisRun, notification)
+    return
+  }
+
   let prompt: string
   if (armed) {
     prompt = `${notification}\n\n${armed.prompt}`
@@ -208,12 +330,61 @@ export async function setupLoop(
   if (!project) return { ok: false, errors: [`project ${chat.projectId} not found`] }
 
   const validation = validateLoopSetup(args.input, project.localPath, {
-    roster: deps.getSubagents().map((s) => ({ id: s.id, name: s.name })),
+    // triggerMode MUST be carried: dropping it here is what let a
+    // manual-trigger subagent arm a loop that could never delegate.
+    roster: deps.getSubagents().map((s) => ({ id: s.id, name: s.name, triggerMode: s.triggerMode })),
     defaultLoopSubagentId: deps.getAppSettingsSnapshot().subagentRuntime?.defaultLoopSubagentId ?? null,
   })
   if (!validation.ok) return { ok: false, errors: validation.errors }
 
   const resolved = validation.resolved
+
+  // A workdir outside the project must still be the SAME repository — a
+  // sibling worktree is the supported case, an arbitrary directory is not.
+  if (resolved.workdirAbs !== project.localPath) {
+    const sameRepo = await deps.isWorktreeOfSameRepo(project.localPath, resolved.workdirAbs)
+    if (!sameRepo) {
+      return {
+        ok: false,
+        errors: [
+          `workdir ${resolved.workdirAbs} is not this project's checkout or a git worktree of it`,
+        ],
+      }
+    }
+  }
+
+  // Refuse to reconcile a COMMITTED tracking file that records a different
+  // goal — that is a previous loop's record, and rewriting it is data loss.
+  const inspection = await deps.inspectTrackingFile(resolved.trackingFileAbs)
+  if (inspection.content !== null) {
+    const safety = assertTrackingFileSafe(inspection.content, {
+      goal: resolved.goal,
+      gitTracked: inspection.gitTracked,
+      force: args.input.force === true,
+    })
+    if (!safety.ok) return { ok: false, errors: [safety.error] }
+  }
+
+  // Prove the oracle can FAIL before arming. A verify command that already
+  // exits 0 means either the goal is done or the oracle is too weak to define
+  // it — arming on that produces an instant, meaningless "GOAL MET" and wipes
+  // the context for nothing. This is the check a careful operator does by hand.
+  const armCheck = await deps.runVerifyCommand({
+    command: resolved.verifyCommand,
+    cwd: resolved.workdirAbs,
+    timeoutMs: ARM_VERIFY_TIMEOUT_MS,
+  })
+  if (armCheck.exitCode === 0 && args.input.force !== true) {
+    return {
+      ok: false,
+      errors: [
+        "the verify command already exits 0, so the loop would declare GOAL MET on its"
+        + " first iteration without doing any work. Either the goal is already met, or"
+        + " the oracle is too weak to define it — tighten the command (prefer a test in"
+        + " the repo over a grep), or pass force: true if this is intentional.",
+      ],
+    }
+  }
   let created: boolean
   let reconciled: boolean
   let reconcileActions: string[]
@@ -262,6 +433,8 @@ export async function setupLoop(
       scheduleId: crypto.randomUUID(),
       subagentId: resolved.subagentId,
       prompt: resolved.prompt,
+      verifyCommand: resolved.verifyCommand,
+      workdirAbs: resolved.workdirAbs,
     })
 
     const scheduleId = crypto.randomUUID()

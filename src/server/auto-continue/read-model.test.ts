@@ -6,6 +6,10 @@ function armed(chatId: string, subagentId: string, prompt: string, at = 1_000): 
   return { v: 3, kind: "loop_armed", timestamp: at, chatId, scheduleId: `arm-${at}`, subagentId, prompt }
 }
 
+function outcome(chatId: string, ok: boolean, at = 1_500, errorCode?: string): AutoContinueEvent {
+  return { v: 3, kind: "loop_run_outcome", timestamp: at, chatId, scheduleId: `out-${at}`, ok, errorCode }
+}
+
 function disarmed(chatId: string, at = 2_000): AutoContinueEvent {
   return { v: 3, kind: "loop_disarmed", timestamp: at, chatId, scheduleId: `dis-${at}`, reason: "goal_met" }
 }
@@ -17,7 +21,7 @@ describe("deriveLoopState", () => {
 
   test("loop_armed → armed state with subagentId + prompt", () => {
     const state = deriveLoopState([armed("c1", "sub-1", "LOOP PROMPT")], "c1")
-    expect(state).toEqual({ subagentId: "sub-1", prompt: "LOOP PROMPT", armedAt: 1_000 })
+    expect(state).toEqual({ subagentId: "sub-1", prompt: "LOOP PROMPT", armedAt: 1_000, consecutiveFailures: 0, verifyCommand: null, workdirAbs: null })
   })
 
   test("loop_disarmed after loop_armed → null", () => {
@@ -31,7 +35,44 @@ describe("deriveLoopState", () => {
       disarmed("c1", 2_000),
       armed("c1", "sub-2", "P2", 3_000),
     ], "c1")
-    expect(state).toEqual({ subagentId: "sub-2", prompt: "P2", armedAt: 3_000 })
+    expect(state).toEqual({ subagentId: "sub-2", prompt: "P2", armedAt: 3_000, consecutiveFailures: 0, verifyCommand: null, workdirAbs: null })
+  })
+
+  test("consecutive failures accumulate across iterations", () => {
+    const state = deriveLoopState([
+      armed("c1", "sub-1", "P"),
+      outcome("c1", false, 1_100, "AUTH_REQUIRED"),
+      outcome("c1", false, 1_200, "AUTH_REQUIRED"),
+    ], "c1")
+    expect(state?.consecutiveFailures).toBe(2)
+  })
+
+  test("a success resets the failure count", () => {
+    const state = deriveLoopState([
+      armed("c1", "sub-1", "P"),
+      outcome("c1", false, 1_100),
+      outcome("c1", true, 1_200),
+    ], "c1")
+    expect(state?.consecutiveFailures).toBe(0)
+  })
+
+  test("re-arming resets the failure count", () => {
+    const state = deriveLoopState([
+      armed("c1", "sub-1", "P1", 1_000),
+      outcome("c1", false, 1_100),
+      outcome("c1", false, 1_200),
+      armed("c1", "sub-1", "P2", 1_300),
+    ], "c1")
+    expect(state?.consecutiveFailures).toBe(0)
+  })
+
+  test("outcomes for a disarmed loop are ignored, not counted", () => {
+    const state = deriveLoopState([
+      armed("c1", "sub-1", "P"),
+      disarmed("c1", 1_050),
+      outcome("c1", false, 1_100),
+    ], "c1")
+    expect(state).toBeNull()
   })
 
   test("armed state is per-chat", () => {

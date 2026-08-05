@@ -886,8 +886,88 @@ The server owns the template so the prompt is deterministic. See
 - **Rendered prompt invariants** (asserted structurally in `validateLoopSetup`):
   the recurring prompt MUST contain the tracking-file path, the verify
   command, `delegate_subagent`, `run_in_background: true`, `GOAL MET`,
-  `END THIS TURN`, `/clear`, `query_tracking_file`, and `append_tracking_row`.
-  Future edits to the template that drop any of these fail validation.
+  `ORACLE TOO WEAK`, `END THIS TURN`, `/clear`, `query_tracking_file`,
+  `append_tracking_row`, `replace_tracking_section`, `BOTH`, `AUTH_REQUIRED`,
+  `do NOT call stop_loop`, and `Failed approaches`. Future edits to the
+  template that drop any of these fail validation.
+
+## Loop oracle + arm-time gates (adr-20260805-loop-oracle-hardening)
+
+**The oracle is a proxy; the plan is the authority.** A loop once declared
+GOAL MET at stage 4 of a 12-stage plan because its verify command — two greps
+plus the standing gate — flipped green early. Step 3 of the rendered prompt is
+therefore four cases over TWO signals, not one:
+
+| verify | `## Next chunk` | orchestrator does |
+| --- | --- | --- |
+| exit 0 | empty / DONE | `GOAL MET` → `stop_loop` |
+| exit 0 | still lists work | `ORACLE TOO WEAK` → `stop_loop`, hand to a human |
+| non-zero | has work | delegate (normal case) |
+| non-zero | empty | write the next chunk itself, then delegate |
+
+The oracle-green-but-plan-full case deliberately STOPS rather than continuing:
+the loop cannot tell a stale plan from a weak oracle, and only a human can
+retighten the definition of done.
+
+**`setup_loop` refuses at arm time**, before the context wipe — every one of
+these used to surface an iteration later, or not at all:
+
+- worker is manual-trigger (`triggerMode` is carried in
+  `LoopSetupContext.roster`; dropping it at the call site is the original bug —
+  `MANUAL_ONLY` then fired only at the first delegation);
+- the verify command **already exits 0** (the loop would declare GOAL MET
+  having done nothing — either the goal is met or the oracle is too weak);
+- the tracking file is **git-tracked and records a different goal**
+  (`assertTrackingFileSafe`) — reconciling it would rewrite a finished loop's
+  committed record;
+- `workdir` is not the project checkout or a worktree of the same repo;
+- `parallelism` outside 1..`MAX_PARALLELISM` (4).
+
+`force: true` overrides the already-passing-oracle and tracked-file refusals.
+
+**`workdir`.** The loop's working directory — where the verify command runs and
+where `trackingFile` is rooted. Defaults to the project cwd; point it at a
+sibling git worktree so the plan sits beside the branch it describes. Bounded
+by `isWorktreeOfSameRepo` (compares `git rev-parse --git-common-dir`, which
+makes worktrees of one repo compare equal while an unrelated repo does not).
+The tracking-doc MCP tools resolve their base dir from the armed loop **per
+call**, not per spawn — tools are built at spawn and `setup_loop` arms mid-turn.
+
+**`parallelism`** (default 1) renders a fan-out rule, but only for chunks the
+plan explicitly marks `[parallel]`, each naming its OWN worktree. Independence
+is never inferred — two workers in one checkout corrupt each other's edits.
+
+**Host-owned failure backstop.** A `loop_run_outcome` auto-continue event
+records each iteration; `deriveLoopState` folds it into `consecutiveFailures`
+(reset by `loop_armed` and by any success). At
+`MAX_CONSECUTIVE_LOOP_FAILURES` (3) the host emits `loop_disarmed` with reason
+`repeated_failures`. This is what lets the prompt safely tell the model to
+RETRY infra failures (`AUTH_REQUIRED`, `CAP_EXCEEDED`, timeouts) instead of
+calling `stop_loop` — previously one transient auth error parked the run until
+a human noticed.
+
+**`run_verify` (oracle memoization).** The gate ran twice per productive
+iteration (orchestrator, then worker) at ~65s each, and again on iterations
+where nothing could have changed. `mcp__kanna__run_verify` runs the armed
+loop's command and caches the result on a workspace digest (`git rev-parse
+HEAD` + `status --porcelain` + size/mtime of every dirty path, sha256'd,
+`loop-verify-io.adapter.ts`). Unchanged tree → the previous result instantly.
+
+**A null digest is NEVER cached** (`loop-verify-cache.ts`): a non-git or
+unfingerprintable tree must re-run, because serving a remembered pass for an
+unknown tree is the same stale-green failure this whole section exists to
+prevent. Timed-out runs are not cached either — a timeout says nothing about
+the tree. Cache is in-memory, process-scoped, bounded at 64 entries; a restart
+re-runs the oracle, which is the safe direction to be wrong in.
+
+Loops armed before this landed replay with `verifyCommand`/`workdirAbs` null on
+`LoopState`; `run_verify` then refuses and asks for a re-arm rather than
+guessing a command to execute.
+
+**Oracle guidance (not enforced — write these by hand).** Prefer a test in the
+repo over a grep in a shell script: a `renderToStaticMarkup` assertion cannot
+be satisfied by an import line, whereas `grep -q SplitContainer` can. Scope the
+oracle to the TERMINAL state of the plan, not the current stage.
 
 ## Structured tracking-file access (mdast — bounds loop context growth)
 
@@ -899,7 +979,7 @@ the READ + APPEND boundary via structured, section-scoped access instead of
 capping the file.
 
 - **Pure engine** (`src/shared/structured-doc/`): a format-agnostic port
-  (`StructuredDoc`: `sections` / `query` / `append`) + an extension registry
+  (`StructuredDoc`: `sections` / `query` / `append` / `replace`) + an extension registry
   (`resolveStructuredDoc(ext)` — `.md` → the mdast adapter today; add a
   format = one adapter + one registry row). The markdown adapter uses mdast
   (`mdast-util-from-markdown` + `micromark-extension-gfm`) purely as a PARSER
@@ -912,16 +992,26 @@ capping the file.
 - **MCP tools** (`kanna-mcp.ts`, `buildTrackingDocToolList`): registered
   whenever a `chatId` is present — so BOTH the main orchestrator AND subagents
   get them (no `depth === 0` gate, unlike setup_loop). Self-contained: they
-  confine the path to the chat cwd (`confinePathToDir`), dispatch by extension
-  through the registry, and call the IO leaf — no coordinator/spawner
-  threading.
+  confine the path to the ARMED LOOP's workdir when one is armed, else the chat
+  cwd (`confinePathToDir`), dispatch by extension through the registry, and
+  call the IO leaf — no coordinator/spawner threading.
   - `query_tracking_file({ file?, sections?, list_limit? })` — returns only
     the requested sections (default file `PROGRESS.md`); `list_limit` keeps
     the first N items of a section's first list (e.g. latest N Progress rows)
     with a one-line elision marker. The whole file never enters context.
   - `append_tracking_row({ file?, section, entry, position? })` — inserts one
     entry under a section (`position: "top"` for newest-first logs) without a
-    read-before-edit of the whole file.
+    read-before-edit of the whole file. For true LOGS only (Progress, Failed
+    approaches).
+  - `replace_tracking_section({ file?, section, body })` — replaces a section's
+    entire body. For sections holding CURRENT state, above all `Next chunk`,
+    which must describe exactly one next step. Appending there instead makes
+    completed chunks pile up until a later iteration re-reads a finished chunk
+    and redoes the work — an observed bug, not a hypothetical.
+  - **Always pass `file:`.** It defaults to `PROGRESS.md`, and the rendered
+    worker prompt used to omit it — so a loop tracking `PROGRESS-panes.md` wrote
+    its progress row into the committed `PROGRESS.md` of an unrelated finished
+    loop. `renderLoopPrompt` now embeds `file:` in every call it prescribes.
 - **Loop prompt wiring** (`renderLoopPrompt`): the orchestrator step 1 and the
   delegated-subagent prompt both instruct `query_tracking_file` (read) +
   `append_tracking_row` (write) and forbid reading/editing the whole file. The

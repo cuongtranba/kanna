@@ -108,6 +108,7 @@ export function getReplayEventPriority(event: StoreEvent): number {
     case "auto_continue_fired":
     case "loop_armed":
     case "loop_disarmed":
+    case "loop_run_outcome":
       return 11
     case "stack_added":
     case "stack_removed":

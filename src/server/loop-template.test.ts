@@ -1,10 +1,19 @@
 import { describe, expect, test } from "bun:test"
 import path from "node:path"
-import { reconcileTrackingFile, validateLoopSetup, __testing, type LoopSetupContext } from "./loop-template"
+import {
+  assertTrackingFileSafe,
+  reconcileTrackingFile,
+  validateLoopSetup,
+  __testing,
+  type LoopSetupContext,
+} from "./loop-template"
 
-// A valid context most tests share: one known subagent, set as the default.
+// A valid context most tests share: two auto-trigger subagents, first is default.
 const CTX: LoopSetupContext = {
-  roster: [{ id: "sub-1", name: "worker" }, { id: "sub-2", name: "reviewer" }],
+  roster: [
+    { id: "sub-1", name: "worker", triggerMode: "auto" },
+    { id: "sub-2", name: "reviewer", triggerMode: "auto" },
+  ],
   defaultLoopSubagentId: "sub-1",
 }
 
@@ -112,7 +121,7 @@ describe("validateLoopSetup — subagent resolution", () => {
     const result = validateLoopSetup(
       { goal: "g", verifyCommand: "true" },
       cwd,
-      { roster: [{ id: "sub-1", name: "worker" }], defaultLoopSubagentId: null },
+      { roster: [{ id: "sub-1", name: "worker", triggerMode: "auto" }], defaultLoopSubagentId: null },
     )
     expect(result.ok).toBe(false)
     if (result.ok) throw new Error("expected reject")
@@ -134,7 +143,7 @@ describe("validateLoopSetup — subagent resolution", () => {
     const result = validateLoopSetup(
       { goal: "g", verifyCommand: "true" },
       cwd,
-      { roster: [{ id: "sub-1", name: "worker" }], defaultLoopSubagentId: "stale-id" },
+      { roster: [{ id: "sub-1", name: "worker", triggerMode: "auto" }], defaultLoopSubagentId: "stale-id" },
     )
     expect(result.ok).toBe(false)
     if (result.ok) throw new Error("expected reject")
@@ -389,15 +398,194 @@ describe("reconcileTrackingFile — deterministic schema reconcile", () => {
 })
 
 describe("renderLoopPrompt structural invariants", () => {
+  const BASE = {
+    goal: "green build",
+    verifyCommand: "make check",
+    trackingFileRel: "PROGRESS.md",
+    subagentId: "sub-1",
+    parallelism: 1,
+    workdirRel: ".",
+  }
+
   test("prompt echoes the goal + verify command in the reference block", () => {
-    const prompt = __testing.renderLoopPrompt({
-      goal: "green build",
-      verifyCommand: "make check",
-      trackingFileRel: "PROGRESS.md",
-      subagentId: "sub-1",
-    })
+    const prompt = __testing.renderLoopPrompt(BASE)
     expect(prompt).toContain("Goal (for reference): green build")
     expect(prompt).toContain("Verify command: `make check`")
     expect(prompt).toContain("subagent_id: \"sub-1\"")
+  })
+
+  // Regression: the rendered tool calls used to omit `file:`, so a loop with a
+  // non-default tracking file had its worker silently write into PROGRESS.md.
+  // Observed in the wild: a worker polluted a COMMITTED PROGRESS.md belonging
+  // to a previous, finished loop.
+  test("every rendered tracking-file tool call names the file explicitly", () => {
+    const prompt = __testing.renderLoopPrompt({ ...BASE, trackingFileRel: "docs/PROGRESS-panes.md" })
+    expect(prompt).not.toContain("PROGRESS.md\"")
+    // Both the orchestrator's own read and the delegated worker's calls
+    for (const call of ["query_tracking_file", "append_tracking_row", "replace_tracking_section"]) {
+      const idx = prompt.indexOf(call)
+      expect(idx).toBeGreaterThan(-1)
+    }
+    // The rendered worker prompt carries the path into each call it prescribes
+    expect(prompt.match(/docs\/PROGRESS-panes\.md/g)?.length ?? 0).toBeGreaterThanOrEqual(4)
+  })
+
+  // The oracle is a proxy; the plan is the authority. A verify command that
+  // passes while the plan still lists work means the oracle is too weak, not
+  // that the goal is met.
+  test("GOAL MET is gated on the plan being exhausted, not the exit code alone", () => {
+    const prompt = __testing.renderLoopPrompt(BASE)
+    expect(prompt).toContain("Next chunk")
+    expect(prompt).toContain("BOTH")
+    expect(prompt).toContain("ORACLE TOO WEAK")
+  })
+
+  test("worker replaces (not appends) the Next chunk section", () => {
+    const prompt = __testing.renderLoopPrompt(BASE)
+    expect(prompt).toContain("replace_tracking_section")
+    expect(prompt).toMatch(/replace_tracking_section[^\n]*Next chunk/)
+  })
+
+  test("carries an infra-vs-work retry policy so a transient failure does not kill the loop", () => {
+    const prompt = __testing.renderLoopPrompt(BASE)
+    expect(prompt).toContain("AUTH_REQUIRED")
+    expect(prompt).toContain("Failed approaches")
+    expect(prompt).toContain("do NOT call stop_loop")
+  })
+
+  test("parallelism 1 renders the single-delegation rule", () => {
+    const prompt = __testing.renderLoopPrompt(BASE)
+    expect(prompt).toContain("Exactly ONE delegate_subagent per turn")
+    expect(prompt).not.toContain("[parallel]")
+  })
+
+  test("parallelism > 1 opts in to marked chunks, each in its own worktree", () => {
+    const prompt = __testing.renderLoopPrompt({ ...BASE, parallelism: 3 })
+    expect(prompt).toContain("[parallel]")
+    expect(prompt).toContain("up to 3")
+    expect(prompt).toContain("its OWN git worktree")
+  })
+
+  test("a non-default workdir is named as the verify + work directory", () => {
+    const prompt = __testing.renderLoopPrompt({ ...BASE, workdirRel: "../wt-feature" })
+    expect(prompt).toContain("../wt-feature")
+  })
+})
+
+describe("validateLoopSetup — worker trigger mode", () => {
+  const cwd = "/tmp/kanna-loop-test-project"
+
+  // Regression: the roster passed to validate used to be {id,name} only, so a
+  // manual-trigger subagent armed fine and the loop only discovered
+  // MANUAL_ONLY one full iteration later — after the context wipe.
+  test("rejects a manual-trigger subagent instead of arming a loop that cannot delegate", () => {
+    const result = validateLoopSetup({ goal: "g", verifyCommand: "true", subagentId: "manual-1" }, cwd, {
+      roster: [
+        { id: "sub-1", name: "worker", triggerMode: "auto" },
+        { id: "manual-1", name: "handy", triggerMode: "manual" },
+      ],
+      defaultLoopSubagentId: "sub-1",
+    })
+    expect(result.ok).toBe(false)
+    if (result.ok) throw new Error("expected reject")
+    expect(result.errors.some((e) => e.includes("handy") && e.includes("manual"))).toBe(true)
+  })
+
+  test("rejects a manual-trigger subagent that arrives via the configured default", () => {
+    const result = validateLoopSetup({ goal: "g", verifyCommand: "true" }, cwd, {
+      roster: [{ id: "manual-1", name: "handy", triggerMode: "manual" }],
+      defaultLoopSubagentId: "manual-1",
+    })
+    expect(result.ok).toBe(false)
+    if (result.ok) throw new Error("expected reject")
+    expect(result.errors.some((e) => e.includes("manual"))).toBe(true)
+  })
+})
+
+describe("validateLoopSetup — workdir + parallelism", () => {
+  const cwd = "/tmp/kanna-loop-test-project"
+
+  test("defaults workdir to the project cwd and parallelism to 1", () => {
+    const result = validateLoopSetup({ goal: "g", verifyCommand: "true" }, cwd, CTX)
+    if (!result.ok) throw new Error(result.errors.join(", "))
+    expect(result.resolved.workdirAbs).toBe(cwd)
+    expect(result.resolved.parallelism).toBe(1)
+  })
+
+  // The project rule is "always use a git worktree", so the work — and the
+  // tracking file describing it — routinely lives in a SIBLING directory.
+  test("an explicit workdir becomes the tracking-file base and is echoed in the prompt", () => {
+    const result = validateLoopSetup(
+      { goal: "g", verifyCommand: "true", workdir: "/tmp/kanna-wt-feature", trackingFile: "PROGRESS.md" },
+      cwd,
+      CTX,
+    )
+    if (!result.ok) throw new Error(result.errors.join(", "))
+    expect(result.resolved.workdirAbs).toBe("/tmp/kanna-wt-feature")
+    expect(result.resolved.trackingFileAbs).toBe("/tmp/kanna-wt-feature/PROGRESS.md")
+  })
+
+  test("rejects a tracking file that escapes the workdir", () => {
+    const result = validateLoopSetup(
+      { goal: "g", verifyCommand: "true", workdir: "/tmp/kanna-wt-feature", trackingFile: "../escape.md" },
+      cwd,
+      CTX,
+    )
+    expect(result.ok).toBe(false)
+  })
+
+  test("rejects a non-absolute workdir", () => {
+    const result = validateLoopSetup({ goal: "g", verifyCommand: "true", workdir: "relative/dir" }, cwd, CTX)
+    expect(result.ok).toBe(false)
+    if (result.ok) throw new Error("expected reject")
+    expect(result.errors.some((e) => e.includes("workdir"))).toBe(true)
+  })
+
+  test.each([0, -1, 1.5, 99])("rejects parallelism %p", (parallelism) => {
+    const result = validateLoopSetup({ goal: "g", verifyCommand: "true", parallelism }, cwd, CTX)
+    expect(result.ok).toBe(false)
+    if (result.ok) throw new Error("expected reject")
+    expect(result.errors.some((e) => e.includes("parallelism"))).toBe(true)
+  })
+
+  test("accepts parallelism within the permit bound", () => {
+    const result = validateLoopSetup({ goal: "g", verifyCommand: "true", parallelism: 4 }, cwd, CTX)
+    if (!result.ok) throw new Error(result.errors.join(", "))
+    expect(result.resolved.parallelism).toBe(4)
+  })
+})
+
+describe("assertTrackingFileSafe", () => {
+  // Regression: setup_loop reconciled a COMMITTED PROGRESS.md belonging to a
+  // finished, unrelated loop — silently rewriting its Goal and Verify command
+  // sections. Committed history must not be clobbered without consent.
+  const committed = "# Old loop\n\n## Goal\nship the old thing\n\n## Verify command\n```\nmake old\n```\n"
+
+  test("refuses to rewrite the goal of a git-tracked file", () => {
+    const result = assertTrackingFileSafe(committed, { goal: "ship the NEW thing", gitTracked: true, force: false })
+    expect(result.ok).toBe(false)
+    if (result.ok) throw new Error("expected reject")
+    expect(result.error).toContain("ship the old thing")
+    expect(result.error).toContain("force")
+  })
+
+  test("force: true overrides the refusal", () => {
+    const result = assertTrackingFileSafe(committed, { goal: "ship the NEW thing", gitTracked: true, force: true })
+    expect(result.ok).toBe(true)
+  })
+
+  test("an untracked file is fair game — nothing committed is at risk", () => {
+    const result = assertTrackingFileSafe(committed, { goal: "ship the NEW thing", gitTracked: false, force: false })
+    expect(result.ok).toBe(true)
+  })
+
+  test("re-arming the SAME goal on a tracked file is allowed (idempotent re-setup)", () => {
+    const result = assertTrackingFileSafe(committed, { goal: "ship the old thing", gitTracked: true, force: false })
+    expect(result.ok).toBe(true)
+  })
+
+  test("a tracked file with no Goal section yet is allowed", () => {
+    const result = assertTrackingFileSafe("# notes\n\nfree text\n", { goal: "g", gitTracked: true, force: false })
+    expect(result.ok).toBe(true)
   })
 })

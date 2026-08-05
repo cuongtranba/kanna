@@ -91,9 +91,18 @@ function makeDeps(overrides: Partial<LoopCommandDeps> = {}): LoopCommandDeps {
       return { created: true, reconciled: false, actions: [], absPath: _args.absPath }
     },
     ...overrides,
-    // isLoopArmed MUST follow the spread: Partial<...> widens it to T|undefined,
-    // placing it after with ?? fallback ensures TS7 always sees a concrete function.
+    // These MUST follow the spread: Partial<...> widens each to T|undefined,
+    // so re-assigning with a ?? fallback keeps TS7 seeing a concrete function.
     isLoopArmed: overrides.isLoopArmed ?? ((_chatId: string) => null),
+    inspectTrackingFile:
+      overrides.inspectTrackingFile
+      ?? (async () => ({ exists: false, content: null, gitTracked: false })),
+    isWorktreeOfSameRepo: overrides.isWorktreeOfSameRepo ?? (async () => true),
+    // Default oracle FAILS: an arming test should exercise the normal path,
+    // and a passing oracle is now a refusal.
+    runVerifyCommand:
+      overrides.runVerifyCommand
+      ?? (async () => ({ exitCode: 1, output: "not done", timedOut: false, durationMs: 1 })),
   }
 }
 
@@ -109,6 +118,7 @@ describe("module surface", () => {
   test("exports only the loop + delivery handlers", async () => {
     const mod = await import("./claude-loop-commands")
     expect(Object.keys(mod).sort()).toEqual([
+      "MAX_CONSECUTIVE_LOOP_FAILURES",
       "clearClaudeSessionContext",
       "deliverSubagentToMain",
       "isLoopArmed",

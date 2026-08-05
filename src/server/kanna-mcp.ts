@@ -30,6 +30,8 @@ import type { LoopSetupInput } from "./loop-template"
 import { confinePathToDir } from "./input-validation"
 import { resolveStructuredDoc } from "../shared/structured-doc/registry"
 import { readDoc, writeDoc } from "./structured-doc-io.adapter"
+import { computeWorkspaceDigest, runVerifyCommand } from "./loop-verify-io.adapter"
+import { getCachedVerify, setCachedVerify } from "./loop-verify-cache"
 import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
@@ -96,6 +98,19 @@ export interface KannaMcpArgs extends OfferDownloadArgs {
    * `setup_loop` (same main-chat gating). Omit to hide the tool.
    */
   stopLoop?: () => Promise<void>
+  /**
+   * Current armed-loop state for this chat, looked up per CALL. Gives the
+   * tracking-doc tools the loop's workdir (so a worktree loop resolves its
+   * tracking file beside the branch it describes) and `run_verify` the oracle
+   * command. Omit to fall back to the chat cwd and hide `run_verify`.
+   */
+  getArmedLoop?: (chatId: string) => ArmedLoopInfo | null
+}
+
+/** The slice of the armed loop the MCP tools need. */
+export interface ArmedLoopInfo {
+  verifyCommand: string | null
+  workdirAbs: string | null
 }
 
 export type SetupLoopHandlerResult =
@@ -485,7 +500,26 @@ function buildSetupLoopToolList(args: {
           .string()
           .optional()
           .describe(
-            "Subagent id the loop delegates each chunk to. Optional: if omitted, the configured default loop subagent (Settings) is used. Rejected if neither is set or the id is not in your roster.",
+            "Subagent id the loop delegates each chunk to. Optional: if omitted, the configured default loop subagent (Settings) is used. Rejected if neither is set, the id is not in your roster, or that subagent is manual-trigger (a loop cannot @-mention it).",
+          ),
+        workdir: z
+          .string()
+          .optional()
+          .describe(
+            "Absolute directory the loop works in — where the verify command runs and where tracking_file is rooted. Defaults to the project cwd. Use this when the work lives in a git worktree so the plan sits beside the branch it describes. Must be the project checkout or a worktree of the same repo.",
+          ),
+        parallelism: z
+          .number()
+          .int()
+          .optional()
+          .describe(
+            "Chunks the orchestrator may delegate per turn (1-4, default 1). Above 1 only chunks the plan marks [parallel] fan out, each in its own worktree.",
+          ),
+        force: z
+          .boolean()
+          .optional()
+          .describe(
+            "Override two safety refusals: overwriting a git-tracked tracking file that records a different goal, and arming when the verify command already exits 0. Use only when you are sure.",
           ),
       },
       async (input) => {
@@ -495,6 +529,9 @@ function buildSetupLoopToolList(args: {
           trackingFile: input.tracking_file,
           chunkHint: input.chunk_hint,
           subagentId: input.subagent_id,
+          workdir: input.workdir,
+          parallelism: input.parallelism,
+          force: input.force,
         })
         if (!result.ok) {
           return {
@@ -558,6 +595,24 @@ const APPEND_TRACKING_ROW_DESCRIPTION =
   + "the append off your context. Use position 'top' for newest-first logs "
   + "like Progress."
 
+const REPLACE_TRACKING_SECTION_DESCRIPTION =
+  "Replace a section's ENTIRE body in a structured markdown tracking file, "
+  + "without reading the whole file. Use this for sections that hold the "
+  + "CURRENT state rather than a log — above all the loop's 'Next chunk', "
+  + "which must describe exactly one next step. Appending there instead makes "
+  + "completed chunks pile up, and a later iteration re-reads a finished chunk "
+  + "and redoes the work. Use append_tracking_row for true logs (Progress, "
+  + "Failed approaches); use this for Next chunk."
+
+const RUN_VERIFY_DESCRIPTION =
+  "Run the armed loop's verify command (the oracle) and return its exit code "
+  + "and output. Prefer this over running the command yourself with Bash: the "
+  + "result is CACHED against a fingerprint of the working tree, so when "
+  + "nothing has changed since the last run you get the previous result "
+  + "instantly instead of paying for the full gate again. The orchestrator and "
+  + "the worker subagent both verify each iteration, and a real gate (lint + "
+  + "typecheck + tests) costs a minute or more each time."
+
 const trackingDocError = (text: string) => ({
   isError: true as const,
   content: [{ type: "text" as const, text }],
@@ -571,9 +626,20 @@ const trackingDocError = (text: string) => ({
  * through the structured-doc registry (`.md` today). See the loop-template
  * renderLoopPrompt which instructs the model to use these instead of Read/Edit.
  */
-function buildTrackingDocToolList(args: { cwd: string; chatId: string | null }): KannaSdkToolList {
+function buildTrackingDocToolList(args: {
+  cwd: string
+  chatId: string | null
+  getArmedLoop?: (chatId: string) => ArmedLoopInfo | null
+}): KannaSdkToolList {
   if (!args.chatId) return []
-  const cwd = args.cwd
+  const chatId = args.chatId
+  const getArmedLoop = args.getArmedLoop
+  // A loop may run in a sibling git worktree (setup_loop's `workdir`), and its
+  // tracking file lives beside the branch it describes. Confining to the chat
+  // cwd would resolve the worker's `file:` against the wrong checkout, so the
+  // armed loop's workdir wins while a loop is armed. Resolved per CALL, not
+  // per build: tools are built at spawn, and setup_loop arms mid-turn.
+  const baseDir = (): string => getArmedLoop?.(chatId)?.workdirAbs ?? args.cwd
   return [
     tool(
       "query_tracking_file",
@@ -582,7 +648,7 @@ function buildTrackingDocToolList(args: { cwd: string; chatId: string | null }):
         file: z
           .string()
           .optional()
-          .describe("Path relative to the project cwd. Defaults to PROGRESS.md."),
+          .describe("Path relative to the loop workdir (project cwd when no loop is armed). Defaults to PROGRESS.md."),
         sections: z
           .array(z.string().min(1))
           .optional()
@@ -597,7 +663,7 @@ function buildTrackingDocToolList(args: { cwd: string; chatId: string | null }):
           .describe("Keep only the first N items of the first list in each returned section (e.g. latest N Progress rows)."),
       },
       async (input) => {
-        const confined = confinePathToDir(input.file ?? "PROGRESS.md", cwd, "file")
+        const confined = confinePathToDir(input.file ?? "PROGRESS.md", baseDir(), "file")
         if ("error" in confined) return trackingDocError(confined.error)
         const doc = resolveStructuredDoc(path.extname(confined.abs))
         if (!doc) {
@@ -619,7 +685,7 @@ function buildTrackingDocToolList(args: { cwd: string; chatId: string | null }):
         file: z
           .string()
           .optional()
-          .describe("Path relative to the project cwd. Defaults to PROGRESS.md."),
+          .describe("Path relative to the loop workdir (project cwd when no loop is armed). Defaults to PROGRESS.md."),
         section: z
           .string()
           .min(1)
@@ -634,7 +700,7 @@ function buildTrackingDocToolList(args: { cwd: string; chatId: string | null }):
           .describe("'top' inserts under the heading (newest-first logs); 'bottom' (default) appends at the end of the section."),
       },
       async (input) => {
-        const confined = confinePathToDir(input.file ?? "PROGRESS.md", cwd, "file")
+        const confined = confinePathToDir(input.file ?? "PROGRESS.md", baseDir(), "file")
         if ("error" in confined) return trackingDocError(confined.error)
         const doc = resolveStructuredDoc(path.extname(confined.abs))
         if (!doc) {
@@ -656,8 +722,122 @@ function buildTrackingDocToolList(args: { cwd: string; chatId: string | null }):
         }
       },
     ),
+    ...buildReplaceTrackingSectionTool(baseDir),
   ]
 }
+
+/**
+ * `replace_tracking_section`: the write op for sections that hold CURRENT
+ * state rather than a log. Registered next to append for the same audience.
+ */
+function buildReplaceTrackingSectionTool(baseDir: () => string): KannaSdkToolList {
+  return [
+    tool(
+      "replace_tracking_section",
+      REPLACE_TRACKING_SECTION_DESCRIPTION,
+      {
+        file: z
+          .string()
+          .optional()
+          .describe("Path relative to the loop workdir (project cwd when no loop is armed). Defaults to PROGRESS.md."),
+        section: z
+          .string()
+          .min(1)
+          .describe("Target section, prefix-matched (e.g. 'next chunk')."),
+        body: z
+          .string()
+          .describe("Markdown that becomes the section's ENTIRE new body. Empty string clears it."),
+      },
+      async (input) => {
+        const confined = confinePathToDir(input.file ?? "PROGRESS.md", baseDir(), "file")
+        if ("error" in confined) return trackingDocError(confined.error)
+        const doc = resolveStructuredDoc(path.extname(confined.abs))
+        if (!doc) {
+          return trackingDocError(`structured replace supports .md files only (got ${confined.rel})`)
+        }
+        const content = await readDoc(confined.abs)
+        if (content === null) {
+          return trackingDocError(`file not found: ${confined.rel} (run setup_loop to create it first)`)
+        }
+        const result = doc.replace(content, { section: input.section, body: input.body })
+        await writeDoc(confined.abs, result.content)
+        const note = result.created ? " (section created)" : ""
+        return {
+          content: [{
+            type: "text" as const,
+            text: `Replaced "${input.section}" in ${confined.rel}${note}.`,
+          }],
+        }
+      },
+    ),
+  ]
+}
+
+/**
+ * `run_verify`: run the armed loop's oracle, memoized on a fingerprint of the
+ * working tree. Hidden unless a loop is armed with a recorded verify command —
+ * there is nothing to run otherwise, and inventing one would be worse than
+ * absent.
+ */
+function buildRunVerifyToolList(args: {
+  chatId: string | null
+  cwd: string
+  getArmedLoop?: (chatId: string) => ArmedLoopInfo | null
+}): KannaSdkToolList {
+  const { chatId, getArmedLoop } = args
+  if (!chatId || !getArmedLoop) return []
+  return [
+    tool(
+      "run_verify",
+      RUN_VERIFY_DESCRIPTION,
+      {
+        force: z
+          .boolean()
+          .optional()
+          .describe("Re-run even when a cached result exists for the current working tree."),
+      },
+      async (input) => {
+        const loop = getArmedLoop(chatId)
+        if (!loop?.verifyCommand) {
+          return trackingDocError(
+            "no armed loop with a recorded verify command on this chat — run the command with Bash, or re-arm the loop via setup_loop.",
+          )
+        }
+        const command = loop.verifyCommand
+        const cwd = loop.workdirAbs ?? args.cwd
+        const digest = await computeWorkspaceDigest(cwd)
+        if (input.force !== true) {
+          const hit = getCachedVerify(chatId, command, digest)
+          if (hit) {
+            return {
+              content: [{
+                type: "text" as const,
+                text:
+                  `exit=${hit.exitCode} (cached — the working tree has not changed since this ran`
+                  + ` in ${hit.durationMs}ms)\n${hit.output}`,
+              }],
+            }
+          }
+        }
+        const result = await runVerifyCommand({ command, cwd, timeoutMs: VERIFY_TOOL_TIMEOUT_MS })
+        // A timed-out run says nothing about the tree, so it is not cached.
+        if (!result.timedOut) {
+          setCachedVerify(chatId, command, digest, result)
+        }
+        const timedOutNote = result.timedOut ? " (TIMED OUT)" : ""
+        return {
+          content: [{
+            type: "text" as const,
+            text: `exit=${result.exitCode}${timedOutNote} (${result.durationMs}ms)\n${result.output}`,
+          }],
+        }
+      },
+    ),
+  ]
+}
+
+/** Wall-clock bound for one `run_verify` call. A real gate is minutes, not seconds. */
+const VERIFY_TOOL_TIMEOUT_MS = 900_000
 
 export function buildKannaMcpTools(args: KannaMcpArgs): KannaSdkToolList {
   const tunnelGateway = args.tunnelGateway ?? null
@@ -719,7 +899,8 @@ export function buildKannaMcpTools(args: KannaMcpArgs): KannaSdkToolList {
       chatId,
     }),
     ...buildSetupLoopToolList({ setupLoop: args.setupLoop, stopLoop: args.stopLoop, chatId }),
-    ...buildTrackingDocToolList({ cwd, chatId }),
+    ...buildTrackingDocToolList({ cwd, chatId, getArmedLoop: args.getArmedLoop }),
+    ...buildRunVerifyToolList({ chatId, cwd, getArmedLoop: args.getArmedLoop }),
     tool(
       "expose_port",
       EXPOSE_PORT_DESCRIPTION,

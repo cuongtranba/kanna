@@ -313,7 +313,7 @@ describe("spawnClaudeTurn", () => {
       let closedSession: ClaudeSessionState | undefined
       const deps = makeDeps({
         closeClaudeSession: (_, session) => { closedSession = session },
-        isLoopArmed: () => ({ subagentId: "sa-1", prompt: "loop", armedAt: 0, scheduleId: "s" }),
+        isLoopArmed: () => ({ subagentId: "sa-1", prompt: "loop", armedAt: 0, scheduleId: "s", consecutiveFailures: 0, verifyCommand: null, workdirAbs: null }),
       })
       const existingSession = makeSession({ loopArmedAtSpawn: false })
       deps.claudeSessions.set("chat-1", existingSession)

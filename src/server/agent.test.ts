@@ -3689,7 +3689,7 @@ describe("AgentCoordinator claude integration", () => {
 
     // Pin the armed state to the test toggle — the send() takeover path would
     // otherwise disarm before the spawn check ever sees an armed loop.
-    coordinator.isLoopArmed = () => (armed ? { subagentId: "sa-1", prompt: "loop prompt", armedAt: 0 } : null)
+    coordinator.isLoopArmed = () => (armed ? { subagentId: "sa-1", prompt: "loop prompt", armedAt: 0, consecutiveFailures: 0, verifyCommand: null, workdirAbs: null } : null)
 
     const sendTurn = async (content: string, expectedFinished: number) => {
       await coordinator.send({
@@ -3770,7 +3770,7 @@ describe("AgentCoordinator claude integration", () => {
       },
     })
 
-    coordinator.isLoopArmed = () => (armed ? { subagentId: "sa-1", prompt: "loop prompt", armedAt: 0 } : null)
+    coordinator.isLoopArmed = () => (armed ? { subagentId: "sa-1", prompt: "loop prompt", armedAt: 0, consecutiveFailures: 0, verifyCommand: null, workdirAbs: null } : null)
 
     const sendTurn = async (content: string, expectedFinished: number) => {
       await coordinator.send({
@@ -4429,6 +4429,26 @@ describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
     }
   }
 
+  /** Coordinator wired to a real temp project root, as the setupLoop tests use. */
+  async function makeSetupLoopCoordinator(
+    projectRoot: string,
+    over: { triggerMode?: "auto" | "manual" } = {},
+  ) {
+    const store = createFakeStore()
+    store.getProject = () => ({ id: "project-1", localPath: projectRoot }) as never
+    const record = {
+      ...makeSubagentRecord({ id: "sa-1", name: "alpha" }),
+      triggerMode: over.triggerMode ?? ("auto" as const),
+    }
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      startClaudeSession: async () => { throw new Error("not needed") },
+      getSubagents: () => [record],
+    })
+    return { coordinator, store }
+  }
+
   test("valid input: creates skeleton, /clears main, emits subagent_background auto-continue carrying the templated prompt", async () => {
     const projectRoot = await mkdtemp(path.join(tmpdir(), "kanna-setup-loop-"))
     try {
@@ -4535,7 +4555,7 @@ describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
 
       const result = await coordinator.setupLoop({
         chatId: "chat-1",
-        input: { goal: "g", verifyCommand: "true", subagentId: "sa-1" },
+        input: { goal: "g", verifyCommand: "false", subagentId: "sa-1" },
       })
       if (!result.ok) throw new Error(result.errors.join(", "))
       expect(store.chat.sessionTokensByProvider.claude ?? null).toBeNull()
@@ -4570,7 +4590,7 @@ describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
 
       const result = await coordinator.setupLoop({
         chatId: "chat-1",
-        input: { goal: "g", verifyCommand: "true", subagentId: "sa-1" },
+        input: { goal: "g", verifyCommand: "false", subagentId: "sa-1" },
       })
       if (!result.ok) throw new Error(result.errors.join(", "))
       expect(result.created).toBe(false)
@@ -4602,7 +4622,7 @@ describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
         startClaudeSession: async () => { throw new Error("not needed") },
         getSubagents: () => [makeSubagentRecord({ id: "sa-1", name: "alpha" })],
       })
-      const input = { goal: "g", verifyCommand: "true", subagentId: "sa-1" }
+      const input = { goal: "g", verifyCommand: "false", subagentId: "sa-1" }
 
       // First call creates the canonical skeleton …
       const first = await coordinator.setupLoop({ chatId: "chat-1", input })
@@ -4637,13 +4657,13 @@ describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
 
       const first = await coordinator.setupLoop({
         chatId: "chat-1",
-        input: { goal: "OLD STALE GOAL", verifyCommand: "true", subagentId: "sa-1" },
+        input: { goal: "OLD STALE GOAL", verifyCommand: "false", subagentId: "sa-1" },
       })
       if (!first.ok) throw new Error(first.errors.join(", "))
 
       const second = await coordinator.setupLoop({
         chatId: "chat-1",
-        input: { goal: "fresh goal", verifyCommand: "true", subagentId: "sa-1" },
+        input: { goal: "fresh goal", verifyCommand: "false", subagentId: "sa-1" },
       })
       if (!second.ok) throw new Error(second.errors.join(", "))
       expect(second.reconciled).toBe(true)
@@ -4656,6 +4676,56 @@ describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
       await rm(projectRoot, { recursive: true, force: true })
     }
   })
+
+  // An oracle that already passes cannot distinguish done from not-done, so a
+  // loop armed on it declares GOAL MET on iteration one having done nothing.
+  test("refuses to arm when the verify command already exits 0", async () => {
+    const projectRoot = await mkdtemp(path.join(tmpdir(), "kanna-setup-loop-"))
+    try {
+      const { coordinator } = await makeSetupLoopCoordinator(projectRoot)
+      const result = await coordinator.setupLoop({
+        chatId: "chat-1",
+        input: { goal: "g", verifyCommand: "true", subagentId: "sa-1" },
+      })
+      expect(result.ok).toBe(false)
+      if (result.ok) throw new Error("expected refusal")
+      expect(result.errors[0]).toContain("already exits 0")
+      // Nothing was armed and no tracking file was written.
+      expect(await Bun.file(path.join(projectRoot, "PROGRESS.md")).exists()).toBe(false)
+    } finally {
+      await rm(projectRoot, { recursive: true, force: true })
+    }
+  }, 30_000)
+
+  test("force: true arms anyway when the verify command already exits 0", async () => {
+    const projectRoot = await mkdtemp(path.join(tmpdir(), "kanna-setup-loop-"))
+    try {
+      const { coordinator } = await makeSetupLoopCoordinator(projectRoot)
+      const result = await coordinator.setupLoop({
+        chatId: "chat-1",
+        input: { goal: "g", verifyCommand: "true", subagentId: "sa-1", force: true },
+      })
+      expect(result.ok).toBe(true)
+    } finally {
+      await rm(projectRoot, { recursive: true, force: true })
+    }
+  }, 30_000)
+
+  test("refuses a manual-trigger subagent rather than arming an undelegatable loop", async () => {
+    const projectRoot = await mkdtemp(path.join(tmpdir(), "kanna-setup-loop-"))
+    try {
+      const { coordinator } = await makeSetupLoopCoordinator(projectRoot, { triggerMode: "manual" })
+      const result = await coordinator.setupLoop({
+        chatId: "chat-1",
+        input: { goal: "g", verifyCommand: "false", subagentId: "sa-1" },
+      })
+      expect(result.ok).toBe(false)
+      if (result.ok) throw new Error("expected refusal")
+      expect(result.errors.some((e) => e.includes("manual-trigger"))).toBe(true)
+    } finally {
+      await rm(projectRoot, { recursive: true, force: true })
+    }
+  }, 30_000)
 
   test("invalid input (multiple bad fields) returns rejection; NO /clear, NO file, NO event", async () => {
     const projectRoot = await mkdtemp(path.join(tmpdir(), "kanna-setup-loop-"))
@@ -4698,7 +4768,7 @@ describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
     })
     const result = await coordinator.setupLoop({
       chatId: "does-not-exist",
-      input: { goal: "g", verifyCommand: "true" },
+      input: { goal: "g", verifyCommand: "false" },
     })
     expect(result.ok).toBe(false)
     if (result.ok) throw new Error("expected reject")

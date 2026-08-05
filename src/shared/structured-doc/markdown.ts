@@ -4,8 +4,9 @@
  * mdast is used purely as a PARSER to locate section + list-item boundaries
  * via source `position` offsets; every slice is taken from the ORIGINAL
  * string, so queries and appends are byte-faithful (no reserialization of
- * untouched content). Only the inserted line changes on append. GFM parsing
- * is enabled so tables / task-lists tokenize correctly.
+ * untouched content). Only the inserted line changes on append, and only the
+ * target section's body changes on replace. GFM parsing is enabled so tables
+ * / task-lists tokenize correctly.
  */
 
 import type { List, Root } from "mdast"
@@ -15,11 +16,13 @@ import { gfm } from "micromark-extension-gfm"
 
 import type {
   AppendRequest,
+  ReplaceRequest,
   SectionInfo,
   SectionQuery,
   StructuredDoc,
   StructuredDocAppendResult,
   StructuredDocQueryResult,
+  StructuredDocReplaceResult,
 } from "./types"
 
 /** Level-2 section boundaries computed from source offsets. */
@@ -116,6 +119,15 @@ function sectionText(content: string, root: Root, sec: Section, limit?: number):
   return `${head}\n_(+${dropped} older entries omitted; query without listLimit to see all)_${tail}`
 }
 
+/**
+ * Heading (already-trimmed source text, no newline) + body → one section
+ * block: a blank line after the heading and a single trailing newline. An
+ * empty body collapses to the bare heading line.
+ */
+function renderSection(heading: string, body: string): string {
+  return body.length > 0 ? `${heading}\n\n${body}\n` : `${heading}\n`
+}
+
 function findSection(sections: readonly Section[], name: string): Section | undefined {
   const q = normalizeQuery(name)
   return sections.find((s) => s.normalized.startsWith(q))
@@ -183,6 +195,27 @@ export const markdownDoc: StructuredDoc = {
     const rest = content.slice(target.endOffset).replace(/^\n+/, "")
     const tail = rest.length > 0 ? `\n\n${rest}` : "\n"
     return { content: `${content.slice(0, target.startOffset)}${body}\n${entry}${tail}`, created: false }
+  },
+
+  replace(content: string, req: ReplaceRequest): StructuredDocReplaceResult {
+    const root = parse(content)
+    const sections = computeSections(content, root)
+    const body = req.body.replace(/\n+$/, "")
+    const target = findSection(sections, req.section)
+
+    if (!target) {
+      const heading = req.section.startsWith("#") ? req.section : `## ${req.section}`
+      const sep = content.length === 0 || content.endsWith("\n") ? "" : "\n"
+      return { content: `${content}${sep}\n${renderSection(heading, body)}`, created: true }
+    }
+
+    // Everything up to the heading text stays verbatim; only the body region
+    // (heading text → next `##`/EOF) is rewritten. An empty body clears the
+    // section down to its heading — the loop's "plan exhausted" marker.
+    const before = content.slice(0, target.bodyStart)
+    const rest = content.slice(target.endOffset).replace(/^\n+/, "")
+    const tail = rest.length > 0 ? `\n${rest}` : ""
+    return { content: `${renderSection(before, body)}${tail}`, created: false }
   },
 }
 
