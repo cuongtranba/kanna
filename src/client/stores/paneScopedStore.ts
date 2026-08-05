@@ -5,19 +5,18 @@ import { createScopedStore } from "../lib/createScopedStore"
 /**
  * Per-pane ephemeral state.
  *
- * Replaces the six slices of the singleton chatPageStore that need independent
+ * Replaces the slices of the singleton chatPageStore that need independent
  * instances per pane (one for the chat pane, one for the changes pane, one per
  * terminal pane). The singleton chatPageStore retains the slices that genuinely
  * belong to a single ChatPage instance (empty-state typing, file drag, scroll
  * position, etc.).
  *
- * Six per-pane slices (mirroring their chatPageStore counterparts exactly so
+ * Five per-pane slices (mirroring their chatPageStore counterparts exactly so
  * consumers can be migrated file-by-file without any behavioural change):
  *
  *   toolGroupExpanded   — ChatTranscriptViewport accordion state
  *   inputHeight         — transcript padding-bottom
  *   layoutWidth         — pane container width (right-sidebar size clamping)
- *   fixedTerminalHeight — TerminalWorkspaceShell height snapshot
  *   localLinkMenuTarget — local-link context-menu target
  *   diffRenderMode      — git changes render mode (+ wrapDiffLines)
  *
@@ -40,10 +39,6 @@ interface PaneScopedState {
   // ─── Layout / container width ─────────────────────────────────────────────
   layoutWidth: number
   setLayoutWidth: (width: number) => void
-
-  // ─── Fixed terminal height ────────────────────────────────────────────────
-  fixedTerminalHeight: number
-  setFixedTerminalHeight: (height: number) => void
 
   // ─── Local link menu target ───────────────────────────────────────────────
   localLinkMenuTarget: OpenLocalLinkTarget | null
@@ -80,10 +75,6 @@ export const PaneScopedStore = createScopedStore<void, PaneScopedState>(
     // Layout width
     layoutWidth: 0,
     setLayoutWidth: (width) => set({ layoutWidth: width }),
-
-    // Fixed terminal height
-    fixedTerminalHeight: 0,
-    setFixedTerminalHeight: (height) => set({ fixedTerminalHeight: height }),
 
     // Local link menu target
     localLinkMenuTarget: null,

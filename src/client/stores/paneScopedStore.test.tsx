@@ -35,8 +35,8 @@ describe("PaneScopedStore initial state", () => {
     expect(readInitial((s) => s.layoutWidth)).toBe(0)
   })
 
-  test("fixedTerminalHeight starts at 0", () => {
-    expect(readInitial((s) => s.fixedTerminalHeight)).toBe(0)
+  test("tabRecency starts empty", () => {
+    expect(readInitial((s) => s.tabRecency)).toEqual([])
   })
 
   test("localLinkMenuTarget starts null", () => {

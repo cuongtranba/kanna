@@ -920,23 +920,26 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
       rightSidebarContentProps ? (
         <ChatSidebarContent {...rightSidebarContentProps} />
       ) : null,
-    terminal: (_target) => (
-      <TerminalWorkspaceShell
-        projectId={projectId!}
-        fixedTerminalHeight={0}
-        terminalLayout={terminalLayout}
-        addTerminal={addTerminal}
-        socket={state.socket}
-        connectionStatus={state.connectionStatus}
-        scrollback={scrollback}
-        minColumnWidth={minColumnWidth}
-        splitTerminalShortcut={resolvedKeybindings.bindings.addSplitTerminal}
-        focusRequestVersion={0}
-        onTerminalCommandSent={scheduleTerminalDiffRefresh}
-        onRemoveTerminal={handleRemoveTerminal}
-        onTerminalLayout={setTerminalSizes}
-      />
-    ),
+    // `isFocused` is the pane's, so a terminal takes keyboard focus exactly when
+    // its pane does. TerminalPane treats 0 as "no request" and focuses on any
+    // change, so toggling 0/1 never steals focus from another pane.
+    terminal: (_target, _pane, isFocused) =>
+      projectId === null ? null : (
+        <TerminalWorkspaceShell
+          projectId={projectId}
+          terminalLayout={terminalLayout}
+          addTerminal={addTerminal}
+          socket={state.socket}
+          connectionStatus={state.connectionStatus}
+          scrollback={scrollback}
+          minColumnWidth={minColumnWidth}
+          splitTerminalShortcut={resolvedKeybindings.bindings.addSplitTerminal}
+          focusRequestVersion={isFocused ? 1 : 0}
+          onTerminalCommandSent={scheduleTerminalDiffRefresh}
+          onRemoveTerminal={handleRemoveTerminal}
+          onTerminalLayout={setTerminalSizes}
+        />
+      ),
   }
 
   // ─── Layout ──────────────────────────────────────────────────────────────────
