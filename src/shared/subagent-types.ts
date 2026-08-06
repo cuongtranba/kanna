@@ -155,6 +155,10 @@ export interface SubagentRunSnapshot {
 export type LoopRowStatus = "pending" | "running" | "done" | "failed"
 
 export interface LoopRow {
+  /**
+   * A real subagent run id, or a synthetic `progress:<n>` / `next` id for a
+   * step read out of the tracking file rather than the live run log.
+   */
   runId: string
   label: string
   status: LoopRowStatus
@@ -181,7 +185,7 @@ export interface LoopProgressSnapshot {
   chatId: string
   /** Whether a loop is currently armed for this chat. */
   armed: boolean
-  /** Latest first — most recent delegation at the top, mirroring PROGRESS.md. */
+  /** Oldest first — checklist order, with the in-flight or pending step last. */
   rows: LoopRow[]
   /** Non-null while the loop is paused on a Claude usage limit. */
   rateLimit: LoopRateLimitInfo | null

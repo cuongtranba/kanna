@@ -150,6 +150,8 @@ export interface AgentCoordinatorArgs {
   ptyInstanceRegistry?: import("./claude-pty/pty-instance-registry").PtyInstanceRegistry
   /** Registry of workflow runs per chat, populated by PTY driver from the on-disk workflows dir. */
   workflowRegistry?: import("./workflow-registry").WorkflowRegistry
+  /** Watches each armed loop's tracking file so the Progress panel can list every step. */
+  loopTrackingRegistry?: import("./loop-tracking-registry").LoopTrackingRegistry
   /** Registry mapping each chat to its `…/subagents` dir for Agent child-transcript drill-in. */
   subagentTranscriptRegistry?: import("./subagent-transcript-registry").SubagentTranscriptRegistry
   /** Reads the persisted LLM provider snapshot (OpenRouter key source). */

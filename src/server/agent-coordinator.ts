@@ -27,6 +27,7 @@ import { startClaudeSession } from "./claude-session-start"
 import { readLlmProviderSnapshot } from "./llm-provider"
 import { type ClaudeDriverPreference } from "../shared/types"
 import type { AutoContinueEvent } from "./auto-continue/events"
+import { syncLoopTracking } from "./loop-tracking-sync"
 import { ClaudeLimitDetector, CodexLimitDetector, type LimitDetection, type LimitDetector } from "./auto-continue/limit-detector"
 import { ClaudeAuthErrorDetector, type AuthErrorDetection } from "./auto-continue/auth-error-detector"
 import type { ScheduleManager } from "./auto-continue/schedule-manager"
@@ -240,6 +241,7 @@ export class AgentCoordinator {
   readonly claudePtyRegistry: import("./claude-pty/pid-registry.adapter").ClaudePtyRegistry | null
   readonly ptyInstanceRegistry: import("./claude-pty/pty-instance-registry").PtyInstanceRegistry | null
   readonly workflowRegistry: import("./workflow-registry").WorkflowRegistry | null
+  readonly loopTrackingRegistry: import("./loop-tracking-registry").LoopTrackingRegistry | null
   readonly subagentTranscriptRegistry: import("./subagent-transcript-registry").SubagentTranscriptRegistry | null
   readonly localCatalog: import("./local-catalog").LocalCatalogService | null
   readonly readLlmProvider: () => Promise<LlmProviderSnapshot>
@@ -336,6 +338,7 @@ export class AgentCoordinator {
     this.claudePtyRegistry = args.claudePtyRegistry ?? null
     this.ptyInstanceRegistry = args.ptyInstanceRegistry ?? null
     this.workflowRegistry = args.workflowRegistry ?? null
+    this.loopTrackingRegistry = args.loopTrackingRegistry ?? null
     this.subagentTranscriptRegistry = args.subagentTranscriptRegistry ?? null
     this.localCatalog = args.localCatalog ?? null
   }
@@ -822,7 +825,18 @@ export class AgentCoordinator {
 
   /** @internal used by agent-deps-builders.ts via buildSessionErrorHandlerDeps + buildLoopCommandDeps; Delegates to emitAutoContinueEventFn. */
   async emitAutoContinueEvent(event: AutoContinueEvent): Promise<void> {
-    return emitAutoContinueEventFn(this.buildAutoContinueCommandDeps(), event)
+    await emitAutoContinueEventFn(this.buildAutoContinueCommandDeps(), event)
+    // Arming, disarming and re-arming all land here, so one reconcile keeps
+    // the watched tracking file in step with the loop the log now describes.
+    if (this.loopTrackingRegistry) {
+      syncLoopTracking(
+        {
+          getAutoContinueEvents: (chatId) => this.store.getAutoContinueEvents(chatId),
+          registry: this.loopTrackingRegistry,
+        },
+        event.chatId,
+      )
+    }
   }
 
   /** @internal used by agent-deps-builders.ts via buildRunClaudeSessionDeps + buildRunTurnDeps; Delegates to handleLimitErrorFn. */

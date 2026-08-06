@@ -171,6 +171,21 @@ export const markdownDoc: StructuredDoc = {
     }
   },
 
+  listItems(content: string, section: string): readonly string[] {
+    const root = parse(content)
+    const sections = computeSections(content, root)
+    const target = findSection(sections, section)
+    if (!target) return []
+    const list = firstListInSection(root, target)
+    if (!list) return []
+    return list.children.flatMap((item) => {
+      if (!item.position) return []
+      const start = offset(item.position.start, target.bodyStart)
+      const end = offset(item.position.end, target.endOffset)
+      return [content.slice(start, end).replace(/\s+$/, "")]
+    })
+  },
+
   append(content: string, req: AppendRequest): StructuredDocAppendResult {
     const root = parse(content)
     const sections = computeSections(content, root)

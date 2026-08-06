@@ -13,6 +13,7 @@ import { PROTOCOL_VERSION } from "../shared/types"
 import type { ServerWebSocket } from "bun"
 import type { PtyInstanceDelta } from "../shared/pty-instance"
 import type { PtyInstanceRegistry } from "./claude-pty/pty-instance-registry"
+import type { LoopTrackingRegistry } from "./loop-tracking-registry"
 import type { WorkflowRegistry } from "./workflow-registry"
 import type { EventStore } from "./event-store"
 import type { AgentCoordinator } from "./agent"
@@ -47,6 +48,7 @@ export interface BroadcastManagerDeps {
   updateManager: UpdateManager | null
   ptyInstances?: PtyInstanceRegistry
   workflowRegistry?: WorkflowRegistry
+  loopTrackingRegistry?: LoopTrackingRegistry
   envelopeBuilder: EnvelopeBuilder
 }
 
@@ -66,6 +68,7 @@ export class BroadcastManager {
   private readonly disposeUpdateEvents: () => void
   private readonly disposePtyInstances: () => void
   private readonly disposeWorkflows: () => void
+  private readonly disposeLoopTracking: () => void
 
   constructor(private readonly deps: BroadcastManagerDeps) {
     const {
@@ -76,6 +79,7 @@ export class BroadcastManager {
       updateManager,
       ptyInstances,
       workflowRegistry,
+      loopTrackingRegistry,
     } = deps
 
     // Wire background error reporter
@@ -159,6 +163,14 @@ export class BroadcastManager {
           send(ws, envelope)
         }
       }
+    }) ?? (() => {})
+
+    // The armed loop's tracking file changed — the Progress panel rides the
+    // chat snapshot, so re-push that rather than a topic of its own. The watch
+    // is already debounced; the coalescer then merges this with the
+    // subagent-completion push that lands milliseconds later.
+    this.disposeLoopTracking = loopTrackingRegistry?.subscribe((chatId) => {
+      this.scheduleChatStateBroadcast(chatId)
     }) ?? (() => {})
   }
 
@@ -551,5 +563,6 @@ export class BroadcastManager {
     this.disposeUpdateEvents()
     this.disposePtyInstances()
     this.disposeWorkflows()
+    this.disposeLoopTracking()
   }
 }

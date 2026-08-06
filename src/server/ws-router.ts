@@ -28,6 +28,7 @@ import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
 import type { PushManager } from "./push/push-manager"
 import type { SessionShareService } from "./session-share"
 import type { PtyInstanceRegistry } from "./claude-pty/pty-instance-registry"
+import type { LoopTrackingRegistry } from "./loop-tracking-registry"
 import type { WorkflowRegistry } from "./workflow-registry"
 import type { SubagentTranscriptRegistry } from "./subagent-transcript-registry"
 import type { FollowedSessionRegistry } from "./followed-session-registry"
@@ -95,6 +96,7 @@ interface CreateWsRouterArgs {
   ptyInstances?: PtyInstanceRegistry
   killPtyInstance?: (chatId: string) => Promise<{ ok: boolean; error?: string }>
   workflowRegistry?: WorkflowRegistry
+  loopTrackingRegistry?: LoopTrackingRegistry
   subagentTranscriptRegistry?: SubagentTranscriptRegistry
   followedSessionRegistry?: FollowedSessionRegistry
   sessionShare?: SessionShareService
@@ -119,6 +121,7 @@ export function createWsRouter({
   ptyInstances,
   killPtyInstance,
   workflowRegistry,
+  loopTrackingRegistry,
   subagentTranscriptRegistry,
   followedSessionRegistry,
   sessionShare,
@@ -136,6 +139,7 @@ export function createWsRouter({
     resolvedDiffStore,
     ptyInstances,
     workflowRegistry,
+    loopTrackingRegistry,
     followedSessionRegistry,
     machineDisplayName,
     updateManager,
@@ -153,6 +157,7 @@ export function createWsRouter({
     updateManager,
     ptyInstances,
     workflowRegistry,
+    loopTrackingRegistry,
     envelopeBuilder,
   })
 

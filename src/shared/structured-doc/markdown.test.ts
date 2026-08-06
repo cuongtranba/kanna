@@ -229,3 +229,55 @@ describe("markdownDoc.replace", () => {
     expect(res.content).toContain("chunk 6")
   })
 })
+
+/** A Progress log whose entries carry continuation lines and a nested list. */
+const MULTILINE_PROGRESS = [
+  "## Progress (latest first)",
+  "",
+  "- 2026-08-06 chunk 3 DONE",
+  "  reverted the adapter split",
+  "- 2026-08-05 chunk 2 DONE",
+  "  - sub note a",
+  "  - sub note b",
+  "- 2026-08-04 chunk 1 DONE",
+  "",
+  "_Subagent appends one row per completed chunk here._",
+  "",
+  "## Next chunk",
+  "chunk 4",
+  "",
+].join("\n")
+
+describe("markdownDoc.listItems", () => {
+  test("returns one entry per top-level item, in document order", () => {
+    expect(markdownDoc.listItems(DOC, "Progress")).toEqual([
+      "- 2026-07-21 chunk 3 DONE",
+      "- 2026-07-20 chunk 2 DONE",
+      "- 2026-07-19 chunk 1 DONE",
+    ])
+  })
+
+  test("a continuation line stays part of its item and a nested list does not split its parent", () => {
+    const items = markdownDoc.listItems(MULTILINE_PROGRESS, "progress")
+    expect(items).toHaveLength(3)
+    expect(items[0]).toBe("- 2026-08-06 chunk 3 DONE\n  reverted the adapter split")
+    expect(items[1]).toContain("- sub note b")
+    expect(items[2]).toBe("- 2026-08-04 chunk 1 DONE")
+  })
+
+  test("the skeleton's trailing placeholder paragraph is not an item", () => {
+    expect(markdownDoc.listItems(MULTILINE_PROGRESS, "Progress").join("\n")).not.toContain(
+      "Subagent appends",
+    )
+  })
+
+  test("a section with no list, and a missing section, yield no items", () => {
+    expect(markdownDoc.listItems(DOC, "goal")).toEqual([])
+    expect(markdownDoc.listItems(DOC, "nonexistent")).toEqual([])
+  })
+
+  test("a list inside a later section is never claimed by an earlier one", () => {
+    expect(markdownDoc.listItems(FENCED, "notes")).toEqual([])
+    expect(markdownDoc.listItems(FENCED, "next chunk")).toEqual(["- outer item\n  - nested item"])
+  })
+})

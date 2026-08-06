@@ -10,8 +10,10 @@ function snapshot(overrides: Partial<LoopProgressSnapshot> = {}): LoopProgressSn
     chatId: "c1",
     armed: true,
     rows: [
+      { runId: "progress:0", label: "Add ports/adapters seal", status: "done", startedAt: 0, finishedAt: null },
+      { runId: "r1", label: "Split the pane tree", status: "failed", startedAt: 10, finishedAt: 15 },
       { runId: "r2", label: "Migrate useKannaState.ts", status: "running", startedAt: 20, finishedAt: null },
-      { runId: "r1", label: "Add ports/adapters seal", status: "done", startedAt: 10, finishedAt: 15 },
+      { runId: "next", label: "Wire the transcript viewport", status: "pending", startedAt: 0, finishedAt: null },
     ],
     rateLimit: null,
     ...overrides,
@@ -19,14 +21,35 @@ function snapshot(overrides: Partial<LoopProgressSnapshot> = {}): LoopProgressSn
 }
 
 describe("LoopProgressSection", () => {
-  test("renders chunk labels without a render loop", async () => {
+  test("renders every step, in checklist order, without a render loop", async () => {
     const result = await renderForLoopCheck(<LoopProgressSection loopProgress={snapshot()} />)
     try {
       expect(result.loopWarnings).toEqual([])
       const text = document.body.textContent ?? ""
       expect(text).toContain("Progress")
-      expect(text).toContain("Migrate useKannaState.ts")
-      expect(text).toContain("Add ports/adapters seal")
+      for (const label of [
+        "Add ports/adapters seal",
+        "Split the pane tree",
+        "Migrate useKannaState.ts",
+        "Wire the transcript viewport",
+      ]) {
+        expect(text).toContain(label)
+      }
+      expect(text.indexOf("Add ports/adapters seal")).toBeLessThan(
+        text.indexOf("Wire the transcript viewport"),
+      )
+    } finally {
+      await result.cleanup()
+    }
+  })
+
+  test("each status gets its own icon, so a step reads as done, failed, running or pending", async () => {
+    const result = await renderForLoopCheck(<LoopProgressSection loopProgress={snapshot()} />)
+    try {
+      const icons = [...document.body.querySelectorAll("svg.lucide")].map((el) => el.getAttribute("class") ?? "")
+      const rowIcons = icons.filter((cls) => cls.includes("h-4 w-4 flex-shrink-0"))
+      expect(rowIcons).toHaveLength(4)
+      expect(new Set(rowIcons).size).toBe(4)
     } finally {
       await result.cleanup()
     }

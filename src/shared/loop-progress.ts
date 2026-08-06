@@ -107,6 +107,18 @@ function rowStatusFor(run: SubagentRunSnapshot): LoopRowStatus {
   }
 }
 
+/**
+ * Read-only view of an armed loop's tracking file, refreshed when the file
+ * changes on disk. The file is the loop's only durability contract, so it —
+ * not the in-memory run log — is the authority for which chunks are finished.
+ */
+export interface LoopTrackingSnapshot {
+  /** Top-level items of `## Progress`, NEWEST first — the file's own order. */
+  doneEntries: readonly string[]
+  /** `## Next chunk` source text (heading included), or "" when absent. */
+  nextChunkSection: string
+}
+
 export interface BuildLoopProgressInput {
   chatId: string
   armed: boolean
@@ -115,31 +127,89 @@ export interface BuildLoopProgressInput {
   /** All subagent runs for the chat (any order). */
   runs: readonly SubagentRunSnapshot[]
   rateLimit: LoopRateLimitInfo | null
+  /**
+   * Tracking-file view. Absent or null falls back to run-only rows: no armed
+   * loop, a loop armed before the tracking file was recorded, or a file that
+   * could not be read.
+   */
+  tracking?: LoopTrackingSnapshot | null
+}
+
+function runRow(run: SubagentRunSnapshot): LoopRow {
+  return {
+    runId: run.runId,
+    label: run.label ?? run.subagentName,
+    status: rowStatusFor(run),
+    startedAt: run.startedAt,
+    finishedAt: run.finishedAt,
+  }
 }
 
 /**
- * Fold the chat's subagent runs + loop/rate-limit state into the panel DTO.
- * Only top-level (depth 0) runs started since the loop was armed count as loop
- * rows — nested sub-spawns and pre-loop delegations are excluded. Rows are
- * sorted newest-first.
+ * Rows for a loop whose plan is readable. Four blocks, in checklist order: the
+ * chunks the plan records as finished, any completion it failed to record, the
+ * delegations that errored, and the step in flight or about to start.
+ *
+ * A completed run whose chunk the plan already records is dropped rather than
+ * label-matched — the plan is the authority for finished work, and fuzzy
+ * matching would flicker rows in and out as the wording drifted. Errored runs
+ * sit after every recorded chunk because a plan row carries no machine-
+ * readable timestamp to interleave against.
+ *
+ * Synthetic ids live in a `progress:` / `next` namespace that real run ids
+ * (UUIDs) cannot collide with. They index the OLDEST-first order, which the
+ * worker only ever extends, so recording a chunk never renumbers the rows
+ * above it.
+ */
+function trackedRows(
+  runs: readonly SubagentRunSnapshot[],
+  tracking: LoopTrackingSnapshot,
+  armed: boolean,
+): LoopRow[] {
+  const rows: LoopRow[] = [...tracking.doneEntries].reverse().map((entry, index) => ({
+    runId: `progress:${index}`,
+    label: deriveChunkLabel(entry),
+    status: "done" as const,
+    startedAt: 0,
+    finishedAt: null,
+  }))
+
+  const completed = runs.filter((run) => run.status === "completed")
+  const unrecorded = completed.length - tracking.doneEntries.length
+  if (unrecorded > 0) rows.push(...completed.slice(-unrecorded).map(runRow))
+
+  rows.push(
+    ...runs.filter((run) => run.status !== "completed" && run.status !== "running").map(runRow),
+  )
+
+  const live = runs.filter((run) => run.status === "running")
+  if (live.length > 0) {
+    rows.push(...live.map(runRow))
+    return rows
+  }
+
+  const nextLabel = armed ? chunkLabelFromSection(tracking.nextChunkSection) : ""
+  if (nextLabel.length > 0) {
+    rows.push({ runId: "next", label: nextLabel, status: "pending", startedAt: 0, finishedAt: null })
+  }
+  return rows
+}
+
+/**
+ * Fold the chat's tracking file + subagent runs + loop/rate-limit state into
+ * the panel DTO. Only top-level (depth 0) runs started since the loop was
+ * armed count as loop rows — nested sub-spawns and pre-loop delegations are
+ * excluded. Rows are oldest-first so the panel reads as a checklist.
  */
 export function buildLoopProgress(input: BuildLoopProgressInput): LoopProgressSnapshot {
-  const since = input.loopArmedAt ?? 0
-  const rows: LoopRow[] = input.runs
-    .filter((run) => run.depth === 0 && run.startedAt >= since)
-    .map((run) => ({
-      runId: run.runId,
-      label: run.label ?? run.subagentName,
-      status: rowStatusFor(run),
-      startedAt: run.startedAt,
-      finishedAt: run.finishedAt,
-    }))
-    .sort((a, b) => b.startedAt - a.startedAt)
+  const runs = input.runs
+    .filter((run) => run.depth === 0 && run.startedAt >= (input.loopArmedAt ?? 0))
+    .sort((a, b) => a.startedAt - b.startedAt)
 
   return {
     chatId: input.chatId,
     armed: input.armed,
-    rows,
+    rows: input.tracking ? trackedRows(runs, input.tracking, input.armed) : runs.map(runRow),
     rateLimit: input.rateLimit,
   }
 }

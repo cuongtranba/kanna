@@ -1013,6 +1013,46 @@ apart. The label rides `delegateRun({label})` → `spawnRun`, which falls back t
 importer), so no IO enters `subagent-orchestrator.ts`. A resolver failure is
 swallowed — a label is cosmetic and must never fail a delegation.
 
+## Loop Progress panel — file-sourced steps (adr-20260806-loop-progress-file-sourced-steps)
+
+The chat footer's Progress card lists the loop's WHOLE checklist, read from the
+armed loop's tracking file. It used to show only the delegations *this server
+process* started since the current `loop_armed` — usually one row, with work
+finished before the arm invisible and `LoopRowStatus: "pending"` unreachable.
+
+- **Step source = the plan.** `LoopTrackingRegistry`
+  (`src/server/loop-tracking-registry.ts`) watches the armed loop's tracking
+  file and caches `{doneEntries, nextChunkSection}` — `## Progress` items via
+  the new `StructuredDoc.listItems(content, section)` port method (mdast, so a
+  continuation line or nested sub-list stays part of ITS item), and the
+  `## Next chunk` source. IO is injected from
+  `loop-tracking-io.adapter.ts`; `readTrackingFile` is **sync** because
+  `snapshot()` is called from the pure, sync `deriveChatSnapshot`.
+- **`watchTrackingFile` watches the PARENT DIR**, filtered by basename
+  (`watchWorkflowDir`'s new `filterBasename`) — an inode-bound watcher is
+  orphaned by a rename-based write, and a loop can arm before its skeleton
+  lands. An event reporting no filename still fires.
+- **One reconcile, two hooks.** `syncLoopTracking`
+  (`src/server/loop-tracking-sync.ts`) derives the watch from `deriveLoopState`
+  and is called from `AgentCoordinator.emitAutoContinueEvent` (the single
+  append path for `loop_armed` / `loop_disarmed`) plus `rehydrateLoopTracking`
+  at boot in `server.ts`. `register` is a no-op on an unchanged path — it runs
+  on EVERY auto-continue event, and rate-limit churn would otherwise thrash the
+  watcher.
+- **Rows are oldest-first on BOTH paths** (`LoopProgressSnapshot.rows`
+  docstring flipped). `buildLoopProgress` with `tracking` emits: plan-recorded
+  chunks (`done`, synthetic ids `progress:<i>`) → a count-based top-up for a
+  completion the worker never recorded → errored runs → the current step (live
+  `running` runs, else one `pending` row from `## Next chunk` when armed). A
+  completed run the plan already records is DROPPED, not label-matched — the
+  plan is the authority and fuzzy matching flickers. `tracking == null`
+  reproduces the old run-only behaviour exactly.
+- **Known trade-off:** errored runs sort after every plan row, because a
+  `## Progress` row carries no machine-readable timestamp. `maxDoneEntries`
+  (200) caps the broadcast payload only; the file still grows on disk.
+- **Transport:** no new WS topic. `BroadcastManager` subscribes to the registry
+  and re-pushes the CHAT topic via `scheduleChatStateBroadcast`.
+
 ## Structured tracking-file access (mdast — bounds loop context growth)
 
 Both the main orchestrator and its subagents are FRESH Claude spawns every
@@ -1023,7 +1063,7 @@ the READ + APPEND boundary via structured, section-scoped access instead of
 capping the file.
 
 - **Pure engine** (`src/shared/structured-doc/`): a format-agnostic port
-  (`StructuredDoc`: `sections` / `query` / `append` / `replace`) + an extension registry
+  (`StructuredDoc`: `sections` / `query` / `listItems` / `append` / `replace`) + an extension registry
   (`resolveStructuredDoc(ext)` — `.md` → the mdast adapter today; add a
   format = one adapter + one registry row). The markdown adapter uses mdast
   (`mdast-util-from-markdown` + `micromark-extension-gfm`) purely as a PARSER

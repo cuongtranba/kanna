@@ -21,6 +21,7 @@ import type { TerminalManager } from "./terminal-manager"
 import type { KeybindingsManager } from "./keybindings"
 import type { PtyInstanceRegistry } from "./claude-pty/pty-instance-registry"
 import type { WorkflowRegistry } from "./workflow-registry"
+import type { LoopTrackingRegistry } from "./loop-tracking-registry"
 import type { FollowedSessionRegistry } from "./followed-session-registry"
 import type { UpdateManager } from "./update-manager"
 import type { PushManager } from "./push/push-manager"
@@ -49,6 +50,7 @@ export interface EnvelopeDeps {
     "commitFiles" | "discardFile" | "ignoreFile" | "readPatch">
   ptyInstances?: PtyInstanceRegistry
   workflowRegistry?: WorkflowRegistry
+  loopTrackingRegistry?: LoopTrackingRegistry
   followedSessionRegistry?: FollowedSessionRegistry
   machineDisplayName: string
   updateManager: UpdateManager | null
@@ -147,6 +149,7 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
     resolvedDiffStore,
     ptyInstances,
     workflowRegistry,
+    loopTrackingRegistry,
     followedSessionRegistry,
     machineDisplayName,
     updateManager,
@@ -172,6 +175,7 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
       agent.getClaudeSessionStates?.() ?? new Map(),
       resolvedAppSettings.getSnapshot().customModels ?? [],
       agent.getBackgroundTasksByChatId?.() ?? new Map(),
+      (id) => loopTrackingRegistry?.snapshot(id) ?? null,
     )
   }
 
@@ -368,6 +372,7 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
       agent.getClaudeSessionStates?.() ?? new Map(),
       resolvedAppSettings.getSnapshot().customModels ?? [],
       agent.getBackgroundTasksByChatId?.() ?? new Map(),
+      (id) => loopTrackingRegistry?.snapshot(id) ?? null,
     )
     return {
       v: PROTOCOL_VERSION,
