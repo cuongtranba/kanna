@@ -1,7 +1,7 @@
 ---
 id: c3-210
 c3-version: 4
-c3-seal: 06f93bdd4f11da699a75cbb3a871d315573de01e92f90573fda923cf8e1981ac
+c3-seal: fc11439bf3d135bd84e06010467fb739fd11ad8586f59d57cf00689cc8625402
 title: agent-coordinator
 type: component
 category: feature
@@ -88,6 +88,7 @@ Owns the agent turn lifecycle: receives `chat.send` commands, picks the provider
 | findSubagent(id) | IN | Snapshot lookup (by exact id, else unambiguous exact name) used by the MCP host to reject keep_alive for non-claude subagents, and by the delegate tool to reject an unresolvable subagent_id BEFORE delegateRun so no ghost failed-run record is persisted for a guessed id | c3-226 | src/server/subagent-orchestrator.ts, src/server/kanna-mcp-tools/delegate-subagent.ts |
 | Subagent restriction threading | IN | buildSubagentProviderRunForChat resolves Subagent.workingDir + allowedPaths via c3-204 resolveSubagentRoots (with realpathAdapter), overrides spawn cwd, and passes restrictedAllowedPaths into BuildSubagentProviderRunArgs → startClaudeSession; both PTY (c3-225) and SDK paths forward the same list into c3-226 kanna-mcp host for per-run path-deny + into the driver for shim-only tool gating | c3-225 | src/server/agent.ts, src/server/subagent-provider-run.ts |
 | describeUnknownSubagent(requested) | IN | Builds the UNKNOWN_SUBAGENT error text from the LIVE settings snapshot (each subagent as "name [id=...]", manual-trigger entries annotated, empty roster points at Settings) so the model self-corrects on retry even when the spawn-time system-prompt roster is stale; consumed by delegateRun's UNKNOWN_SUBAGENT failRun and the delegate tool's pre-delegation rejection | c3-226 | src/server/subagent-orchestrator.ts, src/server/kanna-mcp-tools/delegate-subagent.ts |
+| emitAutoContinueEvent(event) | IN | Appends the auto-continue event, then reconciles the chat's loop-tracking watch via syncLoopTracking. It is the single append path for loop_armed / loop_disarmed, so arm, stop_loop, user takeover, chat delete and the repeated-failure disarm all reconcile through one hook; the reconcile is total and idempotent and the coordinator gains no IO of its own (the registry owns it) | c3-227 | src/server/agent-coordinator.ts, src/server/loop-tracking-sync.ts |
 
 ## Change Safety
 

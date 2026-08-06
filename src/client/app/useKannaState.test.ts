@@ -750,3 +750,28 @@ describe("applyProjectCommandsSnapshot", () => {
     expect(useSlashCommandsStore.getState().byProjectId).toEqual({})
   })
 })
+
+describe("sameChatSnapshotCore loop progress rows", () => {
+  function progress(rows: import("../../shared/types").LoopRow[]) {
+    return createMinimalChatSnapshot({
+      loopProgress: { chatId: "c", armed: true, rows, rateLimit: null },
+    })
+  }
+
+  const doneRow = { runId: "progress:0", label: "chunk one", status: "done" as const, startedAt: 0, finishedAt: null }
+
+  test("identical plan rows dedup", () => {
+    expect(sameChatSnapshotCore(progress([doneRow]), progress([doneRow]))).toBe(true)
+  })
+
+  test("a reworded plan row is not mistaken for the same row", () => {
+    const reworded = { ...doneRow, label: "chunk one (reverted)" }
+    expect(sameChatSnapshotCore(progress([doneRow]), progress([reworded]))).toBe(false)
+  })
+
+  test("the current step turning from pending to running re-renders", () => {
+    const pending = { runId: "next", label: "chunk two", status: "pending" as const, startedAt: 0, finishedAt: null }
+    const running = { runId: "r1", label: "chunk two", status: "running" as const, startedAt: 5, finishedAt: null }
+    expect(sameChatSnapshotCore(progress([doneRow, pending]), progress([doneRow, running]))).toBe(false)
+  })
+})

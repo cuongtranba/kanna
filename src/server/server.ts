@@ -49,6 +49,10 @@ import { TunnelManager } from "./cloudflare-tunnel/tunnel-manager.adapter"
 import { TunnelLifecycle } from "./cloudflare-tunnel/lifecycle"
 import { initToolCallbackOnBoot, type ToolCallbackService } from "./tool-callback"
 import { SessionShareService } from "./session-share"
+import { resolveStructuredDoc } from "../shared/structured-doc/registry"
+import { createLoopTrackingRegistry } from "./loop-tracking-registry"
+import { readTrackingFile, watchTrackingFile } from "./loop-tracking-io.adapter"
+import { rehydrateLoopTracking } from "./loop-tracking-sync"
 import { createWorkflowRegistry } from "./workflow-registry"
 import { LocalCatalogService } from "./local-catalog"
 import { defaultHomeDir, scanLocalCatalog, statMtimes } from "./local-catalog-io.adapter"
@@ -269,6 +273,11 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     readRunJournal: readWorkflowRunJournal,
     readAgentTranscriptLines: readWorkflowAgentTranscriptLines,
   })
+  const loopTrackingRegistry = createLoopTrackingRegistry({
+    read: readTrackingFile,
+    watch: (abs, onChange) => watchTrackingFile(abs, onChange),
+    resolveDoc: (abs) => resolveStructuredDoc(path.extname(abs)),
+  })
   const subagentTranscriptRegistry = createSubagentTranscriptRegistry()
   const reapedClaudePty = await claudePtyRegistry.reapStale()
   if (reapedClaudePty.length > 0) {
@@ -468,6 +477,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     claudePtyRegistry,
     ptyInstanceRegistry,
     workflowRegistry,
+    loopTrackingRegistry,
     subagentTranscriptRegistry,
     localCatalog,
     // Kanna is a personal-use tool on the developer's own machine. Tool calls
@@ -536,6 +546,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     pushManager,
     ptyInstances: ptyInstanceRegistry,
     workflowRegistry,
+    loopTrackingRegistry,
     subagentTranscriptRegistry,
     followedSessionRegistry,
     killPtyInstance: async (chatId: string) => {
@@ -561,6 +572,10 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   }
   scheduleManager.rehydrate(
     store.listAutoContinueChats().flatMap((chatId) => store.getAutoContinueEvents(chatId))
+  )
+  rehydrateLoopTracking(
+    { getAutoContinueEvents: (chatId) => store.getAutoContinueEvents(chatId), registry: loopTrackingRegistry },
+    store.listAutoContinueChats(),
   )
 
   await tunnelGateway.reapOrphanedTunnels()

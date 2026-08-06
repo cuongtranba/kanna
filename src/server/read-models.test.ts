@@ -914,3 +914,63 @@ describe("canForkChat", () => {
     expect(canForkChat(chat, new Map(), new Set())).toBe(false)
   })
 })
+
+describe("deriveChatSnapshot loopProgress", () => {
+  function seedArmedLoopChat() {
+    const state = createEmptyState()
+    state.projectsById.set("p1", { id: "p1", localPath: "/p1", title: "P", createdAt: 1, updatedAt: 1 })
+    state.chatsById.set("c1", {
+      id: "c1",
+      projectId: "p1",
+      title: "Chat",
+      createdAt: 1,
+      updatedAt: 1,
+      unread: false,
+      provider: "claude",
+      planMode: false,
+      sessionTokensByProvider: {},
+      sourceHash: null,
+      lastTurnOutcome: null,
+    })
+    state.autoContinueEventsByChatId.set("c1", [
+      {
+        kind: "loop_armed",
+        chatId: "c1",
+        timestamp: 100,
+        subagentId: "sa-1",
+        prompt: "Do the next chunk",
+        workdirAbs: "/p1",
+        trackingFileRel: "PROGRESS.md",
+      },
+    ] as never)
+    return state
+  }
+
+  const noMessages = () => ({ messages: [], history: { hasOlder: false, olderCursor: null, recentLimit: 200 } })
+
+  test("without a tracking reader the panel keeps its live-run rows", () => {
+    const snap = deriveChatSnapshot(seedArmedLoopChat(), new Map(), new Set(), "c1", noMessages, () => [])
+    expect(snap?.loopProgress).toEqual({ chatId: "c1", armed: true, rows: [], rateLimit: null })
+  })
+
+  test("the plan's steps become rows once the tracking file is readable", () => {
+    const snap = deriveChatSnapshot(
+      seedArmedLoopChat(),
+      new Map(),
+      new Set(),
+      "c1",
+      noMessages,
+      () => [],
+      new Map(),
+      Date.now(),
+      new Map(),
+      [],
+      new Map(),
+      () => ({ doneEntries: ["- chunk one DONE"], nextChunkSection: "## Next chunk\nchunk two" }),
+    )
+    expect(snap?.loopProgress.rows.map((r) => [r.status, r.label])).toEqual([
+      ["done", "chunk one DONE"],
+      ["pending", "chunk two"],
+    ])
+  })
+})

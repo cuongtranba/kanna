@@ -15,6 +15,7 @@ import type {
   StackSummary,
 } from "../shared/types"
 import { mergeCustomModels } from "../shared/types"
+import type { LoopTrackingSnapshot } from "../shared/loop-progress"
 import { buildLoopProgress } from "../shared/loop-progress"
 import type { ChatRecord, ChatTimingState, StoreState } from "./events"
 import { resolveLocalPath } from "./paths"
@@ -284,6 +285,7 @@ export function deriveChatSnapshot(
   claudeSessionStates: Map<string, ClaudeSessionLifecycleStatus> = new Map(),
   customModels: readonly CustomModelEntry[] = [],
   backgroundTasksByChatId: Map<string, ChatBackgroundTask[]> = new Map(),
+  getLoopTracking: (chatId: string) => LoopTrackingSnapshot | null = () => null,
 ): ChatSnapshot | null {
   const chat = state.chatsById.get(chatId)
   if (!chat || chat.deletedAt) return null
@@ -362,6 +364,7 @@ export function deriveChatSnapshot(
     loopArmedAt: loopState?.armedAt ?? null,
     runs: subagentRunsMap ? [...subagentRunsMap.values()] : [],
     rateLimit,
+    tracking: getLoopTracking(chat.id),
   })
 
   return {

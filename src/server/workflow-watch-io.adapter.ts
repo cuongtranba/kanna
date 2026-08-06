@@ -190,10 +190,21 @@ const DEFAULT_WATCH_DEPS: WatchWorkflowDeps = {
   clearInterval: (handle) => clearInterval(handle),
 }
 
+/**
+ * Watch a directory tree and call `onChange`, trailing-edge debounced.
+ *
+ * `filterBasename` narrows the watch to ONE file in `dir` — the way to follow
+ * a single file without binding a watcher to its inode, which a rename-based
+ * write would orphan. An event that reports no filename still fires: some
+ * platforms omit it, and a missed change is worse than a redundant read.
+ */
 export function watchWorkflowDir(
-  dir: string, onChange: () => void, opts?: { debounceMs?: number; deps?: WatchWorkflowDeps },
+  dir: string,
+  onChange: () => void,
+  opts?: { debounceMs?: number; deps?: WatchWorkflowDeps; filterBasename?: string },
 ): () => void {
   const debounceMs = opts?.debounceMs ?? 250
+  const filterBasename = opts?.filterBasename ?? null
   const deps = opts?.deps ?? DEFAULT_WATCH_DEPS
   let timer: ReturnType<typeof setTimeout> | null = null
   let disposed = false
@@ -208,8 +219,9 @@ export function watchWorkflowDir(
   let parentPoll: ReturnType<typeof setInterval> | null = null
   let promoted = false
 
-  const fire = () => {
+  const fire = (_event?: string, filename?: string | Buffer | null) => {
     if (disposed) return
+    if (filterBasename && typeof filename === "string" && filename !== filterBasename) return
     if (timer) deps.clearTimeout(timer)
     timer = deps.setTimeout(() => { timer = null; if (!disposed) onChange() }, debounceMs)
   }

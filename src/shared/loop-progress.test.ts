@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { buildLoopProgress, chunkLabelFromSection, deriveChunkLabel, parseChunkMarker } from "./loop-progress"
+import type { BuildLoopProgressInput, LoopTrackingSnapshot } from "./loop-progress"
 import type { SubagentRunSnapshot } from "./types"
 
 function run(overrides: Partial<SubagentRunSnapshot>): SubagentRunSnapshot {
@@ -128,9 +129,9 @@ describe("buildLoopProgress", () => {
       ],
     })
     expect(snapshot.rows.map((r) => [r.runId, r.status, r.label])).toEqual([
-      ["r3", "failed", "chunk three"],
-      ["r2", "running", "worker"], // label fallback to subagentName
       ["r1", "done", "chunk one"],
+      ["r2", "running", "worker"], // label fallback to subagentName
+      ["r3", "failed", "chunk three"],
     ])
   })
 
@@ -160,5 +161,132 @@ describe("buildLoopProgress", () => {
     expect(snapshot.armed).toBe(false)
     expect(snapshot.rateLimit).toEqual({ scheduleId: "s1", resetAt: 123, tz: "Asia/Saigon", scheduled: false })
     expect(snapshot.rows).toEqual([])
+  })
+})
+
+const NEXT_CHUNK = "## Next chunk\n\nStage 4: pane retention\n"
+
+function tracked(overrides: Partial<LoopTrackingSnapshot> = {}): LoopTrackingSnapshot {
+  return {
+    doneEntries: [
+      "- 2026-08-06 chunk three DONE",
+      "- 2026-08-05 chunk two DONE",
+      "- 2026-08-04 chunk one DONE",
+    ],
+    nextChunkSection: NEXT_CHUNK,
+    ...overrides,
+  }
+}
+
+function tracking(overrides: Partial<BuildLoopProgressInput> = {}): BuildLoopProgressInput {
+  return {
+    chatId: "c1",
+    armed: true,
+    loopArmedAt: 100,
+    rateLimit: null,
+    runs: [],
+    tracking: tracked(),
+    ...overrides,
+  }
+}
+
+describe("buildLoopProgress with a tracking file", () => {
+  test("the plan's completed chunks become done rows, oldest first, ahead of the pending step", () => {
+    const rows = buildLoopProgress(tracking()).rows
+    expect(rows.map((r) => [r.runId, r.status, r.label])).toEqual([
+      ["progress:0", "done", "2026-08-04 chunk one DONE"],
+      ["progress:1", "done", "2026-08-05 chunk two DONE"],
+      ["progress:2", "done", "2026-08-06 chunk three DONE"],
+      ["next", "pending", "Stage 4: pane retention"],
+    ])
+  })
+
+  test("a live worker replaces the pending row and keeps its own chunk label", () => {
+    const rows = buildLoopProgress(
+      tracking({
+        runs: [run({ runId: "r9", status: "running", label: "Stage 4a", startedAt: 200 })],
+      }),
+    ).rows
+    expect(rows.filter((r) => r.status === "pending")).toEqual([])
+    expect(rows.at(-1)).toMatchObject({ runId: "r9", status: "running", label: "Stage 4a" })
+  })
+
+  test("a completed run already recorded in the plan is not duplicated", () => {
+    const rows = buildLoopProgress(
+      tracking({
+        tracking: tracked({ doneEntries: ["- 2026-08-04 chunk one DONE"] }),
+        runs: [run({ runId: "r1", status: "completed", label: "chunk one", startedAt: 200, finishedAt: 250 })],
+      }),
+    ).rows
+    expect(rows.map((r) => r.runId)).toEqual(["progress:0", "next"])
+  })
+
+  test("a completion the worker never recorded still shows, so the panel cannot shrink", () => {
+    const rows = buildLoopProgress(
+      tracking({
+        tracking: tracked({ doneEntries: ["- 2026-08-04 chunk one DONE"] }),
+        runs: [
+          run({ runId: "r1", status: "completed", label: "chunk one", startedAt: 200, finishedAt: 250 }),
+          run({ runId: "r2", status: "completed", label: "chunk two", startedAt: 300, finishedAt: 350 }),
+        ],
+      }),
+    ).rows
+    expect(rows.map((r) => [r.runId, r.status])).toEqual([
+      ["progress:0", "done"],
+      ["r2", "done"],
+      ["next", "pending"],
+    ])
+  })
+
+  test("a failed run sits between the recorded work and the current step", () => {
+    const rows = buildLoopProgress(
+      tracking({
+        tracking: tracked({ doneEntries: ["- 2026-08-04 chunk one DONE"] }),
+        runs: [
+          run({ runId: "boom", status: "failed", label: "chunk two", startedAt: 200 }),
+          run({ runId: "live", status: "running", label: "chunk two retry", startedAt: 300 }),
+        ],
+      }),
+    ).rows
+    expect(rows.map((r) => [r.runId, r.status])).toEqual([
+      ["progress:0", "done"],
+      ["boom", "failed"],
+      ["live", "running"],
+    ])
+  })
+
+  test("a finished plan shows no pending row", () => {
+    const rows = buildLoopProgress(
+      tracking({ tracking: tracked({ nextChunkSection: "## Next chunk\n\nDONE\n" }) }),
+    ).rows
+    expect(rows.map((r) => r.status)).toEqual(["done", "done", "done"])
+  })
+
+  test("a disarmed loop shows the recorded work without proposing a next step", () => {
+    const rows = buildLoopProgress(tracking({ armed: false })).rows
+    expect(rows.map((r) => r.status)).toEqual(["done", "done", "done"])
+  })
+
+  test("recording a newer chunk leaves every existing row id untouched", () => {
+    const before = buildLoopProgress(tracking()).rows
+    const after = buildLoopProgress(
+      tracking({
+        tracking: tracked({
+          doneEntries: ["- 2026-08-07 chunk four DONE", ...tracked().doneEntries],
+        }),
+      }),
+    ).rows
+    expect(after.slice(0, 3).map((r) => r.runId)).toEqual(before.slice(0, 3).map((r) => r.runId))
+    expect(after[3]).toMatchObject({ runId: "progress:3", label: "2026-08-07 chunk four DONE" })
+  })
+
+  test("an unreadable plan falls back to the live runs alone", () => {
+    const rows = buildLoopProgress(
+      tracking({
+        tracking: null,
+        runs: [run({ runId: "r1", status: "completed", label: "chunk one", startedAt: 200 })],
+      }),
+    ).rows
+    expect(rows.map((r) => [r.runId, r.status])).toEqual([["r1", "done"]])
   })
 })

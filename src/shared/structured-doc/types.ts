@@ -88,6 +88,16 @@ export interface StructuredDoc {
   sections(content: string): readonly SectionInfo[]
   /** Return only the requested sections (optionally list-capped). */
   query(content: string, q: SectionQuery): StructuredDocQueryResult
+  /**
+   * Source text of each top-level item of the FIRST list inside `section`
+   * (prefix-matched like `SectionQuery.sections`), in document order, list
+   * marker included. Empty when the section or its list is absent.
+   *
+   * Item-level rather than section-level so an append-only log can be read as
+   * discrete rows: continuation lines and nested sub-lists belong to the item
+   * they hang off, which line scanning cannot tell apart.
+   */
+  listItems(content: string, section: string): readonly string[]
   /** Insert an entry under a section; returns the full new document. */
   append(content: string, req: AppendRequest): StructuredDocAppendResult
   /** Replace a section's entire body; returns the full new document. */
