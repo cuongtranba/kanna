@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test"
 import {
   MAX_TAB_WIDTH,
   MIN_TAB_WIDTH,
-  TAB_STRIP_HEIGHT,
   computeTabStripLayout,
 } from "./tabStripLayout"
 
@@ -71,9 +70,5 @@ describe("computeTabStripLayout", () => {
     const layout = computeTabStripLayout({ ...base, tabCount: 0 })
     expect(layout.tabWidth).toBe(0)
     expect(layout.scrolls).toBe(false)
-  })
-
-  test("the strip height is a fixed, shared constant", () => {
-    expect(TAB_STRIP_HEIGHT).toBe(36)
   })
 })

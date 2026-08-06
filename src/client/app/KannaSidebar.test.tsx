@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router-dom"
 import { TooltipProvider } from "../components/ui/tooltip"
 import type { SidebarData, SidebarProjectGroup } from "../../shared/types"
 import { KannaSidebar } from "./KannaSidebar"
+import { SHELL_TOP_BAND_CLASS } from "../lib/shellChrome"
 
 const STACKS_EMPTY_COPY = "Add your first stack"
 const HEADING_TESTID = 'data-testid="sidebar-section-heading"'
@@ -110,5 +111,17 @@ describe("KannaSidebar section headings", () => {
 
     expect(html).toContain(HEADING_TESTID)
     expect(html.indexOf(HEADING_TESTID)).toBeLessThan(html.indexOf("beta"))
+  })
+})
+
+describe("KannaSidebar top chrome band", () => {
+  // The other half of the shell's top-band contract (the pane tab strip side is
+  // asserted in PaneTabStrip.test.tsx). Both bands must read their height from
+  // the shared token; a literal height on either one is what put the brand
+  // header and the tab strip on different lines.
+  test("the brand header takes its height from the shared top-band token", () => {
+    const html = renderSidebar({ starredProjectGroups: [], projectGroups: [], stacks: [] })
+
+    expect(html).toContain(SHELL_TOP_BAND_CLASS)
   })
 })

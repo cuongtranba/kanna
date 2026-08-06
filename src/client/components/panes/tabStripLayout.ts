@@ -7,7 +7,12 @@
  * every tab addressable and only sheds the label.
  */
 
-export const TAB_STRIP_HEIGHT = 36
+/*
+ * The strip's HEIGHT is deliberately not here. It is the shell's top chrome
+ * band, shared with the sidebar header — see SHELL_TOP_BAND_CLASS in
+ * src/client/lib/shellChrome.ts. A local height constant is what let the two
+ * bands drift out of line in the first place.
+ */
 
 /** Icon (14) + horizontal padding (24) + close button (22). */
 export const MIN_TAB_WIDTH = 60

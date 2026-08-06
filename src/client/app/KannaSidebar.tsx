@@ -14,6 +14,7 @@ import { ImportSessionsDialog } from "../components/ImportSessionsDialog"
 import { formatSidebarAgeLabel, getPathBasename } from "../lib/formatters"
 import { getSidebarChatTimestamp } from "../lib/sidebarChats"
 import { cn } from "../lib/utils"
+import { SHELL_TOP_BAND_CLASS } from "../lib/shellChrome"
 import { ChatRow } from "../components/chat-ui/sidebar/ChatRow"
 import { LocalProjectsSection } from "../components/chat-ui/sidebar/LocalProjectsSection"
 import { StacksSection } from "../components/chat-ui/sidebar/StacksSection"
@@ -589,7 +590,10 @@ function KannaSidebarImpl({
         )}
         style={cssVars({ "--sidebar-width": `${sidebarWidth}px` })}
       >
-        <div className="px-[5px] h-[64px] max-h-[64px] md:h-[55px] md:max-h-[55px] border-b grid grid-cols-[40px_minmax(0,1fr)_40px] items-center md:px-[7px] md:pl-3 md:flex md:justify-between">
+        <div className={cn(
+          "px-[5px] border-b grid grid-cols-[40px_minmax(0,1fr)_40px] items-center md:px-[7px] md:pl-3 md:flex md:justify-between",
+          SHELL_TOP_BAND_CLASS,
+        )}>
           <div className="md:hidden">
             <Button
               variant="ghost"

@@ -61,6 +61,22 @@
     --warning-foreground: oklch(25% 0.03 78);
     --info: oklch(66% 0.13 235);
     --info-foreground: oklch(99% 0.005 235);
+
+    /*
+      Height of the shell's top chrome band. The sidebar header and every pane
+      tab strip are both the topmost row of their column, so they share this one
+      value — that is what keeps their top edges, their labels, and their bottom
+      borders on the same lines. Consume it through SHELL_TOP_BAND_CLASS
+      (src/client/lib/shellChrome.ts), never by re-typing a pixel height.
+    */
+    --shell-top-band: 64px;
+  }
+
+  /* Tailwind `md:` — the one responsive pivot (BREAKPOINT_MD in lib/viewport.ts). */
+  @media (min-width: 768px) {
+    :root {
+      --shell-top-band: 55px;
+    }
   }
 
   .dark {
