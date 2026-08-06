@@ -8,6 +8,21 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.12.0](https://github.com/cuongtranba/kanna/compare/v1.11.0...v1.12.0) (2026-08-06)
+
+
+### Features
+
+* **client:** session tabs — N open chats give N tabs, side by side ([#626](https://github.com/cuongtranba/kanna/issues/626)) ([3bad30e](https://github.com/cuongtranba/kanna/commit/3bad30e6787b550435d801b817b2ee5617960f5c))
+
+
+### Bug Fixes
+
+* **loop:** label Progress rows with the chunk being worked ([#622](https://github.com/cuongtranba/kanna/issues/622)) ([796c110](https://github.com/cuongtranba/kanna/commit/796c110171845c908a08b0639378dc52ff0336cf))
+* **mermaid:** make a diagram parse error diagnosable ([#621](https://github.com/cuongtranba/kanna/issues/621)) ([63d44ca](https://github.com/cuongtranba/kanna/commit/63d44ca7325029c172b3431b34d06d721aa31e89))
+* **pane-layout:** two findings from the pane-tree QA run ([#619](https://github.com/cuongtranba/kanna/issues/619)) ([5087153](https://github.com/cuongtranba/kanna/commit/5087153a36490907a63fc5bae7fffd423f62f09c))
+* **shell:** put the sidebar header and the pane tab strip on one band ([#623](https://github.com/cuongtranba/kanna/issues/623)) ([e3b4ba1](https://github.com/cuongtranba/kanna/commit/e3b4ba102a9291ac116b4253cdf3ac20a488134c))
+
 ## [1.11.0](https://github.com/cuongtranba/kanna/compare/v1.10.0...v1.11.0) (2026-08-05)
 
 
