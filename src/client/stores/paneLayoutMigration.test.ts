@@ -19,10 +19,12 @@ function tabKinds(layout: ReturnType<typeof buildLayoutFromLegacy>) {
 }
 
 describe("buildLayoutFromLegacy", () => {
-  test("a bare project becomes a single focused chat pane", () => {
+  // The chat pane is seeded EMPTY: a chat tab is addressed by chatId and the
+  // legacy layout records none. ChatPage opens a tab for the chat in the URL.
+  test("a bare project becomes a single focused, empty chat pane", () => {
     const layout = buildLayoutFromLegacy(legacy())
     expect(layout.root.kind).toBe("pane")
-    expect(tabKinds(layout)).toEqual(["chat"])
+    expect(tabKinds(layout)).toEqual([])
     expect(layout.focusedPaneId).toBe(layout.root.id)
   })
 
@@ -33,7 +35,7 @@ describe("buildLayoutFromLegacy", () => {
     expect(layout.root.kind).toBe("group")
     if (layout.root.kind !== "group") return
     expect(layout.root.direction).toBe("vertical")
-    expect(tabKinds(layout)).toEqual(["chat", "terminal"])
+    expect(tabKinds(layout)).toEqual(["terminal"])
   })
 
   test("the chat/terminal split keeps its stored proportions", () => {
@@ -60,11 +62,11 @@ describe("buildLayoutFromLegacy", () => {
     if (layout.root.kind !== "group") return
     expect(layout.root.direction).toBe("horizontal")
     expect(layout.root.sizes[1]).toBeCloseTo(0.3, 6)
-    expect(tabKinds(layout)).toEqual(["chat", "changes"])
+    expect(tabKinds(layout)).toEqual(["changes"])
   })
 
   test("a hidden changes panel contributes no tab", () => {
-    expect(tabKinds(buildLayoutFromLegacy(legacy({ changesVisible: false })))).toEqual(["chat"])
+    expect(tabKinds(buildLayoutFromLegacy(legacy({ changesVisible: false })))).toEqual([])
   })
 
   test("the fullest legacy layout still fits inside the depth cap", () => {
@@ -79,7 +81,9 @@ describe("buildLayoutFromLegacy", () => {
     expect(tabKinds(layout).filter((kind) => kind === "terminal")).toHaveLength(3)
   })
 
-  test("chat is always present and always focused", () => {
+  // The chat pane carries no tab yet, but it must exist and hold focus so the
+  // tab ChatPage opens for the URL's chat lands there rather than in a terminal.
+  test("the chat pane always exists, is always focused, and starts empty", () => {
     for (const input of [
       legacy(),
       legacy({ terminals: [{ id: "t1" }] }),
@@ -87,9 +91,9 @@ describe("buildLayoutFromLegacy", () => {
       legacy({ terminals: [{ id: "t1" }], changesVisible: true }),
     ]) {
       const layout = buildLayoutFromLegacy(input)
-      expect(tabKinds(layout)).toContain("chat")
       const focused = collectPanes(layout.root).find((pane) => pane.id === layout.focusedPaneId)
-      expect(focused?.tabs.some((tab) => tab.target.kind === "chat")).toBe(true)
+      expect(focused).toBeDefined()
+      expect(focused?.tabs).toEqual([])
     }
   })
 

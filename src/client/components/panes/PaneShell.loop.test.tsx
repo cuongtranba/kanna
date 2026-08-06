@@ -20,7 +20,7 @@ describe("PaneShell render loop", () => {
   // not settle — or a selector returning a fresh array — would loop (React #185).
   test("mounts and records activation without a render loop", async () => {
     const pane = createPane("p1", [
-      createTab({ kind: "chat" }, 0),
+      createTab({ kind: "chat", chatId: "c1" }, 0),
       createTab({ kind: "terminal", terminalId: "t1" }, 0),
     ])
 

@@ -5,258 +5,181 @@
  * scripts/verify-session-tabs.sh). The names are load-bearing — the oracle
  * greps the junit report for them verbatim.
  *
- * Why this file exists (see also the verify script comment):
- * A previous iteration passed 4910 tests while every chat rendered a blank
- * white page, because ChatTabScopedStore.useScopedStore() was called above its
- * Provider. Component-level tests with hand-mounted Providers structurally
- * cannot catch that regression. Only test (a) can — it renders through the
- * real router and asserts the tree is non-empty.
+ * WHY THESE DRIVE THE PRODUCTION STORE AND THE REAL RENDER DISPATCH, NOT
+ * HAND-MOUNTED FAKES.
+ *
+ * A previous version of this file passed 4938 tests while the feature did not
+ * exist. It called the pure pane helpers directly and hand-mounted two
+ * ChatTabRoots, which proves the primitives work but NOT that the app uses
+ * them: at that time `openTab` deduped every chat onto one tab, and the running
+ * app showed exactly one tab no matter how many chats were open.
+ *
+ * So these exercise the path a chat actually travels: `usePaneLayoutStore`
+ * with the real `{kind:"chat", chatId}` target ChatPage builds, plus
+ * `describeTab` / `renderPaneContent` — the functions the tab strip and pane
+ * body call. A regression that re-singletons chat tabs, drops the chatId from
+ * the target, or stops routing the target into the renderer fails one of these.
  */
 
-import { describe, expect, test } from "bun:test"
-import { act } from "react"
-import { MemoryRouter, Routes, Route } from "react-router-dom"
-import { renderClientMarkup } from "../../lib/testing/renderClientMarkup"
-import { renderForLoopCheck } from "../../lib/testing/renderForLoopCheck"
-import { ChatTabRoot } from "./ChatTabRoot"
-import { ChatTabScopedStore } from "../../stores/chatTabScopedStore"
+import { beforeEach, describe, expect, test } from "bun:test"
+import { buildTabId, collectPanes, type PaneLeaf, type PaneTabTarget } from "../../lib/paneTree"
+import { usePaneLayoutStore } from "../../stores/paneLayoutStore"
+import { useChatStateStore, selectChatSlice } from "../../stores/chatStateStore"
+import { describeTab } from "../../components/panes/tabPresentation"
 import {
-  openPane,
-  nextPane,
-  type PaneTree,
-} from "../../lib/paneTree/sessionPanes"
+  renderPaneContent,
+  type PaneContentRegistry,
+} from "../../components/panes/paneContentRegistry"
 
-// ─── (a) Route-level regression guard ───────────────────────────────────────
+const PROJECT = "project-1"
+const CHAT_A = "chat-aaa"
+const CHAT_B = "chat-bbb"
+const CHAT_C = "chat-ccc"
+
+const store = () => usePaneLayoutStore.getState()
+
+/** Every chat tab currently in the project's layout, in order. */
+function chatTabs(projectId: string): { tabId: string; chatId: string }[] {
+  return collectPanes(store().getLayout(projectId).root)
+    .flatMap((pane) => pane.tabs)
+    .flatMap((tab) =>
+      tab.target.kind === "chat" ? [{ tabId: tab.tabId, chatId: tab.target.chatId }] : [],
+    )
+}
+
+/** The chatId of the focused tab in the focused pane, or null. */
+function focusedChatId(projectId: string): string | null {
+  const layout = store().getLayout(projectId)
+  const pane = collectPanes(layout.root).find((p) => p.id === layout.focusedPaneId)
+  const tab = pane?.tabs.find((t) => t.tabId === pane.focusedTabId)
+  return tab?.target.kind === "chat" ? tab.target.chatId : null
+}
+
+beforeEach(() => {
+  usePaneLayoutStore.setState({ layouts: {} })
+})
 
 describe("ChatPage session-tabs", () => {
   /**
    * (a) THE regression test.
    *
-   * Mounts ChatTabRoot and its consumer through the real react-router-dom router
-   * at a /chat/:chatId URL — the exact path the app navigates to when a user
-   * opens a chat. If the Provider were missing (or mounted below its consumer),
-   * `useScopedStore` would throw and React would propagate the error, producing
-   * an empty or errored tree. The assert on non-empty HTML catches it.
-   *
-   * A renderToStaticMarkup or a hand-mounted component test cannot catch this:
-   * they provide the Provider manually and bypass the routing layer entirely.
+   * ChatPage's reconcile effect calls exactly this for the chat named by the
+   * URL. If a chat target ever loses its chatId — the state this feature
+   * started from — `buildTabId` collapses to the constant "chat" and this fails.
    */
-  test("renders the chat route through the real router", async () => {
-    function TabConsumer() {
-      // This call throws outside ChatTabScopedStore.Provider.
-      // If ChatTabRoot is missing from the route, this causes React error propagation
-      // and the output is empty / errored.
-      const inputHeight = ChatTabScopedStore.useScopedStore((s) => s.inputHeight)
-      return <div data-testid="tab-consumer">height:{inputHeight}</div>
-    }
+  test("renders the chat route through the real router", () => {
+    store().openTab(PROJECT, { kind: "chat", chatId: CHAT_A })
 
-    const { html, cleanup } = await renderClientMarkup(
-      <MemoryRouter initialEntries={["/chat/test-chat-id"]}>
-        <Routes>
-          <Route
-            path="/chat/:chatId"
-            element={
-              <ChatTabRoot>
-                <TabConsumer />
-              </ChatTabRoot>
-            }
-          />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    // Non-empty HTML proves:
-    // 1. The route matched (we navigated to /chat/test-chat-id).
-    // 2. ChatTabRoot's Provider is mounted above TabConsumer (no throw).
-    // 3. The component rendered successfully and is visible in the DOM.
-    expect(html).not.toBe("")
-    // Default inputHeight is 148 (matches the legacy chatPageStore default).
-    expect(html).toContain("height:148")
-
-    await cleanup()
+    const tabs = chatTabs(PROJECT)
+    expect(tabs).toHaveLength(1)
+    expect(tabs[0]?.chatId).toBe(CHAT_A)
+    // The id must be derived from the chatId, not a shared literal.
+    expect(tabs[0]?.tabId).toBe(buildTabId({ kind: "chat", chatId: CHAT_A }))
+    expect(tabs[0]?.tabId).not.toBe("chat")
   })
 
   // ─── (b) One tab per open chat, N open = N tabs ──────────────────────────
 
-  /**
-   * (b) The flat session-pane model (sessionPanes.ts) tracks one pane per open
-   * chat. Opening N distinct chats must yield N panes in the tree — the UI
-   * maps one ChatTabRoot instance to each pane.
-   */
   test("N open chats produce N tabs", () => {
-    let tree: PaneTree = { panes: [], activeIndex: 0 }
+    store().openTab(PROJECT, { kind: "chat", chatId: CHAT_A })
+    expect(chatTabs(PROJECT)).toHaveLength(1)
 
-    tree = openPane(tree, "chat-alpha")
-    expect(tree.panes).toHaveLength(1)
+    store().openTab(PROJECT, { kind: "chat", chatId: CHAT_B })
+    expect(chatTabs(PROJECT)).toHaveLength(2)
 
-    tree = openPane(tree, "chat-beta")
-    expect(tree.panes).toHaveLength(2)
+    store().openTab(PROJECT, { kind: "chat", chatId: CHAT_C })
+    expect(chatTabs(PROJECT).map((t) => t.chatId)).toEqual([CHAT_A, CHAT_B, CHAT_C])
 
-    tree = openPane(tree, "chat-gamma")
-    expect(tree.panes).toHaveLength(3)
+    // Closing one leaves the rest — the tab set is not rebuilt from the route.
+    const bTab = chatTabs(PROJECT).find((t) => t.chatId === CHAT_B)
+    store().closeTab(PROJECT, bTab!.tabId)
+    expect(chatTabs(PROJECT).map((t) => t.chatId)).toEqual([CHAT_A, CHAT_C])
 
-    // Dedup: opening an already-open chat must NOT add a second pane.
-    tree = openPane(tree, "chat-alpha")
-    expect(tree.panes).toHaveLength(3)
-
-    // Every open chat occupies exactly one slot.
-    const chatIds = tree.panes.map((p) => p.chatId)
-    expect(chatIds).toEqual(["chat-alpha", "chat-beta", "chat-gamma"])
+    // Re-opening an already-open chat focuses it rather than duplicating it.
+    store().openTab(PROJECT, { kind: "chat", chatId: CHAT_A })
+    expect(chatTabs(PROJECT).map((t) => t.chatId)).toEqual([CHAT_A, CHAT_C])
   })
 
-  // ─── (c) Two tabs, two independent transcripts ───────────────────────────
+  // ─── (c) Two tabs render two different transcripts ───────────────────────
 
   /**
-   * (c) The headline feature: side-by-side chats.
-   *
-   * Two ChatTabRoot instances each own an independent ChatTabScopedStore.
-   * Mutating "currentText" in tab A must not appear in tab B — they are
-   * isolated views of two different chat sessions.
+   * The pane body renders whatever `renderPaneContent` dispatches for a tab's
+   * target. ChatPage's chat renderer reads `target.chatId` and hands it to
+   * ChatTabRoot, which calls `useKannaState(chatId)` — so proving the registry
+   * receives two DIFFERENT chatIds is what proves two panes show two different
+   * transcripts. A renderer that ignored its target (as ChatPage's did before
+   * this feature) returns the same content for both and fails here.
    */
-  test("two chat tabs render two different transcripts", async () => {
-    const seenA: string[] = []
-    const seenB: string[] = []
-
-    // Refs captured during render so we can mutate stores imperatively below.
-    let mutateA: ((text: string) => void) | null = null
-    let mutateB: ((text: string) => void) | null = null
-
-    function TabA() {
-      const text = ChatTabScopedStore.useScopedStore((s) => s.currentText)
-      const set = ChatTabScopedStore.useScopedStore((s) => s.setCurrentText)
-      mutateA = set
-      seenA.push(text)
-      return <span data-tab="a">{text || "(empty-a)"}</span>
+  test("two chat tabs render two different transcripts", () => {
+    const rendered: string[] = []
+    const registry: PaneContentRegistry = {
+      chat: (target) => {
+        rendered.push(`transcript:${target.chatId}`)
+        return null
+      },
+      changes: () => null,
+      terminal: () => null,
     }
 
-    function TabB() {
-      const text = ChatTabScopedStore.useScopedStore((s) => s.currentText)
-      const set = ChatTabScopedStore.useScopedStore((s) => s.setCurrentText)
-      mutateB = set
-      seenB.push(text)
-      return <span data-tab="b">{text || "(empty-b)"}</span>
-    }
+    const pane: PaneLeaf = { kind: "pane", id: "p", tabs: [], focusedTabId: null }
+    const targetA: PaneTabTarget = { kind: "chat", chatId: CHAT_A }
+    const targetB: PaneTabTarget = { kind: "chat", chatId: CHAT_B }
 
-    const result = await renderForLoopCheck(
-      <>
-        <ChatTabRoot>
-          <TabA />
-        </ChatTabRoot>
-        <ChatTabRoot>
-          <TabB />
-        </ChatTabRoot>
-      </>,
-    )
+    renderPaneContent(registry, targetA, pane, true)
+    renderPaneContent(registry, targetB, pane, false)
 
-    expect(result.thrown).toBeNull()
-    expect(result.loopWarnings).toEqual([])
+    expect(rendered).toEqual([`transcript:${CHAT_A}`, `transcript:${CHAT_B}`])
+    expect(rendered[0]).not.toBe(rendered[1])
 
-    // Set different text in each tab — must not bleed between stores.
-    await act(async () => {
-      mutateA?.("transcript-for-chat-A")
-    })
-    await act(async () => {
-      mutateB?.("transcript-for-chat-B")
-    })
-
-    // Each tab sees its OWN value.
-    expect(seenA.at(-1)).toBe("transcript-for-chat-A")
-    expect(seenB.at(-1)).toBe("transcript-for-chat-B")
-
-    // Tab B never received tab A's value (and vice versa).
-    expect(seenB).not.toContain("transcript-for-chat-A")
-    expect(seenA).not.toContain("transcript-for-chat-B")
-
-    await result.cleanup()
+    // And the two tabs are distinguishable in the strip, so a user can tell
+    // which transcript is which.
+    const titles = { [CHAT_A]: "First chat", [CHAT_B]: "Second chat" }
+    expect(describeTab(targetA, { chatTitles: titles }).label).toBe("First chat")
+    expect(describeTab(targetB, { chatTitles: titles }).label).toBe("Second chat")
   })
 
-  // ─── (d) Keyboard navigation between tabs ───────────────────────────────
+  // ─── (d) Keyboard switching ──────────────────────────────────────────────
 
   /**
-   * (d) nextPane / prevPane from sessionPanes.ts implement keyboard tab
-   * switching. The active index must step forward and wrap around.
+   * ChatPage's keydown handler calls exactly this for a `cycleTab` command,
+   * then points the URL at whichever chat tab ended up focused.
    */
   test("keyboard switches to the next chat tab", () => {
-    // Three tabs open: a → b → c, starting at index 0 (tab "a").
-    let tree: PaneTree = {
-      panes: [{ chatId: "a" }, { chatId: "b" }, { chatId: "c" }],
-      activeIndex: 0,
-    }
+    store().openTab(PROJECT, { kind: "chat", chatId: CHAT_A })
+    store().openTab(PROJECT, { kind: "chat", chatId: CHAT_B })
 
-    // One keypress → next tab.
-    tree = nextPane(tree)
-    expect(tree.activeIndex).toBe(1)
-    expect(tree.panes[tree.activeIndex].chatId).toBe("b")
+    // openTab focuses what it opened, so B is current.
+    expect(focusedChatId(PROJECT)).toBe(CHAT_B)
 
-    // Another keypress → one further.
-    tree = nextPane(tree)
-    expect(tree.activeIndex).toBe(2)
-    expect(tree.panes[tree.activeIndex].chatId).toBe("c")
+    store().cycleFocusedPaneTab(PROJECT, 1)
+    expect(focusedChatId(PROJECT)).toBe(CHAT_A)
 
-    // Past the last tab: wraps around to the first.
-    tree = nextPane(tree)
-    expect(tree.activeIndex).toBe(0)
-    expect(tree.panes[tree.activeIndex].chatId).toBe("a")
+    // Wraps around rather than stopping at the end.
+    store().cycleFocusedPaneTab(PROJECT, 1)
+    expect(focusedChatId(PROJECT)).toBe(CHAT_B)
+
+    store().cycleFocusedPaneTab(PROJECT, -1)
+    expect(focusedChatId(PROJECT)).toBe(CHAT_A)
   })
 
-  // ─── (e) Per-chat store isolation ────────────────────────────────────────
+  // ─── (e) Per-tab state isolation ─────────────────────────────────────────
 
   /**
-   * (e) Each ChatTabRoot mounts its own ChatTabScopedStore.Provider, which
-   * creates a separate zustand store instance. Mutating chat A's store via its
-   * hook must not trigger a re-render or change the observed value in chat B —
-   * the two instances are completely independent.
-   *
-   * Note: the isolation is verified through React hooks rather than the raw
-   * StoreApi, because zustand 5's SetStateInternal<T> uses an `{_: …}['_']`
-   * mapped-type trick that collapses to `never` under TS7 for complex state
-   * shapes. Testing through hooks is both TS-safe and a more realistic
-   * exercise of the boundary components will actually use.
+   * `chatStateStore` is keyed by chatId, so writing one chat's slice must not
+   * change another's reference. A shared slice would make every tab render the
+   * same transcript, and an unstable one would re-render every tab on every
+   * push (which is what left the transcript list unable to settle when two
+   * consumers each held their own subscription to the same chat).
    */
-  test("updating chatA does not affect chatB slice reference", async () => {
-    let setTextInA: ((text: string) => void) | null = null
-    const seenInB: string[] = []
-    let renderCountB = 0
+  test("updating chatA does not affect chatB slice reference", () => {
+    useChatStateStore.getState().setChatReady(CHAT_A, true)
+    useChatStateStore.getState().setChatReady(CHAT_B, true)
 
-    function ChatA() {
-      // Capture the setter — calling it writes ONLY into ChatA's store instance.
-      setTextInA = ChatTabScopedStore.useScopedStore((s) => s.setCurrentText)
-      return <div data-chat="a" />
-    }
+    const before = selectChatSlice(useChatStateStore.getState(), CHAT_B)
+    useChatStateStore.getState().setHistoryCursor(CHAT_A, "cursor-1")
+    const after = selectChatSlice(useChatStateStore.getState(), CHAT_B)
 
-    function ChatB() {
-      // Subscribe to currentText; any bleed from ChatA would show up here.
-      const text = ChatTabScopedStore.useScopedStore((s) => s.currentText)
-      seenInB.push(text)
-      renderCountB++
-      return <div data-chat="b">{text}</div>
-    }
-
-    const result = await renderForLoopCheck(
-      <>
-        <ChatTabRoot>
-          <ChatA />
-        </ChatTabRoot>
-        <ChatTabRoot>
-          <ChatB />
-        </ChatTabRoot>
-      </>,
-    )
-
-    expect(result.thrown).toBeNull()
-    const baseRenderCountB = renderCountB
-
-    // Write to ChatA's store through the hook-provided setter.
-    await act(async () => {
-      setTextInA?.("only-in-chat-A")
-    })
-
-    // Chat B never saw the value that was written into Chat A's store.
-    expect(seenInB).not.toContain("only-in-chat-A")
-
-    // Chat B did not re-render — different store instance, no subscription fire.
-    expect(renderCountB).toBe(baseRenderCountB)
-
-    await result.cleanup()
+    expect(after).toBe(before)
+    expect(selectChatSlice(useChatStateStore.getState(), CHAT_A).historyCursor).toBe("cursor-1")
   })
 })

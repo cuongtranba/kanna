@@ -370,6 +370,15 @@ export function resolveComposeIntent(params: {
 
 export interface AppGlobalState {
   socket: KannaSocket
+  /**
+   * The chatId in the URL, from the provider's single useParams() call.
+   *
+   * Deliberately NOT named activeChatId: a useKannaState instance calls its own
+   * chatId parameter that, and conflating the two is what let the primary-tab
+   * gate be written as isPrimaryChatInstance(x, x) — always true, guarding
+   * nothing. This is the ROUTE's chat; an instance's is its own.
+   */
+  routeChatId: string | null
   sidebarData: SidebarData
   localProjects: LocalProjectsSnapshot | null
   updateSnapshot: UpdateSnapshot | null
@@ -1421,6 +1430,7 @@ export function useAppGlobalState(
 
   return {
     socket,
+    routeChatId: activeChatId,
     sidebarData: resolvedSidebarData,
     localProjects,
     updateSnapshot,

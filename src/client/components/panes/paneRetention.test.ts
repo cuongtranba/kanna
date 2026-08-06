@@ -6,10 +6,14 @@ import {
   selectRetainedTabIds,
 } from "./paneRetention"
 
+function targetFor(tabId: string, kind: "chat" | "changes" | "terminal"): PaneTab["target"] {
+  if (kind === "terminal") return { kind, terminalId: tabId }
+  if (kind === "chat") return { kind, chatId: tabId }
+  return { kind }
+}
+
 function tab(tabId: string, kind: "chat" | "changes" | "terminal"): PaneTab {
-  const target =
-    kind === "terminal" ? ({ kind, terminalId: tabId } as const) : ({ kind } as const)
-  return { tabId, target, createdAt: 0 }
+  return { tabId, target: targetFor(tabId, kind), createdAt: 0 }
 }
 
 describe("selectRetainedTabIds", () => {

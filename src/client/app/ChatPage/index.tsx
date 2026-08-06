@@ -17,6 +17,7 @@ import { DEFAULT_PROJECT_TERMINAL_LAYOUT, useTerminalLayoutStore } from "../../s
 import { useTerminalPreferencesStore } from "../../stores/terminalPreferencesStore"
 import { useChatPageStore } from "../../stores/chatPageStore"
 import type { KannaState } from "../useKannaState"
+import { useAppGlobalContext } from "../AppGlobalProvider"
 import { TerminalWorkspaceShell } from "./TerminalWorkspaceShell"
 import { useChatPageSidebarActions, EMPTY_DIFF_SNAPSHOT } from "./useChatPageSidebarActions"
 import { collectPanes, createDefaultLayout, type PaneLayout, type SplitPosition } from "../../lib/paneTree"
@@ -103,6 +104,11 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
   const dialog = useAppDialog()
   const layoutRootRef = useRef<HTMLDivElement>(null)
   const projectId = state.activeProjectId
+  // The chat named by the URL. Distinct from a tab's own chatId: it says which
+  // tab should be focused, not which chat any given tab renders.
+  const activeChatId = state.activeChatId
+  const sidebarData = state.sidebarData
+  const chatNavigator = useAppGlobalContext().chatNavigator
   const handleOpenExternal = state.handleOpenExternal
   const projectTerminalLayout = useTerminalLayoutStore((store) => (projectId ? store.projects[projectId] : undefined))
   const terminalLayout = projectTerminalLayout ?? DEFAULT_PROJECT_TERMINAL_LAYOUT
@@ -182,12 +188,57 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
     const changesTab = tabs.find((tab) => tab.target.kind === "changes")
     if (showRightSidebar && !changesTab) openTab(projectId, { kind: "changes" })
     if (!showRightSidebar && changesTab) closeTab(projectId, changesTab.tabId)
-  }, [projectId, terminalLayout.terminals, showRightSidebar, openTab, closeTab, getPaneLayout])
+
+    // The chat named by the URL always has a tab. openTab is idempotent per
+    // target, so revisiting an open chat focuses its tab while visiting a new
+    // one adds a tab beside the others — that accumulation is what makes N open
+    // chats N tabs. Chat tabs are deliberately NOT reaped the way stale terminal
+    // tabs are above: a chat tab outliving the URL is the whole point.
+    if (activeChatId) openTab(projectId, { kind: "chat", chatId: activeChatId })
+  }, [
+    projectId,
+    terminalLayout.terminals,
+    showRightSidebar,
+    activeChatId,
+    openTab,
+    closeTab,
+    getPaneLayout,
+  ])
+
+  /**
+   * Point the URL at whichever chat tab currently holds focus.
+   *
+   * Called AFTER a user-initiated focus change (tab click, keyboard cycle, pane
+   * move) — deliberately not from an effect keyed on the focused tab. Such an
+   * effect fights the URL→tab reconcile above: on load, a persisted focus of
+   * chat A under a /chat/B URL makes one effect navigate to A while the other
+   * re-focuses B, and the two ping-pong. Keeping URL→focus as the only effect
+   * makes the flow one-way, and every focus change a user can make passes
+   * through here.
+   *
+   * Reads the store rather than the rendered layout because it runs in the same
+   * tick as the action that moved focus, before a re-render.
+   */
+  const syncUrlToFocusedChat = useCallback(() => {
+    if (!projectId) return
+    const layout = getPaneLayout(projectId)
+    const pane = collectPanes(layout.root).find((p) => p.id === layout.focusedPaneId)
+    const tab = pane?.tabs.find((t) => t.tabId === pane.focusedTabId)
+    // Only a focused CHAT tab steers the URL — focusing a terminal or the
+    // changes panel must not navigate away from the chat being viewed.
+    if (tab?.target.kind === "chat" && tab.target.chatId !== activeChatId) {
+      chatNavigator.openChat(tab.target.chatId)
+    }
+  }, [projectId, getPaneLayout, activeChatId, chatNavigator])
 
   // Stable pane action callbacks.
   const handleSelectTab = useCallback(
-    (tabId: string) => { if (projectId) focusTab(projectId, tabId) },
-    [projectId, focusTab],
+    (tabId: string) => {
+      if (!projectId) return
+      focusTab(projectId, tabId)
+      syncUrlToFocusedChat()
+    },
+    [projectId, focusTab, syncUrlToFocusedChat],
   )
   const handleSplitPane = useCallback(
     ({ tabId, paneId, position }: SplitArgs) => {
@@ -196,9 +247,16 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
     },
     [projectId, splitPane],
   )
+  // Clicking into a pane focuses it, so the URL follows to whatever chat that
+  // pane is showing — otherwise typing in the left pane would send the message
+  // to the chat named by the URL, which is the right pane's.
   const handleFocusPane = useCallback(
-    (paneId: string) => { if (projectId) focusPane(projectId, paneId) },
-    [projectId, focusPane],
+    (paneId: string) => {
+      if (!projectId) return
+      focusPane(projectId, paneId)
+      syncUrlToFocusedChat()
+    },
+    [projectId, focusPane, syncUrlToFocusedChat],
   )
   const handleResizeGroup = useCallback(
     (groupId: string, sizes: number[]) => { if (projectId) setGroupSizes(projectId, groupId, sizes) },
@@ -219,14 +277,26 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
   )
 
   // Tab-strip presentation context: terminal titles from the legacy store.
-  const presentation = useMemo<TabPresentationContext>(
-    () => ({
-      terminalTitles: Object.fromEntries(
-        terminalLayout.terminals.map((t) => [t.id, t.title]),
+  const presentation = useMemo<TabPresentationContext>(() => {
+    // Every chat the sidebar knows about, so a chat tab can title itself. Rows
+    // come from the same snapshot the sidebar renders, so a renamed chat renames
+    // its tab without any tab-side state to go stale.
+    const chatRows = [...sidebarData.starredProjectGroups, ...sidebarData.projectGroups].flatMap(
+      (group) => [...group.chats, ...group.previewChats, ...group.olderChats],
+    )
+
+    return {
+      terminalTitles: Object.fromEntries(terminalLayout.terminals.map((t) => [t.id, t.title])),
+      chatTitles: Object.fromEntries(chatRows.map((row) => [row.chatId, row.title])),
+      // A chat mid-turn holds streaming state that unmounting would discard, so
+      // it is pinned against the retention LRU exactly like a live terminal.
+      busyChatIds: new Set(
+        chatRows
+          .filter((row) => row.status === "running" || row.status === "starting")
+          .map((row) => row.chatId),
       ),
-    }),
-    [terminalLayout.terminals],
-  )
+    }
+  }, [terminalLayout.terminals, sidebarData])
 
   // ─── Layout width ────────────────────────────────────────────────────────────
 
@@ -336,9 +406,41 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
         return
       }
 
+      // A chat tab is OWNED by the URL: the reconcile effect re-opens a tab for
+      // whatever chat the URL names, so closing the active chat's tab without
+      // moving the URL would snap it straight back. Hand over to a sibling chat
+      // tab when there is one, else leave the chat route entirely.
+      if (tab?.target.kind === "chat") {
+        const closingChatId = tab.target.chatId
+        const siblingChatId = collectPanes(getPaneLayout(projectId).root)
+          .flatMap((pane) => pane.tabs)
+          .find(
+            (candidate) =>
+              candidate.tabId !== tabId &&
+              candidate.target.kind === "chat" &&
+              candidate.target.chatId !== closingChatId,
+          )?.target
+
+        closeTab(projectId, tabId)
+
+        if (closingChatId === activeChatId) {
+          if (siblingChatId?.kind === "chat") chatNavigator.openChat(siblingChatId.chatId)
+          else chatNavigator.closeChat()
+        }
+        return
+      }
+
       closeTab(projectId, tabId)
     },
-    [projectId, closeTab, getPaneLayout, handleRemoveTerminal, toggleRightSidebar],
+    [
+      projectId,
+      closeTab,
+      getPaneLayout,
+      handleRemoveTerminal,
+      toggleRightSidebar,
+      activeChatId,
+      chatNavigator,
+    ],
   )
   useEffect(() => {
     function handleGlobalKeydown(event: KeyboardEvent) {
@@ -385,23 +487,29 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
       if (!command) return
 
       event.preventDefault()
+      // Each of these moves focus, so the URL follows — that is what makes
+      // keyboard tab switching actually switch the chat being shown, not just
+      // the highlighted tab.
       switch (command.kind) {
         case "focus":
           focusAdjacentPane(projectId, command.direction)
+          syncUrlToFocusedChat()
           return
         case "split":
           splitFocusedPane(projectId, command.position)
           return
         case "closeTab":
           closeFocusedTab(projectId)
+          syncUrlToFocusedChat()
           return
         case "cycleTab":
           cycleFocusedPaneTab(projectId, command.delta)
+          syncUrlToFocusedChat()
       }
     }
 
     return dom.addWindowListener("keydown", handleGlobalKeydown)
-  }, [addTerminal, closeFocusedTab, cycleFocusedPaneTab, dom, focusAdjacentPane, handleOpenExternal, handleToggleEmbeddedTerminal, handleToggleRightSidebar, projectId, resolvedKeybindings, splitFocusedPane])
+  }, [addTerminal, closeFocusedTab, cycleFocusedPaneTab, dom, focusAdjacentPane, handleOpenExternal, handleToggleEmbeddedTerminal, handleToggleRightSidebar, projectId, resolvedKeybindings, splitFocusedPane, syncUrlToFocusedChat])
 
   // ─── Content registry ────────────────────────────────────────────────────────
 
@@ -473,8 +581,10 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
   const registry: PaneContentRegistry = {
     // Each chat tab gets its own ChatTabScopedStore.Provider via ChatTabRoot so
     // composer state, scroll position, etc. are independent per tab.
-    chat: () => (
-      <ChatTabRoot>
+    // The tab's target — not the route — decides which chat it renders, which
+    // is what lets two tabs show two different live transcripts side by side.
+    chat: (target) => (
+      <ChatTabRoot chatId={target.chatId} timer={timer} dom={dom}>
         <ChatTabContent
           timer={timer}
           dom={dom}
@@ -537,9 +647,10 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
         </PaneDndProvider>
       ) : (
         // No project selected — render the chat card directly (no pane shell).
-        // Still wrapped in ChatTabRoot so ChatTabScopedStore.useScopedStore()
-        // calls inside ChatTabContent don't crash.
-        <ChatTabRoot>
+        // There is no pane tree here, so the tab addresses the route's chat.
+        // Still wrapped in ChatTabRoot so the per-tab providers exist and
+        // ChatTabContent's context reads don't crash.
+        <ChatTabRoot chatId={state.activeChatId} timer={timer} dom={dom}>
           <ChatTabContent
             timer={timer}
             dom={dom}

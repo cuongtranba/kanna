@@ -69,13 +69,3 @@ export {
 } from "./navigation"
 
 export { normalizeLayout } from "./normalize"
-
-export {
-  openPane,
-  closePane,
-  selectPane,
-  nextPane,
-  prevPane,
-  type Pane,
-  type PaneTree,
-} from "./sessionPanes"

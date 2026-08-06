@@ -35,7 +35,7 @@ describe("SplitContainer render loop", () => {
   test("mounts against the real store without a render loop", async () => {
     usePaneLayoutStore.setState({ layouts: {}, nodeSequence: 0 })
     const store = usePaneLayoutStore.getState()
-    store.openTab("proj-loop", { kind: "chat" })
+    store.openTab("proj-loop", { kind: "chat", chatId: "c1" })
 
     const { loopWarnings, thrown, cleanup } = await renderForLoopCheck(
       <SplitContainer

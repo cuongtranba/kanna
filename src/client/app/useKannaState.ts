@@ -377,6 +377,53 @@ function logKannaState(message: string, details?: AnyValue) {
   void details
 }
 
+/**
+ * Live chat subscriptions, keyed by `chatId:resyncNonce` and reference-counted.
+ *
+ * `useKannaState(chatId)` now runs once per OPEN CHAT TAB as well as once at the
+ * route level, so the same chat commonly has two consumers. `socket.subscribe`
+ * mints an independent server subscription per call, so without this each
+ * consumer got its own stream and both wrote the same per-chat store slice —
+ * every push replaced `messages` with a fresh array, the transcript list never
+ * settled long enough to measure its rows, and it rendered permanently empty
+ * (LegendList parks unmeasured items off-screen, so it looked like "no history"
+ * rather than a loop).
+ *
+ * One subscription per chat, shared by every consumer, is the same guarantee
+ * AppGlobalProvider gives the global topics. The nonce is part of the key so a
+ * resync genuinely resubscribes instead of joining the stale stream.
+ */
+const liveChatSubscriptions = new Map<string, { count: number; unsubscribe: () => void }>()
+
+/**
+ * Join the subscription for `key`, creating it only if this is the first
+ * consumer. Returns a release function; the underlying subscription is torn down
+ * when the last consumer releases it.
+ *
+ * Reference counting also makes this safe under React StrictMode's deliberate
+ * double mount/unmount, which would otherwise leave the stream torn down.
+ */
+function acquireChatSubscription(key: string, create: () => () => void): () => void {
+  const existing = liveChatSubscriptions.get(key)
+  if (existing) {
+    existing.count += 1
+  } else {
+    liveChatSubscriptions.set(key, { count: 1, unsubscribe: create() })
+  }
+
+  let released = false
+  return () => {
+    if (released) return
+    released = true
+    const entry = liveChatSubscriptions.get(key)
+    if (!entry) return
+    entry.count -= 1
+    if (entry.count > 0) return
+    liveChatSubscriptions.delete(key)
+    entry.unsubscribe()
+  }
+}
+
 const SEND_TO_STARTING_PROFILE_STORAGE_KEY = "kanna:profile-send-to-starting"
 
 interface SendToStartingTrace {
@@ -753,6 +800,11 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
     }
 
     const subscriptionId = ++chatSubscriptionDebugRef.current
+    // Shared per chat: several tabs (plus the route) may want the same chat, and
+    // duplicate streams fighting over one store slice stop the transcript from
+    // ever settling. See acquireChatSubscription.
+    const chatId = activeChatId
+    return acquireChatSubscription(`${chatId}:${chatResyncNonce}`, () => {
     logKannaState("subscribing to chat", {
       subscriptionId,
       activeChatId,
@@ -817,6 +869,7 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
       })
       unsubscribe()
     }
+    })
   }, [activeChatId, localStore, sessStore, socket, chatResyncNonce])
 
   useEffect(() => {
@@ -833,7 +886,7 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
     }
     // Only the primary tab (route chatId === this instance's chatId) may navigate
     // away. A background tab must never call closeChat() and yank the route.
-    if (!isPrimaryChatInstance(activeChatId, activeChatId)) return
+    if (!isPrimaryChatInstance(activeChatId, appGlobal.routeChatId)) return
     if (!appGlobal.sidebarReady || !chatReady) return
     const exists = sidebarProjectGroups.some((group) => group.chats.some((chat) => chat.chatId === activeChatId))
     if (exists) {
@@ -846,25 +899,25 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
       return
     }
     appGlobal.chatNavigator.closeChat()
-  }, [activeChatId, appGlobal.chatNavigator, appGlobal.sidebarReady, chatReady, pendingChatId, sidebarProjectGroups])
+  }, [activeChatId, appGlobal.chatNavigator, appGlobal.routeChatId, appGlobal.sidebarReady, chatReady, pendingChatId, sidebarProjectGroups])
 
   useEffect(() => {
     if (!chatSnapshot) return
     // Only the primary tab may set the globally-selected project. A background tab
     // must not steal project focus while the user is looking at a different chat.
-    if (!isPrimaryChatInstance(chatSnapshot.runtime.chatId, activeChatId)) return
+    if (!isPrimaryChatInstance(chatSnapshot.runtime.chatId, appGlobal.routeChatId)) return
     useKannaStateStore.getState().setSelectedProjectId(chatSnapshot.runtime.projectId)
     if (pendingChatId === chatSnapshot.runtime.chatId) {
       useKannaStateStore.getState().setPendingChatId(null)
     }
-  }, [activeChatId, chatSnapshot, pendingChatId])
+  }, [activeChatId, appGlobal.routeChatId, chatSnapshot, pendingChatId])
 
   useEffect(() => {
     if (!activeChatId || !appGlobal.sidebarReady) return
     // Only the primary tab (the one the user is looking at) may push a markRead.
     // A background tab would steal the read timestamp even though the user has
     // not seen its messages on the current route.
-    if (!isPrimaryChatInstance(activeChatId, activeChatId)) return
+    if (!isPrimaryChatInstance(activeChatId, appGlobal.routeChatId)) return
     if (!shouldMarkActiveChatRead(dom)) return
     const activeSidebarChat = sidebarProjectGroups
       .flatMap((group) => group.chats)
@@ -873,7 +926,7 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
     void socket.command({ type: "chat.markRead", chatId: activeChatId }).catch((error) => {
       useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
     })
-  }, [activeChatId, appGlobal.sidebarReady, dom, focusEpoch, sidebarProjectGroups, socket])
+  }, [activeChatId, appGlobal.routeChatId, appGlobal.sidebarReady, dom, focusEpoch, sidebarProjectGroups, socket])
 
   useEffect(() => {
     if (!activeChatId) return

@@ -18,7 +18,7 @@ import {
 import { DEFAULT_PANE_ID, type PaneNode } from "./types"
 
 const term = (id: string) => createTab({ kind: "terminal", terminalId: id }, 0)
-const chat = () => createTab({ kind: "chat" }, 0)
+const chat = () => createTab({ kind: "chat", chatId: "c1" }, 0)
 
 /** pane(a) | pane(b) — a simple two-child horizontal group. */
 function twoPanes(): PaneNode {
