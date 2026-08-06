@@ -17,7 +17,7 @@ import { OpenExternalSelect } from "../open-external-menu"
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "../ui/context-menu"
 import { PtyInstancesIndicator } from "./PtyInstancesIndicator"
 import type { KannaSocket } from "../../app/socket"
-import { useSharePopoverOpen, useSetSharePopoverOpen } from "../../stores/chatNavbarStore"
+import { ChatTabScopedStore } from "../../stores/chatTabScopedStore"
 import { useFollowedSessionsStore, selectIsFollowing } from "../../stores/followedSessionsStore"
 import type { DomPort } from "../../ports/domPort"
 import { domAdapter } from "../../adapters/dom.adapter"
@@ -167,8 +167,8 @@ export function ChatNavbar({
 }: Props) {
   const dom = domProp ?? domAdapter
   const branchLabel = computeBranchLabel({ hasGitRepo, gitStatus, localPath, branchName, homeDir })
-  const sharePopoverOpen = useSharePopoverOpen()
-  const setSharePopoverOpen = useSetSharePopoverOpen()
+  const sharePopoverOpen = ChatTabScopedStore.useScopedStore((s) => s.sharePopoverOpen)
+  const setSharePopoverOpen = ChatTabScopedStore.useScopedStore((s) => s.setSharePopoverOpen)
   const isMac = platform === "darwin"
 
   return (

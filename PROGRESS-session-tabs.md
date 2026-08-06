@@ -10,6 +10,8 @@ bash scripts/verify-session-tabs.sh
 
 ## Progress (latest first)
 
+- 2026-08-06 chunk 0.8+0.9 DONE: 5 oracle tests in ChatPage.tabs.test.tsx; fixed 3 lint warnings (showTerminalPane unused, handleOpenExternal undefined, chatTabStoreApi missing dep); fixed paneScopedStore.test.tsx stale fields; fixed ChatInput.test.ts + ChatNavbar.test.tsx missing Provider; TS7 StoreApi inference worked around via hook-based isolation test. ORACLE-PASS: 4938 pass, 0 fail.
+
 - 2026-08-05 chunk 0.7 DONE — isPrimaryChatInstance(chatId, activeChatId) predicate added to derived.ts with JSDoc; 7 unit tests in derived.test.ts; three route-affecting effects in useKannaState.ts gated (not-in-sidebar bounce, setSelectedProjectId, chat.markRead); activeChatId added to effect-2 dep array; no behaviour change for single-tab case; 528 pass / 0 fail, lint clean
 
 - 2026-08-05 chunk 0.6 DONE — project-git + project-commands moved to useAppGlobalState; subscribes once per distinct open projectId (paneLayoutStore keys + selectedProjectId + runtimeProjectId); sameDiffs/shouldPreserveExistingProjectDiffs moved to useAppGlobalState; no call-site changes; ast-grep + lint + typecheck + 521 tests pass / 0 fail
@@ -62,6 +64,10 @@ bash scripts/verify-session-tabs.sh
   assert non-empty output) — component-level tests cannot catch a
   missing-Provider regression.
 
+## Next chunk
+
+DONE — ORACLE-PASS: 4938 pass, 0 fail. All six oracle clauses green. Goal met.
+
 ## Oracle contract (READ THIS — the oracle matches names EXACTLY)
 
 `scripts/verify-session-tabs.sh` goes green only when the whole repo is green
@@ -82,35 +88,6 @@ Only the first four are new work. Do NOT rename the last two.
 
 A test that mounts the component directly while the real route is broken is
 exactly the failure this contract exists to prevent — see Failed approaches.
-
-## Next chunk
-
-**0.8 + 0.9 together — per-chat-tab scoped store AND the ChatPage split**
-
-These are ONE chunk. Landing 0.8 alone blanks the app (see Failed approaches);
-a first attempt is preserved on branch `feat/session-tabs-0.8-wip` — reuse its
-store/Provider code, but do the ChatPage split in the same commit.
-
-Order inside the chunk:
-1. Split `src/client/app/ChatPage/index.tsx` (1,029 lines) into `ChatPageShell`
-   (panes, registry, terminal/changes wiring — stays ABOVE the Provider) and
-   `ChatTabRoot({chatId})` (mounts the Provider and owns everything that reads
-   tab-scoped state, `useTranscriptPaddingBottom` included).
-2. Only then move the fields into the tab store.
-3. Add a route-level render test (mount the real router at `/chat/:id`, assert
-   non-empty output) — the component-level tests cannot catch this class of bug.
-4. Verify in a BROWSER, not just the suite: open a chat and confirm it renders.
-
-New per-chat-tab scoped store via the existing `src/client/lib/createScopedStore.tsx`.
-Move in: `composerStore` (attachments, currentText, mentionQuery, slashQuery, uploadError,
-selectedAttachmentId), `chatNavbarStore.sharePopoverOpen`, and — important —
-`toolGroupExpanded` / `inputHeight` / `showScrollToBottom` OUT of
-`paneScopedStore`, because retention mounts several tabs inside ONE pane
-provider, so those are per-chat-TAB not per-pane. Leave `layoutWidth`,
-`tabRecency`, `diffRenderMode`, `localLinkMenuTarget` on the pane. Leave
-`chatInputStore.drafts` alone (already chatId-keyed).
-
-Verify with: `bun run verify:client-arch` (ast-grep + lint + typecheck + test)
 
 ## Context for every worker (read this first)
 

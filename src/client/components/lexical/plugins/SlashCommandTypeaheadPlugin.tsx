@@ -12,7 +12,7 @@ import { filterCommands, normalizeCommandName } from "../../../lib/slash-command
 import type { SlashCommand } from "../../../../shared/types"
 import { $createSlashCommandNode } from "../nodes/SlashCommandNode"
 import { cn } from "../../../lib/utils"
-import { useComposerStore } from "../../../stores/composerStore"
+import { ChatTabScopedStore } from "../../../stores/chatTabScopedStore"
 
 // ---------------------------------------------------------------------------
 // Custom trigger: slash at the start of the input OR after whitespace.
@@ -105,8 +105,8 @@ export function SlashCommandTypeaheadPlugin({
   projectId,
   enabled,
 }: SlashCommandTypeaheadPluginProps): ReactNode {
-  const query = useComposerStore((state) => state.slashQuery)
-  const setQuery = useComposerStore((state) => state.setSlashQuery)
+  const query = ChatTabScopedStore.useScopedStore((state) => state.slashQuery)
+  const setQuery = ChatTabScopedStore.useScopedStore((state) => state.setSlashQuery)
 
   const slashCommands = useSlashCommands(projectId)
 

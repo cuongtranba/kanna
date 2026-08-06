@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react"
-import { useComposerStore, type MentionSuggestionsState } from "../stores/composerStore"
+import { ChatTabScopedStore, type MentionSuggestionsState } from "../stores/chatTabScopedStore"
 import { fetchProjectPaths, type ProjectPath } from "../api/projects"
 import type { HttpPort } from "../ports/httpPort"
 import type { TimerPort } from "../ports/timerPort"
@@ -29,8 +29,9 @@ export function useMentionSuggestions(args: {
   ports?: MentionSuggestionsPorts
 }): MentionSuggestionsState {
   const { http, timer } = args.ports ?? DEFAULT_PORTS
-  const state = useComposerStore((s) => s.mentionSuggestions)
-  const setMentionSuggestions = useComposerStore((s) => s.setMentionSuggestions)
+  const state = ChatTabScopedStore.useScopedStore((s) => s.mentionSuggestions)
+  const setMentionSuggestions = ChatTabScopedStore.useScopedStore((s) => s.setMentionSuggestions)
+  const chatTabStoreApi = ChatTabScopedStore.useScopedStoreApi()
   const debounceRef = useRef<number | null>(null)
   const abortRef = useRef<AbortController | null>(null)
 
@@ -43,7 +44,7 @@ export function useMentionSuggestions(args: {
     if (debounceRef.current !== null) timer.clearTimeout(debounceRef.current)
     abortRef.current?.abort()
 
-    setMentionSuggestions({ items: useComposerStore.getState().mentionSuggestions.items, loading: true, error: null })
+    setMentionSuggestions({ items: chatTabStoreApi.getState().mentionSuggestions.items, loading: true, error: null })
     const controller = new AbortController()
     abortRef.current = controller
 
@@ -58,7 +59,7 @@ export function useMentionSuggestions(args: {
       if (debounceRef.current !== null) timer.clearTimeout(debounceRef.current)
       controller.abort()
     }
-  }, [args.enabled, args.projectId, args.query, http, timer, setMentionSuggestions])
+  }, [args.enabled, args.projectId, args.query, http, timer, setMentionSuggestions, chatTabStoreApi])
 
   return state
 }

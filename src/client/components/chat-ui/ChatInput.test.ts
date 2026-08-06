@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { PROVIDERS } from "../../../shared/types"
+import { ChatTabScopedStore } from "../../stores/chatTabScopedStore"
 import { createAgentMentionRegex } from "../../../shared/mention-pattern"
 import {
   ChatInput,
@@ -223,17 +224,28 @@ describe("shouldRefreshPickerOnSelection", () => {
 // ---------------------------------------------------------------------------
 
 describe("ChatInput", () => {
-  test("renders the attachment trigger as a button with a sibling hidden file input", () => {
-    const html = renderToStaticMarkup(
-      createElement(ChatInput, {
-        onSubmit: async () => undefined,
-        disabled: false,
-        canCancel: false,
-        activeProvider: null,
-        availableProviders: PROVIDERS,
-      }),
+  // ChatInput reads from ChatTabScopedStore (attachments, currentText, etc.)
+  // so every SSR render must be wrapped in the Provider.
+  //
+  // We inline `{ init: undefined as void }` because `createScopedStore<undefined,…>`
+  // makes the Provider accept `init: void`, and TS7's createElement overloads
+  // require `children` to be part of the props object (not a spread arg) when
+  // the component explicitly declares it.
+  function renderInput(canCancel: boolean): string {
+    const child = createElement(ChatInput, {
+      onSubmit: async () => undefined,
+      disabled: false,
+      canCancel,
+      activeProvider: null,
+      availableProviders: PROVIDERS,
+    })
+    return renderToStaticMarkup(
+      createElement(ChatTabScopedStore.Provider, { init: undefined as void, children: child }),
     )
+  }
 
+  test("renders the attachment trigger as a button with a sibling hidden file input", () => {
+    const html = renderInput(false)
     expect(html).toContain('aria-label="Add attachment"')
     expect(html).toContain('type="file"')
     expect(html).toContain('class="sr-only"')
@@ -242,16 +254,7 @@ describe("ChatInput", () => {
   })
 
   test("renders the Lexical contenteditable editor (not a textarea)", () => {
-    const html = renderToStaticMarkup(
-      createElement(ChatInput, {
-        onSubmit: async () => undefined,
-        disabled: false,
-        canCancel: false,
-        activeProvider: null,
-        availableProviders: PROVIDERS,
-      }),
-    )
-
+    const html = renderInput(false)
     // Lexical renders a contenteditable div, not a textarea
     expect(html).toContain("contentEditable")
     expect(html).toContain('aria-label="Chat input"')
@@ -259,44 +262,17 @@ describe("ChatInput", () => {
   })
 
   test("renders the placeholder text", () => {
-    const html = renderToStaticMarkup(
-      createElement(ChatInput, {
-        onSubmit: async () => undefined,
-        disabled: false,
-        canCancel: false,
-        activeProvider: null,
-        availableProviders: PROVIDERS,
-      }),
-    )
-
+    const html = renderInput(false)
     expect(html).toContain("Build something...")
   })
 
   test("renders send button with correct aria-label when canCancel=false", () => {
-    const html = renderToStaticMarkup(
-      createElement(ChatInput, {
-        onSubmit: async () => undefined,
-        disabled: false,
-        canCancel: false,
-        activeProvider: null,
-        availableProviders: PROVIDERS,
-      }),
-    )
-
+    const html = renderInput(false)
     expect(html).toContain('aria-label="Send message"')
   })
 
   test("renders stop button with correct aria-label when canCancel=true", () => {
-    const html = renderToStaticMarkup(
-      createElement(ChatInput, {
-        onSubmit: async () => undefined,
-        disabled: false,
-        canCancel: true,
-        activeProvider: null,
-        availableProviders: PROVIDERS,
-      }),
-    )
-
+    const html = renderInput(true)
     expect(html).toContain('aria-label="Stop"')
   })
 })
