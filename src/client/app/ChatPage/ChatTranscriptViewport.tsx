@@ -2,6 +2,7 @@ import { LegendList, type LegendListRef } from "@legendapp/list/react"
 import type { AnyValue } from "../../../shared/errors"
 import { memo, useCallback, useEffect, useMemo, useRef } from "react"
 import { useChatPageStore } from "../../stores/chatPageStore"
+import { ChatTabScopedStore } from "../../stores/chatTabScopedStore"
 import { ArrowDown, Bot, Flower, MessageCircleQuestion, Upload } from "lucide-react"
 import { AnimatedShinyText } from "../../components/ui/animated-shiny-text"
 import { DrainingIndicator } from "../../components/messages/DrainingIndicator"
@@ -214,9 +215,9 @@ export const ChatTranscriptViewport = memo(({
   const timer = ports?.timer ?? timerAdapter
   const previousRowCountRef = useRef(0)
   const localLinkMenuTriggerRef = useRef<HTMLSpanElement | null>(null)
-  const toolGroupExpanded = useChatPageStore((s) => s.toolGroupExpanded)
-  const setToolGroupExpanded = useChatPageStore((s) => s.setToolGroupExpanded)
-  const resetToolGroupExpanded = useChatPageStore((s) => s.resetToolGroupExpanded)
+  const toolGroupExpanded = ChatTabScopedStore.useScopedStore((s) => s.toolGroupExpanded)
+  const setToolGroupExpanded = ChatTabScopedStore.useScopedStore((s) => s.setToolGroupExpanded)
+  const resetToolGroupExpanded = ChatTabScopedStore.useScopedStore((s) => s.resetToolGroupExpanded)
   const localLinkMenuTarget = useChatPageStore((s) => s.localLinkMenuTarget)
   const setLocalLinkMenuTarget = useChatPageStore((s) => s.setLocalLinkMenuTarget)
   const setLocalLinkMenuOpen = useChatPageStore((s) => s.setLocalLinkMenuOpen)

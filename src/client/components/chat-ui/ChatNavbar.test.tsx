@@ -3,6 +3,7 @@ import { renderForLoopCheck } from "../../lib/testing/renderForLoopCheck"
 import { ChatNavbar } from "./ChatNavbar"
 import { TooltipProvider } from "../ui/tooltip"
 import { useFollowedSessionsStore } from "../../stores/followedSessionsStore"
+import { ChatTabScopedStore } from "../../stores/chatTabScopedStore"
 
 function baseProps() {
   return {
@@ -18,9 +19,11 @@ describe("ChatNavbar following pill", () => {
   test("hidden when chat is not followed, no render loop", async () => {
     useFollowedSessionsStore.getState().setFollowed([])
     const r = await renderForLoopCheck(
-      <TooltipProvider>
-        <ChatNavbar {...baseProps()} />
-      </TooltipProvider>,
+      <ChatTabScopedStore.Provider init={undefined}>
+        <TooltipProvider>
+          <ChatNavbar {...baseProps()} />
+        </TooltipProvider>
+      </ChatTabScopedStore.Provider>,
     )
     try {
       expect(r.loopWarnings).toEqual([])
@@ -35,9 +38,11 @@ describe("ChatNavbar following pill", () => {
   test("shown when the active chat is followed, no render loop", async () => {
     useFollowedSessionsStore.getState().setFollowed(["chat-1"])
     const r = await renderForLoopCheck(
-      <TooltipProvider>
-        <ChatNavbar {...baseProps()} />
-      </TooltipProvider>,
+      <ChatTabScopedStore.Provider init={undefined}>
+        <TooltipProvider>
+          <ChatNavbar {...baseProps()} />
+        </TooltipProvider>
+      </ChatTabScopedStore.Provider>,
     )
     try {
       expect(r.loopWarnings).toEqual([])

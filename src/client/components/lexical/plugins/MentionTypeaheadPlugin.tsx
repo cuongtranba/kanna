@@ -14,7 +14,7 @@ import type { SubagentSuggestion } from "../../../hooks/useSubagentSuggestions"
 import type { ProjectPath } from "../../../hooks/useMentionSuggestions"
 import { $createMentionNode } from "../nodes/MentionNode"
 import { cn } from "../../../lib/utils"
-import { useComposerStore } from "../../../stores/composerStore"
+import { ChatTabScopedStore } from "../../../stores/chatTabScopedStore"
 
 // ---------------------------------------------------------------------------
 // Custom trigger: matches `@` at start of text or after whitespace, allows
@@ -84,8 +84,8 @@ export interface MentionTypeaheadPluginProps {
 export function MentionTypeaheadPlugin({
   projectId,
 }: MentionTypeaheadPluginProps): ReactNode {
-  const query = useComposerStore((state) => state.mentionQuery)
-  const setQuery = useComposerStore((state) => state.setMentionQuery)
+  const query = ChatTabScopedStore.useScopedStore((state) => state.mentionQuery)
+  const setQuery = ChatTabScopedStore.useScopedStore((state) => state.setMentionQuery)
 
   // Custom trigger: allows `/` and `.` in path queries (e.g., `@agent/builder`
   // or `@src/file.ts`).  useBasicTypeaheadTriggerMatch treats `/` as

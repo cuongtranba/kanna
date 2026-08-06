@@ -11,31 +11,21 @@ import { createScopedStore } from "../lib/createScopedStore"
  * belong to a single ChatPage instance (empty-state typing, file drag, scroll
  * position, etc.).
  *
- * Five per-pane slices (mirroring their chatPageStore counterparts exactly so
- * consumers can be migrated file-by-file without any behavioural change):
+ * Per-pane slices:
  *
- *   toolGroupExpanded   — ChatTranscriptViewport accordion state
- *   inputHeight         — transcript padding-bottom
  *   layoutWidth         — pane container width (right-sidebar size clamping)
  *   localLinkMenuTarget — local-link context-menu target
  *   diffRenderMode      — git changes render mode (+ wrapDiffLines)
+ *   tabRecency          — most-recently-activated tab ids (drives retention)
+ *
+ * toolGroupExpanded, inputHeight, and showScrollToBottom now live in
+ * ChatTabScopedStore (one independent instance per chat tab).
  *
  * `void` init — no configuration needed at mount time; all defaults are
  * hard-coded (same pattern as TerminalPane.store.ts).
  */
 
 interface PaneScopedState {
-  // ─── Tool group expanded ───────────────────────────────────────────────────
-  toolGroupExpanded: Record<string, boolean>
-  setToolGroupExpanded: (
-    updater: (current: Record<string, boolean>) => Record<string, boolean>,
-  ) => void
-  resetToolGroupExpanded: () => void
-
-  // ─── Input height (transcript padding-bottom) ─────────────────────────────
-  inputHeight: number
-  setInputHeight: (height: number) => void
-
   // ─── Layout / container width ─────────────────────────────────────────────
   layoutWidth: number
   setLayoutWidth: (width: number) => void
@@ -62,16 +52,6 @@ interface PaneScopedState {
 export const PaneScopedStore = createScopedStore<void, PaneScopedState>(
   "PaneScoped",
   () => (set) => ({
-    // Tool group expanded
-    toolGroupExpanded: {},
-    setToolGroupExpanded: (updater) =>
-      set((state) => ({ toolGroupExpanded: updater(state.toolGroupExpanded) })),
-    resetToolGroupExpanded: () => set({ toolGroupExpanded: {} }),
-
-    // Input height
-    inputHeight: 148,
-    setInputHeight: (height) => set({ inputHeight: height }),
-
     // Layout width
     layoutWidth: 0,
     setLayoutWidth: (width) => set({ layoutWidth: width }),

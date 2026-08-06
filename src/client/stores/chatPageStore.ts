@@ -35,35 +35,11 @@ interface LayoutWidthSlice {
   setLayoutWidth: (width: number) => void
 }
 
-// ─── Transcript padding bottom ────────────────────────────────────────────────
-
-interface TranscriptPaddingSlice {
-  inputHeight: number
-  setInputHeight: (height: number) => void
-}
-
 // ─── Mobile right sidebar overlay ────────────────────────────────────────────
 
 interface MobileRightSidebarSlice {
   viewportWidth: number
   setViewportWidth: (width: number) => void
-}
-
-// ─── Scroll to bottom ────────────────────────────────────────────────────────
-
-interface ScrollToBottomSlice {
-  showScrollToBottom: boolean
-  setShowScrollToBottom: (show: boolean) => void
-}
-
-// ─── Tool group expanded (ChatTranscriptViewport) ────────────────────────────
-
-interface ToolGroupExpandedSlice {
-  toolGroupExpanded: Record<string, boolean>
-  setToolGroupExpanded: (
-    updater: (current: Record<string, boolean>) => Record<string, boolean>,
-  ) => void
-  resetToolGroupExpanded: () => void
 }
 
 // ─── Local link menu target (ChatTranscriptViewport) ─────────────────────────
@@ -99,10 +75,7 @@ type ChatPageState =
   & EmptyStateTypingSlice
   & PageFileDragSlice
   & LayoutWidthSlice
-  & TranscriptPaddingSlice
   & MobileRightSidebarSlice
-  & ScrollToBottomSlice
-  & ToolGroupExpandedSlice
   & LocalLinkMenuSlice
   & DiffViewSlice
   & TerminalFocusSlice
@@ -131,23 +104,9 @@ export const useChatPageStore = create<ChatPageState>()((set) => ({
   layoutWidth: 0,
   setLayoutWidth: (width) => set({ layoutWidth: width }),
 
-  // Transcript padding (input height)
-  inputHeight: 148,
-  setInputHeight: (height) => set({ inputHeight: height }),
-
   // Mobile right sidebar overlay
   viewportWidth: getInitialViewportWidth(),
   setViewportWidth: (width) => set({ viewportWidth: width }),
-
-  // Scroll to bottom
-  showScrollToBottom: false,
-  setShowScrollToBottom: (show) => set({ showScrollToBottom: show }),
-
-  // Tool group expanded
-  toolGroupExpanded: {},
-  setToolGroupExpanded: (updater) =>
-    set((state) => ({ toolGroupExpanded: updater(state.toolGroupExpanded) })),
-  resetToolGroupExpanded: () => set({ toolGroupExpanded: {} }),
 
   // Local link menu target
   localLinkMenuTarget: null,
