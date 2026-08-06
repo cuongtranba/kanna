@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test"
 import path from "node:path"
 import {
   assertTrackingFileSafe,
+  auditOracle,
+  extractOracleScriptPath,
   reconcileTrackingFile,
   validateLoopSetup,
   __testing,
@@ -440,6 +442,38 @@ describe("renderLoopPrompt structural invariants", () => {
     expect(prompt).toContain("ORACLE TOO WEAK")
   })
 
+  // Regression: a worker wrote DONE into "Next chunk" while five undone chunks
+  // sat in a non-canonical "## Chunks" section nobody ever read, and a
+  // grep-shaped oracle was green — so the loop declared GOAL MET on an
+  // unfinished feature. GOAL MET must survive one whole-plan read, not one
+  // worker-authored section.
+  test("GOAL MET requires a terminal whole-plan check across every section", () => {
+    const prompt = __testing.renderLoopPrompt(BASE)
+    expect(prompt).toContain("TERMINAL CHECK")
+    expect(prompt).toContain("EVERY section")
+    // The terminal check reads the whole file: the call carries no sections filter.
+    expect(prompt).toContain("with NO sections filter")
+    // Case (b) covers work found by the terminal check, not just "Next chunk".
+    expect(prompt).toMatch(/ORACLE TOO WEAK[\s\S]*any other section|any other section[\s\S]*ORACLE TOO WEAK/)
+  })
+
+  test("the whole-file ban carves out exactly the terminal check", () => {
+    const prompt = __testing.renderLoopPrompt(BASE)
+    expect(prompt).toContain("EXCEPT the single TERMINAL CHECK")
+  })
+
+  test("worker re-reads the whole plan before it may write DONE", () => {
+    const prompt = __testing.renderLoopPrompt(BASE)
+    expect(prompt).toContain("Before writing DONE")
+  })
+
+  test("the terminal-check reads name the tracking file explicitly", () => {
+    const prompt = __testing.renderLoopPrompt({ ...BASE, trackingFileRel: "docs/PROGRESS-panes.md" })
+    // Neither the orchestrator's terminal check nor the worker's pre-DONE
+    // check may fall back to the default PROGRESS.md.
+    expect(prompt).not.toContain("PROGRESS.md\"")
+  })
+
   // Regression: the worker prompt is identical every iteration, so without a
   // marker naming the chunk, every Progress row read the same boilerplate
   // ("Do the next chunk in PROGRESS-….md. All work happens in /home/…").
@@ -562,6 +596,102 @@ describe("validateLoopSetup — workdir + parallelism", () => {
     const result = validateLoopSetup({ goal: "g", verifyCommand: "true", parallelism: 4 }, cwd, CTX)
     if (!result.ok) throw new Error(result.errors.join(", "))
     expect(result.resolved.parallelism).toBe(4)
+  })
+})
+
+describe("extractOracleScriptPath", () => {
+  test("finds the script token whether bare or behind an interpreter", () => {
+    expect(extractOracleScriptPath("bash .loop-verify.sh")).toBe(".loop-verify.sh")
+    expect(extractOracleScriptPath("./ci/check.sh --fast")).toBe("./ci/check.sh")
+    expect(extractOracleScriptPath('sh "gate.bash"')).toBe("gate.bash")
+  })
+
+  test("skips flag tokens so `bash -x gate.sh` still resolves", () => {
+    expect(extractOracleScriptPath("bash -x gate.sh")).toBe("gate.sh")
+  })
+
+  test("returns null for commands that reference no shell script", () => {
+    expect(extractOracleScriptPath("bun run lint")).toBeNull()
+    expect(extractOracleScriptPath("task check")).toBeNull()
+  })
+})
+
+describe("auditOracle", () => {
+  // The false-green incident: an oracle of file-existence probes + greps armed
+  // silently, every marker was satisfied by files nothing called, and the loop
+  // declared GOAL MET on an unfinished feature. The audit exists to say so at
+  // arm time, while the operator can still tighten the command.
+  test("warns when the oracle is only existence probes and greps", () => {
+    const script = [
+      "#!/usr/bin/env bash",
+      "test -f backend/src/auth/instance.ts || exit 1",
+      "[ -f backend/src/lib/adapter.ts ] || exit 1",
+      "grep -q better-auth backend/package.json || exit 1",
+      "ls docs/adr/0027-*.md >/dev/null 2>&1 || exit 1",
+    ].join("\n")
+    const warnings = auditOracle({
+      verifyCommand: "bash .loop-verify.sh",
+      scriptPath: ".loop-verify.sh",
+      scriptContent: script,
+    })
+    expect(warnings.length).toBe(1)
+    expect(warnings[0]).toContain("can pass without the behavior existing")
+  })
+
+  test("stays silent for a test-runner oracle", () => {
+    for (const command of ["bun test", "task check", "pnpm test", "go test ./..."]) {
+      expect(auditOracle({ verifyCommand: command, scriptPath: null, scriptContent: null })).toEqual([])
+    }
+  })
+
+  test("soft-warns when many markers gate an otherwise real test run", () => {
+    const script = [
+      "test -f a.ts || exit 1",
+      "test -f b.ts || exit 1",
+      "grep -q tenantSlug src/auth.ts && exit 1",
+      "grep -q newFlag src/config.ts || exit 1",
+      "task check",
+    ].join("\n")
+    const warnings = auditOracle({
+      verifyCommand: "bash gate.sh",
+      scriptPath: "gate.sh",
+      scriptContent: script,
+    })
+    expect(warnings.length).toBe(1)
+    expect(warnings[0]).toContain("green legacy suite")
+  })
+
+  test("one or two fail-fast markers before a real gate stay silent", () => {
+    const script = ["grep -q DONE PLAN.md || exit 1", "bun test"].join("\n")
+    expect(
+      auditOracle({ verifyCommand: "bash gate.sh", scriptPath: "gate.sh", scriptContent: script }),
+    ).toEqual([])
+  })
+
+  test("audits the inline command when it references no script", () => {
+    const warnings = auditOracle({
+      verifyCommand: "grep -q SplitContainer src/App.tsx",
+      scriptPath: null,
+      scriptContent: null,
+    })
+    expect(warnings.length).toBe(1)
+    expect(warnings[0]).toContain("can pass without the behavior existing")
+  })
+
+  test("reports an unreadable referenced script instead of guessing", () => {
+    const warnings = auditOracle({
+      verifyCommand: "bash missing.sh",
+      scriptPath: "missing.sh",
+      scriptContent: null,
+    })
+    expect(warnings.length).toBe(1)
+    expect(warnings[0]).toContain("could not be read")
+  })
+
+  test("an opaque command with no markers and no known runner stays silent", () => {
+    expect(
+      auditOracle({ verifyCommand: "./ci/gate", scriptPath: null, scriptContent: null }),
+    ).toEqual([])
   })
 })
 

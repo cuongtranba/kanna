@@ -9,6 +9,8 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 
+import { confinePathToDir } from "./input-validation"
+
 /**
  * Run a git command and report success + trimmed stdout. Every spawn here
  * pins `stdin: "ignore"` and `GIT_TERMINAL_PROMPT=0` so a repo with a
@@ -79,6 +81,26 @@ export async function isWorktreeOfSameRepo(projectCwd: string, workdir: string):
   if (!project.ok || !target.ok) return false
   if (project.stdout.length === 0 || target.stdout.length === 0) return false
   return path.resolve(project.stdout) === path.resolve(target.stdout)
+}
+
+/**
+ * Read the shell script a verify command references, for the arm-time oracle
+ * audit. Confined to the loop's workdir — the audit must never become a way
+ * to read an arbitrary file. Never throws: an escape, a missing file or an
+ * unreadable one all resolve to null, which the pure audit reports as
+ * "could not be read" rather than guessing.
+ */
+export async function readOracleScript(
+  workdirAbs: string,
+  scriptPath: string,
+): Promise<string | null> {
+  const confined = confinePathToDir(scriptPath, workdirAbs, "verify script")
+  if ("error" in confined) return null
+  try {
+    return await readFile(confined.abs, "utf8")
+  } catch {
+    return null
+  }
 }
 
 export interface EnsureTrackingFileArgs {

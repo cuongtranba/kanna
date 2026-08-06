@@ -886,10 +886,11 @@ The server owns the template so the prompt is deterministic. See
 - **Rendered prompt invariants** (asserted structurally in `validateLoopSetup`):
   the recurring prompt MUST contain the tracking-file path, the verify
   command, `delegate_subagent`, `run_in_background: true`, `GOAL MET`,
-  `ORACLE TOO WEAK`, `END THIS TURN`, `/clear`, `query_tracking_file`,
-  `append_tracking_row`, `replace_tracking_section`, `BOTH`, `AUTH_REQUIRED`,
-  `do NOT call stop_loop`, and `Failed approaches`. Future edits to the
-  template that drop any of these fail validation.
+  `ORACLE TOO WEAK`, `TERMINAL CHECK`, `EVERY section`,
+  `with NO sections filter`, `Before writing DONE`, `END THIS TURN`, `/clear`,
+  `query_tracking_file`, `append_tracking_row`, `replace_tracking_section`,
+  `BOTH`, `AUTH_REQUIRED`, `do NOT call stop_loop`, and `Failed approaches`.
+  Future edits to the template that drop any of these fail validation.
 
 ## Loop oracle + arm-time gates (adr-20260805-loop-oracle-hardening)
 
@@ -900,7 +901,7 @@ therefore four cases over TWO signals, not one:
 
 | verify | `## Next chunk` | orchestrator does |
 | --- | --- | --- |
-| exit 0 | empty / DONE | `GOAL MET` → `stop_loop` |
+| exit 0 | empty / DONE | TERMINAL CHECK (below) → `GOAL MET` → `stop_loop` |
 | exit 0 | still lists work | `ORACLE TOO WEAK` → `stop_loop`, hand to a human |
 | non-zero | has work | delegate (normal case) |
 | non-zero | empty | write the next chunk itself, then delegate |
@@ -908,6 +909,18 @@ therefore four cases over TWO signals, not one:
 The oracle-green-but-plan-full case deliberately STOPS rather than continuing:
 the loop cannot tell a stale plan from a weak oracle, and only a human can
 retighten the definition of done.
+
+**TERMINAL CHECK (adr-20260806-loop-oracle-audit).** `## Next chunk` alone is
+not enough to declare victory: a worker once wrote `DONE` there while five
+undone chunks sat in a non-canonical `## Chunks` section that the
+section-scoped read discipline meant nobody was ever shown — a grep-shaped
+oracle was green, and the loop declared GOAL MET over an unfinished feature.
+Before GOAL MET the orchestrator must call `query_tracking_file` with NO
+sections filter — the ONE whole-file read the loop permits — and scan EVERY
+section (canonical or not) for undone work; work found is case (b). The worker
+brief carries the mirror rule: before replacing `Next chunk` with `DONE`, run
+the same check and write any remaining work into `Next chunk` instead. Bounded
+by construction: at most one full read per loop, on the terminal iteration.
 
 **`setup_loop` refuses at arm time**, before the context wipe — every one of
 these used to surface an iteration later, or not at all:
@@ -964,10 +977,23 @@ Loops armed before this landed replay with `verifyCommand`/`workdirAbs` null on
 `LoopState`; `run_verify` then refuses and asks for a re-arm rather than
 guessing a command to execute.
 
-**Oracle guidance (not enforced — write these by hand).** Prefer a test in the
-repo over a grep in a shell script: a `renderToStaticMarkup` assertion cannot
-be satisfied by an import line, whereas `grep -q SplitContainer` can. Scope the
-oracle to the TERMINAL state of the plan, not the current stage.
+**Oracle guidance.** Prefer a test in the repo over a grep in a shell script:
+a `renderToStaticMarkup` assertion cannot be satisfied by an import line,
+whereas `grep -q SplitContainer` can. Scope the oracle to the TERMINAL state
+of the plan, not the current stage.
+
+**Arm-time oracle audit (adr-20260806-loop-oracle-audit).** `setup_loop` now
+says the above at the moment it matters: pure `auditOracle` +
+`extractOracleScriptPath` (`loop-template.ts`) statically inspect the verify
+command and the `.sh`/`.bash` it references (read via `readOracleScript` in
+`loop-template-io.adapter.ts`, confined to the loop workdir). Weak markers
+(`test -f`, `[ -f`, `grep -q|-c|-L`, `ls … /dev/null`) with no test-runner
+invocation, three-plus markers gating a real test run, or an unreadable
+referenced script each produce one warning on the required
+`SetupLoopHandlerResult.oracleWarnings`, rendered as an `Oracle audit:` block
+appended to the setup_loop reply. NON-FATAL by design — heuristics misfire and
+the operator owns the oracle; the audit never blocks arming. Pattern tables
+live beside `auditOracle`; extend them with a unit fixture in the same PR.
 
 **`getArmedLoop` must be SUPPLIED at every spawn site.** `ArmedLoopInfo`
 (`{verifyCommand, workdirAbs, trackingFileRel}`) backs `run_verify`, the

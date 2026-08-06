@@ -125,6 +125,12 @@ export type SetupLoopHandlerResult =
       reconciled: boolean
       /** Section-level reconcile actions taken (empty when created or already conformant). */
       reconcileActions: string[]
+      /**
+       * Non-fatal arm-time oracle-strength warnings (`auditOracle`). Surfaced
+       * in the tool reply so a grep-shaped oracle is called out at the one
+       * moment the operator can still tighten it.
+       */
+      oracleWarnings: string[]
       /** Fully-rendered recurring prompt (echoed back for observability). */
       prompt: string
     }
@@ -559,12 +565,15 @@ function buildSetupLoopToolList(args: {
         } else if (result.reconciled) {
           fileNote = ` (existing file reconciled to the loop schema: ${result.reconcileActions.join("; ")})`
         }
+        const auditNote = result.oracleWarnings.length > 0
+          ? `\nOracle audit:\n- ${result.oracleWarnings.join("\n- ")}`
+          : ""
         return {
           content: [{
             type: "text" as const,
             text:
               `Loop armed. Tracking file: ${result.trackingFileRel}${fileNote}.`
-              + " Your main-agent context has been cleared; the next turn will replay the loop prompt.",
+              + ` Your main-agent context has been cleared; the next turn will replay the loop prompt.${auditNote}`,
           }],
         }
       },

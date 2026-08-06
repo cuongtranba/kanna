@@ -14,7 +14,12 @@
 import type { AgentCoordinator } from "./agent-coordinator"
 import { ensureFreshMcpToken } from "./mcp-oauth.adapter"
 import { realpathAdapter } from "./paths-fs.adapter"
-import { ensureTrackingFile, inspectTrackingFile, isWorktreeOfSameRepo } from "./loop-template-io.adapter"
+import {
+  ensureTrackingFile,
+  inspectTrackingFile,
+  isWorktreeOfSameRepo,
+  readOracleScript,
+} from "./loop-template-io.adapter"
 import { runVerifyCommand } from "./loop-verify-io.adapter"
 import { homedir } from "node:os"
 import { providerUsesSdkSession } from "../shared/types"
@@ -130,6 +135,7 @@ export function buildLoopCommandDeps(agent: AgentCoordinator): LoopCommandDeps {
     inspectTrackingFile,
     isWorktreeOfSameRepo,
     runVerifyCommand,
+    readOracleScript,
     isLoopArmed: (chatId) => agent.isLoopArmed(chatId),
   }
 }

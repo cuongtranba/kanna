@@ -171,6 +171,14 @@ function renderLoopPrompt(args: {
     "and then REPLACE the plan's next step with",
     `mcp__kanna__replace_tracking_section({ ${f}, section: \\"Next chunk\\", body: \\"<the single next chunk, or DONE if the plan is finished>\\" })`,
     "— replace, never append, or completed chunks pile up and get redone.",
+    // The pre-DONE re-read exists because a worker once wrote DONE while five
+    // undone chunks sat in a section it had never been shown; the whole loop
+    // then terminated on a green-but-weak oracle.
+    "Before writing DONE, run the TERMINAL CHECK: call",
+    `mcp__kanna__query_tracking_file({ ${f} })`,
+    "with NO sections filter — the one whole-file read you are allowed — and",
+    "confirm no other section still lists undone work; if one does, write that",
+    "work into Next chunk instead of DONE.",
     "On failure: call",
     `mcp__kanna__append_tracking_row({ ${f}, section: \\"Failed approaches\\", entry: \\"- <what you tried and why it failed>\\" })`,
     "so the next iteration does not repeat it.",
@@ -188,10 +196,17 @@ function renderLoopPrompt(args: {
     `   \`${verifyCommand}\`. Check its exit code.`,
     "3. Decide, using BOTH signals — the oracle is only a proxy, the plan is the",
     "   authority. Four cases:",
-    "   (a) oracle exited 0 AND \"Next chunk\" is empty / says DONE → the goal is",
-    `       met. Print "GOAL MET: ${goal}", call mcp__kanna__stop_loop({}) and`,
-    "       END THIS TURN. Do NOT call delegate_subagent.",
-    "   (b) oracle exited 0 BUT \"Next chunk\" still lists real work → the oracle",
+    "   (a) oracle exited 0 AND \"Next chunk\" is empty / says DONE → run the",
+    "       TERMINAL CHECK before declaring victory: call",
+    `       mcp__kanna__query_tracking_file({ ${f} })`,
+    "       with NO sections filter — the one whole-file read you are allowed —",
+    "       and scan EVERY section, including non-canonical ones (a \"## Chunks\"",
+    "       or \"## Plan\" list), for undone work. Work found → treat as case (b).",
+    `       Only if the whole plan is exhausted: print "GOAL MET: ${goal}",`,
+    "       call mcp__kanna__stop_loop({}) and END THIS TURN. Do NOT call",
+    "       delegate_subagent.",
+    "   (b) oracle exited 0 BUT \"Next chunk\" still lists real work — or the",
+    "       TERMINAL CHECK found undone work in any other section → the oracle",
     "       is too weak to define done. Print",
     "       \"ORACLE TOO WEAK: <what the plan still lists>\", call",
     "       mcp__kanna__stop_loop({}) and END THIS TURN so a human can tighten",
@@ -232,7 +247,8 @@ function renderLoopPrompt(args: {
     "- You are the orchestrator. NEVER edit code yourself: do NOT use Edit,",
     "  Write, MultiEdit, or the Task/Agent tool. Kanna blocks these tools in",
     "  loop turns; attempting them wastes the turn.",
-    `- NEVER read the whole ${trackingFileRel}. Use mcp__kanna__query_tracking_file`,
+    `- NEVER read the whole ${trackingFileRel} — EXCEPT the single TERMINAL CHECK`,
+    "  in step 3(a). Use mcp__kanna__query_tracking_file",
     "  (read), mcp__kanna__append_tracking_row and",
     "  mcp__kanna__replace_tracking_section (write) so the file stays off your",
     "  context no matter how large it grows.",
@@ -432,6 +448,100 @@ export function assertTrackingFileSafe(
 }
 
 /**
+ * Locate the shell script a verify command runs, so the caller can read it
+ * for the arm-time oracle audit. Token-based on purpose: `bash x.sh`,
+ * `sh -x ./gate.bash` and a bare `./check.sh --fast` all resolve, while
+ * `bun run lint` returns null. A quoted path containing spaces is not
+ * resolved — the audit then falls back to the command string, which is the
+ * safe direction (silence, never a wrong read).
+ */
+export function extractOracleScriptPath(verifyCommand: string): string | null {
+  for (const raw of verifyCommand.split(/\s+/)) {
+    const token = raw.replace(/^["']|["']$/g, "")
+    if (token.startsWith("-")) continue
+    if (/\.(?:sh|bash)$/.test(token)) return token
+  }
+  return null
+}
+
+/**
+ * Existence-probe / grep shapes that can pass without the behavior existing:
+ * `test -f`, `[ -f … ]`, `grep -q|-c|-L`, and the `ls … /dev/null` idiom.
+ * A loop's definition of done built from these declared GOAL MET over a
+ * feature whose new code nothing called — every marker was satisfied by
+ * files that existed but were never wired in.
+ */
+const WEAK_ORACLE_PATTERNS: readonly RegExp[] = [
+  /(?:^|[^\w-])test\s+(?:!\s+)?-[defs]\b/gm,
+  /\[\[?\s+(?:!\s+)?-[defs]\s/gm,
+  /(?:^|[^\w-])grep\s+(?:-\w+\s+)*-\w*[qcL]\w*(?=\s|$)/gm,
+  /(?:^|[^\w-])ls\s+[^\n;|&]*\/dev\/null/gm,
+]
+
+/** Test-runner / gate invocations that assert behavior rather than presence. */
+const STRONG_ORACLE_PATTERNS: readonly RegExp[] = [
+  /\bbun\s+(?:run\s+)?(?:test|check|lint|typecheck)\b/,
+  /\btask\s+\S*(?:check|test)\S*/,
+  /\b(?:pnpm|npm|yarn)\s+(?:run\s+)?(?:test|check|lint|typecheck)\b/,
+  /\b(?:vitest|jest|pytest|playwright|mocha|ava)\b/,
+  /\bgo\s+test\b/,
+  /\bcargo\s+(?:test|check)\b/,
+  /\bmvn\s+(?:test|verify)\b/,
+  /\bmake\s+(?:test|check)\b/,
+  /\btsc\b/,
+  /\beslint\b/,
+]
+
+/**
+ * Below this many weak markers a fail-fast probe in front of a real gate is a
+ * normal optimization; at or above it the markers ARE the definition of done.
+ */
+const WEAK_MARKER_SOFT_LIMIT = 3
+
+export interface OracleAuditInput {
+  verifyCommand: string
+  /** Script path extracted from the command (`extractOracleScriptPath`), or null. */
+  scriptPath: string | null
+  /** The referenced script's content; null when unreadable or not referenced. */
+  scriptContent: string | null
+}
+
+/**
+ * Arm-time static audit of the oracle's strength. Non-fatal by design — the
+ * result is a warning list surfaced in the setup_loop reply, at the one
+ * moment the operator can still tighten the command. The already-green
+ * refusal proves the oracle can FAIL; this asks whether it can only pass for
+ * the right reason.
+ */
+export function auditOracle(input: OracleAuditInput): string[] {
+  if (input.scriptPath !== null && input.scriptContent === null) {
+    return [
+      `verify script ${input.scriptPath} could not be read at arm time, so its strength was`
+      + " not audited — make sure it asserts behavior (tests), not file existence or greps.",
+    ]
+  }
+  const text = input.scriptContent ?? input.verifyCommand
+  const weak = WEAK_ORACLE_PATTERNS.reduce((n, p) => n + [...text.matchAll(p)].length, 0)
+  if (weak === 0) return []
+  const strong = STRONG_ORACLE_PATTERNS.some((p) => p.test(text))
+  if (!strong) {
+    return [
+      `the oracle contains ${weak} file-existence/grep check(s) and no test-runner invocation,`
+      + " so it can pass without the behavior existing. Prefer a RED test in the repo:"
+      + " a grep is satisfied by an import line; a test is not.",
+    ]
+  }
+  if (weak >= WEAK_MARKER_SOFT_LIMIT) {
+    return [
+      `the oracle gates its test run behind ${weak} file-existence/grep markers. Markers can`
+      + " pass without behavior — make sure the suite itself contains RED tests for the"
+      + " remaining work; a green legacy suite proves nothing about new work.",
+    ]
+  }
+  return []
+}
+
+/**
  * Validate + resolve a loop setup. Pure. Returns either a rejection with a
  * flat list of user-facing errors, or the fully-resolved payload the caller
  * uses to (a) ensure the tracking file exists on disk and (b) enqueue the
@@ -532,6 +642,12 @@ export function validateLoopSetup(
     "replace_tracking_section",
     "GOAL MET",
     "ORACLE TOO WEAK",
+    // The terminal whole-plan check is what stops a green-but-weak oracle from
+    // ending the loop while undone work sits in a section nobody was shown.
+    "TERMINAL CHECK",
+    "EVERY section",
+    "with NO sections filter",
+    "Before writing DONE",
     // The chunk marker is what makes each Progress row read as the chunk it
     // worked on rather than the identical boilerplate prompt.
     "[chunk:",
