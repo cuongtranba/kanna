@@ -9,8 +9,12 @@ import {
   resizeGroup,
   splitPane,
 } from "./operations"
+import { buildTabId } from "./tabTarget"
 import { collectPanes, createGroup, createPane, createTab, findPaneContainingTab, getTreeDepth } from "./tree"
 import { DEFAULT_PANE_ID, MAX_TREE_DEPTH, type PaneLayout } from "./types"
+
+/** Derived, not hard-coded, so the id scheme can change without editing tests. */
+const CHAT_C1_TAB_ID = buildTabId({ kind: "chat", chatId: "c1" })
 
 const term = (id: string) => createTab({ kind: "terminal", terminalId: id }, 0)
 const TA = term("a").tabId
@@ -123,7 +127,7 @@ describe("splitPane", () => {
           createPane("pB", [term("b")]),
           createGroup("inner", "vertical", [
             // Two tabs, so detaching one cannot collapse the pane and make room.
-            createPane("pC", [term("c"), createTab({ kind: "chat" }, 0)], TC),
+            createPane("pC", [term("c"), createTab({ kind: "chat", chatId: "c1" }, 0)], TC),
             createPane("pD", [createTab({ kind: "changes" }, 0)]),
           ]),
         ]),
@@ -153,7 +157,7 @@ describe("splitPane", () => {
           createPane("pB", [term("b")]),
           createGroup("inner", "vertical", [
             createPane("pC", [term("c")]),
-            createPane("pD", [createTab({ kind: "chat" }, 0)]),
+            createPane("pD", [createTab({ kind: "chat", chatId: "c1" }, 0)]),
           ]),
         ]),
       ]),
@@ -310,24 +314,27 @@ describe("reorderPaneTabs", () => {
 describe("openTab", () => {
   test("adds a tab to the focused pane and focuses it", () => {
     const layout: PaneLayout = { root: createPane("p1", []), focusedPaneId: "p1" }
-    const result = openTab(layout, { kind: "chat" }, { createdAt: 5 })
+    const result = openTab(layout, { kind: "chat", chatId: "c1" }, { createdAt: 5 })
     expect(result).not.toBeNull()
     if (!result) return
-    expect(result.tabId).toBe("chat")
-    expect(result.layout.root.kind === "pane" && result.layout.root.focusedTabId).toBe("chat")
+    expect(result.tabId).toBe(CHAT_C1_TAB_ID)
+    expect(result.layout.root.kind === "pane" && result.layout.root.focusedTabId).toBe(
+      CHAT_C1_TAB_ID,
+    )
   })
 
-  // Because the id is derived from the target, "open" is idempotent — a second
-  // chat tab is impossible by construction, which is how the singleton rule holds.
+  // Because the id is derived from the target, "open" is idempotent PER TARGET:
+  // reopening the SAME chat focuses its tab, while a different chatId derives a
+  // different id and therefore opens a second tab.
   test("reopening an existing target focuses it instead of duplicating", () => {
     const layout: PaneLayout = {
       root: createGroup("g1", "horizontal", [
         createPane("pa", [term("a")]),
-        createPane("pb", [createTab({ kind: "chat" }, 0)]),
+        createPane("pb", [createTab({ kind: "chat", chatId: "c1" }, 0)]),
       ]),
       focusedPaneId: "pa",
     }
-    const result = openTab(layout, { kind: "chat" }, { createdAt: 9 })
+    const result = openTab(layout, { kind: "chat", chatId: "c1" }, { createdAt: 9 })
     expect(result).not.toBeNull()
     if (!result) return
     expect(collectPanes(result.layout.root).flatMap((p) => p.tabs)).toHaveLength(2)
@@ -336,14 +343,14 @@ describe("openTab", () => {
 
   test("can open without stealing focus", () => {
     const layout: PaneLayout = { root: createPane("p1", [term("a")], TA), focusedPaneId: "p1" }
-    const result = openTab(layout, { kind: "chat" }, { createdAt: 5, focus: false })
+    const result = openTab(layout, { kind: "chat", chatId: "c1" }, { createdAt: 5, focus: false })
     expect(result?.layout.root.kind === "pane" && result.layout.root.focusedTabId).toBe(TA)
   })
 
   test("falls back to the first pane when nothing is focused", () => {
     const layout: PaneLayout = { ...twoPaneLayout(), focusedPaneId: null }
-    const result = openTab(layout, { kind: "chat" }, { createdAt: 5 })
-    expect(findPaneContainingTab(result!.layout.root, "chat")?.pane.id).toBe("pa")
+    const result = openTab(layout, { kind: "chat", chatId: "c1" }, { createdAt: 5 })
+    expect(findPaneContainingTab(result!.layout.root, CHAT_C1_TAB_ID)?.pane.id).toBe("pa")
   })
 })
 
@@ -374,12 +381,12 @@ describe("splitPane refuses to strand an empty pane", () => {
   // splitting a pane's sole tab out of it, so that is refused at the engine.
   test("returns null when the tab is the target pane's only tab", () => {
     const layout: PaneLayout = {
-      root: createPane("p1", [createTab({ kind: "chat" }, 0)]),
+      root: createPane("p1", [createTab({ kind: "chat", chatId: "c1" }, 0)]),
       focusedPaneId: "p1",
     }
 
     const result = splitPane(layout, {
-      tabId: "chat",
+      tabId: CHAT_C1_TAB_ID,
       targetPaneId: "p1",
       position: "right",
       ids: { paneId: "p2", groupId: "g1" },
@@ -390,12 +397,12 @@ describe("splitPane refuses to strand an empty pane", () => {
 
   test("still splits when the pane has another tab to keep", () => {
     const layout: PaneLayout = {
-      root: createPane("p1", [createTab({ kind: "chat" }, 0), createTab({ kind: "changes" }, 0)]),
+      root: createPane("p1", [createTab({ kind: "chat", chatId: "c1" }, 0), createTab({ kind: "changes" }, 0)]),
       focusedPaneId: "p1",
     }
 
     const result = splitPane(layout, {
-      tabId: "chat",
+      tabId: CHAT_C1_TAB_ID,
       targetPaneId: "p1",
       position: "right",
       ids: { paneId: "p2", groupId: "g1" },
@@ -411,14 +418,14 @@ describe("splitPane refuses to strand an empty pane", () => {
     // keeps its own tabs, so nothing is stranded.
     const layout: PaneLayout = {
       root: createGroup("g0", "horizontal", [
-        createPane("pa", [createTab({ kind: "chat" }, 0)]),
+        createPane("pa", [createTab({ kind: "chat", chatId: "c1" }, 0)]),
         createPane("pb", [createTab({ kind: "changes" }, 0)]),
       ]),
       focusedPaneId: "pa",
     }
 
     const result = splitPane(layout, {
-      tabId: "chat",
+      tabId: CHAT_C1_TAB_ID,
       targetPaneId: "pb",
       position: "bottom",
       ids: { paneId: "p2", groupId: "g1" },

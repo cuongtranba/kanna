@@ -4,7 +4,7 @@ import { TooltipProvider } from "../ui/tooltip"
 import { createPane, createTab, type PaneLeaf } from "../../lib/paneTree"
 import { PaneTabStrip } from "./PaneTabStrip"
 
-const chat = createTab({ kind: "chat" }, 0)
+const chat = createTab({ kind: "chat", chatId: "c1" }, 0)
 const changes = createTab({ kind: "changes" }, 0)
 const t1 = createTab({ kind: "terminal", terminalId: "t1" }, 0)
 
@@ -27,7 +27,7 @@ function render(pane: PaneLeaf, isPaneFocused = true, width = 800) {
 describe("PaneTabStrip", () => {
   test("renders one tab per tab in the pane", () => {
     const html = render(createPane("p", [chat, t1, changes]))
-    expect(html).toContain('data-tab-id="chat"')
+    expect(html).toContain(`data-tab-id="${chat.tabId}"`)
     expect(html).toContain('data-tab-id="changes"')
     expect(html).toContain(`data-tab-id="${t1.tabId}"`)
   })
@@ -57,9 +57,11 @@ describe("PaneTabStrip", () => {
     expect(html).not.toContain("#")
   })
 
-  test("chat cannot be closed but a terminal can", () => {
+  // A chat tab became closable when it stopped being the only one; with N open
+  // chats the user needs a way to close the one they are done with.
+  test("every tab offers a close affordance", () => {
     const html = render(createPane("p", [chat, t1]))
-    expect(html).not.toContain("Close Chat")
+    expect(html).toContain("Close Chat")
     expect(html).toContain("Close Terminal A")
   })
 

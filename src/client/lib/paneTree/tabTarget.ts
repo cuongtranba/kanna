@@ -4,13 +4,17 @@ import type { PaneTabKind, PaneTabTarget } from "./types"
 /**
  * Kinds of which at most one tab may exist in the whole tree.
  *
- * `chat` is a singleton for a hard reason, not a stylistic one: every transcript
- * prop originates from a single `useOutletContext<KannaState>()`, so a second
- * live transcript has no context to read from. Because the id is derived from
- * the target, the constraint is enforced by construction — a second chat tab
- * resolves to the same id as the first and simply focuses it.
+ * `chat` used to be listed here because every transcript prop originated from a
+ * single `useOutletContext<KannaState>()`, so a second live transcript had no
+ * context to read from. That constraint is gone: `useKannaState(chatId)` is
+ * per-chat and `ChatTabRoot` calls it once per tab, so N chat tabs each own a
+ * live transcript. A chat tab's id now includes its chatId, which is what makes
+ * opening a second chat produce a second tab instead of focusing the first.
+ *
+ * `changes` stays a singleton — it renders the project's git panel, of which
+ * there is genuinely only one.
  */
-const SINGLETON_KINDS: ReadonlySet<PaneTabKind> = new Set<PaneTabKind>(["chat", "changes"])
+const SINGLETON_KINDS: ReadonlySet<PaneTabKind> = new Set<PaneTabKind>(["changes"])
 
 export function isSingletonTabKind(kind: PaneTabKind): boolean {
   return SINGLETON_KINDS.has(kind)
@@ -28,7 +32,7 @@ function part(value: string): string {
 export function buildTabId(target: PaneTabTarget): string {
   switch (target.kind) {
     case "chat":
-      return "chat"
+      return `chat_${part(target.chatId)}`
     case "changes":
       return "changes"
     case "terminal":
@@ -51,8 +55,13 @@ export function normalizeTabTarget(value: AnyValue): PaneTabTarget | null {
   if (!isRecord(value)) return null
 
   switch (value.kind) {
-    case "chat":
-      return { kind: "chat" }
+    case "chat": {
+      // A layout persisted before chat tabs carried a chatId has no id to
+      // recover, so the tab is dropped rather than guessed at. Nothing is lost:
+      // ChatPage re-opens a tab for the chat in the URL on mount.
+      const chatId = nonEmptyString(value.chatId)
+      return chatId ? { kind: "chat", chatId } : null
+    }
     case "changes":
       return { kind: "changes" }
     case "terminal": {
@@ -68,6 +77,9 @@ export function tabTargetsEqual(left: PaneTabTarget, right: PaneTabTarget): bool
   if (left.kind !== right.kind) return false
   if (left.kind === "terminal" && right.kind === "terminal") {
     return left.terminalId === right.terminalId
+  }
+  if (left.kind === "chat" && right.kind === "chat") {
+    return left.chatId === right.chatId
   }
   return true
 }

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { createGroup, createPane, createTab, type PaneLayout } from "../../lib/paneTree"
 import { flattenLayoutForMobile } from "./mobileLayout"
 
-const chat = createTab({ kind: "chat" }, 0)
+const chat = createTab({ kind: "chat", chatId: "c1" }, 0)
 const changes = createTab({ kind: "changes" }, 0)
 const t1 = createTab({ kind: "terminal", terminalId: "t1" }, 0)
 const t2 = createTab({ kind: "terminal", terminalId: "t2" }, 0)

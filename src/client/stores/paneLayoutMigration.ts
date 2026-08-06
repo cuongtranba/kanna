@@ -48,7 +48,10 @@ function percentToFraction(value: number, fallback: number): number {
 }
 
 export function buildLayoutFromLegacy(legacy: LegacyProjectLayout): PaneLayout {
-  const chatPane = createPane(CHAT_PANE_ID, [createTab({ kind: "chat" }, 0)])
+  // The chat pane starts empty: a chat tab is addressed by chatId and the
+  // legacy layout records none. ChatPage opens a tab for the chat in the URL on
+  // mount, so the pane fills itself the moment a chat is shown.
+  const chatPane = createPane(CHAT_PANE_ID, [])
 
   const terminals = legacy.terminals.filter((terminal) => terminal.id.trim().length > 0)
 

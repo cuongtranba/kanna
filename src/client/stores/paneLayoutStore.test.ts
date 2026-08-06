@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test } from "bun:test"
-import { collectPanes, findPaneContainingTab } from "../lib/paneTree"
+import { buildTabId, collectPanes, findPaneContainingTab } from "../lib/paneTree"
 import { usePaneLayoutStore } from "./paneLayoutStore"
 
 const P = "proj-1"
@@ -31,8 +31,8 @@ describe("paneLayoutStore", () => {
 
   // The singleton rule, enforced by the id derivation rather than by a check here.
   test("opening chat twice does not create a second chat tab", () => {
-    s().openTab(P, { kind: "chat" })
-    s().openTab(P, { kind: "chat" })
+    s().openTab(P, { kind: "chat", chatId: "c1" })
+    s().openTab(P, { kind: "chat", chatId: "c1" })
     const tabs = collectPanes(s().getLayout(P).root).flatMap((pane) => pane.tabs)
     expect(tabs.filter((tab) => tab.target.kind === "chat")).toHaveLength(1)
   })
@@ -57,7 +57,7 @@ describe("paneLayoutStore", () => {
   // Operations return null when nothing changes; the store must translate that
   // into an untouched state object so subscribers do not re-render.
   test("a no-op action preserves state identity", () => {
-    s().openTab(P, { kind: "chat" })
+    s().openTab(P, { kind: "chat", chatId: "c1" })
     const before = s().layouts
     s().closeTab(P, "does-not-exist")
     expect(s().layouts).toBe(before)
@@ -102,18 +102,18 @@ describe("paneLayoutStore", () => {
   })
 
   test("focusTab moves focus to the tab's pane", () => {
-    s().openTab(P, { kind: "chat" })
+    s().openTab(P, { kind: "chat", chatId: "c1" })
     s().openTab(P, { kind: "terminal", terminalId: "t1" })
     const paneId = collectPanes(s().getLayout(P).root)[0]!.id
     s().splitPane(P, { tabId: "terminal_2_t1", targetPaneId: paneId, position: "right" })
-    s().focusTab(P, "chat")
+    s().focusTab(P, buildTabId({ kind: "chat", chatId: "c1" }))
     expect(s().getLayout(P).focusedPaneId).toBe(paneId)
   })
 
   test("resizeGroup adjusts one boundary", () => {
     // Two tabs: splitting a pane's ONLY tab is refused, since it would strand
     // an empty pane.
-    s().openTab(P, { kind: "chat" })
+    s().openTab(P, { kind: "chat", chatId: "c1" })
     s().openTab(P, { kind: "terminal", terminalId: "t1" })
     const paneId = collectPanes(s().getLayout(P).root)[0]!.id
     s().splitPane(P, { tabId: "terminal_2_t1", targetPaneId: paneId, position: "right" })
@@ -135,7 +135,7 @@ describe("paneLayoutStore keyboard commands", () => {
   /** A left/right split with the left pane focused. */
   function twoPanes() {
     // The pane needs a tab to keep; splitting its only tab is refused.
-    s().openTab(P, { kind: "chat" })
+    s().openTab(P, { kind: "chat", chatId: "c1" })
     s().openTab(P, { kind: "terminal", terminalId: "t1" })
     const layout = s().getLayout(P)
     const paneId = collectPanes(layout.root)[0].id
@@ -191,7 +191,7 @@ describe("paneLayoutStore keyboard commands", () => {
   })
 
   test("splitFocusedPane splits around the focused pane's active tab", () => {
-    s().openTab(P, { kind: "chat" })
+    s().openTab(P, { kind: "chat", chatId: "c1" })
     s().openTab(P, { kind: "terminal", terminalId: "t1" })
 
     s().splitFocusedPane(P, "right")

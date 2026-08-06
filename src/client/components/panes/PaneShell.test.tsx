@@ -30,7 +30,7 @@ function renderShell(pane: PaneLeaf) {
   )
 }
 
-const chatTab = createTab({ kind: "chat" }, 0)
+const chatTab = createTab({ kind: "chat", chatId: "c1" }, 0)
 const changesTab = createTab({ kind: "changes" }, 0)
 const termTab = createTab({ kind: "terminal", terminalId: "t1" }, 0)
 

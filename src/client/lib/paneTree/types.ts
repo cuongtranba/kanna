@@ -8,8 +8,12 @@
  */
 
 export type PaneTabTarget =
-  /** The chat transcript. Singleton — see tabTarget.ts. */
-  | { kind: "chat" }
+  /**
+   * One chat transcript, addressed by chatId. NOT a singleton: opening a second
+   * chat yields a second tab, and each renders its own live transcript from its
+   * own `useKannaState(chatId)`.
+   */
+  | { kind: "chat"; chatId: string }
   /** The git changes / history panel. Singleton. */
   | { kind: "changes" }
   | { kind: "terminal"; terminalId: string }

@@ -12,8 +12,8 @@ const registry: PaneContentRegistry = {
 
 describe("renderPaneContent", () => {
   test("dispatches to the chat renderer for a chat target", () => {
-    expect(renderPaneContent(registry, { kind: "chat" }, pane, true)).toBe("chat-true")
-    expect(renderPaneContent(registry, { kind: "chat" }, pane, false)).toBe("chat-false")
+    expect(renderPaneContent(registry, { kind: "chat", chatId: "c1" }, pane, true)).toBe("chat-true")
+    expect(renderPaneContent(registry, { kind: "chat", chatId: "c1" }, pane, false)).toBe("chat-false")
   })
 
   test("dispatches to the changes renderer", () => {
@@ -36,7 +36,7 @@ describe("renderPaneContent", () => {
       changes: (_t, p, _f) => { seenIds.push(p.id); return null },
       terminal: (_t, p, _f) => { seenIds.push(p.id); return null },
     }
-    renderPaneContent(reg, { kind: "chat" }, pane, false)
+    renderPaneContent(reg, { kind: "chat", chatId: "c1" }, pane, false)
     renderPaneContent(reg, { kind: "changes" }, pane, false)
     renderPaneContent(reg, { kind: "terminal", terminalId: "x" }, pane, false)
     expect(seenIds).toEqual(["p1", "p1", "p1"])
@@ -51,7 +51,7 @@ describe("renderPaneContent", () => {
       changes: () => { called.push("changes"); return null },
       terminal: () => { called.push("terminal"); return null },
     }
-    renderPaneContent(reg, { kind: "chat" }, pane, false)
+    renderPaneContent(reg, { kind: "chat", chatId: "c1" }, pane, false)
     expect(called).toEqual(["chat"])
   })
 })

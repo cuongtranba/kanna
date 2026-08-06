@@ -1,9 +1,13 @@
 import { describe, expect, test } from "bun:test"
 import { normalizeLayout } from "./normalize"
+import { buildTabId } from "./tabTarget"
 import { collectPanes, createGroup, createPane, createTab, getTreeDepth } from "./tree"
 import { DEFAULT_PANE_ID } from "./types"
 
 const term = (id: string) => createTab({ kind: "terminal", terminalId: id }, 0)
+
+/** Derived, not hard-coded, so the id scheme can change without editing tests. */
+const CHAT_C1_TAB_ID = buildTabId({ kind: "chat", chatId: "c1" })
 
 describe("normalizeLayout", () => {
   test("returns a default layout for anything unusable", () => {
@@ -34,7 +38,7 @@ describe("normalizeLayout", () => {
         kind: "pane",
         id: "p1",
         tabs: [
-          { tabId: "chat", target: { kind: "chat" }, createdAt: 0 },
+          { tabId: "chat", target: { kind: "chat", chatId: "c1" }, createdAt: 0 },
           { tabId: "junk", target: { kind: "terminal", terminalId: "" }, createdAt: 0 },
           { tabId: "alien", target: { kind: "nope" }, createdAt: 0 },
         ],
@@ -42,7 +46,7 @@ describe("normalizeLayout", () => {
       },
       focusedPaneId: "p1",
     })
-    expect(collectPanes(layout.root)[0]?.tabs.map((tab) => tab.tabId)).toEqual(["chat"])
+    expect(collectPanes(layout.root)[0]?.tabs.map((tab) => tab.tabId)).toEqual([CHAT_C1_TAB_ID])
   })
 
   // Ids are re-derived from the target, so a persisted id that disagrees with
@@ -52,14 +56,14 @@ describe("normalizeLayout", () => {
       root: {
         kind: "pane",
         id: "p1",
-        tabs: [{ tabId: "wrong-id", target: { kind: "chat" }, createdAt: 0 }],
+        tabs: [{ tabId: "wrong-id", target: { kind: "chat", chatId: "c1" }, createdAt: 0 }],
         focusedTabId: "wrong-id",
       },
       focusedPaneId: "p1",
     })
     const pane = collectPanes(layout.root)[0]
-    expect(pane?.tabs[0]?.tabId).toBe("chat")
-    expect(pane?.focusedTabId).toBe("chat")
+    expect(pane?.tabs[0]?.tabId).toBe(CHAT_C1_TAB_ID)
+    expect(pane?.focusedTabId).toBe(CHAT_C1_TAB_ID)
   })
 
   test("dedupes a target that somehow appears twice", () => {
@@ -68,8 +72,8 @@ describe("normalizeLayout", () => {
         kind: "pane",
         id: "p1",
         tabs: [
-          { tabId: "chat", target: { kind: "chat" }, createdAt: 0 },
-          { tabId: "chat", target: { kind: "chat" }, createdAt: 1 },
+          { tabId: "chat", target: { kind: "chat", chatId: "c1" }, createdAt: 0 },
+          { tabId: "chat", target: { kind: "chat", chatId: "c1" }, createdAt: 1 },
         ],
         focusedTabId: "chat",
       },
