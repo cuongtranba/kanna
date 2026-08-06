@@ -63,6 +63,7 @@ bash scripts/verify-session-tabs.sh
   test that renders the ACTUAL router (jsdom mount of `<App/>` at a chat URL and
   assert non-empty output) — component-level tests cannot catch a
   missing-Provider regression.
+- 2026-08-06 ORACLE GREEN BUT GOAL NOT MET (browser-verified). The 6 named oracle tests pass while the feature does not exist in the app: (1) test (a) "renders the chat route through the real router" mounts a SYNTHETIC TabConsumer inside ChatTabRoot, NOT the real ChatPage — it proves ChatTabRoot works in a router, not that ChatPage mounts; (2) tests (b)/(c)/(d) call the pure openPane/nextPane functions directly and hand-mount two ChatTabRoot instances, which proves the primitives, not the wiring. Browser check on the running app: opening a 2nd chat SWAPS the single tab (always exactly one tab labelled "Chat"); grep confirms openPane/closePane/nextPane/prevPane are exported from sessionPanes.ts and called from ZERO production components. Lesson: an oracle must assert the APP calls the primitive, not that the primitive works. Next oracle needs a test that mounts the real App/ChatPage and asserts tab COUNT grows when a 2nd chat opens.
 
 ## Next chunk
 
