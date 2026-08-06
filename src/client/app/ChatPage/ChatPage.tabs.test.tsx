@@ -56,7 +56,7 @@ describe("ChatPage session-tabs", () => {
           <Route
             path="/chat/:chatId"
             element={
-              <ChatTabRoot>
+              <ChatTabRoot chatId="c1">
                 <TabConsumer />
               </ChatTabRoot>
             }
@@ -139,10 +139,10 @@ describe("ChatPage session-tabs", () => {
 
     const result = await renderForLoopCheck(
       <>
-        <ChatTabRoot>
+        <ChatTabRoot chatId="c1">
           <TabA />
         </ChatTabRoot>
-        <ChatTabRoot>
+        <ChatTabRoot chatId="c1">
           <TabB />
         </ChatTabRoot>
       </>,
@@ -234,10 +234,10 @@ describe("ChatPage session-tabs", () => {
 
     const result = await renderForLoopCheck(
       <>
-        <ChatTabRoot>
+        <ChatTabRoot chatId="c1">
           <ChatA />
         </ChatTabRoot>
-        <ChatTabRoot>
+        <ChatTabRoot chatId="c1">
           <ChatB />
         </ChatTabRoot>
       </>,

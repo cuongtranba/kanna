@@ -833,7 +833,7 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
     }
     // Only the primary tab (route chatId === this instance's chatId) may navigate
     // away. A background tab must never call closeChat() and yank the route.
-    if (!isPrimaryChatInstance(activeChatId, activeChatId)) return
+    if (!isPrimaryChatInstance(activeChatId, appGlobal.routeChatId)) return
     if (!appGlobal.sidebarReady || !chatReady) return
     const exists = sidebarProjectGroups.some((group) => group.chats.some((chat) => chat.chatId === activeChatId))
     if (exists) {
@@ -846,25 +846,25 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
       return
     }
     appGlobal.chatNavigator.closeChat()
-  }, [activeChatId, appGlobal.chatNavigator, appGlobal.sidebarReady, chatReady, pendingChatId, sidebarProjectGroups])
+  }, [activeChatId, appGlobal.chatNavigator, appGlobal.routeChatId, appGlobal.sidebarReady, chatReady, pendingChatId, sidebarProjectGroups])
 
   useEffect(() => {
     if (!chatSnapshot) return
     // Only the primary tab may set the globally-selected project. A background tab
     // must not steal project focus while the user is looking at a different chat.
-    if (!isPrimaryChatInstance(chatSnapshot.runtime.chatId, activeChatId)) return
+    if (!isPrimaryChatInstance(chatSnapshot.runtime.chatId, appGlobal.routeChatId)) return
     useKannaStateStore.getState().setSelectedProjectId(chatSnapshot.runtime.projectId)
     if (pendingChatId === chatSnapshot.runtime.chatId) {
       useKannaStateStore.getState().setPendingChatId(null)
     }
-  }, [activeChatId, chatSnapshot, pendingChatId])
+  }, [activeChatId, appGlobal.routeChatId, chatSnapshot, pendingChatId])
 
   useEffect(() => {
     if (!activeChatId || !appGlobal.sidebarReady) return
     // Only the primary tab (the one the user is looking at) may push a markRead.
     // A background tab would steal the read timestamp even though the user has
     // not seen its messages on the current route.
-    if (!isPrimaryChatInstance(activeChatId, activeChatId)) return
+    if (!isPrimaryChatInstance(activeChatId, appGlobal.routeChatId)) return
     if (!shouldMarkActiveChatRead(dom)) return
     const activeSidebarChat = sidebarProjectGroups
       .flatMap((group) => group.chats)
@@ -873,7 +873,7 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
     void socket.command({ type: "chat.markRead", chatId: activeChatId }).catch((error) => {
       useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
     })
-  }, [activeChatId, appGlobal.sidebarReady, dom, focusEpoch, sidebarProjectGroups, socket])
+  }, [activeChatId, appGlobal.routeChatId, appGlobal.sidebarReady, dom, focusEpoch, sidebarProjectGroups, socket])
 
   useEffect(() => {
     if (!activeChatId) return

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, type DragEven
 import type { DomPort } from "../../ports/domPort"
 import type { TimerPort } from "../../ports/timerPort"
 import { type LegendListRef } from "@legendapp/list/react"
-import { useNavigate, useOutletContext } from "react-router-dom"
+import { useNavigate } from "react-router-dom"
 import type { ChatInputHandle } from "../../components/chat-ui/ChatInput"
 import { ChatNavbar } from "../../components/chat-ui/ChatNavbar"
 import { Card, CardContent } from "../../components/ui/card"
@@ -17,8 +17,8 @@ import { useTerminalPreferencesStore } from "../../stores/terminalPreferencesSto
 import { TERMINAL_TOGGLE_ANIMATION_DURATION_MS } from "../terminalToggleAnimation"
 import { useStickyChatFocus } from "../useStickyChatFocus"
 import { usePushFocus } from "../usePushFocus"
-import type { KannaState } from "../useKannaState"
 import { getNextMeasuredInputHeight, getTranscriptPaddingBottom } from "../useKannaState"
+import { useChatTabState } from "./ChatTabRoot"
 import { EMPTY_SCHEDULES } from "../KannaTranscript"
 import { useShareStore } from "../../components/share/share-store"
 import type { ShareCommandResult } from "../../../shared/session-share/protocol"
@@ -184,7 +184,8 @@ export function ChatTabContent({
   onToggleEmbeddedTerminal,
   onToggleRightSidebar,
 }: ChatTabContentProps) {
-  const state = useOutletContext<KannaState>()
+  // This tab's OWN state, not the route's: two chat tabs each read their own.
+  const state = useChatTabState()
 
   const transcriptListRef = useRef<LegendListRef | null>(null)
   const isAtEndRef = useRef(true)
