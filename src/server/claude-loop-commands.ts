@@ -20,6 +20,8 @@ import { timestamped } from "./claude-message-normalizer"
 import { buildTaskNotification } from "./claude-session-config"
 import {
   assertTrackingFileSafe,
+  auditOracle,
+  extractOracleScriptPath,
   validateLoopSetup,
   reconcileTrackingFile,
   type LoopSetupInput,
@@ -107,6 +109,13 @@ export interface LoopCommandDeps {
    * to prove the oracle can fail before the loop is armed.
    */
   runVerifyCommand(args: RunVerifyArgs): Promise<RunVerifyResult>
+
+  /**
+   * IO adapter: read the shell script the verify command references, confined
+   * to the loop's workdir, for the arm-time oracle audit. Null when missing,
+   * unreadable, or escaping the workdir.
+   */
+  readOracleScript(workdirAbs: string, scriptPath: string): Promise<string | null>
 
   /**
    * Returns the current armed-loop state for a chat, or null if disarmed.
@@ -385,6 +394,19 @@ export async function setupLoop(
       ],
     }
   }
+
+  // Static oracle-strength audit — the already-green refusal above proves the
+  // oracle can FAIL; this asks whether it can only pass for the right reason.
+  // Non-fatal: warnings ride the ok result into the tool reply.
+  const scriptPath = extractOracleScriptPath(resolved.verifyCommand)
+  const scriptContent = scriptPath === null
+    ? null
+    : await deps.readOracleScript(resolved.workdirAbs, scriptPath)
+  const oracleWarnings = auditOracle({
+    verifyCommand: resolved.verifyCommand,
+    scriptPath,
+    scriptContent,
+  })
   let created: boolean
   let reconciled: boolean
   let reconcileActions: string[]
@@ -465,6 +487,7 @@ export async function setupLoop(
     created,
     reconciled,
     reconcileActions,
+    oracleWarnings,
     prompt: resolved.prompt,
   }
 }

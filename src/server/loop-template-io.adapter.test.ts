@@ -2,7 +2,12 @@ import { describe, expect, test, beforeEach, afterEach } from "bun:test"
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { ensureTrackingFile, inspectTrackingFile, isWorktreeOfSameRepo } from "./loop-template-io.adapter"
+import {
+  ensureTrackingFile,
+  inspectTrackingFile,
+  isWorktreeOfSameRepo,
+  readOracleScript,
+} from "./loop-template-io.adapter"
 
 /** Reconcile stub that reports the input as already conformant. */
 const noopReconcile = (existing: string) => ({ content: existing, changed: false, actions: [] })
@@ -69,6 +74,39 @@ describe("ensureTrackingFile", () => {
     expect(result.actions).toEqual(['rewrote "## Goal"'])
     const content = await readFile(abs, "utf8")
     expect(content).toBe("reconciled from: stale content")
+  })
+})
+
+describe("readOracleScript", () => {
+  let workdir = ""
+
+  beforeEach(async () => {
+    workdir = await mkdtemp(path.join(tmpdir(), "kanna-loop-oracle-"))
+  })
+
+  afterEach(async () => {
+    if (workdir) await rm(workdir, { recursive: true, force: true })
+  })
+
+  test("reads a script referenced relative to the workdir", async () => {
+    await writeFile(path.join(workdir, ".loop-verify.sh"), "task check\n", "utf8")
+    expect(await readOracleScript(workdir, ".loop-verify.sh")).toBe("task check\n")
+  })
+
+  test("reads a script in a subdirectory, ./-prefixed", async () => {
+    const { mkdir } = await import("node:fs/promises")
+    await mkdir(path.join(workdir, "ci"), { recursive: true })
+    await writeFile(path.join(workdir, "ci", "gate.sh"), "bun test\n", "utf8")
+    expect(await readOracleScript(workdir, "./ci/gate.sh")).toBe("bun test\n")
+  })
+
+  test("returns null for a missing script", async () => {
+    expect(await readOracleScript(workdir, "nope.sh")).toBeNull()
+  })
+
+  test("returns null for a path escaping the workdir", async () => {
+    expect(await readOracleScript(workdir, "../outside.sh")).toBeNull()
+    expect(await readOracleScript(workdir, "/etc/passwd.sh")).toBeNull()
   })
 })
 

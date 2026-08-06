@@ -493,6 +493,7 @@ describe("setup_loop tool", () => {
         created: false,
         reconciled: false,
         reconcileActions: [],
+        oracleWarnings: [],
         prompt: "x",
       }),
     })
@@ -511,6 +512,7 @@ describe("setup_loop tool", () => {
           created: true,
           reconciled: false,
           reconcileActions: [],
+          oracleWarnings: [],
           prompt: "the rendered loop prompt",
         }
       },
@@ -542,6 +544,7 @@ describe("setup_loop tool", () => {
         created: false,
         reconciled: false,
         reconcileActions: [],
+        oracleWarnings: [],
         prompt: "p",
       }),
     }))
@@ -562,6 +565,7 @@ describe("setup_loop tool", () => {
         created: false,
         reconciled: true,
         reconcileActions: ['rewrote "## Goal"', 'inserted "## Next chunk"'],
+        oracleWarnings: [],
         prompt: "p",
       }),
     }))
@@ -573,6 +577,48 @@ describe("setup_loop tool", () => {
     expect(res.content[0].text).toContain("existing file reconciled to the loop schema")
     expect(res.content[0].text).toContain('rewrote "## Goal"')
     expect(res.content[0].text).toContain('inserted "## Next chunk"')
+  })
+
+  test("oracle audit warnings are appended to the success text", async () => {
+    const tools = toolMap(buildKannaMcpTools({
+      ...baseArgs,
+      setupLoop: async () => ({
+        ok: true,
+        trackingFileRel: "PROGRESS.md",
+        created: true,
+        reconciled: false,
+        reconcileActions: [],
+        oracleWarnings: ["the oracle contains 3 file-existence/grep check(s), tighten it"],
+        prompt: "p",
+      }),
+    }))
+    const res = await tools.get("setup_loop")!.handler({
+      goal: "g",
+      verify_command: "bash gate.sh",
+    })
+    expect(res.isError).toBeUndefined()
+    expect(res.content[0].text).toContain("Oracle audit:")
+    expect(res.content[0].text).toContain("file-existence/grep")
+  })
+
+  test("no audit note when the warning list is empty", async () => {
+    const tools = toolMap(buildKannaMcpTools({
+      ...baseArgs,
+      setupLoop: async () => ({
+        ok: true,
+        trackingFileRel: "PROGRESS.md",
+        created: true,
+        reconciled: false,
+        reconcileActions: [],
+        oracleWarnings: [],
+        prompt: "p",
+      }),
+    }))
+    const res = await tools.get("setup_loop")!.handler({
+      goal: "g",
+      verify_command: "bun test",
+    })
+    expect(res.content[0].text).not.toContain("Oracle audit:")
   })
 
   test("validator rejection → isError with the error list", async () => {

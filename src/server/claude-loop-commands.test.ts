@@ -103,6 +103,7 @@ function makeDeps(overrides: Partial<LoopCommandDeps> = {}): LoopCommandDeps {
     runVerifyCommand:
       overrides.runVerifyCommand
       ?? (async () => ({ exitCode: 1, output: "not done", timedOut: false, durationMs: 1 })),
+    readOracleScript: overrides.readOracleScript ?? (async () => null),
   }
 }
 

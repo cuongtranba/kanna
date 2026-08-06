@@ -4505,6 +4505,48 @@ describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
     }
   })
 
+  // The false-green incident: a grep/file-existence oracle armed silently and
+  // later declared GOAL MET over an unfinished feature. The audit must say so
+  // in the arm result, while the operator can still tighten the command.
+  test("a grep-shaped verify script arms WITH oracle audit warnings", async () => {
+    const projectRoot = await mkdtemp(path.join(tmpdir(), "kanna-setup-loop-"))
+    try {
+      await Bun.write(
+        path.join(projectRoot, ".loop-verify.sh"),
+        [
+          "test -f src/instance.ts || exit 1",
+          "grep -q better-auth package.json || exit 1",
+          "grep -q newFlag src/config.ts || exit 1",
+        ].join("\n"),
+      )
+      const { coordinator } = await makeSetupLoopCoordinator(projectRoot)
+      const result = await coordinator.setupLoop({
+        chatId: "chat-1",
+        input: { goal: "g", verifyCommand: "bash .loop-verify.sh", subagentId: "sa-1" },
+      })
+      if (!result.ok) throw new Error(result.errors.join(", "))
+      expect(result.oracleWarnings).toHaveLength(1)
+      expect(result.oracleWarnings[0]).toContain("can pass without the behavior existing")
+    } finally {
+      await rm(projectRoot, { recursive: true, force: true })
+    }
+  })
+
+  test("a test-runner oracle arms with no audit warnings", async () => {
+    const projectRoot = await mkdtemp(path.join(tmpdir(), "kanna-setup-loop-"))
+    try {
+      const { coordinator } = await makeSetupLoopCoordinator(projectRoot)
+      const result = await coordinator.setupLoop({
+        chatId: "chat-1",
+        input: { goal: "g", verifyCommand: "bun run lint", subagentId: "sa-1" },
+      })
+      if (!result.ok) throw new Error(result.errors.join(", "))
+      expect(result.oracleWarnings).toEqual([])
+    } finally {
+      await rm(projectRoot, { recursive: true, force: true })
+    }
+  })
+
   test("the /clear is not overwritten by a late session_token from the in-flight turn", async () => {
     const projectRoot = await mkdtemp(path.join(tmpdir(), "kanna-setup-loop-"))
     const events = new AsyncEventQueue<any>()
