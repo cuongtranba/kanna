@@ -1,9 +1,6 @@
 import { type SetupLoopHandlerResult } from "./kanna-mcp"
-import {
-  findLastUserMessageId as findLastUserMessageIdFn,
-  recreateActiveTurnFromSession as recreateActiveTurnFromSessionFn,
-  type SessionRebuildDeps,
-} from "./claude-session-rebuild"
+import { findLastUserMessageId as findLastUserMessageIdFn } from "./claude-prompt-helpers"
+import { PendingToolSlots } from "./pending-tool-slot"
 import type { LoopSetupInput } from "./loop-template"
 import type {
   AgentProvider,
@@ -194,6 +191,7 @@ export class AgentCoordinator {
   readonly startClaudeSessionPTYFn: (args: StartClaudeSessionPtyArgs) => Promise<ClaudeSessionHandle>
   reportBackgroundError: ((message: string) => void) | null = null
   readonly activeTurns = new Map<string, ActiveTurn>()
+  readonly pendingTools = new PendingToolSlots()
   /**
    * Turns claimed by `startTurnForChat` whose provider session is still
    * booting — the window before an `ActiveTurn` exists. Cancel, send-queueing
@@ -728,26 +726,9 @@ export class AgentCoordinator {
   }
 
 
-  private buildSessionRebuildDeps(): SessionRebuildDeps {
-    return agentDepsBuilders.buildSessionRebuildDeps(this)
-  }
-
-  /** @internal used by agent-deps-builders.ts via buildStartTurnDeps */
-  recreateActiveTurnFromSession(args: {
-    chatId: string
-    provider: AgentProvider
-    model: string
-    effort?: string
-    serviceTier?: "fast"
-    planMode: boolean
-    clientTraceId?: string
-  }): ActiveTurn | undefined {
-    return recreateActiveTurnFromSessionFn(this.buildSessionRebuildDeps(), args)
-  }
-
   /** @internal used by agent-deps-builders.ts via buildStartTurnDeps */
   findLastUserMessageId(chatId: string): string | null {
-    return findLastUserMessageIdFn(this.buildSessionRebuildDeps(), chatId)
+    return findLastUserMessageIdFn(this.store.getMessages(chatId))
   }
 
   private buildSpawnClaudeTurnDeps(): SpawnClaudeTurnDeps {

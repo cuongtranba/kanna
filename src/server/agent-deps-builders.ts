@@ -22,7 +22,6 @@ import {
 } from "./loop-template-io.adapter"
 import { runVerifyCommand } from "./loop-verify-io.adapter"
 import { homedir } from "node:os"
-import { providerUsesSdkSession } from "../shared/types"
 import { isClaudeSdkProvider } from "./provider-catalog"
 
 import type { ClaudeSessionConfigHelpersDeps } from "./claude-session-config-helpers"
@@ -39,7 +38,6 @@ import type { SubagentToolResponseDeps } from "./claude-subagent-tool-response"
 import type { ToolRespondDeps } from "./claude-tool-respond"
 import type { SessionStateQueryDeps } from "./claude-session-state-queries"
 import type { StartTurnDeps } from "./claude-turn-starter"
-import type { SessionRebuildDeps } from "./claude-session-rebuild"
 import type { SpawnClaudeTurnDeps } from "./claude-session-spawner"
 import type { RunClaudeSessionDeps } from "./claude-session-runner"
 import type { RunTurnDeps } from "./claude-turn-runner"
@@ -74,6 +72,7 @@ export function buildSessionLifecycleDeps(agent: AgentCoordinator): SessionLifec
     defaultMaxResidentSessions: agent.claudeSessionLifecycle.maxResidentSessions,
     claudeSessions: agent.claudeSessions,
     activeTurns: agent.activeTurns,
+    pendingTools: agent.pendingTools,
     oauthPool: agent.oauthPool,
     workflowRegistry: agent.workflowRegistry,
     resolveClaudeDriverPreference: () => agent.resolveClaudeDriverPreference(),
@@ -150,6 +149,7 @@ export function buildCancelHandlerDeps(agent: AgentCoordinator): CancelHandlerDe
     rejectPendingResolversForChat: (chatId) => agent.rejectPendingResolversForChat(chatId),
     cancelChatInOrchestrator: (chatId) => agent.getSubagentOrchestrator().cancelChat(chatId),
     activeTurns: agent.activeTurns,
+    pendingTools: agent.pendingTools,
     startingTurns: agent.startingTurns,
     store: agent.store,
     claudeSessions: agent.claudeSessions,
@@ -190,6 +190,7 @@ export function buildSendCommandDeps(agent: AgentCoordinator): SendCommandDeps {
     store: agent.store,
     activeTurns: agent.activeTurns,
     startingTurns: agent.startingTurns,
+    pendingTools: agent.pendingTools,
     claudeSessions: agent.claudeSessions,
     resolveBackgroundTaskMaxMs: () => agent.resolveBackgroundTaskMaxMs(),
     autoResumeByChat: agent.autoResumeByChat,
@@ -255,6 +256,7 @@ export function buildSubagentToolResponseDeps(agent: AgentCoordinator): Subagent
 export function buildToolRespondDeps(agent: AgentCoordinator): ToolRespondDeps {
   return {
     activeTurns: agent.activeTurns,
+    pendingTools: agent.pendingTools,
     store: agent.store,
     emitStateChange: (chatId) => { agent.emitStateChange(chatId) },
   }
@@ -268,6 +270,7 @@ export function buildSessionStateQueryDeps(agent: AgentCoordinator): SessionStat
   return {
     activeTurns: agent.activeTurns,
     startingTurns: agent.startingTurns,
+    pendingTools: agent.pendingTools,
     claudeSessions: agent.claudeSessions,
     drainingStreams: agent.drainingStreams,
     isClaudeSdkProvider: (provider) => isClaudeSdkProvider(provider),
@@ -309,23 +312,10 @@ export function buildStartTurnDeps(agent: AgentCoordinator): StartTurnDeps {
     getAppSettingsSnapshot: () => agent.getAppSettingsSnapshot(),
     generateTitleInBackground: (chatId, content, localPath, optimisticTitle) =>
       agent.generateTitleInBackground(chatId, content, localPath, optimisticTitle),
-    recreateActiveTurnFromSession: (args) => agent.recreateActiveTurnFromSession(args),
+    pendingTools: agent.pendingTools,
     startClaudeTurn: (args) => agent.startClaudeTurn(args),
     findLastUserMessageId: (chatId) => agent.findLastUserMessageId(chatId),
     runTurn: (active) => agent.runTurn(active),
-  }
-}
-
-// ---------------------------------------------------------------------------
-// 15. Session rebuild
-// ---------------------------------------------------------------------------
-
-export function buildSessionRebuildDeps(agent: AgentCoordinator): SessionRebuildDeps {
-  return {
-    claudeSessions: agent.claudeSessions,
-    activeTurns: agent.activeTurns,
-    providerUsesSdkSession: (provider) => providerUsesSdkSession(provider),
-    getMessages: (chatId) => agent.store.getMessages(chatId),
   }
 }
 
@@ -378,6 +368,7 @@ export function buildRunClaudeSessionDeps(agent: AgentCoordinator): RunClaudeSes
     openrouterFirstEntryTimeoutMs: agent.openrouterFirstEntryTimeoutMs,
     claudeSessions: agent.claudeSessions,
     activeTurns: agent.activeTurns,
+    pendingTools: agent.pendingTools,
     oauthPool: agent.oauthPool,
     claudeLimitDetector: agent.claudeLimitDetector,
     claudeAuthErrorDetector: agent.claudeAuthErrorDetector,

@@ -79,6 +79,7 @@ function makeDeps(overrides: Partial<SessionLifecycleDeps> = {}): SessionLifecyc
     defaultMaxResidentSessions: 3,
     claudeSessions: new Map(),
     activeTurns: new Map(),
+    pendingTools: { has: () => false },
     oauthPool: null,
     workflowRegistry: null,
     resolveClaudeDriverPreference: () => "sdk",

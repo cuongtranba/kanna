@@ -235,3 +235,25 @@ export function positiveIntegerFromEnv(value: string | undefined, fallback: numb
   const parsed = Number(value)
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback
 }
+
+// ---------------------------------------------------------------------------
+// Transcript queries
+// ---------------------------------------------------------------------------
+
+/** Minimal transcript-entry shape consumed by findLastUserMessageId. */
+export interface UserMessageEntry {
+  kind: string
+  _id: string
+}
+
+/**
+ * Scans a chat transcript backwards and returns the `_id` of the most recent
+ * `user_prompt` entry, or `null` when the transcript contains no user prompts.
+ */
+export function findLastUserMessageId(messages: readonly UserMessageEntry[]): string | null {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const entry = messages[i]
+    if (entry.kind === "user_prompt") return entry._id
+  }
+  return null
+}

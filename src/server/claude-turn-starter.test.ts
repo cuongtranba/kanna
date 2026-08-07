@@ -6,6 +6,7 @@ import { describe, test, expect, mock } from "bun:test"
 import { startTurnForChat, type StartTurnDeps, type StartTurnForChatArgs } from "./claude-turn-starter"
 import { OAuthPoolUnavailableError } from "./oauth-errors"
 import type { ActiveTurn, ClaudeSessionState, StartingTurn } from "./claude-session-state"
+import { PendingToolSlots } from "./pending-tool-slot"
 import type { HarnessTurn } from "./harness-types"
 
 // ---------------------------------------------------------------------------
@@ -89,7 +90,7 @@ function makeDeps(overrides: Partial<StartTurnDeps> = {}): StartTurnDeps {
     getSubagents: mock(() => []),
     getAppSettingsSnapshot: mock(() => ({ globalPromptAppend: undefined })),
     generateTitleInBackground: mock(async () => {}),
-    recreateActiveTurnFromSession: mock(() => undefined),
+    pendingTools: new PendingToolSlots(),
     startClaudeTurn: mock(async () => fakeTurn),
     findLastUserMessageId: mock(() => null),
     runTurn: mock(() => {}),
@@ -413,22 +414,14 @@ describe("startTurnForChat — starting-turn marker", () => {
     expect(deps.startingTurns.get("chat-1")).toBe(second)
   })
 
-  test("onToolRequest parks the resolve on a rebuilt ghost turn when the prior turn already finalized", async () => {
+  test("onToolRequest parks in the slot — never a ghost turn — when the prior turn already finalized", async () => {
     let captured: ((request: { tool: unknown }) => Promise<unknown>) | null = null
-    const ghost = {
-      chatId: "chat-1",
-      provider: "claude" as const,
-      pendingTool: null,
-      status: "starting",
-      waitStartedAt: null,
-    } as unknown as ActiveTurn
 
     const deps = makeDeps({
       startClaudeTurn: mock(async (args: { onToolRequest: (r: { tool: unknown }) => Promise<unknown> }) => {
         captured = args.onToolRequest
         return makeFakeTurn()
       }) as unknown as StartTurnDeps["startClaudeTurn"],
-      recreateActiveTurnFromSession: mock(() => ghost),
     })
     // The claude path delivers its prompt through the SDK session queue.
     deps.claudeSessions.set("chat-1", {
@@ -458,7 +451,45 @@ describe("startTurnForChat — starting-turn marker", () => {
     // Never resolves — this IS the parked canUseTool continuation. Do not await.
     void captured!({ tool })
 
-    expect(ghost.pendingTool?.toolUseId).toBe("toolu_x")
-    expect(ghost.status).toBe("waiting_for_user")
+    expect(deps.pendingTools.get("chat-1")?.toolUseId).toBe("toolu_x")
+    expect(deps.activeTurns.has("chat-1")).toBe(false)
+  })
+
+  test("onToolRequest during a live turn parks in the slot and flips the turn to waiting_for_user", async () => {
+    let captured: ((request: { tool: unknown }) => Promise<unknown>) | null = null
+
+    const deps = makeDeps({
+      startClaudeTurn: mock(async (args: { onToolRequest: (r: { tool: unknown }) => Promise<unknown> }) => {
+        captured = args.onToolRequest
+        return makeFakeTurn()
+      }) as unknown as StartTurnDeps["startClaudeTurn"],
+    })
+    deps.claudeSessions.set("chat-1", {
+      id: "sess-1",
+      chatId: "chat-1",
+      nextPromptSeq: 0,
+      pendingPromptSeqs: [],
+      cancelledResultPending: 0,
+      lastUsedAt: 0,
+      session: { sendPrompt: async () => {} },
+    } as unknown as ClaudeSessionState)
+
+    await startTurnForChat(deps, makeArgs({ provider: "claude", model: "claude-opus-4-5" }))
+    expect(captured).not.toBeNull()
+    const active = deps.activeTurns.get("chat-1")
+    expect(active).toBeDefined()
+
+    const tool = {
+      kind: "tool",
+      toolKind: "ask_user_question",
+      toolName: "ask_user_question",
+      toolId: "toolu_live",
+      input: { questions: [] },
+    }
+    void captured!({ tool })
+
+    expect(deps.pendingTools.get("chat-1")?.toolUseId).toBe("toolu_live")
+    expect(active?.status).toBe("waiting_for_user")
+    expect(active?.waitStartedAt).not.toBeNull()
   })
 })

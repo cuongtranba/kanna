@@ -14,6 +14,7 @@ import type { AgentProvider, TranscriptEntry } from "../shared/types"
 import type { AnyValue } from "../shared/errors"
 import { isRecord } from "../shared/errors"
 import type { ActiveTurn } from "./claude-session-state"
+import type { PendingToolSlots } from "./pending-tool-slot"
 import { timestamped, normalizeToolContent } from "./claude-message-normalizer"
 
 // ---------------------------------------------------------------------------
@@ -55,6 +56,9 @@ export interface ToolRespondDeps {
   /** The shared in-memory active-turns map owned by AgentCoordinator. */
   activeTurns: ToolRespondActiveTurnsMap
 
+  /** The per-chat parked AskUserQuestion / ExitPlanMode continuations. */
+  pendingTools: PendingToolSlots
+
   /** Persists transcript entries and session tokens. */
   store: ToolRespondStore
 
@@ -70,6 +74,11 @@ export interface ToolRespondDeps {
  * Resolve a pending tool request (AskUserQuestion / ExitPlanMode) coming back
  * from the UI.
  *
+ * The parked continuation lives in the per-chat PendingToolSlots, NOT on an
+ * ActiveTurn — a request parked outside any Kanna turn (SDK self-wake) is
+ * answered through exactly the same path. When a turn IS live, its composer
+ * status flips back to running.
+ *
  * @throws if there is no pending tool for the chat or the toolUseId does not
  *         match.
  */
@@ -77,15 +86,13 @@ export async function respondTool(
   deps: ToolRespondDeps,
   command: RespondToolCommand,
 ): Promise<void> {
-  const { activeTurns, store, emitStateChange } = deps
+  const { activeTurns, pendingTools, store, emitStateChange } = deps
 
-  const active = activeTurns.get(command.chatId)
-  if (!active || !active.pendingTool) {
+  if (!pendingTools.has(command.chatId)) {
     throw new Error("No pending tool request")
   }
-
-  const pending = active.pendingTool
-  if (pending.toolUseId !== command.toolUseId) {
+  const pending = pendingTools.take(command.chatId, command.toolUseId)
+  if (!pending) {
     throw new Error("Tool response does not match active request")
   }
 
@@ -98,9 +105,11 @@ export async function respondTool(
     }),
   )
 
-  active.pendingTool = null
-  active.status = "running"
-  active.waitStartedAt = null
+  const active = activeTurns.get(command.chatId)
+  if (active) {
+    active.status = "running"
+    active.waitStartedAt = null
+  }
 
   if (pending.tool.toolKind === "exit_plan_mode") {
     const resultRec: Record<string, unknown> = isRecord(command.result)
@@ -112,14 +121,14 @@ export async function respondTool(
       typeof resultRec.message === "string" ? resultRec.message : ""
 
     if (confirmed && clearContext) {
-      await store.setSessionTokenForProvider(command.chatId, active.provider, null)
+      await store.setSessionTokenForProvider(command.chatId, pending.provider, null)
       await store.appendMessage(
         command.chatId,
         timestamped({ kind: "context_cleared" }),
       )
     }
 
-    if (active.provider === "codex") {
+    if (pending.provider === "codex" && active) {
       active.postToolFollowUp = confirmed
         ? {
             content: message

@@ -64,7 +64,6 @@ function makeActiveTurn(overrides: Partial<ActiveTurn> = {}, turn?: HarnessTurn)
     model: "gpt-4o",
     planMode: false,
     status: "running",
-    pendingTool: null,
     postToolFollowUp: null,
     hasFinalResult: false,
     cancelRequested: false,

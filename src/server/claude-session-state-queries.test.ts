@@ -10,7 +10,8 @@ import {
   sweepIdleClaudeSessions,
   type SessionStateQueryDeps,
 } from "./claude-session-state-queries"
-import type { ActiveTurn, ClaudeSessionState, PendingToolRequest, StartingTurn } from "./claude-session-state"
+import type { ActiveTurn, ClaudeSessionState, StartingTurn } from "./claude-session-state"
+import { PendingToolSlots, type ParkedTool } from "./pending-tool-slot"
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -50,7 +51,6 @@ function makeActiveTurn(overrides?: Partial<ActiveTurn>): ActiveTurn {
     model: "claude-opus-4-5",
     planMode: false,
     status: "running",
-    pendingTool: null,
     postToolFollowUp: null,
     hasFinalResult: false,
     cancelRequested: false,
@@ -75,6 +75,7 @@ function makeDeps(overrides?: Partial<SessionStateQueryDeps>): SessionStateQuery
   return {
     activeTurns: new Map(),
     startingTurns: new Map(),
+    pendingTools: new PendingToolSlots(),
     claudeSessions: new Map(),
     drainingStreams: new Map(),
     isClaudeSdkProvider: mock(() => false),
@@ -209,36 +210,71 @@ describe("getWaitStartedAtByChatId", () => {
 // getPendingTool
 // ---------------------------------------------------------------------------
 
+function parkTool(slots: PendingToolSlots, chatId: string, toolUseId: string, parkedAt = Date.now()): void {
+  slots.park(chatId, {
+    toolUseId,
+    provider: "claude",
+    tool: { toolKind: "ask_user_question" } as ParkedTool["tool"],
+    parkedAt,
+    resolve: () => undefined,
+  })
+}
+
 describe("getPendingTool", () => {
-  it("returns null when chatId has no active turn", () => {
+  it("returns null when nothing is parked for the chat", () => {
     const deps = makeDeps()
     expect(getPendingTool(deps, "chat-x")).toBeNull()
-  })
-
-  it("returns null when active turn has no pending tool", () => {
-    const deps = makeDeps({
-      activeTurns: new Map([["chat-1", makeActiveTurn({ pendingTool: null })]]),
-    })
     expect(getPendingTool(deps, "chat-1")).toBeNull()
   })
 
-  it("returns PendingToolSnapshot when pending tool is present", () => {
-    const deps = makeDeps({
-      activeTurns: new Map([
-        [
-          "chat-1",
-          makeActiveTurn({
-            pendingTool: {
-              toolUseId: "tool-123",
-              tool: { toolKind: "ask_user_question" } as PendingToolRequest["tool"],
-              resolve: () => undefined,
-            },
-          }),
-        ],
-      ]),
+  it("returns PendingToolSnapshot when a request is parked — with or without a turn", () => {
+    const slots = new PendingToolSlots()
+    parkTool(slots, "chat-1", "tool-123")
+    const deps = makeDeps({ pendingTools: slots })
+    expect(getPendingTool(deps, "chat-1")).toEqual({ toolUseId: "tool-123", toolKind: "ask_user_question" })
+
+    const withTurn = makeDeps({
+      pendingTools: slots,
+      activeTurns: new Map([["chat-1", makeActiveTurn()]]),
     })
-    const result = getPendingTool(deps, "chat-1")
-    expect(result).toEqual({ toolUseId: "tool-123", toolKind: "ask_user_question" })
+    expect(getPendingTool(withTurn, "chat-1")).toEqual({ toolUseId: "tool-123", toolKind: "ask_user_question" })
+  })
+})
+
+describe("pending-tool overlays", () => {
+  it("getActiveStatuses reports waiting_for_user for an out-of-turn parked request", () => {
+    const slots = new PendingToolSlots()
+    parkTool(slots, "chat-1", "tool-123")
+    const deps = makeDeps({ pendingTools: slots })
+    expect(getActiveStatuses(deps).get("chat-1")).toBe("waiting_for_user")
+  })
+
+  it("getActiveStatuses lets a live turn's status win over the slot overlay", () => {
+    const slots = new PendingToolSlots()
+    parkTool(slots, "chat-1", "tool-123")
+    const deps = makeDeps({
+      pendingTools: slots,
+      activeTurns: new Map([["chat-1", makeActiveTurn({ status: "running" })]]),
+    })
+    expect(getActiveStatuses(deps).get("chat-1")).toBe("running")
+  })
+
+  it("getWaitStartedAtByChatId surfaces parkedAt for an out-of-turn parked request", () => {
+    const slots = new PendingToolSlots()
+    parkTool(slots, "chat-1", "tool-123", 4242)
+    const deps = makeDeps({ pendingTools: slots })
+    expect(getWaitStartedAtByChatId(deps).get("chat-1")).toBe(4242)
+  })
+
+  it("isClaudeSessionIdle never reaps a session with a parked request", () => {
+    const slots = new PendingToolSlots()
+    parkTool(slots, "chat-1", "tool-123")
+    const session = makeSession({ lastUsedAt: 0 })
+    const deps = makeDeps({
+      pendingTools: slots,
+      claudeSessions: new Map([["chat-1", session]]),
+    })
+    expect(isClaudeSessionIdle(deps, "chat-1", session, Date.now())).toBe(false)
   })
 })
 

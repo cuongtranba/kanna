@@ -62,6 +62,8 @@ export interface SessionLifecycleDeps {
   claudeSessions: Map<string, ClaudeSessionState>
   /** Active turns map — only `.has()` is called. */
   activeTurns: Pick<Map<string, ActiveTurn>, "has">
+  /** Parked tool continuations — only `.has()` is called. */
+  pendingTools: { has(chatId: string): boolean }
 
   /** OAuth token pool, or null when no pool is configured. */
   oauthPool: LifecycleOAuthPool | null
@@ -228,6 +230,9 @@ export function enforceClaudeSessionBudget(
     .filter(([chatId, session]) => (
       chatId !== protectedChatId
       && !deps.activeTurns.has(chatId)
+      // A parked question blocks the worker inside canUseTool; evicting the
+      // session would orphan the continuation the user is about to answer.
+      && !deps.pendingTools.has(chatId)
       && session.pendingPromptSeqs.length === 0
       && !hasLiveWorkflow(deps, chatId)
       // Any non-empty task set protects from eviction — including an

@@ -10,6 +10,7 @@ import {
   mergeBackgroundTaskSnapshot,
   toolCallDescription,
   positiveIntegerFromEnv,
+  findLastUserMessageId,
 } from "./claude-prompt-helpers"
 import type { ChatAttachment, NormalizedToolCall } from "../shared/types"
 
@@ -353,5 +354,22 @@ describe("mergeBackgroundTaskSnapshot", () => {
     ])
     const next = mergeBackgroundTaskSnapshot(previous, ["t1"], undefined, 999)
     expect(next.get("t1")).toEqual({ taskType: "local_bash", description: "Watch deploy", startedAt: 5 })
+  })
+})
+
+describe("findLastUserMessageId", () => {
+  test("returns the most recent user_prompt id", () => {
+    const messages = [
+      { kind: "user_prompt", _id: "m1" },
+      { kind: "assistant_text", _id: "m2" },
+      { kind: "user_prompt", _id: "m3" },
+      { kind: "tool_call", _id: "m4" },
+    ]
+    expect(findLastUserMessageId(messages)).toBe("m3")
+  })
+
+  test("returns null when no user prompts exist", () => {
+    expect(findLastUserMessageId([{ kind: "assistant_text", _id: "m1" }])).toBeNull()
+    expect(findLastUserMessageId([])).toBeNull()
   })
 })

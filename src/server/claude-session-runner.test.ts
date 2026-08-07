@@ -14,6 +14,7 @@ import { describe, test, expect } from "bun:test"
 import { runClaudeSession } from "./claude-session-runner"
 import type { RunClaudeSessionDeps } from "./claude-session-runner"
 import type { ClaudeSessionState, ActiveTurn } from "./claude-session-state"
+import { PendingToolSlots, type ParkedTool } from "./pending-tool-slot"
 import type { HarnessEvent } from "./harness-types"
 import type { TranscriptEntry } from "../shared/types"
 
@@ -78,7 +79,6 @@ function makeActiveTurn(chatId: string, overrides: Partial<ActiveTurn> = {}): Ac
     model: "claude-opus-4",
     planMode: false,
     status: "starting",
-    pendingTool: null,
     postToolFollowUp: null,
     hasFinalResult: false,
     cancelRequested: false,
@@ -132,6 +132,7 @@ function makeDeps(session: ClaudeSessionState, overrides: Partial<RunClaudeSessi
     openrouterFirstEntryTimeoutMs: 30000,
     claudeSessions: sessions,
     activeTurns: new Map(),
+    pendingTools: new PendingToolSlots(),
     oauthPool: null,
     claudeLimitDetector: {
       detect: () => null,
@@ -769,18 +770,19 @@ describe("runClaudeSession", () => {
 })
 
 // ---------------------------------------------------------------------------
-// Ghost turns + parked pendingTool
+// Out-of-turn parked requests + self-wake lifecycle
 //
 // When the SDK self-resumes after a background-task notification it calls
-// `canUseTool` outside any Kanna turn. `onToolRequest` rebuilds a minimal
-// "ghost" ActiveTurn (claude-session-rebuild.ts) and parks the SDK's resolve
-// fn on it. That ghost has no `claudePromptSeq`, so the result matcher below
-// used to claim it (`undefined ?? null === null`) and delete it, orphaning the
-// resolve — the SDK worker then blocks inside canUseTool forever and
-// respondTool throws "No pending tool request".
+// `canUseTool` outside any Kanna turn. The continuation parks in the
+// per-chat PendingToolSlots — NO ActiveTurn is fabricated. The predecessor
+// design rebuilt a "ghost" ActiveTurn to hold the resolve; every consumer of
+// `activeTurns` then had to special-case it, and the one that didn't (the
+// delete path) leaked the ghost forever: chat stuck "running", sends queued
+// with no drain, selfWakeActive wedged true, idle reaper blocked
+// (session 04fb43c9-fa05-406b-b552-c6e8c077c734).
 // ---------------------------------------------------------------------------
 
-/** Minimal ask_user_question tool call satisfying PendingToolRequest.tool. */
+/** Minimal ask_user_question tool call satisfying ParkedTool.tool. */
 function askUserQuestionTool(toolId: string) {
   return {
     kind: "tool",
@@ -788,54 +790,108 @@ function askUserQuestionTool(toolId: string) {
     toolName: "ask_user_question",
     toolId,
     input: { questions: [] },
-  } as unknown as NonNullable<ActiveTurn["pendingTool"]>["tool"]
+  } as unknown as ParkedTool["tool"]
 }
 
-describe("runClaudeSession — ghost turn / pending-tool orphaning", () => {
-  test("a result does not finalize a session-rebuilt ghost turn holding a pendingTool", async () => {
+function parkOutOfTurn(
+  slots: PendingToolSlots,
+  chatId: string,
+  toolId: string,
+  resolve: (value: unknown) => void = () => {},
+): void {
+  slots.park(chatId, {
+    toolUseId: toolId,
+    provider: "claude",
+    tool: askUserQuestionTool(toolId),
+    parkedAt: Date.now(),
+    resolve,
+  })
+}
+
+function fakeToolCallEntry(): TranscriptEntry {
+  return {
+    _id: "entry-tc",
+    createdAt: Date.now(),
+    kind: "tool_call",
+    tool: {
+      kind: "tool",
+      toolKind: "other",
+      toolName: "Bash",
+      toolId: "toolu_bash",
+      input: {},
+    },
+  } as unknown as TranscriptEntry
+}
+
+describe("runClaudeSession — self-wake + out-of-turn parked requests", () => {
+  test("regression 04fb43c9: a self-wake with an answered question ends fully idle and drains the queue", async () => {
+    // The incident sequence: background Agent completes → SDK self-wakes and
+    // streams entries with no ActiveTurn → model asks AskUserQuestion
+    // (parked out-of-turn) → user answers (slot taken) → wake keeps working
+    // → terminal result. Afterward the chat must be COMPLETELY idle: no
+    // turn, no wedged selfWakeActive, and the queued user message drains.
     const session = makeSession({ pendingPromptSeqs: [] })
-    const active = makeActiveTurn(session.chatId, {
-      claudePromptSeq: undefined,
-      rebuiltFromSession: true,
-      status: "waiting_for_user",
-      pendingTool: {
-        toolUseId: "toolu_ghost",
-        tool: askUserQuestionTool("toolu_ghost"),
-        resolve: () => {},
-      },
-    })
+    const pendingTools = new PendingToolSlots()
+    const drainedFor: string[] = []
     const finishedFor: string[] = []
 
     const deps = makeDeps(session, {
-      activeTurns: new Map([[session.chatId, active]]),
+      pendingTools,
+      maybeStartNextQueuedMessage: async (chatId) => { drainedFor.push(chatId) },
       store: {
         ...makeDeps(session).store,
         recordTurnFinished: async (chatId) => { finishedFor.push(chatId) },
       },
     })
-    session.session.stream = fakeStream([{ type: "entry", entry: fakeResultEntry(false) }] as unknown as HarnessEvent[])
+
+    let answered: unknown = null
+    session.session.stream = (async function* () {
+      yield { type: "entry", entry: fakeToolCallEntry() }
+      parkOutOfTurn(pendingTools, session.chatId, "toolu_q", (v) => { answered = v })
+      const taken = pendingTools.take(session.chatId, "toolu_q")
+      taken?.resolve({ answers: { q1: "brides" } })
+      yield { type: "entry", entry: fakeToolCallEntry() }
+      yield { type: "entry", entry: fakeResultEntry(false) }
+    })() as AsyncIterable<HarnessEvent>
 
     await runClaudeSession(deps, session)
 
-    // The ghost is not a finalize candidate: it never sent a prompt.
+    expect(answered).toMatchObject({ answers: { q1: "brides" } })
+    expect(session.selfWakeActive).toBe(false)
+    expect(deps.activeTurns.size).toBe(0)
+    expect(pendingTools.has(session.chatId)).toBe(false)
     expect(finishedFor).toHaveLength(0)
+    expect(drainedFor).toContain(session.chatId)
   })
 
-  test("a parked pendingTool is settled, not dropped, when the stream ends", async () => {
+  test("a wake result defensively discards a still-parked request", async () => {
     const session = makeSession({ pendingPromptSeqs: [] })
+    const pendingTools = new PendingToolSlots()
     const resolved: unknown[] = []
-    const active = makeActiveTurn(session.chatId, {
-      claudePromptSeq: undefined,
-      rebuiltFromSession: true,
-      status: "waiting_for_user",
-      pendingTool: {
-        toolUseId: "toolu_ghost",
-        tool: askUserQuestionTool("toolu_ghost"),
-        resolve: (value: unknown) => { resolved.push(value) },
-      },
-    })
 
-    const deps = makeDeps(session, { activeTurns: new Map([[session.chatId, active]]) })
+    const deps = makeDeps(session, { pendingTools })
+    session.session.stream = (async function* () {
+      yield { type: "entry", entry: fakeToolCallEntry() }
+      parkOutOfTurn(pendingTools, session.chatId, "toolu_q", (v) => { resolved.push(v) })
+      yield { type: "entry", entry: fakeResultEntry(false) }
+    })() as AsyncIterable<HarnessEvent>
+
+    await runClaudeSession(deps, session)
+
+    expect(resolved).toHaveLength(1)
+    expect(resolved[0]).toMatchObject({ discarded: true })
+    expect(pendingTools.has(session.chatId)).toBe(false)
+    expect(session.selfWakeActive).toBe(false)
+  })
+
+  test("a parked continuation is settled, not dropped, when the stream ends", async () => {
+    const session = makeSession({ pendingPromptSeqs: [] })
+    const pendingTools = new PendingToolSlots()
+    const resolved: unknown[] = []
+    parkOutOfTurn(pendingTools, session.chatId, "toolu_q", (v) => { resolved.push(v) })
+    session.selfWakeActive = true
+
+    const deps = makeDeps(session, { pendingTools })
     session.session.stream = fakeStream([])
 
     await runClaudeSession(deps, session)
@@ -843,7 +899,28 @@ describe("runClaudeSession — ghost turn / pending-tool orphaning", () => {
     // Never leave the SDK worker blocked inside canUseTool.
     expect(resolved).toHaveLength(1)
     expect(resolved[0]).toMatchObject({ discarded: true })
-    expect(active.pendingTool).toBeNull()
+    expect(pendingTools.has(session.chatId)).toBe(false)
+    expect(session.selfWakeActive).toBe(false)
+  })
+
+  test("a real turn's finalize settles a parked request before dropping the turn", async () => {
+    const session = makeSession({ pendingPromptSeqs: [5] })
+    const pendingTools = new PendingToolSlots()
+    const resolved: unknown[] = []
+    parkOutOfTurn(pendingTools, session.chatId, "toolu_q", (v) => { resolved.push(v) })
+    const active = makeActiveTurn(session.chatId, { claudePromptSeq: 5 })
+
+    const deps = makeDeps(session, {
+      pendingTools,
+      activeTurns: new Map([[session.chatId, active]]),
+    })
+    session.session.stream = fakeStream([{ type: "entry", entry: fakeResultEntry(false) }] as unknown as HarnessEvent[])
+
+    await runClaudeSession(deps, session)
+
+    expect(resolved).toHaveLength(1)
+    expect(resolved[0]).toMatchObject({ discarded: true })
+    expect(deps.activeTurns.size).toBe(0)
   })
 
   test("a real turn with a matching prompt-seq still finalizes", async () => {
