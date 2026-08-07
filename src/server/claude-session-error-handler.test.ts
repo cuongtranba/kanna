@@ -81,7 +81,6 @@ function makeActiveTurn(chatId = "chat-1"): ActiveTurn {
     model: "claude-opus-4",
     planMode: false,
     status: "running",
-    pendingTool: null,
     postToolFollowUp: null,
     hasFinalResult: false,
     cancelRequested: false,

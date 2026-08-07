@@ -7,15 +7,8 @@
  * import values from agent.ts. Both sides import these type-only definitions
  * from this neutral file instead.
  */
-import type { AgentProvider, KannaStatus, NormalizedToolCall, SlashCommand } from "../shared/types"
-import type { AnyValue } from "../shared/errors"
+import type { AgentProvider, KannaStatus, SlashCommand } from "../shared/types"
 import type { ClaudeSessionHandle, HarnessTurn } from "./harness-types"
-
-export interface PendingToolRequest {
-  toolUseId: string
-  tool: NormalizedToolCall & { toolKind: "ask_user_question" | "exit_plan_mode" }
-  resolve: (result: AnyValue) => void
-}
 
 /**
  * Metadata for one live Claude-Code background task on this session.
@@ -60,24 +53,11 @@ export interface ActiveTurn {
   provider: AgentProvider
   turn: HarnessTurn
   claudePromptSeq?: number
-  /**
-   * True when this turn was rebuilt from a live session by
-   * `recreateActiveTurnFromSession` — the SDK calls `canUseTool` outside any
-   * Kanna turn when it self-resumes after a background-task notification.
-   *
-   * A ghost never sent a prompt, so it carries no `claudePromptSeq`. It must
-   * never be treated as a finalize candidate: the result matcher's
-   * `active.claudePromptSeq ?? null` coerced `undefined` to `null`, matched
-   * any null completed seq, and deleted the very turn holding a parked
-   * `pendingTool` — orphaning the SDK's resolve fn and wedging the chat.
-   */
-  rebuiltFromSession?: true
   model: string
   effort?: string
   serviceTier?: "fast"
   planMode: boolean
   status: KannaStatus
-  pendingTool: PendingToolRequest | null
   postToolFollowUp: { content: string; planMode: boolean } | null
   hasFinalResult: boolean
   cancelRequested: boolean

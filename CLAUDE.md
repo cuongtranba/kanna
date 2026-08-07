@@ -233,36 +233,47 @@ still **exclusively** gates the 8 built-in shims
 (`read/glob/grep/bash/edit/write/webfetch/websearch`) and the SDK
 driver's `canUseTool` routing — those are never force-enabled under PTY.
 
-## Pending-tool lifecycle invariant (legacy `canUseTool` path)
+## Pending-tool lifecycle (legacy `canUseTool` path — PendingToolSlots)
 
 On the legacy path the parked request is nothing but an in-memory promise:
-`ActiveTurn.pendingTool.resolve` IS the SDK worker's `canUseTool`
-continuation. Drop it and that worker blocks forever, `respondTool` throws
-`"No pending tool request"`, and the chat is wedged with no way back —
-under the SDK driver `interrupt()` is in-band, so the session survives and
-nothing else frees it.
+the parked `resolve` IS the SDK worker's `canUseTool` continuation. Drop it
+and that worker blocks forever, `respondTool` throws `"No pending tool
+request"`, and the chat is wedged with no way back — under the SDK driver
+`interrupt()` is in-band, so the session survives and nothing else frees it.
 
-**An `ActiveTurn` is NEVER removed from `activeTurns` while holding an
-unresolved `pendingTool`.** `settlePendingTool()`
-(`claude-session-runner.ts`) enforces this at both drop sites; `cancelChat`
-resolves for **every** provider and tool kind (not just codex +
-`exit_plan_mode`, which is what previously made Stop unable to unwedge a
-parked claude turn).
+**The parked continuation lives in `PendingToolSlots`
+(`src/server/pending-tool-slot.ts`), keyed by chatId and INDEPENDENT of any
+`ActiveTurn`** (adr-20260807-pending-tool-slot). There is no
+`ActiveTurn.pendingTool` field and no ghost turn: when the SDK self-resumes
+after a background-task notification and calls `canUseTool` outside any
+Kanna turn, the request simply parks in the slot. The predecessor design
+fabricated a ghost `ActiveTurn` (`rebuiltFromSession`) to hold the resolve;
+every consumer of `activeTurns` then had to special-case it, and the one
+that didn't leaked the ghost forever — chat stuck "running", sends queued
+with no drain, `selfWakeActive` wedged, idle reaper blocked (session
+04fb43c9). Do NOT reintroduce a turn-attached pending tool.
 
-Settling uses `discardedToolResult` → `{discarded: true}`, and
-`buildCanUseTool` short-circuits that to `behavior: "deny"`. Without the
-short-circuit its legacy branch maps *any* result to `behavior: "allow"`,
-so the SDK would actually execute `AskUserQuestion` with empty answers and
-overwrite the "Discarded" marker.
+Slot transitions: `park` (dedup — an occupied slot is discarded first),
+`take`/`takeAny` (caller settles, used by `respondTool`/`cancelChat` so the
+transcript append precedes the worker resuming), `discard` (settle-now, used
+at terminal results and session death). Settling uses `discardedToolResult`
+→ `{discarded: true}`, and `buildCanUseTool` short-circuits that to
+`behavior: "deny"` — without the short-circuit its legacy branch maps *any*
+result to `behavior: "allow"`, so the SDK would actually execute
+`AskUserQuestion` with empty answers and overwrite the "Discarded" marker.
 
-**Ghost turns.** When the SDK self-resumes after a background-task
-notification it calls `canUseTool` outside any Kanna turn;
-`recreateActiveTurnFromSession` rebuilds a minimal `ActiveTurn` and parks
-the resolve on it. A ghost sent no prompt, so it carries no
-`claudePromptSeq` and is flagged `rebuiltFromSession`. The result matcher
-must never claim it — it used to, because `active.claudePromptSeq ?? null`
-coerced `undefined` to `null` and matched any null completed seq, deleting
-the very turn holding the parked resolve.
+Settle sites: `cancelChat` (FIRST, turn-independent — one Stop frees a
+question parked mid-turn or mid-self-wake), the runner's real-turn result
+finalize, the self-wake disarm branch (which also drains the queued-message
+queue), and the runner's `finally` (session death). The reaper
+(`isClaudeSessionIdle`) and budget enforcer never close a session whose chat
+has a parked slot — the worker is blocked inside `canUseTool`, so
+`lastUsedAt` stales while the user reads the question.
+
+**Busy derivation is single-sourced:** `isChatBusy`
+(`claude-session-state-queries.ts`) = live turn ∨ booting turn ∨ parked
+slot ∨ streaming self-wake. The send gate and `maybeStartNextQueuedMessage`
+both consume it; never combine the underlying maps ad-hoc.
 
 Optional `KANNA_SERVER_SECRET` env var stabilises HMAC tool-request ids
 across the process lifetime. Cross-restart idempotency does not matter

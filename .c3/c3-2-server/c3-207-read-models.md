@@ -1,7 +1,7 @@
 ---
 id: c3-207
 c3-version: 4
-c3-seal: a3b19e728482deb1bd44b731420cf1b525b58a4f2766bf588643a44886c086a9
+c3-seal: d0c98004912a63b929ee35eb18654a5d284b50dfc347da3301bb36a3c20ad6e3
 title: read-models
 type: component
 category: foundation
@@ -67,7 +67,7 @@ Subscribes to event-store appends, derives per-feature views (sidebar list, chat
 | --- | --- | --- | --- | --- |
 | subscribe(topic) | OUT | Returns latest snapshot + push stream | c3-208 | src/server/read-models.ts |
 | Projection map | IN | Event-store appends drive projection update | c3-206 | src/server/read-models.ts |
-| getLoopTracking(chatId) | IN | Injected reader supplying the armed loop's tracking-file view; defaults to `() => null` so the projection stays pure and callers without the registry are unchanged | c3-208 | src/server/read-models.ts |
+| getLoopTracking(chatId) | IN | Injected reader supplying the armed loop's tracking-file view; defaults to () => null so the projection stays pure and callers without the registry are unchanged | c3-208 | src/server/read-models.ts |
 
 ## Change Safety
 

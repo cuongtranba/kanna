@@ -40,6 +40,7 @@ const NO_ATTACHMENTS: ChatAttachment[] = []
 type DepsOptions = {
   activeChatIds?: string[]
   startingChatIds?: string[]
+  pendingToolChatIds?: string[]
   queuedMessages?: QueuedChatMessage[]
   chatProvider?: "claude" | "openrouter" | "codex" | null
   chatCompactFailures?: number
@@ -51,13 +52,14 @@ type DepsOptions = {
   removedMessages?: Array<{ chatId: string; id: string }>
   createdChats?: string[]
   analyticsEvents?: string[]
-  session?: { backgroundTasks: Map<string, { taskType: null; description: null; startedAt: number }>; backgroundTaskDeadlineAt: number; backgroundTaskWakeCount: number } | null
+  session?: { backgroundTasks: Map<string, { taskType: null; description: null; startedAt: number }>; backgroundTaskDeadlineAt: number; backgroundTaskWakeCount: number; selfWakeActive: boolean } | null
   customModels?: readonly CustomModelEntry[]
 }
 
 function makeDeps(opts: DepsOptions = {}): SendCommandDeps & { startTurnCalled: StartTurnForChatArgs[] } {
   const activeChatIds = new Set(opts.activeChatIds ?? [])
   const startingChatIds = new Set(opts.startingChatIds ?? [])
+  const pendingToolChatIds = new Set(opts.pendingToolChatIds ?? [])
   const queuedMessages: QueuedChatMessage[] = opts.queuedMessages ?? []
   const stopLoopCalled = opts.stopLoopCalled ?? []
   const emitStateCalled = opts.emitStateCalled ?? []
@@ -109,6 +111,9 @@ function makeDeps(opts: DepsOptions = {}): SendCommandDeps & { startTurnCalled: 
     },
     startingTurns: {
       has: (chatId: string) => startingChatIds.has(chatId),
+    },
+    pendingTools: {
+      has: (chatId: string) => pendingToolChatIds.has(chatId),
     },
     claudeSessions: {
       get: (_chatId: string) => opts.session ?? undefined,
@@ -428,6 +433,7 @@ describe("sendCommand", () => {
       backgroundTasks: new Map([["task-1", { taskType: null, description: null, startedAt: 0 }]]),
       backgroundTaskDeadlineAt: 9999,
       backgroundTaskWakeCount: 2,
+      selfWakeActive: false,
     }
     const d = makeDeps({ session })
     const before = Date.now()

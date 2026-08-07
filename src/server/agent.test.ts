@@ -5939,7 +5939,7 @@ describe("AgentCoordinator PTY driver selection", () => {
 // ── Late tool request (SDK self-resume) regression ─────────────────────────────
 
 describe("AgentCoordinator late tool request", () => {
-  test("onToolRequest fired after result event re-promotes activeTurn instead of throwing", async () => {
+  test("onToolRequest fired after result event parks in the slot — no ghost turn — and respondTool answers it", async () => {
     const events = new AsyncEventQueue<any>()
     const store = createFakeStore()
     let capturedOnToolRequest: ((request: any) => Promise<unknown>) | null = null
@@ -6039,9 +6039,13 @@ describe("AgentCoordinator late tool request", () => {
       rejected = true
     })
 
-    await waitFor(() => coordinator.activeTurns.get("chat-1")?.pendingTool?.toolUseId === "t-late")
+    await waitFor(() => coordinator.pendingTools.get("chat-1")?.toolUseId === "t-late")
     expect(rejected).toBe(false)
-    expect(coordinator.activeTurns.get("chat-1")?.status).toBe("waiting_for_user")
+    expect(coordinator.activeTurns.has("chat-1")).toBe(false)
+    expect(coordinator.getPendingTool("chat-1")).toEqual({
+      toolUseId: "t-late",
+      toolKind: "ask_user_question",
+    })
 
     await coordinator.respondTool({
       type: "chat.respondTool",

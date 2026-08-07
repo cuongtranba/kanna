@@ -25,25 +25,7 @@ import {
 import { timestamped } from "./claude-message-normalizer"
 import { logClaudeSteer } from "./claude-steer-log"
 import type { ClaudeSessionState, ActiveTurn } from "./claude-session-state"
-import { discardedToolResult } from "./claude-sdk-queue"
-
-/**
- * Settle a parked `pendingTool` before its ActiveTurn is dropped.
- *
- * Invariant: an ActiveTurn is NEVER removed from `activeTurns` while holding
- * an unresolved `pendingTool`. The resolve fn is the SDK worker's `canUseTool`
- * continuation — drop it and that worker blocks forever, `respondTool` throws
- * "No pending tool request", and the chat is wedged with no way back.
- *
- * Clears the field before resolving so a second call is a no-op (resolving an
- * already-settled promise is inert anyway, but this keeps the state honest).
- */
-function settlePendingTool(active: ActiveTurn | undefined): void {
-  const pending = active?.pendingTool
-  if (!active || !pending) return
-  active.pendingTool = null
-  pending.resolve(discardedToolResult(pending.tool))
-}
+import type { PendingToolSlots } from "./pending-tool-slot"
 
 // Bounded FIFO for toolId → description lookups feeding background-task labels.
 const RECENT_TOOL_DESCRIPTION_LIMIT = 64
@@ -103,6 +85,7 @@ export interface RunClaudeSessionDeps {
   openrouterFirstEntryTimeoutMs: number
   claudeSessions: Map<string, ClaudeSessionState>
   activeTurns: Map<string, ActiveTurn>
+  pendingTools: PendingToolSlots
   oauthPool: OAuthPoolReleaseable | null
   claudeLimitDetector: LimitDetector
   claudeAuthErrorDetector: AuthErrorDetectable
@@ -294,7 +277,14 @@ export async function runClaudeSession(
         if (event.entry.kind === "result") {
           if (session.selfWakeActive) {
             session.selfWakeActive = false
+            // The wake turn is over: settle any request it parked (a blocked
+            // canUseTool normally prevents a result, so this is defensive)
+            // and hand the chat to the next queued message — the send gate
+            // queues user messages while a self-wake streams, and this
+            // terminal result is the only signal that frees them.
+            deps.pendingTools.discard(session.chatId)
             deps.emitStateChange(session.chatId)
+            await deps.maybeStartNextQueuedMessage(session.chatId)
           }
         } else if (SELF_WAKE_ARMING_KINDS.has(event.entry.kind) && !session.selfWakeActive) {
           session.selfWakeActive = true
@@ -433,12 +423,9 @@ export async function runClaudeSession(
       if (
         event.entry.kind === "result"
         && active
-        // A ghost turn (rebuilt because the SDK self-resumed and called
-        // canUseTool outside any Kanna turn) never sent a prompt, so it is
-        // never the turn this result belongs to. Both conjuncts express the
-        // same invariant — no prompt, no finalize — the flag semantically,
-        // the null-check defensively for any future seq-less producer.
-        && !active.rebuiltFromSession
+        // No prompt, no finalize: a result can only complete a turn that
+        // actually sent one. The null-check guards any seq-less producer
+        // from matching a null completed seq.
         && active.claudePromptSeq != null
         && completedClaudePromptSeq === active.claudePromptSeq
       ) {
@@ -492,7 +479,7 @@ export async function runClaudeSession(
           // notification is a follow-up ADR. Model can delegate a status-check
           // subagent if it needs event-driven workflow wake.
         }
-        settlePendingTool(active)
+        deps.pendingTools.discard(session.chatId)
         deps.activeTurns.delete(session.chatId)
         // Turn-scoped reservation: release on turn end so other chats can
         // claim the same token while this chat is idle. The next turn for
@@ -610,9 +597,13 @@ export async function runClaudeSession(
           log.warn("[kanna/agent] stream ended with no final result — recording turn failure", { chatId: session.chatId, sessionId: session.id })
           await deps.store.recordTurnFailed(session.chatId, "session stream ended without a result")
         }
-        settlePendingTool(active)
         deps.activeTurns.delete(session.chatId)
       }
+      // The session's provider worker dies with the stream — any parked
+      // canUseTool continuation is unreachable from here on. Settle it so
+      // the question card clears and the chat cannot report busy forever.
+      deps.pendingTools.discard(session.chatId)
+      if (session.selfWakeActive) session.selfWakeActive = false
     }
     session.session.close()
     deps.emitStateChange(session.chatId)

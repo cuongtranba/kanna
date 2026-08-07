@@ -8,6 +8,7 @@
 import { describe, test, expect, beforeEach } from "bun:test"
 import { cancelChat, type CancelHandlerDeps } from "./claude-cancel-handler"
 import type { ActiveTurn, ClaudeSessionState, StartingTurn } from "./claude-session-state"
+import { PendingToolSlots, type ParkedTool } from "./pending-tool-slot"
 import type { HarnessTurn, ClaudeSessionHandle } from "./harness-types"
 import type { TranscriptEntry } from "../shared/types"
 
@@ -48,7 +49,6 @@ function makeActiveTurn(overrides: Partial<ActiveTurn> = {}): ActiveTurn {
     model: "claude-opus-4",
     planMode: false,
     status: "running",
-    pendingTool: null,
     postToolFollowUp: null,
     hasFinalResult: false,
     cancelRequested: false,
@@ -104,6 +104,7 @@ function makeStartingTurn(overrides: Partial<StartingTurn> = {}): StartingTurn {
 type DepOverrides = {
   drainingStreams?: Map<string, { turn: HarnessTurn }>
   activeTurns?: Map<string, ActiveTurn>
+  pendingTools?: PendingToolSlots
   startingTurns?: Map<string, StartingTurn>
   claudeSessions?: Map<string, ClaudeSessionState>
   appendedMessages?: TranscriptEntry[]
@@ -118,6 +119,7 @@ type DepOverrides = {
 function makeDeps(overrides: DepOverrides = {}): CancelHandlerDeps {
   const drainingStreams: Map<string, { turn: HarnessTurn }> = overrides.drainingStreams ?? new Map()
   const activeTurns: Map<string, ActiveTurn> = overrides.activeTurns ?? new Map()
+  const pendingTools: PendingToolSlots = overrides.pendingTools ?? new PendingToolSlots()
   const startingTurns: Map<string, StartingTurn> = overrides.startingTurns ?? new Map()
   const claudeSessions: Map<string, ClaudeSessionState> = overrides.claudeSessions ?? new Map()
   const appendedMessages = overrides.appendedMessages ?? []
@@ -133,6 +135,7 @@ function makeDeps(overrides: DepOverrides = {}): CancelHandlerDeps {
     rejectPendingResolversForChat: (chatId) => { rejectCalled.push(chatId) },
     cancelChatInOrchestrator: (chatId) => { orchestratorCancelled.push(chatId) },
     activeTurns,
+    pendingTools,
     startingTurns,
     store: {
       appendMessage: async (_chatId, entry) => { appendedMessages.push(entry) },
@@ -405,83 +408,57 @@ describe("transcript entries", () => {
 // ---------------------------------------------------------------------------
 
 describe("pending tool", () => {
-  test("appends tool_result entry when pendingTool is set", async () => {
-    const appendedMessages: TranscriptEntry[] = []
-    const active = makeActiveTurn({
-      pendingTool: {
-        toolUseId: "tool-use-1",
-        tool: {
-          kind: "tool",
-          toolKind: "ask_user_question",
-          toolName: "AskUserQuestion",
-          toolId: "tool-use-1",
-          input: { questions: [] },
-        },
-        resolve: () => {},
-      },
+  function parkPendingTool(
+    slots: PendingToolSlots,
+    toolKind: "ask_user_question" | "exit_plan_mode",
+    toolId: string,
+    resolve: (result: unknown) => void,
+    provider: ActiveTurn["provider"] = "claude",
+  ): void {
+    const tool = toolKind === "ask_user_question"
+      ? { kind: "tool", toolKind: "ask_user_question", toolName: "AskUserQuestion", toolId, input: { questions: [] } }
+      : { kind: "tool", toolKind: "exit_plan_mode", toolName: "ExitPlanMode", toolId, input: {} }
+    slots.park("chat-1", {
+      toolUseId: toolId,
+      provider,
+      tool: tool as ParkedTool["tool"],
+      parkedAt: Date.now(),
+      resolve,
     })
-    const activeTurns = new Map([["chat-1", active]])
-    const deps = makeDeps({ activeTurns, appendedMessages })
+  }
+
+  test("appends tool_result entry when a request is parked", async () => {
+    const appendedMessages: TranscriptEntry[] = []
+    const pendingTools = new PendingToolSlots()
+    parkPendingTool(pendingTools, "ask_user_question", "tool-use-1", () => {})
+    const activeTurns = new Map([["chat-1", makeActiveTurn()]])
+    const deps = makeDeps({ activeTurns, pendingTools, appendedMessages })
     await cancelChat(deps, "chat-1")
     const toolResult = appendedMessages.find((m) => m.kind === "tool_result")
     expect(toolResult).toBeDefined()
     expect((toolResult as { toolId?: string })?.toolId).toBe("tool-use-1")
+    expect(pendingTools.has("chat-1")).toBe(false)
   })
 
-  test("resolves pendingTool when provider=codex and toolKind=exit_plan_mode", async () => {
-    let resolved: unknown = undefined
-    const active = makeActiveTurn({
-      provider: "codex",
-      pendingTool: {
-        toolUseId: "tool-use-2",
-        tool: {
-          kind: "tool",
-          toolKind: "exit_plan_mode",
-          toolName: "ExitPlanMode",
-          toolId: "tool-use-2",
-          input: {},
-        },
-        resolve: (result) => { resolved = result },
-      },
-    })
-    const activeTurns = new Map([["chat-1", active]])
-    const deps = makeDeps({ activeTurns })
-    await cancelChat(deps, "chat-1")
-    expect(resolved).toMatchObject({ discarded: true })
-  })
-
-  // Previously this asserted the OPPOSITE ("does NOT resolve pendingTool when
-  // provider=claude"), which pinned a wedge: cancelChat nulled pendingTool and
-  // deleted the turn while the SDK worker stayed blocked inside canUseTool, so
-  // respondTool threw "No pending tool request" and Stop could never recover
-  // the chat. Under the SDK driver interrupt() is in-band and the session
-  // survives, so nothing else ever freed it. Resolving (never rejecting — a
-  // rejection throws inside the SDK worker) is the only in-band way out.
-  function makePendingTool(
-    toolKind: "ask_user_question" | "exit_plan_mode",
-    toolId: string,
-    resolve: (result: unknown) => void,
-  ): NonNullable<ActiveTurn["pendingTool"]> {
-    const tool = toolKind === "ask_user_question"
-      ? { kind: "tool", toolKind: "ask_user_question", toolName: "AskUserQuestion", toolId, input: { questions: [] } }
-      : { kind: "tool", toolKind: "exit_plan_mode", toolName: "ExitPlanMode", toolId, input: {} }
-    return { toolUseId: toolId, tool, resolve } as unknown as NonNullable<ActiveTurn["pendingTool"]>
-  }
-
+  // The settle is provider- and toolKind-agnostic: dropping the resolve left
+  // the SDK worker blocked inside canUseTool while the ActiveTurn was
+  // deleted, so respondTool threw "No pending tool request" and Stop could
+  // never recover the chat. Resolving (never rejecting — a rejection throws
+  // inside the SDK worker) is the only in-band way out.
   test.each([
     ["claude", "ask_user_question"],
     ["claude", "exit_plan_mode"],
     ["codex", "ask_user_question"],
+    ["codex", "exit_plan_mode"],
     ["openrouter", "exit_plan_mode"],
   ] as const)(
-    "resolves pendingTool with the discarded payload (provider=%s, toolKind=%s)",
+    "resolves the parked request with the discarded payload (provider=%s, toolKind=%s)",
     async (provider, toolKind) => {
       let resolved: unknown = undefined
-      const active = makeActiveTurn({
-        provider,
-        pendingTool: makePendingTool(toolKind, "tool-use-3", (result) => { resolved = result }),
-      })
-      const deps = makeDeps({ activeTurns: new Map([["chat-1", active]]) })
+      const pendingTools = new PendingToolSlots()
+      parkPendingTool(pendingTools, toolKind, "tool-use-3", (result) => { resolved = result }, provider)
+      const active = makeActiveTurn({ provider })
+      const deps = makeDeps({ activeTurns: new Map([["chat-1", active]]), pendingTools })
 
       await cancelChat(deps, "chat-1")
 
@@ -489,19 +466,44 @@ describe("pending tool", () => {
     },
   )
 
+  test("settles a request parked with NO active turn (SDK self-wake) on the FIRST Stop", async () => {
+    // Regression for session 04fb43c9: a question parked during a
+    // background-task self-wake has no ActiveTurn. One Stop must settle the
+    // continuation, append the discarded tool_result, AND clear the
+    // self-wake flag — previously the first press only handled the turn
+    // branch and a second press was needed for the flag.
+    let resolved: unknown = undefined
+    const appendedMessages: TranscriptEntry[] = []
+    const pendingTools = new PendingToolSlots()
+    parkPendingTool(pendingTools, "ask_user_question", "tool-use-5", (result) => { resolved = result })
+    const session = makeSession({ selfWakeActive: true })
+    const deps = makeDeps({
+      pendingTools,
+      appendedMessages,
+      claudeSessions: new Map([["chat-1", session]]),
+    })
+
+    await cancelChat(deps, "chat-1")
+
+    expect(resolved).toMatchObject({ discarded: true })
+    expect(pendingTools.has("chat-1")).toBe(false)
+    expect(session.selfWakeActive).toBe(false)
+    expect(appendedMessages.some((m) => m.kind === "tool_result")).toBe(true)
+    expect(appendedMessages.some((m) => m.kind === "interrupted")).toBe(true)
+  })
+
   test("appends the discarded tool_result BEFORE resolving", async () => {
     // Share one array so append/resolve interleaving is observable: the
     // transcript must already carry the discarded marker by the time the SDK
     // worker is released, otherwise the UI can render an unanswered card.
     const appendedMessages: TranscriptEntry[] = []
     let appendedWhenResolved = -1
-    const active = makeActiveTurn({
-      provider: "claude",
-      pendingTool: makePendingTool("ask_user_question", "tool-use-4", () => {
-        appendedWhenResolved = appendedMessages.length
-      }),
+    const pendingTools = new PendingToolSlots()
+    parkPendingTool(pendingTools, "ask_user_question", "tool-use-4", () => {
+      appendedWhenResolved = appendedMessages.length
     })
-    const deps = makeDeps({ activeTurns: new Map([["chat-1", active]]), appendedMessages })
+    const active = makeActiveTurn({ provider: "claude" })
+    const deps = makeDeps({ activeTurns: new Map([["chat-1", active]]), pendingTools, appendedMessages })
 
     await cancelChat(deps, "chat-1")
 

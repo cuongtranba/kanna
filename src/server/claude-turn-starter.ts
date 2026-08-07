@@ -21,6 +21,7 @@ import { isCodexReasoningEffort, providerUsesSdkSession } from "../shared/types"
 import { isClaudeSdkProvider } from "./provider-catalog"
 import type { ChatRecord, ProjectRecord } from "./events"
 import type { ActiveTurn, ClaudeSessionState, StartingTurn } from "./claude-session-state"
+import type { PendingToolSlots } from "./pending-tool-slot"
 import type { AnyValue } from "../shared/errors"
 import type { HarnessTurn, HarnessToolRequest } from "./harness-types"
 import type { EventStore } from "./event-store"
@@ -59,17 +60,6 @@ export interface StartClaudeTurnArgs {
   forkSession: boolean
   onToolRequest: (request: HarnessToolRequest) => Promise<AnyValue>
   provider: AgentProvider
-}
-
-/** Args for recreateActiveTurnFromSession dep — mirrors the private method signature. */
-export interface RecreateActiveTurnArgs {
-  chatId: string
-  provider: AgentProvider
-  model: string
-  effort?: string
-  serviceTier?: "fast"
-  planMode: boolean
-  clientTraceId?: string
 }
 
 /** AppSettings snapshot fields consumed by this module. */
@@ -114,7 +104,7 @@ export interface StartTurnDeps {
   getAppSettingsSnapshot: () => StartTurnAppSettings
   /** Fired in background (return value discarded). */
   generateTitleInBackground: (chatId: string, content: string, localPath: string, optimisticTitle: string) => Promise<void>
-  recreateActiveTurnFromSession: (args: RecreateActiveTurnArgs) => ActiveTurn | undefined
+  pendingTools: PendingToolSlots
   startClaudeTurn: (args: StartClaudeTurnArgs) => Promise<HarnessTurn>
   findLastUserMessageId: (chatId: string) => string | null
   /** Fires the runTurn loop (return value discarded). */
@@ -386,33 +376,26 @@ async function startTurnAfterTurnStarted(
   }
 
   const onToolRequest = async (request: HarnessToolRequest): Promise<AnyValue> => {
-    let active = deps.activeTurns.get(args.chatId)
-    if (!active) {
-      // The prior turn's `result` event already deleted the activeTurn, but
-      // the Claude SDK fired another `canUseTool` — happens when the SDK
-      // self-resumes after a background task notification. Re-promote a
-      // minimal activeTurn from the live session so the question renders
-      // instead of failing with "Chat turn ended unexpectedly".
-      active = deps.recreateActiveTurnFromSession(args)
-      if (!active) {
-        throw new Error("Chat turn ended unexpectedly")
-      }
+    // The request may arrive OUTSIDE any Kanna turn — the SDK self-resumes
+    // after a background-task notification and calls `canUseTool` with the
+    // prior turn long finalized. The parked continuation lives in the
+    // per-chat PendingToolSlots either way; when a turn IS live, its status
+    // additionally flips to waiting_for_user for the composer.
+    const active = deps.activeTurns.get(args.chatId)
+    if (active) {
+      active.status = "waiting_for_user"
+      active.waitStartedAt = Date.now()
     }
-
-    active.status = "waiting_for_user"
-    active.waitStartedAt = Date.now()
     deps.emitStateChange(args.chatId)
 
-    // Capture in a const to give TypeScript a stable narrowed reference inside
-    // the Promise executor (re-assignment to `active` after the if-block could
-    // theoretically happen but doesn't in practice; const makes the intent clear).
-    const narrowedActive = active
     return await new Promise<AnyValue>((resolve) => {
-      narrowedActive.pendingTool = {
+      deps.pendingTools.park(args.chatId, {
         toolUseId: request.tool.toolId,
+        provider: args.provider,
         tool: request.tool,
+        parkedAt: Date.now(),
         resolve,
-      }
+      })
     })
   }
 
@@ -538,7 +521,6 @@ async function startTurnAfterTurnStarted(
     serviceTier: args.serviceTier,
     planMode: args.planMode,
     status: args.provider === "claude" ? "running" : "starting",
-    pendingTool: null,
     postToolFollowUp: null,
     hasFinalResult: false,
     cancelRequested: false,

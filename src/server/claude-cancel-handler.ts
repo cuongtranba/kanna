@@ -12,6 +12,7 @@
 
 import type { ClaudeDriverPreference, TranscriptEntry } from "../shared/types"
 import type { ActiveTurn, ClaudeSessionState, StartingTurn } from "./claude-session-state"
+import type { PendingToolSlots } from "./pending-tool-slot"
 import type { HarnessTurn } from "./harness-types"
 import { logClaudeSteer } from "./claude-steer-log"
 import { discardedToolResult } from "./claude-sdk-queue"
@@ -67,6 +68,9 @@ export interface CancelHandlerDeps {
   /** The active-turns map. The handler reads and deletes from it. */
   activeTurns: ActiveTurnsMap
 
+  /** The per-chat parked AskUserQuestion / ExitPlanMode continuations. */
+  pendingTools: PendingToolSlots
+
   /**
    * Turns whose provider session is still booting (no `ActiveTurn` yet).
    * The handler marks and removes entries here so Stop lands during the
@@ -103,19 +107,21 @@ export interface CancelHandlerDeps {
  *
  * 1. Closes any draining stream for the chat.
  * 2. Rejects pending `canUseTool` Promises and signals the subagent orchestrator.
- * 3. If there is no active turn, falls back in order to the two states that
+ * 3. Discards any parked main-agent tool request (PendingToolSlots) and
+ *    appends its `tool_result` entry — turn-independent, so ONE Stop frees a
+ *    question parked during an SDK self-wake as well as one parked mid-turn.
+ * 4. If there is no active turn, falls back in order to the two states that
  *    also render as busy: a turn whose provider session is still booting
  *    (`startingTurns`) and a task-notification self-wake turn on the warm
  *    session. Only a genuinely idle chat is a no-op.
- * 4. If there is an active turn:
+ * 5. If there is an active turn:
  *    a. Guards against concurrent cancel calls.
- *    b. Discards any pending tool request and appends a `tool_result` entry.
- *    c. Appends an `interrupted` transcript entry and records `turn_cancelled`.
- *    d. Removes the turn from `activeTurns` so the UI reflects cancellation.
- *    e. Drains the cancelled prompt's seq from the Claude session's pending queue.
- *    f. Emits a state-change event.
- *    g. Interrupts and closes the underlying stream (best-effort, 5 s timeout).
- *    h. For PTY driver: drops the dead Claude session from the map.
+ *    b. Appends an `interrupted` transcript entry and records `turn_cancelled`.
+ *    c. Removes the turn from `activeTurns` so the UI reflects cancellation.
+ *    d. Drains the cancelled prompt's seq from the Claude session's pending queue.
+ *    e. Emits a state-change event.
+ *    f. Interrupts and closes the underlying stream (best-effort, 5 s timeout).
+ *    g. For PTY driver: drops the dead Claude session from the map.
  *
  * Never starts a queued message — see the closing comment.
  *
@@ -144,6 +150,28 @@ export async function cancelChat(
   // subagent session and leaking the resolver entry.
   deps.rejectPendingResolversForChat(chatId)
   deps.cancelChatInOrchestrator(chatId)
+
+  // Settle any parked main-agent tool request FIRST, regardless of turn
+  // state — the slot is independent of ActiveTurn, so a question parked
+  // during an SDK self-wake (no Kanna turn) is freed by the same Stop as
+  // one parked mid-turn. Dropping the resolve would leave the provider
+  // worker blocked inside canUseTool forever. Resolve, never reject — a
+  // rejection surfaces as an unhandled transport error inside the worker.
+  // `discarded: true` makes buildCanUseTool deny the call so the tool
+  // never actually executes with empty answers.
+  const parked = deps.pendingTools.takeAny(chatId)
+  if (parked) {
+    const result = discardedToolResult(parked.tool)
+    await deps.store.appendMessage(
+      chatId,
+      timestamped({
+        kind: "tool_result",
+        toolId: parked.toolUseId,
+        content: result,
+      }),
+    )
+    parked.resolve(result)
+  }
 
   const active = deps.activeTurns.get(chatId)
   if (!active) {
@@ -213,30 +241,6 @@ export async function cancelChat(
   // Guard against concurrent cancel() calls — only the first one does work.
   if (active.cancelRequested) return
   active.cancelRequested = true
-
-  const pendingTool = active.pendingTool
-  active.pendingTool = null
-
-  if (pendingTool) {
-    const result = discardedToolResult(pendingTool.tool)
-    await deps.store.appendMessage(
-      chatId,
-      timestamped({
-        kind: "tool_result",
-        toolId: pendingTool.toolUseId,
-        content: result,
-      }),
-    )
-    // Always settle — for every provider and tool kind. Dropping the resolve
-    // left the SDK worker blocked inside canUseTool while the ActiveTurn was
-    // deleted below, so respondTool could only throw "No pending tool
-    // request": Stop was unable to recover the chat. Under the SDK driver
-    // interrupt() is in-band and the session survives, so nothing else frees
-    // it. Resolve, never reject — a rejection surfaces as an unhandled
-    // transport error inside the worker. `discarded: true` makes
-    // buildCanUseTool deny the call so the tool never actually executes.
-    pendingTool.resolve(result)
-  }
 
   await deps.store.appendMessage(
     chatId,

@@ -32,6 +32,7 @@ import {
   normalizeServerModel,
 } from "./provider-catalog"
 import { buildSteeredMessageContent } from "./claude-prompt-helpers"
+import { isChatBusy } from "./claude-session-state-queries"
 
 // ---------------------------------------------------------------------------
 // Structural sub-interfaces — only the slices this module calls.
@@ -68,6 +69,7 @@ interface ClaudeSessionsMap {
     backgroundTasks: ReadonlyMap<string, unknown>
     backgroundTaskDeadlineAt: number
     backgroundTaskWakeCount: number
+    selfWakeActive: boolean
   } | undefined
 }
 
@@ -98,6 +100,9 @@ export interface SendCommandDeps {
    * alone let a second send race a concurrent turn during the spawn.
    */
   startingTurns: StartingTurnsMap
+
+  /** Parked tool continuations — only `.has()` is consulted (via isChatBusy). */
+  pendingTools: { has(chatId: string): boolean }
 
   /** The claude-sessions map. Used to re-arm background-task state on user send. */
   claudeSessions: ClaudeSessionsMap
@@ -283,7 +288,7 @@ export async function maybeStartNextQueuedMessage(
   deps: SendCommandDeps,
   chatId: string,
 ): Promise<boolean> {
-  if (deps.activeTurns.has(chatId) || deps.startingTurns.has(chatId)) return false
+  if (isChatBusy(deps, chatId)) return false
   const nextQueuedMessage = typeof deps.store.getQueuedMessages === "function"
     ? deps.store.getQueuedMessages(chatId)[0]
     : undefined
@@ -352,10 +357,11 @@ export async function sendCommand(
     deps.autoResumeByChat.set(chatId, command.autoResumeOnRateLimit)
   }
 
-  // `startingTurns` matters here: a turn is not in `activeTurns` until its
-  // provider session has finished spawning, so gating on `activeTurns` alone
-  // let a send during that window start a second, concurrent turn.
-  if (deps.activeTurns.has(chatId) || deps.startingTurns.has(chatId)) {
+  // isChatBusy is the single busy derivation: live turn, booting turn,
+  // parked question, or streaming self-wake all queue the send. The
+  // self-wake / parked-question cases drain when the wake's terminal result
+  // arrives (see the runner's disarm branch).
+  if (isChatBusy(deps, chatId)) {
     deps.analytics.track("message_sent")
     const queuedMessage = await enqueueMessage(deps, chatId, command.content, command.attachments ?? [], {
       provider: command.provider,

@@ -12,6 +12,7 @@
 
 import type { AgentProvider, ChatBackgroundTask, KannaStatus, PendingToolSnapshot } from "../shared/types"
 import type { ActiveTurn, ClaudeSessionState, StartingTurn } from "./claude-session-state"
+import type { PendingToolSlots } from "./pending-tool-slot"
 import { backgroundTaskGuardExpired } from "./claude-session-lifecycle"
 
 // ---------------------------------------------------------------------------
@@ -23,6 +24,8 @@ export interface SessionStateQueryDeps {
   activeTurns: Map<string, ActiveTurn>
   /** Turns whose provider session is still booting, keyed by chatId. */
   startingTurns: Map<string, StartingTurn>
+  /** Parked AskUserQuestion / ExitPlanMode continuations keyed by chatId. */
+  pendingTools: PendingToolSlots
   /** Live Claude session state keyed by chatId. */
   claudeSessions: Map<string, ClaudeSessionState>
   /** Streams currently draining (only `.keys()` is consumed). */
@@ -67,6 +70,34 @@ export interface SessionStateQueryDeps {
 // Public query functions
 // ---------------------------------------------------------------------------
 
+/** Structural slice of coordinator state needed to answer "is this chat busy?". */
+export interface ChatBusyDeps {
+  activeTurns: { has(chatId: string): boolean }
+  startingTurns: { has(chatId: string): boolean }
+  pendingTools: { has(chatId: string): boolean }
+  claudeSessions: { get(chatId: string): { selfWakeActive: boolean } | undefined }
+}
+
+/**
+ * THE single derivation of "is this chat busy?" — every consumer that gates
+ * on busyness (send queueing, queued-message drain) must call this instead of
+ * combining the underlying maps itself. Busy means any of:
+ *
+ * - a live Kanna turn (`activeTurns`)
+ * - a turn whose provider session is still booting (`startingTurns`)
+ * - a parked AskUserQuestion / ExitPlanMode awaiting the user (`pendingTools`)
+ * - a task-notification self-wake turn streaming on the warm session
+ *
+ * Ad-hoc combinations are how the ghost-turn era wedged chats: each consumer
+ * read a different subset and disagreed about the same chat.
+ */
+export function isChatBusy(deps: ChatBusyDeps, chatId: string): boolean {
+  return deps.activeTurns.has(chatId)
+    || deps.startingTurns.has(chatId)
+    || deps.pendingTools.has(chatId)
+    || deps.claudeSessions.get(chatId)?.selfWakeActive === true
+}
+
 /**
  * Returns a map of chatId → KannaStatus for all currently active turns.
  *
@@ -87,6 +118,10 @@ export function getActiveStatuses(deps: SessionStateQueryDeps): Map<string, Kann
   for (const chatId of deps.startingTurns.keys()) {
     if (statuses.has(chatId)) continue
     statuses.set(chatId, "starting")
+  }
+  for (const chatId of deps.pendingTools.chatIds()) {
+    if (statuses.has(chatId)) continue
+    statuses.set(chatId, "waiting_for_user")
   }
   for (const [chatId, session] of deps.claudeSessions.entries()) {
     if (statuses.has(chatId)) continue
@@ -127,18 +162,24 @@ export function getWaitStartedAtByChatId(deps: SessionStateQueryDeps): Map<strin
   for (const [chatId, turn] of deps.activeTurns.entries()) {
     if (turn.waitStartedAt != null) out.set(chatId, turn.waitStartedAt)
   }
+  for (const chatId of deps.pendingTools.chatIds()) {
+    if (out.has(chatId)) continue
+    const parked = deps.pendingTools.get(chatId)
+    if (parked) out.set(chatId, parked.parkedAt)
+  }
   return out
 }
 
 /**
- * Returns the pending tool snapshot for the active turn in the given chat,
- * or null if there is no active turn or no pending tool.
+ * Returns the pending tool snapshot for the given chat, or null when nothing
+ * is parked. Turn-independent: a request parked during an SDK self-wake (no
+ * ActiveTurn) surfaces exactly like one parked mid-turn.
  */
 export function getPendingTool(
   deps: SessionStateQueryDeps,
   chatId: string,
 ): PendingToolSnapshot | null {
-  const pending = deps.activeTurns.get(chatId)?.pendingTool
+  const pending = deps.pendingTools.get(chatId)
   if (!pending) return null
   return { toolUseId: pending.toolUseId, toolKind: pending.tool.toolKind }
 }
@@ -196,6 +237,11 @@ export function isClaudeSessionIdle(
 ): boolean {
   const activeProv = deps.activeTurns.get(chatId)?.provider
   if (activeProv !== undefined && deps.isClaudeSdkProvider(activeProv)) return false
+  // A parked question means the provider worker is BLOCKED inside canUseTool
+  // — no entries stream, so lastUsedAt stales while the user reads the
+  // question. Reaping here would kill the very session holding the parked
+  // continuation.
+  if (deps.pendingTools.has(chatId)) return false
   if (session.pendingPromptSeqs.length > 0) return false
   if (deps.hasLiveWorkflow(chatId)) return false
   if (deps.hasPendingBackgroundTask(session, now)) return false
