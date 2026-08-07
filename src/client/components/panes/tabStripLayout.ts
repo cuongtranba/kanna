@@ -18,6 +18,17 @@
 export const MIN_TAB_WIDTH = 60
 export const MAX_TAB_WIDTH = 200
 
+/**
+ * The floor a phone strip uses instead.
+ *
+ * Shrinking to the icon-only floor is a pointer affordance: it relies on hover
+ * tooltips to tell the tabs apart, and every chat tab carries the same icon. A
+ * touch strip keeps its labels and scrolls, the way a mobile browser's tab bar
+ * does — chosen so three tabs still fill a 390px strip and the fourth clips,
+ * which is what tells the user there is more to reach.
+ */
+export const PHONE_MIN_TAB_WIDTH = 124
+
 /** Rough advance width; only used to decide whether a label fits at all. */
 const ESTIMATED_CHAR_WIDTH = 7
 
@@ -27,6 +38,12 @@ export interface TabStripLayoutInput {
   tabCount: number
   /** Width reserved for the pane's split/close buttons at the end of the strip. */
   actionsWidth: number
+  /**
+   * Narrowest a tab may get before the strip scrolls instead of shrinking
+   * further. Clamped into [MIN_TAB_WIDTH, MAX_TAB_WIDTH]; defaults to the
+   * icon-only floor.
+   */
+  minTabWidth?: number
 }
 
 export interface TabStripLayout {
@@ -35,10 +52,15 @@ export interface TabStripLayout {
   scrolls: boolean
 }
 
+function clamp(value: number, low: number, high: number): number {
+  return Math.min(high, Math.max(low, value))
+}
+
 export function computeTabStripLayout({
   availableWidth,
   tabCount,
   actionsWidth,
+  minTabWidth,
 }: TabStripLayoutInput): TabStripLayout {
   if (tabCount <= 0) return { tabWidth: 0, showLabel: false, scrolls: false }
 
@@ -50,11 +72,10 @@ export function computeTabStripLayout({
   }
 
   const usable = Math.max(0, availableWidth - Math.max(0, actionsWidth))
-  const scrolls = usable < MIN_TAB_WIDTH * tabCount
+  const floor = clamp(minTabWidth ?? MIN_TAB_WIDTH, MIN_TAB_WIDTH, MAX_TAB_WIDTH)
+  const scrolls = usable < floor * tabCount
 
-  const tabWidth = scrolls
-    ? MIN_TAB_WIDTH
-    : Math.round(Math.min(MAX_TAB_WIDTH, Math.max(MIN_TAB_WIDTH, usable / tabCount)))
+  const tabWidth = scrolls ? floor : Math.round(clamp(usable / tabCount, floor, MAX_TAB_WIDTH))
 
   // A label needs at least one character's worth of room beyond the icon and
   // close button; below that the tab is icon-only.

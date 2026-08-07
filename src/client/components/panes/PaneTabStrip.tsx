@@ -1,13 +1,13 @@
 import { useDraggable } from "@dnd-kit/core"
 import { Columns2, Rows2, X } from "lucide-react"
-import { useCallback } from "react"
+import { useCallback, useEffect, useRef } from "react"
 import type { PaneLeaf, SplitPosition } from "../../lib/paneTree"
 import { cn } from "../../lib/utils"
 import { isMobileViewport } from "../../lib/viewport"
 import { useViewportStore } from "../../stores/viewportStore"
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip"
 import { SHELL_TOP_BAND_CLASS } from "../../lib/shellChrome"
-import { computeTabStripLayout } from "./tabStripLayout"
+import { computeTabStripLayout, PHONE_MIN_TAB_WIDTH } from "./tabStripLayout"
 import { describeTab, type TabPresentationContext } from "./tabPresentation"
 
 /**
@@ -44,7 +44,8 @@ export function PaneTabStrip({
   onSplit,
 }: PaneTabStripProps) {
   const viewportWidth = useViewportStore((state) => state.width)
-  const canSplit = !isMobileViewport(viewportWidth)
+  const isPhone = isMobileViewport(viewportWidth)
+  const canSplit = !isPhone
   // A split moves the active tab into the new pane, so the pane must have
   // another tab left to show. Splitting its only tab is refused by the engine —
   // the button must not offer what will not happen.
@@ -54,10 +55,33 @@ export function PaneTabStrip({
     availableWidth: width,
     tabCount: pane.tabs.length,
     actionsWidth: canSplit ? ACTIONS_WIDTH : 0,
+    minTabWidth: isPhone ? PHONE_MIN_TAB_WIDTH : undefined,
   })
 
   const handleSplitRight = useCallback(() => onSplit("right"), [onSplit])
   const handleSplitDown = useCallback(() => onSplit("bottom"), [onSplit])
+
+  const scrollerRef = useRef<HTMLDivElement>(null)
+  const hasAlignedRef = useRef(false)
+  const focusedTabId = pane.focusedTabId
+
+  // Selecting a half-visible tab glides it fully into view. No `behavior`
+  // argument on purpose: that defers to the CSS scroll-behavior below, which is
+  // gated on motion-safe, so prefers-reduced-motion lands the same scroll
+  // instantly. The first alignment after mount is instant either way — a strip
+  // that has just appeared has nothing to animate from.
+  useEffect(() => {
+    const active = scrollerRef.current?.querySelector<HTMLElement>('[data-tab-active="true"]')
+    if (typeof active?.scrollIntoView !== "function") return
+
+    const instant = !hasAlignedRef.current
+    hasAlignedRef.current = true
+    active.scrollIntoView({
+      block: "nearest",
+      inline: "nearest",
+      ...(instant ? { behavior: "instant" as const } : {}),
+    })
+  }, [focusedTabId])
 
   return (
     <div
@@ -69,10 +93,16 @@ export function PaneTabStrip({
       )}
     >
       <div
+        ref={scrollerRef}
+        // Read by the app-wide sidebar swipe gesture, which must not claim a
+        // rightward swipe that is scrolling this strip back to its first tab.
+        data-swipe-scroll-x={layout.scrolls ? "true" : undefined}
         className={cn(
           "flex min-w-0 flex-1 items-stretch",
-          layout.scrolls && "overflow-x-auto scrollbar-hide",
+          layout.scrolls &&
+            "overflow-x-auto scrollbar-hide overscroll-x-contain touch-pan-x motion-safe:scroll-smooth",
         )}
+        style={{ WebkitOverflowScrolling: "touch" }}
       >
         {pane.tabs.map((tab) => {
           const isActive = pane.focusedTabId === tab.tabId
@@ -88,6 +118,7 @@ export function PaneTabStrip({
               isPaneFocused={isPaneFocused}
               showLabel={layout.showLabel}
               closable={closable}
+              isPhone={isPhone}
               width={layout.tabWidth}
               onSelect={onSelectTab}
               onClose={onCloseTab}
@@ -130,6 +161,8 @@ interface PaneTabProps {
   isPaneFocused: boolean
   showLabel: boolean
   closable: boolean
+  /** Phone strip: the horizontal gesture scrolls, so the drag sensor stands down. */
+  isPhone: boolean
   width: number
   onSelect: (tabId: string) => void
   onClose: (tabId: string) => void
@@ -143,6 +176,7 @@ function PaneTab({
   isPaneFocused,
   showLabel,
   closable,
+  isPhone,
   width,
   onSelect,
   onClose,
@@ -160,7 +194,14 @@ function PaneTab({
 
   // The whole tab is the drag handle. The sensor's small distance threshold is
   // what keeps a plain click a selection rather than a drag.
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: tabId })
+  //
+  // A phone shows the whole tree as ONE pane, so a tab can only be dragged into
+  // the pane it already sits in — the gesture buys nothing there, and it costs
+  // the strip its scroll.
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: tabId,
+    disabled: isPhone,
+  })
 
   const tab = (
     <div
@@ -178,8 +219,10 @@ function PaneTab({
       className={cn(
         "group relative flex shrink-0 cursor-pointer items-center gap-1.5 border-r border-border px-3",
         isActive ? "bg-background text-foreground" : "text-muted-foreground hover:bg-muted/40",
-        // touch-none lets the pointer sensor own the gesture on the strip.
-        "touch-none",
+        // touch-action intersects down the ancestor chain, so this one class
+        // decides who owns a swipe on the strip: the pointer sensor (drag), or
+        // the browser (scroll the strip).
+        isPhone ? "touch-pan-x" : "touch-none",
         isDragging && "opacity-50",
       )}
       style={{ width }}

@@ -1,7 +1,7 @@
 ---
 id: c3-110
 c3-version: 4
-c3-seal: 9dc03af1e954b8e7e0edd74257b24185748f065f5df9df573e893e34a4a65e1b
+c3-seal: ec7f57a874be835196c61141bfae84c288a50993a0bd24e96ecb359e2932edb8
 title: app-shell
 type: component
 category: feature
@@ -67,6 +67,7 @@ Composes the React tree at boot: react-router, the central `useKannaState` hook,
 | useKannaState() hook | OUT | Returns snapshot-derived view models | c3-112, c3-115 | src/client/app/useKannaState.ts |
 | Global keybinding handlers | OUT | Dispatches commands like number-jump, toggle terminal | c3-111, c3-118 | src/client/hooks |
 | Viewport measurement | OUT | Mounts the single window-resize subscription and owns BREAKPOINT_MD, the one responsive pivot | c3-102, c3-111, c3-112 | src/client/lib/viewport.ts |
+| Sidebar swipe gesture | OUT | Window-level swipes open and close the sidebar below BREAKPOINT_MD, except when the gesture starts inside a surface marked data-swipe-scroll-x — that surface owns its own horizontal scroll, and it advertises the attribute only while it overflows | c3-104 | src/client/app/sidebarSwipeGesture.ts |
 
 ## Change Safety
 

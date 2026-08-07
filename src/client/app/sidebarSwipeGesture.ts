@@ -28,7 +28,17 @@ export type SwipeGestureOutcome = "open" | "close" | null
 export type SwipeGestureContext = {
   sidebarOpen: boolean
   viewportWidth: number
+  /**
+   * The gesture began inside a surface that scrolls horizontally under the
+   * finger (the pane tab strip). That swipe belongs to the surface, not to the
+   * sidebar — and a surface only marks itself while it actually has something
+   * to scroll, so the gesture is untouched everywhere else.
+   */
+  startedInHorizontalScroller?: boolean
 }
+
+/** Marks a surface that owns horizontal swipes; set by the pane tab strip. */
+export const HORIZONTAL_SCROLLER_SELECTOR = "[data-swipe-scroll-x]"
 
 export function evaluateSidebarSwipe(
   start: SwipePoint,
@@ -36,6 +46,7 @@ export function evaluateSidebarSwipe(
   ctx: SwipeGestureContext
 ): SwipeGestureOutcome {
   if (ctx.viewportWidth >= SIDEBAR_SWIPE_MOBILE_BREAKPOINT_PX) return null
+  if (ctx.startedInHorizontalScroller) return null
 
   const dx = end.x - start.x
   const dy = end.y - start.y
@@ -71,6 +82,7 @@ export function shouldPreventNativeBack(
   ctx: SwipeGestureContext
 ): boolean {
   if (ctx.viewportWidth >= SIDEBAR_SWIPE_MOBILE_BREAKPOINT_PX) return false
+  if (ctx.startedInHorizontalScroller) return false
 
   const dx = current.x - start.x
   const dy = current.y - start.y
@@ -102,11 +114,18 @@ type UseSidebarSwipeGestureParams = {
   ports?: SidebarSwipeGesturePorts
 }
 
+function startedInHorizontalScroller(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest(HORIZONTAL_SCROLLER_SELECTOR) !== null
+}
+
 export function useSidebarSwipeGesture({ sidebarOpen, onOpen, onClose, ports = DEFAULT_PORTS }: UseSidebarSwipeGestureParams) {
   const { dom } = ports
 
   useEffect(() => {
     let start: SwipePoint | null = null
+    // Resolved once, at touchstart: the element under the finger later in the
+    // gesture is whatever the scroll moved there.
+    let inScroller = false
 
     function handleTouchStart(event: TouchEvent) {
       if (event.touches.length !== 1) {
@@ -116,6 +135,7 @@ export function useSidebarSwipeGesture({ sidebarOpen, onOpen, onClose, ports = D
       const touch = event.touches[0]
       if (!touch) return
       start = { x: touch.clientX, y: touch.clientY, t: event.timeStamp }
+      inScroller = startedInHorizontalScroller(event.target)
     }
 
     function handleTouchMove(event: TouchEvent) {
@@ -127,7 +147,7 @@ export function useSidebarSwipeGesture({ sidebarOpen, onOpen, onClose, ports = D
       const prevent = shouldPreventNativeBack(
         startPoint,
         { x: touch.clientX, y: touch.clientY, t: event.timeStamp },
-        { sidebarOpen, viewportWidth: dom.getInnerWidth() }
+        { sidebarOpen, viewportWidth: dom.getInnerWidth(), startedInHorizontalScroller: inScroller }
       )
       // Claim the gesture from the native edge swipe-back so the move resolves
       // to opening/closing the sidebar instead of navigating history.
@@ -143,7 +163,7 @@ export function useSidebarSwipeGesture({ sidebarOpen, onOpen, onClose, ports = D
       const outcome = evaluateSidebarSwipe(
         startPoint,
         { x: touch.clientX, y: touch.clientY, t: event.timeStamp },
-        { sidebarOpen, viewportWidth: dom.getInnerWidth() }
+        { sidebarOpen, viewportWidth: dom.getInnerWidth(), startedInHorizontalScroller: inScroller }
       )
       if (outcome === "open") onOpen()
       else if (outcome === "close") onClose()
