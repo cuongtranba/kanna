@@ -8,6 +8,20 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.13.0](https://github.com/cuongtranba/kanna/compare/v1.12.0...v1.13.0) (2026-08-07)
+
+
+### Features
+
+* **loop:** list every loop step in the Progress panel, sourced from the tracking file ([#627](https://github.com/cuongtranba/kanna/issues/627)) ([fb59dff](https://github.com/cuongtranba/kanna/commit/fb59dffc3e3ed9257902f472bc90f8dfe167c1ed))
+* **loop:** terminal whole-plan check + arm-time oracle audit ([#629](https://github.com/cuongtranba/kanna/issues/629)) ([6f1d83d](https://github.com/cuongtranba/kanna/commit/6f1d83d1aea995f19fe39b0e779604ca3a5fa54a))
+* **panes:** scroll the tab strip on a phone, smoothly ([#630](https://github.com/cuongtranba/kanna/issues/630)) ([a58c3ef](https://github.com/cuongtranba/kanna/commit/a58c3ef47300a37c65301d7c35132e7d0fc21112))
+
+
+### Bug Fixes
+
+* **agent:** park pending tools in per-chat slots, kill ghost turns for good ([#631](https://github.com/cuongtranba/kanna/issues/631)) ([0ccfd51](https://github.com/cuongtranba/kanna/commit/0ccfd511c7047148dc4ec68e10d04c7c9f684d66))
+
 ## [1.12.0](https://github.com/cuongtranba/kanna/compare/v1.11.0...v1.12.0) (2026-08-06)
 
 
