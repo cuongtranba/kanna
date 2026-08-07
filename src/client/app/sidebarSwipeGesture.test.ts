@@ -118,6 +118,51 @@ describe("evaluateSidebarSwipe", () => {
   })
 })
 
+// The pane tab strip scrolls horizontally and sits under the left-edge band, so
+// swiping it back toward its first tab would otherwise fling the sidebar open.
+describe("swipes that start inside a horizontal scroller", () => {
+  const IN_SCROLLER: SwipeGestureContext = {
+    ...MOBILE_CTX_CLOSED,
+    startedInHorizontalScroller: true,
+  }
+
+  test("does not open the sidebar", () => {
+    const result = evaluateSidebarSwipe(
+      { x: 10, y: 40, t: 0 },
+      { x: 10 + SIDEBAR_SWIPE_MIN_HORIZONTAL_PX + 5, y: 42, t: 200 },
+      IN_SCROLLER
+    )
+    expect(result).toBeNull()
+  })
+
+  test("does not close the sidebar either", () => {
+    const result = evaluateSidebarSwipe(
+      { x: 300, y: 40, t: 0 },
+      { x: 300 - SIDEBAR_SWIPE_MIN_HORIZONTAL_PX - 5, y: 42, t: 200 },
+      { ...MOBILE_CTX_OPEN, startedInHorizontalScroller: true }
+    )
+    expect(result).toBeNull()
+  })
+
+  test("leaves the scroll to the browser instead of claiming it", () => {
+    const result = shouldPreventNativeBack(
+      { x: 2, y: 40, t: 0 },
+      { x: 2 + SIDEBAR_SWIPE_PREVENT_MIN_DX + 1, y: 42, t: 80 },
+      IN_SCROLLER
+    )
+    expect(result).toBe(false)
+  })
+
+  test("still opens the sidebar from the same point outside a scroller", () => {
+    const result = evaluateSidebarSwipe(
+      { x: 10, y: 40, t: 0 },
+      { x: 10 + SIDEBAR_SWIPE_MIN_HORIZONTAL_PX + 5, y: 42, t: 200 },
+      { ...MOBILE_CTX_CLOSED, startedInHorizontalScroller: false }
+    )
+    expect(result).toBe("open")
+  })
+})
+
 describe("shouldPreventNativeBack", () => {
   test("blocks native back during a rightward edge swipe (opening)", () => {
     const result = shouldPreventNativeBack(
