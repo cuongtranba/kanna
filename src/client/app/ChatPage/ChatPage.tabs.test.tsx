@@ -22,7 +22,7 @@
  */
 
 import { beforeEach, describe, expect, test } from "bun:test"
-import { buildTabId, collectPanes, type PaneLeaf, type PaneTabTarget } from "../../lib/paneTree"
+import { buildTabId, collectPanes, createDefaultLayout, type PaneLeaf, type PaneTabTarget } from "../../lib/paneTree"
 import { usePaneLayoutStore } from "../../stores/paneLayoutStore"
 import { useChatStateStore, selectChatSlice } from "../../stores/chatStateStore"
 import { describeTab } from "../../components/panes/tabPresentation"
@@ -31,16 +31,15 @@ import {
   type PaneContentRegistry,
 } from "../../components/panes/paneContentRegistry"
 
-const PROJECT = "project-1"
 const CHAT_A = "chat-aaa"
 const CHAT_B = "chat-bbb"
 const CHAT_C = "chat-ccc"
 
 const store = () => usePaneLayoutStore.getState()
 
-/** Every chat tab currently in the project's layout, in order. */
-function chatTabs(projectId: string): { tabId: string; chatId: string }[] {
-  return collectPanes(store().getLayout(projectId).root)
+/** Every chat tab currently in the workspace, in order. */
+function chatTabs(): { tabId: string; chatId: string }[] {
+  return collectPanes(store().getLayout().root)
     .flatMap((pane) => pane.tabs)
     .flatMap((tab) =>
       tab.target.kind === "chat" ? [{ tabId: tab.tabId, chatId: tab.target.chatId }] : [],
@@ -48,15 +47,15 @@ function chatTabs(projectId: string): { tabId: string; chatId: string }[] {
 }
 
 /** The chatId of the focused tab in the focused pane, or null. */
-function focusedChatId(projectId: string): string | null {
-  const layout = store().getLayout(projectId)
+function focusedChatId(): string | null {
+  const layout = store().getLayout()
   const pane = collectPanes(layout.root).find((p) => p.id === layout.focusedPaneId)
   const tab = pane?.tabs.find((t) => t.tabId === pane.focusedTabId)
   return tab?.target.kind === "chat" ? tab.target.chatId : null
 }
 
 beforeEach(() => {
-  usePaneLayoutStore.setState({ layouts: {} })
+  usePaneLayoutStore.setState({ layout: createDefaultLayout() })
 })
 
 describe("ChatPage session-tabs", () => {
@@ -68,9 +67,9 @@ describe("ChatPage session-tabs", () => {
    * started from — `buildTabId` collapses to the constant "chat" and this fails.
    */
   test("renders the chat route through the real router", () => {
-    store().openTab(PROJECT, { kind: "chat", chatId: CHAT_A })
+    store().openTab({ kind: "chat", chatId: CHAT_A })
 
-    const tabs = chatTabs(PROJECT)
+    const tabs = chatTabs()
     expect(tabs).toHaveLength(1)
     expect(tabs[0]?.chatId).toBe(CHAT_A)
     // The id must be derived from the chatId, not a shared literal.
@@ -81,23 +80,23 @@ describe("ChatPage session-tabs", () => {
   // ─── (b) One tab per open chat, N open = N tabs ──────────────────────────
 
   test("N open chats produce N tabs", () => {
-    store().openTab(PROJECT, { kind: "chat", chatId: CHAT_A })
-    expect(chatTabs(PROJECT)).toHaveLength(1)
+    store().openTab({ kind: "chat", chatId: CHAT_A })
+    expect(chatTabs()).toHaveLength(1)
 
-    store().openTab(PROJECT, { kind: "chat", chatId: CHAT_B })
-    expect(chatTabs(PROJECT)).toHaveLength(2)
+    store().openTab({ kind: "chat", chatId: CHAT_B })
+    expect(chatTabs()).toHaveLength(2)
 
-    store().openTab(PROJECT, { kind: "chat", chatId: CHAT_C })
-    expect(chatTabs(PROJECT).map((t) => t.chatId)).toEqual([CHAT_A, CHAT_B, CHAT_C])
+    store().openTab({ kind: "chat", chatId: CHAT_C })
+    expect(chatTabs().map((t) => t.chatId)).toEqual([CHAT_A, CHAT_B, CHAT_C])
 
     // Closing one leaves the rest — the tab set is not rebuilt from the route.
-    const bTab = chatTabs(PROJECT).find((t) => t.chatId === CHAT_B)
-    store().closeTab(PROJECT, bTab!.tabId)
-    expect(chatTabs(PROJECT).map((t) => t.chatId)).toEqual([CHAT_A, CHAT_C])
+    const bTab = chatTabs().find((t) => t.chatId === CHAT_B)
+    store().closeTab(bTab!.tabId)
+    expect(chatTabs().map((t) => t.chatId)).toEqual([CHAT_A, CHAT_C])
 
     // Re-opening an already-open chat focuses it rather than duplicating it.
-    store().openTab(PROJECT, { kind: "chat", chatId: CHAT_A })
-    expect(chatTabs(PROJECT).map((t) => t.chatId)).toEqual([CHAT_A, CHAT_C])
+    store().openTab({ kind: "chat", chatId: CHAT_A })
+    expect(chatTabs().map((t) => t.chatId)).toEqual([CHAT_A, CHAT_C])
   })
 
   // ─── (c) Two tabs render two different transcripts ───────────────────────
@@ -145,21 +144,21 @@ describe("ChatPage session-tabs", () => {
    * then points the URL at whichever chat tab ended up focused.
    */
   test("keyboard switches to the next chat tab", () => {
-    store().openTab(PROJECT, { kind: "chat", chatId: CHAT_A })
-    store().openTab(PROJECT, { kind: "chat", chatId: CHAT_B })
+    store().openTab({ kind: "chat", chatId: CHAT_A })
+    store().openTab({ kind: "chat", chatId: CHAT_B })
 
     // openTab focuses what it opened, so B is current.
-    expect(focusedChatId(PROJECT)).toBe(CHAT_B)
+    expect(focusedChatId()).toBe(CHAT_B)
 
-    store().cycleFocusedPaneTab(PROJECT, 1)
-    expect(focusedChatId(PROJECT)).toBe(CHAT_A)
+    store().cycleFocusedPaneTab(1)
+    expect(focusedChatId()).toBe(CHAT_A)
 
     // Wraps around rather than stopping at the end.
-    store().cycleFocusedPaneTab(PROJECT, 1)
-    expect(focusedChatId(PROJECT)).toBe(CHAT_B)
+    store().cycleFocusedPaneTab(1)
+    expect(focusedChatId()).toBe(CHAT_B)
 
-    store().cycleFocusedPaneTab(PROJECT, -1)
-    expect(focusedChatId(PROJECT)).toBe(CHAT_A)
+    store().cycleFocusedPaneTab(-1)
+    expect(focusedChatId()).toBe(CHAT_A)
   })
 
   // ─── (e) Per-tab state isolation ─────────────────────────────────────────

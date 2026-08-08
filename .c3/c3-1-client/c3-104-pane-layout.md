@@ -1,11 +1,11 @@
 ---
 id: c3-104
-c3-seal: f402665ac9e68684abaa746d021acd9888d07c871ff1d2b97b11d008b905bb7d
+c3-seal: 3632745bb2c36f9b289b9adeba71ed19770348113f66426944fba9299d0ba8cb
 title: pane-layout
 type: component
 category: foundation
 parent: c3-1
-goal: 'Own the user-editable pane tree: the split/close/move/focus algebra, its per-project persistence, and the resizable renderer the chat route composes.'
+goal: 'Own the user-editable pane tree: the split/close/move/focus algebra, its persistence as one workspace shared by every project, and the resizable renderer the chat route composes.'
 uses:
     - ref-colocated-bun-test
     - ref-strong-typing
@@ -16,7 +16,7 @@ uses:
 
 ## Goal
 
-Own the user-editable pane tree: the split/close/move/focus algebra, its per-project persistence, and the resizable renderer the chat route composes.
+Own the user-editable pane tree: the split/close/move/focus algebra, its persistence as one workspace shared by every project, and the resizable renderer the chat route composes.
 
 ## Parent Fit
 
@@ -25,7 +25,7 @@ Own the user-editable pane tree: the split/close/move/focus algebra, its per-pro
 | Container | c3-1 (client) |
 | Parent Goal Slice | "Render the chat experience" — the arrangement layer the chat route is composed into |
 | Category | feature |
-| Lifecycle | Tree persists per project; panes mount and unmount as the user splits and closes |
+| Lifecycle | One tree persists for the whole app; panes mount and unmount as the user splits and closes |
 | Replaceability | The renderer may swap resize libraries; the pure tree algebra is the stable contract |
 
 ## Purpose
@@ -36,8 +36,8 @@ Owns the pane tree as a pure data structure and the components that render it: a
 
 | Aspect | Detail | Reference |
 | --- | --- | --- |
-| Precondition | A project id is selected; the chat route supplies a content registry keyed by tab kind | c3-112 |
-| Input — persisted layout | Per-project tree rehydrated from local storage, repaired before use | ref-local-first-data |
+| Precondition | The chat route supplies a content registry keyed by tab kind; no project needs to be selected — a tab resolves what it needs from its own target | c3-112 |
+| Input — persisted layout | One tree rehydrated from local storage, repaired before use | ref-local-first-data |
 | Input — content registry | Host maps each tab target kind to a renderer, so panes carry no view-model | c3-112 |
 | Internal state | The tree itself plus per-pane scoped UI slices | c3-102 |
 | Sizing | Sibling sizes live only in the tree; there is no parallel override map | c3-102 |
@@ -69,7 +69,7 @@ Owns the pane tree as a pure data structure and the components that render it: a
 | Tab identity | OUT | A tab id is derived from its target, making open idempotent and chat/changes singletons by construction | c3-112 | src/client/lib/paneTree/tabTarget.ts |
 | SplitContainer | OUT | Renders the tree as nested resizable groups keyed by stable node id, so a split never remounts a sibling | c3-112 | src/client/components/panes/SplitContainer.tsx |
 | Content registry | IN | Host supplies one renderer per tab kind; panes hold no view-model of their own | c3-112 | src/client/components/panes/paneContentRegistry.ts |
-| Per-project layout store | OUT | Persists one tree per project and seeds from the pre-rewrite layout keys on first read | c3-102 | src/client/stores/paneLayoutStore.ts |
+| Workspace layout store | OUT | Persists ONE tree for the whole app, seeded from the pre-rewrite layout keys on first read; chats from different projects accumulate as tabs in it, and a terminal tab resolves its owning project from its own id | c3-102 | src/client/stores/paneLayoutStore.ts |
 | Tab retention | OUT | Backgrounded tabs stay mounted — active always, terminals uncapped, the rest by recency to a cap — hidden with visibility:hidden plus inert, never display:none | c3-118 | src/client/components/panes/paneRetention.ts |
 | Phone view | OUT | Below BREAKPOINT_MD the tree flattens to one pane carrying every tab in tree order, so no tab is stranded; unmeasured width (0) renders the tree, not the phone view | c3-110 | src/client/components/panes/mobileLayout.ts |
 | Keyboard commands | OUT | Nine rebindable actions map to pane intents through one pure resolver; each command's subject is derived in the store, and only modifier-less bindings are suppressed while typing | c3-222 | src/client/components/panes/paneKeyboard.ts |
