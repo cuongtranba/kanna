@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.14.1](https://github.com/cuongtranba/kanna/compare/v1.14.0...v1.14.1) (2026-08-08)
+
+
+### Bug Fixes
+
+* **ci:** drop stray .claude/worktrees gitlinks, bump checkout/setup-node ([#635](https://github.com/cuongtranba/kanna/issues/635)) ([5f66be3](https://github.com/cuongtranba/kanna/commit/5f66be3c93372df3f1287b95ffe8d16c8281a209))
+
 ## [1.14.0](https://github.com/cuongtranba/kanna/compare/v1.13.0...v1.14.0) (2026-08-08)
 
 
