@@ -2435,6 +2435,11 @@ describe("AgentCoordinator claude integration", () => {
 
     const session = coordinator.claudeSessions.get("chat-1") as any
     expect(session.backgroundTasks.has("bgABC123")).toBe(true)
+    // Armed by the launch regex only — no level snapshot arrived, so this
+    // session keeps the deadline + wake ladder verified below. This is the
+    // PTY path, and it must stay byte-for-byte the old behaviour
+    // (adr-20260808-...-level-signal-authoritative).
+    expect(session.backgroundTasksLevelSourced).toBe(false)
     const deadline = session.backgroundTaskDeadlineAt as number
     expect(deadline).toBeGreaterThan(0)
 
@@ -2464,6 +2469,78 @@ describe("AgentCoordinator claude integration", () => {
     expect(closeCount).toBe(1)
     await waitFor(() => store.messages.some((m: any) =>
       typeof m.result === "string" && m.result.includes("bgABC123")))
+
+    coordinator.dispose()
+  })
+
+  test("an SDK level-sourced background task survives an indefinitely quiet sweep", async () => {
+    // The bug from chat 1ed924dd, end to end. "start the local dev" launched a
+    // vite dev server; the SDK level signal reported it live and never
+    // retracted it, but the 30-min deadline lapsed during the server's normal
+    // silence and Kanna injected a <background-task-check> prompt into the
+    // chat. With the level signal trusted, no clock can expire this guard.
+    const store = createFakeStore()
+    let closeCount = 0
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      claudeSessionLifecycle: { idleMs: 10, maxResidentSessions: 4, sweepIntervalMs: 0, backgroundTaskMaxMs: 100_000 },
+      startClaudeSession: async () => {
+        const events = new AsyncEventQueue<any>()
+        return {
+          provider: "claude",
+          stream: events,
+          getAccountInfo: async () => null,
+          interrupt: async () => {},
+          close: () => { closeCount += 1; events.close() },
+          setModel: async () => {},
+          setPermissionMode: async () => {},
+          getSupportedCommands: async () => [],
+          sendPrompt: async () => {
+            events.push({
+              type: "transcript" as const,
+              entry: timestamped({
+                kind: "status",
+                status: "Background tasks: 1 running",
+                hidden: true,
+                backgroundTaskIdsSnapshot: ["ba35e96q4"],
+                backgroundTasksSnapshot: [
+                  { id: "ba35e96q4", taskType: "local_bash", description: "task dev" },
+                ],
+              }),
+            })
+            events.push({
+              type: "transcript" as const,
+              entry: timestamped({ kind: "result", subtype: "success", isError: false, durationMs: 0, result: "" }),
+            })
+          },
+        }
+      },
+    })
+
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "claude",
+      content: "start the local dev for me",
+      model: "claude-opus-4-1",
+    })
+    await waitFor(() => store.turnFinishedCount === 1)
+
+    const session = coordinator.claudeSessions.get("chat-1") as any
+    expect(session.backgroundTasks.has("ba35e96q4")).toBe(true)
+    expect(session.backgroundTasksLevelSourced).toBe(true)
+
+    // Long past any deadline, with the session fully time-idle.
+    session.lastUsedAt = 0
+    ;(coordinator as any).sweepIdleClaudeSessions(Date.now() + 2 * 60 * 60_000)
+
+    expect(coordinator.claudeSessions.has("chat-1")).toBe(true)
+    expect(closeCount).toBe(0)
+    expect(session.backgroundTaskWakeCount).toBe(0)
+    expect(session.backgroundTasks.has("ba35e96q4")).toBe(true)
+    // The sharpest assertion: the watchdog prompt never reached the chat.
+    expect(JSON.stringify(store.messages)).not.toContain("<background-task-check>")
 
     coordinator.dispose()
   })

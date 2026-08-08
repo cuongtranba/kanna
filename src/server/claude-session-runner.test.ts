@@ -57,6 +57,7 @@ function makeSession(overrides: Partial<ClaudeSessionState> = {}): ClaudeSession
     recentToolDescriptions: new Map(),
     backgroundTaskDeadlineAt: 0,
     backgroundTaskWakeCount: 0,
+    backgroundTasksLevelSourced: false,
     loopArmedAtSpawn: false,
     cancelledResultPending: 0,
     suppressSessionTokenPersist: false,
@@ -563,6 +564,74 @@ describe("runClaudeSession", () => {
     session.session.stream = fakeStream([{ type: "transcript", entry: snapB }])
     await runClaudeSession(deps, session)
     expect(session.backgroundTaskWakeCount).toBe(1)
+  })
+
+  test("a background_tasks_changed snapshot promotes the session to level-sourced", async () => {
+    // adr-20260808-...-level-signal-authoritative: the SDK level signal is what
+    // a consumer needing "is background work running" should hold, so its first
+    // arrival retires the deadline for this session.
+    const session = makeSession()
+    expect(session.backgroundTasksLevelSourced).toBe(false)
+    const snap = {
+      _id: "snap-promote",
+      createdAt: Date.now(),
+      kind: "status",
+      status: "Background tasks: 1 running",
+      hidden: true,
+      backgroundTaskIdsSnapshot: ["ba35e96q4"],
+    } as unknown as TranscriptEntry
+    const deps = makeDeps(session)
+    session.session.stream = fakeStream([{ type: "transcript", entry: snap }])
+
+    await runClaudeSession(deps, session)
+
+    expect(session.backgroundTasksLevelSourced).toBe(true)
+  })
+
+  test("the level-sourced flag survives an empty snapshot that clears the set", async () => {
+    // Sticky: an EMPTY snapshot proves the signal works just as well as a
+    // non-empty one, so the next launch on this session is trusted at once.
+    const session = makeSession()
+    const deps = makeDeps(session)
+    const snap = (id: string, ids: string[]) => ({
+      _id: id,
+      createdAt: Date.now(),
+      kind: "status",
+      status: "Background tasks",
+      hidden: true,
+      backgroundTaskIdsSnapshot: ids,
+    } as unknown as TranscriptEntry)
+
+    session.session.stream = fakeStream([
+      { type: "transcript", entry: snap("s1", ["t1"]) },
+      { type: "transcript", entry: snap("s2", []) },
+    ])
+    await runClaudeSession(deps, session)
+
+    expect(session.backgroundTasks.size).toBe(0)
+    expect(session.backgroundTaskDeadlineAt).toBe(0)
+    expect(session.backgroundTasksLevelSourced).toBe(true)
+  })
+
+  test("a launch tool_result alone does NOT promote the session (PTY invariant)", async () => {
+    // The launch-regex fallback is the ONLY signal on PTY, where CLI >= 2.1.x
+    // writes no system rows. Promoting on it would hand PTY sessions SDK
+    // semantics they cannot support and disable their only keep-alive bound.
+    const session = makeSession()
+    const bgToolResultEntry = {
+      _id: "tool-res-no-promote",
+      createdAt: Date.now(),
+      kind: "tool_result",
+      content: "Command running in background with ID: ptyonly1",
+    } as unknown as TranscriptEntry
+    const deps = makeDeps(session)
+    session.session.stream = fakeStream([{ type: "transcript", entry: bgToolResultEntry }])
+
+    await runClaudeSession(deps, session)
+
+    expect(session.backgroundTasks.has("ptyonly1")).toBe(true)
+    expect(session.backgroundTasksLevelSourced).toBe(false)
+    expect(session.backgroundTaskDeadlineAt).toBeGreaterThan(Date.now())
   })
 
   test("backgroundTasksSnapshot meta labels tasks; surviving ids keep startedAt", async () => {

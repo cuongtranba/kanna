@@ -251,7 +251,13 @@ export function isClaudeSessionIdle(
 /**
  * Escalate a session whose background-task keep-alive deadline lapsed while
  * task ids are still pending. Invariant: a pending background task never
- * dies silently (adr-20260801-background-task-wake-escalation). In order:
+ * dies silently (adr-20260801-background-task-wake-escalation).
+ *
+ * Reachable ONLY for a session with no SDK level signal — the PTY driver, an
+ * old CLI, or the brief window before an SDK session's first
+ * `background_tasks_changed` snapshot. A level-sourced session never expires
+ * its guard, so it never lands here
+ * (adr-20260808-background-task-level-signal-authoritative). In order:
  *
  * 1. Session visibly busy (active Claude turn / queued prompts / live
  *    workflow) — just re-arm the deadline; the activity itself will settle

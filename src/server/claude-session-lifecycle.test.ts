@@ -11,6 +11,7 @@ import {
   resolveClaudeMaxResident,
   hasLiveWorkflow,
   hasPendingBackgroundTask,
+  backgroundTaskGuardExpired,
   closeClaudeSession,
   maybeRegisterSdkWorkflowsDir,
   enforceClaudeSessionBudget,
@@ -63,6 +64,7 @@ function makeSession(overrides: Partial<ClaudeSessionState> = {}): ClaudeSession
     recentToolDescriptions: new Map(),
     backgroundTaskDeadlineAt: 0,
     backgroundTaskWakeCount: 0,
+    backgroundTasksLevelSourced: false,
     loopArmedAtSpawn: false,
     workflowsDirRegistered: false,
     cancelledResultPending: 0,
@@ -266,6 +268,65 @@ describe("hasPendingBackgroundTask", () => {
     expect(result).toBe(false)
     expect(session.backgroundTasks.size).toBe(1)
     expect(session.backgroundTaskDeadlineAt).toBe(now - 1)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Level-sourced background tasks (adr-20260808-...-level-signal-authoritative)
+//
+// Once the SDK has sent a background_tasks_changed snapshot, set membership is
+// authoritative and no clock may expire it. A `vite dev` server prints its
+// banner and then goes silent for hours, so ANY timer reads a healthy task as
+// dead: in chat 1ed924dd the last output byte landed at 12:45:04 and the
+// watchdog woke the user at 13:14:39.
+// ---------------------------------------------------------------------------
+
+describe("background-task guard with an SDK level signal", () => {
+  const oneTask = () =>
+    new Map([["ba35e96q4", { taskType: "local_bash", description: "task dev", startedAt: 0 }]])
+
+  test("hasPendingBackgroundTask stays true long after the deadline lapsed", () => {
+    const now = Date.now()
+    const session = makeSession({
+      backgroundTasks: oneTask(),
+      backgroundTaskDeadlineAt: now - 60 * 60_000,
+      backgroundTasksLevelSourced: true,
+    })
+    expect(hasPendingBackgroundTask(session, now)).toBe(true)
+  })
+
+  test("backgroundTaskGuardExpired never fires for a level-sourced session", () => {
+    const now = Date.now()
+    const session = makeSession({
+      backgroundTasks: oneTask(),
+      backgroundTaskDeadlineAt: now - 60 * 60_000,
+      backgroundTasksLevelSourced: true,
+    })
+    expect(backgroundTaskGuardExpired(session, now)).toBe(false)
+  })
+
+  test("the flag does not resurrect a guard once the set is empty", () => {
+    // Sticky across an emptied set, but an empty set still means "no pending
+    // work" — otherwise a settled session could never be reaped.
+    const now = Date.now()
+    const session = makeSession({
+      backgroundTasks: new Map(),
+      backgroundTaskDeadlineAt: 0,
+      backgroundTasksLevelSourced: true,
+    })
+    expect(hasPendingBackgroundTask(session, now)).toBe(false)
+    expect(backgroundTaskGuardExpired(session, now)).toBe(false)
+  })
+
+  test("without a level signal the deadline still governs (PTY / old CLI)", () => {
+    const now = Date.now()
+    const session = makeSession({
+      backgroundTasks: oneTask(),
+      backgroundTaskDeadlineAt: now - 1,
+      backgroundTasksLevelSourced: false,
+    })
+    expect(hasPendingBackgroundTask(session, now)).toBe(false)
+    expect(backgroundTaskGuardExpired(session, now)).toBe(true)
   })
 })
 

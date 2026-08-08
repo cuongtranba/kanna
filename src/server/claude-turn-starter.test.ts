@@ -243,6 +243,7 @@ describe("startTurnForChat", () => {
         backgroundTasks: new Map(),
         backgroundTaskDeadlineAt: 0,
     backgroundTaskWakeCount: 0,
+    backgroundTasksLevelSourced: false,
         loopArmedAtSpawn: false,
         cancelledResultPending: 0,
         suppressSessionTokenPersist: false,

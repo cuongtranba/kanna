@@ -83,6 +83,7 @@ function makeSession(overrides: Partial<ClaudeSessionState> = {}): ClaudeSession
     recentToolDescriptions: new Map(),
     backgroundTaskDeadlineAt: 0,
     backgroundTaskWakeCount: 0,
+    backgroundTasksLevelSourced: false,
     loopArmedAtSpawn: false,
     workflowsDirRegistered: false,
     cancelledResultPending: 0,
