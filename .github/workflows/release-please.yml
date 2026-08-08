@@ -35,7 +35,7 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: oven-sh/setup-bun@v2
 
@@ -49,11 +49,19 @@ jobs:
           GIT_TERMINAL_PROMPT: "0"
           HANG_AFTER: "170"
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
           scope: "@cuongtran001"
+          # setup-node >=v5 auto-caches when package.json has a
+          # `packageManager` field; ours says bun@1.3.11 and there is no
+          # package-lock.json, so letting it probe risks a hard "lock file not
+          # found" failure. This job only runs `npm publish` — it never
+          # installs — so caching buys nothing. PR CI does NOT exercise this
+          # job (it runs only on a real release), so failing here would first
+          # surface mid-release. Disable it explicitly.
+          package-manager-cache: false
 
       - run: npm publish --provenance --access public
         env:

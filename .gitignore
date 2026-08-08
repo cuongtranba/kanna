@@ -34,6 +34,10 @@ vite.config.ts.timestamp-*
 
 # claude code session artifacts
 .claude/scheduled_tasks.lock
+# Claude Code writes scratch worktrees here. Two were committed as gitlinks
+# with no .gitmodules entry, which made `git submodule foreach` fail (exit
+# 128) in every actions/checkout post-run step.
+.claude/worktrees/
 
 # playwright MCP scratch
 .playwright-mcp/
