@@ -114,6 +114,20 @@ export interface ClaudeSessionState {
   // Reset to 0 when the id set transitions empty→non-empty and on user send.
   // See adr-20260801-background-task-wake-escalation.
   backgroundTaskWakeCount: number
+  // True once this session has received at least one SDK
+  // `background_tasks_changed` LEVEL snapshot. Per the SDK's own contract
+  // (`sdk.d.ts` SDKBackgroundTasksChangedMessage) the level has REPLACE
+  // semantics and is what a consumer needing "is background work running"
+  // should hold, so from the first snapshot on SET MEMBERSHIP is the truth
+  // and the deadline above is redundant: it fired 29.5 min after a healthy
+  // `vite dev` server's last output byte and woke the user with a
+  // <background-task-check> prompt. Sticky across an emptied set (it records
+  // a driver capability, not a per-epoch fact) and dies with the session —
+  // the SDK level is per-process, so a respawn MUST start false. Never true
+  // on PTY: CLI >= 2.1.x writes no system rows to the transcript JSONL, so
+  // that guard stays deadline-based.
+  // See adr-20260808-background-task-level-signal-authoritative.
+  backgroundTasksLevelSourced: boolean
   // True while a task-notification self-wake turn is streaming entries on
   // this session WITHOUT a Kanna-driven turn (no ActiveTurn). Armed by the
   // runner on model-activity entries with no active turn, disarmed on the

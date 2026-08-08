@@ -341,6 +341,10 @@ export async function spawnClaudeTurn(
       backgroundTasks: new Map<string, SessionBackgroundTask>(),
       backgroundTaskDeadlineAt: 0,
       backgroundTaskWakeCount: 0,
+      // The SDK level signal is per-process: nothing is emitted at startup, so
+      // every fresh CLI process starts untrusted and promotes itself on its
+      // first background_tasks_changed snapshot.
+      backgroundTasksLevelSourced: false,
       selfWakeActive: false,
       recentToolDescriptions: new Map<string, string>(),
       loopArmedAtSpawn: loopArmedNow,

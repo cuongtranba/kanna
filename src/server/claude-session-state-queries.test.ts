@@ -11,6 +11,7 @@ import {
   type SessionStateQueryDeps,
 } from "./claude-session-state-queries"
 import type { ActiveTurn, ClaudeSessionState, StartingTurn } from "./claude-session-state"
+import { hasPendingBackgroundTask } from "./claude-session-lifecycle"
 import { PendingToolSlots, type ParkedTool } from "./pending-tool-slot"
 
 // ---------------------------------------------------------------------------
@@ -38,6 +39,11 @@ function makeSession(overrides?: Partial<ClaudeSessionState>): ClaudeSessionStat
     lastUsedAt: Date.now(),
     backgroundTasks: new Map(),
     backgroundTaskDeadlineAt: 0,
+    backgroundTaskWakeCount: 0,
+    // Explicit even though the cast below would tolerate `undefined`: a
+    // falsy-by-omission flag would make the level-sourced tests pass for the
+    // wrong reason.
+    backgroundTasksLevelSourced: false,
     loopArmedAtSpawn: false,
     ...overrides,
   } as ClaudeSessionState
@@ -458,6 +464,58 @@ describe("sweepIdleClaudeSessions background-task escalation", () => {
       ...overrides,
     })
   }
+
+  // The regression test for adr-20260808-...-level-signal-authoritative.
+  //
+  // Chat 1ed924dd: "start the local dev" launched a vite dev server as
+  // background task ba35e96q4 at 12:41:56. Its output file stopped growing at
+  // 12:45:04 (786 B — the startup banner, then silence) and the server ran on
+  // perfectly happily. The SDK level signal said so the whole time; the fixed
+  // 30-min deadline did not, and at 13:14:39 the watchdog injected a raw
+  // <background-task-check> prompt into the user's chat.
+  it("never wakes a level-sourced session whose task simply never settles", () => {
+    const now = Date.now()
+    const session = makeExpiredSession({
+      backgroundTasks: new Map([
+        ["ba35e96q4", { taskType: "local_bash", description: "task dev", startedAt: now - 32 * 60_000 }],
+      ]),
+      backgroundTaskDeadlineAt: now - 2 * 60_000,
+      lastUsedAt: now - 32 * 60_000,
+      backgroundTasksLevelSourced: true,
+    })
+    const closeFn = mock(() => undefined)
+    const wakeFn = mock<SessionStateQueryDeps["wakeBackgroundTaskSession"]>(() => undefined)
+    const notifyFn = mock<SessionStateQueryDeps["notifyBackgroundTasksAbandoned"]>(() => undefined)
+    const deps = makeDeps({
+      claudeSessions: new Map([["chat-1", session]]),
+      resolveClaudeIdleMs: () => 1,
+      closeClaudeSession: closeFn,
+      wakeBackgroundTaskSession: wakeFn,
+      notifyBackgroundTasksAbandoned: notifyFn,
+      // The REAL predicate, as buildSessionStateQueryDeps wires it. makeDeps
+      // stubs it to `() => false`, which would let the idle reaper close this
+      // session and hide the very regression under test.
+      hasPendingBackgroundTask: (s, n) => hasPendingBackgroundTask(s, n),
+    })
+    sweepIdleClaudeSessions(deps, now)
+    expect(wakeFn.mock.calls.length).toBe(0)
+    expect(closeFn.mock.calls.length).toBe(0)
+    expect(notifyFn.mock.calls.length).toBe(0)
+    expect(session.backgroundTasks.size).toBe(1)
+    expect(session.backgroundTaskWakeCount).toBe(0)
+  })
+
+  it("still wakes a session that never saw a level snapshot (PTY driver)", () => {
+    const session = makeExpiredSession({ backgroundTasksLevelSourced: false })
+    const wakeFn = mock<SessionStateQueryDeps["wakeBackgroundTaskSession"]>(() => undefined)
+    const deps = makeDeps({
+      claudeSessions: new Map([["chat-1", session]]),
+      resolveClaudeIdleMs: () => 1,
+      wakeBackgroundTaskSession: wakeFn,
+    })
+    sweepIdleClaudeSessions(deps, Date.now())
+    expect(wakeFn.mock.calls.length).toBe(1)
+  })
 
   it("fires a wake instead of closing when the guard expires with budget left", () => {
     const session = makeExpiredSession()

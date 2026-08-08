@@ -294,9 +294,10 @@ export async function runClaudeSession(
       // Background-task keep-alive guard (SDK + PTY).
       // On launch: add the task id and refresh the zombie-backstop deadline.
       // On settle (task_notification): remove the id — gate primary signal is
-      // set size>0, not the clock. The deadline (default 4h) is refreshed on
-      // every launch and settle so it only fires when a notification is truly
-      // lost (SDK crash / dropped message), never during normal execution.
+      // set size>0, not the clock. The deadline (default 30 min,
+      // DEFAULT_PTY_BACKGROUND_TASK_MAX_MS) is refreshed on every launch and
+      // settle, and applies ONLY to a session that has never seen a level
+      // snapshot (PTY / old CLI) — see backgroundTasksLevelSourced.
       // A `backgroundTaskIdsSnapshot` status entry (SDK background_tasks_changed
       // level signal) REPLACES the whole set — authoritative over both edges.
       if (event.entry.kind === "tool_result") {
@@ -322,6 +323,13 @@ export async function runClaudeSession(
         }
       }
       if (event.entry.kind === "status" && event.entry.backgroundTaskIdsSnapshot) {
+        // The SDK level signal exists on this session, so from here on set
+        // membership is authoritative and the deadline is no longer consulted
+        // (adr-20260808-background-task-level-signal-authoritative). Sticky:
+        // an EMPTY snapshot proves the signal works just as well as a
+        // non-empty one, so this is never reset — only a respawn clears it,
+        // which is exactly the SDK's per-process rule.
+        session.backgroundTasksLevelSourced = true
         const wasEmpty = session.backgroundTasks.size === 0
         session.backgroundTasks = mergeBackgroundTaskSnapshot(
           session.backgroundTasks,
