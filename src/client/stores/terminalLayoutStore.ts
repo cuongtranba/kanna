@@ -40,6 +40,30 @@ function getProjectLayout(projects: Record<string, ProjectTerminalLayout>, proje
   return projects[projectId] ?? createDefaultProjectLayout()
 }
 
+/**
+ * Which project owns a terminal, if any.
+ *
+ * A terminal id is globally unique (`crypto.randomUUID`), so it is a complete
+ * address on its own — which is why the pane tree stores nothing else about a
+ * terminal tab. The workspace is one tree shared by every project, so a
+ * terminal tab has to resolve its OWN project here rather than borrow whichever
+ * one happens to be active: borrowing renders project A's terminal against
+ * project B's cwd, and reaps A's tab the moment you look at B.
+ *
+ * `null` means no project claims it — a closed terminal, and the one case where
+ * the tab really should be reaped.
+ */
+export function findTerminalOwner(
+  projects: Record<string, ProjectTerminalLayout>,
+  terminalId: string,
+): { projectId: string; terminal: TerminalPaneLayout } | null {
+  for (const [projectId, layout] of Object.entries(projects)) {
+    const terminal = layout.terminals.find((candidate) => candidate.id === terminalId)
+    if (terminal) return { projectId, terminal }
+  }
+  return null
+}
+
 function normalizeSizes(values: number[]): number[] {
   if (values.length === 0) return []
   const total = values.reduce((sum, value) => sum + Math.max(value, 0), 0)

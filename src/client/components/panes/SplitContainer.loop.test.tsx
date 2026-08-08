@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { renderForLoopCheck } from "../../lib/testing/renderForLoopCheck"
-import { createGroup, createPane, createTab, type PaneLayout } from "../../lib/paneTree"
+import { createDefaultLayout, createGroup, createPane, createTab, type PaneLayout } from "../../lib/paneTree"
 import { usePaneLayoutStore } from "../../stores/paneLayoutStore"
 import { SplitContainer } from "./SplitContainer"
 
@@ -33,16 +33,16 @@ describe("SplitContainer render loop", () => {
   })
 
   test("mounts against the real store without a render loop", async () => {
-    usePaneLayoutStore.setState({ layouts: {}, nodeSequence: 0 })
+    usePaneLayoutStore.setState({ layout: createDefaultLayout(), nodeSequence: 0 })
     const store = usePaneLayoutStore.getState()
-    store.openTab("proj-loop", { kind: "chat", chatId: "c1" })
+    store.openTab({ kind: "chat", chatId: "c1" })
 
     const { loopWarnings, thrown, cleanup } = await renderForLoopCheck(
       <SplitContainer
-        layout={store.getLayout("proj-loop")}
+        layout={store.getLayout()}
         renderPane={(pane) => <div>{pane.id}</div>}
-        onFocusPane={(paneId) => store.focusPane("proj-loop", paneId)}
-        onResizeGroup={(groupId, sizes) => store.setGroupSizes("proj-loop", groupId, sizes)}
+        onFocusPane={(paneId) => store.focusPane(paneId)}
+        onResizeGroup={(groupId, sizes) => store.setGroupSizes(groupId, sizes)}
       />,
     )
     await cleanup()

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test } from "bun:test"
-import { getDefaultProjectTerminalLayout, useTerminalLayoutStore } from "./terminalLayoutStore"
+import { findTerminalOwner, getDefaultProjectTerminalLayout, useTerminalLayoutStore } from "./terminalLayoutStore"
 
 const PROJECT_ID = "project-1"
 
@@ -48,5 +48,36 @@ describe("terminalLayoutStore", () => {
     expect(layout.mainSizes).toEqual([68, 32])
     expect(layout.isVisible).toBe(true)
     expect(layout.terminals).toHaveLength(1)
+  })
+})
+
+/**
+ * The workspace pane tree is shared by every project and stores only a
+ * terminalId, so a terminal tab resolves its own owner here. Getting this wrong
+ * is not cosmetic: the active project would be borrowed instead, rendering one
+ * project's terminal against another's cwd and reaping its tab on every switch.
+ */
+describe("findTerminalOwner", () => {
+  beforeEach(() => {
+    useTerminalLayoutStore.setState({ projects: {} })
+  })
+
+  test("finds a terminal owned by a project that is not the active one", () => {
+    useTerminalLayoutStore.getState().addTerminal("project-a")
+    useTerminalLayoutStore.getState().addTerminal("project-b")
+
+    const { projects } = useTerminalLayoutStore.getState()
+    const terminalInB = projects["project-b"]!.terminals[0]!
+
+    const owner = findTerminalOwner(projects, terminalInB.id)
+
+    expect(owner?.projectId).toBe("project-b")
+    expect(owner?.terminal).toEqual(terminalInB)
+  })
+
+  test("returns null for a terminal no project claims", () => {
+    useTerminalLayoutStore.getState().addTerminal(PROJECT_ID)
+
+    expect(findTerminalOwner(useTerminalLayoutStore.getState().projects, "closed-terminal")).toBeNull()
   })
 })

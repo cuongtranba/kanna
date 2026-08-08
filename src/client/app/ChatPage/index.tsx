@@ -13,14 +13,18 @@ import {
   DEFAULT_RIGHT_SIDEBAR_VISIBILITY_STATE,
   useRightSidebarStore,
 } from "../../stores/rightSidebarStore"
-import { DEFAULT_PROJECT_TERMINAL_LAYOUT, useTerminalLayoutStore } from "../../stores/terminalLayoutStore"
+import {
+  DEFAULT_PROJECT_TERMINAL_LAYOUT,
+  findTerminalOwner,
+  useTerminalLayoutStore,
+} from "../../stores/terminalLayoutStore"
 import { useTerminalPreferencesStore } from "../../stores/terminalPreferencesStore"
 import { useChatPageStore } from "../../stores/chatPageStore"
 import type { KannaState } from "../useKannaState"
 import { useAppGlobalContext } from "../AppGlobalProvider"
 import { TerminalWorkspaceShell } from "./TerminalWorkspaceShell"
 import { useChatPageSidebarActions, EMPTY_DIFF_SNAPSHOT } from "./useChatPageSidebarActions"
-import { collectPanes, createDefaultLayout, type PaneLayout, type SplitPosition } from "../../lib/paneTree"
+import { collectPanes, type SplitPosition } from "../../lib/paneTree"
 import { usePaneLayoutStore } from "../../stores/paneLayoutStore"
 import { SplitContainer } from "../../components/panes/SplitContainer"
 import { PaneShell, type SplitArgs } from "../../components/panes/PaneShell"
@@ -43,9 +47,6 @@ export {
 // container (clientHeight === scrollHeight) so it can no longer scroll —
 // most visible on phones. Do not drop min-h-0.
 export const CHAT_PAGE_LAYOUT_ROOT_CLASS = "flex-1 flex flex-col min-h-0 min-w-0 relative"
-
-/** Stable default used as a fallback before a project's layout is seeded. */
-const EMPTY_PANE_LAYOUT: PaneLayout = createDefaultLayout()
 
 function useLayoutWidth(ref: RefObject<HTMLDivElement | null>) {
   const layoutWidth = useChatPageStore((s) => s.layoutWidth)
@@ -110,7 +111,10 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
   const sidebarData = state.sidebarData
   const chatNavigator = useAppGlobalContext().chatNavigator
   const handleOpenExternal = state.handleOpenExternal
-  const projectTerminalLayout = useTerminalLayoutStore((store) => (projectId ? store.projects[projectId] : undefined))
+  // Every project's terminals, not just the active one's: the workspace is
+  // shared, so a terminal tab resolves its own owner (see findTerminalOwner).
+  const terminalProjects = useTerminalLayoutStore((store) => store.projects)
+  const projectTerminalLayout = projectId ? terminalProjects[projectId] : undefined
   const terminalLayout = projectTerminalLayout ?? DEFAULT_PROJECT_TERMINAL_LAYOUT
   const projectRightSidebarVisibility = useRightSidebarStore((store) => (projectId ? store.projects[projectId] : undefined))
   const rightSidebarVisibility = projectRightSidebarVisibility ?? DEFAULT_RIGHT_SIDEBAR_VISIBILITY_STATE
@@ -129,8 +133,17 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
 
   // ─── Pane layout ────────────────────────────────────────────────────────────
 
-  const storedPaneLayout = usePaneLayoutStore((s) => projectId ? s.layouts[projectId] : undefined)
-  const paneLayout = storedPaneLayout ?? EMPTY_PANE_LAYOUT
+  // One workspace for the whole app — deliberately NOT filtered by project, so
+  // a chat opened in project B joins the chats already open from project A
+  // instead of swapping the arrangement out.
+  const paneLayout = usePaneLayoutStore((s) => s.layout)
+  // What decides whether the panel shows: the workspace holds a tab. No project
+  // filter — an empty tree only happens on the very first render, before the
+  // reconcile effect opens a tab for the chat in the URL.
+  const workspaceHasTabs = useMemo(
+    () => collectPanes(paneLayout.root).some((pane) => pane.tabs.length > 0),
+    [paneLayout],
+  )
 
   const seedFromLegacy = usePaneLayoutStore((s) => s.seedFromLegacy)
   const focusPane = usePaneLayoutStore((s) => s.focusPane)
@@ -146,11 +159,12 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
   const openTab = usePaneLayoutStore((s) => s.openTab)
   const getPaneLayout = usePaneLayoutStore((s) => s.getLayout)
 
-  // One-time seed from the legacy terminal + sidebar stores when the project
-  // first loads.  seedFromLegacy is a no-op if the layout already exists.
+  // One-time seed from the legacy terminal + sidebar stores, using whichever
+  // project the user opens first. seedFromLegacy is a no-op once the workspace
+  // holds any tab, so a second project never overwrites it.
   useEffect(() => {
     if (!projectId) return
-    seedFromLegacy(projectId, {
+    seedFromLegacy({
       terminals: terminalLayout.terminals,
       mainSizes: terminalLayout.mainSizes,
       terminalSizes: terminalLayout.terminals.map((t) => t.size),
@@ -167,37 +181,40 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
   // of them writes those sources, and none of them knows about panes. Without
   // this the tree could only ever hold the tabs the one-time seed gave it.
   useEffect(() => {
-    if (!projectId) return
+    const tabs = collectPanes(getPaneLayout().root).flatMap((pane) => pane.tabs)
 
-    const tabs = collectPanes(getPaneLayout(projectId).root).flatMap((pane) => pane.tabs)
-    const terminalIds = new Set(terminalLayout.terminals.map((terminal) => terminal.id))
-
-    for (const id of terminalIds) {
+    for (const terminal of terminalLayout.terminals) {
       const known = tabs.some(
-        (tab) => tab.target.kind === "terminal" && tab.target.terminalId === id,
+        (tab) => tab.target.kind === "terminal" && tab.target.terminalId === terminal.id,
       )
-      if (!known) openTab(projectId, { kind: "terminal", terminalId: id })
+      if (!known) openTab({ kind: "terminal", terminalId: terminal.id })
     }
 
+    // Reap against EVERY project's terminal list, not just the active one. The
+    // workspace is shared, so a terminal tab belonging to another project is
+    // still live — only a terminal no project claims any more is stale.
     for (const tab of tabs) {
-      if (tab.target.kind === "terminal" && !terminalIds.has(tab.target.terminalId)) {
-        closeTab(projectId, tab.tabId)
+      if (tab.target.kind === "terminal" && !findTerminalOwner(terminalProjects, tab.target.terminalId)) {
+        closeTab(tab.tabId)
       }
     }
 
+    // The changes panel is a singleton showing the ACTIVE project's git state,
+    // so its tab follows the active project's toggle rather than accumulating.
     const changesTab = tabs.find((tab) => tab.target.kind === "changes")
-    if (showRightSidebar && !changesTab) openTab(projectId, { kind: "changes" })
-    if (!showRightSidebar && changesTab) closeTab(projectId, changesTab.tabId)
+    if (showRightSidebar && !changesTab) openTab({ kind: "changes" })
+    if (!showRightSidebar && changesTab) closeTab(changesTab.tabId)
 
     // The chat named by the URL always has a tab. openTab is idempotent per
     // target, so revisiting an open chat focuses its tab while visiting a new
     // one adds a tab beside the others — that accumulation is what makes N open
-    // chats N tabs. Chat tabs are deliberately NOT reaped the way stale terminal
-    // tabs are above: a chat tab outliving the URL is the whole point.
-    if (activeChatId) openTab(projectId, { kind: "chat", chatId: activeChatId })
+    // chats N tabs, across projects as well as within one. Chat tabs are
+    // deliberately NOT reaped the way stale terminal tabs are above: a chat tab
+    // outliving the URL is the whole point.
+    if (activeChatId) openTab({ kind: "chat", chatId: activeChatId })
   }, [
-    projectId,
     terminalLayout.terminals,
+    terminalProjects,
     showRightSidebar,
     activeChatId,
     openTab,
@@ -220,8 +237,7 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
    * tick as the action that moved focus, before a re-render.
    */
   const syncUrlToFocusedChat = useCallback(() => {
-    if (!projectId) return
-    const layout = getPaneLayout(projectId)
+    const layout = getPaneLayout()
     const pane = collectPanes(layout.root).find((p) => p.id === layout.focusedPaneId)
     const tab = pane?.tabs.find((t) => t.tabId === pane.focusedTabId)
     // Only a focused CHAT tab steers the URL — focusing a terminal or the
@@ -229,51 +245,47 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
     if (tab?.target.kind === "chat" && tab.target.chatId !== activeChatId) {
       chatNavigator.openChat(tab.target.chatId)
     }
-  }, [projectId, getPaneLayout, activeChatId, chatNavigator])
+  }, [getPaneLayout, activeChatId, chatNavigator])
 
   // Stable pane action callbacks.
   const handleSelectTab = useCallback(
     (tabId: string) => {
-      if (!projectId) return
-      focusTab(projectId, tabId)
+      focusTab(tabId)
       syncUrlToFocusedChat()
     },
-    [projectId, focusTab, syncUrlToFocusedChat],
+    [focusTab, syncUrlToFocusedChat],
   )
   const handleSplitPane = useCallback(
     ({ tabId, paneId, position }: SplitArgs) => {
-      if (!projectId) return
-      splitPane(projectId, { tabId, targetPaneId: paneId, position })
+      splitPane({ tabId, targetPaneId: paneId, position })
     },
-    [projectId, splitPane],
+    [splitPane],
   )
   // Clicking into a pane focuses it, so the URL follows to whatever chat that
   // pane is showing — otherwise typing in the left pane would send the message
   // to the chat named by the URL, which is the right pane's.
   const handleFocusPane = useCallback(
     (paneId: string) => {
-      if (!projectId) return
-      focusPane(projectId, paneId)
+      focusPane(paneId)
       syncUrlToFocusedChat()
     },
-    [projectId, focusPane, syncUrlToFocusedChat],
+    [focusPane, syncUrlToFocusedChat],
   )
   const handleResizeGroup = useCallback(
-    (groupId: string, sizes: number[]) => { if (projectId) setGroupSizes(projectId, groupId, sizes) },
-    [projectId, setGroupSizes],
+    (groupId: string, sizes: number[]) => { setGroupSizes(groupId, sizes) },
+    [setGroupSizes],
   )
 
   // Drag-and-drop: drop a tab into a pane's middle to merge, onto an edge to split.
   const handleMoveTab = useCallback(
-    (tabId: string, toPaneId: string) => { if (projectId) moveTabToPane(projectId, tabId, toPaneId) },
-    [projectId, moveTabToPane],
+    (tabId: string, toPaneId: string) => { moveTabToPane(tabId, toPaneId) },
+    [moveTabToPane],
   )
   const handleSplitWithTab = useCallback(
     (tabId: string, paneId: string, position: SplitPosition) => {
-      if (!projectId) return
-      splitPane(projectId, { tabId, targetPaneId: paneId, position })
+      splitPane({ tabId, targetPaneId: paneId, position })
     },
-    [projectId, splitPane],
+    [splitPane],
   )
 
   // Tab-strip presentation context: terminal titles from the legacy store.
@@ -286,7 +298,14 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
     )
 
     return {
-      terminalTitles: Object.fromEntries(terminalLayout.terminals.map((t) => [t.id, t.title])),
+      // Titles from EVERY project, not just the active one: a terminal tab
+      // opened in another project stays in the shared workspace, and titling it
+      // from the active project alone silently renames it to the fallback.
+      terminalTitles: Object.fromEntries(
+        Object.values(terminalProjects).flatMap((layout) =>
+          layout.terminals.map((terminal) => [terminal.id, terminal.title] as const),
+        ),
+      ),
       chatTitles: Object.fromEntries(chatRows.map((row) => [row.chatId, row.title])),
       // A chat mid-turn holds streaming state that unmounting would discard, so
       // it is pinned against the retention LRU exactly like a live terminal.
@@ -296,7 +315,7 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
           .map((row) => row.chatId),
       ),
     }
-  }, [terminalLayout.terminals, sidebarData])
+  }, [terminalProjects, sidebarData])
 
   // ─── Layout width ────────────────────────────────────────────────────────────
 
@@ -391,18 +410,20 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
   // it calls.
   const handleCloseTab = useCallback(
     (tabId: string) => {
-      if (!projectId) return
-
-      const tab = collectPanes(getPaneLayout(projectId).root)
+      const tab = collectPanes(getPaneLayout().root)
         .flatMap((pane) => pane.tabs)
         .find((candidate) => candidate.tabId === tabId)
 
       if (tab?.target.kind === "terminal") {
-        handleRemoveTerminal(projectId, tab.target.terminalId)
+        // Close it in the project that OWNS it, which need not be the active
+        // one now that the workspace spans projects.
+        const owner = findTerminalOwner(terminalProjects, tab.target.terminalId)
+        if (owner) handleRemoveTerminal(owner.projectId, tab.target.terminalId)
+        else closeTab(tabId)
         return
       }
       if (tab?.target.kind === "changes") {
-        toggleRightSidebar(projectId)
+        if (projectId) toggleRightSidebar(projectId)
         return
       }
 
@@ -412,7 +433,7 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
       // tab when there is one, else leave the chat route entirely.
       if (tab?.target.kind === "chat") {
         const closingChatId = tab.target.chatId
-        const siblingChatId = collectPanes(getPaneLayout(projectId).root)
+        const siblingChatId = collectPanes(getPaneLayout().root)
           .flatMap((pane) => pane.tabs)
           .find(
             (candidate) =>
@@ -421,7 +442,7 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
               candidate.target.chatId !== closingChatId,
           )?.target
 
-        closeTab(projectId, tabId)
+        closeTab(tabId)
 
         if (closingChatId === activeChatId) {
           if (siblingChatId?.kind === "chat") chatNavigator.openChat(siblingChatId.chatId)
@@ -430,10 +451,11 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
         return
       }
 
-      closeTab(projectId, tabId)
+      closeTab(tabId)
     },
     [
       projectId,
+      terminalProjects,
       closeTab,
       getPaneLayout,
       handleRemoveTerminal,
@@ -444,35 +466,38 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
   )
   useEffect(() => {
     function handleGlobalKeydown(event: KeyboardEvent) {
-      if (!projectId) return
-      if (actionMatchesEvent(resolvedKeybindings, "toggleEmbeddedTerminal", event)) {
-        event.preventDefault()
-        handleToggleEmbeddedTerminal()
-        return
-      }
+      // Only the project-scoped actions below need a project; the pane commands
+      // act on the shared workspace and work whatever the route is showing.
+      if (projectId) {
+        if (actionMatchesEvent(resolvedKeybindings, "toggleEmbeddedTerminal", event)) {
+          event.preventDefault()
+          handleToggleEmbeddedTerminal()
+          return
+        }
 
-      if (actionMatchesEvent(resolvedKeybindings, "toggleRightSidebar", event)) {
-        event.preventDefault()
-        handleToggleRightSidebar()
-        return
-      }
+        if (actionMatchesEvent(resolvedKeybindings, "toggleRightSidebar", event)) {
+          event.preventDefault()
+          handleToggleRightSidebar()
+          return
+        }
 
-      if (actionMatchesEvent(resolvedKeybindings, "openInFinder", event)) {
-        event.preventDefault()
-        void handleOpenExternal("open_finder")
-        return
-      }
+        if (actionMatchesEvent(resolvedKeybindings, "openInFinder", event)) {
+          event.preventDefault()
+          void handleOpenExternal("open_finder")
+          return
+        }
 
-      if (actionMatchesEvent(resolvedKeybindings, "openInEditor", event)) {
-        event.preventDefault()
-        void handleOpenExternal("open_editor")
-        return
-      }
+        if (actionMatchesEvent(resolvedKeybindings, "openInEditor", event)) {
+          event.preventDefault()
+          void handleOpenExternal("open_editor")
+          return
+        }
 
-      if (actionMatchesEvent(resolvedKeybindings, "addSplitTerminal", event)) {
-        event.preventDefault()
-        addTerminal(projectId)
-        return
+        if (actionMatchesEvent(resolvedKeybindings, "addSplitTerminal", event)) {
+          event.preventDefault()
+          addTerminal(projectId)
+          return
+        }
       }
 
       // Pane commands resolve through one pure mapper, so the whole keyboard
@@ -492,18 +517,18 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
       // the highlighted tab.
       switch (command.kind) {
         case "focus":
-          focusAdjacentPane(projectId, command.direction)
+          focusAdjacentPane(command.direction)
           syncUrlToFocusedChat()
           return
         case "split":
-          splitFocusedPane(projectId, command.position)
+          splitFocusedPane(command.position)
           return
         case "closeTab":
-          closeFocusedTab(projectId)
+          closeFocusedTab()
           syncUrlToFocusedChat()
           return
         case "cycleTab":
-          cycleFocusedPaneTab(projectId, command.delta)
+          cycleFocusedPaneTab(command.delta)
           syncUrlToFocusedChat()
       }
     }
@@ -600,13 +625,20 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
     // `isFocused` is the pane's, so a terminal takes keyboard focus exactly when
     // its pane does. TerminalPane treats 0 as "no request" and focuses on any
     // change, so toggling 0/1 never steals focus from another pane.
-    terminal: (target, _pane, isFocused) =>
-      projectId === null ? null : (
+    // A terminal tab renders against the project that OWNS the terminal, which
+    // is not necessarily the active one — the workspace spans projects, so
+    // borrowing `projectId` here would point project A's terminal at project
+    // B's cwd the moment you switched chats.
+    terminal: (target, _pane, isFocused) => {
+      const owner = findTerminalOwner(terminalProjects, target.terminalId)
+      if (!owner) return null
+      const ownerLayout = terminalProjects[owner.projectId] ?? DEFAULT_PROJECT_TERMINAL_LAYOUT
+      return (
         <TerminalWorkspaceShell
-          projectId={projectId}
+          projectId={owner.projectId}
           terminalLayout={{
-            ...terminalLayout,
-            terminals: terminalLayout.terminals.filter((t) => t.id === target.terminalId),
+            ...ownerLayout,
+            terminals: [owner.terminal],
           }}
           addTerminal={addTerminal}
           socket={state.socket}
@@ -619,14 +651,15 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
           onRemoveTerminal={handleRemoveTerminal}
           onTerminalLayout={setTerminalSizes}
         />
-      ),
+      )
+    },
   }
 
   // ─── Layout ──────────────────────────────────────────────────────────────────
 
   return (
     <div ref={layoutRootRef} className={CHAT_PAGE_LAYOUT_ROOT_CLASS}>
-      {projectId ? (
+      {workspaceHasTabs ? (
         <PaneDndProvider onMoveTab={handleMoveTab} onSplitWithTab={handleSplitWithTab}>
           <SplitContainer
             layout={paneLayout}
@@ -646,9 +679,10 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
           />
         </PaneDndProvider>
       ) : (
-        // No project selected — render the chat card directly (no pane shell).
-        // There is no pane tree here, so the tab addresses the route's chat.
-        // Still wrapped in ChatTabRoot so the per-tab providers exist and
+        // The workspace is empty — the first render before the reconcile effect
+        // opens a tab, or a route with no chat at all. Render the chat card
+        // directly (no pane shell); the tab addresses the route's chat. Still
+        // wrapped in ChatTabRoot so the per-tab providers exist and
         // ChatTabContent's context reads don't crash.
         <ChatTabRoot chatId={state.activeChatId} timer={timer} dom={dom}>
           <ChatTabContent

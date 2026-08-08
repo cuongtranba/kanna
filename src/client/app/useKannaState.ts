@@ -28,7 +28,7 @@ import type { TimerPort } from "../ports/timerPort"
 import { localStorageAdapter, sessionStorageAdapter } from "../adapters/storage.adapter"
 import { domAdapter } from "../adapters/dom.adapter"
 import { timerAdapter } from "../adapters/timer.adapter"
-import type { ProjectRequest } from "./useAppGlobalState"
+import { getProjectIdForChat, type ProjectRequest } from "./useAppGlobalState"
 import { useAppGlobalContext } from "./AppGlobalProvider"
 import type { ChatNavigatorPort } from "./chatNavigator"
 
@@ -37,6 +37,7 @@ import type { ChatNavigatorPort } from "./chatNavigator"
 export {
   applySidebarProjectOrder,
   getNewestRemainingChatId,
+  getProjectIdForChat,
   getUiUpdateRestartReconnectAction,
   deriveUiRestartActivity,
   shouldHandleUiUpdateReloadRequest,
@@ -507,11 +508,6 @@ function composerStateFromSendOptions(options?: {
   }
 
   return null
-}
-
-function getProjectIdForChat(projectGroups: Array<{ groupKey: string; chats: Array<{ chatId: string }> }>, chatId: string | null) {
-  if (!chatId) return null
-  return projectGroups.find((group) => group.chats.some((chat) => chat.chatId === chatId))?.groupKey ?? null
 }
 
 export function shouldAutoFollowTranscript(distanceFromBottom: number) {

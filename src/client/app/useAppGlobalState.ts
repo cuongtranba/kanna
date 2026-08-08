@@ -28,6 +28,7 @@ import { useFollowedSessionsStore } from "../stores/followedSessionsStore"
 import { useOpenRouterModelsStore } from "../stores/openrouterModelsStore"
 import { useKannaStateStore } from "../stores/kannaStateStore"
 import { usePaneLayoutStore } from "../stores/paneLayoutStore"
+import { collectPanes } from "../lib/paneTree"
 import { useSlashCommandsStore } from "../stores/slashCommandsStore"
 import { isRecord } from "../../shared/errors"
 import type { AnyValue } from "../../shared/errors"
@@ -295,6 +296,15 @@ export function getNewestRemainingChatId(projectGroups: SidebarData["projectGrou
   return projectGroup.chats.find((chat) => chat.chatId !== activeChatId)?.chatId ?? null
 }
 
+/** Which project a chat belongs to, per the sidebar grouping. */
+export function getProjectIdForChat(
+  projectGroups: SidebarData["projectGroups"],
+  chatId: string | null,
+): string | null {
+  if (!chatId) return null
+  return projectGroups.find((group) => group.chats.some((chat) => chat.chatId === chatId))?.groupKey ?? null
+}
+
 export function getUiUpdateRestartReconnectAction(
   phase: string | null,
   connectionStatus: SocketStatus
@@ -485,8 +495,17 @@ export function useAppGlobalState(
   const startingLocalPath = useKannaStateStore((state) => state.startingLocalPath)
   // Internal reads (not in return type):
   const selectedProjectId = useKannaStateStore((state) => state.selectedProjectId)
-  // Stable set of projectIds with open pane layouts — used by the per-project subscriptions below.
-  const layoutProjectIds = usePaneLayoutStore(useShallow((state) => Object.keys(state.layouts)))
+  // Chats with an open tab in the workspace. The workspace is ONE tree shared by
+  // every project now, so the set of open projects is derived from the chat tabs
+  // themselves rather than from per-project layout keys — that is what keeps
+  // project A's subscriptions alive while you read a chat in project B.
+  const openChatTabIds = usePaneLayoutStore(
+    useShallow((state) =>
+      collectPanes(state.layout.root)
+        .flatMap((pane) => pane.tabs)
+        .flatMap((tab) => (tab.target.kind === "chat" ? [tab.target.chatId] : [])),
+    ),
+  )
   const runtimeProjectId = runtime?.projectId ?? null
 
   // ---- derived -----------------------------------------------------------
@@ -611,7 +630,11 @@ export function useAppGlobalState(
   // fires when a project is actually added or removed.
 
   useEffect(() => {
-    const ids = new Set<string>(layoutProjectIds)
+    const ids = new Set<string>()
+    for (const chatId of openChatTabIds) {
+      const chatProjectId = getProjectIdForChat(sidebarProjectGroups, chatId)
+      if (chatProjectId) ids.add(chatProjectId)
+    }
     if (selectedProjectId) ids.add(selectedProjectId)
     if (runtimeProjectId) ids.add(runtimeProjectId)
 
@@ -645,7 +668,7 @@ export function useAppGlobalState(
     })
 
     return () => { cleanups.forEach((fn) => fn()) }
-  }, [layoutProjectIds, runtimeProjectId, selectedProjectId, socket])
+  }, [openChatTabIds, sidebarProjectGroups, runtimeProjectId, selectedProjectId, socket])
 
   // ---- update / UI-restart effects ---------------------------------------
 
