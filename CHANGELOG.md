@@ -8,6 +8,18 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.14.0](https://github.com/cuongtranba/kanna/compare/v1.13.0...v1.14.0) (2026-08-08)
+
+
+### Features
+
+* **client:** one shared pane workspace, not one per project ([#632](https://github.com/cuongtranba/kanna/issues/632)) ([91d7a0b](https://github.com/cuongtranba/kanna/commit/91d7a0b082a4dd1c204fc3568451300a1cc3fbda))
+
+
+### Bug Fixes
+
+* **agent:** trust the SDK background-task level signal, stop waking healthy tasks ([#634](https://github.com/cuongtranba/kanna/issues/634)) ([51dce6a](https://github.com/cuongtranba/kanna/commit/51dce6a69e99de0540f9d7a5323119e1f4b60662))
+
 ## [1.13.0](https://github.com/cuongtranba/kanna/compare/v1.12.0...v1.13.0) (2026-08-07)
 
 
