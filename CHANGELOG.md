@@ -8,6 +8,19 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.15.0](https://github.com/cuongtranba/kanna/compare/v1.14.1...v1.15.0) (2026-08-09)
+
+
+### Features
+
+* **client:** mirror the sidebar's chat status indicators onto pane tabs ([#639](https://github.com/cuongtranba/kanna/issues/639)) ([2322fa8](https://github.com/cuongtranba/kanna/commit/2322fa8b7b4100377c1251ed2ac775bf22d6e90b))
+
+
+### Bug Fixes
+
+* **client:** render mermaid diagrams a model spelled `-.x` instead of `-.-x` ([#637](https://github.com/cuongtranba/kanna/issues/637)) ([87fb17a](https://github.com/cuongtranba/kanna/commit/87fb17a8eaa5744bdd4753251ff5acb440c7c0cf))
+* **test:** isolate paths-route data dir from the real ~/.kanna store ([#640](https://github.com/cuongtranba/kanna/issues/640)) ([7c08cbe](https://github.com/cuongtranba/kanna/commit/7c08cbe3017f6fd74c379560a7dd63b3e56ff034))
+
 ## [1.14.1](https://github.com/cuongtranba/kanna/compare/v1.14.0...v1.14.1) (2026-08-08)
 
 
