@@ -1,12 +1,18 @@
 import { memo } from "react"
 import { Archive, ShieldAlert, Split } from "lucide-react"
-import type { ClaudeSessionLifecycleStatus, SidebarChatRow } from "../../../../shared/types"
+import type { SidebarChatRow } from "../../../../shared/types"
 import { Button } from "../../ui/button"
 import { Kbd } from "../../ui/kbd"
 import { HoverHint } from "../../ui/truncated-text"
 import { cn, normalizeChatId } from "../../../lib/utils"
 import { formatCompactDuration, formatLiveDuration } from "../../../lib/formatDuration"
 import { statusLabel } from "../../../lib/statusLabel"
+import {
+  chatDotBgClass,
+  chatDotTextClass,
+  chatStatusIndicator,
+  sessionStateBadge,
+} from "../../../lib/chatStatusIndicator"
 import { ChatRowMenu } from "./Menus"
 
 interface Props {
@@ -22,48 +28,6 @@ interface Props {
   onArchiveChat: (chatId: string) => void
   onDeleteChat: (chatId: string) => void
   onEditPermissions?: (chatId: string) => void
-}
-
-type DotTone = "warning" | "info" | "success" | "destructive" | null
-
-function dotToneFor(chat: SidebarChatRow): DotTone {
-  if (chat.status === "running" || chat.status === "starting") return "warning"
-  if (chat.status === "waiting_for_user") return "info"
-  if (chat.status === "failed") return "destructive"
-  if (chat.unread) return "success"
-  return null
-}
-
-function dotBgClass(tone: DotTone): string {
-  switch (tone) {
-    case "warning": return "bg-warning"
-    case "info": return "bg-info"
-    case "success": return "bg-success"
-    case "destructive": return "bg-destructive"
-    default: return ""
-  }
-}
-
-function dotTextClass(tone: DotTone): string {
-  switch (tone) {
-    case "warning": return "text-warning"
-    case "info": return "text-info"
-    case "success": return "text-success"
-    case "destructive": return "text-destructive"
-    default: return "text-muted-foreground"
-  }
-}
-
-function sessionStateBadge(state: ClaudeSessionLifecycleStatus | undefined): { glyph: string; tone: string; title: string } | null {
-  switch (state) {
-    case "active": return { glyph: "●", tone: "text-success", title: "Claude PTY session active" }
-    case "warming": return { glyph: "◐", tone: "text-warning", title: "Claude PTY session warming" }
-    case "idle": return { glyph: "○", tone: "text-muted-foreground", title: "Claude PTY session idle" }
-    case "cooling": return { glyph: "◌", tone: "text-muted-foreground", title: "Claude PTY session cooling down" }
-    case "cold":
-    default:
-      return null
-  }
 }
 
 function ChatRowImpl({
@@ -90,7 +54,7 @@ function ChatRowImpl({
   const normalizedChatId = normalizeChatId(chat.chatId)
   const isActive = activeChatId === normalizedChatId
 
-  const tone = dotToneFor(chat)
+  const tone = chatStatusIndicator(chat)?.tone ?? null
   let trailingSlotWidth: string
   if (chat.canFork) {
     trailingSlotWidth = "w-12"
@@ -115,7 +79,7 @@ function ChatRowImpl({
         <span
           className={cn(
             "hidden md:flex absolute inset-0 items-center justify-end pr-1 text-[11px] tabular-nums transition-opacity duration-150 group-hover:opacity-0 whitespace-nowrap",
-            isLiveState ? dotTextClass(tone) : "text-muted-foreground"
+            isLiveState ? chatDotTextClass(tone) : "text-muted-foreground"
           )}
         >
           {trailingLabel}
@@ -141,7 +105,7 @@ function ChatRowImpl({
         aria-hidden
       >
         {tone ? (
-          <span className={cn("h-2 w-2 rounded-full", dotBgClass(tone))} />
+          <span className={cn("h-2 w-2 rounded-full", chatDotBgClass(tone))} />
         ) : null}
       </span>
       {(() => {
@@ -149,7 +113,7 @@ function ChatRowImpl({
         return badge ? (
           <HoverHint label={badge.title}>
             <span
-              className={cn("shrink-0 text-[10px] leading-none", badge.tone)}
+              className={cn("shrink-0 text-[10px] leading-none", badge.toneClass)}
               aria-label={badge.title}
             >
               {badge.glyph}

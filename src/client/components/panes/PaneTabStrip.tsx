@@ -2,6 +2,11 @@ import { useDraggable } from "@dnd-kit/core"
 import { Columns2, Rows2, X } from "lucide-react"
 import { useCallback, useEffect, useRef } from "react"
 import type { PaneLeaf, SplitPosition } from "../../lib/paneTree"
+import {
+  chatDotBgClass,
+  type ChatStatusIndicator,
+  type SessionStateBadge,
+} from "../../lib/chatStatusIndicator"
 import { cn } from "../../lib/utils"
 import { isMobileViewport } from "../../lib/viewport"
 import { useViewportStore } from "../../stores/viewportStore"
@@ -106,7 +111,10 @@ export function PaneTabStrip({
       >
         {pane.tabs.map((tab) => {
           const isActive = pane.focusedTabId === tab.tabId
-          const { label, icon: Icon, closable } = describeTab(tab.target, presentation)
+          const { label, icon: Icon, closable, indicator, sessionBadge } = describeTab(
+            tab.target,
+            presentation,
+          )
 
           return (
             <PaneTab
@@ -114,6 +122,8 @@ export function PaneTabStrip({
               tabId={tab.tabId}
               label={label}
               Icon={Icon}
+              indicator={indicator}
+              sessionBadge={sessionBadge}
               isActive={isActive}
               isPaneFocused={isPaneFocused}
               showLabel={layout.showLabel}
@@ -157,6 +167,9 @@ interface PaneTabProps {
   tabId: string
   label: string
   Icon: React.ComponentType<{ className?: string }>
+  /** Chat status dot; when present it takes the icon's slot rather than crowding beside it. */
+  indicator: ChatStatusIndicator | null
+  sessionBadge: SessionStateBadge | null
   isActive: boolean
   isPaneFocused: boolean
   showLabel: boolean
@@ -172,6 +185,8 @@ function PaneTab({
   tabId,
   label,
   Icon,
+  indicator,
+  sessionBadge,
   isActive,
   isPaneFocused,
   showLabel,
@@ -239,7 +254,42 @@ function PaneTab({
         />
       ) : null}
 
-      <Icon className="size-3.5 shrink-0" />
+      {/*
+        The status dot takes the icon's slot instead of sitting beside it: same
+        3.5 box, so a tab shrunk to icon-only still carries its status, and no
+        tab pays width for a state most tabs are not in. Same 8px solid circle
+        as the sidebar row — static, no pulse (DESIGN.md).
+      */}
+      {indicator ? (
+        <span
+          aria-hidden
+          data-tab-status={indicator.tone}
+          className="flex size-3.5 shrink-0 items-center justify-center"
+        >
+          <span className={cn("h-2 w-2 rounded-full", chatDotBgClass(indicator.tone))} />
+        </span>
+      ) : (
+        <Icon className="size-3.5 shrink-0" />
+      )}
+      {/* Colour never carries the meaning alone: the tab's accessible name reads
+          "Running Fix the parser", and the tooltip below says it on hover. */}
+      {indicator ? <span className="sr-only">{indicator.label}</span> : null}
+
+      {/*
+        Session lifecycle is secondary to turn status, so it yields first: an
+        icon-only tab shows the dot and drops the glyph rather than stacking two
+        marks into a 40px tab.
+      */}
+      {sessionBadge && showLabel ? (
+        <span
+          aria-hidden
+          data-tab-session-badge
+          className={cn("shrink-0 text-[10px] leading-none", sessionBadge.toneClass)}
+        >
+          {sessionBadge.glyph}
+        </span>
+      ) : null}
+
       {showLabel ? <span className="min-w-0 flex-1 truncate text-xs">{label}</span> : null}
 
       {closable ? (
@@ -255,14 +305,25 @@ function PaneTab({
     </div>
   )
 
-  // Icon-only tabs lose their label, so the tooltip is the only way to tell
-  // them apart. The project Tooltip, never a native title — the design gate
-  // rejects `title` on intrinsic elements.
-  if (showLabel) return tab
+  // Two reasons a tab needs a tooltip: an icon-only tab has lost its label and
+  // nothing else tells it apart, and a tab carrying a coloured mark needs that
+  // mark spelled out in words. The project Tooltip, never a native title — the
+  // design gate rejects `title` on intrinsic elements.
+  const statusLines: string[] = []
+  if (indicator) statusLines.push(indicator.label)
+  if (sessionBadge) statusLines.push(sessionBadge.title)
+  if (showLabel && statusLines.length === 0) return tab
   return (
     <Tooltip>
       <TooltipTrigger asChild>{tab}</TooltipTrigger>
-      <TooltipContent side="bottom">{label}</TooltipContent>
+      <TooltipContent side="bottom">
+        <span>{label}</span>
+        {statusLines.map((line) => (
+          <span key={line} className="block text-muted-foreground">
+            {line}
+          </span>
+        ))}
+      </TooltipContent>
     </Tooltip>
   )
 }
