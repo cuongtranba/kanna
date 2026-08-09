@@ -143,6 +143,14 @@ describe("buildKannaSystemPromptAppend", () => {
     expect(KANNA_SYSTEM_PROMPT_BASE).toContain("pasting or summarizing its content")
   })
 
+  // Kanna auto-repairs `-.x` at render time, but a repaired diagram still
+  // carries a correction notice the reader has to reconcile — the prompt is
+  // what stops the defect being written in the first place.
+  test("KANNA_SYSTEM_PROMPT_BASE names the mermaid link spellings that parse", () => {
+    expect(KANNA_SYSTEM_PROMPT_BASE).toContain("`-.-x` and `-.-o`")
+    expect(KANNA_SYSTEM_PROMPT_BASE).toContain("never `-.x` / `-.o`")
+  })
+
   test("KANNA_SYSTEM_PROMPT_BASE includes the workflow-resume args guardrail", () => {
     expect(KANNA_SYSTEM_PROMPT_BASE).toContain("resumeFromRunId")
     expect(KANNA_SYSTEM_PROMPT_BASE).toContain("`args`")
