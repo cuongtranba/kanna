@@ -286,3 +286,71 @@ describe("MermaidDiagram — parse-error diagnostics", () => {
     expect(container!.textContent).toContain("No diagram type detected")
   })
 })
+
+// A model asked for a dotted crossed edge writes `-.x`; mermaid spells it
+// `-.-x` and rejects the whole diagram over the missing dash. Rendering the
+// repaired copy beats showing the reader a parse error for a typo — provided
+// the UI still says the source it is showing is not what was rendered.
+describe("MermaidDiagram — link repair", () => {
+  const BROKEN = "flowchart LR\n  B -.x|discarded| N[nothing]"
+
+  /** Rejects the invalid spelling; `-.-x` does not contain `-.x`, so the repair passes. */
+  const strictMermaid = async () => ({
+    initialize: () => {},
+    render: async (_id: string, text: string) => {
+      if (text.includes("-.x")) throw new Error("Parse error on line 3:\nExpecting 'PIPE'")
+      return { svg: `<svg data-mermaid="1">${text}</svg>` }
+    },
+  })
+
+  test("renders the repaired diagram instead of a parse error", async () => {
+    await renderAndSettle(<MermaidDiagram source={BROKEN} ports={{ loadMermaid: strictMermaid }} />)
+    expect(container!.innerHTML).toContain("data-mermaid")
+    expect(container!.innerHTML).toContain("-.-x")
+    expect(container!.textContent).not.toContain("Couldn't render this Mermaid diagram")
+  })
+
+  test("discloses the correction rather than passing it off as the author's diagram", async () => {
+    await renderAndSettle(<MermaidDiagram source={BROKEN} ports={{ loadMermaid: strictMermaid }} />)
+    expect(container!.textContent).toContain("Corrected")
+    expect(container!.textContent).toContain("1 invalid link")
+    expect(container!.textContent).toContain("-.x → -.-x")
+    expect(container!.textContent).toContain("The source is unchanged")
+  })
+
+  test("leaves a diagram mermaid accepts untouched and says nothing", async () => {
+    const valid = "flowchart LR\n  A --> B"
+    await renderAndSettle(<MermaidDiagram source={valid} ports={{ loadMermaid: strictMermaid }} />)
+    expect(container!.innerHTML).toContain("data-mermaid")
+    expect(container!.textContent).not.toContain("Corrected")
+  })
+
+  test("reports the ORIGINAL error when the repaired copy fails too", async () => {
+    // The reported line and caret refer to the authored source shown below the
+    // message; surfacing the repaired copy's error would point at a phantom.
+    const alwaysFails = async () => ({
+      initialize: () => {},
+      render: async (_id: string, text: string) => {
+        if (text.includes("-.-x")) throw new Error("Parse error on line 99:\nrepaired-copy failure")
+        throw new Error("Parse error on line 2:\nauthored-source failure")
+      },
+    })
+    await renderAndSettle(<MermaidDiagram source={BROKEN} ports={{ loadMermaid: alwaysFails }} />)
+    expect(container!.textContent).toContain("authored-source failure")
+    expect(container!.textContent).not.toContain("repaired-copy failure")
+    expect(container!.textContent).toContain("line 2")
+  })
+
+  test("does not retry when the source has no known defect to repair", async () => {
+    let renders = 0
+    const counting = async () => ({
+      initialize: () => {},
+      render: async () => {
+        renders += 1
+        throw new Error("Parse error on line 1:\nunrelated")
+      },
+    })
+    await renderAndSettle(<MermaidDiagram source={"erDiagram\n  A {"} ports={{ loadMermaid: counting }} />)
+    expect(renders).toBe(1)
+  })
+})

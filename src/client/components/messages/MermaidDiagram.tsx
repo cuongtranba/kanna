@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId } from "react"
-import { AlertTriangle, Check, Code2, Copy, Maximize2, RefreshCw } from "lucide-react"
+import { AlertTriangle, Check, Code2, Copy, Maximize2, RefreshCw, Wrench } from "lucide-react"
 import { Button } from "../ui/button"
 import { cn } from "../../lib/utils"
 import { useTheme } from "../../hooks/useTheme"
@@ -14,6 +14,7 @@ import { domAdapter } from "../../adapters/dom.adapter"
 import type { DomPort } from "../../ports/domPort"
 import { toError } from "../../../shared/errors"
 import { parseMermaidError } from "../../lib/mermaidError"
+import { repairMermaidSource, type MermaidRepair } from "../../lib/mermaidRepair"
 import { createLazyLoader, isStaleChunkError } from "../../lib/lazyModule"
 
 interface MermaidModule {
@@ -38,6 +39,46 @@ interface MermaidDiagramPorts {
 const loadMermaid = createLazyLoader(() =>
   import("mermaid").then((m): MermaidModule => m.default)
 )
+
+/**
+ * Render `source`, falling back to a repaired copy when mermaid rejects it.
+ *
+ * The repair runs ONLY after a failure, so a diagram that renders is never
+ * rewritten and cannot change meaning. When the repaired copy fails too, the
+ * FIRST error is what propagates: its line and caret refer to the authored
+ * source, which is the source the fallback view shows the reader.
+ */
+async function renderWithRepair(
+  mermaid: MermaidModule,
+  domId: string,
+  source: string,
+): Promise<{ svg: string; repairs: readonly MermaidRepair[] }> {
+  try {
+    const { svg } = await mermaid.render(domId, source)
+    return { svg, repairs: [] }
+  } catch (firstError) {
+    const repaired = repairMermaidSource(source)
+    if (repaired.repairs.length === 0) throw firstError
+    try {
+      // A distinct id: mermaid leaves the failed attempt's element in the DOM,
+      // and reusing the id would collide with it.
+      const { svg } = await mermaid.render(`${domId}-repaired`, repaired.source)
+      return { svg, repairs: repaired.repairs }
+    } catch {
+      throw firstError
+    }
+  }
+}
+
+/** `-.x → -.-x, -.o → -.-o` — each distinct rewrite once, in first-seen order. */
+function describeRepairs(repairs: readonly MermaidRepair[]): string {
+  const seen: string[] = []
+  for (const repair of repairs) {
+    const label = `${repair.from} → ${repair.to}`
+    if (!seen.includes(label)) seen.push(label)
+  }
+  return seen.join(", ")
+}
 
 function MermaidDiagramInner({ source, ports }: { source: string; ports?: MermaidDiagramPorts }) {
   const { resolvedTheme } = useTheme()
@@ -74,8 +115,8 @@ function MermaidDiagramInner({ source, ports }: { source: string; ports?: Mermai
           securityLevel: "strict",
           theme: mermaidTheme,
         })
-        const { svg } = await mermaid.render(domId, source)
-        if (!cancelled) setRenderState({ status: "ready", svg })
+        const { svg, repairs } = await renderWithRepair(mermaid, domId, source)
+        if (!cancelled) setRenderState({ status: "ready", svg, repairs })
       })
       .catch((err) => {
         if (cancelled) return
@@ -169,6 +210,21 @@ function MermaidDiagramInner({ source, ports }: { source: string; ports?: Mermai
 
   return (
     <div className="relative group/mermaid my-3">
+      {renderState.repairs.length > 0 && (
+        // The reader is looking at a diagram the author did not quite write, so
+        // say so — silently "fixing" it would misreport the source.
+        <div className="flex items-start gap-1.5 text-xs text-muted-foreground mb-1">
+          <Wrench className="size-3.5 shrink-0 mt-px" />
+          <span>
+            {"Corrected "}
+            <span className="tabular-nums">{renderState.repairs.length}</span>
+            {renderState.repairs.length === 1 ? " invalid link" : " invalid links"}
+            {" to render this ("}
+            <span className="font-mono">{describeRepairs(renderState.repairs)}</span>
+            {"). The source is unchanged."}
+          </span>
+        </div>
+      )}
       <div
         className="flex justify-center overflow-x-auto"
         dangerouslySetInnerHTML={{ __html: renderState.svg }}
