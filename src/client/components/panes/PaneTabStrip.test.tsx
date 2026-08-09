@@ -4,19 +4,25 @@ import { TooltipProvider } from "../ui/tooltip"
 import { createPane, createTab, type PaneLeaf } from "../../lib/paneTree"
 import { SHELL_TOP_BAND_CLASS } from "../../lib/shellChrome"
 import { PaneTabStrip } from "./PaneTabStrip"
+import type { TabPresentationContext } from "./tabPresentation"
 
 const chat = createTab({ kind: "chat", chatId: "c1" }, 0)
 const changes = createTab({ kind: "changes" }, 0)
 const t1 = createTab({ kind: "terminal", terminalId: "t1" }, 0)
 
-function render(pane: PaneLeaf, isPaneFocused = true, width = 800) {
+function render(
+  pane: PaneLeaf,
+  isPaneFocused = true,
+  width = 800,
+  presentation: TabPresentationContext = {},
+) {
   return renderToStaticMarkup(
     <TooltipProvider>
       <PaneTabStrip
         pane={pane}
         isPaneFocused={isPaneFocused}
         width={width}
-        presentation={{ terminalTitles: { t1: "Terminal A" } }}
+        presentation={{ terminalTitles: { t1: "Terminal A" }, ...presentation }}
         onSelectTab={() => undefined}
         onCloseTab={() => undefined}
         onSplit={() => undefined}
@@ -89,6 +95,63 @@ describe("PaneTabStrip", () => {
   // sidebar header. The sidebar side is asserted in KannaSidebar.test.tsx.
   test("takes its height from the shared top-band token", () => {
     expect(render(createPane("p", [chat]))).toContain(SHELL_TOP_BAND_CLASS)
+  })
+})
+
+/**
+ * The tab strip shows the same chats the sidebar lists, so it must speak the
+ * same status language. Before this, a chat mid-turn read "Running" on the left
+ * and showed a plain, indistinguishable icon on its tab.
+ */
+describe("PaneTabStrip chat status", () => {
+  const running: TabPresentationContext = {
+    chatStatuses: { c1: { status: "running", unread: false, sessionState: "active" } },
+  }
+
+  test("a running chat tab carries the sidebar's amber dot", () => {
+    const html = render(createPane("p", [chat]), true, 800, running)
+    expect(html).toContain('data-tab-status="warning"')
+    expect(html).toContain("bg-warning")
+  })
+
+  test("the dot is a theme token, never a literal colour", () => {
+    const html = render(createPane("p", [chat]), true, 800, running)
+    expect(html).not.toContain("#")
+  })
+
+  // Colour alone never communicates (DESIGN.md): the status has to reach a
+  // screen reader too, and the tab's accessible name is where it lands.
+  test("the status is spelled out for assistive tech", () => {
+    const html = render(createPane("p", [chat]), true, 800, running)
+    expect(html).toContain("Running")
+  })
+
+  test("the PTY session badge rides along with the same glyph as the sidebar", () => {
+    const html = render(createPane("p", [chat]), true, 800, running)
+    expect(html).toContain("data-tab-session-badge")
+    expect(html).toContain("●")
+  })
+
+  // The dot lives in the icon's slot precisely so a strip squeezed to
+  // icon-only tabs does not lose the status it exists to show.
+  test("the dot survives a strip too cramped for labels", () => {
+    const html = render(createPane("p", [chat, changes, t1]), true, 200, running)
+    expect(html).not.toContain(">Chat<")
+    expect(html).toContain('data-tab-status="warning"')
+  })
+
+  // …while the secondary badge yields its width first.
+  test("the session badge yields when there is no room for labels", () => {
+    const html = render(createPane("p", [chat, changes, t1]), true, 200, running)
+    expect(html).not.toContain("data-tab-session-badge")
+  })
+
+  test("a quiet chat keeps its plain icon", () => {
+    const html = render(createPane("p", [chat]), true, 800, {
+      chatStatuses: { c1: { status: "idle", unread: false } },
+    })
+    expect(html).not.toContain("data-tab-status")
+    expect(html).toContain("svg")
   })
 })
 

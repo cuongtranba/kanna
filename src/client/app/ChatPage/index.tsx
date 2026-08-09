@@ -307,12 +307,15 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
         ),
       ),
       chatTitles: Object.fromEntries(chatRows.map((row) => [row.chatId, row.title])),
-      // A chat mid-turn holds streaming state that unmounting would discard, so
+      // The same live facts the sidebar row draws its dot from, so a tab shows
+      // the identical status for the identical chat. It also carries "busy": a
+      // chat mid-turn holds streaming state that unmounting would discard, so
       // it is pinned against the retention LRU exactly like a live terminal.
-      busyChatIds: new Set(
-        chatRows
-          .filter((row) => row.status === "running" || row.status === "starting")
-          .map((row) => row.chatId),
+      chatStatuses: Object.fromEntries(
+        chatRows.map((row) => [
+          row.chatId,
+          { status: row.status, unread: row.unread, sessionState: row.sessionState },
+        ]),
       ),
     }
   }, [terminalProjects, sidebarData])
