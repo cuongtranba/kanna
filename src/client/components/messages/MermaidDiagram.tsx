@@ -14,7 +14,7 @@ import { domAdapter } from "../../adapters/dom.adapter"
 import type { DomPort } from "../../ports/domPort"
 import { toError } from "../../../shared/errors"
 import { parseMermaidError } from "../../../shared/mermaidError"
-import { repairMermaidSource, type MermaidRepair } from "../../lib/mermaidRepair"
+import { repairMermaidSource, type MermaidRepair } from "../../../shared/mermaidRepair"
 import { createLazyLoader, isStaleChunkError } from "../../../shared/lazyModule"
 
 interface MermaidModule {

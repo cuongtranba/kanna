@@ -1030,3 +1030,106 @@ describe("runClaudeSession — self-wake + out-of-turn parked requests", () => {
     expect(finishedFor).toHaveLength(0)
   })
 })
+
+// ---------------------------------------------------------------------------
+// Mermaid guard hand-off
+// ---------------------------------------------------------------------------
+
+function fakeAssistantTextEntry(text: string): TranscriptEntry {
+  return {
+    _id: `entry-text-${text.length}`,
+    createdAt: Date.now(),
+    kind: "assistant_text",
+    messageId: "m1",
+    text,
+  } as unknown as TranscriptEntry
+}
+
+describe("runClaudeSession — mermaid guard", () => {
+  interface GuardHarness {
+    deps: RunClaudeSessionDeps
+    session: ClaudeSessionState
+    calls: { chatId: string; text: readonly string[] }[]
+    order: string[]
+  }
+
+  function guardHarness(entries: TranscriptEntry[], activeOverrides: Partial<ActiveTurn> = {}): GuardHarness {
+    const session = makeSession({ pendingPromptSeqs: [1] })
+    const active = makeActiveTurn(session.chatId, { claudePromptSeq: 1, ...activeOverrides })
+    const calls: GuardHarness["calls"] = []
+    const order: string[] = []
+
+    const deps = makeDeps(session, {
+      activeTurns: new Map([[session.chatId, active]]),
+      maybeStartNextQueuedMessage: async () => { order.push("drain") },
+      mermaidGuard: {
+        check: async (chatId, text) => {
+          calls.push({ chatId, text })
+          order.push("guard")
+        },
+      },
+    })
+    session.session.stream = fakeStream(
+      entries.map((entry) => ({ type: "entry", entry })) as unknown as HarnessEvent[],
+    )
+    return { deps, session, calls, order }
+  }
+
+  test("hands the turn's assistant text to the guard on a successful turn", async () => {
+    const harness = guardHarness([
+      fakeAssistantTextEntry("first block"),
+      fakeAssistantTextEntry("```mermaid\nflowchart TD\n```"),
+      fakeResultEntry(false),
+    ])
+
+    await runClaudeSession(harness.deps, harness.session)
+
+    expect(harness.calls).toEqual([
+      { chatId: harness.session.chatId, text: ["first block", "```mermaid\nflowchart TD\n```"] },
+    ])
+  })
+
+  // A correction the guard enqueues has to be there before the drain looks,
+  // or it sits until something else wakes the chat.
+  test("runs before the queued-message drain", async () => {
+    const harness = guardHarness([fakeAssistantTextEntry("text"), fakeResultEntry(false)])
+
+    await runClaudeSession(harness.deps, harness.session)
+
+    expect(harness.order).toEqual(["guard", "drain"])
+  })
+
+  test("stays out of a failed turn", async () => {
+    const harness = guardHarness([fakeAssistantTextEntry("text"), fakeResultEntry(true, "boom")])
+
+    await runClaudeSession(harness.deps, harness.session)
+
+    expect(harness.calls).toEqual([])
+  })
+
+  test("stays out of a cancelled turn", async () => {
+    const harness = guardHarness([fakeAssistantTextEntry("text"), fakeResultEntry(false)], {
+      cancelRequested: true,
+    })
+
+    await runClaudeSession(harness.deps, harness.session)
+
+    expect(harness.calls).toEqual([])
+  })
+
+  // A self-wake turn streams text with no ActiveTurn. Carrying it into the
+  // next real turn would blame that turn for a diagram it never wrote.
+  test("does not carry text across a turn boundary", async () => {
+    const harness = guardHarness([
+      fakeAssistantTextEntry("wake text"),
+      fakeResultEntry(false),
+      fakeAssistantTextEntry("real turn text"),
+    ])
+    harness.session.pendingPromptSeqs = [1, 1]
+
+    await runClaudeSession(harness.deps, harness.session)
+
+    expect(harness.calls[0]?.text).toEqual(["wake text"])
+    expect(harness.calls[1]).toBeUndefined()
+  })
+})

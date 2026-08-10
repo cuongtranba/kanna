@@ -33,7 +33,10 @@ export async function validateMermaidFences(
   parse: MermaidParsePort,
   markdown: string,
 ): Promise<readonly MermaidFenceValidation[]> {
-  const fences = extractMermaidFences(markdown)
-  const results = await Promise.all(fences.map((fence) => validateMermaid(parse, fence.source)))
-  return fences.map((fence, index) => ({ fence, result: results[index] as MermaidValidation }))
+  return await Promise.all(
+    extractMermaidFences(markdown).map(async (fence) => ({
+      fence,
+      result: await validateMermaid(parse, fence.source),
+    })),
+  )
 }

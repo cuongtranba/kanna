@@ -1,5 +1,5 @@
 import { createScopedStore } from "../../lib/createScopedStore"
-import type { MermaidRepair } from "../../lib/mermaidRepair"
+import type { MermaidRepair } from "../../../shared/mermaidRepair"
 
 type RenderState =
   | { status: "loading" }

@@ -26,6 +26,7 @@ import { timestamped } from "./claude-message-normalizer"
 import { logClaudeSteer } from "./claude-steer-log"
 import type { ClaudeSessionState, ActiveTurn } from "./claude-session-state"
 import type { PendingToolSlots } from "./pending-tool-slot"
+import type { MermaidGuard } from "./mermaid-guard"
 
 // Bounded FIFO for toolId → description lookups feeding background-task labels.
 const RECENT_TOOL_DESCRIPTION_LIMIT = 64
@@ -101,6 +102,11 @@ export interface RunClaudeSessionDeps {
   closeClaudeSession(chatId: string, session: ClaudeSessionState): void
   maybeStartNextQueuedMessage(chatId: string): Promise<boolean | void>
   resolveClaudeDriverPreference(): ClaudeDriverPreference
+  /**
+   * Validates the mermaid the model just wrote and asks it to fix anything
+   * that will not render. Omit to disable the backstop.
+   */
+  mermaidGuard?: MermaidGuard
 }
 
 // ---------------------------------------------------------------------------
@@ -132,6 +138,12 @@ export async function runClaudeSession(
   // session to end the stream. `firstEntrySeen` guards against a late real
   // entry; close() prevents any further entry from being processed.
   const isOpenRouterSession = session.openrouterModel !== null
+  // Assistant text of the turn in flight, for the end-of-turn mermaid guard.
+  // The server sees no deltas — each `assistant_text` entry is a complete
+  // content block — but a turn emits several, interleaved with tool rounds.
+  // Cleared on EVERY terminal result, so a self-wake turn's text is dropped
+  // rather than attributed to the next real turn.
+  let turnAssistantText: string[] = []
   let firstEntrySeen = false
   let firstEntryWatchdog: ReturnType<typeof setTimeout> | null = null
   const clearFirstEntryWatchdog = () => {
@@ -252,6 +264,9 @@ export async function runClaudeSession(
       // mirrors claude-code's own invariant that the idle timer starts only
       // after the run loop exits.
       session.lastUsedAt = Date.now()
+      if (event.entry.kind === "assistant_text") {
+        turnAssistantText.push(event.entry.text)
+      }
       // Remember recent tool_call descriptions so a background launch seen
       // only through the tool_result regex (PTY driver; SDK version skew)
       // can label the task in the UI with the launching call's description.
@@ -483,6 +498,10 @@ export async function runClaudeSession(
           if (active.proactiveCompactInjection) {
             await deps.store.setCompactFailureCount(session.chatId, 0)
           }
+          // Turn is already recorded finished, so a slow parse cannot hold it
+          // open. Runs before maybeStartNextQueuedMessage below so the
+          // correction it may enqueue is what that drain picks up.
+          await deps.mermaidGuard?.check(session.chatId, turnAssistantText)
           // Note: pending-workflow harvest wake removed — workflow-completion
           // notification is a follow-up ADR. Model can delegate a status-check
           // subagent if it needs event-driven workflow wake.
@@ -531,6 +550,8 @@ export async function runClaudeSession(
           await deps.handleAuthFailure(session, authDetection)
         }
       }
+
+      if (event.entry.kind === "result") turnAssistantText = []
 
       deps.emitStateChange(session.chatId)
     }

@@ -7,6 +7,7 @@ import { buildDelegateProgressEmitter, buildKannaMcpTools, resolveOfferDownload,
 import { POLICY_DEFAULT } from "../shared/permission-policy"
 import type { SubagentOrchestrator } from "./subagent-orchestrator"
 import type { ArmedLoopInfo, KannaMcpDelegationContext, SetupLoopHandlerResult } from "./kanna-mcp"
+import type { MermaidParsePort } from "../shared/mermaid-validation"
 
 let tempRoot: string
 
@@ -925,5 +926,47 @@ describe("resolveWorkspaceFile", () => {
     expect(result.ok).toBe(true)
     if (!result.ok) throw new Error("expected ok")
     expect(result.payload.contentUrl).toContain("/api/projects/p1/files/")
+  })
+})
+
+describe("validate_mermaid", () => {
+  // A fake parser keeps this suite off the real mermaid bundle; the adapter's
+  // own suite drives the real parser.
+  const fakeParse: MermaidParsePort = (source) =>
+    Promise.resolve(
+      source.includes("[/opt")
+        ? { ok: false, raw: "Lexical error on line 2. Unrecognized text.\n...B[/opt/x sym\n-------^" }
+        : { ok: true },
+    )
+
+  const invoke = (input: Record<string, unknown>, chatId: string | null = "c") => {
+    const tools = buildKannaMcpTools({ ...makeArgs(undefined), chatId: chatId ?? undefined, parseMermaid: fakeParse })
+    const found = tools.find((t) => t.name === "validate_mermaid")
+    if (!found) throw new Error("validate_mermaid not registered")
+    return (found as { handler: (i: Record<string, unknown>, extra: unknown) => Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> })
+      .handler(input, undefined)
+  }
+
+  test("is hidden when there is no chat", () => {
+    const tools = buildKannaMcpTools({ ...makeArgs(undefined), chatId: undefined, parseMermaid: fakeParse })
+    expect(tools.map((t) => t.name)).not.toContain("validate_mermaid")
+  })
+
+  test("accepts a diagram the parser accepts", async () => {
+    const result = await invoke({ source: "flowchart TD\n  A --> B" })
+    expect(result.isError).toBeUndefined()
+    expect(result.content[0]?.text).toBe("VALID")
+  })
+
+  // isError is what makes the model treat the reply as work to redo rather
+  // than a note it can read past.
+  test("rejects with isError, the offending line and an actionable hint", async () => {
+    const result = await invoke({ source: "flowchart TD\n  A --> B[/opt/x sym]" })
+
+    expect(result.isError).toBe(true)
+    const text = result.content[0]?.text ?? ""
+    expect(text).toContain("line 2")
+    expect(text).toContain("Unrecognized text")
+    expect(text).toContain("parallelogram")
   })
 })

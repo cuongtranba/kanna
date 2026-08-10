@@ -17,6 +17,7 @@
  * nothing downstream can sniff `window` and take a browser code path.
  */
 
+import { isRecord, type AnyValue } from "../shared/errors"
 import { createLazyLoader } from "../shared/lazyModule"
 import type { MermaidParsePort, MermaidParseResult } from "../shared/mermaid-validation"
 
@@ -79,7 +80,7 @@ export function installDomShim(target: GlobalBag): () => void {
   if (target.document !== undefined) return () => undefined
 
   const values = shimValues(target)
-  const previous = new Map<string, { present: boolean; value: unknown }>()
+  const previous = new Map<string, { present: boolean; value: AnyValue }>()
 
   for (const [key, value] of Object.entries(values)) {
     previous.set(key, { present: key in target, value: target[key] })
@@ -94,10 +95,21 @@ export function installDomShim(target: GlobalBag): () => void {
   }
 }
 
+function isMermaidModule(value: AnyValue): value is MermaidModule {
+  if (!isRecord(value)) return false
+  return typeof value.initialize === "function" && typeof value.parse === "function"
+}
+
+/** `globalThis` viewed as the string-keyed bag the shim writes into. */
+const globalBag: GlobalBag = globalThis
+
 const loadMermaid = createLazyLoader(async (): Promise<MermaidModule> => {
-  const restore = installDomShim(globalThis as unknown as GlobalBag)
+  const restore = installDomShim(globalBag)
   try {
-    const mermaid = (await import("mermaid")).default as unknown as MermaidModule
+    const mermaid = (await import("mermaid")).default
+    if (!isMermaidModule(mermaid)) {
+      throw new Error("the mermaid package no longer exports initialize/parse")
+    }
     mermaid.initialize({ startOnLoad: false, securityLevel: "strict" })
     return mermaid
   } finally {
