@@ -58,6 +58,7 @@ import {
 } from "./codex-app-server-protocol"
 import { log } from "../shared/log"
 import { type AnyValue, isRecord, errorMessage as sharedErrorMessage } from "../shared/errors"
+import { codexErrorInfoTag, type CodexErrorInfo } from "../shared/codex-error-classification"
 
 export interface CodexAppServerProcess {
   stdin: Writable
@@ -1455,7 +1456,14 @@ export class CodexAppServerManager {
         this.handleContextCompacted(pendingTurn, notification.params)
         return
       case "error":
-        this.failContext(context, notification.params.error.message)
+        // `willRetry` means codex is reconnecting on its own and the turn is
+        // still alive; failing it here kills a turn that would have recovered.
+        if (notification.params.willRetry === true) return
+        this.failContext(
+          context,
+          notification.params.error.message,
+          notification.params.error.codexErrorInfo,
+        )
         break
       default:
         
@@ -1669,6 +1677,7 @@ export class CodexAppServerManager {
     } else {
       subtype = "success"
     }
+    const errorInfoTag = codexErrorInfoTag(notification.turn.error?.codexErrorInfo)
     pendingTurn.queue.push({
       type: "transcript",
       entry: timestamped({
@@ -1679,13 +1688,14 @@ export class CodexAppServerManager {
         result: notification.turn.error?.message ?? "",
         ...(resultUsage !== undefined ? { usage: resultUsage } : {}),
         ...(last?.costUsd !== undefined ? { costUsd: last.costUsd } : {}),
+        ...(errorInfoTag !== null ? { codexErrorInfo: errorInfoTag } : {}),
       }),
     })
     pendingTurn.queue.finish()
     context.pendingTurn = null
   }
 
-  private failContext(context: SessionContext, message: string) {
+  private failContext(context: SessionContext, message: string, errorInfo?: CodexErrorInfo | null) {
     const pendingTurn = context.pendingTurn
     if (pendingTurn && !pendingTurn.resolved) {
       const last = pendingTurn.lastUsageSnapshot
@@ -1696,6 +1706,7 @@ export class CodexAppServerManager {
             ...(last.cachedInputTokens !== undefined ? { cachedInputTokens: last.cachedInputTokens } : {}),
           }
         : undefined
+      const errorInfoTag = codexErrorInfoTag(errorInfo)
       pendingTurn.queue.push({
         type: "transcript",
         entry: timestamped({
@@ -1706,6 +1717,7 @@ export class CodexAppServerManager {
           result: message,
           ...(resultUsage !== undefined ? { usage: resultUsage } : {}),
           ...(last?.costUsd !== undefined ? { costUsd: last.costUsd } : {}),
+          ...(errorInfoTag !== null ? { codexErrorInfo: errorInfoTag } : {}),
         }),
       })
       pendingTurn.queue.finish()

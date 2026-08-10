@@ -20,6 +20,7 @@ import { usePushFocus } from "../usePushFocus"
 import { getNextMeasuredInputHeight, getTranscriptPaddingBottom } from "../useKannaState"
 import { useChatTabState } from "./ChatTabRoot"
 import { EMPTY_SCHEDULES } from "../KannaTranscript"
+import { findRetryPromptForResult } from "../../lib/retryPrompt"
 import { useShareStore } from "../../components/share/share-store"
 import type { ShareCommandResult } from "../../../shared/session-share/protocol"
 import { ChatInputDock } from "./ChatInputDock"
@@ -278,6 +279,21 @@ export function ChatTabContent({
     await state.handleSend(content, options)
   }, [scrollToTranscriptEnd, state])
 
+  // Read through a ref so this callback is permanently stable: it reaches every
+  // memoized transcript row, and `state.messages` / `handleChatSubmit` both
+  // change on each streamed chunk, which would re-render the whole transcript.
+  const retryContextRef = useRef({ messages: state.messages, submit: handleChatSubmit })
+  useEffect(() => {
+    retryContextRef.current = { messages: state.messages, submit: handleChatSubmit }
+  }, [state.messages, handleChatSubmit])
+
+  const handleRetryFailedTurn = useCallback(async (resultMessageId: string) => {
+    const { messages, submit } = retryContextRef.current
+    const prompt = findRetryPromptForResult(messages, resultMessageId)
+    if (!prompt) return
+    await submit(prompt.content, { attachments: prompt.attachments })
+  }, [])
+
   // ─── Auto-continue ────────────────────────────────────────────────────────
 
   const handleAutoContinueAccept = useCallback((scheduleId: string, scheduledAt: number) => {
@@ -526,6 +542,7 @@ export function ChatTabContent({
           onAutoContinueAccept={handleAutoContinueAccept}
           onAutoContinueReschedule={handleAutoContinueReschedule}
           onAutoContinueCancel={handleAutoContinueCancel}
+          onRetryFailedTurn={handleRetryFailedTurn}
           tunnels={state.chatSnapshot?.tunnels}
           liveTunnelId={state.chatSnapshot?.liveTunnelId}
           onTunnelAccept={sendTunnelAccept}

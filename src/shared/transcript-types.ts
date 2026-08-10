@@ -9,6 +9,7 @@
 import type { AgentProvider, ChatAttachment, ProviderUsage } from "./types"
 import type { ToolRequestStatus, ToolRequestDecision } from "./permission-policy"
 import type { NormalizedToolCall, HydratedToolCall } from "./tool-call-types"
+import type { CodexErrorInfoTag } from "./codex-error-classification"
 
 // ---------------------------------------------------------------------------
 // Shared info shapes (only referenced by transcript entries)
@@ -162,6 +163,13 @@ export interface ResultEntry extends TranscriptEntryBase {
    * See adr-20260603-agent-self-scheduled-wake.
    */
   pendingWorkflowCount?: number
+  /**
+   * Codex's machine-readable reason for a failed turn, flattened to its variant
+   * tag. Lets the UI say why the turn died and whether retrying can help,
+   * instead of echoing the provider's raw sentence. Absent on success, on every
+   * non-Codex provider, and whenever the tag is unrecognised.
+   */
+  codexErrorInfo?: CodexErrorInfoTag
 }
 
 export interface StatusEntry extends TranscriptEntryBase {
@@ -270,7 +278,7 @@ export type HydratedTranscriptMessage =
   | ({ kind: "assistant_thinking"; text: string; signature?: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "api_error"; status: number; text: string; requestId?: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "policy_refusal"; text: string; requestId?: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
-  | ({ kind: "result"; success: boolean; cancelled?: boolean; result: string; durationMs: number; costUsd?: number; id: string; messageId?: string; timestamp: string; hidden?: boolean })
+  | ({ kind: "result"; success: boolean; cancelled?: boolean; result: string; durationMs: number; costUsd?: number; codexErrorInfo?: CodexErrorInfoTag; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "status"; status: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "context_window_updated"; usage: ContextWindowUsageSnapshot; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "compact_boundary"; id: string; messageId?: string; timestamp: string; hidden?: boolean })

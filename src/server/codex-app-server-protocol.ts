@@ -2,6 +2,7 @@
 // Keep names and field shapes aligned with the official app-server protocol.
 
 import type { CodexReasoningEffort, ServiceTier } from "../shared/types"
+import type { CodexErrorInfo } from "../shared/codex-error-classification"
 import type { AnyValue } from "../shared/errors"
 import { isRecord } from "../shared/errors"
 
@@ -105,12 +106,22 @@ export interface ThreadStartResponse {
 export type ThreadResumeResponse = ThreadStartResponse
 export type ThreadForkResponse = ThreadStartResponse
 
+/**
+ * `codexErrorInfo` / `additionalDetails` are optional here but required in the
+ * generated protocol: an app-server older than a variant's introduction omits
+ * them, and a newer one may send a variant this build does not know. Read the
+ * tag through `codexErrorInfoTag`, which returns null for both cases.
+ */
+export interface TurnError {
+  message?: string
+  codexErrorInfo?: CodexErrorInfo | null
+  additionalDetails?: string | null
+}
+
 export interface TurnSummary {
   id: string
   status: "inProgress" | "completed" | "failed" | "interrupted"
-  error: {
-    message?: string
-  } | null
+  error: TurnError | null
 }
 
 export interface TurnStartResponse {
@@ -451,12 +462,12 @@ export interface ItemCompletedNotification {
 }
 
 export interface ErrorNotification {
-  error: {
-    message: string
-    codexErrorInfo?: string
-    additionalDetails?: AnyValue
-  }
-  willRetry: boolean
+  error: TurnError & { message: string }
+  /**
+   * Codex is reconnecting on its own and the turn is still live. Optional
+   * because an older app-server omits it; absent must read as terminal.
+   */
+  willRetry?: boolean
   threadId?: string
   turnId?: string
 }

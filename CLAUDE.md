@@ -675,6 +675,61 @@ effective catalog at read time.
 - **Scope.** OpenRouter untouched (already dynamic via API). Providers
   themselves are not add/removable — models only.
 
+# Codex Failure Classification (`codexErrorInfo` + `willRetry`)
+
+A failed Codex turn carries a machine-readable reason, not just prose. Kanna
+reads both fields the app-server sends and stops guessing from error strings.
+
+**Regenerate the protocol truth, never infer it.** `codex app-server
+generate-ts --out <dir>` emits the authoritative bindings; `v2/TurnError.ts`
+and `v2/CodexErrorInfo.ts` are the source for
+`src/shared/codex-error-classification.ts`. The app-server exposes these in
+**camelCase** (`codexErrorInfo`, `serverOverloaded`); the snake_case spellings
+in Codex's own rollout JSONL under `~/.codex/sessions/**` are a DIFFERENT,
+internal format. Reading the rollout and typing the wire from it produces a
+field that never matches — check the generated bindings.
+
+- **One classification table.** `FAILURE_CLASS_BY_TAG` maps every variant to
+  `transient | quota | auth | fatal | unknown`; `CodexErrorInfoTag` is derived
+  from that table's keys, so a variant cannot be classified without existing.
+  An unknown or absent tag classifies `unknown`, **never** `transient` — a
+  future variant must not silently earn a retry affordance.
+- **Two readers, deliberately asymmetric.** `codexErrorInfoTag` parses the WIRE
+  and rejects an object variant spelled as a bare string. `classifyCodexFailure`
+  / `isRetryableCodexFailure` / `describeCodexFailure` take
+  `CodexFailureInput = CodexErrorInfo | CodexErrorInfoTag`, because they also
+  read back the already-flattened tag Kanna persisted itself. Collapsing the two
+  makes an object variant (`responseStreamDisconnected`, `httpConnectionFailed`,
+  `activeTurnNotSteerable`) classify `unknown` on the round trip.
+- **Transport carries facts, UI owns wording.** `handleTurnCompleted` /
+  `failContext` put the flattened tag on `ResultEntry.codexErrorInfo` and leave
+  `result` as the provider's raw sentence. `ResultMessage` renders
+  `describeCodexFailure(...)` and offers **Retry** only when
+  `isRetryableCodexFailure`. No description for a tag → the raw sentence still
+  shows, so an unmapped variant degrades to today's behaviour.
+- **The retry callback must stay reference-stable.** `handleRetryFailedTurn`
+  reaches every memoized transcript row and the row comparator checks its
+  identity, so it reads `messages` + the submit fn through a ref and keeps `[]`
+  deps. Depending on `state.messages` directly re-renders the whole transcript
+  on every streamed chunk.
+
+**`willRetry` is load-bearing — do not drop it again.** `ErrorNotification`
+carries `{error, willRetry}`. `willRetry: true` means Codex is reconnecting on
+its own and the turn is STILL LIVE; `handleNotification` must return without
+calling `failContext`. Failing the turn there kills one that would have
+recovered — it surfaced to users as a turn dying with the literal text
+`Reconnecting... 1/5`. Absent `willRetry` (older app-server) reads as terminal.
+Trade-off accepted: a `willRetry: true` never followed by a terminal event
+leaves the turn hanging where it previously failed fast; Codex bounds its own
+retries and Stop still works.
+
+Not wired: `quota` (`usageLimitExceeded`) does not arm auto-continue —
+`CodexErrorInfo` carries no reset timestamp, so that needs Codex's separate
+`rate_limits` event. `CodexLimitDetector` still only fires on a THROWN stream
+error (`claude-turn-runner.ts` catch branch); a `turn/completed` failure never
+reaches it, which is why c3-227's documented precondition ("a Claude or Codex
+turn emits a result event with subtype: error") is still only half true.
+
 # Subagent Delegation (Anthropic Task-tool pattern)
 
 The main agent is always in the loop. `@agent/<name>` in chat input is a

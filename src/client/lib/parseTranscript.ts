@@ -223,6 +223,7 @@ export function processTranscriptMessages(entries: TranscriptEntry[]): HydratedT
           result: entry.result,
           durationMs: entry.durationMs,
           costUsd: entry.costUsd,
+          codexErrorInfo: entry.codexErrorInfo,
         })
         break
       case "status":

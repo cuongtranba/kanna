@@ -1,8 +1,13 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, mock, test } from "bun:test"
+import { act } from "react"
+import { createRoot } from "react-dom/client"
 import { renderToStaticMarkup } from "react-dom/server"
 import { MemoryRouter } from "react-router-dom"
+import "../../lib/testing/setupHappyDom"
 import type { ProcessedResultMessage } from "./types"
 import { ResultMessage } from "./ResultMessage"
+
+const NOOP_RETRY = (_resultMessageId: string): void => {}
 
 function makeMessage(overrides: Partial<ProcessedResultMessage> = {}): ProcessedResultMessage {
   return {
@@ -78,5 +83,122 @@ describe("ResultMessage", () => {
       </MemoryRouter>
     )
     expect(html).not.toContain("bg-destructive")
+  })
+})
+
+describe("ResultMessage — codex failure reasons", () => {
+  test("replaces the provider sentence with the friendly description", () => {
+    const html = renderToStaticMarkup(
+      <MemoryRouter>
+        <ResultMessage
+          message={makeMessage({
+            result: "Selected model is at capacity. Please try a different model.",
+            durationMs: 1200,
+            codexErrorInfo: "serverOverloaded",
+          })}
+        />
+      </MemoryRouter>
+    )
+    expect(html).toContain("The selected model is temporarily at capacity.")
+    expect(html).not.toContain("Please try a different model.")
+  })
+
+  test("keeps the raw sentence when the tag has no wording", () => {
+    const html = renderToStaticMarkup(
+      <MemoryRouter>
+        <ResultMessage
+          message={makeMessage({
+            result: "Something went sideways",
+            durationMs: 1200,
+            codexErrorInfo: "other",
+          })}
+        />
+      </MemoryRouter>
+    )
+    expect(html).toContain("Something went sideways")
+    expect(html).toContain("bg-destructive/10")
+  })
+
+  test("offers Retry on a transient failure", () => {
+    const html = renderToStaticMarkup(
+      <MemoryRouter>
+        <ResultMessage
+          message={makeMessage({
+            result: "Selected model is at capacity.",
+            durationMs: 1200,
+            codexErrorInfo: "serverOverloaded",
+          })}
+          onRetry={NOOP_RETRY}
+        />
+      </MemoryRouter>
+    )
+    expect(html).toContain(">Retry</button>")
+    expect(html).toContain("Failed after")
+  })
+
+  test("does not offer Retry on a non-transient failure", () => {
+    const html = renderToStaticMarkup(
+      <MemoryRouter>
+        <ResultMessage
+          message={makeMessage({
+            result: "Context window exceeded",
+            durationMs: 1200,
+            codexErrorInfo: "contextWindowExceeded",
+          })}
+          onRetry={NOOP_RETRY}
+        />
+      </MemoryRouter>
+    )
+    expect(html).toContain("context window")
+    expect(html).not.toContain("</button>")
+  })
+
+  test("does not offer Retry when no retry handler is wired", () => {
+    const html = renderToStaticMarkup(
+      <MemoryRouter>
+        <ResultMessage
+          message={makeMessage({
+            result: "Selected model is at capacity.",
+            durationMs: 1200,
+            codexErrorInfo: "serverOverloaded",
+          })}
+        />
+      </MemoryRouter>
+    )
+    expect(html).not.toContain("</button>")
+  })
+
+  test("clicking Retry re-sends the failed turn's prompt", async () => {
+    const onRetry = mock((_resultMessageId: string) => Promise.resolve())
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+
+    await act(async () => {
+      createRoot(container).render(
+        <MemoryRouter>
+          <ResultMessage
+            message={makeMessage({
+              id: "result-42",
+              result: "Selected model is at capacity.",
+              durationMs: 1200,
+              codexErrorInfo: "serverOverloaded",
+            })}
+            onRetry={onRetry}
+          />
+        </MemoryRouter>,
+      )
+    })
+
+    const retry = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.trim() === "Retry",
+    )
+    expect(retry).toBeDefined()
+    await act(async () => {
+      retry!.click()
+    })
+
+    expect(onRetry).toHaveBeenCalledTimes(1)
+    expect(onRetry.mock.calls[0]?.[0]).toBe("result-42")
+    container.remove()
   })
 })

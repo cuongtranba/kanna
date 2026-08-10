@@ -2601,3 +2601,255 @@ describe("CodexAppServerManager developer_instructions", () => {
     expect(snap?.costUsd).toBeUndefined()
   })
 })
+
+describe("CodexAppServerManager failed-turn classification", () => {
+  async function runFailingTurn(error: unknown) {
+    const process = new FakeCodexProcess((message, child) => {
+      if (message.method === "initialize") {
+        child.writeServerMessage({ id: message.id, result: { userAgent: "codex-test" } })
+      } else if (message.method === "thread/start") {
+        child.writeServerMessage({
+          id: message.id,
+          result: { thread: { id: "thread-fail" }, model: "gpt-5.6-sol", reasoningEffort: "high" },
+        })
+      } else if (message.method === "turn/start") {
+        child.writeServerMessage({
+          id: message.id,
+          result: { turn: { id: "turn-fail", status: "inProgress", error: null } },
+        })
+        child.writeServerMessage({
+          method: "turn/completed",
+          params: {
+            threadId: "thread-fail",
+            turn: { id: "turn-fail", status: "failed", error },
+          },
+        })
+      }
+    })
+
+    const manager = new CodexAppServerManager({ spawnProcess: () => process as never })
+    await manager.startSession({
+      chatId: "chat-fail",
+      cwd: "/tmp/project",
+      model: "gpt-5.6-sol",
+      sessionToken: null,
+    })
+    const turn = await manager.startTurn({
+      chatId: "chat-fail",
+      model: "gpt-5.6-sol",
+      content: "Hello",
+      planMode: false,
+      onToolRequest: async () => ({}),
+    })
+
+    const events = await collectStream(turn.stream)
+    const resultEvent = events.find(
+      (event: any) => event.type === "transcript" && event.entry.kind === "result",
+    )
+    if (!resultEvent) throw new Error("missing result event")
+    return resultEvent.entry
+  }
+
+  test("carries the serverOverloaded tag onto the result entry", async () => {
+    const entry = await runFailingTurn({
+      message: "Selected model is at capacity. Please try a different model.",
+      codexErrorInfo: "serverOverloaded",
+      additionalDetails: null,
+    })
+
+    expect(entry.subtype).toBe("error")
+    expect(entry.isError).toBe(true)
+    expect(entry.result).toBe("Selected model is at capacity. Please try a different model.")
+    expect(entry.codexErrorInfo).toBe("serverOverloaded")
+  })
+
+  test("flattens an object-shaped variant to its tag", async () => {
+    const entry = await runFailingTurn({
+      message: "stream disconnected",
+      codexErrorInfo: { responseStreamDisconnected: { httpStatusCode: 502 } },
+      additionalDetails: null,
+    })
+
+    expect(entry.codexErrorInfo).toBe("responseStreamDisconnected")
+  })
+
+  test("omits the tag when an older app-server sends no codexErrorInfo", async () => {
+    const entry = await runFailingTurn({ message: "boom" })
+
+    expect(entry.isError).toBe(true)
+    expect(entry.result).toBe("boom")
+    expect(entry.codexErrorInfo).toBeUndefined()
+  })
+
+  test("omits the tag for a variant it does not recognise", async () => {
+    const entry = await runFailingTurn({
+      message: "boom",
+      codexErrorInfo: "someFutureVariant",
+    })
+
+    expect(entry.codexErrorInfo).toBeUndefined()
+  })
+
+  test("a successful turn carries no tag", async () => {
+    const process = new FakeCodexProcess((message, child) => {
+      if (message.method === "initialize") {
+        child.writeServerMessage({ id: message.id, result: { userAgent: "codex-test" } })
+      } else if (message.method === "thread/start") {
+        child.writeServerMessage({
+          id: message.id,
+          result: { thread: { id: "thread-ok" }, model: "gpt-5.6-sol", reasoningEffort: "high" },
+        })
+      } else if (message.method === "turn/start") {
+        child.writeServerMessage({
+          id: message.id,
+          result: { turn: { id: "turn-ok", status: "inProgress", error: null } },
+        })
+        child.writeServerMessage({
+          method: "turn/completed",
+          params: { threadId: "thread-ok", turn: { id: "turn-ok", status: "completed", error: null } },
+        })
+      }
+    })
+
+    const manager = new CodexAppServerManager({ spawnProcess: () => process as never })
+    await manager.startSession({
+      chatId: "chat-ok",
+      cwd: "/tmp/project",
+      model: "gpt-5.6-sol",
+      sessionToken: null,
+    })
+    const turn = await manager.startTurn({
+      chatId: "chat-ok",
+      model: "gpt-5.6-sol",
+      content: "Hello",
+      planMode: false,
+      onToolRequest: async () => ({}),
+    })
+
+    const events = await collectStream(turn.stream)
+    const resultEvent = events.find(
+      (event: any) => event.type === "transcript" && event.entry.kind === "result",
+    )
+    if (!resultEvent) throw new Error("missing result event")
+
+    expect(resultEvent.entry.subtype).toBe("success")
+    expect(resultEvent.entry.codexErrorInfo).toBeUndefined()
+  })
+})
+
+describe("CodexAppServerManager retryable error notifications", () => {
+  function buildProcess(onTurnStart: (message: any, child: FakeCodexProcess) => void) {
+    return new FakeCodexProcess((message, child) => {
+      if (message.method === "initialize") {
+        child.writeServerMessage({ id: message.id, result: { userAgent: "codex-test" } })
+      } else if (message.method === "thread/start") {
+        child.writeServerMessage({
+          id: message.id,
+          result: { thread: { id: "thread-retry" }, model: "gpt-5.6-sol", reasoningEffort: "high" },
+        })
+      } else if (message.method === "turn/start") {
+        child.writeServerMessage({
+          id: message.id,
+          result: { turn: { id: "turn-retry", status: "inProgress", error: null } },
+        })
+        onTurnStart(message, child)
+      }
+    })
+  }
+
+  async function collectTurn(process: FakeCodexProcess) {
+    const manager = new CodexAppServerManager({ spawnProcess: () => process as never })
+    await manager.startSession({
+      chatId: "chat-retry",
+      cwd: "/tmp/project",
+      model: "gpt-5.6-sol",
+      sessionToken: null,
+    })
+    const turn = await manager.startTurn({
+      chatId: "chat-retry",
+      model: "gpt-5.6-sol",
+      content: "Hello",
+      planMode: false,
+      onToolRequest: async () => ({}),
+    })
+    return collectStream(turn.stream)
+  }
+
+  test("does not end the turn while codex is retrying internally", async () => {
+    const process = buildProcess((_message, child) => {
+      child.writeServerMessage({
+        method: "error",
+        params: {
+          error: {
+            message: "Reconnecting... 1/5",
+            codexErrorInfo: { responseStreamDisconnected: { httpStatusCode: null } },
+          },
+          willRetry: true,
+          threadId: "thread-retry",
+          turnId: "turn-retry",
+        },
+      })
+      child.writeServerMessage({
+        method: "turn/completed",
+        params: {
+          threadId: "thread-retry",
+          turn: { id: "turn-retry", status: "completed", error: null },
+        },
+      })
+    })
+
+    const events = await collectTurn(process)
+    const results = events.filter(
+      (event: any) => event.type === "transcript" && event.entry.kind === "result",
+    )
+
+    expect(results).toHaveLength(1)
+    expect(results[0].entry.subtype).toBe("success")
+    expect(results[0].entry.isError).toBe(false)
+  })
+
+  test("ends the turn when codex says it will not retry", async () => {
+    const process = buildProcess((_message, child) => {
+      child.writeServerMessage({
+        method: "error",
+        params: {
+          error: { message: "stream failed for good", codexErrorInfo: "internalServerError" },
+          willRetry: false,
+          threadId: "thread-retry",
+          turnId: "turn-retry",
+        },
+      })
+    })
+
+    const events = await collectTurn(process)
+    const results = events.filter(
+      (event: any) => event.type === "transcript" && event.entry.kind === "result",
+    )
+
+    expect(results).toHaveLength(1)
+    expect(results[0].entry.isError).toBe(true)
+    expect(results[0].entry.result).toBe("stream failed for good")
+    expect(results[0].entry.codexErrorInfo).toBe("internalServerError")
+  })
+
+  test("treats a missing willRetry as terminal", async () => {
+    const process = buildProcess((_message, child) => {
+      child.writeServerMessage({
+        method: "error",
+        params: {
+          error: { message: "legacy app-server error" },
+          threadId: "thread-retry",
+          turnId: "turn-retry",
+        },
+      })
+    })
+
+    const events = await collectTurn(process)
+    const results = events.filter(
+      (event: any) => event.type === "transcript" && event.entry.kind === "result",
+    )
+
+    expect(results).toHaveLength(1)
+    expect(results[0].entry.isError).toBe(true)
+  })
+})
