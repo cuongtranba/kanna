@@ -41,6 +41,8 @@ const BOARD_COMMAND_TYPES = new Set<string>([
   "board.card.move",
   "board.card.archive",
   "board.card.detail",
+  "board.card.comment",
+  "board.card.update",
   "board.cards.page",
   "board.templates.list",
   "board.sync.bind",
@@ -228,6 +230,26 @@ function dispatch(
     case "board.card.archive": {
       registry.archiveCard(command.cardId, USER)
       send({ v: PROTOCOL_VERSION, type: "ack", id })
+      return true
+    }
+
+    case "board.card.comment": {
+      send({
+        v: PROTOCOL_VERSION,
+        type: "ack",
+        id,
+        result: registry.addComment(command.cardId, USER, command.body),
+      })
+      return true
+    }
+
+    case "board.card.update": {
+      const card = registry.updateCard(
+        command.cardId,
+        command.title === undefined ? {} : { title: command.title },
+        USER,
+      )
+      send({ v: PROTOCOL_VERSION, type: "ack", id, result: card })
       return true
     }
 

@@ -3,6 +3,7 @@ import { RefreshCw } from "lucide-react"
 import { Button } from "../ui/button"
 import { cn } from "../../lib/utils"
 import { useBoardSyncStore } from "./BoardPane.store"
+import { CardDrawer } from "./CardDrawer"
 import { useBoardsStore, selectBoardView } from "../../stores/boardsStore"
 import { KannaBoard, type CardMoveRequest } from "./KannaBoard"
 import { moveCardInView } from "../../lib/boards/optimistic"
@@ -58,12 +59,19 @@ export function BoardPane({ boardId, socket, onOpenCard }: BoardPaneProps) {
     [boardId, socket],
   )
 
+  const openCardId = useBoardSyncStore((state) => state.openCardId)
+
   const handleOpenCard = useCallback(
     (cardId: string) => {
+      useBoardSyncStore.getState().openCard(cardId)
       onOpenCard?.(cardId)
     },
     [onOpenCard],
   )
+
+  const handleCloseCard = useCallback(() => {
+    useBoardSyncStore.getState().closeCard()
+  }, [])
 
   const syncing = useBoardSyncStore((state) => state.syncingBoardId === boardId)
   const syncMessage = useBoardSyncStore((state) => state.messageByBoard[boardId] ?? null)
@@ -133,7 +141,10 @@ export function BoardPane({ boardId, socket, onOpenCard }: BoardPaneProps) {
           {syncing ? "Syncing…" : "Sync"}
         </Button>
       </header>
-      <div className="min-h-0 flex-1">
+      <div className="relative min-h-0 flex-1">
+        {openCardId ? (
+          <CardDrawer cardId={openCardId} socket={socket} onClose={handleCloseCard} />
+        ) : null}
         <KannaBoard
           view={view}
           onCardMove={handleCardMove}

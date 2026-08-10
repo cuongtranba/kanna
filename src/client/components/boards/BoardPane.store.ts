@@ -8,15 +8,22 @@ import { create } from "zustand"
  */
 interface BoardSyncState {
   syncingBoardId: string | null
+  /** The card whose drawer is open, if any. */
+  openCardId: string | null
   /** Last outcome per board, rendered inline on the header rather than as a toast. */
   messageByBoard: Record<string, string>
+  openCard(cardId: string): void
+  closeCard(): void
   startSync(boardId: string): void
   finishSync(boardId: string, message: string): void
 }
 
 export const useBoardSyncStore = create<BoardSyncState>()((set) => ({
   syncingBoardId: null,
+  openCardId: null,
   messageByBoard: {},
+  openCard: (openCardId) => set({ openCardId }),
+  closeCard: () => set({ openCardId: null }),
   startSync: (syncingBoardId) => set({ syncingBoardId }),
   finishSync: (boardId, message) =>
     set((state) => ({

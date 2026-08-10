@@ -311,6 +311,8 @@ export type ClientCommand =
     }
   | { type: "board.card.archive"; cardId: string }
   | { type: "board.card.detail"; cardId: string }
+  | { type: "board.card.comment"; cardId: string; body: string }
+  | { type: "board.card.update"; cardId: string; title?: string }
   | { type: "board.cards.page"; columnId: string; limit: number; afterRank?: string | null }
   | { type: "board.templates.list" }
   | { type: "workflows.getRun"; chatId: string; runId: string }

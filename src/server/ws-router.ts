@@ -434,6 +434,8 @@ export function createWsRouter({
         case "board.card.move":
         case "board.card.archive":
         case "board.card.detail":
+        case "board.card.comment":
+        case "board.card.update":
         case "board.cards.page":
         case "board.templates.list":
         case "board.sync.bind":
