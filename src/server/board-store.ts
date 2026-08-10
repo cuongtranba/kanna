@@ -26,6 +26,16 @@ import type {
   CardLinkKind,
   ColumnColorToken,
   ColumnSemantic,
+  ConflictResolution,
+  FieldValue,
+  OutboxOp,
+  ProviderId,
+  RemoteSourceRef,
+  SyncBinding,
+  SyncConflict,
+  SyncDirection,
+  SyncLink,
+  SyncOutboxEntry,
   FieldDef,
   CardContent,
 } from "../shared/boards/types"
@@ -199,7 +209,55 @@ export interface BoardStore {
   /** Refuses on a built-in template; those are seeded, not owned. */
   deleteTemplate(templateId: string): void
 
+  // Sync
+  getBinding(boardId: string): SyncBinding | null
+  upsertBinding(input: UpsertBindingInput): SyncBinding
+  setBindingCursor(bindingId: string, cursor: string | null, lastPulledAt: number): void
+  getSyncLinkByExternal(bindingId: string, externalId: string): SyncLink | null
+  getSyncLinkByCard(cardId: string, bindingId: string): SyncLink | null
+  upsertSyncLink(link: SyncLink): void
+  /**
+   * Queue a push in the SAME transaction as the write that caused it.
+   * A crash between the two would otherwise lose the push silently — the
+   * reason boards use a database rather than the event log.
+   */
+  enqueueOutbox(entry: EnqueueOutboxInput): SyncOutboxEntry
+  dueOutbox(bindingId: string, now: number, limit: number): SyncOutboxEntry[]
+  settleOutbox(entryId: string): void
+  deferOutbox(entryId: string, nextAttemptAt: number, error: string): void
+  recordConflict(conflict: RecordConflictInput): SyncConflict
+  listConflicts(boardId: string, limit: number): SyncConflict[]
+
   close(): void
+}
+
+export interface UpsertBindingInput {
+  boardId: string
+  providerId: ProviderId
+  sourceRef: RemoteSourceRef
+  direction: SyncDirection
+  allowAgentPush: boolean
+}
+
+export interface EnqueueOutboxInput {
+  cardId: string
+  bindingId: string
+  op: OutboxOp
+  payload: Readonly<Record<string, FieldValue | string | number | boolean | null>>
+  origin: CardActor
+  nextAttemptAt: number
+  /** Set when an agent made the change and the binding forbids agent pushes. */
+  heldReason: "agent_push_disabled" | null
+}
+
+export interface RecordConflictInput {
+  cardId: string
+  bindingId: string
+  field: string
+  localValue: FieldValue | null
+  remoteValue: FieldValue | null
+  resolvedAs: ConflictResolution
+  detectedAt: number
 }
 
 // ── Pure helpers ──────────────────────────────────────────────────────────────

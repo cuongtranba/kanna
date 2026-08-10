@@ -23,11 +23,12 @@ import { Database } from "bun:sqlite"
 import { mkdirSync } from "node:fs"
 import path from "node:path"
 import { LOG_PREFIX } from "../shared/branding"
-import { errorMessage, type AnyValue } from "../shared/errors"
+import { errorMessage, isRecord, type AnyValue } from "../shared/errors"
 import {
   decodeActor,
   decodeCardContent,
   decodeFieldDefs,
+  decodeFieldValue,
   decodeTemplateDefinition,
 } from "../shared/boards/decode"
 import { log } from "../shared/log"
@@ -37,6 +38,8 @@ import {
   isCardLinkKind,
   isColumnColorToken,
   isColumnSemantic,
+  isOutboxOp,
+  isSyncDirection,
   type Board,
   type BoardColumn,
   type BoardTemplate,
@@ -46,6 +49,12 @@ import {
   type CardComment,
   type CardLink,
   type CardLinkKind,
+  type FieldValue,
+  type RemoteSourceRef,
+  type SyncBinding,
+  type SyncConflict,
+  type SyncLink,
+  type SyncOutboxEntry,
 } from "../shared/boards/types"
 import {
   BoardStoreError,
@@ -57,6 +66,9 @@ import {
   type CreateCardInput,
   type CreateColumnInput,
   type CreateTemplateInput,
+  type EnqueueOutboxInput,
+  type RecordConflictInput,
+  type UpsertBindingInput,
   type MoveCardInput,
   type MoveColumnInput,
   type UpdateBoardPatch,
@@ -134,6 +146,51 @@ interface TemplateRow {
   definition: string
   created_at: number
   updated_at: number
+}
+
+
+interface BindingRow {
+  id: string
+  board_id: string
+  provider_id: string
+  source_ref: string
+  direction: string
+  allow_agent_push: number
+  cursor: string | null
+  last_pulled_at: number | null
+}
+
+interface SyncLinkRow {
+  card_id: string
+  binding_id: string
+  external_id: string
+  external_url: string | null
+  field_watermarks: string
+  last_synced_at: number
+}
+
+interface OutboxRow {
+  id: string
+  card_id: string
+  binding_id: string
+  op: string
+  payload: string
+  origin: string
+  attempts: number
+  next_attempt_at: number
+  last_error: string | null
+  held_reason: string | null
+}
+
+interface ConflictRow {
+  id: string
+  card_id: string
+  binding_id: string
+  field: string
+  local_value: string | null
+  remote_value: string | null
+  resolved_as: string
+  detected_at: number
 }
 
 // ── Migrations ────────────────────────────────────────────────────────────────
@@ -363,6 +420,109 @@ function toTemplate(row: TemplateRow): BoardTemplate {
     definition: decodeTemplateDefinition(parseJson(row.definition, "template definition")),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  }
+}
+
+
+function decodeSourceRef(value: AnyValue): RemoteSourceRef {
+  if (isRecord(value)) {
+    if (value.provider === "github-issues" && typeof value.owner === "string" && typeof value.repo === "string") {
+      return { provider: "github-issues", owner: value.owner, repo: value.repo }
+    }
+    if (
+      value.provider === "github-projectv2"
+      && typeof value.owner === "string"
+      && typeof value.projectNumber === "number"
+      && typeof value.projectId === "string"
+    ) {
+      return {
+        provider: "github-projectv2",
+        owner: value.owner,
+        projectNumber: value.projectNumber,
+        projectId: value.projectId,
+      }
+    }
+  }
+  // A binding whose source is unreadable must not silently become a DIFFERENT
+  // repo, so it degrades to an obviously-empty one the engine will refuse.
+  return { provider: "github-issues", owner: "", repo: "" }
+}
+
+function decodeWatermarks(value: AnyValue): Record<string, number> {
+  if (!isRecord(value)) return {}
+  const marks: Record<string, number> = {}
+  for (const [field, mark] of Object.entries(value)) {
+    if (typeof mark === "number" && Number.isFinite(mark)) marks[field] = mark
+  }
+  return marks
+}
+
+function toBinding(row: BindingRow): SyncBinding {
+  const sourceRef = decodeSourceRef(parseJson(row.source_ref, "sync source"))
+  return {
+    id: row.id,
+    boardId: row.board_id,
+    providerId: sourceRef.provider,
+    sourceRef,
+    direction: isSyncDirection(row.direction) ? row.direction : "pull",
+    allowAgentPush: row.allow_agent_push === 1,
+    cursor: row.cursor,
+    lastPulledAt: row.last_pulled_at,
+  }
+}
+
+function toSyncLink(row: SyncLinkRow): SyncLink {
+  return {
+    cardId: row.card_id,
+    bindingId: row.binding_id,
+    externalId: row.external_id,
+    externalUrl: row.external_url,
+    fieldWatermarks: decodeWatermarks(parseJson(row.field_watermarks, "field watermarks")),
+    lastSyncedAt: row.last_synced_at,
+  }
+}
+
+function toOutbox(row: OutboxRow): SyncOutboxEntry {
+  const payload = parseJson(row.payload, "outbox payload")
+  return {
+    id: row.id,
+    cardId: row.card_id,
+    bindingId: row.binding_id,
+    op: isOutboxOp(row.op) ? row.op : "update",
+    payload: isRecord(payload) ? decodeOutboxPayload(payload) : {},
+    origin: decodeActor(parseJson(row.origin, "outbox origin")),
+    attempts: row.attempts,
+    nextAttemptAt: row.next_attempt_at,
+    lastError: row.last_error,
+    heldReason: row.held_reason === "agent_push_disabled" ? "agent_push_disabled" : null,
+  }
+}
+
+function decodeOutboxPayload(
+  raw: Record<string, AnyValue>,
+): Record<string, FieldValue | string | number | boolean | null> {
+  const payload: Record<string, FieldValue | string | number | boolean | null> = {}
+  for (const [key, value] of Object.entries(raw)) {
+    if (value === null || typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+      payload[key] = value
+      continue
+    }
+    const field = decodeFieldValue(value)
+    if (field) payload[key] = field
+  }
+  return payload
+}
+
+function toConflict(row: ConflictRow): SyncConflict {
+  return {
+    id: row.id,
+    cardId: row.card_id,
+    bindingId: row.binding_id,
+    field: row.field,
+    localValue: row.local_value === null ? null : decodeFieldValue(parseJson(row.local_value, "conflict value")),
+    remoteValue: row.remote_value === null ? null : decodeFieldValue(parseJson(row.remote_value, "conflict value")),
+    resolvedAs: row.resolved_as === "local" ? "local" : "remote",
+    detectedAt: row.detected_at,
   }
 }
 
@@ -903,6 +1063,163 @@ export function createBoardStore(options: CreateBoardStoreOptions): BoardStore {
         throw new BoardStoreError("invalid_input", "built-in templates cannot be deleted")
       }
       db.run("DELETE FROM board_template WHERE id = ?", [templateId])
+    },
+
+
+    // ── Sync ────────────────────────────────────────────────────────────────
+
+    getBinding(boardId: string): SyncBinding | null {
+      const row = db.query<BindingRow, [string]>("SELECT * FROM sync_binding WHERE board_id = ?").get(boardId)
+      return row ? toBinding(row) : null
+    },
+
+    upsertBinding(input: UpsertBindingInput): SyncBinding {
+      const existing = db
+        .query<BindingRow, [string]>("SELECT * FROM sync_binding WHERE board_id = ?")
+        .get(input.boardId)
+      if (existing) {
+        db.run(
+          "UPDATE sync_binding SET provider_id = ?, source_ref = ?, direction = ?, allow_agent_push = ? WHERE id = ?",
+          [
+            input.providerId,
+            JSON.stringify(input.sourceRef),
+            input.direction,
+            input.allowAgentPush ? 1 : 0,
+            existing.id,
+          ],
+        )
+      } else {
+        db.run(
+          `INSERT INTO sync_binding (id, board_id, provider_id, source_ref, direction, allow_agent_push, cursor, last_pulled_at)
+           VALUES (?, ?, ?, ?, ?, ?, NULL, NULL)`,
+          [
+            newId(),
+            input.boardId,
+            input.providerId,
+            JSON.stringify(input.sourceRef),
+            input.direction,
+            input.allowAgentPush ? 1 : 0,
+          ],
+        )
+      }
+      const row = db.query<BindingRow, [string]>("SELECT * FROM sync_binding WHERE board_id = ?").get(input.boardId)
+      if (!row) throw new BoardStoreError("conflict", "binding disappeared immediately after write")
+      return toBinding(row)
+    },
+
+    setBindingCursor(bindingId: string, cursor: string | null, lastPulledAt: number): void {
+      db.run("UPDATE sync_binding SET cursor = ?, last_pulled_at = ? WHERE id = ?", [cursor, lastPulledAt, bindingId])
+    },
+
+    getSyncLinkByExternal(bindingId: string, externalId: string): SyncLink | null {
+      const row = db
+        .query<SyncLinkRow, [string, string]>("SELECT * FROM sync_link WHERE binding_id = ? AND external_id = ?")
+        .get(bindingId, externalId)
+      return row ? toSyncLink(row) : null
+    },
+
+    getSyncLinkByCard(cardId: string, bindingId: string): SyncLink | null {
+      const row = db
+        .query<SyncLinkRow, [string, string]>("SELECT * FROM sync_link WHERE card_id = ? AND binding_id = ?")
+        .get(cardId, bindingId)
+      return row ? toSyncLink(row) : null
+    },
+
+    upsertSyncLink(link: SyncLink): void {
+      db.run(
+        `INSERT INTO sync_link (card_id, binding_id, external_id, external_url, field_watermarks, last_synced_at)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT (card_id, binding_id) DO UPDATE SET
+           external_id = excluded.external_id,
+           external_url = excluded.external_url,
+           field_watermarks = excluded.field_watermarks,
+           last_synced_at = excluded.last_synced_at`,
+        [
+          link.cardId,
+          link.bindingId,
+          link.externalId,
+          link.externalUrl,
+          JSON.stringify(link.fieldWatermarks),
+          link.lastSyncedAt,
+        ],
+      )
+    },
+
+    enqueueOutbox(entry: EnqueueOutboxInput): SyncOutboxEntry {
+      const id = newId()
+      db.run(
+        `INSERT INTO sync_outbox (id, card_id, binding_id, op, payload, origin, attempts, next_attempt_at, last_error, held_reason)
+         VALUES (?, ?, ?, ?, ?, ?, 0, ?, NULL, ?)`,
+        [
+          id,
+          entry.cardId,
+          entry.bindingId,
+          entry.op,
+          JSON.stringify(entry.payload),
+          JSON.stringify(entry.origin),
+          entry.nextAttemptAt,
+          entry.heldReason,
+        ],
+      )
+      const row = db.query<OutboxRow, [string]>("SELECT * FROM sync_outbox WHERE id = ?").get(id)
+      if (!row) throw new BoardStoreError("conflict", "outbox entry disappeared immediately after insert")
+      return toOutbox(row)
+    },
+
+    dueOutbox(bindingId: string, now: number, limit: number): SyncOutboxEntry[] {
+      // `held_reason IS NULL` is the agent-push guard: a held entry stays in the
+      // table, visible to the UI, and is never picked up by the drain.
+      return db
+        .query<OutboxRow, [string, number, number]>(
+          `SELECT * FROM sync_outbox
+           WHERE binding_id = ? AND held_reason IS NULL AND next_attempt_at <= ?
+           ORDER BY next_attempt_at LIMIT ?`,
+        )
+        .all(bindingId, now, Math.max(1, limit))
+        .map(toOutbox)
+    },
+
+    settleOutbox(entryId: string): void {
+      db.run("DELETE FROM sync_outbox WHERE id = ?", [entryId])
+    },
+
+    deferOutbox(entryId: string, nextAttemptAt: number, error: string): void {
+      db.run(
+        "UPDATE sync_outbox SET attempts = attempts + 1, next_attempt_at = ?, last_error = ? WHERE id = ?",
+        [nextAttemptAt, error, entryId],
+      )
+    },
+
+    recordConflict(conflict: RecordConflictInput): SyncConflict {
+      const id = newId()
+      db.run(
+        `INSERT INTO sync_conflict (id, card_id, binding_id, field, local_value, remote_value, resolved_as, detected_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          id,
+          conflict.cardId,
+          conflict.bindingId,
+          conflict.field,
+          conflict.localValue === null ? null : JSON.stringify(conflict.localValue),
+          conflict.remoteValue === null ? null : JSON.stringify(conflict.remoteValue),
+          conflict.resolvedAs,
+          conflict.detectedAt,
+        ],
+      )
+      const row = db.query<ConflictRow, [string]>("SELECT * FROM sync_conflict WHERE id = ?").get(id)
+      if (!row) throw new BoardStoreError("conflict", "conflict row disappeared immediately after insert")
+      return toConflict(row)
+    },
+
+    listConflicts(boardId: string, limit: number): SyncConflict[] {
+      return db
+        .query<ConflictRow, [string, number]>(
+          `SELECT sync_conflict.* FROM sync_conflict
+           JOIN card ON card.id = sync_conflict.card_id
+           WHERE card.board_id = ? ORDER BY sync_conflict.detected_at DESC LIMIT ?`,
+        )
+        .all(boardId, Math.max(1, limit))
+        .map(toConflict)
     },
 
     close(): void {
