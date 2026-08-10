@@ -15,6 +15,16 @@ Operations: query, audit, change, ref, sweep.
 File lookup: `c3x lookup <file-or-glob>` maps files/directories to components + refs.
 Skill: `c3-skill:c3` (auto-triggers on `/c3` or architecture phrases).
 
+**`c3x repair` rewrites unrelated docs — do not commit that churn.** It
+re-canonicalizes every fact it loads and strips inline-code backticks from
+markdown TABLE CELLS (`\`bun run lint\`` → `bun run lint`), then re-seals the
+file. On this repo that touches ~5 docs and ~43 rows that the current change
+never went near. It is formatting-only — no text, globs, or emphasis are lost —
+but it buries a real diff in noise. `.c3/c3.db` is gitignored, so the canonical
+markdown is the source of truth: after `repair`, `git checkout --` any doc your
+change did not intend to touch. Upstream fix belongs in the c3 skill's table
+serializer.
+
 # Pull Requests
 
 This is a fork. `origin` = `cuongtranba/kanna` (mine), `upstream` = `jakemor/kanna`.

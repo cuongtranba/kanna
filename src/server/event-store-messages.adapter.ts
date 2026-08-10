@@ -20,6 +20,7 @@ import {
   fitLimitToByteBudget,
   getHistorySnapshot,
   getMessagesPageFromEntries,
+  MIN_RECENT_PAGE_ENTRIES,
   RECENT_PAGE_BYTE_BUDGET,
 } from "./event-store-helpers"
 
@@ -193,9 +194,16 @@ function parseJsonlSlice(
 }
 
 /**
+ * Extra bytes read beyond `byteBudget` before the growth loop stops, so the
+ * slice reliably holds a full budget's worth of entries once serialized.
+ */
+const TAIL_BUDGET_MARGIN = 1.25
+
+/**
  * Reads only the tail of the transcript JSONL (growing backwards until more
- * than `minEntries` lines or BOF). Returns null when the storage backend has
- * no byte-slice APIs — callers must fall back to the full-parse path.
+ * than `minEntries` lines, or `byteBudget` worth of bytes, or BOF). Returns
+ * null when the storage backend has no byte-slice APIs — callers must fall
+ * back to the full-parse path.
  */
 export function readTranscriptTail(
   deps: MessageReadDeps,
@@ -203,6 +211,7 @@ export function readTranscriptTail(
   minEntries: number,
   endOffset?: number,
   chunkBytes: number = TAIL_CHUNK_BYTES,
+  byteBudget?: number,
 ): TranscriptTailResult | null {
   const { storage } = deps
   if (typeof storage.readSliceSync !== "function" || typeof storage.sizeSync !== "function") {
@@ -217,12 +226,22 @@ export function readTranscriptTail(
   if (end <= 0) {
     return { entries: [], lineOffsets: [], reachedStart: true }
   }
+  // Each growth step re-reads and re-parses the whole slice, so the loop costs
+  // the SUM of every attempt: chasing 200 fat entries walks 256K→512K→1M→2M→4M
+  // and parses ~7.75 MB to build a page the byte budget then trims to 1 MB.
+  // When a budget is in play, stop as soon as the slice can fill it — every
+  // entry past that point is parsed only to be discarded.
+  const budgetBytes = byteBudget === undefined ? undefined : byteBudget * TAIL_BUDGET_MARGIN
   let chunk = Math.max(chunkBytes, 64)
   for (;;) {
     const start = Math.max(0, end - chunk)
     const buf = storage.readSliceSync(tPath, start, end)
     const parsed = parseJsonlSlice(buf, start, start === 0)
-    if (start === 0 || parsed.entries.length > minEntries) {
+    const budgetSatisfied =
+      budgetBytes !== undefined &&
+      end - start >= budgetBytes &&
+      parsed.entries.length > MIN_RECENT_PAGE_ENTRIES
+    if (start === 0 || parsed.entries.length > minEntries || budgetSatisfied) {
       return { ...parsed, reachedStart: start === 0 }
     }
     chunk *= 2
@@ -332,7 +351,8 @@ export function getRecentMessagesPageTail(
       : null
 
   const cached = fileSize === null ? undefined : deps.transcriptCache.getTail(chatId, fileSize, limit)
-  const tail = cached ?? readTranscriptTail(deps, chatId, limit, undefined, chunkBytes)
+  const tail =
+    cached ?? readTranscriptTail(deps, chatId, limit, undefined, chunkBytes, RECENT_PAGE_BYTE_BUDGET)
   if (!tail) return null
   if (!cached && fileSize !== null) {
     deps.transcriptCache.setTail(chatId, fileSize, limit, tail)

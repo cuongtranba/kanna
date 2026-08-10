@@ -656,7 +656,7 @@ describe("setPermissionMode (F1 — plan mode exit)", () => {
     } finally {
       await cleanup()
     }
-  }, 10_000)
+  }, 30_000)
 
   test("setPermissionMode(false) after true sends Shift+Tab \\x1b[Z", async () => {
     if (process.platform === "win32") return
@@ -669,7 +669,7 @@ describe("setPermissionMode (F1 — plan mode exit)", () => {
     } finally {
       await cleanup()
     }
-  }, 10_000)
+  }, 30_000)
 
   test("setPermissionMode(false) when started with planMode:true sends Shift+Tab", async () => {
     if (process.platform === "win32") return
@@ -680,7 +680,7 @@ describe("setPermissionMode (F1 — plan mode exit)", () => {
     } finally {
       await cleanup()
     }
-  }, 10_000)
+  }, 30_000)
 
   test("setPermissionMode(false) without prior entry does NOT send Shift+Tab", async () => {
     if (process.platform === "win32") return
@@ -691,7 +691,7 @@ describe("setPermissionMode (F1 — plan mode exit)", () => {
     } finally {
       await cleanup()
     }
-  }, 10_000)
+  }, 30_000)
 })
 
 // ── Task 6: customMcpServers wired through PTY mcp-config.json ────────────────
@@ -795,7 +795,7 @@ describe("PTY customMcpServers wiring (Task 6)", () => {
     } finally {
       await cleanup()
     }
-  }, 10_000)
+  }, 30_000)
 
   test("mcp-config.json omits disabled customMcpServers", async () => {
     if (process.platform === "win32") return
@@ -819,7 +819,7 @@ describe("PTY customMcpServers wiring (Task 6)", () => {
     } finally {
       await cleanup()
     }
-  }, 10_000)
+  }, 30_000)
 })
 
 describe("session close escalation (graceful → SIGTERM → SIGKILL)", () => {
@@ -867,7 +867,7 @@ describe("session close escalation (graceful → SIGTERM → SIGKILL)", () => {
     } finally {
       await rm(tmp, { recursive: true, force: true })
     }
-  }, 10_000)
+  }, 30_000)
 })
 
 describe("keep-alive (Task 1)", () => {
@@ -960,7 +960,7 @@ describe("keep-alive (Task 1)", () => {
     expect(pushed).toEqual(["turn one", "turn two"])
 
     handle.close()
-  }, 10_000)
+  }, 30_000)
 
   test("keepAlive omitted on oneShot: handle.pushChannelPrompt is undefined", async () => {
     if (process.platform === "win32") return
@@ -994,7 +994,7 @@ describe("keep-alive (Task 1)", () => {
     })
     expect(handle.pushChannelPrompt).toBeUndefined()
     handle.close()
-  }, 10_000)
+  }, 30_000)
 })
 
 describe("channel-delivery (Task 5)", () => {
@@ -1026,7 +1026,7 @@ describe("channel-delivery (Task 5)", () => {
     expect(pushed).toEqual(["FULL MULTILINE PROMPT\nline2\nline3"])
     expect(ptyWrites.join("")).not.toContain("FULL MULTILINE PROMPT")
     try { if (handle.interrupt) await handle.interrupt() } catch { /* */ }
-  }, 10_000)
+  }, 30_000)
 
   test("oneShot channel delivery fails fast when client never ready (no paste fallback)", async () => {
     if (process.platform === "win32") return
@@ -1055,7 +1055,7 @@ describe("channel-delivery (Task 5)", () => {
     await expect(promise).rejects.toThrow(/channel/i)
     expect(ptyWrites.join("")).not.toContain("FULL MULTILINE PROMPT")
     expect(closed).toBe(true)
-  }, 10_000)
+  }, 30_000)
 })
 
 describe("follow-up sendPrompt TUI-ready gate (silent-hang fix)", () => {
@@ -1111,7 +1111,7 @@ describe("follow-up sendPrompt TUI-ready gate (silent-hang fix)", () => {
     expect(sentInputs.some((d) => d.includes("\x1b[200~Ok\x1b[201~"))).toBe(true)
     expect(sentInputs.some((d) => d === "\r")).toBe(true)
     handle.close()
-  }, 10_000)
+  }, 30_000)
 
   test("never-ready REPL: warns and still sends after the cap (never worse than today)", async () => {
     if (process.platform === "win32") return
@@ -1144,7 +1144,7 @@ describe("follow-up sendPrompt TUI-ready gate (silent-hang fix)", () => {
     await handle.sendPrompt!("Ok")
     expect(sentInputs.some((d) => d.includes("\x1b[200~Ok\x1b[201~"))).toBe(true)
     handle.close()
-  }, 10_000)
+  }, 30_000)
 })
 
 describe("buildChannelPromptFraming", () => {

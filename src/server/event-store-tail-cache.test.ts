@@ -4,6 +4,7 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { EventStore } from "./event-store"
 import type { TranscriptEntry } from "../shared/types"
+import { getRecentMessagesPageTail } from "./event-store-messages.adapter"
 
 /**
  * The tail window is cached against the transcript's BYTE SIZE, which is only
@@ -117,6 +118,58 @@ describe("transcript tail cache", () => {
       const narrow = store.getRecentChatHistory(chatId, 10)
       expect(narrow.messages.length).toBeLessThan(wide.messages.length)
       expect(narrow.messages.length).toBe(10)
+    })
+  })
+})
+
+/**
+ * The tail read grows its slice until it has enough entries OR enough bytes to
+ * fill the byte budget. That early stop is a pure cost optimization: it must
+ * never change the page that is served. Varying the chunk size changes how
+ * many growth steps happen and where the loop stops, so a page that is
+ * identical across chunk sizes is evidence the stop condition is not
+ * observable from outside.
+ */
+describe("byte-aware tail growth", () => {
+  test("serves an identical page regardless of chunk size", async () => {
+    await withStore(async (store, chatId) => {
+      // Fat entries, so 200 of them far exceed the byte budget and the growth
+      // loop actually has a decision to make.
+      for (let i = 0; i < 300; i += 1) {
+        await store.appendMessage(chatId, entry(`e${i}`, `body ${i} ${"x".repeat(20_000)}`))
+      }
+      await store.flush()
+
+      // Drive the tail read DIRECTLY so chunkBytes actually varies — going
+      // through getRecentChatHistory would ignore it and make this tautological.
+      type Deps = Parameters<typeof getRecentMessagesPageTail>[0]
+      const deps = (store as unknown as { buildMessageReadDeps: () => Deps })
+        .buildMessageReadDeps()
+      const cache = (deps as unknown as { transcriptCache: { invalidateTail: (id: string) => void } })
+        .transcriptCache
+
+      const pages = [4 * 1024, 64 * 1024, 256 * 1024, 8 * 1024 * 1024].map((chunk) => {
+        cache.invalidateTail(chatId)
+        return JSON.stringify(getRecentMessagesPageTail(deps, chatId, 200, chunk))
+      })
+
+      for (const page of pages) expect(page).toBe(pages[0])
+      const parsed = JSON.parse(pages[0]!) as { messages: unknown[] }
+      // Bounded by bytes, so well under the 200 asked for, and over the floor.
+      expect(parsed.messages.length).toBeLessThan(200)
+      expect(parsed.messages.length).toBeGreaterThanOrEqual(10)
+    })
+  })
+
+  test("a chat under the budget still returns every entry it has", async () => {
+    await withStore(async (store, chatId) => {
+      for (let i = 0; i < 40; i += 1) {
+        await store.appendMessage(chatId, entry(`e${i}`, `small ${i}`))
+      }
+      await store.flush()
+      const page = store.getRecentChatHistory(chatId, 200)
+      expect(page.messages.length).toBe(40)
+      expect(page.history.hasOlder).toBe(false)
     })
   })
 })
