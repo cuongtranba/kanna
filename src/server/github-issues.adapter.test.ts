@@ -103,6 +103,42 @@ describe("pull", () => {
     expect(result.cursor).toBe(new Date(Date.parse("2019-10-14T21:16:38Z")).toISOString())
   })
 
+  test("follows pages until it has real issues, not just the first page", async () => {
+    // A fork carries its upstream's PR history, so the oldest-updated page can
+    // be entirely pull requests. Stopping after one page imported NOTHING from
+    // a repo with 13 real issues (observed on cuongtranba/kanna).
+    const prPage = Array.from({ length: 100 }, (_unused, index) =>
+      issue({ number: index + 1, pull_request: { url: "x" }, updated_at: `2019-10-${String((index % 28) + 1).padStart(2, "0")}T00:00:00Z` }),
+    )
+    const issuePage = [issue({ number: 500, updated_at: "2020-01-01T00:00:00Z" })]
+    const { impl, calls } = stubFetch([prPage, issuePage])
+
+    const result = await createGitHubIssuesProvider({ fetchImpl: impl }).pull({
+      auth: AUTH,
+      source: SOURCE,
+      cursor: null,
+      limit: 40,
+    })
+
+    expect(calls.length).toBeGreaterThan(1)
+    expect(result.items.map((item) => item.externalId)).toEqual(["500"])
+  })
+
+  test("stops instead of looping when a page brings nothing newer", async () => {
+    // `since` is inclusive, so a page whose newest entry equals the cursor
+    // would otherwise be requested forever.
+    const page = [issue({ number: 1, updated_at: "2026-01-01T00:00:00Z" })]
+    const { impl, calls } = stubFetch([page])
+    const result = await createGitHubIssuesProvider({ fetchImpl: impl }).pull({
+      auth: AUTH,
+      source: SOURCE,
+      cursor: new Date(Date.parse("2026-01-01T00:00:00Z")).toISOString(),
+      limit: 100,
+    })
+    expect(calls).toHaveLength(1)
+    expect(result.cursor).toBe(new Date(Date.parse("2026-01-01T00:00:00Z")).toISOString())
+  })
+
   test("an empty page leaves the cursor where it was", async () => {
     const { impl } = stubFetch([[]])
     const result = await createGitHubIssuesProvider({ fetchImpl: impl }).pull({

@@ -18,12 +18,15 @@ import type { ClientCommand, ServerEnvelope } from "../shared/protocol"
 import type { CardActor } from "../shared/boards/types"
 import { BoardStoreError } from "./board-store"
 import type { BoardRegistry } from "./board-registry"
+import type { BoardSync } from "./board-sync"
 import { errorMessage } from "../shared/errors"
 
 const USER: CardActor = { kind: "user" }
 
 export interface BoardCommandDeps {
   boardRegistry: BoardRegistry | undefined
+  /** Absent when no sync provider is configured; sync commands then refuse. */
+  boardSync: BoardSync | undefined
   send: (envelope: ServerEnvelope) => void
 }
 
@@ -40,6 +43,10 @@ const BOARD_COMMAND_TYPES = new Set<string>([
   "board.card.detail",
   "board.cards.page",
   "board.templates.list",
+  "board.sync.bind",
+  "board.sync.pull",
+  "board.sync.push",
+  "board.sync.status",
 ])
 
 export function isBoardCommand(command: ClientCommand): boolean {
@@ -53,8 +60,12 @@ export function isBoardCommand(command: ClientCommand): boolean {
  * envelope rather than a thrown exception: these are ordinary user-facing
  * outcomes ("that column still has cards"), and the socket must stay open.
  */
-export function handleBoardCommand(deps: BoardCommandDeps, command: ClientCommand, id: string): boolean {
-  const { boardRegistry, send } = deps
+export async function handleBoardCommand(
+  deps: BoardCommandDeps,
+  command: ClientCommand,
+  id: string,
+): Promise<boolean> {
+  const { boardRegistry, boardSync, send } = deps
   if (!isBoardCommand(command)) return false
 
   if (!boardRegistry) {
@@ -63,6 +74,9 @@ export function handleBoardCommand(deps: BoardCommandDeps, command: ClientComman
   }
 
   try {
+    if (command.type.startsWith("board.sync.")) {
+      return await dispatchSync(boardRegistry, boardSync, send, command, id)
+    }
     return dispatch(boardRegistry, send, command, id)
   } catch (error) {
     if (error instanceof BoardStoreError) {
@@ -72,6 +86,57 @@ export function handleBoardCommand(deps: BoardCommandDeps, command: ClientComman
     send({ v: PROTOCOL_VERSION, type: "error", id, message: errorMessage(error) })
     return true
   }
+}
+
+/**
+ * Sync commands are async and reach the network, so they are dispatched
+ * separately from the synchronous store commands above.
+ */
+async function dispatchSync(
+  registry: BoardRegistry,
+  sync: BoardSync | undefined,
+  send: (envelope: ServerEnvelope) => void,
+  command: ClientCommand,
+  id: string,
+): Promise<boolean> {
+  if (command.type === "board.sync.bind") {
+    const binding = registry.bindSync({
+      boardId: command.boardId,
+      providerId: "github-issues",
+      sourceRef: { provider: "github-issues", owner: command.owner, repo: command.repo },
+      direction: command.direction,
+      allowAgentPush: command.allowAgentPush,
+    })
+    send({ v: PROTOCOL_VERSION, type: "ack", id, result: binding })
+    return true
+  }
+
+  if (command.type === "board.sync.status") {
+    send({
+      v: PROTOCOL_VERSION,
+      type: "ack",
+      id,
+      result: { binding: registry.getBinding(command.boardId), conflicts: registry.listConflicts(command.boardId) },
+    })
+    return true
+  }
+
+  if (!sync) {
+    send({ v: PROTOCOL_VERSION, type: "error", id, message: "Sync is not available on this server." })
+    return true
+  }
+
+  if (command.type === "board.sync.pull") {
+    send({ v: PROTOCOL_VERSION, type: "ack", id, result: await sync.pull(command.boardId) })
+    return true
+  }
+
+  if (command.type === "board.sync.push") {
+    send({ v: PROTOCOL_VERSION, type: "ack", id, result: await sync.drain(command.boardId) })
+    return true
+  }
+
+  return false
 }
 
 function dispatch(

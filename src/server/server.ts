@@ -35,6 +35,9 @@ import { ClaudePtyRegistry } from "./claude-pty/pid-registry.adapter"
 import { createPtyInstanceRegistry } from "./claude-pty/pty-instance-registry"
 import { createBoardRegistry } from "./board-registry"
 import { createBoardStore } from "./board-store.adapter"
+import { createBoardSync } from "./board-sync"
+import { createGitHubIssuesProvider } from "./github-issues.adapter"
+import { readGitHubCliToken } from "./github-cli.adapter"
 import { UpdateManager } from "./update-manager"
 import type { UpdateInstallAttemptResult } from "./cli-runtime"
 import { compareVersions } from "./cli-runtime"
@@ -269,8 +272,16 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   const ptyInstanceRegistry = createPtyInstanceRegistry()
   // Boards live in their own SQLite file beside the event logs — same
   // local-first data dir, different engine (see the boards ADR).
-  const boardRegistry = createBoardRegistry({
-    store: createBoardStore({ filePath: path.join(store.dataDir, "boards.db") }),
+  const boardStore = createBoardStore({ filePath: path.join(store.dataDir, "boards.db") })
+  const boardRegistry = createBoardRegistry({ store: boardStore })
+  // Credentials come from the `gh` CLI: a developer running Kanna has almost
+  // always already logged in, and Kanna has no redirect server for OAuth.
+  const boardSync = createBoardSync({
+    registry: boardRegistry,
+    store: boardStore,
+    providers: new Map([["github-issues", createGitHubIssuesProvider()]]),
+    readToken: readGitHubCliToken,
+    now: () => Date.now(),
   })
   const workflowRegistry = createWorkflowRegistry({
     read: readWorkflowDir,
@@ -554,6 +565,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     ptyInstances: ptyInstanceRegistry,
     workflowRegistry,
     boardRegistry,
+    boardSync,
     loopTrackingRegistry,
     subagentTranscriptRegistry,
     followedSessionRegistry,

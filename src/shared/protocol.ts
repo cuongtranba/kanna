@@ -30,7 +30,7 @@ import type {
 import type { ChatOpsEvent } from "./chat-ops"
 import type { ChatPermissionPolicyOverride, ToolRequestDecision } from "./permission-policy"
 import type { PtyInstanceDelta, PtyInstancesSnapshot } from "./pty-instance"
-import type { BoardOwnerKind, BoardSummary, BoardViewSnapshot } from "./boards/types"
+import type { BoardOwnerKind, BoardSummary, BoardViewSnapshot, SyncDirection } from "./boards/types"
 import type { WorkflowRunSummary } from "./workflow-types"
 
 export type { EditorPreset }
@@ -289,6 +289,17 @@ export type ClientCommand =
   | { type: "board.update"; boardId: string; title?: string; description?: string | null }
   | { type: "board.duplicate"; boardId: string; title: string }
   | { type: "board.saveAsTemplate"; boardId: string; name: string }
+  | {
+      type: "board.sync.bind"
+      boardId: string
+      owner: string
+      repo: string
+      direction: SyncDirection
+      allowAgentPush: boolean
+    }
+  | { type: "board.sync.pull"; boardId: string }
+  | { type: "board.sync.push"; boardId: string }
+  | { type: "board.sync.status"; boardId: string }
   | { type: "board.column.create"; boardId: string; title: string; afterColumnId?: string | null }
   | { type: "board.card.create"; boardId: string; columnId: string; title: string; projectId?: string | null; afterCardId?: string | null }
   | {

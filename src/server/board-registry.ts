@@ -26,6 +26,8 @@ import type {
   CardDetail,
   CardLink,
   CardLinkKind,
+  SyncBinding,
+  SyncConflict,
 } from "../shared/boards/types"
 import {
   BoardStoreError,
@@ -42,10 +44,14 @@ import {
   type UpdateBoardPatch,
   type UpdateCardPatch,
   type UpdateColumnPatch,
+  type UpsertBindingInput,
 } from "./board-store"
 
 /** How many cards each column ships in the initial board snapshot. */
 export const DEFAULT_BOARD_PAGE_SIZE = 30
+
+/** Conflicts are a review queue, not a log; the newest are the actionable ones. */
+const MAX_CONFLICTS = 100
 
 export type { BoardSummary, BoardViewSnapshot, CardDetail }
 
@@ -88,6 +94,12 @@ export interface BoardRegistry {
    * silently clone 300 rows, and the UI labels this "Duplicate structure" so
    * the two can never disagree.
    */
+  // Sync
+  getBinding(boardId: string): SyncBinding | null
+  /** Connect a board to a tracker. Broadcasts: the board's sync state is visible on it. */
+  bindSync(input: UpsertBindingInput): SyncBinding
+  listConflicts(boardId: string): SyncConflict[]
+
   duplicateBoard(boardId: string, title: string): Board
   /** Turn a board's columns + card schema into a reusable template. */
   saveBoardAsTemplate(boardId: string, name: string, description?: string | null): BoardTemplate
@@ -235,6 +247,13 @@ export function createBoardRegistry(options: CreateBoardRegistryOptions): BoardR
       mutate(() => boardIdOfCard(cardId), () => store.removeCardLink(cardId, kind, targetId)),
     addComment: (cardId, author, body) =>
       mutate(() => boardIdOfCard(cardId), () => store.addComment(cardId, author, body)),
+
+    getBinding: (boardId) => store.getBinding(boardId),
+    listConflicts: (boardId) => store.listConflicts(boardId, MAX_CONFLICTS),
+
+    bindSync(input: UpsertBindingInput): SyncBinding {
+      return mutate(() => input.boardId, () => store.upsertBinding(input))
+    },
 
     createTemplate: (input) => store.createTemplate(input),
     deleteTemplate: (templateId) => store.deleteTemplate(templateId),

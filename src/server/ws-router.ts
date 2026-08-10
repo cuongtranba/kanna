@@ -32,6 +32,7 @@ import type { LoopTrackingRegistry } from "./loop-tracking-registry"
 import type { WorkflowRegistry } from "./workflow-registry"
 import { handleBoardCommand } from "./ws-router-boards"
 import type { BoardRegistry } from "./board-registry"
+import type { BoardSync } from "./board-sync"
 import type { SubagentTranscriptRegistry } from "./subagent-transcript-registry"
 import type { FollowedSessionRegistry } from "./followed-session-registry"
 import { buildFallbackDiffStore, buildFallbackLlmProvider, buildResolvedAppSettings } from "./ws-router-defaults"
@@ -99,6 +100,7 @@ interface CreateWsRouterArgs {
   killPtyInstance?: (chatId: string) => Promise<{ ok: boolean; error?: string }>
   workflowRegistry?: WorkflowRegistry
   boardRegistry?: BoardRegistry
+  boardSync?: BoardSync
   loopTrackingRegistry?: LoopTrackingRegistry
   subagentTranscriptRegistry?: SubagentTranscriptRegistry
   followedSessionRegistry?: FollowedSessionRegistry
@@ -125,6 +127,7 @@ export function createWsRouter({
   killPtyInstance,
   workflowRegistry,
   boardRegistry,
+  boardSync,
   loopTrackingRegistry,
   subagentTranscriptRegistry,
   followedSessionRegistry,
@@ -432,8 +435,16 @@ export function createWsRouter({
         case "board.card.archive":
         case "board.card.detail":
         case "board.cards.page":
-        case "board.templates.list": {
-          handleBoardCommand({ boardRegistry, send: (envelope) => send(ws, envelope) }, command, id)
+        case "board.templates.list":
+        case "board.sync.bind":
+        case "board.sync.pull":
+        case "board.sync.push":
+        case "board.sync.status": {
+          await handleBoardCommand(
+            { boardRegistry, boardSync, send: (envelope) => send(ws, envelope) },
+            command,
+            id,
+          )
           return
         }
         case "workflows.getRun":

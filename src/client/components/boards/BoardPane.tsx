@@ -1,9 +1,13 @@
 import { useCallback, useEffect } from "react"
+import { RefreshCw } from "lucide-react"
+import { Button } from "../ui/button"
+import { cn } from "../../lib/utils"
+import { useBoardSyncStore } from "./BoardPane.store"
 import { useBoardsStore, selectBoardView } from "../../stores/boardsStore"
 import { KannaBoard, type CardMoveRequest } from "./KannaBoard"
 import { moveCardInView } from "../../lib/boards/optimistic"
 import type { BoardSnapshot } from "../../../shared/protocol"
-import type { AnyValue } from "../../../shared/errors"
+import { errorMessage, type AnyValue } from "../../../shared/errors"
 
 /**
  * One board, live.
@@ -61,6 +65,31 @@ export function BoardPane({ boardId, socket, onOpenCard }: BoardPaneProps) {
     [onOpenCard],
   )
 
+  const syncing = useBoardSyncStore((state) => state.syncingBoardId === boardId)
+  const syncMessage = useBoardSyncStore((state) => state.messageByBoard[boardId] ?? null)
+
+  const handleSync = useCallback(() => {
+    const sync = useBoardSyncStore.getState()
+    sync.startSync(boardId)
+    void socket
+      .command<{ created: number; updated: number; unchanged: number; conflicts: number }>({
+        type: "board.sync.pull",
+        boardId,
+      })
+      .then((summary) => {
+        const conflicts = summary.conflicts > 0 ? `, ${String(summary.conflicts)} conflicts` : ""
+        sync.finishSync(
+          boardId,
+          `Synced · ${String(summary.created)} new, ${String(summary.updated)} updated${conflicts}`,
+        )
+      })
+      // The reason is shown inline on the header, not as a toast: the user may
+      // not be looking when a sync fails.
+      .catch((cause: AnyValue) => {
+        sync.finishSync(boardId, errorMessage(cause))
+      })
+  }, [boardId, socket])
+
   const handleLoadMore = useCallback(() => {
     // Paging lands with the card drawer; the snapshot's first page covers the
     // common board until then, and the skeletons above it are honest about
@@ -87,11 +116,31 @@ export function BoardPane({ boardId, socket, onOpenCard }: BoardPaneProps) {
   }
 
   return (
-    <KannaBoard
-      view={view}
-      onCardMove={handleCardMove}
-      onOpenCard={handleOpenCard}
-      onLoadMore={handleLoadMore}
-    />
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
+      <header className="flex items-center gap-3 border-b border-border px-4 py-2">
+        <span className="truncate text-[15px] font-semibold text-foreground">{view.board.title}</span>
+        {syncMessage ? (
+          <span className="truncate font-mono text-xs tabular-nums text-muted-foreground">{syncMessage}</span>
+        ) : null}
+        <Button
+          variant="secondary"
+          size="sm"
+          className="ml-auto"
+          onClick={handleSync}
+          disabled={syncing}
+        >
+          <RefreshCw aria-hidden className={cn("size-3.5", syncing && "animate-spin")} />
+          {syncing ? "Syncing…" : "Sync"}
+        </Button>
+      </header>
+      <div className="min-h-0 flex-1">
+        <KannaBoard
+          view={view}
+          onCardMove={handleCardMove}
+          onOpenCard={handleOpenCard}
+          onLoadMore={handleLoadMore}
+        />
+      </div>
+    </div>
   )
 }

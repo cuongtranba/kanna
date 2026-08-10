@@ -30,6 +30,12 @@ import type { RemoteSourceRef } from "../shared/boards/types"
 
 const API = "https://api.github.com"
 
+/**
+ * How many HTTP requests one pull may spend. Bounded so a repo with a very long
+ * PR-only history cannot burn the hourly quota in a single click.
+ */
+const MAX_PULL_REQUESTS = 10
+
 export interface GitHubFetchOptions {
   /** Injected so tests can drive the adapter without a network. */
   fetchImpl?: typeof fetch
@@ -117,32 +123,43 @@ export function createGitHubIssuesProvider(options: GitHubFetchOptions = {}): Bo
       const repo = repoOf(input.source)
       if (!repo) return { items: [], cursor: input.cursor, rateLimit: null }
 
-      const params = new URLSearchParams({
-        state: "all",
-        sort: "updated",
-        direction: "asc",
-        per_page: String(Math.min(Math.max(input.limit, 1), 100)),
-      })
-      if (input.cursor) params.set("since", input.cursor)
-
-      const response = await doFetch(`${API}/repos/${repo.owner}/${repo.repo}/issues?${params.toString()}`, {
-        headers: headers(input.auth),
-      })
-      const rateLimit = readRateLimit(response)
-      if (!response.ok) {
-        throw new Error(`GitHub pull failed: ${String(response.status)} ${response.statusText}`)
-      }
-
-      const body: AnyValue = await response.json()
+      // One "pull" may need SEVERAL requests. `/issues` returns issues and pull
+      // requests interleaved, oldest-updated first, and a fork carries its
+      // upstream's PR history — so a single page can be entirely PRs and import
+      // nothing while real issues sit further along. Observed on
+      // cuongtranba/kanna: 13 issues, first page all PRs, zero imported.
+      // Pages are followed until enough ISSUES are collected, the remote runs
+      // out, or the request budget is spent.
+      const wanted = Math.min(Math.max(input.limit, 1), 500)
+      const perPage = 100
       const items: RemoteItem[] = []
-      // The cursor advances on EVERY entry the page returned, including the
-      // pull requests filtered out above. Advancing only on kept items stalls
-      // the sync forever on a repo whose oldest-updated entries are all PRs:
-      // the cursor never moves, so the next pull re-reads the same page and
-      // imports nothing, silently and permanently. (Observed against cli/cli,
-      // whose first five oldest-updated entries are all PRs.)
-      let newestSeen = 0
-      if (Array.isArray(body)) {
+      let cursor = input.cursor
+      let rateLimit: RateLimit | null = null
+
+      for (let request = 0; request < MAX_PULL_REQUESTS && items.length < wanted; request += 1) {
+        const params = new URLSearchParams({
+          state: "all",
+          sort: "updated",
+          direction: "asc",
+          per_page: String(perPage),
+        })
+        if (cursor) params.set("since", cursor)
+
+        const response = await doFetch(`${API}/repos/${repo.owner}/${repo.repo}/issues?${params.toString()}`, {
+          headers: headers(input.auth),
+        })
+        rateLimit = readRateLimit(response) ?? rateLimit
+        if (!response.ok) {
+          throw new Error(`GitHub pull failed: ${String(response.status)} ${response.statusText}`)
+        }
+
+        const body: AnyValue = await response.json()
+        if (!Array.isArray(body) || body.length === 0) break
+
+        // The cursor advances on EVERY entry the page returned, including the
+        // filtered pull requests. Advancing only on kept items stalls the sync
+        // forever on a page with no issues in it.
+        let newestSeen = 0
         for (const entry of body) {
           if (isRecord(entry) && typeof entry.updated_at === "string") {
             const seen = Date.parse(entry.updated_at)
@@ -151,12 +168,17 @@ export function createGitHubIssuesProvider(options: GitHubFetchOptions = {}): Bo
           const item = decodeIssue(entry)
           if (item) items.push(item)
         }
+
+        // `since` is inclusive, so a page whose newest entry equals the cursor
+        // would repeat forever. Stopping is correct: there is nothing newer.
+        const next = newestSeen > 0 ? new Date(newestSeen).toISOString() : cursor
+        if (next === cursor) break
+        cursor = next
+
+        if (body.length < perPage) break
       }
 
-      // Kept INCLUSIVE — see the note at the top of this file.
-      const cursor = newestSeen > 0 ? new Date(newestSeen).toISOString() : input.cursor
-
-      return { items, cursor, rateLimit }
+      return { items: items.slice(0, wanted), cursor, rateLimit }
     },
 
     async push(input: PushInput): Promise<readonly PushOutcome[]> {
