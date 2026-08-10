@@ -404,6 +404,23 @@ const liveChatSubscriptions = new Map<string, { count: number; unsubscribe: () =
  * Reference counting also makes this safe under React StrictMode's deliberate
  * double mount/unmount, which would otherwise leave the stream torn down.
  */
+/**
+ * Subscription keys are `${chatId}:${chatResyncNonce}`, so one chat can hold
+ * several keys at once (a resync bumps the nonce). Everything below keys on
+ * the chat, not the subscription.
+ */
+function chatIdOfSubscriptionKey(key: string): string {
+  const separator = key.lastIndexOf(":")
+  return separator === -1 ? key : key.slice(0, separator)
+}
+
+function hasLiveSubscriptionForChat(chatId: string): boolean {
+  for (const key of liveChatSubscriptions.keys()) {
+    if (chatIdOfSubscriptionKey(key) === chatId) return true
+  }
+  return false
+}
+
 function acquireChatSubscription(key: string, create: () => () => void): () => void {
   const existing = liveChatSubscriptions.get(key)
   if (existing) {
@@ -422,7 +439,33 @@ function acquireChatSubscription(key: string, create: () => () => void): () => v
     if (entry.count > 0) return
     liveChatSubscriptions.delete(key)
     entry.unsubscribe()
+
+    // Tearing down the last subscription for a chat is the only moment at
+    // which its cached snapshot + transcript are provably unreachable, so it
+    // is where the memory is freed. Without this the slice outlives every tab
+    // that showed it and the heap grows with each chat visited.
+    //
+    // Deferred by one microtask because a RESYNC releases the old key and
+    // acquires the new one within the same commit: releasing synchronously
+    // would wipe the slice between those two steps and force a refetch of a
+    // chat that never stopped being displayed. By the time the microtask runs
+    // the replacement subscription is registered, so the re-check sees it.
+    const chatId = chatIdOfSubscriptionKey(key)
+    queueMicrotask(() => {
+      if (hasLiveSubscriptionForChat(chatId)) return
+      useChatStateStore.getState().releaseChat(chatId)
+    })
   }
+}
+
+/**
+ * Subscription refcounting is module-private, but it now decides when a chat's
+ * cached transcript is freed — a correctness boundary worth testing directly
+ * rather than through a mounted component.
+ */
+export const __testing = {
+  acquireChatSubscription,
+  hasLiveSubscriptionForChat,
 }
 
 const SEND_TO_STARTING_PROFILE_STORAGE_KEY = "kanna:profile-send-to-starting"
