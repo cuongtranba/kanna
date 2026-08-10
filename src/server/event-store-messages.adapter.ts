@@ -17,8 +17,10 @@ import { cloneTranscriptEntries } from "./events"
 import {
   coalesceContextWindowUpdates,
   decodeCursor,
+  fitLimitToByteBudget,
   getHistorySnapshot,
   getMessagesPageFromEntries,
+  RECENT_PAGE_BYTE_BUDGET,
 } from "./event-store-helpers"
 
 // ─── Transcript LRU cache ──────────────────────────────────────────────────
@@ -219,13 +221,23 @@ function readEntryAtOffset(deps: MessageReadDeps, chatId: string, offset: number
   }
 }
 
-function pageFromTail(tail: TranscriptTailResult, limit: number, nextEntry?: TranscriptEntry | null): ChatHistoryPage {
+function pageFromTail(
+  tail: TranscriptTailResult,
+  limit: number,
+  nextEntry?: TranscriptEntry | null,
+  byteBudget?: number,
+): ChatHistoryPage {
   // The sentinel participates in coalescing (so a trailing cwu run collapses
   // against the newer page's leading cwu) and is then removed.
   const coalesced = nextEntry
     ? coalesceContextWindowUpdates([...tail.entries, nextEntry]).slice(0, -1)
     : coalesceContextWindowUpdates(tail.entries)
-  const startIdx = Math.max(0, coalesced.length - limit)
+  // Callers that pass a budget bound the page by bytes as well as by count;
+  // hasOlder / olderCursor below derive from the trimmed page, so the entries
+  // dropped here stay reachable through normal scrollback paging.
+  const effectiveLimit =
+    byteBudget === undefined ? limit : fitLimitToByteBudget(coalesced, limit, byteBudget)
+  const startIdx = Math.max(0, coalesced.length - effectiveLimit)
   const pageEntries = coalesced.slice(startIdx)
   const hasOlder = !tail.reachedStart || startIdx > 0
   let olderCursor: string | null = null
@@ -263,7 +275,7 @@ export function getRecentMessagesPageTail(
   if (tail.reachedStart) {
     seedFullTranscript(deps, chatId, tail.entries)
   }
-  return pageFromTail(tail, limit)
+  return pageFromTail(tail, limit, undefined, RECENT_PAGE_BYTE_BUDGET)
 }
 
 // ─── Exported functions ────────────────────────────────────────────────────
@@ -375,7 +387,7 @@ export function getRecentMessagesPage(
   }
 
   const entries = coalesceContextWindowUpdates(getMessagesView(deps, chatId))
-  const page = getMessagesPageFromEntries(entries, limit)
+  const page = getMessagesPageFromEntries(entries, fitLimitToByteBudget(entries, limit))
 
   return {
     messages: page.entries,
