@@ -65,11 +65,63 @@ export class TranscriptCache {
 
   invalidate(chatId: string): void {
     this.byChat.delete(chatId)
+    this.tailByChat.delete(chatId)
   }
 
   invalidateAll(): void {
     this.byChat.clear()
+    this.tailByChat.clear()
   }
+
+  // ─── Tail-window cache ───────────────────────────────────────────────────
+  //
+  // The full-transcript cache above is only ever seeded when a tail read
+  // happens to reach the START of the file, so for any transcript larger than
+  // one tail chunk it stays permanently empty — and `getRecentMessagesPage`
+  // then takes the tail path on EVERY call, re-reading and re-parsing the file
+  // from disk each time (measured: 18.8 ms of a 20.7 ms call at 3k entries).
+  // That cost lands on every snapshot derive, i.e. every broadcast tick.
+  //
+  // Validity is keyed on the transcript's BYTE SIZE, not on invalidation
+  // hooks: the JSONL is append-only, so a byte size that has not moved
+  // guarantees the tail has not moved. A stat is orders of magnitude cheaper
+  // than the re-parse it replaces, and an append changes the size, which
+  // expires the entry with no wiring to forget.
+
+  private readonly tailByChat = new Map<string, CachedTail>()
+
+  /** Returns the cached tail for this exact (size, limit), or undefined. */
+  getTail(chatId: string, fileSize: number, limit: number): TranscriptTailResult | undefined {
+    const hit = this.tailByChat.get(chatId)
+    if (!hit || hit.fileSize !== fileSize || hit.limit !== limit) return undefined
+    return hit.tail
+  }
+
+  /**
+   * Drops only the tail window, keeping any full transcript cached.
+   * For a writer that REPLACES a transcript wholesale: size-keyed validity
+   * assumes append-only, and a rewrite can in principle land on the same byte
+   * size with different content.
+   */
+  invalidateTail(chatId: string): void {
+    this.tailByChat.delete(chatId)
+  }
+
+  setTail(chatId: string, fileSize: number, limit: number, tail: TranscriptTailResult): void {
+    this.tailByChat.delete(chatId)
+    this.tailByChat.set(chatId, { fileSize, limit, tail })
+    while (this.tailByChat.size > this.maxChats) {
+      const oldest = this.tailByChat.keys().next().value
+      if (oldest === undefined) break
+      this.tailByChat.delete(oldest)
+    }
+  }
+}
+
+interface CachedTail {
+  fileSize: number
+  limit: number
+  tail: TranscriptTailResult
 }
 
 // ─── Deps interface ────────────────────────────────────────────────────────
@@ -270,8 +322,21 @@ export function getRecentMessagesPageTail(
   limit: number,
   chunkBytes?: number,
 ): ChatHistoryPage | null {
-  const tail = readTranscriptTail(deps, chatId, limit, undefined, chunkBytes)
+  // An append-only JSONL at an unchanged byte size has an unchanged tail, so a
+  // stat is a sound validity check for the parsed window — and replaces a full
+  // re-read + JSON.parse on every snapshot derive.
+  const { storage } = deps
+  const fileSize =
+    typeof storage.sizeSync === "function" && storage.existsSync(transcriptPath(deps, chatId))
+      ? storage.sizeSync(transcriptPath(deps, chatId))
+      : null
+
+  const cached = fileSize === null ? undefined : deps.transcriptCache.getTail(chatId, fileSize, limit)
+  const tail = cached ?? readTranscriptTail(deps, chatId, limit, undefined, chunkBytes)
   if (!tail) return null
+  if (!cached && fileSize !== null) {
+    deps.transcriptCache.setTail(chatId, fileSize, limit, tail)
+  }
   if (tail.reachedStart) {
     seedFullTranscript(deps, chatId, tail.entries)
   }
