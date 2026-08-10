@@ -1,7 +1,7 @@
 ---
 id: c3-110
 c3-version: 4
-c3-seal: ec7f57a874be835196c61141bfae84c288a50993a0bd24e96ecb359e2932edb8
+c3-seal: 2f299cc66565faeefddc07eaec99a61ffc2a4aecfd5a187183736dbd8e672a24
 title: app-shell
 type: component
 category: feature
@@ -31,6 +31,8 @@ Own the top-level React shell: routing, Kanna state hook (useKannaState), socket
 ## Purpose
 
 Composes the React tree at boot: react-router, the central `useKannaState` hook, socket bring-up, global keybinding listeners, and persistent layout chrome (sidebar + page outlet). Non-goals: feature-specific rendering, transcript composition, or business logic.
+
+**Chat slice lifecycle.** `useKannaState` refcounts chat subscriptions in a module-scoped `liveChatSubscriptions` map keyed `${chatId}:${chatResyncNonce}`, so one chat may hold several keys at once and several tabs may share one key. Tearing down the LAST subscription for a CHAT — not for a key — is the moment its `chatStateStore` slice (snapshot + transcript + history cursor) becomes provably unreachable, and is where `releaseChat` is called. Without it the slice outlives every tab that showed the chat: tabs stay mounted behind the pane retention cap, and when one is finally unmounted only the socket subscription was torn down (measured heap 129 → 212 MB across ~30 switches, never recovering; now 99–139 MB, reclaimed). Two weaker signals are wrong and must not be substituted: tab unmount, because two tabs can show one chatId (that is why the refcount exists); and subscription-key teardown, because a resync releases the old nonce key and acquires the new one inside ONE commit, so a key-scoped release wipes a chat that never left the screen and forces a refetch. The release is therefore chat-scoped and deferred by one microtask, by which time a resync's replacement subscription is registered. The key → chatId split takes the LAST colon, since chat ids may contain one. Trade-off: a tab the retention cap has unmounted refetches its transcript when revisited.
 
 ## Foundational Flow
 
