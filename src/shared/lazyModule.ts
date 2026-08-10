@@ -1,4 +1,4 @@
-import { toError } from "../../shared/errors"
+import { toError } from "./errors"
 
 // A hashed chunk that vanished from the server — the tab is running a build the
 // server no longer serves. Each engine words this differently; matching only

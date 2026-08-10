@@ -13,9 +13,9 @@ import { timerAdapter } from "../../adapters/timer.adapter"
 import { domAdapter } from "../../adapters/dom.adapter"
 import type { DomPort } from "../../ports/domPort"
 import { toError } from "../../../shared/errors"
-import { parseMermaidError } from "../../lib/mermaidError"
+import { parseMermaidError } from "../../../shared/mermaidError"
 import { repairMermaidSource, type MermaidRepair } from "../../lib/mermaidRepair"
-import { createLazyLoader, isStaleChunkError } from "../../lib/lazyModule"
+import { createLazyLoader, isStaleChunkError } from "../../../shared/lazyModule"
 
 interface MermaidModule {
   initialize: (config: {

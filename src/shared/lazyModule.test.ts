@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { AnyValue } from "../../shared/errors"
+import type { AnyValue } from "./errors"
 import { createLazyLoader, isStaleChunkError } from "./lazyModule"
 
 describe("isStaleChunkError", () => {
