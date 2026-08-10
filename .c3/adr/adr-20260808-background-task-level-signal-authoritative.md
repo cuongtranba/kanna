@@ -1,6 +1,6 @@
 ---
 id: adr-20260808-background-task-level-signal-authoritative
-c3-seal: 6957f051512000ce61c566cc8abe23edf4e5b381f2a46bf0562f098d85b6b0e9
+c3-seal: 35a153919537066f0f590f0a82c1165918af819445cc69122d930f4317afc724
 title: background-task-level-signal-authoritative
 type: adr
 goal: |-
@@ -130,7 +130,7 @@ about healthy dev servers several times a day.
 
 | Entity | Type | Why affected | Governance review |
 | --- | --- | --- | --- |
-| c3-210 | component | agent-coordinator owns the keep-alive guard and the session sweep being narrowed: `backgroundTasksLevelSourced` on `ClaudeSessionState`, both predicates in `claude-session-lifecycle.ts`, the promotion point in `claude-session-runner.ts`, the spawn default in `claude-session-spawner.ts`, and the (unchanged) ladder in `claude-session-state-queries.ts` | No new IO, no new deps, no config: the flag is an OBSERVED capability, not a configured one, so the side-effect seal and the deps builders are untouched |
+| c3-210 | component | agent-coordinator owns the keep-alive guard and the session sweep being narrowed: backgroundTasksLevelSourced on ClaudeSessionState, both predicates in claude-session-lifecycle.ts, the promotion point in claude-session-runner.ts, the spawn default in claude-session-spawner.ts, and the (unchanged) ladder in claude-session-state-queries.ts | No new IO, no new deps, no config: the flag is an OBSERVED capability, not a configured one, so the side-effect seal and the deps builders are untouched |
 | c3-2 | container | Server container hosts the idle reaper and budget enforcer whose keep-alive bound this ADR redefines; no protocol or client surface changes | Server-internal; no new transcript entry kinds, no WS topic changes |
 
 ## Verification
@@ -138,9 +138,9 @@ about healthy dev servers several times a day.
 | Check | Result |
 | --- | --- |
 | bun test src/server/claude-session-lifecycle.test.ts | level-sourced pending stays true past a lapsed deadline; guard never expires; empty set is not resurrected; no-level-signal path unchanged — pass |
-| bun test src/server/claude-session-state-queries.test.ts | regression: a level-sourced session 32 min idle with a lapsed deadline fires no wake, no close, no abandonment (real `hasPendingBackgroundTask` wired, as production does); a non-level-sourced session still wakes — pass |
+| bun test src/server/claude-session-state-queries.test.ts | regression: a level-sourced session 32 min idle with a lapsed deadline fires no wake, no close, no abandonment (real hasPendingBackgroundTask wired, as production does); a non-level-sourced session still wakes — pass |
 | bun test src/server/claude-session-runner.test.ts | first snapshot promotes; flag survives an emptying snapshot; a launch tool_result alone does not promote — pass |
-| bun test src/server/agent.test.ts | coordinator integration: an SDK level-sourced task survives a sweep 2 h past idle with no `<background-task-check>` reaching the chat; the pre-existing launch-regex keep-alive/ladder test passes verbatim — pass |
-| Negative control | With the two `backgroundTasksLevelSourced` early-returns removed, 4 of the new tests fail (3 unit + 1 integration). The tests bind to the fix, not to incidental state. |
+| bun test src/server/agent.test.ts | coordinator integration: an SDK level-sourced task survives a sweep 2 h past idle with no <background-task-check> reaching the chat; the pre-existing launch-regex keep-alive/ladder test passes verbatim — pass |
+| Negative control | With the two backgroundTasksLevelSourced early-returns removed, 4 of the new tests fail (3 unit + 1 integration). The tests bind to the fix, not to incidental state. |
 | bun run test | full suite |
 | bun run lint && bun run typecheck | ESLint --max-warnings=0; TS7 tsc --noEmit |
