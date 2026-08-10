@@ -40,6 +40,7 @@ import type { ClaudeSessionHandle, HarnessTurn, HarnessToolRequest } from "./har
 import type { ActiveTurn, ClaudeSessionState, SessionBackgroundTask } from "./claude-session-state"
 import type { KannaMcpDelegationContext, SetupLoopHandlerResult } from "./kanna-mcp"
 import type { LoopSetupInput } from "./loop-template"
+import type { BoardRegistry } from "./board-registry"
 import type { LoopState } from "./auto-continue/read-model"
 import { toArmedLoopInfo } from "./claude-loop-commands"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
@@ -128,6 +129,11 @@ export interface SpawnClaudeTurnDeps {
   // Method references for private AgentCoordinator helpers
   resolveClaudeDriverPreference: () => ClaudeDriverPreference
   isLoopArmed: (chatId: string) => LoopState | null
+  /**
+   * Boards, for the agent's board tools. Like `getArmedLoop` and unlike
+   * `isLoopArmed`, it is NOT depth-gated: a subagent works a card too.
+   */
+  boardRegistry?: BoardRegistry
   closeClaudeSession: (chatId: string, session: ClaudeSessionState) => void
   enforceClaudeSessionBudget: (protectedChatId?: string) => void
   readLlmProvider: () => Promise<LlmProviderSnapshot>
@@ -266,6 +272,7 @@ export async function spawnClaudeTurn(
             // tools are registered for subagents too, and a worker without the
             // loop's workdir resolves its tracking file against the chat cwd.
             getArmedLoop: (id) => toArmedLoopInfo(deps.isLoopArmed(id)),
+            boardRegistry: deps.boardRegistry,
             toolCallback: deps.toolCallback ?? undefined,
             tunnelGateway: deps.tunnelGateway,
             chatPolicy: deps.resolveChatPolicy(args.chatId),
@@ -304,6 +311,7 @@ export async function spawnClaudeTurn(
               : undefined,
             // See the PTY branch: not depth-gated, on purpose.
             getArmedLoop: (id) => toArmedLoopInfo(deps.isLoopArmed(id)),
+            boardRegistry: deps.boardRegistry,
             toolCallback: deps.toolCallback ?? undefined,
             chatPolicy: deps.resolveChatPolicy(args.chatId),
             customMcpServers: enabledMcpServers,

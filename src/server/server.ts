@@ -495,6 +495,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     claudePtyRegistry,
     ptyInstanceRegistry,
     workflowRegistry,
+    boardRegistry,
     loopTrackingRegistry,
     subagentTranscriptRegistry,
     localCatalog,

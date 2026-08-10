@@ -180,3 +180,25 @@ describe("writes", () => {
     expect(result.content[0]?.text).toContain("does not exist")
   })
 })
+
+describe("registration reaches the real MCP host", () => {
+  test("the board tools appear ONLY when boardRegistry is supplied at the spawn site", async () => {
+    // The regression this pins: the tools can be perfectly built and still be
+    // invisible to the agent, because a list built without the registry
+    // evaluates to empty and nothing errors. CLAUDE.md records `getArmedLoop`
+    // shipping in exactly that state.
+    const { buildKannaMcpTools } = await import("./kanna-mcp")
+    const base = { projectId: "project-1", localPath: "/tmp", chatId: "chat-1" }
+    const boardNames = (list: { name?: string }[]) =>
+      list.map((entry) => entry.name ?? "").filter((name) => name.startsWith("board_") || name.startsWith("card_"))
+
+    expect(boardNames(buildKannaMcpTools({ ...base }))).toEqual([])
+    expect(boardNames(buildKannaMcpTools({ ...base, boardRegistry: registry })).sort()).toEqual([
+      "board_get",
+      "board_list",
+      "card_comment",
+      "card_create",
+      "card_move",
+    ])
+  })
+})
