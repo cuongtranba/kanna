@@ -1,7 +1,7 @@
 ---
 id: c3-210
 c3-version: 4
-c3-seal: dcf3c6401879959d99a082619d3863d1892888199c671db9ae4f22a95eab55f8
+c3-seal: ad4b78e77065e0750ca8945a607b97a5e1adb316f5b5a8c312a810a75b4e4ef9
 title: agent-coordinator
 type: component
 category: feature
@@ -98,6 +98,7 @@ Owns the agent turn lifecycle: receives `chat.send` commands, picks the provider
 | --- | --- | --- | --- |
 | Lost turn on crash | Event written after broadcast | Replay missing turn | bun run test src/server/agent-coordinator.test.ts |
 | Provider drift | Provider event shape change | Tool entries malformed | bun run check against src/server/agent-coordinator.ts |
+| Mermaid correction loop — the model cannot fix its diagram and is asked every turn | `RunClaudeSessionDeps.mermaidGuard` is rebuilt per turn instead of per coordinator (its asked-diagram memory is what makes the ask once-only), or the once-per-diagram / queued-user-message / repairable-diagram short-circuits are dropped | mermaid-guard.test.ts asserts one ask per diagram, one message per turn, and no ask for a diagram `repairMermaidSource` saves; runner tests assert the guard runs on the success branch only and BEFORE maybeStartNextQueuedMessage | bun test --conditions production src/server/mermaid-guard.test.ts src/server/claude-session-runner.test.ts |
 
 ## Derived Materials
 

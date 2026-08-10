@@ -1,6 +1,6 @@
 ---
 id: c3-226
-c3-seal: 1a5f1db6fde9fad032f12178c71b974660c7a7cbcde1111f4dd8c7300490e494
+c3-seal: 04ba0d7ac9717da9dc09519be51748e0526ff22a4c3330c5fdd35f58e21a053c
 title: kanna-mcp-host
 type: component
 category: feature
@@ -98,6 +98,7 @@ the approval protocol clears.
 | schedule_wakeup tool | OUT | Takes delay_seconds plus prompt, arms a Kanna-owned agent_wakeup schedule via c3-210 scheduleAgentWakeup, returns the schedule_id or isError when the per-chat runaway cap is reached. Registered only when a scheduleWakeup callback is supplied, mirroring the delegate_subagent guard. Replaces the native ScheduleWakeup the PTY driver disallows | c3-227 | src/server/kanna-mcp.ts |
 | Per-run path-deny scope | IN | KannaMcpArgs.restrictedAllowedPaths threads through the kanna-mcp host into every shim ctx (ToolHandlerContext.restrictedAllowedPaths) and onto ToolCallbackSubmitArgs / EvaluateArgs; permission-gate.policy.evaluate auto-denies any read/write/bash path resolving outside the listed roots; lifetime is the subagent run (cleared with the spawn) | c3-225 | src/server/kanna-mcp.ts, src/server/permission-gate.ts, src/server/tool-callback.ts |
 | preview_file tool | OUT | Takes a path argument (and a label to title the card); resolveWorkspaceFile applies the same path-safety as offer_download, infers MIME via inferAttachmentContentType, and gates on isPreviewableMime (accepts text/, image/, audio/, video/, application/json, application/pdf after stripping mime params; rejects others with a "use offer_download" hint). Builds the content URL via buildLocalFileContentUrl (/api/local-file?path=<abs>) so files written in a worktree chat resolve — NOT the project-scoped URL. Returns a {kind:"file_preview", contentUrl, relativePath, fileName, displayName, size, mimeType} result that hydrates through c3-303 into a tap-to-open preview card (FilePreviewSheet, origin=preview_file, Share only, no download). Read-only: not gated by KANNA_MCP_TOOL_CALLBACKS and does not touch the durable approval protocol | c3-303 | src/server/kanna-mcp.ts, src/server/uploads.ts |
+| validate_mermaid tool | OUT | Takes one `source` (a diagram without its ``` fence) and answers `VALID`, or `isError: true` carrying the offending line, mermaid's caret excerpt and an actionable hint (`formatMermaidDefect`). `isError` is deliberate — it is what makes the model treat the reply as work to redo rather than a note. Registered by `buildValidateMermaidToolList` whenever a `chatId` is present, so subagents get it too; one `tool()` call reaches both drivers via kanna-mcp-http. Backed by `KannaMcpArgs.parseMermaid`, defaulting to `mermaid-parse.adapter.ts` — the only server module that loads mermaid, which installs a measured-minimum DOM shim ONLY around `await import("mermaid")` and restores it in a `finally`, standing down entirely when a real `document` already exists. Read-only: not gated by KANNA_MCP_TOOL_CALLBACKS and does not touch the durable approval protocol | c3-114 | src/server/kanna-mcp.ts, src/server/mermaid-parse.adapter.ts, src/shared/mermaid-validate.ts |
 
 ## Change Safety
 
@@ -112,6 +113,7 @@ the approval protocol clears.
 | Live broadcast missing on new pending — UI never shows the prompt | createToolCallbackService called without onStateChange, or persistPut/persistResolve refactored to skip the notify(chatId) hook | tool-callback.test.ts asserts 6 events for submit/answer/cancel/cancelAllForChat sequence, and zero events for auto-allow/auto-deny | bun test src/server/tool-callback.test.ts |
 | Session-close cancel cascade re-introduced — denies asks mid-rotation | A future edit re-adds args.toolCallback.cancelAllForSession in makeClaudeSessionHandle.close, or any equivalent close()-side cancel call | grep for cancelAllForSession in src/ returns hits, or oauth-rotation tests show pendings denied mid-turn | bun test src/server/agent.test.ts (oauth-rotation suite); grep -r cancelAllForSession src/ |
 | Pending leak — model crashes mid-tool_use with no cancel path | recoverOnStartup not run on boot (initToolCallbackOnBoot replaced with createToolCallbackService) | boot.test.ts asserts recoverOnStartup is called before service is returned | bun test src/server/boot.test.ts |
+| Mermaid validation silently disabled — the DOM shim stops satisfying mermaid | A mermaid upgrade changes what DOMPurify or `initialize` touch, or the shim is "simplified"; every parse then throws and every diagram reads as valid | Under `bun test` the happy-dom preload masks a broken shim entirely, so the adapter suite drives a SUBPROCESS with no happy-dom and asserts both verdicts plus zero leaked globals | bun test --conditions production src/server/mermaid-parse.adapter.test.ts |
 
 ## Derived Materials
 

@@ -1,6 +1,6 @@
 ---
 id: adr-20260715-trace-turn-run-config
-c3-seal: 1a1393c0b1567ac11c7f388271d24b0bad31c95eb6412d28633299896c9d15da
+c3-seal: 9adf0f73a36033cc444840d3dccfb0df3bf02cd20e221e5ac3deebc4a2806755
 title: trace-turn-run-config
 type: adr
 goal: |-
@@ -8,7 +8,7 @@ goal: |-
     `turn_started` event so `turns.jsonl` is a self-contained trace of which
     provider, model, effort, service tier, plan mode, and Claude driver executed
     each turn — without cross-referencing chat records or server logs.
-status: accepted
+status: done
 date: "2026-07-15"
 ---
 
