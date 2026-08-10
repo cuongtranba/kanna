@@ -1,4 +1,6 @@
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk"
+import { buildBoardToolList } from "./kanna-mcp-boards"
+import type { BoardRegistry } from "./board-registry"
 import { z } from "zod"
 import path from "node:path"
 import { randomUUID } from "node:crypto"
@@ -67,6 +69,7 @@ export interface KannaMcpDelegationContext {
 
 export interface KannaMcpArgs extends OfferDownloadArgs {
   chatId?: string
+  boardRegistry?: BoardRegistry
   sessionId?: string
   tunnelGateway?: TunnelGateway | null
   toolCallback?: ToolCallbackService
@@ -1013,6 +1016,9 @@ export function buildKannaMcpTools(args: KannaMcpArgs): KannaSdkToolList {
     }),
     ...buildSetupLoopToolList({ setupLoop: args.setupLoop, stopLoop: args.stopLoop, chatId }),
     ...buildTrackingDocToolList({ cwd, chatId, getArmedLoop: args.getArmedLoop }),
+    // The board is the agent's work queue: read your column, advance your card.
+    // Scoped to the chat's project and context-bounded — see the module header.
+    ...buildBoardToolList({ boardRegistry: args.boardRegistry, chatId, projectId: args.projectId ?? null }, tool),
     ...buildRunVerifyToolList({ chatId, cwd, getArmedLoop: args.getArmedLoop }),
     ...buildValidateMermaidToolList({ chatId, parse: args.parseMermaid ?? parseMermaid }),
     tool(
