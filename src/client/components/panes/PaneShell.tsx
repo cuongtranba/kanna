@@ -145,7 +145,7 @@ function PaneShellInner({
                 )}
                 inert={!isActiveTab}
               >
-                {renderPaneContent(registry, tab.target, pane, isFocused && isActiveTab)}
+                {renderPaneContent(registry, tab.target, pane, isFocused && isActiveTab, isActiveTab)}
               </div>
             )
           })}

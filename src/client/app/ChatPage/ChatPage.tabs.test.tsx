@@ -116,6 +116,7 @@ describe("ChatPage session-tabs", () => {
         rendered.push(`transcript:${target.chatId}`)
         return null
       },
+      board: () => null,
       changes: () => null,
       terminal: () => null,
     }
@@ -124,8 +125,8 @@ describe("ChatPage session-tabs", () => {
     const targetA: PaneTabTarget = { kind: "chat", chatId: CHAT_A }
     const targetB: PaneTabTarget = { kind: "chat", chatId: CHAT_B }
 
-    renderPaneContent(registry, targetA, pane, true)
-    renderPaneContent(registry, targetB, pane, false)
+    renderPaneContent(registry, targetA, pane, true, true)
+    renderPaneContent(registry, targetB, pane, false, true)
 
     expect(rendered).toEqual([`transcript:${CHAT_A}`, `transcript:${CHAT_B}`])
     expect(rendered[0]).not.toBe(rendered[1])

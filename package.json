@@ -86,6 +86,7 @@
     "micromark-extension-gfm": "^3.0.0",
     "minimatch": "^10.2.5",
     "openai": "^6.34.0",
+    "react-kanban-kit": "0.0.2-beta.7",
     "react-resizable-panels": "^4.7.3",
     "react-use-websocket": "^4.13.0",
     "shell-quote": "^1.8.3",

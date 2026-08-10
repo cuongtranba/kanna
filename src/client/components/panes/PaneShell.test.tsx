@@ -8,6 +8,7 @@ import type { TabPresentationContext } from "./tabPresentation"
 
 const registry: PaneContentRegistry = {
   chat: () => <div data-testid="content-chat" />,
+  board: () => null,
   changes: () => <div data-testid="content-changes" />,
   terminal: (target) => <div data-testid={`content-terminal-${target.terminalId}`} />,
 }

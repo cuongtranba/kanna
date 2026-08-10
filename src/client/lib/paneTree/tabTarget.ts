@@ -37,6 +37,8 @@ export function buildTabId(target: PaneTabTarget): string {
       return "changes"
     case "terminal":
       return `terminal_${part(target.terminalId)}`
+    case "board":
+      return `board_${part(target.boardId)}`
   }
 }
 
@@ -68,18 +70,33 @@ export function normalizeTabTarget(value: AnyValue): PaneTabTarget | null {
       const terminalId = nonEmptyString(value.terminalId)
       return terminalId ? { kind: "terminal", terminalId } : null
     }
+    case "board": {
+      const boardId = nonEmptyString(value.boardId)
+      return boardId ? { kind: "board", boardId } : null
+    }
     default:
       return null
   }
 }
 
+/**
+ * Two targets address the same thing.
+ *
+ * An exhaustive switch with NO `default`, deliberately: the previous if-chain
+ * ended in `return true`, so a newly added variant silently compared equal and
+ * opening a second board just focused the first. A missing case is now a
+ * compile error instead of a silent bug.
+ */
 export function tabTargetsEqual(left: PaneTabTarget, right: PaneTabTarget): boolean {
   if (left.kind !== right.kind) return false
-  if (left.kind === "terminal" && right.kind === "terminal") {
-    return left.terminalId === right.terminalId
+  switch (left.kind) {
+    case "chat":
+      return right.kind === "chat" && left.chatId === right.chatId
+    case "terminal":
+      return right.kind === "terminal" && left.terminalId === right.terminalId
+    case "board":
+      return right.kind === "board" && left.boardId === right.boardId
+    case "changes":
+      return true
   }
-  if (left.kind === "chat" && right.kind === "chat") {
-    return left.chatId === right.chatId
-  }
-  return true
 }

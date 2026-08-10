@@ -17,6 +17,12 @@ export type PaneTabTarget =
   /** The git changes / history panel. Singleton. */
   | { kind: "changes" }
   | { kind: "terminal"; terminalId: string }
+  /**
+   * One board, addressed by boardId. Like a chat tab and unlike `changes`, it
+   * is NOT a singleton: a project may own several boards and each opens its own
+   * tab, so a board can sit beside the chat whose work it tracks.
+   */
+  | { kind: "board"; boardId: string }
 
 export type PaneTabKind = PaneTabTarget["kind"]
 

@@ -546,3 +546,48 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* ── Kanban board (react-kanban-kit) ───────────────────────────────────────
+ * The package ships its CSS injected at import time
+ * (vite-plugin-css-injected-by-js), which paints every column as a filled,
+ * rounded grey panel. Kanna's design says a column AT REST is the page — a 1px
+ * divider and nothing else — because depth here is a state response, not an
+ * idle aesthetic. Neutralised in our own stylesheet, scoped under the board
+ * root, so specificity beats the injected rule without `!important` and
+ * without fighting it from the component.
+ *
+ * Scoped to `.kanna-board` so nothing else in Kanna is affected if the package
+ * ever widens these selectors.
+ */
+/* The package's own rule is `.rkk-column-outer .rkk-column` — the SAME
+ * specificity as a two-class override, and it is injected AFTER this
+ * stylesheet, so source order would win. Matching its structure and adding the
+ * board root puts us one class ahead, which is why this selector is long.
+ * `background-color` (not the `background` shorthand) so the declaration
+ * cannot be reinterpreted during processing. */
+/* Column geometry lives here, not in a utility class: the package styles
+ * `.rkk-column-outer` directly, which TIES on specificity with a Tailwind
+ * utility and wins on source order (its CSS is injected after this sheet). A
+ * `w-[300px] border-r` on the element therefore computed to 264px and a 0px
+ * border — present in the class list, absent from the render. */
+.kanna-board .rkk-column-outer {
+  min-width: 300px;
+  max-width: 300px;
+  /* Longhands rather than the `border-right` shorthand, so a future reset of
+   * one sub-property cannot silently take the other two with it. */
+  border-right-width: 1px;
+  border-right-style: solid;
+  border-right-color: var(--border);
+}
+
+/* No `:last-child` exception to drop the final divider: the package gives every
+ * column its OWN single-child wrapper, so every `.rkk-column-outer` matches
+ * `:last-child` and such a rule silently erased ALL of them. The trailing rule
+ * reads as the board's right edge, which is why this is a fix and not a
+ * compromise. */
+
+.kanna-board .rkk-column-outer .rkk-column {
+  background-color: transparent;
+  border-radius: 0;
+  padding: 0;
+}
