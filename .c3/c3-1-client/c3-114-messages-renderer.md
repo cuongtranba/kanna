@@ -1,7 +1,7 @@
 ---
 id: c3-114
 c3-version: 4
-c3-seal: eefaa12c6b1c7a06dde4b15c29f727d1ec89bb0e61b143f2e9e03076f6a3fed4
+c3-seal: 3f0c3c6289bd6d4c1bc7a806ee30949c36aea62cd2b39ae04d80e8a372008e69
 title: messages-renderer
 type: component
 category: feature
@@ -75,7 +75,8 @@ Owns the per-kind UI for transcript entries — text, tool_use, tool_result, pla
 | --- | --- | --- | --- |
 | Missing kind handler | New entry kind added without renderer | Fallback shows in UI | bun run check against src/client/components/messages/ |
 | Collapsed default regression | Default expand-state change | User overwhelmed by long blocks | bun run check + manual review of src/client/components/messages/ |
-| Stale lazy chunk | A renderer lazy-imports a bundle (mermaid, shiki) and the tab outlives the deploy that deleted that hashed chunk | Diagram or highlight fails with "Failed to fetch dynamically imported module"; caching the rejected promise breaks every later instance in the tab | bun test --conditions production src/client/lib/lazyModule.test.ts src/client/components/messages/MermaidDiagram.test.tsx |
+| Stale lazy chunk | A renderer lazy-imports a bundle (mermaid, shiki) and the tab outlives the deploy that deleted that hashed chunk | Diagram or highlight fails with "Failed to fetch dynamically imported module"; caching the rejected promise breaks every later instance in the tab | bun test --conditions production src/shared/lazyModule.test.ts src/client/components/messages/MermaidDiagram.test.tsx |
+| Fence boundaries diverge between the editor and the validator | The Lexical `MERMAID_FENCE` transformer grows its own start/end regex again instead of consuming `src/shared/mermaid-fences.ts`; the renderer and the server-side validation gate (c3-226) then disagree about where a diagram ends, so a diagram the gate cleared renders as something else | mermaid-fences tests pin a 4-backtick fence, an unterminated fence and a nested ``` at both the scanner and the transformer level | bun test --conditions production src/shared/mermaid-fences.test.ts src/client/components/lexical/markdown/renderMessage.test.tsx src/client/components/lexical/markdown/messageTransformers.test.ts |
 
 ## Derived Materials
 

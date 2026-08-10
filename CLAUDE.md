@@ -472,6 +472,76 @@ Removed in this version (no longer consulted):
 - `KANNA_PTY_TRANSCRIPT_WATCH` — `fs.watch` removed; the follower always polls
   (`adr-20260607-pty-transcript-pure-poll`).
 
+# Mermaid Validation Gate (KANNA_MERMAID_GUARD)
+
+Kanna renders mermaid inline, so a syntax error reaches the user as a broken
+diagram. **The model's diagrams are validated against mermaid's real parser
+before they can stand.** Two layers, deliberately covering each other:
+
+- **`mcp__kanna__validate_mermaid`** (in-turn, proactive). The model calls it
+  with a diagram source and gets back `VALID`, or an `isError` result carrying
+  the offending line, mermaid's caret excerpt, and a hint. It self-corrects in
+  the same turn — no extra turn, and the user never sees the bad version.
+  Registered whenever a `chatId` is present (subagents included); one `tool()`
+  call covers both drivers via `kanna-mcp-http.ts`.
+- **End-of-turn guard** (`src/server/mermaid-guard.ts`, reactive backstop). At
+  the runner's success finalize (`claude-session-runner.ts`, after
+  `recordTurnFinished`, **before** `maybeStartNextQueuedMessage` so the drain
+  picks up what it enqueues) the server re-reads the turn's `assistant_text`,
+  extracts ```mermaid fences and validates them. On a real failure it enqueues
+  one correction prompt via `enqueueMessage` with a synthetic
+  `autoContinue.scheduleId` — the `wakeBackgroundTaskSession` shape, NOT
+  `deliverSubagentToMain`'s: **no `/clear`**, because the model needs the
+  diagram still in context to fix it.
+
+**The guard's bounds are load-bearing, not defensive.** It fires only when the
+reader would actually see an error — a diagram `repairMermaidSource` saves
+renders with the "Corrected …" banner, so spending a turn on it buys nothing.
+It asks about a given diagram **exactly once** per chat (bounded memory, 32
+sources), because a model that cannot fix its own diagram would otherwise be
+asked every turn forever. It stands aside when a user message is queued, skips
+errored/cancelled turns, and swallows its own failures — a diagram is cosmetic,
+a dead turn is not. `KANNA_MERMAID_GUARD=disabled` turns the backstop off; the
+tool stays.
+
+**Server-side mermaid, without a new dependency.**
+`src/server/mermaid-parse.adapter.ts` is the only place mermaid loads on the
+server. mermaid is a browser library, so the adapter installs a ~20-line
+measured-minimum DOM surface **only around `await import("mermaid")`** and
+restores it in a `finally` — nothing downstream can sniff `window` and take a
+browser code path. `installDomShim` stands down entirely when a real `document`
+exists (the happy-dom the test preload registers process-wide). ~9 ms per
+parse, every diagram type. Rejected: happy-dom as a prod dep (it swaps
+`fetch`/`FormData`/`Blob` — see `scripts/test-preload.ts` undoing exactly that)
+and a child process (~200 ms spawn for a 9 ms parse). The adapter's suite
+includes a **subprocess test with no happy-dom** — the only thing that proves
+the gate works where it runs; without it a broken shim would pass CI and
+silently disable validation.
+
+**Layout.** The pure pieces live in `src/shared/`: `mermaid-fences.ts` (the ONE
+definition of a fence — the Lexical `MERMAID_FENCE` transformer consumes it, so
+the editor and the guard can never disagree about where a diagram ends),
+`mermaidError.ts`, `mermaid-hints.ts` (error signature → advice; **advice only,
+never a rewrite**), `mermaid-validate.ts`, `mermaid-report.ts` (the wording both
+surfaces speak), `mermaidRepair.ts`. `mermaid-validation.ts` holds the contract,
+including `MermaidParsePort` — no domain module imports mermaid.
+
+**Prompt drift is a build failure.** `KANNA_SYSTEM_PROMPT_BASE` carries the
+same knowledge as the repair table, and the two drifted for four releases (the
+prompt named `()` and `[]{}` while the failure users hit was a `/`-leading path
+label). `src/shared/mermaid-prompt-drift.test.ts` asserts the prompt mentions
+every `LINK_RULES_FOR_PARITY` rule, every character that forces a quoted label,
+and the tool name. It gates COVERAGE, not prose — reword freely, but a rule the
+repair knows must be one the prompt warns about.
+
+**The grammar fact this all rests on** (mermaid 11.15.0,
+`flowDiagram-I6XJVG4X.mjs` rule 116): the only plain-text run inside the `text`
+lexer state is `/^(?:[^\[\]\(\)\{\}\|\"]+)/`, so an unquoted label is readable
+iff it holds none of `[ ] ( ) { } | "`. Rule 95 (`[/`) longest-match-beats plain
+`[` and pushes `trapText`, which closes only on `/]` or `\]` — that is why
+`Current[/opt/app/current symlink]` dies. Rule 24 (`"`) is present in every
+state, so quoting is the universal escape; a literal `"` is written `#quot;`.
+
 # Kanna-MCP Built-in Shims
 
 When `KANNA_MCP_TOOL_CALLBACKS=1`, kanna-mcp registers 8 additional tools

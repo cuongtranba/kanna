@@ -41,6 +41,9 @@ import type { StartTurnDeps } from "./claude-turn-starter"
 import type { SpawnClaudeTurnDeps } from "./claude-session-spawner"
 import type { RunClaudeSessionDeps } from "./claude-session-runner"
 import type { RunTurnDeps } from "./claude-turn-runner"
+import { createMermaidGuard, type MermaidGuard } from "./mermaid-guard"
+import { parseMermaid } from "./mermaid-parse.adapter"
+import { repairMermaidSource } from "../shared/mermaidRepair"
 
 // ---------------------------------------------------------------------------
 // 1. Session config helpers
@@ -384,7 +387,37 @@ export function buildRunClaudeSessionDeps(agent: AgentCoordinator): RunClaudeSes
     closeClaudeSession: (chatId, session) => { agent.closeClaudeSession(chatId, session) },
     maybeStartNextQueuedMessage: (chatId) => agent.maybeStartNextQueuedMessage(chatId),
     resolveClaudeDriverPreference: () => agent.resolveClaudeDriverPreference(),
+    mermaidGuard: buildMermaidGuard(agent),
   }
+}
+
+/**
+ * One guard per coordinator. Its "already asked about this diagram" memory has
+ * to outlive a single turn — a fresh guard per turn would ask about the same
+ * unfixable diagram forever.
+ */
+const mermaidGuardByAgent = new WeakMap<AgentCoordinator, MermaidGuard>()
+
+function buildMermaidGuard(agent: AgentCoordinator): MermaidGuard {
+  const existing = mermaidGuardByAgent.get(agent)
+  if (existing) return existing
+
+  const guard = createMermaidGuard({
+    enabled: process.env.KANNA_MERMAID_GUARD !== "disabled",
+    parse: parseMermaid,
+    // The same repair the renderer applies before it gives up, so the guard
+    // fires exactly when the reader would see an error rather than a diagram.
+    repair: (source) => {
+      const result = repairMermaidSource(source)
+      return { source: result.source, repaired: result.repairs.length > 0 }
+    },
+    hasQueuedMessage: (chatId) => agent.store.getQueuedMessages(chatId).length > 0,
+    enqueueMessage: async (chatId, content, options) => {
+      await agent.enqueueMessage(chatId, content, [], options)
+    },
+  })
+  mermaidGuardByAgent.set(agent, guard)
+  return guard
 }
 
 // ---------------------------------------------------------------------------

@@ -25,6 +25,11 @@ import {
   LocalFileLinkNode,
 } from "../nodes"
 import { isAbsoluteLocalFilePath, parseLocalFileLink } from "../../../lib/pathUtils"
+import {
+  MERMAID_FENCE_END_REGEX,
+  MERMAID_FENCE_START_REGEX,
+  scanFenceBody,
+} from "../../../../shared/mermaid-fences"
 import { KANNA_BUILTIN_TRANSFORMERS } from "./gfmTransformers"
 
 // ---------------------------------------------------------------------------
@@ -33,10 +38,11 @@ import { KANNA_BUILTIN_TRANSFORMERS } from "./gfmTransformers"
 // Matches a ```mermaid fenced code block and produces a MermaidNode.
 // The regex matches the opening fence line: ```mermaid (with optional spaces).
 // We intercept this BEFORE the built-in CODE transformer handles it.
+//
+// Fence boundaries come from src/shared/mermaid-fences.ts, which the
+// server-side validation guard reads too — a second scanner here would
+// eventually disagree with the one that decides whether a diagram is valid.
 // ---------------------------------------------------------------------------
-
-const MERMAID_FENCE_START_REGEX = /^[ \t]*(`{3,})[ \t]*mermaid[ \t]*$/i
-const MERMAID_FENCE_END_REGEX = /^[ \t]*`{3,}[ \t]*$/
 
 export const MERMAID_FENCE: MultilineElementTransformer = {
   type: "multiline-element",
@@ -50,29 +56,8 @@ export const MERMAID_FENCE: MultilineElementTransformer = {
   },
 
   handleImportAfterStartMatch({ lines, rootNode, startLineIndex, startMatch }) {
-    const fence = startMatch[1] ?? "```"
-    const fenceLength = fence.length
-    const endRegex = new RegExp(`^[ \\t]\`{${fenceLength},}[ \\t]*$`)
-
-    // Collect lines between the opening and closing fence
-    const bodyLines: string[] = []
-    let lastLineIndex = startLineIndex
-
-    for (let i = startLineIndex + 1; i < lines.length; i++) {
-      const line = lines[i]
-      if (line === undefined) break
-      if (MERMAID_FENCE_END_REGEX.test(line) || endRegex.test(line)) {
-        lastLineIndex = i
-        break
-      }
-      bodyLines.push(line)
-      lastLineIndex = i
-    }
-
-    const source = bodyLines.join("\n")
-    const mermaidNode = $createMermaidNode(source)
-    rootNode.append(mermaidNode)
-
+    const { source, lastLineIndex } = scanFenceBody(lines, startLineIndex, startMatch[1] ?? "```")
+    rootNode.append($createMermaidNode(source))
     return [true, lastLineIndex]
   },
 

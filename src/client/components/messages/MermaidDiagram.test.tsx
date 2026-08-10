@@ -109,7 +109,7 @@ describe("MermaidDiagram", () => {
 
 // Regression suite for the stale-chunk incident: a tab left open across a deploy
 // requests a hashed mermaid chunk the new build no longer ships, so `import("mermaid")`
-// rejects. See src/client/lib/lazyModule.ts.
+// rejects. See src/shared/lazyModule.ts.
 describe("MermaidDiagram — stale chunk after a deploy", () => {
   const STALE_CHUNK_MESSAGE =
     "Failed to fetch dynamically imported module: http://localhost:3210/assets/mermaid.core-BxJivhhJ.js"

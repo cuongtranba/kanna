@@ -33,6 +33,10 @@ import { chunkLabelFromSection } from "../shared/loop-progress"
 import { readDoc, writeDoc } from "./structured-doc-io.adapter"
 import { computeWorkspaceDigest, runVerifyCommand } from "./loop-verify-io.adapter"
 import { getCachedVerify, setCachedVerify } from "./loop-verify-cache"
+import { parseMermaid } from "./mermaid-parse.adapter"
+import { validateMermaid } from "../shared/mermaid-validate"
+import { formatMermaidDefect } from "../shared/mermaid-report"
+import type { MermaidParsePort } from "../shared/mermaid-validation"
 import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
@@ -106,6 +110,11 @@ export interface KannaMcpArgs extends OfferDownloadArgs {
    * command. Omit to fall back to the chat cwd and hide `run_verify`.
    */
   getArmedLoop?: (chatId: string) => ArmedLoopInfo | null
+  /**
+   * Backs `validate_mermaid`. Defaults to the real mermaid parser; tests
+   * inject a fake so the tool suite never loads the mermaid bundle.
+   */
+  parseMermaid?: MermaidParsePort
 }
 
 /** The slice of the armed loop the MCP tools need. */
@@ -898,6 +907,49 @@ function buildRunVerifyToolList(args: {
 /** Wall-clock bound for one `run_verify` call. A real gate is minutes, not seconds. */
 const VERIFY_TOOL_TIMEOUT_MS = 900_000
 
+const VALIDATE_MERMAID_DESCRIPTION =
+  "Check that a Mermaid diagram parses BEFORE you put it in a message. Kanna "
+  + "renders mermaid inline, so a syntax error reaches the user as a broken "
+  + "diagram. Pass the diagram source without the ``` fence; a rejection comes "
+  + "back with the offending line, mermaid's own caret excerpt, and what to "
+  + "change. Cheap (a few milliseconds) — call it for every diagram you write."
+
+/**
+ * `validate_mermaid`: the in-turn half of the mermaid validation gate. The
+ * model fixes its own diagram before anyone sees it, which costs no extra
+ * turn; the end-of-turn guard exists only for the turns where this was
+ * skipped.
+ *
+ * Registered whenever a chat is present, so subagents get it too — a subagent
+ * reply is rendered in the transcript the same as a main-turn one.
+ */
+function buildValidateMermaidToolList(args: {
+  chatId: string | null
+  parse: MermaidParsePort
+}): KannaSdkToolList {
+  if (!args.chatId) return []
+  const parse = args.parse
+  return [
+    tool(
+      "validate_mermaid",
+      VALIDATE_MERMAID_DESCRIPTION,
+      {
+        source: z
+          .string()
+          .describe("The complete diagram source, without the surrounding ``` fence."),
+      },
+      async (input) => {
+        const validation = await validateMermaid(parse, input.source)
+        if (validation.ok) return { content: [{ type: "text" as const, text: "VALID" }] }
+        return {
+          isError: true as const,
+          content: [{ type: "text" as const, text: formatMermaidDefect(validation.defect) }],
+        }
+      },
+    ),
+  ]
+}
+
 export function buildKannaMcpTools(args: KannaMcpArgs): KannaSdkToolList {
   const tunnelGateway = args.tunnelGateway ?? null
   const chatId = args.chatId ?? null
@@ -962,6 +1014,7 @@ export function buildKannaMcpTools(args: KannaMcpArgs): KannaSdkToolList {
     ...buildSetupLoopToolList({ setupLoop: args.setupLoop, stopLoop: args.stopLoop, chatId }),
     ...buildTrackingDocToolList({ cwd, chatId, getArmedLoop: args.getArmedLoop }),
     ...buildRunVerifyToolList({ chatId, cwd, getArmedLoop: args.getArmedLoop }),
+    ...buildValidateMermaidToolList({ chatId, parse: args.parseMermaid ?? parseMermaid }),
     tool(
       "expose_port",
       EXPOSE_PORT_DESCRIPTION,

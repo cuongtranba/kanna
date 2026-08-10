@@ -1,10 +1,10 @@
 ---
 id: adr-20260802-background-selfwake-status-ui
-c3-seal: bf0dc2f6cfa293ad7c120fe1cd766b63249cea5860d1fdcdfe07abaef9879652
+c3-seal: 5d327eb42409320bf803e51ac6c48026073ed47755c3e20c69f6dd9ace72bd8d
 title: background-selfwake-status-ui
 type: adr
 goal: 'Surface Claude-Code background-task self-wake activity in the chat UI: when a task-notification wake turn streams on the warm Claude session WITHOUT a Kanna-driven turn, the chat must report status "running" (composer spinner + Stop reaches the work), and the runtime must list WHICH background tasks are live (id, type, description, elapsed) — the Kanna analog of Claude Code''s /tasks view.'
-status: accepted
+status: done
 date: "2026-08-02"
 ---
 

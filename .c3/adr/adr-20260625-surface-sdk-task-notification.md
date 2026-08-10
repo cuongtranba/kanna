@@ -1,6 +1,6 @@
 ---
 id: adr-20260625-surface-sdk-task-notification
-c3-seal: 079b6a326fc97ab50d178c432fb3d7ba7945f814213afd91c6bb5bac6aadf840
+c3-seal: 89c443669f56314386fb00cadf5d99908b1cd7bd03b2ebef2051e98bc055b4c4
 title: surface-sdk-task-notification
 type: adr
 goal: |-
@@ -12,7 +12,7 @@ goal: |-
     not capture the background work." Map it to the existing `status` transcript
     entry kind so the completion is persisted and visible, honoring the SDK's
     `skip_transcript` hint for ambient/housekeeping tasks.
-status: accepted
+status: done
 date: "2026-06-25"
 ---
 

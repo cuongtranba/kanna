@@ -119,6 +119,20 @@ describe("MERMAID_FENCE transformer", () => {
     })
   })
 
+  // A 4-backtick opener is how a diagram whose label contains ``` is written.
+  // The closer must match the opener's length, so the inner ``` is body.
+  it("closes a 4-backtick fence only on a fence at least as long", () => {
+    const source = 'flowchart TD\n  A["```"] --> B'
+    const markdown = `\`\`\`\`mermaid\n${source}\n\`\`\`\`\n\nafter`
+    const editor = parseMarkdown(markdown)
+    editor.getEditorState().read(() => {
+      const allNodes = flattenNodes($getRoot().getChildren<LexicalNode>())
+      const mermaidNodes = allNodes.filter($isMermaidNode)
+      expect(mermaidNodes.length).toBe(1)
+      expect(mermaidNodes[0]!.getTextContent()).toBe(source)
+    })
+  })
+
   it("does NOT create a MermaidNode for non-mermaid code fences", () => {
     const markdown = "```typescript\nconsole.log('hello')\n```"
     const editor = parseMarkdown(markdown)
