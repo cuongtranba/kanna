@@ -71,6 +71,19 @@ export async function removeWorktree(repoRoot: string, path: string, opts: { for
   }
 }
 
+/**
+ * Whether a local branch of exactly this name exists.
+ *
+ * Asked before `git worktree add -b`, because a card whose worktree was removed
+ * but whose branch survived must reattach to that branch rather than fail —
+ * "never creates a second" applies to the branch too. `refs/heads/` is spelled
+ * out so a tag of the same name cannot answer yes and detach HEAD.
+ */
+export async function localBranchExists(repoRoot: string, branch: string): Promise<boolean> {
+  const result = await runGit(["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`], repoRoot)
+  return result.exitCode === 0
+}
+
 export function slugifyBranchForPath(branch: string): string {
   return branch
     .toLowerCase()

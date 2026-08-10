@@ -63,6 +63,8 @@ export interface BoardChange {
 export interface BoardRegistry {
   // Reads
   listBoards(owner: BoardOwnerRef): BoardSummary[]
+  getBoard(boardId: string): Board | null
+  listColumns(boardId: string): BoardColumn[]
   boardView(boardId: string, pageSize?: number): BoardViewSnapshot | null
   cardPage(query: CardPageQuery): CardPage
   cardDetail(cardId: string): CardDetail | null
@@ -191,6 +193,9 @@ export function createBoardRegistry(options: CreateBoardRegistryOptions): BoardR
       })
     },
 
+    getBoard: (boardId: string) => store.getBoard(boardId),
+    listColumns: (boardId: string) => store.listColumns(boardId),
+
     boardView(boardId: string, pageSize = defaultPageSize): BoardViewSnapshot | null {
       const board = store.getBoard(boardId)
       if (!board) return null
@@ -213,7 +218,14 @@ export function createBoardRegistry(options: CreateBoardRegistryOptions): BoardR
     cardDetail(cardId: string): CardDetail | null {
       const card = store.getCard(cardId)
       if (!card) return null
-      return { card, links: store.listCardLinks(cardId), comments: store.listComments(cardId) }
+      const binding = store.getBinding(card.boardId)
+      const syncLink = binding ? store.getSyncLinkByCard(cardId, binding.id) : null
+      return {
+        card,
+        links: store.listCardLinks(cardId),
+        comments: store.listComments(cardId),
+        externalRef: syncLink?.externalId ?? null,
+      }
     },
 
     listTemplates: () => store.listTemplates(),

@@ -36,6 +36,8 @@ import { createPtyInstanceRegistry } from "./claude-pty/pty-instance-registry"
 import { createBoardRegistry } from "./board-registry"
 import { createBoardStore } from "./board-store.adapter"
 import { createBoardSync } from "./board-sync"
+import { startWork as runStartWork } from "./board-start-work"
+import { addWorktree, listWorktrees, localBranchExists } from "./worktree-store.adapter"
 import { createGitHubIssuesProvider } from "./github-issues.adapter"
 import { readGitHubCliToken } from "./github-cli.adapter"
 import { UpdateManager } from "./update-manager"
@@ -527,6 +529,29 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     },
   })
 
+  // "Start work" spans three subsystems that must not import each other: the
+  // board registry, git, and the chat store. All three are in scope here, so
+  // the binding happens here and the orchestrator stays free of IO.
+  const startWork = (cardId: string) =>
+    runStartWork(
+      {
+        registry: boardRegistry,
+        getProject: (projectId) => {
+          const project = store.getProject(projectId)
+          return project ? { id: project.id, localPath: project.localPath } : null
+        },
+        chatExists: (chatId) => store.getChat(chatId) !== null,
+        listWorktrees,
+        localBranchExists,
+        addWorktree,
+        createChat: (projectId, options) => store.createChat(projectId, options),
+        sendPrompt: async (chatId, content) => {
+          await agent.send({ type: "chat.send", chatId, content })
+        },
+      },
+      cardId,
+    )
+
   const followedSessionRegistry = createFollowedSessionRegistry({
     statFile: statSessionFile,
     runDelta: async (_chatId, sourcePath) => {
@@ -567,6 +592,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     workflowRegistry,
     boardRegistry,
     boardSync,
+    startWork,
     loopTrackingRegistry,
     subagentTranscriptRegistry,
     followedSessionRegistry,

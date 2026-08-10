@@ -324,6 +324,66 @@ describe("buildCreateChatEvent", () => {
     const state = { projectsById: new Map<string, ProjectRecord>(), stacksById: new Map<string, StackRecord>() }
     expect(() => buildCreateChatEvent(state, "missing")).toThrow()
   })
+
+  // A card's "Start work" chat runs in a worktree of ONE project. A Stack needs
+  // two, so binding a worktree cannot be expressed as a stack — the binding has
+  // to stand on its own.
+  test("accepts stackBindings without a stackId", () => {
+    const state = { projectsById: makeProjectsById(), stacksById: new Map<string, StackRecord>() }
+    const event = buildCreateChatEvent(state, "proj-1", {
+      stackBindings: [{ projectId: "proj-1", worktreePath: "/tmp/wt/card-1", role: "primary" }],
+    })
+    expect(event.type).toBe("chat_created")
+    if (event.type === "chat_created") {
+      expect(event.stackId).toBeUndefined()
+      expect(event.stackBindings).toEqual([
+        { projectId: "proj-1", worktreePath: "/tmp/wt/card-1", role: "primary" },
+      ])
+    }
+  })
+
+  test("throws on a stackId with no stackBindings", () => {
+    const state = {
+      projectsById: makeProjectsById(),
+      stacksById: new Map([["stack-1", makeStack({ projectIds: ["proj-1", "proj-2"] })]]),
+    }
+    expect(() => buildCreateChatEvent(state, "proj-1", { stackId: "stack-1" })).toThrow()
+  })
+
+  test("still enforces stack membership when a stackId is given", () => {
+    const state = {
+      projectsById: makeProjectsById(["proj-1", "proj-2", "proj-3"]),
+      stacksById: new Map([["stack-1", makeStack({ projectIds: ["proj-1", "proj-2"] })]]),
+    }
+    expect(() =>
+      buildCreateChatEvent(state, "proj-1", {
+        stackId: "stack-1",
+        stackBindings: [
+          { projectId: "proj-1", worktreePath: "/tmp/a", role: "primary" },
+          { projectId: "proj-3", worktreePath: "/tmp/b", role: "additional" },
+        ],
+      }),
+    ).toThrow()
+  })
+
+  test("enforces one primary and a non-empty worktreePath without a stackId", () => {
+    const state = { projectsById: makeProjectsById(), stacksById: new Map<string, StackRecord>() }
+    expect(() =>
+      buildCreateChatEvent(state, "proj-1", {
+        stackBindings: [{ projectId: "proj-1", worktreePath: "/tmp/a", role: "additional" }],
+      }),
+    ).toThrow()
+    expect(() =>
+      buildCreateChatEvent(state, "proj-1", {
+        stackBindings: [{ projectId: "proj-1", worktreePath: "  ", role: "primary" }],
+      }),
+    ).toThrow()
+    expect(() =>
+      buildCreateChatEvent(state, "proj-1", {
+        stackBindings: [{ projectId: "proj-2", worktreePath: "/tmp/a", role: "primary" }],
+      }),
+    ).toThrow()
+  })
 })
 
 describe("buildRenameChatEvent", () => {

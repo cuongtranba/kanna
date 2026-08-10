@@ -233,4 +233,38 @@ describe("read models", () => {
     expect(detail?.comments.map((comment) => comment.body)).toEqual(["Started"])
     expect(registry.cardDetail("missing")).toBeNull()
   })
+
+  test("cardDetail carries the tracker reference the branch name is derived from", () => {
+    const { board, card } = seed()
+    expect(registry.cardDetail(card.id)?.externalRef).toBeNull()
+
+    const binding = registry.bindSync({
+      boardId: board.id,
+      providerId: "github-issues",
+      sourceRef: { provider: "github-issues", owner: "o", repo: "r" },
+      direction: "pull",
+      allowAgentPush: false,
+    })
+    store.upsertSyncLink({
+      cardId: card.id,
+      bindingId: binding.id,
+      externalId: "412",
+      externalUrl: "https://github.test/o/r/issues/412",
+      fieldWatermarks: {},
+      lastSyncedAt: 0,
+    })
+
+    expect(registry.cardDetail(card.id)?.externalRef).toBe("412")
+  })
+
+  test("getBoard and listColumns expose what Start work resolves against", () => {
+    const { board } = seed()
+    expect(registry.getBoard(board.id)?.title).toBe("Sprint")
+    expect(registry.getBoard("missing")).toBeNull()
+    expect(registry.listColumns(board.id).map((column) => column.semantic)).toEqual([
+      "start",
+      "active",
+      "done",
+    ])
+  })
 })

@@ -1,0 +1,117 @@
+/**
+ * "Start work" — the decisions, without the doing.
+ *
+ * One card is one worktree is one branch is one chat. What that button does
+ * next depends on how much of that chain already exists, and the answer has to
+ * be the same on both sides of the wire: the drawer renders the label, the
+ * server acts on it. So the derivation lives here, pure, and both call it.
+ *
+ * Existence is checked, not assumed. A card outlives its links — the
+ * stale-empty-chat reaper deletes a chat nobody wrote to, and a worktree can be
+ * removed with plain git — so a link is evidence, not proof.
+ */
+
+import type { Board, Card, CardLink, FieldValue } from "./types"
+
+export type StartWorkStatus =
+  /** Nothing exists yet. */
+  | { kind: "idle" }
+  /** A worktree survives from an earlier attempt; reuse it, never make a second. */
+  | { kind: "worktree"; worktreePath: string }
+  /** A chat is live. The button opens it and changes nothing. */
+  | { kind: "chat"; chatId: string; worktreePath: string | null }
+
+export interface StartWorkFacts {
+  links: readonly CardLink[]
+  /** Chat ids that still exist. */
+  liveChatIds: ReadonlySet<string>
+  /** Worktree paths that still exist on disk. */
+  existingWorktreePaths: ReadonlySet<string>
+}
+
+function newestTarget(
+  links: readonly CardLink[],
+  kind: CardLink["kind"],
+  exists: (targetId: string) => boolean,
+): string | null {
+  let best: CardLink | null = null
+  for (const candidate of links) {
+    if (candidate.kind !== kind) continue
+    if (!exists(candidate.targetId)) continue
+    if (!best || candidate.createdAt > best.createdAt) best = candidate
+  }
+  return best?.targetId ?? null
+}
+
+export function deriveStartWorkStatus(facts: StartWorkFacts): StartWorkStatus {
+  const worktreePath = newestTarget(facts.links, "worktree", (path) => facts.existingWorktreePaths.has(path))
+  const chatId = newestTarget(facts.links, "chat", (id) => facts.liveChatIds.has(id))
+  if (chatId) return { kind: "chat", chatId, worktreePath }
+  if (worktreePath) return { kind: "worktree", worktreePath }
+  return { kind: "idle" }
+}
+
+/**
+ * The button's whole vocabulary. One action, never a form — the label carries
+ * the state instead.
+ */
+export function startWorkLabel(status: StartWorkStatus): string {
+  switch (status.kind) {
+    case "idle":
+      return "Start work"
+    case "worktree":
+      return "Resume"
+    case "chat":
+      return "Open chat"
+  }
+}
+
+/**
+ * Which checkout the work happens in.
+ *
+ * A project board answers this for every card it holds. A Stack board cannot —
+ * that is the whole reason {@link Card.projectId} exists — so a Stack card
+ * without one resolves to nothing rather than to an arbitrary member.
+ */
+export function resolveStartWorkProjectId(card: Card, board: Board): string | null {
+  if (card.projectId) return card.projectId
+  return board.ownerKind === "project" ? board.ownerId : null
+}
+
+function textOf(value: FieldValue | undefined): string | null {
+  if (!value) return null
+  if (value.kind === "text" || value.kind === "longtext" || value.kind === "url") {
+    const trimmed = value.value.trim()
+    return trimmed === "" ? null : trimmed
+  }
+  return null
+}
+
+function labelsOf(value: FieldValue | undefined): readonly string[] {
+  return value?.kind === "label" ? value.values : []
+}
+
+/**
+ * The first prompt of the card's chat.
+ *
+ * Everything the card knows, and nothing it does not — no invented plan, no
+ * instruction to commit. The agent is told where it is (the branch) and what
+ * the card says; deciding what to do with that is the turn's job.
+ */
+export function buildStartWorkPrompt(card: Card, branch: string): string {
+  const lines: string[] = [`Work on this card: ${card.title}`, "", `Branch: ${branch}`]
+
+  const description = textOf(card.content.description)
+  if (description) lines.push("", "Description:", description)
+
+  const acceptance = textOf(card.content.acceptanceCriteria)
+  if (acceptance) lines.push("", "Acceptance criteria:", acceptance)
+
+  const labels = labelsOf(card.content.labels)
+  if (labels.length > 0) lines.push("", `Labels: ${labels.join(", ")}`)
+
+  const externalUrl = textOf(card.content.externalUrl)
+  if (externalUrl) lines.push("", `Source: ${externalUrl}`)
+
+  return lines.join("\n")
+}

@@ -313,6 +313,8 @@ export type ClientCommand =
   | { type: "board.card.detail"; cardId: string }
   | { type: "board.card.comment"; cardId: string; body: string }
   | { type: "board.card.update"; cardId: string; title?: string }
+  /** Card → worktree → branch → chat. Idempotent: a card already working opens what it has. */
+  | { type: "board.card.startWork"; cardId: string }
   | { type: "board.cards.page"; columnId: string; limit: number; afterRank?: string | null }
   | { type: "board.templates.list" }
   | { type: "workflows.getRun"; chatId: string; runId: string }

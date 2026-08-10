@@ -198,10 +198,21 @@ describe("chat_created with stack fields", () => {
   })
 })
 
-test("createChat rejects only one of stackId/stackBindings", async () => {
+test("createChat rejects a stackId with no stackBindings", async () => {
   const { store, projectIds: [p1, p2] } = await buildStoreWithProjects(["/tmp/p1", "/tmp/p2"])
   const stack = await store.createStack("X", [p1, p2])
-  await expect(store.createChat(p1, { stackId: stack.id })).rejects.toThrow(/together/u)
+  await expect(store.createChat(p1, { stackId: stack.id })).rejects.toThrow(/requires stackBindings/u)
+})
+
+// The binding is what a card's "Start work" chat needs; a Stack needs two
+// projects, so it cannot express one worktree of one project.
+test("createChat accepts a lone worktree binding with no stack", async () => {
+  const { store, projectIds: [p1] } = await buildStoreWithProjects(["/tmp/p1"])
+  const chat = await store.createChat(p1, {
+    stackBindings: [{ projectId: p1, worktreePath: "/tmp/wt/card-1", role: "primary" }],
+  })
+  expect(chat.stackId).toBeUndefined()
+  expect(chat.stackBindings).toEqual([{ projectId: p1, worktreePath: "/tmp/wt/card-1", role: "primary" }])
 })
 
 test("createChat rejects bindings with no primary", async () => {

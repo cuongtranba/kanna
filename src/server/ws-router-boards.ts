@@ -19,6 +19,7 @@ import type { CardActor } from "../shared/boards/types"
 import { BoardStoreError } from "./board-store"
 import type { BoardRegistry } from "./board-registry"
 import type { BoardSync } from "./board-sync"
+import type { StartWorkResult } from "./board-start-work"
 import { errorMessage } from "../shared/errors"
 
 const USER: CardActor = { kind: "user" }
@@ -27,6 +28,11 @@ export interface BoardCommandDeps {
   boardRegistry: BoardRegistry | undefined
   /** Absent when no sync provider is configured; sync commands then refuse. */
   boardSync: BoardSync | undefined
+  /**
+   * Card → worktree → chat. Injected rather than built here because it reaches
+   * git and the chat store, neither of which this module may import.
+   */
+  startWork: ((cardId: string) => Promise<StartWorkResult>) | undefined
   send: (envelope: ServerEnvelope) => void
 }
 
@@ -43,6 +49,7 @@ const BOARD_COMMAND_TYPES = new Set<string>([
   "board.card.detail",
   "board.card.comment",
   "board.card.update",
+  "board.card.startWork",
   "board.cards.page",
   "board.templates.list",
   "board.sync.bind",
@@ -67,7 +74,7 @@ export async function handleBoardCommand(
   command: ClientCommand,
   id: string,
 ): Promise<boolean> {
-  const { boardRegistry, boardSync, send } = deps
+  const { boardRegistry, boardSync, startWork, send } = deps
   if (!isBoardCommand(command)) return false
 
   if (!boardRegistry) {
@@ -76,6 +83,14 @@ export async function handleBoardCommand(
   }
 
   try {
+    if (command.type === "board.card.startWork") {
+      if (!startWork) {
+        send({ v: PROTOCOL_VERSION, type: "error", id, message: "Starting work is not available on this server." })
+        return true
+      }
+      send({ v: PROTOCOL_VERSION, type: "ack", id, result: await startWork(command.cardId) })
+      return true
+    }
     if (command.type.startsWith("board.sync.")) {
       return await dispatchSync(boardRegistry, boardSync, send, command, id)
     }

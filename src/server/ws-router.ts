@@ -31,6 +31,7 @@ import type { PtyInstanceRegistry } from "./claude-pty/pty-instance-registry"
 import type { LoopTrackingRegistry } from "./loop-tracking-registry"
 import type { WorkflowRegistry } from "./workflow-registry"
 import { handleBoardCommand } from "./ws-router-boards"
+import type { StartWorkResult } from "./board-start-work"
 import type { BoardRegistry } from "./board-registry"
 import type { BoardSync } from "./board-sync"
 import type { SubagentTranscriptRegistry } from "./subagent-transcript-registry"
@@ -101,6 +102,8 @@ interface CreateWsRouterArgs {
   workflowRegistry?: WorkflowRegistry
   boardRegistry?: BoardRegistry
   boardSync?: BoardSync
+  /** Card → worktree → chat. Built in `server.ts`, where git and the chat store are reachable. */
+  startWork?: (cardId: string) => Promise<StartWorkResult>
   loopTrackingRegistry?: LoopTrackingRegistry
   subagentTranscriptRegistry?: SubagentTranscriptRegistry
   followedSessionRegistry?: FollowedSessionRegistry
@@ -128,6 +131,7 @@ export function createWsRouter({
   workflowRegistry,
   boardRegistry,
   boardSync,
+  startWork,
   loopTrackingRegistry,
   subagentTranscriptRegistry,
   followedSessionRegistry,
@@ -436,6 +440,7 @@ export function createWsRouter({
         case "board.card.detail":
         case "board.card.comment":
         case "board.card.update":
+        case "board.card.startWork":
         case "board.cards.page":
         case "board.templates.list":
         case "board.sync.bind":
@@ -443,7 +448,7 @@ export function createWsRouter({
         case "board.sync.push":
         case "board.sync.status": {
           await handleBoardCommand(
-            { boardRegistry, boardSync, send: (envelope) => send(ws, envelope) },
+            { boardRegistry, boardSync, startWork, send: (envelope) => send(ws, envelope) },
             command,
             id,
           )

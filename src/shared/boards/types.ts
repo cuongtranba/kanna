@@ -370,4 +370,13 @@ export interface CardDetail {
   card: Card
   links: CardLink[]
   comments: CardComment[]
+  /**
+   * The tracker's own reference for this card — a GitHub issue number — or null
+   * when the card came from nowhere.
+   *
+   * Carried on the detail rather than re-derived per caller because the branch
+   * name is built from it: the drawer previews `card/412-…` and the server
+   * creates it, and the two must not be able to disagree.
+   */
+  externalRef: string | null
 }
