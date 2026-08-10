@@ -11,7 +11,7 @@
  * removed with plain git — so a link is evidence, not proof.
  */
 
-import type { Board, Card, CardLink, FieldValue } from "./types"
+import type { Board, Card, CardDetail, CardLink, FieldValue } from "./types"
 
 export type StartWorkStatus =
   /** Nothing exists yet. */
@@ -49,6 +49,43 @@ export function deriveStartWorkStatus(facts: StartWorkFacts): StartWorkStatus {
   if (chatId) return { kind: "chat", chatId, worktreePath }
   if (worktreePath) return { kind: "worktree", worktreePath }
   return { kind: "idle" }
+}
+
+/**
+ * What the drawer needs to render the button: what exists, what the branch
+ * will be called, and — when the card cannot start at all — why.
+ */
+export interface StartWorkView {
+  status: StartWorkStatus
+  /** Derived from the card, shown rather than asked. */
+  branch: string
+  /** Why "Start work" cannot run, or null when it can. */
+  blockedReason: string | null
+}
+
+/** What `board.card.startWork` answers with. */
+export interface StartWorkResult {
+  cardId: string
+  chatId: string
+  /** The branch this card owns, derived from its title and tracker reference. */
+  branch: string
+  /** Null only when a live chat's worktree has since been removed. */
+  worktreePath: string | null
+  /** The column the card now sits in, or null when the board marks none active. */
+  movedToColumnId: string | null
+  /** True when a live chat already existed and nothing was created. */
+  reused: boolean
+}
+
+/**
+ * What `board.card.detail` puts on the wire.
+ *
+ * The status rides the detail rather than a second command because the drawer
+ * must not paint a button before it knows what the button does.
+ */
+export interface CardDetailView extends CardDetail {
+  /** Null when the server has no start-work wiring. */
+  startWork: StartWorkView | null
 }
 
 /**

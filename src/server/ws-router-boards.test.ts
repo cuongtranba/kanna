@@ -3,7 +3,7 @@ import { handleBoardCommand, isBoardCommand, type BoardCommandDeps } from "./ws-
 import { createBoardRegistry } from "./board-registry"
 import { createBoardStore } from "./board-store.adapter"
 import type { ServerEnvelope } from "../shared/protocol"
-import type { StartWorkResult } from "./board-start-work"
+import type { StartWorkResult } from "../shared/boards/start-work"
 
 const RESULT: StartWorkResult = {
   cardId: "card-1",
@@ -21,6 +21,8 @@ function setup(overrides: Partial<BoardCommandDeps> = {}) {
     boardRegistry: createBoardRegistry({ store }),
     boardSync: undefined,
     startWork: () => Promise.resolve(RESULT),
+    startWorkView: () =>
+      Promise.resolve({ status: { kind: "idle" }, branch: "card/1-task", blockedReason: null }),
     send: (envelope) => sent.push(envelope),
     ...overrides,
   }

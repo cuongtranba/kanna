@@ -4,7 +4,13 @@ import { Button } from "../ui/button"
 import { Textarea } from "../ui/textarea"
 import { cn } from "../../lib/utils"
 import { useCardDrawerStore } from "./CardDrawer.store"
-import type { CardActor, CardDetail, FieldValue } from "../../../shared/boards/types"
+import { usePaneLayoutStore } from "../../stores/paneLayoutStore"
+import type { CardActor, FieldValue } from "../../../shared/boards/types"
+import {
+  startWorkLabel,
+  type CardDetailView,
+  type StartWorkResult,
+} from "../../../shared/boards/start-work"
 import { errorMessage, type AnyValue } from "../../../shared/errors"
 
 /**
@@ -53,6 +59,19 @@ function labelsOf(value: FieldValue | undefined): string[] {
   return []
 }
 
+/**
+ * What to say after the button has run.
+ *
+ * Only the surprising outcomes get a line. Opening the chat is its own
+ * feedback — the tab appears — and saying "Started" over it would be the UI
+ * performing rather than explaining.
+ */
+function describeStartWork(result: StartWorkResult): string | null {
+  if (result.reused) return null
+  if (result.movedToColumnId === null) return "Started · no column marked active"
+  return null
+}
+
 export function CardDrawer({ cardId, socket, onClose, onChanged }: CardDrawerProps) {
   const detail = useCardDrawerStore((state) => state.detail)
   const error = useCardDrawerStore((state) => state.error)
@@ -61,7 +80,7 @@ export function CardDrawer({ cardId, socket, onClose, onChanged }: CardDrawerPro
 
   const load = useCallback(() => {
     void socket
-      .command<CardDetail | null>({ type: "board.card.detail", cardId })
+      .command<CardDetailView | null>({ type: "board.card.detail", cardId })
       .then(setDetail)
       .catch((cause: AnyValue) => {
         setError(errorMessage(cause))
@@ -100,6 +119,27 @@ export function CardDrawer({ cardId, socket, onClose, onChanged }: CardDrawerPro
       })
   }, [cardId, onChanged, onClose, setError, socket])
 
+  /**
+   * One action, whatever state the card is in. The server re-derives that state
+   * from the same resolver the label came from, so a stale label costs a
+   * round-trip and never the wrong outcome.
+   */
+  const handleStartWork = useCallback(() => {
+    useCardDrawerStore.getState().beginStartWork()
+    void socket
+      .command<StartWorkResult>({ type: "board.card.startWork", cardId })
+      .then((result) => {
+        usePaneLayoutStore.getState().openTab({ kind: "chat", chatId: result.chatId })
+        useCardDrawerStore.getState().endStartWork(describeStartWork(result))
+        load()
+        onChanged?.()
+      })
+      .catch((cause: AnyValue) => {
+        useCardDrawerStore.getState().endStartWork(null)
+        setError(errorMessage(cause))
+      })
+  }, [cardId, load, onChanged, setError, socket])
+
   const handleDraft = useCallback(
     (event: React.ChangeEvent<HTMLTextAreaElement>) => {
       setDraft(event.currentTarget.value)
@@ -107,7 +147,11 @@ export function CardDrawer({ cardId, socket, onClose, onChanged }: CardDrawerPro
     [setDraft],
   )
 
+  const startingWork = useCardDrawerStore((state) => state.startingWork)
+  const startWorkNote = useCardDrawerStore((state) => state.startWorkNote)
+
   const card = detail?.card ?? null
+  const startWork = detail?.startWork ?? null
   const description = card ? textOf(card.content.description) : null
   const externalUrl = card ? textOf(card.content.externalUrl) : null
   const labels = card ? labelsOf(card.content.labels) : []
@@ -140,6 +184,28 @@ export function CardDrawer({ cardId, socket, onClose, onChanged }: CardDrawerPro
       {error ? <p className="px-4 py-2 text-[13px] text-destructive-text">{error}</p> : null}
 
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-4">
+        {startWork ? (
+          <section className="space-y-1.5">
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                onClick={handleStartWork}
+                disabled={startingWork || startWork.blockedReason !== null}
+              >
+                {startingWork ? "Starting…" : startWorkLabel(startWork.status)}
+              </Button>
+              {/* Derived, never asked — so it is shown, not offered as a field. */}
+              <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">
+                {startWork.branch}
+              </span>
+            </div>
+            {startWork.blockedReason ? (
+              <p className="text-[13px] text-muted-foreground">{startWork.blockedReason}</p>
+            ) : null}
+            {startWorkNote ? <p className="text-[13px] text-muted-foreground">{startWorkNote}</p> : null}
+          </section>
+        ) : null}
+
         {description ? (
           <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground [text-wrap:pretty]">
             {description}

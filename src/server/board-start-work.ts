@@ -18,8 +18,10 @@ import {
   buildStartWorkPrompt,
   deriveStartWorkStatus,
   resolveStartWorkProjectId,
+  type StartWorkResult,
+  type StartWorkView,
 } from "../shared/boards/start-work"
-import { findActiveColumn, type CardActor } from "../shared/boards/types"
+import { findActiveColumn, type Card, type CardActor } from "../shared/boards/types"
 import type { GitWorktree, StackBinding } from "../shared/types"
 import { resolveDefaultWorktreePath, type AddWorktreeOpts } from "./worktree-store.adapter"
 
@@ -42,19 +44,6 @@ export interface StartWorkDeps {
   sendPrompt(chatId: string, content: string): Promise<void>
 }
 
-export interface StartWorkResult {
-  cardId: string
-  chatId: string
-  /** The branch this card owns, derived from its title and tracker reference. */
-  branch: string
-  /** Null only when a live chat's worktree has since been removed. */
-  worktreePath: string | null
-  /** The column the card now sits in, or null when the board marks none active. */
-  movedToColumnId: string | null
-  /** True when a live chat already existed and nothing was created. */
-  reused: boolean
-}
-
 /**
  * Where a card's worktrees live: a sibling of the checkout, namespaced by repo.
  *
@@ -67,7 +56,27 @@ export function cardWorktreeDir(repoRoot: string): string {
   return join("..", ".kanna-worktrees", basename(repoRoot))
 }
 
-export async function startWork(deps: StartWorkDeps, cardId: string): Promise<StartWorkResult> {
+/**
+ * Read the card's situation without changing it.
+ *
+ * The drawer renders this and the button acts on it, so both go through one
+ * resolver: a label that says "Open chat" while the action would create one is
+ * worse than either behaviour on its own.
+ *
+ * Blocking conditions are RETURNED, not thrown — the drawer needs to explain a
+ * card it cannot start, and "no project" is a thing to say, not an error.
+ */
+type ResolvedStartWork =
+  | { view: StartWorkView; ready: false }
+  | {
+      view: StartWorkView
+      ready: true
+      card: Card
+      project: StartWorkProject
+      existingWorktreePaths: ReadonlySet<string>
+    }
+
+async function resolve(deps: StartWorkDeps, cardId: string): Promise<ResolvedStartWork> {
   const { registry } = deps
 
   const detail = registry.cardDetail(cardId)
@@ -77,26 +86,57 @@ export async function startWork(deps: StartWorkDeps, cardId: string): Promise<St
   const board = registry.getBoard(card.boardId)
   if (!board) throw new BoardStoreError("not_found", `board ${card.boardId} does not exist`)
 
+  const branch = cardBranchName(card.id, card.title, externalRef)
+  const blocked = (blockedReason: string): ResolvedStartWork => ({
+    view: { status: { kind: "idle" }, branch, blockedReason },
+    ready: false,
+  })
+
   const projectId = resolveStartWorkProjectId(card, board)
-  if (!projectId) {
-    throw new BoardStoreError(
-      "invalid_input",
-      "This card has no project, so there is no checkout to work in. Set one on the card first.",
-    )
-  }
+  if (!projectId) return blocked("This card has no project, so there is no checkout to work in.")
   const project = deps.getProject(projectId)
-  if (!project) {
-    throw new BoardStoreError("not_found", `project ${projectId} is no longer open`)
-  }
+  if (!project) return blocked("That card's project is no longer open.")
 
   const worktrees = await deps.listWorktrees(project.localPath)
-  const existingPaths = new Set(worktrees.map((entry) => entry.path))
+  const existingWorktreePaths = new Set(worktrees.map((entry) => entry.path))
   const liveChatIds = new Set(
     links.filter((link) => link.kind === "chat" && deps.chatExists(link.targetId)).map((link) => link.targetId),
   )
 
-  const status = deriveStartWorkStatus({ links, liveChatIds, existingWorktreePaths: existingPaths })
-  const branch = cardBranchName(card.id, card.title, externalRef)
+  return {
+    view: {
+      status: deriveStartWorkStatus({ links, liveChatIds, existingWorktreePaths }),
+      branch,
+      blockedReason: null,
+    },
+    ready: true,
+    card,
+    project,
+    existingWorktreePaths,
+  }
+}
+
+/**
+ * Read the card's situation without changing it.
+ *
+ * The drawer renders this and the button acts on it, so both go through one
+ * resolver: a label reading "Open chat" while the action would create one is
+ * worse than either behaviour alone. Blocking conditions are returned rather
+ * than thrown — the drawer has to explain a card it cannot start, and "no
+ * project" is a thing to say, not a failure.
+ */
+export async function startWorkView(deps: StartWorkDeps, cardId: string): Promise<StartWorkView> {
+  return (await resolve(deps, cardId)).view
+}
+
+export async function startWork(deps: StartWorkDeps, cardId: string): Promise<StartWorkResult> {
+  const { registry } = deps
+  const resolved = await resolve(deps, cardId)
+  const { branch, status, blockedReason } = resolved.view
+  if (!resolved.ready) throw new BoardStoreError("invalid_input", blockedReason ?? "This card cannot start work.")
+
+  const { card, project, existingWorktreePaths: existingPaths } = resolved
+  const projectId = project.id
 
   if (status.kind === "chat") {
     return {

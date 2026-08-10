@@ -19,7 +19,7 @@ import type { CardActor } from "../shared/boards/types"
 import { BoardStoreError } from "./board-store"
 import type { BoardRegistry } from "./board-registry"
 import type { BoardSync } from "./board-sync"
-import type { StartWorkResult } from "./board-start-work"
+import type { CardDetailView, StartWorkResult, StartWorkView } from "../shared/boards/start-work"
 import { errorMessage } from "../shared/errors"
 
 const USER: CardActor = { kind: "user" }
@@ -33,6 +33,8 @@ export interface BoardCommandDeps {
    * git and the chat store, neither of which this module may import.
    */
   startWork: ((cardId: string) => Promise<StartWorkResult>) | undefined
+  /** The same resolver, read-only — what the drawer's button label is derived from. */
+  startWorkView: ((cardId: string) => Promise<StartWorkView>) | undefined
   send: (envelope: ServerEnvelope) => void
 }
 
@@ -74,7 +76,7 @@ export async function handleBoardCommand(
   command: ClientCommand,
   id: string,
 ): Promise<boolean> {
-  const { boardRegistry, boardSync, startWork, send } = deps
+  const { boardRegistry, boardSync, startWork, startWorkView, send } = deps
   if (!isBoardCommand(command)) return false
 
   if (!boardRegistry) {
@@ -89,6 +91,14 @@ export async function handleBoardCommand(
         return true
       }
       send({ v: PROTOCOL_VERSION, type: "ack", id, result: await startWork(command.cardId) })
+      return true
+    }
+    if (command.type === "board.card.detail") {
+      const detail = boardRegistry.cardDetail(command.cardId)
+      const view: CardDetailView | null = detail
+        ? { ...detail, startWork: startWorkView ? await startWorkView(command.cardId) : null }
+        : null
+      send({ v: PROTOCOL_VERSION, type: "ack", id, result: view })
       return true
     }
     if (command.type.startsWith("board.sync.")) {
@@ -265,11 +275,6 @@ function dispatch(
         USER,
       )
       send({ v: PROTOCOL_VERSION, type: "ack", id, result: card })
-      return true
-    }
-
-    case "board.card.detail": {
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: registry.cardDetail(command.cardId) })
       return true
     }
 

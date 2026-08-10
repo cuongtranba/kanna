@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, test } from "bun:test"
 import { createBoardRegistry, type BoardRegistry } from "./board-registry"
 import { createBoardStore } from "./board-store.adapter"
 import type { BoardStore } from "./board-store"
-import { cardWorktreeDir, startWork, type StartWorkDeps } from "./board-start-work"
+import { cardWorktreeDir, startWork, startWorkView, type StartWorkDeps } from "./board-start-work"
 import type { BoardTemplateDefinition } from "../shared/boards/types"
 import type { GitWorktree, StackBinding } from "../shared/types"
 import type { AddWorktreeOpts } from "./worktree-store.adapter"
@@ -103,6 +103,57 @@ describe("cardWorktreeDir", () => {
    */
   test("is a sibling of the repo, namespaced by repo name", () => {
     expect(cardWorktreeDir("/repo/kanna")).toBe("../.kanna-worktrees/kanna")
+  })
+})
+
+describe("startWorkView", () => {
+  test("previews the branch and changes nothing", async () => {
+    const { card } = seed()
+    const view = await startWorkView(makeDeps(), card.id)
+
+    expect(view).toEqual({
+      status: { kind: "idle" },
+      branch: `card/${card.id.slice(0, 8)}-fix-login-redirect-loop`,
+      blockedReason: null,
+    })
+    expect(recorder.added).toEqual([])
+    expect(registry.cardDetail(card.id)!.links).toEqual([])
+  })
+
+  /** The drawer has to explain a card it cannot start, so this is not a throw. */
+  test("reports a card with no project instead of failing", async () => {
+    let counter = 0
+    store = createBoardStore({ filePath: ":memory:", now: () => 1, newId: () => `id-${(counter += 1).toString()}` })
+    registry = createBoardRegistry({ store })
+    recorder = { added: [], chats: [], prompts: [] }
+    const board = registry.createBoard({
+      owner: { kind: "stack", id: "stack-1" },
+      title: "Cross-repo",
+      definition: DEFINITION,
+    })
+    const card = registry.createCard({
+      boardId: board.id,
+      columnId: registry.listColumns(board.id)[0]!.id,
+      title: "Task",
+      actor: { kind: "user" },
+    })
+
+    const view = await startWorkView(makeDeps(), card.id)
+    expect(view.blockedReason).toMatch(/no project/u)
+    expect(view.status).toEqual({ kind: "idle" })
+  })
+
+  /** The label and the action share one resolver, so they cannot disagree. */
+  test("agrees with what startWork then does", async () => {
+    const { card } = seed()
+    const existing = "/repo/.kanna-worktrees/kanna/card-old"
+    registry.addCardLink(card.id, "worktree", existing)
+    const deps = makeDeps({
+      listWorktrees: () => Promise.resolve([worktree(REPO, "main"), worktree(existing, "card/old")]),
+    })
+
+    expect((await startWorkView(deps, card.id)).status).toEqual({ kind: "worktree", worktreePath: existing })
+    expect((await startWork(deps, card.id)).worktreePath).toBe(existing)
   })
 })
 
