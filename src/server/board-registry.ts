@@ -17,6 +17,7 @@ import type {
   Board,
   BoardColumn,
   BoardTemplate,
+  BoardTemplateDefinition,
   BoardSummary,
   BoardViewSnapshot,
   Card,
@@ -80,6 +81,16 @@ export interface BoardRegistry {
   addComment(cardId: string, author: CardActor, body: string): CardComment
   createTemplate(input: CreateTemplateInput): BoardTemplate
   deleteTemplate(templateId: string): void
+  /**
+   * Copy a board's STRUCTURE — columns and card schema — into a new board.
+   *
+   * Deliberately not its cards: a board mirroring a 300-issue tracker would
+   * silently clone 300 rows, and the UI labels this "Duplicate structure" so
+   * the two can never disagree.
+   */
+  duplicateBoard(boardId: string, title: string): Board
+  /** Turn a board's columns + card schema into a reusable template. */
+  saveBoardAsTemplate(boardId: string, name: string, description?: string | null): BoardTemplate
 
   subscribe(cb: (change: BoardChange) => void): () => void
   close(): void
@@ -129,6 +140,21 @@ export function createBoardRegistry(options: CreateBoardRegistryOptions): BoardR
     const column = store.getColumn(columnId)
     if (!column) throw new BoardStoreError("not_found", `column ${columnId} does not exist`)
     return column.boardId
+  }
+
+  /** A board's reusable shape: its columns and its card schema. */
+  function definitionOf(board: Board): BoardTemplateDefinition {
+    return {
+      columns: store.listColumns(board.id).map((column) => ({
+        title: column.title,
+        semantic: column.semantic,
+        colorToken: column.colorToken,
+        wipLimit: column.wipLimit,
+      })),
+      cardFields: board.cardFields,
+      // Sync mappings belong to a binding, not to the shape being copied.
+      mappingDefaults: [],
+    }
   }
 
   function boardIdOfCard(cardId: string): string {
@@ -212,6 +238,26 @@ export function createBoardRegistry(options: CreateBoardRegistryOptions): BoardR
 
     createTemplate: (input) => store.createTemplate(input),
     deleteTemplate: (templateId) => store.deleteTemplate(templateId),
+
+    duplicateBoard(boardId: string, title: string): Board {
+      const source = store.getBoard(boardId)
+      if (!source) throw new BoardStoreError("not_found", `board ${boardId} does not exist`)
+      const board = store.createBoard({
+        owner: { kind: source.ownerKind, id: source.ownerId },
+        title,
+        description: source.description,
+        definition: definitionOf(source),
+        templateId: source.templateId,
+      })
+      notify(board.id, { kind: board.ownerKind, id: board.ownerId })
+      return board
+    },
+
+    saveBoardAsTemplate(boardId: string, name: string, description?: string | null): BoardTemplate {
+      const source = store.getBoard(boardId)
+      if (!source) throw new BoardStoreError("not_found", `board ${boardId} does not exist`)
+      return store.createTemplate({ name, description: description ?? source.description, definition: definitionOf(source) })
+    },
 
     subscribe(cb: (change: BoardChange) => void): () => void {
       subscribers.add(cb)

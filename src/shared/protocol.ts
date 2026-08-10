@@ -286,6 +286,9 @@ export type ClientCommand =
     }
   | { type: "board.create"; ownerKind: BoardOwnerKind; ownerId: string; title: string; templateId?: string | null }
   | { type: "board.archive"; boardId: string }
+  | { type: "board.update"; boardId: string; title?: string; description?: string | null }
+  | { type: "board.duplicate"; boardId: string; title: string }
+  | { type: "board.saveAsTemplate"; boardId: string; name: string }
   | { type: "board.column.create"; boardId: string; title: string; afterColumnId?: string | null }
   | { type: "board.card.create"; boardId: string; columnId: string; title: string; projectId?: string | null; afterCardId?: string | null }
   | {

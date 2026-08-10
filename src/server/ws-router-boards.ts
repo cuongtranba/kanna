@@ -30,6 +30,9 @@ export interface BoardCommandDeps {
 const BOARD_COMMAND_TYPES = new Set<string>([
   "board.create",
   "board.archive",
+  "board.update",
+  "board.duplicate",
+  "board.saveAsTemplate",
   "board.column.create",
   "board.card.create",
   "board.card.move",
@@ -89,6 +92,30 @@ function dispatch(
         templateId: template?.id ?? null,
       })
       send({ v: PROTOCOL_VERSION, type: "ack", id, result: board })
+      return true
+    }
+
+    case "board.update": {
+      const board = registry.updateBoard(command.boardId, {
+        ...(command.title === undefined ? {} : { title: command.title }),
+        ...(command.description === undefined ? {} : { description: command.description }),
+      })
+      send({ v: PROTOCOL_VERSION, type: "ack", id, result: board })
+      return true
+    }
+
+    case "board.duplicate": {
+      send({ v: PROTOCOL_VERSION, type: "ack", id, result: registry.duplicateBoard(command.boardId, command.title) })
+      return true
+    }
+
+    case "board.saveAsTemplate": {
+      send({
+        v: PROTOCOL_VERSION,
+        type: "ack",
+        id,
+        result: registry.saveBoardAsTemplate(command.boardId, command.name),
+      })
       return true
     }
 

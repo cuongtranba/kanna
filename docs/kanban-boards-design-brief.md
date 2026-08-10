@@ -244,3 +244,79 @@ the board's primary signal.
 
 Tell me which of those to change, or confirm and I'll start **P0** (schema + SQLite store
 port + adapter + migrations + fractional rank, server-only with tests).
+
+---
+
+# Addendum — the Boards page (Direction A, confirmed)
+
+Confirmed by looking, not by reading: a static demo rendered with Kanna's real
+tokens and fonts put both directions side by side (`dist/client/board-demo.html`,
+gitignored) and Direction A won.
+
+## The split, and why it is not redundancy
+
+Two surfaces, two questions:
+
+| Surface | Answers | Route |
+| --- | --- | --- |
+| Boards page | *"what boards does this project have?"* | `/boards/:projectId` |
+| Board pane tab | *"where is this card up to?"* | `{kind:"board", boardId}` |
+
+The rejected direction (board owns a full route) collapses both into one and
+loses the second: it cannot sit beside the chat an agent is working in, which is
+the "three agents, three cards" case this feature was justified by.
+
+## Entry point
+
+One `Boards` item at the TOP of the project context menu, with a separator under
+it. It is the only item that navigates away; everything below the rule acts on
+the project in place.
+
+**No submenu listing boards.** A project may own many, and a menu that grows with
+the data stops being a menu.
+
+## The list is rows, not a card grid
+
+The comparison a reader actually makes runs down ONE column — which board is
+busy. A grid forces reading in two directions to find it, and identical card
+grids are a banned shape besides.
+
+```
+Sprint board                          6 columns   42 cards   ● 2 running   ⋯
+Backlog through deployment, for work an agent picks up.
+────────────────────────────────────────────────────────────────────────────
+Bug triage                            5 columns   17 cards                 ⋯
+Reported bugs, triaged and verified before they close.
+```
+
+- Name (15px/600), description muted on the second line, truncated to one line.
+- Counts are the only figures, in `tabular-nums`, so a live one cannot reflow the row.
+- **A healthy board says nothing.** Only a running agent speaks: Editor Amber dot
+  plus a count. Same discipline as the card face — silence is the healthy state.
+- Row hover tints `bg-secondary`; `⋯` reveals the actions.
+- Whole row is the open affordance; it hands the board to the pane tab.
+
+## CRUD
+
+| Action | Where | Behaviour |
+| --- | --- | --- |
+| Create | `New board` + the empty state | Template picker: 4 built-ins, or an empty board |
+| Rename / describe | `⋯` → inline edit on the row | No dialog for a two-field edit |
+| Archive | `⋯`, confirmed | Hides from the list, keeps the data (`archiveBoard`) |
+| Duplicate structure | `⋯` | Copies columns + card schema, **not cards** — a 318-card board must not silently clone 318 rows. The label says `structure` so it cannot mislead |
+| Save as template | `⋯` | Columns + card schema become a reusable template |
+
+## States
+
+*Default* · *empty project* (template picker inline, teaching copy) · *renaming*
+(inline, Enter commits, Esc reverts) · *archive confirm* · *command failed*
+(inline on the row, not a toast — the row is what failed).
+
+## Copy
+
+| Surface | Copy |
+| --- | --- |
+| Empty | **"No boards in this project yet."** / "A board turns issues into work your agents can pick up. Start from a shape, or import an existing tracker." |
+| Header | `Boards` · `kanna · 3 boards` |
+| Duplicate | `Duplicate structure` |
+| Archive confirm | **"Archive `Sprint board`?"** / "It leaves the list. Nothing is deleted." |

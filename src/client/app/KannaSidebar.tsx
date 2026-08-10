@@ -134,6 +134,13 @@ function KannaSidebarImpl({
 
   const location = useLocation()
   const navigate = useNavigate()
+  // The project context menu's only navigating item.
+  const handleOpenBoards = useCallback(
+    (projectId: string) => {
+      navigate(`/boards/${projectId}`)
+    },
+    [navigate],
+  )
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const resizeStartRef = useRef<{ pointerX: number; width: number } | null>(null)
 
@@ -795,6 +802,7 @@ function KannaSidebarImpl({
                   onCopyPath={onCopyPath}
                   onOpenExternalPath={onOpenExternalPath}
                   onHideProject={onHideProject}
+                  onOpenBoards={handleOpenBoards}
                   onToggleStar={onToggleStar}
                   isConnected={connectionStatus === "connected"}
                 />
@@ -821,6 +829,7 @@ function KannaSidebarImpl({
               onCopyPath={onCopyPath}
               onOpenExternalPath={onOpenExternalPath}
               onHideProject={onHideProject}
+              onOpenBoards={handleOpenBoards}
               onToggleStar={onToggleStar}
               isConnected={connectionStatus === "connected"}
             />
