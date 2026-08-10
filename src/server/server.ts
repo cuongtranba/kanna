@@ -37,7 +37,13 @@ import { createBoardRegistry } from "./board-registry"
 import { createBoardStore } from "./board-store.adapter"
 import { createBoardSync } from "./board-sync"
 import { startWork as runStartWork, startWorkView as runStartWorkView, type StartWorkDeps } from "./board-start-work"
-import { addWorktree, listWorktrees, localBranchExists } from "./worktree-store.adapter"
+import { addWorktree, isDirty, listWorktrees, localBranchExists, removeWorktree } from "./worktree-store.adapter"
+import {
+  resolveWorktreeCleanup,
+  worktreeCleanupView,
+  type WorktreeCleanupDeps,
+} from "./board-worktree-cleanup"
+import type { CleanupDecision } from "../shared/boards/worktree-cleanup"
 import { createGitHubIssuesProvider } from "./github-issues.adapter"
 import { readGitHubCliToken } from "./github-cli.adapter"
 import { UpdateManager } from "./update-manager"
@@ -550,6 +556,34 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   const startWork = (cardId: string) => runStartWork(startWorkDeps, cardId)
   const startWorkView = (cardId: string) => runStartWorkView(startWorkDeps, cardId)
 
+  // Merging a card's branch goes through the same machinery as merging one from
+  // the Changes panel — same rules, same conflict detection, one implementation.
+  const cleanupDeps: WorktreeCleanupDeps = {
+    registry: boardRegistry,
+    getProject: startWorkDeps.getProject,
+    listWorktrees,
+    isDirty,
+    previewMerge: async (repoRoot, branch) => {
+      const preview = await diffStore.previewMergeBranch({
+        projectPath: repoRoot,
+        branch: { kind: "local", name: branch },
+      })
+      return { commitCount: preview.commitCount, hasConflicts: preview.hasConflicts }
+    },
+    mergeBranch: async (projectId, repoRoot, branch) => {
+      const merged = await diffStore.mergeBranch({
+        projectId,
+        projectPath: repoRoot,
+        branch: { kind: "local", name: branch },
+      })
+      return merged.ok ? { ok: true, message: `Merged ${branch}` } : { ok: false, message: merged.message }
+    },
+    removeWorktree,
+  }
+  const cleanupView = (cardId: string) => worktreeCleanupView(cleanupDeps, cardId)
+  const resolveCleanup = (cardId: string, decision: CleanupDecision) =>
+    resolveWorktreeCleanup(cleanupDeps, cardId, decision)
+
   const followedSessionRegistry = createFollowedSessionRegistry({
     statFile: statSessionFile,
     runDelta: async (_chatId, sourcePath) => {
@@ -592,6 +626,8 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     boardSync,
     startWork,
     startWorkView,
+    cleanupView,
+    resolveCleanup,
     loopTrackingRegistry,
     subagentTranscriptRegistry,
     followedSessionRegistry,

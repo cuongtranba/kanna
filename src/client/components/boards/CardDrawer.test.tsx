@@ -7,6 +7,7 @@ import { useCardDrawerStore } from "./CardDrawer.store"
 import { usePaneLayoutStore } from "../../stores/paneLayoutStore"
 import { collectPanes, createDefaultLayout } from "../../lib/paneTree"
 import type { CardDetailView, StartWorkResult, StartWorkStatus } from "../../../shared/boards/start-work"
+import type { WorktreeCleanupView } from "../../../shared/boards/worktree-cleanup"
 import type { AnyValue } from "../../../shared/errors"
 
 function detailWith(status: StartWorkStatus, blockedReason: string | null = null): CardDetailView {
@@ -28,6 +29,7 @@ function detailWith(status: StartWorkStatus, blockedReason: string | null = null
     comments: [],
     externalRef: "412",
     startWork: { status, branch: "card/412-fix-login-redirect-loop", blockedReason },
+    cleanup: null,
   }
 }
 
@@ -163,6 +165,77 @@ describe("CardDrawer start work", () => {
     const detail = { ...detailWith({ kind: "idle" }), startWork: null }
     const harness = await mount(detail, () => Promise.resolve(RESULT))
     expect(() => startWorkButton(harness.container)).toThrow()
+    harness.unmount()
+  })
+})
+
+function cleanupDetail(cleanup: Partial<WorktreeCleanupView>): CardDetailView {
+  return {
+    ...detailWith({ kind: "worktree", worktreePath: "/wt/card-412" }),
+    cleanup: {
+      worktreePath: "/wt/card-412",
+      branch: "card/412-fix-login-redirect-loop",
+      dirtyFileCount: 0,
+      unmergedCommitCount: 2,
+      hasConflicts: false,
+      ...cleanup,
+    },
+  }
+}
+
+function buttonNamed(container: HTMLElement, label: string): HTMLButtonElement {
+  const button = [...container.querySelectorAll("button")].find(
+    (candidate) => candidate.textContent === label,
+  )
+  if (!button) throw new Error(`no "${label}" button in: ${container.textContent ?? ""}`)
+  return button
+}
+
+describe("CardDrawer worktree cleanup", () => {
+  test("asks, with the numbers in view", async () => {
+    const harness = await mount(cleanupDetail({ dirtyFileCount: 3 }), () => Promise.resolve(RESULT))
+    expect(harness.container.textContent).toContain("This card is done.")
+    expect(harness.container.textContent).toContain("2 commits to merge · 3 uncommitted files")
+    harness.unmount()
+  })
+
+  test("no question when the card is not done", async () => {
+    const harness = await mount(detailWith({ kind: "idle" }), () => Promise.resolve(RESULT))
+    expect(harness.container.textContent).not.toContain("This card is done.")
+    harness.unmount()
+  })
+
+  /** The rule: a column drag must not be able to destroy an agent's work. */
+  test("discard is refused, with the reason, while the worktree holds work", async () => {
+    const harness = await mount(cleanupDetail({ dirtyFileCount: 1 }), () => Promise.resolve(RESULT))
+    expect(buttonNamed(harness.container, "Discard worktree").disabled).toBe(true)
+    expect(harness.container.textContent).toContain("still holds")
+    harness.unmount()
+  })
+
+  test("discard is offered once the worktree holds nothing", async () => {
+    const harness = await mount(cleanupDetail({ unmergedCommitCount: 0 }), () => Promise.resolve(RESULT))
+    expect(buttonNamed(harness.container, "Discard worktree").disabled).toBe(false)
+    harness.unmount()
+  })
+
+  test("merge is refused on a conflict, and says so", async () => {
+    const harness = await mount(cleanupDetail({ hasConflicts: true }), () => Promise.resolve(RESULT))
+    expect(buttonNamed(harness.container, "Merge").disabled).toBe(true)
+    expect(harness.container.textContent).toContain("conflicts")
+    harness.unmount()
+  })
+
+  test("leaving it is always available and is sent as a decision", async () => {
+    const harness = await mount(cleanupDetail({ dirtyFileCount: 5 }), () => Promise.resolve(RESULT))
+    await act(async () => {
+      buttonNamed(harness.container, "Leave it").click()
+    })
+    expect(harness.commands).toContainEqual({
+      type: "board.card.resolveWorktree",
+      cardId: "card-1",
+      decision: "leave",
+    })
     harness.unmount()
   })
 })

@@ -31,6 +31,7 @@ import type { ChatOpsEvent } from "./chat-ops"
 import type { ChatPermissionPolicyOverride, ToolRequestDecision } from "./permission-policy"
 import type { PtyInstanceDelta, PtyInstancesSnapshot } from "./pty-instance"
 import type { BoardOwnerKind, BoardSummary, BoardViewSnapshot, SyncDirection } from "./boards/types"
+import type { CleanupDecision } from "./boards/worktree-cleanup"
 import type { WorkflowRunSummary } from "./workflow-types"
 
 export type { EditorPreset }
@@ -315,6 +316,8 @@ export type ClientCommand =
   | { type: "board.card.update"; cardId: string; title?: string }
   /** Card → worktree → branch → chat. Idempotent: a card already working opens what it has. */
   | { type: "board.card.startWork"; cardId: string }
+  /** Answer the question a card asks on reaching `done`. */
+  | { type: "board.card.resolveWorktree"; cardId: string; decision: CleanupDecision }
   | { type: "board.cards.page"; columnId: string; limit: number; afterRank?: string | null }
   | { type: "board.templates.list" }
   | { type: "workflows.getRun"; chatId: string; runId: string }

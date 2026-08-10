@@ -19,9 +19,13 @@ interface CardDrawerState {
   setDetail(detail: CardDetailView | null): void
   setError(error: string | null): void
   setDraft(draft: string): void
+  /** True while a merge / discard / leave is in flight. */
+  resolvingCleanup: boolean
   beginStartWork(): void
   /** Settle the button whether the attempt worked or not; `note` is null on failure. */
   endStartWork(note: string | null): void
+  beginCleanup(): void
+  endCleanup(): void
   /** Clear before loading another card, so the previous one never shows through. */
   reset(): void
 }
@@ -32,10 +36,21 @@ export const useCardDrawerStore = create<CardDrawerState>()((set) => ({
   draft: "",
   startingWork: false,
   startWorkNote: null,
+  resolvingCleanup: false,
   setDetail: (detail) => set({ detail, error: null }),
   setError: (error) => set({ error }),
   setDraft: (draft) => set({ draft }),
   beginStartWork: () => set({ startingWork: true, error: null, startWorkNote: null }),
   endStartWork: (note) => set({ startingWork: false, startWorkNote: note }),
-  reset: () => set({ detail: null, error: null, draft: "", startingWork: false, startWorkNote: null }),
+  beginCleanup: () => set({ resolvingCleanup: true, error: null }),
+  endCleanup: () => set({ resolvingCleanup: false }),
+  reset: () =>
+    set({
+      detail: null,
+      error: null,
+      draft: "",
+      startingWork: false,
+      startWorkNote: null,
+      resolvingCleanup: false,
+    }),
 }))

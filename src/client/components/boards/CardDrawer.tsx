@@ -11,6 +11,12 @@ import {
   type CardDetailView,
   type StartWorkResult,
 } from "../../../shared/boards/start-work"
+import {
+  discardBlockedReason,
+  mergeBlockedReason,
+  type CleanupDecision,
+  type WorktreeCleanupView,
+} from "../../../shared/boards/worktree-cleanup"
 import { errorMessage, type AnyValue } from "../../../shared/errors"
 
 /**
@@ -66,6 +72,26 @@ function labelsOf(value: FieldValue | undefined): string[] {
  * feedback — the tab appears — and saying "Started" over it would be the UI
  * performing rather than explaining.
  */
+/** What the worktree is holding, so the choice is made with the numbers in view. */
+function describeWorktreeContents(cleanup: WorktreeCleanupView): string {
+  const parts: string[] = []
+  if (cleanup.unmergedCommitCount > 0) {
+    parts.push(
+      cleanup.unmergedCommitCount === 1
+        ? "1 commit to merge"
+        : `${cleanup.unmergedCommitCount.toString()} commits to merge`,
+    )
+  }
+  if (cleanup.dirtyFileCount > 0) {
+    parts.push(
+      cleanup.dirtyFileCount === 1
+        ? "1 uncommitted file"
+        : `${cleanup.dirtyFileCount.toString()} uncommitted files`,
+    )
+  }
+  return parts.length === 0 ? "Nothing left in it." : parts.join(" · ")
+}
+
 function describeStartWork(result: StartWorkResult): string | null {
   if (result.reused) return null
   if (result.movedToColumnId === null) return "Started · no column marked active"
@@ -140,6 +166,34 @@ export function CardDrawer({ cardId, socket, onClose, onChanged }: CardDrawerPro
       })
   }, [cardId, load, onChanged, setError, socket])
 
+  const handleCleanup = useCallback(
+    (decision: CleanupDecision) => {
+      useCardDrawerStore.getState().beginCleanup()
+      void socket
+        .command({ type: "board.card.resolveWorktree", cardId, decision })
+        .then(() => {
+          useCardDrawerStore.getState().endCleanup()
+          load()
+          onChanged?.()
+        })
+        .catch((cause: AnyValue) => {
+          useCardDrawerStore.getState().endCleanup()
+          setError(errorMessage(cause))
+        })
+    },
+    [cardId, load, onChanged, setError, socket],
+  )
+
+  const handleMerge = useCallback(() => {
+    handleCleanup("merge")
+  }, [handleCleanup])
+  const handleDiscard = useCallback(() => {
+    handleCleanup("discard")
+  }, [handleCleanup])
+  const handleLeave = useCallback(() => {
+    handleCleanup("leave")
+  }, [handleCleanup])
+
   const handleDraft = useCallback(
     (event: React.ChangeEvent<HTMLTextAreaElement>) => {
       setDraft(event.currentTarget.value)
@@ -149,9 +203,13 @@ export function CardDrawer({ cardId, socket, onClose, onChanged }: CardDrawerPro
 
   const startingWork = useCardDrawerStore((state) => state.startingWork)
   const startWorkNote = useCardDrawerStore((state) => state.startWorkNote)
+  const resolvingCleanup = useCardDrawerStore((state) => state.resolvingCleanup)
 
   const card = detail?.card ?? null
   const startWork = detail?.startWork ?? null
+  const cleanup = detail?.cleanup ?? null
+  const discardBlocked = cleanup ? discardBlockedReason(cleanup) : null
+  const mergeBlocked = cleanup ? mergeBlockedReason(cleanup) : null
   const description = card ? textOf(card.content.description) : null
   const externalUrl = card ? textOf(card.content.externalUrl) : null
   const labels = card ? labelsOf(card.content.labels) : []
@@ -203,6 +261,36 @@ export function CardDrawer({ cardId, socket, onClose, onChanged }: CardDrawerPro
               <p className="text-[13px] text-muted-foreground">{startWork.blockedReason}</p>
             ) : null}
             {startWorkNote ? <p className="text-[13px] text-muted-foreground">{startWorkNote}</p> : null}
+          </section>
+        ) : null}
+
+        {cleanup ? (
+          <section className="space-y-2 border border-border p-3">
+            <p className="text-[13px] text-foreground [text-wrap:pretty]">
+              This card is done. What should happen to <span className="font-mono">{cleanup.branch}</span>?
+            </p>
+            <p className="text-[13px] tabular-nums text-muted-foreground">
+              {describeWorktreeContents(cleanup)}
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button size="sm" onClick={handleMerge} disabled={resolvingCleanup || mergeBlocked !== null}>
+                Merge
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleDiscard}
+                disabled={resolvingCleanup || discardBlocked !== null}
+              >
+                Discard worktree
+              </Button>
+              <Button variant="ghost" size="sm" onClick={handleLeave} disabled={resolvingCleanup}>
+                Leave it
+              </Button>
+            </div>
+            {/* A refusal, not a confirmation: uncommitted work exists nowhere else. */}
+            {discardBlocked ? <p className="text-[13px] text-muted-foreground">{discardBlocked}</p> : null}
+            {mergeBlocked ? <p className="text-[13px] text-muted-foreground">{mergeBlocked}</p> : null}
           </section>
         ) : null}
 

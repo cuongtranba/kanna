@@ -12,6 +12,7 @@
  */
 
 import type { Board, Card, CardDetail, CardLink, FieldValue } from "./types"
+import type { WorktreeCleanupView } from "./worktree-cleanup"
 
 export type StartWorkStatus =
   /** Nothing exists yet. */
@@ -86,6 +87,8 @@ export interface StartWorkResult {
 export interface CardDetailView extends CardDetail {
   /** Null when the server has no start-work wiring. */
   startWork: StartWorkView | null
+  /** The question the card asks on reaching `done`; null when it asks none. */
+  cleanup: WorktreeCleanupView | null
 }
 
 /**

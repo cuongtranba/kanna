@@ -20,6 +20,8 @@ import { BoardStoreError } from "./board-store"
 import type { BoardRegistry } from "./board-registry"
 import type { BoardSync } from "./board-sync"
 import type { CardDetailView, StartWorkResult, StartWorkView } from "../shared/boards/start-work"
+import type { CleanupDecision, WorktreeCleanupView } from "../shared/boards/worktree-cleanup"
+import type { WorktreeCleanupOutcome } from "./board-worktree-cleanup"
 import { errorMessage } from "../shared/errors"
 
 const USER: CardActor = { kind: "user" }
@@ -35,6 +37,9 @@ export interface BoardCommandDeps {
   startWork: ((cardId: string) => Promise<StartWorkResult>) | undefined
   /** The same resolver, read-only — what the drawer's button label is derived from. */
   startWorkView: ((cardId: string) => Promise<StartWorkView>) | undefined
+  /** The question a card asks on reaching `done`, and the answer to it. */
+  cleanupView: ((cardId: string) => Promise<WorktreeCleanupView | null>) | undefined
+  resolveCleanup: ((cardId: string, decision: CleanupDecision) => Promise<WorktreeCleanupOutcome>) | undefined
   send: (envelope: ServerEnvelope) => void
 }
 
@@ -52,6 +57,7 @@ const BOARD_COMMAND_TYPES = new Set<string>([
   "board.card.comment",
   "board.card.update",
   "board.card.startWork",
+  "board.card.resolveWorktree",
   "board.cards.page",
   "board.templates.list",
   "board.sync.bind",
@@ -76,7 +82,7 @@ export async function handleBoardCommand(
   command: ClientCommand,
   id: string,
 ): Promise<boolean> {
-  const { boardRegistry, boardSync, startWork, startWorkView, send } = deps
+  const { boardRegistry, boardSync, startWork, startWorkView, cleanupView, resolveCleanup, send } = deps
   if (!isBoardCommand(command)) return false
 
   if (!boardRegistry) {
@@ -93,10 +99,27 @@ export async function handleBoardCommand(
       send({ v: PROTOCOL_VERSION, type: "ack", id, result: await startWork(command.cardId) })
       return true
     }
+    if (command.type === "board.card.resolveWorktree") {
+      if (!resolveCleanup) {
+        send({ v: PROTOCOL_VERSION, type: "error", id, message: "Worktree cleanup is not available on this server." })
+        return true
+      }
+      send({
+        v: PROTOCOL_VERSION,
+        type: "ack",
+        id,
+        result: await resolveCleanup(command.cardId, command.decision),
+      })
+      return true
+    }
     if (command.type === "board.card.detail") {
       const detail = boardRegistry.cardDetail(command.cardId)
       const view: CardDetailView | null = detail
-        ? { ...detail, startWork: startWorkView ? await startWorkView(command.cardId) : null }
+        ? {
+            ...detail,
+            startWork: startWorkView ? await startWorkView(command.cardId) : null,
+            cleanup: cleanupView ? await cleanupView(command.cardId) : null,
+          }
         : null
       send({ v: PROTOCOL_VERSION, type: "ack", id, result: view })
       return true

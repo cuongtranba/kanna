@@ -149,7 +149,13 @@ export interface Card {
   archivedAt: number | null
 }
 
-export type CardLinkKind = "chat" | "worktree" | "pr" | "card"
+/**
+ * `cleanup_declined` is not a link to a thing but a remembered answer: the
+ * user was asked what to do with that worktree and said "leave it". It lives
+ * here because it is exactly a (card, worktree) pair, which is what this table
+ * stores.
+ */
+export type CardLinkKind = "chat" | "worktree" | "pr" | "card" | "cleanup_declined"
 
 export interface CardLink {
   cardId: string
@@ -302,7 +308,7 @@ const SYNC_DIRECTIONS: readonly SyncDirection[] = ["pull", "push", "both"]
 const REMOTE_KINDS: readonly RemoteKind[] = ["state", "label", "projectField"]
 const OUTBOX_OPS: readonly OutboxOp[] = ["create", "update", "move", "close"]
 const BOARD_OWNER_KINDS: readonly BoardOwnerKind[] = ["project", "stack"]
-const CARD_LINK_KINDS: readonly CardLinkKind[] = ["chat", "worktree", "pr", "card"]
+const CARD_LINK_KINDS: readonly CardLinkKind[] = ["chat", "worktree", "pr", "card", "cleanup_declined"]
 
 export function isColumnSemantic(value: string): value is ColumnSemantic {
   return COLUMN_SEMANTICS.some((entry) => entry === value)

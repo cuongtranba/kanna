@@ -32,6 +32,8 @@ import type { LoopTrackingRegistry } from "./loop-tracking-registry"
 import type { WorkflowRegistry } from "./workflow-registry"
 import { handleBoardCommand } from "./ws-router-boards"
 import type { StartWorkResult, StartWorkView } from "../shared/boards/start-work"
+import type { CleanupDecision, WorktreeCleanupView } from "../shared/boards/worktree-cleanup"
+import type { WorktreeCleanupOutcome } from "./board-worktree-cleanup"
 import type { BoardRegistry } from "./board-registry"
 import type { BoardSync } from "./board-sync"
 import type { SubagentTranscriptRegistry } from "./subagent-transcript-registry"
@@ -105,6 +107,8 @@ interface CreateWsRouterArgs {
   /** Card → worktree → chat. Built in `server.ts`, where git and the chat store are reachable. */
   startWork?: (cardId: string) => Promise<StartWorkResult>
   startWorkView?: (cardId: string) => Promise<StartWorkView>
+  cleanupView?: (cardId: string) => Promise<WorktreeCleanupView | null>
+  resolveCleanup?: (cardId: string, decision: CleanupDecision) => Promise<WorktreeCleanupOutcome>
   loopTrackingRegistry?: LoopTrackingRegistry
   subagentTranscriptRegistry?: SubagentTranscriptRegistry
   followedSessionRegistry?: FollowedSessionRegistry
@@ -134,6 +138,8 @@ export function createWsRouter({
   boardSync,
   startWork,
   startWorkView,
+  cleanupView,
+  resolveCleanup,
   loopTrackingRegistry,
   subagentTranscriptRegistry,
   followedSessionRegistry,
@@ -443,6 +449,7 @@ export function createWsRouter({
         case "board.card.comment":
         case "board.card.update":
         case "board.card.startWork":
+        case "board.card.resolveWorktree":
         case "board.cards.page":
         case "board.templates.list":
         case "board.sync.bind":
@@ -450,7 +457,7 @@ export function createWsRouter({
         case "board.sync.push":
         case "board.sync.status": {
           await handleBoardCommand(
-            { boardRegistry, boardSync, startWork, startWorkView, send: (envelope) => send(ws, envelope) },
+            { boardRegistry, boardSync, startWork, startWorkView, cleanupView, resolveCleanup, send: (envelope) => send(ws, envelope) },
             command,
             id,
           )
