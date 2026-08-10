@@ -341,3 +341,33 @@ export function findActiveColumn(columns: readonly BoardColumn[]): BoardColumn |
 export function findDoneColumn(columns: readonly BoardColumn[]): BoardColumn | null {
   return columns.find((column) => column.semantic === "done") ?? null
 }
+
+// ── Wire snapshots ─────────────────────────────────
+
+export interface BoardSummary {
+  id: string
+  title: string
+  description: string | null
+  columnCount: number
+  cardCount: number
+  updatedAt: number
+}
+
+/**
+ * Everything the board view needs for a first paint: the board, its columns,
+ * per-column totals (so skeletons are sized before their cards arrive), and the
+ * first page of each column.
+ */
+export interface BoardViewSnapshot {
+  board: Board
+  columns: BoardColumn[]
+  counts: Record<string, number>
+  cards: Record<string, Card[]>
+  cursors: Record<string, string | null>
+}
+
+export interface CardDetail {
+  card: Card
+  links: CardLink[]
+  comments: CardComment[]
+}

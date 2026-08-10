@@ -30,6 +30,7 @@ import type {
 import type { ChatOpsEvent } from "./chat-ops"
 import type { ChatPermissionPolicyOverride, ToolRequestDecision } from "./permission-policy"
 import type { PtyInstanceDelta, PtyInstancesSnapshot } from "./pty-instance"
+import type { BoardOwnerKind, BoardSummary, BoardViewSnapshot } from "./boards/types"
 import type { WorkflowRunSummary } from "./workflow-types"
 
 export type { EditorPreset }
@@ -52,6 +53,8 @@ export type SubscriptionTopic =
   | { type: "terminal"; terminalId: string }
   | { type: "pty-instances" }
   | { type: "workflows"; chatId: string }
+  | { type: "boards"; ownerKind: BoardOwnerKind; ownerId: string }
+  | { type: "board"; boardId: string }
   | { type: "followed-sessions" }
 
 export interface TerminalSnapshot {
@@ -281,6 +284,21 @@ export type ClientCommand =
       chatId: string
       runId: string
     }
+  | { type: "board.create"; ownerKind: BoardOwnerKind; ownerId: string; title: string; templateId?: string | null }
+  | { type: "board.archive"; boardId: string }
+  | { type: "board.column.create"; boardId: string; title: string; afterColumnId?: string | null }
+  | { type: "board.card.create"; boardId: string; columnId: string; title: string; projectId?: string | null; afterCardId?: string | null }
+  | {
+      type: "board.card.move"
+      cardId: string
+      toColumnId: string
+      aboveCardId: string | null
+      belowCardId: string | null
+    }
+  | { type: "board.card.archive"; cardId: string }
+  | { type: "board.card.detail"; cardId: string }
+  | { type: "board.cards.page"; columnId: string; limit: number; afterRank?: string | null }
+  | { type: "board.templates.list" }
   | { type: "workflows.getRun"; chatId: string; runId: string }
   | { type: "workflows.getAgentTranscript"; chatId: string; runId: string; agentId: string }
   | { type: "subagents.getRun"; chatId: string; agentId: string }
@@ -346,7 +364,21 @@ export type ServerSnapshot =
   | { type: "terminal"; data: TerminalSnapshot | null }
   | { type: "pty-instances"; data: PtyInstancesSnapshot }
   | { type: "workflows"; data: WorkflowsSnapshot }
+  | { type: "boards"; data: BoardsSnapshot }
+  | { type: "board"; data: BoardSnapshot }
   | { type: "followed-sessions"; data: FollowedSessionsSnapshot }
+
+export interface BoardsSnapshot {
+  ownerKind: BoardOwnerKind
+  ownerId: string
+  boards: BoardSummary[]
+}
+
+export interface BoardSnapshot {
+  boardId: string
+  /** Null when the board was archived or never existed. */
+  view: BoardViewSnapshot | null
+}
 
 export type ServerEnvelope =
   | { v: 1; type: "snapshot"; id: string; snapshot: ServerSnapshot }

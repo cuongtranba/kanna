@@ -30,6 +30,8 @@ import type { SessionShareService } from "./session-share"
 import type { PtyInstanceRegistry } from "./claude-pty/pty-instance-registry"
 import type { LoopTrackingRegistry } from "./loop-tracking-registry"
 import type { WorkflowRegistry } from "./workflow-registry"
+import { handleBoardCommand } from "./ws-router-boards"
+import type { BoardRegistry } from "./board-registry"
 import type { SubagentTranscriptRegistry } from "./subagent-transcript-registry"
 import type { FollowedSessionRegistry } from "./followed-session-registry"
 import { buildFallbackDiffStore, buildFallbackLlmProvider, buildResolvedAppSettings } from "./ws-router-defaults"
@@ -96,6 +98,7 @@ interface CreateWsRouterArgs {
   ptyInstances?: PtyInstanceRegistry
   killPtyInstance?: (chatId: string) => Promise<{ ok: boolean; error?: string }>
   workflowRegistry?: WorkflowRegistry
+  boardRegistry?: BoardRegistry
   loopTrackingRegistry?: LoopTrackingRegistry
   subagentTranscriptRegistry?: SubagentTranscriptRegistry
   followedSessionRegistry?: FollowedSessionRegistry
@@ -121,6 +124,7 @@ export function createWsRouter({
   ptyInstances,
   killPtyInstance,
   workflowRegistry,
+  boardRegistry,
   loopTrackingRegistry,
   subagentTranscriptRegistry,
   followedSessionRegistry,
@@ -139,6 +143,7 @@ export function createWsRouter({
     resolvedDiffStore,
     ptyInstances,
     workflowRegistry,
+    boardRegistry,
     loopTrackingRegistry,
     followedSessionRegistry,
     machineDisplayName,
@@ -157,6 +162,7 @@ export function createWsRouter({
     updateManager,
     ptyInstances,
     workflowRegistry,
+    boardRegistry,
     loopTrackingRegistry,
     envelopeBuilder,
   })
@@ -413,6 +419,18 @@ export function createWsRouter({
             command,
             id,
           )
+          return
+        }
+        case "board.create":
+        case "board.archive":
+        case "board.column.create":
+        case "board.card.create":
+        case "board.card.move":
+        case "board.card.archive":
+        case "board.card.detail":
+        case "board.cards.page":
+        case "board.templates.list": {
+          handleBoardCommand({ boardRegistry, send: (envelope) => send(ws, envelope) }, command, id)
           return
         }
         case "workflows.getRun":

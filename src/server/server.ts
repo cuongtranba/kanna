@@ -33,6 +33,8 @@ import { TerminalManager } from "./terminal-manager"
 import { TerminalPidRegistry } from "./terminal-pid-registry.adapter"
 import { ClaudePtyRegistry } from "./claude-pty/pid-registry.adapter"
 import { createPtyInstanceRegistry } from "./claude-pty/pty-instance-registry"
+import { createBoardRegistry } from "./board-registry"
+import { createBoardStore } from "./board-store.adapter"
 import { UpdateManager } from "./update-manager"
 import type { UpdateInstallAttemptResult } from "./cli-runtime"
 import { compareVersions } from "./cli-runtime"
@@ -265,6 +267,11 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   }
   const claudePtyRegistry = new ClaudePtyRegistry(path.join(store.dataDir, "claude-pty.json"))
   const ptyInstanceRegistry = createPtyInstanceRegistry()
+  // Boards live in their own SQLite file beside the event logs — same
+  // local-first data dir, different engine (see the boards ADR).
+  const boardRegistry = createBoardRegistry({
+    store: createBoardStore({ filePath: path.join(store.dataDir, "boards.db") }),
+  })
   const workflowRegistry = createWorkflowRegistry({
     read: readWorkflowDir,
     watch: (dir, onChange) => watchWorkflowDir(dir, onChange),
@@ -546,6 +553,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     pushManager,
     ptyInstances: ptyInstanceRegistry,
     workflowRegistry,
+    boardRegistry,
     loopTrackingRegistry,
     subagentTranscriptRegistry,
     followedSessionRegistry,

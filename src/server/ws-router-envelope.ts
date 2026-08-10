@@ -21,6 +21,7 @@ import type { TerminalManager } from "./terminal-manager"
 import type { KeybindingsManager } from "./keybindings"
 import type { PtyInstanceRegistry } from "./claude-pty/pty-instance-registry"
 import type { WorkflowRegistry } from "./workflow-registry"
+import type { BoardRegistry } from "./board-registry"
 import type { LoopTrackingRegistry } from "./loop-tracking-registry"
 import type { FollowedSessionRegistry } from "./followed-session-registry"
 import type { UpdateManager } from "./update-manager"
@@ -50,6 +51,7 @@ export interface EnvelopeDeps {
     "commitFiles" | "discardFile" | "ignoreFile" | "readPatch">
   ptyInstances?: PtyInstanceRegistry
   workflowRegistry?: WorkflowRegistry
+  boardRegistry?: BoardRegistry
   loopTrackingRegistry?: LoopTrackingRegistry
   followedSessionRegistry?: FollowedSessionRegistry
   machineDisplayName: string
@@ -149,6 +151,7 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
     resolvedDiffStore,
     ptyInstances,
     workflowRegistry,
+    boardRegistry,
     loopTrackingRegistry,
     followedSessionRegistry,
     machineDisplayName,
@@ -337,6 +340,35 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
         snapshot: {
           type: "workflows",
           data: { chatId: topic.chatId, runs: workflowRegistry?.snapshot(topic.chatId) ?? [] },
+        },
+      }
+    }
+
+    if (topic.type === "boards") {
+      const owner = { kind: topic.ownerKind, id: topic.ownerId }
+      return {
+        v: PROTOCOL_VERSION,
+        type: "snapshot",
+        id,
+        snapshot: {
+          type: "boards",
+          data: {
+            ownerKind: topic.ownerKind,
+            ownerId: topic.ownerId,
+            boards: boardRegistry?.listBoards(owner) ?? [],
+          },
+        },
+      }
+    }
+
+    if (topic.type === "board") {
+      return {
+        v: PROTOCOL_VERSION,
+        type: "snapshot",
+        id,
+        snapshot: {
+          type: "board",
+          data: { boardId: topic.boardId, view: boardRegistry?.boardView(topic.boardId) ?? null },
         },
       }
     }
