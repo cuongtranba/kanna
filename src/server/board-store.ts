@@ -163,6 +163,8 @@ export interface BoardStore {
 
   // Columns
   listColumns(boardId: string): BoardColumn[]
+  /** Resolve one column without knowing its board — used to route a change broadcast. */
+  getColumn(columnId: string): BoardColumn | null
   createColumn(input: CreateColumnInput): BoardColumn
   updateColumn(columnId: string, patch: UpdateColumnPatch): BoardColumn
   moveColumn(input: MoveColumnInput): BoardColumn

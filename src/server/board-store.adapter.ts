@@ -615,6 +615,11 @@ export function createBoardStore(options: CreateBoardStoreOptions): BoardStore {
       db.run("UPDATE board SET archived_at = ?, updated_at = ? WHERE id = ?", [now(), now(), boardId])
     },
 
+    getColumn(columnId: string): BoardColumn | null {
+      const row = db.query<ColumnRow, [string]>("SELECT * FROM board_column WHERE id = ?").get(columnId)
+      return row ? toColumn(row) : null
+    },
+
     listColumns(boardId: string): BoardColumn[] {
       return db
         .query<ColumnRow, [string]>("SELECT * FROM board_column WHERE board_id = ? ORDER BY rank")

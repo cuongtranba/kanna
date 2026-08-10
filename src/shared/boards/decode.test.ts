@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import type { FieldValue } from "./types"
 import {
   decodeActor,
   decodeCardContent,
@@ -12,7 +13,7 @@ import {
 
 describe("decodeFieldValue", () => {
   test("round-trips every value kind", () => {
-    const values = [
+    const values: FieldValue[] = [
       { kind: "text", value: "hello" },
       { kind: "longtext", value: "body" },
       { kind: "url", value: "https://example.com" },
