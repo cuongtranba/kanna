@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { moveCardInView, type OptimisticMove } from "./optimistic"
+import { moveCardInView, moveColumnInView, resolveColumnMove, type OptimisticMove } from "./optimistic"
 import type { BoardViewSnapshot, Card } from "../../../shared/boards/types"
 
 function card(id: string, columnId: string, rank: string): Card {
@@ -123,5 +123,64 @@ describe("moveCardInView", () => {
     const next = moveCardInView(view(), move({ cardId: "d1", toColumnId: "todo", aboveCardId: "deleted" }))
     expect(ids(next, "todo")).toHaveLength(4)
     expect(ids(next, "todo")).toContain("d1")
+  })
+})
+
+describe("resolveColumnMove", () => {
+  const ids = ["a", "b", "c", "d"]
+
+  test("names the neighbour the column should follow", () => {
+    expect(resolveColumnMove(ids, 0, 2)).toEqual({ columnId: "a", afterColumnId: "c" })
+    expect(resolveColumnMove(ids, 3, 0)).toEqual({ columnId: "d", afterColumnId: null })
+    expect(resolveColumnMove(ids, 2, 1)).toEqual({ columnId: "c", afterColumnId: "a" })
+  })
+
+  test("a drop that changes nothing resolves to nothing", () => {
+    expect(resolveColumnMove(ids, 1, 1)).toBeNull()
+    expect(resolveColumnMove(ids, 9, 0)).toBeNull()
+    expect(resolveColumnMove(ids, 0, 9)).toBeNull()
+  })
+})
+
+describe("moveColumnInView", () => {
+  function viewWithColumns(ids: readonly string[]): BoardViewSnapshot {
+    return {
+      board: {
+        id: "board-1",
+        ownerKind: "project",
+        ownerId: "p1",
+        title: "B",
+        description: null,
+        templateId: null,
+        cardFields: [],
+        createdAt: 0,
+        updatedAt: 0,
+        archivedAt: null,
+      },
+      columns: ids.map((id, index) => ({
+        id,
+        boardId: "board-1",
+        title: id,
+        rank: `a${index.toString()}`,
+        semantic: null,
+        colorToken: null,
+        wipLimit: null,
+      })),
+      counts: {},
+      cards: {},
+      cursors: {},
+    }
+  }
+
+  test("reorders locally so the drop lands under the cursor", () => {
+    const view = viewWithColumns(["a", "b", "c"])
+    expect(moveColumnInView(view, "a", "c").columns.map((column) => column.id)).toEqual(["b", "c", "a"])
+    expect(moveColumnInView(view, "c", null).columns.map((column) => column.id)).toEqual(["c", "a", "b"])
+  })
+
+  test("never invents state", () => {
+    const view = viewWithColumns(["a", "b"])
+    expect(moveColumnInView(view, "zz", null)).toBe(view)
+    expect(moveColumnInView(view, "a", "zz")).toBe(view)
   })
 })

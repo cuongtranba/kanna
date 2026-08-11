@@ -10,6 +10,9 @@ import {
   toBoardData,
   type BoardItem,
 } from "../../lib/boards/toBoardData"
+import { resolveColumnMove } from "../../lib/boards/optimistic"
+import { ColumnSettings, type ColumnSettingsValue } from "./ColumnSettings"
+import { useColumnAdderStore } from "./ColumnAdder.store"
 import type { BoardViewSnapshot } from "../../../shared/boards/types"
 
 /**
@@ -38,8 +41,18 @@ export interface CardMoveRequest {
 export interface KannaBoardProps {
   view: BoardViewSnapshot
   onCardMove: (move: CardMoveRequest) => void
+  onColumnMove: (columnId: string, afterColumnId: string | null) => void
   onOpenCard: (cardId: string) => void
   onLoadMore: (columnId: string) => void
+  onColumnSave: (columnId: string, patch: ColumnSettingsValue) => void
+  onColumnDelete: (columnId: string) => void
+  onColumnAdd: (title: string) => void
+}
+
+interface KanbanColumnMove {
+  columnId: string
+  fromIndex: number
+  toIndex: number
 }
 
 interface KanbanMove {
@@ -51,8 +64,28 @@ interface KanbanMove {
   position: number
 }
 
-export function KannaBoard({ view, onCardMove, onOpenCard, onLoadMore }: KannaBoardProps) {
+export function KannaBoard({
+  view,
+  onCardMove,
+  onColumnMove,
+  onOpenCard,
+  onLoadMore,
+  onColumnSave,
+  onColumnDelete,
+  onColumnAdd,
+}: KannaBoardProps) {
   const dataSource = useMemo(() => toBoardData(view), [view])
+  const columnIds = useMemo(() => view.columns.map((column) => column.id), [view.columns])
+
+  const handleColumnMove = useCallback(
+    (move: KanbanColumnMove) => {
+      // The library reports indices; the store takes a neighbour, so a rank
+      // resolved under the write's own transaction cannot race another writer.
+      const resolved = resolveColumnMove(columnIds, move.fromIndex, move.toIndex)
+      if (resolved) onColumnMove(resolved.columnId, resolved.afterColumnId)
+    },
+    [columnIds, onColumnMove],
+  )
 
   const handleCardMove = useCallback(
     (move: KanbanMove) => {
@@ -76,7 +109,18 @@ export function KannaBoard({ view, onCardMove, onOpenCard, onLoadMore }: KannaBo
     [onOpenCard],
   )
 
-  const renderColumnHeader = useCallback((column: BoardItem) => <ColumnHeader column={column} />, [])
+  const renderColumnHeader = useCallback(
+    (column: BoardItem) => (
+      <ColumnHeader
+        column={column}
+        onColumnSave={onColumnSave}
+        onColumnDelete={onColumnDelete}
+      />
+    ),
+    [onColumnDelete, onColumnSave],
+  )
+
+  const renderColumnAdder = useCallback(() => <ColumnAdder onAdd={onColumnAdd} />, [onColumnAdd])
 
   const renderSkeletonCard = useCallback(() => <CardSkeleton />, [])
 
@@ -89,6 +133,10 @@ export function KannaBoard({ view, onCardMove, onOpenCard, onLoadMore }: KannaBo
         virtualization
         loadMore={onLoadMore}
         onCardMove={handleCardMove}
+        onColumnMove={handleColumnMove}
+        allowColumnDrag
+        allowColumnAdder
+        renderColumnAdder={renderColumnAdder}
         renderColumnHeader={renderColumnHeader}
         renderSkeletonCard={renderSkeletonCard}
         rootClassName="kanna-board flex h-full items-start gap-0 bg-background p-4"
@@ -112,9 +160,21 @@ const COLUMN_LIST_CLASS = "px-1 py-2"
 const columnWrapperClassName = () => COLUMN_WRAPPER_CLASS
 const columnListContentClassName = () => COLUMN_LIST_CLASS
 
-function ColumnHeader({ column }: { column: BoardItem }) {
-  const { colorToken, wipLimit } = readNodeContent(column)
+function ColumnHeader({
+  column,
+  onColumnSave,
+  onColumnDelete,
+}: {
+  column: BoardItem
+  onColumnSave: (columnId: string, patch: ColumnSettingsValue) => void
+  onColumnDelete: (columnId: string) => void
+}) {
+  const { colorToken, semantic, wipLimit } = readNodeContent(column)
   const overLimit = isOverWipLimit(column.children.length, wipLimit)
+  const settings = useMemo(
+    () => ({ title: column.title, semantic, colorToken, wipLimit }),
+    [colorToken, column.title, semantic, wipLimit],
+  )
   return (
     <div className="flex items-center gap-2 px-1 pb-2 pt-1">
       {colorToken ? (
@@ -132,7 +192,50 @@ function ColumnHeader({ column }: { column: BoardItem }) {
       >
         {column.totalChildrenCount}
       </span>
+      <ColumnSettings
+        columnId={column.id}
+        value={settings}
+        canDelete={column.totalChildrenCount === 0}
+        onSave={onColumnSave}
+        onDelete={onColumnDelete}
+      />
     </div>
+  )
+}
+
+/**
+ * Adding a column is one field, not a dialog: a column is a name, and the role
+ * and colour are set afterwards from the same popover that edits every other
+ * column.
+ */
+function ColumnAdder({ onAdd }: { onAdd: (title: string) => void }) {
+  const draft = useColumnAdderStore((state) => state.draft)
+
+  const handleChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    useColumnAdderStore.getState().setDraft(event.currentTarget.value)
+  }, [])
+
+  const handleSubmit = useCallback(
+    (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault()
+      const title = useColumnAdderStore.getState().draft.trim()
+      if (title === "") return
+      useColumnAdderStore.getState().clear()
+      onAdd(title)
+    },
+    [onAdd],
+  )
+
+  return (
+    <form onSubmit={handleSubmit} className="w-56 shrink-0 px-3 pt-1">
+      <input
+        value={draft}
+        onChange={handleChange}
+        placeholder="Add a column"
+        aria-label="Add a column"
+        className="w-full bg-transparent px-1 py-1 text-[0.9375rem] text-foreground placeholder:text-muted-foreground focus:outline-none"
+      />
+    </form>
   )
 }
 

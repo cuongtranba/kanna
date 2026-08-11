@@ -7,7 +7,8 @@ import { CardDrawer } from "./CardDrawer"
 import { BoardSyncPanel } from "./BoardSyncPanel"
 import { useBoardsStore, selectBoardView } from "../../stores/boardsStore"
 import { KannaBoard, type CardMoveRequest } from "./KannaBoard"
-import { moveCardInView } from "../../lib/boards/optimistic"
+import { moveCardInView, moveColumnInView } from "../../lib/boards/optimistic"
+import type { ColumnSettingsValue } from "./ColumnSettings"
 import type { BoardSnapshot } from "../../../shared/protocol"
 import { errorMessage, type AnyValue } from "../../../shared/errors"
 
@@ -109,6 +110,62 @@ export function BoardPane({ boardId, socket, onOpenCard }: BoardPaneProps) {
       })
   }, [boardId, socket])
 
+  /**
+   * Column edits are not optimistic except for the reorder, which must land
+   * under the cursor. A rename or a delete is a deliberate act with a visible
+   * outcome, so waiting one round-trip for the authoritative snapshot is
+   * honest; guessing would only be able to disagree with it.
+   */
+  const handleColumnMove = useCallback(
+    (columnId: string, afterColumnId: string | null) => {
+      const current = useBoardsStore.getState().viewByBoard[boardId]
+      if (current) useBoardsStore.getState().setBoardView(boardId, moveColumnInView(current, columnId, afterColumnId))
+      void socket.command({ type: "board.column.move", columnId, afterColumnId }).catch(() => {
+        // The authoritative snapshot is the correction.
+      })
+    },
+    [boardId, socket],
+  )
+
+  const handleColumnSave = useCallback(
+    (columnId: string, patch: ColumnSettingsValue) => {
+      void socket
+        .command({
+          type: "board.column.update",
+          columnId,
+          title: patch.title,
+          semantic: patch.semantic,
+          colorToken: patch.colorToken,
+          wipLimit: patch.wipLimit,
+        })
+        .catch((cause: AnyValue) => {
+          useBoardSyncStore.getState().finishSync(boardId, errorMessage(cause))
+        })
+    },
+    [boardId, socket],
+  )
+
+  const handleColumnDelete = useCallback(
+    (columnId: string) => {
+      // The store refuses while cards remain; surfacing its reason is the point.
+      void socket.command({ type: "board.column.delete", columnId }).catch((cause: AnyValue) => {
+        useBoardSyncStore.getState().finishSync(boardId, errorMessage(cause))
+      })
+    },
+    [boardId, socket],
+  )
+
+  const handleColumnAdd = useCallback(
+    (title: string) => {
+      const current = useBoardsStore.getState().viewByBoard[boardId]
+      const afterColumnId = current?.columns.at(-1)?.id ?? null
+      void socket.command({ type: "board.column.create", boardId, title, afterColumnId }).catch((cause: AnyValue) => {
+        useBoardSyncStore.getState().finishSync(boardId, errorMessage(cause))
+      })
+    },
+    [boardId, socket],
+  )
+
   const handleLoadMore = useCallback(() => {
     // Paging lands with the card drawer; the snapshot's first page covers the
     // common board until then, and the skeletons above it are honest about
@@ -165,8 +222,12 @@ export function BoardPane({ boardId, socket, onOpenCard }: BoardPaneProps) {
         <KannaBoard
           view={view}
           onCardMove={handleCardMove}
+          onColumnMove={handleColumnMove}
           onOpenCard={handleOpenCard}
           onLoadMore={handleLoadMore}
+          onColumnSave={handleColumnSave}
+          onColumnDelete={handleColumnDelete}
+          onColumnAdd={handleColumnAdd}
         />
       </div>
     </div>

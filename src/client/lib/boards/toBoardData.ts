@@ -18,7 +18,13 @@
 
 import type { BoardData, BoardItem } from "react-kanban-kit"
 import { isRecord, type AnyValue } from "../../../shared/errors"
-import { isColumnColorToken, type BoardViewSnapshot, type ColumnColorToken } from "../../../shared/boards/types"
+import {
+  isColumnColorToken,
+  isColumnSemantic,
+  type BoardViewSnapshot,
+  type ColumnColorToken,
+  type ColumnSemantic,
+} from "../../../shared/boards/types"
 
 export type { BoardData, BoardItem }
 
@@ -36,6 +42,8 @@ export const CARD_NODE_TYPE = "card"
  */
 export interface BoardNodeContent {
   colorToken: ColumnColorToken | null
+  /** Columns only. Load-bearing: "Start work" and sync routing both key on it. */
+  semantic: ColumnSemantic | null
   wipLimit: number | null
   updatedByAgent: boolean
   projectId: string | null
@@ -43,6 +51,7 @@ export interface BoardNodeContent {
 
 const EMPTY_CONTENT: BoardNodeContent = {
   colorToken: null,
+  semantic: null,
   wipLimit: null,
   updatedByAgent: false,
   projectId: null,
@@ -56,6 +65,7 @@ export function readNodeContent(item: BoardItem): BoardNodeContent {
     : null
   return {
     colorToken,
+    semantic: typeof raw.semantic === "string" && isColumnSemantic(raw.semantic) ? raw.semantic : null,
     wipLimit: typeof raw.wipLimit === "number" ? raw.wipLimit : null,
     updatedByAgent: raw.updatedByAgent === true,
     projectId: typeof raw.projectId === "string" ? raw.projectId : null,
@@ -77,6 +87,7 @@ export function toBoardData(view: BoardViewSnapshot): BoardData {
     const cards = view.cards[column.id] ?? []
     const columnContent: BoardNodeContent = {
       colorToken: column.colorToken,
+      semantic: column.semantic,
       wipLimit: column.wipLimit,
       updatedByAgent: false,
       projectId: null,
@@ -94,6 +105,7 @@ export function toBoardData(view: BoardViewSnapshot): BoardData {
     for (const card of cards) {
       const cardContent: BoardNodeContent = {
         colorToken: null,
+        semantic: null,
         wipLimit: null,
         updatedByAgent: card.updatedBy.kind === "agent",
         projectId: card.projectId,

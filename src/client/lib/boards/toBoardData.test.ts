@@ -107,6 +107,7 @@ describe("readNodeContent", () => {
   test("returns empty content for a node that carries none", () => {
     expect(readNodeContent({ id: "x", title: "x", parentId: null, children: [], totalChildrenCount: 0 })).toEqual({
       colorToken: null,
+      semantic: null,
       wipLimit: null,
       updatedByAgent: false,
       projectId: null,
@@ -120,10 +121,17 @@ describe("readNodeContent", () => {
       parentId: null,
       children: [],
       totalChildrenCount: 0,
-      content: { colorToken: "hotpink", wipLimit: "three", updatedByAgent: "yes", projectId: 7 },
+      content: {
+        colorToken: "hotpink",
+        semantic: "shipped",
+        wipLimit: "three",
+        updatedByAgent: "yes",
+        projectId: 7,
+      },
     }
     expect(readNodeContent(node)).toEqual({
       colorToken: null,
+      semantic: null,
       wipLimit: null,
       updatedByAgent: false,
       projectId: null,

@@ -54,6 +54,9 @@ const BOARD_COMMAND_TYPES = new Set<string>([
   "board.duplicate",
   "board.saveAsTemplate",
   "board.column.create",
+  "board.column.update",
+  "board.column.move",
+  "board.column.delete",
   "board.card.create",
   "board.card.move",
   "board.card.archive",
@@ -269,6 +272,29 @@ function dispatch(
         afterColumnId: command.afterColumnId ?? null,
       })
       send({ v: PROTOCOL_VERSION, type: "ack", id, result: column })
+      return true
+    }
+
+    case "board.column.update": {
+      const column = registry.updateColumn(command.columnId, {
+        ...(command.title === undefined ? {} : { title: command.title }),
+        ...(command.semantic === undefined ? {} : { semantic: command.semantic }),
+        ...(command.colorToken === undefined ? {} : { colorToken: command.colorToken }),
+        ...(command.wipLimit === undefined ? {} : { wipLimit: command.wipLimit }),
+      })
+      send({ v: PROTOCOL_VERSION, type: "ack", id, result: column })
+      return true
+    }
+
+    case "board.column.move": {
+      const column = registry.moveColumn({ columnId: command.columnId, afterColumnId: command.afterColumnId })
+      send({ v: PROTOCOL_VERSION, type: "ack", id, result: column })
+      return true
+    }
+
+    case "board.column.delete": {
+      registry.deleteColumn(command.columnId)
+      send({ v: PROTOCOL_VERSION, type: "ack", id })
       return true
     }
 

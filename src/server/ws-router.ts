@@ -444,6 +444,9 @@ export function createWsRouter({
         case "board.duplicate":
         case "board.saveAsTemplate":
         case "board.column.create":
+        case "board.column.update":
+        case "board.column.move":
+        case "board.column.delete":
         case "board.card.create":
         case "board.card.move":
         case "board.card.archive":

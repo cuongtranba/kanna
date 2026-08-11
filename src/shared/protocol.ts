@@ -30,7 +30,14 @@ import type {
 import type { ChatOpsEvent } from "./chat-ops"
 import type { ChatPermissionPolicyOverride, ToolRequestDecision } from "./permission-policy"
 import type { PtyInstanceDelta, PtyInstancesSnapshot } from "./pty-instance"
-import type { BoardOwnerKind, BoardSummary, BoardViewSnapshot, SyncDirection } from "./boards/types"
+import type {
+  BoardOwnerKind,
+  BoardSummary,
+  BoardViewSnapshot,
+  ColumnColorToken,
+  ColumnSemantic,
+  SyncDirection,
+} from "./boards/types"
 import type { CleanupDecision } from "./boards/worktree-cleanup"
 import type { WorkflowRunSummary } from "./workflow-types"
 
@@ -302,6 +309,18 @@ export type ClientCommand =
   | { type: "board.sync.push"; boardId: string }
   | { type: "board.sync.status"; boardId: string }
   | { type: "board.column.create"; boardId: string; title: string; afterColumnId?: string | null }
+  | {
+      type: "board.column.update"
+      columnId: string
+      title?: string
+      semantic?: ColumnSemantic | null
+      colorToken?: ColumnColorToken | null
+      wipLimit?: number | null
+    }
+  /** Reorder: the column it should sit after; null means first. */
+  | { type: "board.column.move"; columnId: string; afterColumnId: string | null }
+  /** Refused while the column still holds cards. */
+  | { type: "board.column.delete"; columnId: string }
   | { type: "board.card.create"; boardId: string; columnId: string; title: string; projectId?: string | null; afterCardId?: string | null }
   | {
       type: "board.card.move"
