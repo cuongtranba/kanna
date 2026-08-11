@@ -573,6 +573,8 @@ function AuthedApp() {
           <Route path="/chat/:chatId" element={<ChatPage />} />
           <Route path="/workflows/:chatId" element={<WorkflowsPage />} />
           <Route path="/boards/:projectId" element={<BoardsRoutePage />} />
+          {/* A board is its own address, so refresh and Back both work on it. */}
+          <Route path="/boards/:projectId/:boardId" element={<BoardsRoutePage />} />
         </Route>
       </Routes>
     </KannaSocketProvider>

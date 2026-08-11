@@ -1,5 +1,5 @@
 import { useCallback, useEffect } from "react"
-import { RefreshCw, Settings2 } from "lucide-react"
+import { ChevronLeft, Columns2, RefreshCw, Settings2 } from "lucide-react"
 import { Button } from "../ui/button"
 import { cn } from "../../lib/utils"
 import { useBoardSyncStore } from "./BoardPane.store"
@@ -30,9 +30,27 @@ export interface BoardPaneProps {
   boardId: string
   socket: BoardPaneSocket
   onOpenCard?: (cardId: string) => void
+  /** Present on the boards route, absent in a pane — a pane has nowhere to go back to. */
+  onBack?: () => void
+  /** Move this board into the pane workspace. Absent when it is already there. */
+  onOpenBesideChat?: () => void
+  /**
+   * Whether {@link onOpenBesideChat} will have to start a chat.
+   *
+   * The pane workspace only exists on the chat route, so a project with none
+   * gets one. The button says so rather than doing it quietly.
+   */
+  besideChatStartsChat?: boolean
 }
 
-export function BoardPane({ boardId, socket, onOpenCard }: BoardPaneProps) {
+export function BoardPane({
+  boardId,
+  socket,
+  onOpenCard,
+  onBack,
+  onOpenBesideChat,
+  besideChatStartsChat = false,
+}: BoardPaneProps) {
   const view = useBoardsStore(selectBoardView(boardId))
   const pageSize = useBoardsStore(selectBoardPageSize(boardId))
 
@@ -196,20 +214,19 @@ export function BoardPane({ boardId, socket, onOpenCard }: BoardPaneProps) {
     )
   }
 
-  if (view.columns.length === 0) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-1 bg-background p-8 text-center">
-        <p className="text-sm font-medium text-foreground">This board has no columns yet.</p>
-        <p className="max-w-[46ch] text-sm text-muted-foreground">
-          Add a column to start tracking work your agents can pick up.
-        </p>
-      </div>
-    )
-  }
-
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
       <header className="flex items-center gap-3 border-b border-border px-4 py-2">
+        {onBack ? (
+          <button
+            type="button"
+            onClick={onBack}
+            className="-ml-1 rounded-md p-1 text-muted-foreground hover:bg-secondary hover:text-foreground"
+            aria-label="Back to boards"
+          >
+            <ChevronLeft aria-hidden className="size-4" />
+          </button>
+        ) : null}
         <span className="truncate text-[15px] font-semibold text-foreground">{view.board.title}</span>
         {syncMessage ? (
           <span className="truncate font-mono text-xs tabular-nums text-muted-foreground">{syncMessage}</span>
@@ -224,6 +241,12 @@ export function BoardPane({ boardId, socket, onOpenCard }: BoardPaneProps) {
           <RefreshCw aria-hidden className={cn("size-3.5", syncing && "animate-spin")} />
           {syncing ? "Syncing…" : "Sync"}
         </Button>
+        {onOpenBesideChat ? (
+          <Button variant="ghost" size="sm" onClick={onOpenBesideChat}>
+            <Columns2 aria-hidden className="size-3.5" />
+            {besideChatStartsChat ? "Open beside a new chat" : "Open beside chat"}
+          </Button>
+        ) : null}
         <Button variant="ghost" size="sm" onClick={handleOpenSyncPanel} aria-label="Sync settings">
           <Settings2 aria-hidden className="size-3.5" />
         </Button>
@@ -234,6 +257,16 @@ export function BoardPane({ boardId, socket, onOpenCard }: BoardPaneProps) {
         ) : null}
         {openCardId ? (
           <CardDrawer cardId={openCardId} socket={socket} onClose={handleCloseCard} />
+        ) : null}
+        {view.columns.length === 0 ? (
+          // The header stays: on the boards route it carries the only way back,
+          // so an empty board must not be a dead end.
+          <div className="flex h-full flex-col items-center justify-center gap-1 bg-background p-8 text-center">
+            <p className="text-sm font-medium text-foreground">This board has no columns yet.</p>
+            <p className="max-w-[46ch] text-sm text-muted-foreground">
+              Add a column to start tracking work your agents can pick up.
+            </p>
+          </div>
         ) : null}
         <KannaBoard
           view={view}
