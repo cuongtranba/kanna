@@ -260,11 +260,27 @@ Two surfaces, two questions:
 | Surface | Answers | Route |
 | --- | --- | --- |
 | Boards page | *"what boards does this project have?"* | `/boards/:projectId` |
-| Board pane tab | *"where is this card up to?"* | `{kind:"board", boardId}` |
+| Board pane tab | *"where is this card up to?"* | `/boards/:projectId/:boardId` → `{kind:"board", boardId}` |
 
 The rejected direction (board owns a full route) collapses both into one and
 loses the second: it cannot sit beside the chat an agent is working in, which is
 the "three agents, three cards" case this feature was justified by.
+
+**Settled — the board's address IS the pane tab.** The first implementation
+shipped the split as two RENDERERS: `/boards/:projectId/:boardId` drew the board
+outside the pane workspace, and `Open beside chat` moved it in. That reproduced
+the rejected direction by accident — a reader who opened a board got no tab
+strip, no sidebar toggle and no chat, and the only way back to a conversation
+was the sidebar. Worse, the workspace was reachable only from `/chat/:chatId`,
+so the button had to manufacture a chat for a project that had none.
+
+The workspace was already route-neutral (`activeChatId` is nullable, every
+chat-specific effect is guarded on it, and it paints from `workspaceHasTabs`),
+so the board route now mounts it directly and opens the board as a tab. One
+renderer, both questions still answered: the list stays its own page, the board
+arrives beside whatever chats are open, `Open beside chat` is gone because
+splitting is what the tab strip already does, and looking at a board still
+starts no conversation.
 
 ## Entry point
 

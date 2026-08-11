@@ -203,12 +203,21 @@ export function createBoardRegistry(options: CreateBoardRegistryOptions): BoardR
       const counts = store.countCardsByColumn(boardId)
       const cards: Record<string, Card[]> = {}
       const cursors: Record<string, string | null> = {}
+      const shipped = new Set<string>()
       for (const column of columns) {
         const page = store.listCardPage({ columnId: column.id, limit: pageSize })
         cards[column.id] = page.cards
         cursors[column.id] = page.nextCursor
+        for (const card of page.cards) shipped.add(card.id)
       }
-      return { board, columns, counts, cards, cursors }
+      // Scoped to the page, not the board: a 5000-card board ships one page and
+      // must not pay for the links of the 4970 cards it left behind.
+      const chatLinksByCard: Record<string, string[]> = {}
+      for (const link of store.listCardLinksForBoard(boardId, "chat")) {
+        if (!shipped.has(link.cardId)) continue
+        ;(chatLinksByCard[link.cardId] ??= []).push(link.targetId)
+      }
+      return { board, columns, counts, cards, cursors, chatLinksByCard }
     },
 
     cardPage(query: CardPageQuery): CardPage {

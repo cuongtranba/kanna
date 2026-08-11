@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test"
 import { act } from "react"
-import { createRoot } from "react-dom/client"
+import { createRoot, type Root } from "react-dom/client"
 import "../lib/testing/setupHappyDom"
 import {
   createDefaultSubagentDraft,
@@ -23,6 +23,21 @@ import {
   type Subagent,
   type SubagentInput,
 } from "../../shared/types"
+
+/**
+ * Unmount the root, do not merely detach its container.
+ *
+ * happy-dom registers ONE document for the whole Bun process and the test
+ * preload wipes `document.body` after every test. A root left mounted keeps its
+ * portal children registered against a body that has since been emptied, so the
+ * next test to flush React work crashes deleting a node that is no longer there.
+ */
+function closeRoot(root: Root, container: HTMLElement) {
+  act(() => {
+    root.unmount()
+  })
+  container.remove()
+}
 
 const BASE_PROVIDERS: ProviderCatalogEntry[] = [...PROVIDERS]
 
@@ -239,8 +254,9 @@ async function mountSubagentsSection(props: {
 }): Promise<{ container: HTMLDivElement; cleanup: () => void }> {
   const container = document.createElement("div")
   document.body.appendChild(container)
+  const root = createRoot(container)
   await act(async () => {
-    createRoot(container).render(
+    root.render(
       <SubagentsSection
         subagents={props.subagents}
         providerDefaults={props.providerDefaults ?? defaultProviderPrefs}
@@ -253,7 +269,7 @@ async function mountSubagentsSection(props: {
       />,
     )
   })
-  return { container, cleanup: () => container.remove() }
+  return { container, cleanup: () => { closeRoot(root, container) } }
 }
 
 describe("SubagentsSection — empty state", () => {
@@ -268,8 +284,9 @@ describe("SubagentsSection — empty state", () => {
     const onStartCreate = mock(() => undefined)
     const container = document.createElement("div")
     document.body.appendChild(container)
+    const root = createRoot(container)
     await act(async () => {
-      createRoot(container).render(
+      root.render(
         <SubagentsSection
           subagents={[]}
           providerDefaults={defaultProviderPrefs}
@@ -288,7 +305,7 @@ describe("SubagentsSection — empty state", () => {
     expect(btn).toBeDefined()
     await act(async () => { btn!.click() })
     expect(onStartCreate).toHaveBeenCalledTimes(1)
-    container.remove()
+    closeRoot(root, container)
   })
 })
 
@@ -322,8 +339,9 @@ describe("SubagentsSection — create form", () => {
     const onCancelEditing = mock(() => undefined)
     const container = document.createElement("div")
     document.body.appendChild(container)
+    const root = createRoot(container)
     await act(async () => {
-      createRoot(container).render(
+      root.render(
         <SubagentsSection
           subagents={[]}
           providerDefaults={defaultProviderPrefs}
@@ -342,7 +360,7 @@ describe("SubagentsSection — create form", () => {
     expect(cancel).toBeDefined()
     await act(async () => { cancel!.click() })
     expect(onCancelEditing).toHaveBeenCalledTimes(1)
-    container.remove()
+    closeRoot(root, container)
   })
 
   test("custom model from settings appears in Model dropdown", async () => {
@@ -411,8 +429,9 @@ describe("SubagentsSection — edit form", () => {
     }
     const container = document.createElement("div")
     document.body.appendChild(container)
+    const root = createRoot(container)
     await act(async () => {
-      createRoot(container).render(
+      root.render(
         <SubagentsSection
           subagents={[subagent]}
           providerDefaults={defaultProviderPrefs}
@@ -438,7 +457,7 @@ describe("SubagentsSection — edit form", () => {
     await act(async () => { save.click() })
     expect(container.textContent).toContain("Name already used")
     expect(handlers.onUpdate).toHaveBeenCalledTimes(1)
-    container.remove()
+    closeRoot(root, container)
   })
 })
 
@@ -474,8 +493,9 @@ describe("SubagentsSection — delete confirm", () => {
     const subagent = makeSubagent({ id: "sa-1" })
     const container = document.createElement("div")
     document.body.appendChild(container)
+    const root = createRoot(container)
     await act(async () => {
-      createRoot(container).render(
+      root.render(
         <SubagentsSection
           subagents={[subagent]}
           providerDefaults={defaultProviderPrefs}
@@ -496,7 +516,7 @@ describe("SubagentsSection — delete confirm", () => {
     expect(flipped.textContent?.trim()).toBe("Confirm delete")
     await act(async () => { flipped.click() })
     expect(onDelete).toHaveBeenCalledWith("sa-1")
-    container.remove()
+    closeRoot(root, container)
   })
 })
 
@@ -519,8 +539,9 @@ describe("SubagentsSection — list rendering", () => {
     const onSelect = mock((_id: string) => undefined)
     const container = document.createElement("div")
     document.body.appendChild(container)
+    const root = createRoot(container)
     await act(async () => {
-      createRoot(container).render(
+      root.render(
         <SubagentsSection
           subagents={[makeSubagent({ id: "sa-1", name: "reviewer" })]}
           providerDefaults={defaultProviderPrefs}
@@ -539,6 +560,6 @@ describe("SubagentsSection — list rendering", () => {
     expect(row).toBeDefined()
     await act(async () => { row!.click() })
     expect(onSelect).toHaveBeenCalledWith("sa-1")
-    container.remove()
+    closeRoot(root, container)
   })
 })

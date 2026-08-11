@@ -1,11 +1,14 @@
 import { useCallback, useEffect } from "react"
-import { ChevronLeft, Columns2, RefreshCw, Settings2 } from "lucide-react"
+import { ListChecks, RefreshCw, Settings2 } from "lucide-react"
 import { Button } from "../ui/button"
 import { cn } from "../../lib/utils"
 import { useBoardSyncStore } from "./BoardPane.store"
 import { CardDrawer } from "./CardDrawer"
 import { BoardSyncPanel } from "./BoardSyncPanel"
+import { CardSchemaPanel } from "./CardSchemaPanel"
+import { useCardSchemaStore } from "./CardSchemaPanel.store"
 import { useBoardsStore, selectBoardPageSize, selectBoardView } from "../../stores/boardsStore"
+import type { BoardChatFacts } from "../../lib/boards/boardChatFacts"
 import { KannaBoard, type CardMoveRequest } from "./KannaBoard"
 import { moveCardInView, moveColumnInView } from "../../lib/boards/optimistic"
 import type { ColumnSettingsValue } from "./ColumnSettings"
@@ -29,28 +32,23 @@ export interface BoardPaneSocket {
 export interface BoardPaneProps {
   boardId: string
   socket: BoardPaneSocket
-  onOpenCard?: (cardId: string) => void
-  /** Present on the boards route, absent in a pane — a pane has nowhere to go back to. */
-  onBack?: () => void
-  /** Move this board into the pane workspace. Absent when it is already there. */
-  onOpenBesideChat?: () => void
   /**
-   * Whether {@link onOpenBesideChat} will have to start a chat.
-   *
-   * The pane workspace only exists on the chat route, so a project with none
-   * gets one. The button says so rather than doing it quietly.
+   * Live facts for every chat the workspace knows about, keyed by chat id —
+   * prop-drilled rather than read from context so the board can be mounted
+   * without the app's providers. Optional: absent, a card says nothing, which
+   * is what a card with no live chat says anyway.
    */
-  besideChatStartsChat?: boolean
+  chatFacts?: Readonly<Record<string, BoardChatFacts>>
+  onOpenCard?: (cardId: string) => void
+  /**
+   * Go to this board's project list. Takes the owner because the board's view
+   * is the only place the pane learns which project it belongs to — the tab
+   * carries a board id and nothing else.
+   */
+  onOpenBoards?: (projectId: string) => void
 }
 
-export function BoardPane({
-  boardId,
-  socket,
-  onOpenCard,
-  onBack,
-  onOpenBesideChat,
-  besideChatStartsChat = false,
-}: BoardPaneProps) {
+export function BoardPane({ boardId, socket, chatFacts, onOpenCard, onOpenBoards }: BoardPaneProps) {
   const view = useBoardsStore(selectBoardView(boardId))
   const pageSize = useBoardsStore(selectBoardPageSize(boardId))
 
@@ -105,6 +103,25 @@ export function BoardPane({
 
   const handleCloseSyncPanel = useCallback(() => {
     useBoardSyncStore.getState().closeSyncPanel()
+  }, [])
+
+  const schemaPanelOpen = useBoardSyncStore((state) => state.schemaPanelOpen)
+
+  /**
+   * The draft is seeded HERE, at the moment the panel opens, rather than by the
+   * panel reading the board. A board broadcast arrives with a freshly decoded
+   * `cardFields` array on every card move, so a panel that re-seeded from it
+   * would lose an edit in progress the first time anyone dragged a card.
+   */
+  const handleOpenSchemaPanel = useCallback(() => {
+    const current = useBoardsStore.getState().viewByBoard[boardId]
+    if (!current) return
+    useCardSchemaStore.getState().open(current.board.cardFields)
+    useBoardSyncStore.getState().openSchemaPanel()
+  }, [boardId])
+
+  const handleCloseSchemaPanel = useCallback(() => {
+    useBoardSyncStore.getState().closeSchemaPanel()
   }, [])
 
   const syncing = useBoardSyncStore((state) => state.syncingBoardId === boardId)
@@ -246,6 +263,15 @@ export function BoardPane({
     useBoardsStore.getState().growPage(boardId)
   }, [boardId])
 
+  // A stack board has no single project list to go back to, so it shows no
+  // breadcrumb rather than a link that would have to pick one.
+  const ownerProjectId =
+    view && view.board.ownerKind === "project" && onOpenBoards ? view.board.ownerId : null
+
+  const handleOpenBoards = useCallback(() => {
+    if (ownerProjectId) onOpenBoards?.(ownerProjectId)
+  }, [onOpenBoards, ownerProjectId])
+
   if (!view) {
     return (
       <div className="flex h-full items-center justify-center bg-background p-8">
@@ -256,16 +282,26 @@ export function BoardPane({
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
-      <header className="flex items-center gap-3 border-b border-border px-4 py-2">
-        {onBack ? (
-          <button
-            type="button"
-            onClick={onBack}
-            className="-ml-1 rounded-md p-1 text-muted-foreground hover:bg-secondary hover:text-foreground"
-            aria-label="Back to boards"
-          >
-            <ChevronLeft aria-hidden className="size-4" />
-          </button>
+      {/*
+        A second-level bar, under the pane's tab strip — which already carries
+        this board's identity and is how the reader moves to a chat. So it stays
+        quieter than the strip above it: a breadcrumb back to the list, the name,
+        and the two actions that belong to the board itself.
+      */}
+      <header className="flex items-center gap-2 border-b border-border px-3 py-1.5">
+        {ownerProjectId ? (
+          <>
+            <button
+              type="button"
+              onClick={handleOpenBoards}
+              className="shrink-0 rounded-md px-1.5 py-0.5 text-[13px] text-muted-foreground hover:bg-secondary hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
+              Boards
+            </button>
+            <span aria-hidden className="shrink-0 text-[13px] text-muted-foreground">
+              /
+            </span>
+          </>
         ) : null}
         {renaming ? (
           <input
@@ -299,12 +335,9 @@ export function BoardPane({
           <RefreshCw aria-hidden className={cn("size-3.5", syncing && "animate-spin")} />
           {syncing ? "Syncing…" : "Sync"}
         </Button>
-        {onOpenBesideChat ? (
-          <Button variant="ghost" size="sm" onClick={onOpenBesideChat}>
-            <Columns2 aria-hidden className="size-3.5" />
-            {besideChatStartsChat ? "Open beside a new chat" : "Open beside chat"}
-          </Button>
-        ) : null}
+        <Button variant="ghost" size="sm" onClick={handleOpenSchemaPanel} aria-label="Card fields">
+          <ListChecks aria-hidden className="size-3.5" />
+        </Button>
         <Button variant="ghost" size="sm" onClick={handleOpenSyncPanel} aria-label="Sync settings">
           <Settings2 aria-hidden className="size-3.5" />
         </Button>
@@ -313,11 +346,23 @@ export function BoardPane({
         {syncPanelOpen ? (
           <BoardSyncPanel boardId={boardId} socket={socket} onClose={handleCloseSyncPanel} />
         ) : null}
+        {schemaPanelOpen ? (
+          <CardSchemaPanel boardId={boardId} socket={socket} onClose={handleCloseSchemaPanel} />
+        ) : null}
         {openCardId ? (
-          <CardDrawer cardId={openCardId} socket={socket} onClose={handleCloseCard} />
+          <CardDrawer
+            cardId={openCardId}
+            socket={socket}
+            chatFacts={chatFacts}
+            // The card's detail does not carry the board's schema, and the
+            // drawer needs it to know what a card even has.
+            cardFields={view.board.cardFields}
+            onClose={handleCloseCard}
+          />
         ) : null}
         <KannaBoard
           view={view}
+          chatFacts={chatFacts}
           onCardMove={handleCardMove}
           onColumnMove={handleColumnMove}
           onOpenCard={handleOpenCard}

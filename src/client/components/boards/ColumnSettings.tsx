@@ -3,9 +3,8 @@ import { MoreHorizontal } from "lucide-react"
 import { Button } from "../ui/button"
 import { Input } from "../ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover"
-import { cn } from "../../lib/utils"
+import { ColorChoice } from "./ColorChoice"
 import { useColumnSettingsStore } from "./ColumnSettings.store"
-import { COLUMN_DOT_CLASS } from "../../lib/boards/columnStyle"
 import {
   COLUMN_COLOR_TOKENS,
   type ColumnColorToken,
@@ -133,9 +132,15 @@ export function ColumnSettings({ columnId, value, canDelete, onSave, onDelete }:
         <div className="space-y-1.5">
           <p className="text-xs font-medium text-muted-foreground">Dot</p>
           <div className="flex items-center gap-1.5">
-            <ColorChoice token={null} selected={draft.colorToken === null} onSelect={handleColor} />
+            <ColorChoice token={null} label="No dot" selected={draft.colorToken === null} onSelect={handleColor} />
             {COLUMN_COLOR_TOKENS.map((token) => (
-              <ColorChoice key={token} token={token} selected={draft.colorToken === token} onSelect={handleColor} />
+              <ColorChoice
+                key={token}
+                token={token}
+                label={token}
+                selected={draft.colorToken === token}
+                onSelect={handleColor}
+              />
             ))}
           </div>
         </div>
@@ -174,37 +179,5 @@ export function ColumnSettings({ columnId, value, canDelete, onSave, onDelete }:
         )}
       </PopoverContent>
     </Popover>
-  )
-}
-
-function ColorChoice({
-  token,
-  selected,
-  onSelect,
-}: {
-  token: ColumnColorToken | null
-  selected: boolean
-  onSelect: (event: React.MouseEvent<HTMLButtonElement>) => void
-}) {
-  return (
-    <button
-      type="button"
-      value={token ?? ""}
-      onClick={onSelect}
-      aria-label={token ?? "No dot"}
-      aria-pressed={selected}
-      className={cn(
-        "flex size-6 items-center justify-center rounded-md border",
-        selected ? "border-ring" : "border-transparent hover:border-border",
-      )}
-    >
-      <span
-        aria-hidden
-        className={cn(
-          "size-2 rounded-full",
-          token ? COLUMN_DOT_CLASS[token] : "border border-border bg-transparent",
-        )}
-      />
-    </button>
   )
 }
