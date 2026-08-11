@@ -258,16 +258,6 @@ export function BoardPane({
         {openCardId ? (
           <CardDrawer cardId={openCardId} socket={socket} onClose={handleCloseCard} />
         ) : null}
-        {view.columns.length === 0 ? (
-          // The header stays: on the boards route it carries the only way back,
-          // so an empty board must not be a dead end.
-          <div className="flex h-full flex-col items-center justify-center gap-1 bg-background p-8 text-center">
-            <p className="text-sm font-medium text-foreground">This board has no columns yet.</p>
-            <p className="max-w-[46ch] text-sm text-muted-foreground">
-              Add a column to start tracking work your agents can pick up.
-            </p>
-          </div>
-        ) : null}
         <KannaBoard
           view={view}
           onCardMove={handleCardMove}

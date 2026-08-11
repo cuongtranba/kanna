@@ -133,7 +133,7 @@ export function KannaBoard(props: KannaBoardProps) {
           onCardAdd={props.onCardAdd}
         />
       ))}
-      <ColumnAdder onAdd={props.onColumnAdd} />
+      <ColumnAdder onAdd={props.onColumnAdd} isFirst={view.columns.length === 0} />
     </div>
   )
 }
@@ -473,7 +473,7 @@ function CardAdder({
  * and colour are set afterwards from the same popover that edits every other
  * column.
  */
-function ColumnAdder({ onAdd }: { onAdd: (title: string) => void }) {
+function ColumnAdder({ onAdd, isFirst }: { onAdd: (title: string) => void; isFirst: boolean }) {
   const draft = useColumnAdderStore((state) => state.draft)
 
   const handleChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
@@ -492,13 +492,21 @@ function ColumnAdder({ onAdd }: { onAdd: (title: string) => void }) {
   )
 
   return (
-    <form onSubmit={handleSubmit} className="w-56 shrink-0 px-3 pt-1">
+    <form onSubmit={handleSubmit} className="w-64 shrink-0 px-3 pt-1">
+      {/* An empty board teaches HERE, beside the field that acts on it. Copy
+          that says "add a column" while the field is somewhere else is worse
+          than no copy. */}
+      {isFirst ? (
+        <p className="mb-2 px-1 text-sm text-muted-foreground [text-wrap:pretty]">
+          No columns yet. Name your first one to start tracking work your agents can pick up.
+        </p>
+      ) : null}
       <input
         value={draft}
         onChange={handleChange}
-        placeholder="Add a column"
+        placeholder={isFirst ? "Name your first column" : "Add a column"}
         aria-label="Add a column"
-        className="w-full bg-transparent px-1 py-1 text-[0.9375rem] text-foreground placeholder:text-muted-foreground focus:outline-none"
+        className="w-full rounded-md bg-transparent px-1 py-1 text-[0.9375rem] text-foreground placeholder:text-muted-foreground hover:bg-secondary focus:bg-secondary focus:outline-none"
       />
     </form>
   )

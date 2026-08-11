@@ -144,6 +144,21 @@ describe("BoardsRoutePage", () => {
     harness.unmount()
   })
 
+  /**
+   * An empty board used to render a full-height message that pushed the board —
+   * and the only way to add a column — below the fold. Copy that tells you to
+   * do a thing while hiding the control that does it is worse than no copy.
+   */
+  test("an empty board offers the field its own copy points at", async () => {
+    const harness = await mount([chatRow("chat-1")], "/boards/proj-1/board-1")
+    expect(harness.container.textContent).toContain("No columns yet")
+    const field = harness.container.querySelector<HTMLInputElement>("input[aria-label='Add a column']")
+    expect(field).not.toBeNull()
+    // And the way out is still there.
+    expect(harness.container.querySelector("[aria-label='Back to boards']")).not.toBeNull()
+    harness.unmount()
+  })
+
   test("a board renders on its own address", async () => {
     const harness = await mount([chatRow("chat-1")], "/boards/proj-1/board-1")
     expect(harness.container.textContent).toContain("Sprint")
