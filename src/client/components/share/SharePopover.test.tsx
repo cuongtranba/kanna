@@ -27,8 +27,8 @@ async function mountBody(props: {
 }): Promise<{ container: HTMLDivElement; cleanup: () => void }> {
   const container = document.createElement("div")
   document.body.appendChild(container)
+  const root = createRoot(container)
   await act(async () => {
-    const root = createRoot(container)
     root.render(
       createElement(SharePopoverBody, {
         chatId: props.chatId,
@@ -41,7 +41,10 @@ async function mountBody(props: {
   })
   return {
     container,
-    cleanup: () => { container.remove() },
+    cleanup: () => {
+      act(() => { root.unmount() })
+      container.remove()
+    },
   }
 }
 
@@ -138,6 +141,7 @@ describe("SharePopoverBody", () => {
   test("Trigger click toggles popover open (regression: asChild composition)", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)
+    const root = createRoot(container)
     try {
       let openState = false
       const setOpen = (next: boolean) => { openState = next }
@@ -157,7 +161,6 @@ describe("SharePopoverBody", () => {
         })
       }
       await act(async () => {
-        const root = createRoot(container)
         root.render(createElement(TooltipProvider, null, createElement(Harness)))
       })
       const btn = container.querySelector("button[aria-label='Public link']") as HTMLButtonElement | null
@@ -167,6 +170,9 @@ describe("SharePopoverBody", () => {
       })
       expect(openState).toBe(true)
     } finally {
+      // The open popover portals into `document.body`; only unmounting the root
+      // takes that node back.
+      act(() => { root.unmount() })
       container.remove()
     }
   })

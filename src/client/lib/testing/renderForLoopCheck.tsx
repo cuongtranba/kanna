@@ -1,4 +1,5 @@
 import "./setupHappyDom"
+import { afterEach } from "bun:test"
 import { type ReactElement } from "react"
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
@@ -7,6 +8,28 @@ const LOOP_PATTERNS = [
   /Maximum update depth exceeded/i,
   /result of getSnapshot should be cached/i,
 ]
+
+/**
+ * Mounted roots this helper still owns.
+ *
+ * The returned `cleanup` is easy to forget, and forgetting it leaves a LIVE
+ * root behind in a process where the preload wipes `document.body` after every
+ * test. The next commit that root makes then deletes a node the wipe already
+ * took, which happy-dom refuses — from inside whatever unrelated test happens
+ * to be running. Tearing down here makes the leak impossible instead of
+ * detectable.
+ */
+const mounted = new Set<{ root: Root; container: HTMLDivElement }>()
+
+afterEach(() => {
+  for (const entry of mounted) {
+    act(() => {
+      entry.root.unmount()
+    })
+    entry.container.remove()
+  }
+  mounted.clear()
+})
 
 export interface LoopCheckResult {
   errors: string[]
@@ -24,11 +47,12 @@ export async function renderForLoopCheck(element: ReactElement): Promise<LoopChe
 
   const container = document.createElement("div")
   document.body.appendChild(container)
-  let root: Root | null = null
+  const root = createRoot(container)
+  const entry = { root, container }
+  mounted.add(entry)
   let thrown: unknown = null
   try {
     await act(async () => {
-      root = createRoot(container)
       root.render(element)
     })
   } catch (error) {
@@ -48,8 +72,9 @@ export async function renderForLoopCheck(element: ReactElement): Promise<LoopChe
     loopWarnings,
     thrown,
     cleanup: async () => {
+      if (!mounted.delete(entry)) return
       await act(async () => {
-        root?.unmount()
+        root.unmount()
       })
       container.remove()
     },
