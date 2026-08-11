@@ -170,6 +170,20 @@ export function BoardPane({ boardId, socket, onOpenCard }: BoardPaneProps) {
     [boardId, socket],
   )
 
+  const handleCardAdd = useCallback(
+    (columnId: string, title: string) => {
+      const current = useBoardsStore.getState().viewByBoard[boardId]
+      // Append: a card typed at the foot of a column belongs at the foot of it.
+      const afterCardId = current?.cards[columnId]?.at(-1)?.id ?? null
+      void socket
+        .command({ type: "board.card.create", boardId, columnId, title, afterCardId })
+        .catch((cause: AnyValue) => {
+          useBoardSyncStore.getState().finishSync(boardId, errorMessage(cause))
+        })
+    },
+    [boardId, socket],
+  )
+
   const handleLoadMore = useCallback(() => {
     useBoardsStore.getState().growPage(boardId)
   }, [boardId])
@@ -230,6 +244,7 @@ export function BoardPane({ boardId, socket, onOpenCard }: BoardPaneProps) {
           onColumnSave={handleColumnSave}
           onColumnDelete={handleColumnDelete}
           onColumnAdd={handleColumnAdd}
+          onCardAdd={handleCardAdd}
         />
       </div>
     </div>

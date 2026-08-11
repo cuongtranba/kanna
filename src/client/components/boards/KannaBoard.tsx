@@ -13,6 +13,7 @@ import {
 import { resolveColumnMove } from "../../lib/boards/optimistic"
 import { ColumnSettings, type ColumnSettingsValue } from "./ColumnSettings"
 import { useColumnAdderStore } from "./ColumnAdder.store"
+import { selectCardDraft, useCardAdderStore } from "./CardAdder.store"
 import type { BoardViewSnapshot } from "../../../shared/boards/types"
 
 /**
@@ -47,6 +48,7 @@ export interface KannaBoardProps {
   onColumnSave: (columnId: string, patch: ColumnSettingsValue) => void
   onColumnDelete: (columnId: string) => void
   onColumnAdd: (title: string) => void
+  onCardAdd: (columnId: string, title: string) => void
 }
 
 interface KanbanColumnMove {
@@ -73,6 +75,7 @@ export function KannaBoard({
   onColumnSave,
   onColumnDelete,
   onColumnAdd,
+  onCardAdd,
 }: KannaBoardProps) {
   const dataSource = useMemo(() => toBoardData(view), [view])
   const columnIds = useMemo(() => view.columns.map((column) => column.id), [view.columns])
@@ -122,6 +125,11 @@ export function KannaBoard({
 
   const renderColumnAdder = useCallback(() => <ColumnAdder onAdd={onColumnAdd} />, [onColumnAdd])
 
+  const renderListFooter = useCallback(
+    (column: BoardItem) => <CardAdder columnId={column.id} onAdd={onCardAdd} />,
+    [onCardAdd],
+  )
+
   const renderSkeletonCard = useCallback(() => <CardSkeleton />, [])
 
   return (
@@ -137,6 +145,7 @@ export function KannaBoard({
         allowColumnDrag
         allowColumnAdder
         renderColumnAdder={renderColumnAdder}
+        renderListFooter={renderListFooter}
         renderColumnHeader={renderColumnHeader}
         renderSkeletonCard={renderSkeletonCard}
         rootClassName="kanna-board flex h-full items-start gap-0 bg-background p-4"
@@ -200,6 +209,53 @@ function ColumnHeader({
         onDelete={onColumnDelete}
       />
     </div>
+  )
+}
+
+/**
+ * Adding a card is one field at the foot of its column.
+ *
+ * Not a dialog, and not a button that opens one: a card is a title, and
+ * everything else about it is edited in the drawer afterwards. Typing where the
+ * card will appear is the shortest path between intent and result.
+ */
+function CardAdder({
+  columnId,
+  onAdd,
+}: {
+  columnId: string
+  onAdd: (columnId: string, title: string) => void
+}) {
+  const draft = useCardAdderStore(selectCardDraft(columnId))
+
+  const handleChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      useCardAdderStore.getState().setDraft(columnId, event.currentTarget.value)
+    },
+    [columnId],
+  )
+
+  const handleSubmit = useCallback(
+    (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault()
+      const title = (useCardAdderStore.getState().draftByColumn[columnId] ?? "").trim()
+      if (title === "") return
+      useCardAdderStore.getState().clear(columnId)
+      onAdd(columnId, title)
+    },
+    [columnId, onAdd],
+  )
+
+  return (
+    <form onSubmit={handleSubmit} className="px-1 pb-2 pt-1">
+      <input
+        value={draft}
+        onChange={handleChange}
+        placeholder="Add a card"
+        aria-label="Add a card"
+        className="w-full rounded-md bg-transparent px-2 py-1.5 text-sm text-foreground placeholder:text-muted-foreground hover:bg-secondary focus:bg-secondary focus:outline-none"
+      />
+    </form>
   )
 }
 
