@@ -82,27 +82,6 @@ function insertionIndex(destination: readonly Card[], move: OptimisticMove): num
 }
 
 /**
- * Translate the kanban library's index-based column drop into the neighbour the
- * store wants.
- *
- * The library reports where a column landed; the store takes "the column it
- * should sit after", because a rank resolved from a neighbour under the write's
- * own transaction cannot race a concurrent writer the way a client-computed
- * index would. Returns null when the drop changes nothing.
- */
-export function resolveColumnMove(
-  orderedColumnIds: readonly string[],
-  fromIndex: number,
-  toIndex: number,
-): { columnId: string; afterColumnId: string | null } | null {
-  const columnId = orderedColumnIds[fromIndex]
-  if (columnId === undefined || fromIndex === toIndex) return null
-  const remaining = orderedColumnIds.filter((_, index) => index !== fromIndex)
-  if (toIndex < 0 || toIndex > remaining.length) return null
-  return { columnId, afterColumnId: remaining[toIndex - 1] ?? null }
-}
-
-/**
  * Reorder a column locally so the drop lands under the cursor.
  *
  * Returns the input unchanged when the column is unknown, on the same rule as

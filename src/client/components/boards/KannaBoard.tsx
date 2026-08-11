@@ -1,43 +1,48 @@
-import { useCallback, useMemo } from "react"
-import { Kanban } from "react-kanban-kit"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react"
 import { Bot } from "lucide-react"
+import { combine } from "@atlaskit/pragmatic-drag-and-drop/combine"
+import { draggable, dropTargetForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter"
+import { autoScrollForElements } from "@atlaskit/pragmatic-drag-and-drop-auto-scroll/element"
+import { attachClosestEdge, extractClosestEdge } from "@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge"
 import { cn } from "../../lib/utils"
+import { COLUMN_DOT_CLASS, isOverWipLimit } from "../../lib/boards/columnStyle"
 import {
-  CARD_NODE_TYPE,
-  COLUMN_DOT_CLASS,
-  isOverWipLimit,
-  readNodeContent,
-  toBoardData,
-  type BoardItem,
-} from "../../lib/boards/toBoardData"
-import { resolveColumnMove } from "../../lib/boards/optimistic"
+  dropTargetForCardEdge,
+  dropTargetForColumnEdge,
+  resolveCardDrop,
+  resolveColumnDrop,
+  type CardMoveRequest,
+} from "../../lib/boards/dnd"
+import { selectDropAtColumnEnd, selectDropBeforeCard, useBoardDragStore } from "./BoardDrag.store"
 import { ColumnSettings, type ColumnSettingsValue } from "./ColumnSettings"
 import { useColumnAdderStore } from "./ColumnAdder.store"
 import { selectCardDraft, useCardAdderStore } from "./CardAdder.store"
-import type { BoardViewSnapshot } from "../../../shared/boards/types"
+import type { BoardColumn, BoardViewSnapshot, Card } from "../../../shared/boards/types"
 
 /**
- * The only module that imports `react-kanban-kit` at RUNTIME (the mapper in
- * `lib/boards/toBoardData.ts` imports its types only).
+ * The board, drawn by us.
  *
- * The library supplies layout, drag-and-drop (Atlassian pragmatic-dnd) and
- * virtualisation. Every visible element comes from the render props below, in
- * Kanna's own tokens — so the package contributes no pixels of its own and can
- * be swapped for its underlying dnd engine without touching anything else.
+ * This used to wrap `react-kanban-kit`, which supplied layout, drag-and-drop
+ * and virtualization. The virtualization is why it is gone: virtua hides an
+ * item until a `ResizeObserver` measures it, and an item measured at zero size
+ * while the pane was still laying out stayed hidden forever — a real card,
+ * invisible, on the one surface where the cards ARE the product. The library's
+ * own engine, `@atlaskit/pragmatic-drag-and-drop`, is used directly here
+ * instead; it is what the package wrapped, so this is a layer removed rather
+ * than a dependency swapped.
  *
- * Design rules this encodes (see docs/kanban-boards-design-brief.md):
+ * Nothing is virtualized now, and nothing needs to be: a column renders at most
+ * one page of cards (30, raised on demand, capped server-side), so the DOM is
+ * bounded by the paging contract rather than by the size of the board.
+ *
+ * Design rules this encodes (docs/kanban-boards-design-brief.md):
  *  - a column at rest is NOT a tinted panel; it is the page with a 1px divider,
  *  - a column's colour is a 6px dot, never a background wash,
- *  - the drop target tints only WHILE dragging — depth is a state response,
+ *  - the drop target shows a 1px line only WHILE dragging,
  *  - a healthy card shows no badges; silence is the healthy state.
  */
 
-export interface CardMoveRequest {
-  cardId: string
-  toColumnId: string
-  aboveCardId: string | null
-  belowCardId: string | null
-}
+export type { CardMoveRequest }
 
 export interface KannaBoardProps {
   view: BoardViewSnapshot
@@ -51,167 +56,367 @@ export interface KannaBoardProps {
   onCardAdd: (columnId: string, title: string) => void
 }
 
-interface KanbanColumnMove {
-  columnId: string
-  fromIndex: number
-  toIndex: number
-}
+/** Data keys marking what a drag is carrying, so a card cannot drop as a column. */
+const CARD = "kanna-board-card"
+const COLUMN = "kanna-board-column"
 
-interface KanbanMove {
-  cardId: string
-  fromColumnId: string
-  toColumnId: string
-  taskAbove: string | null
-  taskBelow: string | null
-  position: number
-}
+/**
+ * The current columns, readable from a drag callback.
+ *
+ * Drag listeners are registered once per element; closing over the snapshot
+ * would pin them to whatever the board looked like when the listener was
+ * attached. A module-level ref keeps them current without re-registering every
+ * listener on every board update. One board is open per pane, and a drag is
+ * global to the document, so a single slot cannot drift.
+ */
+const liveColumns: { current: readonly BoardColumn[] } = { current: [] }
 
-export function KannaBoard({
-  view,
-  onCardMove,
-  onColumnMove,
-  onOpenCard,
-  onLoadMore,
-  onColumnSave,
-  onColumnDelete,
-  onColumnAdd,
-  onCardAdd,
-}: KannaBoardProps) {
-  const dataSource = useMemo(() => toBoardData(view), [view])
-  const columnIds = useMemo(() => view.columns.map((column) => column.id), [view.columns])
+export function KannaBoard(props: KannaBoardProps) {
+  const { view, onCardMove, onColumnMove } = props
+  const boardRef = useRef<HTMLDivElement | null>(null)
 
-  const handleColumnMove = useCallback(
-    (move: KanbanColumnMove) => {
-      // The library reports indices; the store takes a neighbour, so a rank
-      // resolved under the write's own transaction cannot race another writer.
-      const resolved = resolveColumnMove(columnIds, move.fromIndex, move.toIndex)
-      if (resolved) onColumnMove(resolved.columnId, resolved.afterColumnId)
-    },
-    [columnIds, onColumnMove],
-  )
+  // Assigned in a layout effect, never during render: a drag listener is
+  // registered once per element and must read the CURRENT board, but writing a
+  // ref while rendering is what `react-hooks/refs` forbids.
+  const viewRef = useRef(view)
+  useLayoutEffect(() => {
+    viewRef.current = view
+    liveColumns.current = view.columns
+  })
 
-  const handleCardMove = useCallback(
-    (move: KanbanMove) => {
-      onCardMove({
-        cardId: move.cardId,
-        toColumnId: move.toColumnId,
-        aboveCardId: move.taskAbove ?? null,
-        belowCardId: move.taskBelow ?? null,
-      })
+  const handleCardDrop = useCallback(
+    (cardId: string) => {
+      const target = useBoardDragStore.getState().cardDrop
+      useBoardDragStore.getState().endDrag()
+      if (!target) return
+      const move = resolveCardDrop(viewRef.current, cardId, target)
+      if (move) onCardMove(move)
     },
     [onCardMove],
   )
 
-  const configMap = useMemo(
-    () => ({
-      [CARD_NODE_TYPE]: {
-        isDraggable: true,
-        render: ({ data }: { data: BoardItem }) => <BoardCard node={data} onOpen={onOpenCard} />,
-      },
-    }),
-    [onOpenCard],
+  const handleColumnDrop = useCallback(
+    (columnId: string) => {
+      const { columnDropBeforeId, columnDropActive } = useBoardDragStore.getState()
+      useBoardDragStore.getState().endDrag()
+      if (!columnDropActive) return
+      const move = resolveColumnDrop(viewRef.current.columns, columnId, columnDropBeforeId)
+      if (move) onColumnMove(move.columnId, move.afterColumnId)
+    },
+    [onColumnMove],
   )
 
-  const renderColumnHeader = useCallback(
-    (column: BoardItem) => (
-      <ColumnHeader
-        column={column}
-        onColumnSave={onColumnSave}
-        onColumnDelete={onColumnDelete}
-      />
-    ),
-    [onColumnDelete, onColumnSave],
-  )
-
-  const renderColumnAdder = useCallback(() => <ColumnAdder onAdd={onColumnAdd} />, [onColumnAdd])
-
-  // `renderColumnFooter`, NOT `renderListFooter`: the latter puts the field
-  // inside the virtualized list, where virtua owns its inline `visibility` and
-  // an empty column can render the field hidden. A way to add a card must not
-  // be at the mercy of a virtualizer.
-  const renderColumnFooter = useCallback(
-    (column: BoardItem) => <CardAdder columnId={column.id} onAdd={onCardAdd} />,
-    [onCardAdd],
-  )
-
-  const renderSkeletonCard = useCallback(() => <CardSkeleton />, [])
+  // Horizontal auto-scroll when a drag reaches the board's edge.
+  useEffect(() => {
+    const element = boardRef.current
+    if (!element) return
+    return autoScrollForElements({ element })
+  }, [])
 
   return (
-    <div className="h-full w-full overflow-x-auto bg-background">
-      <Kanban
-        dataSource={dataSource}
-        configMap={configMap}
-        cardsGap={8}
-        virtualization
-        loadMore={onLoadMore}
-        onCardMove={handleCardMove}
-        onColumnMove={handleColumnMove}
-        allowColumnDrag
-        allowColumnAdder
-        renderColumnAdder={renderColumnAdder}
-        renderColumnFooter={renderColumnFooter}
-        renderColumnHeader={renderColumnHeader}
-        renderSkeletonCard={renderSkeletonCard}
-        rootClassName="kanna-board flex h-full items-start gap-0 bg-background p-4"
-        columnWrapperClassName={columnWrapperClassName}
-        columnListContentClassName={columnListContentClassName}
-      />
+    <div
+      ref={boardRef}
+      className="kanna-board flex h-full w-full items-stretch gap-0 overflow-x-auto bg-background p-4"
+    >
+      {view.columns.map((column) => (
+        <BoardColumnView
+          key={column.id}
+          column={column}
+          cards={view.cards[column.id] ?? EMPTY_CARDS}
+          total={view.counts[column.id] ?? (view.cards[column.id] ?? EMPTY_CARDS).length}
+          onCardDrop={handleCardDrop}
+          onColumnDrop={handleColumnDrop}
+          onOpenCard={props.onOpenCard}
+          onLoadMore={props.onLoadMore}
+          onColumnSave={props.onColumnSave}
+          onColumnDelete={props.onColumnDelete}
+          onCardAdd={props.onCardAdd}
+        />
+      ))}
+      <ColumnAdder onAdd={props.onColumnAdd} />
     </div>
   )
 }
 
-/**
- * Only the uncontested parts. Width and the 1px divider are set in
- * `src/index.css` under `.kanna-board .rkk-column-outer`, because the package
- * styles that class directly and a utility class ties with it on specificity.
- */
-const COLUMN_WRAPPER_CLASS = "shrink-0 px-3"
-const COLUMN_LIST_CLASS = "px-1 py-2"
+const EMPTY_CARDS: readonly Card[] = []
 
-// The library takes per-column callbacks, not strings. Hoisted so the props
-// stay reference-stable across renders.
-const columnWrapperClassName = () => COLUMN_WRAPPER_CLASS
-const columnListContentClassName = () => COLUMN_LIST_CLASS
-
-function ColumnHeader({
-  column,
-  onColumnSave,
-  onColumnDelete,
-}: {
-  column: BoardItem
+interface ColumnViewProps {
+  column: BoardColumn
+  cards: readonly Card[]
+  total: number
+  onCardDrop: (cardId: string) => void
+  onColumnDrop: (columnId: string) => void
+  onOpenCard: (cardId: string) => void
+  onLoadMore: (columnId: string) => void
   onColumnSave: (columnId: string, patch: ColumnSettingsValue) => void
   onColumnDelete: (columnId: string) => void
-}) {
-  const { colorToken, semantic, wipLimit } = readNodeContent(column)
-  const overLimit = isOverWipLimit(column.children.length, wipLimit)
-  const settings = useMemo(
-    () => ({ title: column.title, semantic, colorToken, wipLimit }),
-    [colorToken, column.title, semantic, wipLimit],
+  onCardAdd: (columnId: string, title: string) => void
+}
+
+function BoardColumnView({
+  column,
+  cards,
+  total,
+  onOpenCard,
+  onLoadMore,
+  onColumnSave,
+  onColumnDelete,
+  onCardAdd,
+  onCardDrop,
+  onColumnDrop,
+}: ColumnViewProps) {
+  const outerRef = useRef<HTMLDivElement | null>(null)
+  const listRef = useRef<HTMLDivElement | null>(null)
+  const columnId = column.id
+
+  const dragging = useBoardDragStore((state) => state.draggingColumnId === columnId)
+  const dropBefore = useBoardDragStore(
+    (state) => state.columnDropActive && state.columnDropBeforeId === columnId,
   )
+  const dropAtEnd = useBoardDragStore(selectDropAtColumnEnd(columnId))
+
+  useEffect(() => {
+    const outer = outerRef.current
+    const list = listRef.current
+    if (!outer || !list) return
+    const store = useBoardDragStore.getState()
+    // The header is the handle: dragging from the card area must move a card,
+    // not the column it sits in.
+    const handle = outer.querySelector<HTMLElement>("[data-column-handle]") ?? undefined
+
+    return combine(
+      draggable({
+        element: outer,
+        dragHandle: handle,
+        getInitialData: () => ({ [COLUMN]: true, columnId }),
+        onDragStart: () => { store.startColumnDrag(columnId) },
+        onDrop: () => { onColumnDrop(columnId) },
+      }),
+      dropTargetForElements({
+        element: outer,
+        canDrop: ({ source }) => source.data[COLUMN] === true,
+        getData: ({ input, element }) =>
+          attachClosestEdge({ columnId }, { input, element, allowedEdges: ["left", "right"] }),
+        onDragEnter: ({ self }) => { applyColumnEdge(self.data, columnId) },
+        onDrag: ({ self }) => { applyColumnEdge(self.data, columnId) },
+      }),
+      dropTargetForElements({
+        element: list,
+        canDrop: ({ source }) => source.data[CARD] === true,
+        getData: () => ({ columnId }),
+        // The list is the fallback target: an empty column, or the space under
+        // the last card, both mean "put it at the end". A card hovered inside
+        // it overrides this with its own edge.
+        onDragEnter: () => { store.setCardDrop({ columnId, beforeCardId: null }) },
+        onDragLeave: () => { store.setCardDrop(null) },
+      }),
+      autoScrollForElements({ element: list }),
+    )
+  }, [columnId, onColumnDrop])
+
+  const overLimit = isOverWipLimit(total, column.wipLimit)
+  const settings = useMemo(
+    () => ({
+      title: column.title,
+      semantic: column.semantic,
+      colorToken: column.colorToken,
+      wipLimit: column.wipLimit,
+    }),
+    [column.colorToken, column.semantic, column.title, column.wipLimit],
+  )
+
   return (
-    <div className="flex items-center gap-2 px-1 pb-2 pt-1">
-      {colorToken ? (
-        <span aria-hidden className={cn("size-1.5 shrink-0 rounded-full", COLUMN_DOT_CLASS[colorToken])} />
-      ) : null}
-      <span className="truncate text-[0.9375rem] font-semibold leading-tight text-foreground">
-        {column.title}
-      </span>
-      {/* tabular-nums so a live count cannot reflow the header. */}
-      <span
+    <div
+      ref={outerRef}
+      className={cn(
+        "relative flex h-full w-[300px] shrink-0 flex-col border-r border-border px-3",
+        dragging && "opacity-40",
+      )}
+    >
+      {dropBefore ? <ColumnDropLine /> : null}
+
+      <div data-column-handle className="flex cursor-grab items-center gap-2 px-1 pb-2 pt-1">
+        {column.colorToken ? (
+          <span
+            aria-hidden
+            className={cn("size-1.5 shrink-0 rounded-full", COLUMN_DOT_CLASS[column.colorToken])}
+          />
+        ) : null}
+        <span className="truncate text-[0.9375rem] font-semibold leading-tight text-foreground">
+          {column.title}
+        </span>
+        {/* tabular-nums so a live count cannot reflow the header. */}
+        <span
+          className={cn(
+            "ml-auto font-mono text-xs tabular-nums",
+            overLimit ? "text-warning" : "text-muted-foreground",
+          )}
+        >
+          {total}
+        </span>
+        <ColumnSettings
+          columnId={columnId}
+          value={settings}
+          canDelete={total === 0}
+          onSave={onColumnSave}
+          onDelete={onColumnDelete}
+        />
+      </div>
+
+      <div ref={listRef} className="min-h-0 flex-1 space-y-2 overflow-y-auto px-1 py-2">
+        {cards.map((card) => (
+          <BoardCard
+            key={card.id}
+            card={card}
+            columnId={columnId}
+            cards={cards}
+            onOpen={onOpenCard}
+            onCardDrop={onCardDrop}
+          />
+        ))}
+        {dropAtEnd ? <CardDropLine /> : null}
+        {total > cards.length ? <MoreCards columnId={columnId} onLoadMore={onLoadMore} /> : null}
+      </div>
+
+      <CardAdder columnId={columnId} onAdd={onCardAdd} />
+    </div>
+  )
+}
+
+function applyColumnEdge(data: Record<string | symbol, unknown>, hoveredColumnId: string) {
+  const edge = extractClosestEdge(data)
+  if (edge !== "left" && edge !== "right") return
+  const before = dropTargetForColumnEdge(liveColumns.current, hoveredColumnId, edge)
+  useBoardDragStore.getState().setColumnDrop(before, true)
+}
+
+function BoardCard({
+  card,
+  columnId,
+  cards,
+  onOpen,
+  onCardDrop,
+}: {
+  card: Card
+  columnId: string
+  cards: readonly Card[]
+  onOpen: (cardId: string) => void
+  onCardDrop: (cardId: string) => void
+}) {
+  const ref = useRef<HTMLDivElement | null>(null)
+  const cardId = card.id
+  const dragging = useBoardDragStore((state) => state.draggingCardId === cardId)
+  const dropBefore = useBoardDragStore(selectDropBeforeCard(columnId, cardId))
+
+  const cardsRef = useRef(cards)
+  useLayoutEffect(() => {
+    cardsRef.current = cards
+  })
+
+  useEffect(() => {
+    const element = ref.current
+    if (!element) return
+    const store = useBoardDragStore.getState()
+
+    return combine(
+      draggable({
+        element,
+        getInitialData: () => ({ [CARD]: true, cardId }),
+        onDragStart: () => { store.startCardDrag(cardId) },
+        onDrop: () => { onCardDrop(cardId) },
+      }),
+      dropTargetForElements({
+        element,
+        canDrop: ({ source }) => source.data[CARD] === true,
+        getData: ({ input, element: target }) =>
+          attachClosestEdge({ cardId }, { input, element: target, allowedEdges: ["top", "bottom"] }),
+        onDragEnter: ({ self }) => { applyCardEdge(self.data, columnId, cardId, cardsRef.current) },
+        onDrag: ({ self }) => { applyCardEdge(self.data, columnId, cardId, cardsRef.current) },
+      }),
+    )
+  }, [cardId, columnId, onCardDrop])
+
+  const handleOpen = useCallback(() => { onOpen(cardId) }, [cardId, onOpen])
+  const byAgent = card.updatedBy.kind === "agent"
+
+  return (
+    <div ref={ref} className="relative">
+      {dropBefore ? <CardDropLine /> : null}
+      <button
+        type="button"
+        onClick={handleOpen}
         className={cn(
-          "ml-auto font-mono text-xs tabular-nums",
-          overLimit ? "text-warning" : "text-muted-foreground",
+          // Flat by default: 1px edge, no shadow, no left stripe.
+          "w-full cursor-grab rounded-lg border border-border bg-card px-3 py-2 text-left",
+          "transition-colors duration-150 hover:bg-secondary",
+          "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+          dragging && "opacity-40",
         )}
       >
-        {column.totalChildrenCount}
-      </span>
-      <ColumnSettings
-        columnId={column.id}
-        value={settings}
-        canDelete={column.totalChildrenCount === 0}
-        onSave={onColumnSave}
-        onDelete={onColumnDelete}
-      />
+        <span className="line-clamp-2 text-sm font-medium leading-snug text-foreground [text-wrap:pretty]">
+          {card.title}
+        </span>
+        {byAgent ? (
+          // Only rendered when there is something to say. A healthy card is silent.
+          <span className="mt-1.5 flex items-center gap-1 text-xs text-warning">
+            <Bot aria-hidden className="size-3" />
+            <span>Agent</span>
+          </span>
+        ) : null}
+      </button>
+    </div>
+  )
+}
+
+function applyCardEdge(
+  data: Record<string | symbol, unknown>,
+  columnId: string,
+  hoveredCardId: string,
+  cards: readonly Card[],
+) {
+  const edge = extractClosestEdge(data)
+  if (edge !== "top" && edge !== "bottom") return
+  const beforeCardId = dropTargetForCardEdge(cards, hoveredCardId, edge)
+  useBoardDragStore.getState().setCardDrop({ columnId, beforeCardId })
+}
+
+/** 1px line, only while dragging. Depth is a state response, not a resting style. */
+function CardDropLine() {
+  return <div aria-hidden className="pointer-events-none h-px w-full rounded-full bg-primary" />
+}
+
+function ColumnDropLine() {
+  return <div aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-px bg-primary" />
+}
+
+/**
+ * The tail of a partly-loaded column: honest about what is missing, and the
+ * thing that asks for the next page when it scrolls into view.
+ */
+function MoreCards({
+  columnId,
+  onLoadMore,
+}: {
+  columnId: string
+  onLoadMore: (columnId: string) => void
+}) {
+  const ref = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    const element = ref.current
+    if (!element) return
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) onLoadMore(columnId)
+    })
+    observer.observe(element)
+    return () => { observer.disconnect() }
+  }, [columnId, onLoadMore])
+
+  return (
+    <div ref={ref} className="space-y-2" aria-hidden>
+      {/* `animate-pulse` is sanctioned for skeletons. */}
+      <div className="h-14 w-full animate-pulse rounded-lg border border-border bg-secondary" />
+      <div className="h-14 w-full animate-pulse rounded-lg border border-border bg-secondary" />
     </div>
   )
 }
@@ -219,7 +424,7 @@ function ColumnHeader({
 /**
  * Adding a card is one field at the foot of its column.
  *
- * Not a dialog, and not a button that opens one: a card is a title, and
+ * Not a dialog and not a button that opens one: a card is a title, and
  * everything else about it is edited in the drawer afterwards. Typing where the
  * card will appear is the shortest path between intent and result.
  */
@@ -251,7 +456,7 @@ function CardAdder({
   )
 
   return (
-    <form onSubmit={handleSubmit} className="px-1 pb-2 pt-1">
+    <form onSubmit={handleSubmit} className="shrink-0 px-1 pb-1 pt-2">
       <input
         value={draft}
         onChange={handleChange}
@@ -296,40 +501,5 @@ function ColumnAdder({ onAdd }: { onAdd: (title: string) => void }) {
         className="w-full bg-transparent px-1 py-1 text-[0.9375rem] text-foreground placeholder:text-muted-foreground focus:outline-none"
       />
     </form>
-  )
-}
-
-function BoardCard({ node, onOpen }: { node: BoardItem; onOpen: (cardId: string) => void }) {
-  const handleOpen = useCallback(() => onOpen(node.id), [node.id, onOpen])
-  const byAgent = readNodeContent(node).updatedByAgent
-
-  return (
-    <button
-      type="button"
-      onClick={handleOpen}
-      className={cn(
-        // Flat by default: 1px edge, no shadow, no left stripe.
-        "w-full rounded-lg border border-border bg-card px-3 py-2 text-left",
-        "transition-colors duration-150 hover:bg-secondary",
-        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-      )}
-    >
-      <span className="line-clamp-2 text-sm font-medium leading-snug text-foreground [text-wrap:pretty]">
-        {node.title}
-      </span>
-      {byAgent ? (
-        // Only rendered when there is something to say. A healthy card is silent.
-        <span className="mt-1.5 flex items-center gap-1 text-xs text-warning">
-          <Bot aria-hidden className="size-3" />
-          <span>Agent</span>
-        </span>
-      ) : null}
-    </button>
-  )
-}
-
-function CardSkeleton() {
-  return (
-    <div className="h-14 w-full animate-pulse rounded-lg border border-border bg-secondary" aria-hidden />
   )
 }

@@ -5,7 +5,7 @@ import { Input } from "../ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover"
 import { cn } from "../../lib/utils"
 import { useColumnSettingsStore } from "./ColumnSettings.store"
-import { COLUMN_DOT_CLASS } from "../../lib/boards/toBoardData"
+import { COLUMN_DOT_CLASS } from "../../lib/boards/columnStyle"
 import {
   COLUMN_COLOR_TOKENS,
   type ColumnColorToken,
