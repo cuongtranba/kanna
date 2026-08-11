@@ -17,6 +17,13 @@ import { createRoot, type Root } from "react-dom/client"
  */
 export interface ClientRenderResult {
   html: string
+  /**
+   * The live mount point, for the tests that have to DISPATCH rather than read:
+   * a synthetic React handler only fires through the root React delegated to,
+   * so an event has to be sent at a node inside this element. `html` is a
+   * snapshot taken at mount and does not update as the tree does.
+   */
+  container: HTMLElement
   cleanup: () => Promise<void>
 }
 
@@ -32,6 +39,7 @@ export async function renderClientMarkup(element: ReactElement): Promise<ClientR
 
   return {
     html: container.innerHTML,
+    container,
     cleanup: async () => {
       await act(async () => {
         root?.unmount()

@@ -1,6 +1,6 @@
 ---
 id: c3-104
-c3-seal: 9b095b2b0f6bff76fe2479af0a1a71142a9ee6e3614672bfa227c6e611a1d21d
+c3-seal: 6f772e13f39fe067b7fe07f27936be2e2245c1d7a1b3540b1d5dc73106713283
 title: pane-layout
 type: component
 category: foundation
@@ -75,6 +75,7 @@ Owns the pane tree as a pure data structure and the components that render it: a
 | Keyboard commands | OUT | Nine rebindable actions map to pane intents through one pure resolver; each command's subject is derived in the store, and only modifier-less bindings are suppressed while typing | c3-222 | src/client/components/panes/paneKeyboard.ts |
 | Drop geometry | OUT | Pointer over a pane resolves to merge (middle 40% of both axes) or a split toward the proportionally nearest edge; no region of a pane is inert during a drag | c3-112 | src/client/components/panes/paneDropGeometry.ts |
 | Phone tab strip | OUT | On a phone the strip holds a readable tab floor (PHONE_MIN_TAB_WIDTH) and scrolls horizontally instead of shrinking to icon-only; the tab element carries touch-pan-x so the browser owns the swipe, tab drag is disabled, and the focused tab is aligned with scrollIntoView under motion-safe scroll-behavior | c3-110 | src/client/components/panes/PaneTabStrip.tsx |
+| Tab close gestures | OUT | A tab closes by its X button or by a middle-click on the tab body; both are gated on the same `closable` flag, so the wheel never closes what the button will not. The wheel press is defaultPrevented to keep the scrollable strip out of browser autoscroll, and `auxclick` (not `click`) is what carries it, so closing never also selects | c3-112 | src/client/components/panes/PaneTabStrip.tsx |
 | Tab status indicator | IN | A chat tab draws its status from the SAME table the sidebar row uses (src/client/lib/chatStatusIndicator.ts): the dot takes the icon's slot so an icon-only tab keeps it, the PTY session glyph yields its width first, and the status is named in the tooltip + accessible name so colour never carries it alone | c3-111 | src/client/components/panes/tabPresentation.ts |
 
 ## Change Safety
@@ -85,6 +86,7 @@ Owns the pane tree as a pure data structure and the components that render it: a
 | Render loop from an unstable selector | A use*Store selector returning an inline ?? [] / ?? {} | React error #185, caught by the loop-check test | bun run lint:usestate + bun test src/client/components/panes/SplitContainer.loop.test.tsx |
 | Layout lost on a bad persisted tree | Editing the repair pass or the persisted shape | Panes vanish or the app falls back to default on reload | bun test src/client/lib/paneTree/normalize.test.ts |
 | Phone strip frozen in the hand | Restoring touch-none on the tab element, or re-enabling the drag sensor below BREAKPOINT_MD | touch-action intersects down the ancestor chain, so the strip stops scrolling under the finger even though it overflows | bun test --conditions production src/client/components/panes/PaneTabStrip.mobile.test.tsx |
+| Middle-click stops closing tabs | Moving the close off `onAuxClick`, or letting dnd-kit's sensor claim button 1 | Silent — a wheel press does nothing, or arms an autoscroll instead | bun test --conditions production src/client/components/panes/PaneTabStrip.middleClick.test.tsx |
 | Tab status drifts from the sidebar | Copying the tone-to-token table into the tab strip instead of importing the shared module | The same chat reads "Running" in the sidebar and shows a plain icon on its tab | bun test --conditions production src/client/lib/chatStatusIndicator.test.ts src/client/components/panes/PaneTabStrip.test.tsx |
 
 ## Derived Materials
