@@ -1501,6 +1501,32 @@ When a test spawns `git` or other subprocesses, ensure the spawn sets
 cannot exhaust the test timeout. Also give it an explicit timeout
 (`test(name, fn, 30_000)`) — the 5s Bun default is too tight for CI runners.
 
+## Every React root a test mounts must be unmounted (enforced)
+
+happy-dom gives the whole Bun process ONE document, so `scripts/test-preload.ts`
+wipes `document.body` after each test. The wipe cannot reach the React root that
+owned those nodes: a test that calls `container.remove()` but never
+`root.unmount()` leaves a live root — and any portal it opened (Radix
+Dialog/Popover/Select, `createPortal`) had `document.body` ITSELF as its
+container. When that root next commits, React removes a node the wipe already
+took and happy-dom throws `removeChild: The node to be removed is not a child of
+this node`, blaming **whichever test is running at that moment** — a different
+test, in a different file. File order is the filesystem's, so it reproduces on
+CI's ext4 and not on APFS (PR #646: `SharePopover` crashed `CardDrawer` two files
+later; the full suite, CI's exact file order, bun 1.3.11, and Linux under Docker
+were all green locally).
+
+The same `afterEach` now FAILS the test that leaked, naming the nodes. It reports
+only REACT-OWNED leftovers — Lexical's typeahead plugin appends a menu straight
+to `document.body` even under `renderToStaticMarkup`, and nothing holds a
+reference that could commit against it later.
+
+`renderForLoopCheck` unmounts roots whose callers never called the `cleanup` it
+returns, via the teardown registry the preload publishes on
+`globalThis.__kannaDomTeardowns`. It cannot own an `afterEach` for that: bun runs
+hooks in registration order and the preload registers first, so a helper-owned
+hook fires after the sweep has already failed the test.
+
 # Wiki
 
 Public docs site lives in `wiki/` (Astro Starlight) and is deployed to
