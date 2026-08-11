@@ -94,8 +94,19 @@ if (process.env.NODE_ENV === "production") {
   const isReactOwned = (element: Element): boolean =>
     Object.keys(element).some((key) => key.startsWith("__reactFiber$") || key.startsWith("__reactContainer$"))
 
+  // Teardowns a test helper wants run BEFORE the sweep — `renderForLoopCheck`
+  // unmounts the roots its callers forgot here. It cannot own the `afterEach`
+  // itself: bun runs hooks in registration order and this preload registers
+  // first, so the helper's own hook would fire after the sweep had already
+  // failed the test. A global registry keeps the ordering guaranteed without
+  // the preload importing client code.
+  const teardowns = new Set<() => void>()
+  ;(globalThis as { __kannaDomTeardowns?: Set<() => void> }).__kannaDomTeardowns = teardowns
+
   const { afterEach } = require("bun:test") as typeof import("bun:test")
   afterEach(() => {
+    for (const teardown of teardowns) teardown()
+    teardowns.clear()
     if (typeof globalThis.document === "undefined" || !globalThis.document.body) return
     const leaked = [...globalThis.document.body.children]
       .filter(isReactOwned)
