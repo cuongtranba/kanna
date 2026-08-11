@@ -208,6 +208,12 @@ describe("read models", () => {
     })
     expect(rest.cards).toHaveLength(12)
     expect(rest.nextCursor).toBeNull()
+
+    // A raised page size is how the client pages: one bigger read, complete
+    // prefix, nothing to merge on the way back.
+    const grown = registry.boardView(board.id, DEFAULT_BOARD_PAGE_SIZE * 2)
+    expect(grown?.cards[column.id]).toHaveLength(DEFAULT_BOARD_PAGE_SIZE + 12)
+    expect(grown?.cursors[column.id]).toBeNull()
   })
 
   test("boardView gives every column an entry, including empty ones", () => {

@@ -37,6 +37,22 @@ import type { ResolvedAppSettings } from "./ws-router-defaults"
 
 const DEFAULT_CHAT_RECENT_LIMIT = 200
 
+/**
+ * Ceiling on a board subscription's page size.
+ *
+ * The topic arrives from the client verbatim, and every board broadcast
+ * rebuilds the snapshot from it — so an unbounded value would let one socket
+ * turn each card edit into a full-board read. Well above any hand-managed
+ * board; a tracker import past it pages instead.
+ */
+const MAX_BOARD_PAGE_SIZE = 500
+
+export function resolveBoardPageSize(requested: number | undefined): number | undefined {
+  if (requested === undefined) return undefined
+  if (!Number.isInteger(requested) || requested <= 0) return undefined
+  return Math.min(requested, MAX_BOARD_PAGE_SIZE)
+}
+
 // ── Deps type ─────────────────────────────────────────────────────────────────
 
 export interface EnvelopeDeps {
@@ -368,7 +384,10 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
         id,
         snapshot: {
           type: "board",
-          data: { boardId: topic.boardId, view: boardRegistry?.boardView(topic.boardId) ?? null },
+          data: {
+            boardId: topic.boardId,
+            view: boardRegistry?.boardView(topic.boardId, resolveBoardPageSize(topic.pageSize)) ?? null,
+          },
         },
       }
     }

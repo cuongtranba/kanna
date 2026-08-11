@@ -5,7 +5,7 @@ import { cn } from "../../lib/utils"
 import { useBoardSyncStore } from "./BoardPane.store"
 import { CardDrawer } from "./CardDrawer"
 import { BoardSyncPanel } from "./BoardSyncPanel"
-import { useBoardsStore, selectBoardView } from "../../stores/boardsStore"
+import { useBoardsStore, selectBoardPageSize, selectBoardView } from "../../stores/boardsStore"
 import { KannaBoard, type CardMoveRequest } from "./KannaBoard"
 import { moveCardInView, moveColumnInView } from "../../lib/boards/optimistic"
 import type { ColumnSettingsValue } from "./ColumnSettings"
@@ -34,12 +34,16 @@ export interface BoardPaneProps {
 
 export function BoardPane({ boardId, socket, onOpenCard }: BoardPaneProps) {
   const view = useBoardsStore(selectBoardView(boardId))
+  const pageSize = useBoardsStore(selectBoardPageSize(boardId))
 
+  // Re-subscribing on a raised page size IS the paging: the server rebuilds
+  // every board broadcast from this topic, so each push carries a complete
+  // prefix of each column and nothing has to be merged.
   useEffect(() => {
-    return socket.subscribe<BoardSnapshot>({ type: "board", boardId }, (snapshot) => {
+    return socket.subscribe<BoardSnapshot>({ type: "board", boardId, pageSize }, (snapshot) => {
       useBoardsStore.getState().setBoardView(snapshot.boardId, snapshot.view)
     })
-  }, [boardId, socket])
+  }, [boardId, pageSize, socket])
 
   const handleCardMove = useCallback(
     (move: CardMoveRequest) => {
@@ -167,10 +171,8 @@ export function BoardPane({ boardId, socket, onOpenCard }: BoardPaneProps) {
   )
 
   const handleLoadMore = useCallback(() => {
-    // Paging lands with the card drawer; the snapshot's first page covers the
-    // common board until then, and the skeletons above it are honest about
-    // what is missing.
-  }, [])
+    useBoardsStore.getState().growPage(boardId)
+  }, [boardId])
 
   if (!view) {
     return (

@@ -62,7 +62,14 @@ export type SubscriptionTopic =
   | { type: "pty-instances" }
   | { type: "workflows"; chatId: string }
   | { type: "boards"; ownerKind: BoardOwnerKind; ownerId: string }
-  | { type: "board"; boardId: string }
+  /**
+   * `pageSize` is how many cards per column the subscriber wants.
+   *
+   * Paging RAISES it rather than appending client-side: every broadcast then
+   * carries a complete prefix of each column, so a snapshot pushed by an
+   * unrelated card edit cannot silently discard the pages already loaded.
+   */
+  | { type: "board"; boardId: string; pageSize?: number }
   | { type: "followed-sessions" }
 
 export interface TerminalSnapshot {
