@@ -77,7 +77,9 @@ function typeInto(id: string, value: string) {
 
 beforeEach(() => {
   useColumnSettingsStore.getState().close()
-  document.body.innerHTML = ""
+  // NOT `document.body.innerHTML = ""`: the document is shared across test
+  // files in one process, so wiping it detaches another file's mounted
+  // container and its unmount then throws. Each harness closes its own popover.
 })
 
 describe("ColumnSettings", () => {

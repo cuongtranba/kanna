@@ -202,6 +202,46 @@ export function BoardPane({
     [boardId, socket],
   )
 
+  const renaming = useBoardSyncStore((state) => state.renamingBoardId === boardId)
+  const titleDraft = useBoardSyncStore((state) => state.titleDraft)
+
+  const handleStartRename = useCallback(() => {
+    const current = useBoardsStore.getState().viewByBoard[boardId]
+    if (current) useBoardSyncStore.getState().startRenameBoard(boardId, current.board.title)
+  }, [boardId])
+
+  const handleTitleChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    useBoardSyncStore.getState().setTitleDraft(event.currentTarget.value)
+  }, [])
+
+  /**
+   * Commit on Enter or on losing focus; an empty name is a cancel, not a board
+   * with no name.
+   */
+  const handleCommitRename = useCallback(() => {
+    const { titleDraft: draft } = useBoardSyncStore.getState()
+    const current = useBoardsStore.getState().viewByBoard[boardId]
+    useBoardSyncStore.getState().stopRenameBoard()
+    const title = draft.trim()
+    if (title === "" || title === current?.board.title) return
+    void socket.command({ type: "board.update", boardId, title }).catch((cause: AnyValue) => {
+      useBoardSyncStore.getState().finishSync(boardId, errorMessage(cause))
+    })
+  }, [boardId, socket])
+
+  const handleTitleKey = useCallback(
+    (event: React.KeyboardEvent<HTMLInputElement>) => {
+      if (event.key === "Enter") handleCommitRename()
+      if (event.key === "Escape") useBoardSyncStore.getState().stopRenameBoard()
+    },
+    [handleCommitRename],
+  )
+
+  // Focus and select on mount so typing replaces the old name outright.
+  const focusTitle = useCallback((element: HTMLInputElement | null) => {
+    element?.select()
+  }, [])
+
   const handleLoadMore = useCallback(() => {
     useBoardsStore.getState().growPage(boardId)
   }, [boardId])
@@ -227,7 +267,25 @@ export function BoardPane({
             <ChevronLeft aria-hidden className="size-4" />
           </button>
         ) : null}
-        <span className="truncate text-[15px] font-semibold text-foreground">{view.board.title}</span>
+        {renaming ? (
+          <input
+            ref={focusTitle}
+            value={titleDraft}
+            onChange={handleTitleChange}
+            onKeyDown={handleTitleKey}
+            onBlur={handleCommitRename}
+            aria-label="Board name"
+            className="min-w-0 flex-1 rounded-md bg-secondary px-1.5 py-0.5 text-[15px] font-semibold text-foreground focus:outline-none"
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={handleStartRename}
+            className="min-w-0 truncate rounded-md px-1.5 py-0.5 text-left text-[15px] font-semibold text-foreground hover:bg-secondary"
+          >
+            {view.board.title}
+          </button>
+        )}
         {syncMessage ? (
           <span className="truncate font-mono text-xs tabular-nums text-muted-foreground">{syncMessage}</span>
         ) : null}
