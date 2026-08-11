@@ -132,6 +132,7 @@ interface ChatTranscriptViewportProps {
   onAutoContinueAccept: (scheduleId: string, scheduledAt: number) => void
   onAutoContinueReschedule: (scheduleId: string, scheduledAt: number) => void
   onAutoContinueCancel: (scheduleId: string) => void
+  onRetryFailedTurn?: (resultMessageId: string) => void | Promise<void>
   tunnels?: Record<string, CloudflareTunnelRecord>
   liveTunnelId?: string | null
   onTunnelAccept?: (tunnelId: string) => void | Promise<void>
@@ -186,6 +187,7 @@ export const ChatTranscriptViewport = memo(({
   onAutoContinueAccept,
   onAutoContinueReschedule,
   onAutoContinueCancel,
+  onRetryFailedTurn,
   tunnels,
   liveTunnelId,
   onTunnelAccept,
@@ -404,12 +406,13 @@ export const ChatTranscriptViewport = memo(({
           onAutoContinueAccept={onAutoContinueAccept}
           onAutoContinueReschedule={onAutoContinueReschedule}
           onAutoContinueCancel={onAutoContinueCancel}
+          onRetryFailedTurn={onRetryFailedTurn}
           chatId={activeChatId ?? undefined}
         />
         {rowRuns.map((run) => renderRunTree(run, 0))}
       </div>
     )
-  }, [handleToolGroupExpandedChange, onAskUserQuestionSubmit, onExitPlanModeConfirm, onToolRequestAnswer, schedules, onAutoContinueAccept, onAutoContinueReschedule, onAutoContinueCancel, toolGroupExpanded, runsByUserMessageId, renderRunTree, activeChatId, gapClassByRowId])
+  }, [handleToolGroupExpandedChange, onAskUserQuestionSubmit, onExitPlanModeConfirm, onToolRequestAnswer, schedules, onAutoContinueAccept, onAutoContinueReschedule, onAutoContinueCancel, onRetryFailedTurn, toolGroupExpanded, runsByUserMessageId, renderRunTree, activeChatId, gapClassByRowId])
 
   const listHeader = (
     <div className="mx-auto w-full max-w-[800px]" style={{ paddingTop: `${headerOffsetPx}px` }}>

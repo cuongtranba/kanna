@@ -295,6 +295,7 @@ function sameMessage(left: HydratedTranscriptMessage, right: HydratedTranscriptM
         && left.result === right.result
         && left.durationMs === right.durationMs
         && left.costUsd === right.costUsd
+        && left.codexErrorInfo === right.codexErrorInfo
     case "status":
       return right.kind === "status" && left.status === right.status
     case "compact_summary":
@@ -415,6 +416,7 @@ interface TranscriptSingleRowProps {
   onAutoContinueAccept: (scheduleId: string, scheduledAt: number) => void
   onAutoContinueReschedule: (scheduleId: string, scheduledAt: number) => void
   onAutoContinueCancel: (scheduleId: string) => void
+  onRetryFailedTurn?: (resultMessageId: string) => void | Promise<void>
   chatId?: string
 }
 
@@ -437,6 +439,7 @@ const TranscriptSingleRow = memo(({
   onAutoContinueAccept,
   onAutoContinueReschedule,
   onAutoContinueCancel,
+  onRetryFailedTurn,
   chatId,
 }: TranscriptSingleRowProps) => {
   let rendered: React.ReactNode = null
@@ -533,7 +536,9 @@ const TranscriptSingleRow = memo(({
         rendered = <ToolCallMessage key={message.id} message={message} isLoading={isLoading} localPath={localPath} chatId={chatId} />
         break
       case "result":
-        rendered = hideResult ? null : <ResultMessage key={message.id} message={message} />
+        rendered = hideResult
+          ? null
+          : <ResultMessage key={message.id} message={message} onRetry={onRetryFailedTurn} />
         break
       case "context_window_updated":
         rendered = null
@@ -723,6 +728,7 @@ interface KannaTranscriptProps {
   onAutoContinueAccept?: (scheduleId: string, scheduledAt: number) => void
   onAutoContinueReschedule?: (scheduleId: string, scheduledAt: number) => void
   onAutoContinueCancel?: (scheduleId: string) => void
+  onRetryFailedTurn?: (resultMessageId: string) => void | Promise<void>
   onTunnelAccept?: (tunnelId: string) => void | Promise<void>
   onTunnelStop?: (tunnelId: string) => void | Promise<void>
   onTunnelRetry?: (tunnelId: string) => void | Promise<void>
@@ -785,6 +791,7 @@ interface KannaTranscriptRowProps {
   onAutoContinueAccept: (scheduleId: string, scheduledAt: number) => void
   onAutoContinueReschedule: (scheduleId: string, scheduledAt: number) => void
   onAutoContinueCancel: (scheduleId: string) => void
+  onRetryFailedTurn?: (resultMessageId: string) => void | Promise<void>
   chatId?: string
 }
 
@@ -799,6 +806,7 @@ export const KannaTranscriptRow = memo(({
   onAutoContinueAccept,
   onAutoContinueReschedule,
   onAutoContinueCancel,
+  onRetryFailedTurn,
   chatId,
 }: KannaTranscriptRowProps) => {
   if (row.kind === "tool-group") {
@@ -836,6 +844,7 @@ export const KannaTranscriptRow = memo(({
       onAutoContinueAccept={onAutoContinueAccept}
       onAutoContinueReschedule={onAutoContinueReschedule}
       onAutoContinueCancel={onAutoContinueCancel}
+      onRetryFailedTurn={onRetryFailedTurn}
       chatId={chatId}
     />
   )
@@ -849,6 +858,7 @@ export const KannaTranscriptRow = memo(({
   if (prev.onAutoContinueAccept !== next.onAutoContinueAccept) return false
   if (prev.onAutoContinueReschedule !== next.onAutoContinueReschedule) return false
   if (prev.onAutoContinueCancel !== next.onAutoContinueCancel) return false
+  if (prev.onRetryFailedTurn !== next.onRetryFailedTurn) return false
   if (prev.chatId !== next.chatId) return false
   if (prev.row.kind !== next.row.kind) return false
   if (prev.row.id !== next.row.id) return false
@@ -899,6 +909,7 @@ function KannaTranscriptInner({
   onAutoContinueAccept = NOOP_ACCEPT,
   onAutoContinueReschedule = NOOP_RESCHEDULE,
   onAutoContinueCancel = NOOP_CANCEL,
+  onRetryFailedTurn,
   onTunnelAccept: _onTunnelAccept,  // reserved for future per-message tunnel rendering
   onTunnelStop: _onTunnelStop,
   onTunnelRetry: _onTunnelRetry,
@@ -964,6 +975,7 @@ function KannaTranscriptInner({
               onAutoContinueAccept={onAutoContinueAccept}
               onAutoContinueReschedule={onAutoContinueReschedule}
               onAutoContinueCancel={onAutoContinueCancel}
+              onRetryFailedTurn={onRetryFailedTurn}
               chatId={chatId}
             />
             {matchedRun ? renderSubagentRunTree(matchedRun, 0, childrenByParentRunId, localPath ?? "", onSubagentAskUserQuestionSubmit, onSubagentExitPlanModeSubmit, onCancelSubagentRun) : null}

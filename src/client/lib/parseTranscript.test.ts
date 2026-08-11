@@ -334,3 +334,31 @@ describe("getLatestToolIds", () => {
     })
   })
 })
+
+describe("processTranscriptMessages — codex failure tag", () => {
+  test("carries codexErrorInfo onto the hydrated result message", () => {
+    const messages = processTranscriptMessages([
+      entry({
+        kind: "result",
+        subtype: "error",
+        isError: true,
+        result: "Selected model is at capacity. Please try a different model.",
+        durationMs: 900,
+        codexErrorInfo: "serverOverloaded",
+      }),
+    ])
+
+    expect(messages).toHaveLength(1)
+    if (messages[0]?.kind !== "result") throw new Error("unexpected message")
+    expect(messages[0].codexErrorInfo).toBe("serverOverloaded")
+  })
+
+  test("leaves codexErrorInfo undefined when the entry carries none", () => {
+    const messages = processTranscriptMessages([
+      entry({ kind: "result", subtype: "error", isError: true, result: "Boom", durationMs: 900 }),
+    ])
+
+    if (messages[0]?.kind !== "result") throw new Error("unexpected message")
+    expect(messages[0].codexErrorInfo).toBeUndefined()
+  })
+})
