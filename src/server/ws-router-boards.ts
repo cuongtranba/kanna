@@ -15,7 +15,9 @@
 
 import { PROTOCOL_VERSION } from "../shared/types"
 import type { ClientCommand, ServerEnvelope } from "../shared/protocol"
-import type { CardActor } from "../shared/boards/types"
+import type { BoardColumn, CardActor } from "../shared/boards/types"
+import { columnForRemoteState } from "../shared/boards/types"
+import type { BoardSyncStatus, SyncColumnRef } from "../shared/boards/sync-types"
 import { BoardStoreError } from "./board-store"
 import type { BoardRegistry } from "./board-registry"
 import type { BoardSync } from "./board-sync"
@@ -40,6 +42,8 @@ export interface BoardCommandDeps {
   /** The question a card asks on reaching `done`, and the answer to it. */
   cleanupView: ((cardId: string) => Promise<WorktreeCleanupView | null>) | undefined
   resolveCleanup: ((cardId: string, decision: CleanupDecision) => Promise<WorktreeCleanupOutcome>) | undefined
+  /** `owner/repo` from the board project's `origin`, offered as a default when binding. */
+  suggestSyncRepo: ((boardId: string) => Promise<{ owner: string; repo: string } | null>) | undefined
   send: (envelope: ServerEnvelope) => void
 }
 
@@ -82,7 +86,16 @@ export async function handleBoardCommand(
   command: ClientCommand,
   id: string,
 ): Promise<boolean> {
-  const { boardRegistry, boardSync, startWork, startWorkView, cleanupView, resolveCleanup, send } = deps
+  const {
+    boardRegistry,
+    boardSync,
+    startWork,
+    startWorkView,
+    cleanupView,
+    resolveCleanup,
+    suggestSyncRepo,
+    send,
+  } = deps
   if (!isBoardCommand(command)) return false
 
   if (!boardRegistry) {
@@ -125,7 +138,7 @@ export async function handleBoardCommand(
       return true
     }
     if (command.type.startsWith("board.sync.")) {
-      return await dispatchSync(boardRegistry, boardSync, send, command, id)
+      return await dispatchSync(boardRegistry, boardSync, suggestSyncRepo, send, command, id)
     }
     return dispatch(boardRegistry, send, command, id)
   } catch (error) {
@@ -145,6 +158,7 @@ export async function handleBoardCommand(
 async function dispatchSync(
   registry: BoardRegistry,
   sync: BoardSync | undefined,
+  suggestRepo: BoardCommandDeps["suggestSyncRepo"],
   send: (envelope: ServerEnvelope) => void,
   command: ClientCommand,
   id: string,
@@ -162,12 +176,20 @@ async function dispatchSync(
   }
 
   if (command.type === "board.sync.status") {
-    send({
-      v: PROTOCOL_VERSION,
-      type: "ack",
-      id,
-      result: { binding: registry.getBinding(command.boardId), conflicts: registry.listConflicts(command.boardId) },
-    })
+    const columns = registry.listColumns(command.boardId)
+    const named = (column: BoardColumn | null): SyncColumnRef | null =>
+      column ? { id: column.id, title: column.title } : null
+    const status: BoardSyncStatus = {
+      binding: registry.getBinding(command.boardId),
+      conflicts: registry.listConflicts(command.boardId),
+      suggestedRepo: suggestRepo ? await suggestRepo(command.boardId) : null,
+      // Shown, not offered: the engine routes by the same function.
+      routing: {
+        open: named(columnForRemoteState(columns, "open")),
+        closed: named(columnForRemoteState(columns, "closed")),
+      },
+    }
+    send({ v: PROTOCOL_VERSION, type: "ack", id, result: status })
     return true
   }
 

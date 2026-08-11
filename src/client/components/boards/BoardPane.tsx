@@ -1,9 +1,10 @@
 import { useCallback, useEffect } from "react"
-import { RefreshCw } from "lucide-react"
+import { RefreshCw, Settings2 } from "lucide-react"
 import { Button } from "../ui/button"
 import { cn } from "../../lib/utils"
 import { useBoardSyncStore } from "./BoardPane.store"
 import { CardDrawer } from "./CardDrawer"
+import { BoardSyncPanel } from "./BoardSyncPanel"
 import { useBoardsStore, selectBoardView } from "../../stores/boardsStore"
 import { KannaBoard, type CardMoveRequest } from "./KannaBoard"
 import { moveCardInView } from "../../lib/boards/optimistic"
@@ -73,6 +74,16 @@ export function BoardPane({ boardId, socket, onOpenCard }: BoardPaneProps) {
     useBoardSyncStore.getState().closeCard()
   }, [])
 
+  const syncPanelOpen = useBoardSyncStore((state) => state.syncPanelOpen)
+
+  const handleOpenSyncPanel = useCallback(() => {
+    useBoardSyncStore.getState().openSyncPanel()
+  }, [])
+
+  const handleCloseSyncPanel = useCallback(() => {
+    useBoardSyncStore.getState().closeSyncPanel()
+  }, [])
+
   const syncing = useBoardSyncStore((state) => state.syncingBoardId === boardId)
   const syncMessage = useBoardSyncStore((state) => state.messageByBoard[boardId] ?? null)
 
@@ -140,8 +151,14 @@ export function BoardPane({ boardId, socket, onOpenCard }: BoardPaneProps) {
           <RefreshCw aria-hidden className={cn("size-3.5", syncing && "animate-spin")} />
           {syncing ? "Syncing…" : "Sync"}
         </Button>
+        <Button variant="ghost" size="sm" onClick={handleOpenSyncPanel} aria-label="Sync settings">
+          <Settings2 aria-hidden className="size-3.5" />
+        </Button>
       </header>
       <div className="relative min-h-0 flex-1">
+        {syncPanelOpen ? (
+          <BoardSyncPanel boardId={boardId} socket={socket} onClose={handleCloseSyncPanel} />
+        ) : null}
         {openCardId ? (
           <CardDrawer cardId={openCardId} socket={socket} onClose={handleCloseCard} />
         ) : null}

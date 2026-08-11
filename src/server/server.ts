@@ -44,6 +44,7 @@ import {
   type WorktreeCleanupDeps,
 } from "./board-worktree-cleanup"
 import type { CleanupDecision } from "../shared/boards/worktree-cleanup"
+import { readOriginRepoSlug } from "./diff-store-git-branch.adapter"
 import { createGitHubIssuesProvider } from "./github-issues.adapter"
 import { readGitHubCliToken } from "./github-cli.adapter"
 import { UpdateManager } from "./update-manager"
@@ -580,6 +581,19 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     },
     removeWorktree,
   }
+  // A developer who already cloned the repo should not have to type its name
+  // back in to bind a board to it.
+  const suggestSyncRepo = async (boardId: string) => {
+    const board = boardRegistry.getBoard(boardId)
+    if (!board || board.ownerKind !== "project") return null
+    const project = store.getProject(board.ownerId)
+    if (!project) return null
+    const slug = await readOriginRepoSlug(project.localPath)
+    if (!slug) return null
+    const [owner, repo] = slug.split("/")
+    return owner && repo ? { owner, repo } : null
+  }
+
   const cleanupView = (cardId: string) => worktreeCleanupView(cleanupDeps, cardId)
   const resolveCleanup = (cardId: string, decision: CleanupDecision) =>
     resolveWorktreeCleanup(cleanupDeps, cardId, decision)
@@ -628,6 +642,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     startWorkView,
     cleanupView,
     resolveCleanup,
+    suggestSyncRepo,
     loopTrackingRegistry,
     subagentTranscriptRegistry,
     followedSessionRegistry,

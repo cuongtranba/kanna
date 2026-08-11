@@ -8,7 +8,7 @@
  * network or a token.
  */
 
-import type { ProviderId, RemoteSourceRef } from "./types"
+import type { ProviderId, RemoteSourceRef, SyncBinding, SyncConflict } from "./types"
 
 /** One item as the remote tracker sees it, normalised across providers. */
 export interface RemoteItem {
@@ -81,4 +81,35 @@ export interface BoardSyncProvider {
   discoverSources(auth: ProviderAuth): Promise<readonly RemoteSource[]>
   pull(input: PullInput): Promise<PullResult>
   push(input: PushInput): Promise<readonly PushOutcome[]>
+}
+
+/** A column named for the reader, not for the wire. */
+export interface SyncColumnRef {
+  id: string
+  title: string
+}
+
+/**
+ * Where pulled items land.
+ *
+ * Not configurable, and deliberately so: open/closed is the one state every
+ * tracker has, and it meets a board's user-named columns through
+ * {@link ColumnSemantic} alone. The screen shows this rather than offering a
+ * mapping, because a second way to say where a card goes is a second way for
+ * the screen and the engine to disagree.
+ */
+export interface SyncColumnRouting {
+  /** Null when no column is marked `start`; pulled open items then land in the first column. */
+  open: SyncColumnRef | null
+  /** Null when no column is marked `done`; closing an item then moves nothing. */
+  closed: SyncColumnRef | null
+}
+
+/** Everything the sync screen renders, in one read. */
+export interface BoardSyncStatus {
+  binding: SyncBinding | null
+  conflicts: readonly SyncConflict[]
+  /** Read from the project's `origin` remote and offered as the default. */
+  suggestedRepo: { owner: string; repo: string } | null
+  routing: SyncColumnRouting
 }

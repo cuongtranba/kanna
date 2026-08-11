@@ -24,6 +24,7 @@ function setup(overrides: Partial<BoardCommandDeps> = {}) {
     startWorkView: () =>
       Promise.resolve({ status: { kind: "idle" as const }, branch: "card/1-task", blockedReason: null }),
     cleanupView: () => Promise.resolve(null),
+    suggestSyncRepo: () => Promise.resolve(null),
     resolveCleanup: () => Promise.resolve({ decision: "leave" as const, worktreePath: "/wt/card-1" }),
     send: (envelope) => sent.push(envelope),
     ...overrides,

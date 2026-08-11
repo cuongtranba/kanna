@@ -109,6 +109,7 @@ interface CreateWsRouterArgs {
   startWorkView?: (cardId: string) => Promise<StartWorkView>
   cleanupView?: (cardId: string) => Promise<WorktreeCleanupView | null>
   resolveCleanup?: (cardId: string, decision: CleanupDecision) => Promise<WorktreeCleanupOutcome>
+  suggestSyncRepo?: (boardId: string) => Promise<{ owner: string; repo: string } | null>
   loopTrackingRegistry?: LoopTrackingRegistry
   subagentTranscriptRegistry?: SubagentTranscriptRegistry
   followedSessionRegistry?: FollowedSessionRegistry
@@ -140,6 +141,7 @@ export function createWsRouter({
   startWorkView,
   cleanupView,
   resolveCleanup,
+  suggestSyncRepo,
   loopTrackingRegistry,
   subagentTranscriptRegistry,
   followedSessionRegistry,
@@ -457,7 +459,16 @@ export function createWsRouter({
         case "board.sync.push":
         case "board.sync.status": {
           await handleBoardCommand(
-            { boardRegistry, boardSync, startWork, startWorkView, cleanupView, resolveCleanup, send: (envelope) => send(ws, envelope) },
+            {
+              boardRegistry,
+              boardSync,
+              startWork,
+              startWorkView,
+              cleanupView,
+              resolveCleanup,
+              suggestSyncRepo,
+              send: (envelope) => send(ws, envelope),
+            },
             command,
             id,
           )

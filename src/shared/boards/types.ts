@@ -348,6 +348,36 @@ export function findDoneColumn(columns: readonly BoardColumn[]): BoardColumn | n
   return columns.find((column) => column.semantic === "done") ?? null
 }
 
+/**
+ * Where an incoming item of a given tracker state belongs.
+ *
+ * Open/closed is the one state every tracker has, and a board's columns are the
+ * user's own, so the two meet through {@link ColumnSemantic} and nowhere else —
+ * a board marking neither does not move cards at all rather than guessing a
+ * column from its title. This is the single definition: the sync engine routes
+ * by it and the sync screen shows it, so what the screen promises is what the
+ * engine does.
+ */
+export function columnForRemoteState(
+  columns: readonly BoardColumn[],
+  state: "open" | "closed",
+): BoardColumn | null {
+  return state === "closed" ? findDoneColumn(columns) : findStartColumn(columns)
+}
+
+/** Where an incoming open item belongs, or null if the board has not said. */
+export function findStartColumn(columns: readonly BoardColumn[]): BoardColumn | null {
+  return columns.find((column) => column.semantic === "start") ?? null
+}
+
+/** The state a card's column reads as to the tracker. */
+export function remoteStateOfColumn(
+  columns: readonly BoardColumn[],
+  columnId: string,
+): "open" | "closed" {
+  return columns.find((column) => column.id === columnId)?.semantic === "done" ? "closed" : "open"
+}
+
 // ── Wire snapshots ─────────────────────────────────
 
 export interface BoardSummary {

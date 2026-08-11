@@ -27,6 +27,7 @@
  */
 
 import type { BoardColumn, Card, CardActor, FieldValue, ProviderId } from "../shared/boards/types"
+import { columnForRemoteState, remoteStateOfColumn } from "../shared/boards/types"
 import type { BoardSyncProvider, PushChange, RemoteItem } from "../shared/boards/sync-types"
 import type { BoardRegistry } from "./board-registry"
 import type { BoardStore } from "./board-store"
@@ -87,23 +88,13 @@ function labelsOf(value: FieldValue | undefined): string[] {
   return []
 }
 
-/** Which column a state maps to, or null when the board has not said. */
-function columnForState(columns: readonly BoardColumn[], state: "open" | "closed"): BoardColumn | null {
-  const wanted = state === "closed" ? "done" : "start"
-  return columns.find((column) => column.semantic === wanted) ?? null
-}
-
-function stateOfCard(columns: readonly BoardColumn[], card: Card): "open" | "closed" {
-  const column = columns.find((candidate) => candidate.id === card.columnId)
-  return column?.semantic === "done" ? "closed" : "open"
-}
 
 function toLocalState(card: Card, columns: readonly BoardColumn[]): LocalCardState {
   return {
     cardId: card.id,
     title: card.title,
     body: textOf(card.content.description),
-    state: stateOfCard(columns, card),
+    state: remoteStateOfColumn(columns, card.columnId),
     labels: labelsOf(card.content.labels),
     assignee: textOf(card.content.assignee),
     updatedAt: card.updatedAt,
@@ -187,7 +178,7 @@ export function createBoardSync(deps: BoardSyncDeps) {
         }
 
         if (decision.kind === "create") {
-          const column = columnForState(columns, remote.state) ?? columns[0]
+          const column = columnForRemoteState(columns, remote.state) ?? columns[0]
           if (!column) break // A board with no columns has nowhere to put anything.
           const created = registry.createCard({
             boardId,
@@ -227,7 +218,7 @@ export function createBoardSync(deps: BoardSyncDeps) {
             SYNC_ACTOR,
           )
           if (decision.take.includes("state")) {
-            const target = columnForState(columns, remote.state)
+            const target = columnForRemoteState(columns, remote.state)
             // No column marked for this state means the board has not said
             // where closed work goes; moving it anywhere would be a guess.
             if (target && target.id !== card.columnId) {

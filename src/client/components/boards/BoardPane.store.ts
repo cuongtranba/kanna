@@ -10,10 +10,14 @@ interface BoardSyncState {
   syncingBoardId: string | null
   /** The card whose drawer is open, if any. */
   openCardId: string | null
+  /** Whether the sync settings panel is open. Mutually exclusive with the drawer. */
+  syncPanelOpen: boolean
   /** Last outcome per board, rendered inline on the header rather than as a toast. */
   messageByBoard: Record<string, string>
   openCard(cardId: string): void
   closeCard(): void
+  openSyncPanel(): void
+  closeSyncPanel(): void
   startSync(boardId: string): void
   finishSync(boardId: string, message: string): void
 }
@@ -21,9 +25,14 @@ interface BoardSyncState {
 export const useBoardSyncStore = create<BoardSyncState>()((set) => ({
   syncingBoardId: null,
   openCardId: null,
+  syncPanelOpen: false,
   messageByBoard: {},
-  openCard: (openCardId) => set({ openCardId }),
+  // One aside at a time: both overlay the same columns, and stacking them would
+  // hide the board the reader is deciding about.
+  openCard: (openCardId) => set({ openCardId, syncPanelOpen: false }),
   closeCard: () => set({ openCardId: null }),
+  openSyncPanel: () => set({ syncPanelOpen: true, openCardId: null }),
+  closeSyncPanel: () => set({ syncPanelOpen: false }),
   startSync: (syncingBoardId) => set({ syncingBoardId }),
   finishSync: (boardId, message) =>
     set((state) => ({
