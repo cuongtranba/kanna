@@ -13,8 +13,13 @@ import type { EventStore } from "./event-store"
 import { buildHistoryPrimer, extractPreviousAssistantReply } from "./history-primer"
 import { parseMentions, type ParsedMention } from "./mention-parser"
 
-class PausableTimeout {
-  private remainingMs: number
+/**
+ * Exported for direct unit testing: every method takes `now`, so the
+ * pause/resume/reset arithmetic is verifiable without racing real timers.
+ */
+export class PausableTimeout {
+  /** Visible for tests: the residual window that a resume would re-arm. */
+  remainingMs: number
   private readonly totalMs: number
   private deadline: number | null = null
   private handle: ReturnType<typeof setTimeout> | null = null

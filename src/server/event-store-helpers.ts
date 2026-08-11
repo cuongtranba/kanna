@@ -13,6 +13,62 @@ export interface TranscriptPageResult {
   olderCursor: string | null
 }
 
+/**
+ * Byte budget for the FIRST page a chat ships when a tab opens.
+ *
+ * `recentLimit` alone caps the page by entry COUNT, which says nothing about
+ * its size: a chat whose last 200 entries are fat tool outputs serialized to
+ * 3.89 MB and cost ~60 ms of blocking server work plus ~250 ms of client
+ * main-thread blocking per open, while a 19 MB transcript whose entries are
+ * small cost 6 ms. Cost tracks page BYTES, not entry count and not file size,
+ * so the page is bounded by both.
+ *
+ * Entries trimmed here are not lost — the page reports `hasOlder` with a
+ * cursor, and the client pages them back in on scrollback.
+ */
+export const RECENT_PAGE_BYTE_BUDGET = 1024 * 1024
+
+/**
+ * Never ship fewer than this many entries, even when they blow the budget —
+ * an over-budget page beats an empty-looking chat. A single entry larger than
+ * the whole budget is therefore still served whole; bounding THAT needs
+ * entry-level truncation, which is a separate concern.
+ */
+export const MIN_RECENT_PAGE_ENTRIES = 10
+
+/**
+ * Returns how many of the NEWEST entries (capped at `limit`) fit in
+ * `byteBudget`, never fewer than `minEntries`.
+ *
+ * Walks newest-first and stops as soon as the budget is spent, so it
+ * serializes at most one budget's worth of entries — the measurement cost is
+ * bounded by the budget, not by the transcript.
+ */
+export function fitLimitToByteBudget(
+  entries: readonly TranscriptEntry[],
+  limit: number,
+  byteBudget: number = RECENT_PAGE_BYTE_BUDGET,
+  minEntries: number = MIN_RECENT_PAGE_ENTRIES,
+): number {
+  if (limit <= 0 || entries.length === 0 || byteBudget <= 0) return limit
+
+  const windowSize = Math.min(limit, entries.length)
+  const floor = Math.min(minEntries, windowSize)
+  let used = 0
+  let kept = 0
+
+  for (let index = entries.length - 1; index >= entries.length - windowSize; index -= 1) {
+    const entry = entries[index]
+    if (entry === undefined) break
+    const size = JSON.stringify(entry).length
+    if (kept >= floor && used + size > byteBudget) break
+    used += size
+    kept += 1
+  }
+
+  return kept
+}
+
 export function normalizeSidebarProjectOrder<T>(value: T): string[] {
   if (!Array.isArray(value)) {
     return []

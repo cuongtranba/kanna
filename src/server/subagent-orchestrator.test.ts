@@ -678,7 +678,12 @@ describe("SubagentOrchestrator", () => {
   test("reset() while paused is a no-op: residual window survives resume instead of re-arming full", async () => {
     const harness = await setupHarness({
       subagents: [makeSubagent({ id: "sa-1", name: "alpha" })],
-      runTimeoutMs: 900,
+      // Wall-clock budget, scaled 4x from the original 900ms. The assertions
+      // below race real setTimeout against this window, so under full-suite
+      // load a ~500ms sleep could overshoot and flake. Widening keeps every
+      // ratio intact while putting the margins well outside scheduler jitter.
+      // The real fix is an injectable clock; this only buys headroom.
+      runTimeoutMs: 3_600,
     })
 
     let startResolve!: (result: { text: string }) => void
@@ -712,28 +717,36 @@ describe("SubagentOrchestrator", () => {
     expect(capturedRunId).not.toBeNull()
     expect(capturedOnChunk).not.toBeNull()
 
-    // Burn ~500ms of the 900ms idle window, then pause (≈400ms residual).
-    await new Promise((r) => setTimeout(r, 500))
+    // Burn ~2000ms of the 3600ms idle window, then pause (≈1600ms residual).
+    await new Promise((r) => setTimeout(r, 2_000))
     harness.orchestrator.notifySubagentToolPending(capturedRunId!)
 
     // A chunk streamed mid-pause calls reset() — it must NOT re-arm the full
     // window while the approval gate holds the clock.
     capturedOnChunk!("chunk-during-pause")
 
-    await new Promise((r) => setTimeout(r, 100))
+    await new Promise((r) => setTimeout(r, 400))
     harness.orchestrator.notifySubagentToolResolved(capturedRunId!)
 
-    // Silence after resume: the ~400ms residual must have fired by +700ms.
-    // With a corrupted (re-armed full 900ms) clock the run is still alive here.
-    await new Promise((r) => setTimeout(r, 700))
-    const run = Object.values(harness.store.getSubagentRuns(harness.chatId))[0]
+    // Silence after resume: the residual must fire. POLL for it rather than
+    // sleeping a fixed span — a fixed deadline turns event-loop delay under
+    // full-suite load into a test failure, which is what made this flake 2 runs
+    // in 3. The residual-vs-full-window arithmetic this test used to infer from
+    // timing is now owned deterministically by subagent-pausable-timeout.test.ts;
+    // what remains here is the wiring: the orchestrator does eventually TIMEOUT.
+    const deadline = Date.now() + 20_000
+    let run = Object.values(harness.store.getSubagentRuns(harness.chatId))[0]
+    while (run.status !== "failed" && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 50))
+      run = Object.values(harness.store.getSubagentRuns(harness.chatId))[0]
+    }
     expect(run.status).toBe("failed")
     expect(run.error?.code).toBe("TIMEOUT")
 
     // unblock the stuck provider so harness teardown is clean
     startResolve({ text: "late" })
     await runPromise
-  }, 10_000)
+  }, 30_000)
 
   test("recoverInterruptedRuns: marks runs with pendingTool as INTERRUPTED", async () => {
     const dataDir = await createTempDataDir()

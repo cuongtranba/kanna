@@ -23,7 +23,7 @@ async function startPasswordServer(options: {
   const server = await startKannaServer({
     dataDir,
     port: options.port ?? 4320,
-    strictPort: true,
+    strictPort: false,
     password: "secret",
     trustProxy: options.trustProxy ?? false,
     // Don't scan the real ~/.claude / ~/.codex on boot — keeps the test fast
@@ -60,7 +60,7 @@ describe("password auth", () => {
       dataDir,
       distDir,
       port: 4320,
-      strictPort: true,
+      strictPort: false,
       password: "secret",
       trustProxy: false,
       discoverProjects: () => [],

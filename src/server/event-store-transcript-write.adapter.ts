@@ -149,6 +149,9 @@ export async function forkChat(
         chat.hasMessages = true
         chat.updatedAt = Math.max(chat.updatedAt, createdAt)
       }
+      // Wholesale rewrite: the tail cache is validated by byte size, which
+      // only implies "unchanged" for an append-only file.
+      deps.transcriptCache.invalidateTail(chatId)
       if (deps.transcriptCache.has(chatId)) {
         deps.transcriptCache.set(chatId, cloneTranscriptEntries(sourceEntries))
       }

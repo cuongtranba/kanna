@@ -17,8 +17,11 @@ import { cloneTranscriptEntries } from "./events"
 import {
   coalesceContextWindowUpdates,
   decodeCursor,
+  fitLimitToByteBudget,
   getHistorySnapshot,
   getMessagesPageFromEntries,
+  MIN_RECENT_PAGE_ENTRIES,
+  RECENT_PAGE_BYTE_BUDGET,
 } from "./event-store-helpers"
 
 // ─── Transcript LRU cache ──────────────────────────────────────────────────
@@ -63,11 +66,63 @@ export class TranscriptCache {
 
   invalidate(chatId: string): void {
     this.byChat.delete(chatId)
+    this.tailByChat.delete(chatId)
   }
 
   invalidateAll(): void {
     this.byChat.clear()
+    this.tailByChat.clear()
   }
+
+  // ─── Tail-window cache ───────────────────────────────────────────────────
+  //
+  // The full-transcript cache above is only ever seeded when a tail read
+  // happens to reach the START of the file, so for any transcript larger than
+  // one tail chunk it stays permanently empty — and `getRecentMessagesPage`
+  // then takes the tail path on EVERY call, re-reading and re-parsing the file
+  // from disk each time (measured: 18.8 ms of a 20.7 ms call at 3k entries).
+  // That cost lands on every snapshot derive, i.e. every broadcast tick.
+  //
+  // Validity is keyed on the transcript's BYTE SIZE, not on invalidation
+  // hooks: the JSONL is append-only, so a byte size that has not moved
+  // guarantees the tail has not moved. A stat is orders of magnitude cheaper
+  // than the re-parse it replaces, and an append changes the size, which
+  // expires the entry with no wiring to forget.
+
+  private readonly tailByChat = new Map<string, CachedTail>()
+
+  /** Returns the cached tail for this exact (size, limit), or undefined. */
+  getTail(chatId: string, fileSize: number, limit: number): TranscriptTailResult | undefined {
+    const hit = this.tailByChat.get(chatId)
+    if (!hit || hit.fileSize !== fileSize || hit.limit !== limit) return undefined
+    return hit.tail
+  }
+
+  /**
+   * Drops only the tail window, keeping any full transcript cached.
+   * For a writer that REPLACES a transcript wholesale: size-keyed validity
+   * assumes append-only, and a rewrite can in principle land on the same byte
+   * size with different content.
+   */
+  invalidateTail(chatId: string): void {
+    this.tailByChat.delete(chatId)
+  }
+
+  setTail(chatId: string, fileSize: number, limit: number, tail: TranscriptTailResult): void {
+    this.tailByChat.delete(chatId)
+    this.tailByChat.set(chatId, { fileSize, limit, tail })
+    while (this.tailByChat.size > this.maxChats) {
+      const oldest = this.tailByChat.keys().next().value
+      if (oldest === undefined) break
+      this.tailByChat.delete(oldest)
+    }
+  }
+}
+
+interface CachedTail {
+  fileSize: number
+  limit: number
+  tail: TranscriptTailResult
 }
 
 // ─── Deps interface ────────────────────────────────────────────────────────
@@ -139,9 +194,16 @@ function parseJsonlSlice(
 }
 
 /**
+ * Extra bytes read beyond `byteBudget` before the growth loop stops, so the
+ * slice reliably holds a full budget's worth of entries once serialized.
+ */
+const TAIL_BUDGET_MARGIN = 1.25
+
+/**
  * Reads only the tail of the transcript JSONL (growing backwards until more
- * than `minEntries` lines or BOF). Returns null when the storage backend has
- * no byte-slice APIs — callers must fall back to the full-parse path.
+ * than `minEntries` lines, or `byteBudget` worth of bytes, or BOF). Returns
+ * null when the storage backend has no byte-slice APIs — callers must fall
+ * back to the full-parse path.
  */
 export function readTranscriptTail(
   deps: MessageReadDeps,
@@ -149,6 +211,7 @@ export function readTranscriptTail(
   minEntries: number,
   endOffset?: number,
   chunkBytes: number = TAIL_CHUNK_BYTES,
+  byteBudget?: number,
 ): TranscriptTailResult | null {
   const { storage } = deps
   if (typeof storage.readSliceSync !== "function" || typeof storage.sizeSync !== "function") {
@@ -163,12 +226,22 @@ export function readTranscriptTail(
   if (end <= 0) {
     return { entries: [], lineOffsets: [], reachedStart: true }
   }
+  // Each growth step re-reads and re-parses the whole slice, so the loop costs
+  // the SUM of every attempt: chasing 200 fat entries walks 256K→512K→1M→2M→4M
+  // and parses ~7.75 MB to build a page the byte budget then trims to 1 MB.
+  // When a budget is in play, stop as soon as the slice can fill it — every
+  // entry past that point is parsed only to be discarded.
+  const budgetBytes = byteBudget === undefined ? undefined : byteBudget * TAIL_BUDGET_MARGIN
   let chunk = Math.max(chunkBytes, 64)
   for (;;) {
     const start = Math.max(0, end - chunk)
     const buf = storage.readSliceSync(tPath, start, end)
     const parsed = parseJsonlSlice(buf, start, start === 0)
-    if (start === 0 || parsed.entries.length > minEntries) {
+    const budgetSatisfied =
+      budgetBytes !== undefined &&
+      end - start >= budgetBytes &&
+      parsed.entries.length > MIN_RECENT_PAGE_ENTRIES
+    if (start === 0 || parsed.entries.length > minEntries || budgetSatisfied) {
       return { ...parsed, reachedStart: start === 0 }
     }
     chunk *= 2
@@ -219,13 +292,23 @@ function readEntryAtOffset(deps: MessageReadDeps, chatId: string, offset: number
   }
 }
 
-function pageFromTail(tail: TranscriptTailResult, limit: number, nextEntry?: TranscriptEntry | null): ChatHistoryPage {
+function pageFromTail(
+  tail: TranscriptTailResult,
+  limit: number,
+  nextEntry?: TranscriptEntry | null,
+  byteBudget?: number,
+): ChatHistoryPage {
   // The sentinel participates in coalescing (so a trailing cwu run collapses
   // against the newer page's leading cwu) and is then removed.
   const coalesced = nextEntry
     ? coalesceContextWindowUpdates([...tail.entries, nextEntry]).slice(0, -1)
     : coalesceContextWindowUpdates(tail.entries)
-  const startIdx = Math.max(0, coalesced.length - limit)
+  // Callers that pass a budget bound the page by bytes as well as by count;
+  // hasOlder / olderCursor below derive from the trimmed page, so the entries
+  // dropped here stay reachable through normal scrollback paging.
+  const effectiveLimit =
+    byteBudget === undefined ? limit : fitLimitToByteBudget(coalesced, limit, byteBudget)
+  const startIdx = Math.max(0, coalesced.length - effectiveLimit)
   const pageEntries = coalesced.slice(startIdx)
   const hasOlder = !tail.reachedStart || startIdx > 0
   let olderCursor: string | null = null
@@ -258,12 +341,26 @@ export function getRecentMessagesPageTail(
   limit: number,
   chunkBytes?: number,
 ): ChatHistoryPage | null {
-  const tail = readTranscriptTail(deps, chatId, limit, undefined, chunkBytes)
+  // An append-only JSONL at an unchanged byte size has an unchanged tail, so a
+  // stat is a sound validity check for the parsed window — and replaces a full
+  // re-read + JSON.parse on every snapshot derive.
+  const { storage } = deps
+  const fileSize =
+    typeof storage.sizeSync === "function" && storage.existsSync(transcriptPath(deps, chatId))
+      ? storage.sizeSync(transcriptPath(deps, chatId))
+      : null
+
+  const cached = fileSize === null ? undefined : deps.transcriptCache.getTail(chatId, fileSize, limit)
+  const tail =
+    cached ?? readTranscriptTail(deps, chatId, limit, undefined, chunkBytes, RECENT_PAGE_BYTE_BUDGET)
   if (!tail) return null
+  if (!cached && fileSize !== null) {
+    deps.transcriptCache.setTail(chatId, fileSize, limit, tail)
+  }
   if (tail.reachedStart) {
     seedFullTranscript(deps, chatId, tail.entries)
   }
-  return pageFromTail(tail, limit)
+  return pageFromTail(tail, limit, undefined, RECENT_PAGE_BYTE_BUDGET)
 }
 
 // ─── Exported functions ────────────────────────────────────────────────────
@@ -375,7 +472,7 @@ export function getRecentMessagesPage(
   }
 
   const entries = coalesceContextWindowUpdates(getMessagesView(deps, chatId))
-  const page = getMessagesPageFromEntries(entries, limit)
+  const page = getMessagesPageFromEntries(entries, fitLimitToByteBudget(entries, limit))
 
   return {
     messages: page.entries,

@@ -1,7 +1,7 @@
 ---
 id: c3-206
 c3-version: 4
-c3-seal: ad04bf9c16844d50e91c35cbe1668be91e088714b0a807bf4d6f24694245baa3
+c3-seal: 8c9542d0c6c1b3d80a03ede5d4d1177585ee7d0e4254791ea6562b52a243846f
 title: event-store
 type: component
 category: foundation
@@ -98,11 +98,31 @@ path and the ops path is enforced by `src/server/chat-ops-parity.test.ts`.
 
 ## Transcript cache
 
-`TranscriptCache` (`src/server/event-store-messages.adapter.ts`) is a small
-LRU (4 chats) replacing the former single-chat `cachedTranscriptRef`. Page
-reads (`getRecentMessagesPage` / `getMessagesPageBefore`) use the no-clone
-`getMessagesView` and clone only the returned window; the public
-`getMessages` keeps full-clone semantics.
+`TranscriptCache` (`src/server/event-store-messages.adapter.ts`) holds TWO
+caches, both LRU over 4 chats. Page reads (`getRecentMessagesPage` /
+`getMessagesPageBefore`) use the no-clone `getMessagesView` and clone only the
+returned window; the public `getMessages` keeps full-clone semantics.
+
+The FULL-transcript cache is seeded only when a tail read reaches BOF, so for
+any transcript larger than one tail chunk it stays permanently empty. The
+TAIL-WINDOW cache (`getTail` / `setTail`, keyed on `(fileSize, limit)`) is what
+makes a repeat read cheap in that case: the JSONL is append-only, so an
+unchanged byte size proves an unchanged tail, and a `stat` replaces a full
+re-read + parse (20.68 ms → 0.73 ms per `getRecentChatHistory` at 3k entries).
+An append moves the size and expires the entry, so there is no invalidation to
+forget — `appendText` is awaited before anything else observes the entry, so
+the size always moves first. Byte size cannot detect a wholesale REWRITE
+landing on the same byte count, so a writer that replaces a transcript must
+call `invalidateTail` explicitly (the fork path does); `invalidate` /
+`invalidateAll` clear both caches.
+
+The recent page is bounded by BYTES as well as by `recentLimit`:
+`fitLimitToByteBudget` (`event-store-helpers.ts`) trims the newest window to
+`RECENT_PAGE_BYTE_BUDGET` (1 MB) with a floor of `MIN_RECENT_PAGE_ENTRIES`
+(10). Entry count says nothing about payload size — on the real corpus a
+19.1 MB transcript ships 0.85 MB while a 14.9 MB one shipped 3.89 MB and
+blocked the client ~250 ms — and trimmed entries stay reachable through the
+normal `hasOlder` + cursor paging.
 
 ## Transcript tail-read (cold-open fast path)
 
@@ -110,9 +130,11 @@ Cold `getRecentMessagesPage` (cache miss, non-legacy) serves the window via
 `readTranscriptTail` — backward byte-slice reads (`StorageBackend.sizeSync` /
 `readSliceSync`, both OPTIONAL; absent ⇒ full-parse fallback) growing until
 
-> limit lines or BOF. Older paging uses opaque `byte:<offset>` cursors
-> (`idx:` cursors keep working on the warm/full path). Cross-page
-> `context_window_updated` coalescing stays exact via a sentinel parse of the
-> newer page's first line. When the tail reaches BOF the complete transcript
-> is promoted into the cache WITH messageId dedup seeding — partial tails are
-> never cached and never touch the dedup set (PTY resume safety).
+> > limit lines or BOF. Older paging uses opaque `byte:<offset>` cursors
+> > (`idx:` cursors keep working on the warm/full path). Cross-page
+> > `context_window_updated` coalescing stays exact via a sentinel parse of the
+> > newer page's first line. When the tail reaches BOF the complete transcript
+> > is promoted into the FULL cache WITH messageId dedup seeding. A PARTIAL tail
+> > is never promoted there and never touches the dedup set (PTY resume safety),
+> > but it IS kept in the separate tail-window cache — that cache holds parsed
+> > entries only, seeds no dedup state, and so cannot affect resume.
