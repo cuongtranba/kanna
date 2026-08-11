@@ -33,7 +33,7 @@ import type {
 import { generateCommitMessageDetailed } from "./generate-commit-message"
 
 export interface DiffStoreCommitOpsDeps {
-  readonly refreshSnapshot: (projectId: string, projectPath: string) => Promise<boolean>
+  readonly refreshSnapshot: (repoPath: string) => Promise<boolean>
 }
 
 export async function generateCommitMessage(
@@ -80,7 +80,6 @@ export async function generateCommitMessage(
 export async function commitFiles(
   deps: DiffStoreCommitOpsDeps,
   args: {
-    projectId: string
     projectPath: string
     paths: string[]
     summary: string
@@ -143,7 +142,7 @@ export async function commitFiles(
     return createCommitFailure(args.mode, formatGitFailure(commitResult))
   }
 
-  const snapshotChanged = await deps.refreshSnapshot(args.projectId, args.projectPath)
+  const snapshotChanged = await deps.refreshSnapshot(args.projectPath)
   const branchName = await getBranchName(repo.repoRoot)
 
   if (args.mode === "commit_only") {
@@ -173,7 +172,7 @@ export async function commitFiles(
     return createPushFailure(args.mode, formatGitFailure(pushResult), snapshotChanged)
   }
 
-  const postPushSnapshotChanged = await deps.refreshSnapshot(args.projectId, args.projectPath)
+  const postPushSnapshotChanged = await deps.refreshSnapshot(args.projectPath)
 
   return {
     ok: true,
@@ -186,7 +185,7 @@ export async function commitFiles(
 
 export async function discardFile(
   deps: DiffStoreCommitOpsDeps,
-  args: { projectId: string; projectPath: string; path: string }
+  args: { projectPath: string; path: string }
 ) {
   const relativePath = normalizeRepoRelativePath(args.path)
   const repo = await resolveRepo(args.projectPath)
@@ -220,13 +219,13 @@ export async function discardFile(
   }
 
   return {
-    snapshotChanged: await deps.refreshSnapshot(args.projectId, args.projectPath),
+    snapshotChanged: await deps.refreshSnapshot(args.projectPath),
   }
 }
 
 export async function ignoreFile(
   deps: DiffStoreCommitOpsDeps,
-  args: { projectId: string; projectPath: string; path: string }
+  args: { projectPath: string; path: string }
 ) {
   const ignoreEntry = normalizeRepoRelativePath(args.path)
   const repo = await resolveRepo(args.projectPath)
@@ -253,6 +252,6 @@ export async function ignoreFile(
   }
 
   return {
-    snapshotChanged: await deps.refreshSnapshot(args.projectId, args.projectPath),
+    snapshotChanged: await deps.refreshSnapshot(args.projectPath),
   }
 }

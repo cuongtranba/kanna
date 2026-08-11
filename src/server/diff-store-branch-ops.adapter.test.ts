@@ -73,20 +73,20 @@ describe("createBranch", () => {
   test("throws for empty branch name", async () => {
     const repo = await makeRepo()
     await expect(
-      createBranch(makeDeps(), { projectId: "p1", projectPath: repo, name: "" })
+      createBranch(makeDeps(), { projectPath: repo, name: "" })
     ).rejects.toThrow("Branch name is required")
   }, 15_000)
 
   test("throws when not a git repo", async () => {
     const dir = mkdtempSync(path.join(tmpdir(), "kanna-not-git-"))
     await expect(
-      createBranch(makeDeps(), { projectId: "p1", projectPath: dir, name: "new-branch" })
+      createBranch(makeDeps(), { projectPath: dir, name: "new-branch" })
     ).rejects.toThrow("not in a git repository")
   }, 15_000)
 
   test("returns failure for duplicate branch name", async () => {
     const repo = await makeRepo()
-    const result = await createBranch(makeDeps(), { projectId: "p1", projectPath: repo, name: "main" })
+    const result = await createBranch(makeDeps(), { projectPath: repo, name: "main" })
     expect(result.ok).toBe(false)
     if (!result.ok) {
       expect(result.title).toContain("Create branch failed")
@@ -96,7 +96,7 @@ describe("createBranch", () => {
 
   test("creates a new branch and switches to it", async () => {
     const repo = await makeRepo()
-    const result = await createBranch(makeDeps(), { projectId: "p1", projectPath: repo, name: "my-feature" })
+    const result = await createBranch(makeDeps(), { projectPath: repo, name: "my-feature" })
     expect(result.ok).toBe(true)
     if (result.ok) {
       expect(result.branchName).toBe("my-feature")
@@ -107,7 +107,6 @@ describe("createBranch", () => {
   test("creates branch from explicit base branch", async () => {
     const repo = await makeRepo()
     const result = await createBranch(makeDeps(), {
-      projectId: "p1",
       projectPath: repo,
       name: "from-main",
       baseBranchName: "main",
@@ -124,7 +123,6 @@ describe("checkoutBranch", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "kanna-not-git-"))
     await expect(
       checkoutBranch(makeDeps(), {
-        projectId: "p1",
         projectPath: dir,
         branch: { kind: "local", name: "main" },
       })
@@ -140,7 +138,6 @@ describe("checkoutBranch", () => {
     writeFileSync(path.join(repo, "dirty.txt"), "changes\n")
 
     const result = await checkoutBranch(makeDeps(), {
-      projectId: "p1",
       projectPath: repo,
       branch: { kind: "local", name: "other" },
       bringChanges: false,
@@ -158,7 +155,6 @@ describe("checkoutBranch", () => {
     await runGit(["switch", "main"], repo)
 
     const result = await checkoutBranch(makeDeps(), {
-      projectId: "p1",
       projectPath: repo,
       branch: { kind: "local", name: "feature-x" },
     })
@@ -229,7 +225,6 @@ describe("mergeBranch", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "kanna-not-git-"))
     await expect(
       mergeBranch(makeDeps(), {
-        projectId: "p1",
         projectPath: dir,
         branch: { kind: "local", name: "main" },
       })
@@ -240,7 +235,6 @@ describe("mergeBranch", () => {
     const repo = await makeRepo()
     writeFileSync(path.join(repo, "dirty.txt"), "changes\n")
     const result = await mergeBranch(makeDeps(), {
-      projectId: "p1",
       projectPath: repo,
       branch: { kind: "local", name: "main" },
     })
@@ -255,7 +249,6 @@ describe("mergeBranch", () => {
     await runGit(["switch", "-c", "no-new-commits"], repo)
     await runGit(["switch", "main"], repo)
     const result = await mergeBranch(makeDeps(), {
-      projectId: "p1",
       projectPath: repo,
       branch: { kind: "local", name: "no-new-commits" },
     })
@@ -274,7 +267,6 @@ describe("mergeBranch", () => {
     await runGit(["switch", "main"], repo)
 
     const result = await mergeBranch(makeDeps(), {
-      projectId: "p1",
       projectPath: repo,
       branch: { kind: "local", name: "to-merge" },
     })
@@ -289,13 +281,13 @@ describe("syncBranch", () => {
   test("throws when not a git repo", async () => {
     const dir = mkdtempSync(path.join(tmpdir(), "kanna-not-git-"))
     await expect(
-      syncBranch(makeDeps(), { projectId: "p1", projectPath: dir, action: "fetch" })
+      syncBranch(makeDeps(), { projectPath: dir, action: "fetch" })
     ).rejects.toThrow("not in a git repository")
   }, 15_000)
 
   test("returns failure for push without upstream", async () => {
     const repo = await makeRepo()
-    const result = await syncBranch(makeDeps(), { projectId: "p1", projectPath: repo, action: "push" })
+    const result = await syncBranch(makeDeps(), { projectPath: repo, action: "push" })
     expect(result.ok).toBe(false)
     if (!result.ok) {
       expect(result.title).toContain("Push failed")
@@ -305,7 +297,7 @@ describe("syncBranch", () => {
 
   test("returns failure for pull without upstream", async () => {
     const repo = await makeRepo()
-    const result = await syncBranch(makeDeps(), { projectId: "p1", projectPath: repo, action: "pull" })
+    const result = await syncBranch(makeDeps(), { projectPath: repo, action: "pull" })
     expect(result.ok).toBe(false)
     if (!result.ok) {
       expect(result.title).toContain("Pull failed")
@@ -315,7 +307,7 @@ describe("syncBranch", () => {
 
   test("fetch returns failure when no remote configured", async () => {
     const repo = await makeRepo()
-    const result = await syncBranch(makeDeps(), { projectId: "p1", projectPath: repo, action: "fetch" })
+    const result = await syncBranch(makeDeps(), { projectPath: repo, action: "fetch" })
     // fetch --all --prune with no remotes: git either returns non-zero or returns ok with nothing to fetch
     // Either is acceptable — just verify we get a response
     expect(result.action).toBe("fetch")
@@ -323,7 +315,7 @@ describe("syncBranch", () => {
 
   test("publish returns failure when no remote configured", async () => {
     const repo = await makeRepo()
-    const result = await syncBranch(makeDeps(), { projectId: "p1", projectPath: repo, action: "publish" })
+    const result = await syncBranch(makeDeps(), { projectPath: repo, action: "publish" })
     expect(result.ok).toBe(false)
     if (!result.ok) {
       expect(result.action).toBe("publish")

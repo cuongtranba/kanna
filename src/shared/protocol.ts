@@ -56,7 +56,15 @@ export type SubscriptionTopic =
   | { type: "app-settings" }
   | { type: "push-config" }
   | { type: "chat"; chatId: string; recentLimit?: number; since?: number }
-  | { type: "project-git"; projectId: string }
+  /**
+   * `chatId` names the chat whose tree is wanted.
+   *
+   * A chat can run in a git worktree of its project, so "the project's git
+   * state" is not one thing: two chats in one project can sit on different
+   * branches with different dirty files. Without the chat, the second one is
+   * shown the first one's tree. Omitted means the project's own checkout.
+   */
+  | { type: "project-git"; projectId: string; chatId?: string }
   | { type: "project-commands"; projectId: string }
   | { type: "terminal"; terminalId: string }
   | { type: "pty-instances" }
@@ -133,7 +141,8 @@ export type ClientCommand =
   | { type: "project.remove"; projectId: string }
   | { type: "project.setStar"; projectId: string; starred: boolean }
   | { type: "sidebar.reorderProjectGroups"; projectIds: string[] }
-  | { type: "project.readDiffPatch"; projectId: string; path: string }
+  /** `chatId` names the tree to read from — a chat's worktree has its own contents. */
+  | { type: "project.readDiffPatch"; projectId: string; path: string; chatId?: string }
   | { type: "stack.create"; title: string; projectIds: string[] }
   | { type: "stack.rename"; stackId: string; title: string }
   | { type: "stack.remove"; stackId: string }

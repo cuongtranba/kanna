@@ -14,6 +14,7 @@ import { EventStore } from "./event-store"
 import { openExternal } from "./external-open"
 import { KeybindingsManager } from "./keybindings"
 import { resolveLocalPath } from "./paths"
+import { resolveSpawnPaths } from "./claude-session-config"
 import { ensureProjectDirectory } from "./project-directory.adapter"
 import { TerminalManager } from "./terminal-manager"
 import type { UpdateManager } from "./update-manager"
@@ -80,7 +81,7 @@ export { isBenignStaleStateMessage } from "./ws-router-utils"
 
 interface CreateWsRouterArgs {
   store: EventStore
-  diffStore?: Pick<DiffStore, "getProjectSnapshot" | "refreshSnapshot" | "initializeGit" | "getGitHubPublishInfo" | "checkGitHubRepoAvailability" | "publishToGitHub" | "listBranches" | "previewMergeBranch" | "mergeBranch" | "syncBranch" | "checkoutBranch" | "createBranch" | "generateCommitMessage" | "commitFiles" | "discardFile" | "ignoreFile" | "readPatch">
+  diffStore?: Pick<DiffStore, "getSnapshot" | "refreshSnapshot" | "initializeGit" | "getGitHubPublishInfo" | "checkGitHubRepoAvailability" | "publishToGitHub" | "listBranches" | "previewMergeBranch" | "mergeBranch" | "syncBranch" | "checkoutBranch" | "createBranch" | "generateCommitMessage" | "commitFiles" | "discardFile" | "ignoreFile" | "readPatch">
   agent: AgentCoordinator
   terminals: TerminalManager
   keybindings: KeybindingsManager
@@ -183,6 +184,17 @@ export function createWsRouter({
     loopTrackingRegistry,
     envelopeBuilder,
   })
+
+  /**
+   * The tree a chat's git commands operate in: its worktree when it has one,
+   * its project's checkout otherwise. The same resolution the agent's cwd uses,
+   * so the Changes panel can never describe a different tree than the one the
+   * agent is editing.
+   */
+  function resolveChatRepoPath(chatId: string): string {
+    const { chat, project } = resolveChatProject(chatId)
+    return resolveSpawnPaths(chat, project.localPath).cwd
+  }
 
   function resolveChatProject(chatId: string) {
     const chat = store.getChat(chatId)
@@ -316,7 +328,7 @@ export function createWsRouter({
           await handleDiffCommand(
             {
               resolvedDiffStore,
-              resolveChatProject,
+              resolveChatRepoPath,
               send: (envelope) => send(ws, envelope),
               broadcastSnapshots: () => broadcast.broadcastSnapshots(),
             },

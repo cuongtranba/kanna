@@ -573,7 +573,6 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     },
     mergeBranch: async (projectId, repoRoot, branch) => {
       const merged = await diffStore.mergeBranch({
-        projectId,
         projectPath: repoRoot,
         branch: { kind: "local", name: branch },
       })

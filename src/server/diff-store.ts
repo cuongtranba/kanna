@@ -72,6 +72,21 @@ export { runGit, formatGitFailure, extractGitHubRepoSlug, fetchGitHubPullRequest
 export { appendGitIgnoreEntry } from "./diff-store-parse"
 
 export class DiffStore {
+  /**
+   * Git state per REPO PATH, not per project.
+   *
+   * A chat can run in a git worktree of its project, and a worktree is a
+   * different working tree with its own branch, its own dirty files and its own
+   * upstream. Keying by project id gave every chat in a project one shared
+   * entry: a worktree chat and a main-checkout chat overwrote each other's
+   * state and thrashed each other's broadcasts. A path is what a git command
+   * actually operates on, so keying by it is collision-free by construction.
+   *
+   * The key is the path the CALLER gave, not the repo root `resolveRepo` finds.
+   * Reads are synchronous (the envelope builder is pure), so a read cannot
+   * resolve a repo; keeping get and refresh on the same key is what makes them
+   * agree.
+   */
   private readonly states = new Map<string, StoredChatDiffState>()
 
   constructor(_: string) {}
@@ -79,12 +94,11 @@ export class DiffStore {
   async initialize() {}
 
   async initializeGit(args: {
-    projectId: string
     projectPath: string
   }): Promise<BranchActionSuccess | BranchActionFailure> {
     const existingRepo = await resolveRepo(args.projectPath)
     if (existingRepo) {
-      const snapshotChanged = await this.refreshSnapshot(args.projectId, args.projectPath)
+      const snapshotChanged = await this.refreshSnapshot(args.projectPath)
       return {
         ok: true,
         branchName: await getBranchName(existingRepo.repoRoot),
@@ -98,7 +112,7 @@ export class DiffStore {
     }
 
     const repo = await resolveRepo(args.projectPath)
-    const snapshotChanged = await this.refreshSnapshot(args.projectId, args.projectPath)
+    const snapshotChanged = await this.refreshSnapshot(args.projectPath)
     return {
       ok: true,
       branchName: repo ? await getBranchName(repo.repoRoot) : undefined,
@@ -182,7 +196,6 @@ export class DiffStore {
   }
 
   async publishToGitHub(args: {
-    projectId: string
     projectPath: string
     owner: string
     name: string
@@ -268,7 +281,7 @@ export class DiffStore {
       }
     }
 
-    const snapshotChanged = await this.refreshSnapshot(args.projectId, args.projectPath)
+    const snapshotChanged = await this.refreshSnapshot(args.projectPath)
     return {
       ok: true,
       branchName: await getBranchName(repo.repoRoot),
@@ -299,8 +312,8 @@ export class DiffStore {
     return { patch }
   }
 
-  getProjectSnapshot(projectId: string): ChatDiffSnapshot {
-    const state = this.states.get(projectId) ?? createEmptyState()
+  getSnapshot(repoPath: string): ChatDiffSnapshot {
+    const state = this.states.get(repoPath) ?? createEmptyState()
     return {
       status: state.status,
       branchName: state.branchName,
@@ -321,8 +334,8 @@ export class DiffStore {
     }
   }
 
-  async refreshSnapshot(projectId: string, projectPath: string) {
-    const repo = await resolveRepo(projectPath)
+  async refreshSnapshot(repoPath: string) {
+    const repo = await resolveRepo(repoPath)
     if (!repo) {
       const nextState = {
         status: "no_repo",
@@ -337,8 +350,8 @@ export class DiffStore {
         files: [],
         branchHistory: { entries: [] },
       } satisfies StoredChatDiffState
-      const changed = !snapshotsEqual(this.states.get(projectId), nextState)
-      this.states.set(projectId, nextState)
+      const changed = !snapshotsEqual(this.states.get(repoPath), nextState)
+      this.states.set(repoPath, nextState)
       return changed
     }
 
@@ -373,20 +386,20 @@ export class DiffStore {
       files,
       branchHistory,
     } satisfies StoredChatDiffState
-    const changed = !snapshotsEqual(this.states.get(projectId), nextState)
-    this.states.set(projectId, nextState)
+    const changed = !snapshotsEqual(this.states.get(repoPath), nextState)
+    this.states.set(repoPath, nextState)
     return changed
   }
 
   private buildBranchOpsDeps(): DiffStoreBranchOpsDeps {
     return {
-      refreshSnapshot: (projectId, projectPath) => this.refreshSnapshot(projectId, projectPath),
+      refreshSnapshot: (repoPath) => this.refreshSnapshot(repoPath),
     }
   }
 
   private buildCommitOpsDeps(): DiffStoreCommitOpsDeps {
     return {
-      refreshSnapshot: (projectId, projectPath) => this.refreshSnapshot(projectId, projectPath),
+      refreshSnapshot: (repoPath) => this.refreshSnapshot(repoPath),
     }
   }
 
@@ -404,7 +417,6 @@ export class DiffStore {
   }
 
   async mergeBranch(args: {
-    projectId: string
     projectPath: string
     branch: SelectedBranch
   }): Promise<ChatMergeBranchResult> {
@@ -412,7 +424,6 @@ export class DiffStore {
   }
 
   async checkoutBranch(args: {
-    projectId: string
     projectPath: string
     branch: SelectedBranch
     bringChanges?: boolean
@@ -421,7 +432,6 @@ export class DiffStore {
   }
 
   async createBranch(args: {
-    projectId: string
     projectPath: string
     name: string
     baseBranchName?: string
@@ -430,7 +440,6 @@ export class DiffStore {
   }
 
   async syncBranch(args: {
-    projectId: string
     projectPath: string
     action: "fetch" | "pull" | "push" | "publish"
   }): Promise<ChatSyncResult> {
@@ -445,7 +454,6 @@ export class DiffStore {
   }
 
   async commitFiles(args: {
-    projectId: string
     projectPath: string
     paths: string[]
     summary: string
@@ -456,7 +464,6 @@ export class DiffStore {
   }
 
   async discardFile(args: {
-    projectId: string
     projectPath: string
     path: string
   }) {
@@ -464,7 +471,6 @@ export class DiffStore {
   }
 
   async ignoreFile(args: {
-    projectId: string
     projectPath: string
     path: string
   }) {

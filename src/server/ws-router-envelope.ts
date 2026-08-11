@@ -15,6 +15,7 @@ import type { ServerEnvelope, SubscriptionTopic } from "../shared/protocol"
 import type { ServerWebSocket } from "bun"
 import { deriveChatSnapshot, deriveLocalProjectsSnapshot, deriveSidebarData } from "./read-models"
 import { localCommandsForCwd } from "./claude-slash-commands"
+import { resolveSpawnPaths } from "./claude-session-config"
 import type { EventStore } from "./event-store"
 import type { AgentCoordinator } from "./agent"
 import type { TerminalManager } from "./terminal-manager"
@@ -47,6 +48,27 @@ const DEFAULT_CHAT_RECENT_LIMIT = 200
  */
 const MAX_BOARD_PAGE_SIZE = 500
 
+export /**
+ * The tree a `project-git` subscriber is asking about.
+ *
+ * With a chat, its resolved cwd — the worktree it runs in, or the project's
+ * checkout when it has no binding. Without one, the project's checkout. Null
+ * when the project (or the named chat) is gone, which is the existence gate the
+ * snapshot's `null` reports.
+ */
+function resolveTopicRepoPath(
+  store: EventStore,
+  projectId: string,
+  chatId: string | undefined,
+): string | null {
+  const project = store.getProject(projectId)
+  if (!project) return null
+  if (chatId === undefined) return project.localPath
+  const chat = store.getChat(chatId)
+  if (!chat) return null
+  return resolveSpawnPaths(chat, project.localPath).cwd
+}
+
 export function resolveBoardPageSize(requested: number | undefined): number | undefined {
   if (requested === undefined) return undefined
   if (!Number.isInteger(requested) || requested <= 0) return undefined
@@ -61,7 +83,7 @@ export interface EnvelopeDeps {
   resolvedAppSettings: ResolvedAppSettings
   keybindings: KeybindingsManager
   resolvedDiffStore: Pick<DiffStore,
-    "getProjectSnapshot" | "refreshSnapshot" | "initializeGit" | "getGitHubPublishInfo" |
+    "getSnapshot" | "refreshSnapshot" | "initializeGit" | "getGitHubPublishInfo" |
     "checkGitHubRepoAvailability" | "publishToGitHub" | "listBranches" | "previewMergeBranch" |
     "mergeBranch" | "syncBranch" | "checkoutBranch" | "createBranch" | "generateCommitMessage" |
     "commitFiles" | "discardFile" | "ignoreFile" | "readPatch">
@@ -308,9 +330,10 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
         id,
         snapshot: {
           type: "project-git",
-          data: store.getProject(topic.projectId)
-            ? resolvedDiffStore.getProjectSnapshot(topic.projectId)
-            : null,
+          data: (() => {
+            const repoPath = resolveTopicRepoPath(store, topic.projectId, topic.chatId)
+            return repoPath === null ? null : resolvedDiffStore.getSnapshot(repoPath)
+          })(),
         },
       }
     }

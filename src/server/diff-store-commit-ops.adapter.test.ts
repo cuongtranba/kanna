@@ -34,7 +34,6 @@ describe("commitFiles", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "kanna-not-git-"))
     await expect(
       commitFiles(makeDeps(), {
-        projectId: "p1",
         projectPath: dir,
         paths: ["README.md"],
         summary: "test commit",
@@ -47,7 +46,6 @@ describe("commitFiles", () => {
     const repo = await makeRepo()
     await expect(
       commitFiles(makeDeps(), {
-        projectId: "p1",
         projectPath: repo,
         paths: ["README.md"],
         summary: "   ",
@@ -60,7 +58,6 @@ describe("commitFiles", () => {
     const repo = await makeRepo()
     await expect(
       commitFiles(makeDeps(), {
-        projectId: "p1",
         projectPath: repo,
         paths: [],
         summary: "test commit",
@@ -73,7 +70,6 @@ describe("commitFiles", () => {
     const repo = await makeRepo()
     await expect(
       commitFiles(makeDeps(), {
-        projectId: "p1",
         projectPath: repo,
         paths: ["README.md"],
         summary: "test commit",
@@ -87,7 +83,6 @@ describe("commitFiles", () => {
     writeFileSync(path.join(repo, "new-file.txt"), "content\n")
 
     const result = await commitFiles(makeDeps(), {
-      projectId: "p1",
       projectPath: repo,
       paths: ["new-file.txt"],
       summary: "add new file",
@@ -107,7 +102,6 @@ describe("commitFiles", () => {
     writeFileSync(path.join(repo, "README.md"), "modified content\n")
 
     const result = await commitFiles(makeDeps(), {
-      projectId: "p1",
       projectPath: repo,
       paths: ["README.md"],
       summary: "update readme",
@@ -134,7 +128,6 @@ describe("commitFiles", () => {
     })
 
     await commitFiles(deps, {
-      projectId: "p1",
       projectPath: repo,
       paths: ["new-file.txt"],
       summary: "add new file",
@@ -149,7 +142,6 @@ describe("commitFiles", () => {
     writeFileSync(path.join(repo, "new-file.txt"), "content\n")
 
     const result = await commitFiles(makeDeps(), {
-      projectId: "p1",
       projectPath: repo,
       paths: ["new-file.txt"],
       summary: "add new file",
@@ -168,7 +160,6 @@ describe("discardFile", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "kanna-not-git-"))
     await expect(
       discardFile(makeDeps(), {
-        projectId: "p1",
         projectPath: dir,
         path: "some-file.txt",
       })
@@ -179,7 +170,6 @@ describe("discardFile", () => {
     const repo = await makeRepo()
     await expect(
       discardFile(makeDeps(), {
-        projectId: "p1",
         projectPath: repo,
         path: "README.md",
       })
@@ -192,7 +182,6 @@ describe("discardFile", () => {
     writeFileSync(filePath, "content\n")
 
     const result = await discardFile(makeDeps(), {
-      projectId: "p1",
       projectPath: repo,
       path: "untracked.txt",
     })
@@ -207,7 +196,6 @@ describe("discardFile", () => {
     writeFileSync(path.join(repo, "README.md"), "modified content\n")
 
     const result = await discardFile(makeDeps(), {
-      projectId: "p1",
       projectPath: repo,
       path: "README.md",
     })
@@ -232,7 +220,6 @@ describe("discardFile", () => {
     })
 
     await discardFile(deps, {
-      projectId: "p1",
       projectPath: repo,
       path: "untracked.txt",
     })
@@ -246,7 +233,6 @@ describe("ignoreFile", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "kanna-not-git-"))
     await expect(
       ignoreFile(makeDeps(), {
-        projectId: "p1",
         projectPath: dir,
         path: "some-file.txt",
       })
@@ -257,7 +243,6 @@ describe("ignoreFile", () => {
     const repo = await makeRepo()
     await expect(
       ignoreFile(makeDeps(), {
-        projectId: "p1",
         projectPath: repo,
         path: "README.md",
       })
@@ -269,7 +254,6 @@ describe("ignoreFile", () => {
     writeFileSync(path.join(repo, "README.md"), "modified content\n")
     await expect(
       ignoreFile(makeDeps(), {
-        projectId: "p1",
         projectPath: repo,
         path: "README.md",
       })
@@ -281,7 +265,6 @@ describe("ignoreFile", () => {
     writeFileSync(path.join(repo, "secret.txt"), "secret content\n")
 
     const result = await ignoreFile(makeDeps(), {
-      projectId: "p1",
       projectPath: repo,
       path: "secret.txt",
     })
@@ -305,7 +288,6 @@ describe("ignoreFile", () => {
     })
 
     await ignoreFile(deps, {
-      projectId: "p1",
       projectPath: repo,
       path: "secret.txt",
     })

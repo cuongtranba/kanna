@@ -125,7 +125,11 @@ export function KannaBoard({
 
   const renderColumnAdder = useCallback(() => <ColumnAdder onAdd={onColumnAdd} />, [onColumnAdd])
 
-  const renderListFooter = useCallback(
+  // `renderColumnFooter`, NOT `renderListFooter`: the latter puts the field
+  // inside the virtualized list, where virtua owns its inline `visibility` and
+  // an empty column can render the field hidden. A way to add a card must not
+  // be at the mercy of a virtualizer.
+  const renderColumnFooter = useCallback(
     (column: BoardItem) => <CardAdder columnId={column.id} onAdd={onCardAdd} />,
     [onCardAdd],
   )
@@ -145,7 +149,7 @@ export function KannaBoard({
         allowColumnDrag
         allowColumnAdder
         renderColumnAdder={renderColumnAdder}
-        renderListFooter={renderListFooter}
+        renderColumnFooter={renderColumnFooter}
         renderColumnHeader={renderColumnHeader}
         renderSkeletonCard={renderSkeletonCard}
         rootClassName="kanna-board flex h-full items-start gap-0 bg-background p-4"

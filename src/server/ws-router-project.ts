@@ -13,6 +13,8 @@
  * Extracted from ws-router.ts.
  */
 import { PROTOCOL_VERSION } from "../shared/types"
+import { resolveSpawnPaths } from "./claude-session-config"
+import type { ChatRecord } from "./events"
 import type { UpdateInstallResult, UpdateSnapshot } from "../shared/types"
 import type { ClientCommand, ImportSessionsByIdsResult, ServerEnvelope } from "../shared/protocol"
 import type { ImportClaudeSessionsResult } from "./claude-session-importer.adapter"
@@ -24,6 +26,8 @@ import type { ImportClaudeSessionsResult } from "./claude-session-importer.adapt
 /** The subset of EventStore consumed by project WS commands. */
 export interface ProjectStoreDep {
   getProject(projectId: string): { id: string; localPath: string } | null | undefined
+  /** Needed to read a patch from a chat's own worktree rather than the project's checkout. */
+  getChat(chatId: string): Pick<ChatRecord, "id" | "stackBindings"> | null | undefined
   openProject(localPath: string, title?: string): Promise<{ id: string }>
   removeProject(projectId: string): Promise<void>
   setProjectStar(projectId: string, starred: boolean): Promise<void>
@@ -225,8 +229,12 @@ export async function handleProjectCommand(
       if (!project) {
         throw new Error("Project not found")
       }
+      // The diff this patch belongs to was computed against the CHAT's tree, so
+      // the patch has to be read from the same one or it describes a different
+      // file — or none.
+      const chat = command.chatId === undefined ? null : store.getChat(command.chatId)
       const result = await diffStore.readPatch({
-        projectPath: project.localPath,
+        projectPath: chat ? resolveSpawnPaths(chat, project.localPath).cwd : project.localPath,
         path: command.path,
       })
       send({ v: PROTOCOL_VERSION, type: "ack", id, result })

@@ -37,7 +37,7 @@ import type {
 } from "../shared/types"
 
 export interface DiffStoreBranchOpsDeps {
-  readonly refreshSnapshot: (projectId: string, projectPath: string) => Promise<boolean>
+  readonly refreshSnapshot: (repoPath: string) => Promise<boolean>
 }
 
 export async function listBranches(
@@ -263,7 +263,7 @@ export async function previewMergeBranch(
 
 export async function mergeBranch(
   deps: DiffStoreBranchOpsDeps,
-  args: { projectId: string; projectPath: string; branch: SelectedBranch }
+  args: { projectPath: string; branch: SelectedBranch }
 ): Promise<ChatMergeBranchResult> {
   const repo = await resolveRepo(args.projectPath)
   if (!repo) {
@@ -295,7 +295,7 @@ export async function mergeBranch(
   const detail = formatGitFailure(mergeResult)
 
   if (mergeResult.exitCode !== 0) {
-    const snapshotChanged = await deps.refreshSnapshot(args.projectId, args.projectPath)
+    const snapshotChanged = await deps.refreshSnapshot(args.projectPath)
     const normalized = detail.toLowerCase()
     const title = normalized.includes("conflict")
       ? "Merge conflicts need resolution"
@@ -311,7 +311,7 @@ export async function mergeBranch(
     })
   }
 
-  const snapshotChanged = await deps.refreshSnapshot(args.projectId, args.projectPath)
+  const snapshotChanged = await deps.refreshSnapshot(args.projectPath)
   return {
     ok: true,
     branchName: await getBranchName(repo.repoRoot),
@@ -322,7 +322,6 @@ export async function mergeBranch(
 export async function checkoutBranch(
   deps: DiffStoreBranchOpsDeps,
   args: {
-    projectId: string
     projectPath: string
     branch: SelectedBranch
     bringChanges?: boolean
@@ -398,7 +397,7 @@ export async function checkoutBranch(
     return createBranchActionFailure("Checkout failed", formatGitFailure(switchResult), "Git could not switch branches.")
   }
 
-  const snapshotChanged = await deps.refreshSnapshot(args.projectId, args.projectPath)
+  const snapshotChanged = await deps.refreshSnapshot(args.projectPath)
   return {
     ok: true,
     branchName: await getBranchName(repo.repoRoot),
@@ -409,7 +408,6 @@ export async function checkoutBranch(
 export async function createBranch(
   deps: DiffStoreBranchOpsDeps,
   args: {
-    projectId: string
     projectPath: string
     name: string
     baseBranchName?: string
@@ -450,7 +448,7 @@ export async function createBranch(
     return createBranchActionFailure("Create branch failed", formatGitFailure(switchResult), "Git could not create the branch.")
   }
 
-  const snapshotChanged = await deps.refreshSnapshot(args.projectId, args.projectPath)
+  const snapshotChanged = await deps.refreshSnapshot(args.projectPath)
   return {
     ok: true,
     branchName,
@@ -461,7 +459,6 @@ export async function createBranch(
 export async function syncBranch(
   deps: DiffStoreBranchOpsDeps,
   args: {
-    projectId: string
     projectPath: string
     action: "fetch" | "pull" | "push" | "publish"
   }
@@ -495,7 +492,7 @@ export async function syncBranch(
       }
     }
 
-    const snapshotChanged = await deps.refreshSnapshot(args.projectId, args.projectPath)
+    const snapshotChanged = await deps.refreshSnapshot(args.projectPath)
     const branchName = await getBranchName(repo.repoRoot)
     const nextHasUpstream = await hasUpstreamBranch(repo.repoRoot)
     const { aheadCount, behindCount } = nextHasUpstream
@@ -529,7 +526,7 @@ export async function syncBranch(
       return createSyncPushFailure(detail, false)
     }
 
-    const snapshotChanged = await deps.refreshSnapshot(args.projectId, args.projectPath)
+    const snapshotChanged = await deps.refreshSnapshot(args.projectPath)
     const branchName = await getBranchName(repo.repoRoot)
     const nextHasUpstream = await hasUpstreamBranch(repo.repoRoot)
     const { aheadCount, behindCount } = nextHasUpstream
@@ -584,7 +581,7 @@ export async function syncBranch(
     }
   }
 
-  const snapshotChanged = await deps.refreshSnapshot(args.projectId, args.projectPath)
+  const snapshotChanged = await deps.refreshSnapshot(args.projectPath)
   const branchName = await getBranchName(repo.repoRoot)
   const nextHasUpstream = await hasUpstreamBranch(repo.repoRoot)
   const { aheadCount, behindCount } = nextHasUpstream

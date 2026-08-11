@@ -26,7 +26,7 @@ import type { ChatPermissionPolicyOverride } from "../../shared/permission-polic
 import { usePtyInstancesStore } from "../stores/ptyInstancesStore"
 import { useFollowedSessionsStore } from "../stores/followedSessionsStore"
 import { useOpenRouterModelsStore } from "../stores/openrouterModelsStore"
-import { useKannaStateStore } from "../stores/kannaStateStore"
+import { gitSnapshotKey, useKannaStateStore } from "../stores/kannaStateStore"
 import { usePaneLayoutStore } from "../stores/paneLayoutStore"
 import { collectPanes } from "../lib/paneTree"
 import { useSlashCommandsStore } from "../stores/slashCommandsStore"
@@ -631,31 +631,44 @@ export function useAppGlobalState(
 
   useEffect(() => {
     const ids = new Set<string>()
+    // Git state is subscribed per CHAT, because a chat can run in a worktree of
+    // its project and therefore have its own branch and its own dirty files.
+    // A project with no open chat still gets one subscription for its checkout.
+    const gitTargets = new Map<string, { projectId: string; chatId?: string }>()
     for (const chatId of openChatTabIds) {
       const chatProjectId = getProjectIdForChat(sidebarProjectGroups, chatId)
-      if (chatProjectId) ids.add(chatProjectId)
+      if (!chatProjectId) continue
+      ids.add(chatProjectId)
+      gitTargets.set(gitSnapshotKey(chatProjectId, chatId), { projectId: chatProjectId, chatId })
     }
     if (selectedProjectId) ids.add(selectedProjectId)
     if (runtimeProjectId) ids.add(runtimeProjectId)
+    for (const projectId of ids) {
+      if (!gitTargets.has(projectId)) gitTargets.set(projectId, { projectId })
+    }
 
     if (ids.size === 0) return
 
     const cleanups: (() => void)[] = []
-    ids.forEach((projectId) => {
+
+    gitTargets.forEach(({ projectId, chatId }, key) => {
       cleanups.push(
         socket.subscribe<ChatDiffSnapshot | null>(
-          { type: "project-git", projectId },
+          { type: "project-git", projectId, ...(chatId === undefined ? {} : { chatId }) },
           (snapshot) => {
-            useKannaStateStore.getState().setProjectDiffSnapshots((current) => {
+            useKannaStateStore.getState().setDiffSnapshotsByKey((current) => {
               const nextDiffs = snapshot ?? null
-              if (shouldPreserveExistingProjectDiffs(current[projectId] ?? null, nextDiffs)) return current
-              if (sameDiffs(current[projectId] ?? null, nextDiffs)) return current
-              return { ...current, [projectId]: nextDiffs }
+              if (shouldPreserveExistingProjectDiffs(current[key] ?? null, nextDiffs)) return current
+              if (sameDiffs(current[key] ?? null, nextDiffs)) return current
+              return { ...current, [key]: nextDiffs }
             })
             useKannaStateStore.getState().setCommandError(null)
           },
         ),
       )
+    })
+
+    ids.forEach((projectId) => {
       // The composer picker's catalog is per project, so it is fetched once
       // per project rather than per chat — opening another chat in the same
       // project renders the list from cache with no round trip.

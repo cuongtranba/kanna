@@ -1047,7 +1047,7 @@ describe("ws-router", () => {
         getProject: () => state.projectsById.get("project-1") ?? null,
       } as never,
       diffStore: {
-        getProjectSnapshot: () => ({
+        getSnapshot: () => ({
           status: "ready",
           branchName: "main",
           files: [],
@@ -1216,7 +1216,7 @@ describe("ws-router", () => {
         getProject: (projectId: string) => state.projectsById.get(projectId) ?? null,
       } as never,
       diffStore: {
-        getProjectSnapshot: () => null,
+        getSnapshot: () => null,
         refreshSnapshot: async () => false,
         listBranches: async () => ({ recent: [], local: [], remote: [], pullRequests: [], pullRequestsStatus: "unavailable" }),
         previewMergeBranch: async () => ({ currentBranchName: "main", targetBranchName: "feature/test", targetDisplayName: "feature/test", status: "mergeable", commitCount: 1, hasConflicts: false, message: "ready" }),
@@ -1300,7 +1300,7 @@ describe("ws-router", () => {
         getChat: (chatId: string) => state.chatsById.get(chatId) ?? null,
       } as never,
       diffStore: {
-        getProjectSnapshot: () => ({ status: "ready", branchName: "main", files: [], branchHistory: { entries: [] } }),
+        getSnapshot: () => ({ status: "ready", branchName: "main", files: [], branchHistory: { entries: [] } }),
         refreshSnapshot: async () => false,
         listBranches: async () => ({ recent: [], local: [], remote: [], pullRequests: [], pullRequestsStatus: "unavailable" }),
         previewMergeBranch: async () => ({ currentBranchName: "main", targetBranchName: "feature/test", targetDisplayName: "feature/test", status: "mergeable", commitCount: 2, hasConflicts: false, message: "2 commits from feature/test will merge into main." }),
@@ -2310,14 +2310,14 @@ describe("ws-router", () => {
       lastTurnOutcome: null,
     })
 
-    const discardCalls: Array<{ projectId: string; projectPath: string; path: string }> = []
+    const discardCalls: Array<{ projectPath: string; path: string }> = []
     const diffStore = {
-      getProjectSnapshot: () => ({ status: "ready" as const, files: [], defaultBranchName: "main", originRepoSlug: "acme/repo", aheadCount: 0, behindCount: 0, lastFetchedAt: undefined }),
+      getSnapshot: () => ({ status: "ready" as const, files: [], defaultBranchName: "main", originRepoSlug: "acme/repo", aheadCount: 0, behindCount: 0, lastFetchedAt: undefined }),
       refreshSnapshot: async () => false,
       syncBranch: async () => ({ ok: true as const, action: "fetch" as const, snapshotChanged: false }),
       generateCommitMessage: async () => ({ subject: "", body: "" }),
       commitFiles: async () => ({ ok: true as const, mode: "commit_only" as const, pushed: false, snapshotChanged: false }),
-      discardFile: async (args: { projectId: string; projectPath: string; path: string }) => {
+      discardFile: async (args: { projectPath: string; path: string }) => {
         discardCalls.push(args)
         return { snapshotChanged: true }
       },
@@ -2376,7 +2376,6 @@ describe("ws-router", () => {
     )
 
     expect(discardCalls).toEqual([{
-      projectId: "project-1",
       projectPath: "/tmp/project",
       path: "app.txt",
     }])
@@ -2412,7 +2411,7 @@ describe("ws-router", () => {
       lastTurnOutcome: null,
     })
 
-    const ignoreCalls: Array<{ projectId: string; projectPath: string; path: string }> = []
+    const ignoreCalls: Array<{ projectPath: string; path: string }> = []
     const router = createWsRouter({
       store: {
         state,
@@ -2420,13 +2419,13 @@ describe("ws-router", () => {
         getProject: (projectId: string) => state.projectsById.get(projectId) ?? null,
       } as never,
       diffStore: {
-        getProjectSnapshot: () => ({ status: "ready" as const, files: [], defaultBranchName: "main", originRepoSlug: "acme/repo", aheadCount: 0, behindCount: 0, lastFetchedAt: undefined }),
+        getSnapshot: () => ({ status: "ready" as const, files: [], defaultBranchName: "main", originRepoSlug: "acme/repo", aheadCount: 0, behindCount: 0, lastFetchedAt: undefined }),
         refreshSnapshot: async () => false,
         syncBranch: async () => ({ ok: true as const, action: "fetch" as const, snapshotChanged: false }),
         generateCommitMessage: async () => ({ subject: "", body: "" }),
         commitFiles: async () => ({ ok: true as const, mode: "commit_only" as const, pushed: false, snapshotChanged: false }),
         discardFile: async () => ({ snapshotChanged: false }),
-        ignoreFile: async (args: { projectId: string; projectPath: string; path: string }) => {
+        ignoreFile: async (args: { projectPath: string; path: string }) => {
           ignoreCalls.push(args)
           return { snapshotChanged: false }
         },
@@ -2463,7 +2462,6 @@ describe("ws-router", () => {
     )
 
     expect(ignoreCalls).toEqual([{
-      projectId: "project-1",
       projectPath: "/tmp/project",
       path: "scratch.log",
     }])

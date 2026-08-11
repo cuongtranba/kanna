@@ -47,7 +47,7 @@ function makeDeps(storeOverrides?: Partial<DiffStoreDep>): DiffCommandDeps & { s
   let broadcastCount = 0
   return {
     resolvedDiffStore: makeStore(storeOverrides),
-    resolveChatProject: (chatId) => ({ project: { id: `proj-${chatId}`, localPath: `/tmp/${chatId}` } }),
+    resolveChatRepoPath: (chatId: string) => `/tmp/${chatId}`,
     send: (envelope) => { sent.push(envelope) },
     broadcastSnapshots: () => { broadcastCount++ },
     sent,
@@ -120,15 +120,15 @@ describe("handleDiffCommand", () => {
   // ---------------------------------------------------------------------------
 
   test("chat.checkGitHubRepoAvailability — acks without project lookup", async () => {
-    const resolveSpy = mock((chatId: string) => ({ project: { id: `proj-${chatId}`, localPath: `/tmp/${chatId}` } }))
-    const deps = { ...makeDeps(), resolveChatProject: resolveSpy }
+    const resolveSpy = mock((chatId: string) => `/tmp/${chatId}`)
+    const deps = { ...makeDeps(), resolveChatRepoPath: resolveSpy }
     const handled = await handleDiffCommand(
       deps,
       { type: "chat.checkGitHubRepoAvailability", chatId: "c1", owner: "my-org", name: "my-repo" },
       "r6",
     )
     expect(handled).toBe(true)
-    // resolveChatProject should NOT have been called — this command doesn't need a chatId
+    // resolveChatRepoPath should NOT have been called — this command doesn't need a chatId
     expect(resolveSpy).not.toHaveBeenCalled()
   })
 
