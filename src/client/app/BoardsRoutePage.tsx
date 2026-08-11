@@ -11,9 +11,13 @@ import type { SidebarProjectGroup } from "../../shared/types"
  *
  * Opening a board adds a pane tab and then navigates into the project's most
  * recent chat, because the pane WORKSPACE only exists on the chat route — that
- * is where a board sitting beside a live transcript is the point. A project
- * with no chat yet has nowhere to put the pane, so the tab is opened and the
- * route left alone; the board appears as soon as a chat is.
+ * is where a board sitting beside a live transcript is the point.
+ *
+ * A project with no chat yet has nowhere to put the pane, so opening a board
+ * starts one. That used to leave the route alone instead, which opened a tab
+ * the reader could not see and looked like nothing happening. The page says so
+ * before the click rather than surprising them after it; an unused chat is
+ * reaped on its own, so the cost of being wrong is nil.
  */
 export function BoardsRoutePage() {
   const state = useOutletContext<KannaState>()
@@ -28,13 +32,20 @@ export function BoardsRoutePage() {
   const group = groups.find((candidate) => candidate.groupKey === projectId)
   const projectName = group ? getPathBasename(group.localPath) : "Project"
 
+  const existingChatId = group?.chats[0]?.chatId ?? group?.previewChats[0]?.chatId ?? null
+
   const handleOpenBoard = useCallback(
     (boardId: string) => {
       usePaneLayoutStore.getState().openTab({ kind: "board", boardId })
-      const chatId = group?.chats[0]?.chatId ?? group?.previewChats[0]?.chatId ?? null
-      if (chatId) state.chatNavigator.openChat(chatId)
+      if (existingChatId) {
+        state.chatNavigator.openChat(existingChatId)
+        return
+      }
+      // `handleCreateChat` navigates into the new chat itself, which is where
+      // the tab opened above becomes visible.
+      void state.handleCreateChat(projectId)
     },
-    [group, state.chatNavigator],
+    [existingChatId, projectId, state],
   )
 
   return (
@@ -42,6 +53,7 @@ export function BoardsRoutePage() {
       <BoardsPage
         projectId={projectId}
         projectName={projectName}
+        hasChat={existingChatId !== null}
         socket={state.socket}
         onOpenBoard={handleOpenBoard}
       />

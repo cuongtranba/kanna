@@ -29,14 +29,21 @@ export interface BoardsPageSocket {
 }
 
 export interface BoardsPageProps {
+  /**
+   * Whether the project already has a chat. A board opens as a pane tab, and
+   * the pane workspace only exists on the chat route — so with no chat there is
+   * nowhere to put it, and opening one has to start a chat as well. The reader
+   * is told that before they click, not after.
+   */
   projectId: string
   projectName: string
+  hasChat: boolean
   socket: BoardsPageSocket
   /** Hands a board to the pane workspace. */
   onOpenBoard: (boardId: string) => void
 }
 
-export function BoardsPage({ projectId, projectName, socket, onOpenBoard }: BoardsPageProps) {
+export function BoardsPage({ projectId, projectName, hasChat, socket, onOpenBoard }: BoardsPageProps) {
   const key = ownerKey("project", projectId)
   const boards = useBoardsStore(selectBoards(key))
   const templates = useBoardsPageStore(selectTemplates)
@@ -118,6 +125,11 @@ export function BoardsPage({ projectId, projectName, socket, onOpenBoard }: Boar
             {projectName}
             {boards.length > 0 ? <span className="tabular-nums"> · {boards.length} boards</span> : null}
           </p>
+          {hasChat ? null : (
+            <p className="mt-1 text-[13px] text-muted-foreground">
+              Opening a board also starts a chat here — a board sits beside one.
+            </p>
+          )}
         </div>
         {boards.length > 0 ? (
           <Button size="sm" onClick={openPicker}>

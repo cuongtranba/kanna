@@ -39,7 +39,10 @@ export const useBoardsPageStore = create<BoardsPageState>()((set) => ({
   picking: false,
   renamingId: null,
   error: null,
-  setTemplates: (templates) => set({ templates }),
+  // The value crosses the wire, and the loader's own catch promises that a
+  // missing template list will not blank the page. A non-array would break that
+  // promise by crashing the picker instead, so it is treated as none.
+  setTemplates: (templates) => set({ templates: Array.isArray(templates) ? templates : [] }),
   openMenu: (openMenuId) => set({ openMenuId }),
   closeMenu: () => set({ openMenuId: null }),
   openPicker: () => set({ picking: true, error: null }),
