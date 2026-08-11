@@ -1,7 +1,11 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "bun:test"
 import { renderToStaticMarkup } from "react-dom/server"
 import { TooltipProvider } from "../ui/tooltip"
 import { createPane, createTab, type PaneLeaf } from "../../lib/paneTree"
+import { DEFAULT_TAB_MIN_WIDTH } from "../../../shared/pane-tab-width"
+import type { AppSettingsSnapshot } from "../../../shared/types"
+import { renderClientMarkup } from "../../lib/testing/renderClientMarkup"
+import { useAppSettingsStore } from "../../stores/appSettingsStore"
 import { SHELL_TOP_BAND_CLASS } from "../../lib/shellChrome"
 import { PaneTabStrip } from "./PaneTabStrip"
 import type { TabPresentationContext } from "./tabPresentation"
@@ -171,5 +175,68 @@ describe("PaneTabStrip split availability", () => {
 
     expect(html).toContain('aria-label="Split right"')
     expect(html).not.toContain('aria-disabled="true"')
+  })
+})
+
+/**
+ * Store-driven, so these render through the client path — zustand serves
+ * `getInitialState()` to a server render and a `setState` here would be
+ * invisible (see renderClientMarkup).
+ */
+describe("PaneTabStrip tab width preference", () => {
+  const pane = createPane("p1", [chat, t1, changes])
+  /** 3 tabs sharing 260px less the 52px split actions. */
+  const SHARED_WIDTH = Math.round((260 - 52) / 3)
+
+  afterEach(() => {
+    useAppSettingsStore.setState({ settings: null })
+  })
+
+  function setTabMinWidth(tabMinWidth: number) {
+    useAppSettingsStore.setState({
+      settings: { panes: { tabMinWidth } } as unknown as AppSettingsSnapshot,
+    })
+  }
+
+  async function renderStrip() {
+    return renderClientMarkup(
+      <TooltipProvider>
+        <PaneTabStrip
+          pane={pane}
+          isPaneFocused
+          width={260}
+          presentation={{ terminalTitles: { t1: "Terminal A" } }}
+          onSelectTab={() => undefined}
+          onCloseTab={() => undefined}
+          onSplit={() => undefined}
+        />
+      </TooltipProvider>,
+    )
+  }
+
+  test("shrinks tabs toward the icon-only floor by default", async () => {
+    setTabMinWidth(DEFAULT_TAB_MIN_WIDTH)
+    const { html, cleanup } = await renderStrip()
+    await cleanup()
+
+    expect(html).toContain(`width: ${SHARED_WIDTH}px`)
+    expect(html).not.toContain("overflow-x-auto")
+  })
+
+  test("holds tabs wider and scrolls the strip when the preference says so", async () => {
+    setTabMinWidth(160)
+    const { html, cleanup } = await renderStrip()
+    await cleanup()
+
+    expect(html).toContain("width: 160px")
+    expect(html).toContain("overflow-x-auto")
+  })
+
+  test("falls back to the default before settings have hydrated", async () => {
+    useAppSettingsStore.setState({ settings: null })
+    const { html, cleanup } = await renderStrip()
+    await cleanup()
+
+    expect(html).toContain(`width: ${SHARED_WIDTH}px`)
   })
 })

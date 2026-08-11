@@ -22,6 +22,10 @@ export function mergeAppSettingsPatch(
       ...settings.terminal,
       ...patch.terminal,
     },
+    panes: {
+      ...settings.panes,
+      ...patch.panes,
+    },
     editor: {
       ...settings.editor,
       ...patch.editor,

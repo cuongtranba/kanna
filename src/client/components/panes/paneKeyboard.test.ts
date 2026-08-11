@@ -73,6 +73,30 @@ describe("resolvePaneCommand", () => {
     })
   })
 
+  test("maps the shifted directional bindings to a resize command", () => {
+    const cases = [
+      ["ArrowLeft", "left"],
+      ["ArrowRight", "right"],
+      ["ArrowUp", "up"],
+      ["ArrowDown", "down"],
+    ] as const
+
+    for (const [key, direction] of cases) {
+      const mac = keyEvent({ key, meta: true, ctrl: true, shift: true })
+      expect(resolvePaneCommand(KEYBINDINGS, mac, false)).toEqual({ kind: "resize", direction })
+
+      const pc = keyEvent({ key, ctrl: true, alt: true, shift: true })
+      expect(resolvePaneCommand(KEYBINDINGS, pc, false)).toEqual({ kind: "resize", direction })
+    }
+  })
+
+  test("the unshifted arrows still mean focus, not resize", () => {
+    // Resize shares the arrows with focus and is separated only by Shift, so
+    // this pins that the modifier comparison stays exact rather than subset.
+    const event = keyEvent({ key: "ArrowLeft", meta: true, ctrl: true })
+    expect(resolvePaneCommand(KEYBINDINGS, event, false)).toEqual({ kind: "focus", direction: "left" })
+  })
+
   test("returns null for an unrelated combination", () => {
     expect(resolvePaneCommand(KEYBINDINGS, keyEvent({ key: "b", meta: true }), false)).toBeNull()
   })

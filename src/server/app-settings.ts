@@ -9,6 +9,7 @@ import {
   writeTextFileUtf8,
 } from "./app-settings-io.adapter"
 import { getSettingsFilePath } from "../shared/branding"
+import { clampTabMinWidth } from "../shared/pane-tab-width"
 import {
   AUTH_DEFAULTS,
   AUTH_SESSION_MAX_AGE_DAYS_MAX,
@@ -101,6 +102,9 @@ interface AppSettingsFile {
   terminal?: {
     scrollbackLines?: number
     minColumnWidth?: number
+  }
+  panes?: {
+    tabMinWidth?: number
   }
   editor?: {
     preset?: string
@@ -952,6 +956,7 @@ function toFilePayload(state: AppSettingsState) {
     chatSoundPreference: state.chatSoundPreference,
     chatSoundId: state.chatSoundId,
     terminal: state.terminal,
+    panes: state.panes,
     editor: state.editor,
     defaultProvider: state.defaultProvider,
     providerDefaults: state.providerDefaults,
@@ -979,6 +984,7 @@ function toSnapshot(state: AppSettingsState): AppSettingsSnapshot {
     chatSoundPreference: state.chatSoundPreference,
     chatSoundId: state.chatSoundId,
     terminal: state.terminal,
+    panes: state.panes,
     editor: state.editor,
     defaultProvider: state.defaultProvider,
     providerDefaults: state.providerDefaults,
@@ -1060,6 +1066,9 @@ function normalizeAppSettings<T>(
       scrollbackLines: clampNumber(source?.terminal?.scrollbackLines, DEFAULT_TERMINAL_SCROLLBACK, MIN_TERMINAL_SCROLLBACK, MAX_TERMINAL_SCROLLBACK),
       minColumnWidth: clampNumber(source?.terminal?.minColumnWidth, DEFAULT_TERMINAL_MIN_COLUMN_WIDTH, MIN_TERMINAL_MIN_COLUMN_WIDTH, MAX_TERMINAL_MIN_COLUMN_WIDTH),
     },
+    panes: {
+      tabMinWidth: clampTabMinWidth(source?.panes?.tabMinWidth),
+    },
     editor: {
       preset: editorPreset,
       commandTemplate: normalizeEditorCommandTemplate(source?.editor?.commandTemplate, editorPreset),
@@ -1104,6 +1113,7 @@ function toComparablePayload(source: AppSettingsFile) {
     chatSoundPreference: source.chatSoundPreference,
     chatSoundId: source.chatSoundId,
     terminal: source.terminal,
+    panes: source.panes,
     editor: source.editor,
     defaultProvider: source.defaultProvider,
     providerDefaults: source.providerDefaults,
@@ -1660,6 +1670,10 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
     terminal: {
       ...state.terminal,
       ...patch.terminal,
+    },
+    panes: {
+      ...state.panes,
+      ...patch.panes,
     },
     editor: {
       ...state.editor,

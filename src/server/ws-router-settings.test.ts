@@ -17,6 +17,7 @@ import { KeybindingsManager } from "./keybindings"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
+import { DEFAULT_TAB_MIN_WIDTH } from "../shared/pane-tab-width"
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -30,6 +31,7 @@ function makeSnapshot(): AppSettingsSnapshot {
     chatSoundPreference: "always",
     chatSoundId: "funk",
     terminal: { scrollbackLines: 1_000, minColumnWidth: 450 },
+    panes: { tabMinWidth: DEFAULT_TAB_MIN_WIDTH },
     editor: { preset: "cursor", commandTemplate: "cursor {path}" },
     defaultProvider: "last_used",
     providerDefaults: {

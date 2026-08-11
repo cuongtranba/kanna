@@ -21,6 +21,7 @@ import {
 import { createToolCallbackService } from "./tool-callback"
 import { createTestEventStore } from "./storage/test-helpers"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
+import { DEFAULT_TAB_MIN_WIDTH } from "../shared/pane-tab-width"
 
 function withSidebarGroupDefaults(group: {
   groupKey: string
@@ -94,6 +95,7 @@ const DEFAULT_APP_SETTINGS_SNAPSHOT: AppSettingsSnapshot = {
     scrollbackLines: 1_000,
     minColumnWidth: 450,
   },
+  panes: { tabMinWidth: DEFAULT_TAB_MIN_WIDTH },
   editor: {
     preset: "cursor",
     commandTemplate: "cursor {path}",
@@ -552,6 +554,7 @@ describe("ws-router", () => {
             chatSoundId: patch.chatSoundId ?? snapshot.chatSoundId,
             defaultProvider: patch.defaultProvider ?? snapshot.defaultProvider,
             terminal: { ...snapshot.terminal, ...patch.terminal },
+            panes: { ...snapshot.panes, ...patch.panes },
             editor: { ...snapshot.editor, ...patch.editor },
           }
           listener?.(snapshot)

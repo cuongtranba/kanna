@@ -153,6 +153,7 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
   const splitPane = usePaneLayoutStore((s) => s.splitPane)
   const setGroupSizes = usePaneLayoutStore((s) => s.setGroupSizes)
   const focusAdjacentPane = usePaneLayoutStore((s) => s.focusAdjacentPane)
+  const resizeFocusedPane = usePaneLayoutStore((s) => s.resizeFocusedPane)
   const cycleFocusedPaneTab = usePaneLayoutStore((s) => s.cycleFocusedPaneTab)
   const closeFocusedTab = usePaneLayoutStore((s) => s.closeFocusedTab)
   const splitFocusedPane = usePaneLayoutStore((s) => s.splitFocusedPane)
@@ -516,13 +517,16 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
       if (!command) return
 
       event.preventDefault()
-      // Each of these moves focus, so the URL follows — that is what makes
-      // keyboard tab switching actually switch the chat being shown, not just
-      // the highlighted tab.
+      // The focus-moving cases sync the URL — that is what makes keyboard tab
+      // switching actually switch the chat being shown, not just the
+      // highlighted tab. Resize is the one command that leaves focus put.
       switch (command.kind) {
         case "focus":
           focusAdjacentPane(command.direction)
           syncUrlToFocusedChat()
+          return
+        case "resize":
+          resizeFocusedPane(command.direction)
           return
         case "split":
           splitFocusedPane(command.position)
@@ -538,7 +542,7 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
     }
 
     return dom.addWindowListener("keydown", handleGlobalKeydown)
-  }, [addTerminal, closeFocusedTab, cycleFocusedPaneTab, dom, focusAdjacentPane, handleOpenExternal, handleToggleEmbeddedTerminal, handleToggleRightSidebar, projectId, resolvedKeybindings, splitFocusedPane, syncUrlToFocusedChat])
+  }, [addTerminal, closeFocusedTab, cycleFocusedPaneTab, dom, focusAdjacentPane, handleOpenExternal, handleToggleEmbeddedTerminal, handleToggleRightSidebar, projectId, resizeFocusedPane, resolvedKeybindings, splitFocusedPane, syncUrlToFocusedChat])
 
   // ─── Content registry ────────────────────────────────────────────────────────
 

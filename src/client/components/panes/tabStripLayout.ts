@@ -14,9 +14,12 @@
  * bands drift out of line in the first place.
  */
 
-/** Icon (14) + horizontal padding (24) + close button (22). */
-export const MIN_TAB_WIDTH = 60
-export const MAX_TAB_WIDTH = 200
+// The floor and ceiling live in shared because app-settings clamps the user's
+// tab-width preference into exactly this range; a local copy here is how the
+// settings range and the layout floor would drift apart.
+import { MAX_TAB_WIDTH, MIN_TAB_WIDTH } from "../../../shared/pane-tab-width"
+
+export { MAX_TAB_WIDTH, MIN_TAB_WIDTH }
 
 /**
  * The floor a phone strip uses instead.

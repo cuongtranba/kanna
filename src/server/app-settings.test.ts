@@ -5,6 +5,7 @@ import path from "node:path"
 import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLAUDE_DRIVER_DEFAULTS, CLAUDE_PTY_LIFECYCLE_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, DEFAULT_OPENROUTER_SDK_MODEL, GLOBAL_PROMPT_APPEND_MAX_CHARS, PUSH_DEFAULTS, UPLOAD_DEFAULTS } from "../shared/types"
 import { AppSettingsManager, readAppSettingsSnapshot, seedCustomModelsFromBuiltins } from "./app-settings"
 import type { AppSettingsSnapshot, McpOAuthState, SubagentInput } from "../shared/types"
+import { DEFAULT_TAB_MIN_WIDTH, MAX_TAB_WIDTH } from "../shared/pane-tab-width"
 
 let tempDirs: string[] = []
 let activeManagers: AppSettingsManager[] = []
@@ -46,6 +47,7 @@ function expectedSettingsSnapshot(filePath: string, overrides: Partial<AppSettin
       scrollbackLines: 1_000,
       minColumnWidth: 450,
     },
+    panes: { tabMinWidth: DEFAULT_TAB_MIN_WIDTH },
     editor: {
       preset: "cursor",
       commandTemplate: "cursor {path}",
@@ -191,6 +193,32 @@ describe("AppSettingsManager", () => {
     expect(nextPayload.analyticsUserId).toBe(initialPayload.analyticsUserId)
     expect(nextPayload.theme).toBe("dark")
     expect(nextPayload.chatSoundId).toBe("glass")
+
+    manager.dispose()
+  })
+})
+
+describe("pane tab width normalization", () => {
+  test("defaults to the icon-only floor when the file says nothing", async () => {
+    const filePath = await writeSettingsFile({ analyticsEnabled: true })
+    const snapshot = await readAppSettingsSnapshot(filePath)
+    expect(snapshot.panes.tabMinWidth).toBe(DEFAULT_TAB_MIN_WIDTH)
+  })
+
+  test("clamps a hand-edited value into the strip's own range", async () => {
+    const filePath = await writeSettingsFile({ analyticsEnabled: true, panes: { tabMinWidth: 5_000 } })
+    const snapshot = await readAppSettingsSnapshot(filePath)
+    expect(snapshot.panes.tabMinWidth).toBe(MAX_TAB_WIDTH)
+  })
+
+  test("round-trips a patch through the file", async () => {
+    const filePath = await createTempFilePath()
+    const manager = trackManager(new AppSettingsManager(filePath))
+    await manager.initialize()
+
+    const snapshot = await manager.writePatch({ panes: { tabMinWidth: 140 } })
+    expect(snapshot.panes.tabMinWidth).toBe(140)
+    expect(await readAppSettingsSnapshot(filePath)).toMatchObject({ panes: { tabMinWidth: 140 } })
 
     manager.dispose()
   })

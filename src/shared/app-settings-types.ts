@@ -222,6 +222,10 @@ export type KeybindingAction =
   | "closePaneTab"
   | "nextPaneTab"
   | "previousPaneTab"
+  | "resizePaneLeft"
+  | "resizePaneRight"
+  | "resizePaneUp"
+  | "resizePaneDown"
 
 /**
  * Pane commands deliberately sit on `cmd+ctrl` / `ctrl+alt`.
@@ -231,6 +235,10 @@ export type KeybindingAction =
  * `cmd+alt+…` pane binding would flash that overlay on every use. `ctrl+shift`
  * and `cmd+w` families are reserved by browsers (new incognito window, close
  * tab) and cannot be prevented from a page.
+ *
+ * Resize adds Shift to the focus arrows: the two commands are the same gesture
+ * aimed at the same axis, and modifier matching is exact, so they cannot
+ * collide.
  */
 export const DEFAULT_KEYBINDINGS: Record<KeybindingAction, string[]> = {
   toggleEmbeddedTerminal: ["cmd+j", "ctrl+`"],
@@ -253,6 +261,10 @@ export const DEFAULT_KEYBINDINGS: Record<KeybindingAction, string[]> = {
   closePaneTab: ["cmd+ctrl+w", "ctrl+alt+q"],
   nextPaneTab: ["cmd+ctrl+j", "ctrl+alt+j"],
   previousPaneTab: ["cmd+ctrl+k", "ctrl+alt+k"],
+  resizePaneLeft: ["cmd+ctrl+shift+arrowleft", "ctrl+alt+shift+arrowleft"],
+  resizePaneRight: ["cmd+ctrl+shift+arrowright", "ctrl+alt+shift+arrowright"],
+  resizePaneUp: ["cmd+ctrl+shift+arrowup", "ctrl+alt+shift+arrowup"],
+  resizePaneDown: ["cmd+ctrl+shift+arrowdown", "ctrl+alt+shift+arrowdown"],
 }
 
 export const KEYBINDING_ACTIONS: readonly KeybindingAction[] = [
@@ -276,6 +288,10 @@ export const KEYBINDING_ACTIONS: readonly KeybindingAction[] = [
   "closePaneTab",
   "nextPaneTab",
   "previousPaneTab",
+  "resizePaneLeft",
+  "resizePaneRight",
+  "resizePaneUp",
+  "resizePaneDown",
 ] satisfies KeybindingAction[]
 
 export interface KeybindingsSnapshot {
@@ -297,6 +313,10 @@ export interface AppSettingsSnapshot {
   terminal: {
     scrollbackLines: number
     minColumnWidth: number
+  }
+  panes: {
+    /** How narrow a tab may get before the strip scrolls instead of shrinking. */
+    tabMinWidth: number
   }
   editor: {
     preset: EditorPreset
@@ -340,6 +360,7 @@ export interface AppSettingsPatch {
   chatSoundPreference?: ChatSoundPreference
   chatSoundId?: ChatSoundId
   terminal?: Partial<AppSettingsSnapshot["terminal"]>
+  panes?: Partial<AppSettingsSnapshot["panes"]>
   editor?: Partial<AppSettingsSnapshot["editor"]>
   defaultProvider?: DefaultProviderPreference
   providerDefaults?: {

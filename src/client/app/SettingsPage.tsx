@@ -71,6 +71,12 @@ import { McpServersSettingsBranch } from "./McpServersSection"
 import { ModelsSettingsBranch } from "./ModelsSection"
 import { TextSnippetsSettingsBranch } from "./TextSnippetsSection"
 import { useAppSettingsStore, selectCustomModels } from "../stores/appSettingsStore"
+import {
+  DEFAULT_TAB_MIN_WIDTH,
+  MAX_TAB_WIDTH,
+  MIN_TAB_WIDTH,
+  clampTabMinWidth,
+} from "../../shared/pane-tab-width"
 import { ChatPreferenceControls } from "../components/chat-ui/ChatPreferenceControls"
 import { OAuthTokenPoolCard } from "../components/chat-ui/OAuthTokenPoolCard"
 import { EDITOR_OPTIONS, EditorIcon } from "../components/editor-icons"
@@ -1170,7 +1176,10 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
   const scrollbackDraft = useSettingsPageStore((s) => s.scrollbackDraft)
   const setScrollbackDraft = useSettingsPageStore((s) => s.setScrollbackDraft)
   const minColumnWidthDraft = useSettingsPageStore((s) => s.minColumnWidthDraft)
+  const tabMinWidthDraft = useSettingsPageStore((s) => s.tabMinWidthDraft)
   const setMinColumnWidthDraft = useSettingsPageStore((s) => s.setMinColumnWidthDraft)
+  const setTabMinWidthDraft = useSettingsPageStore((s) => s.setTabMinWidthDraft)
+  const tabMinWidth = appSettings?.panes.tabMinWidth ?? DEFAULT_TAB_MIN_WIDTH
   const uploadMaxFileSizeMb = appSettings?.uploads.maxFileSizeMb ?? UPLOAD_DEFAULTS.maxFileSizeMb
   const uploadMaxFileSizeDraft = useSettingsPageStore((s) => s.uploadMaxFileSizeDraft)
   const setUploadMaxFileSizeDraft = useSettingsPageStore((s) => s.setUploadMaxFileSizeDraft)
@@ -1245,6 +1254,10 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
   useEffect(() => {
     setMinColumnWidthDraft(String(minColumnWidth))
   }, [minColumnWidth, setMinColumnWidthDraft])
+
+  useEffect(() => {
+    setTabMinWidthDraft(String(tabMinWidth))
+  }, [tabMinWidth, setTabMinWidthDraft])
 
   useEffect(() => {
     setUploadMaxFileSizeDraft(String(uploadMaxFileSizeMb))
@@ -1380,6 +1393,17 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
     setMinColumnWidth(nextValue)
     void handleWriteAppSettings({ terminal: { minColumnWidth: nextValue } }).catch((error) => {
       setAppSettingsError(error instanceof Error ? error.message : "Unable to save terminal settings.")
+    })
+  }
+
+  function commitTabMinWidth() {
+    const nextValue = Number(tabMinWidthDraft)
+    if (!Number.isFinite(nextValue)) {
+      setTabMinWidthDraft(String(tabMinWidth))
+      return
+    }
+    void handleWriteAppSettings({ panes: { tabMinWidth: clampTabMinWidth(nextValue) } }).catch((error) => {
+      setAppSettingsError(error instanceof Error ? error.message : "Unable to save pane settings.")
     })
   }
 
@@ -2050,6 +2074,29 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
                           <div className="text-left text-xs text-muted-foreground md:text-right">
                             {MIN_TERMINAL_MIN_COLUMN_WIDTH}-{MAX_TERMINAL_MIN_COLUMN_WIDTH} px
                             {minColumnWidth === DEFAULT_TERMINAL_MIN_COLUMN_WIDTH ? " (default)" : ""}
+                          </div>
+                        </div>
+                      </SettingsRow>
+
+                      <SettingsRow
+                        title="Tab Minimum Width"
+                        description="How narrow a pane tab may get before the strip scrolls instead of shrinking"
+                      >
+                        <div className="flex w-full min-w-0 flex-col items-stretch gap-2 md:w-auto md:items-end">
+                          <Input
+                            type="number"
+                            min={MIN_TAB_WIDTH}
+                            max={MAX_TAB_WIDTH}
+                            step={10}
+                            value={tabMinWidthDraft}
+                            onChange={(event) => setTabMinWidthDraft(event.target.value)}
+                            onBlur={commitTabMinWidth}
+                            onKeyDown={(event) => handleNumberInputKeyDown(event, commitTabMinWidth)}
+                            className="hide-number-steppers w-full text-left font-mono md:w-28 md:text-right"
+                          />
+                          <div className="text-left text-xs text-muted-foreground md:text-right">
+                            {MIN_TAB_WIDTH}-{MAX_TAB_WIDTH} px
+                            {tabMinWidth === DEFAULT_TAB_MIN_WIDTH ? " (default)" : ""}
                           </div>
                         </div>
                       </SettingsRow>
