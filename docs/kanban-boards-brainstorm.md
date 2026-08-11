@@ -514,6 +514,10 @@ template; instantiation is a pure function so it is testable without a DB.
 
 - **Route** `project → Boards`, reachable from the sidebar (c3-111); board list + board view.
 - **`<KannaBoard>` wrapper** is the only file importing `react-kanban-kit`. Every visual element is supplied by us through the library's render props (`renderColumnHeader`, `renderColumnWrapper`, `renderListFooter`, `renderColumnAdder`, `renderSkeletonCard`, `configMap.card.render`) using token classes — the library provides layout, DnD, and virtualization, nothing visible.
+  - **Superseded.** The fallback in §10 was taken: `react-kanban-kit` is gone and
+    `KannaBoard` drives `@atlaskit/pragmatic-drag-and-drop` directly. The
+    confinement held exactly as designed — server, store and sync were untouched.
+    See `docs/adr-20260811-board-owns-its-rendering.md`.
 - **Design gate:** no raw hex, no `backdrop-blur`, project `Tooltip` instead of native `title`, `tabular-nums` on counts and ages. Column dots carry no pulse/glow.
 - **Store rules:** `boardsStore` selectors return stable refs (module-level `EMPTY`), state transitions are **named store actions** — no inline updaters in JSX (`no-jsx-inline-state-updater`, `no-jsx-inline-state-logic`), no inline functions passed to custom hooks (`no-unstable-hook-fn-arg`).
 - **Scale:** `virtualization` + `loadMore(columnId)` wired to a paged `board.cards.page` command; `totalChildrenCount` comes from a `COUNT(*)`, so a 5k-issue import renders as skeletons and pages in.
@@ -524,7 +528,7 @@ template; instantiation is a pure function so it is testable without a DB.
 
 | Risk | Severity | Mitigation |
 |---|---|---|
-| **`react-kanban-kit` is `0.0.2-beta.7`** — pre-1.0, and ships `husky` / `vite-plugin-dts` in `dependencies` (packaging bug); CSS is injected by JS | High | Pin the exact version; confine it to `<KannaBoard>`. Its engine is `@atlaskit/pragmatic-drag-and-drop` (stable, Atlassian-maintained) — the fallback is to drop to that directly behind the same wrapper, without touching server, store, or sync |
+| **`react-kanban-kit` is `0.0.2-beta.7`** — pre-1.0, and ships `husky` / `vite-plugin-dts` in `dependencies` (packaging bug); CSS is injected by JS | High | **REALISED, and the mitigation worked.** Its virtualizer left real cards invisible; the fallback was taken and cost one file plus its CSS block. Server, store and sync were untouched, exactly as this row predicted |
 | SQLite is a **new persistence precedent** | Medium | ADR scoping the `ref-event-sourcing` override to boards only; `boards.db` stays under `~/.kanna/data` |
 | `gh` CLI not installed | Medium | Detect at bind time; fall back to a PAT in settings (0600, like `customMcpServers`); never fail silently |
 | GitHub rate limits on large repos | Medium | Honour `x-ratelimit-remaining`, backoff in the outbox, `since` cursor so pulls are incremental |
