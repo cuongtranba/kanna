@@ -546,3 +546,14 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* ── Kanban board ─────────────────────────────────────────────────────────
+ * Nothing here any more.
+ *
+ * This block used to neutralise `react-kanban-kit`'s injected stylesheet,
+ * which painted every column as a filled rounded panel and styled
+ * `.rkk-column-outer` directly — tying on specificity with a Tailwind utility
+ * and winning on source order, so `w-[300px] border-r` computed to 264px and
+ * no border. That package is gone; `KannaBoard` owns its own markup, so the
+ * column's geometry is an ordinary utility class again and needs no override.
+ */

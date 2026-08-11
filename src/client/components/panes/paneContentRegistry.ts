@@ -12,6 +12,17 @@ export type PaneRenderer<T extends PaneTabTarget = PaneTabTarget> = (
   target: T,
   pane: PaneLeaf,
   isFocused: boolean,
+  /**
+   * Whether this tab is its pane's ACTIVE tab — distinct from `isFocused`,
+   * which additionally requires the pane itself to hold focus.
+   *
+   * A retained-but-inactive tab is hidden with `visibility: hidden`. Content
+   * that sets `visibility: visible` on its own descendants (virtua, the kanban
+   * virtualiser, does this inline for measurement) escapes that and paints over
+   * whichever tab IS active — so content with no live stream to preserve should
+   * render nothing when this is false.
+   */
+  isActiveTab: boolean,
 ) => ReactNode
 
 /**
@@ -40,13 +51,16 @@ export function renderPaneContent(
   target: PaneTabTarget,
   pane: PaneLeaf,
   isFocused: boolean,
+  isActiveTab: boolean,
 ): ReactNode {
   switch (target.kind) {
     case "chat":
-      return registry.chat(target, pane, isFocused)
+      return registry.chat(target, pane, isFocused, isActiveTab)
     case "changes":
-      return registry.changes(target, pane, isFocused)
+      return registry.changes(target, pane, isFocused, isActiveTab)
     case "terminal":
-      return registry.terminal(target, pane, isFocused)
+      return registry.terminal(target, pane, isFocused, isActiveTab)
+    case "board":
+      return registry.board(target, pane, isFocused, isActiveTab)
   }
 }

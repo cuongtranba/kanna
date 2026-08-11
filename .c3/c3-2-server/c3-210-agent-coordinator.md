@@ -1,7 +1,7 @@
 ---
 id: c3-210
 c3-version: 4
-c3-seal: ad4b78e77065e0750ca8945a607b97a5e1adb316f5b5a8c312a810a75b4e4ef9
+c3-seal: f1d6c484501460c1922fca4a05bf26e527b0bb44672fd8d926ed1fc13e6a964d
 title: agent-coordinator
 type: component
 category: feature
@@ -56,7 +56,7 @@ Owns the agent turn lifecycle: receives `chat.send` commands, picks the provider
 | Alternate — cancel | chat.cancel propagates to provider; reaches a turn at any lifecycle point (booting / active / self-wake) | c3-211 |
 | Alternate — resume | Resume reuses live session if available | c3-211 |
 | Alternate — background self-wake | Task-notification wake turns stream with no ActiveTurn; ClaudeSessionState.selfWakeActive overlays status "running" via getActiveStatuses, getBackgroundTasksByChatId feeds ChatRuntime.backgroundTasks, and cancel interrupts the warm session (adr-20260802-background-selfwake-status-ui). A canUseTool request arriving mid-wake parks in PendingToolSlots (no ghost ActiveTurn — adr-20260807-pending-tool-slot); the wake's terminal result disarms the flag, defensively discards the slot, and drains the queued-message queue | c3-207 |
-| Alternate — background-task keep-alive | A pending background task holds its Claude session warm against the idle reaper and the budget enforcer, because the task is a child of the CLI process. WHAT bounds that hold depends on the signal available (adr-20260808-background-task-level-signal-authoritative): once the SDK has sent a `background_tasks_changed` LEVEL snapshot the session is `backgroundTasksLevelSourced` and SET MEMBERSHIP alone is authoritative — no clock may expire it, because a healthy dev server is silent for hours and every timer and output-growth probe reads that silence as death. Absent the level signal (PTY driver, old CLI, or before an SDK session's first snapshot) the fixed `backgroundTaskMaxMs` deadline governs and a lapsed deadline escalates through the visible wake ladder to abandonment (adr-20260801-background-task-wake-escalation) rather than a silent reap. Consequence: `hasPendingBackgroundTask` and `backgroundTaskGuardExpired` no longer partition `size > 0`, and a level-sourced hold is bounded only by the SDK's REPLACE semantics plus the runner's `finally` releasing on transport death | c3-207 |
+| Alternate — background-task keep-alive | A pending background task holds its Claude session warm against the idle reaper and the budget enforcer, because the task is a child of the CLI process. WHAT bounds that hold depends on the signal available (adr-20260808-background-task-level-signal-authoritative): once the SDK has sent a background_tasks_changed LEVEL snapshot the session is backgroundTasksLevelSourced and SET MEMBERSHIP alone is authoritative — no clock may expire it, because a healthy dev server is silent for hours and every timer and output-growth probe reads that silence as death. Absent the level signal (PTY driver, old CLI, or before an SDK session's first snapshot) the fixed backgroundTaskMaxMs deadline governs and a lapsed deadline escalates through the visible wake ladder to abandonment (adr-20260801-background-task-wake-escalation) rather than a silent reap. Consequence: hasPendingBackgroundTask and backgroundTaskGuardExpired no longer partition size > 0, and a level-sourced hold is bounded only by the SDK's REPLACE semantics plus the runner's finally releasing on transport death | c3-207 |
 | Failure — provider error | Emits typed failure event; surfaces to client | c3-205 |
 
 ## Governance
@@ -98,7 +98,7 @@ Owns the agent turn lifecycle: receives `chat.send` commands, picks the provider
 | --- | --- | --- | --- |
 | Lost turn on crash | Event written after broadcast | Replay missing turn | bun run test src/server/agent-coordinator.test.ts |
 | Provider drift | Provider event shape change | Tool entries malformed | bun run check against src/server/agent-coordinator.ts |
-| Mermaid correction loop — the model cannot fix its diagram and is asked every turn | `RunClaudeSessionDeps.mermaidGuard` is rebuilt per turn instead of per coordinator (its asked-diagram memory is what makes the ask once-only), or the once-per-diagram / queued-user-message / repairable-diagram short-circuits are dropped | mermaid-guard.test.ts asserts one ask per diagram, one message per turn, and no ask for a diagram `repairMermaidSource` saves; runner tests assert the guard runs on the success branch only and BEFORE maybeStartNextQueuedMessage | bun test --conditions production src/server/mermaid-guard.test.ts src/server/claude-session-runner.test.ts |
+| Mermaid correction loop — the model cannot fix its diagram and is asked every turn | RunClaudeSessionDeps.mermaidGuard is rebuilt per turn instead of per coordinator (its asked-diagram memory is what makes the ask once-only), or the once-per-diagram / queued-user-message / repairable-diagram short-circuits are dropped | mermaid-guard.test.ts asserts one ask per diagram, one message per turn, and no ask for a diagram repairMermaidSource saves; runner tests assert the guard runs on the success branch only and BEFORE maybeStartNextQueuedMessage | bun test --conditions production src/server/mermaid-guard.test.ts src/server/claude-session-runner.test.ts |
 
 ## Derived Materials
 

@@ -119,13 +119,15 @@ export function useChatPageSidebarActions({
     if (!projectId) {
       throw new Error("Project not found")
     }
+    const chatId = activeChatIdRef.current
     const result = await state.socket.command<{ patch: string }>({
       type: "project.readDiffPatch",
       projectId,
       path: filePath,
+      ...(chatId ? { chatId } : {}),
     })
     return result.patch
-  }, [projectId, state.socket])
+  }, [activeChatIdRef, projectId, state.socket])
 
   const handleDiscardDiffFile = useCallback((filePath: string) => {
     const chatId = activeChatIdRef.current

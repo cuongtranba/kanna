@@ -8,7 +8,12 @@ import type { StoragePort } from "../ports/storagePort"
 
 // Stable empty refs — NEVER use inline ?? [] or ?? {} in selectors (React error #185)
 export const EMPTY_OPTIMISTIC_PROMPTS: OptimisticUserPrompt[] = []
-export const EMPTY_PROJECT_DIFF_SNAPSHOTS: Record<string, ChatDiffSnapshot | null> = {}
+export const EMPTY_DIFF_SNAPSHOTS: Record<string, ChatDiffSnapshot | null> = {}
+
+/** The key a chat's (or a bare project's) git snapshot is stored and read under. */
+export function gitSnapshotKey(projectId: string, chatId?: string | null): string {
+  return chatId ?? projectId
+}
 export const EMPTY_SIDEBAR_DATA: SidebarData = { starredProjectGroups: [], projectGroups: [], stacks: [] }
 
 interface KannaStateStoreState {
@@ -17,7 +22,15 @@ interface KannaStateStoreState {
   localProjects: LocalProjectsSnapshot | null
   updateSnapshot: UpdateSnapshot | null
   uiRestartPhase: string | null
-  projectDiffSnapshots: Record<string, ChatDiffSnapshot | null>
+  /**
+   * Git state keyed by {@link gitSnapshotKey} — a chat id when the snapshot is
+   * a chat's own tree, a project id when it is the project's checkout.
+   *
+   * Not keyed by project: a chat can run in a git worktree, so two chats in one
+   * project can sit on different branches with different dirty files. One slot
+   * per project showed the second chat the first one's tree.
+   */
+  diffSnapshotsByKey: Record<string, ChatDiffSnapshot | null>
   keybindings: KeybindingsSnapshot | null
   appSettings: AppSettingsSnapshot | null
   pushConfig: PushConfigSnapshot | null
@@ -40,7 +53,7 @@ interface KannaStateStoreState {
   setLocalProjects: (value: LocalProjectsSnapshot | null) => void
   setUpdateSnapshot: (value: UpdateSnapshot | null) => void
   setUiRestartPhase: (value: string | null) => void
-  setProjectDiffSnapshots: (value: Record<string, ChatDiffSnapshot | null> | ((current: Record<string, ChatDiffSnapshot | null>) => Record<string, ChatDiffSnapshot | null>)) => void
+  setDiffSnapshotsByKey: (value: Record<string, ChatDiffSnapshot | null> | ((current: Record<string, ChatDiffSnapshot | null>) => Record<string, ChatDiffSnapshot | null>)) => void
   setKeybindings: (value: KeybindingsSnapshot | null) => void
   setAppSettings: (value: AppSettingsSnapshot | null) => void
   setPushConfig: (value: PushConfigSnapshot | null) => void
@@ -76,7 +89,7 @@ export const useKannaStateStore = create<KannaStateStoreState>()((set) => ({
   localProjects: null,
   updateSnapshot: null,
   uiRestartPhase: readInitialUiRestartPhase(),
-  projectDiffSnapshots: EMPTY_PROJECT_DIFF_SNAPSHOTS,
+  diffSnapshotsByKey: EMPTY_DIFF_SNAPSHOTS,
   keybindings: null,
   appSettings: null,
   pushConfig: null,
@@ -102,9 +115,9 @@ export const useKannaStateStore = create<KannaStateStoreState>()((set) => ({
   setLocalProjects: (value) => set({ localProjects: value }),
   setUpdateSnapshot: (value) => set({ updateSnapshot: value }),
   setUiRestartPhase: (value) => set({ uiRestartPhase: value }),
-  setProjectDiffSnapshots: (value) =>
+  setDiffSnapshotsByKey: (value) =>
     set((state) => ({
-      projectDiffSnapshots: typeof value === "function" ? value(state.projectDiffSnapshots) : value,
+      diffSnapshotsByKey: typeof value === "function" ? value(state.diffSnapshotsByKey) : value,
     })),
   setKeybindings: (value) => set({ keybindings: value }),
   setAppSettings: (value) => set({ appSettings: value }),

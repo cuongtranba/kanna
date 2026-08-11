@@ -684,3 +684,16 @@ export async function getGitHubOwners(): Promise<string[]> {
 
   return [...owners]
 }
+
+/**
+ * The `owner/repo` a checkout's `origin` points at, or null when there is none
+ * to read.
+ *
+ * Offered as a default when binding a board to a tracker: a developer who
+ * already cloned the repo should not have to type its name back.
+ */
+export async function readOriginRepoSlug(repoRoot: string): Promise<string | null> {
+  const result = await runGit(["remote", "get-url", "origin"], repoRoot)
+  if (result.exitCode !== 0) return null
+  return extractGitHubRepoSlug(result.stdout.trim())
+}

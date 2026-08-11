@@ -217,7 +217,7 @@ export function buildInitialAppSettingsSnapshot(): AppSettingsSnapshot {
 
 export function buildFallbackDiffStore() {
   return {
-    getProjectSnapshot: (_projectId: string) => ({
+    getSnapshot: (_repoPath: string) => ({
       status: "unknown" as const,
       branchName: undefined,
       defaultBranchName: undefined,
@@ -230,7 +230,7 @@ export function buildFallbackDiffStore() {
       files: [],
       branchHistory: { entries: [] },
     }),
-    refreshSnapshot: async (_projectId: string) => false as const,
+    refreshSnapshot: async (_repoPath: string) => false as const,
     initializeGit: async () => ({ ok: true as const, branchName: undefined, snapshotChanged: false }),
     getGitHubPublishInfo: async () => ({
       ghInstalled: false,

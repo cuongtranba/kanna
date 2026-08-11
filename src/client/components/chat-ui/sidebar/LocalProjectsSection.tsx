@@ -50,6 +50,7 @@ interface Props {
   onCopyPath?: (localPath: string) => void
   onOpenExternalPath?: (action: "open_finder" | "open_editor", localPath: string) => void
   onHideProject?: (projectId: string) => void
+  onOpenBoards?: (projectId: string) => void
   onToggleStar?: (projectId: string, starred: boolean) => void
   onReorderGroups?: (newOrder: string[]) => void
   isConnected?: boolean
@@ -70,6 +71,7 @@ interface SortableProjectGroupProps {
   onCopyPath?: (localPath: string) => void
   onOpenExternalPath?: (action: "open_finder" | "open_editor", localPath: string) => void
   onHideProject?: (projectId: string) => void
+  onOpenBoards?: (projectId: string) => void
   onToggleStar?: (projectId: string, starred: boolean) => void
   isConnected?: boolean
   startingLocalPath?: string | null
@@ -186,6 +188,7 @@ const SortableProjectGroup = memo(({
   onCopyPath,
   onOpenExternalPath,
   onHideProject,
+  onOpenBoards,
   onToggleStar,
   isConnected,
   startingLocalPath,
@@ -331,6 +334,7 @@ const SortableProjectGroup = memo(({
           onOpenInEditor={() => onOpenExternalPath?.("open_editor", localPath)}
           onToggleStar={() => onToggleStar?.(groupKey, group.starredAt === undefined)}
           onHide={() => onHideProject?.(groupKey)}
+          onOpenBoards={onOpenBoards ? () => onOpenBoards(groupKey) : undefined}
         >
           {header}
         </ProjectSectionMenu>
@@ -400,6 +404,7 @@ const LocalProjectsSectionImpl = function LocalProjectsSection({
   onCopyPath,
   onOpenExternalPath,
   onHideProject,
+  onOpenBoards,
   onToggleStar,
   onReorderGroups,
   isConnected,
@@ -486,6 +491,7 @@ const LocalProjectsSectionImpl = function LocalProjectsSection({
               onCopyPath={onCopyPath}
               onOpenExternalPath={onOpenExternalPath}
               onHideProject={onHideProject}
+              onOpenBoards={onOpenBoards}
               onToggleStar={onToggleStar}
               isConnected={isConnected}
               startingLocalPath={startingLocalPath}

@@ -1,4 +1,4 @@
-import { GitCompare, MessageSquare, SquareTerminal, type LucideIcon } from "lucide-react"
+import { GitCompare, MessageSquare, SquareKanban, SquareTerminal, type LucideIcon } from "lucide-react"
 import type { ClaudeSessionLifecycleStatus, KannaStatus } from "../../../shared/types"
 import {
   chatStatusIndicator,
@@ -40,6 +40,8 @@ export interface TabPresentationContext {
    * `status ∈ {running, starting}`, and two representations of one fact drift.
    */
   chatStatuses?: Readonly<Record<string, ChatTabStatus>>
+  /** Board titles by boardId, from the boards snapshot. */
+  boardTitles?: Record<string, string>
 }
 
 export interface TabPresentation {
@@ -75,6 +77,19 @@ export function describeTab(
         sessionBadge: sessionStateBadge(chat?.sessionState),
       }
     }
+
+    case "board":
+      // Titled by the board it addresses, like a chat tab: a project may own
+      // several boards and two open tabs must be tellable apart. Never pinned —
+      // a board holds no live stream the retention LRU could drop.
+      return {
+        label: context.boardTitles?.[target.boardId] ?? "Board",
+        icon: SquareKanban,
+        pinned: false,
+        closable: true,
+        indicator: null,
+        sessionBadge: null,
+      }
 
     case "changes":
       return {

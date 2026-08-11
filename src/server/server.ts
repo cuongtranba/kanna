@@ -33,6 +33,20 @@ import { TerminalManager } from "./terminal-manager"
 import { TerminalPidRegistry } from "./terminal-pid-registry.adapter"
 import { ClaudePtyRegistry } from "./claude-pty/pid-registry.adapter"
 import { createPtyInstanceRegistry } from "./claude-pty/pty-instance-registry"
+import { createBoardRegistry } from "./board-registry"
+import { createBoardStore } from "./board-store.adapter"
+import { createBoardSync } from "./board-sync"
+import { startWork as runStartWork, startWorkView as runStartWorkView, type StartWorkDeps } from "./board-start-work"
+import { addWorktree, isDirty, listWorktrees, localBranchExists, removeWorktree } from "./worktree-store.adapter"
+import {
+  resolveWorktreeCleanup,
+  worktreeCleanupView,
+  type WorktreeCleanupDeps,
+} from "./board-worktree-cleanup"
+import type { CleanupDecision } from "../shared/boards/worktree-cleanup"
+import { readOriginRepoSlug } from "./diff-store-git-branch.adapter"
+import { createGitHubIssuesProvider } from "./github-issues.adapter"
+import { readGitHubCliToken } from "./github-cli.adapter"
 import { UpdateManager } from "./update-manager"
 import type { UpdateInstallAttemptResult } from "./cli-runtime"
 import { compareVersions } from "./cli-runtime"
@@ -265,6 +279,19 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   }
   const claudePtyRegistry = new ClaudePtyRegistry(path.join(store.dataDir, "claude-pty.json"))
   const ptyInstanceRegistry = createPtyInstanceRegistry()
+  // Boards live in their own SQLite file beside the event logs — same
+  // local-first data dir, different engine (see the boards ADR).
+  const boardStore = createBoardStore({ filePath: path.join(store.dataDir, "boards.db") })
+  const boardRegistry = createBoardRegistry({ store: boardStore })
+  // Credentials come from the `gh` CLI: a developer running Kanna has almost
+  // always already logged in, and Kanna has no redirect server for OAuth.
+  const boardSync = createBoardSync({
+    registry: boardRegistry,
+    store: boardStore,
+    providers: new Map([["github-issues", createGitHubIssuesProvider()]]),
+    readToken: readGitHubCliToken,
+    now: () => Date.now(),
+  })
   const workflowRegistry = createWorkflowRegistry({
     read: readWorkflowDir,
     watch: (dir, onChange) => watchWorkflowDir(dir, onChange),
@@ -477,6 +504,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     claudePtyRegistry,
     ptyInstanceRegistry,
     workflowRegistry,
+    boardRegistry,
     loopTrackingRegistry,
     subagentTranscriptRegistry,
     localCatalog,
@@ -507,6 +535,67 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
       router.scheduleBroadcast()
     },
   })
+
+  // "Start work" spans three subsystems that must not import each other: the
+  // board registry, git, and the chat store. All three are in scope here, so
+  // the binding happens here and the orchestrator stays free of IO.
+  const startWorkDeps: StartWorkDeps = {
+    registry: boardRegistry,
+    getProject: (projectId) => {
+      const project = store.getProject(projectId)
+      return project ? { id: project.id, localPath: project.localPath } : null
+    },
+    chatExists: (chatId) => store.getChat(chatId) !== null,
+    listWorktrees,
+    localBranchExists,
+    addWorktree,
+    createChat: (projectId, options) => store.createChat(projectId, options),
+    sendPrompt: async (chatId, content) => {
+      await agent.send({ type: "chat.send", chatId, content })
+    },
+  }
+  const startWork = (cardId: string) => runStartWork(startWorkDeps, cardId)
+  const startWorkView = (cardId: string) => runStartWorkView(startWorkDeps, cardId)
+
+  // Merging a card's branch goes through the same machinery as merging one from
+  // the Changes panel — same rules, same conflict detection, one implementation.
+  const cleanupDeps: WorktreeCleanupDeps = {
+    registry: boardRegistry,
+    getProject: startWorkDeps.getProject,
+    listWorktrees,
+    isDirty,
+    previewMerge: async (repoRoot, branch) => {
+      const preview = await diffStore.previewMergeBranch({
+        projectPath: repoRoot,
+        branch: { kind: "local", name: branch },
+      })
+      return { commitCount: preview.commitCount, hasConflicts: preview.hasConflicts }
+    },
+    mergeBranch: async (projectId, repoRoot, branch) => {
+      const merged = await diffStore.mergeBranch({
+        projectPath: repoRoot,
+        branch: { kind: "local", name: branch },
+      })
+      return merged.ok ? { ok: true, message: `Merged ${branch}` } : { ok: false, message: merged.message }
+    },
+    removeWorktree,
+  }
+  // A developer who already cloned the repo should not have to type its name
+  // back in to bind a board to it.
+  const suggestSyncRepo = async (boardId: string) => {
+    const board = boardRegistry.getBoard(boardId)
+    if (!board || board.ownerKind !== "project") return null
+    const project = store.getProject(board.ownerId)
+    if (!project) return null
+    const slug = await readOriginRepoSlug(project.localPath)
+    if (!slug) return null
+    const [owner, repo] = slug.split("/")
+    return owner && repo ? { owner, repo } : null
+  }
+
+  const cleanupView = (cardId: string) => worktreeCleanupView(cleanupDeps, cardId)
+  const resolveCleanup = (cardId: string, decision: CleanupDecision) =>
+    resolveWorktreeCleanup(cleanupDeps, cardId, decision)
 
   const followedSessionRegistry = createFollowedSessionRegistry({
     statFile: statSessionFile,
@@ -546,6 +635,13 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     pushManager,
     ptyInstances: ptyInstanceRegistry,
     workflowRegistry,
+    boardRegistry,
+    boardSync,
+    startWork,
+    startWorkView,
+    cleanupView,
+    resolveCleanup,
+    suggestSyncRepo,
     loopTrackingRegistry,
     subagentTranscriptRegistry,
     followedSessionRegistry,

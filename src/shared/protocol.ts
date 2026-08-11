@@ -30,6 +30,15 @@ import type {
 import type { ChatOpsEvent } from "./chat-ops"
 import type { ChatPermissionPolicyOverride, ToolRequestDecision } from "./permission-policy"
 import type { PtyInstanceDelta, PtyInstancesSnapshot } from "./pty-instance"
+import type {
+  BoardOwnerKind,
+  BoardSummary,
+  BoardViewSnapshot,
+  ColumnColorToken,
+  ColumnSemantic,
+  SyncDirection,
+} from "./boards/types"
+import type { CleanupDecision } from "./boards/worktree-cleanup"
 import type { WorkflowRunSummary } from "./workflow-types"
 
 export type { EditorPreset }
@@ -47,11 +56,28 @@ export type SubscriptionTopic =
   | { type: "app-settings" }
   | { type: "push-config" }
   | { type: "chat"; chatId: string; recentLimit?: number; since?: number }
-  | { type: "project-git"; projectId: string }
+  /**
+   * `chatId` names the chat whose tree is wanted.
+   *
+   * A chat can run in a git worktree of its project, so "the project's git
+   * state" is not one thing: two chats in one project can sit on different
+   * branches with different dirty files. Without the chat, the second one is
+   * shown the first one's tree. Omitted means the project's own checkout.
+   */
+  | { type: "project-git"; projectId: string; chatId?: string }
   | { type: "project-commands"; projectId: string }
   | { type: "terminal"; terminalId: string }
   | { type: "pty-instances" }
   | { type: "workflows"; chatId: string }
+  | { type: "boards"; ownerKind: BoardOwnerKind; ownerId: string }
+  /**
+   * `pageSize` is how many cards per column the subscriber wants.
+   *
+   * Paging RAISES it rather than appending client-side: every broadcast then
+   * carries a complete prefix of each column, so a snapshot pushed by an
+   * unrelated card edit cannot silently discard the pages already loaded.
+   */
+  | { type: "board"; boardId: string; pageSize?: number }
   | { type: "followed-sessions" }
 
 export interface TerminalSnapshot {
@@ -115,7 +141,8 @@ export type ClientCommand =
   | { type: "project.remove"; projectId: string }
   | { type: "project.setStar"; projectId: string; starred: boolean }
   | { type: "sidebar.reorderProjectGroups"; projectIds: string[] }
-  | { type: "project.readDiffPatch"; projectId: string; path: string }
+  /** `chatId` names the tree to read from — a chat's worktree has its own contents. */
+  | { type: "project.readDiffPatch"; projectId: string; path: string; chatId?: string }
   | { type: "stack.create"; title: string; projectIds: string[] }
   | { type: "stack.rename"; stackId: string; title: string }
   | { type: "stack.remove"; stackId: string }
@@ -281,6 +308,53 @@ export type ClientCommand =
       chatId: string
       runId: string
     }
+  | { type: "board.create"; ownerKind: BoardOwnerKind; ownerId: string; title: string; templateId?: string | null }
+  | { type: "board.archive"; boardId: string }
+  | { type: "board.update"; boardId: string; title?: string; description?: string | null }
+  | { type: "board.duplicate"; boardId: string; title: string }
+  | { type: "board.saveAsTemplate"; boardId: string; name: string }
+  | {
+      type: "board.sync.bind"
+      boardId: string
+      owner: string
+      repo: string
+      direction: SyncDirection
+      allowAgentPush: boolean
+    }
+  | { type: "board.sync.pull"; boardId: string }
+  | { type: "board.sync.push"; boardId: string }
+  | { type: "board.sync.status"; boardId: string }
+  | { type: "board.column.create"; boardId: string; title: string; afterColumnId?: string | null }
+  | {
+      type: "board.column.update"
+      columnId: string
+      title?: string
+      semantic?: ColumnSemantic | null
+      colorToken?: ColumnColorToken | null
+      wipLimit?: number | null
+    }
+  /** Reorder: the column it should sit after; null means first. */
+  | { type: "board.column.move"; columnId: string; afterColumnId: string | null }
+  /** Refused while the column still holds cards. */
+  | { type: "board.column.delete"; columnId: string }
+  | { type: "board.card.create"; boardId: string; columnId: string; title: string; projectId?: string | null; afterCardId?: string | null }
+  | {
+      type: "board.card.move"
+      cardId: string
+      toColumnId: string
+      aboveCardId: string | null
+      belowCardId: string | null
+    }
+  | { type: "board.card.archive"; cardId: string }
+  | { type: "board.card.detail"; cardId: string }
+  | { type: "board.card.comment"; cardId: string; body: string }
+  | { type: "board.card.update"; cardId: string; title?: string }
+  /** Card → worktree → branch → chat. Idempotent: a card already working opens what it has. */
+  | { type: "board.card.startWork"; cardId: string }
+  /** Answer the question a card asks on reaching `done`. */
+  | { type: "board.card.resolveWorktree"; cardId: string; decision: CleanupDecision }
+  | { type: "board.cards.page"; columnId: string; limit: number; afterRank?: string | null }
+  | { type: "board.templates.list" }
   | { type: "workflows.getRun"; chatId: string; runId: string }
   | { type: "workflows.getAgentTranscript"; chatId: string; runId: string; agentId: string }
   | { type: "subagents.getRun"; chatId: string; agentId: string }
@@ -346,7 +420,21 @@ export type ServerSnapshot =
   | { type: "terminal"; data: TerminalSnapshot | null }
   | { type: "pty-instances"; data: PtyInstancesSnapshot }
   | { type: "workflows"; data: WorkflowsSnapshot }
+  | { type: "boards"; data: BoardsSnapshot }
+  | { type: "board"; data: BoardSnapshot }
   | { type: "followed-sessions"; data: FollowedSessionsSnapshot }
+
+export interface BoardsSnapshot {
+  ownerKind: BoardOwnerKind
+  ownerId: string
+  boards: BoardSummary[]
+}
+
+export interface BoardSnapshot {
+  boardId: string
+  /** Null when the board was archived or never existed. */
+  view: BoardViewSnapshot | null
+}
 
 export type ServerEnvelope =
   | { v: 1; type: "snapshot"; id: string; snapshot: ServerSnapshot }

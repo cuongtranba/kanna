@@ -1,4 +1,5 @@
 import { query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
+import type { BoardRegistry } from "./board-registry"
 import {
   createKannaMcpServer,
   type KannaMcpDelegationContext,
@@ -116,6 +117,7 @@ export async function startClaudeSession(args: {
    * workdir, or it writes its progress into the wrong checkout.
    */
   getArmedLoop?: (chatId: string) => ArmedLoopInfo | null
+  boardRegistry?: BoardRegistry
   /**
    * Agentic-turn bound passed natively to the SDK query() (Claude Code's
    * per-agent frontmatter maxTurns analog): the SDK stops gracefully and
@@ -184,6 +186,7 @@ export async function startClaudeSession(args: {
           setupLoop: args.setupLoop,
           stopLoop: args.stopLoop,
           getArmedLoop: args.getArmedLoop,
+          boardRegistry: args.boardRegistry,
         }),
         ..._deps.buildUserMcpServers(args.customMcpServers ?? [], args.oauthBearers),
       },

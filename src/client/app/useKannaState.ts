@@ -17,7 +17,7 @@ import type { KannaSocket, SocketStatus } from "./socket"
 import type { ChatPermissionPolicyOverride, ToolRequestDecision } from "../../shared/permission-policy"
 import { useWorkflowsStore } from "../stores/workflowsStore"
 import { useOpenRouterModelsStore } from "../stores/openrouterModelsStore"
-import { useKannaStateStore } from "../stores/kannaStateStore"
+import { gitSnapshotKey, useKannaStateStore } from "../stores/kannaStateStore"
 import { useChatStateStore, selectChatSlice } from "../stores/chatStateStore"
 import type { EditorOpenSettings, ImportSessionsByIdsResult, OpenExternalAction, WorkflowsSnapshot } from "../../shared/protocol"
 import { log } from "../../shared/log"
@@ -729,7 +729,7 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
   const historyCursor = useChatStateStore((state) => selectChatSlice(state, activeChatId ?? "").historyCursor)
   const hasOlderHistory = useChatStateStore((state) => selectChatSlice(state, activeChatId ?? "").hasOlderHistory)
   const chatReady = useChatStateStore((state) => selectChatSlice(state, activeChatId ?? "").chatReady)
-  const projectDiffSnapshots = useKannaStateStore((state) => state.projectDiffSnapshots)
+  const diffSnapshotsByKey = useKannaStateStore((state) => state.diffSnapshotsByKey)
   const selectedProjectId = useKannaStateStore((state) => state.selectedProjectId)
   const pendingChatId = useKannaStateStore((state) => state.pendingChatId)
   const optimisticUserPrompts = useKannaStateStore((state) => state.optimisticUserPrompts)
@@ -742,8 +742,8 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
   )
   const chatSubscriptionDebugRef = useRef(0)
   const lastStartingRenderedTraceIdRef = useRef<string | null>(null)
-  const lastActiveProjectDiffRef = useRef<{ projectId: string | null; diffs: ChatDiffSnapshot | null }>({
-    projectId: null,
+  const lastActiveProjectDiffRef = useRef<{ key: string | null; diffs: ChatDiffSnapshot | null }>({
+    key: null,
     diffs: null,
   })
   const editorLabel = getEditorPresetLabel(useTerminalPreferencesStore((store) => store.editorPreset))
@@ -780,18 +780,24 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
   // deferred to a follow-up PR. Both are React compiler concerns in the same category.
   /* eslint-disable react-hooks/refs */
   const chatDiffSnapshot = useMemo(() => {
-    const currentDiffs = activeProjectId ? (projectDiffSnapshots[activeProjectId] ?? null) : null
-    if (activeProjectId && currentDiffs) {
-      lastActiveProjectDiffRef.current = { projectId: activeProjectId, diffs: currentDiffs }
+    // The chat's own tree first; a bare project's checkout is the fallback for
+    // a view with no chat, and for the moment before the chat's first snapshot
+    // lands.
+    const key = activeProjectId ? gitSnapshotKey(activeProjectId, activeChatId) : null
+    const currentDiffs = key
+      ? (diffSnapshotsByKey[key] ?? (activeProjectId ? diffSnapshotsByKey[activeProjectId] ?? null : null))
+      : null
+    if (key && currentDiffs) {
+      lastActiveProjectDiffRef.current = { key, diffs: currentDiffs }
       return currentDiffs
     }
 
-    if (activeProjectId && lastActiveProjectDiffRef.current.projectId === activeProjectId) {
+    if (key && lastActiveProjectDiffRef.current.key === key) {
       return lastActiveProjectDiffRef.current.diffs
     }
 
     return currentDiffs
-  }, [activeProjectId, projectDiffSnapshots])
+  }, [activeChatId, activeProjectId, diffSnapshotsByKey])
   /* eslint-enable react-hooks/refs */
 
   const queuedMessages = activeChatSnapshot?.queuedMessages ?? []

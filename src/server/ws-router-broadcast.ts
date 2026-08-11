@@ -15,6 +15,7 @@ import type { PtyInstanceDelta } from "../shared/pty-instance"
 import type { PtyInstanceRegistry } from "./claude-pty/pty-instance-registry"
 import type { LoopTrackingRegistry } from "./loop-tracking-registry"
 import type { WorkflowRegistry } from "./workflow-registry"
+import type { BoardChange, BoardRegistry } from "./board-registry"
 import type { EventStore } from "./event-store"
 import type { AgentCoordinator } from "./agent"
 import type { TerminalManager } from "./terminal-manager"
@@ -48,6 +49,7 @@ export interface BroadcastManagerDeps {
   updateManager: UpdateManager | null
   ptyInstances?: PtyInstanceRegistry
   workflowRegistry?: WorkflowRegistry
+  boardRegistry?: BoardRegistry
   loopTrackingRegistry?: LoopTrackingRegistry
   envelopeBuilder: EnvelopeBuilder
 }
@@ -68,6 +70,7 @@ export class BroadcastManager {
   private readonly disposeUpdateEvents: () => void
   private readonly disposePtyInstances: () => void
   private readonly disposeWorkflows: () => void
+  private readonly disposeBoards: () => void
   private readonly disposeLoopTracking: () => void
 
   constructor(private readonly deps: BroadcastManagerDeps) {
@@ -79,6 +82,7 @@ export class BroadcastManager {
       updateManager,
       ptyInstances,
       workflowRegistry,
+      boardRegistry,
       loopTrackingRegistry,
     } = deps
 
@@ -155,6 +159,28 @@ export class BroadcastManager {
         const snapshotSignatures = ensureSnapshotSignatures(ws)
         for (const [id, topic] of ws.data.subscriptions.entries()) {
           if (topic.type !== "workflows" || topic.chatId !== chatId) continue
+          const envelope = deps.envelopeBuilder.createEnvelope(id, topic, undefined, ws)
+          if (envelope.type !== "snapshot") continue
+          const signature = JSON.stringify(envelope.snapshot)
+          if (snapshotSignatures.get(id) === signature) continue
+          snapshotSignatures.set(id, signature)
+          send(ws, envelope)
+        }
+      }
+    }) ?? (() => {})
+
+    // Board changes: one write can move both the board view and its owner's
+    // board list (a card added changes the list's card count), so a single
+    // change re-pushes whichever of the two topics a socket is on.
+    this.disposeBoards = boardRegistry?.subscribe((change: BoardChange) => {
+      for (const ws of this.sockets) {
+        const snapshotSignatures = ensureSnapshotSignatures(ws)
+        for (const [id, topic] of ws.data.subscriptions.entries()) {
+          const matchesBoard = topic.type === "board" && topic.boardId === change.boardId
+          const matchesList = topic.type === "boards"
+            && topic.ownerKind === change.owner.kind
+            && topic.ownerId === change.owner.id
+          if (!matchesBoard && !matchesList) continue
           const envelope = deps.envelopeBuilder.createEnvelope(id, topic, undefined, ws)
           if (envelope.type !== "snapshot") continue
           const signature = JSON.stringify(envelope.snapshot)
@@ -563,6 +589,7 @@ export class BroadcastManager {
     this.disposeUpdateEvents()
     this.disposePtyInstances()
     this.disposeWorkflows()
+    this.disposeBoards()
     this.disposeLoopTracking()
   }
 }

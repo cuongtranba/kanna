@@ -19,6 +19,7 @@ import type { LoopTrackingSnapshot } from "../shared/loop-progress"
 import { buildLoopProgress } from "../shared/loop-progress"
 import type { ChatRecord, ChatTimingState, StoreState } from "./events"
 import { resolveLocalPath } from "./paths"
+import { resolveSpawnPaths } from "./claude-session-config"
 import { SERVER_PROVIDERS } from "./provider-catalog"
 import { deriveChatSchedules, deriveLoopState } from "./auto-continue/read-model"
 import { deriveChatTunnels } from "./cloudflare-tunnel/read-model"
@@ -295,7 +296,11 @@ export function deriveChatSnapshot(
   const runtime: ChatRuntime = {
     chatId: chat.id,
     projectId: project.id,
-    localPath: project.localPath,
+    // The chat's OWN working directory — its worktree when it has one. Reporting
+    // the project's checkout told the reader they were on `main` in the main
+    // tree while the agent edited a card branch somewhere else, and pointed
+    // "Open in Finder" at the wrong directory.
+    localPath: resolveSpawnPaths(chat, project.localPath).cwd,
     title: chat.title,
     status: deriveStatus(chat, activeStatuses.get(chat.id)),
     isDraining: drainingChatIds.has(chat.id),

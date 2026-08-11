@@ -239,6 +239,12 @@ export class AgentCoordinator {
   readonly claudePtyRegistry: import("./claude-pty/pid-registry.adapter").ClaudePtyRegistry | null
   readonly ptyInstanceRegistry: import("./claude-pty/pty-instance-registry").PtyInstanceRegistry | null
   readonly workflowRegistry: import("./workflow-registry").WorkflowRegistry | null
+  /**
+   * Boards, for the agent's board tools. Read at every spawn: a tool list built
+   * without it evaluates to empty and the agent silently has no board — the
+   * declared-but-never-passed failure `getArmedLoop` already had once.
+   */
+  readonly boardRegistry: import("./board-registry").BoardRegistry | null
   readonly loopTrackingRegistry: import("./loop-tracking-registry").LoopTrackingRegistry | null
   readonly subagentTranscriptRegistry: import("./subagent-transcript-registry").SubagentTranscriptRegistry | null
   readonly localCatalog: import("./local-catalog").LocalCatalogService | null
@@ -336,6 +342,7 @@ export class AgentCoordinator {
     this.claudePtyRegistry = args.claudePtyRegistry ?? null
     this.ptyInstanceRegistry = args.ptyInstanceRegistry ?? null
     this.workflowRegistry = args.workflowRegistry ?? null
+    this.boardRegistry = args.boardRegistry ?? null
     this.loopTrackingRegistry = args.loopTrackingRegistry ?? null
     this.subagentTranscriptRegistry = args.subagentTranscriptRegistry ?? null
     this.localCatalog = args.localCatalog ?? null

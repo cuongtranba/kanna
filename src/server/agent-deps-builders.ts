@@ -344,6 +344,7 @@ export function buildSpawnClaudeTurnDeps(agent: AgentCoordinator): SpawnClaudeTu
     subagentTranscriptRegistry: agent.subagentTranscriptRegistry,
     resolveClaudeDriverPreference: () => agent.resolveClaudeDriverPreference(),
     isLoopArmed: (chatId) => agent.isLoopArmed(chatId),
+    boardRegistry: agent.boardRegistry ?? undefined,
     closeClaudeSession: (chatId, session) => agent.closeClaudeSession(chatId, session),
     enforceClaudeSessionBudget: (protectedChatId?) => agent.enforceClaudeSessionBudget(protectedChatId),
     readLlmProvider: () => agent.readLlmProvider(),

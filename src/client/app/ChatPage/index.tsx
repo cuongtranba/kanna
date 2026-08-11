@@ -33,6 +33,7 @@ import { PaneDndProvider } from "../../components/panes/PaneDndProvider"
 import type { PaneContentRegistry } from "../../components/panes/paneContentRegistry"
 import type { TabPresentationContext } from "../../components/panes/tabPresentation"
 import { ChatTabRoot } from "./ChatTabRoot"
+import { BoardPane } from "../../components/boards/BoardPane"
 import { ChatTabContent } from "./ChatTabContent"
 
 export {
@@ -607,6 +608,15 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
   // ─── Registry ────────────────────────────────────────────────────────────────
 
   const registry: PaneContentRegistry = {
+    // A board is an ADDRESS like every other tab: it re-subscribes from its
+    // boardId, so a persisted layout can never carry stale board content.
+    // Rendered only while it is the active tab: the kanban virtualiser sets
+    // `visibility: visible` inline on its rows, which escapes the `invisible`
+    // class a retained background tab is hidden with and paints cards over the
+    // focused chat. A board holds no live stream, so remounting simply
+    // re-subscribes and the server pushes a fresh snapshot.
+    board: (target, _pane, _isFocused, isActiveTab) =>
+      isActiveTab ? <BoardPane boardId={target.boardId} socket={state.socket} /> : null,
     // Each chat tab gets its own ChatTabScopedStore.Provider via ChatTabRoot so
     // composer state, scroll position, etc. are independent per tab.
     // The tab's target — not the route — decides which chat it renders, which

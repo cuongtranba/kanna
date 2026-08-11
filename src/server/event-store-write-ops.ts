@@ -213,12 +213,18 @@ export function buildCreateChatEvent(
   const project = state.projectsById.get(projectId)
   if (!project || project.deletedAt) throw new Error("Project not found")
 
-  if (options?.stackId !== undefined || options?.stackBindings !== undefined) {
-    if (options.stackId === undefined || options.stackBindings === undefined) {
-      throw new Error("stackId and stackBindings must be provided together")
-    }
-    const stack = state.stacksById.get(options.stackId)
-    if (!stack || stack.deletedAt) throw new Error("Stack not found")
+  if (options?.stackId !== undefined && options.stackBindings === undefined) {
+    throw new Error("stackId requires stackBindings")
+  }
+
+  if (options?.stackBindings !== undefined) {
+    // A stack is optional. `StackBinding` names a project and a worktree and
+    // nothing else, and every consumer — spawn cwd, the system-prompt block,
+    // the navbar — reads it without ever resolving a stack. A card's "Start
+    // work" chat needs exactly one binding, which a Stack cannot express: a
+    // Stack requires two projects.
+    const stack = options.stackId === undefined ? null : state.stacksById.get(options.stackId)
+    if (options.stackId !== undefined && (!stack || stack.deletedAt)) throw new Error("Stack not found")
     if (options.stackBindings.length === 0) throw new Error("stackBindings cannot be empty")
     const primaries = options.stackBindings.filter((b) => b.role === "primary")
     if (primaries.length !== 1) throw new Error("Exactly one primary binding required")
@@ -226,7 +232,7 @@ export function buildCreateChatEvent(
     for (const binding of options.stackBindings) {
       if (seenProjects.has(binding.projectId)) throw new Error("Duplicate projectId in stackBindings")
       seenProjects.add(binding.projectId)
-      if (!stack.projectIds.includes(binding.projectId)) {
+      if (stack && !stack.projectIds.includes(binding.projectId)) {
         throw new Error(`Binding projectId not a member of stack: ${binding.projectId}`)
       }
       const peer = state.projectsById.get(binding.projectId)

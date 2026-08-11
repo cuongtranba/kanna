@@ -14,6 +14,7 @@ import { EventStore } from "./event-store"
 import { openExternal } from "./external-open"
 import { KeybindingsManager } from "./keybindings"
 import { resolveLocalPath } from "./paths"
+import { resolveSpawnPaths } from "./claude-session-config"
 import { ensureProjectDirectory } from "./project-directory.adapter"
 import { TerminalManager } from "./terminal-manager"
 import type { UpdateManager } from "./update-manager"
@@ -30,6 +31,12 @@ import type { SessionShareService } from "./session-share"
 import type { PtyInstanceRegistry } from "./claude-pty/pty-instance-registry"
 import type { LoopTrackingRegistry } from "./loop-tracking-registry"
 import type { WorkflowRegistry } from "./workflow-registry"
+import { handleBoardCommand } from "./ws-router-boards"
+import type { StartWorkResult, StartWorkView } from "../shared/boards/start-work"
+import type { CleanupDecision, WorktreeCleanupView } from "../shared/boards/worktree-cleanup"
+import type { WorktreeCleanupOutcome } from "./board-worktree-cleanup"
+import type { BoardRegistry } from "./board-registry"
+import type { BoardSync } from "./board-sync"
 import type { SubagentTranscriptRegistry } from "./subagent-transcript-registry"
 import type { FollowedSessionRegistry } from "./followed-session-registry"
 import { buildFallbackDiffStore, buildFallbackLlmProvider, buildResolvedAppSettings } from "./ws-router-defaults"
@@ -74,7 +81,7 @@ export { isBenignStaleStateMessage } from "./ws-router-utils"
 
 interface CreateWsRouterArgs {
   store: EventStore
-  diffStore?: Pick<DiffStore, "getProjectSnapshot" | "refreshSnapshot" | "initializeGit" | "getGitHubPublishInfo" | "checkGitHubRepoAvailability" | "publishToGitHub" | "listBranches" | "previewMergeBranch" | "mergeBranch" | "syncBranch" | "checkoutBranch" | "createBranch" | "generateCommitMessage" | "commitFiles" | "discardFile" | "ignoreFile" | "readPatch">
+  diffStore?: Pick<DiffStore, "getSnapshot" | "refreshSnapshot" | "initializeGit" | "getGitHubPublishInfo" | "checkGitHubRepoAvailability" | "publishToGitHub" | "listBranches" | "previewMergeBranch" | "mergeBranch" | "syncBranch" | "checkoutBranch" | "createBranch" | "generateCommitMessage" | "commitFiles" | "discardFile" | "ignoreFile" | "readPatch">
   agent: AgentCoordinator
   terminals: TerminalManager
   keybindings: KeybindingsManager
@@ -96,6 +103,14 @@ interface CreateWsRouterArgs {
   ptyInstances?: PtyInstanceRegistry
   killPtyInstance?: (chatId: string) => Promise<{ ok: boolean; error?: string }>
   workflowRegistry?: WorkflowRegistry
+  boardRegistry?: BoardRegistry
+  boardSync?: BoardSync
+  /** Card → worktree → chat. Built in `server.ts`, where git and the chat store are reachable. */
+  startWork?: (cardId: string) => Promise<StartWorkResult>
+  startWorkView?: (cardId: string) => Promise<StartWorkView>
+  cleanupView?: (cardId: string) => Promise<WorktreeCleanupView | null>
+  resolveCleanup?: (cardId: string, decision: CleanupDecision) => Promise<WorktreeCleanupOutcome>
+  suggestSyncRepo?: (boardId: string) => Promise<{ owner: string; repo: string } | null>
   loopTrackingRegistry?: LoopTrackingRegistry
   subagentTranscriptRegistry?: SubagentTranscriptRegistry
   followedSessionRegistry?: FollowedSessionRegistry
@@ -121,6 +136,13 @@ export function createWsRouter({
   ptyInstances,
   killPtyInstance,
   workflowRegistry,
+  boardRegistry,
+  boardSync,
+  startWork,
+  startWorkView,
+  cleanupView,
+  resolveCleanup,
+  suggestSyncRepo,
   loopTrackingRegistry,
   subagentTranscriptRegistry,
   followedSessionRegistry,
@@ -139,6 +161,7 @@ export function createWsRouter({
     resolvedDiffStore,
     ptyInstances,
     workflowRegistry,
+    boardRegistry,
     loopTrackingRegistry,
     followedSessionRegistry,
     machineDisplayName,
@@ -157,9 +180,21 @@ export function createWsRouter({
     updateManager,
     ptyInstances,
     workflowRegistry,
+    boardRegistry,
     loopTrackingRegistry,
     envelopeBuilder,
   })
+
+  /**
+   * The tree a chat's git commands operate in: its worktree when it has one,
+   * its project's checkout otherwise. The same resolution the agent's cwd uses,
+   * so the Changes panel can never describe a different tree than the one the
+   * agent is editing.
+   */
+  function resolveChatRepoPath(chatId: string): string {
+    const { chat, project } = resolveChatProject(chatId)
+    return resolveSpawnPaths(chat, project.localPath).cwd
+  }
 
   function resolveChatProject(chatId: string) {
     const chat = store.getChat(chatId)
@@ -293,7 +328,7 @@ export function createWsRouter({
           await handleDiffCommand(
             {
               resolvedDiffStore,
-              resolveChatProject,
+              resolveChatRepoPath,
               send: (envelope) => send(ws, envelope),
               broadcastSnapshots: () => broadcast.broadcastSnapshots(),
             },
@@ -409,6 +444,45 @@ export function createWsRouter({
               broadcastSidebar: () => broadcast.broadcastFilteredSnapshots({ includeSidebar: true }),
               broadcastChatAndSidebar: (chatId) => broadcast.broadcastChatAndSidebar(chatId),
               pushTerminalSnapshot: (terminalId) => broadcast.pushTerminalSnapshot(terminalId),
+            },
+            command,
+            id,
+          )
+          return
+        }
+        case "board.create":
+        case "board.archive":
+        case "board.update":
+        case "board.duplicate":
+        case "board.saveAsTemplate":
+        case "board.column.create":
+        case "board.column.update":
+        case "board.column.move":
+        case "board.column.delete":
+        case "board.card.create":
+        case "board.card.move":
+        case "board.card.archive":
+        case "board.card.detail":
+        case "board.card.comment":
+        case "board.card.update":
+        case "board.card.startWork":
+        case "board.card.resolveWorktree":
+        case "board.cards.page":
+        case "board.templates.list":
+        case "board.sync.bind":
+        case "board.sync.pull":
+        case "board.sync.push":
+        case "board.sync.status": {
+          await handleBoardCommand(
+            {
+              boardRegistry,
+              boardSync,
+              startWork,
+              startWorkView,
+              cleanupView,
+              resolveCleanup,
+              suggestSyncRepo,
+              send: (envelope) => send(ws, envelope),
             },
             command,
             id,

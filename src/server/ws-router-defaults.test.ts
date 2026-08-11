@@ -139,7 +139,7 @@ describe("buildFallbackDiffStore", () => {
   test("returns an object with all required DiffStore methods", () => {
     const store = buildFallbackDiffStore()
     const methods = [
-      "getProjectSnapshot", "refreshSnapshot", "initializeGit",
+      "getSnapshot", "refreshSnapshot", "initializeGit",
       "getGitHubPublishInfo", "checkGitHubRepoAvailability", "publishToGitHub",
       "listBranches", "previewMergeBranch", "mergeBranch", "syncBranch",
       "checkoutBranch", "createBranch", "generateCommitMessage", "commitFiles",
@@ -152,7 +152,7 @@ describe("buildFallbackDiffStore", () => {
 
   test("getProjectSnapshot returns an unknown status with empty files", () => {
     const store = buildFallbackDiffStore()
-    const snap = store.getProjectSnapshot("any-project-id")
+    const snap = store.getSnapshot("any-project-id")
     expect(snap.status).toBe("unknown")
     expect(snap.files).toEqual([])
   })

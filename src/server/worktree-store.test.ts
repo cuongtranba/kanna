@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { join } from "node:path"
 import { git, makeTempRepo } from "./test-helpers/worktree-repo"
-import { parseWorktreeList, listWorktrees, addWorktree, isDirty, removeWorktree, slugifyBranchForPath, resolveDefaultWorktreePath } from "./worktree-store.adapter"
+import { parseWorktreeList, listWorktrees, addWorktree, isDirty, removeWorktree, slugifyBranchForPath, resolveDefaultWorktreePath, localBranchExists } from "./worktree-store.adapter"
 import { writeFileSync } from "node:fs"
 
 describe("parseWorktreeList", () => {
@@ -125,6 +125,20 @@ test("addWorktree attaches an existing branch", async () => {
       path: join(dir, ".worktrees", "feat-exists"),
     })
     expect(wt.branch).toBe("feat/exists")
+  } finally {
+    cleanup()
+  }
+}, 30_000)
+
+test("localBranchExists distinguishes a real branch from a lookalike", async () => {
+  const { dir, cleanup } = makeTempRepo()
+  try {
+    git(dir, "branch", "card/412-fix-login")
+    expect(await localBranchExists(dir, "card/412-fix-login")).toBe(true)
+    expect(await localBranchExists(dir, "card/999-nope")).toBe(false)
+    // A tag is not a branch: attaching a worktree to it would detach HEAD.
+    git(dir, "tag", "card/tagged")
+    expect(await localBranchExists(dir, "card/tagged")).toBe(false)
   } finally {
     cleanup()
   }

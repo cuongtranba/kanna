@@ -1,9 +1,10 @@
 import { type ReactNode } from "react"
-import { Archive, Code, Copy, EyeOff, FolderOpen, Pencil, ShieldAlert, Split, Star, StarOff, Trash2, Users } from "lucide-react"
+import { Archive, Code, Copy, EyeOff, FolderOpen, Pencil, ShieldAlert, Split, SquareKanban, Star, StarOff, Trash2, Users } from "lucide-react"
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuTrigger,
 } from "../../ui/context-menu"
 import { Popover, PopoverContent, PopoverTrigger } from "../../ui/popover"
@@ -24,6 +25,7 @@ const stackActionsPopoverStore = createScopedStore<
 
 export function ProjectSectionMenu({
   editorLabel,
+  onOpenBoards,
   starred,
   onCopyPath,
   onShowArchived,
@@ -35,6 +37,7 @@ export function ProjectSectionMenu({
 }: {
   editorLabel: string
   starred: boolean
+  onOpenBoards?: () => void
   onCopyPath: () => void
   onShowArchived: () => void
   onOpenInFinder: () => void
@@ -49,6 +52,24 @@ export function ProjectSectionMenu({
         {children}
       </ContextMenuTrigger>
       <ContextMenuContent>
+        {/* Boards is the only item that NAVIGATES; everything under the rule
+            acts on the project in place. Deliberately not a submenu of
+            individual boards — a project may own many, and a menu that grows
+            with the data stops being a menu. */}
+        {onOpenBoards ? (
+          <>
+            <ContextMenuItem
+              onSelect={(event) => {
+                event.stopPropagation()
+                onOpenBoards()
+              }}
+            >
+              <SquareKanban className="h-3.5 w-3.5" />
+              <span className="text-xs font-medium">Boards</span>
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+          </>
+        ) : null}
         <ContextMenuItem
           onSelect={(event) => {
             event.stopPropagation()

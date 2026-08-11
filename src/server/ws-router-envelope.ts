@@ -15,12 +15,14 @@ import type { ServerEnvelope, SubscriptionTopic } from "../shared/protocol"
 import type { ServerWebSocket } from "bun"
 import { deriveChatSnapshot, deriveLocalProjectsSnapshot, deriveSidebarData } from "./read-models"
 import { localCommandsForCwd } from "./claude-slash-commands"
+import { resolveSpawnPaths } from "./claude-session-config"
 import type { EventStore } from "./event-store"
 import type { AgentCoordinator } from "./agent"
 import type { TerminalManager } from "./terminal-manager"
 import type { KeybindingsManager } from "./keybindings"
 import type { PtyInstanceRegistry } from "./claude-pty/pty-instance-registry"
 import type { WorkflowRegistry } from "./workflow-registry"
+import type { BoardRegistry } from "./board-registry"
 import type { LoopTrackingRegistry } from "./loop-tracking-registry"
 import type { FollowedSessionRegistry } from "./followed-session-registry"
 import type { UpdateManager } from "./update-manager"
@@ -36,6 +38,43 @@ import type { ResolvedAppSettings } from "./ws-router-defaults"
 
 const DEFAULT_CHAT_RECENT_LIMIT = 200
 
+/**
+ * Ceiling on a board subscription's page size.
+ *
+ * The topic arrives from the client verbatim, and every board broadcast
+ * rebuilds the snapshot from it — so an unbounded value would let one socket
+ * turn each card edit into a full-board read. Well above any hand-managed
+ * board; a tracker import past it pages instead.
+ */
+const MAX_BOARD_PAGE_SIZE = 500
+
+export /**
+ * The tree a `project-git` subscriber is asking about.
+ *
+ * With a chat, its resolved cwd — the worktree it runs in, or the project's
+ * checkout when it has no binding. Without one, the project's checkout. Null
+ * when the project (or the named chat) is gone, which is the existence gate the
+ * snapshot's `null` reports.
+ */
+function resolveTopicRepoPath(
+  store: EventStore,
+  projectId: string,
+  chatId: string | undefined,
+): string | null {
+  const project = store.getProject(projectId)
+  if (!project) return null
+  if (chatId === undefined) return project.localPath
+  const chat = store.getChat(chatId)
+  if (!chat) return null
+  return resolveSpawnPaths(chat, project.localPath).cwd
+}
+
+export function resolveBoardPageSize(requested: number | undefined): number | undefined {
+  if (requested === undefined) return undefined
+  if (!Number.isInteger(requested) || requested <= 0) return undefined
+  return Math.min(requested, MAX_BOARD_PAGE_SIZE)
+}
+
 // ── Deps type ─────────────────────────────────────────────────────────────────
 
 export interface EnvelopeDeps {
@@ -44,12 +83,13 @@ export interface EnvelopeDeps {
   resolvedAppSettings: ResolvedAppSettings
   keybindings: KeybindingsManager
   resolvedDiffStore: Pick<DiffStore,
-    "getProjectSnapshot" | "refreshSnapshot" | "initializeGit" | "getGitHubPublishInfo" |
+    "getSnapshot" | "refreshSnapshot" | "initializeGit" | "getGitHubPublishInfo" |
     "checkGitHubRepoAvailability" | "publishToGitHub" | "listBranches" | "previewMergeBranch" |
     "mergeBranch" | "syncBranch" | "checkoutBranch" | "createBranch" | "generateCommitMessage" |
     "commitFiles" | "discardFile" | "ignoreFile" | "readPatch">
   ptyInstances?: PtyInstanceRegistry
   workflowRegistry?: WorkflowRegistry
+  boardRegistry?: BoardRegistry
   loopTrackingRegistry?: LoopTrackingRegistry
   followedSessionRegistry?: FollowedSessionRegistry
   machineDisplayName: string
@@ -149,6 +189,7 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
     resolvedDiffStore,
     ptyInstances,
     workflowRegistry,
+    boardRegistry,
     loopTrackingRegistry,
     followedSessionRegistry,
     machineDisplayName,
@@ -289,9 +330,10 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
         id,
         snapshot: {
           type: "project-git",
-          data: store.getProject(topic.projectId)
-            ? resolvedDiffStore.getProjectSnapshot(topic.projectId)
-            : null,
+          data: (() => {
+            const repoPath = resolveTopicRepoPath(store, topic.projectId, topic.chatId)
+            return repoPath === null ? null : resolvedDiffStore.getSnapshot(repoPath)
+          })(),
         },
       }
     }
@@ -337,6 +379,38 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
         snapshot: {
           type: "workflows",
           data: { chatId: topic.chatId, runs: workflowRegistry?.snapshot(topic.chatId) ?? [] },
+        },
+      }
+    }
+
+    if (topic.type === "boards") {
+      const owner = { kind: topic.ownerKind, id: topic.ownerId }
+      return {
+        v: PROTOCOL_VERSION,
+        type: "snapshot",
+        id,
+        snapshot: {
+          type: "boards",
+          data: {
+            ownerKind: topic.ownerKind,
+            ownerId: topic.ownerId,
+            boards: boardRegistry?.listBoards(owner) ?? [],
+          },
+        },
+      }
+    }
+
+    if (topic.type === "board") {
+      return {
+        v: PROTOCOL_VERSION,
+        type: "snapshot",
+        id,
+        snapshot: {
+          type: "board",
+          data: {
+            boardId: topic.boardId,
+            view: boardRegistry?.boardView(topic.boardId, resolveBoardPageSize(topic.pageSize)) ?? null,
+          },
         },
       }
     }
