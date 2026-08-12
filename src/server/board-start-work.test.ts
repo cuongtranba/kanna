@@ -17,6 +17,18 @@ const DEFINITION: BoardTemplateDefinition = {
   mappingDefaults: [],
 }
 
+/** A stage between `active` and `done` — the only shape that advances anywhere. */
+const PIPELINE: BoardTemplateDefinition = {
+  columns: [
+    { title: "Todo", semantic: "start", colorToken: null, wipLimit: null },
+    { title: "Doing", semantic: "active", colorToken: null, wipLimit: null },
+    { title: "Test", semantic: null, colorToken: null, wipLimit: null },
+    { title: "Done", semantic: "done", colorToken: null, wipLimit: null },
+  ],
+  cardFields: [],
+  mappingDefaults: [],
+}
+
 const NO_SEMANTICS: BoardTemplateDefinition = {
   columns: [
     { title: "Inbox", semantic: null, colorToken: null, wipLimit: null },
@@ -187,6 +199,38 @@ describe("startWork", () => {
     expect(result.movedToColumnId).toBe(columns[1]!.id)
     expect(store.getCard(card.id)!.columnId).toBe(columns[1]!.id)
     expect(result.reused).toBe(false)
+  })
+
+  /**
+   * The prompt is built AFTER the move, so the column it names is the one after
+   * where the card now sits — not the one after where the user left it.
+   */
+  test("the prompt names the column after the one the card lands in", async () => {
+    const { columns, card } = seed(PIPELINE)
+    await startWork(makeDeps(), card.id)
+
+    const prompt = recorder.prompts[0]!.content
+    expect(prompt).toContain("mcp__kanna__card_move")
+    expect(prompt).toContain(`card_id: "${card.id}"`)
+    expect(prompt).toContain(`to_column_id: "${columns[2]!.id}"`)
+    expect(prompt).toContain("Test")
+  })
+
+  /**
+   * Closing a card raises the merge/discard/leave question and reports closed to
+   * a connected tracker. The agent is never handed that.
+   */
+  test("the prompt asks for no move when the only next column is done", async () => {
+    const { card } = seed()
+    await startWork(makeDeps(), card.id)
+    expect(recorder.prompts[0]!.content).not.toContain("card_move")
+  })
+
+  /** No active column means the card never moved, so it advances from where it is. */
+  test("advances from the card's own column when the board marks none active", async () => {
+    const { columns, card } = seed(NO_SEMANTICS)
+    await startWork(makeDeps(), card.id)
+    expect(recorder.prompts[0]!.content).toContain(`to_column_id: "${columns[1]!.id}"`)
   })
 
   test("uses the tracker's reference in the branch name", async () => {

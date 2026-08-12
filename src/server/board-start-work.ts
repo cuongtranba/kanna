@@ -17,11 +17,13 @@ import type { BoardRegistry } from "./board-registry"
 import {
   buildStartWorkPrompt,
   deriveStartWorkStatus,
+  findAdvanceColumn,
   resolveStartWorkProjectId,
+  type CardAdvance,
   type StartWorkResult,
   type StartWorkView,
 } from "../shared/boards/start-work"
-import { findActiveColumn, type Card, type CardActor } from "../shared/boards/types"
+import { findActiveColumn, type BoardColumn, type Card, type CardActor } from "../shared/boards/types"
 import type { GitWorktree, StackBinding } from "../shared/types"
 import { resolveDefaultWorktreePath, type AddWorktreeOpts } from "./worktree-store.adapter"
 
@@ -160,16 +162,36 @@ export async function startWork(deps: StartWorkDeps, cardId: string): Promise<St
     stackBindings: [{ projectId, worktreePath, role: "primary" }],
   })
   registry.addCardLink(cardId, "chat", chat.id)
-  await deps.sendPrompt(chat.id, buildStartWorkPrompt(card, branch))
+
+  // Moved BEFORE the prompt: the prompt names where the card advances to NEXT,
+  // which is the column after the one it is about to sit in. A prompt built
+  // from the pre-move column would send the agent one step behind the board.
+  const columns = registry.listColumns(card.boardId)
+  const movedToColumnId = moveToActiveColumn(registry, columns, cardId, card.columnId)
+  await deps.sendPrompt(
+    chat.id,
+    buildStartWorkPrompt(card, branch, resolveAdvance(columns, cardId, movedToColumnId ?? card.columnId)),
+  )
 
   return {
     cardId,
     chatId: chat.id,
     branch,
     worktreePath,
-    movedToColumnId: moveToActiveColumn(registry, card.boardId, cardId, card.columnId),
+    movedToColumnId,
     reused: false,
   }
+}
+
+/** The move to ask the agent for, or null when the board has nowhere to advance to. */
+function resolveAdvance(
+  columns: readonly BoardColumn[],
+  cardId: string,
+  fromColumnId: string,
+): CardAdvance | null {
+  const next = findAdvanceColumn(columns, fromColumnId)
+  if (!next) return null
+  return { cardId, columnId: next.id, columnTitle: next.title }
 }
 
 async function createWorktree(
@@ -202,11 +224,11 @@ async function createWorktree(
  */
 function moveToActiveColumn(
   registry: BoardRegistry,
-  boardId: string,
+  columns: readonly BoardColumn[],
   cardId: string,
   currentColumnId: string,
 ): string | null {
-  const active = findActiveColumn(registry.listColumns(boardId))
+  const active = findActiveColumn(columns)
   if (!active) return null
   if (active.id === currentColumnId) return active.id
   registry.moveCard({ cardId, toColumnId: active.id, aboveCardId: null, belowCardId: null, actor: USER })
