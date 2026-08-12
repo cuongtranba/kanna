@@ -48,6 +48,34 @@ export interface StartingTurn {
   cancelRequested: boolean
 }
 
+/**
+ * Why a turn exists to compact, when it does.
+ *
+ * - `proactive` — Kanna injected `/compact` ahead of the user's real message.
+ *   Only this kind is owned by the `compactFailureCount` circuit breaker and by
+ *   the `message.dequeue` refusal: both exist to bound Kanna's OWN automatic
+ *   injection, and a user who typed the command must not trip either.
+ * - `user` — the user typed `/compact`. Reaches the claude CLI verbatim, so it
+ *   emits a bare `compact_boundary` under PTY exactly as the proactive one does.
+ * - `codex_summary` — Codex's app-server has no compaction request, so Kanna
+ *   runs the summarization itself and reshapes the reply into `compact_summary`.
+ */
+export type CompactionTurnKind = "proactive" | "user" | "codex_summary"
+
+/**
+ * A compaction driven by the claude CLI, which under PTY writes only a
+ * `compact_boundary` and never a `result` — so the boundary is the turn's
+ * terminal signal. See adr-20260608-pty-compact-boundary-dequeue-finalize.
+ */
+export function isCliCompactTurn(turn: Pick<ActiveTurn, "compactionTurn"> | undefined): boolean {
+  return turn?.compactionTurn === "proactive" || turn?.compactionTurn === "user"
+}
+
+/** A compaction the `compactFailureCount` circuit breaker owns. */
+export function isProactiveCompactTurn(turn: Pick<ActiveTurn, "compactionTurn"> | undefined): boolean {
+  return turn?.compactionTurn === "proactive"
+}
+
 export interface ActiveTurn {
   chatId: string
   provider: AgentProvider
@@ -65,10 +93,7 @@ export interface ActiveTurn {
   clientTraceId?: string
   profilingStartedAt?: number
   waitStartedAt: number | null
-  // True when this turn was synthesised by Kanna to inject `/compact` before
-  // the user's real message. Used to update the per-chat compact circuit
-  // breaker on completion (reset on success, increment on failure).
-  proactiveCompactInjection?: boolean
+  compactionTurn?: CompactionTurnKind
   // _id of the user_prompt entry that triggered this turn (when appended on
   // this turn). Used to attribute main-Claude-initiated subagent runs to the
   // originating user message.

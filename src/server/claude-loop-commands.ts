@@ -16,6 +16,7 @@ import type { TranscriptEntry } from "../shared/types"
 import type { Subagent, AgentProvider } from "../shared/types"
 import { AUTO_CONTINUE_EVENT_VERSION, type AutoContinueEvent } from "./auto-continue/events"
 import { deriveChatSchedules, deriveLoopState, type LoopState } from "./auto-continue/read-model"
+import { clearClaudeSessionContext } from "./claude-context-commands"
 import { timestamped } from "./claude-message-normalizer"
 import { buildTaskNotification } from "./claude-session-config"
 import {
@@ -132,29 +133,7 @@ export interface LoopCommandDeps {
 
 // ── Loop + background delivery ──────────────────────────────────────────────
 
-/**
- * Wipe the main-agent's Claude session context (the /clear equivalent).
- *
- * Three things happen:
- * - The persisted session token is set to null (so the next spawn starts fresh).
- * - The live session's `suppressSessionTokenPersist` flag is set to true so the
- *   in-flight stream cannot overwrite the null we just wrote (avoids a
- *   121 ms race on setup_loop /clear).
- * - An idle warm SDK session is torn down so it cannot be reused in-band by
- *   the next turn (which would make the /clear a no-op).
- */
-export async function clearClaudeSessionContext(
-  deps: LoopCommandDeps,
-  chatId: string,
-): Promise<void> {
-  await deps.store.setSessionTokenForProvider(chatId, "claude", null)
-  const session = deps.claudeSessions.get(chatId)
-  if (!session) return
-  session.suppressSessionTokenPersist = true
-  if (!deps.activeTurns.has(chatId)) {
-    deps.closeClaudeSession(chatId, session)
-  }
-}
+export { clearClaudeSessionContext } from "./claude-context-commands"
 
 /**
  * Consecutive failed iterations after which the host disarms the loop itself.

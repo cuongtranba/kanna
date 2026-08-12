@@ -1,7 +1,7 @@
 ---
 id: c3-211
 c3-version: 4
-c3-seal: 0cb981682d6bb47a7da1a70c35c92c84bc9852286e5e7fb187cfd4713111aec8
+c3-seal: 9317510117d4b96be39cd2c1f5e099d80de6e4f4d192d89950d6697f70df78e6
 title: codex-app-server
 type: component
 category: feature
@@ -51,6 +51,7 @@ Spawns the Codex App Server child process, speaks JSON-RPC, maps its event strea
 | Alternate — fallback | Quick-response uses Codex when Claude Haiku fails | c3-213 |
 | Alternate — cancel | RPC cancel propagates to running turn | c3-210 |
 | Failure — child crash | Restart child; surface error event | c3-209 |
+| Alternate — compaction | The protocol is `initialize`, `initialized`, `thread/{fork,resume,start}`, `turn/{start,interrupt}` — there is no compaction request, so Kanna can observe `thread/compacted` but never ask for it. A user `/compact` is therefore a Kanna-driven summarize turn plus a session-token wipe plus `stopSession`; the stop is required because `startSession` reuses a live session on a cwd match and never consults the token | c3-210 |
 
 ## Governance
 

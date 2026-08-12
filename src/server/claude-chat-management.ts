@@ -12,7 +12,8 @@
 
 import type { AgentProvider, QueuedChatMessage } from "../shared/types"
 import type { ClientCommand } from "../shared/protocol"
-import type { ClaudeSessionState } from "./claude-session-state"
+import type { ClaudeSessionState, CompactionTurnKind } from "./claude-session-state"
+import { isProactiveCompactTurn } from "./claude-session-state"
 import type { GenerateChatTitleResult } from "./generate-title"
 import { logClaudeSteer } from "./claude-steer-log"
 
@@ -23,7 +24,7 @@ import { logClaudeSteer } from "./claude-steer-log"
 /** Subset of the activeTurns map used by chat management. */
 interface ActiveTurnsMap {
   has(chatId: string): boolean
-  get(chatId: string): { proactiveCompactInjection?: boolean } | undefined
+  get(chatId: string): { compactionTurn?: CompactionTurnKind } | undefined
 }
 
 /** Subset of the drainingStreams map used by chat management. */
@@ -179,9 +180,10 @@ export async function dequeue(
   // Refuse to drop the queued message while a Kanna-injected `/compact`
   // turn is running. The compact was triggered specifically to make room
   // for this queued message; auto-draining it after compact completes
-  // would silently lose user intent and waste the compact spend.
+  // would silently lose user intent and waste the compact spend. A
+  // user-typed `/compact` owns no queued message, so it never blocks here.
   const active = deps.activeTurns.get(command.chatId)
-  if (active?.proactiveCompactInjection) {
+  if (isProactiveCompactTurn(active)) {
     throw new Error("Cannot remove queued message while compact is running")
   }
 

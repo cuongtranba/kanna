@@ -33,6 +33,7 @@ import { toArmedLoopInfo } from "./claude-loop-commands"
 import type { CancelHandlerDeps } from "./claude-cancel-handler"
 import type { ChatManagementDeps } from "./claude-chat-management"
 import type { SendCommandDeps } from "./claude-send-command"
+import type { ClearChatContextDeps } from "./claude-context-commands"
 import type { SubagentWiringDeps } from "./claude-subagent-wiring"
 import type { SubagentToolResponseDeps } from "./claude-subagent-tool-response"
 import type { ToolRespondDeps } from "./claude-tool-respond"
@@ -202,6 +203,18 @@ export function buildSendCommandDeps(agent: AgentCoordinator): SendCommandDeps {
     stopLoop: (chatId, reason) => agent.stopLoop(chatId, reason),
     emitStateChange: (chatId) => agent.emitStateChange(chatId),
     startTurnForChat: (args) => agent.startTurnForChat(args),
+    clearChatContext: (chatId) => agent.clearChatContext(chatId),
+  }
+}
+
+export function buildClearChatContextDeps(agent: AgentCoordinator): ClearChatContextDeps {
+  return {
+    store: agent.store,
+    claudeSessions: agent.claudeSessions,
+    activeTurns: agent.activeTurns,
+    closeClaudeSession: (chatId, session) => agent.closeClaudeSession(chatId, session),
+    stopCodexSession: (chatId) => agent.codexManager.stopSession(chatId),
+    emitStateChange: (chatId) => agent.emitStateChange(chatId),
   }
 }
 
@@ -437,5 +450,6 @@ export function buildRunTurnDeps(agent: AgentCoordinator): RunTurnDeps {
     clearDrainingStream: (chatId) => { agent.clearDrainingStream(chatId) },
     startTurnForChat: (args) => agent.startTurnForChat(args),
     maybeStartNextQueuedMessage: (chatId) => agent.maybeStartNextQueuedMessage(chatId),
+    stopCodexSession: (chatId) => agent.codexManager.stopSession(chatId),
   }
 }

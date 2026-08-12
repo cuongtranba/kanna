@@ -13,7 +13,7 @@
 import { describe, test, expect } from "bun:test"
 import { runClaudeSession } from "./claude-session-runner"
 import type { RunClaudeSessionDeps } from "./claude-session-runner"
-import type { ClaudeSessionState, ActiveTurn } from "./claude-session-state"
+import type { ClaudeSessionState, ActiveTurn, CompactionTurnKind } from "./claude-session-state"
 import { PendingToolSlots, type ParkedTool } from "./pending-tool-slot"
 import type { HarnessEvent } from "./harness-types"
 import type { TranscriptEntry } from "../shared/types"
@@ -400,27 +400,30 @@ describe("runClaudeSession", () => {
     expect(failedCalls[0].reason).toBe("Something went wrong")
   })
 
-  test("compact_boundary with proactiveCompactInjection (PTY driver) finalizes the turn", async () => {
+  function runCompactBoundary(args: {
+    compactionTurn: CompactionTurnKind
+    driver: "pty" | "sdk"
+  }) {
     const session = makeSession()
     session.pendingPromptSeqs = [1]
 
     const active = makeActiveTurn(session.chatId, {
       claudePromptSeq: 1,
-      proactiveCompactInjection: true,
+      compactionTurn: args.compactionTurn,
     })
     const activeTurns = new Map([[session.chatId, active]])
     const finishedCalls: string[] = []
-    const releaseCalls: string[] = []
+    const breakerCalls: number[] = []
 
     const deps = makeDeps(session, {
       activeTurns,
-      oauthPool: { release: (chatId) => releaseCalls.push(chatId) },
+      oauthPool: { release: () => {} },
       store: {
         ...makeDeps(session).store,
         recordTurnFinished: async (chatId) => { finishedCalls.push(chatId) },
-        setCompactFailureCount: async () => {},
+        setCompactFailureCount: async (_chatId, count) => { breakerCalls.push(count) },
       },
-      resolveClaudeDriverPreference: () => "pty",
+      resolveClaudeDriverPreference: () => args.driver,
     })
     const compactBoundaryEntry = {
       _id: "compact-1",
@@ -431,12 +434,70 @@ describe("runClaudeSession", () => {
       { type: "transcript", entry: compactBoundaryEntry },
     ])
 
+    return { session, active, activeTurns, finishedCalls, breakerCalls, deps }
+  }
+
+  test("compact_boundary on a proactive compact (PTY) finalizes and resets the breaker", async () => {
+    const ctx = runCompactBoundary({ compactionTurn: "proactive", driver: "pty" })
+
+    await runClaudeSession(ctx.deps, ctx.session)
+
+    expect(ctx.finishedCalls).toHaveLength(1)
+    expect(ctx.active.hasFinalResult).toBe(true)
+    expect(ctx.activeTurns.size).toBe(0)
+    expect(ctx.session.pendingPromptSeqs).toEqual([])
+    expect(ctx.breakerCalls).toEqual([0])
+  })
+
+  test("compact_boundary on a user-typed compact (PTY) finalizes without touching the breaker", async () => {
+    const ctx = runCompactBoundary({ compactionTurn: "user", driver: "pty" })
+
+    await runClaudeSession(ctx.deps, ctx.session)
+
+    expect(ctx.finishedCalls).toHaveLength(1)
+    expect(ctx.active.hasFinalResult).toBe(true)
+    expect(ctx.activeTurns.size).toBe(0)
+    expect(ctx.session.pendingPromptSeqs).toEqual([])
+    expect(ctx.breakerCalls).toEqual([])
+  })
+
+  test("compact_boundary on a user-typed compact under the SDK driver does NOT finalize", async () => {
+    const ctx = runCompactBoundary({ compactionTurn: "user", driver: "sdk" })
+
+    await runClaudeSession(ctx.deps, ctx.session)
+
+    expect(ctx.finishedCalls).toEqual([])
+    expect(ctx.active.hasFinalResult).toBe(false)
+    expect(ctx.session.pendingPromptSeqs).toEqual([1])
+  })
+
+  test("a failed user-typed compact never increments the breaker", async () => {
+    const session = makeSession()
+    session.pendingPromptSeqs = [1]
+
+    const active = makeActiveTurn(session.chatId, {
+      claudePromptSeq: 1,
+      compactionTurn: "user",
+    })
+    const activeTurns = new Map([[session.chatId, active]])
+    const breakerCalls: number[] = []
+
+    const deps = makeDeps(session, {
+      activeTurns,
+      store: {
+        ...makeDeps(session).store,
+        recordTurnFailed: async () => {},
+        getChat: () => ({ compactFailureCount: 0, pendingForkSessionToken: null }),
+        setCompactFailureCount: async (_chatId, count) => { breakerCalls.push(count) },
+      },
+    })
+    session.session.stream = fakeStream([
+      { type: "transcript", entry: fakeResultEntry(true, "compact failed") },
+    ])
+
     await runClaudeSession(deps, session)
 
-    expect(finishedCalls).toHaveLength(1)
-    expect(active.hasFinalResult).toBe(true)
-    // activeTurns cleared in compact_boundary path
-    expect(activeTurns.size).toBe(0)
+    expect(breakerCalls).toEqual([])
   })
 
   test("tool_result with background task ID updates backgroundTaskIds and deadline", async () => {
