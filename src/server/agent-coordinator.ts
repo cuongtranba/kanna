@@ -127,6 +127,7 @@ import {
   maybeStartNextQueuedMessage as maybeStartNextQueuedMessageFn,
   type SendCommandDeps,
 } from "./claude-send-command"
+import { clearChatContext as clearChatContextFn } from "./claude-context-commands"
 import {
   subagentPendingKey as subagentPendingKeyFn,
   rejectPendingResolversForChat as rejectPendingResolversForChatFn,
@@ -707,6 +708,11 @@ export class AgentCoordinator {
   /** @internal Delegates to maybeStartNextQueuedMessageFn — see claude-send-command.ts. */
   async maybeStartNextQueuedMessage(chatId: string) {
     return maybeStartNextQueuedMessageFn(this.buildSendCommandDeps(), chatId)
+  }
+
+  /** @internal Delegates to clearChatContextFn — see claude-context-commands.ts. */
+  async clearChatContext(chatId: string) {
+    return clearChatContextFn(agentDepsBuilders.buildClearChatContextDeps(this), chatId)
   }
 
   private buildStartTurnDeps(): StartTurnDeps {

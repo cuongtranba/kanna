@@ -205,7 +205,7 @@ describe("dequeue", () => {
     const deps = makeDeps({
       activeTurns: {
         has: mock(() => true),
-        get: mock(() => ({ proactiveCompactInjection: true })),
+        get: mock(() => ({ compactionTurn: "proactive" as const })),
       },
       store: {
         getQueuedMessage: mock(() => qm),

@@ -1,4 +1,4 @@
-import type { SlashCommand } from "../../shared/types"
+import type { AgentProvider, SlashCommand } from "../../shared/types"
 
 const SLASH_TOKEN_PATTERN = /^\/(\S*)$/
 
@@ -53,6 +53,22 @@ const SCOPE_RANK: Record<string, number> = { project: 0, personal: 0, builtin: 1
 function byScopeThenName(a: SlashCommand, b: SlashCommand): number {
   const rank = (SCOPE_RANK[a.scope ?? ""] ?? 1) - (SCOPE_RANK[b.scope ?? ""] ?? 1)
   return rank !== 0 ? rank : a.name.localeCompare(b.name)
+}
+
+/**
+ * Narrow the catalog to what actually works on the selected provider.
+ *
+ * Kanna's builtins are provider-agnostic — it implements them itself. The
+ * disk-scanned entries are Claude Code skills and commands, so they only mean
+ * anything to a provider that runs the claude CLI: OpenRouter does (pointed at
+ * a different endpoint), Codex does not.
+ */
+export function commandsForProvider(
+  list: SlashCommand[],
+  provider: AgentProvider,
+): SlashCommand[] {
+  if (provider !== "codex") return list
+  return list.filter((command) => command.scope === "builtin")
 }
 
 export function filterCommands(list: SlashCommand[], query: string): SlashCommand[] {

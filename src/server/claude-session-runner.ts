@@ -25,6 +25,7 @@ import {
 import { timestamped } from "./claude-message-normalizer"
 import { logClaudeSteer } from "./claude-steer-log"
 import type { ClaudeSessionState, ActiveTurn } from "./claude-session-state"
+import { isCliCompactTurn, isProactiveCompactTurn } from "./claude-session-state"
 import type { PendingToolSlots } from "./pending-tool-slot"
 import type { MermaidGuard } from "./mermaid-guard"
 
@@ -406,28 +407,32 @@ export async function runClaudeSession(
         pendingPromptSeqs: [...session.pendingPromptSeqs],
       })
 
-      // PTY-only: the Kanna-injected proactive `/compact` turn never emits a
-      // terminal `result`/`turn_duration` under the interactive TUI — it
-      // writes only a `system/compact_boundary` line (confirmed in the
-      // on-disk transcript). Without a result, the normal finalize path below
-      // (kind === "result") never runs, so the active turn and its
-      // `proactiveCompactInjection` flag linger forever — permanently wedging
+      // PTY-only: a `/compact` turn never emits a terminal
+      // `result`/`turn_duration` under the interactive TUI — it writes only a
+      // `system/compact_boundary` line (confirmed in the on-disk transcript).
+      // Without a result, the normal finalize path below (kind === "result")
+      // never runs, so the active turn lingers forever — permanently wedging
       // `dequeue()` ("Cannot remove queued message while compact is running")
       // and the queued-message drain. Treat the boundary as the compact
       // turn's completion: finalize like the SDK result path and drain the
-      // queued user message the compact made room for. The SDK driver is
+      // queued user message the compact made room for. Applies to a
+      // user-typed `/compact` as well as Kanna's own injection — both reach
+      // the CLI verbatim, so both go quiet the same way. The SDK driver is
       // excluded because there a real `result` still follows; finalizing here
       // would double-finalize and corrupt the trailing result's seq
       // accounting. See adr-20260608-pty-compact-boundary-dequeue-finalize.
       if (
         event.entry.kind === "compact_boundary"
-        && active?.proactiveCompactInjection
+        && active !== undefined
+        && isCliCompactTurn(active)
         && !active.cancelRequested
         && deps.resolveClaudeDriverPreference() === "pty"
       ) {
         active.hasFinalResult = true
         await deps.store.recordTurnFinished(session.chatId)
-        await deps.store.setCompactFailureCount(session.chatId, 0)
+        if (isProactiveCompactTurn(active)) {
+          await deps.store.setCompactFailureCount(session.chatId, 0)
+        }
         // The compact prompt's seq never gets shifted (no result event), so
         // drop it here — otherwise the next real turn's result would shift
         // this stale seq and FIFO-mismatch, wedging that turn. Mirrors
@@ -489,13 +494,13 @@ export async function runClaudeSession(
           } else {
             await deps.store.recordTurnFailed(session.chatId, resultText)
           }
-          if (active.proactiveCompactInjection) {
+          if (isProactiveCompactTurn(active)) {
             const prev = deps.store.getChat(session.chatId)?.compactFailureCount ?? 0
             await deps.store.setCompactFailureCount(session.chatId, prev + 1)
           }
         } else if (!active.cancelRequested) {
           await deps.store.recordTurnFinished(session.chatId)
-          if (active.proactiveCompactInjection) {
+          if (isProactiveCompactTurn(active)) {
             await deps.store.setCompactFailureCount(session.chatId, 0)
           }
           // Turn is already recorded finished, so a slow parse cannot hold it

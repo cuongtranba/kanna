@@ -77,11 +77,43 @@ export interface RunTurnDeps {
   startTurnForChat: (args: StartTurnForChatArgs) => Promise<void>
   /** Process the next queued message for a chat after the current turn ends. */
   maybeStartNextQueuedMessage: (chatId: string) => Promise<boolean | void>
+  /**
+   * Tear down the chat's codex process. A live session is reused whenever the
+   * cwd matches, regardless of session token, so a compaction that only nulls
+   * the token would leave the next turn on the same thread.
+   */
+  stopCodexSession: (chatId: string) => void
 }
 
 // ---------------------------------------------------------------------------
 // Standalone function
 // ---------------------------------------------------------------------------
+
+/**
+ * Commit a Codex compaction, all-or-nothing.
+ *
+ * The boundary is written BEFORE the summary because the history primer
+ * resumes at the last boundary and replays what follows — the other order
+ * would cut the summary out and hand Codex an empty context.
+ *
+ * A turn that errored, was cancelled, or produced no prose commits nothing:
+ * dropping the thread without a replacement summary is strictly worse than
+ * not compacting at all.
+ */
+async function finalizeCodexSummary(
+  deps: RunTurnDeps,
+  active: ActiveTurn,
+  summaryParts: readonly string[],
+): Promise<void> {
+  if (active.compactionTurn !== "codex_summary") return
+  const summary = summaryParts.join("\n\n").trim()
+  if (!summary) return
+
+  await deps.store.appendMessage(active.chatId, timestamped({ kind: "compact_boundary" }))
+  await deps.store.appendMessage(active.chatId, timestamped({ kind: "compact_summary", summary }))
+  await deps.store.setSessionTokenForProvider(active.chatId, "codex", null)
+  deps.stopCodexSession(active.chatId)
+}
 
 /**
  * Drive a single agentic turn to completion.
@@ -91,6 +123,8 @@ export interface RunTurnDeps {
  * token release, and post-turn scheduling (postToolFollowUp or queue drain).
  */
 export async function runTurn(deps: RunTurnDeps, active: ActiveTurn): Promise<void> {
+  const isCodexSummary = active.compactionTurn === "codex_summary"
+  const summaryParts: string[] = []
   try {
     for await (const event of active.turn.stream) {
       // Once cancelled, stop processing further stream events.
@@ -111,6 +145,17 @@ export async function runTurn(deps: RunTurnDeps, active: ActiveTurn): Promise<vo
       }
 
       if (!event.entry) continue
+
+      // The whole point of a summarize turn is that its prose becomes the
+      // context, not another transcript message — so it is accumulated and
+      // written once as a `compact_summary` below. Codex emits one
+      // assistant_text per item, so transforming each in place would produce
+      // N summaries for one compaction.
+      if (isCodexSummary && event.entry.kind === "assistant_text") {
+        summaryParts.push(event.entry.text)
+        continue
+      }
+
       await deps.store.appendMessage(active.chatId, event.entry)
 
       if (event.entry.kind === "system_init") {
@@ -123,6 +168,7 @@ export async function runTurn(deps: RunTurnDeps, active: ActiveTurn): Promise<vo
           await deps.store.recordTurnFailed(active.chatId, event.entry.result || "Turn failed")
         } else if (!active.cancelRequested) {
           await deps.store.recordTurnFinished(active.chatId)
+          await finalizeCodexSummary(deps, active, summaryParts)
         }
         // Remove from activeTurns as soon as the result arrives so the UI
         // transitions to idle immediately. The stream may still be open

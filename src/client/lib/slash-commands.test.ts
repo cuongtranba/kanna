@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test"
-import { applyCommandToInput, shouldShowPicker, filterCommands } from "./slash-commands"
+import { describe, expect, test, test as it } from "bun:test"
+import { applyCommandToInput, shouldShowPicker, filterCommands, commandsForProvider } from "./slash-commands"
 import type { SlashCommand } from "../../shared/types"
 
 describe("shouldShowPicker", () => {
@@ -140,5 +140,43 @@ describe("applyCommandToInput", () => {
     })
     // This input is "/rev" + " rest"; caret at 4 means we replace "/rev"
     expect(result).toEqual({ value: "/review rest", caret: 7 })
+  })
+})
+
+describe("commandsForProvider", () => {
+  const builtin: SlashCommand = { name: "clear", description: "", argumentHint: "", scope: "builtin" }
+  const projectSkill: SlashCommand = { name: "review-pr", description: "", argumentHint: "", scope: "project" }
+  const pluginSkill: SlashCommand = { name: "cf:sandbox", description: "", argumentHint: "", scope: "plugin" }
+  const all = [builtin, projectSkill, pluginSkill]
+
+  it("returns everything for claude", () => {
+    expect(commandsForProvider(all, "claude")).toEqual(all)
+  })
+
+  it("returns everything for openrouter — same claude CLI underneath", () => {
+    expect(commandsForProvider(all, "openrouter")).toEqual(all)
+  })
+
+  it("returns only builtins for codex — disk skills are Claude Code skills", () => {
+    expect(commandsForProvider(all, "codex")).toEqual([builtin])
+  })
+
+  it("returns a stable reference when nothing is filtered out", () => {
+    expect(commandsForProvider(all, "claude")).toBe(all)
+  })
+})
+
+describe("builtin scope ranking", () => {
+  it("sorts builtins below user-authored commands and above plugin ones", () => {
+    const list: SlashCommand[] = [
+      { name: "zzz-plugin", description: "", argumentHint: "", scope: "plugin" },
+      { name: "clear", description: "", argumentHint: "", scope: "builtin" },
+      { name: "zzz-project", description: "", argumentHint: "", scope: "project" },
+    ]
+    expect(filterCommands(list, "").map((c) => c.name)).toEqual([
+      "zzz-project",
+      "clear",
+      "zzz-plugin",
+    ])
   })
 })

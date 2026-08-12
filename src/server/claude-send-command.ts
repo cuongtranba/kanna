@@ -27,12 +27,19 @@ import {
 import {
   codexServiceTierFromModelOptions,
   getServerProviderCatalog,
+  isClaudeSdkProvider,
   normalizeClaudeModelOptions,
   normalizeCodexModelOptions,
   normalizeServerModel,
 } from "./provider-catalog"
 import { buildSteeredMessageContent } from "./claude-prompt-helpers"
 import { isChatBusy } from "./claude-session-state-queries"
+import type { CompactionTurnKind } from "./claude-session-state"
+import {
+  buildCodexCompactPrompt,
+  parseBuiltinCommand,
+  type BuiltinCommand,
+} from "../shared/builtin-commands"
 
 // ---------------------------------------------------------------------------
 // Structural sub-interfaces — only the slices this module calls.
@@ -55,7 +62,7 @@ interface SendCommandStore {
 /** Subset of the activeTurns map used by the send command handler. */
 interface ActiveTurnsMap {
   has(chatId: string): boolean
-  get(chatId: string): { proactiveCompactInjection?: boolean } | undefined
+  get(chatId: string): { compactionTurn?: CompactionTurnKind } | undefined
 }
 
 /** Subset of the startingTurns map used by the send command handler. */
@@ -127,6 +134,9 @@ export interface SendCommandDeps {
 
   /** Start a new provider turn for the given chat. */
   startTurnForChat(args: StartTurnForChatArgs): Promise<void>
+
+  /** Wipe every provider's context for the chat — backs the `/clear` builtin. */
+  clearChatContext(chatId: string): Promise<void>
 }
 
 // ---------------------------------------------------------------------------
@@ -144,6 +154,13 @@ export function resolveProvider(
   return options.provider ?? currentProvider ?? "claude"
 }
 
+export interface ProviderSettings {
+  model: string
+  effort: string | undefined
+  serviceTier: "fast" | undefined
+  planMode: boolean
+}
+
 /**
  * Resolve the model/effort/planMode settings for a new provider turn.
  * Falls through provider-specific normalization logic.
@@ -152,7 +169,7 @@ export function getProviderSettings(
   provider: AgentProvider,
   options: SendMessageOptions,
   customModels: readonly CustomModelEntry[],
-) {
+): ProviderSettings {
   const catalog = getServerProviderCatalog(provider)
 
   if (provider === "claude") {
@@ -237,6 +254,44 @@ export async function enqueueMessage(
 }
 
 /**
+ * Run a slash command Kanna implements itself.
+ *
+ * `/clear` is pure Kanna state — no model call, no turn. `/compact` is a turn
+ * either way, but its shape depends on the provider: the claude CLI has a real
+ * compaction, and Codex's app-server has no compaction request at all, so
+ * Kanna asks the model to summarize and reshapes the reply in the turn runner.
+ */
+export async function runBuiltinCommand(
+  deps: SendCommandDeps,
+  chatId: string,
+  command: BuiltinCommand,
+  provider: AgentProvider,
+  settings: ProviderSettings,
+): Promise<void> {
+  if (command.name === "clear") {
+    await deps.clearChatContext(chatId)
+    return
+  }
+
+  const cliPassthrough = isClaudeSdkProvider(provider)
+  const cliCommand = command.instructions ? `/compact ${command.instructions}` : "/compact"
+  await deps.startTurnForChat({
+    chatId,
+    provider,
+    content: cliPassthrough ? cliCommand : buildCodexCompactPrompt(command.instructions),
+    attachments: [],
+    model: settings.model,
+    effort: settings.effort,
+    serviceTier: settings.serviceTier,
+    planMode: false,
+    appendUserPrompt: false,
+  })
+
+  const active = deps.activeTurns.get(chatId)
+  if (active) active.compactionTurn = cliPassthrough ? "user" : "codex_summary"
+}
+
+/**
  * Dequeue a specific queued message and start a turn for it.
  * If `options.steered` is true, the content is wrapped as a steered message.
  */
@@ -256,6 +311,15 @@ export async function dequeueAndStartQueuedMessage(
   const provider = resolveProvider(queuedMessage, chat.provider)
   const customModels = deps.getAppSettingsSnapshot().customModels ?? []
   const settings = getProviderSettings(provider, queuedMessage, customModels)
+
+  // A steered message is an injection into a live session, not a fresh turn —
+  // a builtin there has nothing to act on, so it falls through as text.
+  const builtin = options?.steered ? null : parseBuiltinCommand(queuedMessage.content)
+  if (builtin) {
+    await runBuiltinCommand(deps, chatId, builtin, provider, settings)
+    await maybeStartNextQueuedMessage(deps, chatId)
+    return
+  }
 
   // Auto-continue rate-limit recovery sends the literal "continue" as a
   // resume signal. Appending it as a user_prompt entry adds noise to the
@@ -384,6 +448,15 @@ export async function sendCommand(
   const settings = getProviderSettings(provider, command, customModels)
   deps.analytics.track("message_sent")
 
+  // Builtins are dispatched after the busy check on purpose: a `/clear` typed
+  // mid-turn queues like any other message and runs when the turn drains,
+  // leaving every startingTurns / pendingTools / isChatBusy invariant alone.
+  const builtin = parseBuiltinCommand(command.content)
+  if (builtin) {
+    await runBuiltinCommand(deps, chatId, builtin, provider, settings)
+    return { chatId }
+  }
+
   // Proactive compact: if the latest usage snapshot crossed claude-code's
   // auto-compact threshold, inject a synthetic `/compact` turn ahead of the
   // user's real message. The user's prompt sits in the queue and runs after
@@ -417,7 +490,7 @@ export async function sendCommand(
     // Tag the active turn so the result handler can update the circuit
     // breaker (reset on success / increment on failure).
     const compactActive = deps.activeTurns.get(chatId)
-    if (compactActive) compactActive.proactiveCompactInjection = true
+    if (compactActive) compactActive.compactionTurn = "proactive"
 
     logSendToStartingProfile(profile, "chat_send.proactive_compact_injected", {
       chatId,

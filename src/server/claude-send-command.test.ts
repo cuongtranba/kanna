@@ -18,6 +18,8 @@ import {
 } from "./claude-send-command"
 import type { QueuedChatMessage, ChatAttachment, CustomModelEntry } from "../shared/types"
 import type { StartTurnForChatArgs } from "./claude-turn-starter"
+import type { CompactionTurnKind } from "./claude-session-state"
+import { buildCodexCompactPrompt } from "../shared/builtin-commands"
 
 // ---------------------------------------------------------------------------
 // Minimal fixture types
@@ -54,6 +56,8 @@ type DepsOptions = {
   analyticsEvents?: string[]
   session?: { backgroundTasks: Map<string, { taskType: null; description: null; startedAt: number }>; backgroundTaskDeadlineAt: number; backgroundTaskWakeCount: number; selfWakeActive: boolean } | null
   customModels?: readonly CustomModelEntry[]
+  clearedChatIds?: string[]
+  activeTurn?: { compactionTurn?: CompactionTurnKind }
 }
 
 function makeDeps(opts: DepsOptions = {}): SendCommandDeps & { startTurnCalled: StartTurnForChatArgs[] } {
@@ -107,7 +111,7 @@ function makeDeps(opts: DepsOptions = {}): SendCommandDeps & { startTurnCalled: 
     },
     activeTurns: {
       has: (chatId: string) => activeChatIds.has(chatId),
-      get: (_chatId: string) => undefined,
+      get: (_chatId: string) => opts.activeTurn,
     },
     startingTurns: {
       has: (chatId: string) => startingChatIds.has(chatId),
@@ -131,6 +135,7 @@ function makeDeps(opts: DepsOptions = {}): SendCommandDeps & { startTurnCalled: 
     },
     emitStateChange: (chatId: string) => { emitStateCalled.push(chatId) },
     startTurnForChat: async (args: StartTurnForChatArgs) => { startTurnCalled.push(args) },
+    clearChatContext: async (chatId: string) => { (opts.clearedChatIds ?? []).push(chatId) },
   }
 }
 
@@ -454,5 +459,169 @@ describe("sendCommand", () => {
       chatId: "chat-1",
     } as Parameters<typeof sendCommand>[1])
     expect(analyticsEvents).toContain("message_sent")
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Builtin commands — /clear and /compact
+// ---------------------------------------------------------------------------
+
+describe("builtin /clear", () => {
+  test("on an idle chat clears context and starts no turn", async () => {
+    const clearedChatIds: string[] = []
+    const deps = makeDeps({ chatProvider: "claude", clearedChatIds })
+
+    const result = await sendCommand(deps, {
+      type: "chat.send",
+      content: "/clear",
+      chatId: "chat-1",
+    } as Parameters<typeof sendCommand>[1])
+
+    expect(clearedChatIds).toEqual(["chat-1"])
+    expect(deps.startTurnCalled).toEqual([])
+    expect(result).toEqual({ chatId: "chat-1" })
+  })
+
+  test("while a turn is running it queues like any other message", async () => {
+    const clearedChatIds: string[] = []
+    const enqueuedMessages: Array<{ chatId: string; content: string }> = []
+    const deps = makeDeps({
+      chatProvider: "claude",
+      activeChatIds: ["chat-1"],
+      clearedChatIds,
+      enqueuedMessages,
+    })
+
+    const result = await sendCommand(deps, {
+      type: "chat.send",
+      content: "/clear",
+      chatId: "chat-1",
+    } as Parameters<typeof sendCommand>[1])
+
+    expect(enqueuedMessages).toEqual([{ chatId: "chat-1", content: "/clear" }])
+    expect(clearedChatIds).toEqual([])
+    expect(result.queued).toBe(true)
+  })
+
+  test("a queued /clear executes on drain without starting a turn", async () => {
+    const clearedChatIds: string[] = []
+    const removedMessages: Array<{ chatId: string; id: string }> = []
+    const deps = makeDeps({ chatProvider: "claude", clearedChatIds, removedMessages })
+
+    await dequeueAndStartQueuedMessage(deps, "chat-1", makeQueuedMessage({ content: "/clear" }))
+
+    expect(removedMessages).toEqual([{ chatId: "chat-1", id: "qm-1" }])
+    expect(clearedChatIds).toEqual(["chat-1"])
+    expect(deps.startTurnCalled).toEqual([])
+  })
+
+  test("a queued /clear then drains the next queued message", async () => {
+    const clearedChatIds: string[] = []
+    const nextMessage = makeQueuedMessage({ id: "qm-2", content: "real work" })
+    const deps = makeDeps({
+      chatProvider: "claude",
+      clearedChatIds,
+      queuedMessages: [nextMessage],
+    })
+
+    await dequeueAndStartQueuedMessage(deps, "chat-1", makeQueuedMessage({ content: "/clear" }))
+
+    expect(clearedChatIds).toEqual(["chat-1"])
+    expect(deps.startTurnCalled).toHaveLength(1)
+    expect(deps.startTurnCalled[0].content).toBe("real work")
+  })
+
+  test("a steered /clear falls through as ordinary text", async () => {
+    const clearedChatIds: string[] = []
+    const deps = makeDeps({ chatProvider: "claude", clearedChatIds })
+
+    await dequeueAndStartQueuedMessage(
+      deps,
+      "chat-1",
+      makeQueuedMessage({ content: "/clear" }),
+      { steered: true },
+    )
+
+    expect(clearedChatIds).toEqual([])
+    expect(deps.startTurnCalled).toHaveLength(1)
+  })
+})
+
+describe("builtin /compact", () => {
+  test("on claude passes the CLI command through verbatim", async () => {
+    const activeTurn: { compactionTurn?: CompactionTurnKind } = {}
+    const deps = makeDeps({ chatProvider: "claude", activeTurn })
+
+    await sendCommand(deps, {
+      type: "chat.send",
+      content: "/compact focus on auth",
+      chatId: "chat-1",
+    } as Parameters<typeof sendCommand>[1])
+
+    expect(deps.startTurnCalled).toHaveLength(1)
+    expect(deps.startTurnCalled[0].content).toBe("/compact focus on auth")
+    expect(deps.startTurnCalled[0].appendUserPrompt).toBe(false)
+    expect(activeTurn.compactionTurn).toBe("user")
+  })
+
+  test("with no instructions sends the bare command", async () => {
+    const deps = makeDeps({ chatProvider: "claude", activeTurn: {} })
+
+    await sendCommand(deps, {
+      type: "chat.send",
+      content: "/compact",
+      chatId: "chat-1",
+    } as Parameters<typeof sendCommand>[1])
+
+    expect(deps.startTurnCalled[0].content).toBe("/compact")
+  })
+
+  test("on openrouter takes the same CLI passthrough", async () => {
+    const activeTurn: { compactionTurn?: CompactionTurnKind } = {}
+    const deps = makeDeps({ chatProvider: "openrouter", activeTurn })
+
+    await sendCommand(deps, {
+      type: "chat.send",
+      content: "/compact",
+      chatId: "chat-1",
+    } as Parameters<typeof sendCommand>[1])
+
+    expect(deps.startTurnCalled[0].content).toBe("/compact")
+    expect(activeTurn.compactionTurn).toBe("user")
+  })
+
+  test("on codex starts a Kanna summarize turn", async () => {
+    const activeTurn: { compactionTurn?: CompactionTurnKind } = {}
+    const deps = makeDeps({ chatProvider: "codex", activeTurn })
+
+    await sendCommand(deps, {
+      type: "chat.send",
+      content: "/compact focus on auth",
+      chatId: "chat-1",
+    } as Parameters<typeof sendCommand>[1])
+
+    expect(deps.startTurnCalled).toHaveLength(1)
+    expect(deps.startTurnCalled[0].content).toBe(buildCodexCompactPrompt("focus on auth"))
+    expect(deps.startTurnCalled[0].appendUserPrompt).toBe(false)
+    expect(deps.startTurnCalled[0].planMode).toBe(false)
+    expect(activeTurn.compactionTurn).toBe("codex_summary")
+  })
+})
+
+describe("non-builtin slash commands", () => {
+  test("an unknown slash command is still sent as ordinary prompt text", async () => {
+    const clearedChatIds: string[] = []
+    const deps = makeDeps({ chatProvider: "claude", clearedChatIds })
+
+    await sendCommand(deps, {
+      type: "chat.send",
+      content: "/deploy staging",
+      chatId: "chat-1",
+    } as Parameters<typeof sendCommand>[1])
+
+    expect(clearedChatIds).toEqual([])
+    expect(deps.startTurnCalled).toHaveLength(1)
+    expect(deps.startTurnCalled[0].content).toBe("/deploy staging")
+    expect(deps.startTurnCalled[0].appendUserPrompt).toBe(true)
   })
 })
