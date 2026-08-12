@@ -115,6 +115,21 @@ describe("OAuthTokenPoolCard", () => {
     expect(html).toContain("Remove")
   })
 
+  test("concurrency inputs carry a minimum but no upper bound", () => {
+    const html = renderToStaticMarkup(
+      <OAuthTokenPoolCard
+        concurrencyDefault={12}
+        tokens={[makeToken({ maxConcurrent: 30 })]}
+        onWrite={async () => {}}
+        onTest={async () => ({ ok: true, error: null })}
+      />,
+    )
+    expect(html).toContain('value="12"')
+    expect(html).toContain('value="30"')
+    expect(html).toContain('min="1"')
+    expect(html).not.toContain("max=")
+  })
+
   test("renders multiple tokens in order", () => {
     const tokens = [
       makeToken({ id: "a", label: "alpha" }),

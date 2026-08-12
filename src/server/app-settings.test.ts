@@ -398,6 +398,47 @@ describe("AppSettingsManager.setClaudeAuth", () => {
     mgr.dispose()
   })
 
+  test("setClaudeAuth accepts a concurrencyDefault above the former cap of 5", async () => {
+    const filePath = await createTempFilePath()
+    const mgr = trackManager(new AppSettingsManager(filePath))
+    await mgr.initialize()
+
+    const snapshot = await mgr.setClaudeAuth({ concurrencyDefault: 12 })
+    expect(snapshot.claudeAuth.concurrencyDefault).toBe(12)
+  })
+
+  test("setClaudeAuth rejects a concurrencyDefault below the minimum", async () => {
+    const mgr = trackManager(new AppSettingsManager(path.join(tmpdir(), "kanna-settings-unused.json")))
+    await expect(mgr.setClaudeAuth({ concurrencyDefault: 0 })).rejects.toThrow(/concurrencyDefault/)
+  })
+
+  test("normalizer keeps high concurrency values from file without warning", async () => {
+    const filePath = await writeSettingsFile({
+      claudeAuth: {
+        concurrencyDefault: 20,
+        tokens: [{ id: "t1", label: "prod", token: "sk-ant-abc", maxConcurrent: 30, addedAt: 1 }],
+      },
+    })
+    const snapshot = await readAppSettingsSnapshot(filePath)
+    expect(snapshot.claudeAuth.concurrencyDefault).toBe(20)
+    expect(snapshot.claudeAuth.tokens[0]?.maxConcurrent).toBe(30)
+    expect(snapshot.warning ?? "").not.toMatch(/concurrenc/i)
+  })
+
+  test("normalizer clamps sub-minimum concurrency values and warns", async () => {
+    const filePath = await writeSettingsFile({
+      claudeAuth: {
+        concurrencyDefault: 0,
+        tokens: [{ id: "t1", label: "prod", token: "sk-ant-abc", maxConcurrent: -2, addedAt: 1 }],
+      },
+    })
+    const snapshot = await readAppSettingsSnapshot(filePath)
+    expect(snapshot.claudeAuth.concurrencyDefault).toBe(1)
+    expect(snapshot.claudeAuth.tokens[0]?.maxConcurrent).toBe(1)
+    expect(snapshot.warning).toMatch(/concurrencyDefault/)
+    expect(snapshot.warning).toMatch(/maxConcurrent/)
+  })
+
   test("mutateTokenStatus updates one field without disturbing others", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "kanna-settings-"))
     const filePath = path.join(dir, "settings.json")

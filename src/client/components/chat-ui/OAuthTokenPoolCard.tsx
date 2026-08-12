@@ -2,9 +2,8 @@ import { Trash2, FlaskConical, Power, PowerOff } from "lucide-react"
 import {
   type ClaudeAuthSettings,
   type OAuthTokenEntry,
-  OAUTH_TOKEN_CONCURRENCY_DEFAULT,
-  OAUTH_TOKEN_MAX_CONCURRENT_MAX,
   OAUTH_TOKEN_MAX_CONCURRENT_MIN,
+  clampTokenConcurrency,
 } from "../../../shared/types"
 import { maskToken } from "../../lib/oauthTokenMask"
 import { Input } from "../ui/input"
@@ -41,14 +40,6 @@ export interface OAuthTokenPoolCardProps {
   /** Timestamp override for test determinism; defaults to Date.now() at render. */
   now?: number
   ports?: TokenRowPorts
-}
-
-function clampCap(raw: number): number {
-  if (!Number.isFinite(raw)) return OAUTH_TOKEN_CONCURRENCY_DEFAULT
-  const r = Math.round(raw)
-  if (r < OAUTH_TOKEN_MAX_CONCURRENT_MIN) return OAUTH_TOKEN_MAX_CONCURRENT_MIN
-  if (r > OAUTH_TOKEN_MAX_CONCURRENT_MAX) return OAUTH_TOKEN_MAX_CONCURRENT_MAX
-  return r
 }
 
 // ─── status pill ─────────────────────────────────────────────────────────────
@@ -187,9 +178,8 @@ function TokenRow({
           <Input
             type="number"
             value={effectiveCap}
-            onChange={(e) => onChangeMaxConcurrent(entry.id, clampCap(Number(e.target.value)))}
+            onChange={(e) => onChangeMaxConcurrent(entry.id, clampTokenConcurrency(Number(e.target.value)))}
             min={OAUTH_TOKEN_MAX_CONCURRENT_MIN}
-            max={OAUTH_TOKEN_MAX_CONCURRENT_MAX}
             aria-label="Max concurrent chats"
             className="h-7 w-14 text-xs"
             disabled={isDisabled}
@@ -360,7 +350,7 @@ export function OAuthTokenPoolCard({
   }
 
   const handleChangeGlobalDefault = (value: number) => {
-    void onWrite({ concurrencyDefault: clampCap(value) })
+    void onWrite({ concurrencyDefault: clampTokenConcurrency(value) })
   }
 
   return (
@@ -369,7 +359,7 @@ export function OAuthTokenPoolCard({
         <HoverHint label="Default concurrent-chat cap applied to any OAuth token whose row does not override it. Sharing across N chats burns Anthropic quota and risks 429s.">
         <label className="flex flex-col gap-0.5 text-sm">
           <span className="font-medium text-foreground">Default concurrency per token</span>
-          <span className="text-xs text-muted-foreground">Cap for tokens without an explicit per-row override. Range {OAUTH_TOKEN_MAX_CONCURRENT_MIN}–{OAUTH_TOKEN_MAX_CONCURRENT_MAX}.</span>
+          <span className="text-xs text-muted-foreground">Cap for tokens without an explicit per-row override. Minimum {OAUTH_TOKEN_MAX_CONCURRENT_MIN}, no upper limit.</span>
         </label>
         </HoverHint>
         <Input
@@ -377,7 +367,6 @@ export function OAuthTokenPoolCard({
           value={concurrencyDefault}
           onChange={(e) => handleChangeGlobalDefault(Number(e.target.value))}
           min={OAUTH_TOKEN_MAX_CONCURRENT_MIN}
-          max={OAUTH_TOKEN_MAX_CONCURRENT_MAX}
           aria-label="Default concurrency per token"
           className="h-8 w-16 text-sm"
         />
