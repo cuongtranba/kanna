@@ -1558,6 +1558,71 @@ consumed in `src/server/server.ts`:
 - `KANNA_IMPORT_FOLLOW_IDLE_MS` — the registry stops following a session
   after this long with no file growth. Default `600000`.
 
+# Kanban Boards — the card's lifecycle
+
+One card is one worktree is one branch is one chat (`board-start-work.ts`).
+That chain is what makes three agents on three cards safe: each has its own
+checkout, so they cannot touch each other's files.
+
+**A column's behaviour comes from its `semantic`, never its title.**
+`ColumnSemantic` is `start | active | review | done`, all optional — a board
+that marks none simply does not move cards, and the feature never guesses a
+column from what the user called it. Only `active` and `done` drive anything.
+
+**The card moves automatically at exactly two moments, and they are not
+symmetric:**
+
+| Moment | Who moves it | Where to |
+| --- | --- | --- |
+| "Start work" | Kanna (`moveToActiveColumn`) | the `active` column |
+| work is finished | **the agent**, via `mcp__kanna__card_move` | `findAdvanceColumn` — one step forward |
+| card reaches `done` | only ever the user | — (raises the cleanup question) |
+
+**Why the agent moves its own card and Kanna does not.** There is no turn-end
+hook, deliberately: a card takes as many turns as it takes, so "the turn ended"
+is not "the work is done" — a host-side move would advance the card the first
+time the agent stopped to ask a question. Instead `buildStartWorkPrompt` names
+the card id and the destination column id, and asks for the move *when the work
+is done and verified*. The card id has to ride the prompt because the agent has
+no other way to learn it; without it the agent would have to read the whole
+board back and guess which row is its own, which is why `card_move` sat unused
+before this. If a deterministic signal is ever wanted, it belongs on an
+acceptance oracle (the `run_verify` shape), not on the turn boundary.
+
+**`findAdvanceColumn` picks by ORDER, not semantic** — the next column by rank
+(`listColumns` sorts by it). A board names at most one `review` column while it
+may hold several stages between `active` and `done`; the built-in Dev pipeline
+runs `In progress → Test → QA → Deployment`, so jumping to the `review` column
+would skip a stage. One step forward is the only reading that fits every
+template.
+
+**`done` is unreachable that way, on purpose.** Reaching it reports the item
+CLOSED to a connected tracker (`remoteStateOfColumn`) and raises the worktree
+question — merge / discard / leave (`worktree-cleanup.ts`), asked and never
+performed, because a column drag is one gesture with no undo and uncommitted
+work exists nowhere else. Those are the user's decisions. A board whose only
+successor is `done` (the GitHub template's `Open / In progress / Closed`)
+advances nothing, and the prompt then says nothing about moving rather than
+improvising a destination.
+
+**Agent-origin writes are held back from the tracker.** Every board write
+carries a `CardActor`; the MCP tools attribute `{kind:"agent", chatId}`, and
+`board-sync.ts` holds such a change with `heldReason: "agent_push_disabled"`
+unless that binding set `allowAgentPush`. An agent advancing a card must not
+silently close a real issue.
+
+**Agent tools** (`kanna-mcp-boards.ts`, registered only with a `boardRegistry`
++ `chatId` + `projectId`): `board_list`, `board_get`, `card_move`,
+`card_create`, `card_comment`. Two disciplines carried over from the
+tracking-doc tools: `board_get` returns COUNTS plus a 20-card window and never
+a whole board (a 5k-issue import would otherwise blow up one turn), and every
+id is resolved against the chat's project before any write, so an agent cannot
+reach another project's board by guessing an id.
+
+**Not covered by C3.** `src/shared/boards/**` and `src/server/board-*.ts` are
+unmapped — `c3x lookup` returns nothing for them. Until that gap is closed,
+this section is the only architecture doc for the feature.
+
 # Tests
 
 `bun run test` MUST pass locally before any push or PR. CI (`.github/workflows/test.yml`)
