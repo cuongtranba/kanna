@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.16.1](https://github.com/cuongtranba/kanna/compare/v1.16.0...v1.16.1) (2026-08-12)
+
+
+### Bug Fixes
+
+* **oauth-pool:** drop the 5-chat ceiling on per-token concurrency ([#650](https://github.com/cuongtranba/kanna/issues/650)) ([8c445e0](https://github.com/cuongtranba/kanna/commit/8c445e093856fe5853e64ec6a765335afb2be51d))
+
 ## [1.16.0](https://github.com/cuongtranba/kanna/compare/v1.15.0...v1.16.0) (2026-08-12)
 
 
