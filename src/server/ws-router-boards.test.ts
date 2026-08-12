@@ -4,6 +4,7 @@ import { createBoardRegistry } from "./board-registry"
 import { createBoardStore } from "./board-store.adapter"
 import type { ServerEnvelope } from "../shared/protocol"
 import type { StartWorkResult } from "../shared/boards/start-work"
+import type { FieldDef } from "../shared/boards/types"
 
 const RESULT: StartWorkResult = {
   cardId: "card-1",
@@ -58,5 +59,196 @@ describe("board.card.startWork", () => {
     const { deps, sent } = setup({ startWork: () => Promise.reject(new Error("branch already exists")) })
     await handleBoardCommand(deps, { type: "board.card.startWork", cardId: "card-1" }, "req-1")
     expect(sent[0]).toMatchObject({ type: "error", message: "branch already exists" })
+  })
+})
+
+/**
+ * `board.card.update` is the only path by which a user-defined field is ever
+ * written, so what it refuses is the whole guarantee: the store REPLACES a
+ * card's content with whatever it is handed, and it does not check that against
+ * the board's schema.
+ */
+describe("board.card.update content", () => {
+  const FIELDS: FieldDef[] = [
+    { id: "description", label: "Description", kind: "longtext", options: null, required: false },
+    {
+      id: "priority",
+      label: "Priority",
+      kind: "select",
+      required: false,
+      options: [{ id: "high", label: "High", colorToken: "destructive" }],
+    },
+  ]
+
+  function boardWithCard(deps: BoardCommandDeps) {
+    const registry = deps.boardRegistry
+    if (!registry) throw new Error("no registry")
+    const board = registry.createBoard({
+      owner: { kind: "project", id: "proj-1" },
+      title: "Board",
+      definition: { columns: [{ title: "Todo", semantic: null, colorToken: null, wipLimit: null }], cardFields: FIELDS, mappingDefaults: [] },
+    })
+    const column = registry.listColumns(board.id)[0]
+    if (!column) throw new Error("no column")
+    return registry.createCard({ boardId: board.id, columnId: column.id, title: "A card", actor: { kind: "user" } })
+  }
+
+  test("writes content the board's schema declares", async () => {
+    const { deps, sent } = setup()
+    const card = boardWithCard(deps)
+    await handleBoardCommand(
+      deps,
+      {
+        type: "board.card.update",
+        cardId: card.id,
+        content: { description: { kind: "longtext", value: "the body" } },
+      },
+      "req-1",
+    )
+    expect(sent[0]).toMatchObject({ type: "ack", id: "req-1" })
+    expect(deps.boardRegistry?.cardDetail(card.id)?.card.content).toEqual({
+      description: { kind: "longtext", value: "the body" },
+    })
+  })
+
+  test("refuses a field the board does not declare, and says so rather than going quiet", async () => {
+    const { deps, sent } = setup()
+    const card = boardWithCard(deps)
+    await handleBoardCommand(
+      deps,
+      { type: "board.card.update", cardId: card.id, content: { invented: { kind: "text", value: "x" } } },
+      "req-1",
+    )
+    expect(sent[0]).toMatchObject({ type: "error", id: "req-1" })
+    expect(deps.boardRegistry?.cardDetail(card.id)?.card.content).toEqual({})
+  })
+
+  test("refuses a value whose kind disagrees with the schema", async () => {
+    const { deps, sent } = setup()
+    const card = boardWithCard(deps)
+    await handleBoardCommand(
+      deps,
+      { type: "board.card.update", cardId: card.id, content: { description: { kind: "text", value: "x" } } },
+      "req-1",
+    )
+    expect(sent[0]).toMatchObject({ type: "error", id: "req-1" })
+  })
+
+  test("refuses an option the field does not offer", async () => {
+    const { deps, sent } = setup()
+    const card = boardWithCard(deps)
+    await handleBoardCommand(
+      deps,
+      { type: "board.card.update", cardId: card.id, content: { priority: { kind: "select", optionId: "urgent" } } },
+      "req-1",
+    )
+    expect(sent[0]).toMatchObject({ type: "error", id: "req-1" })
+  })
+
+  /** A title-only update predates this and must keep working untouched. */
+  test("a title-only update never consults the schema", async () => {
+    const { deps, sent } = setup()
+    const card = boardWithCard(deps)
+    await handleBoardCommand(deps, { type: "board.card.update", cardId: card.id, title: "Renamed" }, "req-1")
+    expect(sent[0]).toMatchObject({ type: "ack", id: "req-1" })
+    expect(deps.boardRegistry?.cardDetail(card.id)?.card.title).toBe("Renamed")
+  })
+
+  test("a card that does not exist is an error, not a crash", async () => {
+    const { deps, sent } = setup()
+    await handleBoardCommand(
+      deps,
+      { type: "board.card.update", cardId: "nope", content: { description: { kind: "longtext", value: "x" } } },
+      "req-1",
+    )
+    expect(sent[0]).toMatchObject({ type: "error", id: "req-1" })
+  })
+})
+
+/**
+ * `board.update` is the only path by which a board's card schema is ever
+ * written. The store writes `cardFields` whole and checks nothing, so what this
+ * refuses is the whole guarantee — a duplicate field id would leave two fields
+ * fighting over one card value with no way back.
+ */
+describe("board.update cardFields", () => {
+  function newBoard(deps: BoardCommandDeps) {
+    const registry = deps.boardRegistry
+    if (!registry) throw new Error("no registry")
+    return registry.createBoard({ owner: { kind: "project", id: "proj-1" }, title: "Board" })
+  }
+
+  const SCHEMA = [
+    { id: "description", label: "Description", kind: "longtext", options: null, required: false },
+    {
+      id: "priority",
+      label: "Priority",
+      kind: "select",
+      required: true,
+      options: [{ id: "high", label: "High", colorToken: "warning" }],
+    },
+  ]
+
+  test("gives a title-only board a schema", async () => {
+    const { deps, sent } = setup()
+    const board = newBoard(deps)
+    expect(board.cardFields).toEqual([])
+
+    await handleBoardCommand(deps, { type: "board.update", boardId: board.id, cardFields: SCHEMA }, "req-1")
+    expect(sent[0]).toMatchObject({ type: "ack", id: "req-1" })
+    expect(deps.boardRegistry?.getBoard(board.id)?.cardFields).toEqual(SCHEMA as never)
+  })
+
+  test("leaves the schema alone when the command does not carry one", async () => {
+    const { deps } = setup()
+    const board = newBoard(deps)
+    await handleBoardCommand(deps, { type: "board.update", boardId: board.id, cardFields: SCHEMA }, "req-1")
+    await handleBoardCommand(deps, { type: "board.update", boardId: board.id, title: "Renamed" }, "req-2")
+
+    const updated = deps.boardRegistry?.getBoard(board.id)
+    expect(updated?.title).toBe("Renamed")
+    expect(updated?.cardFields).toHaveLength(2)
+  })
+
+  test("removing a field leaves the board with the fields that remain", async () => {
+    const { deps } = setup()
+    const board = newBoard(deps)
+    await handleBoardCommand(deps, { type: "board.update", boardId: board.id, cardFields: SCHEMA }, "req-1")
+    await handleBoardCommand(
+      deps,
+      { type: "board.update", boardId: board.id, cardFields: [SCHEMA[1]] },
+      "req-2",
+    )
+    expect(deps.boardRegistry?.getBoard(board.id)?.cardFields.map((field) => field.id)).toEqual(["priority"])
+  })
+
+  test("answers with an error rather than persisting a schema it cannot read", async () => {
+    const refusals: unknown[] = [
+      [{ id: "a", label: "A", kind: "text", options: null, required: false }, { id: "a", label: "B", kind: "text", options: null, required: false }],
+      [{ id: "a", label: "A", kind: "currency", options: null, required: false }],
+      [{ id: "a", label: "A", kind: "select", required: false, options: [{ id: "x", label: "X", colorToken: "chartreuse" }] }],
+      [
+        {
+          id: "a",
+          label: "A",
+          kind: "select",
+          required: false,
+          options: [{ id: "x", label: "X", colorToken: null }, { id: "x", label: "Y", colorToken: null }],
+        },
+      ],
+      "not a schema",
+    ]
+
+    for (const cardFields of refusals) {
+      const { deps, sent } = setup()
+      const board = newBoard(deps)
+      await handleBoardCommand(deps, { type: "board.update", boardId: board.id, cardFields }, "req-1")
+      expect(sent[0]).toMatchObject({ type: "error", id: "req-1" })
+      expect(deps.boardRegistry?.getBoard(board.id)?.cardFields).toEqual([])
+    }
+  })
+
+  test("is routed as a board command", () => {
+    expect(isBoardCommand({ type: "board.update", boardId: "board-1", cardFields: [] })).toBe(true)
   })
 })

@@ -199,6 +199,12 @@ export interface BoardStore {
   removeCardLink(cardId: string, kind: CardLinkKind, targetId: string): void
   /** Every card linked to a given target, e.g. "which card owns this chat?". */
   findCardsByLink(kind: CardLinkKind, targetId: string): Card[]
+  /**
+   * Every link of `kind` on a whole board, grouped by card and newest first
+   * within each card — one query, so a board view never fans out to one read
+   * per card it ships.
+   */
+  listCardLinksForBoard(boardId: string, kind: CardLinkKind): CardLink[]
   listComments(cardId: string): CardComment[]
   addComment(cardId: string, author: CardActor, body: string): CardComment
 
@@ -265,9 +271,35 @@ export interface RecordConflictInput {
 /**
  * Validate a card's content against its board's field schema.
  *
+ * The STORE's gate, applied to every write from every caller. The WS router's
+ * `decodeContentForFields` guards only the one path a person edits from; this
+ * stands under the sync engine, the board MCP tools, and whatever is added
+ * next.
+ *
+ * It reports CONTRADICTIONS and nothing else: a value whose kind disagrees with
+ * its field's, an option the board does not offer, a number that is not one, a
+ * date that is not epoch milliseconds. Each of those already reads as unset in
+ * the drawer and would be dropped by the next write, so storing it loses the
+ * value either way — refusing at least says so.
+ *
+ * Two things it does NOT report, both of which the wire decoder does, and the
+ * asymmetry is deliberate:
+ *
+ * A field id the schema has not declared is not a contradiction here. A board's
+ * schema is edited under content already written, and an orphaned value is left
+ * in place on purpose — the storage decoder keeps it readable, so re-adding the
+ * field restores it. The sync engine also writes `description` / `labels` /
+ * `assignee` onto boards that never declared them; refusing there would turn a
+ * GitHub pull into a hard failure on every board created without a template.
+ * The wire decoder can afford to refuse because the drawer that sends to it
+ * renders exactly this schema, so an id it has not heard of is a client bug.
+ *
+ * A missing required field is not one either. `required` marks a field, it
+ * never refuses a save — enforcing it here would make every existing card
+ * unwritable the moment a board added a required field.
+ *
  * Returns the problems rather than throwing so a caller can report all of them
- * at once. An unknown field id is an error, not an ignored extra: silently
- * dropping it would lose data on the next write-back.
+ * at once.
  */
 export function validateCardContent(content: CardContent, fields: readonly FieldDef[]): string[] {
   const problems: string[] = []
@@ -275,10 +307,7 @@ export function validateCardContent(content: CardContent, fields: readonly Field
 
   for (const [fieldId, value] of Object.entries(content)) {
     const field = byId.get(fieldId)
-    if (!field) {
-      problems.push(`unknown field ${JSON.stringify(fieldId)}`)
-      continue
-    }
+    if (!field) continue
     if (value.kind !== field.kind) {
       problems.push(`field ${JSON.stringify(fieldId)} expects ${field.kind}, received ${value.kind}`)
       continue
@@ -302,12 +331,6 @@ export function validateCardContent(content: CardContent, fields: readonly Field
     }
     if (value.kind === "date" && !Number.isInteger(value.value)) {
       problems.push(`field ${JSON.stringify(fieldId)} must be epoch milliseconds`)
-    }
-  }
-
-  for (const field of fields) {
-    if (field.required && content[field.id] === undefined) {
-      problems.push(`field ${JSON.stringify(field.id)} is required`)
     }
   }
 

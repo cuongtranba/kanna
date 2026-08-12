@@ -42,6 +42,7 @@ function view(): BoardViewSnapshot {
       doing: [card("d1", "doing", "a0")],
     },
     cursors: { todo: null, doing: null },
+    chatLinksByCard: {},
   }
 }
 
@@ -153,6 +154,7 @@ describe("moveColumnInView", () => {
       counts: {},
       cards: {},
       cursors: {},
+      chatLinksByCard: {},
     }
   }
 

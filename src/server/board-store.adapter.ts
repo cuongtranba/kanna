@@ -44,6 +44,7 @@ import {
   type BoardColumn,
   type BoardTemplate,
   type Card,
+  type CardContent,
   type CardActor,
   type ColumnColorToken,
   type CardComment,
@@ -58,6 +59,7 @@ import {
 } from "../shared/boards/types"
 import {
   BoardStoreError,
+  validateCardContent,
   type BoardOwnerRef,
   type BoardStore,
   type CardPage,
@@ -562,6 +564,25 @@ export function createBoardStore(options: CreateBoardStoreOptions): BoardStore {
     return row
   }
 
+  /**
+   * The schema gate, on every path that writes card content.
+   *
+   * Here rather than at each caller because the store is what they have in
+   * common: the WS router checks the drawer's writes, and until this ran the
+   * sync engine and the board MCP tools were checked by nobody.
+   */
+  function requireContentMatchesSchema(boardId: string, content: CardContent): void {
+    const board = requireBoard(boardId)
+    const fields = decodeFieldDefs(parseJson(board.card_fields, "card field schema"))
+    const problems = validateCardContent(content, fields)
+    if (problems.length > 0) {
+      throw new BoardStoreError(
+        "invalid_input",
+        `card content does not match this board's fields: ${problems.join("; ")}`,
+      )
+    }
+  }
+
   /** The rank of the first live card strictly after `afterRank` in a column. */
   function nextCardRank(columnId: string, afterRank: string | null): string | null {
     const row = afterRank === null
@@ -669,6 +690,7 @@ export function createBoardStore(options: CreateBoardStoreOptions): BoardStore {
     if (column.board_id !== input.boardId) {
       throw new BoardStoreError("invalid_input", `column ${input.columnId} is not on board ${input.boardId}`)
     }
+    if (input.content !== undefined) requireContentMatchesSchema(input.boardId, input.content)
     const afterRank = input.afterCardId === null || input.afterCardId === undefined
       ? null
       : requireCard(input.afterCardId).rank
@@ -926,6 +948,7 @@ export function createBoardStore(options: CreateBoardStoreOptions): BoardStore {
       if (title.trim() === "") {
         throw new BoardStoreError("invalid_input", "a card needs a title")
       }
+      if (patch.content !== undefined) requireContentMatchesSchema(existing.board_id, patch.content)
       db.run(
         "UPDATE card SET title = ?, project_id = ?, content = ?, updated_by = ?, updated_at = ? WHERE id = ?",
         [
@@ -1001,6 +1024,23 @@ export function createBoardStore(options: CreateBoardStoreOptions): BoardStore {
         )
         .all(kind, targetId)
         .map(toCard)
+    },
+
+    listCardLinksForBoard(boardId: string, kind: CardLinkKind): CardLink[] {
+      // The subquery is what keeps this board-scoped: written as a plain join,
+      // SQLite drives from card_link_target_idx (kind=?) and walks every link
+      // of that kind in the store. Driving from the board's cards instead
+      // probes the card_link primary key per card, so no new index is needed.
+      // rowid breaks a created_at tie in insertion order — two links added in
+      // the same millisecond must still read newest-first.
+      return db
+        .query<CardLinkRow, [string, string]>(
+          `SELECT * FROM card_link
+           WHERE kind = ? AND card_id IN (SELECT id FROM card WHERE board_id = ?)
+           ORDER BY card_id, created_at DESC, rowid DESC`,
+        )
+        .all(kind, boardId)
+        .map(toCardLink)
     },
 
     listComments(cardId: string): CardComment[] {

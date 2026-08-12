@@ -400,6 +400,15 @@ export interface BoardViewSnapshot {
   counts: Record<string, number>
   cards: Record<string, Card[]>
   cursors: Record<string, string | null>
+  /**
+   * Card id → the chats linked to it, newest first, and only for cards that
+   * have one — an empty array per card is payload the board never reads.
+   *
+   * Derived per read so a card face can show its chat's LIVE status; the card
+   * row's own `updatedBy` says who wrote last, which is attribution, not
+   * liveness.
+   */
+  chatLinksByCard: Record<string, string[]>
 }
 
 export interface CardDetail {

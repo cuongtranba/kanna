@@ -1,12 +1,12 @@
 ---
 id: c3-112
 c3-version: 4
-c3-seal: 9b2a2cb9f80f5cea696dcf84690f1e07e1db0c9fcaba6202d01a2f4bb7cf1a21
+c3-seal: 59e1fb0221cefc78eea384e66e110cdfce18de25c95d550880709a22006f51c4
 title: chat-page
 type: component
 category: feature
 parent: c3-1
-goal: 'Compose the chat route: transcript viewport, input dock, terminal workspace, focus policy, and sidebar actions.'
+goal: 'Compose the workspace route that both /chat/:chatId and /boards/:projectId/:boardId mount: transcript viewport, input dock, terminal workspace, focus policy, sidebar actions, and the presentation context every open tab is titled from.'
 uses:
     - ref-cqrs-read-models
     - ref-ws-subscription
@@ -16,7 +16,7 @@ uses:
 
 ## Goal
 
-Compose the chat route: transcript viewport, input dock, terminal workspace, focus policy, and sidebar actions.
+Compose the workspace route that both /chat/:chatId and /boards/:projectId/:boardId mount: transcript viewport, input dock, terminal workspace, focus policy, sidebar actions, and the presentation context every open tab is titled from.
 
 ## Parent Fit
 
@@ -25,12 +25,12 @@ Compose the chat route: transcript viewport, input dock, terminal workspace, foc
 | Container | c3-1 (client) |
 | Parent Goal Slice | "Render hydrated transcripts… Accept user input: chat composer" |
 | Category | feature |
-| Lifecycle | Mounts per /chat/:sessionId route; remounts on session change |
+| Lifecycle | Mounts on /chat/:chatId and on /boards/:projectId/:boardId; the route param opens a tab rather than deciding what the page is, and the page renders whenever the workspace has tabs |
 | Replaceability | Composition can be reshaped; sub-components remain stable |
 
 ## Purpose
 
-Composes the chat route: transcript viewport, input dock, embedded terminal panel, focus/scroll policy, sidebar action wiring. Non-goals: rendering individual entries, owning input state, terminal PTY logic.
+Composes the workspace route: transcript viewport, input dock, embedded terminal panel, focus/scroll policy, sidebar action wiring, and the pure context the tab strip titles and statuses tabs from. Route-neutral — /chat/:chatId and /boards/:projectId/:boardId mount the same page and differ only in which tab the route param opens. Non-goals: rendering individual entries, owning input state, terminal PTY logic, and what a non-chat tab renders.
 
 ## Foundational Flow
 
@@ -63,9 +63,10 @@ Composes the chat route: transcript viewport, input dock, embedded terminal pane
 
 | Surface | Direction | Contract | Boundary | Evidence |
 | --- | --- | --- | --- | --- |
-| <ChatPage> route component | OUT | Mounts at /chat/:sessionId, owns layout | c3-110 | src/client/app/ChatPage |
+| <WorkspacePage> route component | OUT | One page mounted at both /chat/:chatId and /boards/:projectId/:boardId; the route param opens its tab and the render gate is whether the workspace has tabs, so neither route is privileged and neither needs a chat to exist | c3-110 | src/client/app/ChatPage/index.tsx |
 | Pane arrangement | OUT | Arrangement is a user-editable pane tree, not a fixed slot order; the route composes the tree and supplies one renderer per tab kind | c3-104 | src/client/app/ChatPage/index.tsx |
 | Focus policy callback | IN | Hooks consumed for sticky scroll | c3-112 | src/client/app/useStickyChatFocus.ts |
+| Tab presentation context | OUT | Titles and statuses for every open tab are built as a pure function over EVERY project's snapshots, never the active project's alone, because one workspace is shared across projects; a board title is read from the open board view as well as the project's board list, so landing straight on a board address still titles its tab | c3-104 | src/client/app/ChatPage/tabPresentationContext.ts |
 
 ## Change Safety
 
@@ -73,6 +74,7 @@ Composes the chat route: transcript viewport, input dock, embedded terminal pane
 | --- | --- | --- | --- |
 | Sticky focus regression | Scroll-anchor logic edit | User loses place during streaming | bun run test src/client/app/ChatPage.test.ts + manual streaming smoke |
 | Layout animation jank | Toggle animation timing edit | Visible flash on terminal toggle | bun run test src/client/app/useTerminalToggleAnimation.ts adjacent tests |
+| Tab falls back to its kind's label | Titling a tab from the active project's snapshots, or a board from the project's board list alone | A board opened by URL reads "Board"; a chat or terminal tab reads its fallback after the user changes project | bun test --conditions production src/client/app/ChatPage/tabPresentationContext.test.ts |
 
 ## Derived Materials
 

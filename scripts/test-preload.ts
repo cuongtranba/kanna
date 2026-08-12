@@ -74,10 +74,51 @@ if (process.env.NODE_ENV === "production") {
   // picking up a stale WorkflowsSection dialog. Clearing the body after each
   // test makes every test start from a clean DOM. Safe because tests append a
   // fresh container per render and none build DOM in `beforeAll`.
+  //
+  // Clearing alone is not enough, because the wipe cannot reach the React root
+  // that owns the nodes. A test that mounts a root and only calls
+  // `container.remove()` leaves that root live and still holding host nodes —
+  // including any portal node, whose container is `document.body` itself.
+  // Whenever that root next commits (a store write, a Radix `Presence`
+  // teardown, a resolved promise), React removes a node the wipe already took
+  // and happy-dom throws `removeChild: The node to be removed is not a child of
+  // this node`. Bun blames whichever test is running WHEN the leaked root
+  // commits, which is a different test in a different file, and the file order
+  // is the filesystem's — so it reproduces on CI's ext4 and not on a dev
+  // machine's APFS. Failing the test that leaked keeps the diagnosis where the
+  // fix is.
+  // Only REACT-OWNED leftovers are reported. A node React never made (Lexical's
+  // typeahead plugin appends its menu straight to `document.body`, even under
+  // `renderToStaticMarkup`) is swept and forgotten: nothing holds a reference
+  // that could commit against it later.
+  const isReactOwned = (element: Element): boolean =>
+    Object.keys(element).some((key) => key.startsWith("__reactFiber$") || key.startsWith("__reactContainer$"))
+
+  // Teardowns a test helper wants run BEFORE the sweep — `renderForLoopCheck`
+  // unmounts the roots its callers forgot here. It cannot own the `afterEach`
+  // itself: bun runs hooks in registration order and this preload registers
+  // first, so the helper's own hook would fire after the sweep had already
+  // failed the test. A global registry keeps the ordering guaranteed without
+  // the preload importing client code.
+  const teardowns = new Set<() => void>()
+  ;(globalThis as { __kannaDomTeardowns?: Set<() => void> }).__kannaDomTeardowns = teardowns
+
   const { afterEach } = require("bun:test") as typeof import("bun:test")
   afterEach(() => {
-    if (typeof globalThis.document !== "undefined" && globalThis.document.body) {
-      globalThis.document.body.innerHTML = ""
+    for (const teardown of teardowns) teardown()
+    teardowns.clear()
+    if (typeof globalThis.document === "undefined" || !globalThis.document.body) return
+    const leaked = [...globalThis.document.body.children]
+      .filter(isReactOwned)
+      .map((element) => element.tagName.toLowerCase() + (element.id ? `#${element.id}` : ""))
+    globalThis.document.body.innerHTML = ""
+    if (leaked.length > 0) {
+      throw new Error(
+        `Test left ${String(leaked.length)} React-owned node(s) in document.body: ${leaked.join(", ")}. ` +
+          "Unmount the root (`root.unmount()`), not just `container.remove()` — a live root whose " +
+          "nodes were swept commits into a DOM that no longer holds them, and happy-dom throws " +
+          "`removeChild` from inside an unrelated test in a later file.",
+      )
     }
   })
 }

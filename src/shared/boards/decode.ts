@@ -85,6 +85,82 @@ export function decodeFieldDefs(value: AnyValue): FieldDef[] {
   return fields
 }
 
+// ── Field schema, arriving on the wire ────────────────────────────────────────
+
+/**
+ * A board's field schema as an INSTRUCTION rather than as history.
+ *
+ * The strict counterpart to {@link decodeFieldDefs}, split from it for the
+ * reason spelled out over {@link decodeContentForFields}: a schema written by
+ * an older build must stay readable, so storage drops what it cannot parse and
+ * keeps the rest. A schema arriving from a client is a change being asked for —
+ * dropping the one field it could not read would ack an edit that never landed,
+ * and would orphan every card's value for that field with nobody the wiser.
+ *
+ * Beyond shape it refuses three things the lenient decoder has no way to see:
+ *
+ * A duplicate field id. {@link CardContent} is keyed by field id, so two fields
+ * sharing one would fight over a single value forever.
+ *
+ * A duplicate option id within a field, for the same reason one level down. The
+ * same id on two DIFFERENT fields is fine — options are scoped to their field.
+ *
+ * An option colour outside {@link COLUMN_COLOR_TOKENS}. The palette is closed
+ * on purpose: a stored hex is a colour correct in exactly one of the two
+ * themes, and an open set brings back the rainbow-column look.
+ */
+export function decodeFieldDefsForWrite(value: AnyValue): FieldDef[] | null {
+  if (!Array.isArray(value)) return null
+  const fields: FieldDef[] = []
+  const ids = new Set<string>()
+  for (const entry of value) {
+    const field = decodeFieldDefForWrite(entry)
+    if (!field || ids.has(field.id)) return null
+    ids.add(field.id)
+    fields.push(field)
+  }
+  return fields
+}
+
+function decodeFieldDefForWrite(value: AnyValue): FieldDef | null {
+  if (!isRecord(value)) return null
+  const { id, label, kind } = value
+  if (typeof id !== "string" || id === "") return null
+  if (typeof label !== "string" || label.trim() === "") return null
+  if (typeof kind !== "string" || !isFieldKind(kind)) return null
+  if (value.required !== undefined && typeof value.required !== "boolean") return null
+
+  // The option list is not optional decoration: `select` without one offers
+  // nothing, and any other kind carrying one is a client that has confused two
+  // field kinds.
+  const wantsOptions = kind === "select" || kind === "multiselect"
+  if (!wantsOptions) {
+    if (value.options !== undefined && value.options !== null) return null
+    return { id, label, kind, options: null, required: value.required === true }
+  }
+  if (!Array.isArray(value.options)) return null
+
+  const options: FieldOption[] = []
+  const optionIds = new Set<string>()
+  for (const entry of value.options) {
+    const option = decodeFieldOptionForWrite(entry)
+    if (!option || optionIds.has(option.id)) return null
+    optionIds.add(option.id)
+    options.push(option)
+  }
+  return { id, label, kind, options, required: value.required === true }
+}
+
+function decodeFieldOptionForWrite(value: AnyValue): FieldOption | null {
+  if (!isRecord(value)) return null
+  const { id, label } = value
+  if (typeof id !== "string" || id === "") return null
+  if (typeof label !== "string" || label.trim() === "") return null
+  if (value.colorToken === undefined || value.colorToken === null) return { id, label, colorToken: null }
+  if (typeof value.colorToken !== "string" || !isColumnColorToken(value.colorToken)) return null
+  return { id, label, colorToken: value.colorToken }
+}
+
 // ── Card content ──────────────────────────────────────────────────────────────
 
 export function decodeFieldValue(value: AnyValue): FieldValue | null {
@@ -128,6 +204,102 @@ export function decodeCardContent(value: AnyValue): CardContent {
     if (decoded) content[fieldId] = decoded
   }
   return content
+}
+
+// ── Card content, against a schema ────────────────────────────────────────────
+
+/**
+ * The strict counterpart to {@link decodeCardContent}, for content arriving on
+ * the WIRE rather than out of storage.
+ *
+ * The two differ in what they do with something they cannot read, and the
+ * difference is the whole point. Storage is history: a row written by an older
+ * build must stay readable, so a value that no longer parses is dropped and the
+ * rest of the card survives. A write is an instruction: dropping a field there
+ * would ack a change that never landed, and the writer would have no way to
+ * know. So this one refuses the whole patch.
+ *
+ * It also knows the board's schema, which the storage decoder does not, so a
+ * value can be checked against its DEFINITION and not merely against itself:
+ * `FieldValue` is discriminated by the same names as {@link FieldKind} exactly
+ * so `value.kind !== field.kind` is a question that can be asked.
+ *
+ * `required` is deliberately not consulted. A patch names the fields it changes
+ * and no others, so completeness is not knowable here — and required is
+ * advisory in this product anyway: it marks a field, it never refuses a save.
+ */
+export function decodeContentForFields(
+  fields: readonly FieldDef[],
+  value: AnyValue,
+): CardContent | null {
+  if (!isRecord(value)) return null
+  const byId = new Map(fields.map((field) => [field.id, field]))
+  const content: Record<string, FieldValue> = {}
+  for (const [fieldId, raw] of Object.entries(value)) {
+    const field = byId.get(fieldId)
+    if (!field) return null
+    const decoded = decodeValueForField(field, raw)
+    if (!decoded) return null
+    content[fieldId] = decoded
+  }
+  return content
+}
+
+/** One value, checked against the definition it claims to belong to. */
+export function decodeValueForField(field: FieldDef, value: AnyValue): FieldValue | null {
+  if (!isRecord(value)) return null
+  if (value.kind !== field.kind) return null
+
+  switch (field.kind) {
+    case "text":
+      return typeof value.value === "string" ? { kind: "text", value: value.value } : null
+    case "longtext":
+      return typeof value.value === "string" ? { kind: "longtext", value: value.value } : null
+    case "url":
+      return typeof value.value === "string" ? { kind: "url", value: value.value } : null
+    case "number":
+      return typeof value.value === "number" && Number.isFinite(value.value)
+        ? { kind: "number", value: value.value }
+        : null
+    case "date":
+      // `isInteger` implies finite, and epoch milliseconds are whole.
+      return typeof value.value === "number" && Number.isInteger(value.value)
+        ? { kind: "date", value: value.value }
+        : null
+    case "select": {
+      if (value.optionId === null) return { kind: "select", optionId: null }
+      if (typeof value.optionId !== "string") return null
+      return offersOption(field, value.optionId) ? { kind: "select", optionId: value.optionId } : null
+    }
+    case "multiselect": {
+      const optionIds = decodeStrictStringArray(value.optionIds)
+      if (!optionIds) return null
+      return optionIds.every((optionId) => offersOption(field, optionId))
+        ? { kind: "multiselect", optionIds }
+        : null
+    }
+    case "label": {
+      // Free strings by design — a label field has no option list to check
+      // against, which is what distinguishes it from a multiselect.
+      const values = decodeStrictStringArray(value.values)
+      return values ? { kind: "label", values } : null
+    }
+  }
+}
+
+function offersOption(field: FieldDef, optionId: string): boolean {
+  return (field.options ?? []).some((option) => option.id === optionId)
+}
+
+/** Refuses a ragged array rather than silencing its bad entries. */
+function decodeStrictStringArray(value: AnyValue): string[] | null {
+  if (!Array.isArray(value)) return null
+  const values: string[] = []
+  for (const entry of value) {
+    if (typeof entry !== "string") return null
+    values.push(entry)
+  }
+  return values
 }
 
 // ── Actors ────────────────────────────────────────────────────────────────────

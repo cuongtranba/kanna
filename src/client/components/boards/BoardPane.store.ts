@@ -10,8 +10,10 @@ interface BoardSyncState {
   syncingBoardId: string | null
   /** The card whose drawer is open, if any. */
   openCardId: string | null
-  /** Whether the sync settings panel is open. Mutually exclusive with the drawer. */
+  /** Whether the sync settings panel is open. One aside at a time; see the actions. */
   syncPanelOpen: boolean
+  /** Whether the card-field editor is open. */
+  schemaPanelOpen: boolean
   /** Last outcome per board, rendered inline on the header rather than as a toast. */
   messageByBoard: Record<string, string>
   /**
@@ -26,6 +28,8 @@ interface BoardSyncState {
   closeCard(): void
   openSyncPanel(): void
   closeSyncPanel(): void
+  openSchemaPanel(): void
+  closeSchemaPanel(): void
   startRenameBoard(boardId: string, currentTitle: string): void
   setTitleDraft(titleDraft: string): void
   /** Dismiss the editor. Discarding is what makes clicking away a cancel. */
@@ -38,15 +42,18 @@ export const useBoardSyncStore = create<BoardSyncState>()((set) => ({
   syncingBoardId: null,
   openCardId: null,
   syncPanelOpen: false,
+  schemaPanelOpen: false,
   messageByBoard: {},
   renamingBoardId: null,
   titleDraft: "",
-  // One aside at a time: both overlay the same columns, and stacking them would
-  // hide the board the reader is deciding about.
-  openCard: (openCardId) => set({ openCardId, syncPanelOpen: false }),
+  // One aside at a time: all three overlay the same columns, and stacking them
+  // would hide the board the reader is deciding about.
+  openCard: (openCardId) => set({ openCardId, syncPanelOpen: false, schemaPanelOpen: false }),
   closeCard: () => set({ openCardId: null }),
-  openSyncPanel: () => set({ syncPanelOpen: true, openCardId: null }),
+  openSyncPanel: () => set({ syncPanelOpen: true, openCardId: null, schemaPanelOpen: false }),
   closeSyncPanel: () => set({ syncPanelOpen: false }),
+  openSchemaPanel: () => set({ schemaPanelOpen: true, openCardId: null, syncPanelOpen: false }),
+  closeSchemaPanel: () => set({ schemaPanelOpen: false }),
   startRenameBoard: (renamingBoardId, currentTitle) => set({ renamingBoardId, titleDraft: currentTitle }),
   setTitleDraft: (titleDraft) => set({ titleDraft }),
   stopRenameBoard: () => set({ renamingBoardId: null, titleDraft: "" }),
