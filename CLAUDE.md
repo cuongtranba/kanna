@@ -1619,9 +1619,16 @@ a whole board (a 5k-issue import would otherwise blow up one turn), and every
 id is resolved against the chat's project before any write, so an agent cannot
 reach another project's board by guessing an id.
 
-**Not covered by C3.** `src/shared/boards/**` and `src/server/board-*.ts` are
-unmapped — `c3x lookup` returns nothing for them. Until that gap is closed,
-this section is the only architecture doc for the feature.
+**C3 has the decisions but not the map.** Five ADRs record why boards are
+shaped as they are — `adr-20260810-boards-sqlite-store` (SQLite, not the event
+log), `adr-20260811-board-column-semantics-single-source`,
+`adr-20260811-board-in-the-workspace`, `adr-20260811-board-owns-its-rendering`,
+`adr-20260811-card-start-work` — and they are the first thing to read before
+changing this feature. What is missing is a **component** fact: no `c3-NNN`
+owns `src/shared/boards/**`, `src/server/board-*.ts`, or
+`src/client/**/boards/**`, so `c3x lookup` on any of them returns nothing and
+the mandatory pre-coding `/c3 query` gate comes back empty. Until that lands,
+read the ADRs plus this section.
 
 # Tests
 
