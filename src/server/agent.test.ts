@@ -3524,13 +3524,13 @@ describe("AgentCoordinator claude integration", () => {
       type: "chat.send",
       chatId: "chat-1",
       provider: "claude",
-      content: "/clear",
+      content: "/deploy staging",
       model: "claude-opus-4-7",
     })
 
     await waitFor(() => store.turnFinishedCount === 1, 2000)
 
-    expect(prompts).toEqual(["/clear"])
+    expect(prompts).toEqual(["/deploy staging"])
     events.close()
   })
 
@@ -3618,7 +3618,7 @@ describe("AgentCoordinator claude integration", () => {
   // Regression (adr-20260608-pty-compact-boundary-dequeue-finalize): under the
   // PTY driver the interactive `/compact` writes a `compact_boundary` line but
   // NO terminal `result`/`turn_duration`, so the compact turn never finalized —
-  // its `proactiveCompactInjection` active turn lingered forever, permanently
+  // its compaction-tagged active turn lingered forever, permanently
   // wedging `dequeue()` and the queued-message drain. The boundary must now
   // finalize the compact turn and drain the queue.
   test("PTY: compact_boundary finalizes the proactive compact turn and drains the queue", async () => {

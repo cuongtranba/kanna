@@ -1,12 +1,34 @@
 import "./setupHappyDom"
 import { type ReactElement } from "react"
 import { act } from "react"
-import { createRoot, type Root } from "react-dom/client"
+import { createRoot } from "react-dom/client"
 
 const LOOP_PATTERNS = [
   /Maximum update depth exceeded/i,
   /result of getSnapshot should be cached/i,
 ]
+
+/**
+ * Teardown of a root whose caller never called `cleanup`.
+ *
+ * The returned `cleanup` is easy to forget, and forgetting it leaves a LIVE
+ * root behind in a process where the preload wipes `document.body` after every
+ * test. The next commit that root makes then deletes a node the wipe already
+ * took, which happy-dom refuses — from inside whatever unrelated test happens
+ * to be running. Registering here makes the leak impossible instead of merely
+ * detectable.
+ *
+ * The preload owns the hook rather than this module: bun runs `afterEach` in
+ * registration order, the preload registers first, and a teardown that ran
+ * after the preload's sweep would be too late to matter.
+ */
+function registerTeardown(teardown: () => void): () => void {
+  const teardowns = (globalThis as { __kannaDomTeardowns?: Set<() => void> }).__kannaDomTeardowns
+  teardowns?.add(teardown)
+  return () => {
+    teardowns?.delete(teardown)
+  }
+}
 
 export interface LoopCheckResult {
   errors: string[]
@@ -24,11 +46,20 @@ export async function renderForLoopCheck(element: ReactElement): Promise<LoopChe
 
   const container = document.createElement("div")
   document.body.appendChild(container)
-  let root: Root | null = null
+  const root = createRoot(container)
+  let torndown = false
+  const teardown = () => {
+    if (torndown) return
+    torndown = true
+    act(() => {
+      root.unmount()
+    })
+    container.remove()
+  }
+  const unregister = registerTeardown(teardown)
   let thrown: unknown = null
   try {
     await act(async () => {
-      root = createRoot(container)
       root.render(element)
     })
   } catch (error) {
@@ -48,8 +79,11 @@ export async function renderForLoopCheck(element: ReactElement): Promise<LoopChe
     loopWarnings,
     thrown,
     cleanup: async () => {
+      if (torndown) return
+      torndown = true
+      unregister()
       await act(async () => {
-        root?.unmount()
+        root.unmount()
       })
       container.remove()
     },

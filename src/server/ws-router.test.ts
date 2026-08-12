@@ -5,6 +5,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLAUDE_DRIVER_DEFAULTS, CLAUDE_PTY_LIFECYCLE_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, DEFAULT_OPENROUTER_SDK_MODEL, PROTOCOL_VERSION, PUSH_DEFAULTS, UPLOAD_DEFAULTS } from "../shared/types"
+import { BUILTIN_SLASH_COMMANDS } from "../shared/builtin-commands"
 import type { AppSettingsSnapshot, KeybindingsSnapshot, LlmProviderSnapshot, McpServerConfig, McpServerTestResult, OpenRouterModel, UpdateSnapshot } from "../shared/types"
 import { createEmptyState } from "./events"
 import {
@@ -1164,6 +1165,7 @@ describe("ws-router", () => {
         data: {
           projectId: "project-1",
           commands: [
+            ...BUILTIN_SLASH_COMMANDS,
             { name: "deploy", description: "from /tmp/project", argumentHint: "", kind: "skill", scope: "project" },
             { name: "skill-stack:dokploy", description: "", argumentHint: "", kind: "skill", scope: "plugin" },
           ],

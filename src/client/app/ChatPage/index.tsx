@@ -4,7 +4,7 @@ import type { TimerPort } from "../../ports/timerPort"
 import { domAdapter } from "../../adapters/dom.adapter"
 import { timerAdapter } from "../../adapters/timer.adapter"
 import { isMobileViewport } from "../../lib/viewport"
-import { useOutletContext } from "react-router-dom"
+import { useNavigate, useOutletContext, useParams } from "react-router-dom"
 import { RightSidebar } from "../../components/chat-ui/RightSidebar"
 import { useAppDialog } from "../../components/ui/app-dialog"
 import { actionMatchesEvent, getResolvedKeybindings } from "../../lib/keybindings"
@@ -32,6 +32,9 @@ import { isTypingTarget, resolvePaneCommand } from "../../components/panes/paneK
 import { PaneDndProvider } from "../../components/panes/PaneDndProvider"
 import type { PaneContentRegistry } from "../../components/panes/paneContentRegistry"
 import type { TabPresentationContext } from "../../components/panes/tabPresentation"
+import { buildTabPresentationContext } from "./tabPresentationContext"
+import { buildBoardChatFacts } from "../../lib/boards/boardChatFacts"
+import { useBoardsStore } from "../../stores/boardsStore"
 import { ChatTabRoot } from "./ChatTabRoot"
 import { BoardPane } from "../../components/boards/BoardPane"
 import { ChatTabContent } from "./ChatTabContent"
@@ -99,7 +102,22 @@ export interface ChatPagePorts {
   timer?: TimerPort
 }
 
-export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
+/**
+ * The pane workspace — one shared tree of splits and tabs, mounted by every
+ * route that shows one.
+ *
+ * Route-neutral on purpose. A chat is one tab KIND among four, so nothing here
+ * requires a chat: `activeChatId` is nullable and every chat-specific effect is
+ * guarded on it, and what decides whether the workspace paints is
+ * `workspaceHasTabs`, not whether a chat exists. That is what lets `/boards/:projectId/:boardId`
+ * mount the same component and get the tab strip, splits and persistence for
+ * free — the earlier attempt at board-beside-chat instead manufactured a chat
+ * nobody asked for, because the workspace was reachable only from `/chat/:chatId`.
+ *
+ * The directory keeps the `ChatPage` name: the chat TAB's own components live
+ * beside this file.
+ */
+export function WorkspacePage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
   const dom = ports.dom ?? domAdapter
   const timer = ports.timer ?? timerAdapter
   const state = useOutletContext<KannaState>()
@@ -109,12 +127,20 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
   // The chat named by the URL. Distinct from a tab's own chatId: it says which
   // tab should be focused, not which chat any given tab renders.
   const activeChatId = state.activeChatId
+  // The board named by the URL, on `/boards/:projectId/:boardId`. Undefined on
+  // every other route, which is what keeps this component route-neutral.
+  const { boardId: routeBoardId } = useParams<{ boardId?: string }>()
+  const navigate = useNavigate()
   const sidebarData = state.sidebarData
   const chatNavigator = useAppGlobalContext().chatNavigator
   const handleOpenExternal = state.handleOpenExternal
   // Every project's terminals, not just the active one's: the workspace is
   // shared, so a terminal tab resolves its own owner (see findTerminalOwner).
   const terminalProjects = useTerminalLayoutStore((store) => store.projects)
+  // Every project's boards, for the same reason: a board tab outlives the
+  // project the user is currently looking at.
+  const boardsByOwner = useBoardsStore((store) => store.boardsByOwner)
+  const boardViews = useBoardsStore((store) => store.viewByBoard)
   const projectTerminalLayout = projectId ? terminalProjects[projectId] : undefined
   const terminalLayout = projectTerminalLayout ?? DEFAULT_PROJECT_TERMINAL_LAYOUT
   const projectRightSidebarVisibility = useRightSidebarStore((store) => (projectId ? store.projects[projectId] : undefined))
@@ -214,11 +240,16 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
     // deliberately NOT reaped the way stale terminal tabs are above: a chat tab
     // outliving the URL is the whole point.
     if (activeChatId) openTab({ kind: "chat", chatId: activeChatId })
+    // A board is an address the same way a chat is, so the board named by the
+    // URL gets a tab by the same rule. Idempotent per target, so arriving at a
+    // board already open focuses it instead of adding a second tab.
+    if (routeBoardId) openTab({ kind: "board", boardId: routeBoardId })
   }, [
     terminalLayout.terminals,
     terminalProjects,
     showRightSidebar,
     activeChatId,
+    routeBoardId,
     openTab,
     closeTab,
     getPaneLayout,
@@ -290,37 +321,15 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
     [splitPane],
   )
 
-  // Tab-strip presentation context: terminal titles from the legacy store.
-  const presentation = useMemo<TabPresentationContext>(() => {
-    // Every chat the sidebar knows about, so a chat tab can title itself. Rows
-    // come from the same snapshot the sidebar renders, so a renamed chat renames
-    // its tab without any tab-side state to go stale.
-    const chatRows = [...sidebarData.starredProjectGroups, ...sidebarData.projectGroups].flatMap(
-      (group) => [...group.chats, ...group.previewChats, ...group.olderChats],
-    )
+  const presentation = useMemo<TabPresentationContext>(
+    () => buildTabPresentationContext({ terminalProjects, sidebarData, boardsByOwner, boardViews }),
+    [terminalProjects, sidebarData, boardsByOwner, boardViews],
+  )
 
-    return {
-      // Titles from EVERY project, not just the active one: a terminal tab
-      // opened in another project stays in the shared workspace, and titling it
-      // from the active project alone silently renames it to the fallback.
-      terminalTitles: Object.fromEntries(
-        Object.values(terminalProjects).flatMap((layout) =>
-          layout.terminals.map((terminal) => [terminal.id, terminal.title] as const),
-        ),
-      ),
-      chatTitles: Object.fromEntries(chatRows.map((row) => [row.chatId, row.title])),
-      // The same live facts the sidebar row draws its dot from, so a tab shows
-      // the identical status for the identical chat. It also carries "busy": a
-      // chat mid-turn holds streaming state that unmounting would discard, so
-      // it is pinned against the retention LRU exactly like a live terminal.
-      chatStatuses: Object.fromEntries(
-        chatRows.map((row) => [
-          row.chatId,
-          { status: row.status, unread: row.unread, sessionState: row.sessionState },
-        ]),
-      ),
-    }
-  }, [terminalProjects, sidebarData])
+  // Memoized because it reaches a board tab as a prop: a fresh object per
+  // render would re-render every card on the board on every keystroke
+  // elsewhere in the workspace.
+  const boardChatFacts = useMemo(() => buildBoardChatFacts(sidebarData), [sidebarData])
 
   // ─── Layout width ────────────────────────────────────────────────────────────
 
@@ -609,6 +618,13 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
     wrapDiffLines,
   ])
 
+  const handleOpenBoards = useCallback(
+    (boardsProjectId: string) => {
+      void navigate(`/boards/${boardsProjectId}`)
+    },
+    [navigate],
+  )
+
   // ─── Registry ────────────────────────────────────────────────────────────────
 
   const registry: PaneContentRegistry = {
@@ -620,7 +636,14 @@ export function ChatPage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
     // focused chat. A board holds no live stream, so remounting simply
     // re-subscribes and the server pushes a fresh snapshot.
     board: (target, _pane, _isFocused, isActiveTab) =>
-      isActiveTab ? <BoardPane boardId={target.boardId} socket={state.socket} /> : null,
+      isActiveTab ? (
+        <BoardPane
+          boardId={target.boardId}
+          socket={state.socket}
+          chatFacts={boardChatFacts}
+          onOpenBoards={handleOpenBoards}
+        />
+      ) : null,
     // Each chat tab gets its own ChatTabScopedStore.Provider via ChatTabRoot so
     // composer state, scroll position, etc. are independent per tab.
     // The tab's target — not the route — decides which chat it renders, which

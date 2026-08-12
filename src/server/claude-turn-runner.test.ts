@@ -97,6 +97,7 @@ function makeDeps(overrides: Partial<RunTurnDeps> = {}): RunTurnDeps {
     clearDrainingStream: mock(() => {}),
     startTurnForChat: mock(async () => {}),
     maybeStartNextQueuedMessage: mock(async () => {}),
+    stopCodexSession: mock(() => {}),
     ...overrides,
   }
 }
@@ -305,5 +306,140 @@ describe("runTurn", () => {
     await runTurn(deps, active)
 
     expect(active.status).toBe("running")
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Codex summarize turn (`/compact` on a provider with no compaction request)
+// ---------------------------------------------------------------------------
+
+describe("runTurn — codex summarize turn", () => {
+  function makeAssistantEntry(id: string, text: string): TranscriptEntry {
+    return {
+      _id: id,
+      createdAt: Date.now(),
+      kind: "assistant_text",
+      text,
+    } as TranscriptEntry
+  }
+
+  function summarizeHarness(options: {
+    events: HarnessEvent[]
+    compactionTurn?: ActiveTurn["compactionTurn"]
+    cancelRequested?: boolean
+  }) {
+    const appended: TranscriptEntry[] = []
+    const tokenWrites: Array<{ provider: string; token: string | null }> = []
+    const stoppedCodexChatIds: string[] = []
+
+    const turn = makeFakeTurn(options.events)
+    const active = makeActiveTurn(
+      {
+        compactionTurn: "compactionTurn" in options ? options.compactionTurn : "codex_summary",
+        cancelRequested: options.cancelRequested ?? false,
+      },
+      turn,
+    )
+    const deps = makeDeps({
+      store: {
+        ...makeDeps().store,
+        appendMessage: mock(async (_chatId: string, entry: TranscriptEntry) => { appended.push(entry) }),
+        setSessionTokenForProvider: mock(async (_chatId: string, provider: string, token: string | null) => {
+          tokenWrites.push({ provider, token })
+        }),
+      } as unknown as RunTurnDeps["store"],
+      stopCodexSession: (chatId: string) => { stoppedCodexChatIds.push(chatId) },
+    })
+
+    return { active, deps, appended, tokenWrites, stoppedCodexChatIds }
+  }
+
+  test("suppresses assistant_text and emits one joined compact_summary", async () => {
+    const h = summarizeHarness({
+      events: [
+        { type: "transcript", entry: makeAssistantEntry("a1", "first half.") },
+        { type: "transcript", entry: makeAssistantEntry("a2", "second half.") },
+        { type: "transcript", entry: makeResultEntry(false) },
+      ],
+    })
+
+    await runTurn(h.deps, h.active)
+
+    expect(h.appended.filter((e) => e.kind === "assistant_text")).toEqual([])
+    const summaries = h.appended.filter((e) => e.kind === "compact_summary")
+    expect(summaries).toHaveLength(1)
+    expect((summaries[0] as { summary: string }).summary).toBe("first half.\n\nsecond half.")
+  })
+
+  test("appends compact_boundary BEFORE compact_summary so the primer keeps the summary", async () => {
+    const h = summarizeHarness({
+      events: [
+        { type: "transcript", entry: makeAssistantEntry("a1", "the summary") },
+        { type: "transcript", entry: makeResultEntry(false) },
+      ],
+    })
+
+    await runTurn(h.deps, h.active)
+
+    const kinds = h.appended.map((e) => e.kind)
+    expect(kinds.indexOf("compact_boundary")).toBeGreaterThanOrEqual(0)
+    expect(kinds.indexOf("compact_boundary")).toBeLessThan(kinds.indexOf("compact_summary"))
+  })
+
+  test("clears the codex token and stops the codex session on success", async () => {
+    const h = summarizeHarness({
+      events: [
+        { type: "transcript", entry: makeAssistantEntry("a1", "the summary") },
+        { type: "transcript", entry: makeResultEntry(false) },
+      ],
+    })
+
+    await runTurn(h.deps, h.active)
+
+    expect(h.tokenWrites).toContainEqual({ provider: "codex", token: null })
+    expect(h.stoppedCodexChatIds).toEqual(["chat-1"])
+  })
+
+  test("a failed summarize turn compacts nothing", async () => {
+    const h = summarizeHarness({
+      events: [
+        { type: "transcript", entry: makeAssistantEntry("a1", "partial") },
+        { type: "transcript", entry: makeResultEntry(true) },
+      ],
+    })
+
+    await runTurn(h.deps, h.active)
+
+    expect(h.appended.map((e) => e.kind)).not.toContain("compact_boundary")
+    expect(h.appended.map((e) => e.kind)).not.toContain("compact_summary")
+    expect(h.tokenWrites).toEqual([])
+    expect(h.stoppedCodexChatIds).toEqual([])
+  })
+
+  test("a turn that produced no summary compacts nothing", async () => {
+    const h = summarizeHarness({
+      events: [{ type: "transcript", entry: makeResultEntry(false) }],
+    })
+
+    await runTurn(h.deps, h.active)
+
+    expect(h.appended.map((e) => e.kind)).not.toContain("compact_boundary")
+    expect(h.tokenWrites).toEqual([])
+    expect(h.stoppedCodexChatIds).toEqual([])
+  })
+
+  test("a normal turn still appends assistant_text unchanged", async () => {
+    const h = summarizeHarness({
+      compactionTurn: undefined,
+      events: [
+        { type: "transcript", entry: makeAssistantEntry("a1", "hello") },
+        { type: "transcript", entry: makeResultEntry(false) },
+      ],
+    })
+
+    await runTurn(h.deps, h.active)
+
+    expect(h.appended.filter((e) => e.kind === "assistant_text")).toHaveLength(1)
+    expect(h.appended.map((e) => e.kind)).not.toContain("compact_summary")
   })
 })

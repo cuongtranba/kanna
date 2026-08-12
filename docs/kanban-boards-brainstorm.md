@@ -561,7 +561,16 @@ the risky half of sync, isolated behind the port. P6 is additive.
 
 ## 12. Open questions
 
-1. **Board placement in the UI** — a dedicated project route, or also a pane in the pane-layout (c3-104) so a board can sit beside a chat?
+1. ~~**Board placement in the UI** — a dedicated project route, or also a pane in the pane-layout (c3-104) so a board can sit beside a chat?~~
+   **Settled: both, and they are the same thing.** `/boards/:projectId` is the
+   list; `/boards/:projectId/:boardId` mounts the pane workspace and opens the
+   board as a `{kind:"board"}` tab. The board therefore has a real address
+   (refresh and Back work) *and* the tab strip, splits and layout persistence,
+   with no second renderer to keep in step. See the design brief's addendum,
+   "The split, and why it is not redundancy".
 2. **Sync trigger** — on board open + manual refresh, or a background interval per binding?
-3. **Chat linkage direction** — should opening a card be able to *spawn* a chat with the card as context, or only link existing chats?
+3. ~~**Chat linkage direction** — should opening a card be able to *spawn* a chat with the card as context, or only link existing chats?~~
+   **Settled: spawn.** §7b "Start work" creates the worktree, branch and chat and
+   links both to the card; `card_link` holds the edge, and a card accumulates
+   chat links as later stages reuse the same worktree.
 4. **Cross-project boards** — a board is project-scoped here. Does a Stack (multi-project) need one board spanning its projects?

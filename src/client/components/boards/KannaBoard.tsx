@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react"
-import { Bot } from "lucide-react"
+import { MessageSquare } from "lucide-react"
 import { combine } from "@atlaskit/pragmatic-drag-and-drop/combine"
 import { draggable, dropTargetForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter"
 import { autoScrollForElements } from "@atlaskit/pragmatic-drag-and-drop-auto-scroll/element"
 import { attachClosestEdge, extractClosestEdge } from "@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge"
 import { cn } from "../../lib/utils"
+import { chatDotBgClass, chatDotTextClass } from "../../lib/chatStatusIndicator"
+import { formatLiveDuration } from "../../lib/formatDuration"
+import { useNow } from "../../hooks/useNow"
+import { cardChatSignal, type CardChatFacts } from "../../lib/boards/cardChatSignal"
 import { COLUMN_DOT_CLASS, isOverWipLimit } from "../../lib/boards/columnStyle"
 import {
   dropTargetForCardEdge,
@@ -46,6 +50,12 @@ export type { CardMoveRequest }
 
 export interface KannaBoardProps {
   view: BoardViewSnapshot
+  /**
+   * Live facts for every chat the workspace knows about, keyed by chat id.
+   * Optional: a board mounted for its layout alone still renders, and its cards
+   * then simply say nothing — which is what a healthy card says anyway.
+   */
+  chatFacts?: Readonly<Record<string, CardChatFacts>>
   onCardMove: (move: CardMoveRequest) => void
   onColumnMove: (columnId: string, afterColumnId: string | null) => void
   onOpenCard: (cardId: string) => void
@@ -124,6 +134,8 @@ export function KannaBoard(props: KannaBoardProps) {
           column={column}
           cards={view.cards[column.id] ?? EMPTY_CARDS}
           total={view.counts[column.id] ?? (view.cards[column.id] ?? EMPTY_CARDS).length}
+          chatLinksByCard={view.chatLinksByCard ?? EMPTY_CHAT_LINKS}
+          chatFacts={props.chatFacts ?? EMPTY_CHAT_FACTS}
           onCardDrop={handleCardDrop}
           onColumnDrop={handleColumnDrop}
           onOpenCard={props.onOpenCard}
@@ -139,11 +151,16 @@ export function KannaBoard(props: KannaBoardProps) {
 }
 
 const EMPTY_CARDS: readonly Card[] = []
+const EMPTY_CHAT_IDS: readonly string[] = []
+const EMPTY_CHAT_LINKS: Readonly<Record<string, string[]>> = {}
+const EMPTY_CHAT_FACTS: Readonly<Record<string, CardChatFacts>> = {}
 
 interface ColumnViewProps {
   column: BoardColumn
   cards: readonly Card[]
   total: number
+  chatLinksByCard: Readonly<Record<string, string[]>>
+  chatFacts: Readonly<Record<string, CardChatFacts>>
   onCardDrop: (cardId: string) => void
   onColumnDrop: (columnId: string) => void
   onOpenCard: (cardId: string) => void
@@ -157,6 +174,8 @@ function BoardColumnView({
   column,
   cards,
   total,
+  chatLinksByCard,
+  chatFacts,
   onOpenCard,
   onLoadMore,
   onColumnSave,
@@ -270,6 +289,8 @@ function BoardColumnView({
             card={card}
             columnId={columnId}
             cards={cards}
+            chatIds={chatLinksByCard[card.id] ?? EMPTY_CHAT_IDS}
+            chatFacts={chatFacts}
             onOpen={onOpenCard}
             onCardDrop={onCardDrop}
           />
@@ -294,12 +315,16 @@ function BoardCard({
   card,
   columnId,
   cards,
+  chatIds,
+  chatFacts,
   onOpen,
   onCardDrop,
 }: {
   card: Card
   columnId: string
   cards: readonly Card[]
+  chatIds: readonly string[]
+  chatFacts: Readonly<Record<string, CardChatFacts>>
   onOpen: (cardId: string) => void
   onCardDrop: (cardId: string) => void
 }) {
@@ -337,7 +362,11 @@ function BoardCard({
   }, [cardId, columnId, onCardDrop])
 
   const handleOpen = useCallback(() => { onOpen(cardId) }, [cardId, onOpen])
-  const byAgent = card.updatedBy.kind === "agent"
+
+  // Liveness, not attribution. `card.updatedBy.kind === "agent"` — what this row
+  // used to key on — says an agent wrote the row last, so a card finished an
+  // hour ago looked identical to one mid-turn.
+  const signal = cardChatSignal(chatIds, chatFacts)
 
   return (
     <div ref={ref} className="relative">
@@ -356,16 +385,43 @@ function BoardCard({
         <span className="line-clamp-2 text-sm font-medium leading-snug text-foreground [text-wrap:pretty]">
           {card.title}
         </span>
-        {byAgent ? (
+        {signal ? (
           // Only rendered when there is something to say. A healthy card is silent.
-          <span className="mt-1.5 flex items-center gap-1 text-xs text-warning">
-            <Bot aria-hidden className="size-3" />
-            <span>Agent</span>
+          <span
+            className={cn(
+              "mt-1.5 flex items-center gap-1.5 text-xs",
+              chatDotTextClass(signal.tone),
+            )}
+          >
+            {signal.tone ? (
+              // A resting dot: no pulse, no glow. The label beside it is what
+              // carries the meaning — the colour only sharpens it.
+              <span
+                aria-hidden
+                className={cn("size-1.5 shrink-0 rounded-full", chatDotBgClass(signal.tone))}
+              />
+            ) : (
+              <MessageSquare aria-hidden className="size-3 shrink-0" />
+            )}
+            <span>{signal.label}</span>
+            {signal.liveSince === null ? null : <LiveStamp since={signal.liveSince} />}
           </span>
         ) : null}
       </button>
     </div>
   )
+}
+
+/**
+ * The one thing on the board that ticks.
+ *
+ * Its own component so the second hand re-renders a stamp rather than the
+ * board: a card is silent unless its chat is live, so at most a handful of
+ * these exist at once, and the other 200 cards never re-render for the clock.
+ */
+function LiveStamp({ since }: { since: number }) {
+  const now = useNow(1_000)
+  return <span className="tabular-nums">{formatLiveDuration(Math.max(0, now - since))}</span>
 }
 
 function applyCardEdge(

@@ -1,10 +1,25 @@
 import { describe, expect, mock, test } from "bun:test"
 import { act } from "react"
-import { createRoot } from "react-dom/client"
+import { createRoot, type Root } from "react-dom/client"
 import "../lib/testing/setupHappyDom"
 import { formatWorkflowResult, WorkflowRunDetail, WorkflowsSection, WorkflowsSectionWithDetail } from "./WorkflowsSection"
 import type { WorkflowRun, WorkflowRunSummary } from "../../shared/workflow-types"
 import { renderForLoopCheck } from "../lib/testing/renderForLoopCheck"
+
+/**
+ * Unmount the root, do not merely detach its container.
+ *
+ * happy-dom registers ONE document for the whole Bun process and the test
+ * preload wipes `document.body` after every test. A root left mounted keeps its
+ * portal children registered against a body that has since been emptied, so the
+ * next test to flush React work crashes deleting a node that is no longer there.
+ */
+function closeRoot(root: Root, container: HTMLElement) {
+  act(() => {
+    root.unmount()
+  })
+  container.remove()
+}
 
 function makeRun(over: Partial<WorkflowRunSummary> = {}): WorkflowRunSummary {
   return {
@@ -29,8 +44,9 @@ async function mountWorkflowsSection(props: {
 }): Promise<{ container: HTMLDivElement; cleanup: () => void }> {
   const container = document.createElement("div")
   document.body.appendChild(container)
+  const root = createRoot(container)
   await act(async () => {
-    createRoot(container).render(
+    root.render(
       <WorkflowsSection
         runs={props.runs}
         onSelectRun={props.onSelectRun ?? (() => undefined)}
@@ -38,7 +54,7 @@ async function mountWorkflowsSection(props: {
       />,
     )
   })
-  return { container, cleanup: () => container.remove() }
+  return { container, cleanup: () => { closeRoot(root, container) } }
 }
 
 describe("WorkflowsSection — empty state", () => {
@@ -108,8 +124,9 @@ describe("WorkflowsSection — list rendering", () => {
     const onSelectRun = mock((_id: string) => undefined)
     const container = document.createElement("div")
     document.body.appendChild(container)
+    const root = createRoot(container)
     await act(async () => {
-      createRoot(container).render(
+      root.render(
         <WorkflowsSection
           runs={[makeRun({ runId: "run-42" })]}
           onSelectRun={onSelectRun}
@@ -120,7 +137,7 @@ describe("WorkflowsSection — list rendering", () => {
     expect(row).toBeDefined()
     await act(async () => { row!.click() })
     expect(onSelectRun).toHaveBeenCalledWith("run-42")
-    container.remove()
+    closeRoot(root, container)
   })
 })
 
@@ -185,10 +202,11 @@ function makeFullRun(over: Partial<WorkflowRun> = {}): WorkflowRun {
 async function mountDetail(run: WorkflowRun, onSelectAgent?: (agentId: string) => void) {
   const container = document.createElement("div")
   document.body.appendChild(container)
+  const root = createRoot(container)
   await act(async () => {
-    createRoot(container).render(<WorkflowRunDetail run={run} onSelectAgent={onSelectAgent} />)
+    root.render(<WorkflowRunDetail run={run} onSelectAgent={onSelectAgent} />)
   })
-  return { container, cleanup: () => container.remove() }
+  return { container, cleanup: () => { closeRoot(root, container) } }
 }
 
 describe("WorkflowRunDetail — parity rendering", () => {
@@ -299,8 +317,9 @@ describe("WorkflowsSectionWithDetail — drill-in", () => {
 
     const container = document.createElement("div")
     document.body.appendChild(container)
+    const root = createRoot(container)
     await act(async () => {
-      createRoot(container).render(
+      root.render(
         <WorkflowsSectionWithDetail
           runs={[makeRun({ runId: "run-full", workflowName: "deploy" })]}
           getRunDetail={getRunDetail}
@@ -323,7 +342,7 @@ describe("WorkflowsSectionWithDetail — drill-in", () => {
     // Per-agent outcome summary (fixed/stale/tests) surfaces in the drill-in.
     expect(document.body.textContent).toContain("fixed 1 · stale 2 · tests ✓")
 
-    container.remove()
+    closeRoot(root, container)
   })
 })
 
@@ -342,7 +361,7 @@ async function mountWithDetail(props: {
       root.render(<WorkflowsSectionWithDetail runs={next} getRunDetail={props.getRunDetail} />)
     })
   }
-  return { container, rerender, cleanup: () => container.remove() }
+  return { container, rerender, cleanup: () => { closeRoot(root, container) } }
 }
 
 function makeFullRunForPush(over: Partial<WorkflowRun> = {}): WorkflowRun {

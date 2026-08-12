@@ -41,6 +41,9 @@ const ACTIONS_WIDTH = 52
 
 const SPLIT_NEEDS_TWO_TABS = "Open another tab to split — a pane cannot be left empty"
 
+/** `MouseEvent.button` for the wheel press. */
+const MIDDLE_MOUSE_BUTTON = 1
+
 export function PaneTabStrip({
   pane,
   isPaneFocused,
@@ -215,6 +218,30 @@ function PaneTab({
     [onClose, tabId],
   )
 
+  // Middle-click closes the tab, the way every browser and editor does it.
+  // `auxclick` rather than `click`: a non-primary button fires only the former,
+  // which is also why this can never collide with `handleSelect`. Gated on
+  // `closable` so the gesture offers exactly what the X button offers — a tab
+  // the strip refuses to close by click must not vanish under the wheel.
+  const handleAuxClick = useCallback(
+    (event: React.MouseEvent) => {
+      if (event.button !== MIDDLE_MOUSE_BUTTON || !closable) return
+      event.preventDefault()
+      event.stopPropagation()
+      onClose(tabId)
+    },
+    [closable, onClose, tabId],
+  )
+
+  // A middle press on a scrollable region arms the browser's autoscroll (the
+  // anchor puck + sticky panning), and the strip IS scrollable. Suppressing the
+  // default here is what keeps the close gesture from leaving the user in a
+  // pan they never asked for. The drag sensor is unaffected: dnd-kit's
+  // PointerSensor activates on button 0 only.
+  const handleMouseDown = useCallback((event: React.MouseEvent) => {
+    if (event.button === MIDDLE_MOUSE_BUTTON) event.preventDefault()
+  }, [])
+
   // The whole tab is the drag handle. The sensor's small distance threshold is
   // what keeps a plain click a selection rather than a drag.
   //
@@ -239,6 +266,8 @@ function PaneTab({
       data-tab-id={tabId}
       data-tab-active={isActive ? "true" : "false"}
       onClick={handleSelect}
+      onAuxClick={handleAuxClick}
+      onMouseDown={handleMouseDown}
       className={cn(
         "group relative flex shrink-0 cursor-pointer items-center gap-1.5 border-r border-border px-3",
         isActive ? "bg-background text-foreground" : "text-muted-foreground hover:bg-muted/40",

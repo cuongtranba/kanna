@@ -21,7 +21,7 @@ import { getChatSoundBurstCount, getNotificationTitleCount } from "./chatNotific
 import { cn } from "../lib/utils"
 import { SHELL_CONTENT_CARD_CLASS } from "../lib/shellChrome"
 import { KannaSidebar } from "./KannaSidebar"
-import { ChatPage } from "./ChatPage"
+import { WorkspacePage } from "./ChatPage"
 import { LocalProjectsPage } from "./LocalProjectsPage"
 import { BoardsRoutePage } from "./BoardsRoutePage"
 import { SettingsPage } from "./SettingsPage"
@@ -570,11 +570,16 @@ function AuthedApp() {
           <Route path="/" element={<LocalProjectsPage />} />
           <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
           <Route path="/settings/:sectionId" element={<SettingsPage />} />
-          <Route path="/chat/:chatId" element={<ChatPage />} />
+          <Route path="/chat/:chatId" element={<WorkspacePage />} />
           <Route path="/workflows/:chatId" element={<WorkflowsPage />} />
+          {/* The list answers "what boards does this project have" — not a
+              workspace question, so it is a page of its own. */}
           <Route path="/boards/:projectId" element={<BoardsRoutePage />} />
-          {/* A board is its own address, so refresh and Back both work on it. */}
-          <Route path="/boards/:projectId/:boardId" element={<BoardsRoutePage />} />
+          {/* A board is its own address, so refresh and Back both work on it —
+              and it opens INTO the workspace, as a tab beside the chats, so
+              switching board↔chat is the tab strip rather than a round trip
+              through the sidebar. */}
+          <Route path="/boards/:projectId/:boardId" element={<WorkspacePage />} />
         </Route>
       </Routes>
     </KannaSocketProvider>

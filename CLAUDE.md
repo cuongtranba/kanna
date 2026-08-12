@@ -482,6 +482,75 @@ Removed in this version (no longer consulted):
 - `KANNA_PTY_TRANSCRIPT_WATCH` — `fs.watch` removed; the follower always polls
   (`adr-20260607-pty-transcript-pure-poll`).
 
+# Builtin slash commands — `/clear` and `/compact [instructions]`
+
+Two commands Kanna implements itself rather than forwarding as prompt text.
+`src/shared/builtin-commands.ts` is the single source for both the parser and
+the picker catalog (`BUILTIN_SLASH_COMMANDS`, `scope: "builtin"`); a colocated
+drift guard asserts every catalog entry parses, so the picker can never
+advertise a command dispatch does not handle. **A builtin must be the whole
+message** — `/clear now` does not match, because discarding what the user typed
+is worse than treating the line as a prompt.
+
+`runBuiltinCommand` (`claude-send-command.ts`) is the one dispatch site, called
+from `sendCommand` **after** the `isChatBusy` branch and from
+`dequeueAndStartQueuedMessage` (non-steered only). That placement is what makes
+a `/clear` typed mid-turn queue like any other message; do not hoist it above
+the busy check.
+
+- **`/clear`** starts no turn. `clearChatContext`
+  (`claude-context-commands.ts`) nulls every provider's token, applies the
+  claude suppress-persist + idle-session teardown, **stops the codex process**,
+  and appends `context_cleared`. The codex stop is load-bearing:
+  `CodexAppServerManager.startSession` reuses a live session on a cwd match and
+  never consults the session token, so a token wipe alone is a no-op on the next
+  turn. `clearClaudeSessionContext` lives here too (moved from
+  `claude-loop-commands.ts`, re-exported) so the loop `/clear` and the user
+  `/clear` cannot drift.
+- **`/compact`** is a turn everywhere. claude + openrouter get the CLI command
+  verbatim (`appendUserPrompt: false`). Codex's app-server exposes **no**
+  compaction request, so Kanna runs the summarization itself and
+  `claude-turn-runner.ts` reshapes the reply into `compact_boundary` **then**
+  `compact_summary`. That order is load-bearing — the history primer resumes at
+  the last boundary, so summary-first would discard the summary. Error, cancel,
+  or empty prose commits nothing.
+
+## `CompactionTurnKind` — one field, two questions
+
+`ActiveTurn.compactionTurn` is `"proactive" | "user" | "codex_summary"` (it
+replaced the boolean `proactiveCompactInjection`). Two predicates read it, and
+they are deliberately different:
+
+- `isCliCompactTurn` — gates the PTY `compact_boundary` finalize
+  (`adr-20260608-pty-compact-boundary-dequeue-finalize`). Covers `proactive` AND
+  `user`: both reach the CLI verbatim, so both go quiet the same way.
+- `isProactiveCompactTurn` — gates the `compactFailureCount` circuit breaker and
+  the `message.dequeue` refusal. `proactive` only. Both exist to bound Kanna's
+  **own** automatic injection; a user-typed `/compact` owns no queued message
+  and must not consume that budget.
+
+## History primer is scoped to the last context reset
+
+`buildHistoryPrimer` (`history-primer.ts`) starts at the most recent
+`context_cleared` / `compact_boundary`, counts `compact_summary` as assistant
+content, and hoists a summary sitting on the older side of its own boundary
+(emission order is not ours to control). Without this, `shouldInjectPrimer`
+returning true on a null token means a cleared chat re-sends up to
+`PRIMER_MAX_CHARS` (60k) of the conversation it just dropped — which silently
+defeated the loop `/clear` path (`setup_loop`, `deliverSubagentToMain`,
+`disarmFailingLoop`) too, despite that design resting on main being
+stateless-in-context. `shouldInjectPrimer` itself is unchanged: "token null ⇒
+prime" was always right; the bug was *what* got primed.
+
+The picker merges the builtins in `localCommandsForCwd`, not in
+`LocalCatalogService.list` (whose contract stays the disk catalog), and
+`commandsForProvider` narrows the list to builtins-only on codex — disk-scanned
+Claude Code skills mean nothing to a provider that does not run the claude CLI.
+A project-authored `.claude/commands/clear.md` is dropped from the listing
+because dispatch intercepts that name first; rename it.
+
+See `adr-20260811-builtin-clear-compact-commands`.
+
 # Mermaid Validation Gate (KANNA_MERMAID_GUARD)
 
 Kanna renders mermaid inline, so a syntax error reaches the user as a broken
@@ -1500,6 +1569,32 @@ When a test spawns `git` or other subprocesses, ensure the spawn sets
 `stdin: "ignore"` and `GIT_TERMINAL_PROMPT=0` so a hung credential prompt
 cannot exhaust the test timeout. Also give it an explicit timeout
 (`test(name, fn, 30_000)`) — the 5s Bun default is too tight for CI runners.
+
+## Every React root a test mounts must be unmounted (enforced)
+
+happy-dom gives the whole Bun process ONE document, so `scripts/test-preload.ts`
+wipes `document.body` after each test. The wipe cannot reach the React root that
+owned those nodes: a test that calls `container.remove()` but never
+`root.unmount()` leaves a live root — and any portal it opened (Radix
+Dialog/Popover/Select, `createPortal`) had `document.body` ITSELF as its
+container. When that root next commits, React removes a node the wipe already
+took and happy-dom throws `removeChild: The node to be removed is not a child of
+this node`, blaming **whichever test is running at that moment** — a different
+test, in a different file. File order is the filesystem's, so it reproduces on
+CI's ext4 and not on APFS (PR #646: `SharePopover` crashed `CardDrawer` two files
+later; the full suite, CI's exact file order, bun 1.3.11, and Linux under Docker
+were all green locally).
+
+The same `afterEach` now FAILS the test that leaked, naming the nodes. It reports
+only REACT-OWNED leftovers — Lexical's typeahead plugin appends a menu straight
+to `document.body` even under `renderToStaticMarkup`, and nothing holds a
+reference that could commit against it later.
+
+`renderForLoopCheck` unmounts roots whose callers never called the `cleanup` it
+returns, via the teardown registry the preload publishes on
+`globalThis.__kannaDomTeardowns`. It cannot own an `afterEach` for that: bun runs
+hooks in registration order and the preload registers first, so a helper-owned
+hook fires after the sweep has already failed the test.
 
 # Wiki
 

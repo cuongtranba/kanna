@@ -17,8 +17,9 @@ import { PROTOCOL_VERSION } from "../shared/types"
 import type { ClientCommand, ServerEnvelope } from "../shared/protocol"
 import type { BoardColumn, CardActor } from "../shared/boards/types"
 import { columnForRemoteState } from "../shared/boards/types"
+import { decodeContentForFields, decodeFieldDefsForWrite } from "../shared/boards/decode"
 import type { BoardSyncStatus, SyncColumnRef } from "../shared/boards/sync-types"
-import { BoardStoreError } from "./board-store"
+import { BoardStoreError, type UpdateBoardPatch, type UpdateCardPatch } from "./board-store"
 import type { BoardRegistry } from "./board-registry"
 import type { BoardSync } from "./board-sync"
 import type { CardDetailView, StartWorkResult, StartWorkView } from "../shared/boards/start-work"
@@ -236,11 +237,32 @@ function dispatch(
     }
 
     case "board.update": {
-      const board = registry.updateBoard(command.boardId, {
+      const patch: UpdateBoardPatch = {
         ...(command.title === undefined ? {} : { title: command.title }),
         ...(command.description === undefined ? {} : { description: command.description }),
-      })
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: board })
+      }
+
+      if (command.cardFields !== undefined) {
+        // Decoded against the domain's rules rather than trusted from the wire,
+        // for the reason `board.card.update` gives one case below: the store
+        // writes the schema whole and validates nothing. A duplicate field id
+        // would leave two fields fighting over one card value, and there is no
+        // way back once cards have written through it.
+        const cardFields = decodeFieldDefsForWrite(command.cardFields)
+        if (!cardFields) {
+          send({
+            v: PROTOCOL_VERSION,
+            type: "error",
+            id,
+            message:
+              "Those card fields are not usable. Each field needs a unique id, a name, a known kind, and option colours from the board palette.",
+          })
+          return true
+        }
+        patch.cardFields = cardFields
+      }
+
+      send({ v: PROTOCOL_VERSION, type: "ack", id, result: registry.updateBoard(command.boardId, patch) })
       return true
     }
 
@@ -340,12 +362,33 @@ function dispatch(
     }
 
     case "board.card.update": {
-      const card = registry.updateCard(
-        command.cardId,
-        command.title === undefined ? {} : { title: command.title },
-        USER,
-      )
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: card })
+      const patch: UpdateCardPatch = command.title === undefined ? {} : { title: command.title }
+
+      if (command.content !== undefined) {
+        // Checked against THIS board's schema rather than trusted from the
+        // wire: the store replaces a card's content wholesale and validates
+        // nothing, so a field the board never declared would persist — and the
+        // sender would be acked for it.
+        const detail = registry.cardDetail(command.cardId)
+        const board = detail ? registry.getBoard(detail.card.boardId) : null
+        if (!board) {
+          send({ v: PROTOCOL_VERSION, type: "error", id, message: `card ${command.cardId} does not exist` })
+          return true
+        }
+        const content = decodeContentForFields(board.cardFields, command.content)
+        if (!content) {
+          send({
+            v: PROTOCOL_VERSION,
+            type: "error",
+            id,
+            message: "That change does not match this board's card fields.",
+          })
+          return true
+        }
+        patch.content = content
+      }
+
+      send({ v: PROTOCOL_VERSION, type: "ack", id, result: registry.updateCard(command.cardId, patch, USER) })
       return true
     }
 

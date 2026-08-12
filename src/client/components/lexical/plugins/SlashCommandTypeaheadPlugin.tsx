@@ -8,8 +8,8 @@ import {
 } from "@lexical/react/LexicalTypeaheadMenuPlugin"
 import type { MenuTextMatch, TriggerFn } from "@lexical/react/LexicalTypeaheadMenuPlugin"
 import { useSlashCommands } from "../../../hooks/useSlashCommands"
-import { filterCommands, normalizeCommandName } from "../../../lib/slash-commands"
-import type { SlashCommand } from "../../../../shared/types"
+import { commandsForProvider, filterCommands, normalizeCommandName } from "../../../lib/slash-commands"
+import type { AgentProvider, SlashCommand } from "../../../../shared/types"
 import { $createSlashCommandNode } from "../nodes/SlashCommandNode"
 import { cn } from "../../../lib/utils"
 import { ChatTabScopedStore } from "../../../stores/chatTabScopedStore"
@@ -84,10 +84,10 @@ export interface SlashCommandTypeaheadPluginProps {
    */
   projectId: string | null
   /**
-   * When false the plugin renders nothing (mirrors the ChatInput gating that
-   * only shows the slash picker when selectedProvider === "claude").
+   * Scopes the catalog: Kanna's builtins work everywhere, disk-scanned Claude
+   * Code skills only on a provider that runs the claude CLI.
    */
-  enabled: boolean
+  provider: AgentProvider
 }
 
 // ---------------------------------------------------------------------------
@@ -103,7 +103,7 @@ function clampDescription(text: string): string {
 
 export function SlashCommandTypeaheadPlugin({
   projectId,
-  enabled,
+  provider,
 }: SlashCommandTypeaheadPluginProps): ReactNode {
   const query = ChatTabScopedStore.useScopedStore((state) => state.slashQuery)
   const setQuery = ChatTabScopedStore.useScopedStore((state) => state.setSlashQuery)
@@ -113,10 +113,10 @@ export function SlashCommandTypeaheadPlugin({
   const triggerFn = useSlashTrigger()
 
   const options = useMemo<SlashCommandMenuOption[]>(() => {
-    if (!enabled) return []
-    const filtered = filterCommands(slashCommands, query ?? "")
+    const available = commandsForProvider(slashCommands, provider)
+    const filtered = filterCommands(available, query ?? "")
     return dedupeCommandsByName(filtered).map((cmd) => new SlashCommandMenuOption(cmd))
-  }, [enabled, slashCommands, query])
+  }, [provider, slashCommands, query])
 
   const onQueryChange = useCallback((matchingString: string | null) => {
     setQuery(matchingString)
@@ -170,7 +170,6 @@ export function SlashCommandTypeaheadPlugin({
         options: SlashCommandMenuOption[]
       },
     ) => {
-      if (!enabled) return null
       if (anchorElementRef.current == null) return null
       // No loading state to render: the catalog arrives with the project
       // snapshot, so an empty list means "nothing matches", never "not yet".
@@ -236,13 +235,12 @@ export function SlashCommandTypeaheadPlugin({
         </ul>
       )
     },
-    [enabled],
+    [],
   )
 
-  // When disabled, still mount the plugin but with no options so it never opens.
   return (
     <LexicalTypeaheadMenuPlugin<SlashCommandMenuOption>
-      options={enabled ? options : []}
+      options={options}
       onQueryChange={onQueryChange}
       onSelectOption={onSelectOption}
       triggerFn={triggerFn}

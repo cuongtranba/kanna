@@ -88,3 +88,89 @@ describe("extractPreviousAssistantReply", () => {
     expect(extractPreviousAssistantReply(entries)).toBe("Bash: ls")
   })
 })
+
+function clearedEntry(createdAt: number): TranscriptEntry {
+  return { _id: `c-${createdAt}`, kind: "context_cleared", createdAt }
+}
+
+function boundaryEntry(createdAt: number): TranscriptEntry {
+  return { _id: `b-${createdAt}`, kind: "compact_boundary", createdAt }
+}
+
+function summaryEntry(summary: string, createdAt: number): TranscriptEntry {
+  return { _id: `s-${createdAt}`, kind: "compact_summary", createdAt, summary }
+}
+
+describe("buildHistoryPrimer — context resets", () => {
+  test("returns null when the conversation ends at a context_cleared", () => {
+    const entries: TranscriptEntry[] = [
+      userEntry("old", 1000),
+      assistantEntry("old reply", 2000),
+      clearedEntry(3000),
+    ]
+    expect(buildHistoryPrimer(entries, "codex" as AgentProvider, "next")).toBeNull()
+  })
+
+  test("renders only what came after the last context_cleared", () => {
+    const entries: TranscriptEntry[] = [
+      userEntry("old", 1000),
+      assistantEntry("old reply", 2000),
+      clearedEntry(3000),
+      userEntry("new", 4000),
+      assistantEntry("new reply", 5000),
+    ]
+    const primer = buildHistoryPrimer(entries, "codex" as AgentProvider, "tail")!
+    expect(primer).toContain("new reply")
+    expect(primer).not.toContain("old reply")
+    expect(primer).not.toContain("[user, 1970-01-01 00:00:01]\nold\n")
+  })
+
+  test("carries the compact summary that follows a boundary", () => {
+    const entries: TranscriptEntry[] = [
+      userEntry("old", 1000),
+      assistantEntry("old reply", 2000),
+      boundaryEntry(3000),
+      summaryEntry("THE SUMMARY", 4000),
+      userEntry("new", 5000),
+    ]
+    const primer = buildHistoryPrimer(entries, "codex" as AgentProvider, "tail")!
+    expect(primer).toContain("THE SUMMARY")
+    expect(primer).toContain("new")
+    expect(primer).not.toContain("old reply")
+  })
+
+  test("hoists a compact summary that precedes its boundary", () => {
+    const entries: TranscriptEntry[] = [
+      userEntry("old", 1000),
+      assistantEntry("old reply", 2000),
+      summaryEntry("THE SUMMARY", 3000),
+      boundaryEntry(4000),
+      userEntry("new", 5000),
+    ]
+    const primer = buildHistoryPrimer(entries, "codex" as AgentProvider, "tail")!
+    expect(primer).toContain("THE SUMMARY")
+    expect(primer).not.toContain("old reply")
+  })
+
+  test("a context_cleared after a summary discards the summary too", () => {
+    const entries: TranscriptEntry[] = [
+      summaryEntry("THE SUMMARY", 1000),
+      boundaryEntry(2000),
+      clearedEntry(3000),
+      userEntry("new", 4000),
+      assistantEntry("new reply", 5000),
+    ]
+    const primer = buildHistoryPrimer(entries, "codex" as AgentProvider, "tail")!
+    expect(primer).not.toContain("THE SUMMARY")
+    expect(primer).toContain("new reply")
+  })
+
+  test("returns null when the post-reset slice holds no assistant content", () => {
+    const entries: TranscriptEntry[] = [
+      assistantEntry("old reply", 1000),
+      clearedEntry(2000),
+      userEntry("new", 3000),
+    ]
+    expect(buildHistoryPrimer(entries, "codex" as AgentProvider, "tail")).toBeNull()
+  })
+})

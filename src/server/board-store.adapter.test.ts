@@ -23,11 +23,11 @@ const SIMPLE_DEFINITION: BoardTemplateDefinition = {
 const openStores: BoardStore[] = []
 const tempDirs: string[] = []
 
-function newStore(filePath = ":memory:"): BoardStore {
+function newStore(filePath = ":memory:", now: () => number = () => 1_700_000_000_000): BoardStore {
   let counter = 0
   const store = createBoardStore({
     filePath,
-    now: () => 1_700_000_000_000,
+    now,
     newId: () => `id-${(counter += 1).toString().padStart(4, "0")}`,
   })
   openStores.push(store)
@@ -581,6 +581,45 @@ describe("links and comments", () => {
     expect(store.findCardsByLink("chat", "chat-absent")).toEqual([])
   })
 
+  test("a board's links of one kind read back in a single grouped, newest-first pass", () => {
+    let clock = 1_700_000_000_000
+    const store = newStore(":memory:", () => (clock += 1))
+    const { board, columns } = seedBoard(store)
+    const first = store.createCard({ boardId: board.id, columnId: columns[0]!.id, title: "First", actor: USER })
+    const second = store.createCard({ boardId: board.id, columnId: columns[1]!.id, title: "Second", actor: USER })
+    const elsewhere = seedBoard(store)
+    const stray = store.createCard({
+      boardId: elsewhere.board.id,
+      columnId: elsewhere.columns[0]!.id,
+      title: "Stray",
+      actor: USER,
+    })
+
+    store.addCardLink(first.id, "chat", "chat-older")
+    store.addCardLink(first.id, "chat", "chat-newer")
+    store.addCardLink(first.id, "worktree", "/repo/.worktrees/card-1")
+    store.addCardLink(second.id, "chat", "chat-2")
+    store.addCardLink(stray.id, "chat", "chat-elsewhere")
+
+    const links = store.listCardLinksForBoard(board.id, "chat")
+    expect(links.map((link) => `${link.cardId}:${link.targetId}`)).toEqual([
+      `${first.id}:chat-newer`,
+      `${first.id}:chat-older`,
+      `${second.id}:chat-2`,
+    ])
+    expect(links[0]?.kind).toBe("chat")
+  })
+
+  test("a board with no links of the asked kind reads back empty", () => {
+    const store = newStore()
+    const { board, columns } = seedBoard(store)
+    const card = store.createCard({ boardId: board.id, columnId: columns[0]!.id, title: "Task", actor: USER })
+    store.addCardLink(card.id, "worktree", "/repo/.worktrees/card-1")
+
+    expect(store.listCardLinksForBoard(board.id, "chat")).toEqual([])
+    expect(store.listCardLinksForBoard("missing", "chat")).toEqual([])
+  })
+
   test("deleting a card takes its links and comments with it", () => {
     const store = newStore()
     const { board, columns } = seedBoard(store)
@@ -668,19 +707,28 @@ describe("validateCardContent", () => {
     ).toEqual([])
   })
 
-  test("reports an unknown field rather than dropping it", () => {
-    const problems = validateCardContent(
-      { mystery: { kind: "text", value: "x" }, priority: { kind: "select", optionId: "high" } },
-      fields,
-    )
-    expect(problems).toEqual([expect.stringContaining("unknown field")])
+  /**
+   * The two things it deliberately stays quiet about, both of which the WIRE
+   * decoder refuses. See the function's own comment for why the store cannot
+   * afford to agree with it.
+   */
+  test("says nothing about a field the schema has not declared", () => {
+    expect(
+      validateCardContent(
+        { mystery: { kind: "text", value: "x" }, priority: { kind: "select", optionId: "high" } },
+        fields,
+      ),
+    ).toEqual([])
   })
 
-  test("reports a mismatched kind, a bad option, and a missing required field", () => {
-    const problems = validateCardContent({ notes: { kind: "number", value: 1 } }, fields)
-    expect(problems).toHaveLength(2)
-    expect(problems[0]).toContain("expects text")
-    expect(problems[1]).toContain("required")
+  test("says nothing about a required field the content omits", () => {
+    expect(validateCardContent({}, fields)).toEqual([])
+  })
+
+  test("reports a mismatched kind and a bad option", () => {
+    expect(validateCardContent({ notes: { kind: "number", value: 1 } }, fields)).toEqual([
+      expect.stringContaining("expects text"),
+    ])
 
     expect(
       validateCardContent({ priority: { kind: "select", optionId: "nonexistent" } }, fields),
@@ -726,5 +774,116 @@ describe("cardBranchName", () => {
 
   test("survives a title with no usable characters", () => {
     expect(cardBranchName("abcd1234", "***", "5")).toBe("card/5")
+  })
+})
+
+/**
+ * The store's own schema gate. The WS router validates the one path a person
+ * edits from; this is what stands under every other caller — the sync engine,
+ * the board MCP tools, and anything added next.
+ */
+describe("card content is checked against the board's fields", () => {
+  const SCHEMA: BoardTemplateDefinition = {
+    ...SIMPLE_DEFINITION,
+    cardFields: [
+      { id: "notes", label: "Notes", kind: "text", options: null, required: false },
+      {
+        id: "priority",
+        label: "Priority",
+        kind: "select",
+        required: true,
+        options: [{ id: "high", label: "High", colorToken: "warning" }],
+      },
+    ],
+  }
+
+  function seedTypedBoard(store: BoardStore) {
+    const board = store.createBoard({
+      owner: { kind: "project", id: "project-1" },
+      title: "Typed board",
+      definition: SCHEMA,
+    })
+    const column = store.listColumns(board.id)[0]
+    if (!column) throw new Error("no column")
+    const card = store.createCard({ boardId: board.id, columnId: column.id, title: "Card", actor: USER })
+    return { board, column, card }
+  }
+
+  test("updateCard refuses a value whose kind disagrees with its field", () => {
+    const store = newStore()
+    const { card } = seedTypedBoard(store)
+    expect(() =>
+      store.updateCard(card.id, { content: { notes: { kind: "number", value: 3 } } }, USER),
+    ).toThrow(/expects text/)
+    expect(store.getCard(card.id)?.content).toEqual({})
+  })
+
+  test("updateCard refuses an option the board does not offer", () => {
+    const store = newStore()
+    const { card } = seedTypedBoard(store)
+    expect(() =>
+      store.updateCard(card.id, { content: { priority: { kind: "select", optionId: "urgent" } } }, USER),
+    ).toThrow(/has no option/)
+  })
+
+  test("createCard refuses the same contradiction, so a bad card cannot be born", () => {
+    const store = newStore()
+    const { board, column } = seedTypedBoard(store)
+    expect(() =>
+      store.createCard({
+        boardId: board.id,
+        columnId: column.id,
+        title: "Card",
+        content: { notes: { kind: "date", value: 0 } },
+        actor: USER,
+      }),
+    ).toThrow(BoardStoreError)
+  })
+
+  test("content matching the schema still writes", () => {
+    const store = newStore()
+    const { card } = seedTypedBoard(store)
+    const updated = store.updateCard(
+      card.id,
+      { content: { notes: { kind: "text", value: "ok" }, priority: { kind: "select", optionId: "high" } } },
+      USER,
+    )
+    expect(updated.content.notes).toEqual({ kind: "text", value: "ok" })
+  })
+
+  /**
+   * The gate reports contradictions, not surprises. A board's schema is edited
+   * under content already written, and the sync engine writes `description`
+   * onto boards that have never declared it — refusing there would turn a
+   * GitHub pull into a hard failure on every board made without a template.
+   */
+  test("a field the schema has not declared is stored, not refused", () => {
+    const store = newStore()
+    const { card } = seedTypedBoard(store)
+    const updated = store.updateCard(
+      card.id,
+      { content: { description: { kind: "longtext", value: "from GitHub" } } },
+      USER,
+    )
+    expect(updated.content.description).toEqual({ kind: "longtext", value: "from GitHub" })
+  })
+
+  /** `required` marks a field; it never refuses a save. */
+  test("content omitting a required field still writes", () => {
+    const store = newStore()
+    const { card } = seedTypedBoard(store)
+    expect(store.updateCard(card.id, { content: { notes: { kind: "text", value: "ok" } } }, USER).content)
+      .toEqual({ notes: { kind: "text", value: "ok" } })
+  })
+
+  test("a title-only board takes any content, because it has said nothing to contradict", () => {
+    const store = newStore()
+    const { columns, board } = seedBoard(store)
+    const column = columns[0]
+    if (!column) throw new Error("no column")
+    const card = store.createCard({ boardId: board.id, columnId: column.id, title: "Card", actor: USER })
+    expect(
+      store.updateCard(card.id, { content: { anything: { kind: "text", value: "x" } } }, USER).content,
+    ).toEqual({ anything: { kind: "text", value: "x" } })
   })
 })

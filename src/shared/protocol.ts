@@ -310,7 +310,13 @@ export type ClientCommand =
     }
   | { type: "board.create"; ownerKind: BoardOwnerKind; ownerId: string; title: string; templateId?: string | null }
   | { type: "board.archive"; boardId: string }
-  | { type: "board.update"; boardId: string; title?: string; description?: string | null }
+  /**
+   * `cardFields` is the board's whole card schema, not a delta — the store
+   * writes it whole. Typed loose for the same reason `board.card.update`
+   * carries its content that way: it is decoded against the domain's own rules
+   * server-side, and a wire type would only be a second place to state them.
+   */
+  | { type: "board.update"; boardId: string; title?: string; description?: string | null; cardFields?: AnyValue }
   | { type: "board.duplicate"; boardId: string; title: string }
   | { type: "board.saveAsTemplate"; boardId: string; name: string }
   | {
@@ -348,7 +354,13 @@ export type ClientCommand =
   | { type: "board.card.archive"; cardId: string }
   | { type: "board.card.detail"; cardId: string }
   | { type: "board.card.comment"; cardId: string; body: string }
-  | { type: "board.card.update"; cardId: string; title?: string }
+  /**
+   * `content` is the card's WHOLE content, not just the field that changed: the
+   * store replaces rather than merges, so a partial map would erase every field
+   * it did not name. Untyped on the wire because the schema it has to satisfy
+   * is the board's, which only the server can read — see `decodeContentForFields`.
+   */
+  | { type: "board.card.update"; cardId: string; title?: string; content?: AnyValue }
   /** Card → worktree → branch → chat. Idempotent: a card already working opens what it has. */
   | { type: "board.card.startWork"; cardId: string }
   /** Answer the question a card asks on reaching `done`. */

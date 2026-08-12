@@ -228,6 +228,42 @@ describe("read models", () => {
     expect(registry.boardView("nope")).toBeNull()
   })
 
+  test("boardView carries chat links only for the cards that have them", () => {
+    const { board, columns, card } = seed()
+    const unlinked = registry.createCard({
+      boardId: board.id,
+      columnId: columns[1]!.id,
+      title: "Worktree only",
+      actor: USER,
+    })
+    registry.addCardLink(card.id, "chat", "chat-9")
+    registry.addCardLink(unlinked.id, "worktree", "/repo/.worktrees/card-2")
+
+    expect(registry.boardView(board.id)?.chatLinksByCard).toEqual({ [card.id]: ["chat-9"] })
+  })
+
+  test("boardView leaves out the chat links of cards past the page it ships", () => {
+    const { board, columns, card } = seed()
+    let previous = card.id
+    const rest = ["Second", "Third"].map((title) => {
+      const created = registry.createCard({
+        boardId: board.id,
+        columnId: columns[0]!.id,
+        title,
+        actor: USER,
+        afterCardId: previous,
+      })
+      previous = created.id
+      return created
+    })
+    registry.addCardLink(card.id, "chat", "chat-1")
+    registry.addCardLink(rest[1]!.id, "chat", "chat-3")
+
+    const view = registry.boardView(board.id, 2)
+    expect(view?.cards[columns[0]!.id]?.map((entry) => entry.id)).toEqual([card.id, rest[0]!.id])
+    expect(view?.chatLinksByCard).toEqual({ [card.id]: ["chat-1"] })
+  })
+
   test("cardDetail bundles links and comments", () => {
     const { card } = seed()
     registry.addCardLink(card.id, "worktree", "/repo/.worktrees/card-1")

@@ -34,7 +34,49 @@ function renderEntry(entry: TranscriptEntry): RenderedEntry | null {
   if (entry.kind === "tool_call") {
     return { text: `[tool, ${ts}] ${entry.tool.toolName}\n`, createdAt: entry.createdAt }
   }
+  if (entry.kind === "compact_summary") {
+    return {
+      text: `[summary of earlier conversation, ${ts}]\n${entry.summary}\n`,
+      createdAt: entry.createdAt,
+    }
+  }
   return null
+}
+
+/**
+ * The slice of a chat that still counts as context.
+ *
+ * Everything before the most recent `context_cleared` / `compact_boundary` was
+ * deliberately dropped — by the user, by a loop iteration, or by the provider's
+ * own compaction. Replaying it here would silently undo that, and the primer is
+ * injected precisely when the session token is null, which is exactly the state
+ * a clear leaves behind.
+ *
+ * A `compact_summary` IS the carried context, so it is hoisted across its own
+ * boundary when it sits on the older side — the SDK and the CLI are free to
+ * emit the two in either order.
+ */
+function selectPrimerEntries(entries: readonly TranscriptEntry[]): TranscriptEntry[] {
+  let resetIndex = -1
+  let lastClearedIndex = -1
+  for (let i = 0; i < entries.length; i += 1) {
+    const kind = entries[i].kind
+    if (kind === "context_cleared") {
+      resetIndex = i
+      lastClearedIndex = i
+    } else if (kind === "compact_boundary") {
+      resetIndex = i
+    }
+  }
+  if (resetIndex < 0) return [...entries]
+
+  const selected = entries.slice(resetIndex + 1)
+  if (selected.some((entry) => entry.kind === "compact_summary")) return selected
+
+  for (let i = resetIndex; i > lastClearedIndex; i -= 1) {
+    if (entries[i].kind === "compact_summary") return [entries[i], ...selected]
+  }
+  return selected
 }
 
 export function buildHistoryPrimer(
@@ -42,10 +84,13 @@ export function buildHistoryPrimer(
   _targetProvider: AgentProvider,
   userText: string,
 ): string | null {
-  const hasAssistant = entries.some((entry) => entry.kind === "assistant_text")
+  const inContext = selectPrimerEntries(entries)
+  const hasAssistant = inContext.some(
+    (entry) => entry.kind === "assistant_text" || entry.kind === "compact_summary",
+  )
   if (!hasAssistant) return null
 
-  const rendered = entries
+  const rendered = inContext
     .map(renderEntry)
     .filter((entry): entry is RenderedEntry => entry !== null)
 
