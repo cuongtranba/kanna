@@ -1,6 +1,6 @@
 ---
 id: c3-310
-c3-seal: 9d33004b8013ea999a42a67bd2197040421288190a646975bee3e8923e90adde
+c3-seal: e5633ca86a638540a717847cc0c298e34462f91329dd9b4462dab471422f8f13
 title: boards-domain
 type: component
 category: feature
@@ -84,7 +84,7 @@ Owns the board vocabulary (`Board`, `BoardColumn`, `Card`, `FieldDef`, `FieldVal
 
 | Risk | Trigger | Detection | Required Verification |
 | --- | --- | --- | --- |
-| Routing split-brain | A caller reimplements a semantic lookup locally instead of calling the finder | Review; a second semantic === "done" comparison outside this module | grep -rn 'semantic ===' src/ and bun run test |
+| Routing split-brain | A caller reimplements a semantic lookup locally instead of calling the finder | Review; a second semantic === "done" comparison outside this module | bun test --conditions production src/server/board-sync.test.ts |
 | Prompt field drift | A card field the start-work prompt reads by name is deleted from a board schema | cardSchema.test.ts probes every id the prompt reads | bun test --conditions production src/shared/boards/cardSchema.test.ts |
 | Rank collision | Two concurrent moves derive the same fractional key | Column or card order flickers after a drag | bun test --conditions production src/shared/boards/rank.test.ts |
 | Decoder strictness inversion | Wire decoding relaxed to match storage leniency | A malformed client payload reaches the store | bun test --conditions production src/shared/boards/decode.test.ts |

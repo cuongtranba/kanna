@@ -1,6 +1,6 @@
 ---
 id: c3-119
-c3-seal: ada713d1e65a336ad6ab0c162e6266e180418c3c6af973e2ae8c81707d8015bb
+c3-seal: 71b91984a8f6a2d5ec5abfd64a864bff1bbf840e05b34ab7190bb2650f26f202
 title: boards-ui
 type: component
 category: feature
@@ -87,6 +87,6 @@ Owns the board surface: `BoardsPage` and `BoardPane`, the `KannaBoard` renderer 
 | Risk | Trigger | Detection | Required Verification |
 | --- | --- | --- | --- |
 | Render loop | A board selector returns a fresh array or object reference each call | React error #185 in the console | bun run lint:usestate and bunx ast-grep test |
-| Unmounted root leak | A board test mounts a portal-opening component without unmounting its root | The preload sweep fails the test that leaked | bun run test |
+| Unmounted root leak | A board test mounts a portal-opening component without unmounting its root | The preload sweep fails the test that leaked | bun test --conditions production src/client/components/boards/CardDrawer.test.tsx |
 | Second source of truth | Optimistic state stops being replaced by the server snapshot | A rejected move sticks on screen | bun test --conditions production src/client/lib/boards/optimistic.test.ts |
 | Index-based ordering | A drop starts computing an insertion index instead of neighbours | Two concurrent drags disagree on order | bun test --conditions production src/client/lib/boards/dnd.test.ts |
