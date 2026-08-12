@@ -8,6 +8,28 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.16.0](https://github.com/cuongtranba/kanna/compare/v1.15.0...v1.16.0) (2026-08-12)
+
+
+### Features
+
+* **boards:** kanban boards — Start work, SQLite store, GitHub sync, agent tools ([#645](https://github.com/cuongtranba/kanna/issues/645)) ([91b9f0a](https://github.com/cuongtranba/kanna/commit/91b9f0add1b280b9bd33d3f62f6ecf11adf9358e))
+* **boards:** open a board in the workspace, show its chats, define its cards ([#646](https://github.com/cuongtranba/kanna/issues/646)) ([5bead4e](https://github.com/cuongtranba/kanna/commit/5bead4e25d2a326dd87ea8007efba6cd0acdb38f))
+* **chat:** /clear and /compact [instructions] as real Kanna commands ([#649](https://github.com/cuongtranba/kanna/issues/649)) ([a193638](https://github.com/cuongtranba/kanna/commit/a193638eb664ae8b3b1ab222be4857490ed9a551))
+* **panes:** close a tab with a middle click ([#648](https://github.com/cuongtranba/kanna/issues/648)) ([965d069](https://github.com/cuongtranba/kanna/commit/965d0696421ea56799f558ca94eeaba41f573971))
+* **panes:** make pane resizing reachable — grabbable divider, keyboard nudges, tab width ([#647](https://github.com/cuongtranba/kanna/issues/647)) ([861bba4](https://github.com/cuongtranba/kanna/commit/861bba4c1f0710e931e7b6b0b932588907b165ea))
+
+
+### Bug Fixes
+
+* **codex:** keep transient turns alive and classify failure reasons ([#643](https://github.com/cuongtranba/kanna/issues/643)) ([a257391](https://github.com/cuongtranba/kanna/commit/a25739122fc0e9bb0fc3708e25791269a9364801))
+* **mermaid:** validate the model's diagrams at creation instead of patching spellings ([#641](https://github.com/cuongtranba/kanna/issues/641)) ([6cb1445](https://github.com/cuongtranba/kanna/commit/6cb1445856e99b9c989dd1c40ca5c311853312ce))
+
+
+### Performance Improvements
+
+* **chat:** bound tab-open cost by bytes, cache the transcript tail, free chat slices ([#644](https://github.com/cuongtranba/kanna/issues/644)) ([b583c03](https://github.com/cuongtranba/kanna/commit/b583c0393e25724513d6a651ee101285c6436bde))
+
 ## [1.15.0](https://github.com/cuongtranba/kanna/compare/v1.14.1...v1.15.0) (2026-08-09)
 
 
