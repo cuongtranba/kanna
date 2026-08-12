@@ -1,6 +1,6 @@
 ---
 id: c3-224
-c3-seal: 739362607f0697a74bdc5a923bf39c2152f9e4e686d8c8d4fef40dbc4aace0e3
+c3-seal: 563cb3af5377c129478fb73a25c3c86f46ed31f9076863034c0025fb0914f257
 title: oauth-token-pool
 type: component
 category: feature
@@ -31,7 +31,7 @@ Own the multi-token Anthropic OAuth pool: pick the right token per chat turn, pr
 
 ## Purpose
 
-Maintains an in-memory refcounted reservation index (Map<tokenId, Set<chatId>>) plus the token state machine over the OAuth tokens persisted in app settings under `claudeAuth.tokens`. Selects an eligible token for each spawn via `pickActive(chatId)` with cap-aware spread-load semantics: per-token `maxConcurrent` (1–5) admits up to N concurrent chats on the same token, defaulting to `ClaudeAuthSettings.concurrencyDefault` when omitted. Owners are returned to the rotation layer in `agent.ts` via `takeStaleOwners(id)` before `markLimited` / `markError` so the layer can drive a deduped, staggered respawn for every shared owner (per `adr-20260522-oauth-token-share-cap`). Classifies why each token is unusable via `describeUnavailability(chatId)` for the refusal UI, naming every chat in the multi-owner case. Non-goals: the OAuth login flow itself (handled in settings UI), the launch-password gate (c3-203), persistent token storage (delegated to app-settings under c3-204 / c3-206 boundary), event sourcing — pool state is settings-backed by design because tokens are user secrets, not derivable from the event log.
+Maintains an in-memory refcounted reservation index (Map<tokenId, Set<chatId>>) plus the token state machine over the OAuth tokens persisted in app settings under `claudeAuth.tokens`. Selects an eligible token for each spawn via `pickActive(chatId)` with cap-aware spread-load semantics: per-token `maxConcurrent` (any integer at or above 1; no upper bound — the operator owns the rate-limit policy) admits up to N concurrent chats on the same token, defaulting to `ClaudeAuthSettings.concurrencyDefault` when omitted. Owners are returned to the rotation layer in `agent.ts` via `takeStaleOwners(id)` before `markLimited` / `markError` so the layer can drive a deduped, staggered respawn for every shared owner (per `adr-20260522-oauth-token-share-cap`, whose 1–5 range is lifted by `adr-20260812-unbound-oauth-token-concurrency`). Classifies why each token is unusable via `describeUnavailability(chatId)` for the refusal UI, naming every chat in the multi-owner case. Non-goals: the OAuth login flow itself (handled in settings UI), the launch-password gate (c3-203), persistent token storage (delegated to app-settings under c3-204 / c3-206 boundary), event sourcing — pool state is settings-backed by design because tokens are user secrets, not derivable from the event log.
 
 ## Foundational Flow
 
@@ -65,7 +65,7 @@ Maintains an in-memory refcounted reservation index (Map<tokenId, Set<chatId>>) 
 
 | Surface | Direction | Contract | Boundary | Evidence |
 | --- | --- | --- | --- | --- |
-| pickActive(reservedFor?) | OUT | Returns the LRU-eligible token for caller, binds reservation under refcounted Set<chatId>. A token admits up to tokenCap(token) distinct chats (per-token maxConcurrent or ClaudeAuthSettings.concurrencyDefault, clamped to [1,5]). Re-entrant pickActive returns the caller's already-owned token; otherwise spreads load by owner-count ASC then LRU. Revives expired-limited tokens. Null when none eligible. | c3-210 | src/server/oauth-pool/oauth-token-pool.ts |
+| pickActive(reservedFor?) | OUT | Returns the LRU-eligible token for caller, binds reservation under refcounted Set<chatId>. A token admits up to tokenCap(token) distinct chats (per-token maxConcurrent or ClaudeAuthSettings.concurrencyDefault, routed through the shared clampTokenConcurrency — rounded, floored at 1, no ceiling). Re-entrant pickActive returns the caller's already-owned token; otherwise spreads load by owner-count ASC then LRU. Revives expired-limited tokens. Null when none eligible. | c3-210 | src/server/oauth-pool/oauth-token-pool.ts |
 | pickEphemeral() | OUT | Returns EphemeralLease under synthetic key so concurrent ephemeral callers (quick-response, subagent oneShot) do not collide. Counts against the picked token's cap; release() frees the slot. | c3-213 | src/server/oauth-pool/oauth-token-pool.ts |
 | markLimited(id, resetAt) | IN | Marks token limited until resetAt; clears the local owner set. Caller MUST invoke takeStaleOwners(id) BEFORE markLimited to drive coordinated rotation for all shared owners. | c3-210 | src/server/oauth-pool/oauth-token-pool.ts |
 | markError(id, message) | IN | Marks token errored (401); clears the local owner set. Same takeStaleOwners precondition as markLimited. | c3-210 | src/server/oauth-pool/oauth-token-pool.ts |

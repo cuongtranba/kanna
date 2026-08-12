@@ -34,9 +34,10 @@ import {
   normalizeCodexModelId,
   OAUTH_TOKEN_CONCURRENCY_DEFAULT,
   OAUTH_TOKEN_LABEL_MAX,
-  OAUTH_TOKEN_MAX_CONCURRENT_MAX,
   OAUTH_TOKEN_MAX_CONCURRENT_MIN,
   OAUTH_TOKEN_VALUE_MAX,
+  clampTokenConcurrency,
+  isTokenConcurrency,
   PROVIDERS,
   PUSH_DEFAULTS,
   isValidVapidSubject,
@@ -768,19 +769,11 @@ function normalizeTokenEntry<T>(value: T, warnings: string[]): OAuthTokenEntry |
   if (src.maxConcurrent !== undefined) {
     if (typeof src.maxConcurrent !== "number" || !Number.isFinite(src.maxConcurrent)) {
       warnings.push("claudeAuth.tokens entry maxConcurrent must be a number")
-    } else if (
-      src.maxConcurrent < OAUTH_TOKEN_MAX_CONCURRENT_MIN
-      || src.maxConcurrent > OAUTH_TOKEN_MAX_CONCURRENT_MAX
-    ) {
+    } else if (!isTokenConcurrency(src.maxConcurrent)) {
       warnings.push(
-        `claudeAuth.tokens entry maxConcurrent must be between ${OAUTH_TOKEN_MAX_CONCURRENT_MIN} and ${OAUTH_TOKEN_MAX_CONCURRENT_MAX}`,
+        `claudeAuth.tokens entry maxConcurrent must be at least ${OAUTH_TOKEN_MAX_CONCURRENT_MIN}`,
       )
-      maxConcurrent = clampNumber(
-        src.maxConcurrent,
-        OAUTH_TOKEN_CONCURRENCY_DEFAULT,
-        OAUTH_TOKEN_MAX_CONCURRENT_MIN,
-        OAUTH_TOKEN_MAX_CONCURRENT_MAX,
-      )
+      maxConcurrent = clampTokenConcurrency(src.maxConcurrent)
     } else {
       maxConcurrent = Math.round(src.maxConcurrent)
     }
@@ -927,19 +920,11 @@ function normalizeClaudeAuth<T>(value: T, warnings: string[]): ClaudeAuthSetting
   if (src.concurrencyDefault !== undefined) {
     if (typeof src.concurrencyDefault !== "number" || !Number.isFinite(src.concurrencyDefault)) {
       warnings.push("claudeAuth.concurrencyDefault must be a number")
-    } else if (
-      src.concurrencyDefault < OAUTH_TOKEN_MAX_CONCURRENT_MIN
-      || src.concurrencyDefault > OAUTH_TOKEN_MAX_CONCURRENT_MAX
-    ) {
+    } else if (!isTokenConcurrency(src.concurrencyDefault)) {
       warnings.push(
-        `claudeAuth.concurrencyDefault must be between ${OAUTH_TOKEN_MAX_CONCURRENT_MIN} and ${OAUTH_TOKEN_MAX_CONCURRENT_MAX}`,
+        `claudeAuth.concurrencyDefault must be at least ${OAUTH_TOKEN_MAX_CONCURRENT_MIN}`,
       )
-      concurrencyDefault = clampNumber(
-        src.concurrencyDefault,
-        OAUTH_TOKEN_CONCURRENCY_DEFAULT,
-        OAUTH_TOKEN_MAX_CONCURRENT_MIN,
-        OAUTH_TOKEN_MAX_CONCURRENT_MAX,
-      )
+      concurrencyDefault = clampTokenConcurrency(src.concurrencyDefault)
     } else {
       concurrencyDefault = Math.round(src.concurrencyDefault)
     }
@@ -1885,9 +1870,9 @@ export class AppSettingsManager {
       if (typeof v !== "number" || !Number.isFinite(v)) {
         throw new Error("claudeAuth.concurrencyDefault must be a number")
       }
-      if (v < OAUTH_TOKEN_MAX_CONCURRENT_MIN || v > OAUTH_TOKEN_MAX_CONCURRENT_MAX) {
+      if (!isTokenConcurrency(v)) {
         throw new Error(
-          `claudeAuth.concurrencyDefault must be between ${OAUTH_TOKEN_MAX_CONCURRENT_MIN} and ${OAUTH_TOKEN_MAX_CONCURRENT_MAX}`,
+          `claudeAuth.concurrencyDefault must be at least ${OAUTH_TOKEN_MAX_CONCURRENT_MIN}`,
         )
       }
     }

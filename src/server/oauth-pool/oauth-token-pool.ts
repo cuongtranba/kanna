@@ -1,4 +1,5 @@
 import type { OAuthTokenEntry } from "../../shared/types"
+import { OAUTH_TOKEN_CONCURRENCY_DEFAULT, clampTokenConcurrency } from "../../shared/types"
 
 export type TokenStatusPatch = Partial<Pick<OAuthTokenEntry,
   "status" | "limitedUntil" | "lastUsedAt" | "lastErrorAt" | "lastErrorMessage"
@@ -21,9 +22,6 @@ export interface EphemeralLease {
   release(): void
 }
 
-const ABSOLUTE_MIN_CAP = 1
-const ABSOLUTE_MAX_CAP = 5
-
 export class OAuthTokenPool {
   // tokenId -> set of chat ids currently bound to that token. A token may
   // be bound by up to `tokenCap(token)` chats concurrently (see ADR
@@ -39,18 +37,14 @@ export class OAuthTokenPool {
     private readonly readTokens: () => OAuthTokenEntry[],
     private readonly writeStatus: (id: string, patch: TokenStatusPatch) => void,
     private readonly now: () => number = Date.now,
-    private readonly readGlobalCap: () => number = () => ABSOLUTE_MIN_CAP,
+    private readonly readGlobalCap: () => number = () => OAUTH_TOKEN_CONCURRENCY_DEFAULT,
   ) {}
 
   private tokenCap(t: OAuthTokenEntry): number {
     const raw = typeof t.maxConcurrent === "number" && Number.isFinite(t.maxConcurrent)
       ? t.maxConcurrent
       : this.readGlobalCap()
-    if (!Number.isFinite(raw)) return ABSOLUTE_MIN_CAP
-    const rounded = Math.round(raw)
-    if (rounded < ABSOLUTE_MIN_CAP) return ABSOLUTE_MIN_CAP
-    if (rounded > ABSOLUTE_MAX_CAP) return ABSOLUTE_MAX_CAP
-    return rounded
+    return clampTokenConcurrency(raw)
   }
 
   private getOwners(tokenId: string): Set<string> {

@@ -589,6 +589,25 @@ describe("OAuthTokenPool concurrency cap (adr-20260522-oauth-token-share-cap)", 
     expect(pool.pickActive("c4")).toBe(null)
   })
 
+  test("per-token maxConcurrent above 5 admits that many chats", () => {
+    const pool = new OAuthTokenPool(
+      () => [tok("a", { maxConcurrent: 8 })],
+      () => {}, () => 1000,
+    )
+    for (let i = 1; i <= 8; i++) expect(pool.pickActive(`chat-${i}`)?.id).toBe("a")
+    expect(pool.pickActive("chat-9")).toBe(null)
+  })
+
+  test("global default cap above 5 applies to tokens without an override", () => {
+    const pool = new OAuthTokenPool(
+      () => [tok("a")],
+      () => {}, () => 1000,
+      () => 7,
+    )
+    for (let i = 1; i <= 7; i++) expect(pool.pickActive(`c${i}`)?.id).toBe("a")
+    expect(pool.pickActive("c8")).toBe(null)
+  })
+
   test("per-token maxConcurrent overrides global default", () => {
     const pool = new OAuthTokenPool(
       () => [tok("a", { maxConcurrent: 1 }), tok("b", { maxConcurrent: 2 })],
