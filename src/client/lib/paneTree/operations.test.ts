@@ -9,6 +9,7 @@ import {
   resizeGroup,
   splitPane,
 } from "./operations"
+import { MIN_PANE_FRACTION } from "./sizes"
 import { buildTabId } from "./tabTarget"
 import { collectPanes, createGroup, createPane, createTab, findPaneContainingTab, getTreeDepth } from "./tree"
 import { DEFAULT_PANE_ID, MAX_TREE_DEPTH, type PaneLayout } from "./types"
@@ -41,6 +42,16 @@ function twoPaneLayout(): PaneLayout {
     ]),
     focusedPaneId: "pa",
   }
+}
+
+/** The same two panes, with the left one given an explicit share. */
+function skewed(left: number) {
+  return createGroup(
+    "g1",
+    "horizontal",
+    [createPane("pa", [term("a")]), createPane("pb", [term("b")])],
+    [left, 1 - left],
+  )
 }
 
 describe("splitPane", () => {
@@ -366,6 +377,23 @@ describe("resizeGroup", () => {
   test("returns null for an unknown group or a zero delta", () => {
     expect(resizeGroup(twoPaneLayout(), "nope", 0, 0.2)).toBeNull()
     expect(resizeGroup(twoPaneLayout(), "g1", 0, 0)).toBeNull()
+  })
+
+  test("truncates the last step onto the floor rather than overshooting it", () => {
+    const layout: PaneLayout = { ...twoPaneLayout(), root: skewed(0.13) }
+    const next = resizeGroup(layout, "g1", 0, -0.05)
+    expect(next?.root.kind === "group" && next.root.sizes[0]).toBeCloseTo(MIN_PANE_FRACTION, 10)
+  })
+
+  test("returns null once the boundary is already at the floor", () => {
+    // What keeps a held arrow key from re-rendering the tree forever.
+    const layout: PaneLayout = { ...twoPaneLayout(), root: skewed(MIN_PANE_FRACTION) }
+    expect(resizeGroup(layout, "g1", 0, -0.05)).toBeNull()
+  })
+
+  test("returns null for a boundary index past the last pair", () => {
+    // Why findResizeBoundary must never emit `children.length - 1`.
+    expect(resizeGroup(twoPaneLayout(), "g1", 1, 0.05)).toBeNull()
   })
 })
 

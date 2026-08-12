@@ -68,4 +68,6 @@ export {
   type PaneRect,
 } from "./navigation"
 
+export { KEYBOARD_RESIZE_STEP, findResizeBoundary, type PaneResizeBoundary } from "./resize"
+
 export { normalizeLayout } from "./normalize"

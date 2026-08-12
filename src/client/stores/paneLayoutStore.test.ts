@@ -125,6 +125,58 @@ describe("paneLayoutStore", () => {
     if (after.kind !== "group") return
     expect(after.sizes[0]).toBeCloseTo(0.65, 6)
   })
+
+  /** A horizontal split; returns the pane ids left-to-right. */
+  function splitHorizontally(): string[] {
+    s().openTab({ kind: "chat", chatId: "c1" })
+    s().openTab({ kind: "terminal", terminalId: "t1" })
+    const paneId = collectPanes(s().getLayout().root)[0]!.id
+    s().splitPane({ tabId: "terminal_2_t1", targetPaneId: paneId, position: "right" })
+    return collectPanes(s().getLayout().root).map((pane) => pane.id)
+  }
+
+  function leftShare(): number {
+    const root = s().getLayout().root
+    return root.kind === "group" ? root.sizes[0]! : Number.NaN
+  }
+
+  test("resizeFocusedPane moves the divider toward the arrow", () => {
+    const [left] = splitHorizontally()
+    s().focusPane(left!)
+    s().resizeFocusedPane("right")
+    expect(leftShare()).toBeCloseTo(0.55, 6)
+  })
+
+  /**
+   * The end-to-end proof of the divider model: one boundary moves the same way
+   * whichever side of it holds focus. Under a "right always grows me" rule this
+   * case would come back 0.45 and the divider would travel against the key.
+   */
+  test("the divider moves identically from the pane on either side of it", () => {
+    const [, right] = splitHorizontally()
+    s().focusPane(right!)
+    s().resizeFocusedPane("right")
+    expect(leftShare()).toBeCloseTo(0.55, 6)
+  })
+
+  test("resizeFocusedPane leaves state untouched when there is no boundary", () => {
+    splitHorizontally()
+    const before = s().getLayout()
+
+    s().resizeFocusedPane("down")
+    expect(s().getLayout()).toBe(before)
+
+    usePaneLayoutStore.setState({ layout: { ...before, focusedPaneId: null } })
+    const unfocused = s().getLayout()
+    s().resizeFocusedPane("right")
+    expect(s().getLayout()).toBe(unfocused)
+  })
+
+  test("resizeFocusedPane is inert on the default single pane", () => {
+    const before = s().getLayout()
+    s().resizeFocusedPane("right")
+    expect(s().getLayout()).toBe(before)
+  })
 })
 
 describe("paneLayoutStore persistence", () => {

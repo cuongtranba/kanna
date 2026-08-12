@@ -9,6 +9,8 @@ import {
 } from "../../lib/chatStatusIndicator"
 import { cn } from "../../lib/utils"
 import { isMobileViewport } from "../../lib/viewport"
+import { DEFAULT_TAB_MIN_WIDTH } from "../../../shared/pane-tab-width"
+import { useAppSettingsStore } from "../../stores/appSettingsStore"
 import { useViewportStore } from "../../stores/viewportStore"
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip"
 import { SHELL_TOP_BAND_CLASS } from "../../lib/shellChrome"
@@ -53,6 +55,12 @@ export function PaneTabStrip({
 }: PaneTabStripProps) {
   const viewportWidth = useViewportStore((state) => state.width)
   const isPhone = isMobileViewport(viewportWidth)
+  // A scalar, so the selector is reference-stable without useShallow. The phone
+  // floor still wins: it exists because a touch strip cannot rely on hover
+  // tooltips to tell icon-only tabs apart.
+  const tabMinWidth = useAppSettingsStore(
+    (state) => state.settings?.panes.tabMinWidth ?? DEFAULT_TAB_MIN_WIDTH,
+  )
   const canSplit = !isPhone
   // A split moves the active tab into the new pane, so the pane must have
   // another tab left to show. Splitting its only tab is refused by the engine —
@@ -63,7 +71,7 @@ export function PaneTabStrip({
     availableWidth: width,
     tabCount: pane.tabs.length,
     actionsWidth: canSplit ? ACTIONS_WIDTH : 0,
-    minTabWidth: isPhone ? PHONE_MIN_TAB_WIDTH : undefined,
+    minTabWidth: isPhone ? PHONE_MIN_TAB_WIDTH : tabMinWidth,
   })
 
   const handleSplitRight = useCallback(() => onSplit("right"), [onSplit])

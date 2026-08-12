@@ -63,6 +63,25 @@ describe("SplitContainer on a phone", () => {
     expect(html).toContain("content-pb")
   })
 
+  /**
+   * A tablet and a phone held sideways are both above the breakpoint, so they
+   * already get real dividers — which is the whole of Kanna's touch resize
+   * story. Pinning both widths means a future breakpoint change cannot quietly
+   * take dividers away from those devices.
+   */
+  test("gives tablets and landscape phones a draggable divider", async () => {
+    for (const width of [1024, 844]) {
+      useViewportStore.setState({ width, height: 600 })
+
+      const { html, cleanup } = await render(split)
+      await cleanup()
+
+      expect(html).not.toContain('data-pane-mobile="true"')
+      expect(html).toContain("data-separator")
+      expect(html).toContain("pointer-coarse:w-5")
+    }
+  })
+
   test("renders the tree when the viewport has not been measured yet", async () => {
     // Width 0 means "unmeasured", not "narrow" — first paint must not flash the
     // phone view before the resize subscription reports a real width.

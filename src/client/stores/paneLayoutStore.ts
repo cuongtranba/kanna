@@ -5,6 +5,7 @@ import {
   collectPanes,
   createDefaultLayout,
   findAdjacentPane,
+  findResizeBoundary,
   focusPane as focusPaneInLayout,
   focusTab as focusTabInLayout,
   moveTabToPane as moveTabInLayout,
@@ -55,6 +56,8 @@ interface PaneLayoutState {
   moveTabToPane: (tabId: string, toPaneId: string, index?: number) => void
   /** Keyboard: move focus to the nearest pane in a direction. */
   focusAdjacentPane: (direction: PaneDirection) => void
+  /** Keyboard: nudge the divider beside the focused pane the way the arrow points. */
+  resizeFocusedPane: (direction: PaneDirection) => void
   /** Keyboard: step the focused pane's active tab, wrapping at both ends. */
   cycleFocusedPaneTab: (delta: number) => void
   /** Keyboard: close the focused pane's active tab. */
@@ -128,6 +131,14 @@ export const usePaneLayoutStore = create<PaneLayoutState>()(
             if (!layout.focusedPaneId) return null
             const nextId = findAdjacentPane(layout.root, layout.focusedPaneId, direction)
             return nextId ? focusPaneInLayout(layout, nextId) : null
+          }),
+
+        resizeFocusedPane: (direction) =>
+          apply((layout) => {
+            if (!layout.focusedPaneId) return null
+            const boundary = findResizeBoundary(layout.root, layout.focusedPaneId, direction)
+            if (!boundary) return null
+            return resizeGroupInLayout(layout, boundary.groupId, boundary.index, boundary.deltaRatio)
           }),
 
         cycleFocusedPaneTab: (delta) =>

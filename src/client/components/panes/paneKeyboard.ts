@@ -12,6 +12,8 @@ import type { PaneDirection, SplitPosition } from "../../lib/paneTree"
 
 export type PaneCommand =
   | { kind: "focus"; direction: PaneDirection }
+  /** Nudge the divider beside the focused pane the way the arrow points. */
+  | { kind: "resize"; direction: PaneDirection }
   | { kind: "split"; position: SplitPosition }
   | { kind: "closeTab" }
   /** +1 is the next tab in the focused pane, -1 the previous; both wrap. */
@@ -23,6 +25,10 @@ const PANE_COMMANDS: ReadonlyArray<readonly [KeybindingAction, PaneCommand]> = [
   ["focusPaneRight", { kind: "focus", direction: "right" }],
   ["focusPaneUp", { kind: "focus", direction: "up" }],
   ["focusPaneDown", { kind: "focus", direction: "down" }],
+  ["resizePaneLeft", { kind: "resize", direction: "left" }],
+  ["resizePaneRight", { kind: "resize", direction: "right" }],
+  ["resizePaneUp", { kind: "resize", direction: "up" }],
+  ["resizePaneDown", { kind: "resize", direction: "down" }],
   ["splitPaneRight", { kind: "split", position: "right" }],
   ["splitPaneDown", { kind: "split", position: "bottom" }],
   ["closePaneTab", { kind: "closeTab" }],

@@ -3,6 +3,9 @@ import {
   normalizeClaudeModelId,
   normalizeCodexModelId,
   supportsClaudeMaxReasoningEffort,
+  DEFAULT_KEYBINDINGS,
+  KEYBINDING_ACTIONS,
+  type KeybindingAction,
   PROVIDERS,
   OPENROUTER_BASE_URL,
   OPENROUTER_MODELS_URL,
@@ -10,6 +13,24 @@ import {
   mergeCustomModels,
   type CustomModelEntry,
 } from "./types"
+
+/**
+ * `KEYBINDING_ACTIONS` is a `satisfies` array, not a `Record`, so the compiler
+ * never notices an action missing from it — and a missing entry silently costs
+ * the action its Settings row and its key on disk. These are that check.
+ */
+describe("keybinding registration", () => {
+  test("KEYBINDING_ACTIONS lists every action in DEFAULT_KEYBINDINGS", () => {
+    expect([...KEYBINDING_ACTIONS].sort()).toEqual(
+      Object.keys(DEFAULT_KEYBINDINGS).sort() as KeybindingAction[],
+    )
+  })
+
+  test("no two actions claim the same default binding", () => {
+    const bindings = Object.values(DEFAULT_KEYBINDINGS).flat()
+    expect(bindings).toEqual([...new Set(bindings)])
+  })
+})
 
 describe("shared model normalization", () => {
   test("normalizes Claude aliases via the provider catalog", () => {

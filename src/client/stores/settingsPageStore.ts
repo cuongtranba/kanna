@@ -48,6 +48,7 @@ interface SettingsPageState {
   pushDeviceId: string | null
   scrollbackDraft: string
   minColumnWidthDraft: string
+  tabMinWidthDraft: string
   uploadMaxFileSizeDraft: string
   claudeIdleMinutesDraft: string
   claudeMaxConcurrentDraft: string
@@ -104,6 +105,7 @@ interface SettingsPageState {
   setPushDeviceId: (deviceId: string | null) => void
   setScrollbackDraft: (draft: string) => void
   setMinColumnWidthDraft: (draft: string) => void
+  setTabMinWidthDraft: (draft: string) => void
   setUploadMaxFileSizeDraft: (draft: string) => void
   setClaudeIdleMinutesDraft: (draft: string) => void
   setClaudeMaxConcurrentDraft: (draft: string) => void
@@ -159,6 +161,7 @@ export const useSettingsPageStore = create<SettingsPageState>()((set, get) => ({
   pushDeviceId: getStoredPushDeviceId(),
   scrollbackDraft: "",
   minColumnWidthDraft: "",
+  tabMinWidthDraft: "",
   uploadMaxFileSizeDraft: "",
   claudeIdleMinutesDraft: "",
   claudeMaxConcurrentDraft: "",
@@ -247,6 +250,7 @@ export const useSettingsPageStore = create<SettingsPageState>()((set, get) => ({
   setPushDeviceId: (deviceId) => set({ pushDeviceId: deviceId }),
   setScrollbackDraft: (draft) => set({ scrollbackDraft: draft }),
   setMinColumnWidthDraft: (draft) => set({ minColumnWidthDraft: draft }),
+  setTabMinWidthDraft: (draft) => set({ tabMinWidthDraft: draft }),
   setUploadMaxFileSizeDraft: (draft) => set({ uploadMaxFileSizeDraft: draft }),
   setClaudeIdleMinutesDraft: (draft) => set({ claudeIdleMinutesDraft: draft }),
   setClaudeMaxConcurrentDraft: (draft) => set({ claudeMaxConcurrentDraft: draft }),

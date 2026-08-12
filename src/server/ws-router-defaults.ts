@@ -25,6 +25,7 @@ import type {
   LlmProviderValidationResult,
   Subagent,
 } from "../shared/types"
+import { DEFAULT_TAB_MIN_WIDTH } from "../shared/pane-tab-width"
 import type { AppSettingsManager } from "./app-settings"
 
 // ---------------------------------------------------------------------------
@@ -82,6 +83,10 @@ export function mergeAppSettingsPatch(
     terminal: {
       ...snapshot.terminal,
       ...patch.terminal,
+    },
+    panes: {
+      ...snapshot.panes,
+      ...patch.panes,
     },
     editor: {
       ...snapshot.editor,
@@ -164,6 +169,9 @@ export function buildInitialAppSettingsSnapshot(): AppSettingsSnapshot {
     terminal: {
       scrollbackLines: 1_000,
       minColumnWidth: 450,
+    },
+    panes: {
+      tabMinWidth: DEFAULT_TAB_MIN_WIDTH,
     },
     editor: {
       preset: "cursor",

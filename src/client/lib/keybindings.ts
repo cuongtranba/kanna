@@ -21,6 +21,10 @@ export const KEYBINDING_ACTION_LABELS: Record<KeybindingAction, string> = {
   closePaneTab: "Close Tab",
   nextPaneTab: "Next Tab",
   previousPaneTab: "Previous Tab",
+  resizePaneLeft: "Resize Pane Left",
+  resizePaneRight: "Resize Pane Right",
+  resizePaneUp: "Resize Pane Up",
+  resizePaneDown: "Resize Pane Down",
 }
 
 export function formatKeybindingInput(bindings: string[] | undefined) {

@@ -11,6 +11,7 @@ import {
   type McpServerConfig,
 } from "../shared/types"
 import { buildAgentAppSettingsView } from "./server"
+import { DEFAULT_TAB_MIN_WIDTH } from "../shared/pane-tab-width"
 
 function makeSnapshot(overrides: Partial<AppSettingsSnapshot> = {}): AppSettingsSnapshot {
   return {
@@ -20,6 +21,7 @@ function makeSnapshot(overrides: Partial<AppSettingsSnapshot> = {}): AppSettings
     chatSoundPreference: "always",
     chatSoundId: "funk",
     terminal: { scrollbackLines: 1000, minColumnWidth: 450 },
+    panes: { tabMinWidth: DEFAULT_TAB_MIN_WIDTH },
     editor: { preset: "vscode", commandTemplate: "code {path}" },
     defaultProvider: "last_used",
     providerDefaults: {
