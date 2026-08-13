@@ -302,7 +302,7 @@ describe("dequeueAndStartQueuedMessage", () => {
         },
       ] as TranscriptEntry[],
     })
-    await dequeueAndStartQueuedMessage(deps, "chat-1", queued)
+    await dequeueAndStartQueuedMessage(deps, "chat-1", queued, { replay: true })
     expect(deps.startTurnCalled[0]?.appendUserPrompt).toBe(false)
   })
 
@@ -313,7 +313,7 @@ describe("dequeueAndStartQueuedMessage", () => {
         { _id: "e1", createdAt: 1, kind: "context_cleared" },
       ] as TranscriptEntry[],
     })
-    await dequeueAndStartQueuedMessage(deps, "chat-1", makeQueuedMessage({ content: "hello" }))
+    await dequeueAndStartQueuedMessage(deps, "chat-1", makeQueuedMessage({ content: "hello" }), { replay: true })
     expect(deps.startTurnCalled[0]?.appendUserPrompt).toBe(true)
   })
 

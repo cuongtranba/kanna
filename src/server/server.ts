@@ -678,7 +678,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   // delay the listener coming up.
   void recoverQueuedMessages({
     listChatsWithQueuedMessages: () => store.listChatsWithQueuedMessages(),
-    maybeStartNextQueuedMessage: (chatId) => agent.maybeStartNextQueuedMessage(chatId),
+    maybeStartNextQueuedMessage: (chatId, options) => agent.maybeStartNextQueuedMessage(chatId, options),
   }).then((recovered) => {
     if (recovered.length > 0) {
       log.info("[kanna] resumed queued messages after restart", { chats: recovered.length })

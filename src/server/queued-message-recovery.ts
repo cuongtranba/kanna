@@ -21,7 +21,7 @@ import { log } from "../shared/log"
 
 export interface QueuedMessageRecoveryDeps {
   listChatsWithQueuedMessages(): string[]
-  maybeStartNextQueuedMessage(chatId: string): Promise<boolean>
+  maybeStartNextQueuedMessage(chatId: string, options?: { replay?: boolean }): Promise<boolean>
 }
 
 /**
@@ -39,7 +39,7 @@ export async function recoverQueuedMessages(
   const recovered: string[] = []
   for (const chatId of deps.listChatsWithQueuedMessages()) {
     try {
-      if (await deps.maybeStartNextQueuedMessage(chatId)) recovered.push(chatId)
+      if (await deps.maybeStartNextQueuedMessage(chatId, { replay: true })) recovered.push(chatId)
     } catch (error) {
       log.warn("[kanna] queued-message recovery failed", { chatId, error: String(error) })
     }

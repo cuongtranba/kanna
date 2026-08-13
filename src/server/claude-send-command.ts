@@ -324,7 +324,7 @@ export async function dequeueAndStartQueuedMessage(
   deps: SendCommandDeps,
   chatId: string,
   queuedMessage: QueuedChatMessage,
-  options?: { steered?: boolean },
+  options?: { steered?: boolean; replay?: boolean },
 ): Promise<void> {
   // Released only once the message's effect is durable — see `onTurnRecorded`.
   // Removing it up front lost the message outright when the process died
@@ -357,7 +357,11 @@ export async function dequeueAndStartQueuedMessage(
   // case; agent-driven wakes with a meaningful custom prompt still appear.
   const isRateLimitFallback = queuedMessage.autoContinue !== undefined
     && queuedMessage.content === "continue"
-  const alreadyAppended = !options?.steered
+  // Only the boot-recovery path can replay a prompt a crashed turn already
+  // wrote, and reading the transcript here costs a full load + deep clone —
+  // so the steady-state drain never pays for it.
+  const alreadyAppended = options?.replay === true
+    && !options.steered
     && isPromptAlreadyAppended(deps.store.getMessages(chatId), queuedMessage)
 
   await deps.startTurnForChat({
@@ -383,13 +387,14 @@ export async function dequeueAndStartQueuedMessage(
 export async function maybeStartNextQueuedMessage(
   deps: SendCommandDeps,
   chatId: string,
+  options?: { replay?: boolean },
 ): Promise<boolean> {
   if (isChatBusy(deps, chatId)) return false
   const nextQueuedMessage = typeof deps.store.getQueuedMessages === "function"
     ? deps.store.getQueuedMessages(chatId)[0]
     : undefined
   if (!nextQueuedMessage) return false
-  await dequeueAndStartQueuedMessage(deps, chatId, nextQueuedMessage)
+  await dequeueAndStartQueuedMessage(deps, chatId, nextQueuedMessage, options)
   return true
 }
 
