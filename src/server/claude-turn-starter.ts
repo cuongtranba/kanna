@@ -129,6 +129,13 @@ export interface StartTurnForChatArgs {
   autoContinue?: { scheduleId: string }
   userClearedContext?: boolean
   profile?: SendToStartingProfile | null
+  /**
+   * Invoked once `turn_started` is durably recorded — the point after which
+   * this turn is replayable from the event log. Callers that hold the turn's
+   * only durable trigger (a queued message) release it here, so a crash
+   * before this point leaves the trigger intact instead of losing the turn.
+   */
+  onTurnRecorded?: () => Promise<void>
 }
 
 interface StartTurnAfterTurnStartedCtx {
@@ -291,6 +298,7 @@ async function startTurnForChatInner(
   logSendToStartingProfile(args.profile, "start_turn.turn_started_recorded", {
     chatId: args.chatId,
   })
+  await args.onTurnRecorded?.()
 
   try {
     await startTurnAfterTurnStarted(deps, {

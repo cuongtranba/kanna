@@ -989,6 +989,40 @@ adr-20260616-subagent-run-in-background.
   timeout. Every delivery is a real event, never a self-poll — no runaway
   budget is meaningful here.
 
+# Queued messages are released on commit, not on dequeue
+
+A queued message is a chat's only durable "start this once idle" trigger. For a
+user it is a convenience; for an autonomous loop the wake **is** the queued
+message, so losing one strands a still-armed loop with nothing left to wake it.
+
+`dequeueAndStartQueuedMessage` therefore no longer removes the message up
+front. It passes `StartTurnForChatArgs.onTurnRecorded` — invoked the moment
+`recordTurnStarted` makes the turn replayable from the event log — and the
+removal happens there. `runBuiltinCommand` takes the same callback so `/clear`
+releases after the context wipe and `/compact` at its turn record. **Do not
+move the release earlier**: removing it before the turn is durable is exactly
+the bug (chat c87ab0ad, 2026-08-13 — pm2 restarted the server 150 ms after the
+prompt was appended and before `recordTurnStarted`; the loop stayed armed, its
+queue was empty, and it sat dead for 2.5 h until the user typed "Resume").
+
+`recoverQueuedMessages` (`queued-message-recovery.ts`, called from
+`server.ts` boot, detached) is the other half: nothing on boot ever drained the
+queue — it was drained only by live events — so a surviving message would still
+sit forever. Recovery is best-effort and sequential; a chat that refuses to
+start is logged and skipped, never fatal to boot.
+
+Replay is idempotent via `isPromptAlreadyAppended`: a turn that appended its
+`user_prompt` and then died leaves that entry trailing, so the restart passes
+`appendUserPrompt: false`. Identity is the durable `autoContinue.scheduleId`
+when present, else exact content, and only against the TRAILING entry — in
+steady state that is a `result`, never the prompt about to run.
+
+Residual window (accepted): a crash between `recordTurnStarted` and the spawn
+still loses the wake. That is two adjacent store writes, down from the whole
+spawn — which on a slow MCP boot was seconds.
+
+See `adr-20260813-queued-message-dequeue-on-commit`.
+
 # Notification-Driven Loop Orchestration (supersedes Agent Self-Scheduled Wake)
 
 Long-horizon autonomous loops (eslint burn-downs, migration sweeps, multi-hour
