@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.16.2](https://github.com/cuongtranba/kanna/compare/v1.16.1...v1.16.2) (2026-08-13)
+
+
+### Bug Fixes
+
+* **loop:** survive a server restart mid-wake, and bound transcript memory ([#654](https://github.com/cuongtranba/kanna/issues/654)) ([5a5cbb9](https://github.com/cuongtranba/kanna/commit/5a5cbb96af4480945610c1378ba395b122ad9abb))
+
 ## [1.16.1](https://github.com/cuongtranba/kanna/compare/v1.16.0...v1.16.1) (2026-08-12)
 
 
