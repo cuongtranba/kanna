@@ -989,6 +989,76 @@ adr-20260616-subagent-run-in-background.
   timeout. Every delivery is a real event, never a self-poll — no runaway
   budget is meaningful here.
 
+# Queued messages are released on commit, not on dequeue
+
+A queued message is a chat's only durable "start this once idle" trigger. For a
+user it is a convenience; for an autonomous loop the wake **is** the queued
+message, so losing one strands a still-armed loop with nothing left to wake it.
+
+`dequeueAndStartQueuedMessage` therefore no longer removes the message up
+front. It passes `StartTurnForChatArgs.onTurnRecorded` — invoked the moment
+`recordTurnStarted` makes the turn replayable from the event log — and the
+removal happens there. `runBuiltinCommand` takes the same callback so `/clear`
+releases after the context wipe and `/compact` at its turn record. **Do not
+move the release earlier**: removing it before the turn is durable is exactly
+the bug (chat c87ab0ad, 2026-08-13 — pm2 restarted the server 150 ms after the
+prompt was appended and before `recordTurnStarted`; the loop stayed armed, its
+queue was empty, and it sat dead for 2.5 h until the user typed "Resume").
+
+`recoverQueuedMessages` (`queued-message-recovery.ts`, called from
+`server.ts` boot, detached) is the other half: nothing on boot ever drained the
+queue — it was drained only by live events — so a surviving message would still
+sit forever. Recovery is best-effort and sequential; a chat that refuses to
+start is logged and skipped, never fatal to boot.
+
+Replay is idempotent via `isPromptAlreadyAppended`: a turn that appended its
+`user_prompt` and then died leaves that entry trailing, so the restart passes
+`appendUserPrompt: false`. Identity is the durable `autoContinue.scheduleId`
+when present, else exact content, and only against the TRAILING entry — in
+steady state that is a `result`, never the prompt about to run.
+
+The check is gated behind `{ replay: true }`, which ONLY `recoverQueuedMessages`
+passes. Reading the transcript costs a full load plus a deep clone, and replay
+is the only path that can hit a stale prompt — so the steady-state drain never
+pays for it. Keep it that way: dropping the gate puts a MB-scale read on every
+queued send.
+
+Residual window (accepted): a crash between `recordTurnStarted` and the spawn
+still loses the wake. That is two adjacent store writes, down from the whole
+spawn — which on a slow MCP boot was seconds.
+
+See `adr-20260813-queued-message-dequeue-on-commit`.
+
+# Transcript memory is bounded by bytes, and loaded lazily
+
+Transcript JSONL is never compacted, so a chat's transcript has no size limit
+(measured on one install: 379 MB across 152 chats, largest 13.7 MB). Two
+consequences, both fixed — and both easy to reintroduce.
+
+**`TranscriptCache` budgets bytes, not chats.** `maxChats = 4` was never a
+memory bound: MEASURED, the four largest transcripts on that install cost
+**220 MB RSS** (~4.7x their 47 MB of source text, parsed to JS objects). The
+cache now enforces `maxBytes` (default 24 MiB of SOURCE bytes ≈ 110 MB RSS)
+alongside the chat cap, and always retains the most recent entry so a single
+oversized transcript degrades to a re-read instead of thrashing. `set()` takes
+the source size — `loadTranscriptWithBytes` hands it over for free — and falls
+back to `estimateTranscriptBytes` when a caller has no cheap size. **A count
+cap over unbounded-size items is not a bound**; do not swap back.
+
+**`startTurnForChat` no longer loads the transcript per turn.**
+`store.getMessages` loads the whole file AND deep-clones it — tens of MB of
+heap on a big chat, every turn, pinning that chat in the LRU. It is now behind
+`loadExistingMessages`, a thunk. The title check short-circuits on
+`chat.title === "New Chat"` and `!chat.hasMessages` first, so an established
+chat never triggers the load; the primer thunk runs only when a primer is
+actually built. Adding an unconditional `deps.store.getMessages(...)` back to
+this path silently restores the whole cost.
+
+Still unbounded, deliberately out of scope here: `state.subagentRunsByChatId`
+and `state.autoContinueEventsByChatId` are evicted only by whole-chat delete.
+The latter is MEASURED at 285 KB for one long loop chat, 91% of it the same
+rendered loop prompt re-embedded on every wake by `deliverSubagentToMain`.
+
 # Notification-Driven Loop Orchestration (supersedes Agent Self-Scheduled Wake)
 
 Long-horizon autonomous loops (eslint burn-downs, migration sweeps, multi-hour

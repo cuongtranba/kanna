@@ -129,6 +129,13 @@ export interface StartTurnForChatArgs {
   autoContinue?: { scheduleId: string }
   userClearedContext?: boolean
   profile?: SendToStartingProfile | null
+  /**
+   * Invoked once `turn_started` is durably recorded — the point after which
+   * this turn is replayable from the event log. Callers that hold the turn's
+   * only durable trigger (a queued message) release it here, so a crash
+   * before this point leaves the trigger intact instead of losing the turn.
+   */
+  onTurnRecorded?: () => Promise<void>
 }
 
 interface StartTurnAfterTurnStartedCtx {
@@ -137,7 +144,8 @@ interface StartTurnAfterTurnStartedCtx {
   starting: StartingTurn
   chat: ChatRecord
   project: ProjectRecord
-  existingMessages: TranscriptEntry[]
+  /** Lazy: loads + clones the whole transcript, so only the primer path calls it. */
+  loadExistingMessages: () => TranscriptEntry[]
   shouldGenerateTitle: boolean
   optimisticTitle: string | null
   appendedUserMessageId: string | null
@@ -231,8 +239,16 @@ async function startTurnForChatInner(
     planMode: args.planMode,
   })
 
-  const existingMessages = deps.store.getMessages(args.chatId)
-  const shouldGenerateTitle = args.appendUserPrompt && chat.title === "New Chat" && existingMessages.length === 0
+  // Both reads below are lazy on purpose. `store.getMessages` loads the WHOLE
+  // transcript from disk and then deep-clones it — on a MB-scale chat that is
+  // tens of MB of heap per turn, and it pins that chat in the transcript LRU.
+  // The `&&` chain short-circuits for any chat that already has a title, and
+  // the primer thunk runs only when a primer is actually built.
+  const loadExistingMessages = () => deps.store.getMessages(args.chatId)
+  const shouldGenerateTitle = args.appendUserPrompt
+    && chat.title === "New Chat"
+    && !chat.hasMessages
+    && loadExistingMessages().length === 0
   const optimisticTitle = shouldGenerateTitle ? fallbackTitleFromMessage(args.content) : null
 
   if (optimisticTitle) {
@@ -291,6 +307,7 @@ async function startTurnForChatInner(
   logSendToStartingProfile(args.profile, "start_turn.turn_started_recorded", {
     chatId: args.chatId,
   })
+  await args.onTurnRecorded?.()
 
   try {
     await startTurnAfterTurnStarted(deps, {
@@ -298,7 +315,7 @@ async function startTurnForChatInner(
       starting,
       chat,
       project,
-      existingMessages,
+      loadExistingMessages,
       shouldGenerateTitle,
       optimisticTitle,
       appendedUserMessageId,
@@ -370,7 +387,7 @@ async function startTurnAfterTurnStarted(
   deps: StartTurnDeps,
   ctx: StartTurnAfterTurnStartedCtx,
 ): Promise<void> {
-  const { args, starting, chat, project, existingMessages, shouldGenerateTitle, optimisticTitle, appendedUserMessageId } = ctx
+  const { args, starting, chat, project, loadExistingMessages, shouldGenerateTitle, optimisticTitle, appendedUserMessageId } = ctx
   if (shouldGenerateTitle) {
     void deps.generateTitleInBackground(args.chatId, args.content, project.localPath, optimisticTitle ?? "New Chat")
   }
@@ -411,7 +428,7 @@ async function startTurnAfterTurnStarted(
   )
   const userPromptText = buildPromptText(args.content, args.attachments)
   const primer = shouldPrime
-    ? buildHistoryPrimer(existingMessages, targetProvider, userPromptText)
+    ? buildHistoryPrimer(loadExistingMessages(), targetProvider, userPromptText)
     : null
   const promptContent = primer ?? userPromptText
 

@@ -428,6 +428,12 @@ export class EventStore implements PushEventStore {
 
   listAutoContinueChats(): string[] { return [...this.state.autoContinueEventsByChatId.keys()] }
 
+  listChatsWithQueuedMessages(): string[] {
+    return [...this.state.queuedMessagesByChatId.entries()]
+      .filter(([, entries]) => entries.length > 0)
+      .map(([chatId]) => chatId)
+  }
+
   // ─── Peripheral event methods (thin delegates) ───────────────────────────
 
   async appendTunnelEvent(event: CloudflareTunnelEvent): Promise<void> { return PeripheralEvents.appendTunnelEvent(this.buildPeripheralEventsDeps(), event) }

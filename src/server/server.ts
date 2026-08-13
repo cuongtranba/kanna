@@ -67,6 +67,7 @@ import { resolveStructuredDoc } from "../shared/structured-doc/registry"
 import { createLoopTrackingRegistry } from "./loop-tracking-registry"
 import { readTrackingFile, watchTrackingFile } from "./loop-tracking-io.adapter"
 import { rehydrateLoopTracking } from "./loop-tracking-sync"
+import { recoverQueuedMessages } from "./queued-message-recovery"
 import { createWorkflowRegistry } from "./workflow-registry"
 import { LocalCatalogService } from "./local-catalog"
 import { defaultHomeDir, scanLocalCatalog, statMtimes } from "./local-catalog-io.adapter"
@@ -673,6 +674,16 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     { getAutoContinueEvents: (chatId) => store.getAutoContinueEvents(chatId), registry: loopTrackingRegistry },
     store.listAutoContinueChats(),
   )
+  // Detached: a recovered chat spawns a provider session, which must not
+  // delay the listener coming up.
+  void recoverQueuedMessages({
+    listChatsWithQueuedMessages: () => store.listChatsWithQueuedMessages(),
+    maybeStartNextQueuedMessage: (chatId, options) => agent.maybeStartNextQueuedMessage(chatId, options),
+  }).then((recovered) => {
+    if (recovered.length > 0) {
+      log.info("[kanna] resumed queued messages after restart", { chats: recovered.length })
+    }
+  })
 
   await tunnelGateway.reapOrphanedTunnels()
   const staleEmptyChatPruneInterval = setInterval(() => {

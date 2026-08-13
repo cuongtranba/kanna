@@ -706,8 +706,8 @@ export class AgentCoordinator {
   }
 
   /** @internal Delegates to maybeStartNextQueuedMessageFn — see claude-send-command.ts. */
-  async maybeStartNextQueuedMessage(chatId: string) {
-    return maybeStartNextQueuedMessageFn(this.buildSendCommandDeps(), chatId)
+  async maybeStartNextQueuedMessage(chatId: string, options?: { replay?: boolean }) {
+    return maybeStartNextQueuedMessageFn(this.buildSendCommandDeps(), chatId, options)
   }
 
   /** @internal Delegates to clearChatContextFn — see claude-context-commands.ts. */

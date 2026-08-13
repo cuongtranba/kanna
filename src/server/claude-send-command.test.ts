@@ -16,7 +16,7 @@ import {
   sendCommand,
   type SendCommandDeps,
 } from "./claude-send-command"
-import type { QueuedChatMessage, ChatAttachment, CustomModelEntry } from "../shared/types"
+import type { QueuedChatMessage, ChatAttachment, CustomModelEntry, TranscriptEntry } from "../shared/types"
 import type { StartTurnForChatArgs } from "./claude-turn-starter"
 import type { CompactionTurnKind } from "./claude-session-state"
 import { buildCodexCompactPrompt } from "../shared/builtin-commands"
@@ -58,6 +58,12 @@ type DepsOptions = {
   customModels?: readonly CustomModelEntry[]
   clearedChatIds?: string[]
   activeTurn?: { compactionTurn?: CompactionTurnKind }
+  /**
+   * Whether the fake turn reaches its durable `recordTurnStarted` commit
+   * point. `false` simulates the process dying mid-spawn.
+   */
+  turnReachesCommit?: boolean
+  transcript?: TranscriptEntry[]
 }
 
 function makeDeps(opts: DepsOptions = {}): SendCommandDeps & { startTurnCalled: StartTurnForChatArgs[] } {
@@ -107,7 +113,7 @@ function makeDeps(opts: DepsOptions = {}): SendCommandDeps & { startTurnCalled: 
         removedMessages.push({ chatId, id })
       },
       getQueuedMessages: (_chatId: string) => queuedMessages,
-      getMessages: (_chatId: string) => [],
+      getMessages: (_chatId: string) => opts.transcript ?? [],
     },
     activeTurns: {
       has: (chatId: string) => activeChatIds.has(chatId),
@@ -134,7 +140,10 @@ function makeDeps(opts: DepsOptions = {}): SendCommandDeps & { startTurnCalled: 
       stopLoopCalled.push(`${chatId}:${reason}`)
     },
     emitStateChange: (chatId: string) => { emitStateCalled.push(chatId) },
-    startTurnForChat: async (args: StartTurnForChatArgs) => { startTurnCalled.push(args) },
+    startTurnForChat: async (args: StartTurnForChatArgs) => {
+      startTurnCalled.push(args)
+      if (opts.turnReachesCommit ?? true) await args.onTurnRecorded?.()
+    },
     clearChatContext: async (chatId: string) => { (opts.clearedChatIds ?? []).push(chatId) },
   }
 }
@@ -259,12 +268,63 @@ describe("enqueueMessage", () => {
 // ---------------------------------------------------------------------------
 
 describe("dequeueAndStartQueuedMessage", () => {
-  test("removes message from store before starting turn", async () => {
+  test("removes the message once the turn reaches its durable commit point", async () => {
     const removedMessages: Array<{ chatId: string; id: string }> = []
     const deps = makeDeps({ removedMessages })
     const msg = makeQueuedMessage({ id: "qm-abc" })
     await dequeueAndStartQueuedMessage(deps, "chat-1", msg)
     expect(removedMessages).toEqual([{ chatId: "chat-1", id: "qm-abc" }])
+  })
+
+  test("keeps the message queued when the turn dies before recording", async () => {
+    const removedMessages: Array<{ chatId: string; id: string }> = []
+    const deps = makeDeps({ removedMessages, turnReachesCommit: false })
+    await dequeueAndStartQueuedMessage(deps, "chat-1", makeQueuedMessage({ id: "qm-abc" }))
+    expect(removedMessages).toEqual([])
+  })
+
+  test("does not re-append a prompt a crashed turn already wrote", async () => {
+    const queued = makeQueuedMessage({
+      content: "orchestrator wake",
+      autoContinue: { scheduleId: "sched-9" },
+    })
+    const deps = makeDeps({
+      chatProvider: "claude",
+      transcript: [
+        { _id: "e1", createdAt: 1, kind: "context_cleared" },
+        {
+          _id: "e2",
+          createdAt: 2,
+          kind: "user_prompt",
+          content: "orchestrator wake",
+          attachments: [],
+          autoContinue: { scheduleId: "sched-9" },
+        },
+      ] as TranscriptEntry[],
+    })
+    await dequeueAndStartQueuedMessage(deps, "chat-1", queued, { replay: true })
+    expect(deps.startTurnCalled[0]?.appendUserPrompt).toBe(false)
+  })
+
+  test("appends the prompt when the trailing entry is not that prompt", async () => {
+    const deps = makeDeps({
+      chatProvider: "claude",
+      transcript: [
+        { _id: "e1", createdAt: 1, kind: "context_cleared" },
+      ] as TranscriptEntry[],
+    })
+    await dequeueAndStartQueuedMessage(deps, "chat-1", makeQueuedMessage({ content: "hello" }), { replay: true })
+    expect(deps.startTurnCalled[0]?.appendUserPrompt).toBe(true)
+  })
+
+  test("keeps the message queued when starting the turn throws", async () => {
+    const removedMessages: Array<{ chatId: string; id: string }> = []
+    const deps = makeDeps({ removedMessages })
+    deps.startTurnForChat = async () => { throw new Error("spawn failed") }
+    await expect(
+      dequeueAndStartQueuedMessage(deps, "chat-1", makeQueuedMessage({ id: "qm-abc" })),
+    ).rejects.toThrow("spawn failed")
+    expect(removedMessages).toEqual([])
   })
 
   test("calls startTurnForChat with resolved provider", async () => {

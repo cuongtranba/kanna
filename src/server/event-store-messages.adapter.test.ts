@@ -410,6 +410,49 @@ describe("TranscriptCache", () => {
     expect(reads()).toBe(6)
   })
 
+  test("evicts on the byte budget while still under the chat cap", () => {
+    const files = new Map([
+      transcriptFile("chat-a"), transcriptFile("chat-b"), transcriptFile("chat-c"),
+    ])
+    const { storage, reads } = countingStorage(files)
+    // One transcript is ~150 bytes; a 260-byte budget holds two, not four.
+    const deps = makeDeps({ storage, transcriptCache: new TranscriptCache(4, 260) })
+
+    getMessages(deps, "chat-a")
+    getMessages(deps, "chat-b")
+    expect(reads()).toBe(2)
+    getMessages(deps, "chat-c") // budget exceeded -> evicts chat-a despite cap 4
+    expect(reads()).toBe(3)
+    getMessages(deps, "chat-a")
+    expect(reads()).toBe(4)
+  })
+
+  test("keeps the newest transcript even when it alone exceeds the budget", () => {
+    const files = new Map([transcriptFile("chat-a")])
+    const { storage, reads } = countingStorage(files)
+    const deps = makeDeps({ storage, transcriptCache: new TranscriptCache(4, 1) })
+
+    getMessages(deps, "chat-a")
+    getMessages(deps, "chat-a") // must still be a cache hit, not a thrash
+    expect(reads()).toBe(1)
+  })
+
+  test("appended entries count toward the byte budget", () => {
+    const cache = new TranscriptCache(4, 400)
+    const files = new Map([transcriptFile("chat-a"), transcriptFile("chat-b")])
+    const { storage, reads } = countingStorage(files)
+    const deps = makeDeps({ storage, transcriptCache: cache })
+
+    getMessages(deps, "chat-a")
+    getMessages(deps, "chat-b")
+    expect(reads()).toBe(2)
+
+    cache.appendTo("chat-b", { _id: "big", createdAt: 3, kind: "assistant_text", text: "x".repeat(300) })
+
+    getMessages(deps, "chat-a") // chat-a evicted by chat-b's growth
+    expect(reads()).toBe(3)
+  })
+
   test("page reads clone only the returned window (mutation does not leak into cache)", () => {
     const files = new Map([transcriptFile("chat-a")])
     const deps = makeDeps({ storage: makeStorage(files), transcriptCache: new TranscriptCache(4) })

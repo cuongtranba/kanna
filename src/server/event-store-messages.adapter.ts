@@ -31,10 +31,33 @@ import {
  * Replaces the former single-chat `cachedTranscriptRef` so switching between
  * a handful of chats does not re-read MB-scale JSONL files from disk.
  */
+export function estimateTranscriptBytes(entries: readonly TranscriptEntry[]): number {
+  return JSON.stringify(entries).length
+}
+
+/**
+ * Default budget, counted in SOURCE JSONL bytes rather than heap bytes.
+ * Measured amplification from JSONL text to parsed JS objects is ~4.7x, so
+ * 24 MiB of transcript costs on the order of 110 MB RSS.
+ */
+const DEFAULT_TRANSCRIPT_CACHE_MAX_BYTES = 24 * 1024 * 1024
+
 export class TranscriptCache {
   private readonly byChat = new Map<string, TranscriptEntry[]>()
+  private readonly bytesByChat = new Map<string, number>()
+  private totalBytes = 0
 
-  constructor(private readonly maxChats: number = 4) {}
+  /**
+   * `maxChats` alone was never a memory bound: a transcript has no size limit
+   * (the JSONL is never compacted), so "4 chats" measured 220 MB RSS on this
+   * install's four largest. `maxBytes` bounds the resource actually being
+   * spent. Both are enforced, and the most recent entry is always retained so
+   * a single oversized transcript degrades to a re-read, never a thrash.
+   */
+  constructor(
+    private readonly maxChats: number = 4,
+    private readonly maxBytes: number = DEFAULT_TRANSCRIPT_CACHE_MAX_BYTES,
+  ) {}
 
   /** Returns the cached entries (touching LRU recency), or undefined. */
   get(chatId: string): TranscriptEntry[] | undefined {
@@ -45,19 +68,24 @@ export class TranscriptCache {
     return entries
   }
 
-  set(chatId: string, entries: TranscriptEntry[]): void {
-    this.byChat.delete(chatId)
+  /**
+   * `bytes` is the transcript's source size. Callers holding the file text
+   * pass its length for free; the rest fall back to measuring.
+   */
+  set(chatId: string, entries: TranscriptEntry[], bytes?: number): void {
+    this.drop(chatId)
     this.byChat.set(chatId, entries)
-    while (this.byChat.size > this.maxChats) {
-      const oldest = this.byChat.keys().next().value
-      if (oldest === undefined) break
-      this.byChat.delete(oldest)
-    }
+    this.addBytes(chatId, bytes ?? estimateTranscriptBytes(entries))
+    this.evict()
   }
 
   /** Appends to a cached transcript; no-op when the chat is not cached. */
   appendTo(chatId: string, entry: TranscriptEntry): void {
-    this.byChat.get(chatId)?.push(entry)
+    const entries = this.byChat.get(chatId)
+    if (!entries) return
+    entries.push(entry)
+    this.addBytes(chatId, estimateTranscriptBytes([entry]))
+    this.evict()
   }
 
   has(chatId: string): boolean {
@@ -65,13 +93,38 @@ export class TranscriptCache {
   }
 
   invalidate(chatId: string): void {
-    this.byChat.delete(chatId)
+    this.drop(chatId)
     this.tailByChat.delete(chatId)
   }
 
   invalidateAll(): void {
     this.byChat.clear()
+    this.bytesByChat.clear()
+    this.totalBytes = 0
     this.tailByChat.clear()
+  }
+
+  private addBytes(chatId: string, bytes: number): void {
+    this.bytesByChat.set(chatId, (this.bytesByChat.get(chatId) ?? 0) + bytes)
+    this.totalBytes += bytes
+  }
+
+  private drop(chatId: string): void {
+    if (!this.byChat.delete(chatId)) return
+    this.totalBytes -= this.bytesByChat.get(chatId) ?? 0
+    this.bytesByChat.delete(chatId)
+  }
+
+  /** Evicts LRU-first until both bounds hold, never dropping the last entry. */
+  private evict(): void {
+    while (
+      this.byChat.size > 1
+      && (this.byChat.size > this.maxChats || this.totalBytes > this.maxBytes)
+    ) {
+      const oldest = this.byChat.keys().next().value
+      if (oldest === undefined) break
+      this.drop(oldest)
+    }
   }
 
   // ─── Tail-window cache ───────────────────────────────────────────────────
@@ -383,13 +436,25 @@ export function loadTranscriptFromDisk(
   deps: MessageReadDeps,
   chatId: string,
 ): TranscriptEntry[] {
+  return loadTranscriptWithBytes(deps, chatId).entries
+}
+
+/**
+ * Same load, also reporting the source byte size the cache budgets on — free
+ * here (the text is already in hand), and far cheaper than re-measuring the
+ * parsed entries.
+ */
+export function loadTranscriptWithBytes(
+  deps: MessageReadDeps,
+  chatId: string,
+): { entries: TranscriptEntry[]; bytes: number } {
   const tPath = transcriptPath(deps, chatId)
   if (!deps.storage.existsSync(tPath)) {
-    return []
+    return { entries: [], bytes: 0 }
   }
 
   const text = deps.storage.readTextSync(tPath)
-  if (!text.trim()) return []
+  if (!text.trim()) return { entries: [], bytes: 0 }
 
   const entries: TranscriptEntry[] = []
   const seen = getSeenMessageIds(deps, chatId)
@@ -403,7 +468,7 @@ export function loadTranscriptFromDisk(
       seen.add(mid)
     }
   }
-  return entries
+  return { entries, bytes: text.length }
 }
 
 /**
@@ -422,8 +487,8 @@ export function getMessagesView(deps: MessageReadDeps, chatId: string): readonly
     return copy
   }
 
-  const entries = loadTranscriptFromDisk(deps, chatId)
-  deps.transcriptCache.set(chatId, entries)
+  const { entries, bytes } = loadTranscriptWithBytes(deps, chatId)
+  deps.transcriptCache.set(chatId, entries, bytes)
   return entries
 }
 

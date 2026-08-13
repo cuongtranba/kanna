@@ -267,9 +267,11 @@ export async function runBuiltinCommand(
   command: BuiltinCommand,
   provider: AgentProvider,
   settings: ProviderSettings,
+  onCommitted?: () => Promise<void>,
 ): Promise<void> {
   if (command.name === "clear") {
     await deps.clearChatContext(chatId)
+    await onCommitted?.()
     return
   }
 
@@ -285,10 +287,33 @@ export async function runBuiltinCommand(
     serviceTier: settings.serviceTier,
     planMode: false,
     appendUserPrompt: false,
+    onTurnRecorded: onCommitted,
   })
 
   const active = deps.activeTurns.get(chatId)
   if (active) active.compactionTurn = cliPassthrough ? "user" : "codex_summary"
+}
+
+/**
+ * True when the transcript already ends with the `user_prompt` this queued
+ * message would append.
+ *
+ * Only reachable on replay: a turn that appended its prompt and then died
+ * before `recordTurnStarted` leaves the message queued (dequeue-on-commit),
+ * so boot recovery restarts it. Identity is the durable `autoContinue`
+ * scheduleId when present, else exact content — and only against the TRAILING
+ * entry, which in steady state is a `result`, never the prompt about to run.
+ */
+export function isPromptAlreadyAppended(
+  messages: readonly TranscriptEntry[],
+  queuedMessage: QueuedChatMessage,
+): boolean {
+  const last = messages[messages.length - 1]
+  if (last?.kind !== "user_prompt") return false
+  if (queuedMessage.autoContinue) {
+    return last.autoContinue?.scheduleId === queuedMessage.autoContinue.scheduleId
+  }
+  return last.content === queuedMessage.content
 }
 
 /**
@@ -299,9 +324,13 @@ export async function dequeueAndStartQueuedMessage(
   deps: SendCommandDeps,
   chatId: string,
   queuedMessage: QueuedChatMessage,
-  options?: { steered?: boolean },
+  options?: { steered?: boolean; replay?: boolean },
 ): Promise<void> {
-  await deps.store.removeQueuedMessage(chatId, queuedMessage.id)
+  // Released only once the message's effect is durable — see `onTurnRecorded`.
+  // Removing it up front lost the message outright when the process died
+  // mid-spawn, which silently stranded autonomous loops whose only wake
+  // trigger it was. See adr-20260813-queued-message-dequeue-on-commit.
+  const release = () => deps.store.removeQueuedMessage(chatId, queuedMessage.id)
   const chat = deps.store.requireChat(chatId)
 
   // Mentions no longer short-circuit the main turn (Anthropic-style
@@ -316,7 +345,7 @@ export async function dequeueAndStartQueuedMessage(
   // a builtin there has nothing to act on, so it falls through as text.
   const builtin = options?.steered ? null : parseBuiltinCommand(queuedMessage.content)
   if (builtin) {
-    await runBuiltinCommand(deps, chatId, builtin, provider, settings)
+    await runBuiltinCommand(deps, chatId, builtin, provider, settings, release)
     await maybeStartNextQueuedMessage(deps, chatId)
     return
   }
@@ -328,6 +357,12 @@ export async function dequeueAndStartQueuedMessage(
   // case; agent-driven wakes with a meaningful custom prompt still appear.
   const isRateLimitFallback = queuedMessage.autoContinue !== undefined
     && queuedMessage.content === "continue"
+  // Only the boot-recovery path can replay a prompt a crashed turn already
+  // wrote, and reading the transcript here costs a full load + deep clone —
+  // so the steady-state drain never pays for it.
+  const alreadyAppended = options?.replay === true
+    && !options.steered
+    && isPromptAlreadyAppended(deps.store.getMessages(chatId), queuedMessage)
 
   await deps.startTurnForChat({
     chatId,
@@ -338,9 +373,10 @@ export async function dequeueAndStartQueuedMessage(
     effort: settings.effort,
     serviceTier: settings.serviceTier,
     planMode: settings.planMode,
-    appendUserPrompt: !isRateLimitFallback,
+    appendUserPrompt: !isRateLimitFallback && !alreadyAppended,
     steered: options?.steered,
     autoContinue: queuedMessage.autoContinue,
+    onTurnRecorded: release,
   })
 }
 
@@ -351,13 +387,14 @@ export async function dequeueAndStartQueuedMessage(
 export async function maybeStartNextQueuedMessage(
   deps: SendCommandDeps,
   chatId: string,
+  options?: { replay?: boolean },
 ): Promise<boolean> {
   if (isChatBusy(deps, chatId)) return false
   const nextQueuedMessage = typeof deps.store.getQueuedMessages === "function"
     ? deps.store.getQueuedMessages(chatId)[0]
     : undefined
   if (!nextQueuedMessage) return false
-  await dequeueAndStartQueuedMessage(deps, chatId, nextQueuedMessage)
+  await dequeueAndStartQueuedMessage(deps, chatId, nextQueuedMessage, options)
   return true
 }
 
