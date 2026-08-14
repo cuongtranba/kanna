@@ -61,6 +61,10 @@ export function mergeAppSettingsPatch(
       ...settings.push,
       ...patch.push,
     },
+    telemetry: {
+      ...settings.telemetry,
+      ...patch.telemetry,
+    },
     claudeAuth: {
       tokens: patch.claudeAuth?.tokens ?? settings.claudeAuth.tokens,
       concurrencyDefault: patch.claudeAuth?.concurrencyDefault ?? settings.claudeAuth.concurrencyDefault,

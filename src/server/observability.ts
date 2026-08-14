@@ -63,6 +63,17 @@ export async function withSpan<T>(
 const counters = new Map<string, Counter>()
 const upDowns = new Map<string, UpDownCounter>()
 
+/**
+ * A cached instrument is bound to the meter provider that created it, so a
+ * runtime provider swap (telemetry toggled in Settings) would leave every
+ * cached counter recording into a shut-down provider. The adapter calls this
+ * on each provider transition; the next add() re-resolves from the global.
+ */
+export function resetMetricInstrumentCache(): void {
+  counters.clear()
+  upDowns.clear()
+}
+
 /** Increments a monotonic counter (e.g. turns started, wakes recovered). */
 export function addCounter(name: string, value: number, attributes?: Attributes): void {
   let counter = counters.get(name)

@@ -177,6 +177,26 @@ export const PUSH_DEFAULTS: PushSettings = {
   contactSubject: DEFAULT_VAPID_SUBJECT,
 }
 
+// ---------------------------------------------------------------------------
+// Telemetry (OTel traces + metrics)
+// ---------------------------------------------------------------------------
+
+/**
+ * User-facing switch for Kanna's OTel export. Each install reports under a
+ * service name derived from the machine's display name, so `enabled` is the
+ * whole opt-out: turning it off stops span + metric export at runtime. The
+ * KANNA_OTEL env var still overrides in both directions (see otel-config.ts).
+ */
+export interface TelemetrySettings {
+  enabled: boolean
+  endpoint: string
+}
+
+export const TELEMETRY_DEFAULTS: TelemetrySettings = {
+  enabled: true,
+  endpoint: "https://kanna-otel.lowbit.link",
+}
+
 export type CloudflareTunnelMode = "always-ask" | "auto-expose"
 
 export interface CloudflareTunnelSettings {
@@ -336,6 +356,7 @@ export interface AppSettingsSnapshot {
   filePathDisplay: string
   cloudflareTunnel: CloudflareTunnelSettings
   push: PushSettings
+  telemetry: TelemetrySettings
   auth: AuthSettings
   claudeAuth: ClaudeAuthSettings
   uploads: UploadSettings
@@ -378,6 +399,7 @@ export interface AppSettingsPatch {
   }
   cloudflareTunnel?: Partial<CloudflareTunnelSettings>
   push?: Partial<PushSettings>
+  telemetry?: Partial<TelemetrySettings>
   auth?: Partial<AuthSettings>
   claudeAuth?: Partial<ClaudeAuthSettings>
   uploads?: Partial<UploadSettings>

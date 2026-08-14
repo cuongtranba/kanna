@@ -235,7 +235,6 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   const strictPort = options.strictPort ?? false
   const runtimeProfile = getRuntimeProfile()
   const store = new EventStore(options.dataDir)
-  const observability = initObservability({ dataDir: store.dataDir })
   const diffStore = new DiffStore(store.dataDir)
   const machineDisplayName = getMachineDisplayName()
   await store.initialize()
@@ -316,6 +315,16 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   const keybindings = new KeybindingsManager()
   const appSettings = new AppSettingsManager(path.join(store.dataDir, "settings.json"))
   await appSettings.initialize()
+  // Deliberately after the settings load: the telemetry setting gates OTel
+  // export, and the memlog + heap-snapshot concerns lose nothing by starting
+  // a few ms later. The onChange hook is what makes the Settings toggle
+  // apply without a restart.
+  const observability = initObservability({
+    dataDir: store.dataDir,
+    telemetry: appSettings.getSnapshot().telemetry,
+    machineName: machineDisplayName,
+  })
+  appSettings.onChange((snapshot) => observability.applyTelemetrySettings(snapshot.telemetry))
   const pushManager = new PushManager({
     store,
     sender: realWebPushSender,
