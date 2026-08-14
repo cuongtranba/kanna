@@ -37,6 +37,7 @@ import type { BackgroundRunOutcome } from "./subagent-orchestrator"
 import type { ClaudeSessionState } from "./claude-session-state"
 import type { ArmedLoopInfo, SetupLoopHandlerResult } from "./kanna-mcp"
 import { log } from "../shared/log"
+import { addCounter, withSpan } from "./observability"
 
 // ---------------------------------------------------------------------------
 // Structural sub-interfaces — only the operations this module calls.
@@ -49,6 +50,10 @@ interface LoopCommandStore {
   getAutoContinueEvents(chatId: string): AutoContinueEvent[]
   setSessionTokenForProvider(chatId: string, provider: AgentProvider, token: string | null): Promise<void>
   appendMessage(chatId: string, entry: TranscriptEntry): Promise<void>
+  /** Chats that have ever recorded an auto-continue event — the armed-loop candidates. */
+  listAutoContinueChats(): string[]
+  /** Queued messages for a chat; a survivor here means queue recovery owns the wake. */
+  getQueuedMessages(chatId: string): readonly { id: string }[]
 }
 
 // ---------------------------------------------------------------------------
@@ -125,6 +130,13 @@ export interface LoopCommandDeps {
    * `coordinator.isLoopArmed = () => ({...})`.
    */
   isLoopArmed(chatId: string): LoopState | null
+
+  /**
+   * Single busy predicate (active turn, booting turn, parked tool, self-wake).
+   * Wired to `isChatBusy` in claude-session-state-queries — never re-derive
+   * from the underlying maps here.
+   */
+  isChatBusy(chatId: string): boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -218,6 +230,19 @@ export async function deliverSubagentToMain(
   outcome: BackgroundRunOutcome,
 ): Promise<void> {
   if (!deps.store.getChat(chatId)) return
+  return withSpan(
+    "kanna.loop.wake.deliver",
+    { "kanna.chat_id": chatId, "kanna.run_id": runId, "kanna.outcome": outcome.status },
+    () => deliverSubagentToMainInner(deps, chatId, runId, outcome),
+  )
+}
+
+async function deliverSubagentToMainInner(
+  deps: LoopCommandDeps,
+  chatId: string,
+  runId: string,
+  outcome: BackgroundRunOutcome,
+): Promise<void> {
 
   // Structured re-entry: the completion is delivered as the same
   // <task-notification> XML Claude Code's own background agents use
@@ -296,6 +321,64 @@ export async function deliverSubagentToMain(
   } catch (err) {
     log.warn(`[kanna] deliverSubagentToMain failed`, { chatId, runId, err })
   }
+}
+
+
+/**
+ * Boot recovery for the OTHER lost-wake window: a loop whose background
+ * subagent died WITH the server. `recoverQueuedMessages` replays a wake that
+ * reached the queue; this covers the wake that never got that far — the run
+ * was in flight (or its delivery was mid-write in `deliverSubagentToMain`,
+ * whose four steps are not atomic) when the process died. Observed twice as a
+ * silently-stalled loop: chat c87ab0ad on 2026-08-13 (OOM at 09:31 killed run
+ * fc17bee6 seven minutes in) and chat 5cea83a7 on 2026-08-14 (OOM at 18:40:13
+ * landed 118 ms after `loop_run_outcome`, before `auto_continue_accepted`).
+ *
+ * The invariant this restores: an ARMED loop always has exactly one pending
+ * wake — a running subagent, a queued message, or an active turn. At boot no
+ * subagent survives the dead process, so armed + idle + empty queue proves
+ * the wake is lost, and the recovery re-emits it from the durable
+ * `LoopState.prompt`. Idempotent by construction: the orchestrator re-reads
+ * the tracking file and re-delegates whatever the plan still lists.
+ *
+ * Best-effort and per-chat isolated, like `recoverQueuedMessages` — a chat
+ * that refuses to recover is logged and skipped, never fatal to boot.
+ */
+export async function recoverArmedLoopWakes(deps: LoopCommandDeps): Promise<string[]> {
+  const recovered: string[] = []
+  for (const chatId of deps.store.listAutoContinueChats()) {
+    try {
+      const armed = deps.isLoopArmed(chatId)
+      if (!armed) continue
+      if (deps.isChatBusy(chatId)) continue
+      if (deps.store.getQueuedMessages(chatId).length > 0) continue
+
+      await clearClaudeSessionContext(deps, chatId)
+      await deps.store.appendMessage(chatId, timestamped({ kind: "context_cleared" }))
+      const now = Date.now()
+      await deps.emitAutoContinueEvent({
+        v: AUTO_CONTINUE_EVENT_VERSION,
+        kind: "auto_continue_accepted",
+        timestamp: now,
+        chatId,
+        scheduleId: crypto.randomUUID(),
+        scheduledAt: now,
+        tz: "system",
+        source: "subagent_background",
+        resetAt: now,
+        detectedAt: now,
+        prompt: `The server was restarted while your loop's wake was in flight, so the`
+          + ` previous background run's outcome may be missing from the plan.`
+          + ` Re-read the tracking file and continue from what it records.\n\n${
+           armed.prompt}`,
+      })
+      recovered.push(chatId)
+      addCounter("kanna.loop.wake.recovered", 1)
+    } catch (err) {
+      log.warn("[kanna] armed-loop wake recovery failed", { chatId, err })
+    }
+  }
+  return recovered
 }
 
 /**

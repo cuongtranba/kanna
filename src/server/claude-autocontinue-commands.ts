@@ -15,6 +15,7 @@ import { AUTO_CONTINUE_EVENT_VERSION, type AutoContinueEvent } from "./auto-cont
 import { deriveChatSchedules } from "./auto-continue/read-model"
 import type { SendMessageOptions } from "./claude-steer-log"
 import { timestamped } from "./claude-message-normalizer"
+import { addCounter } from "./observability"
 
 // ---------------------------------------------------------------------------
 // Structural sub-interfaces — only the operations this module calls.
@@ -159,6 +160,7 @@ export async function fireAutoContinue(
     await deps.store.appendAutoContinueEvent(event)
     await deps.enqueueMessage(chatId, promptToReplay, [], { autoContinue: { scheduleId } })
     await deps.maybeStartNextQueuedMessage(chatId)
+    addCounter("kanna.autocontinue.fired", 1)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     await deps.store.appendMessage(

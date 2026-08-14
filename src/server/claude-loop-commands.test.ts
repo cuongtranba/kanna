@@ -17,6 +17,7 @@ import {
   listLiveSchedules,
   clearClaudeSessionContext,
   deliverSubagentToMain,
+  recoverArmedLoopWakes,
   stopLoop,
   type LoopCommandDeps,
 } from "./claude-loop-commands"
@@ -36,6 +37,9 @@ interface FakeStore {
   getProject(projectId: string): { id: string; localPath: string } | null
   setSessionTokenForProvider(chatId: string, provider: "claude", token: string | null): Promise<void>
   appendMessage(chatId: string, entry: TranscriptEntry): Promise<void>
+  queuedByChat: Map<string, { id: string }[]>
+  listAutoContinueChats(): string[]
+  getQueuedMessages(chatId: string): readonly { id: string }[]
 }
 
 function makeStore(overrides: Partial<FakeStore> = {}): FakeStore {
@@ -59,6 +63,13 @@ function makeStore(overrides: Partial<FakeStore> = {}): FakeStore {
     },
     async appendMessage(chatId, entry) {
       store.messages.push({ chatId, entry })
+    },
+    queuedByChat: new Map(),
+    listAutoContinueChats() {
+      return [...store.chats.keys()]
+    },
+    getQueuedMessages(chatId) {
+      return store.queuedByChat.get(chatId) ?? []
     },
     ...overrides,
   }
@@ -94,6 +105,7 @@ function makeDeps(overrides: Partial<LoopCommandDeps> = {}): LoopCommandDeps {
     // These MUST follow the spread: Partial<...> widens each to T|undefined,
     // so re-assigning with a ?? fallback keeps TS7 seeing a concrete function.
     isLoopArmed: overrides.isLoopArmed ?? ((_chatId: string) => null),
+    isChatBusy: overrides.isChatBusy ?? ((_chatId: string) => false),
     inspectTrackingFile:
       overrides.inspectTrackingFile
       ?? (async () => ({ exists: false, content: null, gitTracked: false })),
@@ -124,6 +136,7 @@ describe("module surface", () => {
       "deliverSubagentToMain",
       "isLoopArmed",
       "listLiveSchedules",
+      "recoverArmedLoopWakes",
       "setupLoop",
       "stopLoop",
       // Narrows LoopState → the slice kanna-mcp needs; the single adapter
@@ -310,6 +323,89 @@ describe("stopLoop", () => {
     deps.store.getAutoContinueEvents = () => [armEvent]
     await stopLoop(deps, "chat-1", "goal_met")
     expect(emitted.some((e) => e.kind === "loop_disarmed")).toBe(true)
+  })
+})
+
+function armedLoop(prompt = "ORCHESTRATOR loop prompt") {
+  return {
+    subagentId: "sub-1",
+    prompt,
+    armedAt: 1,
+    consecutiveFailures: 0,
+    verifyCommand: "sh verify.sh",
+    workdirAbs: "/repo",
+    trackingFileRel: "PROGRESS.md",
+  }
+}
+
+describe("recoverArmedLoopWakes", () => {
+  test("re-emits the wake for an armed chat left with nothing to wake it", async () => {
+    const store = makeStore()
+    const emitted: AutoContinueEvent[] = []
+    const deps = makeDeps({
+      store,
+      emitAutoContinueEvent: async (event) => { emitted.push(event) },
+      isLoopArmed: () => armedLoop(),
+    })
+
+    const recovered = await recoverArmedLoopWakes(deps)
+
+    expect(recovered).toEqual(["chat-1"])
+    expect(store.sessionTokensSet).toEqual([{ chatId: "chat-1", provider: "claude", token: null }])
+    expect(store.messages.map((m) => m.entry.kind)).toEqual(["context_cleared"])
+    expect(emitted).toHaveLength(1)
+    const event = emitted[0]
+    if (event.kind !== "auto_continue_accepted") throw new Error("expected accepted event")
+    expect(event.source).toBe("subagent_background")
+    expect(event.prompt).toContain("ORCHESTRATOR loop prompt")
+    expect(event.prompt).toContain("restart")
+  })
+
+  test("does nothing for a chat with no armed loop", async () => {
+    const emitted: AutoContinueEvent[] = []
+    const deps = makeDeps({ emitAutoContinueEvent: async (e) => { emitted.push(e) } })
+    expect(await recoverArmedLoopWakes(deps)).toEqual([])
+    expect(emitted).toEqual([])
+  })
+
+  test("leaves a chat whose queued message survived to the queue recovery", async () => {
+    const store = makeStore()
+    store.queuedByChat.set("chat-1", [{ id: "qm-1" }])
+    const emitted: AutoContinueEvent[] = []
+    const deps = makeDeps({
+      store,
+      emitAutoContinueEvent: async (e) => { emitted.push(e) },
+      isLoopArmed: () => armedLoop(),
+    })
+    expect(await recoverArmedLoopWakes(deps)).toEqual([])
+    expect(emitted).toEqual([])
+  })
+
+  test("leaves a chat that is already busy", async () => {
+    const emitted: AutoContinueEvent[] = []
+    const deps = makeDeps({
+      emitAutoContinueEvent: async (e) => { emitted.push(e) },
+      isLoopArmed: () => armedLoop(),
+      isChatBusy: () => true,
+    })
+    expect(await recoverArmedLoopWakes(deps)).toEqual([])
+    expect(emitted).toEqual([])
+  })
+
+  test("one failing chat does not abort the rest", async () => {
+    const store = makeStore()
+    store.chats.set("chat-2", { id: "chat-2", projectId: "proj-1" })
+    const emitted: AutoContinueEvent[] = []
+    const deps = makeDeps({
+      store,
+      emitAutoContinueEvent: async (event) => {
+        if (event.chatId === "chat-1") throw new Error("append failed")
+        emitted.push(event)
+      },
+      isLoopArmed: () => armedLoop(),
+    })
+    expect(await recoverArmedLoopWakes(deps)).toEqual(["chat-2"])
+    expect(emitted.map((e) => e.chatId)).toEqual(["chat-2"])
   })
 })
 

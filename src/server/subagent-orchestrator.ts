@@ -1,6 +1,7 @@
 import crypto from "node:crypto"
 import { LOG_PREFIX } from "../shared/branding"
 import { log } from "../shared/log"
+import { addCounter, withSpan } from "./observability"
 import { deriveChunkLabel } from "../shared/loop-progress"
 import type {
   AgentProvider,
@@ -796,6 +797,38 @@ export class SubagentOrchestrator {
     runId?: string
   }): Promise<DelegationOutcome> {
     const runId = args.runId ?? crypto.randomUUID()
+    const outcome = await withSpan(
+      "kanna.subagent.run",
+      {
+        "kanna.chat_id": args.chatId,
+        "kanna.run_id": runId,
+        "kanna.subagent_id": args.subagent.id,
+        "kanna.subagent.provider": args.subagent.provider,
+        "kanna.depth": args.depth,
+      },
+      (span) => this.spawnRunInner({ ...args, runId }).then((result) => {
+        span.setAttribute("kanna.outcome", result.status)
+        return result
+      }),
+    )
+    addCounter("kanna.subagent.run.finished", 1, { outcome: outcome.status })
+    return outcome
+  }
+
+  private async spawnRunInner(args: {
+    subagent: Subagent
+    chatId: string
+    parentUserMessageId: string
+    parentRunId: string | null
+    depth: number
+    ancestorSubagentIds: string[]
+    userInstruction: string
+    label?: string
+    onEntry?: (entry: TranscriptEntry) => void
+    keepAlive?: boolean
+    runId: string
+  }): Promise<DelegationOutcome> {
+    const runId = args.runId
     const label = args.label?.trim() || deriveChunkLabel(args.userInstruction)
     await this.deps.store.appendSubagentEvent({
       v: 3,

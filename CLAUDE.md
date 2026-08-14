@@ -1027,7 +1027,57 @@ Residual window (accepted): a crash between `recordTurnStarted` and the spawn
 still loses the wake. That is two adjacent store writes, down from the whole
 spawn — which on a slow MCP boot was seconds.
 
-See `adr-20260813-queued-message-dequeue-on-commit`.
+**`recoverArmedLoopWakes` covers the OTHER lost-wake window** — the wake that
+never reached the queue because the loop's background subagent (or its
+delivery in `deliverSubagentToMain`, whose four writes are not atomic) died
+WITH the server. Observed twice: chat c87ab0ad (OOM killed run fc17bee6 seven
+minutes in) and chat 5cea83a7 (OOM landed 118 ms after `loop_run_outcome`,
+before `auto_continue_accepted`). The invariant it restores: an ARMED loop
+always holds exactly one pending wake — a running subagent, a queued message,
+or an active turn. At boot no subagent survives the dead process, so
+armed + idle + empty queue proves the wake is lost, and the recovery re-emits
+it from the durable `LoopState.prompt`. Runs AFTER `recoverQueuedMessages` on
+purpose: a chat whose wake survived to the queue is busy (or still queued) by
+then, so the armed-loop pass cannot double-fire it. The busy check goes
+through the injected `isChatBusy` (the single predicate), never ad-hoc maps.
+
+See `adr-20260813-queued-message-dequeue-on-commit` and
+`adr-20260814-armed-loop-wake-recovery`.
+
+# Observability (OTel traces + metrics, memlog, SIGUSR2 heap snapshot)
+
+Three independent concerns, one adapter (`src/server/otel.adapter.ts` — the
+ONLY file that may import the OTel SDK/exporters), initialized once from
+`server.ts` boot and shut down in the server stop path:
+
+- **OTel traces + metrics** — `KANNA_OTEL=enabled` registers a
+  `NodeTracerProvider` (BatchSpanProcessor → OTLP http) and a `MeterProvider`
+  (periodic reader, `KANNA_OTEL_METRIC_INTERVAL_MS`, default 15000). Endpoint
+  via the standard `OTEL_EXPORTER_OTLP_ENDPOINT` (default localhost:4318);
+  service name via `KANNA_OTEL_SERVICE_NAME` (default `kanna`). Off by
+  default — it opens sockets. Init never throws: a broken collector must not
+  take the server down.
+- **Memory log** — `KANNA_MEMLOG_MS` (default 60000, `0` disables) prints one
+  `[kanna/mem] rss=…` line per interval. This is the correlation record for
+  the next OOM kill; three OOMs (1.06–2.43 GB) went undiagnosed for lack of
+  exactly this.
+- **Heap snapshot** — `kill -USR2 <pid>` writes a Chrome-DevTools-loadable
+  v8 `.heapsnapshot` under `<dataDir>/heap-snapshots`
+  (`KANNA_HEAP_SNAPSHOT=disabled` opts out). The only way to answer "WHAT
+  holds the bytes" on a live process.
+
+**Domain code imports `src/server/observability.ts` ONLY** — a pure facade
+over `@opentelemetry/api` (`withSpan`, `addCounter`, `recordUpDown`). With no
+SDK registered every call is the api package's no-op, so instrumentation
+needs no test doubles and costs nothing when disabled. Never import the
+adapter from domain code; never import SDK packages outside the adapter.
+
+Instrumented so far: `kanna.turn.start` (spawn pipeline), `kanna.subagent.run`
+(whole run, the loop's unit of work), `kanna.loop.wake.deliver`, counters
+`kanna.subagent.run.finished`, `kanna.autocontinue.fired`,
+`kanna.queued_message.recovered`, `kanna.loop.wake.recovered`, and
+process-memory gauges. Spans nest via AsyncLocalStorage — add depth with a
+one-line `withSpan` at the call site, no handle threading.
 
 # Transcript memory is bounded by bytes, and loaded lazily
 
