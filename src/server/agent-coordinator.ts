@@ -97,6 +97,7 @@ import {
 } from "./claude-autocontinue-commands"
 import {
   deliverSubagentToMain as deliverSubagentToMainFn,
+  recoverArmedLoopWakes as recoverArmedLoopWakesFn,
   setupLoop as setupLoopFn,
   isLoopArmed as isLoopArmedFn,
   stopLoop as stopLoopFn,
@@ -884,6 +885,15 @@ export class AgentCoordinator {
     outcome: BackgroundRunOutcome,
   ): Promise<void> {
     return deliverSubagentToMainFn(this.buildLoopCommandDeps(), chatId, runId, outcome)
+  }
+
+  /**
+   * Boot recovery: re-emit the wake for any ARMED loop left with nothing to
+   * wake it (no running subagent survives a restart, queue empty, chat idle).
+   * Delegates to recoverArmedLoopWakesFn — see claude-loop-commands.ts.
+   */
+  async recoverArmedLoopWakes(): Promise<string[]> {
+    return recoverArmedLoopWakesFn(this.buildLoopCommandDeps())
   }
 
   /**

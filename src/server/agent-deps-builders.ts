@@ -30,6 +30,7 @@ import type { SessionErrorHandlerDeps } from "./claude-session-error-handler"
 import type { AutoContinueCommandDeps } from "./claude-autocontinue-commands"
 import type { LoopCommandDeps } from "./claude-loop-commands"
 import { toArmedLoopInfo } from "./claude-loop-commands"
+import { isChatBusy } from "./claude-session-state-queries"
 import type { CancelHandlerDeps } from "./claude-cancel-handler"
 import type { ChatManagementDeps } from "./claude-chat-management"
 import type { SendCommandDeps } from "./claude-send-command"
@@ -140,6 +141,7 @@ export function buildLoopCommandDeps(agent: AgentCoordinator): LoopCommandDeps {
     runVerifyCommand,
     readOracleScript,
     isLoopArmed: (chatId) => agent.isLoopArmed(chatId),
+    isChatBusy: (chatId) => isChatBusy(buildSendCommandDeps(agent), chatId),
   }
 }
 

@@ -40,6 +40,7 @@ import {
   type SendToStartingProfile,
 } from "./claude-steer-log"
 import { log } from "../shared/log"
+import { withSpan } from "./observability"
 import { LOG_PREFIX } from "../shared/branding"
 
 // ---------------------------------------------------------------------------
@@ -162,6 +163,22 @@ interface StartTurnAfterTurnStartedCtx {
  * then delegates to startTurnAfterTurnStarted.
  */
 export async function startTurnForChat(
+  deps: StartTurnDeps,
+  args: StartTurnForChatArgs,
+): Promise<void> {
+  return withSpan(
+    "kanna.turn.start",
+    {
+      "kanna.chat_id": args.chatId,
+      "kanna.provider": args.provider,
+      "kanna.model": args.model,
+      "kanna.plan_mode": args.planMode,
+    },
+    () => startTurnForChatOuter(deps, args),
+  )
+}
+
+async function startTurnForChatOuter(
   deps: StartTurnDeps,
   args: StartTurnForChatArgs,
 ): Promise<void> {

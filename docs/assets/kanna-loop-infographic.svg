@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1280 800" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="kanna-loop-title kanna-loop-desc">
+      <title id="kanna-loop-title">Kanna Loop — Giữ đà, không mất ngữ cảnh</title>
+      <desc id="kanna-loop-desc">Sáu bước lặp theo chiều kim đồng hồ: xác lập mục tiêu, lấy phần việc tiếp theo, giao worker, thực thi và kiểm chứng, ghi tiến độ, rồi notification đánh thức vòng mới. Mọi vòng cùng đọc và ghi tracking file ở trung tâm để duy trì ngữ cảnh.</desc>
+      <defs>
+        <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="oklch(55% 0.013 13)"/></marker>
+        <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="oklch(71.2% 0.194 13.428)"/></marker>
+        <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="oklch(66% 0.13 235)"/></marker>
+        <marker id="arrow-soft" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="oklch(70% 0.012 13)"/></marker>
+      </defs>
+      <rect width="1280" height="800" fill="oklch(99.5% 0.003 13)"/>
+
+      <text x="640" y="52" class="title">Kanna Loop</text>
+      <text x="640" y="84" class="subtitle">Giữ đà bằng notification · Giữ ngữ cảnh bằng tracking file</text>
+
+      <path class="ring" d="M720 193.726 A240 240 0 0 1 824.969 267.073" marker-end="url(#arrow)"/>
+      <path class="ring" d="M863.285 332 A240 240 0 0 1 863.722 506.882" marker-end="url(#arrow)"/>
+      <path class="ring" d="M825.731 572 A240 240 0 0 1 721.130 645.871" marker-end="url(#arrow)"/>
+      <path class="ring" d="M560 646.274 A240 240 0 0 1 455.031 572.927" marker-end="url(#arrow)"/>
+      <path class="ring" d="M416.715 508 A240 240 0 0 1 416.278 333.118" marker-end="url(#arrow)"/>
+      <path class="ring" d="M454.269 268 A240 240 0 0 1 558.870 194.129" marker-end="url(#arrow)"/>
+
+      <path class="spoke" d="M640 212 V360" marker-end="url(#arrow-soft)"/>
+      <path class="spoke" d="M792 332 L736 364" marker-end="url(#arrow-soft)"/>
+      <path class="spoke" d="M792 508 L736 476" marker-end="url(#arrow-soft)"/>
+      <path class="spoke" d="M640 628 V480" marker-end="url(#arrow-soft)"/>
+      <path class="spoke" d="M488 508 L544 476" marker-end="url(#arrow-soft)"/>
+      <path class="spoke" d="M488 332 L544 364" marker-end="url(#arrow-soft)"/>
+
+      <rect x="652" y="280" width="48" height="16" rx="4" fill="oklch(99.5% 0.003 13)"/>
+      <text x="676" y="292" class="arrow-label">ĐỌC PLAN</text>
+      <rect x="528" y="544" width="56" height="16" rx="4" fill="oklch(99.5% 0.003 13)"/>
+      <text x="556" y="556" class="arrow-label">GHI KẾT QUẢ</text>
+
+      <rect class="station focal" x="560" y="148" width="160" height="64" rx="6"/>
+      <text x="572" y="164" class="step">01</text>
+      <text x="640" y="176" class="node-name focal-name">Xác lập đích đến</text>
+      <text x="640" y="196" class="sublabel">goal + lệnh kiểm chứng</text>
+
+      <rect class="station" x="768" y="268" width="160" height="64" rx="6"/>
+      <text x="780" y="284" class="step">02</text>
+      <text x="848" y="296" class="node-name">Lấy “next chunk”</text>
+      <text x="848" y="316" class="sublabel">một phần việc vừa đủ</text>
+
+      <rect class="station" x="768" y="508" width="160" height="64" rx="6"/>
+      <text x="780" y="524" class="step">03</text>
+      <text x="848" y="536" class="node-name">Giao worker</text>
+      <text x="848" y="556" class="sublabel">brief gọn, context đúng</text>
+
+      <rect class="station" x="560" y="628" width="160" height="64" rx="6"/>
+      <text x="572" y="644" class="step">04</text>
+      <text x="640" y="656" class="node-name">Làm + kiểm chứng</text>
+      <text x="640" y="676" class="sublabel">thực thi rồi chạy oracle</text>
+
+      <rect class="station" x="352" y="508" width="160" height="64" rx="6"/>
+      <text x="364" y="524" class="step">05</text>
+      <text x="432" y="536" class="node-name">Ghi tiến độ</text>
+      <text x="432" y="556" class="sublabel">done · failed · next</text>
+
+      <rect class="station" x="352" y="268" width="160" height="64" rx="6"/>
+      <text x="364" y="284" class="step">06</text>
+      <text x="432" y="296" class="node-name">Notification đánh thức</text>
+      <text x="432" y="316" class="sublabel">context mới · đà tiếp tục</text>
+
+      <rect class="hub" x="540" y="368" width="200" height="104" rx="8"/>
+      <text x="640" y="408" class="hub-name">TRACKING FILE</text>
+      <text x="640" y="432" class="hub-sub">nguồn sự thật bền vững</text>
+      <text x="640" y="452" class="hub-sub">PROGRESS · FAILED · NEXT</text>
+
+      <text x="640" y="728" class="promise">Context có thể được làm mới. Tiến độ thì không.</text>
+      <line x1="80" y1="752" x2="1200" y2="752" stroke="oklch(91% 0.008 13)" stroke-width="1"/>
+      <line x1="272" y1="776" x2="320" y2="776" class="ring" marker-end="url(#arrow)"/>
+      <text x="336" y="780" class="legend">LUỒNG CÔNG VIỆC</text>
+      <line x1="576" y1="776" x2="624" y2="776" class="spoke" marker-end="url(#arrow-soft)"/>
+      <text x="640" y="780" class="legend">GHI VỀ BỘ NHỚ CHUNG</text>
+      <circle cx="920" cy="776" r="4" fill="oklch(71.2% 0.194 13.428)"/>
+      <text x="936" y="780" class="legend">ĐIỂM KHỞI TẠO</text>
+    </svg>
+

@@ -1173,9 +1173,13 @@ describe("EventStore subagent runs", () => {
       model: "claude-opus-4-7", parentUserMessageId: "u1", parentRunId: null, depth: 0,
     })
 
-    // Replace turns.jsonl with a directory so appendFile fails
+    // Replace turns.jsonl with a directory so appendFile fails.
+    // force: true — appendSubagentEvent resolves BEFORE its disk write lands
+    // (the exact contract this test pins), so on a slow filesystem the file
+    // may not exist yet when rm runs; a bare rm then throws ENOENT and fails
+    // the test 2 ms in (observed on CI ext4, never on local APFS).
     const turnsLogPath = join(dir, "turns.jsonl")
-    await rm(turnsLogPath)
+    await rm(turnsLogPath, { force: true })
     await mkdir(turnsLogPath)
 
     const errorSpy = spyOn(console, "error").mockImplementation(() => {})

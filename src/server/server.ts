@@ -68,6 +68,7 @@ import { createLoopTrackingRegistry } from "./loop-tracking-registry"
 import { readTrackingFile, watchTrackingFile } from "./loop-tracking-io.adapter"
 import { rehydrateLoopTracking } from "./loop-tracking-sync"
 import { recoverQueuedMessages } from "./queued-message-recovery"
+import { initObservability } from "./otel.adapter"
 import { createWorkflowRegistry } from "./workflow-registry"
 import { LocalCatalogService } from "./local-catalog"
 import { defaultHomeDir, scanLocalCatalog, statMtimes } from "./local-catalog-io.adapter"
@@ -234,6 +235,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   const strictPort = options.strictPort ?? false
   const runtimeProfile = getRuntimeProfile()
   const store = new EventStore(options.dataDir)
+  const observability = initObservability({ dataDir: store.dataDir })
   const diffStore = new DiffStore(store.dataDir)
   const machineDisplayName = getMachineDisplayName()
   await store.initialize()
@@ -679,9 +681,17 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   void recoverQueuedMessages({
     listChatsWithQueuedMessages: () => store.listChatsWithQueuedMessages(),
     maybeStartNextQueuedMessage: (chatId, options) => agent.maybeStartNextQueuedMessage(chatId, options),
-  }).then((recovered) => {
+  }).then(async (recovered) => {
     if (recovered.length > 0) {
       log.info("[kanna] resumed queued messages after restart", { chats: recovered.length })
+    }
+    // AFTER the queue drain on purpose: a chat whose wake survived to the
+    // queue is busy (or still queued) by now, so the armed-loop pass cannot
+    // double-fire it. This covers the wake that never reached the queue —
+    // the subagent (or its delivery) died with the process.
+    const rearmed = await agent.recoverArmedLoopWakes()
+    if (rearmed.length > 0) {
+      log.info("[kanna] re-fired lost loop wakes after restart", { chats: rearmed.length })
     }
   })
 
@@ -844,6 +854,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     scheduleManager.shutdown()
     tunnelGateway.shutdown()
     snapshotSweepHandle.stop()
+    await observability.shutdown()
     clearInterval(staleEmptyChatPruneInterval)
     clearInterval(followedSessionTickInterval)
     for (const chatId of [...agent.activeTurns.keys()]) {
