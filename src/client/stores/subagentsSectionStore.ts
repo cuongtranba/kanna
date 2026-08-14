@@ -52,11 +52,9 @@ interface SubagentsSectionState {
 
   // Actions — form
   resetForm: (draft: SubagentInput) => void
-  setFormDraft: (draft: SubagentInput) => void
+  patchForm: (patch: Partial<SubagentFormState>) => void
+  /** Patches the nested draft — not reachable through `patchForm`'s shallow merge. */
   patchFormDraft: (patch: Partial<SubagentInput>) => void
-  setFormError: (error: SubagentFieldError | null) => void
-  setFormPending: (pending: boolean) => void
-  setFormConfirmDelete: (confirmDelete: boolean) => void
 
   // Actions — LoopRuntimePanel
   setTimeoutDraft: (draft: string) => void
@@ -81,20 +79,11 @@ export const useSubagentsSectionStore = create<SubagentsSectionState>()((set) =>
       },
     }),
 
-  setFormDraft: (draft) =>
-    set((state) => ({ form: { ...state.form, draft } })),
+  patchForm: (patch) =>
+    set((state) => ({ form: { ...state.form, ...patch } })),
 
   patchFormDraft: (patch) =>
     set((state) => ({ form: { ...state.form, draft: { ...state.form.draft, ...patch } } })),
-
-  setFormError: (error) =>
-    set((state) => ({ form: { ...state.form, error } })),
-
-  setFormPending: (pending) =>
-    set((state) => ({ form: { ...state.form, pending } })),
-
-  setFormConfirmDelete: (confirmDelete) =>
-    set((state) => ({ form: { ...state.form, confirmDelete } })),
 
   setTimeoutDraft: (timeoutDraft) => set({ timeoutDraft }),
   setLoopError: (loopError) => set({ loopError }),

@@ -45,13 +45,43 @@ function stdio(
 
 async function mount(
   props: Parameters<typeof McpServersSection>[0],
-): Promise<{ container: HTMLDivElement; cleanup: () => void }> {
+): Promise<{ container: HTMLDivElement; cleanup: () => Promise<void> }> {
   const container = document.createElement("div")
   document.body.appendChild(container)
+  const root = createRoot(container)
   await act(async () => {
-    createRoot(container).render(<McpServersSection {...props} />)
+    root.render(<McpServersSection {...props} />)
   })
-  return { container, cleanup: () => container.remove() }
+  return {
+    container,
+    cleanup: async () => {
+      await act(async () => {
+        root.unmount()
+      })
+      container.remove()
+    },
+  }
+}
+
+const listProps = {
+  editing: { kind: "list" } as const,
+  onSelect: () => {},
+  onStartCreate: () => {},
+  onCancelEditing: () => {},
+}
+
+function clickText(container: HTMLElement, text: string) {
+  const button = [...container.querySelectorAll("button")].find((b) => b.textContent === text)
+  expect(button).toBeDefined()
+  return act(async () => {
+    button!.click()
+  })
+}
+
+function type(el: HTMLInputElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set
+  setter?.call(el, value)
+  el.dispatchEvent(new Event("input", { bubbles: true }))
 }
 
 describe("McpServersSection — empty state", () => {
@@ -65,7 +95,7 @@ describe("McpServersSection — empty state", () => {
       handlers: noopHandlers,
     })
     expect(container.textContent).toContain("No custom MCP servers")
-    cleanup()
+    await cleanup()
   })
 })
 
@@ -81,7 +111,7 @@ describe("McpServersSection — list", () => {
     })
     expect(container.textContent).toContain("fs")
     expect(container.textContent?.toLowerCase()).toContain("stdio")
-    cleanup()
+    await cleanup()
   })
 
   test("renders ok pill with tool count", async () => {
@@ -94,7 +124,7 @@ describe("McpServersSection — list", () => {
       handlers: noopHandlers,
     })
     expect(container.textContent).toContain("3 tools")
-    cleanup()
+    await cleanup()
   })
 
   test("renders failed pill when last test errored", async () => {
@@ -107,7 +137,7 @@ describe("McpServersSection — list", () => {
       handlers: noopHandlers,
     })
     expect(container.textContent).toContain("Failed")
-    cleanup()
+    await cleanup()
   })
 })
 
@@ -122,7 +152,7 @@ describe("McpServersSection — editor", () => {
       handlers: noopHandlers,
     })
     expect(container.textContent).toContain("Add MCP server")
-    cleanup()
+    await cleanup()
   })
 
   test("editor shows Save changes heading for edit mode", async () => {
@@ -135,7 +165,7 @@ describe("McpServersSection — editor", () => {
       handlers: noopHandlers,
     })
     expect(container.textContent).toContain("Edit MCP server")
-    cleanup()
+    await cleanup()
   })
 })
 
@@ -167,7 +197,7 @@ describe("McpServersSection — OAuth controls", () => {
     })
     const buttons = Array.from(container.querySelectorAll("button"))
     expect(buttons.some((b) => b.textContent?.includes("Authenticate"))).toBe(true)
-    cleanup()
+    await cleanup()
   })
 
   test("clicking Authenticate calls onStartMcpOAuth with server id", async () => {
@@ -189,6 +219,126 @@ describe("McpServersSection — OAuth controls", () => {
     expect(authBtn).toBeDefined()
     await act(async () => { authBtn!.click() })
     expect(calledIds).toEqual(["design"])
-    cleanup()
+    await cleanup()
+  })
+})
+
+describe("McpServersSection — row actions", () => {
+  test("edit and delete are addressable by the server name", async () => {
+    const selected: string[] = []
+    const { container, cleanup } = await mount({
+      ...listProps,
+      servers: [stdio("fs")],
+      onSelect: (id) => { selected.push(id) },
+      handlers: noopHandlers,
+    })
+
+    const edit = container.querySelector<HTMLButtonElement>('[aria-label="Edit fs"]')
+    expect(edit).not.toBeNull()
+    expect(container.querySelector('[aria-label="Delete fs"]')).not.toBeNull()
+
+    await act(async () => {
+      edit!.click()
+    })
+    expect(selected).toEqual(["fs"])
+    await cleanup()
+  })
+
+  test("delete asks for confirmation before calling onDelete", async () => {
+    const originalConfirm = window.confirm
+    const deleted: string[] = []
+    const props = {
+      ...listProps,
+      servers: [stdio("fs")],
+      handlers: { ...noopHandlers, onDelete: async (id: string) => { deleted.push(id) } },
+    }
+
+    window.confirm = () => false
+    const declined = await mount(props)
+    await act(async () => {
+      declined.container.querySelector<HTMLButtonElement>('[aria-label="Delete fs"]')!.click()
+    })
+    expect(deleted).toEqual([])
+    await declined.cleanup()
+
+    window.confirm = () => true
+    const accepted = await mount(props)
+    await act(async () => {
+      accepted.container.querySelector<HTMLButtonElement>('[aria-label="Delete fs"]')!.click()
+    })
+    expect(deleted).toEqual(["fs"])
+    await accepted.cleanup()
+
+    window.confirm = originalConfirm
+  })
+})
+
+describe("McpServersSection — editor submit", () => {
+  test("create submits the stdio input and leaves the editor", async () => {
+    const created: unknown[] = []
+    const cancelled: string[] = []
+    const { container, cleanup } = await mount({
+      ...listProps,
+      servers: [],
+      editing: { kind: "create" },
+      onCancelEditing: () => { cancelled.push("done") },
+      handlers: { ...noopHandlers, onCreate: async (input) => { created.push(input) } },
+    })
+
+    await act(async () => {
+      type(container.querySelector<HTMLInputElement>('input[placeholder="fs"]')!, "fs")
+      type(
+        container.querySelector<HTMLInputElement>(
+          'input[placeholder="/usr/local/bin/mcp-filesystem"]',
+        )!,
+        "/bin/ls",
+      )
+    })
+
+    await clickText(container, "Add server")
+
+    expect(created).toEqual([
+      { name: "fs", transport: "stdio", command: "/bin/ls", args: [], env: {}, cwd: undefined },
+    ])
+    expect(cancelled).toEqual(["done"])
+    await cleanup()
+  })
+
+  test("a failing save surfaces the error and stays in the editor", async () => {
+    const { container, cleanup } = await mount({
+      ...listProps,
+      servers: [],
+      editing: { kind: "create" },
+      handlers: { ...noopHandlers, onCreate: async () => { throw new Error("port in use") } },
+    })
+
+    await act(async () => {
+      type(container.querySelector<HTMLInputElement>('input[placeholder="fs"]')!, "fs")
+    })
+    await clickText(container, "Add server")
+
+    expect(container.textContent).toContain("port in use")
+    expect(container.textContent).toContain("Add MCP server")
+    await cleanup()
+  })
+
+  test("an invalid name blocks submit and explains why", async () => {
+    const created: unknown[] = []
+    const { container, cleanup } = await mount({
+      ...listProps,
+      servers: [],
+      editing: { kind: "create" },
+      handlers: { ...noopHandlers, onCreate: async (input) => { created.push(input) } },
+    })
+
+    await act(async () => {
+      type(container.querySelector<HTMLInputElement>('input[placeholder="fs"]')!, "kanna")
+    })
+
+    expect(container.textContent).toContain("'kanna' is reserved.")
+    const submit = [...container.querySelectorAll("button")].find((b) => b.textContent === "Add server")
+    expect(submit!.disabled).toBe(true)
+    expect(created).toEqual([])
+    await cleanup()
   })
 })

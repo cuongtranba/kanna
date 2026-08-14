@@ -246,10 +246,7 @@ function SubagentForm(props: SubagentFormProps) {
   const resetForm = useSubagentsSectionStore((state) => state.resetForm)
   const form = useSubagentsSectionStore((state) => state.form)
   const patchFormDraft = useSubagentsSectionStore((state) => state.patchFormDraft)
-  const setFormDraft = useSubagentsSectionStore((state) => state.setFormDraft)
-  const setFormError = useSubagentsSectionStore((state) => state.setFormError)
-  const setFormPending = useSubagentsSectionStore((state) => state.setFormPending)
-  const setFormConfirmDelete = useSubagentsSectionStore((state) => state.setFormConfirmDelete)
+  const patchForm = useSubagentsSectionStore((state) => state.patchForm)
 
   // Initialize store with baseline on mount (key prop ensures re-mount on subagent switch)
   useEffect(() => {
@@ -267,15 +264,14 @@ function SubagentForm(props: SubagentFormProps) {
   function patchDraft(patch: Partial<SubagentInput>) {
     patchFormDraft(patch)
     if (error?.field === "name" && "name" in patch) {
-      setFormError(null)
+      patchForm({ error: null })
     }
   }
 
   function handleProviderChange(provider: AgentProvider) {
     if (provider === draft.provider) return
     const defaults = createDefaultSubagentDraft(provider, props.providerDefaults, props.availableProviders)
-    setFormDraft({
-      ...draft,
+    patchFormDraft({
       provider,
       model: defaults.model,
       modelOptions: defaults.modelOptions,
@@ -302,33 +298,31 @@ function SubagentForm(props: SubagentFormProps) {
 
   async function handleSubmit() {
     if (!canSave || pending) return
-    setFormPending(true)
-    setFormError(null)
+    patchForm({ pending: true, error: null })
     try {
       const result =
         props.mode === "create"
           ? await props.handlers.onCreate(draft)
           : await props.handlers.onUpdate(props.subject!.id, draft)
       if (!result.ok) {
-        setFormError(mapSubagentValidationError(result.error))
+        patchForm({ error: mapSubagentValidationError(result.error) })
       }
     } finally {
-      setFormPending(false)
+      patchForm({ pending: false })
     }
   }
 
   async function handleDelete() {
     if (props.mode !== "edit" || !props.subject) return
     if (!confirmDelete) {
-      setFormConfirmDelete(true)
+      patchForm({ confirmDelete: true })
       return
     }
-    setFormPending(true)
+    patchForm({ pending: true })
     try {
       await props.handlers.onDelete(props.subject.id)
     } finally {
-      setFormPending(false)
-      setFormConfirmDelete(false)
+      patchForm({ pending: false, confirmDelete: false })
     }
   }
 

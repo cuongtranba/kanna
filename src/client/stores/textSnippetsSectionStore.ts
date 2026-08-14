@@ -36,10 +36,7 @@ interface TextSnippetsSectionState {
 
   // Actions — editor form
   resetEditorForm: (shortcut: string, expansion: string) => void
-  setEditorShortcut: (shortcut: string) => void
-  setEditorExpansion: (expansion: string) => void
-  setEditorSubmitting: (submitting: boolean) => void
-  setEditorError: (error: string | null) => void
+  patchEditorForm: (patch: Partial<SnippetEditorFormState>) => void
 }
 
 export const useTextSnippetsSectionStore = create<TextSnippetsSectionState>()((set) => ({
@@ -51,12 +48,6 @@ export const useTextSnippetsSectionStore = create<TextSnippetsSectionState>()((s
   resetEditorForm: (shortcut, expansion) =>
     set({ editorForm: createEditorFormFromInitial(shortcut, expansion) }),
 
-  setEditorShortcut: (shortcut) =>
-    set((state) => ({ editorForm: { ...state.editorForm, shortcut } })),
-  setEditorExpansion: (expansion) =>
-    set((state) => ({ editorForm: { ...state.editorForm, expansion } })),
-  setEditorSubmitting: (submitting) =>
-    set((state) => ({ editorForm: { ...state.editorForm, submitting } })),
-  setEditorError: (error) =>
-    set((state) => ({ editorForm: { ...state.editorForm, error } })),
+  patchEditorForm: (patch) =>
+    set((state) => ({ editorForm: { ...state.editorForm, ...patch } })),
 }))

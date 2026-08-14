@@ -1,16 +1,22 @@
 import { useMemo } from "react"
-import { Plus, Trash2, Pencil, Type } from "lucide-react"
+import { Plus, Type } from "lucide-react"
 import { Button } from "../components/ui/button"
 import { Input } from "../components/ui/input"
 import { Textarea } from "../components/ui/textarea"
+import {
+  SettingsEmptyState,
+  SettingsList,
+  SettingsRowActions,
+} from "../components/settings/SettingsList"
 import { useAppSettingsStore, selectTextSnippets } from "../stores/appSettingsStore"
-import type {
-  AppSettingsPatch,
-  TextSnippet,
-  TextSnippetInput,
-  TextSnippetPatch,
-} from "../../shared/types"
+import type { TextSnippet, TextSnippetInput, TextSnippetPatch } from "../../shared/types"
 import type { KannaState } from "./useKannaState"
+import {
+  useAppSettingsCrudHandlers,
+  type AppSettingsCrudHandlers,
+  type AppSettingsPatchWrapper,
+} from "./appSettingsCrud"
+import { editorSubmitLabel, submitEditorForm } from "./settingsEditorForm"
 import {
   useTextSnippetsSectionStore,
   type SnippetEditingState,
@@ -18,11 +24,14 @@ import {
 import type { DomPort } from "../ports/domPort"
 import { domAdapter } from "../adapters/dom.adapter"
 
-export interface TextSnippetsSectionHandlers {
-  onCreate: (input: TextSnippetInput) => Promise<void>
-  onUpdate: (id: string, patch: TextSnippetPatch) => Promise<void>
-  onDelete: (id: string) => Promise<void>
-}
+export type TextSnippetsSectionHandlers = AppSettingsCrudHandlers<
+  TextSnippetInput,
+  TextSnippetPatch
+>
+
+const wrapSnippetsPatch: AppSettingsPatchWrapper<TextSnippetInput, TextSnippetPatch> = (
+  textSnippets,
+) => ({ textSnippets })
 
 interface TextSnippetsSectionProps {
   snippets: readonly TextSnippet[]
@@ -79,14 +88,12 @@ export function TextSnippetsSection({ snippets, handlers, dom = domAdapter }: Te
       </div>
 
       {snippets.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-md border border-dashed px-6 py-10 text-center">
-          <Type className="mb-3 h-8 w-8 text-muted-foreground" aria-hidden />
-          <p className="text-sm text-muted-foreground">
-            No snippets yet. Add one to expand a shortcut with Tab.
-          </p>
-        </div>
+        <SettingsEmptyState
+          icon={Type}
+          message="No snippets yet. Add one to expand a shortcut with Tab."
+        />
       ) : (
-        <ul className="flex flex-col divide-y rounded-md border">
+        <SettingsList>
           {snippets.map((snippet) => (
             <SnippetRow
               key={snippet.id}
@@ -99,7 +106,7 @@ export function TextSnippetsSection({ snippets, handlers, dom = domAdapter }: Te
               }}
             />
           ))}
-        </ul>
+        </SettingsList>
       )}
     </div>
   )
@@ -121,17 +128,7 @@ function SnippetRow({
         <span className="truncate text-xs text-muted-foreground">{snippet.expansion}</span>
       </div>
       <div className="ml-auto flex items-center gap-2">
-        <Button variant="ghost" size="sm" onClick={onEdit} aria-label={`Edit ${snippet.shortcut}`}>
-          <Pencil className="h-4 w-4" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onDelete}
-          aria-label={`Delete ${snippet.shortcut}`}
-        >
-          <Trash2 className="h-4 w-4" />
-        </Button>
+        <SettingsRowActions label={snippet.shortcut} onEdit={onEdit} onDelete={onDelete} />
       </div>
     </li>
   )
@@ -151,10 +148,7 @@ function SnippetEditor({
   onDone: () => void
 }) {
   const editorForm = useTextSnippetsSectionStore((state) => state.editorForm)
-  const setEditorShortcut = useTextSnippetsSectionStore((state) => state.setEditorShortcut)
-  const setEditorExpansion = useTextSnippetsSectionStore((state) => state.setEditorExpansion)
-  const setEditorSubmitting = useTextSnippetsSectionStore((state) => state.setEditorSubmitting)
-  const setEditorError = useTextSnippetsSectionStore((state) => state.setEditorError)
+  const patchEditorForm = useTextSnippetsSectionStore((state) => state.patchEditorForm)
 
   const { shortcut, expansion, submitting, error } = editorForm
 
@@ -168,31 +162,21 @@ function SnippetEditor({
 
   const canSave = shortcutValid && !duplicate && expansion.length > 0 && !submitting
 
-  const onSubmit = async () => {
-    setEditorSubmitting(true)
-    setEditorError(null)
-    try {
-      if (isEdit && initial) {
-        await handlers.onUpdate(initial.id, { shortcut: trimmedShortcut, expansion })
-      } else {
-        await handlers.onCreate({ shortcut: trimmedShortcut, expansion })
-      }
-      onDone()
-    } catch (e) {
-      setEditorError(e instanceof Error ? e.message : "Failed to save snippet")
-    } finally {
-      setEditorSubmitting(false)
-    }
-  }
+  const onSubmit = () =>
+    submitEditorForm({
+      patch: patchEditorForm,
+      save: async () => {
+        if (isEdit && initial) {
+          await handlers.onUpdate(initial.id, { shortcut: trimmedShortcut, expansion })
+        } else {
+          await handlers.onCreate({ shortcut: trimmedShortcut, expansion })
+        }
+      },
+      onDone,
+      fallbackMessage: "Failed to save snippet",
+    })
 
-  let submitLabel: string
-  if (submitting) {
-    submitLabel = "Saving…"
-  } else if (isEdit) {
-    submitLabel = "Save changes"
-  } else {
-    submitLabel = "Add snippet"
-  }
+  const submitLabel = editorSubmitLabel({ submitting, isEdit, addLabel: "Add snippet" })
 
   return (
     <div className="flex flex-col gap-4 px-6 py-6">
@@ -202,7 +186,7 @@ function SnippetEditor({
         <span className="text-sm font-medium">Shortcut</span>
         <Input
           value={shortcut}
-          onChange={(e) => setEditorShortcut(e.target.value)}
+          onChange={(e) => patchEditorForm({ shortcut: e.target.value })}
           placeholder="pgm"
           className="font-mono"
           autoFocus
@@ -221,7 +205,7 @@ function SnippetEditor({
         <span className="text-sm font-medium">Expands to</span>
         <Textarea
           value={expansion}
-          onChange={(e) => setEditorExpansion(e.target.value)}
+          onChange={(e) => patchEditorForm({ expansion: e.target.value })}
           placeholder="pull request green then merge"
           rows={4}
         />
@@ -252,22 +236,6 @@ export function TextSnippetsSettingsBranch(props: {
   state: Pick<KannaState, "handleWriteAppSettings">
 }) {
   const snippets = useAppSettingsStore(selectTextSnippets)
-  const handlers = useMemo<TextSnippetsSectionHandlers>(
-    () => ({
-      onCreate: async (input) => {
-        const s: AppSettingsPatch = { textSnippets: { create: input } }
-        await props.state.handleWriteAppSettings(s)
-      },
-      onUpdate: async (id, patch) => {
-        const s: AppSettingsPatch = { textSnippets: { update: { id, patch } } }
-        await props.state.handleWriteAppSettings(s)
-      },
-      onDelete: async (id) => {
-        const s: AppSettingsPatch = { textSnippets: { delete: { id } } }
-        await props.state.handleWriteAppSettings(s)
-      },
-    }),
-    [props.state],
-  )
+  const handlers = useAppSettingsCrudHandlers(wrapSnippetsPatch, props.state)
   return <TextSnippetsSection snippets={snippets} handlers={handlers} />
 }

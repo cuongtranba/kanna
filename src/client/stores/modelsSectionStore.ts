@@ -46,12 +46,7 @@ interface ModelsSectionState {
     modelProvider: ModelProvider,
     supportsEffort: boolean,
   ) => void
-  setEditorId: (id: string) => void
-  setEditorLabel: (label: string) => void
-  setEditorModelProvider: (provider: ModelProvider) => void
-  setEditorSupportsEffort: (supportsEffort: boolean) => void
-  setEditorSubmitting: (submitting: boolean) => void
-  setEditorError: (error: string | null) => void
+  patchEditorForm: (patch: Partial<ModelEditorFormState>) => void
 }
 
 export const useModelsSectionStore = create<ModelsSectionState>()((set) => ({
@@ -63,16 +58,6 @@ export const useModelsSectionStore = create<ModelsSectionState>()((set) => ({
   resetEditorForm: (id, label, modelProvider, supportsEffort) =>
     set({ editorForm: createEditorFormFromInitial(id, label, modelProvider, supportsEffort) }),
 
-  setEditorId: (id) =>
-    set((state) => ({ editorForm: { ...state.editorForm, id } })),
-  setEditorLabel: (label) =>
-    set((state) => ({ editorForm: { ...state.editorForm, label } })),
-  setEditorModelProvider: (modelProvider) =>
-    set((state) => ({ editorForm: { ...state.editorForm, modelProvider } })),
-  setEditorSupportsEffort: (supportsEffort) =>
-    set((state) => ({ editorForm: { ...state.editorForm, supportsEffort } })),
-  setEditorSubmitting: (submitting) =>
-    set((state) => ({ editorForm: { ...state.editorForm, submitting } })),
-  setEditorError: (error) =>
-    set((state) => ({ editorForm: { ...state.editorForm, error } })),
+  patchEditorForm: (patch) =>
+    set((state) => ({ editorForm: { ...state.editorForm, ...patch } })),
 }))
