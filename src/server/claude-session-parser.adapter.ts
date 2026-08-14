@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto"
 import { readFileSync, statSync } from "node:fs"
 import type { AnyValue } from "../shared/errors"
+import { safeJsonParse } from "../shared/safe-json"
 import type { ClaudeSessionRecord, ParsedClaudeSession } from "./claude-session-types"
 
 function isClaudeSessionRecord(v: AnyValue): v is ClaudeSessionRecord {
@@ -10,12 +11,8 @@ function isClaudeSessionRecord(v: AnyValue): v is ClaudeSessionRecord {
 }
 
 function tryParse(line: string): ClaudeSessionRecord | null {
-  try {
-    const parsed: AnyValue = JSON.parse(line)
-    return isClaudeSessionRecord(parsed) ? parsed : null
-  } catch {
-    return null
-  }
+  const parsed = safeJsonParse(line)
+  return isClaudeSessionRecord(parsed) ? parsed : null
 }
 
 export function parseClaudeSessionFile(filePath: string): ParsedClaudeSession | null {

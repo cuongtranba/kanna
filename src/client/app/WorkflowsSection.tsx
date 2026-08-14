@@ -3,8 +3,10 @@ import { WorkflowsSectionDetailStore } from "./WorkflowsSection.store"
 import { Activity, FileText } from "lucide-react"
 import { cn } from "../lib/utils"
 import { formatCompactDuration } from "../lib/formatDuration"
+import { statusToneClass, statusToneDotClass, workflowStatusTone, type StatusTone } from "../lib/statusLabel"
+import { WorkflowStatusPill } from "../components/ui/status-pill"
 import { groupWorkflowAgentsByPhase } from "../lib/workflowGrouping"
-import type { WorkflowAgentProgress, WorkflowRun, WorkflowRunSummary, WorkflowStatus } from "../../shared/workflow-types"
+import type { WorkflowAgentProgress, WorkflowRun, WorkflowRunSummary } from "../../shared/workflow-types"
 import {
   Dialog,
   DialogContent,
@@ -12,70 +14,6 @@ import {
   DialogTitle,
   DialogBody,
 } from "../components/ui/dialog"
-
-// ── Status helpers ────────────────────────────────────────────────────────────
-
-export type WorkflowStatusTone = "muted" | "active" | "destructive" | "warning"
-
-function workflowStatusLabel(status: WorkflowStatus): string {
-  switch (status) {
-    case "running": return "Running"
-    case "completed": return "Completed"
-    case "failed": return "Failed"
-    case "killed": return "Killed"
-    case "unknown": return "Unknown"
-  }
-}
-
-function workflowStatusTone(status: WorkflowStatus): WorkflowStatusTone {
-  switch (status) {
-    case "running": return "active"
-    case "failed": return "destructive"
-    case "killed": return "warning"
-    case "completed":
-    case "unknown":
-    default: return "muted"
-  }
-}
-
-export function workflowStatusDotClass(tone: WorkflowStatusTone): string {
-  switch (tone) {
-    case "active": return "bg-emerald-500 dark:bg-emerald-400"
-    case "destructive": return "bg-destructive"
-    case "warning": return "bg-amber-500 dark:bg-amber-400"
-    case "muted":
-    default: return "bg-muted-foreground"
-  }
-}
-
-export function workflowStatusTextClass(tone: WorkflowStatusTone): string {
-  switch (tone) {
-    case "active": return "text-emerald-500 dark:text-emerald-400"
-    case "destructive": return "text-destructive"
-    case "warning": return "text-amber-500 dark:text-amber-400"
-    case "muted":
-    default: return "text-muted-foreground"
-  }
-}
-
-// ── StatusPill ────────────────────────────────────────────────────────────────
-
-export function WorkflowStatusPill({ status }: { status: WorkflowStatus }) {
-  const tone = workflowStatusTone(status)
-  return (
-    <span className="inline-flex items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide">
-      <span
-        aria-hidden
-        className={cn(
-          "inline-block size-1.5 rounded-full",
-          workflowStatusDotClass(tone),
-          status === "running" && "animate-pulse",
-        )}
-      />
-      <span className={workflowStatusTextClass(tone)}>{workflowStatusLabel(status)}</span>
-    </span>
-  )
-}
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -164,7 +102,7 @@ function WorkflowRunRow(props: {
           <span className={cn("truncate text-sm text-foreground", (live || selected) && "font-medium")}>
             {label}
           </span>
-          <WorkflowStatusPill status={run.status} />
+          <WorkflowStatusPill status={run.status} pulse />
         </span>
         <span className="flex w-full items-center gap-3 text-xs text-muted-foreground">
           {run.agentCount != null ? (
@@ -196,10 +134,10 @@ interface WorkflowRunDetailDialogProps {
   onClose: () => void
 }
 
-export function agentStateTone(state: string): WorkflowStatusTone {
+export function agentStateTone(state: string): StatusTone {
   if (state === "running" || state === "progress") return "active"
   if (state === "failed" || state === "error") return "destructive"
-  if (state === "killed") return "warning"
+  if (state === "killed") return "attention"
   return "muted"
 }
 
@@ -265,7 +203,7 @@ function WorkflowAgentRow({
         aria-hidden
         className={cn(
           "mt-1.5 inline-block size-1.5 shrink-0 rounded-full",
-          workflowStatusDotClass(stateTone),
+          statusToneDotClass(stateTone),
           live && "animate-pulse",
         )}
       />
@@ -290,7 +228,7 @@ function WorkflowAgentRow({
           ) : null}
         </div>
         <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-          <span className={cn("capitalize", workflowStatusTextClass(stateTone))}>{agent.state}</span>
+          <span className={cn("capitalize", statusToneClass(stateTone))}>{agent.state}</span>
           {agent.lastToolName ? <span className="truncate">last: {agent.lastToolName}</span> : null}
           {agent.durationMs != null ? <span className="tabular-nums">{formatCompactDuration(agent.durationMs)}</span> : null}
           {agent.tokens != null ? <span className="tabular-nums">{agent.tokens.toLocaleString()} tok</span> : null}
@@ -331,7 +269,7 @@ export function WorkflowRunDetail({ run, onSelectAgent, title }: WorkflowRunDeta
       <div className="flex flex-col gap-1.5">
         {title ? <h3 className="truncate text-base font-semibold text-foreground">{title}</h3> : null}
         <div className="flex flex-wrap items-center gap-3">
-          <WorkflowStatusPill status={run.status} />
+          <WorkflowStatusPill status={run.status} pulse />
           {run.durationMs != null ? (
             <span className="text-xs text-muted-foreground tabular-nums">
               {formatCompactDuration(run.durationMs)}
@@ -426,7 +364,7 @@ export function WorkflowRunDetail({ run, onSelectAgent, title }: WorkflowRunDeta
       {/* Error */}
       {run.error && run.status !== "completed" ? (
         <section className="flex flex-col gap-1">
-          <h4 className={cn("text-xs font-medium uppercase tracking-wide", workflowStatusTextClass(tone))}>
+          <h4 className={cn("text-xs font-medium uppercase tracking-wide", statusToneClass(tone))}>
             Error
           </h4>
           <p className="rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive whitespace-pre-wrap">

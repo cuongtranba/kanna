@@ -56,6 +56,9 @@ c3-115:
 c3-116:
   - src/client/app/McpServersSection.test.tsx
   - src/client/app/McpServersSection.tsx
+  - src/client/app/appSettingsCrud.ts
+  - src/client/app/settingsEditorForm.ts
+  - src/client/components/settings/SettingsList.tsx
 c3-117:
   - src/client/app/LocalProjectsPage.tsx
   - src/client/components/NewProjectModal.tsx
@@ -190,6 +193,10 @@ c3-226:
 c3-227:
   - src/server/auto-continue/**/*.ts
 c3-229:
+  - src/server/agent-transcript-parse.test.ts
+  - src/server/agent-transcript-parse.ts
+  - src/server/watched-registry.test.ts
+  - src/server/watched-registry.ts
   - src/client/app/WorkflowAgentTranscriptPanel.test.tsx
   - src/client/app/WorkflowAgentTranscriptPanel.tsx
   - src/client/app/WorkflowsPage.test.tsx

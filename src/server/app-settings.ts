@@ -193,19 +193,35 @@ const MODEL_LABEL_MAX = 64
 const SNIPPET_SHORTCUT_REGEX = /^\S{1,32}$/
 const SNIPPET_EXPANSION_MAX = 4_000
 
-class SubagentValidationException extends Error {
-  constructor(readonly validationError: SubagentValidationError) {
+interface ValidationErrorOf<Code extends string> {
+  code: Code
+  field?: string
+  message: string
+}
+
+type CustomModelValidationError = ValidationErrorOf<
+  "INVALID_ID" | "EMPTY_LABEL" | "INVALID_PROVIDER" | "DUPLICATE_ID" | "NOT_FOUND"
+>
+
+type TextSnippetValidationError = ValidationErrorOf<
+  "INVALID_SHORTCUT" | "EMPTY_EXPANSION" | "DUPLICATE_SHORTCUT" | "NOT_FOUND"
+>
+
+// Subclassed rather than collapsed into one class: createSubagent /
+// updateSubagent discriminate by class identity to decide which failures they
+// may return as a typed SubagentValidationError, so each collection keeps its
+// own runtime identity.
+class ValidationException<E extends { code: string; message: string }> extends Error {
+  constructor(readonly validationError: E) {
     super(validationError.message)
-    this.name = "SubagentValidationException"
+    this.name = new.target.name
   }
 }
 
-class McpValidationException extends Error {
-  constructor(readonly validationError: McpValidationError) {
-    super(validationError.message)
-    this.name = "McpValidationException"
-  }
-}
+class SubagentValidationException extends ValidationException<SubagentValidationError> {}
+class McpValidationException extends ValidationException<McpValidationError> {}
+class CustomModelValidationException extends ValidationException<CustomModelValidationError> {}
+class TextSnippetValidationException extends ValidationException<TextSnippetValidationError> {}
 
 async function atomicWriteJson(filePath: string, content: string) {
   const tmpPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`
@@ -1292,19 +1308,6 @@ function applyMcpPatch(existing: McpServerConfig, patch: McpServerPatch): McpSer
   }
 }
 
-interface CustomModelValidationError {
-  code: "INVALID_ID" | "EMPTY_LABEL" | "INVALID_PROVIDER" | "DUPLICATE_ID" | "NOT_FOUND"
-  field?: string
-  message: string
-}
-
-class CustomModelValidationException extends Error {
-  constructor(readonly validationError: CustomModelValidationError) {
-    super(validationError.message)
-    this.name = "CustomModelValidationException"
-  }
-}
-
 function validateCustomModelShape(
   entry: CustomModelEntry,
   others: Array<{ id: string; provider: string }>,
@@ -1342,19 +1345,6 @@ function applyCustomModelPatch(existing: CustomModelEntry, patch: CustomModelPat
     contextWindowOptions: patch.contextWindowOptions === null ? undefined : patch.contextWindowOptions ?? existing.contextWindowOptions,
     supportsMaxReasoningEffort: patch.supportsMaxReasoningEffort ?? existing.supportsMaxReasoningEffort,
     updatedAt: Date.now(),
-  }
-}
-
-interface TextSnippetValidationError {
-  code: "INVALID_SHORTCUT" | "EMPTY_EXPANSION" | "DUPLICATE_SHORTCUT" | "NOT_FOUND"
-  field?: string
-  message: string
-}
-
-class TextSnippetValidationException extends Error {
-  constructor(readonly validationError: TextSnippetValidationError) {
-    super(validationError.message)
-    this.name = "TextSnippetValidationException"
   }
 }
 
@@ -1487,6 +1477,170 @@ function mergeSubagentModelOptions(
   }
 }
 
+interface CollectionPatch<CreateInput, EntryPatch> {
+  create?: CreateInput
+  update?: { id: string; patch: EntryPatch }
+  delete?: { id: string }
+}
+
+interface CollectionCrud<Entry, CreateInput, EntryPatch> {
+  /** Builds the new entry; throws the collection's validation exception on refusal. */
+  create: (input: CreateInput, current: readonly Entry[]) => Entry
+  /** Merges the patch onto the found entry; throws the collection's validation exception on refusal. */
+  update: (existing: Entry, patch: EntryPatch, current: readonly Entry[]) => Entry
+  notFound: (id: string) => Error
+}
+
+/**
+ * The create/update/delete mechanics every settings collection shares: append,
+ * locate-then-splice, filter — all producing a new array. Returns undefined
+ * when the patch names none of the three arms, so collections with extra arms
+ * (MCP's setters) can fall through with their precedence intact.
+ */
+function applyCollectionPatch<Entry extends { id: string }, CreateInput, EntryPatch>(
+  current: readonly Entry[],
+  patch: CollectionPatch<CreateInput, EntryPatch> | undefined,
+  crud: CollectionCrud<Entry, CreateInput, EntryPatch>,
+): Entry[] | undefined {
+  if (patch?.create) return [...current, crud.create(patch.create, current)]
+  if (patch?.update) {
+    const { id, patch: entryPatch } = patch.update
+    const index = current.findIndex((entry) => entry.id === id)
+    if (index < 0) throw crud.notFound(id)
+    const updated = crud.update(current[index]!, entryPatch, current)
+    return [...current.slice(0, index), updated, ...current.slice(index + 1)]
+  }
+  if (patch?.delete) {
+    const removedId = patch.delete.id
+    return current.filter((entry) => entry.id !== removedId)
+  }
+  return undefined
+}
+
+const SUBAGENT_CRUD: CollectionCrud<Subagent, SubagentInput, SubagentPatch> = {
+  create(input, current) {
+    const nameError = validateSubagentName(input.name, current.map((s) => ({ id: s.id, name: s.name })))
+    if (nameError) throw new SubagentValidationException(nameError)
+    const restrictionError = validateSubagentRestriction(input.provider, input.workingDir, input.allowedPaths)
+    if (restrictionError) throw new SubagentValidationException(restrictionError)
+    const now = Date.now()
+    return {
+      id: randomUUID(),
+      name: input.name.trim(),
+      description: input.description?.trim() || undefined,
+      provider: input.provider,
+      model: input.model,
+      modelOptions: input.modelOptions,
+      systemPrompt: input.systemPrompt,
+      contextScope: input.contextScope,
+      triggerMode: input.triggerMode ?? "auto",
+      workingDir: input.workingDir,
+      allowedPaths: input.allowedPaths && input.allowedPaths.length > 0 ? input.allowedPaths : undefined,
+      maxTurns: normalizeSubagentMaxTurns(input.maxTurns),
+      createdAt: now,
+      updatedAt: now,
+    }
+  },
+  update(existing, patch, current) {
+    const nextName = patch.name !== undefined ? patch.name.trim() : existing.name
+    // Only a patch that touches the name re-validates it: stored names predate
+    // today's rules and an unrelated edit must not be refused because of one.
+    if (patch.name !== undefined) {
+      const nameError = validateSubagentName(nextName, current.map((s) => ({ id: s.id, name: s.name })), existing.id)
+      if (nameError) throw new SubagentValidationException(nameError)
+    }
+    const nextWorkingDir = patch.workingDir === null ? undefined : patch.workingDir ?? existing.workingDir
+    const nextAllowedPaths = patch.allowedPaths === null ? undefined : patch.allowedPaths ?? existing.allowedPaths
+    const nextMaxTurns = patch.maxTurns === undefined
+      ? existing.maxTurns
+      : normalizeSubagentMaxTurns(patch.maxTurns ?? undefined)
+    const restrictionError = validateSubagentRestriction(
+      patch.provider ?? existing.provider,
+      nextWorkingDir,
+      nextAllowedPaths,
+    )
+    if (restrictionError) throw new SubagentValidationException(restrictionError)
+    const nextDescription = patch.description === undefined
+      ? existing.description
+      : patch.description?.trim() || undefined
+    return {
+      ...existing,
+      ...patch,
+      name: nextName,
+      description: nextDescription,
+      modelOptions: mergeSubagentModelOptions(existing.modelOptions, patch.modelOptions),
+      workingDir: nextWorkingDir,
+      allowedPaths: nextAllowedPaths,
+      maxTurns: nextMaxTurns,
+      triggerMode: patch.triggerMode ?? existing.triggerMode,
+      updatedAt: Date.now(),
+    }
+  },
+  notFound: (id) => new SubagentValidationException({ code: "NOT_FOUND", message: `Subagent ${id} not found` }),
+}
+
+const MCP_CRUD: CollectionCrud<McpServerConfig, McpServerInput, McpServerPatch> = {
+  create(input, current) {
+    if (isPlainObject(input) && input.transport === "stdio" && isMcpOAuthState(input.oauth) && input.oauth.enabled) {
+      throw new McpValidationException({ code: "INVALID_OAUTH_TRANSPORT", field: "oauth", message: "OAuth is only supported for http/sse transports" })
+    }
+    return validatedMcpEntry(buildMcpFromInput(input), current)
+  },
+  update: (existing, patch, current) => validatedMcpEntry(applyMcpPatch(existing, patch), current),
+  notFound: (id) => new McpValidationException({ code: "NOT_FOUND", message: `MCP server ${id} not found` }),
+}
+
+function validatedMcpEntry(entry: McpServerConfig, current: readonly McpServerConfig[]): McpServerConfig {
+  const error = validateMcpShape(entry, current.map((s) => ({ id: s.id, name: s.name })))
+  if (error) throw new McpValidationException(error)
+  return entry
+}
+
+/** MCP's arms beyond create/update/delete; each rewrites one entry in place. */
+function applyMcpSetterPatch(
+  current: McpServerConfig[],
+  patch: NonNullable<AppSettingsPatch["customMcpServers"]>,
+): McpServerConfig[] {
+  if (patch.setEnabled) {
+    const { id, enabled } = patch.setEnabled
+    return current.map((s) => (s.id === id ? { ...s, enabled, updatedAt: new Date().toISOString() } : s))
+  }
+  if (patch.setTestResult) {
+    const { id, result } = patch.setTestResult
+    return current.map((s) => (s.id === id ? { ...s, lastTest: result, updatedAt: new Date().toISOString() } : s))
+  }
+  if (patch.setOAuthState) {
+    const { id, oauth } = patch.setOAuthState
+    return current.map((s) => (s.id === id && s.transport !== "stdio" ? { ...s, oauth } : s))
+  }
+  return current
+}
+
+const CUSTOM_MODEL_CRUD: CollectionCrud<CustomModelEntry, CustomModelInput, CustomModelPatch> = {
+  create(input, current) {
+    const entry = buildCustomModelFromInput(input)
+    const error = validateCustomModelShape(entry, current.map((m) => ({ id: m.id, provider: m.provider })))
+    if (error) throw new CustomModelValidationException(error)
+    return entry
+  },
+  // Deliberately unvalidated: an edit that invalidates the entry is dropped by
+  // normalizeCustomModels with a warning rather than refused here.
+  update: applyCustomModelPatch,
+  notFound: (id) => new CustomModelValidationException({ code: "NOT_FOUND", message: `custom model ${id} not found` }),
+}
+
+const TEXT_SNIPPET_CRUD: CollectionCrud<TextSnippet, TextSnippetInput, TextSnippetPatch> = {
+  create: (input, current) => validatedTextSnippet(buildTextSnippetFromInput(input), current),
+  update: (existing, patch, current) => validatedTextSnippet(applyTextSnippetPatch(existing, patch), current),
+  notFound: (id) => new TextSnippetValidationException({ code: "NOT_FOUND", message: `text snippet ${id} not found` }),
+}
+
+function validatedTextSnippet(entry: TextSnippet, current: readonly TextSnippet[]): TextSnippet {
+  const error = validateTextSnippetShape(entry, current.map((s) => ({ id: s.id, shortcut: s.shortcut })))
+  if (error) throw new TextSnippetValidationException(error)
+  return entry
+}
+
 function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettingsState {
   if (patch.shareDefaultTtlHours !== undefined) {
     const value = patch.shareDefaultTtlHours
@@ -1511,179 +1665,14 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
     }
   }
 
-  let nextSubagents = state.subagents
-  if (patch.subagents?.create) {
-    const input = patch.subagents.create
-    const error = validateSubagentName(input.name, state.subagents.map((s) => ({ id: s.id, name: s.name })))
-    if (error) throw new SubagentValidationException(error)
-    const restrictionError = validateSubagentRestriction(input.provider, input.workingDir, input.allowedPaths)
-    if (restrictionError) throw new SubagentValidationException(restrictionError)
-    const now = Date.now()
-    nextSubagents = [
-      ...state.subagents,
-      {
-        id: randomUUID(),
-        name: input.name.trim(),
-        description: input.description?.trim() || undefined,
-        provider: input.provider,
-        model: input.model,
-        modelOptions: input.modelOptions,
-        systemPrompt: input.systemPrompt,
-        contextScope: input.contextScope,
-        triggerMode: input.triggerMode ?? "auto",
-        workingDir: input.workingDir,
-        allowedPaths: input.allowedPaths && input.allowedPaths.length > 0 ? input.allowedPaths : undefined,
-        maxTurns: normalizeSubagentMaxTurns(input.maxTurns),
-        createdAt: now,
-        updatedAt: now,
-      },
-    ]
-  } else if (patch.subagents?.update) {
-    const { id, patch: subagentPatch } = patch.subagents.update
-    const index = state.subagents.findIndex((subagent) => subagent.id === id)
-    if (index < 0) {
-      throw new SubagentValidationException({ code: "NOT_FOUND", message: `Subagent ${id} not found` })
-    }
-    const existing = state.subagents[index]
-    const nextName = subagentPatch.name !== undefined ? subagentPatch.name.trim() : existing.name
-    if (subagentPatch.name !== undefined) {
-      const error = validateSubagentName(nextName, state.subagents.map((s) => ({ id: s.id, name: s.name })), id)
-      if (error) throw new SubagentValidationException(error)
-    }
-    const nextProvider = subagentPatch.provider ?? existing.provider
-    let nextWorkingDir: string | undefined
-    if (subagentPatch.workingDir === null) {
-      nextWorkingDir = undefined
-    } else if (subagentPatch.workingDir !== undefined) {
-      nextWorkingDir = subagentPatch.workingDir
-    } else {
-      nextWorkingDir = existing.workingDir
-    }
-    let nextAllowedPaths: string[] | undefined
-    if (subagentPatch.allowedPaths === null) {
-      nextAllowedPaths = undefined
-    } else if (subagentPatch.allowedPaths !== undefined) {
-      nextAllowedPaths = subagentPatch.allowedPaths
-    } else {
-      nextAllowedPaths = existing.allowedPaths
-    }
-    let nextMaxTurns: number | undefined
-    if (subagentPatch.maxTurns === null) {
-      nextMaxTurns = undefined
-    } else if (subagentPatch.maxTurns !== undefined) {
-      nextMaxTurns = normalizeSubagentMaxTurns(subagentPatch.maxTurns)
-    } else {
-      nextMaxTurns = existing.maxTurns
-    }
-    const restrictionError = validateSubagentRestriction(nextProvider, nextWorkingDir, nextAllowedPaths)
-    if (restrictionError) throw new SubagentValidationException(restrictionError)
-    let descriptionValue: string | undefined
-    if (subagentPatch.description === null) {
-      descriptionValue = undefined
-    } else if (subagentPatch.description !== undefined) {
-      descriptionValue = subagentPatch.description.trim() || undefined
-    } else {
-      descriptionValue = existing.description
-    }
-    const merged: Subagent = {
-      ...existing,
-      ...subagentPatch,
-      name: nextName,
-      description: descriptionValue,
-      modelOptions: mergeSubagentModelOptions(existing.modelOptions, subagentPatch.modelOptions),
-      workingDir: nextWorkingDir,
-      allowedPaths: nextAllowedPaths,
-      maxTurns: nextMaxTurns,
-      triggerMode: subagentPatch.triggerMode ?? existing.triggerMode,
-      updatedAt: Date.now(),
-    }
-    nextSubagents = [...state.subagents.slice(0, index), merged, ...state.subagents.slice(index + 1)]
-  } else if (patch.subagents?.delete) {
-    nextSubagents = state.subagents.filter((subagent) => subagent.id !== patch.subagents?.delete?.id)
-  }
-
-  let nextMcpServers = state.customMcpServers
-  if (patch.customMcpServers?.create) {
-    const createInput = patch.customMcpServers.create
-    if (
-      createInput.transport === "stdio"
-      && isPlainObject(createInput)
-      && isPlainObject(createInput.oauth)
-      && createInput.oauth.enabled
-    ) {
-      throw new McpValidationException({ code: "INVALID_OAUTH_TRANSPORT", field: "oauth", message: "OAuth is only supported for http/sse transports" })
-    }
-    const entry = buildMcpFromInput(createInput)
-    const error = validateMcpShape(entry, state.customMcpServers.map((s) => ({ id: s.id, name: s.name })))
-    if (error) throw new McpValidationException(error)
-    nextMcpServers = [...state.customMcpServers, entry]
-  } else if (patch.customMcpServers?.update) {
-    const { id, patch: mcpPatch } = patch.customMcpServers.update
-    const idx = state.customMcpServers.findIndex((s) => s.id === id)
-    if (idx < 0) throw new McpValidationException({ code: "NOT_FOUND", message: `MCP server ${id} not found` })
-    const updated = applyMcpPatch(state.customMcpServers[idx]!, mcpPatch)
-    const error = validateMcpShape(
-      updated,
-      state.customMcpServers.map((s) => ({ id: s.id, name: s.name })),
-    )
-    if (error) throw new McpValidationException(error)
-    nextMcpServers = [
-      ...state.customMcpServers.slice(0, idx),
-      updated,
-      ...state.customMcpServers.slice(idx + 1),
-    ]
-  } else if (patch.customMcpServers?.delete) {
-    nextMcpServers = state.customMcpServers.filter((s) => s.id !== patch.customMcpServers!.delete!.id)
-  } else if (patch.customMcpServers?.setEnabled) {
-    const { id, enabled } = patch.customMcpServers.setEnabled
-    nextMcpServers = state.customMcpServers.map((s) =>
-      s.id === id ? { ...s, enabled, updatedAt: new Date().toISOString() } : s,
-    )
-  } else if (patch.customMcpServers?.setTestResult) {
-    const { id, result } = patch.customMcpServers.setTestResult
-    nextMcpServers = state.customMcpServers.map((s) =>
-      s.id === id ? { ...s, lastTest: result, updatedAt: new Date().toISOString() } : s,
-    )
-  } else if (patch.customMcpServers?.setOAuthState) {
-    const { id, oauth } = patch.customMcpServers.setOAuthState
-    nextMcpServers = state.customMcpServers.map((s) =>
-      s.id === id && s.transport !== "stdio" ? { ...s, oauth } : s,
-    )
-  }
-
-  let nextCustomModels = state.customModels
-  if (patch.customModels?.create) {
-    const entry = buildCustomModelFromInput(patch.customModels.create)
-    const error = validateCustomModelShape(entry, state.customModels.map((m) => ({ id: m.id, provider: m.provider })))
-    if (error) throw new CustomModelValidationException(error)
-    nextCustomModels = [...state.customModels, entry]
-  } else if (patch.customModels?.update) {
-    const { id, patch: modelPatch } = patch.customModels.update
-    const idx = state.customModels.findIndex((m) => m.id === id)
-    if (idx < 0) throw new CustomModelValidationException({ code: "NOT_FOUND", message: `custom model ${id} not found` })
-    const updated = applyCustomModelPatch(state.customModels[idx]!, modelPatch)
-    nextCustomModels = [...state.customModels.slice(0, idx), updated, ...state.customModels.slice(idx + 1)]
-  } else if (patch.customModels?.delete) {
-    nextCustomModels = state.customModels.filter((m) => m.id !== patch.customModels!.delete!.id)
-  }
-
-  let nextTextSnippets = state.textSnippets
-  if (patch.textSnippets?.create) {
-    const entry = buildTextSnippetFromInput(patch.textSnippets.create)
-    const error = validateTextSnippetShape(entry, state.textSnippets.map((s) => ({ id: s.id, shortcut: s.shortcut })))
-    if (error) throw new TextSnippetValidationException(error)
-    nextTextSnippets = [...state.textSnippets, entry]
-  } else if (patch.textSnippets?.update) {
-    const { id, patch: snippetPatch } = patch.textSnippets.update
-    const idx = state.textSnippets.findIndex((s) => s.id === id)
-    if (idx < 0) throw new TextSnippetValidationException({ code: "NOT_FOUND", message: `text snippet ${id} not found` })
-    const updated = applyTextSnippetPatch(state.textSnippets[idx]!, snippetPatch)
-    const error = validateTextSnippetShape(updated, state.textSnippets.map((s) => ({ id: s.id, shortcut: s.shortcut })))
-    if (error) throw new TextSnippetValidationException(error)
-    nextTextSnippets = [...state.textSnippets.slice(0, idx), updated, ...state.textSnippets.slice(idx + 1)]
-  } else if (patch.textSnippets?.delete) {
-    nextTextSnippets = state.textSnippets.filter((s) => s.id !== patch.textSnippets!.delete!.id)
-  }
+  const mcpPatch = patch.customMcpServers
+  const nextSubagents = applyCollectionPatch(state.subagents, patch.subagents, SUBAGENT_CRUD) ?? state.subagents
+  const nextMcpServers = applyCollectionPatch(state.customMcpServers, mcpPatch, MCP_CRUD)
+    ?? (mcpPatch ? applyMcpSetterPatch(state.customMcpServers, mcpPatch) : state.customMcpServers)
+  const nextCustomModels = applyCollectionPatch(state.customModels, patch.customModels, CUSTOM_MODEL_CRUD)
+    ?? state.customModels
+  const nextTextSnippets = applyCollectionPatch(state.textSnippets, patch.textSnippets, TEXT_SNIPPET_CRUD)
+    ?? state.textSnippets
 
   return normalizeAppSettings({
     ...toFilePayload(state),

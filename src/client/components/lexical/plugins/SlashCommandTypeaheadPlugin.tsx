@@ -12,6 +12,7 @@ import { commandsForProvider, filterCommands, normalizeCommandName } from "../..
 import type { AgentProvider, SlashCommand } from "../../../../shared/types"
 import { $createSlashCommandNode } from "../nodes/SlashCommandNode"
 import { cn } from "../../../lib/utils"
+import { clampCommandDescription } from "../../../lib/formatters"
 import { ChatTabScopedStore } from "../../../stores/chatTabScopedStore"
 
 // ---------------------------------------------------------------------------
@@ -93,13 +94,6 @@ export interface SlashCommandTypeaheadPluginProps {
 // ---------------------------------------------------------------------------
 // Plugin component
 // ---------------------------------------------------------------------------
-
-const DESCRIPTION_MAX_CHARS = 80
-
-function clampDescription(text: string): string {
-  if (text.length <= DESCRIPTION_MAX_CHARS) return text
-  return `${text.slice(0, DESCRIPTION_MAX_CHARS - 1).trimEnd()}…`
-}
 
 export function SlashCommandTypeaheadPlugin({
   projectId,
@@ -226,7 +220,7 @@ export function SlashCommandTypeaheadPlugin({
                 </div>
                 {cmd.description ? (
                   <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground sm:text-right">
-                    {clampDescription(cmd.description)}
+                    {clampCommandDescription(cmd.description)}
                   </span>
                 ) : null}
               </li>

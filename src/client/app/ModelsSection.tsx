@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from "react"
-import { Plus, Trash2, Pencil, Cpu } from "lucide-react"
+import { Plus, Cpu } from "lucide-react"
 import { Button } from "../components/ui/button"
 import { Input } from "../components/ui/input"
 import {
@@ -9,14 +9,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../components/ui/select"
+import {
+  SettingsEmptyState,
+  SettingsList,
+  SettingsRowActions,
+} from "../components/settings/SettingsList"
 import { useAppSettingsStore, selectCustomModels } from "../stores/appSettingsStore"
-import type {
-  AppSettingsPatch,
-  CustomModelEntry,
-  CustomModelInput,
-  CustomModelPatch,
-} from "../../shared/types"
+import type { CustomModelEntry, CustomModelInput, CustomModelPatch } from "../../shared/types"
 import type { KannaState } from "./useKannaState"
+import {
+  useAppSettingsCrudHandlers,
+  type AppSettingsCrudHandlers,
+  type AppSettingsPatchWrapper,
+} from "./appSettingsCrud"
+import { editorSubmitLabel, submitEditorForm } from "./settingsEditorForm"
 import {
   useModelsSectionStore,
   type ModelProvider,
@@ -25,11 +31,11 @@ import {
 import type { DomPort } from "../ports/domPort"
 import { domAdapter } from "../adapters/dom.adapter"
 
-export interface ModelsSectionHandlers {
-  onCreate: (input: CustomModelInput) => Promise<void>
-  onUpdate: (id: string, patch: CustomModelPatch) => Promise<void>
-  onDelete: (id: string) => Promise<void>
-}
+export type ModelsSectionHandlers = AppSettingsCrudHandlers<CustomModelInput, CustomModelPatch>
+
+const wrapModelsPatch: AppSettingsPatchWrapper<CustomModelInput, CustomModelPatch> = (
+  customModels,
+) => ({ customModels })
 
 const MODEL_PROVIDER_SET = new Set<string>(["claude", "codex"])
 function isModelProvider(v: string): v is ModelProvider {
@@ -91,14 +97,12 @@ export function ModelsSection({ models, handlers, dom = domAdapter }: ModelsSect
               </Button>
             </div>
             {rows.length === 0 ? (
-              <div className="flex flex-col items-center justify-center rounded-md border border-dashed px-6 py-10 text-center">
-                <Cpu className="mb-3 h-8 w-8 text-muted-foreground" aria-hidden />
-                <p className="text-sm text-muted-foreground">
-                  No {PROVIDER_LABEL[provider]} models configured.
-                </p>
-              </div>
+              <SettingsEmptyState
+                icon={Cpu}
+                message={`No ${PROVIDER_LABEL[provider]} models configured.`}
+              />
             ) : (
-              <ul className="flex flex-col divide-y rounded-md border">
+              <SettingsList>
                 {rows.map((model) => (
                   <ModelRow
                     key={model.id}
@@ -111,7 +115,7 @@ export function ModelsSection({ models, handlers, dom = domAdapter }: ModelsSect
                     }}
                   />
                 ))}
-              </ul>
+              </SettingsList>
             )}
           </div>
         )
@@ -142,12 +146,7 @@ function ModelRow({
         {model.supportsMaxReasoningEffort && (
           <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase">max</span>
         )}
-        <Button variant="ghost" size="sm" onClick={onEdit} aria-label={`Edit ${model.label}`}>
-          <Pencil className="h-4 w-4" />
-        </Button>
-        <Button variant="ghost" size="sm" onClick={onDelete} aria-label={`Delete ${model.label}`}>
-          <Trash2 className="h-4 w-4" />
-        </Button>
+        <SettingsRowActions label={model.label} onEdit={onEdit} onDelete={onDelete} />
       </div>
     </li>
   )
@@ -167,17 +166,12 @@ function ModelEditor({
   onDone: () => void
 }) {
   const editorForm = useModelsSectionStore((state) => state.editorForm)
-  const setEditorId = useModelsSectionStore((state) => state.setEditorId)
-  const setEditorLabel = useModelsSectionStore((state) => state.setEditorLabel)
-  const setEditorModelProvider = useModelsSectionStore((state) => state.setEditorModelProvider)
+  const patchEditorForm = useModelsSectionStore((state) => state.patchEditorForm)
   // The guard is a TS type predicate narrowing string -> ModelProvider, so it
   // belongs at the boundary, not in the store.
   const handleProviderChange = useCallback((value: string) => {
-    if (isModelProvider(value)) setEditorModelProvider(value)
-  }, [setEditorModelProvider])
-  const setEditorSupportsEffort = useModelsSectionStore((state) => state.setEditorSupportsEffort)
-  const setEditorSubmitting = useModelsSectionStore((state) => state.setEditorSubmitting)
-  const setEditorError = useModelsSectionStore((state) => state.setEditorError)
+    if (isModelProvider(value)) patchEditorForm({ modelProvider: value })
+  }, [patchEditorForm])
 
   const { id, label, modelProvider, supportsEffort, submitting, error } = editorForm
 
@@ -192,36 +186,26 @@ function ModelEditor({
 
   const canSave = id.trim().length > 0 && label.trim().length > 0 && !duplicate && !submitting
 
-  const onSubmit = async () => {
-    setEditorSubmitting(true)
-    setEditorError(null)
-    try {
-      if (isEdit && initial) {
-        await handlers.onUpdate(initial.id, { label: label.trim(), supportsEffort })
-      } else {
-        await handlers.onCreate({
-          id: id.trim(),
-          label: label.trim(),
-          provider: modelProvider,
-          supportsEffort,
-        })
-      }
-      onDone()
-    } catch (e) {
-      setEditorError(e instanceof Error ? e.message : "Failed to save model")
-    } finally {
-      setEditorSubmitting(false)
-    }
-  }
+  const onSubmit = () =>
+    submitEditorForm({
+      patch: patchEditorForm,
+      save: async () => {
+        if (isEdit && initial) {
+          await handlers.onUpdate(initial.id, { label: label.trim(), supportsEffort })
+        } else {
+          await handlers.onCreate({
+            id: id.trim(),
+            label: label.trim(),
+            provider: modelProvider,
+            supportsEffort,
+          })
+        }
+      },
+      onDone,
+      fallbackMessage: "Failed to save model",
+    })
 
-  let submitLabel: string
-  if (submitting) {
-    submitLabel = "Saving…"
-  } else if (isEdit) {
-    submitLabel = "Save changes"
-  } else {
-    submitLabel = "Add model"
-  }
+  const submitLabel = editorSubmitLabel({ submitting, isEdit, addLabel: "Add model" })
 
   return (
     <div className="flex flex-col gap-4 px-6 py-6">
@@ -248,7 +232,7 @@ function ModelEditor({
         <span className="text-sm font-medium">Model ID</span>
         <Input
           value={id}
-          onChange={(e) => setEditorId(e.target.value)}
+          onChange={(e) => patchEditorForm({ id: e.target.value })}
           placeholder="claude-opus-4-9"
           disabled={isEdit}
           className="font-mono"
@@ -260,14 +244,18 @@ function ModelEditor({
 
       <label className="flex flex-col gap-1">
         <span className="text-sm font-medium">Label</span>
-        <Input value={label} onChange={(e) => setEditorLabel(e.target.value)} placeholder="Opus 4.9" />
+        <Input
+          value={label}
+          onChange={(e) => patchEditorForm({ label: e.target.value })}
+          placeholder="Opus 4.9"
+        />
       </label>
 
       <label className="inline-flex cursor-pointer items-center gap-2 text-sm">
         <input
           type="checkbox"
           checked={supportsEffort}
-          onChange={(e) => setEditorSupportsEffort(e.target.checked)}
+          onChange={(e) => patchEditorForm({ supportsEffort: e.target.checked })}
         />
         <span>Supports reasoning effort</span>
       </label>
@@ -297,22 +285,6 @@ export function ModelsSettingsBranch(props: {
   state: Pick<KannaState, "handleWriteAppSettings">
 }) {
   const models = useAppSettingsStore(selectCustomModels)
-  const handlers = useMemo<ModelsSectionHandlers>(
-    () => ({
-      onCreate: async (input) => {
-        const s: AppSettingsPatch = { customModels: { create: input } }
-        await props.state.handleWriteAppSettings(s)
-      },
-      onUpdate: async (id, patch) => {
-        const s: AppSettingsPatch = { customModels: { update: { id, patch } } }
-        await props.state.handleWriteAppSettings(s)
-      },
-      onDelete: async (id) => {
-        const s: AppSettingsPatch = { customModels: { delete: { id } } }
-        await props.state.handleWriteAppSettings(s)
-      },
-    }),
-    [props.state],
-  )
+  const handlers = useAppSettingsCrudHandlers(wrapModelsPatch, props.state)
   return <ModelsSection models={models} handlers={handlers} />
 }

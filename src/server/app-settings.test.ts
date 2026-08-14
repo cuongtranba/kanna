@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLAUDE_DRIVER_DEFAULTS, CLAUDE_PTY_LIFECYCLE_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, DEFAULT_OPENROUTER_SDK_MODEL, GLOBAL_PROMPT_APPEND_MAX_CHARS, PUSH_DEFAULTS,
+import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLAUDE_DRIVER_DEFAULTS, CLAUDE_PTY_LIFECYCLE_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, DEFAULT_OPENROUTER_SDK_MODEL, GLOBAL_PROMPT_APPEND_MAX_CHARS, mergeCustomModels, PROVIDERS, PUSH_DEFAULTS,
   TELEMETRY_DEFAULTS, UPLOAD_DEFAULTS } from "../shared/types"
 import { AppSettingsManager, readAppSettingsSnapshot, seedCustomModelsFromBuiltins } from "./app-settings"
 import type { AppSettingsSnapshot, McpOAuthState, SubagentInput } from "../shared/types"
@@ -1523,5 +1523,129 @@ describe("textSnippets", () => {
     const reloaded = trackManager(new AppSettingsManager(filePath))
     await reloaded.initialize()
     expect(reloaded.getSnapshot().textSnippets.some((s) => s.shortcut === "pgm")).toBe(true)
+  })
+})
+
+// The four settings collections (subagents, MCP servers, custom models, text
+// snippets) share one create/update/delete shape but deliberately differ in
+// what each arm validates. These pin the differences so a shared CRUD path
+// cannot quietly level them.
+describe("collection CRUD contracts", () => {
+  async function freshManager() {
+    const manager = trackManager(new AppSettingsManager(await createTempFilePath()))
+    await manager.initialize()
+    return manager
+  }
+
+  test("update on a missing id is NOT_FOUND for every collection", async () => {
+    const manager = await freshManager()
+    await expect(manager.writePatch({ customModels: { update: { id: "ghost", patch: { label: "x" } } } }))
+      .rejects.toMatchObject({ validationError: { code: "NOT_FOUND" } })
+    await expect(manager.writePatch({ textSnippets: { update: { id: "ghost", patch: { expansion: "x" } } } }))
+      .rejects.toMatchObject({ validationError: { code: "NOT_FOUND" } })
+    await expect(manager.writePatch({ subagents: { update: { id: "ghost", patch: { name: "x" } } } }))
+      .rejects.toMatchObject({ validationError: { code: "NOT_FOUND" } })
+    await expect(manager.writePatch({ customMcpServers: { update: { id: "ghost", patch: { name: "x" } } } }))
+      .rejects.toMatchObject({ validationError: { code: "NOT_FOUND" } })
+  })
+
+  test("delete of a missing id is a no-op for every collection", async () => {
+    const manager = await freshManager()
+    const before = manager.getSnapshot()
+    await manager.writePatch({ customModels: { delete: { id: "ghost" } } })
+    await manager.writePatch({ textSnippets: { delete: { id: "ghost" } } })
+    await manager.writePatch({ subagents: { delete: { id: "ghost" } } })
+    await manager.writePatch({ customMcpServers: { delete: { id: "ghost" } } })
+    const after = manager.getSnapshot()
+    expect(after.customModels).toEqual(before.customModels)
+    expect(after.textSnippets).toEqual(before.textSnippets)
+    expect(after.subagents).toEqual(before.subagents)
+    expect(after.customMcpServers).toEqual(before.customMcpServers)
+  })
+
+  test("a create never mutates the array the previous snapshot handed out", async () => {
+    const manager = await freshManager()
+    const before = manager.getSnapshot()
+    const modelsBefore = before.customModels.length
+    const snippetsBefore = before.textSnippets.length
+    await manager.writePatch({ customModels: { create: { id: "claude-frozen", label: "Frozen", provider: "claude", supportsEffort: true } } })
+    await manager.writePatch({ textSnippets: { create: { shortcut: "frz", expansion: "frozen" } } })
+    expect(before.customModels).toHaveLength(modelsBefore)
+    expect(before.textSnippets).toHaveLength(snippetsBefore)
+    expect(manager.getSnapshot().customModels).toHaveLength(modelsBefore + 1)
+    expect(manager.getSnapshot().textSnippets).toHaveLength(snippetsBefore + 1)
+  })
+
+  test("deleting a seeded model drops the override so the built-in shows through", async () => {
+    const manager = await freshManager()
+    await manager.writePatch({ customModels: { delete: { id: "claude-opus-4-8" } } })
+    const custom = manager.getSnapshot().customModels
+    expect(custom.some((m) => m.id === "claude-opus-4-8")).toBe(false)
+    const merged = mergeCustomModels([...PROVIDERS], custom)
+    expect(merged.find((p) => p.id === "claude")!.models.some((m) => m.id === "claude-opus-4-8")).toBe(true)
+  })
+
+  test("custom model update is unvalidated at the CRUD boundary; the normalizer drops the result", async () => {
+    const manager = await freshManager()
+    await manager.writePatch({ customModels: { create: { id: "claude-doomed", label: "Doomed", provider: "claude", supportsEffort: true } } })
+    await manager.writePatch({ customModels: { update: { id: "claude-doomed", patch: { label: "   " } } } })
+    expect(manager.getSnapshot().customModels.some((m) => m.id === "claude-doomed")).toBe(false)
+  })
+
+  test("text snippet update rejects a shortcut another snippet already owns", async () => {
+    const manager = await freshManager()
+    await manager.writePatch({ textSnippets: { create: { shortcut: "one", expansion: "first" } } })
+    await manager.writePatch({ textSnippets: { create: { shortcut: "two", expansion: "second" } } })
+    const second = manager.getSnapshot().textSnippets.find((s) => s.shortcut === "two")!
+    await expect(manager.writePatch({ textSnippets: { update: { id: second.id, patch: { shortcut: "one" } } } }))
+      .rejects.toMatchObject({ validationError: { code: "DUPLICATE_SHORTCUT" } })
+    expect(manager.getSnapshot().textSnippets.find((s) => s.id === second.id)!.shortcut).toBe("two")
+  })
+
+  test("text snippet update keeps its own shortcut without tripping the dedupe", async () => {
+    const manager = await freshManager()
+    await manager.writePatch({ textSnippets: { create: { shortcut: "keep", expansion: "before" } } })
+    const id = manager.getSnapshot().textSnippets[0]!.id
+    await manager.writePatch({ textSnippets: { update: { id, patch: { shortcut: "keep", expansion: "after" } } } })
+    expect(manager.getSnapshot().textSnippets[0]!.expansion).toBe("after")
+  })
+
+  test("text snippet create rejects an expansion over the cap", async () => {
+    const manager = await freshManager()
+    await expect(manager.writePatch({ textSnippets: { create: { shortcut: "big", expansion: "x".repeat(4_001) } } }))
+      .rejects.toMatchObject({ validationError: { code: "EMPTY_EXPANSION" } })
+  })
+
+  test("MCP server update rejects a name another server already owns", async () => {
+    const manager = await freshManager()
+    await manager.writePatch({ customMcpServers: { create: { name: "alpha", transport: "stdio", command: "/bin/a", args: [], env: {} } } })
+    await manager.writePatch({ customMcpServers: { create: { name: "beta", transport: "stdio", command: "/bin/b", args: [], env: {} } } })
+    const beta = manager.getSnapshot().customMcpServers.find((s) => s.name === "beta")!
+    await expect(manager.writePatch({ customMcpServers: { update: { id: beta.id, patch: { name: "alpha" } } } }))
+      .rejects.toMatchObject({ validationError: { code: "DUPLICATE_NAME" } })
+    expect(manager.getSnapshot().customMcpServers.find((s) => s.id === beta.id)!.name).toBe("beta")
+  })
+
+  test("custom model create rejects a duplicate id with DUPLICATE_ID", async () => {
+    const manager = await freshManager()
+    await expect(manager.writePatch({ customModels: { create: { id: "claude-opus-4-8", label: "Dup", provider: "claude", supportsEffort: true } } }))
+      .rejects.toMatchObject({ validationError: { code: "DUPLICATE_ID" } })
+  })
+
+  test("a subagent keeping its own name is not a duplicate of itself", async () => {
+    const manager = await freshManager()
+    const created = await manager.createSubagent({
+      name: "keeper",
+      provider: "claude",
+      model: "claude-opus-4-8",
+      modelOptions: { reasoningEffort: "high", contextWindow: "200k" },
+      systemPrompt: "hi",
+      contextScope: "previous-assistant-reply",
+    })
+    const id = (created as { id: string }).id
+    expect(await manager.updateSubagent(id, { name: "keeper", systemPrompt: "same name" }))
+      .toMatchObject({ id, name: "keeper", systemPrompt: "same name" })
+    expect(await manager.updateSubagent(id, { systemPrompt: "no name in patch" }))
+      .toMatchObject({ id, name: "keeper" })
   })
 })

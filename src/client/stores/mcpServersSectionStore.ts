@@ -69,29 +69,14 @@ interface McpServersSectionState {
   // McpRow per-server test-in-progress tracking (replaces per-row useState(false))
   testingServerIds: ReadonlySet<string>
 
-  // McpServerEditor form state (all 16 useState calls)
+  // McpServerEditor form state (ONE editor active at a time)
   editorForm: EditorFormState
 
   // Actions
   setEditing: (editing: EditingState) => void
   setServerTesting: (id: string, testing: boolean) => void
   resetEditorForm: (initial: McpServerConfig | null) => void
-  setEditorName: (name: string) => void
-  setEditorTransport: (transport: McpServerTransport) => void
-  setEditorCommand: (command: string) => void
-  setEditorArgsText: (argsText: string) => void
-  setEditorEnvText: (envText: string) => void
-  setEditorCwd: (cwd: string) => void
-  setEditorUrl: (url: string) => void
-  setEditorHeadersText: (headersText: string) => void
-  setEditorError: (error: string | null) => void
-  setEditorSubmitting: (submitting: boolean) => void
-  setEditorOauthEnabled: (enabled: boolean) => void
-  setEditorAuthFlowUrl: (url: string | null) => void
-  setEditorCallbackInput: (input: string) => void
-  setEditorOauthError: (error: string | null) => void
-  setEditorAuthenticating: (authenticating: boolean) => void
-  setEditorCompleting: (completing: boolean) => void
+  patchEditorForm: (patch: Partial<EditorFormState>) => void
 }
 
 export const useMcpServersSectionStore = create<McpServersSectionState>()((set) => ({
@@ -114,36 +99,6 @@ export const useMcpServersSectionStore = create<McpServersSectionState>()((set) 
 
   resetEditorForm: (initial) => set({ editorForm: createEditorFormFromInitial(initial) }),
 
-  setEditorName: (name) =>
-    set((state) => ({ editorForm: { ...state.editorForm, name } })),
-  setEditorTransport: (transport) =>
-    set((state) => ({ editorForm: { ...state.editorForm, transport } })),
-  setEditorCommand: (command) =>
-    set((state) => ({ editorForm: { ...state.editorForm, command } })),
-  setEditorArgsText: (argsText) =>
-    set((state) => ({ editorForm: { ...state.editorForm, argsText } })),
-  setEditorEnvText: (envText) =>
-    set((state) => ({ editorForm: { ...state.editorForm, envText } })),
-  setEditorCwd: (cwd) =>
-    set((state) => ({ editorForm: { ...state.editorForm, cwd } })),
-  setEditorUrl: (url) =>
-    set((state) => ({ editorForm: { ...state.editorForm, url } })),
-  setEditorHeadersText: (headersText) =>
-    set((state) => ({ editorForm: { ...state.editorForm, headersText } })),
-  setEditorError: (error) =>
-    set((state) => ({ editorForm: { ...state.editorForm, error } })),
-  setEditorSubmitting: (submitting) =>
-    set((state) => ({ editorForm: { ...state.editorForm, submitting } })),
-  setEditorOauthEnabled: (oauthEnabled) =>
-    set((state) => ({ editorForm: { ...state.editorForm, oauthEnabled } })),
-  setEditorAuthFlowUrl: (authFlowUrl) =>
-    set((state) => ({ editorForm: { ...state.editorForm, authFlowUrl } })),
-  setEditorCallbackInput: (callbackInput) =>
-    set((state) => ({ editorForm: { ...state.editorForm, callbackInput } })),
-  setEditorOauthError: (oauthError) =>
-    set((state) => ({ editorForm: { ...state.editorForm, oauthError } })),
-  setEditorAuthenticating: (authenticating) =>
-    set((state) => ({ editorForm: { ...state.editorForm, authenticating } })),
-  setEditorCompleting: (completing) =>
-    set((state) => ({ editorForm: { ...state.editorForm, completing } })),
+  patchEditorForm: (patch) =>
+    set((state) => ({ editorForm: { ...state.editorForm, ...patch } })),
 }))

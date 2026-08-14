@@ -1,7 +1,8 @@
 import type { WorkflowJournalEntry, WorkflowRawFile, WorkflowRunDirInfo } from "./workflow-watch-io.adapter"
 import { parseWorkflowRunFile, toRunSummary } from "../shared/workflow-types"
 import type { WorkflowAgentProgress, WorkflowRun, WorkflowRunSummary } from "../shared/workflow-types"
-import { normalizeClaudeStreamMessage } from "./agent"
+import { parseAgentTranscriptLines } from "./agent-transcript-parse"
+import { createWatchedRegistry } from "./watched-registry"
 import type { TranscriptEntry } from "../shared/types"
 
 export interface WorkflowRegistryDeps {
@@ -58,8 +59,6 @@ export interface WorkflowRegistry {
   hasActiveRun(chatId: string, freshnessMs: number, now: number): boolean
   subscribe(cb: (chatId: string) => void): () => void
 }
-
-interface Entry { dir: string; dispose: () => void; runs: Map<string, WorkflowRun> }
 
 // A live run dir with no terminal sidecar and activity within this window is
 // surfaced as a synthetic `running` row. Claude flushes the wf_<runId>.json
@@ -131,49 +130,39 @@ function buildAgentsFromJournal(entries: WorkflowJournalEntry[]): WorkflowAgentP
 }
 
 export function createWorkflowRegistry(deps: WorkflowRegistryDeps): WorkflowRegistry {
-  const entries = new Map<string, Entry>()
-  const subs = new Set<(chatId: string) => void>()
-
-  function refresh(chatId: string): void {
-    const entry = entries.get(chatId)
-    if (!entry) return
-    const next = new Map<string, WorkflowRun>()
-    for (const { raw } of deps.read(entry.dir)) {
-      const run = parseWorkflowRunFile(raw)
-      if (run) next.set(run.runId, run)
-    }
-    entry.runs = next
-    for (const cb of subs) cb(chatId)
-  }
-
-  return {
-    register(chatId, workflowsDir) {
-      entries.get(chatId)?.dispose()
-      const disposeSidecar = deps.watch(workflowsDir, () => refresh(chatId))
+  const registry = createWatchedRegistry<Map<string, WorkflowRun>>({
+    load: (workflowsDir) => {
+      const runs = new Map<string, WorkflowRun>()
+      for (const { raw } of deps.read(workflowsDir)) {
+        const run = parseWorkflowRunFile(raw)
+        if (run) runs.set(run.runId, run)
+      }
+      return runs
+    },
+    watch: (workflowsDir, onChange) => {
+      const disposeSidecar = deps.watch(workflowsDir, onChange)
       // Also watch the live run-dir root so a launch (no sidecar yet) pushes a
       // snapshot — otherwise an in-flight run is invisible until it terminates.
-      const disposeLive = deps.watchRunDirs?.(workflowsDir, () => refresh(chatId)) ?? (() => {})
-      const dispose = () => { disposeSidecar(); disposeLive() }
-      entries.set(chatId, { dir: workflowsDir, dispose, runs: new Map() })
-      refresh(chatId)
+      const disposeLive = deps.watchRunDirs?.(workflowsDir, onChange) ?? (() => {})
+      return () => { disposeSidecar(); disposeLive() }
     },
-    unregister(chatId) {
-      const entry = entries.get(chatId)
-      if (!entry) return
-      entry.dispose()
-      entries.delete(chatId)
-    },
+  })
+
+  return {
+    register: registry.register,
+    unregister: registry.unregister,
     snapshot(chatId) {
-      const entry = entries.get(chatId)
+      const entry = registry.entry(chatId)
       if (!entry) return []
+      const { key: dir, state: runs } = entry
       // Sidecar runs (terminal/authoritative) + synthetic running rows for live
       // run dirs that have no sidecar yet. A real terminal sidecar wins over a
       // synthetic row; the sole exception is a no-op crash sidecar overridden by
       // a fresh non-empty live journal (a re-run reused the runId — see below).
-      const merged = new Map(entry.runs)
+      const merged = new Map(runs)
       if (deps.listRunDirs) {
         const floor = Date.now() - SNAPSHOT_LIVE_WINDOW_MS
-        for (const { runId, newestMtimeMs } of deps.listRunDirs(entry.dir)) {
+        for (const { runId, newestMtimeMs } of deps.listRunDirs(dir)) {
           if (newestMtimeMs < floor) continue
           const existing = merged.get(runId)
           // No sidecar yet: surface the live run as a synthetic running row.
@@ -183,7 +172,7 @@ export function createWorkflowRegistry(deps: WorkflowRegistryDeps): WorkflowRegi
           // reused the runId (≥1 agent). Journal is read solely in this rare
           // case, keeping the common no-sidecar path journal-free.
           if (!isStaleCrashSidecar(existing) || !deps.readRunJournal) continue
-          const agents = buildAgentsFromJournal(deps.readRunJournal(entry.dir, runId))
+          const agents = buildAgentsFromJournal(deps.readRunJournal(dir, runId))
           if (agents.length === 0) continue // true crash, no re-run → keep failed
           // Carry the crash sidecar's taskId/workflowName so the launch card
           // (joined by taskId) binds to the live re-run that reused the runId.
@@ -197,9 +186,10 @@ export function createWorkflowRegistry(deps: WorkflowRegistryDeps): WorkflowRegi
       return [...merged.values()].sort(byNewest).map(toRunSummary)
     },
     getRun(chatId, runId) {
-      const entry = entries.get(chatId)
+      const entry = registry.entry(chatId)
       if (!entry) return null
-      const sidecar = entry.runs.get(runId)
+      const { key: dir, state: runs } = entry
+      const sidecar = runs.get(runId)
       // A real terminal sidecar wins. A crash sidecar (no-op shape) falls
       // through to live synthesis so a re-run that reused the runId surfaces
       // as running; it falls BACK to the failed sidecar if the live dir proves
@@ -208,11 +198,11 @@ export function createWorkflowRegistry(deps: WorkflowRegistryDeps): WorkflowRegi
       // Synthesize a running run from the live dir, enriched from the journal.
       if (deps.listRunDirs) {
         const floor = Date.now() - SNAPSHOT_LIVE_WINDOW_MS
-        const live = deps.listRunDirs(entry.dir).find((r) => r.runId === runId && r.newestMtimeMs >= floor)
+        const live = deps.listRunDirs(dir).find((r) => r.runId === runId && r.newestMtimeMs >= floor)
         if (live) {
           const base = synthRunningRun(runId, live.newestMtimeMs)
           if (deps.readRunJournal) {
-            const agents = buildAgentsFromJournal(deps.readRunJournal(entry.dir, runId))
+            const agents = buildAgentsFromJournal(deps.readRunJournal(dir, runId))
             // A crash sidecar with no live agents is a true crash → keep failed.
             // When overriding, carry the crash sidecar's taskId/workflowName.
             if (agents.length > 0 || !sidecar) {
@@ -226,37 +216,23 @@ export function createWorkflowRegistry(deps: WorkflowRegistryDeps): WorkflowRegi
       return sidecar ?? null
     },
     getAgentTranscript(chatId, runId, agentId) {
-      const entry = entries.get(chatId)
+      const entry = registry.entry(chatId)
       if (!entry || !deps.readAgentTranscriptLines) return []
-      const out: TranscriptEntry[] = []
-      for (const line of deps.readAgentTranscriptLines(entry.dir, runId, agentId)) {
-        let parsed
-        try {
-          parsed = JSON.parse(line)
-        } catch {
-          continue // partial / corrupt line — skip
-        }
-        if (!parsed || typeof parsed !== "object") continue
-        try {
-          out.push(...normalizeClaudeStreamMessage(parsed))
-        } catch {
-          continue // defensive: never let one bad line abort the read
-        }
-      }
-      return out
+      return parseAgentTranscriptLines(deps.readAgentTranscriptLines(entry.key, runId, agentId))
     },
     hasActiveRun(chatId, freshnessMs, now) {
-      const entry = entries.get(chatId)
+      const entry = registry.entry(chatId)
       if (!entry || !deps.listRunDirs) return false
+      const { key: dir, state: runs } = entry
       const floor = now - freshnessMs
-      for (const { runId, newestMtimeMs } of deps.listRunDirs(entry.dir)) {
+      for (const { runId, newestMtimeMs } of deps.listRunDirs(dir)) {
         if (newestMtimeMs < floor) continue // stale: no activity within the window
-        const sidecar = entry.runs.get(runId)
+        const sidecar = runs.get(runId)
         // No terminal sidecar yet (still mid-run), or it explicitly says running.
         if (!sidecar || sidecar.status === "running") return true
       }
       return false
     },
-    subscribe(cb) { subs.add(cb); return () => subs.delete(cb) },
+    subscribe: registry.subscribe,
   }
 }

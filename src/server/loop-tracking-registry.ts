@@ -13,6 +13,7 @@
 
 import type { StructuredDoc } from "../shared/structured-doc/types"
 import type { LoopTrackingSnapshot } from "../shared/loop-progress"
+import { createWatchedRegistry } from "./watched-registry"
 
 const DEFAULT_MAX_DONE_ENTRIES = 200
 
@@ -39,12 +40,6 @@ export interface LoopTrackingRegistry {
   subscribe(cb: (chatId: string) => void): () => void
 }
 
-interface Entry {
-  path: string
-  dispose: () => void
-  tracking: LoopTrackingSnapshot | null
-}
-
 function parse(
   content: string,
   doc: StructuredDoc,
@@ -59,45 +54,21 @@ function parse(
 
 export function createLoopTrackingRegistry(deps: LoopTrackingRegistryDeps): LoopTrackingRegistry {
   const maxDoneEntries = deps.maxDoneEntries ?? DEFAULT_MAX_DONE_ENTRIES
-  const entries = new Map<string, Entry>()
-  const subs = new Set<(chatId: string) => void>()
 
-  function refresh(chatId: string): void {
-    const entry = entries.get(chatId)
-    if (!entry) return
-    const doc = deps.resolveDoc(entry.path)
-    const content = doc ? deps.read(entry.path) : null
-    entry.tracking = doc && content !== null ? parse(content, doc, maxDoneEntries) : null
-    for (const cb of subs) cb(chatId)
-  }
+  const registry = createWatchedRegistry<LoopTrackingSnapshot | null>({
+    watch: deps.watch,
+    load: (path) => {
+      const doc = deps.resolveDoc(path)
+      if (!doc) return null
+      const content = deps.read(path)
+      return content === null ? null : parse(content, doc, maxDoneEntries)
+    },
+  })
 
   return {
-    register(chatId, trackingFileAbs) {
-      const existing = entries.get(chatId)
-      if (existing?.path === trackingFileAbs) return
-      existing?.dispose()
-      entries.set(chatId, {
-        path: trackingFileAbs,
-        dispose: deps.watch(trackingFileAbs, () => refresh(chatId)),
-        tracking: null,
-      })
-      refresh(chatId)
-    },
-
-    unregister(chatId) {
-      const entry = entries.get(chatId)
-      if (!entry) return
-      entry.dispose()
-      entries.delete(chatId)
-    },
-
-    snapshot(chatId) {
-      return entries.get(chatId)?.tracking ?? null
-    },
-
-    subscribe(cb) {
-      subs.add(cb)
-      return () => subs.delete(cb)
-    },
+    register: registry.register,
+    unregister: registry.unregister,
+    snapshot: (chatId) => registry.entry(chatId)?.state ?? null,
+    subscribe: registry.subscribe,
   }
 }

@@ -3,6 +3,7 @@ import { homedir } from "node:os"
 import path from "node:path"
 import type { AgentProvider } from "../shared/types"
 import { isRecord } from "../shared/errors"
+import { safeJsonParse } from "../shared/safe-json"
 import { resolveLocalPath } from "./paths"
 
 export interface DiscoveredProject {
@@ -124,13 +125,8 @@ export class ClaudeProjectDiscoveryAdapter implements ProjectDiscoveryAdapter {
 }
 
 function parseJsonRecord(line: string): Record<string, unknown> | null {
-  try {
-    const parsed = JSON.parse(line)
-    if (!isRecord(parsed)) return null
-    return parsed
-  } catch {
-    return null
-  }
+  const parsed = safeJsonParse(line)
+  return isRecord(parsed) ? parsed : null
 }
 
 function readCodexSessionIndex(indexPath: string) {

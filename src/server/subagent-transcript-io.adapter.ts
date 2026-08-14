@@ -9,15 +9,14 @@ export interface SubagentTranscriptIo {
   readAgentTranscriptLines(subagentsDir: string, agentId: string): string[]
 }
 
-function agentFileName(agentId: string): string {
+export function agentTranscriptFileName(agentId: string): string {
   // Claude names the file `agent-<agentId>.jsonl`. Guard against an agentId
   // that already carries the prefix so callers can pass either form.
   const base = agentId.startsWith("agent-") ? agentId : `agent-${agentId}`
   return `${base}.jsonl`
 }
 
-export function readAgentTranscriptLines(subagentsDir: string, agentId: string): string[] {
-  const path = join(subagentsDir, agentFileName(agentId))
+export function readJsonlLinesAt(path: string): string[] {
   if (!existsSync(path)) return []
   let text: string
   try {
@@ -26,6 +25,10 @@ export function readAgentTranscriptLines(subagentsDir: string, agentId: string):
     return []
   }
   return text.split("\n").filter((line) => line.trim().length > 0)
+}
+
+export function readAgentTranscriptLines(subagentsDir: string, agentId: string): string[] {
+  return readJsonlLinesAt(join(subagentsDir, agentTranscriptFileName(agentId)))
 }
 
 export const subagentTranscriptIo: SubagentTranscriptIo = { readAgentTranscriptLines }

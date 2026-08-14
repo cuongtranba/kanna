@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { formatAge, formatBashCommandTitle, formatSidebarAgeLabel } from "./formatters"
+import { formatAge, formatBashCommandTitle, formatSidebarAgeLabel, truncateEndEllipsis } from "./formatters"
 
 describe("formatBashCommandTitle", () => {
   test("unwraps codex zsh -lc commands", () => {
@@ -98,5 +98,18 @@ describe("formatAge", () => {
 
   test("formats exactly 1h as 1h 0m", () => {
     expect(formatAge(0, 3_600_000)).toBe("1h 0m")
+  })
+})
+
+describe("truncateEndEllipsis", () => {
+  test("returns short strings unchanged", () => {
+    expect(truncateEndEllipsis("short", 10)).toBe("short")
+  })
+  test("cuts to maxChars including the ellipsis", () => {
+    expect(truncateEndEllipsis("abcdefghij", 5)).toBe("abcd…")
+    expect(truncateEndEllipsis("abcdefghij", 5).length).toBe(5)
+  })
+  test("trims whitespace left at the cut", () => {
+    expect(truncateEndEllipsis("abc defghi", 5)).toBe("abc…")
   })
 })

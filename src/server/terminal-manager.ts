@@ -4,14 +4,12 @@ import defaultShell, { detectDefaultShell } from "default-shell"
 import { Terminal } from "@xterm/headless"
 import { SerializeAddon } from "@xterm/addon-serialize"
 import type { TerminalEvent, TerminalSnapshot } from "../shared/protocol"
+import { clampScrollback } from "../shared/terminal-scrollback"
 import type { TerminalPidRegistry } from "./terminal-pid-registry.adapter"
 import { createBunTerminal, hasBunTerminal, spawnTerminalProcess } from "./terminal-manager-io.adapter"
 
 const DEFAULT_COLS = 80
 const DEFAULT_ROWS = 24
-const DEFAULT_SCROLLBACK = 1_000
-const MIN_SCROLLBACK = 500
-const MAX_SCROLLBACK = 5_000
 const FOCUS_IN_SEQUENCE = "\x1b[I"
 const FOCUS_OUT_SEQUENCE = "\x1b[O"
 const MODE_SEQUENCE_TAIL_LENGTH = 16
@@ -40,11 +38,6 @@ interface TerminalSession {
   serializeAddon: SerializeAddon
   focusReportingEnabled: boolean
   modeSequenceTail: string
-}
-
-function clampScrollback(value: number) {
-  if (!Number.isFinite(value)) return DEFAULT_SCROLLBACK
-  return Math.min(MAX_SCROLLBACK, Math.max(MIN_SCROLLBACK, Math.round(value)))
 }
 
 function normalizeTerminalDimension(value: number, fallback: number) {

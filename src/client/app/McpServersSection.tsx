@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef } from "react"
-import { Plug, Plus, Trash2, RefreshCw, Pencil, ExternalLink, Copy, KeyRound } from "lucide-react"
+import { Plug, Plus, RefreshCw, ExternalLink, Copy, KeyRound } from "lucide-react"
 import { Button } from "../components/ui/button"
 import { Input } from "../components/ui/input"
 import { Textarea } from "../components/ui/textarea"
 import { HoverHint } from "../components/ui/truncated-text"
+import { SettingsList, SettingsRowActions } from "../components/settings/SettingsList"
 import {
   Select,
   SelectContent,
@@ -18,7 +19,6 @@ import {
   type EditingState,
 } from "../stores/mcpServersSectionStore"
 import type {
-  AppSettingsPatch,
   McpOAuthState,
   McpServerConfig,
   McpServerInput,
@@ -27,6 +27,12 @@ import type {
   McpServerTransport,
 } from "../../shared/types"
 import type { KannaState } from "./useKannaState"
+import {
+  useAppSettingsCrudHandlers,
+  type AppSettingsCrudHandlers,
+  type AppSettingsPatchWrapper,
+} from "./appSettingsCrud"
+import { editorSubmitLabel, submitEditorForm } from "./settingsEditorForm"
 import type { DomPort } from "../ports/domPort"
 import type { ClipboardPort } from "../ports/clipboardPort"
 import { domAdapter } from "../adapters/dom.adapter"
@@ -44,15 +50,17 @@ interface OAuthStartResult {
   error?: string
 }
 
-interface McpServersSectionHandlers {
-  onCreate: (input: McpServerInput) => Promise<void>
-  onUpdate: (id: string, patch: McpServerPatch) => Promise<void>
-  onDelete: (id: string) => Promise<void>
+interface McpServersSectionHandlers
+  extends AppSettingsCrudHandlers<McpServerInput, McpServerPatch> {
   onSetEnabled: (id: string, enabled: boolean) => Promise<void>
   onTest: (id: string) => Promise<void>
   onStartMcpOAuth: (id: string) => Promise<OAuthStartResult>
   onCompleteMcpOAuth: (id: string, callbackUrl: string) => Promise<{ ok: boolean; error?: string }>
 }
+
+const wrapMcpServersPatch: AppSettingsPatchWrapper<McpServerInput, McpServerPatch> = (
+  customMcpServers,
+) => ({ customMcpServers })
 
 interface McpServersSectionProps {
   servers: readonly McpServerConfig[]
@@ -105,7 +113,7 @@ export function McpServersSection(props: McpServersSectionProps) {
           Add server
         </Button>
       </div>
-      <ul className="flex flex-col divide-y rounded-md border">
+      <SettingsList>
         {props.servers.map((s) => (
           <McpRow
             key={s.id}
@@ -114,7 +122,7 @@ export function McpServersSection(props: McpServersSectionProps) {
             onEdit={() => props.onSelect(s.id)}
           />
         ))}
-      </ul>
+      </SettingsList>
     </div>
   )
 }
@@ -141,6 +149,12 @@ function McpRow({
       setServerTesting(server.id, false)
     }
   }, [handlers, server.id, setServerTesting])
+
+  const onDelete = useCallback(() => {
+    if (dom.confirmDialog(`Delete MCP server "${server.name}"?`)) {
+      void handlers.onDelete(server.id)
+    }
+  }, [dom, handlers, server.id, server.name])
 
   return (
     <li className="flex items-center gap-3 px-4 py-3">
@@ -177,21 +191,7 @@ function McpRow({
         >
           <RefreshCw className={cn("h-4 w-4", testing && "animate-spin")} />
         </Button>
-        <Button variant="ghost" size="sm" onClick={onEdit} title="Edit">
-          <Pencil className="h-4 w-4" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => {
-            if (dom.confirmDialog(`Delete MCP server "${server.name}"?`)) {
-              void handlers.onDelete(server.id)
-            }
-          }}
-          title="Delete"
-        >
-          <Trash2 className="h-4 w-4" />
-        </Button>
+        <SettingsRowActions label={server.name} onEdit={onEdit} onDelete={onDelete} />
       </div>
     </li>
   )
@@ -263,27 +263,12 @@ function McpServerEditor({
 }) {
   const editorForm = useMcpServersSectionStore((s) => s.editorForm)
   const resetEditorForm = useMcpServersSectionStore((s) => s.resetEditorForm)
-  const setEditorName = useMcpServersSectionStore((s) => s.setEditorName)
-  const setEditorTransport = useMcpServersSectionStore((s) => s.setEditorTransport)
+  const patchEditorForm = useMcpServersSectionStore((s) => s.patchEditorForm)
   // TS type predicate narrowing string -> McpServerTransport: a boundary
   // concern, not a store transition.
   const handleTransportChange = useCallback((v: string) => {
-    if (isMcpServerTransport(v)) setEditorTransport(v)
-  }, [setEditorTransport])
-  const setEditorCommand = useMcpServersSectionStore((s) => s.setEditorCommand)
-  const setEditorArgsText = useMcpServersSectionStore((s) => s.setEditorArgsText)
-  const setEditorEnvText = useMcpServersSectionStore((s) => s.setEditorEnvText)
-  const setEditorCwd = useMcpServersSectionStore((s) => s.setEditorCwd)
-  const setEditorUrl = useMcpServersSectionStore((s) => s.setEditorUrl)
-  const setEditorHeadersText = useMcpServersSectionStore((s) => s.setEditorHeadersText)
-  const setEditorError = useMcpServersSectionStore((s) => s.setEditorError)
-  const setEditorSubmitting = useMcpServersSectionStore((s) => s.setEditorSubmitting)
-  const setEditorOauthEnabled = useMcpServersSectionStore((s) => s.setEditorOauthEnabled)
-  const setEditorAuthFlowUrl = useMcpServersSectionStore((s) => s.setEditorAuthFlowUrl)
-  const setEditorCallbackInput = useMcpServersSectionStore((s) => s.setEditorCallbackInput)
-  const setEditorOauthError = useMcpServersSectionStore((s) => s.setEditorOauthError)
-  const setEditorAuthenticating = useMcpServersSectionStore((s) => s.setEditorAuthenticating)
-  const setEditorCompleting = useMcpServersSectionStore((s) => s.setEditorCompleting)
+    if (isMcpServerTransport(v)) patchEditorForm({ transport: v })
+  }, [patchEditorForm])
 
   const {
     name,
@@ -316,77 +301,51 @@ function McpServerEditor({
 
   const toggleOAuth = useCallback(
     async (enabled: boolean) => {
-      setEditorOauthEnabled(enabled)
-      if (!enabled) {
-        setEditorAuthFlowUrl(null)
-        setEditorCallbackInput("")
-        setEditorOauthError(null)
-      }
+      patchEditorForm(
+        enabled
+          ? { oauthEnabled: true }
+          : { oauthEnabled: false, authFlowUrl: null, callbackInput: "", oauthError: null },
+      )
       if (initial) {
         await handlers.onUpdate(initial.id, {
           oauth: { ...(currentOauth ?? { status: "unauthenticated" as const }), enabled },
         })
       }
     },
-    [
-      initial,
-      currentOauth,
-      handlers,
-      setEditorOauthEnabled,
-      setEditorAuthFlowUrl,
-      setEditorCallbackInput,
-      setEditorOauthError,
-    ],
+    [initial, currentOauth, handlers, patchEditorForm],
   )
 
   const startAuth = useCallback(async () => {
     if (!initial) return
-    setEditorAuthenticating(true)
-    setEditorOauthError(null)
+    patchEditorForm({ authenticating: true, oauthError: null })
     try {
       const result = await handlers.onStartMcpOAuth(initial.id)
       if (result.ok && result.authorizationUrl) {
-        setEditorAuthFlowUrl(result.authorizationUrl)
+        patchEditorForm({ authFlowUrl: result.authorizationUrl })
       } else if (result.ok && result.alreadyAuthenticated) {
-        setEditorAuthFlowUrl(null)
+        patchEditorForm({ authFlowUrl: null })
       } else {
-        setEditorOauthError(result.error ?? "Failed to start OAuth flow")
+        patchEditorForm({ oauthError: result.error ?? "Failed to start OAuth flow" })
       }
     } finally {
-      setEditorAuthenticating(false)
+      patchEditorForm({ authenticating: false })
     }
-  }, [
-    initial,
-    handlers,
-    setEditorAuthenticating,
-    setEditorOauthError,
-    setEditorAuthFlowUrl,
-  ])
+  }, [initial, handlers, patchEditorForm])
 
   const completeAuth = useCallback(async () => {
     if (!initial) return
-    setEditorCompleting(true)
-    setEditorOauthError(null)
+    patchEditorForm({ completing: true, oauthError: null })
     try {
       const result = await handlers.onCompleteMcpOAuth(initial.id, callbackInput)
       if (result.ok) {
-        setEditorAuthFlowUrl(null)
-        setEditorCallbackInput("")
+        patchEditorForm({ authFlowUrl: null, callbackInput: "" })
       } else {
-        setEditorOauthError(result.error ?? "Failed to complete OAuth flow")
+        patchEditorForm({ oauthError: result.error ?? "Failed to complete OAuth flow" })
       }
     } finally {
-      setEditorCompleting(false)
+      patchEditorForm({ completing: false })
     }
-  }, [
-    initial,
-    callbackInput,
-    handlers,
-    setEditorCompleting,
-    setEditorOauthError,
-    setEditorAuthFlowUrl,
-    setEditorCallbackInput,
-  ])
+  }, [initial, callbackInput, handlers, patchEditorForm])
 
   const nameError = useMemo(() => {
     if (name.length === 0) return null
@@ -401,42 +360,40 @@ function McpServerEditor({
 
   const submit = useCallback(async () => {
     if (nameError) return
-    setEditorSubmitting(true)
-    setEditorError(null)
-    try {
-      const args = argsText
-        .split("\n")
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0)
-      const env: Record<string, string> = {}
-      for (const line of envText.split("\n")) {
-        const idx = line.indexOf("=")
-        if (idx > 0) env[line.slice(0, idx).trim()] = line.slice(idx + 1)
-      }
-      const headers: Record<string, string> = {}
-      for (const line of headersText.split("\n")) {
-        const idx = line.indexOf(":")
-        if (idx > 0) headers[line.slice(0, idx).trim()] = line.slice(idx + 1).trim()
-      }
-      if (initial) {
-        const patch: McpServerPatch =
-          transport === "stdio"
-            ? { name, transport, command, args, env, cwd: cwd || undefined }
-            : { name, transport, url, headers }
-        await handlers.onUpdate(initial.id, patch)
-      } else {
-        const input: McpServerInput =
-          transport === "stdio"
-            ? { name, transport: "stdio", command, args, env, cwd: cwd || undefined }
-            : { name, transport, url, headers }
-        await handlers.onCreate(input)
-      }
-      onCancel()
-    } catch (err) {
-      setEditorError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setEditorSubmitting(false)
-    }
+    await submitEditorForm({
+      patch: patchEditorForm,
+      save: async () => {
+        const args = argsText
+          .split("\n")
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0)
+        const env: Record<string, string> = {}
+        for (const line of envText.split("\n")) {
+          const idx = line.indexOf("=")
+          if (idx > 0) env[line.slice(0, idx).trim()] = line.slice(idx + 1)
+        }
+        const headers: Record<string, string> = {}
+        for (const line of headersText.split("\n")) {
+          const idx = line.indexOf(":")
+          if (idx > 0) headers[line.slice(0, idx).trim()] = line.slice(idx + 1).trim()
+        }
+        if (initial) {
+          const patch: McpServerPatch =
+            transport === "stdio"
+              ? { name, transport, command, args, env, cwd: cwd || undefined }
+              : { name, transport, url, headers }
+          await handlers.onUpdate(initial.id, patch)
+        } else {
+          const input: McpServerInput =
+            transport === "stdio"
+              ? { name, transport: "stdio", command, args, env, cwd: cwd || undefined }
+              : { name, transport, url, headers }
+          await handlers.onCreate(input)
+        }
+      },
+      onDone: onCancel,
+      fallbackMessage: "Failed to save MCP server",
+    })
   }, [
     argsText,
     command,
@@ -450,18 +407,14 @@ function McpServerEditor({
     onCancel,
     transport,
     url,
-    setEditorSubmitting,
-    setEditorError,
+    patchEditorForm,
   ])
 
-  let submitLabel: string
-  if (submitting) {
-    submitLabel = "Saving…"
-  } else if (initial) {
-    submitLabel = "Save changes"
-  } else {
-    submitLabel = "Add server"
-  }
+  const submitLabel = editorSubmitLabel({
+    submitting,
+    isEdit: initial !== null,
+    addLabel: "Add server",
+  })
 
   return (
     <div className="flex flex-col gap-4 px-6 py-6 max-w-2xl">
@@ -473,7 +426,7 @@ function McpServerEditor({
         <span className="text-xs font-medium text-foreground">Name</span>
         <Input
           value={name}
-          onChange={(e) => setEditorName(e.target.value)}
+          onChange={(e) => patchEditorForm({ name: e.target.value })}
           placeholder="fs"
         />
         {nameError && <p className="text-xs text-red-600">{nameError}</p>}
@@ -503,7 +456,7 @@ function McpServerEditor({
             <span className="text-xs font-medium text-foreground">Command</span>
             <Input
               value={command}
-              onChange={(e) => setEditorCommand(e.target.value)}
+              onChange={(e) => patchEditorForm({ command: e.target.value })}
               placeholder="/usr/local/bin/mcp-filesystem"
             />
           </div>
@@ -513,7 +466,7 @@ function McpServerEditor({
             </span>
             <Textarea
               value={argsText}
-              onChange={(e) => setEditorArgsText(e.target.value)}
+              onChange={(e) => patchEditorForm({ argsText: e.target.value })}
               rows={3}
               className="font-mono text-sm"
             />
@@ -524,7 +477,7 @@ function McpServerEditor({
             </span>
             <Textarea
               value={envText}
-              onChange={(e) => setEditorEnvText(e.target.value)}
+              onChange={(e) => patchEditorForm({ envText: e.target.value })}
               rows={3}
               className="font-mono text-sm"
             />
@@ -535,7 +488,7 @@ function McpServerEditor({
             </span>
             <Input
               value={cwd}
-              onChange={(e) => setEditorCwd(e.target.value)}
+              onChange={(e) => patchEditorForm({ cwd: e.target.value })}
               placeholder="/optional/working/dir"
             />
           </div>
@@ -546,7 +499,7 @@ function McpServerEditor({
             <span className="text-xs font-medium text-foreground">URL</span>
             <Input
               value={url}
-              onChange={(e) => setEditorUrl(e.target.value)}
+              onChange={(e) => patchEditorForm({ url: e.target.value })}
               placeholder={
                 transport === "ws"
                   ? "wss://example.com/mcp"
@@ -565,7 +518,7 @@ function McpServerEditor({
               </span>
               <Textarea
                 value={headersText}
-                onChange={(e) => setEditorHeadersText(e.target.value)}
+                onChange={(e) => patchEditorForm({ headersText: e.target.value })}
                 rows={3}
                 className="font-mono text-sm"
                 disabled={oauthEnabled}
@@ -652,7 +605,7 @@ function McpServerEditor({
                           </span>
                           <Input
                             value={callbackInput}
-                            onChange={(e) => setEditorCallbackInput(e.target.value)}
+                            onChange={(e) => patchEditorForm({ callbackInput: e.target.value })}
                             placeholder="http://localhost:…/callback?code=…"
                             className="font-mono text-xs"
                           />
@@ -705,24 +658,20 @@ export function McpServersSettingsBranch(props: {
   const editing = useMcpServersSectionStore((s) => s.editing)
   const setEditing = useMcpServersSectionStore((s) => s.setEditing)
 
+  const crud = useAppSettingsCrudHandlers(wrapMcpServersPatch, props.state)
+
   const handlers = useMemo<McpServersSectionHandlers>(
     () => ({
-      onCreate: async (input) => {
-        const patch: AppSettingsPatch = { customMcpServers: { create: input } }
-        await props.state.handleWriteAppSettings(patch)
-      },
-      onUpdate: async (id, patch) => {
-        const settings: AppSettingsPatch = { customMcpServers: { update: { id, patch } } }
-        await props.state.handleWriteAppSettings(settings)
-      },
+      ...crud,
+      // Deleting the server being edited leaves the editor pointing at nothing.
       onDelete: async (id) => {
-        const patch: AppSettingsPatch = { customMcpServers: { delete: { id } } }
-        await props.state.handleWriteAppSettings(patch)
+        await crud.onDelete(id)
         setEditing({ kind: "list" })
       },
       onSetEnabled: async (id, enabled) => {
-        const patch: AppSettingsPatch = { customMcpServers: { setEnabled: { id, enabled } } }
-        await props.state.handleWriteAppSettings(patch)
+        await props.state.handleWriteAppSettings({
+          customMcpServers: { setEnabled: { id, enabled } },
+        })
       },
       onTest: async (id) => {
         await props.state.handleTestMcpServer(id)
@@ -730,7 +679,7 @@ export function McpServersSettingsBranch(props: {
       onStartMcpOAuth: async (id) => props.state.handleStartMcpOAuth(id),
       onCompleteMcpOAuth: async (id, callbackUrl) => props.state.handleCompleteMcpOAuth(id, callbackUrl),
     }),
-    [props.state, setEditing],
+    [crud, props.state, setEditing],
   )
 
   return (

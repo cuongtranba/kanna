@@ -1,5 +1,5 @@
 import type { TranscriptEntry } from "../shared/types"
-import { normalizeClaudeStreamMessage } from "./agent"
+import { parseAgentTranscriptLines } from "./agent-transcript-parse"
 import { readAgentTranscriptLines as defaultRead } from "./subagent-transcript-io.adapter"
 
 export interface SubagentTranscriptRegistry {
@@ -41,22 +41,7 @@ export function createSubagentTranscriptRegistry(
     getAgentTranscript(chatId, agentId) {
       const dir = dirByChat.get(chatId)
       if (dir === undefined) return []
-      const out: TranscriptEntry[] = []
-      for (const line of read(dir, agentId)) {
-        let parsed
-        try {
-          parsed = JSON.parse(line)
-        } catch {
-          continue // partial / corrupt line — skip
-        }
-        if (!parsed || typeof parsed !== "object") continue
-        try {
-          out.push(...normalizeClaudeStreamMessage(parsed))
-        } catch {
-          continue // defensive: never let one bad line abort the read
-        }
-      }
-      return out
+      return parseAgentTranscriptLines(read(dir, agentId))
     },
   }
 }

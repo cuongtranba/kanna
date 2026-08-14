@@ -1,9 +1,12 @@
 import { create } from "zustand"
 import type { EditorPreset } from "../../shared/protocol"
+import { clampScrollback, DEFAULT_TERMINAL_SCROLLBACK } from "../../shared/terminal-scrollback"
 
-export const DEFAULT_TERMINAL_SCROLLBACK = 1_000
-export const MIN_TERMINAL_SCROLLBACK = 500
-export const MAX_TERMINAL_SCROLLBACK = 5_000
+export {
+  DEFAULT_TERMINAL_SCROLLBACK,
+  MIN_TERMINAL_SCROLLBACK,
+  MAX_TERMINAL_SCROLLBACK,
+} from "../../shared/terminal-scrollback"
 export const DEFAULT_TERMINAL_MIN_COLUMN_WIDTH = 450
 export const MIN_TERMINAL_MIN_COLUMN_WIDTH = 250
 export const MAX_TERMINAL_MIN_COLUMN_WIDTH = 900
@@ -39,11 +42,6 @@ export function getEditorPresetLabel(preset: EditorPreset) {
     default:
       return "Cursor"
   }
-}
-
-function clampScrollback(value: number) {
-  if (!Number.isFinite(value)) return DEFAULT_TERMINAL_SCROLLBACK
-  return Math.min(MAX_TERMINAL_SCROLLBACK, Math.max(MIN_TERMINAL_SCROLLBACK, Math.round(value)))
 }
 
 function clampMinColumnWidth(value: number) {

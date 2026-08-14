@@ -1,4 +1,5 @@
 import type { KannaStatus } from "../../shared/types"
+import type { WorkflowStatus } from "../../shared/workflow-types"
 
 export function statusLabel(status: KannaStatus): string {
   switch (status) {
@@ -30,5 +31,36 @@ export function statusToneClass(tone: StatusTone): string {
     case "destructive": return "text-destructive"
     case "muted":
     default: return "text-muted-foreground"
+  }
+}
+
+export function statusToneDotClass(tone: StatusTone): string {
+  switch (tone) {
+    case "active": return "bg-emerald-500 dark:bg-emerald-400"
+    case "attention": return "bg-amber-500 dark:bg-amber-400"
+    case "destructive": return "bg-destructive"
+    case "muted":
+    default: return "bg-muted-foreground"
+  }
+}
+
+export function workflowStatusLabel(status: WorkflowStatus): string {
+  switch (status) {
+    case "running": return "Running"
+    case "completed": return "Completed"
+    case "failed": return "Failed"
+    case "killed": return "Killed"
+    case "unknown": return "Unknown"
+  }
+}
+
+export function workflowStatusTone(status: WorkflowStatus): StatusTone {
+  switch (status) {
+    case "running": return "active"
+    case "failed": return "destructive"
+    case "killed": return "attention"
+    case "completed":
+    case "unknown":
+    default: return "muted"
   }
 }
