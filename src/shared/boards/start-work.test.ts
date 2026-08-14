@@ -2,10 +2,15 @@ import { describe, expect, test } from "bun:test"
 import {
   buildStartWorkPrompt,
   deriveStartWorkStatus,
+  findAdvanceColumn,
   resolveStartWorkProjectId,
   startWorkLabel,
 } from "./start-work"
-import type { Board, Card, CardLink } from "./types"
+import type { Board, BoardColumn, Card, CardLink, ColumnSemantic } from "./types"
+
+function column(id: string, semantic: ColumnSemantic | null = null): BoardColumn {
+  return { id, boardId: "board-1", title: id, rank: id, semantic, colorToken: null, wipLimit: null }
+}
 
 function link(kind: CardLink["kind"], targetId: string, createdAt = 1): CardLink {
   return { cardId: "card-1", kind, targetId, createdAt }
@@ -148,6 +153,45 @@ describe("resolveStartWorkProjectId", () => {
   })
 })
 
+describe("findAdvanceColumn", () => {
+  const pipeline = [
+    column("backlog", "start"),
+    column("progress", "active"),
+    column("test"),
+    column("qa", "review"),
+    column("deploy", "done"),
+  ]
+
+  test("advances to the next column in board order", () => {
+    expect(findAdvanceColumn(pipeline, "progress")?.id).toBe("test")
+  })
+
+  /**
+   * Order, never a semantic guess: `test` carries no semantic and still wins
+   * over the `review` column behind it.
+   */
+  test("the next column wins over a later review column", () => {
+    expect(findAdvanceColumn(pipeline, "test")?.id).toBe("qa")
+  })
+
+  /**
+   * `done` closes the card and asks the merge/discard/leave question — a
+   * decision that costs work to get wrong, so it stays the user's.
+   */
+  test("never advances into the done column", () => {
+    expect(findAdvanceColumn(pipeline, "qa")).toBeNull()
+    expect(findAdvanceColumn([column("open", "start"), column("progress", "active"), column("closed", "done")], "progress")).toBeNull()
+  })
+
+  test("the last column advances to nothing", () => {
+    expect(findAdvanceColumn(pipeline, "deploy")).toBeNull()
+  })
+
+  test("a column the board does not have advances to nothing", () => {
+    expect(findAdvanceColumn(pipeline, "ghost")).toBeNull()
+  })
+})
+
 describe("buildStartWorkPrompt", () => {
   test("carries the title, description and source link", () => {
     const prompt = buildStartWorkPrompt(
@@ -159,6 +203,7 @@ describe("buildStartWorkPrompt", () => {
         },
       }),
       "card/412-fix-login-redirect-loop",
+      null,
     )
     expect(prompt).toContain("Fix: login redirect loop")
     expect(prompt).toContain("Redirects loop after SSO.")
@@ -168,9 +213,30 @@ describe("buildStartWorkPrompt", () => {
   })
 
   test("a bare card still produces a usable prompt", () => {
-    const prompt = buildStartWorkPrompt(card(), "card/abc-fix-login-redirect-loop")
+    const prompt = buildStartWorkPrompt(card(), "card/abc-fix-login-redirect-loop", null)
     expect(prompt).toContain("Fix: login redirect loop")
     expect(prompt).not.toContain("Description")
     expect(prompt).not.toContain("Labels")
+  })
+
+  /**
+   * The card id is the point: the prompt names the card and the column, so the
+   * agent moves the right one without reading the whole board back first.
+   */
+  test("an advance column becomes a card_move instruction", () => {
+    const prompt = buildStartWorkPrompt(card(), "card/abc-fix", {
+      cardId: "card-1",
+      columnId: "col-test",
+      columnTitle: "Test",
+    })
+    expect(prompt).toContain("mcp__kanna__card_move")
+    expect(prompt).toContain('card_id: "card-1"')
+    expect(prompt).toContain('to_column_id: "col-test"')
+    expect(prompt).toContain("Test")
+  })
+
+  /** A board with nowhere to advance to says nothing rather than improvising. */
+  test("no advance column leaves the prompt free of move instructions", () => {
+    expect(buildStartWorkPrompt(card(), "card/abc-fix", null)).not.toContain("card_move")
   })
 })

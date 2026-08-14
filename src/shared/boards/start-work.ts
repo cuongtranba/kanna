@@ -11,7 +11,7 @@
  * removed with plain git — so a link is evidence, not proof.
  */
 
-import type { Board, Card, CardDetail, CardLink, FieldValue } from "./types"
+import type { Board, BoardColumn, Card, CardDetail, CardLink, FieldValue } from "./types"
 import type { WorktreeCleanupView } from "./worktree-cleanup"
 
 export type StartWorkStatus =
@@ -132,13 +132,57 @@ function labelsOf(value: FieldValue | undefined): readonly string[] {
 }
 
 /**
+ * Where the card goes once the work is finished: the next column in board order.
+ *
+ * Order, never a semantic guess — columns arrive sorted by rank (`listColumns`),
+ * and a board names at most one `review` column while it may hold several stages
+ * between `active` and `done`. Advancing one step is the only reading that fits
+ * every board.
+ *
+ * `done` is deliberately unreachable this way. Reaching it closes the card to a
+ * connected tracker and raises the worktree question (merge / discard / leave) —
+ * decisions that cost real work to get wrong, so they stay the user's. A board
+ * whose only successor is `done` advances nothing, and the prompt then says
+ * nothing about moving rather than improvising a destination.
+ */
+export function findAdvanceColumn(
+  columns: readonly BoardColumn[],
+  fromColumnId: string,
+): BoardColumn | null {
+  const index = columns.findIndex((column) => column.id === fromColumnId)
+  if (index === -1) return null
+  const next = columns[index + 1]
+  if (!next || next.semantic === "done") return null
+  return next
+}
+
+/**
+ * The move the agent is asked to make when it is done.
+ *
+ * The card id rides the prompt because the agent has no other way to learn it —
+ * it would otherwise have to read the whole board back and guess which row is
+ * its own.
+ */
+export interface CardAdvance {
+  cardId: string
+  columnId: string
+  columnTitle: string
+}
+
+/**
  * The first prompt of the card's chat.
  *
  * Everything the card knows, and nothing it does not — no invented plan, no
  * instruction to commit. The agent is told where it is (the branch) and what
  * the card says; deciding what to do with that is the turn's job.
+ *
+ * The one thing it is told to DO is move its own card when the work stands, and
+ * only then. Kanna does not move it on the agent's behalf at turn end: a card
+ * takes as many turns as it takes, so "the turn ended" is not "the work is
+ * done", and a host-side move would advance the card the first time the agent
+ * stopped to ask a question.
  */
-export function buildStartWorkPrompt(card: Card, branch: string): string {
+export function buildStartWorkPrompt(card: Card, branch: string, advance: CardAdvance | null): string {
   const lines: string[] = [`Work on this card: ${card.title}`, "", `Branch: ${branch}`]
 
   const description = textOf(card.content.description)
@@ -152,6 +196,15 @@ export function buildStartWorkPrompt(card: Card, branch: string): string {
 
   const externalUrl = textOf(card.content.externalUrl)
   if (externalUrl) lines.push("", `Source: ${externalUrl}`)
+
+  if (advance) {
+    lines.push(
+      "",
+      `When the work is done and verified, move this card to "${advance.columnTitle}":`,
+      `  mcp__kanna__card_move({ card_id: "${advance.cardId}", to_column_id: "${advance.columnId}" })`,
+      "If it is unfinished or the checks do not pass, leave the card where it is and say what is blocking.",
+    )
+  }
 
   return lines.join("\n")
 }

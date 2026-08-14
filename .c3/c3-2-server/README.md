@@ -1,7 +1,7 @@
 ---
 id: c3-2
 c3-version: 4
-c3-seal: e64bd47747ca41cbe6b159252c492db7c98d23855d6d87b9188d1f08c841caad
+c3-seal: c290c95d3e442d275bb86ca55b87b94f16abd9c7b13fe27310f98a943a863f1f
 title: Server
 type: container
 boundary: service
@@ -59,3 +59,4 @@ Run the local Bun backend: serve HTTP+WebSocket on localhost, coordinate Claude 
 | c3-229 | workflow-status |  | active | Disk-watch sidecar read-model for PTY workflow runs; WorkflowRegistry + WorkflowsSnapshot WS topic |
 | c3-230 | openrouter-models | feature | active | Tool-capable OpenRouter model catalog: HTTPS fetch + parse + TTL cache; feeds the composer model picker via settings.listOpenRouterModels RPC |
 | c3-231 | local-catalog | feature | active | Scan local Claude skills + slash commands (user, project, plugin) and merge them into ChatSnapshot.slashCommands so the composer / picker mirrors Claude Code |
+| c3-232 | boards | feature | active | Persist boards, project them to subscribers, turn a card into an isolated worktree-branch-chat, reconcile a bound tracker, and expose the board to the agent as a work queue. |

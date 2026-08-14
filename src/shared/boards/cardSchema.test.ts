@@ -45,8 +45,8 @@ describe("loadBearingFieldNote", () => {
     }
 
     for (const [fieldId, value] of Object.entries(probes)) {
-      const prompt = buildStartWorkPrompt(cardWith({ [fieldId]: value }), "card/1-fix")
-      const bare = buildStartWorkPrompt(cardWith({}), "card/1-fix")
+      const prompt = buildStartWorkPrompt(cardWith({ [fieldId]: value }), "card/1-fix", null)
+      const bare = buildStartWorkPrompt(cardWith({}), "card/1-fix", null)
       // Guards the probe itself: a field the prompt ignores would pass a
       // containment check that never ran.
       expect(prompt).not.toEqual(bare)
