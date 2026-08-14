@@ -1047,16 +1047,29 @@ See `adr-20260813-queued-message-dequeue-on-commit` and
 # Observability (OTel traces + metrics, memlog, SIGUSR2 heap snapshot)
 
 Three independent concerns, one adapter (`src/server/otel.adapter.ts` — the
-ONLY file that may import the OTel SDK/exporters), initialized once from
-`server.ts` boot and shut down in the server stop path:
+ONLY file that may import the OTel SDK/exporters), initialized from
+`server.ts` boot right after `appSettings.initialize()` (the telemetry
+setting gates OTel export) and shut down in the server stop path:
 
-- **OTel traces + metrics** — `KANNA_OTEL=enabled` registers a
-  `NodeTracerProvider` (BatchSpanProcessor → OTLP http) and a `MeterProvider`
-  (periodic reader, `KANNA_OTEL_METRIC_INTERVAL_MS`, default 15000). Endpoint
-  via the standard `OTEL_EXPORTER_OTLP_ENDPOINT` (default localhost:4318);
-  service name via `KANNA_OTEL_SERVICE_NAME` (default `kanna`). Off by
-  default — it opens sockets. Init never throws: a broken collector must not
-  take the server down.
+- **OTel traces + metrics** — gated by the user-facing telemetry setting
+  (Settings page → "Telemetry Tracing"; `telemetry: {enabled, endpoint}` in
+  `settings.json`, default ON with endpoint `https://kanna-otel.lowbit.link`,
+  the grafana/otel-lgtm compose on the lowbit Dokploy). Enabled, it registers
+  a `NodeTracerProvider` (BatchSpanProcessor → OTLP http) and a
+  `MeterProvider` (periodic reader, `KANNA_OTEL_METRIC_INTERVAL_MS`, default
+  15000). Precedence lives in the pure `src/server/otel-config.ts`
+  (`resolveOtelConfig`): `KANNA_OTEL=disabled` hard-disables,
+  `KANNA_OTEL=enabled` enables even when the setting is off, else the setting
+  decides; `OTEL_EXPORTER_OTLP_ENDPOINT` beats the settings endpoint;
+  `KANNA_OTEL_SERVICE_NAME` beats the derived name. Service name defaults to
+  `kanna-<machine name>` (sanitized `getMachineDisplayName()` — each install
+  reports under its computer name; the raw name rides the `host.name`
+  resource attribute). The toggle applies at RUNTIME:
+  `AppSettingsManager.onChange` → `ObservabilityHandle.applyTelemetrySettings`
+  restarts/stops the providers, and the facade's instrument cache is cleared
+  on each transition (`resetMetricInstrumentCache`) so cached counters never
+  record into a shut-down provider. Init never throws: a broken collector
+  must not take the server down.
 - **Memory log** — `KANNA_MEMLOG_MS` (default 60000, `0` disables) prints one
   `[kanna/mem] rss=…` line per interval. This is the correlation record for
   the next OOM kill; three OOMs (1.06–2.43 GB) went undiagnosed for lack of

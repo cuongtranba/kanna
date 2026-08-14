@@ -2,7 +2,8 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLAUDE_DRIVER_DEFAULTS, CLAUDE_PTY_LIFECYCLE_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, DEFAULT_OPENROUTER_SDK_MODEL, GLOBAL_PROMPT_APPEND_MAX_CHARS, PUSH_DEFAULTS, UPLOAD_DEFAULTS } from "../shared/types"
+import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLAUDE_DRIVER_DEFAULTS, CLAUDE_PTY_LIFECYCLE_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, DEFAULT_OPENROUTER_SDK_MODEL, GLOBAL_PROMPT_APPEND_MAX_CHARS, PUSH_DEFAULTS,
+  TELEMETRY_DEFAULTS, UPLOAD_DEFAULTS } from "../shared/types"
 import { AppSettingsManager, readAppSettingsSnapshot, seedCustomModelsFromBuiltins } from "./app-settings"
 import type { AppSettingsSnapshot, McpOAuthState, SubagentInput } from "../shared/types"
 import { DEFAULT_TAB_MIN_WIDTH, MAX_TAB_WIDTH } from "../shared/pane-tab-width"
@@ -80,6 +81,7 @@ function expectedSettingsSnapshot(filePath: string, overrides: Partial<AppSettin
     filePathDisplay: filePath,
     cloudflareTunnel: CLOUDFLARE_TUNNEL_DEFAULTS,
     push: PUSH_DEFAULTS,
+    telemetry: TELEMETRY_DEFAULTS,
     auth: AUTH_DEFAULTS,
     claudeAuth: CLAUDE_AUTH_DEFAULTS,
     uploads: UPLOAD_DEFAULTS,
@@ -292,6 +294,39 @@ describe("cloudflareTunnel normalization", () => {
     expect((await readAppSettingsSnapshot(filePath)).push.contactSubject).toBe(
       PUSH_DEFAULTS.contactSubject,
     )
+  })
+
+  test("defaults telemetry when absent (enabled, lowbit collector)", async () => {
+    const filePath = await writeSettingsFile({ analyticsEnabled: true })
+    const snapshot = await readAppSettingsSnapshot(filePath)
+    expect(snapshot.telemetry).toEqual(TELEMETRY_DEFAULTS)
+    expect(snapshot.warning).toBeNull()
+  })
+
+  test("preserves telemetry.enabled=false and trims the endpoint's trailing slash", async () => {
+    const filePath = await writeSettingsFile({
+      telemetry: { enabled: false, endpoint: "https://collector.example.dev/" },
+    })
+    const snapshot = await readAppSettingsSnapshot(filePath)
+    expect(snapshot.telemetry).toEqual({ enabled: false, endpoint: "https://collector.example.dev" })
+  })
+
+  test("rejects a non-url telemetry.endpoint with a warning and keeps the default", async () => {
+    const filePath = await writeSettingsFile({
+      telemetry: { endpoint: "not-a-url" },
+    })
+    const snapshot = await readAppSettingsSnapshot(filePath)
+    expect(snapshot.telemetry.endpoint).toBe(TELEMETRY_DEFAULTS.endpoint)
+    expect(snapshot.warning).toContain("telemetry.endpoint")
+  })
+
+  test("writePatch({telemetry:{enabled:false}}) persists and keeps the endpoint", async () => {
+    const filePath = await writeSettingsFile({ analyticsEnabled: true })
+    const manager = trackManager(new AppSettingsManager(filePath))
+    await manager.initialize()
+    await manager.writePatch({ telemetry: { enabled: false } })
+    const snapshot = await readAppSettingsSnapshot(filePath)
+    expect(snapshot.telemetry).toEqual({ enabled: false, endpoint: TELEMETRY_DEFAULTS.endpoint })
   })
 
   test("setCloudflareTunnel persists patch to disk and round-trips through readAppSettingsSnapshot", async () => {

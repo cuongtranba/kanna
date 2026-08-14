@@ -7,8 +7,12 @@
  * Three independent concerns, each with its own switch, because they answer
  * different incidents:
  *
- * 1. OTel traces + metrics (KANNA_OTEL=enabled) — full-system tracing to an
- *    OTLP collector. Off by default: it opens sockets.
+ * 1. OTel traces + metrics — full-system tracing to an OTLP collector.
+ *    Gated by the user-facing telemetry setting (Settings → telemetry.enabled,
+ *    runtime-applied via applyTelemetrySettings) with KANNA_OTEL as the env
+ *    override in both directions; precedence lives in otel-config.ts. Each
+ *    install reports under `kanna-<machine name>` so distinct distributions
+ *    stay distinguishable at the collector.
  * 2. Memory log line (KANNA_MEMLOG_MS, default 60000, 0 disables) — one
  *    rss/heap line per minute in the server log. This is what correlates the
  *    NEXT OOM kill with what the process was doing; three OOMs at 1.06-2.43 GB
@@ -28,10 +32,24 @@ import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http"
 import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-http"
 import { resourceFromAttributes } from "@opentelemetry/resources"
 import { log } from "../shared/log"
+import { resetMetricInstrumentCache } from "./observability"
+import { resolveOtelConfig, type ResolvedOtelConfig, type TelemetrySettingsInput } from "./otel-config"
 
 export interface ObservabilityHandle {
   /** Flushes and tears down whatever was started. Safe to call once. */
   shutdown(): Promise<void>
+  /**
+   * Re-resolves OTel export against the new telemetry setting and restarts or
+   * stops the providers accordingly — the Settings toggle applies without a
+   * server restart. Serialized internally; safe to call at any time.
+   */
+  applyTelemetrySettings(telemetry: TelemetrySettingsInput): void
+}
+
+export interface InitObservabilityArgs {
+  dataDir: string
+  telemetry?: TelemetrySettingsInput
+  machineName?: string
 }
 
 function positiveIntEnv(raw: string | undefined, fallback: number): number {
@@ -40,44 +58,82 @@ function positiveIntEnv(raw: string | undefined, fallback: number): number {
   return Number.isFinite(n) && n >= 0 ? n : fallback
 }
 
+function startOtel(config: ResolvedOtelConfig): () => Promise<void> {
+  const resource = resourceFromAttributes({
+    "service.name": config.serviceName,
+    "host.name": config.machineName,
+  })
+  const tracerProvider = new NodeTracerProvider({
+    resource,
+    spanProcessors: [
+      new BatchSpanProcessor(new OTLPTraceExporter(config.traceUrl ? { url: config.traceUrl } : {})),
+    ],
+  })
+  tracerProvider.register()
+  const meterProvider = new MeterProvider({
+    resource,
+    readers: [
+      new PeriodicExportingMetricReader({
+        exporter: new OTLPMetricExporter(config.metricUrl ? { url: config.metricUrl } : {}),
+        exportIntervalMillis: positiveIntEnv(process.env.KANNA_OTEL_METRIC_INTERVAL_MS, 15_000),
+      }),
+    ],
+  })
+  metrics.setGlobalMeterProvider(meterProvider)
+  resetMetricInstrumentCache()
+  registerMemoryGauges()
+  log.info("[kanna/otel] tracing + metrics enabled", {
+    serviceName: config.serviceName,
+    endpoint: config.traceUrl
+      ?? process.env.OTEL_EXPORTER_OTLP_ENDPOINT
+      ?? "http://localhost:4318 (default)",
+  })
+  return async () => {
+    await tracerProvider.shutdown()
+    await meterProvider.shutdown()
+    // Clear the api globals so a later start can register fresh providers
+    // (the api setter refuses to overwrite an existing registration).
+    trace.disable()
+    metrics.disable()
+    resetMetricInstrumentCache()
+  }
+}
+
 /**
  * Starts every enabled observability concern. Called once from server boot.
  * Never throws: a broken collector endpoint must not take the server down —
  * observability failing closed means flying blind, not crashing.
  */
-export function initObservability(args: { dataDir: string }): ObservabilityHandle {
+export function initObservability(args: InitObservabilityArgs): ObservabilityHandle {
   const teardowns: Array<() => Promise<void> | void> = []
+  let otelTeardown: (() => Promise<void>) | null = null
+  let otelConfig: ResolvedOtelConfig | null = null
+  // Serializes start/stop transitions so a rapid toggle cannot interleave a
+  // provider shutdown with the next registration.
+  let transition: Promise<void> = Promise.resolve()
 
-  try {
-    if (process.env.KANNA_OTEL === "enabled") {
-      const resource = resourceFromAttributes({
-        "service.name": process.env.KANNA_OTEL_SERVICE_NAME ?? "kanna",
-      })
-      const tracerProvider = new NodeTracerProvider({
-        resource,
-        spanProcessors: [new BatchSpanProcessor(new OTLPTraceExporter())],
-      })
-      tracerProvider.register()
-      const meterProvider = new MeterProvider({
-        resource,
-        readers: [
-          new PeriodicExportingMetricReader({
-            exporter: new OTLPMetricExporter(),
-            exportIntervalMillis: positiveIntEnv(process.env.KANNA_OTEL_METRIC_INTERVAL_MS, 15_000),
-          }),
-        ],
-      })
-      metrics.setGlobalMeterProvider(meterProvider)
-      registerMemoryGauges()
-      teardowns.push(() => tracerProvider.shutdown())
-      teardowns.push(() => meterProvider.shutdown())
-      log.info("[kanna/otel] tracing + metrics enabled", {
-        endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT ?? "http://localhost:4318 (default)",
-      })
+  const startFromConfig = (config: ResolvedOtelConfig | null) => {
+    otelConfig = config
+    if (!config) return
+    try {
+      otelTeardown = startOtel(config)
+    } catch (err) {
+      otelTeardown = null
+      log.warn("[kanna/otel] init failed; continuing without export", { err })
     }
-  } catch (err) {
-    log.warn("[kanna/otel] init failed; continuing without export", { err })
   }
+
+  const readOtelEnv = () => ({
+    KANNA_OTEL: process.env.KANNA_OTEL,
+    KANNA_OTEL_SERVICE_NAME: process.env.KANNA_OTEL_SERVICE_NAME,
+    OTEL_EXPORTER_OTLP_ENDPOINT: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+  })
+
+  startFromConfig(resolveOtelConfig({
+    env: readOtelEnv(),
+    telemetry: args.telemetry,
+    machineName: args.machineName ?? "",
+  }))
 
   const memlogMs = positiveIntEnv(process.env.KANNA_MEMLOG_MS, 60_000)
   if (memlogMs > 0) {
@@ -113,6 +169,16 @@ export function initObservability(args: { dataDir: string }): ObservabilityHandl
 
   return {
     async shutdown() {
+      await transition.catch(() => undefined)
+      const otel = otelTeardown
+      otelTeardown = null
+      if (otel) {
+        try {
+          await otel()
+        } catch (err) {
+          log.warn("[kanna/otel] teardown failed", { err })
+        }
+      }
       for (const teardown of teardowns.splice(0)) {
         try {
           await teardown()
@@ -122,6 +188,29 @@ export function initObservability(args: { dataDir: string }): ObservabilityHandl
       }
       trace.disable()
       metrics.disable()
+    },
+
+    applyTelemetrySettings(telemetry) {
+      const next = resolveOtelConfig({
+        env: readOtelEnv(),
+        telemetry,
+        machineName: args.machineName ?? "",
+      })
+      if (JSON.stringify(next) === JSON.stringify(otelConfig)) return
+      otelConfig = next
+      transition = transition.then(async () => {
+        const previous = otelTeardown
+        otelTeardown = null
+        if (previous) {
+          try {
+            await previous()
+          } catch (err) {
+            log.warn("[kanna/otel] teardown failed", { err })
+          }
+        }
+        startFromConfig(next)
+        if (!next) log.info("[kanna/otel] tracing + metrics disabled via settings")
+      })
     },
   }
 }

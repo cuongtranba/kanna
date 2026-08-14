@@ -42,6 +42,7 @@ import {
   PUSH_DEFAULTS,
   isValidVapidSubject,
   supportsClaudeMaxReasoningEffort,
+  TELEMETRY_DEFAULTS,
   UPLOAD_DEFAULTS,
   UPLOAD_MAX_FILE_SIZE_MB_MAX,
   UPLOAD_MAX_FILE_SIZE_MB_MIN,
@@ -86,6 +87,7 @@ import {
   type SubagentPatch,
   type SubagentRuntimeSettings,
   type SubagentValidationError,
+  type TelemetrySettings,
   type UploadSettings,
 } from "../shared/types"
 
@@ -119,6 +121,7 @@ interface AppSettingsFile {
   }
   cloudflareTunnel?: Record<string, unknown>
   push?: Record<string, unknown>
+  telemetry?: Record<string, unknown>
   auth?: Record<string, unknown>
   claudeAuth?: Record<string, unknown>
   uploads?: Record<string, unknown>
@@ -444,6 +447,34 @@ function normalizePushSettings<T>(value: T, warnings: string[]): PushSettings {
   }
 
   return { contactSubject: trimmed || PUSH_DEFAULTS.contactSubject }
+}
+
+function normalizeTelemetrySettings<T>(value: T, warnings: string[]): TelemetrySettings {
+  const source = isPlainObject(value) ? value : null
+  if (value !== undefined && !source) {
+    warnings.push("telemetry must be an object")
+  }
+
+  let enabled = TELEMETRY_DEFAULTS.enabled
+  if (source?.enabled !== undefined) {
+    if (typeof source.enabled !== "boolean") {
+      warnings.push("telemetry.enabled must be a boolean")
+    } else {
+      enabled = source.enabled
+    }
+  }
+
+  let endpoint = TELEMETRY_DEFAULTS.endpoint
+  if (source?.endpoint !== undefined) {
+    const raw = typeof source.endpoint === "string" ? source.endpoint.trim() : null
+    if (!raw || !/^https?:\/\//.test(raw)) {
+      warnings.push("telemetry.endpoint must be an http(s) URL")
+    } else {
+      endpoint = raw.replace(/\/+$/, "")
+    }
+  }
+
+  return { enabled, endpoint }
 }
 
 function normalizeAuthSettings<T>(value: T, warnings: string[]): AuthSettings {
@@ -947,6 +978,7 @@ function toFilePayload(state: AppSettingsState) {
     providerDefaults: state.providerDefaults,
     cloudflareTunnel: state.cloudflareTunnel,
     push: state.push,
+    telemetry: state.telemetry,
     auth: state.auth,
     claudeAuth: state.claudeAuth,
     uploads: state.uploads,
@@ -977,6 +1009,7 @@ function toSnapshot(state: AppSettingsState): AppSettingsSnapshot {
     filePathDisplay: state.filePathDisplay,
     cloudflareTunnel: state.cloudflareTunnel,
     push: state.push,
+    telemetry: state.telemetry,
     auth: state.auth,
     claudeAuth: state.claudeAuth,
     uploads: state.uploads,
@@ -1018,6 +1051,7 @@ function normalizeAppSettings<T>(
 
   const cloudflareTunnel = normalizeCloudflareTunnel(source?.cloudflareTunnel, warnings)
   const push = normalizePushSettings(source?.push, warnings)
+  const telemetry = normalizeTelemetrySettings(source?.telemetry, warnings)
   const auth = normalizeAuthSettings(source?.auth, warnings)
   const claudeAuth = normalizeClaudeAuth(source?.claudeAuth, warnings)
   const uploads = normalizeUploadSettings(source?.uploads, warnings)
@@ -1064,6 +1098,7 @@ function normalizeAppSettings<T>(
     filePathDisplay: formatDisplayPath(filePath),
     cloudflareTunnel,
     push,
+    telemetry,
     auth,
     claudeAuth,
     uploads,
@@ -1104,6 +1139,7 @@ function toComparablePayload(source: AppSettingsFile) {
     providerDefaults: source.providerDefaults,
     cloudflareTunnel: source.cloudflareTunnel,
     push: source.push,
+    telemetry: source.telemetry,
     auth: source.auth,
     claudeAuth: source.claudeAuth,
     uploads: source.uploads,
@@ -1694,6 +1730,10 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
     push: {
       ...state.push,
       ...patch.push,
+    },
+    telemetry: {
+      ...state.telemetry,
+      ...patch.telemetry,
     },
     auth: {
       ...state.auth,

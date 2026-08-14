@@ -1560,6 +1560,15 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
     }
   }
 
+  async function handleTelemetryPreferenceChange(nextValue: "enabled" | "disabled") {
+    try {
+      setAppSettingsError(null)
+      await handleWriteAppSettings({ telemetry: { enabled: nextValue === "enabled" } })
+    } catch (error) {
+      setAppSettingsError(error instanceof Error ? error.message : "Unable to save telemetry settings.")
+    }
+  }
+
   async function handleTunnelPatch(patch: Partial<CloudflareTunnelSettings>) {
     try {
       setTunnelError(null)
@@ -1675,6 +1684,7 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
     .replaceAll("{column}", "1")
   const analyticsDisclosureEvents = ANALYTICS_STATIC_EVENT_NAMES
   const analyticsSettingValue = appSettings?.analyticsEnabled === false ? "disabled" : "enabled"
+  const telemetrySettingValue = appSettings?.telemetry?.enabled === false ? "disabled" : "enabled"
   const tunnelSettings: CloudflareTunnelSettings = appSettings?.cloudflareTunnel ?? CLOUDFLARE_TUNNEL_DEFAULTS
   const tunnelEnabledValue = tunnelSettings.enabled ? "enabled" : "disabled"
   const selectedSection = sidebarItems.find((item) => item.id === selectedPage) ?? sidebarItems[0]
@@ -2201,6 +2211,28 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
                           value={analyticsSettingValue}
                           onValueChange={(value) => {
                             void handleAnalyticsPreferenceChange(value)
+                          }}
+                          options={analyticsOptions}
+                          size="sm"
+                        />
+                      </SettingsRow>
+                      <SettingsRow
+                        title="Telemetry Tracing"
+                        description={(
+                          <>
+                            <span>
+                              Export OpenTelemetry traces and metrics (turn timings, subagent runs, process memory) to Kanna&apos;s observability collector so each install can be monitored. This machine reports under its computer name. Turning it off stops the export immediately.
+                            </span>
+                            <span className="mt-1 block">
+                              Collector: {appSettings?.telemetry?.endpoint ?? "not configured"}. Stored in {appSettings?.filePathDisplay ?? "~/.kanna/data/settings.json"}.
+                            </span>
+                          </>
+                        )}
+                      >
+                        <SegmentedControl
+                          value={telemetrySettingValue}
+                          onValueChange={(value) => {
+                            void handleTelemetryPreferenceChange(value)
                           }}
                           options={analyticsOptions}
                           size="sm"
