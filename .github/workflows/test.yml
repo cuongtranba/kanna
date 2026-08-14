@@ -14,6 +14,11 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      # Tests boot real Kanna servers; telemetry defaults ON, so without this
+      # every CI run phones home to the collector as kanna-runnervm<random>
+      # and pollutes the fleet dashboard's machine list.
+      KANNA_OTEL: disabled
     steps:
       - uses: actions/checkout@v7
 
