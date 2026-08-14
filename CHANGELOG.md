@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.18.0](https://github.com/cuongtranba/kanna/compare/v1.17.0...v1.18.0) (2026-08-14)
+
+
+### Features
+
+* **observability:** settings-gated telemetry with machine-named service ([#658](https://github.com/cuongtranba/kanna/issues/658)) ([01bb958](https://github.com/cuongtranba/kanna/commit/01bb9582d50c5cc24cc3b4f6225d5bf3a6423f4d))
+
 ## [1.17.0](https://github.com/cuongtranba/kanna/compare/v1.16.2...v1.17.0) (2026-08-14)
 
 
