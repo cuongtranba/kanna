@@ -16,6 +16,7 @@ import {
   CLOUDFLARE_TUNNEL_DEFAULTS,
   DEFAULT_OPENROUTER_SDK_MODEL,
   PUSH_DEFAULTS,
+  TELEMETRY_DEFAULTS,
   UPLOAD_DEFAULTS,
 } from "../shared/types"
 import type {
@@ -123,6 +124,10 @@ export function mergeAppSettingsPatch(
       ...snapshot.push,
       ...patch.push,
     },
+    telemetry: {
+      ...snapshot.telemetry,
+      ...patch.telemetry,
+    },
     auth: {
       ...snapshot.auth,
       ...patch.auth,
@@ -205,6 +210,7 @@ export function buildInitialAppSettingsSnapshot(): AppSettingsSnapshot {
     filePathDisplay: "~/.kanna/data/settings.json",
     cloudflareTunnel: CLOUDFLARE_TUNNEL_DEFAULTS,
     push: PUSH_DEFAULTS,
+    telemetry: TELEMETRY_DEFAULTS,
     auth: AUTH_DEFAULTS,
     claudeAuth: CLAUDE_AUTH_DEFAULTS,
     uploads: UPLOAD_DEFAULTS,
