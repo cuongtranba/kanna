@@ -190,6 +190,8 @@ c3-226:
 c3-227:
   - src/server/auto-continue/**/*.ts
 c3-229:
+  - src/server/agent-transcript-parse.test.ts
+  - src/server/agent-transcript-parse.ts
   - src/client/app/WorkflowAgentTranscriptPanel.test.tsx
   - src/client/app/WorkflowAgentTranscriptPanel.tsx
   - src/client/app/WorkflowsPage.test.tsx

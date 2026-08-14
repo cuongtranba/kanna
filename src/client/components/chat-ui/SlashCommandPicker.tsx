@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react"
 import type { SlashCommand } from "../../../shared/types"
 import { cn } from "../../lib/utils"
 import { normalizeCommandName } from "../../lib/slash-commands"
+import { clampCommandDescription } from "../../lib/formatters"
 
 interface SlashCommandPickerProps {
   items: SlashCommand[]
@@ -12,12 +13,6 @@ interface SlashCommandPickerProps {
 }
 
 const SKELETON_ROWS = 4
-const DESCRIPTION_MAX_CHARS = 80
-
-function clampDescription(text: string) {
-  if (text.length <= DESCRIPTION_MAX_CHARS) return text
-  return `${text.slice(0, DESCRIPTION_MAX_CHARS - 1).trimEnd()}…`
-}
 
 export function SlashCommandPicker({ items, activeIndex, loading, onSelect, onHoverIndex }: SlashCommandPickerProps) {
   const listRef = useRef<HTMLUListElement>(null)
@@ -95,7 +90,7 @@ export function SlashCommandPicker({ items, activeIndex, loading, onSelect, onHo
             </div>
             {cmd.description ? (
               <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground sm:text-right">
-                {clampDescription(cmd.description)}
+                {clampCommandDescription(cmd.description)}
               </span>
             ) : null}
           </li>

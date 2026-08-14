@@ -6,6 +6,7 @@ import { PtyInstanceRowStore } from "./PtyInstanceRow.store"
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip"
 import { TruncatedText } from "../ui/truncated-text"
+import { formatAge } from "../../lib/formatters"
 import type { KannaSocket } from "../../app/socket"
 
 const PHASE_COLOR: Record<PtyInstancePhase, string> = {
@@ -36,14 +37,7 @@ function shortenChat(chatId: string): string {
 }
 
 function formatUptime(startedAt: number, exitedAt: number | null): string {
-  const ref = exitedAt ?? Date.now()
-  const ms = Math.max(0, ref - startedAt)
-  const s = Math.floor(ms / 1000)
-  if (s < 60) return `${s}s`
-  const m = Math.floor(s / 60)
-  if (m < 60) return `${m}m ${s % 60}s`
-  const h = Math.floor(m / 60)
-  return `${h}h ${m % 60}m`
+  return formatAge(startedAt, exitedAt ?? Date.now())
 }
 
 export function formatBytes(bytes: number): string {

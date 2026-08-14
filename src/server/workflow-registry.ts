@@ -1,7 +1,7 @@
 import type { WorkflowJournalEntry, WorkflowRawFile, WorkflowRunDirInfo } from "./workflow-watch-io.adapter"
 import { parseWorkflowRunFile, toRunSummary } from "../shared/workflow-types"
 import type { WorkflowAgentProgress, WorkflowRun, WorkflowRunSummary } from "../shared/workflow-types"
-import { normalizeClaudeStreamMessage } from "./agent"
+import { parseAgentTranscriptLines } from "./agent-transcript-parse"
 import type { TranscriptEntry } from "../shared/types"
 
 export interface WorkflowRegistryDeps {
@@ -228,22 +228,7 @@ export function createWorkflowRegistry(deps: WorkflowRegistryDeps): WorkflowRegi
     getAgentTranscript(chatId, runId, agentId) {
       const entry = entries.get(chatId)
       if (!entry || !deps.readAgentTranscriptLines) return []
-      const out: TranscriptEntry[] = []
-      for (const line of deps.readAgentTranscriptLines(entry.dir, runId, agentId)) {
-        let parsed
-        try {
-          parsed = JSON.parse(line)
-        } catch {
-          continue // partial / corrupt line — skip
-        }
-        if (!parsed || typeof parsed !== "object") continue
-        try {
-          out.push(...normalizeClaudeStreamMessage(parsed))
-        } catch {
-          continue // defensive: never let one bad line abort the read
-        }
-      }
-      return out
+      return parseAgentTranscriptLines(deps.readAgentTranscriptLines(entry.dir, runId, agentId))
     },
     hasActiveRun(chatId, freshnessMs, now) {
       const entry = entries.get(chatId)

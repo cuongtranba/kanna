@@ -2,6 +2,8 @@ import { useCallback } from "react"
 import { UserRound, ArrowUp, ChevronRight, Loader2 } from "lucide-react"
 import { cn } from "../../lib/utils"
 import { formatCompactDuration } from "../../lib/formatDuration"
+import { type StatusTone } from "../../lib/statusLabel"
+import { StatusPill } from "../ui/status-pill"
 import { formatContextWindowTokens } from "../../lib/contextWindow"
 import { processTranscriptMessages } from "../../lib/parseTranscript"
 import type { AnyValue } from "../../../shared/errors"
@@ -17,30 +19,10 @@ interface Props {
   localPath?: string | null
 }
 
-type StatusTone = "muted" | "active" | "destructive"
-
 function toneFor(status: string | undefined, isError: boolean | undefined): StatusTone {
   if (isError || status === "failed" || status === "error") return "destructive"
   if (status === "in_progress" || status === "running") return "active"
   return "muted"
-}
-
-function dotClass(tone: StatusTone): string {
-  switch (tone) {
-    case "active": return "bg-emerald-500 dark:bg-emerald-400"
-    case "destructive": return "bg-destructive"
-    case "muted":
-    default: return "bg-muted-foreground"
-  }
-}
-
-function textClass(tone: StatusTone): string {
-  switch (tone) {
-    case "active": return "text-emerald-500 dark:text-emerald-400"
-    case "destructive": return "text-destructive"
-    case "muted":
-    default: return "text-muted-foreground"
-  }
 }
 
 // Compact "1 read · 3 edits" summary of the subagent's tool usage; only
@@ -105,12 +87,7 @@ function SubagentTaskMessageInner({ subagentType, result, isError, localPath }: 
       )}
       <div className="flex flex-1 items-center gap-2 min-w-0 overflow-hidden">
         <span className="font-medium text-foreground/80 text-sm truncate">{name}</span>
-        {result?.status && (
-          <span className="inline-flex items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide">
-            <span aria-hidden className={cn("inline-block size-1.5 rounded-full", dotClass(tone))} />
-            <span className={textClass(tone)}>{result.status}</span>
-          </span>
-        )}
+        {result?.status && <StatusPill tone={tone} label={result.status} />}
         {result?.totalTokens != null && result.totalTokens > 0 && (
           <span className="inline-flex items-center gap-0.5 text-xs text-muted-foreground tabular-nums">
             <ArrowUp className="size-3" aria-hidden />

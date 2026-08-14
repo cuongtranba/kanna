@@ -82,3 +82,19 @@ export function formatSidebarAgeLabel(lastMessageAt: number | undefined, nowMs: 
   if (deltaMs < weekMs) return `${Math.floor(deltaMs / dayMs)}d`
   return `${Math.floor(deltaMs / weekMs)}w`
 }
+
+/**
+ * Tail-truncates to `maxChars` (ellipsis included), trimming trailing
+ * whitespace before the ellipsis so a cut never reads "foo …".
+ */
+export function truncateEndEllipsis(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text
+  return `${text.slice(0, maxChars - 1).trimEnd()}…`
+}
+
+const COMMAND_DESCRIPTION_MAX_CHARS = 80
+
+/** One clamp for every slash-command description surface (picker + typeahead). */
+export function clampCommandDescription(text: string): string {
+  return truncateEndEllipsis(text, COMMAND_DESCRIPTION_MAX_CHARS)
+}

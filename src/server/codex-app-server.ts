@@ -57,6 +57,7 @@ import {
   isServerRequest,
 } from "./codex-app-server-protocol"
 import { log } from "../shared/log"
+import { safeJsonParse } from "../shared/safe-json"
 import { type AnyValue, isRecord, errorMessage as sharedErrorMessage } from "../shared/errors"
 import { codexErrorInfoTag, type CodexErrorInfo } from "../shared/codex-error-classification"
 
@@ -185,14 +186,6 @@ function codexSystemInitEntry(model: string): TranscriptEntry {
     slashCommands: [],
     mcpServers: [],
   })
-}
-
-function parseJsonLine(line: string): AnyValue | null {
-  try {
-    return JSON.parse(line)
-  } catch {
-    return null
-  }
 }
 
 function isRecoverableResumeError(error: AnyValue): boolean {
@@ -1218,7 +1211,7 @@ export class CodexAppServerManager {
     const lines = createInterface({ input: context.child.stdout })
     void (async () => {
       for await (const line of lines) {
-        const parsed = parseJsonLine(line)
+        const parsed = safeJsonParse(line)
         if (!parsed) continue
 
         if (isJsonRpcResponse(parsed)) {

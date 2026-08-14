@@ -6,7 +6,7 @@ import type {
   SubagentRunSnapshot,
 } from "../../../shared/types"
 import { CHAT_SELECTION_ZONE_ATTRIBUTE } from "../../app/chatFocusPolicy"
-import { formatBashCommandTitle } from "../../lib/formatters"
+import { formatBashCommandTitle, truncateEndEllipsis } from "../../lib/formatters"
 import { processTranscriptMessages } from "../../lib/parseTranscript"
 import { stripWorkspacePath } from "../../lib/pathUtils"
 import { cn } from "../../lib/utils"
@@ -16,9 +16,8 @@ import { SubagentPendingToolCard } from "./SubagentPendingToolCard"
 
 const ACTIVITY_MAX_LEN = 40
 
-function truncateActivity(s: string, n = ACTIVITY_MAX_LEN): string {
-  if (s.length <= n) return s
-  return `${s.slice(0, n - 1)}…`
+function truncateActivity(s: string): string {
+  return truncateEndEllipsis(s, ACTIVITY_MAX_LEN)
 }
 
 function toolActivityLabel(tool: NormalizedToolCall, localPath: string): string {
