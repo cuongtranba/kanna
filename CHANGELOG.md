@@ -8,6 +8,14 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.17.0](https://github.com/cuongtranba/kanna/compare/v1.16.2...v1.17.0) (2026-08-14)
+
+
+### Features
+
+* **boards:** ask the agent to advance its own card when the work is done ([#652](https://github.com/cuongtranba/kanna/issues/652)) ([2c44f60](https://github.com/cuongtranba/kanna/commit/2c44f60047fb65bf534a52a7ad689830c633d7e3))
+* **observability:** OTel traces + memory forensics, and recover armed-loop wakes at boot ([#657](https://github.com/cuongtranba/kanna/issues/657)) ([a447c6d](https://github.com/cuongtranba/kanna/commit/a447c6d871e5541b1ab8e0b7898858de889ea834))
+
 ## [1.16.2](https://github.com/cuongtranba/kanna/compare/v1.16.1...v1.16.2) (2026-08-13)
 
 
