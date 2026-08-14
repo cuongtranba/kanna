@@ -1624,11 +1624,17 @@ shaped as they are — `adr-20260810-boards-sqlite-store` (SQLite, not the event
 log), `adr-20260811-board-column-semantics-single-source`,
 `adr-20260811-board-in-the-workspace`, `adr-20260811-board-owns-its-rendering`,
 `adr-20260811-card-start-work` — and they are the first thing to read before
-changing this feature. What is missing is a **component** fact: no `c3-NNN`
-owns `src/shared/boards/**`, `src/server/board-*.ts`, or
-`src/client/**/boards/**`, so `c3x lookup` on any of them returns nothing and
-the mandatory pre-coding `/c3 query` gate comes back empty. Until that lands,
-read the ADRs plus this section.
+changing this feature. Boards also shipped without a **component** fact; three
+now carry it — `c3-310` (boards-domain, `src/shared/boards/**`), `c3-232`
+(boards, `src/server/board-*.ts` plus the MCP and WS surfaces), and `c3-119`
+(boards-ui, `src/client/**/boards/**`) — each with a `code-map.yaml` block.
+
+**`c3x lookup` is non-functional in this repo today, for every file — not just
+boards.** `c3x lookup src/server/read-models.ts` returns `matches[0]` although
+`code-map.yaml` has listed it under `c3-207` all along. Never read an empty
+`lookup` as "this file has no component": read the component directly
+(`c3x read c3-232`) or grep `code-map.yaml`. The `/c3 query` gate still works —
+`c3x search` and `c3x read` both resolve.
 
 # Tests
 

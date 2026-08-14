@@ -1,7 +1,7 @@
 ---
 id: c3-3
 c3-version: 4
-c3-seal: 5a7f4a101f22cf1c35659adf1457783278f7ca369a0fa048c58b7f6952724ddd
+c3-seal: 3d686fdee59b81cbbec8219556a88352061e13feb89ebd85a7ffceecdc337bbe
 title: Shared
 type: container
 boundary: library
@@ -34,3 +34,4 @@ Publish the wire protocol, core domain types, tool-call normalization, port and 
 | c3-305 | branding | foundation | active | Product name + data dir constants |
 | c3-306 | share-shared | foundation | active | Share DTOs shared with client |
 | c3-307 | token-pricing | foundation | active | Pure USD token-cost math + model-price resolution |
+| c3-310 | boards-domain | feature | active | Define the board domain — boards, columns, cards, fields, ranks — and the pure decisions about it that the server and the client must not be able to disagree on. |

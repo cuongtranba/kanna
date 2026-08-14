@@ -65,6 +65,14 @@ c3-118:
   - src/client/app/terminalLayoutResize.ts
   - src/client/app/terminalToggleAnimation.test.ts
   - src/client/app/terminalToggleAnimation.ts
+c3-119:
+  - src/client/app/BoardsRoutePage.test.tsx
+  - src/client/app/BoardsRoutePage.tsx
+  - src/client/components/boards/**/*.ts
+  - src/client/components/boards/**/*.tsx
+  - src/client/lib/boards/**/*.ts
+  - src/client/stores/boardsStore.test.ts
+  - src/client/stores/boardsStore.ts
 c3-201:
   - src/server/cli-runtime.test.ts
   - src/server/cli-runtime.ts
@@ -199,6 +207,12 @@ c3-229:
   - src/server/workflow-watch-io.adapter.ts
   - src/shared/workflow-types.test.ts
   - src/shared/workflow-types.ts
+c3-232:
+  - src/server/board-*.ts
+  - src/server/kanna-mcp-boards.test.ts
+  - src/server/kanna-mcp-boards.ts
+  - src/server/ws-router-boards.test.ts
+  - src/server/ws-router-boards.ts
 c3-301:
   - src/shared/analytics.ts
   - src/shared/kanna-system-prompt.test.ts
@@ -232,3 +246,5 @@ c3-306:
   - src/shared/share.ts
 c3-307:
   - src/shared/token-pricing.ts
+c3-310:
+  - src/shared/boards/**/*.ts

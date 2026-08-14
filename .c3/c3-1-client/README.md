@@ -1,7 +1,7 @@
 ---
 id: c3-1
 c3-version: 4
-c3-seal: 4a0c78510a83c30b0ae40ff34567c6ea734685694a0c57cfccadbd40c0403db7
+c3-seal: c9797a00ad1241c275de379b3e03bd78623a4cd36985c75e06e51cb747743147
 title: Client
 type: container
 boundary: app
@@ -40,3 +40,4 @@ Render the chat experience: hydrate transcripts, accept input, drive sidebar/set
 | c3-117 | local-projects-page | feature | active | List + open locally discovered projects |
 | c3-118 | terminal-workspace | feature | active | Embedded xterm panel with layout persistence |
 | c3-104 | pane-layout | foundation | active | Own the user-editable pane tree: the split/close/move/focus algebra, its per-project persistence, and the resizable renderer the chat route composes. |
+| c3-119 | boards-ui | feature | active | Render a project's boards as a live workspace tab — drag cards, edit a card in a drawer, edit the card schema, drive a sync binding, and start work on a card. |
