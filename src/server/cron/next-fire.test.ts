@@ -14,8 +14,8 @@ function scheduleOf(text: string): CronSchedule {
  * the suite passes in any timezone — cron matching itself runs on local
  * wall-clock fields.
  */
-function local(year: number, month: number, day: number, hour = 0, minute = 0): number {
-  return new Date(year, month - 1, day, hour, minute).getTime()
+function local(year: number, month: number, day: number, hour = 0, minute = 0, second = 0): number {
+  return new Date(year, month - 1, day, hour, minute, second).getTime()
 }
 
 describe("cron next fire", () => {
@@ -77,6 +77,48 @@ describe("cron next fire", () => {
   test("restricted dom with unrestricted dow is a plain dom match", () => {
     const at = nextFireAt(scheduleOf("0 0 15 * *"), local(2026, 8, 16, 0, 0), 0)
     expect(at).toBe(local(2026, 9, 15, 0, 0))
+  })
+})
+
+/**
+ * Seconds are the engine's own 6-field mode, so these rows pin the library the
+ * same way the calendar rows above do — a node-cron upgrade that changed
+ * sub-minute matching or lost strictly-after at second granularity would let a
+ * job compute its own fire time again and fire in a tight loop.
+ */
+describe("6-field cron next fire (seconds)", () => {
+  test("every-30-seconds lands on the next half minute", () => {
+    const at = nextFireAt(scheduleOf("*/30 * * * * *"), local(2026, 8, 16, 10, 0, 5), 0)
+    expect(at).toBe(local(2026, 8, 16, 10, 0, 30))
+  })
+
+  test("fires strictly after from, never at it", () => {
+    const at = nextFireAt(scheduleOf("*/30 * * * * *"), local(2026, 8, 16, 10, 0, 30), 0)
+    expect(at).toBe(local(2026, 8, 16, 10, 1, 0))
+  })
+
+  test("every second advances one second", () => {
+    const at = nextFireAt(scheduleOf("* * * * * *"), local(2026, 8, 16, 10, 0, 7), 0)
+    expect(at).toBe(local(2026, 8, 16, 10, 0, 8))
+  })
+
+  test("a second pins an instant inside an otherwise 5-field schedule", () => {
+    const at = nextFireAt(scheduleOf("15 30 9 * * *"), local(2026, 8, 16, 12, 0, 0), 0)
+    expect(at).toBe(local(2026, 8, 17, 9, 30, 15))
+  })
+
+  test("a 5-field schedule still fires on the minute boundary", () => {
+    const at = nextFireAt(scheduleOf("*/5 * * * *"), local(2026, 8, 16, 10, 7, 30), 0)
+    expect(at).toBe(local(2026, 8, 16, 10, 10, 0))
+  })
+})
+
+describe("sub-minute interval next fire", () => {
+  test("stays on the arm-time grid at second resolution", () => {
+    const schedule: CronSchedule = { type: "interval", ms: 5_000 }
+    const armedAt = local(2026, 8, 16, 10, 2, 3)
+    expect(nextFireAt(schedule, armedAt, armedAt)).toBe(armedAt + 5_000)
+    expect(nextFireAt(schedule, armedAt + 12_000, armedAt)).toBe(armedAt + 15_000)
   })
 })
 

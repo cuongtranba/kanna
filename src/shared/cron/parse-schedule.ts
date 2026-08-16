@@ -2,10 +2,11 @@
  * Schedule-text parser for the `/cron` command.
  *
  * Accepts three syntaxes, all normalized to `CronSchedule`:
- * - 5-field cron (minute hour day-of-month month day-of-week), e.g.
- *   star-slash-5 star star star star for "every 5 minutes"
+ * - cron with 5 fields (minute hour day-of-month month day-of-week), e.g.
+ *   star-slash-5 star star star star for "every 5 minutes", or 6 fields with a
+ *   LEADING second — the shape node-cron itself uses for sub-minute schedules
  * - shortcuts: `@hourly` `@daily` `@weekly` `@monthly`
- * - interval sugar: `every 5m`, `every 2h`
+ * - interval sugar: `every 30s`, `every 5m`, `every 2h`
  *
  * Every failure names the exact part that is wrong and, when the fix is
  * unambiguous, carries a corrected schedule fragment the command parser
@@ -58,13 +59,19 @@ const FIELD_SPECS: readonly FieldSpec[] = [
   { name: "day-of-week", min: 0, max: 7, names: DOW_NAMES, normalize: (v) => (v === 7 ? 0 : v) },
 ]
 
+/** Prepended when a cron line carries six fields — node-cron's seconds slot. */
+const SECOND_SPEC: FieldSpec = { name: "second", min: 0, max: 59 }
+
+const SECOND_MS = 1_000
 const MINUTE_MS = 60_000
 const HOUR_MS = 3_600_000
+
+const INTERVAL_UNIT_MS: Record<string, number> = { s: SECOND_MS, m: MINUTE_MS, h: HOUR_MS }
 
 export function parseSchedule(text: string): ScheduleParse {
   const trimmed = text.trim()
   if (trimmed === "") {
-    return { ok: false, part: "schedule", message: "missing schedule — expected 5-field cron, @shortcut, or `every <N>m|h`" }
+    return { ok: false, part: "schedule", message: "missing schedule — expected 5- or 6-field cron, @shortcut, or `every <N>s|m|h`" }
   }
   const tokens = trimmed.split(/\s+/)
 
@@ -113,7 +120,7 @@ function nearestShortcut(token: string): string | null {
 
 function parseInterval(tokens: string[]): ScheduleParse {
   if (tokens.length === 1) {
-    return { ok: false, part: "schedule", message: "missing interval after `every` — expected e.g. `every 5m` or `every 2h`" }
+    return { ok: false, part: "schedule", message: "missing interval after `every` — expected e.g. `every 30s`, `every 5m`, or `every 2h`" }
   }
   // `every 5 m` typed with a space: try re-joining before failing.
   const raw = tokens.length === 3 ? tokens[1]! + tokens[2]! : tokens[1]!
@@ -121,17 +128,17 @@ function parseInterval(tokens: string[]): ScheduleParse {
     return {
       ok: false,
       part: "schedule",
-      message: `expected exactly \`every <N>m|h\`, got "${tokens.join(" ")}"`,
+      message: `expected exactly \`every <N>s|m|h\`, got "${tokens.join(" ")}"`,
     }
   }
 
-  const strict = /^(\d+)(m|h)$/.exec(raw)
+  const strict = /^(\d+)(s|m|h)$/.exec(raw)
   if (strict) {
     const amount = Number.parseInt(strict[1]!, 10)
     if (amount < 1) {
       return { ok: false, part: "schedule", message: "interval must be at least 1", correctedSchedule: `every 1${strict[2]}` }
     }
-    const unitMs = strict[2] === "h" ? HOUR_MS : MINUTE_MS
+    const unitMs = INTERVAL_UNIT_MS[strict[2]!]!
     const corrected = tokens.length === 3 ? `every ${raw}` : undefined
     if (corrected !== undefined) {
       return { ok: false, part: "schedule", message: `interval "${tokens.slice(1).join(" ")}" has a stray space`, correctedSchedule: corrected }
@@ -143,14 +150,6 @@ function parseInterval(tokens: string[]): ScheduleParse {
   if (loose) {
     const amount = loose[1]!
     const unit = loose[2]!.toLowerCase()
-    if (unit.startsWith("s")) {
-      return {
-        ok: false,
-        part: "schedule",
-        message: "seconds are not supported — the minimum interval unit is minutes",
-        correctedSchedule: "every 1m",
-      }
-    }
     if (unit.startsWith("d")) {
       return {
         ok: false,
@@ -159,74 +158,82 @@ function parseInterval(tokens: string[]): ScheduleParse {
         correctedSchedule: "@daily",
       }
     }
-    const short = unit.startsWith("h") ? "h" : "m"
+    // Every verbose unit still starts with the letter its short form uses.
+    const short = unit[0]!
     return {
       ok: false,
       part: "schedule",
-      message: `interval unit "${unit}" is not valid — use \`m\` or \`h\``,
+      message: `interval unit "${unit}" is not valid — use \`s\`, \`m\`, or \`h\``,
       correctedSchedule: `every ${amount}${short}`,
     }
   }
 
-  return { ok: false, part: "schedule", message: `interval "${raw}" is not valid — expected e.g. \`every 5m\` or \`every 2h\`` }
+  return { ok: false, part: "schedule", message: `interval "${raw}" is not valid — expected e.g. \`every 30s\`, \`every 5m\`, or \`every 2h\`` }
 }
 
 function isIntervalToken(raw: string): boolean {
   return /^\d+\s*[a-z]+$/i.test(raw)
 }
 
+/**
+ * Five fields is the classic form; six adds a LEADING second, which is what
+ * node-cron itself reads and therefore the only sub-minute cron shape Kanna
+ * can honour without inventing semantics the engine would not agree with.
+ */
 function parseCronFields(tokens: string[]): ScheduleParse {
-  if (tokens.length !== 5) {
-    if (tokens.length === 6) {
-      const withoutSeconds = tokens.slice(1)
-      const corrected = parseCronFields(withoutSeconds).ok ? withoutSeconds.join(" ") : undefined
-      return {
-        ok: false,
-        part: "schedule",
-        message: `cron schedule has 6 fields, expected 5 — Kanna cron has no seconds field`,
-        correctedSchedule: corrected,
-      }
-    }
-    const bareInterval = tokens.length === 1 && /^\d+(m|h)$/.test(tokens[0]!)
+  const withSeconds = tokens.length === 6
+  if (tokens.length !== 5 && !withSeconds) {
+    const bareInterval = tokens.length === 1 && /^\d+(s|m|h)$/.test(tokens[0]!)
     return {
       ok: false,
       part: "schedule",
-      message: `cron schedule has ${tokens.length} field${tokens.length === 1 ? "" : "s"}, expected 5 (minute hour day-of-month month day-of-week)`,
-      correctedSchedule: bareInterval ? `every ${tokens[0]}` : padToFiveFields(tokens),
+      message: `cron schedule has ${tokens.length} field${tokens.length === 1 ? "" : "s"}, expected 5 (minute hour day-of-month month day-of-week) or 6 with a leading second`,
+      correctedSchedule: bareInterval ? `every ${tokens[0]}` : reshapeToCron(tokens),
     }
   }
 
+  const specs = withSeconds ? [SECOND_SPEC, ...FIELD_SPECS] : FIELD_SPECS
   const fields: CronField[] = []
-  for (let i = 0; i < FIELD_SPECS.length; i++) {
-    const parsed = parseField(FIELD_SPECS[i]!, tokens[i]!)
+  for (let i = 0; i < specs.length; i++) {
+    const parsed = parseField(specs[i]!, tokens[i]!)
     if (!parsed.ok) return { ok: false, part: "schedule_field", message: parsed.message }
     fields.push(parsed.field)
   }
 
+  const offset = withSeconds ? 1 : 0
   return {
     ok: true,
     schedule: {
       type: "cron",
       expression: tokens.join(" "),
-      minute: fields[0]!,
-      hour: fields[1]!,
-      dom: fields[2]!,
-      month: fields[3]!,
-      dow: fields[4]!,
+      ...(withSeconds ? { second: fields[0]! } : {}),
+      minute: fields[offset]!,
+      hour: fields[offset + 1]!,
+      dom: fields[offset + 2]!,
+      month: fields[offset + 3]!,
+      dow: fields[offset + 4]!,
     },
   }
 }
 
 /**
- * A short cron line is usually a truncated one — `0 3` means 03:00 daily with
- * the trailing wildcards left off. Only offered when the padded form actually
- * parses, so English like "9am every day" produces no suggestion and falls
- * through to the model rather than being guessed at.
+ * A wrong-length cron line is usually a truncated or over-long one. Short
+ * (2–4) means the trailing wildcards were left off — `0 3` is 03:00 daily.
+ * Seven is Quartz, whose extra field is a TRAILING year, so the fix drops the
+ * last token rather than the first. Either way the candidate is only offered
+ * once it actually parses, so English like "9am every day" produces no
+ * suggestion and falls through to the model rather than being guessed at.
  */
-function padToFiveFields(tokens: string[]): string | undefined {
-  if (tokens.length < 2 || tokens.length > 4) return undefined
-  const padded = [...tokens, ...Array<string>(5 - tokens.length).fill("*")]
-  return parseCronFields(padded).ok ? padded.join(" ") : undefined
+function reshapeToCron(tokens: string[]): string | undefined {
+  if (tokens.length >= 2 && tokens.length <= 4) {
+    const padded = [...tokens, ...Array<string>(5 - tokens.length).fill("*")]
+    return parseCronFields(padded).ok ? padded.join(" ") : undefined
+  }
+  if (tokens.length === 7) {
+    const trimmed = tokens.slice(0, 6)
+    return parseCronFields(trimmed).ok ? trimmed.join(" ") : undefined
+  }
+  return undefined
 }
 
 type FieldParse = { ok: true; field: CronField } | { ok: false; message: string }

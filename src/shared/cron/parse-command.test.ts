@@ -179,14 +179,15 @@ describe("suggestion drift guard", () => {
     "/cron check ci spwan @daily",
     "/cron check ci every 5m",
     "/cron check ci inline every 5min",
-    "/cron check ci inline every 30s",
+    "/cron check ci inline every 30seconds",
     "/cron check ci inline every 1d",
     "/cron check ci inline @hour",
     "/cron check ci inline @daily 5m",
     "/cron nightly build spawn 0 3 * *",
-    "/cron nightly build spawn 0 0 */5 * * *",
+    "/cron nightly build spawn 0 0 0 */5 * * *",
     "/cron check ci inline 5m",
     "/cron check ci inline every 0m",
+    "/cron check ci inline every 0s",
   ]
 
   test("every emitted suggestion re-parses to a successful command", () => {

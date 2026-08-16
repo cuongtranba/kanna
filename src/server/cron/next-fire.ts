@@ -4,7 +4,9 @@
  * Cron-type schedules delegate to the `cron` package (kelektiv/node-cron) —
  * its `CronTime.getNextDateFrom` is the single authority for calendar
  * semantics: the vixie day-of-month/day-of-week OR rule, DST shifts, month
- * lengths, leap years. Verified behaviors this module relies on:
+ * lengths, leap years, and the 6-field form whose LEADING field is seconds
+ * (which is why Kanna's sub-minute cron support needed no math of its own).
+ * Verified behaviors this module relies on:
  * - strictly-after: an exactly-matching `from` returns the NEXT slot, so a
  *   just-fired job can never compute its own fire time again;
  * - an impossible schedule (`0 0 30 2 *`, Feb 30) throws after a bounded

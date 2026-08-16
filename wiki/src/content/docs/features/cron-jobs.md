@@ -56,17 +56,34 @@ A chat can hold **any number of jobs**, each with its own id, schedule, and mode
 
 ## Schedules
 
-Three syntaxes, all accepted anywhere a schedule is expected:
+Four syntaxes, all accepted anywhere a schedule is expected:
 
 | Syntax | Example | Meaning |
 | --- | --- | --- |
 | 5-field cron | `*/15 9-17 * * 1-5` | Every 15 min, 9am–5pm, weekdays |
+| 6-field cron | `*/30 * * * * *` | Every 30 seconds — the extra field is a **leading second** |
 | Shortcut | `@hourly` `@daily` `@weekly` `@monthly` | Top of the hour / midnight / Sunday / the 1st |
-| Interval | `every 5m` `every 2h` | Every N minutes or hours from the moment you armed it |
+| Interval | `every 30s` `every 5m` `every 2h` | Every N seconds, minutes, or hours from the moment you armed it |
 
 Cron fields support `*`, `N`, `N-M`, `*/S`, `N-M/S`, comma lists, and month /
 weekday names (`jan`, `mon`). Day-of-month and day-of-week follow the standard
 vixie rule: when **both** are restricted the day matches if **either** matches.
+
+### Sub-minute schedules
+
+There is **no minimum cadence**: `every 1s` and `* * * * * *` both arm. What
+bounds a fast job is not a rule but reality — a run is a whole agent turn, so
+a job scheduled every 5 seconds against work that takes 20 will spend most of
+its ticks skipping.
+
+Those skips are recorded, not hidden, but **consecutive skips collapse into one
+card** carrying how many ticks it stands for (`Cron runs skipped 9× — chat was
+busy`). Without that, a fast job would bury its own output under skip notices.
+A slow job is unaffected: an isolated skip is still reported the moment it
+happens.
+
+Pick a cadence with the work in mind. If each run takes 20 seconds, `every 30s`
+gets you every run; `every 2s` gets you the same runs plus a lot of skips.
 
 :::note
 `every 5m` and `*/5 * * * *` are not the same thing. The interval form anchors
@@ -88,9 +105,9 @@ ready-to-send corrected command** you can copy whenever the fix is unambiguous:
 | You typed | Kanna says | It suggests |
 | --- | --- | --- |
 | `/cron check ci spwan @daily` | unknown mode "spwan" | `/cron check ci spawn @daily` |
-| `/cron check ci inline every 5min` | interval unit "min" is not valid — use `m` or `h` | `/cron check ci inline every 5m` |
-| `/cron nightly build spawn 0 3 * *` | cron schedule has 4 fields, expected 5 | `/cron nightly build spawn 0 3 * * *` |
-| `/cron nightly build spawn 0 3` | cron schedule has 2 fields, expected 5 | `/cron nightly build spawn 0 3 * * *` |
+| `/cron check ci inline every 5min` | interval unit "min" is not valid — use `s`, `m`, or `h` | `/cron check ci inline every 5m` |
+| `/cron nightly build spawn 0 3 * *` | cron schedule has 4 fields, expected 5 or 6 | `/cron nightly build spawn 0 3 * * *` |
+| `/cron nightly build spawn 0 3` | cron schedule has 2 fields, expected 5 or 6 | `/cron nightly build spawn 0 3 * * *` |
 | `/cron check ci inline 0 9 * * 8` | day-of-week field "8" is out of range 0-7 | — (ambiguous, no guess) |
 
 Nothing arms until the command is valid.
@@ -130,7 +147,9 @@ slow one. In `inline` mode a busy chat (you're mid-turn, or a question is
 waiting) also skips.
 
 Skips are visible one-liners, so a job that keeps missing its window is obvious
-rather than silent.
+rather than silent. Consecutive skips share one line and a count, so a fast
+schedule reports about once a minute instead of once per tick — the miss is
+never hidden, only stated once.
 
 ## Restarts and missed fires
 

@@ -17,12 +17,35 @@ describe("humanizeSchedule", () => {
     expect(humanized("every 90m")).toBe("every 90 minutes")
   })
 
+  test("sub-minute intervals read in seconds", () => {
+    expect(humanized("every 1s")).toBe("every second")
+    expect(humanized("every 30s")).toBe("every 30 seconds")
+    // 90s divides into no whole minute, so it stays in seconds rather than
+    // becoming "every 1.5 minutes".
+    expect(humanized("every 90s")).toBe("every 90 seconds")
+    expect(humanized("every 120s")).toBe("every 2 minutes")
+  })
+
   test("common cron shapes", () => {
     expect(humanized("* * * * *")).toBe("every minute")
     expect(humanized("30 * * * *")).toBe("hourly at :30")
     expect(humanized("0 9 * * *")).toBe("daily at 09:00")
     expect(humanized("0 9 * * 1")).toBe("every Monday at 09:00")
     expect(humanized("0 0 1 * *")).toBe("on day 1 of each month at 00:00")
+  })
+
+  test("6-field cron shapes", () => {
+    expect(humanized("* * * * * *")).toBe("every second")
+    expect(humanized("*/30 * * * * *")).toBe("every 30 seconds")
+    expect(humanized("0 * * * * *")).toBe("every minute")
+    expect(humanized("15 * * * * *")).toBe("every minute at :15")
+    expect(humanized("15 30 * * * *")).toBe("hourly at :30:15")
+    expect(humanized("15 30 9 * * *")).toBe("daily at 09:30:15")
+    expect(humanized("0 30 9 * * 1")).toBe("every Monday at 09:30")
+  })
+
+  test("a seconds list with no single cadence falls back to the raw text", () => {
+    expect(humanized("5,17 * * * * *")).toBe("5,17 * * * * *")
   })
 
   test("shortcut text falls into the same shapes", () => {

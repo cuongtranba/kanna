@@ -147,7 +147,18 @@ describe("CronRunSkippedMessage", () => {
         message={{ ...base, kind: "cron_run_skipped", jobId: "cron-abc", reason: "server_offline", missedCount: 4 }}
       />,
     )
-    expect(offline).toContain("4 fires missed")
+    expect(offline).toContain("4×")
+    expect(offline).toContain("missed while the server was offline")
+  })
+
+  test("one card stands for a whole coalesced burst", () => {
+    const burst = renderToStaticMarkup(
+      <CronRunSkippedMessage
+        message={{ ...base, kind: "cron_run_skipped", jobId: "cron-abc", reason: "chat_busy", missedCount: 9 }}
+      />,
+    )
+    expect(burst).toContain("Cron runs skipped 9×")
+    expect(burst).toContain("chat was busy")
   })
 })
 

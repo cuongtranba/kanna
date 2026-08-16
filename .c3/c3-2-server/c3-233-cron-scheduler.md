@@ -1,6 +1,6 @@
 ---
 id: c3-233
-c3-seal: 0d8c0f7fd7af220f21604986bb5194157434f84961cb0982378e56084a8f2918
+c3-seal: c514f1f340d6e7f1466d1ab25255b9a78dfc847cbcf132bf402e0db8738962eb
 title: cron-scheduler
 type: component
 category: feature
@@ -56,8 +56,11 @@ rehydrate, SKIPS fires missed while the server was down, reporting a visible
 server_offline notice per job. `fireCronJob` runs inline fires (context
 cleared before EVERY run — the arming chat is a monitoring view) and spawn
 fires (a fresh chat per run in the arming chat's project, carded in the
-arming chat); overlap is skip-and-record with an orphan self-heal. Occurrence
-math delegates to the `cron` npm package (CronTime.getNextDateFrom).
+arming chat); overlap is skip-and-record with an orphan self-heal, and
+CONSECUTIVE skips collapse into one counted record (`CronSkipCoalescer`, a
+per-job leading-edge throttle) so a sub-minute schedule's runs are not buried
+under one card per skipped tick. Occurrence math delegates to the `cron` npm
+package (CronTime.getNextDateFrom), including its 6-field seconds form.
 Non-goals: turn orchestration (c3-210), the one-shot rate-limit resume
 scheduler (c3-227), UI rendering (c3-120).
 
@@ -70,6 +73,7 @@ scheduler (c3-227), UI rendering (c3-120).
 | rule-strong-typing | rule | Event kinds, snapshots, and deps interfaces are fully typed | wired compliance target | typed at module boundary |
 | rule-colocated-bun-test | rule | scheduler/fire/commands/read-model each sit next to their .test.ts | wired compliance target | FakeClock drives scheduler tests |
 | adr-20260816-builtin-cron-jobs | adr | The whole component: grammar interception, node-cron adoption, outcome attribution, overlap policy | decision record | authored with this component |
+| adr-20260816-cron-seconds | adr | Sub-minute schedules and the coalescing of consecutive skips into one counted record | decision record | seconds come from node-cron's own 6-field form; the count is tallied at the tick, never derived at read time |
 
 ## Contract
 
@@ -77,7 +81,7 @@ scheduler (c3-227), UI rendering (c3-120).
 | --- | --- | --- | --- | --- |
 | Cron events | OUT | cron_armed/cron_disarmed/cron_paused/cron_resumed/cron_run_started/cron_run_outcome/cron_run_skipped on the auto-continue JSONL log; scheduleId doubles as job id | c3-227 | src/server/auto-continue/events.ts, src/server/cron/commands.ts |
 | /cron dispatch | IN | runBuiltinCommand routes every parsed /cron message (valid or error) to runCronCommand; never starts a turn | c3-210 | src/server/claude-send-command.ts, src/server/cron/commands.ts |
-| Fire | IN | CronScheduler fire callback invokes AgentCoordinator.fireCronJob(chatId, jobId); inline clears context then enqueues; spawn creates a chat then enqueues there | c3-210 | src/server/cron/scheduler.ts, src/server/cron/fire.ts |
+| Fire | IN | CronScheduler fire callback invokes AgentCoordinator.fireCronJob(chatId, jobId); inline clears context then enqueues; spawn creates a chat then enqueues there; a skipped tick writes only what CronSkipCoalescer hands back, and both fire paths flush the pending streak before starting a run | c3-210 | src/server/cron/scheduler.ts, src/server/cron/fire.ts, src/server/cron/skip-coalescer.ts |
 | Run outcome | IN | EventStore.onTurnTerminal (the single recordTurnFinished/Failed/Cancelled choke point) reports the tagged turn's outcome; recordCronTurnOutcome lands it on the arming chat | c3-206 | src/server/event-store.ts, src/server/cron/fire.ts |
 | Cron read model | OUT | deriveCronJobs projects CronJobSnapshot[] onto ChatSnapshot.cronJobs; the cron-jobs WS topic aggregates every chat for the global page; cron.remove/pause/resume WS commands reuse the /cron dispatch | c3-207 | src/server/cron/read-model.ts, src/server/ws-router-envelope.ts, src/server/ws-router-agent-ctrl.ts |
 | Refusal + model escalation | OUT | refuseCronCommand is the one path a /cron line is refused on: it appends the cron_command_error card carrying the typed line AND offers the error to createCronRepair, which enqueues a repair prompt and drains the queue only when the parser had no suggestion, for arm-shaped parts, once per line per chat, standing aside for a queued user message. A schedule that parses but never fires escalates too, on a reconstructed canonical line. KANNA_CRON_REPAIR=disabled turns it off | c3-226 | src/server/cron/commands.ts, src/server/cron/repair.ts |
@@ -89,6 +93,7 @@ scheduler (c3-227), UI rendering (c3-120).
 | Missed outcome wedges the overlap guard into skipping forever | A turn finalize path that bypasses the onTurnTerminal observer | fireCronJob's orphan self-heal settles a running run whose chat is idle | bun test src/server/cron/fire.test.ts |
 | Boot fires a storm of missed runs | Rehydrate replaying past fires instead of skipping | Scheduler rehydrate test asserts skip + future arm | bun test src/server/cron/scheduler.test.ts |
 | Occurrence semantics drift from the engine | node-cron upgrade changing day-matching or strictly-after behavior | Behavioral next-fire table pins vixie OR, leap years, impossible-date null | bun test src/server/cron/next-fire.test.ts |
+| A skip streak outlives the job it belongs to, or is never reported | A fire path that starts a run without flushing, or a lifecycle event that does not forget the streak | fire.test.ts asserts the tail lands before the run it waited on, and that a pause drops the folded count | bun test src/server/cron/fire.test.ts src/server/cron/skip-coalescer.test.ts |
 
 ## Derived Materials
 
@@ -99,3 +104,4 @@ scheduler (c3-227), UI rendering (c3-120).
 | src/server/cron/commands.ts | Contract (Cron events) | Entry wording | src/server/cron/commands.ts |
 | src/server/cron/read-model.ts | Contract (Cron read model) | Bounded recentRuns cap | src/server/cron/read-model.ts |
 | src/server/cron/next-fire.ts | Contract (Fire) | Engine call shape | src/server/cron/next-fire.ts |
+| src/server/cron/skip-coalescer.ts | Contract (Fire) | Flush window length | src/server/cron/skip-coalescer.ts |
