@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.19.0](https://github.com/cuongtranba/kanna/compare/v1.18.0...v1.19.0) (2026-08-16)
+
+
+### Features
+
+* **cron:** /cron builtin — scheduled instructions with inline and spawn run modes ([#662](https://github.com/cuongtranba/kanna/issues/662)) ([3671522](https://github.com/cuongtranba/kanna/commit/3671522558ebe85eb6e5e2a1da3f11bab1ac3b33))
+
 ## [1.18.0](https://github.com/cuongtranba/kanna/compare/v1.17.0...v1.18.0) (2026-08-14)
 
 
