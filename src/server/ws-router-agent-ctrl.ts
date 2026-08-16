@@ -20,6 +20,7 @@ export interface AgentCtrlAgentDep {
   acceptAutoContinue(chatId: string, scheduleId: string, scheduledAt: number): Promise<void>
   rescheduleAutoContinue(chatId: string, scheduleId: string, scheduledAt: number): Promise<void>
   cancelAutoContinue(chatId: string, scheduleId: string, reason: "user" | "chat_deleted"): Promise<void>
+  runCronCommand(chatId: string, result: import("../shared/cron/types").CronParseResult): Promise<void>
   cancel(chatId: string): Promise<void>
 }
 
@@ -75,6 +76,23 @@ export async function handleAgentCtrlCommand(
     }
     case "autoContinue.cancel": {
       await agent.cancelAutoContinue(command.chatId, command.scheduleId, "user")
+      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      await broadcastChatAndSidebar(command.chatId)
+      return true
+    }
+    // Cron panel buttons reuse the /cron dispatch (same events, same
+    // cron_job_change transcript entry) via a synthetic parsed command — the
+    // UI action and the typed command can never diverge.
+    case "cron.remove":
+    case "cron.pause":
+    case "cron.resume": {
+      let sub: "remove" | "pause" | "resume" = "resume"
+      if (command.type === "cron.remove") sub = "remove"
+      else if (command.type === "cron.pause") sub = "pause"
+      await agent.runCronCommand(command.chatId, {
+        ok: true,
+        command: { sub, jobId: command.jobId },
+      })
       send({ v: PROTOCOL_VERSION, type: "ack", id })
       await broadcastChatAndSidebar(command.chatId)
       return true

@@ -8,6 +8,12 @@ import { UserMessage } from "../components/messages/UserMessage"
 import { RawJsonMessage } from "../components/messages/RawJsonMessage"
 import { SystemMessage } from "../components/messages/SystemMessage"
 import { AccountInfoMessage } from "../components/messages/AccountInfoMessage"
+import { CronArmedMessage } from "../components/messages/CronArmedMessage"
+import { CronCommandErrorMessage } from "../components/messages/CronCommandErrorMessage"
+import { CronJobChangeMessage } from "../components/messages/CronJobChangeMessage"
+import { CronListMessage } from "../components/messages/CronListMessage"
+import { CronRunMessage } from "../components/messages/CronRunMessage"
+import { CronRunSkippedMessage } from "../components/messages/CronRunSkippedMessage"
 import { TextMessage } from "../components/messages/TextMessage"
 import { ThinkingMessage } from "../components/messages/ThinkingMessage"
 import { ApiErrorMessage } from "../components/messages/ApiErrorMessage"
@@ -31,6 +37,7 @@ import { AutoContinueCard } from "../components/chat-ui/AutoContinueCard"
 import { PendingToolRequestMessage } from "../components/messages/PendingToolRequestMessage"
 import { CHAT_SELECTION_ZONE_ATTRIBUTE } from "./chatFocusPolicy"
 import type { AutoContinueSchedule } from "../../shared/types"
+import type { CronJobSnapshot } from "../../shared/cron/types"
 import type { ToolRequestDecision } from "../../shared/permission-policy"
 import {
   DELEGATE_SUBAGENT_TOOL_NAME,
@@ -423,6 +430,7 @@ interface TranscriptSingleRowProps {
   onExitPlanModeConfirm: (toolUseId: string, confirmed: boolean, clearContext?: boolean, message?: string) => void
   onToolRequestAnswer?: (toolRequestId: string, decision: ToolRequestDecision) => void
   schedules: Record<string, AutoContinueSchedule>
+  cronJobs: readonly CronJobSnapshot[]
   onAutoContinueAccept: (scheduleId: string, scheduledAt: number) => void
   onAutoContinueReschedule: (scheduleId: string, scheduledAt: number) => void
   onAutoContinueCancel: (scheduleId: string) => void
@@ -446,6 +454,7 @@ const TranscriptSingleRow = memo(({
   onExitPlanModeConfirm,
   onToolRequestAnswer = NOOP_TOOL_REQUEST_ANSWER,
   schedules,
+  cronJobs,
   onAutoContinueAccept,
   onAutoContinueReschedule,
   onAutoContinueCancel,
@@ -580,6 +589,24 @@ const TranscriptSingleRow = memo(({
           />
         )
         break
+      case "cron_armed":
+        rendered = <CronArmedMessage key={message.id} message={message} />
+        break
+      case "cron_command_error":
+        rendered = <CronCommandErrorMessage key={message.id} message={message} />
+        break
+      case "cron_run":
+        rendered = <CronRunMessage key={message.id} message={message} cronJobs={cronJobs} />
+        break
+      case "cron_run_skipped":
+        rendered = <CronRunSkippedMessage key={message.id} message={message} />
+        break
+      case "cron_list":
+        rendered = <CronListMessage key={message.id} message={message} cronJobs={cronJobs} />
+        break
+      case "cron_job_change":
+        rendered = <CronJobChangeMessage key={message.id} message={message} />
+        break
     }
   }
 
@@ -609,6 +636,7 @@ const TranscriptSingleRow = memo(({
   && prev.onExitPlanModeConfirm === next.onExitPlanModeConfirm
   && prev.onToolRequestAnswer === next.onToolRequestAnswer
   && prev.schedules === next.schedules
+  && prev.cronJobs === next.cronJobs
   && prev.onAutoContinueAccept === next.onAutoContinueAccept
   && prev.onAutoContinueReschedule === next.onAutoContinueReschedule
   && prev.onAutoContinueCancel === next.onAutoContinueCancel
@@ -735,6 +763,7 @@ interface KannaTranscriptProps {
   onExitPlanModeConfirm: (toolUseId: string, confirmed: boolean, clearContext?: boolean, message?: string) => void
   onToolRequestAnswer?: (toolRequestId: string, decision: ToolRequestDecision) => void
   schedules?: Record<string, AutoContinueSchedule>
+  cronJobs?: readonly CronJobSnapshot[]
   onAutoContinueAccept?: (scheduleId: string, scheduledAt: number) => void
   onAutoContinueReschedule?: (scheduleId: string, scheduledAt: number) => void
   onAutoContinueCancel?: (scheduleId: string) => void
@@ -798,6 +827,7 @@ interface KannaTranscriptRowProps {
   onExitPlanModeConfirm: (toolUseId: string, confirmed: boolean, clearContext?: boolean, message?: string) => void
   onToolRequestAnswer?: (toolRequestId: string, decision: ToolRequestDecision) => void
   schedules: Record<string, AutoContinueSchedule>
+  cronJobs: readonly CronJobSnapshot[]
   onAutoContinueAccept: (scheduleId: string, scheduledAt: number) => void
   onAutoContinueReschedule: (scheduleId: string, scheduledAt: number) => void
   onAutoContinueCancel: (scheduleId: string) => void
@@ -813,6 +843,7 @@ export const KannaTranscriptRow = memo(({
   onExitPlanModeConfirm,
   onToolRequestAnswer,
   schedules,
+  cronJobs,
   onAutoContinueAccept,
   onAutoContinueReschedule,
   onAutoContinueCancel,
@@ -851,6 +882,7 @@ export const KannaTranscriptRow = memo(({
       onExitPlanModeConfirm={onExitPlanModeConfirm}
       onToolRequestAnswer={onToolRequestAnswer}
       schedules={schedules}
+      cronJobs={cronJobs}
       onAutoContinueAccept={onAutoContinueAccept}
       onAutoContinueReschedule={onAutoContinueReschedule}
       onAutoContinueCancel={onAutoContinueCancel}
@@ -865,6 +897,7 @@ export const KannaTranscriptRow = memo(({
   if (prev.onExitPlanModeConfirm !== next.onExitPlanModeConfirm) return false
   if (prev.onToolRequestAnswer !== next.onToolRequestAnswer) return false
   if (prev.schedules !== next.schedules) return false
+  if (prev.cronJobs !== next.cronJobs) return false
   if (prev.onAutoContinueAccept !== next.onAutoContinueAccept) return false
   if (prev.onAutoContinueReschedule !== next.onAutoContinueReschedule) return false
   if (prev.onAutoContinueCancel !== next.onAutoContinueCancel) return false
@@ -901,6 +934,7 @@ export const KannaTranscriptRow = memo(({
 })
 
 export const EMPTY_SCHEDULES: Record<string, AutoContinueSchedule> = {}
+export const EMPTY_CRON_JOBS: readonly CronJobSnapshot[] = []
 const NOOP_ACCEPT = (_scheduleId: string, _scheduledAt: number): void => {}
 const NOOP_RESCHEDULE = (_scheduleId: string, _scheduledAt: number): void => {}
 const NOOP_CANCEL = (_scheduleId: string): void => {}
@@ -916,6 +950,7 @@ function KannaTranscriptInner({
   onExitPlanModeConfirm,
   onToolRequestAnswer = NOOP_TOOL_REQUEST_ANSWER,
   schedules = EMPTY_SCHEDULES,
+  cronJobs = EMPTY_CRON_JOBS,
   onAutoContinueAccept = NOOP_ACCEPT,
   onAutoContinueReschedule = NOOP_RESCHEDULE,
   onAutoContinueCancel = NOOP_CANCEL,
@@ -982,6 +1017,7 @@ function KannaTranscriptInner({
               onExitPlanModeConfirm={onExitPlanModeConfirm}
               onToolRequestAnswer={onToolRequestAnswer}
               schedules={schedules}
+              cronJobs={cronJobs}
               onAutoContinueAccept={onAutoContinueAccept}
               onAutoContinueReschedule={onAutoContinueReschedule}
               onAutoContinueCancel={onAutoContinueCancel}

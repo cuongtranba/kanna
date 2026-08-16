@@ -16,10 +16,13 @@ import { cn } from "../../lib/utils"
 import { shouldOpenLocalFileLinkInEditor } from "../../lib/pathUtils"
 import {
   buildResolvedTranscriptRows,
+  EMPTY_CRON_JOBS,
   KannaTranscriptRow,
   type ResolvedTranscriptRow,
   useStableResolvedRows,
 } from "../KannaTranscript"
+import type { CronJobSnapshot } from "../../../shared/cron/types"
+import { CronJobsSection } from "../CronJobsSection"
 import { buildTranscriptGapClassMap } from "../transcriptSpacing"
 import type { KannaState } from "../useKannaState"
 import type { AutoContinueSchedule, ChatBackgroundTask, CloudflareTunnelRecord, LoopProgressSnapshot, SubagentRunSnapshot } from "../../../shared/types"
@@ -129,6 +132,10 @@ interface ChatTranscriptViewportProps {
   onSubagentAskUserQuestionSubmit?: KannaState["handleSubagentAskUserQuestion"]
   onSubagentExitPlanModeSubmit?: KannaState["handleSubagentExitPlanMode"]
   schedules: Record<string, AutoContinueSchedule>
+  cronJobs?: readonly CronJobSnapshot[]
+  onCronPause?: (jobId: string) => void
+  onCronResume?: (jobId: string) => void
+  onCronRemove?: (jobId: string) => void
   onAutoContinueAccept: (scheduleId: string, scheduledAt: number) => void
   onAutoContinueReschedule: (scheduleId: string, scheduledAt: number) => void
   onAutoContinueCancel: (scheduleId: string) => void
@@ -184,6 +191,10 @@ export const ChatTranscriptViewport = memo(({
   onSubagentAskUserQuestionSubmit,
   onSubagentExitPlanModeSubmit,
   schedules,
+  cronJobs = EMPTY_CRON_JOBS,
+  onCronPause,
+  onCronResume,
+  onCronRemove,
   onAutoContinueAccept,
   onAutoContinueReschedule,
   onAutoContinueCancel,
@@ -403,6 +414,7 @@ export const ChatTranscriptViewport = memo(({
           onExitPlanModeConfirm={onExitPlanModeConfirm}
           onToolRequestAnswer={onToolRequestAnswer}
           schedules={schedules}
+          cronJobs={cronJobs}
           onAutoContinueAccept={onAutoContinueAccept}
           onAutoContinueReschedule={onAutoContinueReschedule}
           onAutoContinueCancel={onAutoContinueCancel}
@@ -412,7 +424,7 @@ export const ChatTranscriptViewport = memo(({
         {rowRuns.map((run) => renderRunTree(run, 0))}
       </div>
     )
-  }, [handleToolGroupExpandedChange, onAskUserQuestionSubmit, onExitPlanModeConfirm, onToolRequestAnswer, schedules, onAutoContinueAccept, onAutoContinueReschedule, onAutoContinueCancel, onRetryFailedTurn, toolGroupExpanded, runsByUserMessageId, renderRunTree, activeChatId, gapClassByRowId])
+  }, [handleToolGroupExpandedChange, onAskUserQuestionSubmit, onExitPlanModeConfirm, onToolRequestAnswer, schedules, cronJobs, onAutoContinueAccept, onAutoContinueReschedule, onAutoContinueCancel, onRetryFailedTurn, toolGroupExpanded, runsByUserMessageId, renderRunTree, activeChatId, gapClassByRowId])
 
   const listHeader = (
     <div className="mx-auto w-full max-w-[800px]" style={{ paddingTop: `${headerOffsetPx}px` }}>
@@ -441,6 +453,16 @@ export const ChatTranscriptViewport = memo(({
           <LoopProgressSection
             loopProgress={loopProgress}
             onResume={onAutoContinueAccept}
+          />
+        </div>
+      ) : null}
+      {cronJobs.length > 0 && onCronPause && onCronResume && onCronRemove ? (
+        <div className="pb-4">
+          <CronJobsSection
+            jobs={cronJobs}
+            onPause={onCronPause}
+            onResume={onCronResume}
+            onRemove={onCronRemove}
           />
         </div>
       ) : null}

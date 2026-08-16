@@ -22,7 +22,10 @@ import { resolveLocalPath } from "./paths"
 import { resolveSpawnPaths } from "./claude-session-config"
 import { SERVER_PROVIDERS } from "./provider-catalog"
 import { deriveChatSchedules, deriveLoopState } from "./auto-continue/read-model"
-import { hasUnpausedCronJob } from "./cron/read-model"
+import { deriveCronJobs, hasUnpausedCronJob } from "./cron/read-model"
+import type { CronJobSnapshot } from "../shared/cron/types"
+
+const EMPTY_CRON_JOBS: readonly CronJobSnapshot[] = []
 import { deriveChatTunnels } from "./cloudflare-tunnel/read-model"
 import type { CloudflareTunnelEvent } from "./cloudflare-tunnel/events"
 
@@ -375,6 +378,8 @@ export function deriveChatSnapshot(
     rateLimit,
     tracking: getLoopTracking(chat.id),
   })
+  const derivedCronJobs = deriveCronJobs(autoContinueEvents, chat.id, nowMs)
+  const cronJobs = derivedCronJobs.length > 0 ? derivedCronJobs : EMPTY_CRON_JOBS
 
   return {
     runtime,
@@ -391,6 +396,7 @@ export function deriveChatSnapshot(
     liveTunnelId,
     subagentRuns,
     loopProgress,
+    cronJobs,
     ...(resolvedBindings !== undefined ? { resolvedBindings } : {}),
   }
 }

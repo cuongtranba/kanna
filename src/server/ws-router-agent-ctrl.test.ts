@@ -12,6 +12,7 @@ function makeAgent(overrides: Partial<AgentCtrlAgentDep> = {}): AgentCtrlAgentDe
     acceptAutoContinue: mock(async () => {}),
     rescheduleAutoContinue: mock(async () => {}),
     cancelAutoContinue: mock(async () => {}),
+    runCronCommand: mock(async () => {}),
     cancel: mock(async () => {}),
     ...overrides,
   }

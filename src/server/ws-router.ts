@@ -272,6 +272,9 @@ export function createWsRouter({
         case "autoContinue.accept":
         case "autoContinue.reschedule":
         case "autoContinue.cancel":
+        case "cron.remove":
+        case "cron.pause":
+        case "cron.resume":
         case "tunnel.accept":
         case "tunnel.stop":
         case "tunnel.retry": {
