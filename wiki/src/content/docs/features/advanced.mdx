@@ -1,6 +1,6 @@
 ---
 title: Advanced
-description: Custom MCP servers, workflow panel, agent self-scheduled wake, local skills, token cost, self-update, expose_port, mermaid, transcript export, keybindings, password gate, PWA.
+description: Custom MCP servers, workflow panel, agent chat re-entry, local skills, token cost, self-update, expose_port, mermaid, transcript export, keybindings, password gate, PWA.
 ---
 
 import Screenshot from '../../../components/Screenshot.astro'
@@ -38,9 +38,17 @@ Register your own MCP servers from **Settings → MCP servers**. Entries persist
 
 Kanna surfaces Claude Code's native **Workflow** tool (dynamic multi-agent orchestration) in a read-only per-chat panel: every run with live status, drill-in progress, token totals, and an inline transcript card on the launch. It works under both the SDK and PTY drivers by watching the `wf_<runId>.json` sidecars Claude writes to disk — no event-stream coupling. Stopping or relaunching runs from the panel is out of scope.
 
-## Agent self-scheduled wake
+## Agent chat re-entry
 
-The agent can schedule its own chat re-entry via the `mcp__kanna__schedule_wakeup` tool — useful for polling long-running background work and then continuing. Kanna owns the timer (it survives a server restart via event replay and obeys the cancel cascade) rather than the CLI's in-memory cron. A runaway-loop cap, `KANNA_MAX_AGENT_WAKES` (default 25), bounds consecutive self-wakes per chat and resets on a real user turn. Background subagent results are delivered through the same re-entry path and are exempt from the cap.
+The agent can hand work off and have the chat pick it up again later, without polling on a timer.
+
+Call `mcp__kanna__delegate_subagent({ run_in_background: true, … })` and the tool returns immediately with a run id while the subagent works. When it finishes, Kanna clears the main agent's context and re-enters the chat as a fresh turn carrying the result — so a long job costs one wake, not a polling loop. Delivery is event-driven and provider-agnostic, and it survives a server restart via event replay.
+
+For work that should recur on a **clock** rather than on completion, use [cron jobs](/features/cron-jobs/).
+
+:::note[Removed]
+The timer-based `mcp__kanna__schedule_wakeup` tool and its `KANNA_MAX_AGENT_WAKES` cap no longer exist — they were removed when re-entry became notification-driven. A self-polling agent lost momentum across context compaction, which is what the background-delegation path above fixes. Claude Code's own native `ScheduleWakeup` stays disallowed under the PTY driver for the same reason.
+:::
 
 ## Local skills & slash commands
 

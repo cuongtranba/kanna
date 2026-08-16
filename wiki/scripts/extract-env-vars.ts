@@ -17,8 +17,6 @@ const DESCRIPTIONS: Record<string, { default: string; description: string }> = {
   KANNA_MCP_TOOL_CALLBACKS: { default: '0', description: 'Set to "1" to route AskUserQuestion / ExitPlanMode / built-in shims through the durable approval protocol.' },
   KANNA_SERVER_SECRET: { default: '(random per process)', description: 'Stabilises HMAC tool-request ids across process restarts.' },
   KANNA_SYSTEM_PROMPT_APPEND: { default: '(unset)', description: 'Appended to the system prompt for every agent spawn (both SDK and PTY drivers).' },
-  KANNA_MAX_AGENT_WAKES: { default: '25', description: 'Max consecutive agent self-scheduled wakes per chat before the runaway-loop cap trips. Resets on a real user turn.' },
-  KANNA_PENDING_WORKFLOW_POLL_MS: { default: '120000', description: 'Interval the pending-workflow harvest wake re-polls a still-running background Workflow.' },
   KANNA_SUBAGENT_MAX_LIVE: { default: '5', description: 'Max concurrent keep-alive (warm) subagent processes per chat. Over cap, delegate_subagent({keep_alive:true}) fails CAP_EXCEEDED.' },
   KANNA_SUBAGENT_IDLE_TIMEOUT_MS: { default: '300000', description: 'Idle window after which a keep-alive subagent session is auto-closed. Reset on each turn.' },
   KANNA_PTY_BACKGROUND_TASK_MAX_MS: { default: '1800000', description: 'Max time a launched background Bash task keeps the PTY session warm before the idle reaper may reclaim it (30 min).' },
