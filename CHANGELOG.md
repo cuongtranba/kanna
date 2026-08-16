@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.20.0](https://github.com/cuongtranba/kanna/compare/v1.19.0...v1.20.0) (2026-08-16)
+
+
+### Features
+
+* **cron:** LLM self-repair for invalid /cron commands ([#665](https://github.com/cuongtranba/kanna/issues/665)) ([36dfcf9](https://github.com/cuongtranba/kanna/commit/36dfcf92c87fa1fe71a6037d159db44b000107fc))
+
 ## [1.19.0](https://github.com/cuongtranba/kanna/compare/v1.18.0...v1.19.0) (2026-08-16)
 
 
