@@ -86,3 +86,42 @@ export type CronCommand =
 export type CronParseResult =
   | { ok: true; command: CronCommand }
   | { ok: false; error: CronParseError }
+
+/** Why a scheduled tick was skipped instead of run. */
+export type CronSkipReason = "chat_busy" | "previous_run_active" | "server_offline"
+
+export type CronRunStatus = "running" | "completed" | "failed" | "skipped"
+
+export interface CronRunSnapshot {
+  runId: string
+  firedAt: number
+  status: CronRunStatus
+  /** Spawn mode: the chat this run executed in. */
+  spawnedChatId?: string
+  skipReason?: CronSkipReason
+  /** For `server_offline` skips: how many fires were missed. */
+  missedCount?: number
+  errorCode?: string
+}
+
+/**
+ * One armed cron job, projected from the auto-continue event log. Flows
+ * server → client on `ChatSnapshot.cronJobs` (per-chat footer panel, run-card
+ * status joins) and on the global cron-jobs topic (management page).
+ */
+export interface CronJobSnapshot {
+  jobId: string
+  instruction: string
+  mode: CronMode
+  scheduleText: string
+  schedule: CronSchedule
+  paused: boolean
+  armedAt: number
+  /** Next fire time, or null when paused or the schedule has no future occurrence. */
+  nextFireAt: number | null
+  lastRun: CronRunSnapshot | null
+  /** Newest first, bounded (`MAX_RECENT_CRON_RUNS`). */
+  recentRuns: readonly CronRunSnapshot[]
+}
+
+export const MAX_RECENT_CRON_RUNS = 20
