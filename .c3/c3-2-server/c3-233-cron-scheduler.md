@@ -1,6 +1,6 @@
 ---
 id: c3-233
-c3-seal: e66cabbed0f56cf61b4cc485326f5e6707e4d091bbcba14c3117f49e91e40a68
+c3-seal: 0d8c0f7fd7af220f21604986bb5194157434f84961cb0982378e56084a8f2918
 title: cron-scheduler
 type: component
 category: feature
@@ -39,12 +39,20 @@ read models.
 ## Purpose
 
 Owns the server half of the `/cron` feature. `runCronCommand` dispatches
-parsed commands (arm/list/remove/pause/resume, or a validation-error entry)
-through `emitCronEvent` — the one write path: append event, scheduler.onEvent,
-chat broadcast, global-topic push. `CronScheduler` (a deliberate sibling of
-the one-shot ScheduleManager, sharing its injected Clock) re-arms after every
-fire with 6-hour-chunked wall-clock-recomputed timeouts and, on rehydrate,
-SKIPS fires missed while the server was down, reporting a visible
+parsed commands (arm/list/remove/pause/resume) through `emitCronEvent` — the
+one write path: append event, scheduler.onEvent, chat broadcast, global-topic
+push — and refuses every invalid line through the single `refuseCronCommand`
+choke point, which cards the failure and offers it to the model together.
+`createCronRepair` is that offer: when the parser produced no suggestion of
+its own it enqueues a repair prompt and drains the queue (`/cron` starts no
+turn, so nothing else would), bounded to arm-shaped failures, one ask per
+line per chat, standing aside for a queued user message, swallowing its own
+failures, and disabled by `KANNA_CRON_REPAIR=disabled`. `previewCronCommand`
+is the single answer behind the `validate_cron` / `arm_cron` MCP tools in
+c3-226, so neither can contradict the other. `CronScheduler` (a deliberate
+sibling of the one-shot ScheduleManager, sharing its injected Clock) re-arms
+after every fire with 6-hour-chunked wall-clock-recomputed timeouts and, on
+rehydrate, SKIPS fires missed while the server was down, reporting a visible
 server_offline notice per job. `fireCronJob` runs inline fires (context
 cleared before EVERY run — the arming chat is a monitoring view) and spawn
 fires (a fresh chat per run in the arming chat's project, carded in the
@@ -72,6 +80,7 @@ scheduler (c3-227), UI rendering (c3-120).
 | Fire | IN | CronScheduler fire callback invokes AgentCoordinator.fireCronJob(chatId, jobId); inline clears context then enqueues; spawn creates a chat then enqueues there | c3-210 | src/server/cron/scheduler.ts, src/server/cron/fire.ts |
 | Run outcome | IN | EventStore.onTurnTerminal (the single recordTurnFinished/Failed/Cancelled choke point) reports the tagged turn's outcome; recordCronTurnOutcome lands it on the arming chat | c3-206 | src/server/event-store.ts, src/server/cron/fire.ts |
 | Cron read model | OUT | deriveCronJobs projects CronJobSnapshot[] onto ChatSnapshot.cronJobs; the cron-jobs WS topic aggregates every chat for the global page; cron.remove/pause/resume WS commands reuse the /cron dispatch | c3-207 | src/server/cron/read-model.ts, src/server/ws-router-envelope.ts, src/server/ws-router-agent-ctrl.ts |
+| Refusal + model escalation | OUT | refuseCronCommand is the one path a /cron line is refused on: it appends the cron_command_error card carrying the typed line AND offers the error to createCronRepair, which enqueues a repair prompt and drains the queue only when the parser had no suggestion, for arm-shaped parts, once per line per chat, standing aside for a queued user message. A schedule that parses but never fires escalates too, on a reconstructed canonical line. KANNA_CRON_REPAIR=disabled turns it off | c3-226 | src/server/cron/commands.ts, src/server/cron/repair.ts |
 
 ## Change Safety
 

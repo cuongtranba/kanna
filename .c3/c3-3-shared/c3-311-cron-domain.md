@@ -1,6 +1,6 @@
 ---
 id: c3-311
-c3-seal: c40b66624885d2746b71d458b599eba749bee7351afe6480ef1f6e6bb31b4bdb
+c3-seal: 1201f11d6da3c5a6b858ca9689cfd0cb1abbbbd0aaa330dea20d229822c6e448
 title: cron-domain
 type: component
 category: feature
@@ -38,15 +38,18 @@ humanization, and the snapshot/tag types both client and server consume.
 
 Owns everything about `/cron` that is pure and shared: `parseCronCommand`
 (the arm grammar anchors on the LAST inline/spawn token so instructions need
-no quoting; every failure names the failing part and, when unambiguous,
-carries a complete corrected line that is drift-guard-tested to re-parse),
-`parseSchedule` (5-field cron with per-field range diagnostics, @shortcut
-expansion, `every Nm|Nh` intervals kept anchor-based rather than rewritten to
-cron fields), `humanizeSchedule`, and the `CronJobSnapshot` /
-`CronRunSnapshot` / `CronRunTag` / `CronJobsGlobalSnapshot` types. Non-goals:
-next-occurrence computation (server-only, delegated to the `cron` npm package
-in c3-233 so luxon stays out of the client bundle), timers, event persistence,
-and any IO — the side-effect seal holds this module pure.
+no quoting; every failure names the failing part, records the offending line,
+and, when unambiguous, carries a complete corrected line that is
+drift-guard-tested to re-parse), `parseSchedule` (5-field cron with per-field
+range diagnostics, @shortcut expansion, validated wildcard padding for a
+short cron, `every Nm|Nh` intervals kept anchor-based rather than rewritten to
+cron fields), `humanizeSchedule`, `formatCronDefect` / `formatCronRepairRequest`
+(the words both the validate_cron tool result and the model repair prompt
+speak, so the model is never taught two vocabularies for one defect), and the
+`CronJobSnapshot` / `CronRunSnapshot` / `CronRunTag` / `CronJobsGlobalSnapshot`
+types. Non-goals: next-occurrence computation (server-only, delegated to the
+`cron` npm package in c3-233 so luxon stays out of the client bundle), timers,
+event persistence, and any IO — the side-effect seal holds this module pure.
 
 ## Governance
 
@@ -63,6 +66,7 @@ and any IO — the side-effect seal holds this module pure.
 | Suggestion re-parse guarantee | OUT | Every CronParseError.suggestion is a complete /cron line validated to re-parse cleanly before it is attached | c3-1 | src/shared/cron/parse-command.ts, src/shared/cron/parse-command.test.ts |
 | CronSchedule shape | OUT | Cron schedules carry the canonical 5-field expression (the occurrence engine's input) plus parsed CronFields for validation and humanize; intervals carry ms and anchor at arm time | c3-233 | src/shared/cron/types.ts, src/shared/cron/parse-schedule.ts |
 | Snapshot types | OUT | CronJobSnapshot/CronRunSnapshot/CronJobsGlobalSnapshot are the server-to-client cron read-model shapes on ChatSnapshot.cronJobs and the cron-jobs topic | c3-207 | src/shared/cron/types.ts |
+| Offending line recorded | OUT | Every CronParseError carries the trimmed line it rejected, and its `suggestion` being absent is the signal c3-233 escalates on. parseCronCommand stamps the line once over an internal Outcome type whose error omits it, so a failure path cannot record a defect without its line — `/cron` starts no turn, so nothing else in the transcript does | c3-233 | src/shared/cron/parse-command.ts, src/shared/cron/types.ts |
 
 ## Derived Materials
 
@@ -72,3 +76,4 @@ and any IO — the side-effect seal holds this module pure.
 | src/shared/cron/parse-schedule.ts | Contract (CronSchedule shape) | Error message wording | src/shared/cron/parse-schedule.ts |
 | src/shared/cron/humanize.ts | Contract (snapshot types) | Pattern coverage; falls back to raw schedule text | src/shared/cron/humanize.ts |
 | src/shared/cron/parse-command.test.ts | Contract (suggestion re-parse guarantee) | Fixture selection | src/shared/cron/parse-command.test.ts |
+| src/shared/cron/repair-report.ts | Contract (offending line recorded) | Prompt wording, so long as it names both cron tools and the ask-when-ambiguous rule | src/shared/cron/repair-report.ts, src/shared/cron/repair-report.test.ts |

@@ -1,6 +1,6 @@
 ---
 id: c3-120
-c3-seal: 3d940670daf2f7457b06c07d4f1185cecc15b97c4c47d5b01516bc74782c5911
+c3-seal: 96f736d6b217c348fd9516ff969e509346a739a344de09953af2b8608e8a2339
 title: cron-ui
 type: component
 category: feature
@@ -66,6 +66,7 @@ occurrences — it renders the server-computed nextFireAt.
 | Live status join | IN | CronRunMessage and CronListMessage join live run state from ChatSnapshot.cronJobs (by runId / whole list), never from the immutable entry | c3-207 | src/client/components/messages/CronRunMessage.tsx, src/client/components/messages/CronListMessage.tsx |
 | Management commands | OUT | Footer panel and /cron page issue cron.pause / cron.resume / cron.remove WS commands (the same dispatch the typed /cron subcommands use) | c3-233 | src/client/app/CronJobsSection.tsx, src/client/app/CronJobsPage.tsx |
 | Global topic | IN | cronJobsStore consumes the cron-jobs subscription snapshot (all projects/chats) with a stable EMPTY fallback | c3-233 | src/client/stores/cronJobsStore.ts, src/client/app/useAppGlobalState.ts |
+| Offending line display | IN | CronCommandErrorMessage renders cron_command_error.input above the message when present. `/cron` starts no turn, so no user_prompt bubble records the typed line and this card is the only surface it can appear on; entries without a single offending line render unchanged | c3-311 | src/client/components/messages/CronCommandErrorMessage.tsx, src/client/lib/parseTranscript.ts |
 
 ## Derived Materials
 
