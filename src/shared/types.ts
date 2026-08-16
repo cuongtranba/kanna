@@ -107,6 +107,7 @@ export interface QueuedChatMessage {
   modelOptions?: ModelOptions
   planMode?: boolean
   autoContinue?: { scheduleId: string }
+  cronRun?: import("./cron/types").CronRunTag
 }
 
 export interface InternalUserAttachmentsData {
@@ -407,6 +408,8 @@ export interface ChatSnapshot {
   subagentRuns: Record<string, SubagentRunSnapshot>
   /** Loop Progress panel view — armed state, per-round rows, rate-limit resume. */
   loopProgress: LoopProgressSnapshot
+  /** Armed cron jobs on this chat — footer panel + run-card status joins. */
+  cronJobs: readonly import("./cron/types").CronJobSnapshot[]
   /**
    * Chat op-log sequence this snapshot reflects. Absent when the producer
    * has no op-log (share page, legacy paths) — such snapshots never get

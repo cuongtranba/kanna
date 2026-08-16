@@ -1,3 +1,5 @@
+import type { CronMode, CronSchedule, CronSkipReason } from "../../shared/cron/types"
+
 export const AUTO_CONTINUE_EVENT_VERSION = 3 as const
 
 /**
@@ -105,4 +107,51 @@ export type AutoContinueEvent =
   | (AutoContinueEventBase & {
       kind: "loop_disarmed"
       reason: "goal_met" | "user_send" | "chat_deleted" | "repeated_failures"
+    })
+  /*
+   * Cron events. `scheduleId` doubles as the cron JOB id (the same trick
+   * `loop_armed` plays), so the base shape carries job identity for free.
+   * Run events additionally carry their own `runId` — one job fires many
+   * runs. Timers live in `CronScheduler`, never `ScheduleManager`; these
+   * events are its durable state, replayed on boot.
+   */
+  | (AutoContinueEventBase & {
+      /** `/cron` armed a job. A later `cron_armed` with the same id replaces it. */
+      kind: "cron_armed"
+      instruction: string
+      mode: CronMode
+      scheduleText: string
+      schedule: CronSchedule
+    })
+  | (AutoContinueEventBase & {
+      kind: "cron_disarmed"
+      reason: "user" | "chat_deleted"
+    })
+  | (AutoContinueEventBase & {
+      kind: "cron_paused"
+    })
+  | (AutoContinueEventBase & {
+      kind: "cron_resumed"
+    })
+  | (AutoContinueEventBase & {
+      kind: "cron_run_started"
+      runId: string
+      /** Present in spawn mode: the chat this run executes in. */
+      spawnedChatId?: string
+    })
+  | (AutoContinueEventBase & {
+      kind: "cron_run_outcome"
+      runId: string
+      ok: boolean
+      errorCode?: string
+    })
+  | (AutoContinueEventBase & {
+      /**
+       * A tick that did not run: the arming chat (inline) or the job's own
+       * previous run was still busy, or fires were missed while the server
+       * was down (`server_offline`, with how many were skipped).
+       */
+      kind: "cron_run_skipped"
+      reason: CronSkipReason
+      missedCount?: number
     })

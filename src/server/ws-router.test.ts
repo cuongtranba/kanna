@@ -2494,6 +2494,7 @@ describe("ws-router", () => {
         rescheduleAutoContinue: async (_chatId: string, _scheduleId: string, _scheduledAt: number) => {},
         cancelAutoContinue: async (_chatId: string, _scheduleId: string, _reason: string) => {},
         listLiveSchedules: (_chatId: string): string[] => [],
+        disarmCronJobsForChat: async (_chatId: string) => {},
         cancel: async () => {},
         closeChat: async () => {},
         ...overrides,

@@ -26,6 +26,7 @@ import { LocalProjectsPage } from "./LocalProjectsPage"
 import { BoardsRoutePage } from "./BoardsRoutePage"
 import { SettingsPage } from "./SettingsPage"
 import { WorkflowsPage } from "./WorkflowsPage"
+import { CronJobsPage } from "./CronJobsPage"
 import { AppBootstrap } from "./AppBootstrap"
 import { SharePage } from "./share-view/SharePage"
 import { useKannaState } from "./useKannaState"
@@ -572,6 +573,7 @@ function AuthedApp() {
           <Route path="/settings/:sectionId" element={<SettingsPage />} />
           <Route path="/chat/:chatId" element={<WorkspacePage />} />
           <Route path="/workflows/:chatId" element={<WorkflowsPage />} />
+          <Route path="/cron" element={<CronJobsPage />} />
           {/* The list answers "what boards does this project have" — not a
               workspace question, so it is a page of its own. */}
           <Route path="/boards/:projectId" element={<BoardsRoutePage />} />

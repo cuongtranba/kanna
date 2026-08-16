@@ -50,6 +50,7 @@ export interface ChatAgentDep {
   cancel(chatId: string): Promise<void>
   cancelAutoContinue(chatId: string, scheduleId: string, reason: string): Promise<void>
   listLiveSchedules(chatId: string): Iterable<string>
+  disarmCronJobsForChat(chatId: string): Promise<void>
   closeChat(chatId: string): Promise<void>
   stopDraining(chatId: string): Promise<void>
   respondTool(command: Extract<ClientCommand, { type: "chat.respondTool" }>): Promise<void>
@@ -174,6 +175,7 @@ export async function handleChatCommand(
       for (const scheduleId of agent.listLiveSchedules(command.chatId)) {
         await agent.cancelAutoContinue(command.chatId, scheduleId, "chat_deleted")
       }
+      await agent.disarmCronJobsForChat(command.chatId)
       await agent.closeChat(command.chatId)
       if (agent.toolCallbackService) {
         await agent.toolCallbackService.cancelAllForChat(command.chatId, "chat_deleted")

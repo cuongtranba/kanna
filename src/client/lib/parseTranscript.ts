@@ -291,6 +291,61 @@ export function processTranscriptMessages(entries: TranscriptEntry[]): HydratedT
       case "tool_request_resolved":
         // resolved entries are informational; drop them from the rendered transcript
         break
+      case "cron_armed":
+        messages.push({
+          ...createBaseMessage(entry),
+          kind: "cron_armed",
+          jobId: entry.jobId,
+          instruction: entry.instruction,
+          mode: entry.mode,
+          scheduleText: entry.scheduleText,
+          scheduleHuman: entry.scheduleHuman,
+          nextFireAt: entry.nextFireAt,
+        })
+        break
+      case "cron_command_error":
+        messages.push({
+          ...createBaseMessage(entry),
+          kind: "cron_command_error",
+          message: entry.message,
+          ...(entry.suggestion !== undefined ? { suggestion: entry.suggestion } : {}),
+        })
+        break
+      case "cron_run":
+        messages.push({
+          ...createBaseMessage(entry),
+          kind: "cron_run",
+          jobId: entry.jobId,
+          runId: entry.runId,
+          instruction: entry.instruction,
+          ...(entry.spawnedChatId !== undefined ? { spawnedChatId: entry.spawnedChatId } : {}),
+          firedAt: entry.firedAt,
+        })
+        break
+      case "cron_run_skipped":
+        messages.push({
+          ...createBaseMessage(entry),
+          kind: "cron_run_skipped",
+          jobId: entry.jobId,
+          reason: entry.reason,
+          ...(entry.missedCount !== undefined ? { missedCount: entry.missedCount } : {}),
+        })
+        break
+      case "cron_list":
+        messages.push({
+          ...createBaseMessage(entry),
+          kind: "cron_list",
+          ...(entry.help !== undefined ? { help: entry.help } : {}),
+        })
+        break
+      case "cron_job_change":
+        messages.push({
+          ...createBaseMessage(entry),
+          kind: "cron_job_change",
+          jobId: entry.jobId,
+          change: entry.change,
+        })
+        break
       default:
         messages.push({
           ...createBaseMessage(entry),

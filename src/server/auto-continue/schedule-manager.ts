@@ -74,6 +74,15 @@ export class ScheduleManager {
       case "loop_run_outcome":
         // Loop arm/disarm/outcome are durable state markers, not schedule timers.
         return
+      case "cron_armed":
+      case "cron_disarmed":
+      case "cron_paused":
+      case "cron_resumed":
+      case "cron_run_started":
+      case "cron_run_outcome":
+      case "cron_run_skipped":
+        // Cron timers belong to CronScheduler, not this one-shot manager.
+        return
       default: {
         const _exhaustive: never = event
         void _exhaustive

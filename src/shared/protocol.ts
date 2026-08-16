@@ -79,6 +79,7 @@ export type SubscriptionTopic =
    */
   | { type: "board"; boardId: string; pageSize?: number }
   | { type: "followed-sessions" }
+  | { type: "cron-jobs" }
 
 export interface TerminalSnapshot {
   terminalId: string
@@ -394,6 +395,9 @@ export type ClientCommand =
   | { type: "autoContinue.accept"; chatId: string; scheduleId: string; scheduledAt: number }
   | { type: "autoContinue.reschedule"; chatId: string; scheduleId: string; scheduledAt: number }
   | { type: "autoContinue.cancel"; chatId: string; scheduleId: string }
+  | { type: "cron.remove"; chatId: string; jobId: string }
+  | { type: "cron.pause"; chatId: string; jobId: string }
+  | { type: "cron.resume"; chatId: string; jobId: string }
   | { type: "tunnel.accept"; chatId: string; tunnelId: string }
   | { type: "tunnel.stop"; chatId: string; tunnelId: string }
   | { type: "tunnel.retry"; chatId: string; tunnelId: string }
@@ -435,6 +439,7 @@ export type ServerSnapshot =
   | { type: "boards"; data: BoardsSnapshot }
   | { type: "board"; data: BoardSnapshot }
   | { type: "followed-sessions"; data: FollowedSessionsSnapshot }
+  | { type: "cron-jobs"; data: import("./cron/types").CronJobsGlobalSnapshot }
 
 export interface BoardsSnapshot {
   ownerKind: BoardOwnerKind

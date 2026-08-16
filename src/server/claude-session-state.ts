@@ -94,6 +94,12 @@ export interface ActiveTurn {
   profilingStartedAt?: number
   waitStartedAt: number | null
   compactionTurn?: CompactionTurnKind
+  /**
+   * Set when this turn is a cron-fired run. The store's turn-terminal
+   * observer reads it to append `cron_run_outcome` to the job's arming chat
+   * — see cron/fire.ts.
+   */
+  cronRun?: import("../shared/cron/types").CronRunTag
   // _id of the user_prompt entry that triggered this turn (when appended on
   // this turn). Used to attribute main-Claude-initiated subagent runs to the
   // originating user message.

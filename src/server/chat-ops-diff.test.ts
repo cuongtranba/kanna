@@ -52,6 +52,7 @@ function makeMeta(overrides?: Partial<ChatSnapshot>): ChatSnapshot {
     liveTunnelId: null,
     subagentRuns: {},
     loopProgress: { chatId: "chat-1", armed: false, rows: [], rateLimit: null },
+    cronJobs: [],
     ...overrides,
   }
 }

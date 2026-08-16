@@ -56,6 +56,7 @@ import { deleteProjectUpload, inferAttachmentContentType, inferProjectFileConten
 import { getProjectUploadDir } from "./paths"
 import { listProjectPaths } from "./project-paths"
 import { ScheduleManager } from "./auto-continue/schedule-manager"
+import { CronScheduler } from "./cron/scheduler"
 import { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
 import { setQuickResponseOAuthPool } from "./quick-response"
 import { TunnelGateway } from "./cloudflare-tunnel/gateway"
@@ -499,9 +500,15 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
       await agent.fireAutoContinue(chatId, scheduleId)
     },
   })
+  const cronScheduler = new CronScheduler({
+    fire: async (chatId, jobId) => {
+      await agent.fireCronJob(chatId, jobId)
+    },
+  })
   agent = new AgentCoordinator({
     store,
     scheduleManager,
+    cronScheduler,
     openrouterFirstEntryTimeoutMs: parsePositiveIntEnv(
       process.env.KANNA_OPENROUTER_FIRST_ENTRY_TIMEOUT_MS,
       2 * 60 * 1000,
@@ -678,9 +685,23 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   pushFollowedSessions = () => {
     router.pushFollowedSessions()
   }
+  agent.onCronJobsChange = () => {
+    router.pushCronJobs()
+  }
   scheduleManager.rehydrate(
     store.listAutoContinueChats().flatMap((chatId) => store.getAutoContinueEvents(chatId))
   )
+  {
+    const cronChatIds = store.listAutoContinueChats()
+    const missedCronFires = cronScheduler.rehydrate(
+      cronChatIds.flatMap((chatId) => store.getAutoContinueEvents(chatId)),
+    )
+    // Detached like queued-message recovery: reconciliation appends visible
+    // notices + settles orphaned runs and must not delay the listener.
+    void agent.reconcileCronRunsAtBoot(missedCronFires, cronChatIds).catch((error) => {
+      log.error("[kanna/cron] boot reconciliation failed:", String(error))
+    })
+  }
   rehydrateLoopTracking(
     { getAutoContinueEvents: (chatId) => store.getAutoContinueEvents(chatId), registry: loopTrackingRegistry },
     store.listAutoContinueChats(),
@@ -861,6 +882,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     appSettings.dispose()
     keybindings.dispose()
     scheduleManager.shutdown()
+    cronScheduler.shutdown()
     tunnelGateway.shutdown()
     snapshotSweepHandle.stop()
     await observability.shutdown()

@@ -14,6 +14,8 @@ import type { ChatSnapshot } from "../shared/types"
 import type { ServerEnvelope, SubscriptionTopic } from "../shared/protocol"
 import type { ServerWebSocket } from "bun"
 import { deriveChatSnapshot, deriveLocalProjectsSnapshot, deriveSidebarData } from "./read-models"
+import { deriveCronJobs } from "./cron/read-model"
+import type { CronJobsGlobalRow } from "../shared/cron/types"
 import { localCommandsForCwd } from "./claude-slash-commands"
 import { resolveSpawnPaths } from "./claude-session-config"
 import type { EventStore } from "./event-store"
@@ -427,6 +429,18 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
       }
     }
 
+    if (topic.type === "cron-jobs") {
+      return {
+        v: PROTOCOL_VERSION,
+        type: "snapshot",
+        id,
+        snapshot: {
+          type: "cron-jobs",
+          data: { rows: buildCronJobsGlobalRows(store) },
+        },
+      }
+    }
+
     // Capture seq BEFORE deriving: ops recorded mid-derive then overlap the
     // snapshot, and the client reducer's upsert-by-_id makes that idempotent.
     // Optional-chained like the registry subscriptions: partial store fakes in tests
@@ -460,4 +474,31 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
   }
 
   return { getSidebarSnapshotCacheEntry, createEnvelope, deriveChatMeta }
+}
+
+/**
+ * All armed cron jobs across every chat/project — the global management
+ * page's read model, aggregated on demand from the same per-chat event
+ * streams the chat snapshot uses.
+ */
+function buildCronJobsGlobalRows(store: EventStore): CronJobsGlobalRow[] {
+  const now = Date.now()
+  const rows: CronJobsGlobalRow[] = []
+  for (const chatId of store.listAutoContinueChats()) {
+    const chat = store.getChat(chatId)
+    if (!chat) continue
+    const project = store.getProject(chat.projectId)
+    if (!project) continue
+    for (const job of deriveCronJobs(store.getAutoContinueEvents(chatId), chatId, now)) {
+      rows.push({
+        projectId: project.id,
+        projectPath: project.localPath,
+        chatId,
+        chatTitle: chat.title,
+        job,
+      })
+    }
+  }
+  rows.sort((a, b) => a.projectPath.localeCompare(b.projectPath) || a.job.armedAt - b.job.armedAt)
+  return rows
 }

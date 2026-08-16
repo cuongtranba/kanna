@@ -70,3 +70,33 @@ export type ProcessedMemoryLoadedMessage = Extract<
   import("../../../shared/types").HydratedTranscriptMessage,
   { kind: "memory_loaded" }
 >
+
+export type ProcessedCronArmedMessage = Extract<
+  import("../../../shared/types").HydratedTranscriptMessage,
+  { kind: "cron_armed" }
+>
+
+export type ProcessedCronCommandErrorMessage = Extract<
+  import("../../../shared/types").HydratedTranscriptMessage,
+  { kind: "cron_command_error" }
+>
+
+export type ProcessedCronRunMessage = Extract<
+  import("../../../shared/types").HydratedTranscriptMessage,
+  { kind: "cron_run" }
+>
+
+export type ProcessedCronRunSkippedMessage = Extract<
+  import("../../../shared/types").HydratedTranscriptMessage,
+  { kind: "cron_run_skipped" }
+>
+
+export type ProcessedCronListMessage = Extract<
+  import("../../../shared/types").HydratedTranscriptMessage,
+  { kind: "cron_list" }
+>
+
+export type ProcessedCronJobChangeMessage = Extract<
+  import("../../../shared/types").HydratedTranscriptMessage,
+  { kind: "cron_job_change" }
+>

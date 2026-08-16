@@ -137,6 +137,9 @@ export interface SendCommandDeps {
 
   /** Wipe every provider's context for the chat — backs the `/clear` builtin. */
   clearChatContext(chatId: string): Promise<void>
+
+  /** Dispatch a parsed `/cron` message (arm/list/manage or validation error). */
+  runCronCommand(chatId: string, result: import("../shared/cron/types").CronParseResult): Promise<void>
 }
 
 // ---------------------------------------------------------------------------
@@ -248,6 +251,7 @@ export async function enqueueMessage(
     modelOptions: options?.modelOptions,
     planMode: options?.planMode,
     autoContinue: options?.autoContinue,
+    cronRun: options?.cronRun,
   })
   deps.emitStateChange(chatId)
   return queued
@@ -271,6 +275,14 @@ export async function runBuiltinCommand(
 ): Promise<void> {
   if (command.name === "clear") {
     await deps.clearChatContext(chatId)
+    await onCommitted?.()
+    return
+  }
+
+  // `/cron` never starts a turn — arm/list/manage (or a validation-error
+  // entry) is pure Kanna state, like `/clear`.
+  if (command.name === "cron") {
+    await deps.runCronCommand(chatId, command.result)
     await onCommitted?.()
     return
   }
@@ -376,6 +388,7 @@ export async function dequeueAndStartQueuedMessage(
     appendUserPrompt: !isRateLimitFallback && !alreadyAppended,
     steered: options?.steered,
     autoContinue: queuedMessage.autoContinue,
+    cronRun: queuedMessage.cronRun,
     onTurnRecorded: release,
   })
 }

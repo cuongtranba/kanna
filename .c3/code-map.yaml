@@ -255,3 +255,18 @@ c3-307:
   - src/shared/token-pricing.ts
 c3-310:
   - src/shared/boards/**/*.ts
+c3-120:
+  - src/client/app/CronJobsPage.tsx
+  - src/client/app/CronJobsSection.tsx
+  - src/client/components/messages/CronArmedMessage.tsx
+  - src/client/components/messages/CronCommandErrorMessage.tsx
+  - src/client/components/messages/CronJobChangeMessage.tsx
+  - src/client/components/messages/CronListMessage.tsx
+  - src/client/components/messages/CronMessages.test.tsx
+  - src/client/components/messages/CronRunMessage.tsx
+  - src/client/components/messages/CronRunSkippedMessage.tsx
+  - src/client/stores/cronJobsStore.ts
+c3-233:
+  - src/server/cron/**/*.ts
+c3-311:
+  - src/shared/cron/**/*.ts

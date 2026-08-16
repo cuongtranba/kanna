@@ -19,7 +19,7 @@ import { useStickyChatFocus } from "../useStickyChatFocus"
 import { usePushFocus } from "../usePushFocus"
 import { getNextMeasuredInputHeight, getTranscriptPaddingBottom } from "../useKannaState"
 import { useChatTabState } from "./ChatTabRoot"
-import { EMPTY_SCHEDULES } from "../KannaTranscript"
+import { EMPTY_CRON_JOBS, EMPTY_SCHEDULES } from "../KannaTranscript"
 import { findRetryPromptForResult } from "../../lib/retryPrompt"
 import { useShareStore } from "../../components/share/share-store"
 import type { ShareCommandResult } from "../../../shared/session-share/protocol"
@@ -308,6 +308,24 @@ export function ChatTabContent({
     void state.socket.command({ type: "autoContinue.reschedule", chatId, scheduleId, scheduledAt }).catch(() => {})
   }, [state.activeChatId, state.socket])
 
+  const handleCronPause = useCallback((jobId: string) => {
+    const chatId = state.activeChatId
+    if (!chatId) return
+    void state.socket.command({ type: "cron.pause", chatId, jobId }).catch(() => {})
+  }, [state.activeChatId, state.socket])
+
+  const handleCronResume = useCallback((jobId: string) => {
+    const chatId = state.activeChatId
+    if (!chatId) return
+    void state.socket.command({ type: "cron.resume", chatId, jobId }).catch(() => {})
+  }, [state.activeChatId, state.socket])
+
+  const handleCronRemove = useCallback((jobId: string) => {
+    const chatId = state.activeChatId
+    if (!chatId) return
+    void state.socket.command({ type: "cron.remove", chatId, jobId }).catch(() => {})
+  }, [state.activeChatId, state.socket])
+
   const handleAutoContinueCancel = useCallback((scheduleId: string) => {
     const chatId = state.activeChatId
     if (!chatId) return
@@ -539,6 +557,10 @@ export function ChatTabContent({
           onSubagentAskUserQuestionSubmit={state.handleSubagentAskUserQuestion}
           onSubagentExitPlanModeSubmit={state.handleSubagentExitPlanMode}
           schedules={state.chatSnapshot?.schedules ?? EMPTY_SCHEDULES}
+          cronJobs={state.chatSnapshot?.cronJobs ?? EMPTY_CRON_JOBS}
+          onCronPause={handleCronPause}
+          onCronResume={handleCronResume}
+          onCronRemove={handleCronRemove}
           onAutoContinueAccept={handleAutoContinueAccept}
           onAutoContinueReschedule={handleAutoContinueReschedule}
           onAutoContinueCancel={handleAutoContinueCancel}

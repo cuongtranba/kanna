@@ -105,6 +105,17 @@ import {
   type LoopCommandDeps,
 } from "./claude-loop-commands"
 import {
+  runCronCommand as runCronCommandFn,
+  disarmCronJobsForChat as disarmCronJobsForChatFn,
+  type CronCommandDeps,
+} from "./cron/commands"
+import {
+  fireCronJob as fireCronJobFn,
+  recordCronTurnOutcome as recordCronTurnOutcomeFn,
+  reconcileCronRunsAtBoot as reconcileCronRunsAtBootFn,
+  type CronFireDeps,
+} from "./cron/fire"
+import {
   cancelChat as cancelChatFn,
   type CancelHandlerDeps,
 } from "./claude-cancel-handler"
@@ -208,6 +219,7 @@ export class AgentCoordinator {
   readonly codexLimitDetector: LimitDetector
   readonly claudeAuthErrorDetector: ClaudeAuthErrorDetector
   readonly scheduleManager: ScheduleManager | null
+  readonly cronScheduler: import("./cron/scheduler").CronScheduler | null
   readonly getAutoResumePreference: () => boolean
   readonly getSubagents: () => Subagent[]
   readonly getAppSettingsSnapshot: NonNullable<AgentCoordinatorArgs["getAppSettingsSnapshot"]>
@@ -270,6 +282,18 @@ export class AgentCoordinator {
     this.codexLimitDetector = args.codexLimitDetector ?? new CodexLimitDetector()
     this.claudeAuthErrorDetector = new ClaudeAuthErrorDetector()
     this.scheduleManager = args.scheduleManager ?? null
+    this.cronScheduler = args.cronScheduler ?? null
+    // The store's turn-terminal observer is how a cron-fired turn's outcome
+    // reaches its job: every provider path funnels through recordTurn*, and
+    // the ActiveTurn still holds its CronRunTag at that moment (turns are
+    // deleted from the map only after the terminal record persists).
+    this.store.onTurnTerminal = (chatId, outcome) => {
+      const tag = this.activeTurns.get(chatId)?.cronRun
+      if (!tag) return
+      void recordCronTurnOutcomeFn(this.buildCronCommandDeps(), tag, outcome).catch((error) => {
+        log.error("[kanna/cron] failed to record run outcome:", String(error))
+      })
+    }
     this.getAutoResumePreference = args.getAutoResumePreference ?? (() => false)
     this.openrouterFirstEntryTimeoutMs =
       args.openrouterFirstEntryTimeoutMs ?? DEFAULT_OPENROUTER_FIRST_ENTRY_TIMEOUT_MS
@@ -457,6 +481,14 @@ export class AgentCoordinator {
 
   private buildLoopCommandDeps(): LoopCommandDeps {
     return agentDepsBuilders.buildLoopCommandDeps(this)
+  }
+
+  private buildCronCommandDeps(): CronCommandDeps {
+    return agentDepsBuilders.buildCronCommandDeps(this)
+  }
+
+  private buildCronFireDeps(): CronFireDeps {
+    return agentDepsBuilders.buildCronFireDeps(this)
   }
 
   // ---------------------------------------------------------------------------
@@ -923,6 +955,46 @@ export class AgentCoordinator {
    */
   async stopLoop(chatId: string, reason: "goal_met" | "user_send" | "chat_deleted"): Promise<void> {
     return stopLoopFn(this.buildLoopCommandDeps(), chatId, reason)
+  }
+
+  /**
+   * Re-push hook for the global cron-jobs WS topic; the router assigns it at
+   * wiring time. Fired from `emitCronEvent` on every cron state change.
+   */
+  onCronJobsChange: (() => void) | null = null
+
+  /** Dispatch a parsed `/cron` message. Delegates to runCronCommandFn — see cron/commands.ts. */
+  async runCronCommand(
+    chatId: string,
+    result: import("../shared/cron/types").CronParseResult,
+  ): Promise<void> {
+    return runCronCommandFn(this.buildCronCommandDeps(), chatId, result)
+  }
+
+  /**
+   * Disarm every cron job on a chat (chat deleted) and drop its timers.
+   * Delegates to disarmCronJobsForChatFn — see cron/commands.ts.
+   */
+  async disarmCronJobsForChat(chatId: string): Promise<void> {
+    await disarmCronJobsForChatFn(this.buildCronCommandDeps(), chatId)
+    this.cronScheduler?.clearChat(chatId)
+  }
+
+  /** One cron tick — the CronScheduler's fire callback. Delegates to fireCronJobFn — see cron/fire.ts. */
+  async fireCronJob(chatId: string, jobId: string): Promise<void> {
+    return fireCronJobFn(this.buildCronFireDeps(), chatId, jobId)
+  }
+
+  /**
+   * Boot-time cron reconciliation: visible server_offline skip notices for
+   * fires missed while the server was down, plus settling runs no restart
+   * could have kept alive. Delegates to reconcileCronRunsAtBootFn.
+   */
+  async reconcileCronRunsAtBoot(
+    missed: ReadonlyArray<{ chatId: string; jobId: string; missedCount: number }>,
+    chatIds: readonly string[],
+  ): Promise<void> {
+    return reconcileCronRunsAtBootFn(this.buildCronCommandDeps(), missed, chatIds)
   }
 
   /** Delegates to listLiveSchedulesFn — see claude-loop-commands.ts. */

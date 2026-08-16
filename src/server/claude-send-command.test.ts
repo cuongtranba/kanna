@@ -64,6 +64,7 @@ type DepsOptions = {
    */
   turnReachesCommit?: boolean
   transcript?: TranscriptEntry[]
+  cronCalls?: Array<{ chatId: string; ok: boolean }>
 }
 
 function makeDeps(opts: DepsOptions = {}): SendCommandDeps & { startTurnCalled: StartTurnForChatArgs[] } {
@@ -145,6 +146,9 @@ function makeDeps(opts: DepsOptions = {}): SendCommandDeps & { startTurnCalled: 
       if (opts.turnReachesCommit ?? true) await args.onTurnRecorded?.()
     },
     clearChatContext: async (chatId: string) => { (opts.clearedChatIds ?? []).push(chatId) },
+    runCronCommand: async (chatId: string, result: { ok: boolean }) => {
+      (opts.cronCalls ?? []).push({ chatId, ok: result.ok })
+    },
   }
 }
 
@@ -604,6 +608,70 @@ describe("builtin /clear", () => {
 
     expect(clearedChatIds).toEqual([])
     expect(deps.startTurnCalled).toHaveLength(1)
+  })
+})
+
+describe("builtin /cron", () => {
+  test("on an idle chat dispatches to runCronCommand and starts no turn", async () => {
+    const cronCalls: Array<{ chatId: string; ok: boolean }> = []
+    const deps = makeDeps({ chatProvider: "claude", cronCalls })
+
+    const result = await sendCommand(deps, {
+      type: "chat.send",
+      content: "/cron check ci inline every 5m",
+      chatId: "chat-1",
+    } as Parameters<typeof sendCommand>[1])
+
+    expect(cronCalls).toEqual([{ chatId: "chat-1", ok: true }])
+    expect(deps.startTurnCalled).toEqual([])
+    expect(result).toEqual({ chatId: "chat-1" })
+  })
+
+  test("an INVALID /cron line still dispatches (never reaches the model as a prompt)", async () => {
+    const cronCalls: Array<{ chatId: string; ok: boolean }> = []
+    const deps = makeDeps({ chatProvider: "claude", cronCalls })
+
+    await sendCommand(deps, {
+      type: "chat.send",
+      content: "/cron total nonsense",
+      chatId: "chat-1",
+    } as Parameters<typeof sendCommand>[1])
+
+    expect(cronCalls).toEqual([{ chatId: "chat-1", ok: false }])
+    expect(deps.startTurnCalled).toEqual([])
+  })
+
+  test("while a turn is running it queues like any other message", async () => {
+    const cronCalls: Array<{ chatId: string; ok: boolean }> = []
+    const enqueuedMessages: Array<{ chatId: string; content: string }> = []
+    const deps = makeDeps({
+      chatProvider: "claude",
+      activeChatIds: ["chat-1"],
+      cronCalls,
+      enqueuedMessages,
+    })
+
+    const result = await sendCommand(deps, {
+      type: "chat.send",
+      content: "/cron list",
+      chatId: "chat-1",
+    } as Parameters<typeof sendCommand>[1])
+
+    expect(enqueuedMessages).toEqual([{ chatId: "chat-1", content: "/cron list" }])
+    expect(cronCalls).toEqual([])
+    expect(result.queued).toBe(true)
+  })
+
+  test("a queued /cron releases its queued message on commit", async () => {
+    const cronCalls: Array<{ chatId: string; ok: boolean }> = []
+    const removedMessages: Array<{ chatId: string; id: string }> = []
+    const deps = makeDeps({ chatProvider: "claude", cronCalls, removedMessages })
+
+    await dequeueAndStartQueuedMessage(deps, "chat-1", makeQueuedMessage({ content: "/cron list" }))
+
+    expect(removedMessages).toEqual([{ chatId: "chat-1", id: "qm-1" }])
+    expect(cronCalls).toEqual([{ chatId: "chat-1", ok: true }])
+    expect(deps.startTurnCalled).toEqual([])
   })
 })
 

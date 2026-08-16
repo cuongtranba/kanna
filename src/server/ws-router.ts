@@ -272,6 +272,9 @@ export function createWsRouter({
         case "autoContinue.accept":
         case "autoContinue.reschedule":
         case "autoContinue.cancel":
+        case "cron.remove":
+        case "cron.pause":
+        case "cron.resume":
         case "tunnel.accept":
         case "tunnel.stop":
         case "tunnel.retry": {
@@ -574,6 +577,7 @@ export function createWsRouter({
     scheduleChatStateBroadcast: (chatId: string) => broadcast.scheduleChatStateBroadcast(chatId),
     pruneStaleEmptyChats: () => broadcast.maybePruneStaleEmptyChats(),
     pushFollowedSessions: () => broadcast.pushFollowedSessions(),
+    pushCronJobs: () => broadcast.pushCronJobs(),
     async handleMessage(ws: ServerWebSocket<ClientState>, raw: string | Buffer | ArrayBuffer | Uint8Array) {
       let parsed: AnyValue
       try {
