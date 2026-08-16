@@ -32,6 +32,7 @@ export default defineConfig({
             { label: 'Providers & Models', slug: 'features/providers-models' },
             { label: 'Chat & Transcript', slug: 'features/chat-transcript' },
             { label: 'Projects & Sessions', slug: 'features/projects-sessions' },
+            { label: 'Cron Jobs', slug: 'features/cron-jobs' },
             { label: 'Advanced', slug: 'features/advanced' },
             { label: 'Security & Sandboxing', slug: 'features/security-sandboxing' },
           ],
