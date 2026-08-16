@@ -10,8 +10,12 @@
  * joins the run by `runId` from the snapshot.
  *
  * Overlap policy is skip-and-record: a tick that lands while the previous
- * run (or, inline, the chat) is busy appends a visible `cron_run_skipped`
- * and does nothing else. The turn carries a `CronRunTag`; the store's
+ * run (or, inline, the chat) is busy records a visible `cron_run_skipped` and
+ * does nothing else. CONSECUTIVE skips collapse into one counted record
+ * (`skip-coalescer.ts`) — under a sub-minute schedule the skipped ticks
+ * outnumber the runs, and one card each buries the runs that did happen. The
+ * streak is written when it ends, which is why both fire paths flush before
+ * they start a run. The turn carries a `CronRunTag`; the store's
  * turn-terminal observer routes the outcome back to the arming chat via
  * `recordCronTurnOutcome`. If that hook is ever missed, `fireCronJob`
  * self-heals: a run still "running" whose chat is demonstrably idle is
@@ -24,8 +28,11 @@ import type { SendMessageOptions } from "../claude-steer-log"
 import { AUTO_CONTINUE_EVENT_VERSION } from "../auto-continue/events"
 import { deriveCronJobs, hasActiveRun } from "./read-model"
 import { emitCronEvent, appendCronEntry, type CronCommandDeps } from "./commands"
+import type { CoalescedSkipReason, CronSkipCoalescerPort } from "./skip-coalescer"
 
 export interface CronFireDeps extends CronCommandDeps {
+  /** Required here, unlike on the command deps: without it every tick writes. */
+  skipCoalescer: CronSkipCoalescerPort
   getChatRecord(chatId: string): { projectId: string } | null
   isChatBusy(chatId: string): boolean
   clearChatContext(chatId: string): Promise<void>
@@ -77,6 +84,9 @@ export async function fireCronJob(deps: CronFireDeps, chatId: string, jobId: str
       await skip(deps, chatId, jobId, "chat_busy")
       return
     }
+    // The streak (if any) ended here, so it is reported before the run it was
+    // waiting on — the transcript then reads in the order things happened.
+    await flushSkipStreak(deps, chatId, jobId)
     // Fresh context every cycle — the arming chat is a monitoring view.
     await deps.clearChatContext(chatId)
     const runId = newRunId()
@@ -97,6 +107,7 @@ export async function fireCronJob(deps: CronFireDeps, chatId: string, jobId: str
   // spawn: a new chat per run, in the arming chat's project.
   const project = deps.getChatRecord(chatId)
   if (!project) return
+  await flushSkipStreak(deps, chatId, jobId)
   const spawned = await deps.createChat(project.projectId)
   const runId = newRunId()
   const firedAt = deps.now?.() ?? Date.now()
@@ -194,12 +205,40 @@ export async function reconcileCronRunsAtBoot(
   }
 }
 
+/**
+ * One skipped tick. Most of them write nothing — the coalescer decides, and
+ * only hands back a record when a streak has to be reported (its reason
+ * changed, or it has run past the flush window).
+ */
 async function skip(
   deps: CronFireDeps,
   chatId: string,
   jobId: string,
-  reason: "chat_busy" | "previous_run_active",
+  reason: CoalescedSkipReason,
 ): Promise<void> {
+  const now = deps.now?.() ?? Date.now()
+  const record = deps.skipCoalescer.record(chatId, jobId, reason, now)
+  if (!record) return
+  await writeSkip(deps, chatId, jobId, record.reason, record.count)
+}
+
+/** The streak ended: report what it accumulated but never wrote. */
+async function flushSkipStreak(deps: CronFireDeps, chatId: string, jobId: string): Promise<void> {
+  const record = deps.skipCoalescer.flushPending(chatId, jobId, deps.now?.() ?? Date.now())
+  if (!record) return
+  await writeSkip(deps, chatId, jobId, record.reason, record.count)
+}
+
+async function writeSkip(
+  deps: CronFireDeps,
+  chatId: string,
+  jobId: string,
+  reason: CoalescedSkipReason,
+  count: number,
+): Promise<void> {
+  // A count of one is the shape this event has always had; the field appears
+  // only when it says something a reader could not assume.
+  const missed = count > 1 ? { missedCount: count } : {}
   await emitCronEvent(deps, {
     v: AUTO_CONTINUE_EVENT_VERSION,
     kind: "cron_run_skipped",
@@ -207,8 +246,9 @@ async function skip(
     scheduleId: jobId,
     timestamp: deps.now?.() ?? Date.now(),
     reason,
+    ...missed,
   })
-  await appendCronEntry(deps, chatId, { kind: "cron_run_skipped", jobId, reason })
+  await appendCronEntry(deps, chatId, { kind: "cron_run_skipped", jobId, reason, ...missed })
 }
 
 function latestRealRun(job: CronJobSnapshot): CronRunSnapshot | null {

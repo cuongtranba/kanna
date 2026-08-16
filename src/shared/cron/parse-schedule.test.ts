@@ -75,14 +75,53 @@ describe("5-field cron", () => {
     expect(error.correctedSchedule).toBe("*/5 * * * *")
   })
 
-  test("6 fields suggests dropping the seconds field", () => {
-    const error = errorOf("0 */5 * * * *")
-    expect(error.message).toContain("6 fields")
-    expect(error.correctedSchedule).toBe("*/5 * * * *")
-  })
-
   test("a bare interval token suggests the every form", () => {
     expect(errorOf("5m").correctedSchedule).toBe("every 5m")
+    expect(errorOf("30s").correctedSchedule).toBe("every 30s")
+  })
+})
+
+describe("6-field cron (leading second)", () => {
+  test("parses the second field and keeps the expression verbatim", () => {
+    const schedule = scheduleOf("*/30 * * * * *")
+    expect(schedule).toEqual({
+      type: "cron",
+      expression: "*/30 * * * * *",
+      second: { kind: "values", values: [0, 30] },
+      minute: { kind: "any" },
+      hour: { kind: "any" },
+      dom: { kind: "any" },
+      month: { kind: "any" },
+      dow: { kind: "any" },
+    })
+  })
+
+  test("the remaining five fields keep their 5-field meaning", () => {
+    const schedule = scheduleOf("15 30 9 * * 1")
+    if (schedule.type !== "cron") throw new Error("expected cron")
+    expect(schedule.second).toEqual({ kind: "values", values: [15] })
+    expect(schedule.minute).toEqual({ kind: "values", values: [30] })
+    expect(schedule.hour).toEqual({ kind: "values", values: [9] })
+    expect(schedule.dow).toEqual({ kind: "values", values: [1] })
+  })
+
+  test("a 5-field schedule carries no second field at all", () => {
+    const schedule = scheduleOf("0 9 * * 1")
+    if (schedule.type !== "cron") throw new Error("expected cron")
+    expect(schedule.second).toBeUndefined()
+  })
+
+  test("the second field is range-checked like every other", () => {
+    const error = errorOf("60 * * * * *")
+    expect(error.message).toContain("second")
+    expect(error.message).toContain("0-59")
+    expect(error.part).toBe("schedule_field")
+  })
+
+  test("7 fields (Quartz) suggests dropping the trailing year", () => {
+    const error = errorOf("0 0 12 * * 1 2026")
+    expect(error.message).toContain("7 fields")
+    expect(error.correctedSchedule).toBe("0 0 12 * * 1")
   })
 })
 
@@ -110,7 +149,10 @@ describe("@shortcuts", () => {
 })
 
 describe("every-interval sugar", () => {
-  test("parses minutes and hours", () => {
+  test("parses seconds, minutes, and hours", () => {
+    expect(scheduleOf("every 1s")).toEqual({ type: "interval", ms: 1_000 })
+    expect(scheduleOf("every 30s")).toEqual({ type: "interval", ms: 30_000 })
+    expect(scheduleOf("every 90s")).toEqual({ type: "interval", ms: 90_000 })
     expect(scheduleOf("every 5m")).toEqual({ type: "interval", ms: 300_000 })
     expect(scheduleOf("every 2h")).toEqual({ type: "interval", ms: 7_200_000 })
   })
@@ -119,20 +161,17 @@ describe("every-interval sugar", () => {
     expect(errorOf("every 5min").correctedSchedule).toBe("every 5m")
     expect(errorOf("every 5minutes").correctedSchedule).toBe("every 5m")
     expect(errorOf("every 2hours").correctedSchedule).toBe("every 2h")
-  })
-
-  test("seconds are refused with the minimum unit named", () => {
-    const error = errorOf("every 30s")
-    expect(error.message).toContain("minutes")
-    expect(error.correctedSchedule).toBe("every 1m")
+    expect(errorOf("every 30seconds").correctedSchedule).toBe("every 30s")
+    expect(errorOf("every 30sec").correctedSchedule).toBe("every 30s")
   })
 
   test("days route to @daily", () => {
     expect(errorOf("every 1d").correctedSchedule).toBe("@daily")
   })
 
-  test("zero interval is refused", () => {
+  test("zero interval is refused in its own unit", () => {
     expect(errorOf("every 0m").correctedSchedule).toBe("every 1m")
+    expect(errorOf("every 0s").correctedSchedule).toBe("every 1s")
   })
 
   test("a stray space is corrected", () => {

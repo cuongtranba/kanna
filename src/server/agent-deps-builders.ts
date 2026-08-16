@@ -156,6 +156,7 @@ export function buildCronCommandDeps(agent: AgentCoordinator): CronCommandDeps {
   return {
     store: agent.store,
     cronScheduler: agent.cronScheduler,
+    skipCoalescer: agent.cronSkipCoalescer,
     emitStateChange: (chatId) => agent.emitStateChange(chatId),
     pushCronJobsUpdate: () => agent.onCronJobsChange?.(),
     cronRepair: buildCronRepair(agent),
@@ -193,6 +194,7 @@ function buildCronRepair(agent: AgentCoordinator): CronRepair {
 export function buildCronFireDeps(agent: AgentCoordinator): CronFireDeps {
   return {
     ...buildCronCommandDeps(agent),
+    skipCoalescer: agent.cronSkipCoalescer,
     getChatRecord: (chatId) => agent.store.getChat(chatId),
     isChatBusy: (chatId) => isChatBusy(buildSendCommandDeps(agent), chatId),
     clearChatContext: (chatId) => agent.clearChatContext(chatId),

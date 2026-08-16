@@ -5,6 +5,7 @@ import { parseCronCommand } from "../../shared/cron/parse-command"
 import type { SendMessageOptions } from "../claude-steer-log"
 import { runCronCommand } from "./commands"
 import { fireCronJob, recordCronTurnOutcome, reconcileCronRunsAtBoot, type CronFireDeps } from "./fire"
+import { CronSkipCoalescer, SKIP_FLUSH_WINDOW_MS } from "./skip-coalescer"
 
 const CHAT = "chat-1"
 
@@ -22,8 +23,11 @@ function makeDeps(opts: { busyChatIds?: string[]; now?: number } = {}) {
   const drained: string[] = []
   const createdChats: string[] = []
   const busy = new Set(opts.busyChatIds ?? [])
+  const clock = { now: opts.now ?? 1_000_000 }
+  const skipCoalescer = new CronSkipCoalescer()
   let chatSeq = 0
   const deps: CronFireDeps = {
+    skipCoalescer,
     store: {
       appendMessage: async (chatId, entry) => {
         entries.push({ chatId, entry })
@@ -35,7 +39,7 @@ function makeDeps(opts: { busyChatIds?: string[]; now?: number } = {}) {
     },
     cronScheduler: null,
     emitStateChange: () => {},
-    now: () => opts.now ?? 1_000_000,
+    now: () => clock.now,
     newJobId: () => "cron-abc",
     getChatRecord: (chatId) => (chatId === CHAT ? { projectId: "proj-1" } : null),
     isChatBusy: (chatId) => busy.has(chatId),
@@ -55,7 +59,7 @@ function makeDeps(opts: { busyChatIds?: string[]; now?: number } = {}) {
       return true
     },
   }
-  return { deps, entries, events, cleared, enqueued, drained, createdChats, busy }
+  return { deps, entries, events, cleared, enqueued, drained, createdChats, busy, clock }
 }
 
 async function armJob(deps: CronFireDeps, line: string) {
@@ -164,6 +168,101 @@ describe("fireCronJob — spawn", () => {
     await fireCronJob(deps, CHAT, "cron-abc")
     expect(events.filter((event) => event.kind === "cron_run_outcome")).toHaveLength(1)
     expect(events.filter((event) => event.kind === "cron_run_started")).toHaveLength(2)
+  })
+})
+
+describe("fireCronJob — consecutive skips coalesce", () => {
+  function skippedEvents(events: AutoContinueEvent[]) {
+    return events.filter((event) => event.kind === "cron_run_skipped")
+  }
+
+  /**
+   * The reason this exists: `every 5s` against a 20 s task skips three ticks
+   * per cycle. One card each buries the runs that did happen, in a log that is
+   * never compacted.
+   */
+  test("a burst of skipped ticks writes once, not once per tick", async () => {
+    const { deps, events, entries, busy, clock } = makeDeps()
+    await armJob(deps, "/cron check ci inline every 5s")
+    busy.add(CHAT)
+
+    for (const offset of [0, 5_000, 10_000, 15_000]) {
+      clock.now = 1_000_000 + offset
+      await fireCronJob(deps, CHAT, "cron-abc")
+    }
+
+    expect(skippedEvents(events)).toHaveLength(1)
+    expect(entries.filter((record) => record.entry.kind === "cron_run_skipped")).toHaveLength(1)
+  })
+
+  test("the folded ticks are reported with their count once the window passes", async () => {
+    const { deps, events, busy, clock } = makeDeps()
+    await armJob(deps, "/cron check ci inline every 5s")
+    busy.add(CHAT)
+
+    for (const offset of [0, 5_000, 10_000, SKIP_FLUSH_WINDOW_MS]) {
+      clock.now = 1_000_000 + offset
+      await fireCronJob(deps, CHAT, "cron-abc")
+    }
+
+    const skipped = skippedEvents(events)
+    expect(skipped).toHaveLength(2)
+    expect(skipped[0]).toMatchObject({ reason: "chat_busy" })
+    expect(skipped[0]).not.toHaveProperty("missedCount")
+    expect(skipped[1]).toMatchObject({ reason: "chat_busy", missedCount: 3 })
+  })
+
+  test("the tail lands next to the run it was waiting on", async () => {
+    const { deps, events, entries, busy, clock } = makeDeps()
+    await armJob(deps, "/cron check ci inline every 5s")
+    busy.add(CHAT)
+    for (const offset of [0, 5_000, 10_000]) {
+      clock.now = 1_000_000 + offset
+      await fireCronJob(deps, CHAT, "cron-abc")
+    }
+
+    busy.delete(CHAT)
+    clock.now = 1_000_000 + SKIP_FLUSH_WINDOW_MS
+    await fireCronJob(deps, CHAT, "cron-abc")
+
+    const skipped = skippedEvents(events)
+    expect(skipped.at(-1)).toMatchObject({ reason: "chat_busy", missedCount: 2 })
+    // The summary is written BEFORE the run it precedes, so the transcript
+    // reads in the order things happened.
+    const kinds = events.map((event) => event.kind)
+    expect(kinds.lastIndexOf("cron_run_skipped")).toBeLessThan(kinds.lastIndexOf("cron_run_started"))
+    expect(entries.filter((record) => record.entry.kind === "cron_run_skipped")).toHaveLength(2)
+  })
+
+  /** A slow schedule must not wait for a window that only a later tick notices. */
+  test("a sparse skip is still reported immediately", async () => {
+    const { deps, events, busy, clock } = makeDeps()
+    await armJob(deps, "/cron nightly report inline @daily")
+    busy.add(CHAT)
+
+    await fireCronJob(deps, CHAT, "cron-abc")
+    clock.now = 1_000_000 + 86_400_000
+    await fireCronJob(deps, CHAT, "cron-abc")
+
+    expect(skippedEvents(events)).toHaveLength(2)
+  })
+
+  test("pausing the job drops the folded count instead of carrying it past the resume", async () => {
+    const { deps, events, busy, clock } = makeDeps()
+    await armJob(deps, "/cron check ci inline every 5s")
+    busy.add(CHAT)
+    for (const offset of [0, 5_000, 10_000]) {
+      clock.now = 1_000_000 + offset
+      await fireCronJob(deps, CHAT, "cron-abc")
+    }
+
+    await armJob(deps, "/cron pause cron-abc")
+    await armJob(deps, "/cron resume cron-abc")
+    clock.now = 1_000_000 + SKIP_FLUSH_WINDOW_MS
+    await fireCronJob(deps, CHAT, "cron-abc")
+
+    // The resumed job leads its own window: one skip, standing for itself only.
+    expect(skippedEvents(events).at(-1)).not.toHaveProperty("missedCount")
   })
 })
 

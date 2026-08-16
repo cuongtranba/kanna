@@ -45,7 +45,7 @@ export function CronListMessage({ message, cronJobs }: Props) {
         <div className="mt-3 border-t border-border pt-2 font-mono text-xs text-muted-foreground">
           <div>/cron &lt;instruction&gt; inline|spawn &lt;schedule&gt;</div>
           <div>/cron list · /cron remove &lt;id&gt; · /cron pause &lt;id&gt; · /cron resume &lt;id&gt;</div>
-          <div>schedules: `0 9 * * 1-5` · @hourly @daily @weekly @monthly · every 5m / every 2h</div>
+          <div>schedules: `0 9 * * 1-5` · `*/30 * * * * *` (leading second) · @hourly @daily @weekly @monthly · every 30s / every 5m / every 2h</div>
           <div className="mt-1">
             inline runs in this chat with context cleared each cycle; spawn creates a new chat per run.
             Next-fire times use server-local time.

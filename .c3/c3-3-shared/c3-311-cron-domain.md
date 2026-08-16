@@ -1,6 +1,6 @@
 ---
 id: c3-311
-c3-seal: c40b66624885d2746b71d458b599eba749bee7351afe6480ef1f6e6bb31b4bdb
+c3-seal: a0015ae6fde28478d46e698d0677c088655f25ac8ba8be28e181955f442f2ecb
 title: cron-domain
 type: component
 category: feature
@@ -40,13 +40,17 @@ Owns everything about `/cron` that is pure and shared: `parseCronCommand`
 (the arm grammar anchors on the LAST inline/spawn token so instructions need
 no quoting; every failure names the failing part and, when unambiguous,
 carries a complete corrected line that is drift-guard-tested to re-parse),
-`parseSchedule` (5-field cron with per-field range diagnostics, @shortcut
-expansion, `every Nm|Nh` intervals kept anchor-based rather than rewritten to
-cron fields), `humanizeSchedule`, and the `CronJobSnapshot` /
-`CronRunSnapshot` / `CronRunTag` / `CronJobsGlobalSnapshot` types. Non-goals:
-next-occurrence computation (server-only, delegated to the `cron` npm package
-in c3-233 so luxon stays out of the client bundle), timers, event persistence,
-and any IO — the side-effect seal holds this module pure.
+`parseSchedule` (cron with 5 fields or 6 with a LEADING second — node-cron's
+own sub-minute shape — with per-field range diagnostics, @shortcut expansion,
+and `every Ns|Nm|Nh` intervals kept anchor-based rather than rewritten to cron
+fields), `humanizeSchedule` (which reads a sub-minute cadence in seconds
+rather than fractional minutes), and the `CronJobSnapshot` /
+`CronRunSnapshot` / `CronRunTag` / `CronJobsGlobalSnapshot` types. There is no
+minimum cadence: `every 1s` parses, because a cadence is chosen in the `/cron`
+line and nowhere else. Non-goals: next-occurrence computation (server-only,
+delegated to the `cron` npm package in c3-233 so luxon stays out of the client
+bundle), timers, event persistence, and any IO — the side-effect seal holds
+this module pure.
 
 ## Governance
 
@@ -61,7 +65,7 @@ and any IO — the side-effect seal holds this module pure.
 | --- | --- | --- | --- | --- |
 | /cron interception | OUT | parseCronCommand returns null for non-/cron text and ALWAYS a result (ok or structured error) for any line whose first token is /cron — an invalid arm line never falls through as prompt text | c3-301 | src/shared/cron/parse-command.ts |
 | Suggestion re-parse guarantee | OUT | Every CronParseError.suggestion is a complete /cron line validated to re-parse cleanly before it is attached | c3-1 | src/shared/cron/parse-command.ts, src/shared/cron/parse-command.test.ts |
-| CronSchedule shape | OUT | Cron schedules carry the canonical 5-field expression (the occurrence engine's input) plus parsed CronFields for validation and humanize; intervals carry ms and anchor at arm time | c3-233 | src/shared/cron/types.ts, src/shared/cron/parse-schedule.ts |
+| CronSchedule shape | OUT | Cron schedules carry the canonical 5- or 6-field expression (the occurrence engine's input) plus parsed CronFields for validation and humanize; the 6-field form's leading second lands on an OPTIONAL `second` field, so a job armed before sub-minute support replays from the durable log unchanged; intervals carry ms (down to 1000) and anchor at arm time | c3-233 | src/shared/cron/types.ts, src/shared/cron/parse-schedule.ts |
 | Snapshot types | OUT | CronJobSnapshot/CronRunSnapshot/CronJobsGlobalSnapshot are the server-to-client cron read-model shapes on ChatSnapshot.cronJobs and the cron-jobs topic | c3-207 | src/shared/cron/types.ts |
 
 ## Derived Materials

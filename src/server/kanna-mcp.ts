@@ -966,7 +966,9 @@ const VALIDATE_CRON_DESCRIPTION =
   + "schedule in plain words plus the next few real fire times — which is how "
   + "you confirm `0 9 * * *` means the 09:00-daily the user actually asked for. "
   + "A rejection names the failing part and why. Cheap; call it for every line "
-  + "you are about to arm or suggest."
+  + "you are about to arm or suggest. Sub-minute schedules are supported and "
+  + "have no floor — `every 2s` and the 6-field `*/2 * * * * *` both arm, so "
+  + "ask this tool instead of assuming a one-minute minimum."
 
 const ARM_CRON_DESCRIPTION =
   "Schedule a `/cron` line on this chat — use it to finish repairing a command "

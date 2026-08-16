@@ -666,6 +666,46 @@ parser as the deterministic layer.
 `KANNA_CRON_REPAIR=disabled` turns the escalation off; the tools stay. See
 `adr-20260816-cron-llm-repair`.
 
+# `/cron` sub-minute schedules
+
+Seconds are **node-cron's own shape, not Kanna's invention**: `CronTime` reads a
+6-field expression as seconds-first, so `parseCronFields` accepts 5 **or** 6
+tokens (prepending a `second` spec, 0–59) and hands the expression through
+untouched. `every Ns` joins `m`/`h` in the interval regex. **There is no minimum
+cadence and no setting for one** — a cadence is chosen in the `/cron` line and
+nowhere else; `every 1s` arms.
+
+- **`CronSchedule.second` is OPTIONAL, deliberately.** `cron_armed` persists the
+  whole schedule object on the auto-continue log, so every job armed before this
+  replays without the field; absent reads as the 5-field "at second 0". Making
+  it required would strand them.
+- **The model's vocabulary is part of the feature.** The refusal users hit
+  ("cron cannot run more often than every 1 minute") came from
+  `repair-report.ts`'s grammar prose and the `validate_cron` tool description,
+  not from the engine. Both now name the seconds forms; a parser change without
+  them leaves the model refusing what the parser accepts.
+- **Consecutive skips collapse into one counted record** (`cron/skip-coalescer.ts`),
+  because skip-and-record assumed ticks are rare relative to run duration — true
+  at minute cadence, false at `every 5s` against a 20 s task (3 cards per cycle,
+  ~2 000/hour, into a JSONL log that is never compacted). It is a per-job
+  **leading-edge** throttle: the first skip after a quiet stretch writes
+  immediately — a `@daily` job skipped at 09:00 must say so at 09:00, and a
+  window can only be noticed by a LATER tick, so holding it would delay that
+  notice by a day — then skips inside the window are counted and the folded count
+  is written by the first tick or run past it. Both fire paths `flushPending`
+  before starting a run so the tail lands next to the run it waited on;
+  `emitCronEvent` `forget`s a job's streak on arm/pause/disarm.
+- **The count is tallied at the tick, never derived at read time.** Deriving it
+  means walking `CronTime.getNextDateFrom` across the streak — MEASURED at ~42 µs
+  per call — inside `deriveCronJobs`, which runs on every chat broadcast. It
+  rides the existing `missedCount`, whose meaning widens from server-offline-only
+  to "how many fires this row represents".
+- `skipCoalescer` is **required** on `CronFireDeps` (optional on
+  `CronCommandDeps`, where it only cleans up): a missing wiring must be a compile
+  error, not a silent return to one write per tick.
+
+See `adr-20260816-cron-seconds`.
+
 # Kanna-MCP Built-in Shims
 
 When `KANNA_MCP_TOOL_CALLBACKS=1`, kanna-mcp registers 8 additional tools

@@ -116,6 +116,7 @@ import {
   reconcileCronRunsAtBoot as reconcileCronRunsAtBootFn,
   type CronFireDeps,
 } from "./cron/fire"
+import { CronSkipCoalescer } from "./cron/skip-coalescer"
 import {
   cancelChat as cancelChatFn,
   type CancelHandlerDeps,
@@ -221,6 +222,11 @@ export class AgentCoordinator {
   readonly claudeAuthErrorDetector: ClaudeAuthErrorDetector
   readonly scheduleManager: ScheduleManager | null
   readonly cronScheduler: import("./cron/scheduler").CronScheduler | null
+  /**
+   * One per coordinator: a skip streak spans ticks, so it cannot be rebuilt
+   * per dispatch the way the stateless cron deps are.
+   */
+  readonly cronSkipCoalescer = new CronSkipCoalescer()
   readonly getAutoResumePreference: () => boolean
   readonly getSubagents: () => Subagent[]
   readonly getAppSettingsSnapshot: NonNullable<AgentCoordinatorArgs["getAppSettingsSnapshot"]>
@@ -996,6 +1002,7 @@ export class AgentCoordinator {
   async disarmCronJobsForChat(chatId: string): Promise<void> {
     await disarmCronJobsForChatFn(this.buildCronCommandDeps(), chatId)
     this.cronScheduler?.clearChat(chatId)
+    this.cronSkipCoalescer.clearChat(chatId)
   }
 
   /** One cron tick — the CronScheduler's fire callback. Delegates to fireCronJobFn — see cron/fire.ts. */

@@ -205,7 +205,7 @@ function finishArm(instruction: string, mode: CronMode, scheduleText: string): O
       error: {
         part: "schedule",
         message:
-          "missing schedule after the mode — expected 5-field cron (e.g. `0 9 * * 1`), a shortcut (`@daily`), or an interval (`every 5m`)",
+          "missing schedule after the mode — expected 5- or 6-field cron (e.g. `0 9 * * 1`, `*/30 * * * * *`), a shortcut (`@daily`), or an interval (`every 30s`, `every 5m`)",
       },
     }
   }

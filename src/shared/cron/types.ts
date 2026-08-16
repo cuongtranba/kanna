@@ -25,7 +25,7 @@ export function isCronMode(token: string): token is CronMode {
 export type CronField = { kind: "any" } | { kind: "values"; values: readonly number[] }
 
 /**
- * A normalized schedule. `every Nm` sugar stays an interval — it anchors at
+ * A normalized schedule. `every Ns|Nm` sugar stays an interval — it anchors at
  * arm time (`every 7m` = every 7 minutes from arming), which is NOT the same
  * as the star-slash-7 cron minute field (that snaps to the hour) — so it is
  * deliberately not rewritten to cron fields.
@@ -39,8 +39,15 @@ export type CronField = { kind: "any" } | { kind: "values"; values: readonly num
 export type CronSchedule =
   | {
       type: "cron"
-      /** Canonical 5-field cron expression (shortcuts already expanded). */
+      /** Canonical 5- or 6-field cron expression (shortcuts already expanded). */
       expression: string
+      /**
+       * Present only on a 6-field expression, where it is the LEADING field.
+       * Optional because `cron_armed` persists this whole object on the
+       * auto-continue log: every job armed before sub-minute schedules existed
+       * replays without it, and absent reads as the 5-field "at second 0".
+       */
+      second?: CronField
       minute: CronField
       hour: CronField
       dom: CronField

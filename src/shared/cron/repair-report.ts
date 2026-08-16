@@ -24,7 +24,8 @@ const GRAMMAR = [
   "",
   "- <instruction> is what the agent should do, copied from what the user wrote — never invent one they did not ask for.",
   "- the mode is `inline` (runs in this chat, context cleared each cycle) or `spawn` (a new chat per run).",
-  `- <schedule> is 5-field cron (\`0 9 * * 1\`), a shortcut (${CRON_SHORTCUTS.join(", ")}), or an interval (\`every 5m\`, \`every 2h\`).`,
+  `- <schedule> is cron with 5 fields (\`0 9 * * 1\`) or 6 with a leading second (\`*/30 * * * * *\`), a shortcut (${CRON_SHORTCUTS.join(", ")}), or an interval (\`every 30s\`, \`every 5m\`, \`every 2h\`).`,
+  "- sub-minute schedules ARE supported and have no floor: `every 2s` and `*/2 * * * * *` both arm. Never tell the user cron cannot run faster than once a minute.",
 ].join("\n")
 
 /**

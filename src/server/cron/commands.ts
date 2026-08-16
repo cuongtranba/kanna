@@ -26,6 +26,13 @@ export interface CronCommandDeps {
   store: CronCommandStore
   /** Timer registry; null in tests that only exercise event/entry output. */
   cronScheduler: { onEvent(event: AutoContinueEvent): void } | null
+  /**
+   * Skip-streak state, so a job that stops existing cannot leave one behind.
+   * Optional: dropping a streak is cleanup, and its absence can only lose a
+   * count — unlike on the fire path, where absence would restore a write per
+   * tick, so there it is required.
+   */
+  skipCoalescer?: { forget(chatId: string, jobId: string): void }
   emitStateChange(chatId: string): void
   /** Re-push the global cron-jobs topic. Optional: wired by the WS router. */
   pushCronJobsUpdate?: () => void
@@ -46,6 +53,11 @@ export interface CronCommandDeps {
 export async function emitCronEvent(deps: CronCommandDeps, event: AutoContinueEvent): Promise<void> {
   await deps.store.appendAutoContinueEvent(event)
   deps.cronScheduler?.onEvent(event)
+  // A job that is gone, paused, or freshly re-armed owns no unreported skips:
+  // the streak dies with it rather than surfacing under the next arming.
+  if (event.kind === "cron_armed" || event.kind === "cron_disarmed" || event.kind === "cron_paused") {
+    deps.skipCoalescer?.forget(event.chatId, event.scheduleId)
+  }
   deps.emitStateChange(event.chatId)
   deps.pushCronJobsUpdate?.()
 }
