@@ -1,7 +1,7 @@
 ---
 id: c3-1
 c3-version: 4
-c3-seal: c9797a00ad1241c275de379b3e03bd78623a4cd36985c75e06e51cb747743147
+c3-seal: 75c276c9cceefa997eba411307b380bc8a0f19c287fede326d25ec0c6019d64f
 title: Client
 type: container
 boundary: app
@@ -41,3 +41,4 @@ Render the chat experience: hydrate transcripts, accept input, drive sidebar/set
 | c3-118 | terminal-workspace | feature | active | Embedded xterm panel with layout persistence |
 | c3-104 | pane-layout | foundation | active | Own the user-editable pane tree: the split/close/move/focus algebra, its per-project persistence, and the resizable renderer the chat route composes. |
 | c3-119 | boards-ui | feature | active | Render a project's boards as a live workspace tab — drag cards, edit a card in a drawer, edit the card schema, drive a sync binding, and start work on a card. |
+| c3-120 | cron-ui | feature | active | Render the cron feature in the client: six transcript cards for cron entries, |

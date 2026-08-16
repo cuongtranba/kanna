@@ -1,7 +1,7 @@
 ---
 id: c3-2
 c3-version: 4
-c3-seal: c290c95d3e442d275bb86ca55b87b94f16abd9c7b13fe27310f98a943a863f1f
+c3-seal: bb0e85a2e8d1d3e23134d557b694eb8e71a2ed7bf82f9342e4b9c3288458a6b1
 title: Server
 type: container
 boundary: service
@@ -60,3 +60,4 @@ Run the local Bun backend: serve HTTP+WebSocket on localhost, coordinate Claude 
 | c3-230 | openrouter-models | feature | active | Tool-capable OpenRouter model catalog: HTTPS fetch + parse + TTL cache; feeds the composer model picker via settings.listOpenRouterModels RPC |
 | c3-231 | local-catalog | feature | active | Scan local Claude skills + slash commands (user, project, plugin) and merge them into ChatSnapshot.slashCommands so the composer / picker mirrors Claude Code |
 | c3-232 | boards | feature | active | Persist boards, project them to subscribers, turn a card into an isolated worktree-branch-chat, reconcile a bound tracker, and expose the board to the agent as a work queue. |
+| c3-233 | cron-scheduler | feature | active | Run armed cron jobs: dispatch /cron commands into durable events, keep |
