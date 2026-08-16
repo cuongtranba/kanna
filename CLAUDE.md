@@ -15,15 +15,26 @@ Operations: query, audit, change, ref, sweep.
 File lookup: `c3x lookup <file-or-glob>` maps files/directories to components + refs.
 Skill: `c3-skill:c3` (auto-triggers on `/c3` or architecture phrases).
 
-**`c3x repair` rewrites unrelated docs — do not commit that churn.** It
-re-canonicalizes every fact it loads and strips inline-code backticks from
-markdown TABLE CELLS (`\`bun run lint\`` → `bun run lint`), then re-seals the
-file. On this repo that touches ~5 docs and ~43 rows that the current change
-never went near. It is formatting-only — no text, globs, or emphasis are lost —
-but it buries a real diff in noise. `.c3/c3.db` is gitignored, so the canonical
-markdown is the source of truth: after `repair`, `git checkout --` any doc your
-change did not intend to touch. Upstream fix belongs in the c3 skill's table
-serializer.
+**`c3x` can rewrite docs your change never touched — always `git status .c3/`
+after ANY c3x write, `repair` and `change apply` alike, and `git checkout --`
+what you did not intend.** `.c3/c3.db` is gitignored, so the canonical markdown
+is the only source of truth and git is the only thing that catches this.
+
+Most of that churn is cosmetic re-canonicalization (it strips inline-code
+backticks from TABLE CELLS: `` `bun run lint` `` → `bun run lint`). **But it is
+not always formatting-only — text can be LOST.** A table cell holding an escaped
+pipe (`\|`, the only way to write a literal `|` in a cell) was rewritten as
+`\ |`, which escapes a space instead. The pipe then reads as a column separator,
+so the NEXT re-serialization truncates the row at the table's column count.
+c3-210's `compactionTurn` row carried that broken escape from a193638 (#649)
+until 36217ff, and lost 533 bytes mid-sentence on the way. If you see `\ |` in a
+`.c3/` table cell, it is damage — restore `\|`.
+
+Both defects are fixed in `cuongtranba/c3-skill` (the `insert-after` seq shift
+and the table-row normalizer). Until a release ships with them, `change apply`
+also fails on any `insert` after a non-last table row
+(`UNIQUE constraint failed: index 'idx_nodes_order'`); build the fork and run
+via `C3X_LOCAL_BINARY=<path> bash <skill-dir>/bin/c3x.sh …`.
 
 # Pull Requests
 
