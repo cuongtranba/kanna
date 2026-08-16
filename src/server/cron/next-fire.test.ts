@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { nextFireAt } from "./next-fire"
-import { parseSchedule } from "./parse-schedule"
-import type { CronSchedule } from "./types"
+import { parseSchedule } from "../../shared/cron/parse-schedule"
+import type { CronSchedule } from "../../shared/cron/types"
 
 function scheduleOf(text: string): CronSchedule {
   const parsed = parseSchedule(text)

@@ -29,23 +29,23 @@ export type CronField = { kind: "any" } | { kind: "values"; values: readonly num
  * arm time (`every 7m` = every 7 minutes from arming), which is NOT the same
  * as the star-slash-7 cron minute field (that snaps to the hour) — so it is
  * deliberately not rewritten to cron fields.
+ *
+ * Occurrence SEMANTICS (day-of-month/day-of-week interplay, DST, next-fire
+ * math) are owned by the `cron` package (kelektiv/node-cron) on the server —
+ * `expression` is what it evaluates. The parsed `CronField`s exist for the
+ * field-level validation UX and for `humanizeSchedule`; they never drive
+ * scheduling.
  */
 export type CronSchedule =
   | {
       type: "cron"
+      /** Canonical 5-field cron expression (shortcuts already expanded). */
+      expression: string
       minute: CronField
       hour: CronField
       dom: CronField
       month: CronField
       dow: CronField
-      /**
-       * Vixie-cron day-matching rule: a dom/dow field whose raw text starts
-       * with `*` is "unrestricted". When BOTH dom and dow are restricted the
-       * day matches when EITHER matches (OR); otherwise both apply (AND,
-       * where an unrestricted field matches every day).
-       */
-      domRestricted: boolean
-      dowRestricted: boolean
     }
   | { type: "interval"; ms: number }
 

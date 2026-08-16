@@ -1,5 +1,5 @@
 /**
- * The two slash commands Kanna implements itself, rather than forwarding to a
+ * The slash commands Kanna implements itself, rather than forwarding to a
  * provider as prompt text.
  *
  * This module is the single source of truth for both halves: the parser the
@@ -10,9 +10,18 @@
  * A builtin must be the WHOLE message. `/clear` with trailing words does not
  * match — silently discarding what the user typed is worse than treating the
  * line as an ordinary prompt.
+ *
+ * `/cron` is the deliberate exception: ANY message whose first token is
+ * `/cron` is intercepted, valid or not. Its arm form carries a schedule that
+ * must hard-validate, and sending a mistyped schedule to the model as prompt
+ * text would silently arm nothing — so invalid `/cron` lines surface a
+ * structured error (with a ready-to-send corrected suggestion) instead of
+ * falling through.
  */
 
 import type { SlashCommand } from "./types"
+import { parseCronCommand } from "./cron/parse-command"
+import type { CronParseResult } from "./cron/types"
 
 export interface BuiltinClearCommand {
   name: "clear"
@@ -23,12 +32,23 @@ export interface BuiltinCompactCommand {
   instructions: string
 }
 
-export type BuiltinCommand = BuiltinClearCommand | BuiltinCompactCommand
+export interface BuiltinCronCommand {
+  name: "cron"
+  /** Success or structured validation error — either way `/cron` intercepts. */
+  result: CronParseResult
+}
+
+export type BuiltinCommand = BuiltinClearCommand | BuiltinCompactCommand | BuiltinCronCommand
 
 const CLEAR_PATTERN = /^\/clear$/
 const COMPACT_PATTERN = /^\/compact(?:[ \t]+(.*))?$/
 
 export function parseBuiltinCommand(content: string): BuiltinCommand | null {
+  // Before the newline guard: a multiline /cron message must intercept as an
+  // error, not fall through as a prompt.
+  const cron = parseCronCommand(content)
+  if (cron) return { name: "cron", result: cron }
+
   if (content.includes("\n")) return null
   const line = content.trim()
 
@@ -52,6 +72,13 @@ export const BUILTIN_SLASH_COMMANDS: readonly SlashCommand[] = [
     name: "compact",
     description: "Compact conversation history, optionally with focus instructions",
     argumentHint: "[instructions]",
+    kind: "command",
+    scope: "builtin",
+  },
+  {
+    name: "cron",
+    description: "Schedule an instruction — inline (this chat, fresh context per run) or spawn (new chat per run)",
+    argumentHint: "<instruction> inline|spawn <schedule> · list · remove <id>",
     kind: "command",
     scope: "builtin",
   },

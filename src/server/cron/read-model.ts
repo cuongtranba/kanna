@@ -11,7 +11,7 @@ import {
   type CronJobSnapshot,
   type CronRunSnapshot,
 } from "../../shared/cron/types"
-import { nextFireAt } from "../../shared/cron/next-fire"
+import { nextFireAt } from "./next-fire"
 import type { AutoContinueEvent } from "../auto-continue/events"
 
 interface JobAccum {

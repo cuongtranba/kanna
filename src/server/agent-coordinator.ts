@@ -105,6 +105,11 @@ import {
   type LoopCommandDeps,
 } from "./claude-loop-commands"
 import {
+  runCronCommand as runCronCommandFn,
+  disarmCronJobsForChat as disarmCronJobsForChatFn,
+  type CronCommandDeps,
+} from "./cron/commands"
+import {
   cancelChat as cancelChatFn,
   type CancelHandlerDeps,
 } from "./claude-cancel-handler"
@@ -208,6 +213,7 @@ export class AgentCoordinator {
   readonly codexLimitDetector: LimitDetector
   readonly claudeAuthErrorDetector: ClaudeAuthErrorDetector
   readonly scheduleManager: ScheduleManager | null
+  readonly cronScheduler: import("./cron/scheduler").CronScheduler | null
   readonly getAutoResumePreference: () => boolean
   readonly getSubagents: () => Subagent[]
   readonly getAppSettingsSnapshot: NonNullable<AgentCoordinatorArgs["getAppSettingsSnapshot"]>
@@ -270,6 +276,7 @@ export class AgentCoordinator {
     this.codexLimitDetector = args.codexLimitDetector ?? new CodexLimitDetector()
     this.claudeAuthErrorDetector = new ClaudeAuthErrorDetector()
     this.scheduleManager = args.scheduleManager ?? null
+    this.cronScheduler = args.cronScheduler ?? null
     this.getAutoResumePreference = args.getAutoResumePreference ?? (() => false)
     this.openrouterFirstEntryTimeoutMs =
       args.openrouterFirstEntryTimeoutMs ?? DEFAULT_OPENROUTER_FIRST_ENTRY_TIMEOUT_MS
@@ -457,6 +464,10 @@ export class AgentCoordinator {
 
   private buildLoopCommandDeps(): LoopCommandDeps {
     return agentDepsBuilders.buildLoopCommandDeps(this)
+  }
+
+  private buildCronCommandDeps(): CronCommandDeps {
+    return agentDepsBuilders.buildCronCommandDeps(this)
   }
 
   // ---------------------------------------------------------------------------
@@ -923,6 +934,29 @@ export class AgentCoordinator {
    */
   async stopLoop(chatId: string, reason: "goal_met" | "user_send" | "chat_deleted"): Promise<void> {
     return stopLoopFn(this.buildLoopCommandDeps(), chatId, reason)
+  }
+
+  /**
+   * Re-push hook for the global cron-jobs WS topic; the router assigns it at
+   * wiring time. Fired from `emitCronEvent` on every cron state change.
+   */
+  onCronJobsChange: (() => void) | null = null
+
+  /** Dispatch a parsed `/cron` message. Delegates to runCronCommandFn — see cron/commands.ts. */
+  async runCronCommand(
+    chatId: string,
+    result: import("../shared/cron/types").CronParseResult,
+  ): Promise<void> {
+    return runCronCommandFn(this.buildCronCommandDeps(), chatId, result)
+  }
+
+  /**
+   * Disarm every cron job on a chat (chat deleted) and drop its timers.
+   * Delegates to disarmCronJobsForChatFn — see cron/commands.ts.
+   */
+  async disarmCronJobsForChat(chatId: string): Promise<void> {
+    await disarmCronJobsForChatFn(this.buildCronCommandDeps(), chatId)
+    this.cronScheduler?.clearChat(chatId)
   }
 
   /** Delegates to listLiveSchedulesFn — see claude-loop-commands.ts. */

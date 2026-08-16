@@ -10,6 +10,7 @@ import type { AgentProvider, ChatAttachment, ProviderUsage } from "./types"
 import type { ToolRequestStatus, ToolRequestDecision } from "./permission-policy"
 import type { NormalizedToolCall, HydratedToolCall } from "./tool-call-types"
 import type { CodexErrorInfoTag } from "./codex-error-classification"
+import type { CronMode, CronSkipReason } from "./cron/types"
 
 // ---------------------------------------------------------------------------
 // Shared info shapes (only referenced by transcript entries)
@@ -244,6 +245,61 @@ export interface ToolRequestResolvedEntry extends TranscriptEntryBase {
   decision?: ToolRequestDecision
 }
 
+// ---------------------------------------------------------------------------
+// Cron entries (`/cron` builtin — armed jobs, run cards, validation errors)
+// ---------------------------------------------------------------------------
+
+/** Static confirmation card appended when a job arms; the footer panel is the live surface. */
+export interface CronArmedEntry extends TranscriptEntryBase {
+  kind: "cron_armed"
+  jobId: string
+  instruction: string
+  mode: CronMode
+  scheduleText: string
+  scheduleHuman: string
+  nextFireAt: number | null
+}
+
+/** A `/cron` line that failed hard validation — precise error + optional ready-to-send fix. */
+export interface CronCommandErrorEntry extends TranscriptEntryBase {
+  kind: "cron_command_error"
+  message: string
+  suggestion?: string
+}
+
+/**
+ * One spawn-mode fire: the run card in the arming (monitoring) chat. Live
+ * status is joined client-side from `ChatSnapshot.cronJobs[].recentRuns` by
+ * `runId` — the WorkflowMessage pattern.
+ */
+export interface CronRunEntry extends TranscriptEntryBase {
+  kind: "cron_run"
+  jobId: string
+  runId: string
+  instruction: string
+  spawnedChatId?: string
+  firedAt: number
+}
+
+export interface CronRunSkippedEntry extends TranscriptEntryBase {
+  kind: "cron_run_skipped"
+  jobId: string
+  reason: CronSkipReason
+  missedCount?: number
+}
+
+/** `/cron list` (and bare `/cron` help) — the component renders live jobs from the snapshot. */
+export interface CronListEntry extends TranscriptEntryBase {
+  kind: "cron_list"
+  help?: boolean
+}
+
+export interface CronJobChangeEntry extends TranscriptEntryBase {
+  kind: "cron_job_change"
+  jobId: string
+  change: "removed" | "paused" | "resumed"
+}
+
 export type TranscriptEntry =
   | UserPromptEntry
   | SystemInitEntry
@@ -265,6 +321,12 @@ export type TranscriptEntry =
   | AutoContinuePromptEntry
   | PendingToolRequestEntry
   | ToolRequestResolvedEntry
+  | CronArmedEntry
+  | CronCommandErrorEntry
+  | CronRunEntry
+  | CronRunSkippedEntry
+  | CronListEntry
+  | CronJobChangeEntry
 
 // ---------------------------------------------------------------------------
 // Hydrated transcript message (rich UI representation)
@@ -289,4 +351,10 @@ export type HydratedTranscriptMessage =
   | ({ kind: "unknown"; json: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "auto_continue_prompt"; scheduleId: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "pending_tool_request"; toolRequestId: string; toolName: string; arguments: Record<string, unknown>; id: string; messageId?: string; timestamp: string; hidden?: boolean })
+  | ({ kind: "cron_armed"; jobId: string; instruction: string; mode: CronMode; scheduleText: string; scheduleHuman: string; nextFireAt: number | null; id: string; messageId?: string; timestamp: string; hidden?: boolean })
+  | ({ kind: "cron_command_error"; message: string; suggestion?: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
+  | ({ kind: "cron_run"; jobId: string; runId: string; instruction: string; spawnedChatId?: string; firedAt: number; id: string; messageId?: string; timestamp: string; hidden?: boolean })
+  | ({ kind: "cron_run_skipped"; jobId: string; reason: CronSkipReason; missedCount?: number; id: string; messageId?: string; timestamp: string; hidden?: boolean })
+  | ({ kind: "cron_list"; help?: boolean; id: string; messageId?: string; timestamp: string; hidden?: boolean })
+  | ({ kind: "cron_job_change"; jobId: string; change: "removed" | "paused" | "resumed"; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ id: string; messageId?: string; hidden?: boolean } & HydratedToolCall)

@@ -15,17 +15,16 @@ function errorOf(text: string) {
 }
 
 describe("5-field cron", () => {
-  test("parses star fields as any", () => {
+  test("parses star fields as any and keeps the raw expression", () => {
     const schedule = scheduleOf("* * * * *")
     expect(schedule).toEqual({
       type: "cron",
+      expression: "* * * * *",
       minute: { kind: "any" },
       hour: { kind: "any" },
       dom: { kind: "any" },
       month: { kind: "any" },
       dow: { kind: "any" },
-      domRestricted: false,
-      dowRestricted: false,
     })
   })
 
@@ -36,15 +35,8 @@ describe("5-field cron", () => {
     expect(schedule.hour).toEqual({ kind: "values", values: [9, 10, 11] })
     expect(schedule.dom).toEqual({ kind: "values", values: [1, 15] })
     expect(schedule.dow).toEqual({ kind: "values", values: [1, 2, 3, 4, 5] })
-    expect(schedule.domRestricted).toBe(true)
-    expect(schedule.dowRestricted).toBe(true)
-  })
-
-  test("a stepped star stays unrestricted for the vixie day rule", () => {
-    const schedule = scheduleOf("0 0 */2 * *")
-    if (schedule.type !== "cron") throw new Error("expected cron")
-    expect(schedule.domRestricted).toBe(false)
-    expect(schedule.dom.kind).toBe("values")
+    // The occurrence engine (node-cron) evaluates the expression verbatim.
+    expect(schedule.expression).toBe("*/15 9-11 1,15 * 1-5")
   })
 
   test("accepts month and weekday names, normalizes dow 7 to 0", () => {

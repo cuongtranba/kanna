@@ -119,15 +119,17 @@ function parseArm(line: string, tokens: Token[]): CronParseResult {
   if (line[tokens[1]!.start] === '"') return parseQuotedArm(line, tokens)
 
   let modeIndex = -1
+  let mode: CronMode | null = null
   for (let i = tokens.length - 1; i >= 1; i--) {
-    if (isCronMode(tokens[i]!.text)) {
+    const text = tokens[i]!.text
+    if (isCronMode(text)) {
       modeIndex = i
+      mode = text
       break
     }
   }
-  if (modeIndex === -1) return missingModeError(line, tokens)
+  if (mode === null || modeIndex === -1) return missingModeError(line, tokens)
 
-  const mode = tokens[modeIndex]!.text as CronMode
   const instruction = line.slice(tokens[1]!.start, tokens[modeIndex]!.start).trim()
   const scheduleText = stripQuotes(line.slice(tokens[modeIndex]!.end).trim())
   return finishArm(instruction, mode, scheduleText)
@@ -144,8 +146,9 @@ function parseQuotedArm(line: string, tokens: Token[]): CronParseResult {
   }
   const instruction = line.slice(openIndex + 1, closeIndex).trim()
   const rest = tokenize(line.slice(closeIndex + 1))
-  if (rest.length === 0 || !isCronMode(rest[0]!.text)) {
-    const got = rest.length === 0 ? "nothing" : `"${rest[0]!.text}"`
+  const firstText = rest[0]?.text
+  if (firstText === undefined || !isCronMode(firstText)) {
+    const got = firstText === undefined ? "nothing" : `"${firstText}"`
     return {
       ok: false,
       error: {
@@ -154,7 +157,7 @@ function parseQuotedArm(line: string, tokens: Token[]): CronParseResult {
       },
     }
   }
-  const mode = rest[0]!.text as CronMode
+  const mode = firstText
   const scheduleText = stripQuotes(
     line
       .slice(closeIndex + 1)

@@ -54,6 +54,27 @@ describe("parseBuiltinCommand", () => {
     expect(parseBuiltinCommand("/clear\nand also do this")).toBeNull()
     expect(parseBuiltinCommand("/compact focus\non auth")).toBeNull()
   })
+
+  test("/cron always intercepts — valid, invalid, and multiline alike", () => {
+    const armed = parseBuiltinCommand("/cron check ci inline every 5m")
+    expect(armed?.name).toBe("cron")
+    if (armed?.name !== "cron") throw new Error("expected cron")
+    expect(armed.result.ok).toBe(true)
+
+    const invalid = parseBuiltinCommand("/cron total nonsense")
+    expect(invalid?.name).toBe("cron")
+    if (invalid?.name !== "cron") throw new Error("expected cron")
+    expect(invalid.result.ok).toBe(false)
+
+    const multiline = parseBuiltinCommand("/cron check\nci inline every 5m")
+    expect(multiline?.name).toBe("cron")
+    if (multiline?.name !== "cron") throw new Error("expected cron")
+    expect(multiline.result.ok).toBe(false)
+  })
+
+  test("/cronx is not /cron", () => {
+    expect(parseBuiltinCommand("/cronx foo")).toBeNull()
+  })
 })
 
 describe("BUILTIN_SLASH_COMMANDS", () => {
@@ -71,10 +92,11 @@ describe("BUILTIN_SLASH_COMMANDS", () => {
     }
   })
 
-  test("only compact advertises an argument", () => {
+  test("clear advertises no argument; compact and cron do", () => {
     const byName = new Map(BUILTIN_SLASH_COMMANDS.map((c) => [c.name, c]))
     expect(byName.get("clear")?.argumentHint).toBe("")
     expect(byName.get("compact")?.argumentHint).not.toBe("")
+    expect(byName.get("cron")?.argumentHint).not.toBe("")
   })
 
   test("names carry no leading slash — the UI adds it", () => {

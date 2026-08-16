@@ -54,6 +54,14 @@ export const TRANSCRIPT_ROW_TONE_BY_MESSAGE_KIND: Record<
   pending_tool_request: "card",
   auto_continue_prompt: "card",
   unknown: "card",
+
+  // Cron: cards for the substantial surfaces, chrome for one-line notices.
+  cron_armed: "card",
+  cron_command_error: "card",
+  cron_run: "card",
+  cron_list: "card",
+  cron_run_skipped: "chrome",
+  cron_job_change: "chrome",
 }
 
 export function transcriptRowTone(row: ResolvedTranscriptRow): TranscriptRowTone {

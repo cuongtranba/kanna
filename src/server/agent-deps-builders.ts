@@ -30,6 +30,7 @@ import type { SessionErrorHandlerDeps } from "./claude-session-error-handler"
 import type { AutoContinueCommandDeps } from "./claude-autocontinue-commands"
 import type { LoopCommandDeps } from "./claude-loop-commands"
 import { toArmedLoopInfo } from "./claude-loop-commands"
+import type { CronCommandDeps } from "./cron/commands"
 import { isChatBusy } from "./claude-session-state-queries"
 import type { CancelHandlerDeps } from "./claude-cancel-handler"
 import type { ChatManagementDeps } from "./claude-chat-management"
@@ -146,6 +147,19 @@ export function buildLoopCommandDeps(agent: AgentCoordinator): LoopCommandDeps {
 }
 
 // ---------------------------------------------------------------------------
+// 5b. Cron commands
+// ---------------------------------------------------------------------------
+
+export function buildCronCommandDeps(agent: AgentCoordinator): CronCommandDeps {
+  return {
+    store: agent.store,
+    cronScheduler: agent.cronScheduler,
+    emitStateChange: (chatId) => agent.emitStateChange(chatId),
+    pushCronJobsUpdate: () => agent.onCronJobsChange?.(),
+  }
+}
+
+// ---------------------------------------------------------------------------
 // 6. Cancel handler
 // ---------------------------------------------------------------------------
 
@@ -206,6 +220,7 @@ export function buildSendCommandDeps(agent: AgentCoordinator): SendCommandDeps {
     emitStateChange: (chatId) => agent.emitStateChange(chatId),
     startTurnForChat: (args) => agent.startTurnForChat(args),
     clearChatContext: (chatId) => agent.clearChatContext(chatId),
+    runCronCommand: (chatId, result) => agent.runCronCommand(chatId, result),
   }
 }
 

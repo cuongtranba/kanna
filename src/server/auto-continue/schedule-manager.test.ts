@@ -53,6 +53,8 @@ function event(kind: AutoContinueEvent["kind"], overrides: Partial<AutoContinueE
       return { ...base, kind, reason: "goal_met", ...overrides } as AutoContinueEvent
     case "loop_run_outcome":
       return { ...base, kind, ok: true, ...overrides } as AutoContinueEvent
+    default:
+      throw new Error(`fixture helper has no shape for kind ${kind}`)
   }
 }
 

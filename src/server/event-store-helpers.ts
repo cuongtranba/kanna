@@ -177,6 +177,13 @@ export function getReplayEventPriority(event: StoreEvent): number {
     case "loop_armed":
     case "loop_disarmed":
     case "loop_run_outcome":
+    case "cron_armed":
+    case "cron_disarmed":
+    case "cron_paused":
+    case "cron_resumed":
+    case "cron_run_started":
+    case "cron_run_outcome":
+    case "cron_run_skipped":
       return 11
     case "stack_added":
     case "stack_removed":

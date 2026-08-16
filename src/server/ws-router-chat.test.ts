@@ -51,6 +51,7 @@ function makeAgent(overrides: Partial<ChatAgentDep> = {}): ChatAgentDep {
     cancel: mock(async () => {}),
     cancelAutoContinue: mock(async () => {}),
     listLiveSchedules: mock(() => []),
+    disarmCronJobsForChat: mock(async () => {}),
     closeChat: mock(async () => {}),
     stopDraining: mock(async () => {}),
     respondTool: mock(async () => {}),

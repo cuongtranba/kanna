@@ -317,6 +317,16 @@ function sameMessage(left: HydratedTranscriptMessage, right: HydratedTranscriptM
       return right.kind === "pending_tool_request"
         && left.toolRequestId === right.toolRequestId
         && left.toolName === right.toolName
+    // Cron entries are immutable once appended — live run status joins from
+    // ChatSnapshot.cronJobs in the component, not from the message — so
+    // kind + id equality (checked above) is identity.
+    case "cron_armed":
+    case "cron_command_error":
+    case "cron_run":
+    case "cron_run_skipped":
+    case "cron_list":
+    case "cron_job_change":
+      return true
   }
 }
 

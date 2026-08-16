@@ -1,0 +1,214 @@
+/**
+ * Cron command handler cluster — arm / list / remove / pause / resume plus
+ * the single choke-point `emitCronEvent` (append event → scheduler.onEvent →
+ * state broadcast → global topic push), mirroring `emitAutoContinueEvent`.
+ *
+ * Side-effect seal: no direct IO; everything effectful is injected.
+ */
+
+import type { TranscriptEntry } from "../../shared/types"
+import type { CronParseResult } from "../../shared/cron/types"
+import { humanizeSchedule } from "../../shared/cron/humanize"
+import { nextFireAt } from "./next-fire"
+import type { AutoContinueEvent } from "../auto-continue/events"
+import { AUTO_CONTINUE_EVENT_VERSION } from "../auto-continue/events"
+import { deriveCronJobs } from "./read-model"
+import { timestamped } from "../claude-message-normalizer"
+
+export interface CronCommandStore {
+  appendMessage(chatId: string, entry: TranscriptEntry): Promise<unknown>
+  appendAutoContinueEvent(event: AutoContinueEvent): Promise<void>
+  getAutoContinueEvents(chatId: string): AutoContinueEvent[]
+}
+
+export interface CronCommandDeps {
+  store: CronCommandStore
+  /** Timer registry; null in tests that only exercise event/entry output. */
+  cronScheduler: { onEvent(event: AutoContinueEvent): void } | null
+  emitStateChange(chatId: string): void
+  /** Re-push the global cron-jobs topic. Optional: wired by the WS router. */
+  pushCronJobsUpdate?: () => void
+  now?: () => number
+  newJobId?: () => string
+}
+
+/**
+ * The one write path for cron events. Everything that arms, disarms, pauses,
+ * or records a run goes through here so the scheduler, the per-chat snapshot,
+ * and the global management page can never disagree.
+ */
+export async function emitCronEvent(deps: CronCommandDeps, event: AutoContinueEvent): Promise<void> {
+  await deps.store.appendAutoContinueEvent(event)
+  deps.cronScheduler?.onEvent(event)
+  deps.emitStateChange(event.chatId)
+  deps.pushCronJobsUpdate?.()
+}
+
+/**
+ * Dispatch a parsed `/cron` message. Never starts a turn; every outcome —
+ * success or validation failure — lands as a visible transcript entry.
+ */
+export async function runCronCommand(
+  deps: CronCommandDeps,
+  chatId: string,
+  result: CronParseResult,
+): Promise<void> {
+  if (!result.ok) {
+    await appendEntry(deps, chatId, {
+      kind: "cron_command_error",
+      message: result.error.message,
+      ...(result.error.suggestion !== undefined ? { suggestion: result.error.suggestion } : {}),
+    })
+    return
+  }
+
+  const command = result.command
+  switch (command.sub) {
+    case "help":
+      await appendEntry(deps, chatId, { kind: "cron_list", help: true })
+      return
+    case "list":
+      await appendEntry(deps, chatId, { kind: "cron_list" })
+      return
+    case "arm": {
+      const now = deps.now?.() ?? Date.now()
+      const firstFire = nextFireAt(command.schedule, now, now)
+      if (firstFire === null) {
+        await appendEntry(deps, chatId, {
+          kind: "cron_command_error",
+          message: `schedule "${command.scheduleText}" never fires (no matching date exists) — not armed`,
+        })
+        return
+      }
+
+      const jobId = pickJobId(deps, chatId)
+      await emitCronEvent(deps, {
+        v: AUTO_CONTINUE_EVENT_VERSION,
+        kind: "cron_armed",
+        chatId,
+        scheduleId: jobId,
+        timestamp: now,
+        instruction: command.instruction,
+        mode: command.mode,
+        scheduleText: command.scheduleText,
+        schedule: command.schedule,
+      })
+      await appendEntry(deps, chatId, {
+        kind: "cron_armed",
+        jobId,
+        instruction: command.instruction,
+        mode: command.mode,
+        scheduleText: command.scheduleText,
+        scheduleHuman: humanizeSchedule(command.schedule, command.scheduleText),
+        nextFireAt: firstFire,
+      })
+      return
+    }
+    case "remove":
+    case "pause":
+    case "resume": {
+      const now = deps.now?.() ?? Date.now()
+      const jobs = deriveCronJobs(deps.store.getAutoContinueEvents(chatId), chatId, now)
+      const job = jobs.find((candidate) => candidate.jobId === command.jobId)
+      if (!job) {
+        await appendEntry(deps, chatId, {
+          kind: "cron_command_error",
+          message: `no cron job "${command.jobId}" in this chat — run \`/cron list\` to see armed jobs`,
+          suggestion: "/cron list",
+        })
+        return
+      }
+      if (command.sub === "pause" && job.paused) {
+        await appendEntry(deps, chatId, {
+          kind: "cron_command_error",
+          message: `cron job "${command.jobId}" is already paused`,
+        })
+        return
+      }
+      if (command.sub === "resume" && !job.paused) {
+        await appendEntry(deps, chatId, {
+          kind: "cron_command_error",
+          message: `cron job "${command.jobId}" is not paused`,
+        })
+        return
+      }
+
+      const base = {
+        v: AUTO_CONTINUE_EVENT_VERSION,
+        chatId,
+        scheduleId: command.jobId,
+        timestamp: now,
+      } as const
+      let event: AutoContinueEvent
+      let change: "removed" | "paused" | "resumed"
+      if (command.sub === "remove") {
+        event = { ...base, kind: "cron_disarmed", reason: "user" }
+        change = "removed"
+      } else if (command.sub === "pause") {
+        event = { ...base, kind: "cron_paused" }
+        change = "paused"
+      } else {
+        event = { ...base, kind: "cron_resumed" }
+        change = "resumed"
+      }
+      await emitCronEvent(deps, event)
+      await appendEntry(deps, chatId, {
+        kind: "cron_job_change",
+        jobId: command.jobId,
+        change,
+      })
+    }
+  }
+}
+
+/**
+ * Disarm every cron job on a chat (chat deleted). Emits `cron_disarmed` per
+ * job — which also clears its timer through the scheduler — but appends no
+ * transcript entries: the chat is going away.
+ */
+export async function disarmCronJobsForChat(deps: CronCommandDeps, chatId: string): Promise<void> {
+  const now = deps.now?.() ?? Date.now()
+  const jobs = deriveCronJobs(deps.store.getAutoContinueEvents(chatId), chatId, now)
+  for (const job of jobs) {
+    await emitCronEvent(deps, {
+      v: AUTO_CONTINUE_EVENT_VERSION,
+      kind: "cron_disarmed",
+      reason: "chat_deleted",
+      chatId,
+      scheduleId: job.jobId,
+      timestamp: now,
+    })
+  }
+}
+
+/**
+ * `Omit` over the whole union collapses to the common keys and rejects
+ * per-kind fields; distributing it per member keeps excess-property checks.
+ */
+type NewTranscriptEntry = {
+  [K in TranscriptEntry["kind"]]: Omit<Extract<TranscriptEntry, { kind: K }>, "_id" | "createdAt">
+}[TranscriptEntry["kind"]]
+
+async function appendEntry(
+  deps: CronCommandDeps,
+  chatId: string,
+  entry: NewTranscriptEntry,
+): Promise<void> {
+  const stamped: TranscriptEntry = timestamped(entry, deps.now?.() ?? Date.now())
+  await deps.store.appendMessage(chatId, stamped)
+  deps.emitStateChange(chatId)
+}
+
+function pickJobId(deps: CronCommandDeps, chatId: string): string {
+  const taken = new Set(
+    deriveCronJobs(deps.store.getAutoContinueEvents(chatId), chatId, deps.now?.() ?? Date.now()).map(
+      (job) => job.jobId,
+    ),
+  )
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const candidate = deps.newJobId?.() ?? `cron-${crypto.randomUUID().slice(0, 6)}`
+    if (!taken.has(candidate)) return candidate
+  }
+  // Injected generators that always collide fall through to a full UUID.
+  return `cron-${crypto.randomUUID()}`
+}

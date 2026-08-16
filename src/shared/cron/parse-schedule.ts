@@ -215,13 +215,12 @@ function parseCronFields(tokens: string[]): ScheduleParse {
     ok: true,
     schedule: {
       type: "cron",
+      expression: tokens.join(" "),
       minute: fields[0]!,
       hour: fields[1]!,
       dom: fields[2]!,
       month: fields[3]!,
       dow: fields[4]!,
-      domRestricted: !tokens[2]!.startsWith("*"),
-      dowRestricted: !tokens[4]!.startsWith("*"),
     },
   }
 }

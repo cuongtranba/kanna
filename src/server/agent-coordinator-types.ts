@@ -128,6 +128,7 @@ export interface AgentCoordinatorArgs {
   claudeLimitDetector?: LimitDetector
   codexLimitDetector?: LimitDetector
   scheduleManager?: ScheduleManager
+  cronScheduler?: import("./cron/scheduler").CronScheduler
   getAutoResumePreference?: () => boolean
   /**
    * Watchdog (ms) for an OpenRouter turn whose SDK stream emits no transcript
