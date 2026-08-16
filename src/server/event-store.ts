@@ -344,11 +344,28 @@ export class EventStore implements PushEventStore {
 
   async recordTurnStarted(chatId: string, runConfig?: TurnRunConfig) { return EntityWrite.recordTurnStarted(this.buildSessionWriteDeps(), chatId, runConfig) }
 
-  async recordTurnFinished(chatId: string) { return EntityWrite.recordTurnFinished(this.buildSessionWriteDeps(), chatId) }
+  /**
+   * Observer fired after a turn's terminal event persists — the ONE choke
+   * point every provider path funnels through (24 call sites feed these
+   * three methods). Currently consumed by the cron feature to attribute a
+   * cron-fired turn's outcome; assigned by AgentCoordinator at construction.
+   */
+  onTurnTerminal: ((chatId: string, outcome: "finished" | "failed" | "cancelled", error?: string) => void) | null = null
 
-  async recordTurnFailed(chatId: string, error: string) { return EntityWrite.recordTurnFailed(this.buildSessionWriteDeps(), chatId, error) }
+  async recordTurnFinished(chatId: string) {
+    await EntityWrite.recordTurnFinished(this.buildSessionWriteDeps(), chatId)
+    this.onTurnTerminal?.(chatId, "finished")
+  }
 
-  async recordTurnCancelled(chatId: string) { return EntityWrite.recordTurnCancelled(this.buildSessionWriteDeps(), chatId) }
+  async recordTurnFailed(chatId: string, error: string) {
+    await EntityWrite.recordTurnFailed(this.buildSessionWriteDeps(), chatId, error)
+    this.onTurnTerminal?.(chatId, "failed", error)
+  }
+
+  async recordTurnCancelled(chatId: string) {
+    await EntityWrite.recordTurnCancelled(this.buildSessionWriteDeps(), chatId)
+    this.onTurnTerminal?.(chatId, "cancelled")
+  }
 
   async appendSubagentEvent(event: SubagentRunEvent) { return appendSubagentEventFn(this.buildAppendSubagentDeps(), event) }
 

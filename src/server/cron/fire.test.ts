@@ -1,0 +1,206 @@
+import { describe, expect, test } from "bun:test"
+import type { ChatAttachment, TranscriptEntry } from "../../shared/types"
+import type { AutoContinueEvent } from "../auto-continue/events"
+import { parseCronCommand } from "../../shared/cron/parse-command"
+import type { SendMessageOptions } from "../claude-steer-log"
+import { runCronCommand } from "./commands"
+import { fireCronJob, recordCronTurnOutcome, reconcileCronRunsAtBoot, type CronFireDeps } from "./fire"
+
+const CHAT = "chat-1"
+
+interface EnqueuedRecord {
+  chatId: string
+  content: string
+  options?: SendMessageOptions
+}
+
+function makeDeps(opts: { busyChatIds?: string[]; now?: number } = {}) {
+  const entries: Array<{ chatId: string; entry: TranscriptEntry }> = []
+  const events: AutoContinueEvent[] = []
+  const cleared: string[] = []
+  const enqueued: EnqueuedRecord[] = []
+  const drained: string[] = []
+  const createdChats: string[] = []
+  const busy = new Set(opts.busyChatIds ?? [])
+  let chatSeq = 0
+  const deps: CronFireDeps = {
+    store: {
+      appendMessage: async (chatId, entry) => {
+        entries.push({ chatId, entry })
+      },
+      appendAutoContinueEvent: async (event) => {
+        events.push(event)
+      },
+      getAutoContinueEvents: (chatId) => events.filter((event) => event.chatId === chatId),
+    },
+    cronScheduler: null,
+    emitStateChange: () => {},
+    now: () => opts.now ?? 1_000_000,
+    newJobId: () => "cron-abc",
+    getChatRecord: (chatId) => (chatId === CHAT ? { projectId: "proj-1" } : null),
+    isChatBusy: (chatId) => busy.has(chatId),
+    clearChatContext: async (chatId) => {
+      cleared.push(chatId)
+    },
+    createChat: async (projectId) => {
+      createdChats.push(projectId)
+      chatSeq += 1
+      return { id: `spawned-${chatSeq}` }
+    },
+    enqueueMessage: async (chatId, content, _attachments: ChatAttachment[], options) => {
+      enqueued.push({ chatId, content, options })
+    },
+    maybeStartNextQueuedMessage: async (chatId) => {
+      drained.push(chatId)
+      return true
+    },
+  }
+  return { deps, entries, events, cleared, enqueued, drained, createdChats, busy }
+}
+
+async function armJob(deps: CronFireDeps, line: string) {
+  const parsed = parseCronCommand(line)
+  if (!parsed) throw new Error("not a cron line")
+  await runCronCommand(deps, CHAT, parsed)
+}
+
+describe("fireCronJob — inline", () => {
+  test("clears context, records the run, and starts the instruction with its tag", async () => {
+    const { deps, events, cleared, enqueued, drained } = makeDeps()
+    await armJob(deps, "/cron check ci inline every 5m")
+
+    await fireCronJob(deps, CHAT, "cron-abc")
+
+    expect(cleared).toEqual([CHAT])
+    const started = events.find((event) => event.kind === "cron_run_started")
+    expect(started).toMatchObject({ chatId: CHAT, scheduleId: "cron-abc" })
+    expect(enqueued).toHaveLength(1)
+    expect(enqueued[0]).toMatchObject({ chatId: CHAT, content: "check ci" })
+    expect(enqueued[0]!.options?.cronRun).toMatchObject({ jobId: "cron-abc", originChatId: CHAT })
+    expect(drained).toEqual([CHAT])
+  })
+
+  test("busy chat skips with a visible chat_busy notice and no context clear", async () => {
+    const { deps, events, cleared, enqueued, entries, busy } = makeDeps()
+    await armJob(deps, "/cron check ci inline every 5m")
+    busy.add(CHAT)
+
+    await fireCronJob(deps, CHAT, "cron-abc")
+
+    expect(cleared).toEqual([])
+    expect(enqueued).toEqual([])
+    const skipped = events.find((event) => event.kind === "cron_run_skipped")
+    expect(skipped).toMatchObject({ reason: "chat_busy" })
+    expect(entries.at(-1)?.entry).toMatchObject({ kind: "cron_run_skipped", reason: "chat_busy" })
+  })
+
+  test("own previous run still live (busy chat) skips as previous_run_active", async () => {
+    const { deps, events, busy } = makeDeps()
+    await armJob(deps, "/cron check ci inline every 5m")
+    await fireCronJob(deps, CHAT, "cron-abc") // run 1 started, still "running"
+    busy.add(CHAT)
+
+    await fireCronJob(deps, CHAT, "cron-abc")
+
+    const skipped = events.find((event) => event.kind === "cron_run_skipped")
+    expect(skipped).toMatchObject({ reason: "previous_run_active" })
+  })
+
+  test("a running run whose chat is idle is settled as orphaned, then the fire proceeds", async () => {
+    const { deps, events, enqueued } = makeDeps()
+    await armJob(deps, "/cron check ci inline every 5m")
+    await fireCronJob(deps, CHAT, "cron-abc") // run 1 never got an outcome
+
+    await fireCronJob(deps, CHAT, "cron-abc")
+
+    const outcomes = events.filter((event) => event.kind === "cron_run_outcome")
+    expect(outcomes).toHaveLength(1)
+    expect(outcomes[0]).toMatchObject({ ok: false, errorCode: "orphaned" })
+    // Both fires ran (the second proceeded after settling the orphan).
+    expect(enqueued).toHaveLength(2)
+  })
+
+  test("paused or unknown jobs and missing chats are no-ops", async () => {
+    const { deps, events } = makeDeps()
+    await armJob(deps, "/cron check ci inline every 5m")
+    const before = events.length
+
+    await fireCronJob(deps, CHAT, "ghost")
+    await fireCronJob(deps, "missing-chat", "cron-abc")
+    expect(events).toHaveLength(before)
+  })
+})
+
+describe("fireCronJob — spawn", () => {
+  test("creates a chat in the arming chat's project and runs there, carding the arming chat", async () => {
+    const { deps, events, entries, enqueued, createdChats, cleared } = makeDeps()
+    await armJob(deps, "/cron nightly report spawn @daily")
+
+    await fireCronJob(deps, CHAT, "cron-abc")
+
+    expect(createdChats).toEqual(["proj-1"])
+    expect(cleared).toEqual([]) // spawn mode never clears the arming chat
+    const started = events.find((event) => event.kind === "cron_run_started")
+    expect(started).toMatchObject({ chatId: CHAT, spawnedChatId: "spawned-1" })
+    const card = entries.find((record) => record.entry.kind === "cron_run")
+    expect(card?.chatId).toBe(CHAT)
+    expect(card?.entry).toMatchObject({ instruction: "nightly report", spawnedChatId: "spawned-1" })
+    expect(enqueued[0]).toMatchObject({ chatId: "spawned-1", content: "nightly report" })
+    expect(enqueued[0]!.options?.cronRun).toMatchObject({ originChatId: CHAT })
+  })
+
+  test("a still-running spawned run skips the tick; an idle one is orphan-settled", async () => {
+    const { deps, events, busy } = makeDeps()
+    await armJob(deps, "/cron nightly report spawn @daily")
+    await fireCronJob(deps, CHAT, "cron-abc")
+    busy.add("spawned-1")
+
+    await fireCronJob(deps, CHAT, "cron-abc")
+    expect(events.find((event) => event.kind === "cron_run_skipped")).toMatchObject({
+      reason: "previous_run_active",
+    })
+
+    busy.delete("spawned-1")
+    await fireCronJob(deps, CHAT, "cron-abc")
+    expect(events.filter((event) => event.kind === "cron_run_outcome")).toHaveLength(1)
+    expect(events.filter((event) => event.kind === "cron_run_started")).toHaveLength(2)
+  })
+})
+
+describe("recordCronTurnOutcome", () => {
+  test("routes outcomes to the arming chat with the right shape", async () => {
+    const { deps, events } = makeDeps()
+    const tag = { jobId: "cron-abc", runId: "run-1", originChatId: CHAT }
+
+    await recordCronTurnOutcome(deps, tag, "finished")
+    expect(events.at(-1)).toMatchObject({ kind: "cron_run_outcome", chatId: CHAT, ok: true })
+
+    await recordCronTurnOutcome(deps, tag, "cancelled")
+    expect(events.at(-1)).toMatchObject({ ok: false, errorCode: "cancelled" })
+
+    await recordCronTurnOutcome(deps, tag, "failed")
+    expect(events.at(-1)).toMatchObject({ ok: false, errorCode: "error" })
+  })
+})
+
+describe("reconcileCronRunsAtBoot", () => {
+  test("appends server_offline notices and settles runs no restart kept alive", async () => {
+    const { deps, events, entries } = makeDeps()
+    await armJob(deps, "/cron check ci inline every 5m")
+    await fireCronJob(deps, CHAT, "cron-abc") // running, no outcome — "crashed" here
+
+    await reconcileCronRunsAtBoot(
+      deps,
+      [{ chatId: CHAT, jobId: "cron-abc", missedCount: 3 }],
+      [CHAT],
+    )
+
+    const skipped = events.find(
+      (event) => event.kind === "cron_run_skipped" && event.reason === "server_offline",
+    )
+    expect(skipped).toMatchObject({ missedCount: 3 })
+    expect(entries.some((record) => record.entry.kind === "cron_run_skipped")).toBe(true)
+    const outcome = events.find((event) => event.kind === "cron_run_outcome")
+    expect(outcome).toMatchObject({ ok: false, errorCode: "orphaned" })
+  })
+})

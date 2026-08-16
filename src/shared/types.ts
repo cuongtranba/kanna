@@ -107,6 +107,7 @@ export interface QueuedChatMessage {
   modelOptions?: ModelOptions
   planMode?: boolean
   autoContinue?: { scheduleId: string }
+  cronRun?: import("./cron/types").CronRunTag
 }
 
 export interface InternalUserAttachmentsData {

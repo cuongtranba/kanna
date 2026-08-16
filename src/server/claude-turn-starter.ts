@@ -128,6 +128,7 @@ export interface StartTurnForChatArgs {
   appendUserPrompt: boolean
   steered?: boolean
   autoContinue?: { scheduleId: string }
+  cronRun?: import("../shared/cron/types").CronRunTag
   userClearedContext?: boolean
   profile?: SendToStartingProfile | null
   /**
@@ -562,6 +563,7 @@ async function startTurnAfterTurnStarted(
     clientTraceId: args.profile?.traceId,
     profilingStartedAt: args.profile?.startedAt,
     waitStartedAt: null,
+    cronRun: args.cronRun,
     userMessageId: appendedUserMessageId ?? deps.findLastUserMessageId(args.chatId),
   }
   deps.activeTurns.set(args.chatId, active)

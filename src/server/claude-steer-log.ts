@@ -30,6 +30,7 @@ export interface SendMessageOptions {
   effort?: string
   planMode?: boolean
   autoContinue?: { scheduleId: string }
+  cronRun?: import("../shared/cron/types").CronRunTag
 }
 
 export function isSendToStartingProfilingEnabled() {

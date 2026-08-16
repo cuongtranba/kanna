@@ -110,6 +110,12 @@ import {
   type CronCommandDeps,
 } from "./cron/commands"
 import {
+  fireCronJob as fireCronJobFn,
+  recordCronTurnOutcome as recordCronTurnOutcomeFn,
+  reconcileCronRunsAtBoot as reconcileCronRunsAtBootFn,
+  type CronFireDeps,
+} from "./cron/fire"
+import {
   cancelChat as cancelChatFn,
   type CancelHandlerDeps,
 } from "./claude-cancel-handler"
@@ -277,6 +283,17 @@ export class AgentCoordinator {
     this.claudeAuthErrorDetector = new ClaudeAuthErrorDetector()
     this.scheduleManager = args.scheduleManager ?? null
     this.cronScheduler = args.cronScheduler ?? null
+    // The store's turn-terminal observer is how a cron-fired turn's outcome
+    // reaches its job: every provider path funnels through recordTurn*, and
+    // the ActiveTurn still holds its CronRunTag at that moment (turns are
+    // deleted from the map only after the terminal record persists).
+    this.store.onTurnTerminal = (chatId, outcome) => {
+      const tag = this.activeTurns.get(chatId)?.cronRun
+      if (!tag) return
+      void recordCronTurnOutcomeFn(this.buildCronCommandDeps(), tag, outcome).catch((error) => {
+        log.error("[kanna/cron] failed to record run outcome:", String(error))
+      })
+    }
     this.getAutoResumePreference = args.getAutoResumePreference ?? (() => false)
     this.openrouterFirstEntryTimeoutMs =
       args.openrouterFirstEntryTimeoutMs ?? DEFAULT_OPENROUTER_FIRST_ENTRY_TIMEOUT_MS
@@ -468,6 +485,10 @@ export class AgentCoordinator {
 
   private buildCronCommandDeps(): CronCommandDeps {
     return agentDepsBuilders.buildCronCommandDeps(this)
+  }
+
+  private buildCronFireDeps(): CronFireDeps {
+    return agentDepsBuilders.buildCronFireDeps(this)
   }
 
   // ---------------------------------------------------------------------------
@@ -957,6 +978,23 @@ export class AgentCoordinator {
   async disarmCronJobsForChat(chatId: string): Promise<void> {
     await disarmCronJobsForChatFn(this.buildCronCommandDeps(), chatId)
     this.cronScheduler?.clearChat(chatId)
+  }
+
+  /** One cron tick — the CronScheduler's fire callback. Delegates to fireCronJobFn — see cron/fire.ts. */
+  async fireCronJob(chatId: string, jobId: string): Promise<void> {
+    return fireCronJobFn(this.buildCronFireDeps(), chatId, jobId)
+  }
+
+  /**
+   * Boot-time cron reconciliation: visible server_offline skip notices for
+   * fires missed while the server was down, plus settling runs no restart
+   * could have kept alive. Delegates to reconcileCronRunsAtBootFn.
+   */
+  async reconcileCronRunsAtBoot(
+    missed: ReadonlyArray<{ chatId: string; jobId: string; missedCount: number }>,
+    chatIds: readonly string[],
+  ): Promise<void> {
+    return reconcileCronRunsAtBootFn(this.buildCronCommandDeps(), missed, chatIds)
   }
 
   /** Delegates to listLiveSchedulesFn — see claude-loop-commands.ts. */

@@ -251,6 +251,7 @@ export async function enqueueMessage(
     modelOptions: options?.modelOptions,
     planMode: options?.planMode,
     autoContinue: options?.autoContinue,
+    cronRun: options?.cronRun,
   })
   deps.emitStateChange(chatId)
   return queued
@@ -387,6 +388,7 @@ export async function dequeueAndStartQueuedMessage(
     appendUserPrompt: !isRateLimitFallback && !alreadyAppended,
     steered: options?.steered,
     autoContinue: queuedMessage.autoContinue,
+    cronRun: queuedMessage.cronRun,
     onTurnRecorded: release,
   })
 }

@@ -31,6 +31,7 @@ import type { AutoContinueCommandDeps } from "./claude-autocontinue-commands"
 import type { LoopCommandDeps } from "./claude-loop-commands"
 import { toArmedLoopInfo } from "./claude-loop-commands"
 import type { CronCommandDeps } from "./cron/commands"
+import type { CronFireDeps } from "./cron/fire"
 import { isChatBusy } from "./claude-session-state-queries"
 import type { CancelHandlerDeps } from "./claude-cancel-handler"
 import type { ChatManagementDeps } from "./claude-chat-management"
@@ -156,6 +157,19 @@ export function buildCronCommandDeps(agent: AgentCoordinator): CronCommandDeps {
     cronScheduler: agent.cronScheduler,
     emitStateChange: (chatId) => agent.emitStateChange(chatId),
     pushCronJobsUpdate: () => agent.onCronJobsChange?.(),
+  }
+}
+
+export function buildCronFireDeps(agent: AgentCoordinator): CronFireDeps {
+  return {
+    ...buildCronCommandDeps(agent),
+    getChatRecord: (chatId) => agent.store.getChat(chatId),
+    isChatBusy: (chatId) => isChatBusy(buildSendCommandDeps(agent), chatId),
+    clearChatContext: (chatId) => agent.clearChatContext(chatId),
+    createChat: (projectId) => agent.store.createChat(projectId),
+    enqueueMessage: (chatId, content, attachments, options) =>
+      agent.enqueueMessage(chatId, content, attachments, options),
+    maybeStartNextQueuedMessage: async (chatId) => agent.maybeStartNextQueuedMessage(chatId),
   }
 }
 

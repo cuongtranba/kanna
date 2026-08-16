@@ -54,7 +54,7 @@ export async function runCronCommand(
   result: CronParseResult,
 ): Promise<void> {
   if (!result.ok) {
-    await appendEntry(deps, chatId, {
+    await appendCronEntry(deps, chatId, {
       kind: "cron_command_error",
       message: result.error.message,
       ...(result.error.suggestion !== undefined ? { suggestion: result.error.suggestion } : {}),
@@ -65,16 +65,16 @@ export async function runCronCommand(
   const command = result.command
   switch (command.sub) {
     case "help":
-      await appendEntry(deps, chatId, { kind: "cron_list", help: true })
+      await appendCronEntry(deps, chatId, { kind: "cron_list", help: true })
       return
     case "list":
-      await appendEntry(deps, chatId, { kind: "cron_list" })
+      await appendCronEntry(deps, chatId, { kind: "cron_list" })
       return
     case "arm": {
       const now = deps.now?.() ?? Date.now()
       const firstFire = nextFireAt(command.schedule, now, now)
       if (firstFire === null) {
-        await appendEntry(deps, chatId, {
+        await appendCronEntry(deps, chatId, {
           kind: "cron_command_error",
           message: `schedule "${command.scheduleText}" never fires (no matching date exists) — not armed`,
         })
@@ -93,7 +93,7 @@ export async function runCronCommand(
         scheduleText: command.scheduleText,
         schedule: command.schedule,
       })
-      await appendEntry(deps, chatId, {
+      await appendCronEntry(deps, chatId, {
         kind: "cron_armed",
         jobId,
         instruction: command.instruction,
@@ -111,7 +111,7 @@ export async function runCronCommand(
       const jobs = deriveCronJobs(deps.store.getAutoContinueEvents(chatId), chatId, now)
       const job = jobs.find((candidate) => candidate.jobId === command.jobId)
       if (!job) {
-        await appendEntry(deps, chatId, {
+        await appendCronEntry(deps, chatId, {
           kind: "cron_command_error",
           message: `no cron job "${command.jobId}" in this chat — run \`/cron list\` to see armed jobs`,
           suggestion: "/cron list",
@@ -119,14 +119,14 @@ export async function runCronCommand(
         return
       }
       if (command.sub === "pause" && job.paused) {
-        await appendEntry(deps, chatId, {
+        await appendCronEntry(deps, chatId, {
           kind: "cron_command_error",
           message: `cron job "${command.jobId}" is already paused`,
         })
         return
       }
       if (command.sub === "resume" && !job.paused) {
-        await appendEntry(deps, chatId, {
+        await appendCronEntry(deps, chatId, {
           kind: "cron_command_error",
           message: `cron job "${command.jobId}" is not paused`,
         })
@@ -152,7 +152,7 @@ export async function runCronCommand(
         change = "resumed"
       }
       await emitCronEvent(deps, event)
-      await appendEntry(deps, chatId, {
+      await appendCronEntry(deps, chatId, {
         kind: "cron_job_change",
         jobId: command.jobId,
         change,
@@ -189,7 +189,7 @@ type NewTranscriptEntry = {
   [K in TranscriptEntry["kind"]]: Omit<Extract<TranscriptEntry, { kind: K }>, "_id" | "createdAt">
 }[TranscriptEntry["kind"]]
 
-async function appendEntry(
+export async function appendCronEntry(
   deps: CronCommandDeps,
   chatId: string,
   entry: NewTranscriptEntry,

@@ -125,3 +125,17 @@ export interface CronJobSnapshot {
 }
 
 export const MAX_RECENT_CRON_RUNS = 20
+
+/**
+ * Rides the queued message and the ActiveTurn of a cron-fired run, so the
+ * store's turn-terminal observer can attribute the outcome to its job.
+ */
+export interface CronRunTag {
+  jobId: string
+  runId: string
+  /**
+   * The arming (monitoring) chat — where run events land. Equals the run
+   * chat in inline mode; the spawned chat differs in spawn mode.
+   */
+  originChatId: string
+}
