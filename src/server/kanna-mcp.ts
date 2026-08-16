@@ -27,6 +27,7 @@ import {
   DELEGATE_SUBAGENT_DESCRIPTION,
   type DelegateSubagentContext,
 } from "./kanna-mcp-tools/delegate-subagent"
+import { previewCronCommand } from "./cron/preview"
 import type { SubagentOrchestrator } from "./subagent-orchestrator"
 import type { LoopSetupInput } from "./loop-template"
 import { confinePathToDir } from "./input-validation"
@@ -118,6 +119,12 @@ export interface KannaMcpArgs extends OfferDownloadArgs {
    * inject a fake so the tool suite never loads the mermaid bundle.
    */
   parseMermaid?: MermaidParsePort
+  /**
+   * Backs `arm_cron` — runs a `/cron` line through the normal dispatch, so a
+   * model-armed job takes exactly the path a typed command takes. Omit to
+   * hide the tool; supplied only for main chats, like `setup_loop`.
+   */
+  armCron?: (command: string) => Promise<void>
 }
 
 /** The slice of the armed loop the MCP tools need. */
@@ -953,6 +960,79 @@ function buildValidateMermaidToolList(args: {
   ]
 }
 
+const VALIDATE_CRON_DESCRIPTION =
+  "Check a `/cron` line BEFORE you schedule anything with it. Pass the complete "
+  + "line (`/cron <instruction> inline|spawn <schedule>`) and get back the "
+  + "schedule in plain words plus the next few real fire times — which is how "
+  + "you confirm `0 9 * * *` means the 09:00-daily the user actually asked for. "
+  + "A rejection names the failing part and why. Cheap; call it for every line "
+  + "you are about to arm or suggest."
+
+const ARM_CRON_DESCRIPTION =
+  "Schedule a `/cron` line on this chat — use it to finish repairing a command "
+  + "the user mistyped, once you know what they meant. Takes the complete line "
+  + "and runs it through the same dispatch a typed command takes, so anything "
+  + "the user could not have typed is refused here too. Validate with "
+  + "validate_cron first. If the user's intent is genuinely ambiguous (the mode "
+  + "is neither stated nor implied, the time could mean more than one thing), "
+  + "ask them with AskUserQuestion before arming — do not guess."
+
+/**
+ * The `/cron` pair, mirroring the mermaid gate: `validate_cron` is the in-turn
+ * oracle, `arm_cron` is the act it enables. Both answer from
+ * `previewCronCommand`, so the model can never be told a line is valid by one
+ * and refused by the other.
+ *
+ * `validate_cron` gates on a chat only — checking a line is free of
+ * consequence. `arm_cron` additionally needs the injected capability, which
+ * the spawner supplies for main chats alone: a subagent's chat is ephemeral
+ * and must not leave recurring work behind.
+ */
+function buildCronToolList(args: {
+  chatId: string | null
+  armCron?: (command: string) => Promise<void>
+  now?: () => number
+}): KannaSdkToolList {
+  if (!args.chatId) return []
+  const now = args.now ?? (() => Date.now())
+  const commandArg = {
+    command: z
+      .string()
+      .describe("The complete /cron line, e.g. `/cron check CI inline 0 9 * * *`."),
+  }
+
+  const tools: KannaSdkToolList = [
+    tool("validate_cron", VALIDATE_CRON_DESCRIPTION, commandArg, (input) => {
+      const preview = previewCronCommand(input.command, now())
+      if (!preview.ok) {
+        return Promise.resolve({
+          isError: true as const,
+          content: [{ type: "text" as const, text: preview.reason }],
+        })
+      }
+      return Promise.resolve({ content: [{ type: "text" as const, text: preview.summary }] })
+    }),
+  ]
+
+  const armCron = args.armCron
+  if (!armCron) return tools
+
+  tools.push(
+    tool("arm_cron", ARM_CRON_DESCRIPTION, commandArg, async (input) => {
+      const preview = previewCronCommand(input.command, now())
+      if (!preview.ok) {
+        return {
+          isError: true as const,
+          content: [{ type: "text" as const, text: `Not armed. ${preview.reason}` }],
+        }
+      }
+      await armCron(input.command)
+      return { content: [{ type: "text" as const, text: `Armed.\n${preview.summary}` }] }
+    }),
+  )
+  return tools
+}
+
 export function buildKannaMcpTools(args: KannaMcpArgs): KannaSdkToolList {
   const tunnelGateway = args.tunnelGateway ?? null
   const chatId = args.chatId ?? null
@@ -1021,6 +1101,7 @@ export function buildKannaMcpTools(args: KannaMcpArgs): KannaSdkToolList {
     ...buildBoardToolList({ boardRegistry: args.boardRegistry, chatId, projectId: args.projectId ?? null }, tool),
     ...buildRunVerifyToolList({ chatId, cwd, getArmedLoop: args.getArmedLoop }),
     ...buildValidateMermaidToolList({ chatId, parse: args.parseMermaid ?? parseMermaid }),
+    ...buildCronToolList({ chatId, armCron: args.armCron }),
     tool(
       "expose_port",
       EXPOSE_PORT_DESCRIPTION,

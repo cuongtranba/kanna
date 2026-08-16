@@ -7,7 +7,8 @@
  */
 
 import type { TranscriptEntry } from "../../shared/types"
-import type { CronParseResult } from "../../shared/cron/types"
+import type { CronParseError, CronParseResult } from "../../shared/cron/types"
+import type { CronRepair } from "./repair"
 import { humanizeSchedule } from "../../shared/cron/humanize"
 import { nextFireAt } from "./next-fire"
 import type { AutoContinueEvent } from "../auto-continue/events"
@@ -28,6 +29,11 @@ export interface CronCommandDeps {
   emitStateChange(chatId: string): void
   /** Re-push the global cron-jobs topic. Optional: wired by the WS router. */
   pushCronJobsUpdate?: () => void
+  /**
+   * Hands a rejected line to the model when Kanna has no fix of its own.
+   * Optional so tests exercising event/entry output need not wire it.
+   */
+  cronRepair?: CronRepair
   now?: () => number
   newJobId?: () => string
 }
@@ -54,11 +60,7 @@ export async function runCronCommand(
   result: CronParseResult,
 ): Promise<void> {
   if (!result.ok) {
-    await appendCronEntry(deps, chatId, {
-      kind: "cron_command_error",
-      message: result.error.message,
-      ...(result.error.suggestion !== undefined ? { suggestion: result.error.suggestion } : {}),
-    })
+    await refuseCronCommand(deps, chatId, result.error)
     return
   }
 
@@ -74,9 +76,13 @@ export async function runCronCommand(
       const now = deps.now?.() ?? Date.now()
       const firstFire = nextFireAt(command.schedule, now, now)
       if (firstFire === null) {
-        await appendCronEntry(deps, chatId, {
-          kind: "cron_command_error",
+        // Parseable but with no occurrence (Feb 30). Still a setup the user
+        // meant something by, so it is refused on the canonical line rather
+        // than dead-ending — only the model can ask what they meant.
+        await refuseCronCommand(deps, chatId, {
+          part: "schedule",
           message: `schedule "${command.scheduleText}" never fires (no matching date exists) — not armed`,
+          input: `/cron ${command.instruction} ${command.mode} ${command.scheduleText}`,
         })
         return
       }
@@ -159,6 +165,26 @@ export async function runCronCommand(
       })
     }
   }
+}
+
+/**
+ * The one way a `/cron` line is refused: the card the reader sees and the
+ * offer to the model are a single step, so a new refusal cannot record one
+ * without the other. The repair itself decides whether to spend a turn — a
+ * failure Kanna already has a suggestion for is dropped there, not here.
+ */
+async function refuseCronCommand(
+  deps: CronCommandDeps,
+  chatId: string,
+  error: CronParseError,
+): Promise<void> {
+  await appendCronEntry(deps, chatId, {
+    kind: "cron_command_error",
+    message: error.message,
+    input: error.input,
+    ...(error.suggestion !== undefined ? { suggestion: error.suggestion } : {}),
+  })
+  await deps.cronRepair?.offer(chatId, error)
 }
 
 /**

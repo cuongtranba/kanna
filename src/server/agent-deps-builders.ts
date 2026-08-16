@@ -46,6 +46,7 @@ import type { SpawnClaudeTurnDeps } from "./claude-session-spawner"
 import type { RunClaudeSessionDeps } from "./claude-session-runner"
 import type { RunTurnDeps } from "./claude-turn-runner"
 import { createMermaidGuard, type MermaidGuard } from "./mermaid-guard"
+import { createCronRepair, type CronRepair } from "./cron/repair"
 import { parseMermaid } from "./mermaid-parse.adapter"
 import { repairMermaidSource } from "../shared/mermaidRepair"
 
@@ -157,7 +158,36 @@ export function buildCronCommandDeps(agent: AgentCoordinator): CronCommandDeps {
     cronScheduler: agent.cronScheduler,
     emitStateChange: (chatId) => agent.emitStateChange(chatId),
     pushCronJobsUpdate: () => agent.onCronJobsChange?.(),
+    cronRepair: buildCronRepair(agent),
   }
+}
+
+/**
+ * One repair per coordinator. Its "already asked about this line" memory has
+ * to outlive a single command — a fresh one per dispatch would re-offer the
+ * same unrepairable line every time the user retyped it, which is the exact
+ * shape of the failure this exists to fix.
+ */
+const cronRepairByAgent = new WeakMap<AgentCoordinator, CronRepair>()
+
+function buildCronRepair(agent: AgentCoordinator): CronRepair {
+  const existing = cronRepairByAgent.get(agent)
+  if (existing) return existing
+
+  const repair = createCronRepair({
+    enabled: process.env.KANNA_CRON_REPAIR !== "disabled",
+    hasQueuedMessage: (chatId) => agent.store.getQueuedMessages(chatId).length > 0,
+    enqueueMessage: async (chatId, content, options) => {
+      await agent.enqueueMessage(chatId, content, [], options)
+    },
+    // `/cron` starts no turn, so unlike the mermaid guard nothing else will
+    // come along and drain this.
+    drainQueue: async (chatId) => {
+      await agent.maybeStartNextQueuedMessage(chatId)
+    },
+  })
+  cronRepairByAgent.set(agent, repair)
+  return repair
 }
 
 export function buildCronFireDeps(agent: AgentCoordinator): CronFireDeps {
@@ -400,6 +430,7 @@ export function buildSpawnClaudeTurnDeps(agent: AgentCoordinator): SpawnClaudeTu
     getEnabledCustomMcpServers: () => agent.getEnabledCustomMcpServers(),
     buildOAuthBearers: (servers) => agent.buildOAuthBearers(servers),
     setupLoop: (chatId, input) => agent.setupLoop({ chatId, input }),
+    armCron: (chatId, command) => agent.armCron(chatId, command),
     stopLoop: (chatId, reason) => agent.stopLoop(chatId, reason),
     resolveChatPolicy: (chatId) => agent.resolveChatPolicy(chatId),
     runClaudeSession: (session) => { void agent.runClaudeSession(session) },

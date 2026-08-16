@@ -144,6 +144,8 @@ export interface SpawnClaudeTurnDeps {
   getEnabledCustomMcpServers: () => readonly McpServerConfig[]
   buildOAuthBearers: (servers: readonly McpServerConfig[]) => Promise<Map<string, string>>
   setupLoop: (chatId: string, input: LoopSetupInput) => Promise<SetupLoopHandlerResult>
+  /** Backs the `arm_cron` MCP tool — see AgentCoordinator.armCron. */
+  armCron: (chatId: string, command: string) => Promise<void>
   stopLoop: (chatId: string, reason: "goal_met" | "user_send" | "chat_deleted") => Promise<void>
   resolveChatPolicy: (chatId: string) => ChatPermissionPolicy
   /** Fires the session event loop. Return value is discarded (fire-and-forget). */
@@ -262,6 +264,9 @@ export async function spawnClaudeTurn(
             setupLoop: delegationContext.depth === 0
               ? (input) => deps.setupLoop(chatIdForCtx, input)
               : undefined,
+            armCron: delegationContext.depth === 0
+              ? (command: string) => deps.armCron(chatIdForCtx, command)
+              : undefined,
             stopLoop: delegationContext.depth === 0
               ? () => deps.stopLoop(chatIdForCtx, "goal_met")
               : undefined,
@@ -302,6 +307,9 @@ export async function spawnClaudeTurn(
             delegationContext,
             setupLoop: delegationContext.depth === 0
               ? (input) => deps.setupLoop(chatIdForCtx, input)
+              : undefined,
+            armCron: delegationContext.depth === 0
+              ? (command: string) => deps.armCron(chatIdForCtx, command)
               : undefined,
             stopLoop: delegationContext.depth === 0
               ? () => deps.stopLoop(chatIdForCtx, "goal_met")

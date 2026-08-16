@@ -77,6 +77,31 @@ describe("CronCommandErrorMessage", () => {
     )
     expect(html).not.toContain("Copy fix")
   })
+
+  // `/cron` starts no turn, so this card is the only place the typed line can
+  // appear — without it the reader is told a line is wrong but not which one.
+  test("shows the line that failed", () => {
+    const html = renderToStaticMarkup(
+      <CronCommandErrorMessage
+        message={{
+          ...base,
+          kind: "cron_command_error",
+          message: "cron schedule has 3 fields, expected 5",
+          input: "/cron check CI inline 9am every day",
+        }}
+      />,
+    )
+    expect(html).toContain("/cron check CI inline 9am every day")
+  })
+
+  test("renders without an input, for errors with no single offending line", () => {
+    const html = renderToStaticMarkup(
+      <CronCommandErrorMessage
+        message={{ ...base, kind: "cron_command_error", message: "missing instruction" }}
+      />,
+    )
+    expect(html).toContain("missing instruction")
+  })
 })
 
 describe("CronRunMessage", () => {

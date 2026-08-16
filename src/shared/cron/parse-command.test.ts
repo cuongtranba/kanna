@@ -132,6 +132,43 @@ describe("validation errors and suggestions", () => {
     const error = errorOf("/cron nightly build spawn 0 3 * *")
     expect(error.suggestion).toBe("/cron nightly build spawn 0 3 * * *")
   })
+
+  test("a short cron whose fields are valid is padded with wildcards", () => {
+    expect(errorOf("/cron nightly build spawn 0 3 *").suggestion).toBe(
+      "/cron nightly build spawn 0 3 * * *",
+    )
+    expect(errorOf("/cron nightly build spawn 0 3").suggestion).toBe(
+      "/cron nightly build spawn 0 3 * * *",
+    )
+  })
+
+  // Padding only helps when the fields themselves are cron. "9am every day" is
+  // English, and guessing at it is exactly the job the model picks up.
+  test("a short schedule that is not cron at all offers no suggestion", () => {
+    const error = errorOf("/cron check ci inline 9am every day")
+    expect(error.part).toBe("schedule")
+    expect(error.suggestion).toBeUndefined()
+  })
+})
+
+// The offending line is the one thing the old error entry did not keep, which
+// left both the user and the model with nothing to work from.
+describe("the offending line is recorded", () => {
+  test("every parse error carries the line it came from", () => {
+    for (const line of ["/cron remove", "/cron check ci inline 9am every day", "/cron nonsense"]) {
+      expect(errorOf(line).input).toBe(line)
+    }
+  })
+
+  test("the recorded line is trimmed, matching what was parsed", () => {
+    expect(errorOf("  /cron nonsense  ").input).toBe("/cron nonsense")
+  })
+
+  test("a multiline /cron message records the whole message", () => {
+    expect(errorOf("/cron check ci inline @daily\nsecond line").input).toBe(
+      "/cron check ci inline @daily\nsecond line",
+    )
+  })
 })
 
 describe("suggestion drift guard", () => {

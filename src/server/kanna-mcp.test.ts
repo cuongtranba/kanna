@@ -970,3 +970,118 @@ describe("validate_mermaid", () => {
     expect(text).toContain("parallelogram")
   })
 })
+
+describe("validate_cron", () => {
+  const invoke = (input: Record<string, unknown>, chatId: string | null = "c") => {
+    const tools = buildKannaMcpTools({ ...makeArgs(undefined), chatId: chatId ?? undefined })
+    const found = tools.find((t) => t.name === "validate_cron")
+    if (!found) throw new Error("validate_cron not registered")
+    return (found as { handler: (i: Record<string, unknown>, extra: unknown) => Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> })
+      .handler(input, undefined)
+  }
+
+  test("is hidden when there is no chat", () => {
+    const tools = buildKannaMcpTools({ ...makeArgs(undefined), chatId: undefined })
+    expect(tools.map((t) => t.name)).not.toContain("validate_cron")
+  })
+
+  // The next fire times are the point: they are how the model confirms that
+  // `0 9 * * *` is the 09:00-daily the user asked for.
+  test("accepts a valid line and answers in words plus real fire times", async () => {
+    const result = await invoke({ command: "/cron check ci inline 0 9 * * *" })
+    expect(result.isError).toBeUndefined()
+    const text = result.content[0]?.text ?? ""
+    expect(text).toContain("VALID")
+    expect(text).toContain("check ci")
+    expect(text).toContain("inline")
+    expect(text).toMatch(/\d{4}-\d{2}-\d{2}/)
+  })
+
+  test("rejects an unparseable line with isError and the field-level reason", async () => {
+    const result = await invoke({ command: "/cron check ci inline 0 9 * * 8" })
+    expect(result.isError).toBe(true)
+    expect(result.content[0]?.text).toContain("day-of-week")
+  })
+
+  test("passes the deterministic fix through when there is one", async () => {
+    const result = await invoke({ command: "/cron check ci spwan @daily" })
+    expect(result.isError).toBe(true)
+    expect(result.content[0]?.text).toContain("/cron check ci spawn @daily")
+  })
+
+  test("refuses a line that is not a /cron command at all", async () => {
+    const result = await invoke({ command: "every day at 9" })
+    expect(result.isError).toBe(true)
+  })
+
+  // A management line validates but schedules nothing — saying VALID would
+  // invite the model to arm it and report success over a no-op.
+  test("refuses a line that would not arm anything", async () => {
+    const result = await invoke({ command: "/cron list" })
+    expect(result.isError).toBe(true)
+  })
+
+  test("reports a schedule with no future occurrence rather than calling it valid", async () => {
+    const result = await invoke({ command: "/cron impossible inline 0 0 30 2 *" })
+    expect(result.isError).toBe(true)
+    expect(result.content[0]?.text).toContain("never fires")
+  })
+})
+
+describe("arm_cron", () => {
+  const armed: string[] = []
+  const build = (over: Record<string, unknown> = {}) =>
+    buildKannaMcpTools({
+      ...makeArgs(undefined),
+      chatId: "c",
+      armCron: (line: string) => {
+        armed.push(line)
+        return Promise.resolve()
+      },
+      ...over,
+    })
+
+  const invoke = (input: Record<string, unknown>) => {
+    const found = build().find((t) => t.name === "arm_cron")
+    if (!found) throw new Error("arm_cron not registered")
+    return (found as { handler: (i: Record<string, unknown>, extra: unknown) => Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> })
+      .handler(input, undefined)
+  }
+
+  test("is hidden without a chat or without the arm capability", () => {
+    expect(build({ chatId: undefined }).map((t) => t.name)).not.toContain("arm_cron")
+    expect(buildKannaMcpTools({ ...makeArgs(undefined), chatId: "c" }).map((t) => t.name))
+      .not.toContain("arm_cron")
+  })
+
+  test("arms a valid line and reports what was scheduled", async () => {
+    armed.length = 0
+    const result = await invoke({ command: "/cron check ci inline 0 9 * * *" })
+    expect(result.isError).toBeUndefined()
+    expect(armed).toEqual(["/cron check ci inline 0 9 * * *"])
+    expect(result.content[0]?.text).toContain("check ci")
+  })
+
+  // The model must never be able to arm something the send pipeline would
+  // have rejected — same parser, same answer.
+  test("refuses an invalid line without arming", async () => {
+    armed.length = 0
+    const result = await invoke({ command: "/cron check ci inline 9am every day" })
+    expect(result.isError).toBe(true)
+    expect(armed).toEqual([])
+  })
+
+  test("refuses a management subcommand without arming", async () => {
+    armed.length = 0
+    const result = await invoke({ command: "/cron remove cron-a1" })
+    expect(result.isError).toBe(true)
+    expect(armed).toEqual([])
+  })
+
+  test("refuses a schedule that never fires", async () => {
+    armed.length = 0
+    const result = await invoke({ command: "/cron impossible inline 0 0 30 2 *" })
+    expect(result.isError).toBe(true)
+    expect(armed).toEqual([])
+  })
+})

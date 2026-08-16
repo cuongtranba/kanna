@@ -16,6 +16,7 @@ const DESCRIPTIONS: Record<string, { default: string; description: string }> = {
   KANNA_CLAUDE_DRIVER: { default: 'sdk', description: 'Driver mode: "sdk" (API rates) or "pty" (subscription billing, macOS/Linux only).' },
   KANNA_MCP_TOOL_CALLBACKS: { default: '0', description: 'Set to "1" to route AskUserQuestion / ExitPlanMode / built-in shims through the durable approval protocol.' },
   KANNA_SERVER_SECRET: { default: '(random per process)', description: 'Stabilises HMAC tool-request ids across process restarts.' },
+  KANNA_CRON_REPAIR: { default: 'enabled', description: 'Set to "disabled" to stop handing an invalid /cron line to the agent for repair. It only ever fires where Kanna has no corrected command of its own; the validate_cron / arm_cron tools stay registered either way.' },
   KANNA_SYSTEM_PROMPT_APPEND: { default: '(unset)', description: 'Appended to the system prompt for every agent spawn (both SDK and PTY drivers).' },
   KANNA_SUBAGENT_MAX_LIVE: { default: '5', description: 'Max concurrent keep-alive (warm) subagent processes per chat. Over cap, delegate_subagent({keep_alive:true}) fails CAP_EXCEEDED.' },
   KANNA_SUBAGENT_IDLE_TIMEOUT_MS: { default: '300000', description: 'Idle window after which a keep-alive subagent session is auto-closed. Reset on each turn.' },

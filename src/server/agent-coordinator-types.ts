@@ -113,6 +113,8 @@ export interface AgentCoordinatorArgs {
     restrictedAllowedPaths?: string[]
     /** Backs the `setup_loop` MCP tool. Omit to hide the tool. */
     setupLoop?: (input: LoopSetupInput) => Promise<SetupLoopHandlerResult>
+    /** Backs the `arm_cron` MCP tool; main chats only. */
+    armCron?: (command: string) => Promise<void>
     /** Backs the `stop_loop` MCP tool. Omit to hide the tool. */
     stopLoop?: () => Promise<void>
     /** Live check: true while an autonomous loop is armed. */
