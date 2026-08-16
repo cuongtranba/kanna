@@ -308,6 +308,7 @@ export function processTranscriptMessages(entries: TranscriptEntry[]): HydratedT
           ...createBaseMessage(entry),
           kind: "cron_command_error",
           message: entry.message,
+          ...(entry.input !== undefined ? { input: entry.input } : {}),
           ...(entry.suggestion !== undefined ? { suggestion: entry.suggestion } : {}),
         })
         break

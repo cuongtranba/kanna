@@ -109,6 +109,7 @@ import {
   disarmCronJobsForChat as disarmCronJobsForChatFn,
   type CronCommandDeps,
 } from "./cron/commands"
+import { parseCronCommand } from "../shared/cron/parse-command"
 import {
   fireCronJob as fireCronJobFn,
   recordCronTurnOutcome as recordCronTurnOutcomeFn,
@@ -969,6 +970,23 @@ export class AgentCoordinator {
     result: import("../shared/cron/types").CronParseResult,
   ): Promise<void> {
     return runCronCommandFn(this.buildCronCommandDeps(), chatId, result)
+  }
+
+  /**
+   * Arm a `/cron` line on the model's behalf (the `arm_cron` tool), through
+   * the same parse and dispatch a typed command takes.
+   *
+   * Anything not an armable line is REFUSED here rather than dispatched: a
+   * failed dispatch appends an error card and offers the line back to the
+   * model for repair, so a model answering its own repair prompt with another
+   * bad line would loop. Refusing keeps escalation strictly user-initiated.
+   */
+  async armCron(chatId: string, command: string): Promise<void> {
+    const parsed = parseCronCommand(command)
+    if (!parsed?.ok || parsed.command.sub !== "arm") {
+      throw new Error(`not an armable /cron command: ${command}`)
+    }
+    return this.runCronCommand(chatId, parsed)
   }
 
   /**

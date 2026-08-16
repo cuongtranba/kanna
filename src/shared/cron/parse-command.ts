@@ -18,7 +18,13 @@
  * corrected suggestion, never get sent to the model as a prompt.
  */
 
-import { isCronMode, type CronMode, type CronParseResult } from "./types"
+import {
+  isCronMode,
+  type CronCommand,
+  type CronMode,
+  type CronParseError,
+  type CronParseResult,
+} from "./types"
 import { levenshtein, parseSchedule } from "./parse-schedule"
 
 interface Token {
@@ -26,6 +32,15 @@ interface Token {
   start: number
   end: number
 }
+
+/**
+ * What the grammar itself produces. `parseCronCommand` stamps `input` on the
+ * way out, so no failure path can forget to record the line it rejected — and
+ * a new one cannot be written without it.
+ */
+type Outcome =
+  | { ok: true; command: CronCommand }
+  | { ok: false; error: Omit<CronParseError, "input"> }
 
 const MODE_HINT = "`inline` (runs in this chat, cleared each cycle) or `spawn` (a new chat per run)"
 const ARM_SHAPE = "`/cron <instruction> <inline|spawn> <schedule>`"
@@ -38,6 +53,13 @@ export function parseCronCommand(content: string): CronParseResult | null {
   const line = content.trim()
   const firstToken = /^\S+/.exec(line)?.[0]
   if (firstToken !== "/cron") return null
+
+  const outcome = parseCronLine(line)
+  if (outcome.ok) return outcome
+  return { ok: false, error: { ...outcome.error, input: line } }
+}
+
+function parseCronLine(line: string): Outcome {
   if (line.includes("\n")) {
     return {
       ok: false,
@@ -71,7 +93,7 @@ function tokenize(line: string): Token[] {
  * `/cron remove old sessions inline @daily` is an arm whose instruction
  * happens to start with "remove".
  */
-function parseSubcommand(line: string, tokens: Token[]): CronParseResult | null {
+function parseSubcommand(line: string, tokens: Token[]): Outcome | null {
   const first = tokens[1]!.text.toLowerCase()
   const modeLater = tokens.slice(2).some((token) => isCronMode(token.text))
   if (modeLater) return null
@@ -115,7 +137,7 @@ function parseSubcommand(line: string, tokens: Token[]): CronParseResult | null 
   return null
 }
 
-function parseArm(line: string, tokens: Token[]): CronParseResult {
+function parseArm(line: string, tokens: Token[]): Outcome {
   if (line[tokens[1]!.start] === '"') return parseQuotedArm(line, tokens)
 
   let modeIndex = -1
@@ -135,7 +157,7 @@ function parseArm(line: string, tokens: Token[]): CronParseResult {
   return finishArm(instruction, mode, scheduleText)
 }
 
-function parseQuotedArm(line: string, tokens: Token[]): CronParseResult {
+function parseQuotedArm(line: string, tokens: Token[]): Outcome {
   const openIndex = tokens[1]!.start
   const closeIndex = line.indexOf('"', openIndex + 1)
   if (closeIndex === -1) {
@@ -167,7 +189,7 @@ function parseQuotedArm(line: string, tokens: Token[]): CronParseResult {
   return finishArm(instruction, mode, scheduleText)
 }
 
-function finishArm(instruction: string, mode: CronMode, scheduleText: string): CronParseResult {
+function finishArm(instruction: string, mode: CronMode, scheduleText: string): Outcome {
   if (instruction === "") {
     return {
       ok: false,
@@ -215,7 +237,7 @@ function finishArm(instruction: string, mode: CronMode, scheduleText: string): C
  * as a schedule, else a parseable schedule suffix with the mode simply
  * omitted (suggests `inline`).
  */
-function missingModeError(line: string, tokens: Token[]): CronParseResult {
+function missingModeError(line: string, tokens: Token[]): Outcome {
   for (let i = tokens.length - 2; i >= 2; i--) {
     const token = tokens[i]!
     const nearest = nearestMode(token.text)

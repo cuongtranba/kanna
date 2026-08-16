@@ -81,19 +81,46 @@ Schedules run on **server-local time**. Per-job timezones are not supported.
 ## Validation catches mistakes before anything arms
 
 A mistyped schedule is never sent to the model as a prompt. Any line starting
-with `/cron` is intercepted, and an invalid one produces an error card naming
-the exact problem — plus a **complete, ready-to-send corrected command** you can
-copy whenever the fix is unambiguous:
+with `/cron` is intercepted, and an invalid one produces an error card showing
+**the line you typed** and naming the exact problem — plus a **complete,
+ready-to-send corrected command** you can copy whenever the fix is unambiguous:
 
 | You typed | Kanna says | It suggests |
 | --- | --- | --- |
 | `/cron check ci spwan @daily` | unknown mode "spwan" | `/cron check ci spawn @daily` |
 | `/cron check ci inline every 5min` | interval unit "min" is not valid — use `m` or `h` | `/cron check ci inline every 5m` |
 | `/cron nightly build spawn 0 3 * *` | cron schedule has 4 fields, expected 5 | `/cron nightly build spawn 0 3 * * *` |
+| `/cron nightly build spawn 0 3` | cron schedule has 2 fields, expected 5 | `/cron nightly build spawn 0 3 * * *` |
 | `/cron check ci inline 0 9 * * 8` | day-of-week field "8" is out of range 0-7 | — (ambiguous, no guess) |
-| `/cron report inline 0 0 30 2 *` | schedule never fires (no matching date exists) | — (refused at arm time) |
 
 Nothing arms until the command is valid.
+
+### When Kanna can't fix it, the agent does
+
+Some mistakes have no mechanical answer. `9am every day` is English where a
+schedule belongs, and when the mode is missing entirely nothing can tell
+whether the job should run in this chat or spawn its own. Rather than leave you
+re-typing, Kanna hands those lines to the agent, which repairs and schedules
+the job — or asks what you meant:
+
+```
+You     /cron check CI inline 9am every day
+
+        ⚠ Invalid /cron command
+          /cron check CI inline 9am every day
+          cron schedule has 3 fields, expected 5
+
+Claude  "9am every day" is `0 9 * * *` in cron. Scheduling that.
+        ✅ Cron armed — cron-a1b2, every day at 09:00, next run tomorrow 09:00
+```
+
+Where your intent is genuinely ambiguous the agent asks first and schedules
+your answer instead of guessing. It steps in **only** where Kanna had no
+suggestion of its own, so every copy-a-fix case above stays instant and costs
+nothing. Set `KANNA_CRON_REPAIR=disabled` to turn it off.
+
+A schedule that parses but can never occur — `/cron report inline 0 0 30 2 *`,
+February 30th — is refused at arm time and goes to the agent the same way.
 
 ## When a run would overlap
 

@@ -177,14 +177,6 @@ function isIntervalToken(raw: string): boolean {
 
 function parseCronFields(tokens: string[]): ScheduleParse {
   if (tokens.length !== 5) {
-    if (tokens.length === 4) {
-      return {
-        ok: false,
-        part: "schedule",
-        message: `cron schedule has 4 fields, expected 5 (minute hour day-of-month month day-of-week)`,
-        correctedSchedule: `${tokens.join(" ")} *`,
-      }
-    }
     if (tokens.length === 6) {
       const withoutSeconds = tokens.slice(1)
       const corrected = parseCronFields(withoutSeconds).ok ? withoutSeconds.join(" ") : undefined
@@ -200,7 +192,7 @@ function parseCronFields(tokens: string[]): ScheduleParse {
       ok: false,
       part: "schedule",
       message: `cron schedule has ${tokens.length} field${tokens.length === 1 ? "" : "s"}, expected 5 (minute hour day-of-month month day-of-week)`,
-      correctedSchedule: bareInterval ? `every ${tokens[0]}` : undefined,
+      correctedSchedule: bareInterval ? `every ${tokens[0]}` : padToFiveFields(tokens),
     }
   }
 
@@ -223,6 +215,18 @@ function parseCronFields(tokens: string[]): ScheduleParse {
       dow: fields[4]!,
     },
   }
+}
+
+/**
+ * A short cron line is usually a truncated one — `0 3` means 03:00 daily with
+ * the trailing wildcards left off. Only offered when the padded form actually
+ * parses, so English like "9am every day" produces no suggestion and falls
+ * through to the model rather than being guessed at.
+ */
+function padToFiveFields(tokens: string[]): string | undefined {
+  if (tokens.length < 2 || tokens.length > 4) return undefined
+  const padded = [...tokens, ...Array<string>(5 - tokens.length).fill("*")]
+  return parseCronFields(padded).ok ? padded.join(" ") : undefined
 }
 
 type FieldParse = { ok: true; field: CronField } | { ok: false; message: string }

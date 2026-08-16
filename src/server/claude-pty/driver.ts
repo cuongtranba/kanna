@@ -115,6 +115,8 @@ export interface StartClaudeSessionPtyArgs {
   delegationContext?: KannaMcpDelegationContext
   /** Backs the `setup_loop` MCP tool. Omit to hide the tool from the model. */
   setupLoop?: (input: LoopSetupInput) => Promise<SetupLoopHandlerResult>
+  /** Backs the `arm_cron` MCP tool; main chats only. */
+  armCron?: (command: string) => Promise<void>
   /** Backs the `stop_loop` MCP tool. Omit to hide the tool from the model. */
   stopLoop?: () => Promise<void>
   /** Evaluated at spawn: when true, add LOOP_BLOCKED tools to --disallowedTools. */
@@ -497,6 +499,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
         subagentOrchestrator: args.subagentOrchestrator,
         delegationContext: args.delegationContext,
         setupLoop: args.setupLoop,
+        armCron: args.armCron,
         stopLoop: args.stopLoop,
         getArmedLoop: args.getArmedLoop,
         boardRegistry: args.boardRegistry,

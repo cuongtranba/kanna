@@ -264,6 +264,12 @@ export interface CronArmedEntry extends TranscriptEntryBase {
 export interface CronCommandErrorEntry extends TranscriptEntryBase {
   kind: "cron_command_error"
   message: string
+  /**
+   * The line that failed. `/cron` starts no turn, so no `user_prompt` records
+   * what the user typed — without this the card names a defect in a line the
+   * reader cannot see. Absent only on entries with no single offending line.
+   */
+  input?: string
   suggestion?: string
 }
 
@@ -352,7 +358,7 @@ export type HydratedTranscriptMessage =
   | ({ kind: "auto_continue_prompt"; scheduleId: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "pending_tool_request"; toolRequestId: string; toolName: string; arguments: Record<string, unknown>; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "cron_armed"; jobId: string; instruction: string; mode: CronMode; scheduleText: string; scheduleHuman: string; nextFireAt: number | null; id: string; messageId?: string; timestamp: string; hidden?: boolean })
-  | ({ kind: "cron_command_error"; message: string; suggestion?: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
+  | ({ kind: "cron_command_error"; message: string; input?: string; suggestion?: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "cron_run"; jobId: string; runId: string; instruction: string; spawnedChatId?: string; firedAt: number; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "cron_run_skipped"; jobId: string; reason: CronSkipReason; missedCount?: number; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "cron_list"; help?: boolean; id: string; messageId?: string; timestamp: string; hidden?: boolean })

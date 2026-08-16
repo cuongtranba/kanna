@@ -61,9 +61,19 @@ export interface CronParseError {
   part: CronParsePart
   message: string
   /**
+   * The `/cron` line that failed, trimmed. `/cron` starts no turn, so nothing
+   * else in the transcript records what the user typed — without this the
+   * error entry names a defect in a line no one can see, and the model has
+   * nothing to repair.
+   */
+  input: string
+  /**
    * A complete, ready-to-send corrected `/cron …` line. Only present when a
    * correction is unambiguous; every suggestion is guaranteed to re-parse
    * cleanly (drift guard in the colocated test).
+   *
+   * Its absence is also the escalation signal: a failure Kanna cannot fix on
+   * its own is the one the model is asked to repair.
    */
   suggestion?: string
 }

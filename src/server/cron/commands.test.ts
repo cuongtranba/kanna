@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import type { TranscriptEntry } from "../../shared/types"
 import type { AutoContinueEvent } from "../auto-continue/events"
 import { parseCronCommand } from "../../shared/cron/parse-command"
-import type { CronParseResult } from "../../shared/cron/types"
+import type { CronParseError, CronParseResult } from "../../shared/cron/types"
 import { disarmCronJobsForChat, runCronCommand, type CronCommandDeps } from "./commands"
 
 const CHAT = "chat-1"
@@ -19,6 +19,7 @@ function makeDeps(opts: { now?: number; jobIds?: string[] } = {}) {
   const schedulerEvents: AutoContinueEvent[] = []
   const stateChanges: string[] = []
   const pushes: number[] = []
+  const offered: CronParseError[] = []
   const jobIds = [...(opts.jobIds ?? [])]
   const deps: CronCommandDeps = {
     store: {
@@ -33,10 +34,16 @@ function makeDeps(opts: { now?: number; jobIds?: string[] } = {}) {
     cronScheduler: { onEvent: (event) => schedulerEvents.push(event) },
     emitStateChange: (chatId) => stateChanges.push(chatId),
     pushCronJobsUpdate: () => pushes.push(1),
+    cronRepair: {
+      offer: (_chatId, error) => {
+        offered.push(error)
+        return Promise.resolve()
+      },
+    },
     now: () => opts.now ?? 1_000_000,
     ...(jobIds.length > 0 ? { newJobId: () => jobIds.shift() ?? "cron-fallback" } : {}),
   }
-  return { deps, entries, events, schedulerEvents, stateChanges, pushes }
+  return { deps, entries, events, schedulerEvents, stateChanges, pushes, offered }
 }
 
 describe("runCronCommand", () => {
@@ -81,6 +88,50 @@ describe("runCronCommand", () => {
     expect(entries[0]).toMatchObject({ kind: "cron_command_error" })
     if (entries[0]!.kind !== "cron_command_error") throw new Error("expected error entry")
     expect(entries[0]!.message).toContain("never fires")
+  })
+
+  test("the error entry keeps the line that failed", async () => {
+    const { deps, entries } = makeDeps()
+    await runCronCommand(deps, CHAT, parsed("/cron check CI inline 9am every day"))
+    expect(entries[0]).toMatchObject({
+      kind: "cron_command_error",
+      input: "/cron check CI inline 9am every day",
+    })
+  })
+})
+
+describe("runCronCommand escalation to the model", () => {
+  test("offers a line Kanna cannot fix", async () => {
+    const { deps, offered } = makeDeps()
+    await runCronCommand(deps, CHAT, parsed("/cron check CI inline 9am every day"))
+    expect(offered).toHaveLength(1)
+    expect(offered[0]?.input).toBe("/cron check CI inline 9am every day")
+  })
+
+  // A parseable schedule with no occurrence is still an invalid setup the user
+  // meant something by, so it escalates on a reconstructed line.
+  test("offers a schedule that parses but never fires", async () => {
+    const { deps, offered } = makeDeps()
+    await runCronCommand(deps, CHAT, parsed("/cron impossible inline 0 0 30 2 *"))
+    expect(offered).toHaveLength(1)
+    expect(offered[0]?.input).toBe("/cron impossible inline 0 0 30 2 *")
+  })
+
+  test("never offers a command that succeeded", async () => {
+    const { deps, offered } = makeDeps({ jobIds: ["cron-abc"] })
+    await runCronCommand(deps, CHAT, parsed("/cron check ci inline every 5m"))
+    await runCronCommand(deps, CHAT, parsed("/cron list"))
+    expect(offered).toEqual([])
+  })
+
+  // The repair module owns the suggestion / part bounds; dispatch just forwards.
+  test("forwards the error verbatim, bounds included", async () => {
+    const { deps, offered } = makeDeps()
+    await runCronCommand(deps, CHAT, parsed("/cron check ci spwan @daily"))
+    expect(offered[0]).toMatchObject({
+      part: "mode",
+      suggestion: "/cron check ci spawn @daily",
+    })
   })
 
   test("help and list append list cards", async () => {

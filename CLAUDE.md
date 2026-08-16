@@ -621,6 +621,51 @@ iff it holds none of `[ ] ( ) { } | "`. Rule 95 (`[/`) longest-match-beats plain
 `Current[/opt/app/current symlink]` dies. Rule 24 (`"`) is present in every
 state, so quoting is the universal escape; a literal `"` is written `#quot;`.
 
+# `/cron` Self-Repair (KANNA_CRON_REPAIR)
+
+`/cron` always intercepts and never starts a turn, so a rejected line used to be
+terminal Kanna state. Chat `39b0d210` is what that cost: three
+`cron_command_error` entries in 34 seconds, no suggestion on any of them, then
+the user gave up. **The line they typed was recorded nowhere** — no
+`user_prompt` is appended on this path — so neither the reader nor the model
+could see what failed. Same two-layer shape as the mermaid gate, with the
+parser as the deterministic layer.
+
+- **`CronParseError.input` is required.** `parseCronCommand` stamps it once on
+  the way out, over an internal `Outcome` type whose error omits it — so a
+  failure path cannot record a defect without the line that caused it, and a
+  newly added one will not compile. The error card renders it.
+- **`validate_cron` / `arm_cron`** (`kanna-mcp.ts`) mirror `validate_mermaid`.
+  Both answer from one `previewCronCommand` (`cron/preview.ts`) — the humanized
+  schedule plus the next 3 real fire times, or the refusal — so the two tools
+  can never disagree about a line, and both run the parser the send pipeline
+  uses. `validate_cron` gates on a chat alone; **`arm_cron` also needs the
+  injected `armCron`, supplied for main chats only** (`depth === 0`, like
+  `setup_loop`) — a subagent's chat is ephemeral and must not leave recurring
+  work behind. `AgentCoordinator.armCron` REFUSES a non-armable line instead of
+  dispatching it; dispatching would card the failure and re-offer it to the
+  model, so a model answering its own repair prompt would loop.
+- **`createCronRepair`** (`cron/repair.ts`) is the escalation, shaped like
+  `createMermaidGuard`. **Its bounds are load-bearing:** it stands down when the
+  parser produced a `suggestion` (the card already offers a free fix — the
+  analog of mermaid standing down on a repairable diagram); it covers
+  arm-shaped `part`s only, never management-subcommand typos; it asks about a
+  given line **once per chat** (32-entry bounded memory), because a model that
+  cannot repair a line must not be asked every time the user retypes it; and it
+  swallows its own failures. Unlike the mermaid guard it also **drains the
+  queue** — `/cron` starts no turn, so nothing else ever would.
+- **One refusal path.** `refuseCronCommand` (`cron/commands.ts`) appends the
+  card and offers the line together, so a new refusal cannot record one without
+  the other. A schedule that parses but never fires (Feb 30) escalates too, on
+  a reconstructed canonical line.
+- **Deterministic coverage widened** so escalation stays rare: `parseCronFields`
+  pads a 2–4 field cron with wildcards (`0 3` → `0 3 * * *`), but only when the
+  padded form actually parses — English like `9am every day` yields nothing and
+  goes to the model.
+
+`KANNA_CRON_REPAIR=disabled` turns the escalation off; the tools stay. See
+`adr-20260816-cron-llm-repair`.
+
 # Kanna-MCP Built-in Shims
 
 When `KANNA_MCP_TOOL_CALLBACKS=1`, kanna-mcp registers 8 additional tools

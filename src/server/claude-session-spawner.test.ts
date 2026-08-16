@@ -136,6 +136,7 @@ function makeDeps(overrides: Partial<SpawnClaudeTurnDeps> = {}): SpawnClaudeTurn
     buildOAuthBearers: async () => new Map(),
     setupLoop: async () => ({ ok: false as const, errors: [] }),
     stopLoop: async () => {},
+    armCron: async () => {},
     resolveChatPolicy: () => POLICY_DEFAULT,
     runClaudeSession: () => {},
     emitStateChange: () => {},
