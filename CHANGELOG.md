@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.21.0](https://github.com/cuongtranba/kanna/compare/v1.20.0...v1.21.0) (2026-08-16)
+
+
+### Features
+
+* **cron:** sub-minute schedules, with skips coalesced into one counted row ([#668](https://github.com/cuongtranba/kanna/issues/668)) ([40576da](https://github.com/cuongtranba/kanna/commit/40576da7e1d0242fba2c70eadd81ab36d7d304c3))
+
 ## [1.20.0](https://github.com/cuongtranba/kanna/compare/v1.19.0...v1.20.0) (2026-08-16)
 
 
