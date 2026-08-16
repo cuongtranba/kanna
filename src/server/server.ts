@@ -685,6 +685,9 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   pushFollowedSessions = () => {
     router.pushFollowedSessions()
   }
+  agent.onCronJobsChange = () => {
+    router.pushCronJobs()
+  }
   scheduleManager.rehydrate(
     store.listAutoContinueChats().flatMap((chatId) => store.getAutoContinueEvents(chatId))
   )

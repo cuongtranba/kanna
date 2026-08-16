@@ -4,7 +4,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, type CSSProperties, type
 function cssVars(vars: Record<`--${string}`, string>): CSSProperties {
   return Object.assign({} satisfies CSSProperties, vars)
 }
-import { Download, Flower, FoldVertical, PanelLeft, UnfoldVertical, X, Menu, Plus, Settings, Workflow } from "lucide-react"
+import { CalendarClock, Download, Flower, FoldVertical, PanelLeft, UnfoldVertical, X, Menu, Plus, Settings, Workflow } from "lucide-react"
 import { useLocation, useNavigate } from "react-router-dom"
 import { APP_NAME } from "../../shared/branding"
 import { Button } from "../components/ui/button"
@@ -533,7 +533,8 @@ function KannaSidebarImpl({
   const isLocalProjectsActive = location.pathname === "/"
   const isSettingsActive = location.pathname.startsWith("/settings")
   const isWorkflowsActive = location.pathname.startsWith("/workflows")
-  const isUtilityPageActive = isLocalProjectsActive || isSettingsActive || isWorkflowsActive
+  const isCronJobsActive = location.pathname.startsWith("/cron")
+  const isUtilityPageActive = isLocalProjectsActive || isSettingsActive || isWorkflowsActive || isCronJobsActive
   const isConnecting = connectionStatus === "connecting"
   let statusLabel: string
   if (isConnecting) {
@@ -853,6 +854,20 @@ function KannaSidebarImpl({
           >
             <Workflow className="h-4 w-4 shrink-0 text-muted-foreground" />
             <span className="text-sm flex-1">Workflows</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              navigate("/cron")
+              onClose()
+            }}
+            className={cn(
+              "w-full flex items-center gap-2 px-3 py-2.5 text-left transition-colors duration-150 rounded-none",
+              isCronJobsActive ? "bg-muted" : "hover:bg-muted/50"
+            )}
+          >
+            <CalendarClock className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <span className="text-sm flex-1">Cron jobs</span>
           </button>
           <button
             type="button"

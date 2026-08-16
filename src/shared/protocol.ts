@@ -79,6 +79,7 @@ export type SubscriptionTopic =
    */
   | { type: "board"; boardId: string; pageSize?: number }
   | { type: "followed-sessions" }
+  | { type: "cron-jobs" }
 
 export interface TerminalSnapshot {
   terminalId: string
@@ -438,6 +439,7 @@ export type ServerSnapshot =
   | { type: "boards"; data: BoardsSnapshot }
   | { type: "board"; data: BoardSnapshot }
   | { type: "followed-sessions"; data: FollowedSessionsSnapshot }
+  | { type: "cron-jobs"; data: import("./cron/types").CronJobsGlobalSnapshot }
 
 export interface BoardsSnapshot {
   ownerKind: BoardOwnerKind

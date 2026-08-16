@@ -577,6 +577,7 @@ export function createWsRouter({
     scheduleChatStateBroadcast: (chatId: string) => broadcast.scheduleChatStateBroadcast(chatId),
     pruneStaleEmptyChats: () => broadcast.maybePruneStaleEmptyChats(),
     pushFollowedSessions: () => broadcast.pushFollowedSessions(),
+    pushCronJobs: () => broadcast.pushCronJobs(),
     async handleMessage(ws: ServerWebSocket<ClientState>, raw: string | Buffer | ArrayBuffer | Uint8Array) {
       let parsed: AnyValue
       try {

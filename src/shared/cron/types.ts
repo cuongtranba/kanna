@@ -126,6 +126,20 @@ export interface CronJobSnapshot {
 
 export const MAX_RECENT_CRON_RUNS = 20
 
+/** One row of the global cron management page — a job joined to its chat + project. */
+export interface CronJobsGlobalRow {
+  projectId: string
+  /** The project's local path; the UI renders its basename. */
+  projectPath: string
+  chatId: string
+  chatTitle: string
+  job: CronJobSnapshot
+}
+
+export interface CronJobsGlobalSnapshot {
+  rows: readonly CronJobsGlobalRow[]
+}
+
 /**
  * Rides the queued message and the ActiveTurn of a cron-fired run, so the
  * store's turn-terminal observer can attribute the outcome to its job.
