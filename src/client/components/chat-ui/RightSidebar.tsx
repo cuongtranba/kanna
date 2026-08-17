@@ -39,6 +39,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Textarea } from "../ui/textarea"
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip"
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "../ui/dialog"
+import {
+  canIgnoreDiffFile,
+  canIgnoreDiffFolder,
+  deriveBranchListSnapshot,
+  deriveRepositorySnapshot,
+  formatFetchTooltip,
+  formatRelativeTime,
+  getDiffPreviewAttachment,
+  getMergeBranchGroups,
+  shouldLoadDiffPatchNow,
+} from "./repositoryWorkspace"
+
+export { canIgnoreDiffFile, canIgnoreDiffFolder, shouldLoadDiffPatchNow }
 
 type DiffRenderMode = "unified" | "split"
 type DiffFile = ChatDiffSnapshot["files"][number]
@@ -53,40 +66,6 @@ function isRepoVisibility(v: string): v is RepoVisibility { return REPO_VISIBILI
 function isEntryView(v: string): v is EntryView { return ENTRY_VIEW_VALUES.has(v) }
 const EMPTY_CHECKED_PATHS: Record<string, boolean> = {}
 
-export function shouldLoadDiffPatchNow(args: {
-  isCollapsed: boolean
-  hasPreviewAttachment: boolean
-  patch?: string
-  patchError?: string
-  isPatchLoading: boolean
-}) {
-  return !args.isCollapsed
-    && !args.hasPreviewAttachment
-    && args.patch === undefined
-    && args.patchError === undefined
-    && !args.isPatchLoading
-}
-
-function getDiffPreviewAttachment(projectId: string | null, file: DiffFile): ChatAttachment | null {
-  if (!projectId || !file.mimeType || typeof file.size !== "number" || file.changeType === "deleted") {
-    return null
-  }
-
-  if (!file.mimeType.startsWith("image/") && file.mimeType !== "application/pdf") {
-    return null
-  }
-
-  return {
-    id: `diff:${file.path}`,
-    kind: file.mimeType.startsWith("image/") ? "image" : "file",
-    displayName: file.path.split("/").pop() ?? file.path,
-    absolutePath: file.path,
-    relativePath: file.path,
-    contentUrl: `/api/projects/${projectId}/files/${encodeURIComponent(file.path)}/content`,
-    mimeType: file.mimeType,
-    size: file.size,
-  }
-}
 
 export interface RightSidebarPorts {
   dom?: DomPort
@@ -127,16 +106,6 @@ interface RightSidebarProps extends DiffFileActions {
   ports?: RightSidebarPorts
 }
 
-export function canIgnoreDiffFile(file: DiffFile) {
-  return file.isUntracked
-}
-
-export function canIgnoreDiffFolder(file: DiffFile) {
-  if (!canIgnoreDiffFile(file)) {
-    return false
-  }
-  return file.path.includes("/")
-}
 
 function IconButton(props: {
   label: string
@@ -208,47 +177,6 @@ function StageCheckbox({
   )
 }
 
-function formatRelativeTime(isoTimestamp: string) {
-  const timestamp = Date.parse(isoTimestamp)
-  if (!Number.isFinite(timestamp)) {
-    return ""
-  }
-
-  const diffMs = Date.now() - timestamp
-  const minute = 60_000
-  const hour = 60 * minute
-  const day = 24 * hour
-  const week = 7 * day
-  const month = 30 * day
-  const year = 365 * day
-
-  if (diffMs < minute) {
-    return "just now"
-  }
-  if (diffMs < hour) {
-    return `${Math.round(diffMs / minute)}m ago`
-  }
-  if (diffMs < day) {
-    return `${Math.round(diffMs / hour)}hr ago`
-  }
-  if (diffMs < week) {
-    return `${Math.round(diffMs / day)}d ago`
-  }
-  if (diffMs < month) {
-    return `${Math.round(diffMs / week)}wk ago`
-  }
-  if (diffMs < year) {
-    return `${Math.round(diffMs / month)}mo ago`
-  }
-  return `${Math.round(diffMs / year)}yr ago`
-}
-
-function formatFetchTooltip(isoTimestamp?: string) {
-  if (!isoTimestamp) {
-    return "No local fetch recorded"
-  }
-  return `Last fetched ${formatRelativeTime(isoTimestamp)}`
-}
 
 function CommitHistoryRow({ entry, isPendingPush = false, ports }: { entry: ChatBranchHistoryEntry; isPendingPush?: boolean; ports?: RightSidebarPorts }) {
   const dom = ports?.dom ?? domAdapter
@@ -312,66 +240,6 @@ function CommitHistoryRow({ entry, isPendingPush = false, ports }: { entry: Chat
   )
 }
 
-function getBranchCandidatePriority(entry: ChatBranchListEntry) {
-  switch (entry.kind) {
-    case "local":
-      return 0
-    case "pull_request":
-      return 1
-    case "remote":
-    default:
-      return 2
-  }
-}
-
-function dedupeBranchEntries(entries: ChatBranchListEntry[]) {
-  const selectedByName = new Map<string, ChatBranchListEntry>()
-  for (const entry of entries) {
-    const existing = selectedByName.get(entry.name)
-    if (!existing || getBranchCandidatePriority(entry) < getBranchCandidatePriority(existing)) {
-      selectedByName.set(entry.name, entry)
-    }
-  }
-  return selectedByName
-}
-
-function getMergeBranchGroups(branchList: ChatBranchListResult, currentBranchName?: string) {
-  const uniqueEntriesByName = dedupeBranchEntries([
-    ...branchList.local,
-    ...branchList.pullRequests,
-    ...branchList.remote,
-  ])
-  if (currentBranchName) {
-    uniqueEntriesByName.delete(currentBranchName)
-  }
-
-  const usedNames = new Set<string>()
-  const defaultBranch = branchList.defaultBranchName
-    ? uniqueEntriesByName.get(branchList.defaultBranchName)
-    : undefined
-
-  if (defaultBranch) {
-    usedNames.add(defaultBranch.name)
-  }
-
-  const recent = branchList.recent
-    .map((entry) => uniqueEntriesByName.get(entry.name) ?? entry)
-    .filter((entry): entry is ChatBranchListEntry => Boolean(entry) && !usedNames.has(entry.name))
-
-  for (const entry of recent) {
-    usedNames.add(entry.name)
-  }
-
-  const other = [...uniqueEntriesByName.values()]
-    .filter((entry) => !usedNames.has(entry.name))
-    .sort((left, right) => left.displayName.localeCompare(right.displayName))
-
-  return {
-    defaultBranch,
-    recent,
-    other,
-  }
-}
 
 function GitHubPublishModal({
   open,
@@ -1043,25 +911,8 @@ function BranchSwitcher({
       })
   }, [onListBranches, open, setBranchList, setError, setIsLoading])
 
-  const normalizedQuery = query.trim().toLowerCase()
-  const filterEntries = (entries: ChatBranchListEntry[]) => entries.filter((entry) => {
-    if (!normalizedQuery) return true
-    return [
-      entry.displayName,
-      entry.name,
-      entry.description,
-      entry.prTitle,
-      entry.headLabel,
-    ].some((value) => value?.toLowerCase().includes(normalizedQuery))
-  })
-
-  const currentName = branchList?.currentBranchName ?? currentBranchName
-  const pullRequestHeadNames = new Set((branchList?.pullRequests ?? []).map((entry) => entry.headRefName ?? entry.name))
-  const recent = filterEntries(branchList?.recent ?? []).filter((entry) => entry.name !== currentName)
-  const local = filterEntries(branchList?.local ?? []).filter((entry) => entry.name !== currentName)
-  const remote = filterEntries(branchList?.remote ?? []).filter((entry) => entry.name !== currentName && !pullRequestHeadNames.has(entry.name))
-  const pullRequests = filterEntries(branchList?.pullRequests ?? []).filter((entry) => entry.name !== currentName)
-  const totalPullRequestCount = branchList?.pullRequests.length ?? 0
+  const { currentName, recent, local, remote, pullRequests, totalPullRequestCount } =
+    deriveBranchListSnapshot(branchList ?? null, currentBranchName, query)
 
   async function handleCheckout(entry: ChatBranchListEntry) {
     setIsMutating(true)
@@ -1709,31 +1560,17 @@ function RightSidebarImpl({
   const isCommitting = commitModeInFlight !== null
   const isBusy = isGenerating || isCommitting
   const branchHistory = diffs.branchHistory?.entries ?? []
-  const behindCount = diffs.behindCount ?? 0
-  const aheadCount = diffs.aheadCount ?? 0
-  const isPublishedBranch = diffs.hasUpstream === true
-  const isPublishableBranch = diffs.hasUpstream === false && Boolean(diffs.branchName)
-  const hasRemoteOrigin = diffs.hasOriginRemote === true
-  const encodedBranchName = diffs.branchName
-    ? diffs.branchName.split("/").map((segment) => encodeURIComponent(segment)).join("/")
-    : null
-  let syncAction: "fetch" | "pull" | "publish"
-  if (isPublishableBranch) {
-    syncAction = "publish"
-  } else if (behindCount > 0) {
-    syncAction = "pull"
-  } else {
-    syncAction = "fetch"
-  }
-  const compareUrl = diffs.originRepoSlug && encodedBranchName
-    ? `https://github.com/${diffs.originRepoSlug}/compare/${encodedBranchName}?expand=1`
-    : null
-  const canOpenPullRequest = Boolean(
-    isPublishedBranch
-    && compareUrl
-    && diffs.branchName
-    && diffs.branchName !== diffs.defaultBranchName
-  )
+  const {
+    syncAction,
+    compareUrl,
+    canOpenPullRequest,
+    primaryCommitMode,
+    isPublishedBranch,
+    hasRemoteOrigin,
+    behindCount,
+    aheadCount,
+    resolvedBranchName,
+  } = deriveRepositorySnapshot(diffs)
   const canGenerate = diffs.status === "ready"
     && selectedCount > 0
     && !isBusy
@@ -1741,8 +1578,6 @@ function RightSidebarImpl({
     && selectedCount > 0
     && hasSummary
     && !isBusy
-  const primaryCommitMode: DiffCommitMode = hasRemoteOrigin ? "commit_and_push" : "commit_only"
-  const resolvedBranchName = diffs.branchName ?? "current branch"
 
   async function handleCommit(mode: DiffCommitMode) {
     if (!canCommit) return
