@@ -388,7 +388,7 @@ export class AgentCoordinator {
     this.reportBackgroundError = report
   }
 
-  async dispose(gracefulTimeoutMs = 10_000): Promise<void> {
+  async dispose(gracefulTimeoutMs = 20_000): Promise<void> {
     if (this.claudeSessionSweepTimer) clearInterval(this.claudeSessionSweepTimer)
     const closedPromises = [...this.claudeSessions.entries()].map(([chatId, session]) => {
       const closed = session.session.closed
