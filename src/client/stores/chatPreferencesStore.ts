@@ -491,6 +491,7 @@ interface ChatPreferencesState {
   providerDefaults: ChatProviderPreferences
   chatStates: Record<string, ComposerState>
   legacyComposerState: ComposerState | null
+  pendingProviderSyncChatIds: Set<string>
   setDefaultProvider: (provider: DefaultProviderPreference) => void
   applyServerDefaults: (
     defaultProvider: DefaultProviderPreference,
@@ -552,6 +553,7 @@ export const useChatPreferencesStore = create<ChatPreferencesState>()(
     defaultProvider: "last_used",
     providerDefaults: createDefaultProviderDefaults(),
     chatStates: {},
+    pendingProviderSyncChatIds: new Set<string>(),
     legacyComposerState: {
       provider: "claude",
       model: "claude-opus-4-7",
@@ -649,7 +651,21 @@ export const useChatPreferencesStore = create<ChatPreferencesState>()(
       getComposerState: (chatId) => cloneComposerState(getStoredComposerState(get(), chatId)),
       initializeComposerForChat: (chatId, options) =>
         set((state) => {
-          if (state.chatStates[chatId]) {
+          const existingState = state.chatStates[chatId]
+          const providerHint = options?.providerHint
+
+          if (existingState) {
+            if (providerHint && state.pendingProviderSyncChatIds.has(chatId)) {
+              const newPending = new Set(state.pendingProviderSyncChatIds)
+              newPending.delete(chatId)
+              const syncedState = composerFromProviderDefaults(providerHint, state.providerDefaults)
+              const updated = { ...syncedState, planMode: existingState.planMode }
+              logChatPreferences("initializeComposerForChat sync", { chatId, provider: providerHint })
+              return {
+                chatStates: { ...state.chatStates, [chatId]: updated },
+                pendingProviderSyncChatIds: newPending,
+              }
+            }
             return state
           }
 
@@ -658,16 +674,18 @@ export const useChatPreferencesStore = create<ChatPreferencesState>()(
             providerDefaults: state.providerDefaults,
             sourceState: options?.sourceState,
             legacyComposerState: state.legacyComposerState,
-            providerHint: options?.providerHint,
+            providerHint,
           })
 
           logChatPreferences("initializeComposerForChat", { chatId, composerState })
 
+          const newPending = providerHint
+            ? state.pendingProviderSyncChatIds
+            : new Set([...state.pendingProviderSyncChatIds, chatId])
+
           return {
-            chatStates: {
-              ...state.chatStates,
-              [chatId]: composerState,
-            },
+            chatStates: { ...state.chatStates, [chatId]: composerState },
+            pendingProviderSyncChatIds: newPending,
           }
         }),
       setComposerState: (chatId, composerState) =>
@@ -768,12 +786,17 @@ export const useChatPreferencesStore = create<ChatPreferencesState>()(
           planMode,
         }))),
       resetChatComposerFromProvider: (chatId, provider) =>
-        set((state) => ({
-          chatStates: {
-            ...state.chatStates,
-            [chatId]: composerFromProviderDefaults(provider, state.providerDefaults),
-          },
-        })),
+        set((state) => {
+          const newPending = new Set(state.pendingProviderSyncChatIds)
+          newPending.delete(chatId)
+          return {
+            chatStates: {
+              ...state.chatStates,
+              [chatId]: composerFromProviderDefaults(provider, state.providerDefaults),
+            },
+            pendingProviderSyncChatIds: newPending,
+          }
+        }),
     }),
     {
       name: "chat-preferences-state",

@@ -546,3 +546,84 @@ describe("chat preference store", () => {
     })
   })
 })
+
+describe("initializeComposerForChat — provider sync (issue #65)", () => {
+  test("initializing without a providerHint syncs provider when runtime resolves later", () => {
+    const store = useChatPreferencesStore.getState()
+
+    store.initializeComposerForChat("chat-codex", { providerHint: null })
+    expect(store.getComposerState("chat-codex").provider).toBe("claude")
+
+    store.initializeComposerForChat("chat-codex", { providerHint: "codex" })
+    expect(store.getComposerState("chat-codex").provider).toBe("codex")
+  })
+
+  test("initializing with a providerHint from the start uses the correct provider and does not mark for sync", () => {
+    const store = useChatPreferencesStore.getState()
+
+    store.initializeComposerForChat("chat-codex", { providerHint: "codex" })
+    expect(store.getComposerState("chat-codex").provider).toBe("codex")
+
+    store.initializeComposerForChat("chat-codex", { providerHint: "claude" })
+    expect(store.getComposerState("chat-codex").provider).toBe("codex")
+  })
+
+  test("planMode is preserved during provider sync", () => {
+    useChatPreferencesStore.setState({
+      ...INITIAL_STATE,
+      providerDefaults: {
+        ...INITIAL_STATE.providerDefaults,
+        codex: { ...INITIAL_STATE.providerDefaults.codex, planMode: false },
+      },
+    })
+    const store = useChatPreferencesStore.getState()
+
+    store.initializeComposerForChat("chat-x", { providerHint: null })
+    store.setChatComposerPlanMode("chat-x", true)
+
+    store.initializeComposerForChat("chat-x", { providerHint: "codex" })
+
+    const state = store.getComposerState("chat-x")
+    expect(state.provider).toBe("codex")
+    expect(state.planMode).toBe(true)
+  })
+
+  test("explicit provider change via resetChatComposerFromProvider prevents later sync override", () => {
+    const store = useChatPreferencesStore.getState()
+
+    store.initializeComposerForChat("chat-x", { providerHint: null })
+    expect(store.getComposerState("chat-x").provider).toBe("claude")
+
+    store.resetChatComposerFromProvider("chat-x", "codex")
+    expect(store.getComposerState("chat-x").provider).toBe("codex")
+
+    store.resetChatComposerFromProvider("chat-x", "claude")
+    expect(store.getComposerState("chat-x").provider).toBe("claude")
+
+    store.initializeComposerForChat("chat-x", { providerHint: "codex" })
+    expect(store.getComposerState("chat-x").provider).toBe("claude")
+  })
+
+  test("sync does not fire for chats initialized with an explicit providerHint even if called again later", () => {
+    const store = useChatPreferencesStore.getState()
+
+    store.initializeComposerForChat("chat-claude", { providerHint: "claude" })
+    store.initializeComposerForChat("chat-claude", { providerHint: "codex" })
+    expect(store.getComposerState("chat-claude").provider).toBe("claude")
+  })
+
+  test("sync is independent per chat — syncing one does not affect another", () => {
+    const store = useChatPreferencesStore.getState()
+
+    store.initializeComposerForChat("chat-a", { providerHint: null })
+    store.initializeComposerForChat("chat-b", { providerHint: null })
+
+    store.initializeComposerForChat("chat-a", { providerHint: "codex" })
+
+    expect(store.getComposerState("chat-a").provider).toBe("codex")
+    expect(store.getComposerState("chat-b").provider).toBe("claude")
+
+    store.initializeComposerForChat("chat-b", { providerHint: "codex" })
+    expect(store.getComposerState("chat-b").provider).toBe("codex")
+  })
+})
