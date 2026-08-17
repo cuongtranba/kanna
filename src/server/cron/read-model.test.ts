@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { AUTO_CONTINUE_EVENT_VERSION, type AutoContinueEvent } from "../auto-continue/events"
-import { deriveCronJobs, hasActiveRun, hasUnpausedCronJob } from "./read-model"
+import { deriveCronJobs, findRunningCronRuns, hasActiveRun, hasUnpausedCronJob } from "./read-model"
 import { parseSchedule } from "../../shared/cron/parse-schedule"
 import { MAX_RECENT_CRON_RUNS, type CronSchedule } from "../../shared/cron/types"
 
@@ -216,6 +216,20 @@ describe("deriveCronJobs", () => {
     ).toBe(true)
   })
 
+  test("cron_run_outcome is first-terminal-wins: a second outcome for the same runId is ignored", () => {
+    const jobs = deriveCronJobs(
+      [
+        armed("j1", 1000),
+        runStarted("j1", "r1", 2000),
+        runOutcome("j1", "r1", 2500, false, "orphaned"),
+        runOutcome("j1", "r1", 3000, true),
+      ],
+      CHAT,
+      4000,
+    )
+    expect(jobs[0]!.lastRun).toMatchObject({ runId: "r1", status: "failed", errorCode: "orphaned" })
+  })
+
   test("loop and provider-failure events do not disturb cron state", () => {
     const jobs = deriveCronJobs(
       [
@@ -241,5 +255,75 @@ describe("deriveCronJobs", () => {
       2000,
     )
     expect(jobs).toHaveLength(1)
+  })
+})
+
+describe("findRunningCronRuns", () => {
+  test("returns an empty array for no events", () => {
+    expect(findRunningCronRuns([], CHAT)).toEqual([])
+  })
+
+  test("returns nothing when all runs have outcomes", () => {
+    const runs = findRunningCronRuns(
+      [armed("j1", 1000), runStarted("j1", "r1", 2000), runOutcome("j1", "r1", 2500, true)],
+      CHAT,
+    )
+    expect(runs).toEqual([])
+  })
+
+  test("returns a run that has no outcome", () => {
+    const runs = findRunningCronRuns([armed("j1", 1000), runStarted("j1", "r1", 2000)], CHAT)
+    expect(runs).toEqual([{ jobId: "j1", runId: "r1" }])
+  })
+
+  test("includes spawnedChatId when present", () => {
+    const events: AutoContinueEvent[] = [
+      armed("j1", 1000),
+      runStarted("j1", "r1", 2000, "spawned-chat"),
+    ]
+    const runs = findRunningCronRuns(events, CHAT)
+    expect(runs).toEqual([{ jobId: "j1", runId: "r1", spawnedChatId: "spawned-chat" }])
+  })
+
+  test("finds a running run buried under more than MAX_RECENT_CRON_RUNS skip records", () => {
+    const events: AutoContinueEvent[] = [armed("j1", 1000), runStarted("j1", "r1", 2000)]
+    for (let i = 0; i < MAX_RECENT_CRON_RUNS + 5; i++) {
+      events.push({
+        v: AUTO_CONTINUE_EVENT_VERSION,
+        kind: "cron_run_skipped",
+        chatId: CHAT,
+        scheduleId: "j1",
+        timestamp: 3000 + i,
+        reason: "previous_run_active",
+      })
+    }
+    const runs = findRunningCronRuns(events, CHAT)
+    expect(runs).toEqual([{ jobId: "j1", runId: "r1" }])
+  })
+
+  test("re-arm clears the previous run for that job", () => {
+    const runs = findRunningCronRuns(
+      [
+        armed("j1", 1000),
+        runStarted("j1", "r1", 2000),
+        armed("j1", 5000, { instruction: "new" }),
+      ],
+      CHAT,
+    )
+    expect(runs).toEqual([])
+  })
+
+  test("disarm clears the run for that job", () => {
+    const runs = findRunningCronRuns(
+      [armed("j1", 1000), runStarted("j1", "r1", 2000), event("cron_disarmed", "j1", 3000)],
+      CHAT,
+    )
+    expect(runs).toEqual([])
+  })
+
+  test("ignores events for other chats", () => {
+    const foreign = { ...armed("j1", 1000), chatId: "other" }
+    const foreignRun = { ...runStarted("j1", "r1", 2000), chatId: "other" }
+    expect(findRunningCronRuns([foreign, foreignRun], CHAT)).toEqual([])
   })
 })

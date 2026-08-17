@@ -1,6 +1,6 @@
 ---
 id: c3-233
-c3-seal: 74102b88ad8bc08b447e9db4033d7f0387c3a71d597380781335e31ed957100d
+c3-seal: 0d000a34e7a8cebcf7590d59b7052274918ef753bf662cf437945dc7017f6368
 title: cron-scheduler
 type: component
 category: feature
@@ -100,11 +100,13 @@ scheduler (c3-227), UI rendering (c3-120).
 
 | Risk | Trigger | Detection | Required Verification |
 | --- | --- | --- | --- |
-| Missed outcome wedges the overlap guard into skipping forever | A turn finalize path that bypasses the onTurnTerminal observer | fireCronJob's orphan self-heal settles a running run whose chat is idle | bun test src/server/cron/fire.test.ts |
+| Missed outcome wedges the overlap guard into skipping forever | A turn finalize path that bypasses the onTurnTerminal observer | fireCronJob's orphan self-heal settles a running run whose chat is idle; reconcileCronRunsAtBoot checks getQueuedMessages before emitting orphaned and uses findRunningCronRuns (unbounded scan) instead of the display-capped recentRuns | bun test src/server/cron/fire.test.ts |
 | Boot fires a storm of missed runs | Rehydrate replaying past fires instead of skipping | Scheduler rehydrate test asserts skip + future arm | bun test src/server/cron/scheduler.test.ts |
 | Occurrence semantics drift from the engine | node-cron upgrade changing day-matching or strictly-after behavior | Behavioral next-fire table pins vixie OR, leap years, impossible-date null | bun test src/server/cron/next-fire.test.ts |
 | A skip streak outlives the job it belongs to, or is never reported | A fire path that starts a run without flushing, or a lifecycle event that does not forget the streak | fire.test.ts asserts the tail lands before the run it waited on, and that a pause drops the folded count | bun test src/server/cron/fire.test.ts src/server/cron/skip-coalescer.test.ts |
 | In-flight cron event lost when log is truncated at shutdown | A new write path in fire.ts or server.ts that bypasses flush() before snapshotAndTruncateLogs(), or a cancel path that drops the drainCronOutcomes() await | scheduler.test.ts shutdown drain test asserts in-flight fire completes before shutdown returns; EventStore.flush() call in server.ts shutdown is the choke point | bun test src/server/cron/scheduler.test.ts |
+| Boot reconcile double-settles a queued run | reconcileCronRunsAtBoot orphans a run whose tagged message survived in the durable queue; recoverQueuedMessages then re-drains it and emits a second cron_run_outcome for the same runId | reconcileCronRunsAtBoot checks getQueuedMessages before emitting orphaned — a run with a surviving queued message is skipped | bun test src/server/cron/fire.test.ts |
+| cron_run_outcome corrupt row from double-settle | two outcome events for the same runId; errorCode set by the orphaned event is never cleared when the success event lands | deriveCronJobs cron_run_outcome handler is first-terminal-wins — only settles a run still in running status, so a second outcome is ignored | bun test src/server/cron/read-model.test.ts |
 
 ## Derived Materials
 

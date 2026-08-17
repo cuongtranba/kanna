@@ -26,7 +26,7 @@ import type { ChatAttachment } from "../../shared/types"
 import type { CronJobSnapshot, CronRunSnapshot, CronRunTag } from "../../shared/cron/types"
 import type { SendMessageOptions } from "../claude-steer-log"
 import { AUTO_CONTINUE_EVENT_VERSION } from "../auto-continue/events"
-import { deriveCronJobs, hasActiveRun } from "./read-model"
+import { deriveCronJobs, findRunningCronRuns, hasActiveRun } from "./read-model"
 import { emitCronEvent, appendCronEntry, type CronCommandDeps } from "./commands"
 import type { CoalescedSkipReason, CronSkipCoalescerPort } from "./skip-coalescer"
 
@@ -159,11 +159,18 @@ export async function recordCronTurnOutcome(
 /**
  * Boot-time reconciliation, called right after `CronScheduler.rehydrate`:
  * (a) one visible `server_offline` skip per job that missed fires while the
- * server was down; (b) any run still "running" is orphaned — no turn
- * survives a restart — and settles as failed.
+ * server was down; (b) any run still "running" without a surviving queued
+ * message is orphaned and settles as failed — runs whose tagged message is
+ * still in the durable queue are left for `recoverQueuedMessages`.
+ *
+ * The orphan scan uses `findRunningCronRuns` (unbounded event walk) instead
+ * of the display-capped `job.recentRuns` so a running run buried under many
+ * skip records is never silently missed.
  */
 export async function reconcileCronRunsAtBoot(
-  deps: CronCommandDeps,
+  deps: CronCommandDeps & {
+    getQueuedMessages: (chatId: string) => ReadonlyArray<{ cronRun?: { runId: string } }>
+  },
   missed: ReadonlyArray<{ chatId: string; jobId: string; missedCount: number }>,
   chatIds: readonly string[],
 ): Promise<void> {
@@ -187,20 +194,20 @@ export async function reconcileCronRunsAtBoot(
 
   for (const chatId of chatIds) {
     const now = deps.now?.() ?? Date.now()
-    for (const job of deriveCronJobs(deps.store.getAutoContinueEvents(chatId), chatId, now)) {
-      for (const run of job.recentRuns) {
-        if (run.status !== "running") continue
-        await emitCronEvent(deps, {
-          v: AUTO_CONTINUE_EVENT_VERSION,
-          kind: "cron_run_outcome",
-          chatId,
-          scheduleId: job.jobId,
-          timestamp: now,
-          runId: run.runId,
-          ok: false,
-          errorCode: "orphaned",
-        })
-      }
+    for (const run of findRunningCronRuns(deps.store.getAutoContinueEvents(chatId), chatId)) {
+      const runChatId = run.spawnedChatId ?? chatId
+      const isQueued = deps.getQueuedMessages(runChatId).some((msg) => msg.cronRun?.runId === run.runId)
+      if (isQueued) continue
+      await emitCronEvent(deps, {
+        v: AUTO_CONTINUE_EVENT_VERSION,
+        kind: "cron_run_outcome",
+        chatId,
+        scheduleId: run.jobId,
+        timestamp: now,
+        runId: run.runId,
+        ok: false,
+        errorCode: "orphaned",
+      })
     }
   }
 }

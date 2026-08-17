@@ -1022,7 +1022,14 @@ export class AgentCoordinator {
     missed: ReadonlyArray<{ chatId: string; jobId: string; missedCount: number }>,
     chatIds: readonly string[],
   ): Promise<void> {
-    return reconcileCronRunsAtBootFn(this.buildCronCommandDeps(), missed, chatIds)
+    return reconcileCronRunsAtBootFn(
+      {
+        ...this.buildCronCommandDeps(),
+        getQueuedMessages: (chatId) => this.store.getQueuedMessages(chatId),
+      },
+      missed,
+      chatIds,
+    )
   }
 
   /**
