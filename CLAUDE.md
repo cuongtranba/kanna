@@ -489,6 +489,12 @@ the same rotation/retry path the SDK driver uses on thrown stream errors.
 - `KANNA_PTY_FOLLOWUP_READY_MS` — hard cap on the follow-up-turn TUI-ready
   gate in `sendPrompt` (default = `KANNA_PTY_TUI_BOOT_MS` / 3000). On timeout
   the driver warns and pastes anyway.
+- `KANNA_PTY_SESSION_END_GRACE_MS=5000` — grace period (ms) between `/exit`
+  and SIGTERM during session close (default `5000`). The SessionEnd hook fires
+  in this window; increase if your SessionEnd hook takes longer. Sessions whose
+  Claude process exits before the deadline skip SIGTERM entirely. Supervisord
+  users should set `stopwaitsecs` ≥ this value + 10 so Kanna can shut down
+  gracefully without being SIGKILL'd by supervisord.
 - `CLAUDE_CODE_OAUTH_TOKEN` — set by driver from pool, NOT a user env var.
 - `KANNA_PTY_CHANNEL_DELIVERY=enabled|disabled` — for one-shot (subagent) PTY
   spawns, deliver the prompt via a `notifications/claude/channel` push instead

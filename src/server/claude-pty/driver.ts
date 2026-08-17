@@ -744,6 +744,10 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
   const tuiReadyQuietRaw = (args.env ?? process.env).KANNA_PTY_TUI_READY_QUIET_MS
   const tuiReadyQuietMs = tuiReadyQuietRaw !== undefined ? Number(tuiReadyQuietRaw) : undefined
   const trustDismiss = (args.env ?? process.env).KANNA_PTY_TRUST_DISMISS ?? "enabled"
+  // Grace period (ms) between /exit and SIGTERM — allows the SessionEnd hook to
+  // complete before the process is forcibly terminated. Increase via
+  // KANNA_PTY_SESSION_END_GRACE_MS when hooks take longer than the default.
+  const sessionEndGraceMs = Number((args.env ?? process.env).KANNA_PTY_SESSION_END_GRACE_MS ?? 5_000)
   if (channelDeliveryEnabled && trustDismiss !== "disabled") {
     // Channel path: dismiss both trust dialog AND dev-channels dialog.
     // +8 s over the base cap to absorb both dialogs + project reload.
@@ -1052,10 +1056,12 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
       closed = true
       void (async () => {
         // 3-stage shutdown escalation:
-        //   1. /exit (graceful REPL exit)               — 2 s grace
+        //   1. /exit (graceful REPL exit)               — sessionEndGraceMs (default 5 s)
         //   2. SIGTERM (terminal.close + proc.kill)     — 3 s grace
         //   3. SIGKILL (force kill, unblocks hung TUI)
         // Each timer is cleared if pty.exited resolves before the deadline.
+        // The SessionEnd hook fires during stage 1; increase KANNA_PTY_SESSION_END_GRACE_MS
+        // when hooks take longer than the default.
         try { await sendExitCommand(pty) } catch { /* swallow */ }
         const sigkillTimer: { ref: ReturnType<typeof setTimeout> | null } = { ref: null }
         const termTimer = setTimeout(() => {
@@ -1063,7 +1069,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
           sigkillTimer.ref = setTimeout(() => {
             try { pty.kill("SIGKILL") } catch { /* swallow */ }
           }, 3000)
-        }, 2000)
+        }, sessionEndGraceMs)
         try {
           await pty.exited
         } catch { /* swallow */ }

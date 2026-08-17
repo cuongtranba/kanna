@@ -846,7 +846,7 @@ describe("session close escalation (graceful → SIGTERM → SIGKILL)", () => {
         oauthToken: "test-token", sessionToken: null,
         onToolRequest: async () => null,
         homeDir: tmp,
-        env: { HOME: tmp, CLAUDE_CODE_OAUTH_TOKEN: "test-token", KANNA_PTY_TRUST_DISMISS: "disabled", CLAUDE_EXECUTABLE: "/bin/sh" },
+        env: { HOME: tmp, CLAUDE_CODE_OAUTH_TOKEN: "test-token", KANNA_PTY_TRUST_DISMISS: "disabled", CLAUDE_EXECUTABLE: "/bin/sh", KANNA_PTY_SESSION_END_GRACE_MS: "200" },
         spawnPtyProcess: async (s) => { s.onOutput?.("❯ "); return stubbornPty },
         startKannaMcpHttpServer: async () => ({ url: "http://127.0.0.1:0/mcp", bearerToken: "t", close: async () => {}, channelClientReady: Promise.resolve(), pushChannelPrompt: async () => {} }),
         startTranscriptStreamFn: async () => ({
@@ -857,13 +857,61 @@ describe("session close escalation (graceful → SIGTERM → SIGKILL)", () => {
         smokeTestGate: { async canSpawn() { return { ok: true } } },
       })
       handle.close()
-      // 2 s SIGTERM grace + 3 s SIGKILL grace + a safety margin.
+      // 200 ms SIGTERM grace + 3 s SIGKILL grace + a safety margin (grace shortened via env var).
       const code = await Promise.race([
         exited,
         new Promise<number>((_, reject) => setTimeout(() => reject(new Error("escalation timed out")), 8_000)),
       ])
       expect(code).toBe(137)
       expect(killSignal).toBe("SIGKILL")
+    } finally {
+      await rm(tmp, { recursive: true, force: true })
+    }
+  }, 30_000)
+
+  test("close() does not send SIGTERM when process exits within the grace window (SessionEnd hook completes)", async () => {
+    if (process.platform === "win32") return
+    let sigTermSent = false
+    let sigKillSent = false
+    let exitResolve!: (code: number) => void
+    const exited = new Promise<number>((r) => { exitResolve = r })
+    const cooperativePty: PtyProcess = {
+      pid: 99997,
+      async sendInput(text) {
+        // Simulate SessionEnd completing after /exit\r — process exits within grace window.
+        if (text === "/exit\r") setTimeout(() => exitResolve(0), 50)
+      },
+      resize() {},
+      exited,
+      close() { sigTermSent = true },
+      kill() { sigKillSent = true },
+    }
+    const tmp = await mkdtemp(path.join(tmpdir(), "kanna-pty-close-grace-"))
+    try {
+      const handle = await startClaudeSessionPTY({
+        chatId: "test-close-grace", projectId: "p", localPath: tmp,
+        model: "claude-haiku-4-5-20251001",
+        planMode: false, forkSession: false,
+        oauthToken: "test-token", sessionToken: null,
+        onToolRequest: async () => null,
+        homeDir: tmp,
+        env: { HOME: tmp, CLAUDE_CODE_OAUTH_TOKEN: "test-token", KANNA_PTY_TRUST_DISMISS: "disabled", CLAUDE_EXECUTABLE: "/bin/sh", KANNA_PTY_SESSION_END_GRACE_MS: "500" },
+        spawnPtyProcess: async (s) => { s.onOutput?.("❯ "); return cooperativePty },
+        startKannaMcpHttpServer: async () => ({ url: "http://127.0.0.1:0/mcp", bearerToken: "t", close: async () => {}, channelClientReady: Promise.resolve(), pushChannelPrompt: async () => {} }),
+        startTranscriptStreamFn: async () => ({
+          lines: { [Symbol.asyncIterator]() { return { next(): Promise<IteratorResult<string, undefined>> { return new Promise(() => {}) } } } },
+          filePath: new Promise<string>(() => {}),
+          close() {},
+        }),
+        smokeTestGate: { async canSpawn() { return { ok: true } } },
+      })
+      handle.close()
+      await Promise.race([
+        exited,
+        new Promise<number>((_, reject) => setTimeout(() => reject(new Error("exit timed out")), 3_000)),
+      ])
+      expect(sigTermSent).toBe(false)
+      expect(sigKillSent).toBe(false)
     } finally {
       await rm(tmp, { recursive: true, force: true })
     }
