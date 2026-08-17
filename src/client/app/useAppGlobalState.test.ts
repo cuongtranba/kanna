@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import {
   applySidebarProjectOrder,
   getNewestRemainingChatId,
+  getMostRecentProjectProvider,
   getProjectIdForChat,
   getUiUpdateRestartReconnectAction,
   deriveUiRestartActivity,
@@ -280,5 +281,63 @@ describe("resolveComposeIntent", () => {
 describe("getUiUpdateReadinessPath", () => {
   test("returns /auth/status", () => {
     expect(getUiUpdateReadinessPath()).toBe("/auth/status")
+  })
+})
+
+// ---------------------------------------------------------------------------
+// getMostRecentProjectProvider
+// ---------------------------------------------------------------------------
+
+describe("getMostRecentProjectProvider", () => {
+  test("returns null when project group is not found", () => {
+    const groups = [makeProjectGroup("proj-a")]
+    expect(getMostRecentProjectProvider(groups, "proj-missing")).toBeNull()
+  })
+
+  test("returns null when the project has no chats", () => {
+    const groups = [makeProjectGroup("proj-a", [])]
+    expect(getMostRecentProjectProvider(groups, "proj-a")).toBeNull()
+  })
+
+  test("returns null when the most recent chat has no provider", () => {
+    const group: SidebarGroup = {
+      groupKey: "proj-a",
+      localPath: "/projects/proj-a",
+      chats: [{ chatId: "c1", provider: null } as unknown as SidebarChat],
+      previewChats: [],
+      olderChats: [],
+      defaultCollapsed: false,
+    }
+    expect(getMostRecentProjectProvider([group], "proj-a")).toBeNull()
+  })
+
+  test("returns the provider of the most recent (first) chat", () => {
+    const group: SidebarGroup = {
+      groupKey: "proj-a",
+      localPath: "/projects/proj-a",
+      chats: [
+        { chatId: "c1", provider: "codex" } as unknown as SidebarChat,
+        { chatId: "c2", provider: "claude" } as unknown as SidebarChat,
+      ],
+      previewChats: [],
+      olderChats: [],
+      defaultCollapsed: false,
+    }
+    expect(getMostRecentProjectProvider([group], "proj-a")).toBe("codex")
+  })
+
+  test("returns claude when the most recent chat used claude", () => {
+    const group: SidebarGroup = {
+      groupKey: "proj-b",
+      localPath: "/projects/proj-b",
+      chats: [
+        { chatId: "c1", provider: "claude" } as unknown as SidebarChat,
+        { chatId: "c2", provider: "codex" } as unknown as SidebarChat,
+      ],
+      previewChats: [],
+      olderChats: [],
+      defaultCollapsed: false,
+    }
+    expect(getMostRecentProjectProvider([group], "proj-b")).toBe("claude")
   })
 })
