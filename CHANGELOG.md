@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.21.3](https://github.com/cuongtranba/kanna/compare/v1.21.2...v1.21.3) (2026-08-17)
+
+
+### Bug Fixes
+
+* **cron:** prevent double-settle of queued runs at boot ([#686](https://github.com/cuongtranba/kanna/issues/686)) ([f25a199](https://github.com/cuongtranba/kanna/commit/f25a19969b5b448047684f0a62cab47c6774ecc2)), closes [#673](https://github.com/cuongtranba/kanna/issues/673)
+
 ## [1.21.2](https://github.com/cuongtranba/kanna/compare/v1.21.1...v1.21.2) (2026-08-17)
 
 
