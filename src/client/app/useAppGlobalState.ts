@@ -7,7 +7,7 @@
  * KannaState return. KannaState stays byte-identical; no consumer changes.
  */
 
-import { useCallback, useEffect, useMemo } from "react"
+import { useCallback, useEffect, useMemo, useRef } from "react"
 import { useShallow } from "zustand/react/shallow"
 import { type ChatNavigatorPort } from "./chatNavigator"
 import { type AppSettingsPatch, type AppSettingsSnapshot, type ClaudeAuthSettings, type KeybindingsSnapshot, type LlmProviderSnapshot, type LlmProviderValidationResult, type OpenRouterModel, type PushConfigSnapshot, type UpdateInstallResult, type UpdateSnapshot } from "../../shared/types"
@@ -40,6 +40,7 @@ import type { TimerPort } from "../ports/timerPort"
 import type { ClipboardPort } from "../ports/clipboardPort"
 import { postAuthLogout, fetchAuthStatus } from "../api/auth"
 import type { KannaSocket, SocketStatus } from "./socket"
+import { sameDiffs, shouldPreserveExistingProjectDiffs, UpdateRestartRuntime } from "./appRuntime"
 import type { OpenLocalLinkTarget } from "../components/messages/shared"
 
 // ---------------------------------------------------------------------------
@@ -50,8 +51,6 @@ const LEGACY_THEME_STORAGE_KEY = "lever-theme"
 const LEGACY_CHAT_SOUND_STORAGE_KEY = "chat-sound-preferences"
 const LEGACY_TERMINAL_STORAGE_KEY = "terminal-preferences"
 const LEGACY_CHAT_PREFERENCES_STORAGE_KEY = "chat-preferences"
-const UI_UPDATE_RESTART_STORAGE_KEY = "kanna:ui-update-restart"
-const UI_UPDATE_RELOAD_REQUEST_STORAGE_KEY = "kanna:last-update-reload-request"
 
 // ---------------------------------------------------------------------------
 // Private helpers
@@ -71,62 +70,6 @@ function readPersistedZustandState(key: string, storage: StoragePort): Record<st
 // ---------------------------------------------------------------------------
 // project-git / project-commands subscription helpers
 // ---------------------------------------------------------------------------
-
-function sameDiffs(left: ChatDiffSnapshot | null | undefined, right: ChatDiffSnapshot | null | undefined): boolean {
-  if (left === right) return true
-  if (!left || !right) return false
-  if (left.status !== right.status) return false
-  if (left.branchName !== right.branchName) return false
-  if (left.defaultBranchName !== right.defaultBranchName) return false
-  if (left.hasOriginRemote !== right.hasOriginRemote) return false
-  if (left.originRepoSlug !== right.originRepoSlug) return false
-  if (left.hasUpstream !== right.hasUpstream) return false
-  if (left.aheadCount !== right.aheadCount) return false
-  if (left.behindCount !== right.behindCount) return false
-  if (left.lastFetchedAt !== right.lastFetchedAt) return false
-  const leftHistory = left.branchHistory?.entries ?? []
-  const rightHistory = right.branchHistory?.entries ?? []
-  if (leftHistory.length !== rightHistory.length) return false
-  const sameBranchHistory = leftHistory.every((entry, index) => {
-    const other = rightHistory[index]
-    return Boolean(other)
-      && entry.sha === other.sha
-      && entry.summary === other.summary
-      && entry.description === other.description
-      && entry.authorName === other.authorName
-      && entry.authoredAt === other.authoredAt
-      && entry.githubUrl === other.githubUrl
-      && entry.tags.length === other.tags.length
-      && entry.tags.every((tag, tagIndex) => tag === other.tags[tagIndex])
-  })
-  if (!sameBranchHistory) return false
-  if (left.files.length !== right.files.length) return false
-  return left.files.every((file, index) => {
-    const other = right.files[index]
-    return Boolean(other)
-      && file.path === other.path
-      && file.changeType === other.changeType
-      && file.isUntracked === other.isUntracked
-      && file.additions === other.additions
-      && file.deletions === other.deletions
-      && file.patchDigest === other.patchDigest
-      && file.mimeType === other.mimeType
-      && file.size === other.size
-  })
-}
-
-function shouldPreserveExistingProjectDiffs(
-  current: ChatDiffSnapshot | null | undefined,
-  next: ChatDiffSnapshot | null | undefined,
-): boolean {
-  return Boolean(
-    current
-    && current.status !== "unknown"
-    && next
-    && next.status === "unknown"
-    && next.files.length === 0
-  )
-}
 
 function applyProjectCommandsSnapshotLocal(
   subscribedProjectId: string,
@@ -227,30 +170,6 @@ function syncRuntimeStoresFromAppSettings(snapshot: AppSettingsSnapshot) {
   )
 }
 
-function getUiUpdateRestartPhase(sessStore: StoragePort) {
-  return sessStore.getItem(UI_UPDATE_RESTART_STORAGE_KEY)
-}
-
-function setUiUpdateRestartPhase(phase: "awaiting_disconnect" | "awaiting_server_ready", sessStore: StoragePort) {
-  sessStore.setItem(UI_UPDATE_RESTART_STORAGE_KEY, phase)
-}
-
-function clearUiUpdateRestartPhase(sessStore: StoragePort) {
-  sessStore.removeItem(UI_UPDATE_RESTART_STORAGE_KEY)
-}
-
-function getLastHandledUiUpdateReloadRequest(sessStore: StoragePort) {
-  return sessStore.getItem(UI_UPDATE_RELOAD_REQUEST_STORAGE_KEY)
-}
-
-function setLastHandledUiUpdateReloadRequest(reloadRequestedAt: number, sessStore: StoragePort) {
-  sessStore.setItem(UI_UPDATE_RELOAD_REQUEST_STORAGE_KEY, String(reloadRequestedAt))
-}
-
-async function isServerReady(signal?: AbortSignal) {
-  const result = await fetchAuthStatus(signal)
-  return Object.keys(result).length > 0
-}
 
 // ---------------------------------------------------------------------------
 // Exported pure helpers (consumers may import these)
@@ -512,15 +431,63 @@ export function useAppGlobalState(
 
   // ---- derived -----------------------------------------------------------
 
-  const markUiRestartPhase = useCallback((phase: "awaiting_disconnect" | "awaiting_server_ready") => {
-    setUiUpdateRestartPhase(phase, sessStore)
-    useKannaStateStore.getState().setUiRestartPhase(phase)
-  }, [sessStore])
+  const updateRestartRuntimeRef = useRef<UpdateRestartRuntime | null>(null)
+
+  useEffect(() => {
+    const rt = new UpdateRestartRuntime(
+      {
+        storage: sessStore,
+        dom,
+        timer,
+        onSnapshot: (snap) => {
+          useKannaStateStore.getState().setUiRestartPhase(snap.phase === "idle" ? null : snap.phase)
+        },
+      },
+      {
+        isServerReady: async () => {
+          const result = await fetchAuthStatus()
+          return Object.keys(result).length > 0
+        },
+      },
+    )
+    updateRestartRuntimeRef.current = rt
+    return () => {
+      rt.close()
+      updateRestartRuntimeRef.current = null
+    }
+  }, [dom, sessStore, timer])
+
+  useEffect(() => {
+    updateRestartRuntimeRef.current?.dispatch({
+      kind: "update_status_changed",
+      updateStatus: updateSnapshot?.status,
+    })
+  }, [updateSnapshot?.status])
+
+  useEffect(() => {
+    const rt = updateRestartRuntimeRef.current
+    if (!rt || !updateSnapshot?.reloadRequestedAt) return
+    rt.dispatch({
+      kind: "reload_requested",
+      reloadRequestedAt: updateSnapshot.reloadRequestedAt,
+      lastHandled: UpdateRestartRuntime.getLastHandledReloadRequest(sessStore),
+    })
+  }, [sessStore, updateSnapshot?.reloadRequestedAt])
+
+  useEffect(() => {
+    updateRestartRuntimeRef.current?.dispatch({
+      kind: "connection_status_changed",
+      connectionStatus,
+    })
+  }, [connectionStatus])
+
+  const markUiRestartPhase = useCallback((_phase: "awaiting_disconnect" | "awaiting_server_ready") => {
+    updateRestartRuntimeRef.current?.dispatch({ kind: "update_initiated" })
+  }, [])
 
   const clearUiRestartPhase = useCallback(() => {
-    clearUiUpdateRestartPhase(sessStore)
-    useKannaStateStore.getState().setUiRestartPhase(null)
-  }, [sessStore])
+    updateRestartRuntimeRef.current?.dispatch({ kind: "aborted" })
+  }, [])
 
   const sidebarProjectGroups = useMemo(
     () => applySidebarProjectOrder(sidebarData.projectGroups, optimisticSidebarProjectOrder),
@@ -699,63 +666,6 @@ export function useAppGlobalState(
       useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
     })
   }, [connectionStatus, socket])
-
-  useEffect(() => {
-    const reloadRequestedAt = updateSnapshot?.reloadRequestedAt
-    if (!shouldHandleUiUpdateReloadRequest(reloadRequestedAt, getLastHandledUiUpdateReloadRequest(sessStore))) {
-      return
-    }
-    if (!reloadRequestedAt) {
-      return
-    }
-
-    setLastHandledUiUpdateReloadRequest(reloadRequestedAt, sessStore)
-    markUiRestartPhase("awaiting_disconnect")
-  }, [markUiRestartPhase, sessStore, updateSnapshot?.reloadRequestedAt])
-
-  useEffect(() => {
-    const phase = getUiUpdateRestartPhase(sessStore)
-    const reconnectAction = getUiUpdateRestartReconnectAction(phase, connectionStatus)
-    if (reconnectAction === "awaiting_server_ready") {
-      markUiRestartPhase("awaiting_server_ready")
-    }
-  }, [connectionStatus, markUiRestartPhase, sessStore])
-
-  useEffect(() => {
-    if (getUiUpdateRestartPhase(sessStore) !== "awaiting_server_ready") {
-      return
-    }
-
-    let cancelled = false
-    let timeoutId: number | null = null
-
-    const pollServerReadiness = async () => {
-      try {
-        if (await isServerReady()) {
-          if (cancelled) return
-          clearUiRestartPhase()
-          dom.reload()
-          return
-        }
-      } catch {
-        // Keep polling while the process restarts.
-      }
-
-      if (cancelled) return
-      timeoutId = timer.setTimeout(() => {
-        void pollServerReadiness()
-      }, 500)
-    }
-
-    void pollServerReadiness()
-
-    return () => {
-      cancelled = true
-      if (timeoutId !== null) {
-        timer.clearTimeout(timeoutId)
-      }
-    }
-  }, [clearUiRestartPhase, connectionStatus, dom, sessStore, timer])
 
   // ---- focus / visibility effects ----------------------------------------
 
