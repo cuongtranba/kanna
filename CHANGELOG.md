@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.26.4](https://github.com/cuongtranba/kanna/compare/v1.26.3...v1.26.4) (2026-08-17)
+
+
+### Bug Fixes
+
+* **composer:** use project's most recent chat provider as hint on new chat creation ([#728](https://github.com/cuongtranba/kanna/issues/728)) ([27831da](https://github.com/cuongtranba/kanna/commit/27831da70c2fbd7b59aa06600e391091ce2f1d14))
+
 ## [1.26.3](https://github.com/cuongtranba/kanna/compare/v1.26.2...v1.26.3) (2026-08-17)
 
 
