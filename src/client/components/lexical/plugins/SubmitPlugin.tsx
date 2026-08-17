@@ -49,6 +49,7 @@ export function isTypeaheadMenuOpen(dom: Pick<DomPort, "hasTypeaheadMenuOpen"> =
  *
  *   – Plain Enter (no modifier, not on touch device) → submit + clear
  *   – Shift+Enter                                    → insert newline (default)
+ *   – Enter during IME composition (CJK)             → confirm candidate, no submit
  *   – When disabled                                  → noop
  *
  * The plugin uses COMMAND_PRIORITY_HIGH so it fires before the default
@@ -63,6 +64,10 @@ export function SubmitPlugin({ onSubmit, disabled, dom = domAdapter }: SubmitPlu
       (event: KeyboardEvent | null) => {
         if (disabled) return false
         if (!event) return false
+
+        // IME composition active (CJK input): Enter confirms the candidate,
+        // it must not submit the message.
+        if (event.isComposing) return false
 
         // Shift+Enter → insert newline; do not intercept.
         if (event.shiftKey) return false

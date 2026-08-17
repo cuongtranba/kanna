@@ -19,7 +19,7 @@
  */
 import { describe, expect, it } from "bun:test"
 import { createHeadlessEditor } from "@lexical/headless"
-import { $createParagraphNode, $createTextNode, $getRoot, KEY_ENTER_COMMAND, COMMAND_PRIORITY_NORMAL } from "lexical"
+import { $createParagraphNode, $createTextNode, $getRoot, KEY_ENTER_COMMAND, COMMAND_PRIORITY_HIGH, COMMAND_PRIORITY_NORMAL } from "lexical"
 import {
   KANNA_COMPOSER_NODES,
   $createMentionNode,
@@ -258,6 +258,141 @@ describe("SubmitPlugin — keyboard routing contract", () => {
 
     expect(canSubmit).toBe(true)
     expect(shouldSubmit(plainEnterEvent, disabled, canSubmit)).toBe(true)
+  })
+})
+
+// ─── IME composition guard (regression: CJK Enter must not submit) ───────────
+
+describe("SubmitPlugin — IME composition guard", () => {
+  it("does NOT submit when Enter is pressed during IME composition (isComposing=true)", () => {
+    const composingEnterEvent = { shiftKey: false, isComposing: true } as KeyboardEvent
+    const disabled = false
+    const canSubmit = true
+
+    function shouldSubmit(event: KeyboardEvent, isDisabled: boolean, hasContent: boolean): boolean {
+      if (isDisabled) return false
+      if (!event) return false
+      if (event.isComposing) return false
+      if (event.shiftKey) return false
+      if (!hasContent) return false
+      return true
+    }
+
+    expect(shouldSubmit(composingEnterEvent, disabled, canSubmit)).toBe(false)
+  })
+
+  it("submits when plain Enter is pressed with composition ended (isComposing=false)", () => {
+    const committedEnterEvent = { shiftKey: false, isComposing: false } as KeyboardEvent
+    const disabled = false
+    const canSubmit = true
+
+    function shouldSubmit(event: KeyboardEvent, isDisabled: boolean, hasContent: boolean): boolean {
+      if (isDisabled) return false
+      if (!event) return false
+      if (event.isComposing) return false
+      if (event.shiftKey) return false
+      if (!hasContent) return false
+      return true
+    }
+
+    expect(shouldSubmit(committedEnterEvent, disabled, canSubmit)).toBe(true)
+  })
+
+  it("isComposing guard fires before shiftKey check (composition + shift does not submit)", () => {
+    const composingShiftEnterEvent = { shiftKey: true, isComposing: true } as KeyboardEvent
+    const disabled = false
+    const canSubmit = true
+
+    function shouldSubmit(event: KeyboardEvent, isDisabled: boolean, hasContent: boolean): boolean {
+      if (isDisabled) return false
+      if (!event) return false
+      if (event.isComposing) return false
+      if (event.shiftKey) return false
+      if (!hasContent) return false
+      return true
+    }
+
+    expect(shouldSubmit(composingShiftEnterEvent, disabled, canSubmit)).toBe(false)
+  })
+
+  it("handler dispatched with isComposing=true does not invoke onSubmit callback", () => {
+    const editor = buildEditor()
+    let submitted = false
+
+    editor.update(
+      () => {
+        const root = $getRoot()
+        root.clear()
+        const para = $createParagraphNode()
+        para.append($createTextNode("hello"))
+        root.append(para)
+      },
+      { discrete: true },
+    )
+
+    const fakeDom = { hasTypeaheadMenuOpen: () => false, isTouchDevice: () => false }
+    const unregister = editor.registerCommand(
+      KEY_ENTER_COMMAND,
+      (event: KeyboardEvent | null) => {
+        if (!event) return false
+        if (event.isComposing) return false
+        if (event.shiftKey) return false
+        if (fakeDom.hasTypeaheadMenuOpen()) return false
+        if (fakeDom.isTouchDevice()) return false
+        const payload = serializeEditorToWire(editor)
+        const canSubmit = payload.text.trim().length > 0 || payload.attachments.length > 0
+        if (!canSubmit) return false
+        submitted = true
+        return true
+      },
+      COMMAND_PRIORITY_HIGH,
+    )
+
+    const imeEnter = Object.assign(new KeyboardEvent("keydown", { key: "Enter" }), { isComposing: true })
+    editor.dispatchCommand(KEY_ENTER_COMMAND, imeEnter as KeyboardEvent)
+
+    expect(submitted).toBe(false)
+    unregister()
+  })
+
+  it("handler dispatched with isComposing=false DOES invoke onSubmit callback", () => {
+    const editor = buildEditor()
+    let submitted = false
+
+    editor.update(
+      () => {
+        const root = $getRoot()
+        root.clear()
+        const para = $createParagraphNode()
+        para.append($createTextNode("hello"))
+        root.append(para)
+      },
+      { discrete: true },
+    )
+
+    const fakeDom = { hasTypeaheadMenuOpen: () => false, isTouchDevice: () => false }
+    const unregister = editor.registerCommand(
+      KEY_ENTER_COMMAND,
+      (event: KeyboardEvent | null) => {
+        if (!event) return false
+        if (event.isComposing) return false
+        if (event.shiftKey) return false
+        if (fakeDom.hasTypeaheadMenuOpen()) return false
+        if (fakeDom.isTouchDevice()) return false
+        const payload = serializeEditorToWire(editor)
+        const canSubmit = payload.text.trim().length > 0 || payload.attachments.length > 0
+        if (!canSubmit) return false
+        submitted = true
+        return true
+      },
+      COMMAND_PRIORITY_HIGH,
+    )
+
+    const plainEnter = Object.assign(new KeyboardEvent("keydown", { key: "Enter" }), { isComposing: false })
+    editor.dispatchCommand(KEY_ENTER_COMMAND, plainEnter as KeyboardEvent)
+
+    expect(submitted).toBe(true)
+    unregister()
   })
 })
 
