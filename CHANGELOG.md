@@ -13,6 +13,7 @@
 
 ### Bug Fixes
 
+* **codex:** pass shell:true on Windows so codex.cmd is resolved during spawn ([#720](https://github.com/cuongtranba/kanna/issues/720)) ([0cba3a3](https://github.com/cuongtranba/kanna/commit/0cba3a3374012618687875207e0929da85a5638e))
 * **composer:** submit on Enter when iPad has external keyboard (Universal Control / Magic Keyboard) ([#716](https://github.com/cuongtranba/kanna/issues/716)) ([18f6be0](https://github.com/cuongtranba/kanna/commit/18f6be05b091918f5d5b6388fa136c5a8f7018a6))
 
 ## [1.26.0](https://github.com/cuongtranba/kanna/compare/v1.25.0...v1.26.0) (2026-08-17)
