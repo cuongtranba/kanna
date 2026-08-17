@@ -1,0 +1,31 @@
+id: no-inline-tint-pairing
+valid:
+  # correct token (warning-text, not warning or warning-foreground)
+  - '"border-warning/40 text-warning-text bg-warning/10"'
+  # correct token for success
+  - '"border-success/40 text-success-text bg-success/10"'
+  # correct token for destructive
+  - '"border-destructive/40 text-destructive-text bg-destructive/10"'
+  # skipped pill uses muted (not in the blocked group)
+  - '"border-border text-muted-foreground bg-muted/40"'
+  # tint bg without a semantic text pairing — not flagged
+  - '"bg-warning/10 font-medium"'
+  # semantic text without a tint bg — not flagged
+  - '"text-warning-foreground font-medium"'
+  # text-destructive alone is valid (used without a tint bg)
+  - '"text-destructive font-medium"'
+  # solid destructive button with hover opacity — hover:bg-destructive/ is not an unmodified tint bg
+  - '"bg-destructive text-destructive-foreground hover:bg-destructive/90"'
+invalid:
+  # the original bug: warning-foreground is near-black on near-black in dark mode
+  - '"border-warning/40 text-warning-foreground bg-warning/10"'
+  # warning raw token fails light mode when paired with a tint bg
+  - '"text-warning bg-warning/10"'
+  # success raw token fails light mode
+  - '"border-success/40 text-success bg-success/10"'
+  # destructive foreground fails both themes on a tint
+  - '"border-destructive/40 text-destructive-foreground bg-destructive/10"'
+  # reversed order: bg before text — still caught (same string_fragment)
+  - '"bg-destructive/10 border-destructive/40 text-destructive-foreground"'
+  # info pairing
+  - '"bg-info/10 text-info-foreground"'

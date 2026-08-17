@@ -1,0 +1,37 @@
+id: no-inline-tint-pairing
+language: tsx
+severity: error
+message: >
+  Inline semantic tint pairing bypasses the TONE_PAIRINGS catalog — contrast
+  unverified in both themes. Derive classes from STATUS_PILL_CLASS or TONE_PAIRINGS
+  (src/shared/design/tone-pairings.ts) instead of spelling the fg/bg pair inline.
+note: |
+  Wrong (the bad pattern):
+    "border-warning/40 text-warning-foreground bg-warning/10"
+  Correct (catalog-derived):
+    STATUS_PILL_CLASS[status]
+  See DESIGN.md Contrast Gate and issues #684/#685.
+files:
+  - src/client/**
+rule:
+  any:
+    - all:
+        - kind: string_fragment
+          regex: 'text-warning(?:[ \t]|-foreground)'
+        - kind: string_fragment
+          regex: '(?:^|[ \t])bg-warning/'
+    - all:
+        - kind: string_fragment
+          regex: 'text-success(?:[ \t]|-foreground)'
+        - kind: string_fragment
+          regex: '(?:^|[ \t])bg-success/'
+    - all:
+        - kind: string_fragment
+          regex: 'text-destructive-foreground'
+        - kind: string_fragment
+          regex: '(?:^|[ \t])bg-destructive/'
+    - all:
+        - kind: string_fragment
+          regex: 'text-info(?:[ \t]|-foreground)'
+        - kind: string_fragment
+          regex: '(?:^|[ \t])bg-info/'

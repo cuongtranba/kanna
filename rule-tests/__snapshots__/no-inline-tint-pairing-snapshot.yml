@@ -1,0 +1,38 @@
+id: no-inline-tint-pairing
+snapshots:
+  '"bg-destructive/10 border-destructive/40 text-destructive-foreground"':
+    labels:
+    - source: bg-destructive/10 border-destructive/40 text-destructive-foreground
+      style: primary
+      start: 1
+      end: 68
+  '"bg-info/10 text-info-foreground"':
+    labels:
+    - source: bg-info/10 text-info-foreground
+      style: primary
+      start: 1
+      end: 32
+  '"border-destructive/40 text-destructive-foreground bg-destructive/10"':
+    labels:
+    - source: border-destructive/40 text-destructive-foreground bg-destructive/10
+      style: primary
+      start: 1
+      end: 68
+  '"border-success/40 text-success bg-success/10"':
+    labels:
+    - source: border-success/40 text-success bg-success/10
+      style: primary
+      start: 1
+      end: 45
+  '"border-warning/40 text-warning-foreground bg-warning/10"':
+    labels:
+    - source: border-warning/40 text-warning-foreground bg-warning/10
+      style: primary
+      start: 1
+      end: 56
+  '"text-warning bg-warning/10"':
+    labels:
+    - source: text-warning bg-warning/10
+      style: primary
+      start: 1
+      end: 27
