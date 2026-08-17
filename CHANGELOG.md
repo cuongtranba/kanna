@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.24.1](https://github.com/cuongtranba/kanna/compare/v1.24.0...v1.24.1) (2026-08-17)
+
+
+### Bug Fixes
+
+* **composer:** guard Enter submit against active IME composition ([#702](https://github.com/cuongtranba/kanna/issues/702)) ([38c3cc1](https://github.com/cuongtranba/kanna/commit/38c3cc1e64b71ba8fd98a67ddfa10e03ca6edc67)), closes [#701](https://github.com/cuongtranba/kanna/issues/701)
+
 ## [1.24.0](https://github.com/cuongtranba/kanna/compare/v1.23.0...v1.24.0) (2026-08-17)
 
 
