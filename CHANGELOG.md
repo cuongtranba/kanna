@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.26.5](https://github.com/cuongtranba/kanna/compare/v1.26.4...v1.26.5) (2026-08-17)
+
+
+### Bug Fixes
+
+* **pty:** extend SessionEnd hook grace period before SIGTERM ([#730](https://github.com/cuongtranba/kanna/issues/730)) ([bc09e59](https://github.com/cuongtranba/kanna/commit/bc09e59b301a75084a624eeee1acb9adf7b839d8))
+
 ## [1.26.4](https://github.com/cuongtranba/kanna/compare/v1.26.3...v1.26.4) (2026-08-17)
 
 
