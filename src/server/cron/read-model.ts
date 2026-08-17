@@ -74,7 +74,7 @@ export function deriveCronJobs(
         const accum = jobs.get(event.scheduleId)
         if (!accum) break
         const run = accum.runs.find((candidate) => candidate.runId === event.runId)
-        if (!run) break
+        if (!run || run.status !== "running") break
         run.status = event.ok ? "completed" : "failed"
         if (event.errorCode !== undefined) run.errorCode = event.errorCode
         break
@@ -158,4 +158,52 @@ export function hasActiveRun(job: CronJobSnapshot): boolean {
     return run.status === "running"
   }
   return false
+}
+
+/**
+ * Scans the full, unbounded event log and returns every run that has a
+ * `cron_run_started` but no `cron_run_outcome`. Used by boot reconciliation
+ * instead of `job.recentRuns` (capped at `MAX_RECENT_CRON_RUNS`) so a running
+ * run buried under many skip records cannot silently escape the orphan pass.
+ */
+export function findRunningCronRuns(
+  events: readonly AutoContinueEvent[],
+  chatId: string,
+): Array<{ jobId: string; runId: string; spawnedChatId?: string }> {
+  const running = new Map<string, { jobId: string; runId: string; spawnedChatId?: string }>()
+  const activeJobs = new Set<string>()
+
+  for (const event of events) {
+    if (event.chatId !== chatId) continue
+    switch (event.kind) {
+      case "cron_armed":
+        activeJobs.add(event.scheduleId)
+        for (const [runId, run] of running) {
+          if (run.jobId === event.scheduleId) running.delete(runId)
+        }
+        break
+      case "cron_disarmed":
+        activeJobs.delete(event.scheduleId)
+        for (const [runId, run] of running) {
+          if (run.jobId === event.scheduleId) running.delete(runId)
+        }
+        break
+      case "cron_run_started":
+        if (activeJobs.has(event.scheduleId)) {
+          running.set(event.runId, {
+            jobId: event.scheduleId,
+            runId: event.runId,
+            ...(event.spawnedChatId !== undefined ? { spawnedChatId: event.spawnedChatId } : {}),
+          })
+        }
+        break
+      case "cron_run_outcome":
+        running.delete(event.runId)
+        break
+      default:
+        break
+    }
+  }
+
+  return [...running.values()]
 }

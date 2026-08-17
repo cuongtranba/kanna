@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { ChatAttachment, TranscriptEntry } from "../../shared/types"
+import type { ChatAttachment, QueuedChatMessage, TranscriptEntry } from "../../shared/types"
 import type { AutoContinueEvent } from "../auto-continue/events"
 import { parseCronCommand } from "../../shared/cron/parse-command"
 import type { SendMessageOptions } from "../claude-steer-log"
@@ -22,11 +22,12 @@ function makeDeps(opts: { busyChatIds?: string[]; now?: number } = {}) {
   const enqueued: EnqueuedRecord[] = []
   const drained: string[] = []
   const createdChats: string[] = []
+  const queuedByChatId = new Map<string, QueuedChatMessage[]>()
   const busy = new Set(opts.busyChatIds ?? [])
   const clock = { now: opts.now ?? 1_000_000 }
   const skipCoalescer = new CronSkipCoalescer()
   let chatSeq = 0
-  const deps: CronFireDeps = {
+  const deps: CronFireDeps & { getQueuedMessages: (chatId: string) => QueuedChatMessage[] } = {
     skipCoalescer,
     store: {
       appendMessage: async (chatId, entry) => {
@@ -53,13 +54,19 @@ function makeDeps(opts: { busyChatIds?: string[]; now?: number } = {}) {
     },
     enqueueMessage: async (chatId, content, _attachments: ChatAttachment[], options) => {
       enqueued.push({ chatId, content, options })
+      if (options?.cronRun) {
+        const list = queuedByChatId.get(chatId) ?? []
+        list.push({ id: `qm-${list.length}`, content, attachments: [], createdAt: clock.now, cronRun: options.cronRun })
+        queuedByChatId.set(chatId, list)
+      }
     },
     maybeStartNextQueuedMessage: async (chatId) => {
       drained.push(chatId)
       return true
     },
+    getQueuedMessages: (chatId) => queuedByChatId.get(chatId) ?? [],
   }
-  return { deps, entries, events, cleared, enqueued, drained, createdChats, busy, clock }
+  return { deps, entries, events, cleared, enqueued, drained, createdChats, busy, clock, queuedByChatId }
 }
 
 async function armJob(deps: CronFireDeps, line: string) {
@@ -287,6 +294,8 @@ describe("reconcileCronRunsAtBoot", () => {
     const { deps, events, entries } = makeDeps()
     await armJob(deps, "/cron check ci inline every 5m")
     await fireCronJob(deps, CHAT, "cron-abc") // running, no outcome — "crashed" here
+    // Drain the queued message so no queue entry survives (simulates crash before dequeue-on-commit)
+    deps.getQueuedMessages(CHAT).length = 0
 
     await reconcileCronRunsAtBoot(
       deps,
@@ -300,6 +309,74 @@ describe("reconcileCronRunsAtBoot", () => {
     expect(skipped).toMatchObject({ missedCount: 3 })
     expect(entries.some((record) => record.entry.kind === "cron_run_skipped")).toBe(true)
     const outcome = events.find((event) => event.kind === "cron_run_outcome")
+    expect(outcome).toMatchObject({ ok: false, errorCode: "orphaned" })
+  })
+
+  test("queued inline run is skipped at boot — recoverQueuedMessages owns it", async () => {
+    const { deps, events } = makeDeps()
+    await armJob(deps, "/cron check ci inline every 5m")
+    await fireCronJob(deps, CHAT, "cron-abc") // message stays in queue (dequeue-on-commit)
+
+    await reconcileCronRunsAtBoot(deps, [], [CHAT])
+
+    const outcome = events.find((event) => event.kind === "cron_run_outcome")
+    expect(outcome).toBeUndefined()
+  })
+
+  test("queued spawn run is skipped — a concurrent tick still skips as previous_run_active", async () => {
+    const { deps, events, busy } = makeDeps()
+    await armJob(deps, "/cron nightly report spawn @daily")
+    await fireCronJob(deps, CHAT, "cron-abc") // run started in spawned-1, message queued there
+    busy.add("spawned-1") // simulate recoverQueuedMessages starting the turn
+
+    await reconcileCronRunsAtBoot(deps, [], [CHAT])
+
+    expect(events.find((e) => e.kind === "cron_run_outcome")).toBeUndefined()
+    // A concurrent tick must still skip — the run is still "running" in the read model.
+    await fireCronJob(deps, CHAT, "cron-abc")
+    expect(events.find((e) => e.kind === "cron_run_skipped")).toMatchObject({ reason: "previous_run_active" })
+  })
+
+  test("queued run completes: exactly one cron_run_outcome with ok:true and no errorCode", async () => {
+    const { deps, events } = makeDeps()
+    await armJob(deps, "/cron check ci inline every 5m")
+    await fireCronJob(deps, CHAT, "cron-abc")
+    const tag = deps.getQueuedMessages(CHAT)[0]!.cronRun!
+
+    // Boot reconcile skips it (queue still holds the message)
+    await reconcileCronRunsAtBoot(deps, [], [CHAT])
+    expect(events.filter((e) => e.kind === "cron_run_outcome")).toHaveLength(0)
+
+    // Turn completes via recoverQueuedMessages path
+    await recordCronTurnOutcome(deps, tag, "finished")
+
+    const outcomes = events.filter((e) => e.kind === "cron_run_outcome")
+    expect(outcomes).toHaveLength(1)
+    expect(outcomes[0]).toMatchObject({ ok: true })
+    expect(outcomes[0]).not.toHaveProperty("errorCode")
+  })
+
+  test("a running run buried under many skips is still found and orphaned", async () => {
+    const { deps, events } = makeDeps()
+    await armJob(deps, "/cron check ci inline every 5m")
+    await fireCronJob(deps, CHAT, "cron-abc") // run started, no outcome
+    deps.getQueuedMessages(CHAT).length = 0 // no queued message (crashed before dequeue-on-commit)
+
+    // Emit 25 skip records, pushing the running run past MAX_RECENT_CRON_RUNS
+    for (let i = 0; i < 25; i++) {
+      events.push({
+        v: 3,
+        kind: "cron_run_skipped",
+        chatId: CHAT,
+        scheduleId: "cron-abc",
+        timestamp: 1_000_000 + i * 60_000,
+        reason: "previous_run_active",
+      })
+    }
+
+    await reconcileCronRunsAtBoot(deps, [], [CHAT])
+
+    const outcome = events.find((e) => e.kind === "cron_run_outcome")
     expect(outcome).toMatchObject({ ok: false, errorCode: "orphaned" })
   })
 })
