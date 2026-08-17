@@ -11,6 +11,9 @@ code:
   - src/client/app/chatNotifications.ts
   - src/client/app/derived.ts
   - src/client/app/sidebarSwipeGesture.ts
+  - src/client/app/appRuntime.test.ts
+  - src/client/app/appRuntime.ts
+  - src/client/app/useAppGlobalState.test.ts
   - src/client/app/useAppGlobalState.ts
   - src/client/app/useKannaState.test.ts
   - src/client/app/useKannaState.ts
