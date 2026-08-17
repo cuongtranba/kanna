@@ -8,6 +8,18 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.26.0](https://github.com/cuongtranba/kanna/compare/v1.25.0...v1.26.0) (2026-08-17)
+
+
+### Features
+
+* **cron:** show model, created-at, and elapsed time per cron job ([#713](https://github.com/cuongtranba/kanna/issues/713)) ([a860113](https://github.com/cuongtranba/kanna/commit/a860113b7af1c6cddde81b560b2456229f68b33c))
+
+
+### Bug Fixes
+
+* **shutdown:** await session closed promises during dispose so SessionEnd hook fires ([#714](https://github.com/cuongtranba/kanna/issues/714)) ([1c5356b](https://github.com/cuongtranba/kanna/commit/1c5356b580218f412f7fe4acf4c0ba00e07d55af)), closes [#71](https://github.com/cuongtranba/kanna/issues/71)
+
 ## [1.25.0](https://github.com/cuongtranba/kanna/compare/v1.24.3...v1.25.0) (2026-08-17)
 
 
