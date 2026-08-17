@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.21.2](https://github.com/cuongtranba/kanna/compare/v1.21.1...v1.21.2) (2026-08-17)
+
+
+### Bug Fixes
+
+* **cron:** graceful shutdown drains in-flight fires and cron outcomes ([#672](https://github.com/cuongtranba/kanna/issues/672)) ([#682](https://github.com/cuongtranba/kanna/issues/682)) ([72549c7](https://github.com/cuongtranba/kanna/commit/72549c779bb2526b110d4490e9cb05e7d0c3d93c))
+
 ## [1.21.1](https://github.com/cuongtranba/kanna/compare/v1.21.0...v1.21.1) (2026-08-17)
 
 
