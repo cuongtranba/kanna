@@ -227,6 +227,7 @@ export class AgentCoordinator {
    * per dispatch the way the stateless cron deps are.
    */
   readonly cronSkipCoalescer = new CronSkipCoalescer()
+  private readonly pendingCronOutcomes = new Set<Promise<unknown>>()
   readonly getAutoResumePreference: () => boolean
   readonly getSubagents: () => Subagent[]
   readonly getAppSettingsSnapshot: NonNullable<AgentCoordinatorArgs["getAppSettingsSnapshot"]>
@@ -297,9 +298,11 @@ export class AgentCoordinator {
     this.store.onTurnTerminal = (chatId, outcome) => {
       const tag = this.activeTurns.get(chatId)?.cronRun
       if (!tag) return
-      void recordCronTurnOutcomeFn(this.buildCronCommandDeps(), tag, outcome).catch((error) => {
+      const p = recordCronTurnOutcomeFn(this.buildCronCommandDeps(), tag, outcome).catch((error) => {
         log.error("[kanna/cron] failed to record run outcome:", String(error))
       })
+      this.pendingCronOutcomes.add(p)
+      p.finally(() => this.pendingCronOutcomes.delete(p))
     }
     this.getAutoResumePreference = args.getAutoResumePreference ?? (() => false)
     this.openrouterFirstEntryTimeoutMs =
@@ -1020,6 +1023,17 @@ export class AgentCoordinator {
     chatIds: readonly string[],
   ): Promise<void> {
     return reconcileCronRunsAtBootFn(this.buildCronCommandDeps(), missed, chatIds)
+  }
+
+  /**
+   * Await all `cron_run_outcome` writes started by `onTurnTerminal`. Called
+   * in the shutdown path after the cancel loop so a deploy-cancelled cron
+   * turn is recorded as `cancelled` (not `orphaned` at next boot) before the
+   * event log is snapshotted and truncated.
+   */
+  async drainCronOutcomes(): Promise<void> {
+    if (this.pendingCronOutcomes.size === 0) return
+    await Promise.allSettled([...this.pendingCronOutcomes])
   }
 
   /** Delegates to listLiveSchedulesFn — see claude-loop-commands.ts. */

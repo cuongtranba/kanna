@@ -25,9 +25,13 @@
  * streak, MEASURED at ~42 µs per call, inside `deriveCronJobs` — which runs on
  * every chat broadcast. Incrementing an integer is O(1).
  *
- * The state is per-armed-job and process-local, the same durability the
- * `CronScheduler`'s own timers have; a restart re-reports through the
- * `server_offline` path, so nothing is silently lost. No IO.
+ * The state is per-armed-job and process-local. On a clean shutdown
+ * `CronScheduler.shutdown()` drains in-flight fires, which flush any open
+ * streak before their run records are written. On a hard kill (SIGKILL,
+ * OOM) the tail of an open streak IS silently dropped: the next boot's
+ * `server_offline` record covers the fires that were missed while the
+ * server was down but does NOT recover the in-memory pending count from
+ * before the kill. This is a known, accepted trade-off. No IO.
  */
 
 import type { CronSkipReason } from "../../shared/cron/types"
