@@ -31,6 +31,15 @@ describe("interception boundary", () => {
     const parsed = parseCronCommand("/cron check ci inline @daily\nsecond line")
     expect(parsed?.ok).toBe(false)
   })
+
+  // Distinct from "subcommand" so the repair escalation can treat it as
+  // arm-shaped (repairable) without also opening up real subcommand typos
+  // like `/cron list extra`, which already carry a mechanical suggestion.
+  test("a multiline /cron message carries its own part, not subcommand", () => {
+    const error = errorOf("/cron check ci inline @daily\nsecond line")
+    expect(error.part).toBe("multiline")
+    expect(error.suggestion).toBeUndefined()
+  })
 })
 
 describe("subcommands", () => {

@@ -59,6 +59,7 @@ export type CronSchedule =
 /** Which part of a `/cron` line failed validation. */
 export type CronParsePart =
   | "subcommand"
+  | "multiline"
   | "instruction"
   | "mode"
   | "schedule"
