@@ -15,6 +15,13 @@
  * `onMissedFires` per affected job (the coordinator appends a visible
  * `cron_run_skipped {reason:"server_offline"}`) and arms at the next FUTURE
  * occurrence. No run storm at boot.
+ *
+ * Graceful shutdown: `shutdown()` is async. It sets a `stopped` flag so any
+ * timer callback that fires concurrently declines to start a NEW fire, then
+ * awaits every in-flight `runFire` call under a bounded deadline. Fires that
+ * outlive the deadline are abandoned (killed when the process exits) and
+ * their runs are reconciled as `orphaned` at next boot by
+ * `reconcileCronRunsAtBoot`.
  */
 
 import type { CronSchedule } from "../../shared/cron/types"
@@ -29,10 +36,17 @@ const MAX_TIMER_CHUNK_MS = 6 * 3_600_000
 /** Reported missed-fire counts are capped — "100+" is as useful as 4 032. */
 const MAX_MISSED_COUNT = 100
 
+/**
+ * How long `shutdown()` waits for in-flight fires to complete. Shorter than
+ * Docker's default 10 s kill grace so the drain finishes before SIGKILL.
+ */
+export const SHUTDOWN_DRAIN_TIMEOUT_MS = 5_000
+
 export interface CronSchedulerArgs {
   clock?: Clock
   fire: (chatId: string, jobId: string) => Promise<void>
   onError?: (error: Error) => void
+  shutdownDrainTimeoutMs?: number
 }
 
 interface ArmedJob {
@@ -49,11 +63,15 @@ export class CronScheduler {
   private readonly clock: Clock
   private readonly fireFn: CronSchedulerArgs["fire"]
   private readonly onError: (error: Error) => void
+  private readonly drainTimeoutMs: number
   private readonly jobs = new Map<string, ArmedJob>()
+  private readonly inFlight = new Set<Promise<void>>()
+  private stopped = false
 
   constructor(args: CronSchedulerArgs) {
     this.clock = args.clock ?? realClock
     this.fireFn = args.fire
+    this.drainTimeoutMs = args.shutdownDrainTimeoutMs ?? SHUTDOWN_DRAIN_TIMEOUT_MS
     this.onError = args.onError ?? ((error) => log.error("[kanna/cron-scheduler]", String(error)))
   }
 
@@ -148,9 +166,26 @@ export class CronScheduler {
     }
   }
 
-  shutdown(): void {
+  /**
+   * Stop all timers, decline new fires, and wait for any in-flight fire to
+   * complete (bounded by `drainTimeoutMs`). Fires still running at the
+   * deadline are abandoned and will be reconciled as `orphaned` at next boot.
+   */
+  async shutdown(): Promise<void> {
+    this.stopped = true
     for (const job of this.jobs.values()) this.clearTimer(job)
     this.jobs.clear()
+
+    if (this.inFlight.size === 0) return
+
+    const pending = this.inFlight.size
+    const drained = await Promise.race([
+      Promise.allSettled([...this.inFlight]).then(() => true),
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), this.drainTimeoutMs)),
+    ])
+    if (!drained) {
+      log.warn(`[kanna/cron-scheduler] shutdown drain timed out with ${pending} fire(s) still in flight`)
+    }
   }
 
   private arm(job: ArmedJob): void {
@@ -173,12 +208,14 @@ export class CronScheduler {
     const delay = Math.min(Math.max(0, job.nextFireAtMs - this.clock.now()), MAX_TIMER_CHUNK_MS)
     job.timerId = this.clock.setTimeout(() => {
       job.timerId = null
-      if (job.paused || !this.jobs.has(keyOf(job.chatId, job.jobId))) return
+      if (this.stopped || job.paused || !this.jobs.has(keyOf(job.chatId, job.jobId))) return
       if (job.nextFireAtMs !== null && this.clock.now() < job.nextFireAtMs) {
         this.armChunk(job)
         return
       }
-      void this.runFire(job)
+      const fire = this.runFire(job)
+      this.inFlight.add(fire)
+      fire.finally(() => this.inFlight.delete(fire))
     }, delay)
   }
 
@@ -189,9 +226,7 @@ export class CronScheduler {
     } catch (error) {
       this.onError(toError(error))
     }
-    // The job may have been disarmed/paused by its own fire (or a user
-    // action racing it) while we awaited.
-    if (!this.jobs.has(keyOf(job.chatId, job.jobId)) || job.paused) return
+    if (this.stopped || !this.jobs.has(keyOf(job.chatId, job.jobId)) || job.paused) return
     this.arm(job)
   }
 
@@ -212,7 +247,7 @@ export class CronScheduler {
 }
 
 function keyOf(chatId: string, jobId: string): string {
-  return `${chatId}\u0000${jobId}`
+  return `${chatId} ${jobId}`
 }
 
 function countMissedFires(

@@ -222,6 +222,80 @@ describe("CronScheduler", () => {
     await settle()
     expect(fired).toEqual(["j1"])
     expect(clock.pending()).toBe(0)
-    scheduler.shutdown()
+    await scheduler.shutdown()
   })
+
+  test("shutdown drains an in-flight fire before returning", async () => {
+    const clock = new FakeClock()
+    let resolveFireFn!: () => void
+    const fireBarrier = new Promise<void>((resolve) => {
+      resolveFireFn = resolve
+    })
+    const fired: string[] = []
+    const scheduler = new CronScheduler({
+      clock,
+      fire: async (_chatId, jobId) => {
+        await fireBarrier
+        fired.push(jobId)
+      },
+      shutdownDrainTimeoutMs: 10_000,
+    })
+    scheduler.onEvent(armedEvent())
+    clock.advance(300_000)
+    // runFire is now in flight, awaiting the barrier
+    const shutdownPromise = scheduler.shutdown()
+    expect(fired).toEqual([])
+    resolveFireFn()
+    await shutdownPromise
+    expect(fired).toEqual(["j1"])
+  }, 15_000)
+
+  test("shutdown stops new fires and resolves immediately when none in flight", async () => {
+    const clock = new FakeClock()
+    const fires: string[] = []
+    const scheduler = new CronScheduler({
+      clock,
+      fire: async (_chatId, jobId) => {
+        fires.push(jobId)
+      },
+    })
+    scheduler.onEvent(armedEvent())
+    // Shutdown before the timer fires — no in-flight work.
+    await scheduler.shutdown()
+    // Timer is gone.
+    expect(clock.pending()).toBe(0)
+    // Advancing clock fires nothing.
+    clock.advance(300_000)
+    await settle()
+    expect(fires).toHaveLength(0)
+  })
+
+  test("a timer callback that races shutdown does not start a new fire", async () => {
+    const clock = new FakeClock()
+    const fires: string[] = []
+    let resolveFireFn!: () => void
+    const fireBarrier = new Promise<void>((resolve) => {
+      resolveFireFn = resolve
+    })
+    const scheduler = new CronScheduler({
+      clock,
+      fire: async (_chatId, jobId) => {
+        fires.push(jobId)
+        await fireBarrier
+      },
+      shutdownDrainTimeoutMs: 10_000,
+    })
+    scheduler.onEvent(armedEvent())
+    clock.advance(300_000)
+    // First fire is in flight. Advance again to queue the re-arm timer.
+    // (won't actually re-arm since stopped will be true)
+    const shutdownPromise = scheduler.shutdown()
+    // Resolve the first fire so shutdown can drain.
+    resolveFireFn()
+    await shutdownPromise
+    // Only the one fire that was already in flight completed.
+    expect(fires).toEqual(["j1"])
+    // No re-arm happened after the fire because stopped=true.
+    expect(clock.pending()).toBe(0)
+  }, 15_000)
 })

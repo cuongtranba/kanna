@@ -120,4 +120,26 @@ describe("CronSkipCoalescer", () => {
     })
     expect(coalescer.flushPending(CHAT, "cron-other", SKIP_FLUSH_WINDOW_MS)).toBeNull()
   })
+
+  /**
+   * Documents the accepted trade-off: state is process-local, so a hard kill
+   * (SIGKILL, OOM) discards any pending count that was never written. A clean
+   * shutdown drains in-flight fires (which flush streaks before the run
+   * record), so this only affects hard kills. The next boot's `server_offline`
+   * count covers fires missed WHILE the server was down, not the pre-kill tail.
+   */
+  test("pending skip count is process-local and is silently dropped on process exit", () => {
+    const coalescer = new CronSkipCoalescer()
+    coalescer.record(CHAT, JOB, "chat_busy", 0)
+    coalescer.record(CHAT, JOB, "chat_busy", 1_000)
+    coalescer.record(CHAT, JOB, "chat_busy", 2_000)
+    // Simulate process exit: the coalescer object is garbage-collected.
+    // A NEW coalescer (next boot) has no memory of the 2 pending counts.
+    const nextBootCoalescer = new CronSkipCoalescer()
+    expect(nextBootCoalescer.flushPending(CHAT, JOB, 0)).toBeNull()
+    expect(nextBootCoalescer.record(CHAT, JOB, "chat_busy", 0)).toEqual({
+      reason: "chat_busy",
+      count: 1,
+    })
+  })
 })

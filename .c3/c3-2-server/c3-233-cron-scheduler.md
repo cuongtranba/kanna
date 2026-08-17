@@ -1,6 +1,6 @@
 ---
 id: c3-233
-c3-seal: c514f1f340d6e7f1466d1ab25255b9a78dfc847cbcf132bf402e0db8738962eb
+c3-seal: 74102b88ad8bc08b447e9db4033d7f0387c3a71d597380781335e31ed957100d
 title: cron-scheduler
 type: component
 category: feature
@@ -61,6 +61,16 @@ CONSECUTIVE skips collapse into one counted record (`CronSkipCoalescer`, a
 per-job leading-edge throttle) so a sub-minute schedule's runs are not buried
 under one card per skipped tick. Occurrence math delegates to the `cron` npm
 package (CronTime.getNextDateFrom), including its 6-field seconds form.
+Shutdown: `CronScheduler.shutdown()` is async — it sets a `stopped` flag
+(so any timer callback that fires concurrently declines to start a new fire),
+clears all timers, then drains every in-flight `runFire` call under
+`SHUTDOWN_DRAIN_TIMEOUT_MS` (5 s, shorter than Docker's 10 s kill grace).
+`AgentCoordinator.drainCronOutcomes()` awaits the `cron_run_outcome` writes
+that the cancel loop triggers via `onTurnTerminal` before the event log is
+truncated. `EventStore.flush()` is called immediately before
+`snapshotAndTruncateLogs()` so no in-flight append races the truncation.
+Fires that outlive the drain deadline are abandoned and their runs are
+reconciled as `orphaned` at next boot by `reconcileCronRunsAtBoot`.
 Non-goals: turn orchestration (c3-210), the one-shot rate-limit resume
 scheduler (c3-227), UI rendering (c3-120).
 
@@ -94,6 +104,7 @@ scheduler (c3-227), UI rendering (c3-120).
 | Boot fires a storm of missed runs | Rehydrate replaying past fires instead of skipping | Scheduler rehydrate test asserts skip + future arm | bun test src/server/cron/scheduler.test.ts |
 | Occurrence semantics drift from the engine | node-cron upgrade changing day-matching or strictly-after behavior | Behavioral next-fire table pins vixie OR, leap years, impossible-date null | bun test src/server/cron/next-fire.test.ts |
 | A skip streak outlives the job it belongs to, or is never reported | A fire path that starts a run without flushing, or a lifecycle event that does not forget the streak | fire.test.ts asserts the tail lands before the run it waited on, and that a pause drops the folded count | bun test src/server/cron/fire.test.ts src/server/cron/skip-coalescer.test.ts |
+| In-flight cron event lost when log is truncated at shutdown | A new write path in fire.ts or server.ts that bypasses flush() before snapshotAndTruncateLogs(), or a cancel path that drops the drainCronOutcomes() await | scheduler.test.ts shutdown drain test asserts in-flight fire completes before shutdown returns; EventStore.flush() call in server.ts shutdown is the choke point | bun test src/server/cron/scheduler.test.ts |
 
 ## Derived Materials
 

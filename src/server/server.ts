@@ -882,7 +882,11 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     appSettings.dispose()
     keybindings.dispose()
     scheduleManager.shutdown()
-    cronScheduler.shutdown()
+    // cronScheduler.shutdown() sets stopped=true and clears timers synchronously
+    // (the first part of its body runs before the first await), so no new fires
+    // can start after this line. The async drain runs concurrently while we
+    // cancel active turns, then we await it below.
+    const cronDrain = cronScheduler.shutdown()
     tunnelGateway.shutdown()
     snapshotSweepHandle.stop()
     await observability.shutdown()
@@ -891,6 +895,11 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     for (const chatId of [...agent.activeTurns.keys()]) {
       await agent.cancel(chatId)
     }
+    // Drain any cron_run_outcome writes triggered by the cancel loop above,
+    // then wait for in-flight cron fires that were already running at shutdown.
+    // Both must complete before we flush + truncate the event log.
+    await agent.drainCronOutcomes()
+    await cronDrain
     // After cancel handles in-flight turns, dispose() closes any RESIDENT
     // claudeSessions that have no active turn (idle but cached) — without
     // this, those PTY children leak past server shutdown.
@@ -898,6 +907,9 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     router.dispose()
     await auth?.dispose()
     terminals.closeAll()
+    // Flush all queued event writes before snapshotting so no event is lost
+    // in the race between an in-flight appendText and the log truncation.
+    await store.flush()
     await store.snapshotAndTruncateLogs()
     server.stop(true)
   }
