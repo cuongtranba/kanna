@@ -1,28 +1,21 @@
 import { randomUUID } from "node:crypto"
-import { computeCostUsd, resolveModelPrice, type ModelPrice } from "../shared/token-pricing"
+import { resolveModelPrice } from "../shared/token-pricing"
 import { defaultSpawnCodexAppServer } from "./codex-spawn.adapter"
 import { createInterface } from "node:readline"
 import type { Readable, Writable } from "node:stream"
 import type {
-  AskUserQuestionItem,
   CodexReasoningEffort,
   ContextWindowUsageSnapshot,
-  ImageGenerationStatus,
   ServiceTier,
-  TodoItem,
-  TranscriptEntry,
 } from "../shared/types"
-import { buildContentUrlForFilePath } from "../shared/projectFileUrl"
 import { relocateExternalFileIntoProject } from "./projectFileRelocation.adapter"
 import type { HarnessEvent, HarnessToolRequest, HarnessTurn } from "./harness-types"
 import {
-  type CollabAgentToolCallItem,
   type ContextCompactedNotification,
   type CodexRequestId,
   type CommandExecutionApprovalDecision,
   type CommandExecutionRequestApprovalParams,
   type CommandExecutionRequestApprovalResponse,
-  type DynamicToolCallOutputContentItem,
   type DynamicToolCallResponse,
   type FileChangeApprovalDecision,
   type FileChangeRequestApprovalParams,
@@ -31,11 +24,9 @@ import {
   type ItemCompletedNotification,
   type ItemStartedNotification,
   type JsonRpcResponse,
-  type McpToolCallItem,
   type PlanDeltaNotification,
   type ServerNotification,
   type ServerRequest,
-  type ThreadItem,
   type ThreadResumeParams,
   type ThreadResumeResponse,
   type ThreadForkParams,
@@ -43,9 +34,6 @@ import {
   type ThreadStartParams,
   type ThreadStartResponse,
   type ThreadTokenUsageUpdatedNotification,
-  type ToolRequestUserInputParams,
-  type ToolRequestUserInputQuestion,
-  type ToolRequestUserInputResponse,
   type TurnPlanStep,
   type TurnPlanUpdatedNotification,
   type TurnCompletedNotification,
@@ -56,10 +44,28 @@ import {
   isServerNotification,
   isServerRequest,
 } from "./codex-app-server-protocol"
-import { log } from "../shared/log"
 import { safeJsonParse } from "../shared/safe-json"
-import { type AnyValue, isRecord, errorMessage as sharedErrorMessage } from "../shared/errors"
-import { codexErrorInfoTag, type CodexErrorInfo } from "../shared/codex-error-classification"
+import { type AnyValue, errorMessage as sharedErrorMessage } from "../shared/errors"
+import { type CodexErrorInfo } from "../shared/codex-error-classification"
+import {
+  type TranslationContext,
+  asRecord,
+  buildResultEntry,
+  codexSystemInitEntry,
+  createTranscriptEntry,
+  dynamicToolPayload,
+  genericDynamicToolCall,
+  normalizeCodexTokenUsage,
+  renderPlanMarkdownFromSteps,
+  todoToolCall,
+  toAskUserQuestionItems,
+  toToolRequestUserInputResponse,
+  translateItemToToolCalls,
+  translateItemToToolResults,
+  webSearchQuery,
+  DEFERRED_DYNAMIC_TOOLS,
+} from "./codex-transcript-translator"
+export { normalizeCodexTokenUsage } from "./codex-transcript-translator"
 
 export interface CodexAppServerProcess {
   stdin: Writable
@@ -165,724 +171,12 @@ export interface GenerateStructuredArgs {
   serviceTier?: ServiceTier
 }
 
-function timestamped<T extends Omit<TranscriptEntry, "_id" | "createdAt">>(
-  entry: T,
-  createdAt = Date.now()
-): T & { _id: string; createdAt: number } {
-  return {
-    _id: randomUUID(),
-    createdAt,
-    ...entry,
-  }
-}
-
-function codexSystemInitEntry(model: string): TranscriptEntry {
-  return timestamped({
-    kind: "system_init",
-    provider: "codex",
-    model,
-    tools: ["Bash", "Write", "Edit", "WebSearch", "TodoWrite", "AskUserQuestion", "ExitPlanMode"],
-    agents: ["spawnAgent", "sendInput", "resumeAgent", "wait", "closeAgent"],
-    slashCommands: [],
-    mcpServers: [],
-  })
-}
-
 function isRecoverableResumeError(error: AnyValue): boolean {
   const message = sharedErrorMessage(error).toLowerCase()
   if (!message.includes("thread/resume")) return false
   return ["not found", "missing thread", "no such thread", "unknown thread", "does not exist"].some((snippet) =>
     message.includes(snippet)
   )
-}
-
-const MULTI_SELECT_HINT_PATTERN = /\b(all that apply|select all|choose all|pick all|select multiple|choose multiple|pick multiple|multiple selections?|multiple choice|more than one|one or more)\b/i
-
-function inferQuestionAllowsMultiple(question: ToolRequestUserInputQuestion): boolean {
-  const combinedText = [question.header, question.question].filter(Boolean).join(" ")
-  return MULTI_SELECT_HINT_PATTERN.test(combinedText)
-}
-
-function toAskUserQuestionItems(params: ToolRequestUserInputParams): AskUserQuestionItem[] {
-  return params.questions.map((question) => ({
-    id: question.id,
-    question: question.question,
-    header: question.header || undefined,
-    options: question.options?.map((option) => ({
-      label: option.label,
-      description: option.description ?? undefined,
-    })),
-    multiSelect: inferQuestionAllowsMultiple(question),
-  }))
-}
-
-function toToolRequestUserInputResponse(raw: AnyValue, questions: ToolRequestUserInputParams["questions"]): ToolRequestUserInputResponse {
-  const record = isRecord(raw) ? raw : {}
-  const answersValue = record.answers
-  const value = isRecord(answersValue) ? answersValue : record
-  const answers = Object.fromEntries(
-    questions.map((question) => {
-      const rawAnswer = value[question.id] ?? value[question.question]
-      if (Array.isArray(rawAnswer)) {
-        return [question.id, { answers: rawAnswer.map((entry) => String(entry)) }]
-      }
-      if (typeof rawAnswer === "string") {
-        return [question.id, { answers: [rawAnswer] }]
-      }
-      if (isRecord(rawAnswer) && Array.isArray(rawAnswer.answers)) {
-        return [question.id, { answers: rawAnswer.answers.map((entry) => String(entry)) }]
-      }
-      return [question.id, { answers: [] }]
-    })
-  )
-  return { answers }
-}
-
-function normalizeMcpContent(v: AnyValue): string | Record<string, AnyValue> | AnyValue[] | null {
-  if (typeof v === "string") return v
-  if (isRecord(v)) return v
-  if (Array.isArray(v)) return v
-  return null
-}
-
-function contentFromMcpResult(item: McpToolCallItem): AnyValue {
-  if (item.error?.message) {
-    return { error: item.error.message }
-  }
-  return item.result?.structuredContent ?? item.result?.content ?? null
-}
-
-function asRecord(value: AnyValue): Record<string, unknown> | null {
-  if (!isRecord(value)) return null
-  return value
-}
-
-function asNumber(value: AnyValue): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined
-}
-
-export function normalizeCodexTokenUsage(
-  notification: ThreadTokenUsageUpdatedNotification,
-  resolveTurnPrice?: () => ModelPrice | null,
-): ContextWindowUsageSnapshot | null {
-  const usage = notification.tokenUsage
-  const totalUsage = usage.total_token_usage ?? usage.total
-  const lastUsage = usage.last_token_usage ?? usage.last
-
-  const totalProcessedTokens = asNumber(totalUsage?.total_tokens) ?? asNumber(totalUsage?.totalTokens)
-  const usedTokens = asNumber(lastUsage?.total_tokens) ?? asNumber(lastUsage?.totalTokens) ?? totalProcessedTokens
-  if (usedTokens === undefined || usedTokens <= 0) {
-    return null
-  }
-
-  const inputTokens = asNumber(lastUsage?.input_tokens) ?? asNumber(lastUsage?.inputTokens)
-  const cachedInputTokens = asNumber(lastUsage?.cached_input_tokens) ?? asNumber(lastUsage?.cachedInputTokens)
-  const outputTokens = asNumber(lastUsage?.output_tokens) ?? asNumber(lastUsage?.outputTokens)
-  const reasoningOutputTokens =
-    asNumber(lastUsage?.reasoning_output_tokens) ?? asNumber(lastUsage?.reasoningOutputTokens)
-  const maxTokens = asNumber(usage.model_context_window) ?? asNumber(usage.modelContextWindow)
-
-  let costUsd: number | undefined
-  if (resolveTurnPrice) {
-    const price = resolveTurnPrice()
-    if (price) {
-      costUsd = computeCostUsd(
-        { inputTokens: inputTokens ?? 0, cachedInputTokens, outputTokens: outputTokens ?? 0 },
-        price,
-      )
-    }
-  }
-
-  return {
-    usedTokens,
-    ...(totalProcessedTokens !== undefined && totalProcessedTokens > usedTokens ? { totalProcessedTokens } : {}),
-    ...(maxTokens !== undefined ? { maxTokens } : {}),
-    ...(inputTokens !== undefined ? { inputTokens } : {}),
-    ...(cachedInputTokens !== undefined ? { cachedInputTokens } : {}),
-    ...(outputTokens !== undefined ? { outputTokens } : {}),
-    ...(reasoningOutputTokens !== undefined ? { reasoningOutputTokens } : {}),
-    ...(inputTokens !== undefined ? { lastInputTokens: inputTokens } : {}),
-    ...(cachedInputTokens !== undefined ? { lastCachedInputTokens: cachedInputTokens } : {}),
-    ...(outputTokens !== undefined ? { lastOutputTokens: outputTokens } : {}),
-    ...(reasoningOutputTokens !== undefined ? { lastReasoningOutputTokens: reasoningOutputTokens } : {}),
-    lastUsedTokens: usedTokens,
-    compactsAutomatically: true,
-    ...(costUsd !== undefined ? { costUsd } : {}),
-  }
-}
-
-function todoStatus(status: TurnPlanStep["status"]): TodoItem["status"] {
-  if (status === "completed") return "completed"
-  if (status === "inProgress") return "in_progress"
-  return "pending"
-}
-
-function planStepsToTodos(steps: TurnPlanStep[]): TodoItem[] {
-  return steps.map((step) => ({
-    content: step.step,
-    status: todoStatus(step.status),
-    activeForm: step.step,
-  }))
-}
-
-function renderPlanMarkdownFromSteps(steps: TurnPlanStep[]): string {
-  return steps.map((step) => {
-    const checkbox = step.status === "completed" ? "[x]" : "[ ]"
-    return `- ${checkbox} ${step.step}`
-  }).join("\n")
-}
-
-const warnedUnknownItemTypes = new Set<string>()
-
-function warnUnknownItemType(item: ThreadItem) {
-  const type = ("type" in item && typeof item.type === "string" ? item.type : null) ?? "<missing>"
-  if (warnedUnknownItemTypes.has(type)) return
-  warnedUnknownItemTypes.add(type)
-  log.warn(`[codex-app-server] unknown ThreadItem type "${type}"; emitting generic tool placeholder. Update protocol bindings.`)
-}
-
-function fallbackToolNameForItem(item: ThreadItem): string {
-  const type = ("type" in item && typeof item.type === "string" ? item.type : null) ?? "Unknown"
-  return type.charAt(0).toUpperCase() + type.slice(1)
-}
-
-function dynamicContentToText(contentItems: DynamicToolCallOutputContentItem[] | null | undefined): string {
-  if (!contentItems?.length) return ""
-  return contentItems
-    .map((item) => item.type === "inputText" ? item.text ?? "" : item.imageUrl ?? "")
-    .filter(Boolean)
-    .join("\n")
-}
-
-function dynamicToolPayload(value: Record<string, unknown> | unknown[] | string | number | boolean | null | undefined): Record<string, unknown> {
-  const record = asRecord(value)
-  if (record) return record
-  return { value }
-}
-
-function webSearchQuery(item: Extract<ThreadItem, { type: "webSearch" }>): string {
-  return item.query || item.action?.query || item.action?.queries?.find((query) => typeof query === "string") || ""
-}
-
-function genericDynamicToolCall(toolId: string, toolName: string, input: Record<string, unknown>): TranscriptEntry {
-  return timestamped({
-    kind: "tool_call",
-    tool: {
-      kind: "tool",
-      toolKind: "unknown_tool",
-      toolName,
-      toolId,
-      input: {
-        payload: input,
-      },
-      rawInput: input,
-    },
-  })
-}
-
-export const IMAGE_GENERATION_TOOL_NAME = "ImageGeneration"
-
-// Dynamic tools whose `item/started` payload carries placeholder args; emission
-// must wait for `item/completed` so the UI sees the real revisedPrompt/status.
-export const DEFERRED_DYNAMIC_TOOLS: ReadonlySet<string> = new Set([IMAGE_GENERATION_TOOL_NAME])
-
-function normalizeImageGenerationStatus(raw: AnyValue): ImageGenerationStatus {
-  if (raw === "completed" || raw === "failed") return raw
-  return "in_progress"
-}
-
-function imageGenerationInputFromArgs(args: AnyValue): { revisedPrompt: string | null; status: ImageGenerationStatus } {
-  const record = asRecord(args)
-  return {
-    revisedPrompt: typeof record?.revisedPrompt === "string" ? record.revisedPrompt : null,
-    status: normalizeImageGenerationStatus(record?.status),
-  }
-}
-
-function imageGenerationToolCallFromDynamic(item: Extract<ThreadItem, { type: "dynamicToolCall" }>): TranscriptEntry {
-  const input = imageGenerationInputFromArgs(item.arguments)
-  return timestamped({
-    kind: "tool_call",
-    tool: {
-      kind: "tool",
-      toolKind: "image_generation",
-      toolName: IMAGE_GENERATION_TOOL_NAME,
-      toolId: item.id,
-      input,
-      rawInput: input,
-    },
-  })
-}
-
-function imageGenerationToolCallFromTyped(item: Extract<ThreadItem, { type: "imageGeneration" }>): TranscriptEntry {
-  const input = {
-    revisedPrompt: item.revisedPrompt ?? null,
-    status: normalizeImageGenerationStatus(item.status),
-  }
-  return timestamped({
-    kind: "tool_call",
-    tool: {
-      kind: "tool",
-      toolKind: "image_generation",
-      toolName: IMAGE_GENERATION_TOOL_NAME,
-      toolId: item.id,
-      input,
-      rawInput: input,
-    },
-  })
-}
-
-function relativePathFromContentItems(contentItems: DynamicToolCallOutputContentItem[] | null | undefined): string | null {
-  if (!contentItems?.length) return null
-  for (const entry of contentItems) {
-    if (entry.type !== "inputText" || typeof entry.text !== "string") continue
-    const text = entry.text.trim()
-    if (!text) continue
-    return text
-  }
-  return null
-}
-
-function buildImageGenerationResult(
-  toolId: string,
-  relativePath: string | null,
-  projectId: string | null,
-  upstreamError: boolean,
-): TranscriptEntry {
-  const rel = relativePath ?? ""
-  const fileName = rel ? rel.split("/").pop() ?? rel : ""
-  const contentUrl = buildContentUrlForFilePath(projectId, rel) ?? ""
-  // No URL means the renderer cannot display anything useful — surface as an
-  // error so the UI shows the error branch instead of silent "no content".
-  const isError = upstreamError || !contentUrl
-  return timestamped({
-    kind: "tool_result",
-    toolId,
-    content: { contentUrl, relativePath: rel, fileName },
-    isError,
-  })
-}
-
-function collabToolCall(item: CollabAgentToolCallItem): TranscriptEntry {
-  return timestamped({
-    kind: "tool_call",
-    tool: {
-      kind: "tool",
-      toolKind: "subagent_task",
-      toolName: "Task",
-      toolId: item.id,
-      input: {
-        subagentType: item.tool,
-      },
-      rawInput: isRecord(item) ? item : {},
-    },
-  })
-}
-
-function todoToolCall(toolId: string, steps: TurnPlanStep[]): TranscriptEntry {
-  return timestamped({
-    kind: "tool_call",
-    tool: {
-      kind: "tool",
-      toolKind: "todo_write",
-      toolName: "TodoWrite",
-      toolId,
-      input: {
-        todos: planStepsToTodos(steps),
-      },
-      rawInput: {
-        plan: steps,
-      },
-    },
-  })
-}
-
-function fileChangeKind(
-  kind: "add" | "delete" | "update" | { type: "add" | "delete" | "update"; move_path?: string | null }
-): { type: "add" | "delete" | "update"; movePath?: string | null } {
-  if (typeof kind === "string") {
-    return { type: kind }
-  }
-  return {
-    type: kind.type,
-    movePath: kind.move_path ?? null,
-  }
-}
-
-function fileChangeToolId(itemId: string, index: number, totalChanges: number): string {
-  if (totalChanges === 1) {
-    return itemId
-  }
-  return `${itemId}:change:${index}`
-}
-
-function fileChangePayload(
-  item: Extract<ThreadItem, { type: "fileChange" }>,
-  change: Extract<ThreadItem, { type: "fileChange" }>["changes"][number]
-): Record<string, unknown> {
-  const payload = { ...item, changes: [change] }
-  return isRecord(payload) ? payload : {}
-}
-
-function parseUnifiedDiff(diff: string): { oldString: string; newString: string } {
-  const oldLines: string[] = []
-  const newLines: string[] = []
-
-  for (const line of diff.split(/\r?\n/)) {
-    if (!line) continue
-    if (line.startsWith("@@") || line.startsWith("---") || line.startsWith("+++")) continue
-    if (line === "\\ No newline at end of file") continue
-
-    const prefix = line[0]
-    const content = line.slice(1)
-
-    if (prefix === " ") {
-      oldLines.push(content)
-      newLines.push(content)
-      continue
-    }
-    if (prefix === "-") {
-      oldLines.push(content)
-      continue
-    }
-    if (prefix === "+") {
-      newLines.push(content)
-    }
-  }
-
-  return {
-    oldString: oldLines.join("\n"),
-    newString: newLines.join("\n"),
-  }
-}
-
-function isUnifiedDiff(diff: string) {
-  return diff.includes("@@")
-    || diff.startsWith("---")
-    || diff.startsWith("+++")
-    || diff.split(/\r?\n/).some((line) => (
-      line.startsWith("+")
-      || line.startsWith("-")
-      || line.startsWith(" ")
-      || line === "\\ No newline at end of file"
-    ))
-}
-
-function fileChangeToToolCalls(item: Extract<ThreadItem, { type: "fileChange" }>): TranscriptEntry[] {
-  return item.changes.map((change, index) => {
-    const payload = fileChangePayload(item, change)
-    const toolId = fileChangeToolId(item.id, index, item.changes.length)
-    const normalizedKind = fileChangeKind(change.kind)
-
-    if (normalizedKind.movePath) {
-      return timestamped({
-        kind: "tool_call",
-        tool: {
-          kind: "tool",
-          toolKind: "unknown_tool",
-          toolName: "FileChange",
-          toolId,
-          input: {
-            payload,
-          },
-          rawInput: payload,
-        },
-      })
-    }
-
-    if (typeof change.diff === "string") {
-      const diffIsUnified = isUnifiedDiff(change.diff)
-      const { oldString, newString } = diffIsUnified
-        ? parseUnifiedDiff(change.diff)
-        : { oldString: change.diff, newString: change.diff }
-
-      if (normalizedKind.type === "add") {
-        return timestamped({
-          kind: "tool_call",
-          tool: {
-            kind: "tool",
-            toolKind: "write_file",
-            toolName: "Write",
-            toolId,
-            input: {
-              filePath: change.path,
-              content: newString,
-            },
-            rawInput: payload,
-          },
-        })
-      }
-
-      if (normalizedKind.type === "update") {
-        if (!diffIsUnified) {
-          return timestamped({
-            kind: "tool_call",
-            tool: {
-              kind: "tool",
-              toolKind: "unknown_tool",
-              toolName: "FileChange",
-              toolId,
-              input: {
-                payload,
-              },
-              rawInput: payload,
-            },
-          })
-        }
-
-        return timestamped({
-          kind: "tool_call",
-          tool: {
-            kind: "tool",
-            toolKind: "edit_file",
-            toolName: "Edit",
-            toolId,
-            input: {
-              filePath: change.path,
-              oldString,
-              newString,
-            },
-            rawInput: payload,
-          },
-        })
-      }
-
-      if (normalizedKind.type === "delete") {
-        return timestamped({
-          kind: "tool_call",
-          tool: {
-            kind: "tool",
-            toolKind: "delete_file",
-            toolName: "Delete",
-            toolId,
-            input: {
-              filePath: change.path,
-              content: oldString,
-            },
-            rawInput: payload,
-          },
-        })
-      }
-    }
-
-    return timestamped({
-      kind: "tool_call",
-      tool: {
-        kind: "tool",
-        toolKind: "unknown_tool",
-        toolName: "FileChange",
-        toolId,
-        input: {
-          payload,
-        },
-        rawInput: payload,
-      },
-    })
-  })
-}
-
-function fileChangeToToolResults(item: Extract<ThreadItem, { type: "fileChange" }>): TranscriptEntry[] {
-  return item.changes.map((change, index) => timestamped({
-    kind: "tool_result",
-    toolId: fileChangeToolId(item.id, index, item.changes.length),
-    content: fileChangePayload(item, change),
-    isError: item.status === "failed" || item.status === "declined",
-  }))
-}
-
-function itemToToolCalls(item: ThreadItem, _projectId: string | null): TranscriptEntry[] {
-  switch (item.type) {
-    case "userMessage":
-    case "reasoning":
-    case "agentMessage":
-      return []
-    case "dynamicToolCall":
-      if (item.tool === IMAGE_GENERATION_TOOL_NAME) {
-        return [imageGenerationToolCallFromDynamic(item)]
-      }
-      return [genericDynamicToolCall(item.id, item.tool, dynamicToolPayload(item.arguments))]
-    case "collabAgentToolCall":
-      return [collabToolCall(item)]
-    case "commandExecution":
-      return [timestamped({
-        kind: "tool_call",
-        tool: {
-          kind: "tool",
-          toolKind: "bash",
-          toolName: "Bash",
-          toolId: item.id,
-          input: {
-            command: item.command,
-          },
-          rawInput: Object.fromEntries(Object.entries(item)),
-        },
-      })]
-    case "webSearch":
-      return [timestamped({
-        kind: "tool_call",
-        tool: {
-          kind: "tool",
-          toolKind: "web_search",
-          toolName: "WebSearch",
-          toolId: item.id,
-          input: {
-            query: webSearchQuery(item),
-          },
-          rawInput: Object.fromEntries(Object.entries(item)),
-        },
-      })]
-    case "mcpToolCall":
-      return [timestamped({
-        kind: "tool_call",
-        tool: {
-          kind: "tool",
-          toolKind: "mcp_generic",
-          toolName: `mcp__${item.server}__${item.tool}`,
-          toolId: item.id,
-          input: {
-            server: item.server,
-            tool: item.tool,
-            payload: item.arguments ?? {},
-          },
-          rawInput: item.arguments ?? {},
-        },
-      })]
-    case "fileChange":
-      return fileChangeToToolCalls(item)
-    case "plan":
-      return []
-    case "error":
-      return [timestamped({
-        kind: "tool_call",
-        tool: {
-          kind: "tool",
-          toolKind: "unknown_tool",
-          toolName: "Error",
-          toolId: item.id,
-          input: {
-            payload: isRecord(item) ? item : {},
-          },
-          rawInput: isRecord(item) ? item : {},
-        },
-      })]
-    case "imageGeneration":
-      return [imageGenerationToolCallFromTyped(item)]
-    case "imageView":
-      return [timestamped({
-        kind: "tool_call",
-        tool: {
-          kind: "tool",
-          toolKind: "unknown_tool",
-          toolName: "ImageView",
-          toolId: item.id,
-          input: {
-            payload: { path: item.path },
-          },
-          rawInput: isRecord(item) ? item : {},
-        },
-      })]
-    default: {
-      warnUnknownItemType(item)
-      const record: Record<string, unknown> = isRecord(item) ? item : {}
-      const id = typeof record.id === "string" ? record.id : `unknown-${randomUUID()}`
-      return [timestamped({
-        kind: "tool_call",
-        tool: {
-          kind: "tool",
-          toolKind: "unknown_tool",
-          toolName: fallbackToolNameForItem(item),
-          toolId: id,
-          input: {
-            payload: record,
-          },
-          rawInput: record,
-        },
-      })]
-    }
-  }
-}
-
-function itemToToolResults(item: ThreadItem, projectId: string | null, cwd: string): TranscriptEntry[] {
-  switch (item.type) {
-    case "userMessage":
-    case "reasoning":
-    case "agentMessage":
-      return []
-    case "dynamicToolCall":
-      if (item.tool === IMAGE_GENERATION_TOOL_NAME) {
-        const isError = item.status === "failed" || item.success === false
-        const rawRel = relativePathFromContentItems(item.contentItems)
-        const resolvedRel = rawRel ? relocateExternalFileIntoProject(rawRel, cwd).relativePath : rawRel
-        return [buildImageGenerationResult(item.id, resolvedRel, projectId, isError)]
-      }
-      return [timestamped({
-        kind: "tool_result",
-        toolId: item.id,
-        content: dynamicContentToText(item.contentItems) || Object.fromEntries(Object.entries(item)),
-        isError: item.status === "failed" || item.success === false,
-      })]
-    case "collabAgentToolCall":
-      return [timestamped({
-        kind: "tool_result",
-        toolId: item.id,
-        content: Object.fromEntries(Object.entries(item)),
-        isError: item.status === "failed",
-      })]
-    case "commandExecution":
-      return [timestamped({
-        kind: "tool_result",
-        toolId: item.id,
-        content: item.aggregatedOutput ?? Object.fromEntries(Object.entries(item)),
-        isError: (typeof item.exitCode === "number" && item.exitCode !== 0) || item.status === "failed" || item.status === "declined",
-      })]
-    case "webSearch":
-      return [timestamped({
-        kind: "tool_result",
-        toolId: item.id,
-        content: Object.fromEntries(Object.entries(item)),
-      })]
-    case "mcpToolCall": {
-      const mcpContent = contentFromMcpResult(item)
-      return [timestamped({
-        kind: "tool_result",
-        toolId: item.id,
-        content: normalizeMcpContent(mcpContent),
-        isError: item.status === "failed",
-      })]
-    }
-    case "fileChange":
-      return fileChangeToToolResults(item)
-    case "plan":
-      return []
-    case "error":
-      return [timestamped({
-        kind: "tool_result",
-        toolId: item.id,
-        content: item.message,
-        isError: true,
-      })]
-    case "imageGeneration": {
-      const rel = item.savedPath ?? item.result ?? null
-      const resolvedRel = rel ? relocateExternalFileIntoProject(rel, cwd).relativePath : rel
-      const isError = item.status === "failed"
-      return [buildImageGenerationResult(item.id, resolvedRel, projectId, isError)]
-    }
-    case "imageView":
-      return [timestamped({
-        kind: "tool_result",
-        toolId: item.id,
-        content: item.path,
-      })]
-    default: {
-      const record: Record<string, unknown> = isRecord(item) ? item : {}
-      const id = typeof record.id === "string" ? record.id : `unknown-${randomUUID()}`
-      return [timestamped({
-        kind: "tool_result",
-        toolId: id,
-        content: record,
-      })]
-    }
-  }
 }
 
 class AsyncQueue<T> implements AsyncIterable<T> {
@@ -1207,6 +501,14 @@ export class CodexAppServerManager {
     return context
   }
 
+  private buildTranslationContext(context: SessionContext): TranslationContext {
+    return {
+      projectId: context.projectId,
+      cwd: context.cwd,
+      relocate: (path) => relocateExternalFileIntoProject(path, context.cwd).relativePath,
+    }
+  }
+
   private attachListeners(context: SessionContext) {
     const lines = createInterface({ input: context.child.stdout })
     void (async () => {
@@ -1293,7 +595,7 @@ export class CodexAppServerManager {
       }
       pendingTurn.queue.push({
         type: "transcript",
-        entry: timestamped({
+        entry: createTranscriptEntry({
           kind: "tool_call",
           tool: toolRequest.tool,
         }),
@@ -1340,7 +642,7 @@ export class CodexAppServerManager {
           })
           pendingTurn.queue.push({
             type: "transcript",
-            entry: timestamped({
+            entry: createTranscriptEntry({
               kind: "tool_result",
               toolId: request.params.callId,
               content: "",
@@ -1366,7 +668,7 @@ export class CodexAppServerManager {
       const errorMessage = `Unsupported dynamic tool call: ${request.params.tool}`
       pendingTurn.queue.push({
         type: "transcript",
-        entry: timestamped({
+        entry: createTranscriptEntry({
           kind: "tool_result",
           toolId: request.params.callId,
           content: errorMessage,
@@ -1493,7 +795,7 @@ export class CodexAppServerManager {
       return
     }
 
-    const entries = itemToToolCalls(notification.item, context.projectId)
+    const entries = translateItemToToolCalls(notification.item, context.projectId)
     for (const entry of entries) {
       if (entry.kind === "tool_call") {
         pendingTurn.startedToolIds.add(entry.tool.toolId)
@@ -1509,7 +811,7 @@ export class CodexAppServerManager {
       }
       pendingTurn.queue.push({
         type: "transcript",
-        entry: timestamped({
+        entry: createTranscriptEntry({
           kind: "assistant_text",
           text: notification.item.text,
         }),
@@ -1517,7 +819,7 @@ export class CodexAppServerManager {
       if (pendingTurn.pendingWebSearchResultToolId && notification.item.text.trim()) {
         pendingTurn.queue.push({
           type: "transcript",
-          entry: timestamped({
+          entry: createTranscriptEntry({
             kind: "tool_result",
             toolId: pendingTurn.pendingWebSearchResultToolId,
             content: notification.item.text,
@@ -1538,7 +840,7 @@ export class CodexAppServerManager {
       return
     }
 
-    const startedEntries = itemToToolCalls(notification.item, context.projectId)
+    const startedEntries = translateItemToToolCalls(notification.item, context.projectId)
     for (const entry of startedEntries) {
       if (entry.kind !== "tool_call") {
         continue
@@ -1550,7 +852,7 @@ export class CodexAppServerManager {
       pendingTurn.queue.push({ type: "transcript", entry })
     }
 
-    const resultEntries = itemToToolResults(notification.item, context.projectId, context.cwd)
+    const resultEntries = translateItemToToolResults(notification.item, this.buildTranslationContext(context))
     for (const entry of resultEntries) {
       pendingTurn.queue.push({ type: "transcript", entry })
       if (notification.item.type === "webSearch" && entry.kind === "tool_result" && !entry.isError) {
@@ -1585,7 +887,7 @@ export class CodexAppServerManager {
   private handleContextCompacted(pendingTurn: PendingTurn, _notification: ContextCompactedNotification) {
     pendingTurn.queue.push({
       type: "transcript",
-      entry: timestamped({ kind: "compact_boundary" }),
+      entry: createTranscriptEntry({ kind: "compact_boundary" }),
     })
   }
 
@@ -1603,7 +905,7 @@ export class CodexAppServerManager {
 
     pendingTurn.queue.push({
       type: "transcript",
-      entry: timestamped({
+      entry: createTranscriptEntry({
         kind: "context_window_updated",
         usage,
       }),
@@ -1640,7 +942,7 @@ export class CodexAppServerManager {
         }
         pendingTurn.queue.push({
           type: "transcript",
-          entry: timestamped({
+          entry: createTranscriptEntry({
             kind: "tool_call",
             tool,
           }),
@@ -1654,14 +956,6 @@ export class CodexAppServerManager {
     }
 
     pendingTurn.resolved = true
-    const last = pendingTurn.lastUsageSnapshot
-    const resultUsage = last
-      ? {
-          ...(last.inputTokens !== undefined ? { inputTokens: last.inputTokens } : {}),
-          ...(last.outputTokens !== undefined ? { outputTokens: last.outputTokens } : {}),
-          ...(last.cachedInputTokens !== undefined ? { cachedInputTokens: last.cachedInputTokens } : {}),
-        }
-      : undefined
     let subtype: "cancelled" | "error" | "success"
     if (isCancelled) {
       subtype = "cancelled"
@@ -1670,19 +964,9 @@ export class CodexAppServerManager {
     } else {
       subtype = "success"
     }
-    const errorInfoTag = codexErrorInfoTag(notification.turn.error?.codexErrorInfo)
     pendingTurn.queue.push({
       type: "transcript",
-      entry: timestamped({
-        kind: "result",
-        subtype,
-        isError,
-        durationMs: 0,
-        result: notification.turn.error?.message ?? "",
-        ...(resultUsage !== undefined ? { usage: resultUsage } : {}),
-        ...(last?.costUsd !== undefined ? { costUsd: last.costUsd } : {}),
-        ...(errorInfoTag !== null ? { codexErrorInfo: errorInfoTag } : {}),
-      }),
+      entry: buildResultEntry(subtype, notification.turn.error?.message ?? "", notification.turn.error?.codexErrorInfo, pendingTurn.lastUsageSnapshot),
     })
     pendingTurn.queue.finish()
     context.pendingTurn = null
@@ -1691,27 +975,9 @@ export class CodexAppServerManager {
   private failContext(context: SessionContext, message: string, errorInfo?: CodexErrorInfo | null) {
     const pendingTurn = context.pendingTurn
     if (pendingTurn && !pendingTurn.resolved) {
-      const last = pendingTurn.lastUsageSnapshot
-      const resultUsage = last
-        ? {
-            ...(last.inputTokens !== undefined ? { inputTokens: last.inputTokens } : {}),
-            ...(last.outputTokens !== undefined ? { outputTokens: last.outputTokens } : {}),
-            ...(last.cachedInputTokens !== undefined ? { cachedInputTokens: last.cachedInputTokens } : {}),
-          }
-        : undefined
-      const errorInfoTag = codexErrorInfoTag(errorInfo)
       pendingTurn.queue.push({
         type: "transcript",
-        entry: timestamped({
-          kind: "result",
-          subtype: "error" as const,
-          isError: true,
-          durationMs: 0,
-          result: message,
-          ...(resultUsage !== undefined ? { usage: resultUsage } : {}),
-          ...(last?.costUsd !== undefined ? { costUsd: last.costUsd } : {}),
-          ...(errorInfoTag !== null ? { codexErrorInfo: errorInfoTag } : {}),
-        }),
+        entry: buildResultEntry("error", message, errorInfo, pendingTurn.lastUsageSnapshot),
       })
       pendingTurn.queue.finish()
       context.pendingTurn = null
