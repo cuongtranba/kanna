@@ -63,7 +63,10 @@ function parseCronLine(line: string): Outcome {
   if (line.includes("\n")) {
     return {
       ok: false,
-      error: { part: "subcommand", message: "a /cron command must be a single-line message" },
+      error: {
+        part: "multiline",
+        message: "a /cron command must be a single-line message",
+      },
     }
   }
 

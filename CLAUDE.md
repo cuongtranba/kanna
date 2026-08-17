@@ -677,6 +677,21 @@ parser as the deterministic layer.
 `KANNA_CRON_REPAIR=disabled` turns the escalation off; the tools stay. See
 `adr-20260816-cron-llm-repair`.
 
+**A multiline `/cron` message is its own `part` (`"multiline"`), not
+`"subcommand"`.** Chat `061b8856` reproduced 39b0d210's dead end even with
+`input` recorded: the user's message wrapped onto a second line, the guard in
+`parseCronCommand` rejected it with `part: "subcommand"` and no `suggestion`,
+and `REPAIRABLE_PARTS` excluded `"subcommand"` — so `createCronRepair.offer`
+returned before ever asking the model, twice, with nothing else happening.
+The exclusion was meant for genuine management-subcommand typos
+(`/cron list extra`, `/cron remove` with no id), which always carry a
+mechanical `suggestion` and so never actually reach that check — the
+multiline guard was the only live path hitting it, and it isn't a subcommand
+typo at all: a wrapped or multi-sentence instruction is still arm-shaped,
+just with no mechanical way to collapse it to one line. `"multiline"` is
+listed in `REPAIRABLE_PARTS` so it escalates to the model like any other
+unfixable arm.
+
 # `/cron` sub-minute schedules
 
 Seconds are **node-cron's own shape, not Kanna's invention**: `CronTime` reads a

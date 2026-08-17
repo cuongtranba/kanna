@@ -55,15 +55,24 @@ export interface CronRepair {
 }
 
 /**
- * Parts that describe an arm the user meant but mistyped. `subcommand` covers
- * `/cron list extra` and the multiline guard — shape errors with a mechanical
- * answer and no schedule to interpret.
+ * Parts that describe an arm the user meant but mistyped. `subcommand` is
+ * deliberately excluded — `/cron list extra`, `/cron remove` with no id, and
+ * friends always carry a mechanical `suggestion`, so they never even reach
+ * this check (the `error.suggestion !== undefined` guard above catches them
+ * first); the exclusion is belt-and-suspenders for a shape that should never
+ * arrive here without a fix already attached.
+ *
+ * `multiline` is repairable: a `/cron` message that spans multiple lines is
+ * still arm-shaped (usually a verbose instruction the user wrapped or
+ * appended a thought to) with no mechanical way to collapse it into one line
+ * — exactly the free-form intent this escalation exists to interpret.
  */
 const REPAIRABLE_PARTS: readonly CronParsePart[] = [
   "instruction",
   "mode",
   "schedule",
   "schedule_field",
+  "multiline",
 ]
 
 /**

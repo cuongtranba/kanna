@@ -14,6 +14,10 @@ function errorOf(line: string): CronParseError {
 const UNFIXABLE = errorOf("/cron check CI inline 9am every day")
 /** The parser already knows the answer to this one. */
 const FIXABLE = errorOf("/cron check ci spwan @daily")
+/** Arm-shaped, but split across lines — no mechanical way to collapse it. */
+const MULTILINE = errorOf(
+  "/cron pull github issues and fix them, run every 2 mins\nwhen done mark the issue closed",
+)
 
 interface Harness {
   deps: CronRepairDeps
@@ -69,11 +73,29 @@ describe("createCronRepair", () => {
   })
 
   // `/cron remove badid` is a typo with a deterministic answer, not an intent
-  // to interpret.
+  // to interpret. Every real subcommand-shape failure the parser produces
+  // already carries a suggestion (caught by the check above this one), so
+  // this exercises the REPAIRABLE_PARTS gate directly as a defensive backstop.
   test("ignores management-subcommand failures", async () => {
     const { deps, sent } = harness()
-    await createCronRepair(deps).offer("c1", errorOf("/cron check ci inline @daily\nsecond line"))
+    const subcommandFailure: CronParseError = {
+      part: "subcommand",
+      message: "unexpected arguments after `list`",
+      input: "/cron list extra",
+    }
+    await createCronRepair(deps).offer("c1", subcommandFailure)
     expect(sent).toEqual([])
+  })
+
+  // A message split across lines is still arm-shaped — often a verbose
+  // instruction the user wrapped — and the parser has no mechanical way to
+  // collapse it, so it must reach the model like any other unfixable arm.
+  test("offers a multiline /cron message for repair", async () => {
+    const { deps, sent } = harness()
+    await createCronRepair(deps).offer("c1", MULTILINE)
+
+    expect(sent).toHaveLength(1)
+    expect(sent[0]?.content).toContain(MULTILINE.input)
   })
 
   // A model that cannot repair a line must not be asked about it forever.
