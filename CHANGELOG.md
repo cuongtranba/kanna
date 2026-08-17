@@ -8,6 +8,14 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.26.2](https://github.com/cuongtranba/kanna/compare/v1.26.1...v1.26.2) (2026-08-17)
+
+
+### Bug Fixes
+
+* **composer:** sync provider when runtime resolves after initial render ([#723](https://github.com/cuongtranba/kanna/issues/723)) ([b900a03](https://github.com/cuongtranba/kanna/commit/b900a03b81ba6c42d33585f5686f56d3ad24c394))
+* **terminal:** pass --interactive to fish shell to bypass PTY foreground-pgid detection loop ([#724](https://github.com/cuongtranba/kanna/issues/724)) ([b12e264](https://github.com/cuongtranba/kanna/commit/b12e2646c2c5f409256b3d7a40d721005f792b0d))
+
 ## [1.26.1](https://github.com/cuongtranba/kanna/compare/v1.26.0...v1.26.1) (2026-08-17)
 
 
