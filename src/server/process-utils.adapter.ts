@@ -39,6 +39,10 @@ export function spawnDetached(command: string, args: string[]) {
 }
 
 export function hasCommand(command: string) {
+  if (process.platform === "win32") {
+    const result = spawnSync("where", [command], { stdio: "ignore" })
+    return result.status === 0
+  }
   const result = spawnSync("sh", ["-lc", `command -v ${command}`], { stdio: "ignore" })
   return result.status === 0
 }
