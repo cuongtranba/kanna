@@ -14,11 +14,13 @@ export function buildCodexSpawnOptions(platform: string, cwd: string): SpawnOpti
 }
 
 function spawnCodexProcess(cwd: string): CodexAppServerProcess {
-  return spawn(
-    "codex",
-    ["app-server"],
-    buildCodexSpawnOptions(process.platform, cwd),
-  ) as unknown as CodexAppServerProcess
+  const child = spawn("codex", ["app-server"], {
+    cwd,
+    stdio: ["pipe", "pipe", "pipe"],
+    env: process.env,
+    shell: process.platform === "win32",
+  })
+  return child
 }
 
 export const defaultSpawnCodexAppServer: SpawnCodexAppServer = spawnCodexProcess
