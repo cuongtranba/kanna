@@ -81,6 +81,19 @@ describe("runCronCommand", () => {
     })
   })
 
+  test("arm records model on cron_armed when provided", async () => {
+    const { deps, events } = makeDeps({ jobIds: ["cron-abc"] })
+    await runCronCommand(deps, CHAT, parsed("/cron check ci inline every 5m"), "claude-sonnet-5")
+    expect(events[0]).toMatchObject({ kind: "cron_armed", model: "claude-sonnet-5" })
+  })
+
+  test("arm omits model from cron_armed when not provided", async () => {
+    const { deps, events } = makeDeps({ jobIds: ["cron-abc"] })
+    await runCronCommand(deps, CHAT, parsed("/cron check ci inline every 5m"))
+    expect(events[0]).toMatchObject({ kind: "cron_armed" })
+    expect((events[0] as { model?: string }).model).toBeUndefined()
+  })
+
   test("a schedule that never fires is refused at arm time", async () => {
     const { deps, entries, events } = makeDeps()
     await runCronCommand(deps, CHAT, parsed("/cron impossible inline 0 0 30 2 *"))

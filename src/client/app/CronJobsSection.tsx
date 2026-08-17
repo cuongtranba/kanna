@@ -2,9 +2,10 @@ import { CalendarClock, Pause, Play, X } from "lucide-react"
 import type { CronJobSnapshot } from "../../shared/cron/types"
 import { humanizeSchedule } from "../../shared/cron/humanize"
 import { CronRunStatusPill } from "../components/messages/CronRunMessage"
-import { formatLiveDuration } from "../lib/formatDuration"
+import { formatCompactDuration, formatLiveDuration } from "../lib/formatDuration"
 import { useNow } from "../hooks/useNow"
 import { cn } from "../lib/utils"
+import { HoverHint } from "../components/ui/truncated-text"
 
 interface Props {
   jobs: readonly CronJobSnapshot[]
@@ -36,6 +37,7 @@ export function CronJobsSection({ jobs, onPause, onResume, onRemove }: Props) {
         <div>
           {jobs.map((job, index) => {
             const isLast = index === jobs.length - 1
+            const elapsedMs = now - job.armedAt
             return (
               <div
                 key={job.jobId}
@@ -49,10 +51,15 @@ export function CronJobsSection({ jobs, onPause, onResume, onRemove }: Props) {
                     <span className="truncate text-sm text-foreground">{job.instruction}</span>
                     {job.lastRun ? <CronRunStatusPill status={job.lastRun.status} /> : null}
                   </div>
-                  <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+                  <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
                     <span className="font-mono">{job.jobId}</span>
                     <span>{humanizeSchedule(job.schedule, job.scheduleText)}</span>
                     <span>· {job.mode}</span>
+                    {job.model ? <span className="font-mono">{job.model}</span> : null}
+                    <HoverHint label={new Date(job.armedAt).toLocaleString()} side="top">
+                      <span className="tabular-nums">created {formatCompactDuration(elapsedMs)} ago</span>
+                    </HoverHint>
+                    <span className="tabular-nums">running for {formatCompactDuration(elapsedMs)}</span>
                     {job.paused ? (
                       <span className="inline-flex items-center gap-1">
                         <Pause className="h-3 w-3" aria-hidden="true" />

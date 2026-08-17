@@ -42,6 +42,7 @@ export function deriveCronJobs(
             schedule: event.schedule,
             paused: false,
             armedAt: event.timestamp,
+            ...(event.model !== undefined ? { model: event.model } : {}),
           },
           runs: [],
         })

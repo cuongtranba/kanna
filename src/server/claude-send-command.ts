@@ -139,7 +139,7 @@ export interface SendCommandDeps {
   clearChatContext(chatId: string): Promise<void>
 
   /** Dispatch a parsed `/cron` message (arm/list/manage or validation error). */
-  runCronCommand(chatId: string, result: import("../shared/cron/types").CronParseResult): Promise<void>
+  runCronCommand(chatId: string, result: import("../shared/cron/types").CronParseResult, model?: string): Promise<void>
 }
 
 // ---------------------------------------------------------------------------
@@ -282,7 +282,7 @@ export async function runBuiltinCommand(
   // `/cron` never starts a turn — arm/list/manage (or a validation-error
   // entry) is pure Kanna state, like `/clear`.
   if (command.name === "cron") {
-    await deps.runCronCommand(chatId, command.result)
+    await deps.runCronCommand(chatId, command.result, settings.model)
     await onCommitted?.()
     return
   }

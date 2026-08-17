@@ -122,6 +122,8 @@ export type AutoContinueEvent =
       mode: CronMode
       scheduleText: string
       schedule: CronSchedule
+      /** Model resolved at arm time. Optional for backward compat with older events. */
+      model?: string
     })
   | (AutoContinueEventBase & {
       kind: "cron_disarmed"

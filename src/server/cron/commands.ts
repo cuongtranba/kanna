@@ -70,6 +70,7 @@ export async function runCronCommand(
   deps: CronCommandDeps,
   chatId: string,
   result: CronParseResult,
+  model?: string,
 ): Promise<void> {
   if (!result.ok) {
     await refuseCronCommand(deps, chatId, result.error)
@@ -110,6 +111,7 @@ export async function runCronCommand(
         mode: command.mode,
         scheduleText: command.scheduleText,
         schedule: command.schedule,
+        ...(model !== undefined ? { model } : {}),
       })
       await appendCronEntry(deps, chatId, {
         kind: "cron_armed",

@@ -6,10 +6,11 @@ import { useKannaSocketInstance } from "./KannaSocketProvider"
 import type { CronJobsGlobalRow } from "../../shared/cron/types"
 import { humanizeSchedule } from "../../shared/cron/humanize"
 import { CronRunStatusPill } from "../components/messages/CronRunMessage"
-import { formatLiveDuration } from "../lib/formatDuration"
+import { formatCompactDuration, formatLiveDuration } from "../lib/formatDuration"
 import { getPathBasename } from "../lib/formatters"
 import { useNow } from "../hooks/useNow"
 import { cn } from "../lib/utils"
+import { HoverHint } from "../components/ui/truncated-text"
 
 /**
  * Global cron management page (/cron): every armed job across every project
@@ -62,6 +63,7 @@ export function CronJobsPage() {
                 {group.rows.map((row, index) => {
                   const job = row.job
                   const isLast = index === group.rows.length - 1
+                  const elapsedMs = now - job.armedAt
                   return (
                     <div
                       key={`${row.chatId} ${job.jobId}`}
@@ -79,6 +81,11 @@ export function CronJobsPage() {
                           <span className="font-mono">{job.jobId}</span>
                           <span>{humanizeSchedule(job.schedule, job.scheduleText)}</span>
                           <span>· {job.mode}</span>
+                          {job.model ? <span className="font-mono">{job.model}</span> : null}
+                          <HoverHint label={new Date(job.armedAt).toLocaleString()} side="top">
+                            <span className="tabular-nums">created {formatCompactDuration(elapsedMs)} ago</span>
+                          </HoverHint>
+                          <span className="tabular-nums">running for {formatCompactDuration(elapsedMs)}</span>
                           {job.paused ? (
                             <span className="inline-flex items-center gap-1">
                               <Pause className="h-3 w-3" aria-hidden="true" />
