@@ -57,13 +57,24 @@ function resolveShell() {
   }
 }
 
-function resolveShellArgs(shellPath: string) {
+export function resolveShellArgs(shellPath: string): string[] {
   if (process.platform === "win32") {
     return []
   }
 
   const shellName = path.basename(shellPath)
-  if (["bash", "zsh", "fish", "sh", "ksh"].includes(shellName)) {
+  if (shellName === "fish") {
+    // fish checks tcgetpgrp(STDIN_FILENO) to confirm it is the foreground process
+    // group before entering interactive mode. When Bun.Terminal does not call
+    // tcsetpgrp(master_fd, child_pgid) after spawning, that check returns -1 and
+    // fish enters an infinite SIGTTIN loop — the terminal hangs. Passing
+    // --interactive bypasses the foreground-process-group detection: fish starts
+    // its prompt immediately and job control still works because stdin is a real
+    // PTY slave (isatty returns true). -l loads login config files as usual.
+    return ["--interactive", "-l"]
+  }
+
+  if (["bash", "zsh", "sh", "ksh"].includes(shellName)) {
     return ["-l"]
   }
 
