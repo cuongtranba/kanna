@@ -659,3 +659,164 @@ describe("SubmitPlugin — KEY_ENTER_COMMAND dispatch", () => {
     unregister2()
   })
 })
+
+// ─── iPad external keyboard (regression: Enter must submit via Universal Control / Magic Keyboard) ─
+
+describe("SubmitPlugin — iPad external keyboard (fine pointer override)", () => {
+  /**
+   * On iPad, isTouchDevice() is always true (ontouchstart / maxTouchPoints > 0).
+   * When connected to a Magic Keyboard or Universal Control, the Mac's trackpad
+   * becomes the primary pointing device → matchesMediaQuery("(hover: hover) and
+   * (pointer: fine)") returns true. Enter should submit in that case.
+   */
+
+  it("does NOT submit on touch device with coarse pointer (on-screen keyboard)", () => {
+    const plainEnter = { shiftKey: false, isComposing: false } as KeyboardEvent
+
+    function shouldSubmit(
+      event: KeyboardEvent,
+      isTouchDevice: boolean,
+      hasFinePointer: boolean,
+      hasContent: boolean,
+    ): boolean {
+      if (!event) return false
+      if (event.isComposing) return false
+      if (event.shiftKey) return false
+      if (isTouchDevice && !hasFinePointer) return false
+      if (!hasContent) return false
+      return true
+    }
+
+    expect(shouldSubmit(plainEnter, true, false, true)).toBe(false)
+  })
+
+  it("submits on touch device with fine pointer (iPad + Magic Keyboard / Universal Control)", () => {
+    const plainEnter = { shiftKey: false, isComposing: false } as KeyboardEvent
+
+    function shouldSubmit(
+      event: KeyboardEvent,
+      isTouchDevice: boolean,
+      hasFinePointer: boolean,
+      hasContent: boolean,
+    ): boolean {
+      if (!event) return false
+      if (event.isComposing) return false
+      if (event.shiftKey) return false
+      if (isTouchDevice && !hasFinePointer) return false
+      if (!hasContent) return false
+      return true
+    }
+
+    expect(shouldSubmit(plainEnter, true, true, true)).toBe(true)
+  })
+
+  it("submits on non-touch device regardless of pointer type", () => {
+    const plainEnter = { shiftKey: false, isComposing: false } as KeyboardEvent
+
+    function shouldSubmit(
+      event: KeyboardEvent,
+      isTouchDevice: boolean,
+      hasFinePointer: boolean,
+      hasContent: boolean,
+    ): boolean {
+      if (!event) return false
+      if (event.isComposing) return false
+      if (event.shiftKey) return false
+      if (isTouchDevice && !hasFinePointer) return false
+      if (!hasContent) return false
+      return true
+    }
+
+    expect(shouldSubmit(plainEnter, false, false, true)).toBe(true)
+  })
+
+  it("handler with touch=true fine=true dispatches onSubmit via command", () => {
+    const editor = buildEditor()
+    let submitted = false
+
+    editor.update(
+      () => {
+        const root = $getRoot()
+        root.clear()
+        const para = $createParagraphNode()
+        para.append($createTextNode("hello from iPad"))
+        root.append(para)
+      },
+      { discrete: true },
+    )
+
+    const fakeDom = {
+      hasTypeaheadMenuOpen: () => false,
+      isTouchDevice: () => true,
+      matchesMediaQuery: (query: string) => query === "(hover: hover) and (pointer: fine)",
+    }
+
+    const unregister = editor.registerCommand(
+      KEY_ENTER_COMMAND,
+      (event: KeyboardEvent | null) => {
+        if (!event) return false
+        if (event.isComposing) return false
+        if (event.shiftKey) return false
+        if (fakeDom.hasTypeaheadMenuOpen()) return false
+        if (fakeDom.isTouchDevice() && !fakeDom.matchesMediaQuery("(hover: hover) and (pointer: fine)")) return false
+        const payload = serializeEditorToWire(editor)
+        const canSubmit = payload.text.trim().length > 0 || payload.attachments.length > 0
+        if (!canSubmit) return false
+        submitted = true
+        return true
+      },
+      COMMAND_PRIORITY_HIGH,
+    )
+
+    const enter = Object.assign(new KeyboardEvent("keydown", { key: "Enter" }), { isComposing: false })
+    editor.dispatchCommand(KEY_ENTER_COMMAND, enter as KeyboardEvent)
+
+    expect(submitted).toBe(true)
+    unregister()
+  })
+
+  it("handler with touch=true fine=false does NOT dispatch onSubmit via command", () => {
+    const editor = buildEditor()
+    let submitted = false
+
+    editor.update(
+      () => {
+        const root = $getRoot()
+        root.clear()
+        const para = $createParagraphNode()
+        para.append($createTextNode("hello from iPad"))
+        root.append(para)
+      },
+      { discrete: true },
+    )
+
+    const fakeDom = {
+      hasTypeaheadMenuOpen: () => false,
+      isTouchDevice: () => true,
+      matchesMediaQuery: (_query: string) => false,
+    }
+
+    const unregister = editor.registerCommand(
+      KEY_ENTER_COMMAND,
+      (event: KeyboardEvent | null) => {
+        if (!event) return false
+        if (event.isComposing) return false
+        if (event.shiftKey) return false
+        if (fakeDom.hasTypeaheadMenuOpen()) return false
+        if (fakeDom.isTouchDevice() && !fakeDom.matchesMediaQuery("(hover: hover) and (pointer: fine)")) return false
+        const payload = serializeEditorToWire(editor)
+        const canSubmit = payload.text.trim().length > 0 || payload.attachments.length > 0
+        if (!canSubmit) return false
+        submitted = true
+        return true
+      },
+      COMMAND_PRIORITY_HIGH,
+    )
+
+    const enter = Object.assign(new KeyboardEvent("keydown", { key: "Enter" }), { isComposing: false })
+    editor.dispatchCommand(KEY_ENTER_COMMAND, enter as KeyboardEvent)
+
+    expect(submitted).toBe(false)
+    unregister()
+  })
+})
