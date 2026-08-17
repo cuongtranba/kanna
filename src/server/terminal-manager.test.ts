@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { TerminalManager } from "./terminal-manager"
+import { TerminalManager, resolveShellArgs } from "./terminal-manager"
 
 const SHELL_START_TIMEOUT_MS = 5_000
 const COMMAND_TIMEOUT_MS = 5_000
@@ -11,6 +11,37 @@ const RAW_READ_HEX_COMMAND = `python3 -c "exec('import os,sys,tty,termios,select
 
 const isSupportedPlatform = process.platform !== "win32" && typeof Bun.Terminal === "function"
 const describeIfSupported = isSupportedPlatform ? describe : describe.skip
+
+// ─── resolveShellArgs unit tests ─────────────────────────────────────────────
+// These run on all platforms; the Windows branch is guarded inside the function.
+
+const describeUnix = process.platform !== "win32" ? describe : describe.skip
+
+describeUnix("resolveShellArgs", () => {
+  test("fish gets --interactive and -l to bypass PTY process-group detection loop", () => {
+    expect(resolveShellArgs("/usr/bin/fish")).toEqual(["--interactive", "-l"])
+    expect(resolveShellArgs("/opt/homebrew/bin/fish")).toEqual(["--interactive", "-l"])
+    expect(resolveShellArgs("fish")).toEqual(["--interactive", "-l"])
+  })
+
+  test("bash, zsh, sh, ksh each get only -l (no --interactive needed)", () => {
+    expect(resolveShellArgs("/bin/bash")).toEqual(["-l"])
+    expect(resolveShellArgs("/bin/zsh")).toEqual(["-l"])
+    expect(resolveShellArgs("/bin/sh")).toEqual(["-l"])
+    expect(resolveShellArgs("/bin/ksh")).toEqual(["-l"])
+  })
+
+  test("unknown shell gets no args", () => {
+    expect(resolveShellArgs("/usr/bin/nushell")).toEqual([])
+    expect(resolveShellArgs("/usr/bin/pwsh")).toEqual([])
+    expect(resolveShellArgs("")).toEqual([])
+  })
+
+  test("shell basename is used, not the full path", () => {
+    expect(resolveShellArgs("/some/weird/path/to/fish")).toEqual(["--interactive", "-l"])
+    expect(resolveShellArgs("/usr/local/bin/bash")).toEqual(["-l"])
+  })
+})
 
 let tempProjectPath = ""
 let tempHomePath = ""
