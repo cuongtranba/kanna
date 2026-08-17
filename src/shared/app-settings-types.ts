@@ -1,7 +1,3 @@
-// Application settings domain types.
-// Extracted from types.ts to keep the barrel lean.
-// All external consumers importing from "../shared/types" continue to work unchanged.
-
 import type {
   AppThemePreference,
   ChatSoundPreference,
@@ -10,7 +6,50 @@ import type {
   DefaultProviderPreference,
   LlmProviderKind,
 } from "./core-types"
-import { DEFAULT_VAPID_SUBJECT } from "./vapid-subject"
+import type { AuthSettings } from "./settings/auth"
+import {
+  AUTH_DEFAULTS,
+  AUTH_SESSION_MAX_AGE_DAYS_MAX,
+  AUTH_SESSION_MAX_AGE_DAYS_MIN,
+} from "./settings/auth"
+import type {
+  CloudflareTunnelMode,
+  CloudflareTunnelRecord,
+  CloudflareTunnelSettings,
+  CloudflareTunnelState,
+} from "./settings/cloudflare-tunnel"
+import { CLOUDFLARE_TUNNEL_DEFAULTS } from "./settings/cloudflare-tunnel"
+import type { PushSettings } from "./settings/push"
+import { PUSH_DEFAULTS } from "./settings/push"
+import type { TelemetrySettings } from "./settings/telemetry"
+import { TELEMETRY_DEFAULTS } from "./settings/telemetry"
+import type { UploadSettings } from "./settings/uploads"
+import {
+  UPLOAD_DEFAULTS,
+  UPLOAD_MAX_FILE_SIZE_MB_MAX,
+  UPLOAD_MAX_FILE_SIZE_MB_MIN,
+} from "./settings/uploads"
+export type {
+  AuthSettings,
+  CloudflareTunnelMode,
+  CloudflareTunnelRecord,
+  CloudflareTunnelSettings,
+  CloudflareTunnelState,
+  PushSettings,
+  TelemetrySettings,
+  UploadSettings,
+}
+export {
+  AUTH_DEFAULTS,
+  AUTH_SESSION_MAX_AGE_DAYS_MAX,
+  AUTH_SESSION_MAX_AGE_DAYS_MIN,
+  CLOUDFLARE_TUNNEL_DEFAULTS,
+  PUSH_DEFAULTS,
+  TELEMETRY_DEFAULTS,
+  UPLOAD_DEFAULTS,
+  UPLOAD_MAX_FILE_SIZE_MB_MAX,
+  UPLOAD_MAX_FILE_SIZE_MB_MIN,
+}
 import type {
   ChatProviderPreferences,
   ProviderPreference,
@@ -36,17 +75,6 @@ import type { Subagent, SubagentInput, SubagentPatch } from "./subagent-types"
 // ---------------------------------------------------------------------------
 // Auth
 // ---------------------------------------------------------------------------
-
-export interface AuthSettings {
-  sessionMaxAgeDays: number
-}
-
-export const AUTH_DEFAULTS: AuthSettings = {
-  sessionMaxAgeDays: 30,
-}
-
-export const AUTH_SESSION_MAX_AGE_DAYS_MIN = 1
-export const AUTH_SESSION_MAX_AGE_DAYS_MAX = 365
 
 export type OAuthTokenStatus = "active" | "limited" | "error" | "disabled"
 
@@ -97,17 +125,6 @@ export const OAUTH_TOKEN_VALUE_MAX = 1024
 // Upload
 // ---------------------------------------------------------------------------
 
-export interface UploadSettings {
-  maxFileSizeMb: number
-}
-
-export const UPLOAD_DEFAULTS: UploadSettings = {
-  maxFileSizeMb: 100,
-}
-
-export const UPLOAD_MAX_FILE_SIZE_MB_MIN = 1
-export const UPLOAD_MAX_FILE_SIZE_MB_MAX = 2048
-
 export const GLOBAL_PROMPT_APPEND_MAX_CHARS = 8_000
 
 // ---------------------------------------------------------------------------
@@ -153,76 +170,6 @@ export interface ChatSessionStateSnapshot {
   chatId: string
   state: ClaudeSessionLifecycleStatus
   updatedAt: number
-}
-
-// ---------------------------------------------------------------------------
-// Cloudflare tunnel
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// Push notifications
-// ---------------------------------------------------------------------------
-
-/**
- * User-configurable Web Push settings. `contactSubject` is the VAPID `sub`
- * (JWT subject) claim used to sign push messages — push services reject a
- * malformed one (Apple returns `403 BadJwtToken`). Validated via
- * `isValidVapidSubject` in `src/shared/vapid-subject.ts`.
- */
-export interface PushSettings {
-  contactSubject: string
-}
-
-export const PUSH_DEFAULTS: PushSettings = {
-  contactSubject: DEFAULT_VAPID_SUBJECT,
-}
-
-// ---------------------------------------------------------------------------
-// Telemetry (OTel traces + metrics)
-// ---------------------------------------------------------------------------
-
-/**
- * User-facing switch for Kanna's OTel export. Each install reports under a
- * service name derived from the machine's display name, so `enabled` is the
- * whole opt-out: turning it off stops span + metric export at runtime. The
- * KANNA_OTEL env var still overrides in both directions (see otel-config.ts).
- */
-export interface TelemetrySettings {
-  enabled: boolean
-  endpoint: string
-}
-
-export const TELEMETRY_DEFAULTS: TelemetrySettings = {
-  enabled: true,
-  endpoint: "https://kanna-otel.lowbit.link",
-}
-
-export type CloudflareTunnelMode = "always-ask" | "auto-expose"
-
-export interface CloudflareTunnelSettings {
-  enabled: boolean
-  cloudflaredPath: string
-  mode: CloudflareTunnelMode
-}
-
-export const CLOUDFLARE_TUNNEL_DEFAULTS: CloudflareTunnelSettings = {
-  enabled: false,
-  cloudflaredPath: "cloudflared",
-  mode: "always-ask",
-}
-
-export type CloudflareTunnelState = "proposed" | "active" | "stopped" | "failed"
-
-export interface CloudflareTunnelRecord {
-  tunnelId: string
-  chatId: string
-  port: number
-  state: CloudflareTunnelState
-  url: string | null
-  error: string | null
-  proposedAt: number
-  activatedAt: number | null
-  stoppedAt: number | null
 }
 
 // ---------------------------------------------------------------------------
