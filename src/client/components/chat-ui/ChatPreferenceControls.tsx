@@ -1,5 +1,5 @@
 import { useCallback, useMemo, type ComponentType, type SVGProps } from "react"
-import { Box, Brain, Gauge, ListTodo, LockOpen, Search, SquareMenu, SquareMinus } from "lucide-react"
+import { Box, Brain, Gauge, ListTodo, Lock, LockOpen, Search, SquareMenu, SquareMinus } from "lucide-react"
 import {
   CLAUDE_CONTEXT_WINDOW_OPTIONS,
   CLAUDE_REASONING_OPTIONS,
@@ -17,6 +17,7 @@ import {
 import { useAppSettingsStore, selectCustomModels } from "../../stores/appSettingsStore"
 import { cn } from "../../lib/utils"
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover"
+import { HoverHint } from "../ui/truncated-text"
 import { InputPopoverStore } from "./InputPopover.store"
 import { SearchableModelPopoverStore } from "./SearchableModelPopover.store"
 
@@ -302,7 +303,7 @@ interface ChatPreferenceControlsProps {
   model: string
   modelOptions: ClaudeModelOptions | CodexModelOptions | OpenRouterModelOptions
   onProviderChange?: (provider: AgentProvider) => void
-  onModelChange: (provider: AgentProvider, model: string) => void
+  onModelChange?: (provider: AgentProvider, model: string) => void
   onModelOptionChange: (change: ModelOptionChange) => void
   planMode?: boolean
   onPlanModeChange?: (planMode: boolean) => void
@@ -335,6 +336,51 @@ export function ChatPreferenceControls({
   const contextWindowOptions = providerConfig.models.find((candidate) => candidate.id === model)?.contextWindowOptions ?? []
   const selectedContextWindow = claudeModelOptions?.contextWindow ?? CLAUDE_CONTEXT_WINDOW_OPTIONS[0].id
   const ContextWindowIcon = selectedContextWindow === "1m" ? SquareMenu : SquareMinus
+  const modelLabel = providerConfig.models.find((candidate) => candidate.id === model)?.label ?? model
+  const unlockedModelPicker = selectedProvider === "openrouter" ? (
+    <SearchableModelPopover
+      models={providerConfig.models}
+      selectedModel={model}
+      onSelect={(id) => onModelChange?.(selectedProvider, id)}
+      ModelIcon={ModelIcon}
+    />
+  ) : (
+    <InputPopover
+      trigger={(
+        <>
+          <ModelIcon className="h-3.5 w-3.5" />
+          <span>{modelLabel}</span>
+        </>
+      )}
+    >
+      {(close) => providerConfig.models.map((candidate) => {
+        const Icon = Box
+        return (
+          <PopoverMenuItem
+            key={candidate.id}
+            onClick={() => {
+              onModelChange?.(selectedProvider, candidate.id)
+              close()
+            }}
+            selected={model === candidate.id}
+            icon={<Icon className="h-4 w-4 text-muted-foreground" />}
+            label={
+              showCodexCliRequirementHints && selectedProvider === "codex" && candidate.id === "gpt-5.5"
+                ? (
+                  <>
+                    {candidate.label}{" "}
+                    <span className="text-xs font-normal text-muted-foreground">
+                      codex-cli &gt;= 0.124
+                    </span>
+                  </>
+                )
+                : candidate.label
+            }
+          />
+        )
+      })}
+    </InputPopover>
+  )
 
   return (
     <div className={cn("flex md:justify-center items-center gap-0.5", className)}>
@@ -366,50 +412,17 @@ export function ChatPreferenceControls({
         </InputPopover>
       ) : null}
 
-      {selectedProvider === "openrouter" ? (
-        <SearchableModelPopover
-          models={providerConfig.models}
-          selectedModel={model}
-          onSelect={(id) => onModelChange(selectedProvider, id)}
-          ModelIcon={ModelIcon}
-        />
-      ) : (
-        <InputPopover
-          trigger={(
-            <>
-              <ModelIcon className="h-3.5 w-3.5" />
-              <span>{providerConfig.models.find((candidate) => candidate.id === model)?.label ?? model}</span>
-            </>
-          )}
-        >
-          {(close) => providerConfig.models.map((candidate) => {
-            const Icon = Box
-            return (
-              <PopoverMenuItem
-                key={candidate.id}
-                onClick={() => {
-                  onModelChange(selectedProvider, candidate.id)
-                  close()
-                }}
-                selected={model === candidate.id}
-                icon={<Icon className="h-4 w-4 text-muted-foreground" />}
-                label={
-                  showCodexCliRequirementHints && selectedProvider === "codex" && candidate.id === "gpt-5.5"
-                    ? (
-                      <>
-                        {candidate.label}{" "}
-                        <span className="text-xs font-normal text-muted-foreground">
-                          codex-cli &gt;= 0.124
-                        </span>
-                      </>
-                    )
-                    : candidate.label
-                }
-              />
-            )
-          })}
-        </InputPopover>
-      )}
+      {onModelChange == null ? (
+        <HoverHint label="Model is locked while a cron job is running — pause or remove the cron job to change it" side="top">
+          <span
+            aria-disabled="true"
+            className="flex min-h-[36px] items-center gap-1.5 px-2 py-1 text-sm rounded-md text-muted-foreground [&>svg]:shrink-0 opacity-70 cursor-default [&>span]:whitespace-nowrap"
+          >
+            <Lock className="h-3.5 w-3.5" />
+            <span>{modelLabel}</span>
+          </span>
+        </HoverHint>
+      ) : unlockedModelPicker}
 
       {selectedProvider !== "openrouter" ? (
       <InputPopover

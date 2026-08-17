@@ -20,6 +20,7 @@ interface ChatInputDockProps {
   sessionTotals: SessionTotals | null
   onSubmit: KannaState["handleSend"]
   onCancel: () => void
+  hasUnpausedCronJob: boolean
 }
 
 export const ChatInputDock = memo(({
@@ -38,6 +39,7 @@ export const ChatInputDock = memo(({
   sessionTotals,
   onSubmit,
   onCancel,
+  hasUnpausedCronJob,
 }: ChatInputDockProps) => {
   return (
     <div className="absolute bottom-0 left-0 right-0 z-20 pointer-events-none">
@@ -58,6 +60,7 @@ export const ChatInputDock = memo(({
           contextWindowSnapshot={contextWindowSnapshot}
           sessionTotals={sessionTotals}
           previousPrompt={previousPrompt}
+          hasUnpausedCronJob={hasUnpausedCronJob}
         />
       </div>
     </div>

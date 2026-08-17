@@ -242,6 +242,7 @@ interface Props {
   sessionTotals?: SessionTotals | null
   previousPrompt?: string | null
   ports?: ChatInputPorts
+  hasUnpausedCronJob?: boolean
 }
 
 export interface ChatInputHandle {
@@ -459,6 +460,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
     sessionTotals = null,
     previousPrompt = null,
     ports,
+    hasUnpausedCronJob = false,
   },
   forwardedRef,
 ) => {
@@ -1276,7 +1278,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
               onProviderChange={(provider) => {
                 resetChatComposerFromProvider(composerChatId, provider)
               }}
-              onModelChange={(_, model) => {
+              onModelChange={hasUnpausedCronJob ? undefined : (_, model) => {
                 setChatComposerModel(composerChatId, model)
               }}
               onModelOptionChange={(change) => {
