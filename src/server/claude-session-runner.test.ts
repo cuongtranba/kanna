@@ -30,6 +30,7 @@ function makeSession(overrides: Partial<ClaudeSessionState> = {}): ClaudeSession
     interrupt: async () => {},
     close: () => {},
     sendPrompt: async () => {},
+    closed: Promise.resolve(),
     setModel: async () => {},
     setPermissionMode: async () => {},
     getSupportedCommands: async () => [],

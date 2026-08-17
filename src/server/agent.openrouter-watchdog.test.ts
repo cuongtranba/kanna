@@ -122,6 +122,7 @@ describe("AgentCoordinator OpenRouter first-entry watchdog", () => {
               closeCalled += 1
               events.close()
             },
+            closed: Promise.resolve(),
             setModel: async () => {},
             setPermissionMode: async () => {},
             getSupportedCommands: async () => [],
@@ -185,6 +186,7 @@ describe("AgentCoordinator OpenRouter first-entry watchdog", () => {
             getAccountInfo: async () => null,
             interrupt: async () => {},
             close: () => events.close(),
+            closed: Promise.resolve(),
             setModel: async () => {},
             setPermissionMode: async () => {},
             getSupportedCommands: async () => [],
@@ -237,6 +239,7 @@ describe("AgentCoordinator OpenRouter SDK-session prompt delivery", () => {
             getAccountInfo: async () => null,
             interrupt: async () => {},
             close: () => events.close(),
+            closed: Promise.resolve(),
             setModel: async () => {},
             setPermissionMode: async () => {},
             getSupportedCommands: async () => [],

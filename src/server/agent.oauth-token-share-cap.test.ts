@@ -229,6 +229,7 @@ describe("AgentCoordinator OAuth share-cap smoke (adr-20260522-oauth-token-share
             getAccountInfo: async () => null,
             interrupt: async () => {},
             close: () => {},
+            closed: Promise.resolve(),
             setModel: async () => {},
             setPermissionMode: async () => {},
             getSupportedCommands: async () => [],

@@ -232,6 +232,8 @@ export async function startClaudeSession(args: {
     }
   }
 
+  const { sessionClosed, resolveSessionClosed } = makeSessionClosedSignal()
+
   return {
     provider: "claude",
     stream: _deps.createClaudeHarnessStream(
@@ -280,6 +282,15 @@ export async function startClaudeSession(args: {
       // mid-turn used to mask the question prompt as a silent drop. Pending
       // records are now reaped by the explicit chat.cancel / chat.delete
       // paths in ws-router.ts and by recoverOnStartup on server boot.
+      resolveSessionClosed()
     },
+    closed: sessionClosed,
   }
+}
+
+/** Creates a promise/resolver pair for tracking session close completion. */
+function makeSessionClosedSignal(): { sessionClosed: Promise<void>; resolveSessionClosed: () => void } {
+  let resolveSessionClosed!: () => void
+  const sessionClosed = new Promise<void>((resolve) => { resolveSessionClosed = resolve })
+  return { sessionClosed, resolveSessionClosed }
 }

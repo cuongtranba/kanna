@@ -21,7 +21,7 @@ import { createToolCallbackService } from "./tool-callback"
 import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
-import type { HarnessTurn } from "./harness-types"
+import type { HarnessEvent, HarnessTurn } from "./harness-types"
 import type { ChatAttachment, McpServerConfig, SlashCommand, TranscriptEntry } from "../shared/types"
 import { AUTO_CONTINUE_EVENT_VERSION } from "./auto-continue/events"
 import type { AutoContinueEvent } from "./auto-continue/events"
@@ -1799,6 +1799,7 @@ describe("AgentCoordinator claude integration", () => {
         getAccountInfo: async () => null,
         interrupt: async () => {},
         close: () => {},
+                closed: Promise.resolve(),
         setModel: async () => {},
         setPermissionMode: async () => {},
         getSupportedCommands: async () => [],
@@ -1865,6 +1866,7 @@ describe("AgentCoordinator claude integration", () => {
           getAccountInfo: async () => null,
           interrupt: async () => {},
           close: () => {},
+                    closed: Promise.resolve(),
           setModel: async () => {},
           setPermissionMode: async () => {},
           getSupportedCommands: async () => [],
@@ -1940,6 +1942,7 @@ describe("AgentCoordinator claude integration", () => {
         getAccountInfo: async () => null,
         interrupt: async () => {},
         close: () => {},
+                closed: Promise.resolve(),
         setModel: async () => {},
         setPermissionMode: async () => {},
         getSupportedCommands: async () => [],
@@ -2019,6 +2022,7 @@ describe("AgentCoordinator claude integration", () => {
         close: () => {
           closeCount += 1
         },
+        closed: Promise.resolve(),
         setModel: async () => {},
         setPermissionMode: async () => {},
         getSupportedCommands: async () => [],
@@ -2075,6 +2079,7 @@ describe("AgentCoordinator claude integration", () => {
         getAccountInfo: async () => null,
         interrupt: async () => {},
         close: () => {},
+                closed: Promise.resolve(),
         setModel: async () => {},
         setPermissionMode: async () => {},
         getSupportedCommands: async () => [],
@@ -2152,6 +2157,7 @@ describe("AgentCoordinator claude integration", () => {
             closeCount += 1
             events.close()
           },
+          closed: Promise.resolve(),
           setModel: async () => {},
           setPermissionMode: async () => {},
           getSupportedCommands: async () => [],
@@ -2236,6 +2242,7 @@ describe("AgentCoordinator claude integration", () => {
             events.close()
           },
           sendPrompt: async () => {},
+          closed: Promise.resolve(),
           setModel: async () => {},
           setPermissionMode: async () => {},
           getSupportedCommands: async () => [],
@@ -2293,6 +2300,7 @@ describe("AgentCoordinator claude integration", () => {
           interrupt: async () => {},
           close: () => { closed.push(chatId); events.close() },
           sendPrompt: async () => {},
+          closed: Promise.resolve(),
           setModel: async () => {},
           setPermissionMode: async () => {},
           getSupportedCommands: async () => [],
@@ -2354,6 +2362,7 @@ describe("AgentCoordinator claude integration", () => {
           interrupt: async () => {},
           close: () => { closed.push(chatId); events.close() },
           sendPrompt: async () => {},
+          closed: Promise.resolve(),
           setModel: async () => {},
           setPermissionMode: async () => {},
           getSupportedCommands: async () => [],
@@ -2402,6 +2411,7 @@ describe("AgentCoordinator claude integration", () => {
           getAccountInfo: async () => null,
           interrupt: async () => {},
           close: () => { closeCount += 1; events.close() },
+          closed: Promise.resolve(),
           setModel: async () => {},
           setPermissionMode: async () => {},
           getSupportedCommands: async () => [],
@@ -2493,6 +2503,7 @@ describe("AgentCoordinator claude integration", () => {
           getAccountInfo: async () => null,
           interrupt: async () => {},
           close: () => { closeCount += 1; events.close() },
+          closed: Promise.resolve(),
           setModel: async () => {},
           setPermissionMode: async () => {},
           getSupportedCommands: async () => [],
@@ -2559,6 +2570,7 @@ describe("AgentCoordinator claude integration", () => {
           getAccountInfo: async () => null,
           interrupt: async () => {},
           close: () => { events.close() },
+          closed: Promise.resolve(),
           setModel: async () => {},
           setPermissionMode: async () => {},
           getSupportedCommands: async () => [],
@@ -2616,6 +2628,7 @@ describe("AgentCoordinator claude integration", () => {
           interrupt: async () => {},
           close: () => { closed.push(chatId); events.close() },
           sendPrompt: async () => {},
+          closed: Promise.resolve(),
           setModel: async () => {},
           setPermissionMode: async () => {},
           getSupportedCommands: async () => [],
@@ -2663,6 +2676,7 @@ describe("AgentCoordinator claude integration", () => {
           getAccountInfo: async () => null,
           interrupt: async () => {},
           close: () => { events.close() },
+          closed: Promise.resolve(),
           setModel: async () => {},
           setPermissionMode: async () => {},
           getSupportedCommands: async () => [],
@@ -2729,6 +2743,7 @@ describe("AgentCoordinator claude integration", () => {
           getAccountInfo: async () => null,
           interrupt: async () => {},
           close: () => { closeCount += 1; events.close() },
+          closed: Promise.resolve(),
           setModel: async () => {},
           setPermissionMode: async () => {},
           getSupportedCommands: async () => [],
@@ -2826,6 +2841,7 @@ describe("AgentCoordinator claude integration", () => {
         getAccountInfo: async () => null,
         interrupt: async () => {},
         close: () => {},
+                closed: Promise.resolve(),
         setModel: async () => {},
         setPermissionMode: async () => {},
         getSupportedCommands: async () => {
@@ -2876,6 +2892,7 @@ describe("AgentCoordinator claude integration", () => {
         getAccountInfo: async () => null,
         interrupt: async () => {},
         close: () => {},
+                closed: Promise.resolve(),
         setModel: async () => {},
         setPermissionMode: async () => {},
         getSupportedCommands: async () => [],
@@ -2944,6 +2961,7 @@ describe("AgentCoordinator claude integration", () => {
         getAccountInfo: async () => null,
         interrupt: async () => {},
         close: () => {},
+                closed: Promise.resolve(),
         setModel: async () => {},
         setPermissionMode: async () => {},
         getSupportedCommands: async () => [],
@@ -3015,6 +3033,7 @@ describe("AgentCoordinator claude integration", () => {
         getAccountInfo: async () => null,
         interrupt: async () => {},
         close: () => {},
+                closed: Promise.resolve(),
         setModel: async () => {},
         setPermissionMode: async () => {},
         getSupportedCommands: async () => [],
@@ -3095,6 +3114,7 @@ describe("AgentCoordinator claude integration", () => {
           getAccountInfo: async () => null,
           interrupt: async () => {},
           close: () => {},
+                    closed: Promise.resolve(),
           setModel: async () => {},
           setPermissionMode: async () => {},
           getSupportedCommands: async () => [],
@@ -3331,6 +3351,7 @@ describe("AgentCoordinator claude integration", () => {
         getAccountInfo: async () => null,
         interrupt: async () => {},
         close: () => {},
+                closed: Promise.resolve(),
         setModel: async () => {},
         setPermissionMode: async () => {},
         getSupportedCommands: async () => [],
@@ -3391,6 +3412,7 @@ describe("AgentCoordinator claude integration", () => {
         getAccountInfo: async () => null,
         interrupt: async () => {},
         close: () => {},
+                closed: Promise.resolve(),
         setModel: async () => {},
         setPermissionMode: async () => {},
         getSupportedCommands: async () => [],
@@ -3448,6 +3470,7 @@ describe("AgentCoordinator claude integration", () => {
         getAccountInfo: async () => null,
         interrupt: async () => {},
         close: () => {},
+                closed: Promise.resolve(),
         setModel: async () => {},
         setPermissionMode: async () => {},
         getSupportedCommands: async () => [],
@@ -3501,6 +3524,7 @@ describe("AgentCoordinator claude integration", () => {
         getAccountInfo: async () => null,
         interrupt: async () => {},
         close: () => {},
+                closed: Promise.resolve(),
         setModel: async () => {},
         setPermissionMode: async () => {},
         getSupportedCommands: async () => [],
@@ -3557,6 +3581,7 @@ describe("AgentCoordinator claude integration", () => {
         getAccountInfo: async () => null,
         interrupt: async () => {},
         close: () => {},
+                closed: Promise.resolve(),
         setModel: async () => {},
         setPermissionMode: async () => {},
         getSupportedCommands: async () => [],
@@ -3650,6 +3675,7 @@ describe("AgentCoordinator claude integration", () => {
         getAccountInfo: async () => null,
         interrupt: async () => {},
         close: () => {},
+                closed: Promise.resolve(),
         setModel: async () => {},
         setPermissionMode: async () => {},
         getSupportedCommands: async () => [],
@@ -3745,6 +3771,7 @@ describe("AgentCoordinator claude integration", () => {
           getAccountInfo: async () => null,
           interrupt: async () => {},
           close: () => {},
+                    closed: Promise.resolve(),
           setModel: async () => {},
           setPermissionMode: async () => {},
           getSupportedCommands: async () => [],
@@ -3828,6 +3855,7 @@ describe("AgentCoordinator claude integration", () => {
           getAccountInfo: async () => null,
           interrupt: async () => {},
           close: () => {},
+                    closed: Promise.resolve(),
           setModel: async () => {},
           setPermissionMode: async () => {},
           getSupportedCommands: async () => [],
@@ -4106,6 +4134,7 @@ describe("AgentCoordinator rate-limit detection (manual mode)", () => {
         getAccountInfo: async () => null,
         interrupt: async () => {},
         close: () => {},
+                closed: Promise.resolve(),
         setModel: async () => {},
         setPermissionMode: async () => {},
         getSupportedCommands: async () => [],
@@ -4151,6 +4180,7 @@ describe("AgentCoordinator rate-limit detection (manual mode)", () => {
         getAccountInfo: async () => null,
         interrupt: async () => {},
         close: () => {},
+                closed: Promise.resolve(),
         setModel: async () => {},
         setPermissionMode: async () => {},
         getSupportedCommands: async () => [],
@@ -4236,6 +4266,7 @@ describe("AgentCoordinator auto-continue firing", () => {
         getAccountInfo: async () => null,
         interrupt: async () => {},
         close: () => {},
+                closed: Promise.resolve(),
         setModel: async () => {},
         setPermissionMode: async () => {},
         getSupportedCommands: async () => [],
@@ -4353,6 +4384,7 @@ describe("AgentCoordinator.deliverSubagentToMain (notification-driven /clear)", 
         close: () => {
           closeCount += 1
         },
+        closed: Promise.resolve(),
         setModel: async () => {},
         setPermissionMode: async () => {},
         getSupportedCommands: async () => [],
@@ -4640,6 +4672,7 @@ describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
           getAccountInfo: async () => null,
           interrupt: async () => {},
           close: () => {},
+                    closed: Promise.resolve(),
           setModel: async () => {},
           setPermissionMode: async () => {},
           getSupportedCommands: async () => [],
@@ -5247,6 +5280,7 @@ describe("AgentCoordinator subagent mention gating", () => {
           stream: stream(),
           interrupt: async () => {},
           close: () => {},
+          closed: Promise.resolve(),
           sendPrompt: async () => {},
           setModel: async () => {},
           setPermissionMode: async () => {},
@@ -5341,6 +5375,7 @@ describe("AgentCoordinator subagent mention gating", () => {
           stream: stream(),
           interrupt: async () => {},
           close: () => {},
+          closed: Promise.resolve(),
           sendPrompt: async () => {},
           setModel: async () => {},
           setPermissionMode: async () => {},
@@ -5439,6 +5474,7 @@ describe("AgentCoordinator subagent mention gating", () => {
           stream: stream(),
           interrupt: async () => {},
           close: () => {},
+          closed: Promise.resolve(),
           sendPrompt: async () => {},
           setModel: async () => {},
           setPermissionMode: async () => {},
@@ -5513,6 +5549,7 @@ describe("AgentCoordinator subagent mention gating", () => {
           stream: stream(),
           interrupt: async () => {},
           close: () => {},
+          closed: Promise.resolve(),
           sendPrompt: async () => {},
           setModel: async () => {},
           setPermissionMode: async () => {},
@@ -5913,6 +5950,7 @@ describe("AgentCoordinator chatPolicy plumbing", () => {
           getAccountInfo: async () => null,
           interrupt: async () => {},
           close: () => {},
+          closed: Promise.resolve(),
           sendPrompt: async () => {
             events.push({
               type: "transcript" as const,
@@ -5963,6 +6001,7 @@ describe("AgentCoordinator PTY driver selection", () => {
         getAccountInfo: async () => null,
         interrupt: async () => {},
         close: () => {},
+        closed: Promise.resolve(),
         sendPrompt: async () => {
           events.push({
             type: "transcript" as const,
@@ -6032,6 +6071,7 @@ describe("AgentCoordinator late tool request", () => {
           getAccountInfo: async () => null,
           interrupt: async () => {},
           close: () => {},
+                    closed: Promise.resolve(),
           setModel: async () => {},
           setPermissionMode: async () => {},
           getSupportedCommands: async () => [],
@@ -6277,4 +6317,98 @@ describe("buildClaudeEnv openrouter branch", () => {
     const env = buildClaudeEnv({ PATH: "/bin", CLAUDE_CODE_OAUTH_TOKEN: "inherited" } as NodeJS.ProcessEnv, null)
     expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBe("inherited")
   })
+})
+
+describe("AgentCoordinator.dispose — awaits session closed promises", () => {
+  test(
+    "dispose() resolves only after all session closed promises resolve",
+    async () => {
+      let resolveSessionClosed!: () => void
+      const sessionClosed = new Promise<void>((resolve) => {
+        resolveSessionClosed = resolve
+      })
+
+      const events = new AsyncEventQueue<HarnessEvent>()
+      const store = createFakeStore()
+      const coordinator = new AgentCoordinator({
+        store: store as never,
+        onStateChange: () => {},
+        startClaudeSession: async () => ({
+          provider: "claude" as const,
+          stream: events,
+          getAccountInfo: async () => null,
+          interrupt: async () => {},
+          close: () => { events.close() },
+          closed: sessionClosed,
+          sendPrompt: async () => {},
+          setModel: async () => {},
+          setPermissionMode: async () => {},
+          getSupportedCommands: async () => [],
+        }),
+      } as never)
+
+      await coordinator.send({
+        type: "chat.send",
+        chatId: "chat-1",
+        content: "hello",
+        provider: "claude",
+        model: "claude-opus-4-5",
+      })
+
+      let disposed = false
+      const disposePromise = coordinator.dispose().then(() => { disposed = true })
+
+      // dispose() should not have resolved yet — session is still open
+      await new Promise((r) => setTimeout(r, 20))
+      expect(disposed).toBe(false)
+
+      // Resolve the session's closed promise (simulating PTY process exit)
+      resolveSessionClosed()
+      await disposePromise
+
+      expect(disposed).toBe(true)
+    },
+    10_000,
+  )
+
+  test(
+    "dispose() resolves after gracefulTimeoutMs even if closed never resolves",
+    async () => {
+      const neverResolves = new Promise<void>(() => {})
+      const events = new AsyncEventQueue<HarnessEvent>()
+      const store = createFakeStore()
+      const coordinator = new AgentCoordinator({
+        store: store as never,
+        onStateChange: () => {},
+        startClaudeSession: async () => ({
+          provider: "claude" as const,
+          stream: events,
+          getAccountInfo: async () => null,
+          interrupt: async () => {},
+          close: () => { events.close() },
+          closed: neverResolves,
+          sendPrompt: async () => {},
+          setModel: async () => {},
+          setPermissionMode: async () => {},
+          getSupportedCommands: async () => [],
+        }),
+      } as never)
+
+      await coordinator.send({
+        type: "chat.send",
+        chatId: "chat-1",
+        content: "hello",
+        provider: "claude",
+        model: "claude-opus-4-5",
+      })
+
+      const start = Date.now()
+      await coordinator.dispose(100)
+      const elapsed = Date.now() - start
+
+      expect(elapsed).toBeGreaterThanOrEqual(90)
+      expect(elapsed).toBeLessThan(500)
+    },
+    10_000,
+  )
 })

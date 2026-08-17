@@ -660,7 +660,7 @@ async function shutdownServices(services: ApplicationServices, server: Server<Cl
   }
   await agent.drainCronOutcomes()
   await cronDrain
-  agent.dispose()
+  await agent.dispose()
   router.dispose()
   await auth?.dispose()
   terminals.closeAll()

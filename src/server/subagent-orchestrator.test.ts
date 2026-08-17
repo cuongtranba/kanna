@@ -524,6 +524,7 @@ describe("SubagentOrchestrator", () => {
       stream,
       interrupt: async () => {},
       close: () => {},
+      closed: Promise.resolve(),
       sendPrompt: async () => {},
       setModel: async () => {},
       setPermissionMode: async () => {},

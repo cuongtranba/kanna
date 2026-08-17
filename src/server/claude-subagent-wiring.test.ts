@@ -28,7 +28,7 @@ function makeDeps(overrides: Partial<SubagentWiringDeps> = {}): SubagentWiringDe
     { resolve: (v: unknown) => void; reject: (e: Error) => void }
   >()
 
-  const fakeSession = { interrupt: () => {}, getAccountInfo: async () => null, close: () => {}, getSupportedCommands: async () => [], setModel: async () => {}, setPermissionMode: async () => {}, sendPrompt: NOOP_PROMISE, pushChannelPrompt: NOOP_PROMISE }
+  const fakeSession = { interrupt: () => {}, getAccountInfo: async () => null, close: () => {}, closed: Promise.resolve(), getSupportedCommands: async () => [], setModel: async () => {}, setPermissionMode: async () => {}, sendPrompt: NOOP_PROMISE, pushChannelPrompt: NOOP_PROMISE }
 
   return {
     store: {
