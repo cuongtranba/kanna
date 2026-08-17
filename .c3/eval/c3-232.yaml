@@ -1,0 +1,8 @@
+fact: c3-232
+claim: "boards server logic is at src/server/board-*.ts and MCP boards"
+code:
+  - src/server/board-*.ts
+  - src/server/kanna-mcp-boards.test.ts
+  - src/server/kanna-mcp-boards.ts
+  - src/server/ws-router-boards.test.ts
+  - src/server/ws-router-boards.ts

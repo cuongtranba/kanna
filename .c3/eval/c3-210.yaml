@@ -1,0 +1,14 @@
+fact: c3-210
+claim: "agent coordinator and subagent orchestration are at src/server/agent.ts, subagent-orchestrator.ts, and related files"
+code:
+  - src/server/agent.test.ts
+  - src/server/agent.ts
+  - src/server/history-primer.test.ts
+  - src/server/history-primer.ts
+  - src/server/mention-parser.test.ts
+  - src/server/mention-parser.ts
+  - src/server/subagent-entry-cap.test.ts
+  - src/server/subagent-orchestrator.test.ts
+  - src/server/subagent-orchestrator.ts
+  - src/server/subagent-provider-run.test.ts
+  - src/server/subagent-provider-run.ts

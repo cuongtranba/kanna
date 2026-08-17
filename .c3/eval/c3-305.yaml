@@ -1,0 +1,5 @@
+fact: c3-305
+claim: "branding is at src/shared/branding.ts"
+code:
+  - src/shared/branding.test.ts
+  - src/shared/branding.ts

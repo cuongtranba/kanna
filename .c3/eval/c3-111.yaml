@@ -1,0 +1,6 @@
+fact: c3-111
+claim: "sidebar is implemented at src/client/app/KannaSidebar.tsx and sidebar navigation helpers"
+code:
+  - src/client/app/KannaSidebar.tsx
+  - src/client/app/sidebarNumberJump.test.ts
+  - src/client/app/sidebarNumberJump.ts

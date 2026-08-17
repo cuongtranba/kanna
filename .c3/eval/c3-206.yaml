@@ -1,0 +1,8 @@
+fact: c3-206
+claim: "event-sourced chat op log is at src/server/chat-op-log.ts and event-store.ts"
+code:
+  - src/server/chat-op-log.test.ts
+  - src/server/chat-op-log.ts
+  - src/server/chat-ops-parity.test.ts
+  - src/server/event-store.test.ts
+  - src/server/event-store.ts

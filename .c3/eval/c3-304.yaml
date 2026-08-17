@@ -1,0 +1,6 @@
+fact: c3-304
+claim: "port constants are at src/shared/ports.ts and dev-ports.ts"
+code:
+  - src/shared/dev-ports.test.ts
+  - src/shared/dev-ports.ts
+  - src/shared/ports.ts

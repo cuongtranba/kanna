@@ -1,0 +1,6 @@
+fact: c3-114
+claim: "message rendering is under src/client/components/messages/ and markdown"
+code:
+  - src/client/components/lexical/markdown/**
+  - src/client/components/messages/**/*.ts
+  - src/client/components/messages/**/*.tsx

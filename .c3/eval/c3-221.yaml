@@ -1,0 +1,5 @@
+fact: c3-221
+claim: "external link opener is at src/server/external-open.ts"
+code:
+  - src/server/external-open.test.ts
+  - src/server/external-open.ts

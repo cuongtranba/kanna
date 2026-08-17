@@ -1,0 +1,10 @@
+fact: c3-115
+claim: "chat-input and lexical editor are under src/client/components/chat-ui/ and lexical/"
+code:
+  - src/client/components/chat-ui/**/*.ts
+  - src/client/components/chat-ui/**/*.tsx
+  - src/client/components/lexical/config.ts
+  - src/client/components/lexical/nodes/**
+  - src/client/components/lexical/plugins/**
+  - src/client/components/lexical/serialize/**
+  - src/client/components/open-external-menu.tsx

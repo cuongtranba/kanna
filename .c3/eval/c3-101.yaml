@@ -1,0 +1,10 @@
+fact: c3-101
+claim: "socket client is implemented at src/client/app/socket* and socket provider files"
+code:
+  - src/client/app/socket.test.ts
+  - src/client/app/socket.ts
+  - src/client/app/socket-protocol.ts
+  - src/client/app/KannaSocketProvider.tsx
+  - src/client/app/SocketBridge.tsx
+  - src/client/app/pushClient.ts
+  - src/client/app/pushClient.test.ts

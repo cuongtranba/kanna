@@ -1,0 +1,4 @@
+fact: c3-310
+claim: "shared boards types are under src/shared/boards/"
+code:
+  - src/shared/boards/**/*.ts

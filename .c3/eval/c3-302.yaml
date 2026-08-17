@@ -1,0 +1,6 @@
+fact: c3-302
+claim: "chat ops and protocol are at src/shared/chat-ops.ts and protocol.ts"
+code:
+  - src/shared/chat-ops.test.ts
+  - src/shared/chat-ops.ts
+  - src/shared/protocol.ts

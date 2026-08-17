@@ -1,0 +1,8 @@
+fact: c3-118
+claim: "terminal workspace is implemented at src/client/app/ChatPage/TerminalWorkspaceShell.tsx and layout helpers"
+code:
+  - src/client/app/ChatPage/TerminalWorkspaceShell.tsx
+  - src/client/app/terminalLayoutResize.test.ts
+  - src/client/app/terminalLayoutResize.ts
+  - src/client/app/terminalToggleAnimation.test.ts
+  - src/client/app/terminalToggleAnimation.ts

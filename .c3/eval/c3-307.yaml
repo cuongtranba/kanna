@@ -1,0 +1,4 @@
+fact: c3-307
+claim: "token pricing is at src/shared/token-pricing.ts"
+code:
+  - src/shared/token-pricing.ts

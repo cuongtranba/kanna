@@ -1,0 +1,23 @@
+fact: c3-110
+claim: "app-shell is implemented in src/client/app/App.tsx, useKannaState, useAppGlobalState, and related shell infrastructure"
+code:
+  - src/client/app/App.test.tsx
+  - src/client/app/App.tsx
+  - src/client/app/AppBootstrap.tsx
+  - src/client/app/AppGlobalProvider.tsx
+  - src/client/app/PageHeader.tsx
+  - src/client/app/chatFocusPolicy.test.ts
+  - src/client/app/chatFocusPolicy.ts
+  - src/client/app/chatNotifications.ts
+  - src/client/app/derived.ts
+  - src/client/app/sidebarSwipeGesture.ts
+  - src/client/app/useAppGlobalState.ts
+  - src/client/app/useKannaState.test.ts
+  - src/client/app/useKannaState.ts
+  - src/client/app/usePushFocus.ts
+  - src/client/app/usePushFocus.test.ts
+  - src/client/components/LocalDev.tsx
+  - src/client/hooks/**/*.ts
+  - src/client/hooks/**/*.tsx
+  - src/client/lib/**/*.ts
+  - src/main.tsx

@@ -1,0 +1,7 @@
+fact: c3-219
+claim: "update manager and strategy are at src/server/update-*.ts"
+code:
+  - src/server/update-manager.test.ts
+  - src/server/update-manager.ts
+  - src/server/update-strategy.test.ts
+  - src/server/update-strategy.ts

@@ -1,0 +1,6 @@
+fact: c3-203
+claim: "auth is implemented at src/server/auth.ts"
+code:
+  - src/server/auth.test.ts
+  - src/server/auth.ts
+  - src/client/app/PasswordScreen.store.ts

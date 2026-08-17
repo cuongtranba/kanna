@@ -1,0 +1,4 @@
+fact: c3-224
+claim: "OAuth token pool is under src/server/oauth-pool/"
+code:
+  - src/server/oauth-pool/**/*.ts

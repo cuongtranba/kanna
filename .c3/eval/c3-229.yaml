@@ -1,0 +1,27 @@
+fact: c3-229
+claim: "workflow status panel is at src/server/workflow-*.ts and src/client/app/Workflows*.tsx"
+code:
+  - src/server/agent-transcript-parse.test.ts
+  - src/server/agent-transcript-parse.ts
+  - src/server/watched-registry.test.ts
+  - src/server/watched-registry.ts
+  - src/client/app/WorkflowAgentTranscriptPanel.store.ts
+  - src/client/app/WorkflowAgentTranscriptPanel.test.tsx
+  - src/client/app/WorkflowAgentTranscriptPanel.tsx
+  - src/client/app/WorkflowsPage.store.ts
+  - src/client/app/WorkflowsPage.test.tsx
+  - src/client/app/WorkflowsPage.tsx
+  - src/client/app/WorkflowsSection.store.ts
+  - src/client/app/WorkflowsSection.tsx
+  - src/client/components/messages/WorkflowMessage.tsx
+  - src/client/lib/workflowGrouping.test.ts
+  - src/client/lib/workflowGrouping.ts
+  - src/client/stores/workflowsStore.ts
+  - src/server/workflow-agent-transcript-io.adapter.test.ts
+  - src/server/workflow-agent-transcript-io.adapter.ts
+  - src/server/workflow-registry.test.ts
+  - src/server/workflow-registry.ts
+  - src/server/workflow-watch-io.adapter.test.ts
+  - src/server/workflow-watch-io.adapter.ts
+  - src/shared/workflow-types.test.ts
+  - src/shared/workflow-types.ts

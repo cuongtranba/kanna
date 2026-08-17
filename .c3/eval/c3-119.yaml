@@ -1,0 +1,10 @@
+fact: c3-119
+claim: "boards UI is under src/client/app/Boards* and src/client/components/boards/"
+code:
+  - src/client/app/BoardsRoutePage.test.tsx
+  - src/client/app/BoardsRoutePage.tsx
+  - src/client/components/boards/**/*.ts
+  - src/client/components/boards/**/*.tsx
+  - src/client/lib/boards/**/*.ts
+  - src/client/stores/boardsStore.test.ts
+  - src/client/stores/boardsStore.ts

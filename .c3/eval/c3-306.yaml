@@ -1,0 +1,4 @@
+fact: c3-306
+claim: "share types are at src/shared/share.ts"
+code:
+  - src/shared/share.ts

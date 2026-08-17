@@ -1,0 +1,5 @@
+fact: c3-205
+claim: "event types and harness types are at src/server/events.ts and harness-types.ts"
+code:
+  - src/server/events.ts
+  - src/server/harness-types.ts
