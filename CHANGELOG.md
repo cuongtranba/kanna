@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.21.1](https://github.com/cuongtranba/kanna/compare/v1.21.0...v1.21.1) (2026-08-17)
+
+
+### Bug Fixes
+
+* **cron:** let a multiline /cron message reach the self-repair escalation ([#670](https://github.com/cuongtranba/kanna/issues/670)) ([21f63d7](https://github.com/cuongtranba/kanna/commit/21f63d71c097e7ecd4647f47dd9164db40545ccf))
+
 ## [1.21.0](https://github.com/cuongtranba/kanna/compare/v1.20.0...v1.21.0) (2026-08-16)
 
 
