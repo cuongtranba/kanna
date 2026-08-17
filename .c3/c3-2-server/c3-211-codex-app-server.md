@@ -1,7 +1,7 @@
 ---
 id: c3-211
 c3-version: 4
-c3-seal: 9317510117d4b96be39cd2c1f5e099d80de6e4f4d192d89950d6697f70df78e6
+c3-seal: 00295afe0995037f769d7463110cd8fbb45c817e919a86a7c351fee0ca49dd50
 title: codex-app-server
 type: component
 category: feature
@@ -80,3 +80,4 @@ Spawns the Codex App Server child process, speaks JSON-RPC, maps its event strea
 | Material | Must derive from | Allowed variance | Evidence |
 | --- | --- | --- | --- |
 | src/server/codex-app-server.ts | c3-211 Contract | RPC detail | src/server/codex-app-server.ts |
+| src/server/codex-transcript-translator.ts | c3-211 Contract | Pure translation functions; no IO | src/server/codex-transcript-translator.ts |
