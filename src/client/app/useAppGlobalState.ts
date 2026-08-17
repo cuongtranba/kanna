@@ -11,7 +11,7 @@ import { useCallback, useEffect, useMemo, useRef } from "react"
 import { useShallow } from "zustand/react/shallow"
 import { type ChatNavigatorPort } from "./chatNavigator"
 import { type AppSettingsPatch, type AppSettingsSnapshot, type ClaudeAuthSettings, type KeybindingsSnapshot, type LlmProviderSnapshot, type LlmProviderValidationResult, type OpenRouterModel, type PushConfigSnapshot, type UpdateInstallResult, type UpdateSnapshot } from "../../shared/types"
-import type { ChatDiffSnapshot, ChatSnapshot, CloudflareTunnelSettings, GitWorktree, LocalProjectsSnapshot, ProjectCommandsSnapshot, SidebarChatRow, SidebarData, StackSummary } from "../../shared/types"
+import type { AgentProvider, ChatDiffSnapshot, ChatSnapshot, CloudflareTunnelSettings, GitWorktree, LocalProjectsSnapshot, ProjectCommandsSnapshot, SidebarChatRow, SidebarData, StackSummary } from "../../shared/types"
 import { NEW_CHAT_COMPOSER_ID, useChatPreferencesStore } from "../stores/chatPreferencesStore"
 import { useRightSidebarStore } from "../stores/rightSidebarStore"
 import { useTerminalLayoutStore } from "../stores/terminalLayoutStore"
@@ -224,6 +224,14 @@ export function getProjectIdForChat(
 ): string | null {
   if (!chatId) return null
   return projectGroups.find((group) => group.chats.some((chat) => chat.chatId === chatId))?.groupKey ?? null
+}
+
+export function getMostRecentProjectProvider(
+  projectGroups: SidebarData["projectGroups"],
+  projectId: string,
+): AgentProvider | null {
+  const group = projectGroups.find((g) => g.groupKey === projectId)
+  return group?.chats[0]?.provider ?? null
 }
 
 export function getUiUpdateRestartReconnectAction(
@@ -995,15 +1003,21 @@ export function useAppGlobalState(
     const sourceComposerState = activeChatId
       ? chatPreferences.getComposerState(activeChatId)
       : chatPreferences.getComposerState(NEW_CHAT_COMPOSER_ID)
+
+    const providerHint =
+      chatPreferences.defaultProvider === "last_used"
+        ? getMostRecentProjectProvider(sidebarProjectGroups, projectId)
+        : null
+
     const result = await socket.command<{ chatId: string }>({ type: "chat.create", projectId })
-    chatPreferences.initializeComposerForChat(result.chatId, { sourceState: sourceComposerState })
+    chatPreferences.initializeComposerForChat(result.chatId, { sourceState: sourceComposerState, providerHint })
     const store = useKannaStateStore.getState()
     store.setSelectedProjectId(projectId)
     store.setPendingChatId(result.chatId)
     chatNavigator.openChat(result.chatId)
     store.setSidebarOpen(false)
     store.setCommandError(null)
-  }, [activeChatId, chatNavigator, socket])
+  }, [activeChatId, chatNavigator, sidebarProjectGroups, socket])
 
   const resolveProjectIdForStartChat = useCallback(async (intent: StartChatIntent): Promise<{ projectId: string; localPath?: string }> => {
     if (intent.kind === "project_id") {
