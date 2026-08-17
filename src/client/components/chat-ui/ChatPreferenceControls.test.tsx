@@ -67,4 +67,20 @@ describe("ChatPreferenceControls", () => {
     expect(html).toContain("min-h-[36px]")
     expect(html).toContain("touch-manipulation")
   })
+
+  test("locks model picker when onModelChange is omitted", () => {
+    const html = renderToStaticMarkup(
+      <ChatPreferenceControls
+        availableProviders={PROVIDERS}
+        selectedProvider="claude"
+        model="claude-opus-4-7"
+        modelOptions={{ reasoningEffort: "high", contextWindow: "1m" }}
+        onProviderChange={() => {}}
+        onModelOptionChange={() => {}}
+      />
+    )
+    expect(html).toContain("Opus 4.7")
+    expect(html).toContain("aria-disabled")
+    expect(html).toContain("lucide-lock")
+  })
 })

@@ -603,6 +603,7 @@ export function ChatTabContent({
         sessionTotals={sessionTotals}
         onSubmit={handleChatSubmit}
         onCancel={state.handleCancel}
+        hasUnpausedCronJob={(state.chatSnapshot?.cronJobs ?? EMPTY_CRON_JOBS).some((j) => !j.paused)}
       />
     </Card>
   )
