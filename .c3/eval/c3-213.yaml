@@ -1,0 +1,11 @@
+fact: c3-213
+claim: "LLM provider, quick-response and title generation are at src/server/llm-provider.ts and related"
+code:
+  - src/server/generate-commit-message.test.ts
+  - src/server/generate-commit-message.ts
+  - src/server/generate-title.ts
+  - src/server/llm-provider.test.ts
+  - src/server/llm-provider.ts
+  - src/server/quick-response.test.ts
+  - src/server/quick-response.ts
+  - src/server/title-generation.live.test.ts

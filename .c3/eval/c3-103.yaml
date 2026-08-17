@@ -1,0 +1,5 @@
+fact: c3-103
+claim: "UI primitives are under src/client/components/ui/ excluding testing helpers"
+code:
+  - src/client/components/editor-icons.tsx
+  - src/client/components/ui/**/*.tsx

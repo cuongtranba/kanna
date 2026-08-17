@@ -1,0 +1,5 @@
+fact: c3-226
+claim: "MCP OAuth adapter and validator are at src/server/mcp-oauth.adapter.ts and mcp-validator.ts"
+code:
+  - src/server/mcp-oauth.adapter.ts
+  - src/server/mcp-validator.ts

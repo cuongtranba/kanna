@@ -1,0 +1,5 @@
+fact: c3-207
+claim: "CQRS read models are at src/server/read-models.ts"
+code:
+  - src/server/read-models.test.ts
+  - src/server/read-models.ts

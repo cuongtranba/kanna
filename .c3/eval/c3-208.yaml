@@ -1,0 +1,7 @@
+fact: c3-208
+claim: "WS router and chat ops diff are at src/server/ws-router.ts and chat-ops-diff.ts"
+code:
+  - src/server/chat-ops-diff.test.ts
+  - src/server/chat-ops-diff.ts
+  - src/server/ws-router.test.ts
+  - src/server/ws-router.ts

@@ -11,11 +11,14 @@ c3-110:
   - src/client/app/App.test.tsx
   - src/client/app/App.tsx
   - src/client/app/AppBootstrap.tsx
+  - src/client/app/AppGlobalProvider.tsx
   - src/client/app/PageHeader.tsx
   - src/client/app/chatFocusPolicy.test.ts
   - src/client/app/chatFocusPolicy.ts
   - src/client/app/chatNotifications.ts
   - src/client/app/derived.ts
+  - src/client/app/sidebarSwipeGesture.ts
+  - src/client/app/useAppGlobalState.ts
   - src/client/app/useKannaState.test.ts
   - src/client/app/useKannaState.ts
   - src/client/components/LocalDev.tsx
@@ -56,7 +59,12 @@ c3-115:
 c3-116:
   - src/client/app/McpServersSection.test.tsx
   - src/client/app/McpServersSection.tsx
+  - src/client/app/ModelsSection.tsx
+  - src/client/app/SettingsPage.tsx
+  - src/client/app/SubagentsSection.tsx
+  - src/client/app/TextSnippetsSection.tsx
   - src/client/app/appSettingsCrud.ts
+  - src/client/app/llmProviderDraft.ts
   - src/client/app/settingsEditorForm.ts
   - src/client/components/settings/SettingsList.tsx
 c3-117:
@@ -77,9 +85,10 @@ c3-119:
   - src/client/stores/boardsStore.test.ts
   - src/client/stores/boardsStore.ts
 c3-201:
+  - src/server/cli-bootstrap.adapter.ts
   - src/server/cli-runtime.test.ts
   - src/server/cli-runtime.ts
-  - src/server/cli-supervisor.ts
+  - src/server/cli-supervisor.adapter.ts
   - src/server/cli.ts
 c3-202:
   - src/server/app-settings.ts
@@ -88,7 +97,7 @@ c3-203:
   - src/server/auth.test.ts
   - src/server/auth.ts
 c3-204:
-  - src/server/machine-name.ts
+  - src/server/machine-name.adapter.ts
   - src/server/paths.ts
   - src/server/project-paths.test.ts
   - src/server/project-paths.ts
@@ -110,8 +119,8 @@ c3-208:
   - src/server/ws-router.test.ts
   - src/server/ws-router.ts
 c3-209:
+  - src/server/process-utils.adapter.ts
   - src/server/process-utils.test.ts
-  - src/server/process-utils.ts
 c3-210:
   - src/server/agent.test.ts
   - src/server/agent.ts
@@ -120,7 +129,6 @@ c3-210:
   - src/server/mention-parser.test.ts
   - src/server/mention-parser.ts
   - src/server/subagent-entry-cap.test.ts
-  - src/server/subagent-entry-cap.ts
   - src/server/subagent-orchestrator.test.ts
   - src/server/subagent-orchestrator.ts
   - src/server/subagent-provider-run.test.ts
@@ -160,7 +168,6 @@ c3-216:
   - src/server/terminal-manager.test.ts
   - src/server/terminal-manager.ts
   - src/server/terminal-pid-registry.test.ts
-  - src/server/terminal-pid-registry.ts
 c3-217:
   - src/server/uploads.test.ts
   - src/server/uploads.ts
@@ -229,8 +236,6 @@ c3-301:
   - src/shared/mention-pattern.ts
   - src/shared/permission-policy.test.ts
   - src/shared/permission-policy.ts
-  - src/shared/projectFileRelocation.test.ts
-  - src/shared/projectFileRelocation.ts
   - src/shared/projectFileUrl.test.ts
   - src/shared/projectFileUrl.ts
   - src/shared/types.test.ts

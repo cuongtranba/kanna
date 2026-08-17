@@ -1,0 +1,5 @@
+fact: c3-218
+claim: "share feature is at src/server/share.ts"
+code:
+  - src/server/share.test.ts
+  - src/server/share.ts

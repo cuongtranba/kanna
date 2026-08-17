@@ -1889,12 +1889,23 @@ now carry it — `c3-310` (boards-domain, `src/shared/boards/**`), `c3-232`
 (boards, `src/server/board-*.ts` plus the MCP and WS surfaces), and `c3-119`
 (boards-ui, `src/client/**/boards/**`) — each with a `code-map.yaml` block.
 
-**`c3x lookup` is non-functional in this repo today, for every file — not just
-boards.** `c3x lookup src/server/read-models.ts` returns `matches[0]` although
-`code-map.yaml` has listed it under `c3-207` all along. Never read an empty
-`lookup` as "this file has no component": read the component directly
-(`c3x read c3-232`) or grep `code-map.yaml`. The `/c3 query` gate still works —
-`c3x search` and `c3x read` both resolve.
+**`c3x lookup` is now functional via `.c3/eval/<fact>.yaml` bindings.** Every
+production-significant component has a spec file at `.c3/eval/c3-NNN.yaml` with
+a `code:` list of its files and globs — `c3x lookup <file>` reads those to map a
+file back to its owning fact. `code-map.yaml` is a secondary index kept in sync
+for reference; the eval files are the authoritative source for `lookup`.
+
+**Maintaining eval bindings.** When you add a new architecture-significant file:
+1. Identify its owning component (use `c3x search` or read nearby components).
+2. Add the file path to `code:` in `.c3/eval/c3-NNN.yaml`.
+3. Also add it to the matching entry in `.c3/code-map.yaml` for consistency.
+4. Run `c3x repair` (no warnings) then `c3x lookup <file>` to confirm resolution.
+
+When a file is **renamed to `.adapter.ts`** (IO seal enforcement): update both
+`.c3/eval/c3-NNN.yaml` and `.c3/code-map.yaml` to reflect the new path.
+
+When a file is **deleted**: remove its entry from both files — stale anchors
+surface as warnings on `c3x repair`/`c3x check`; keep those clean.
 
 # Tests
 

@@ -1,0 +1,16 @@
+fact: c3-116
+claim: "settings-page is implemented at src/client/app/SettingsPage.tsx and its section components"
+code:
+  - src/client/app/McpServersSection.test.tsx
+  - src/client/app/McpServersSection.tsx
+  - src/client/app/ModelsSection.tsx
+  - src/client/app/ModelsSection.test.tsx
+  - src/client/app/SettingsPage.tsx
+  - src/client/app/SubagentsSection.tsx
+  - src/client/app/SubagentsSection.test.tsx
+  - src/client/app/TextSnippetsSection.tsx
+  - src/client/app/TextSnippetsSection.test.tsx
+  - src/client/app/appSettingsCrud.ts
+  - src/client/app/llmProviderDraft.ts
+  - src/client/app/settingsEditorForm.ts
+  - src/client/components/settings/SettingsList.tsx

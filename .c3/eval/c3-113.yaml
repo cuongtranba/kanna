@@ -1,0 +1,10 @@
+fact: c3-113
+claim: "transcript rendering is implemented at src/client/app/KannaTranscript.tsx and spacing/placement helpers"
+code:
+  - src/client/app/KannaTranscript.store.ts
+  - src/client/app/KannaTranscript.test.tsx
+  - src/client/app/KannaTranscript.tsx
+  - src/client/app/subagent-run-placement.test.ts
+  - src/client/app/subagent-run-placement.ts
+  - src/client/app/transcriptSpacing.test.ts
+  - src/client/app/transcriptSpacing.ts

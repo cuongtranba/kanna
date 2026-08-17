@@ -1,0 +1,7 @@
+fact: c3-204
+claim: "paths and machine-name are at src/server/paths.ts, project-paths.ts, and adapter files"
+code:
+  - src/server/machine-name.adapter.ts
+  - src/server/paths.ts
+  - src/server/project-paths.test.ts
+  - src/server/project-paths.ts

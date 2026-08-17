@@ -1,0 +1,5 @@
+fact: c3-117
+claim: "local-projects page is implemented at src/client/app/LocalProjectsPage.tsx"
+code:
+  - src/client/app/LocalProjectsPage.tsx
+  - src/client/components/NewProjectModal.tsx

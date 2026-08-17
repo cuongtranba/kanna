@@ -1,0 +1,4 @@
+fact: c3-227
+claim: "auto-continue scheduler is under src/server/auto-continue/"
+code:
+  - src/server/auto-continue/**/*.ts

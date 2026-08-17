@@ -1,0 +1,6 @@
+fact: c3-211
+claim: "Codex App Server driver is at src/server/codex-app-server.ts and protocol"
+code:
+  - src/server/codex-app-server-protocol.ts
+  - src/server/codex-app-server.test.ts
+  - src/server/codex-app-server.ts

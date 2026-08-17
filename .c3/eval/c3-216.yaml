@@ -1,0 +1,6 @@
+fact: c3-216
+claim: "terminal manager is at src/server/terminal-manager.ts"
+code:
+  - src/server/terminal-manager.test.ts
+  - src/server/terminal-manager.ts
+  - src/server/terminal-pid-registry.test.ts

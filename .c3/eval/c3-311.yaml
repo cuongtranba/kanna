@@ -1,0 +1,4 @@
+fact: c3-311
+claim: "shared cron types are under src/shared/cron/"
+code:
+  - src/shared/cron/**/*.ts

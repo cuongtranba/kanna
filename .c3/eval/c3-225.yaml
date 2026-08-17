@@ -1,0 +1,4 @@
+fact: c3-225
+claim: "Claude PTY driver is under src/server/claude-pty/"
+code:
+  - src/server/claude-pty/**

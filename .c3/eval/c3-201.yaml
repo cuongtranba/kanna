@@ -1,0 +1,8 @@
+fact: c3-201
+claim: "CLI runtime is implemented at src/server/cli.ts and adapter files"
+code:
+  - src/server/cli-bootstrap.adapter.ts
+  - src/server/cli-runtime.test.ts
+  - src/server/cli-runtime.ts
+  - src/server/cli-supervisor.adapter.ts
+  - src/server/cli.ts
