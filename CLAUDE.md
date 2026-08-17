@@ -141,6 +141,22 @@ defined in `src/index.css` and consumed as Tailwind theme vars
 exempt from rule 2 only (xterm's `ITheme` API takes hex strings, not CSS vars).
 No other exemptions; do not add `eslint-disable` comments.
 
+**Contrast gate (enforced, two layers).** Semantic tinted pill surfaces
+(`bg-{color}/10`) must use a `-text` token, not the raw color or `-foreground`.
+Raw and foreground tokens fail WCAG AA on one or both themes when composited over
+a tinted dark surface.
+
+- `bun run lint:usestate` (ast-grep, `rules/no-inline-tint-pairing.yml`): bans
+  inline `text-{color}[-foreground]` + `bg-{color}/` pairs in `src/client/**`.
+  Derive classes from `STATUS_PILL_CLASS` or `TONE_PAIRINGS` in
+  `src/shared/design/tone-pairings.ts`.
+- `bun run test src/server/design/tone-pairings.test.ts`: asserts WCAG AA
+  (≥4.5:1) for every `TONE_PAIRINGS` entry × {light, dark}, compositing
+  `bg-{color}/{alpha}` over the real base surface via pure OKLCH → WCAG math
+  (`src/shared/design/contrast.ts`, `tokens.ts`). Adding a new semantic tint
+  context means adding an entry to `TONE_PAIRINGS` and confirming the test
+  passes before touching any component.
+
 **Guidance-only (NOT linted — semantic, would false-positive).** Follow by
 hand:
 - No pulse/glow on status **dots** (`animate-pulse` is fine for skeletons/

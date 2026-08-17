@@ -57,10 +57,13 @@
     --logo: oklch(71.2% 0.194 13.428);
     --success: oklch(68% 0.15 155);
     --success-foreground: oklch(99% 0.005 155);
+    --success-text: oklch(37% 0.1 155);
     --warning: oklch(76% 0.14 78);
     --warning-foreground: oklch(25% 0.03 78);
+    --warning-text: oklch(42% 0.09 78);
     --info: oklch(66% 0.13 235);
     --info-foreground: oklch(99% 0.005 235);
+    --info-text: oklch(38% 0.09 235);
 
     /*
       Height of the shell's top chrome band. The sidebar header and every pane
@@ -96,7 +99,7 @@
     --accent-foreground: oklch(98% 0.003 13);
     --destructive: var(--logo);
     --destructive-foreground: var(--background);
-    --destructive-text: var(--destructive);
+    --destructive-text: oklch(78% 0.18 13);
     --border: oklch(29% 0.008 13);
     --input: oklch(26% 0.01 13);
     --ring: oklch(85% 0.008 13);
@@ -104,10 +107,13 @@
     --logo: oklch(71.2% 0.194 13.428);
     --success: oklch(72% 0.14 155);
     --success-foreground: oklch(15% 0.02 155);
+    --success-text: oklch(76% 0.14 155);
     --warning: oklch(80% 0.13 78);
     --warning-foreground: oklch(20% 0.03 78);
+    --warning-text: var(--warning);
     --info: oklch(72% 0.12 235);
     --info-foreground: oklch(15% 0.02 235);
+    --info-text: var(--info);
   }
 }
 
@@ -137,10 +143,13 @@
   --color-logo: var(--logo);
   --color-success: var(--success);
   --color-success-foreground: var(--success-foreground);
+  --color-success-text: var(--success-text);
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
+  --color-warning-text: var(--warning-text);
   --color-info: var(--info);
   --color-info-foreground: var(--info-foreground);
+  --color-info-text: var(--info-text);
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);

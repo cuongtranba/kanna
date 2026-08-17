@@ -26,8 +26,8 @@ export function ApiErrorMessage({ message }: Props) {
   const url = statusUrl(message.status)
   return (
     <div className="w-full max-w-[70ch]">
-      <div className="rounded-md border border-destructive/40 bg-destructive/10 text-destructive-foreground px-3 py-2.5 space-y-1.5">
-        <div className="flex items-center gap-2 text-xs font-medium text-destructive">
+      <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2.5 space-y-1.5">
+        <div className="flex items-center gap-2 text-xs font-medium text-destructive-text">
           <AlertTriangle className="h-3.5 w-3.5" />
           <span className="uppercase tracking-wide">{label}</span>
         </div>

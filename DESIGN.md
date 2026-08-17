@@ -133,7 +133,25 @@ The palette is one rose-tinted neutral family with a single saturated coral acce
 
 - **Kanna Coral** (`oklch(71.2% 0.194 13.428)`): the brand mark and the destructive surface. Used as logo color, as the primary CTA in landing/auth contexts, and as `--destructive` for stop/delete affordances. Never used as a background fill or a decorative gradient stop.
 
-- **Destructive Text** (`oklch(56% 0.18 13)` light / `var(--destructive)` dark): AA-compliant coral variant for text and icon-only destructive contexts (e.g. "Confirm stop?", "Force kill" labels). The bright Kanna Coral (`oklch(71.2% 0.194 13.428)`) achieves only 2.81:1 on Warm Paper — below WCAG AA. This darker variant hits 5.04:1 on Warm Paper in light mode while preserving the editorial-light-text-button feel. In dark mode the token aliases back to `--destructive` (6.35:1 on Inkstone), so the bright coral is used in both contexts where it passes. Filled destructive buttons continue to use the bright coral as background with Pale Foreground text — this token is only for text or icon-only foreground use.
+- **Destructive Text** (`oklch(56% 0.18 13)` light / `oklch(78% 0.18 13)` dark): AA-compliant coral for text and icon-only destructive contexts on tinted surfaces (e.g. "Confirm stop?", "Force kill" labels, the failed-pill in CronRunMessage). The bright Kanna Coral (`oklch(71.2% 0.194 13.428)`) achieves only 2.81:1 on Warm Paper in light mode and 3.94:1 on a `bg-destructive/10` over Warm Card Dark — both below WCAG AA. The light variant hits 5.04:1 on Warm Paper. The dark variant at L=78% achieves 4.76:1 on `bg-destructive/10` over Warm Card Dark and 7.56:1 on Inkstone. Filled destructive buttons continue to use the bright coral as background with Pale Foreground text — this token is only for text or icon-only use on tinted or light surfaces.
+
+- **Success Text** (`oklch(37% 0.1 155)` light / `oklch(76% 0.14 155)` dark): AA-compliant sage for text-only success contexts on tinted surfaces (completed-pill). Dark value brightened beyond `--success` (oklch 72%) to achieve 5.14:1 on `bg-success/10` over Warm Card Dark.
+
+- **Warning Text** (`oklch(42% 0.09 78)` light / `oklch(80% 0.13 78)` dark): AA-compliant amber for text-only running/warning contexts on tinted surfaces (running-pill). Dark aliases `--warning` (oklch 80% 0.13 78), which achieves 4.98:1 on `bg-warning/10` over Warm Card Dark.
+
+- **Info Text** (`oklch(38% 0.09 235)` light / `oklch(72% 0.12 235)` dark): AA-compliant blue for text-only info contexts on tinted surfaces. Dark aliases `--info`.
+
+### Semantic Tint Pairings
+
+Tinted pill surfaces (`bg-{color}/10`) require pairing with a **`-text`** token, not the raw color or `-foreground`. Raw colors like `--success` (sage green) achieve only 4.46:1 on a `bg-success/10` over Warm Card Dark — below WCAG AA. The `-foreground` tokens (e.g. `--warning-foreground: oklch(25% 0.03 78)`) are near-black in light and near-black in dark — 1.30:1 on a dark tinted surface.
+
+The complete catalog lives in `src/shared/design/tone-pairings.ts` (`TONE_PAIRINGS`, `STATUS_PILL_CLASS`). Every entry is machine-checked in `src/server/design/tone-pairings.test.ts` — WCAG AA (4.5:1) in both themes, compositing `bg-{color}/{alpha}` over the real base surface.
+
+**Contrast gate (enforced, two layers):**
+1. `bun run lint:usestate` (ast-grep, `rules/no-inline-tint-pairing.yml`): bans inline `text-{color}[-foreground]` + `bg-{color}/` class pairs in `src/client/**`. Use `STATUS_PILL_CLASS[status]` from the catalog instead.
+2. `bun run test src/server/design/tone-pairings.test.ts`: asserts ≥4.5:1 for every `TONE_PAIRINGS` entry × {light, dark}.
+
+Adding a new semantic tint context requires: (a) adding an entry to `TONE_PAIRINGS`, (b) choosing `-text` tokens whose contrast the test confirms, (c) adding a corresponding `STATUS_PILL_CLASS` key if it is a status pill.
 
 ### Neutral (warm rose family, hue ~13°)
 

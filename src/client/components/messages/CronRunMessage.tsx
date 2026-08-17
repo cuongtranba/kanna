@@ -1,6 +1,7 @@
 import { CalendarClock, ExternalLink } from "lucide-react"
 import { Link } from "react-router-dom"
 import type { CronJobSnapshot, CronRunStatus } from "../../../shared/cron/types"
+import { STATUS_PILL_CLASS } from "../../../shared/design/tone-pairings"
 import { formatStartedClock } from "../../lib/formatters"
 import { cn } from "../../lib/utils"
 import type { ProcessedCronRunMessage } from "./types"
@@ -56,27 +57,23 @@ const STATUS_LABEL: Record<CronRunStatus, string> = {
   skipped: "Skipped",
 }
 
+const STATUS_DOT_CLASS: Record<CronRunStatus, string> = {
+  running: "bg-warning",
+  completed: "bg-success",
+  failed: "bg-destructive",
+  skipped: "bg-muted-foreground",
+}
+
 /** Status always pairs color with a label — color alone never communicates. */
 export function CronRunStatusPill({ status }: { status: CronRunStatus }) {
   return (
     <span
       className={cn(
         "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium",
-        status === "running" && "border-warning/40 text-warning-foreground bg-warning/10",
-        status === "completed" && "border-success/40 text-success bg-success/10",
-        status === "failed" && "border-destructive/40 text-destructive bg-destructive/10",
-        status === "skipped" && "border-border text-muted-foreground bg-muted/40",
+        STATUS_PILL_CLASS[status],
       )}
     >
-      <span
-        className={cn(
-          "h-1.5 w-1.5 rounded-full",
-          status === "running" && "bg-warning",
-          status === "completed" && "bg-success",
-          status === "failed" && "bg-destructive",
-          status === "skipped" && "bg-muted-foreground",
-        )}
-      />
+      <span className={cn("h-1.5 w-1.5 rounded-full", STATUS_DOT_CLASS[status])} />
       {STATUS_LABEL[status]}
     </span>
   )
