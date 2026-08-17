@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.24.0](https://github.com/cuongtranba/kanna/compare/v1.23.0...v1.24.0) (2026-08-17)
+
+
+### Features
+
+* **ports:** extract PushPort capability interface from DomPort ([#695](https://github.com/cuongtranba/kanna/issues/695)) ([012ef85](https://github.com/cuongtranba/kanna/commit/012ef8511c4d24dc0c615e1ad14bb241b1e8ce89)), closes [#679](https://github.com/cuongtranba/kanna/issues/679)
+
 ## [1.23.0](https://github.com/cuongtranba/kanna/compare/v1.22.0...v1.23.0) (2026-08-17)
 
 
