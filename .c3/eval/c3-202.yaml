@@ -1,5 +1,8 @@
 fact: c3-202
-claim: "HTTP+WS server is implemented at src/server/server.ts and http.ts"
+claim: "HTTP+WS server is composed in src/server/server.ts with HTTP dispatch in http-dispatcher.ts, route handlers in http-api-routes.ts, and static serving in http-static.ts"
 code:
   - src/server/app-settings.ts
   - src/server/server.ts
+  - src/server/http-dispatcher.ts
+  - src/server/http-api-routes.ts
+  - src/server/http-static.ts
