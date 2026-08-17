@@ -1,8 +1,8 @@
 import { localStorageAdapter } from "../adapters/storage.adapter"
-import { domAdapter } from "../adapters/dom.adapter"
+import { pushAdapter } from "../adapters/push.adapter"
 import { notificationAdapter } from "../adapters/notification.adapter"
 import type { StoragePort } from "../ports/storagePort"
-import type { DomPort } from "../ports/domPort"
+import type { PushPort } from "../ports/pushPort"
 import type { NotificationPort } from "../ports/notificationPort"
 
 export type PushPermissionState =
@@ -18,7 +18,7 @@ export interface PushSupportSnapshot {
 
 export interface PushClientPorts {
   storage?: StoragePort
-  dom?: DomPort
+  push?: PushPort
   notification?: NotificationPort
 }
 
@@ -39,24 +39,24 @@ export function clearStoredPushDeviceId(ports: PushClientPorts = {}): void {
   storage.removeItem(PUSH_DEVICE_ID_STORAGE_KEY)
 }
 
-function isFeatureSupported(dom: DomPort, notification: NotificationPort): boolean {
+function isFeatureSupported(push: PushPort, notification: NotificationPort): boolean {
   if (!notification.isSupported()) return false
-  if (!dom.isServiceWorkerSupported()) return false
-  if (!dom.isPushManagerSupported()) return false
+  if (!push.isServiceWorkerSupported()) return false
+  if (!push.isPushManagerSupported()) return false
   return true
 }
 
-function isSecure(dom: DomPort): boolean {
-  if (dom.isSecureContext()) return true
-  const host = dom.getHostname()
+function isSecure(push: PushPort): boolean {
+  if (push.isSecureContext()) return true
+  const host = push.getHostname()
   return host === "localhost" || host === "127.0.0.1" || host === "::1"
 }
 
 export function detectPushSupport(ports: PushClientPorts = {}): PushSupportSnapshot {
-  const dom = ports.dom ?? domAdapter
+  const push = ports.push ?? pushAdapter
   const notification = ports.notification ?? notificationAdapter
-  if (!isFeatureSupported(dom, notification)) return { state: "unsupported" }
-  if (!isSecure(dom)) return { state: "insecure-context" }
+  if (!isFeatureSupported(push, notification)) return { state: "unsupported" }
+  if (!isSecure(push)) return { state: "insecure-context" }
   switch (notification.getPermission()) {
     case "granted": return { state: "granted" }
     case "denied": return { state: "denied" }
@@ -97,10 +97,10 @@ export async function subscribePush(args: {
   vapidPublicKey: string
   sendToServer: (payload: PushSubscribeServerCall) => Promise<{ id: string }>
 } & PushClientPorts): Promise<string> {
-  const dom = args.dom ?? domAdapter
+  const push = args.push ?? pushAdapter
   const notification = args.notification ?? notificationAdapter
 
-  const support = detectPushSupport({ dom, notification })
+  const support = detectPushSupport({ push, notification })
   if (support.state === "unsupported") throw new Error("Push not supported in this browser")
   if (support.state === "insecure-context") throw new Error("Push requires a secure context (HTTPS)")
   if (support.state === "denied") throw new Error("Notification permission previously denied")
@@ -108,8 +108,8 @@ export async function subscribePush(args: {
   const result = await notification.requestPermission()
   if (result !== "granted") throw new Error("Notification permission was not granted")
 
-  const reg = await dom.registerServiceWorker("/sw.js")
-  await dom.getReadyServiceWorkerRegistration()
+  const reg = await push.registerServiceWorker("/sw.js")
+  await push.getReadyServiceWorkerRegistration()
   const subscription = await reg.pushManager.subscribe({
     userVisibleOnly: true,
     applicationServerKey: urlBase64ToUint8Array(args.vapidPublicKey),
@@ -121,7 +121,7 @@ export async function subscribePush(args: {
   if (!endpoint || !keys.p256dh || !keys.auth) {
     throw new Error("Subscription returned without endpoint or keys")
   }
-  const ua = dom.getUserAgent() ?? ""
+  const ua = push.getUserAgent() ?? ""
   const { id } = await args.sendToServer({
     subscription: { endpoint, keys: { p256dh: keys.p256dh, auth: keys.auth } },
     label: deriveLabel(ua),
@@ -134,8 +134,8 @@ export async function unsubscribePush(args: {
   pushDeviceId: string
   sendToServer: (pushDeviceId: string) => Promise<void>
 } & PushClientPorts): Promise<void> {
-  const dom = args.dom ?? domAdapter
-  const reg = await dom.getReadyServiceWorkerRegistration()
+  const push = args.push ?? pushAdapter
+  const reg = await push.getReadyServiceWorkerRegistration()
   const sub = await reg.pushManager.getSubscription()
   if (sub) await sub.unsubscribe()
   await args.sendToServer(args.pushDeviceId)
