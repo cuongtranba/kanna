@@ -60,6 +60,7 @@ export function isTypeaheadMenuOpen(dom: Pick<DomPort, "hasTypeaheadMenuOpen"> =
 export function SubmitPlugin({ onSubmit, disabled, dom = domAdapter }: SubmitPluginProps): null {
   const [editor] = useLexicalComposerContext()
   const isComposingRef = useRef(false)
+  const justSubmittedRef = useRef(false)
 
   useEffect(() => {
     function onCompositionStart() { isComposingRef.current = true }
@@ -88,11 +89,14 @@ export function SubmitPlugin({ onSubmit, disabled, dom = domAdapter }: SubmitPlu
         if (disabled) return false
         if (!event) return false
 
-        // Guard against IME composition. isComposingRef covers the Korean IME
-        // edge case on macOS Chrome where event.isComposing may be false on the
-        // Enter keydown even though compositionend hasn't yet delivered the final
-        // character to the editor.
-        if (isComposingRef.current || event.isComposing) return false
+        // Guard against IME composition. Three signals are checked:
+        //   1. isComposingRef tracks compositionstart/compositionend on the editor
+        //      root — catches the Korean IME edge case on macOS Chrome where
+        //      event.isComposing may be false even though composition is active.
+        //   2. event.isComposing — the standard W3C flag.
+        //   3. event.keyCode === 229 — the "Process" key sent by IMEs on some
+        //      browser/OS combinations even when isComposing is reported as false.
+        if (isComposingRef.current || event.isComposing || event.keyCode === 229) return false
 
         // Shift+Enter → insert newline; do not intercept.
         if (event.shiftKey) return false
@@ -109,6 +113,16 @@ export function SubmitPlugin({ onSubmit, disabled, dom = domAdapter }: SubmitPlu
         // is connected — e.g. iPad + Magic Keyboard or Universal Control.
         if (dom.isTouchDevice() && !dom.matchesMediaQuery("(hover: hover) and (pointer: fine)")) return false
 
+        // Guard against a double-submission caused by some macOS Korean IME
+        // browser behaviour: the browser fires two keydown events for the same
+        // Enter press (one to commit the composition, one as the real Enter),
+        // and Lexical's async compositionend handling can re-insert the final
+        // syllable into the just-cleared editor before the second keydown fires.
+        // justSubmittedRef is set to true on submit and cleared after one
+        // microtask — enough to block the same-sequence second keydown but not
+        // subsequent legitimate Enter presses.
+        if (justSubmittedRef.current) return false
+
         // Check the editor has content worth sending.
         const payload = serializeEditorToWire(editor)
         const canSubmit = payload.text.trim().length > 0 || payload.attachments.length > 0
@@ -124,6 +138,9 @@ export function SubmitPlugin({ onSubmit, disabled, dom = domAdapter }: SubmitPlu
           root.clear()
           root.append($createParagraphNode())
         })
+
+        justSubmittedRef.current = true
+        Promise.resolve().then(() => { justSubmittedRef.current = false })
 
         onSubmit(payload)
         return true

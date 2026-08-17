@@ -820,3 +820,200 @@ describe("SubmitPlugin — iPad external keyboard (fine pointer override)", () =
     unregister()
   })
 })
+
+// ─── keyCode 229 guard (IME Process key) ─────────────────────────────────────
+//
+// Some macOS browser/IME combinations send keyCode=229 (the "Process" virtual
+// key) on keydown even when isComposing is reported as false. SubmitPlugin
+// checks keyCode === 229 as a third signal alongside isComposing and
+// isComposingRef, ensuring the submit is always blocked during IME processing.
+
+describe("SubmitPlugin — keyCode 229 guard", () => {
+  it("does NOT submit when keyCode is 229 even if isComposing is false", () => {
+    const processKeyEvent = { shiftKey: false, isComposing: false, keyCode: 229 } as KeyboardEvent
+
+    function shouldSubmit(
+      event: KeyboardEvent,
+      isDisabled: boolean,
+      hasContent: boolean,
+      composingRefCurrent: boolean,
+    ): boolean {
+      if (isDisabled) return false
+      if (!event) return false
+      if (composingRefCurrent || event.isComposing || event.keyCode === 229) return false
+      if (event.shiftKey) return false
+      if (!hasContent) return false
+      return true
+    }
+
+    expect(shouldSubmit(processKeyEvent, false, true, false)).toBe(false)
+  })
+
+  it("submits when keyCode is 13 and isComposing is false", () => {
+    const realEnterEvent = { shiftKey: false, isComposing: false, keyCode: 13 } as KeyboardEvent
+
+    function shouldSubmit(
+      event: KeyboardEvent,
+      isDisabled: boolean,
+      hasContent: boolean,
+      composingRefCurrent: boolean,
+    ): boolean {
+      if (isDisabled) return false
+      if (!event) return false
+      if (composingRefCurrent || event.isComposing || event.keyCode === 229) return false
+      if (event.shiftKey) return false
+      if (!hasContent) return false
+      return true
+    }
+
+    expect(shouldSubmit(realEnterEvent, false, true, false)).toBe(true)
+  })
+
+  it("dispatched command with keyCode=229 does not invoke onSubmit", () => {
+    const editor = buildEditor()
+    let submitted = false
+
+    editor.update(
+      () => {
+        const root = $getRoot()
+        root.clear()
+        const para = $createParagraphNode()
+        para.append($createTextNode("안녕하세요"))
+        root.append(para)
+      },
+      { discrete: true },
+    )
+
+    const fakeDom = { hasTypeaheadMenuOpen: () => false, isTouchDevice: () => false }
+    const unregister = editor.registerCommand(
+      KEY_ENTER_COMMAND,
+      (event: KeyboardEvent | null) => {
+        if (!event) return false
+        if (event.isComposing || event.keyCode === 229) return false
+        if (event.shiftKey) return false
+        if (fakeDom.hasTypeaheadMenuOpen()) return false
+        if (fakeDom.isTouchDevice()) return false
+        const payload = serializeEditorToWire(editor)
+        const canSubmit = payload.text.trim().length > 0 || payload.attachments.length > 0
+        if (!canSubmit) return false
+        submitted = true
+        return true
+      },
+      COMMAND_PRIORITY_HIGH,
+    )
+
+    const imeProcessKey = Object.assign(
+      new KeyboardEvent("keydown", { key: "Enter", keyCode: 229 }),
+      { isComposing: false, keyCode: 229 },
+    )
+    editor.dispatchCommand(KEY_ENTER_COMMAND, imeProcessKey as KeyboardEvent)
+
+    expect(submitted).toBe(false)
+    unregister()
+  })
+})
+
+// ─── Post-submit lock (Korean IME double-keydown regression) ─────────────────
+//
+// On macOS Korean IME, pressing Enter can produce two keydown events in rapid
+// succession: one that commits the composition (blocked by the IME guard) and a
+// second real Enter. Lexical's async compositionend update can re-insert the
+// final syllable into the just-cleared editor between these two keydowns. The
+// justSubmittedRef flag blocks the second Enter within the same microtask
+// boundary, preventing the re-inserted syllable from being submitted as a
+// separate message.
+
+describe("SubmitPlugin — post-submit lock (justSubmittedRef)", () => {
+  it("does NOT submit when justSubmittedRef is true (same-sequence second Enter)", () => {
+    const plainEnter = { shiftKey: false, isComposing: false, keyCode: 13 } as KeyboardEvent
+    const justSubmittedRef = { current: true }
+
+    function shouldSubmit(
+      event: KeyboardEvent,
+      isDisabled: boolean,
+      hasContent: boolean,
+      composingRefCurrent: boolean,
+      justSubmitted: boolean,
+    ): boolean {
+      if (isDisabled) return false
+      if (!event) return false
+      if (composingRefCurrent || event.isComposing || event.keyCode === 229) return false
+      if (event.shiftKey) return false
+      if (justSubmitted) return false
+      if (!hasContent) return false
+      return true
+    }
+
+    expect(shouldSubmit(plainEnter, false, true, false, justSubmittedRef.current)).toBe(false)
+  })
+
+  it("submits when justSubmittedRef is false (normal submit)", () => {
+    const plainEnter = { shiftKey: false, isComposing: false, keyCode: 13 } as KeyboardEvent
+    const justSubmittedRef = { current: false }
+
+    function shouldSubmit(
+      event: KeyboardEvent,
+      isDisabled: boolean,
+      hasContent: boolean,
+      composingRefCurrent: boolean,
+      justSubmitted: boolean,
+    ): boolean {
+      if (isDisabled) return false
+      if (!event) return false
+      if (composingRefCurrent || event.isComposing || event.keyCode === 229) return false
+      if (event.shiftKey) return false
+      if (justSubmitted) return false
+      if (!hasContent) return false
+      return true
+    }
+
+    expect(shouldSubmit(plainEnter, false, true, false, justSubmittedRef.current)).toBe(true)
+  })
+
+  it("dispatched second Enter while justSubmittedRef=true does not invoke onSubmit", () => {
+    const editor = buildEditor()
+    let submitCount = 0
+    let justSubmitted = false
+
+    editor.update(
+      () => {
+        const root = $getRoot()
+        root.clear()
+        const para = $createParagraphNode()
+        para.append($createTextNode("줘"))
+        root.append(para)
+      },
+      { discrete: true },
+    )
+
+    const fakeDom = { hasTypeaheadMenuOpen: () => false, isTouchDevice: () => false }
+    const unregister = editor.registerCommand(
+      KEY_ENTER_COMMAND,
+      (event: KeyboardEvent | null) => {
+        if (!event) return false
+        if (event.isComposing || event.keyCode === 229) return false
+        if (event.shiftKey) return false
+        if (fakeDom.hasTypeaheadMenuOpen()) return false
+        if (fakeDom.isTouchDevice()) return false
+        if (justSubmitted) return false
+        const payload = serializeEditorToWire(editor)
+        const canSubmit = payload.text.trim().length > 0 || payload.attachments.length > 0
+        if (!canSubmit) return false
+        submitCount++
+        justSubmitted = true
+        Promise.resolve().then(() => { justSubmitted = false })
+        return true
+      },
+      COMMAND_PRIORITY_HIGH,
+    )
+
+    const firstEnter = Object.assign(new KeyboardEvent("keydown", { key: "Enter" }), { isComposing: false, keyCode: 13 })
+    editor.dispatchCommand(KEY_ENTER_COMMAND, firstEnter as KeyboardEvent)
+
+    const secondEnter = Object.assign(new KeyboardEvent("keydown", { key: "Enter" }), { isComposing: false, keyCode: 13 })
+    editor.dispatchCommand(KEY_ENTER_COMMAND, secondEnter as KeyboardEvent)
+
+    expect(submitCount).toBe(1)
+    unregister()
+  })
+})
