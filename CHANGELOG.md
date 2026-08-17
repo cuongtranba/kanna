@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.23.0](https://github.com/cuongtranba/kanna/compare/v1.22.0...v1.23.0) (2026-08-17)
+
+
+### Features
+
+* **settings:** extract push/telemetry/auth/uploads/cloudflare-tunnel into concept-owned domain modules ([#693](https://github.com/cuongtranba/kanna/issues/693)) ([ddfbb8a](https://github.com/cuongtranba/kanna/commit/ddfbb8a503bfa12f135345e0bab9453655355c85))
+
 ## [1.22.0](https://github.com/cuongtranba/kanna/compare/v1.21.4...v1.22.0) (2026-08-17)
 
 
