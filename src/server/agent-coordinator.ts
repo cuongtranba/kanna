@@ -388,11 +388,16 @@ export class AgentCoordinator {
     this.reportBackgroundError = report
   }
 
-  dispose() {
+  async dispose(gracefulTimeoutMs = 10_000): Promise<void> {
     if (this.claudeSessionSweepTimer) clearInterval(this.claudeSessionSweepTimer)
-    for (const [chatId, session] of [...this.claudeSessions.entries()]) {
+    const closedPromises = [...this.claudeSessions.entries()].map(([chatId, session]) => {
+      const closed = session.session.closed
       this.closeClaudeSession(chatId, session)
-    }
+      return closed
+    })
+    if (closedPromises.length === 0) return
+    const timeout = new Promise<void>((resolve) => setTimeout(resolve, gracefulTimeoutMs))
+    await Promise.race([Promise.allSettled(closedPromises), timeout])
   }
 
   getActiveStatuses() {

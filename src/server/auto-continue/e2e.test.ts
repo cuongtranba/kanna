@@ -121,6 +121,7 @@ describe("auto-continue end-to-end", () => {
           getAccountInfo: async () => null,
           interrupt: async () => {},
           close: () => {},
+          closed: Promise.resolve(),
           setModel: async () => {},
           setPermissionMode: async () => {},
           getSupportedCommands: async () => [],

@@ -26,6 +26,7 @@ function makeFakeHandle(overrides: Partial<ClaudeSessionHandle> = {}): ClaudeSes
     stream: (async function* () {})(),
     interrupt: async () => {},
     close: () => {},
+    closed: Promise.resolve(),
     sendPrompt: async () => {},
     setModel: async () => {},
     setPermissionMode: async () => {},

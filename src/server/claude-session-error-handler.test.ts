@@ -34,6 +34,7 @@ function makeHandle() {
     stream: (async function* () {})() as AsyncIterable<never>,
     interrupt: async () => {},
     close: () => {},
+    closed: Promise.resolve(),
     sendPrompt: async () => {},
     setModel: async () => {},
     setPermissionMode: async () => {},

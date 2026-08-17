@@ -563,6 +563,8 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
   const mergedQueue: HarnessEvent[] = []
   const mergedWaiters: Array<(r: IteratorResult<HarnessEvent>) => void> = []
 
+  const { handleClosed, resolveHandleClosed } = makePtyClosedSignal()
+
   async function cleanupResources() {
     if (cleanedUp) return
     cleanedUp = true
@@ -604,6 +606,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     workflowRegistrationCancelled = true
     args.workflowRegistry?.unregister(args.chatId)
     args.subagentTranscriptRegistry?.unregister(args.chatId)
+    resolveHandleClosed()
   }
 
   function pushMerged(ev: HarnessEvent) {
@@ -1074,5 +1077,12 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
         }
       })()
     },
+    closed: handleClosed,
   }
+}
+
+function makePtyClosedSignal(): { handleClosed: Promise<void>; resolveHandleClosed: () => void } {
+  let resolveHandleClosed!: () => void
+  const handleClosed = new Promise<void>((resolve) => { resolveHandleClosed = resolve })
+  return { handleClosed, resolveHandleClosed }
 }
