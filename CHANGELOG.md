@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.26.1](https://github.com/cuongtranba/kanna/compare/v1.26.0...v1.26.1) (2026-08-17)
+
+
+### Bug Fixes
+
+* **composer:** submit on Enter when iPad has external keyboard (Universal Control / Magic Keyboard) ([#716](https://github.com/cuongtranba/kanna/issues/716)) ([18f6be0](https://github.com/cuongtranba/kanna/commit/18f6be05b091918f5d5b6388fa136c5a8f7018a6))
+
 ## [1.26.0](https://github.com/cuongtranba/kanna/compare/v1.25.0...v1.26.0) (2026-08-17)
 
 
