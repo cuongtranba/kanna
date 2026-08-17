@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.26.3](https://github.com/cuongtranba/kanna/compare/v1.26.2...v1.26.3) (2026-08-17)
+
+
+### Bug Fixes
+
+* **composer:** guard Korean IME double-submission on macOS ([#726](https://github.com/cuongtranba/kanna/issues/726)) ([4c5e9f6](https://github.com/cuongtranba/kanna/commit/4c5e9f6cf14956d9e50b7b051642377f24e60044))
+
 ## [1.26.2](https://github.com/cuongtranba/kanna/compare/v1.26.1...v1.26.2) (2026-08-17)
 
 
