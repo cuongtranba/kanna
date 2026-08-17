@@ -1,7 +1,7 @@
 {
   "name": "@cuongtran001/kanna",
   "type": "module",
-  "version": "1.24.2",
+  "version": "1.24.3",
   "description": "A beautiful web UI for Claude Code",
   "license": "MIT",
   "keywords": [
