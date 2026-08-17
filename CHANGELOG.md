@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.24.3](https://github.com/cuongtranba/kanna/compare/v1.24.2...v1.24.3) (2026-08-17)
+
+
+### Bug Fixes
+
+* **process-utils:** make hasCommand cross-platform for Windows ([#707](https://github.com/cuongtranba/kanna/issues/707)) ([47a4f48](https://github.com/cuongtranba/kanna/commit/47a4f48f1377442f2a59bdbcd77aff3e00e11526))
+
 ## [1.24.2](https://github.com/cuongtranba/kanna/compare/v1.24.1...v1.24.2) (2026-08-17)
 
 
