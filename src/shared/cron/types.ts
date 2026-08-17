@@ -135,6 +135,11 @@ export interface CronJobSnapshot {
   schedule: CronSchedule
   paused: boolean
   armedAt: number
+  /**
+   * Model resolved at arm time (e.g. "claude-sonnet-5"). Optional for
+   * backward compat: jobs armed before this field existed have none.
+   */
+  model?: string
   /** Next fire time, or null when paused or the schedule has no future occurrence. */
   nextFireAt: number | null
   lastRun: CronRunSnapshot | null

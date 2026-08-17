@@ -977,8 +977,9 @@ export class AgentCoordinator {
   async runCronCommand(
     chatId: string,
     result: import("../shared/cron/types").CronParseResult,
+    model?: string,
   ): Promise<void> {
-    return runCronCommandFn(this.buildCronCommandDeps(), chatId, result)
+    return runCronCommandFn(this.buildCronCommandDeps(), chatId, result, model)
   }
 
   /**

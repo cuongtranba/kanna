@@ -256,6 +256,28 @@ describe("deriveCronJobs", () => {
     )
     expect(jobs).toHaveLength(1)
   })
+
+  test("model is captured from cron_armed and surfaced on the snapshot", () => {
+    const jobs = deriveCronJobs([armed("j1", 1000, { model: "claude-sonnet-5" })], CHAT, 2000)
+    expect(jobs[0]!.model).toBe("claude-sonnet-5")
+  })
+
+  test("model is absent when not recorded (backward compat)", () => {
+    const jobs = deriveCronJobs([armed("j1", 1000)], CHAT, 2000)
+    expect(jobs[0]!.model).toBeUndefined()
+  })
+
+  test("re-arming picks up the new model", () => {
+    const jobs = deriveCronJobs(
+      [
+        armed("j1", 1000, { model: "claude-opus-4-8" }),
+        armed("j1", 5000, { model: "claude-sonnet-5" }),
+      ],
+      CHAT,
+      6000,
+    )
+    expect(jobs[0]!.model).toBe("claude-sonnet-5")
+  })
 })
 
 describe("findRunningCronRuns", () => {

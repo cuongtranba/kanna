@@ -266,7 +266,7 @@ export function buildSendCommandDeps(agent: AgentCoordinator): SendCommandDeps {
     emitStateChange: (chatId) => agent.emitStateChange(chatId),
     startTurnForChat: (args) => agent.startTurnForChat(args),
     clearChatContext: (chatId) => agent.clearChatContext(chatId),
-    runCronCommand: (chatId, result) => agent.runCronCommand(chatId, result),
+    runCronCommand: (chatId, result, model) => agent.runCronCommand(chatId, result, model),
   }
 }
 
