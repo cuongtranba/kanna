@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.22.0](https://github.com/cuongtranba/kanna/compare/v1.21.4...v1.22.0) (2026-08-17)
+
+
+### Features
+
+* **c3:** add eval bindings so c3x lookup resolves all component owners ([#690](https://github.com/cuongtranba/kanna/issues/690)) ([70685d6](https://github.com/cuongtranba/kanna/commit/70685d67c9599d0ee7a7d56b0dd7fa017736a2cb))
+
 ## [1.21.4](https://github.com/cuongtranba/kanna/compare/v1.21.3...v1.21.4) (2026-08-17)
 
 
