@@ -396,6 +396,166 @@ describe("SubmitPlugin — IME composition guard", () => {
   })
 })
 
+// ─── Composition ref tracking (Korean IME edge case) ─────────────────────────
+//
+// On macOS Chrome with Korean IME, event.isComposing may be false on the Enter
+// keydown even though compositionend hasn't yet delivered the final syllable.
+// SubmitPlugin tracks composition state via a ref (set by compositionstart /
+// compositionend on the editor root) and checks it alongside event.isComposing.
+
+describe("SubmitPlugin — composition ref tracking (Korean IME edge case)", () => {
+  it("does NOT submit when compositionRef is true even if event.isComposing is false", () => {
+    const enterWithFalseIsComposing = { shiftKey: false, isComposing: false } as KeyboardEvent
+    const composingRef = { current: true }
+
+    function shouldSubmit(
+      event: KeyboardEvent,
+      isDisabled: boolean,
+      hasContent: boolean,
+      composingRefCurrent: boolean,
+    ): boolean {
+      if (isDisabled) return false
+      if (!event) return false
+      if (composingRefCurrent || event.isComposing) return false
+      if (event.shiftKey) return false
+      if (!hasContent) return false
+      return true
+    }
+
+    expect(shouldSubmit(enterWithFalseIsComposing, false, true, composingRef.current)).toBe(false)
+  })
+
+  it("submits when compositionRef is false AND event.isComposing is false", () => {
+    const plainEnter = { shiftKey: false, isComposing: false } as KeyboardEvent
+    const composingRef = { current: false }
+
+    function shouldSubmit(
+      event: KeyboardEvent,
+      isDisabled: boolean,
+      hasContent: boolean,
+      composingRefCurrent: boolean,
+    ): boolean {
+      if (isDisabled) return false
+      if (!event) return false
+      if (composingRefCurrent || event.isComposing) return false
+      if (event.shiftKey) return false
+      if (!hasContent) return false
+      return true
+    }
+
+    expect(shouldSubmit(plainEnter, false, true, composingRef.current)).toBe(true)
+  })
+
+  it("does NOT submit when compositionRef is false but event.isComposing is true", () => {
+    const composingEnter = { shiftKey: false, isComposing: true } as KeyboardEvent
+    const composingRef = { current: false }
+
+    function shouldSubmit(
+      event: KeyboardEvent,
+      isDisabled: boolean,
+      hasContent: boolean,
+      composingRefCurrent: boolean,
+    ): boolean {
+      if (isDisabled) return false
+      if (!event) return false
+      if (composingRefCurrent || event.isComposing) return false
+      if (event.shiftKey) return false
+      if (!hasContent) return false
+      return true
+    }
+
+    expect(shouldSubmit(composingEnter, false, true, composingRef.current)).toBe(false)
+  })
+
+  it("dispatched command with composingRef=true (isComposing=false) does not invoke onSubmit", () => {
+    const editor = buildEditor()
+    let submitted = false
+    const composingRefCurrent = true
+
+    editor.update(
+      () => {
+        const root = $getRoot()
+        root.clear()
+        const para = $createParagraphNode()
+        para.append($createTextNode("안녕하세요"))
+        root.append(para)
+      },
+      { discrete: true },
+    )
+
+    const fakeDom = { hasTypeaheadMenuOpen: () => false, isTouchDevice: () => false }
+    const unregister = editor.registerCommand(
+      KEY_ENTER_COMMAND,
+      (event: KeyboardEvent | null) => {
+        if (!event) return false
+        if (composingRefCurrent || event.isComposing) return false
+        if (event.shiftKey) return false
+        if (fakeDom.hasTypeaheadMenuOpen()) return false
+        if (fakeDom.isTouchDevice()) return false
+        const payload = serializeEditorToWire(editor)
+        const canSubmit = payload.text.trim().length > 0 || payload.attachments.length > 0
+        if (!canSubmit) return false
+        submitted = true
+        return true
+      },
+      COMMAND_PRIORITY_HIGH,
+    )
+
+    const koreanImeEnter = Object.assign(
+      new KeyboardEvent("keydown", { key: "Enter" }),
+      { isComposing: false },
+    )
+    editor.dispatchCommand(KEY_ENTER_COMMAND, koreanImeEnter as KeyboardEvent)
+
+    expect(submitted).toBe(false)
+    unregister()
+  })
+
+  it("dispatched command with composingRef=false (isComposing=false) DOES invoke onSubmit", () => {
+    const editor = buildEditor()
+    let submitted = false
+    const composingRefCurrent = false
+
+    editor.update(
+      () => {
+        const root = $getRoot()
+        root.clear()
+        const para = $createParagraphNode()
+        para.append($createTextNode("안녕하세요"))
+        root.append(para)
+      },
+      { discrete: true },
+    )
+
+    const fakeDom = { hasTypeaheadMenuOpen: () => false, isTouchDevice: () => false }
+    const unregister = editor.registerCommand(
+      KEY_ENTER_COMMAND,
+      (event: KeyboardEvent | null) => {
+        if (!event) return false
+        if (composingRefCurrent || event.isComposing) return false
+        if (event.shiftKey) return false
+        if (fakeDom.hasTypeaheadMenuOpen()) return false
+        if (fakeDom.isTouchDevice()) return false
+        const payload = serializeEditorToWire(editor)
+        const canSubmit = payload.text.trim().length > 0 || payload.attachments.length > 0
+        if (!canSubmit) return false
+        submitted = true
+        return true
+      },
+      COMMAND_PRIORITY_HIGH,
+    )
+
+    const committedEnter = Object.assign(
+      new KeyboardEvent("keydown", { key: "Enter" }),
+      { isComposing: false },
+    )
+    editor.dispatchCommand(KEY_ENTER_COMMAND, committedEnter as KeyboardEvent)
+
+    expect(submitted).toBe(true)
+    unregister()
+  })
+})
+
 // ─── Typeahead-menu guard (regression: Enter must select picker option) ───────
 
 describe("SubmitPlugin — isTypeaheadMenuOpen guard", () => {

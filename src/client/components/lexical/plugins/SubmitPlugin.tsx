@@ -1,4 +1,4 @@
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext"
 import {
   COMMAND_PRIORITY_HIGH,
@@ -57,6 +57,27 @@ export function isTypeaheadMenuOpen(dom: Pick<DomPort, "hasTypeaheadMenuOpen"> =
  */
 export function SubmitPlugin({ onSubmit, disabled, dom = domAdapter }: SubmitPluginProps): null {
   const [editor] = useLexicalComposerContext()
+  const isComposingRef = useRef(false)
+
+  useEffect(() => {
+    function onCompositionStart() { isComposingRef.current = true }
+    function onCompositionEnd() { isComposingRef.current = false }
+    let trackedRoot: HTMLElement | null = null
+
+    const unsubscribe = editor.registerRootListener((rootElement, prevRootElement) => {
+      prevRootElement?.removeEventListener("compositionstart", onCompositionStart)
+      prevRootElement?.removeEventListener("compositionend", onCompositionEnd)
+      rootElement?.addEventListener("compositionstart", onCompositionStart)
+      rootElement?.addEventListener("compositionend", onCompositionEnd)
+      trackedRoot = rootElement
+    })
+
+    return () => {
+      unsubscribe()
+      trackedRoot?.removeEventListener("compositionstart", onCompositionStart)
+      trackedRoot?.removeEventListener("compositionend", onCompositionEnd)
+    }
+  }, [editor])
 
   useEffect(() => {
     return editor.registerCommand(
@@ -65,9 +86,11 @@ export function SubmitPlugin({ onSubmit, disabled, dom = domAdapter }: SubmitPlu
         if (disabled) return false
         if (!event) return false
 
-        // IME composition active (CJK input): Enter confirms the candidate,
-        // it must not submit the message.
-        if (event.isComposing) return false
+        // Guard against IME composition. isComposingRef covers the Korean IME
+        // edge case on macOS Chrome where event.isComposing may be false on the
+        // Enter keydown even though compositionend hasn't yet delivered the final
+        // character to the editor.
+        if (isComposingRef.current || event.isComposing) return false
 
         // Shift+Enter → insert newline; do not intercept.
         if (event.shiftKey) return false
