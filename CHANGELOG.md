@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.21.4](https://github.com/cuongtranba/kanna/compare/v1.21.3...v1.21.4) (2026-08-17)
+
+
+### Bug Fixes
+
+* **design:** WCAG AA contrast for semantic tint pairings ([#684](https://github.com/cuongtranba/kanna/issues/684) [#685](https://github.com/cuongtranba/kanna/issues/685)) ([#688](https://github.com/cuongtranba/kanna/issues/688)) ([0d653be](https://github.com/cuongtranba/kanna/commit/0d653befb4ebe8a9039400428e65d35fad3b35a6))
+
 ## [1.21.3](https://github.com/cuongtranba/kanna/compare/v1.21.2...v1.21.3) (2026-08-17)
 
 
