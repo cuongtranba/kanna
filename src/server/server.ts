@@ -1,14 +1,13 @@
 import path from "node:path"
 import type { Server } from "bun"
 import { isErrnoException } from "../shared/errors"
-import { getServerFile, serveHttp, statFile } from "./server-io.adapter"
+import { serveHttp } from "./server-io.adapter"
 import { bin as cloudflaredBin } from "cloudflared"
-import { APP_NAME, getRuntimeProfile } from "../shared/branding"
+import { getRuntimeProfile } from "../shared/branding"
 import {
   CLOUDFLARE_TUNNEL_DEFAULTS,
   UPLOAD_MAX_FILE_SIZE_MB_MAX,
   type AppSettingsSnapshot,
-  type ChatAttachment,
 } from "../shared/types"
 import type { ShareMode } from "../shared/share"
 import { createAuthManager } from "./auth"
@@ -52,9 +51,6 @@ import type { UpdateInstallAttemptResult } from "./cli-runtime"
 import { compareVersions } from "./cli-runtime"
 import { createUpdateStrategy } from "./update-strategy"
 import { createWsRouter, type ClientState } from "./ws-router"
-import { deleteProjectUpload, inferAttachmentContentType, inferProjectFileContentType, persistProjectUpload } from "./uploads"
-import { getProjectUploadDir } from "./paths"
-import { listProjectPaths } from "./project-paths"
 import { ScheduleManager } from "./auto-continue/schedule-manager"
 import { CronScheduler } from "./cron/scheduler"
 import { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
@@ -81,7 +77,6 @@ import { parseClaudeSessionFile } from "./claude-session-parser.adapter"
 import { listWorkflowRunDirs, readWorkflowDir, readWorkflowRunJournal, watchWorkflowDir, watchWorkflowRunDirs } from "./workflow-watch-io.adapter"
 import { readWorkflowAgentTranscriptLines } from "./workflow-agent-transcript-io.adapter"
 import { SnapshotStore } from "./session-share/snapshot-store.adapter"
-import { handleShareApiRequest } from "./session-share/http-routes"
 import { buildChatSnapshot, type SnapshotSources } from "./session-share/snapshot-builder"
 import { startSnapshotSweep } from "./session-share/sweep"
 import { log } from "../shared/log"
@@ -90,28 +85,17 @@ import type {
   AttachmentManifestEntry,
   ChatMeta,
 } from "../shared/session-share/types"
+import { createHttpDispatcher } from "./http-dispatcher"
+export { persistUploadedFiles } from "./http-api-routes"
 
-/** Parse a positive-integer env var, falling back to `fallback` on unset/invalid/<=0. */
 function parsePositiveIntEnv(raw: string | undefined, fallback: number): number {
   if (raw === undefined) return fallback
   const n = Number.parseInt(raw, 10)
   return Number.isFinite(n) && n > 0 ? n : fallback
 }
 
-function deriveOriginFromUpgrade(req: Request, url: URL): string {
-  const forwardedProto = req.headers.get("x-forwarded-proto")
-  const forwardedHost = req.headers.get("x-forwarded-host")
-  const hostHeader = req.headers.get("host")
-  const host = forwardedHost ?? hostHeader ?? url.host
-  if (!host) return ""
-  const scheme = forwardedProto ?? (url.protocol === "wss:" || url.protocol === "https:" ? "https" : "http")
-  return `${scheme}://${host}`
-}
-
 function resolveCloudflaredPath(settingsPath: string): string {
-  if (settingsPath !== CLOUDFLARE_TUNNEL_DEFAULTS.cloudflaredPath) {
-    return settingsPath
-  }
+  if (settingsPath !== CLOUDFLARE_TUNNEL_DEFAULTS.cloudflaredPath) return settingsPath
   return cloudflaredBin
 }
 
@@ -136,62 +120,18 @@ export function buildAgentAppSettingsView(snapshot: AppSettingsSnapshot): AgentA
   return {
     claudeDriver: snapshot.claudeDriver,
     globalPromptAppend: snapshot.globalPromptAppend,
-    // MUST forward customMcpServers: AgentCoordinator.getEnabledCustomMcpServers
-    // reads this off the view, and when it is absent returns [] for every
-    // spawn — silently dropping all user-configured MCP servers (context7 etc.)
-    // from both Claude drivers. Same failure class as the globalPromptAppend
-    // regression above. See server.test.ts guard.
     customMcpServers: snapshot.customMcpServers,
-    // Forward customModels so getProviderSettings can accept user-defined
-    // model ids without collapsing to the built-in default. See ChatPreferenceControls.
     customModels: snapshot.customModels,
-    // Forward subagent-runtime knobs: the stall watchdog window (read once at
-    // orchestrator construction) and the default loop subagent (used by setupLoop).
     subagentRuntime: snapshot.subagentRuntime,
   }
 }
 
-const MAX_UPLOAD_FILES = 50
 const STALE_EMPTY_CHAT_PRUNE_INTERVAL_MS = 60 * 1000
 const IMPORT_FOLLOW_POLL_MS = 2000
 const IMPORT_FOLLOW_ACTIVE_WINDOW_MS = 600_000
 const IMPORT_FOLLOW_IDLE_MS = 600_000
 const MULTIPART_OVERHEAD_BYTES = 16 * 1024 * 1024
-const MAX_REQUEST_BODY_BYTES = UPLOAD_MAX_FILE_SIZE_MB_MAX * 1024 * 1024 + MULTIPART_OVERHEAD_BYTES
-
-export async function persistUploadedFiles(args: {
-  projectId: string
-  localPath: string
-  files: File[]
-  persistUpload?: typeof persistProjectUpload
-}): Promise<ChatAttachment[]> {
-  const persistUpload = args.persistUpload ?? persistProjectUpload
-  const attachments: ChatAttachment[] = []
-
-  try {
-    for (const file of args.files) {
-      const bytes = new Uint8Array(await file.arrayBuffer())
-      const attachment = await persistUpload({
-        projectId: args.projectId,
-        localPath: args.localPath,
-        fileName: file.name,
-        bytes,
-        fallbackMimeType: file.type || undefined,
-      })
-      attachments.push(attachment)
-    }
-  } catch (error) {
-    await Promise.allSettled(
-      attachments.map((attachment) => deleteProjectUpload({
-        localPath: args.localPath,
-        storedName: path.basename(attachment.absolutePath),
-      }))
-    )
-    throw error
-  }
-
-  return attachments
-}
+export const MAX_REQUEST_BODY_BYTES = UPLOAD_MAX_FILE_SIZE_MB_MAX * 1024 * 1024 + MULTIPART_OVERHEAD_BYTES
 
 export interface StartKannaServerOptions {
   port?: number
@@ -230,51 +170,60 @@ export interface StartKannaServerOptions {
   }
 }
 
-export async function startKannaServer(options: StartKannaServerOptions = {}) {
-  const port = options.port ?? 3210
-  const hostname = options.host ?? "127.0.0.1"
-  const strictPort = options.strictPort ?? false
+interface ApplicationServices {
+  store: EventStore
+  diffStore: DiffStore
+  auth: ReturnType<typeof createAuthManager> | null
+  analytics: KannaAnalyticsReporter
+  terminals: TerminalManager
+  updateManager: UpdateManager | null
+  agent: AgentCoordinator
+  router: ReturnType<typeof createWsRouter>
+  appSettings: AppSettingsManager
+  keybindings: KeybindingsManager
+  tunnelGateway: TunnelGateway
+  pushManager: PushManager
+  sessionShareService: SessionShareService
+  observability: ReturnType<typeof initObservability>
+  scheduleManager: ScheduleManager
+  cronScheduler: CronScheduler
+  loopTrackingRegistry: ReturnType<typeof createLoopTrackingRegistry>
+  staleEmptyChatPruneInterval: ReturnType<typeof setInterval>
+  followedSessionTickInterval: ReturnType<typeof setInterval>
+  snapshotSweepHandle: { stop(): void }
+}
+
+async function createApplicationServices(options: StartKannaServerOptions): Promise<ApplicationServices> {
   const runtimeProfile = getRuntimeProfile()
   const store = new EventStore(options.dataDir)
   const diffStore = new DiffStore(store.dataDir)
   const machineDisplayName = getMachineDisplayName()
   await store.initialize()
-  // Initialize tool-callback service; recoverOnStartup() fail-closes any
-  // pending tool requests left over from a previous server run.
-  // KANNA_SERVER_SECRET stabilises HMAC ids across the process lifetime.
-  // If unset, a fresh UUID is used — acceptable because recoverOnStartup()
-  // already clears all pending records on every restart.
-  //
-  // onStateChange is wired to router.scheduleChatStateBroadcast through a
-  // deferred holder because the router is not yet created at this point;
-  // the holder gets populated below once createWsRouter returns. Until then
-  // the callback is a no-op, which is the correct behaviour for the
-  // recoverOnStartup pass (no connected client to broadcast to anyway).
+
+  // Deferred holders: toolCallback and followedSessionRegistry are built
+  // before the WS router, but need to invoke router methods. The holders
+  // are populated in wireRuntimeCallbacks after the router is created.
   let broadcastChatState: ((chatId: string) => void) | null = null
-  // Same deferred-holder pattern as broadcastChatState above: the registry is
-  // constructed before the router exists, so its onChange dep forwards here
-  // until the holder is populated once createWsRouter returns.
   let pushFollowedSessions: (() => void) | null = null
+
   const toolCallback: ToolCallbackService = await initToolCallbackOnBoot({
     store,
     serverSecret: process.env.KANNA_SERVER_SECRET ?? crypto.randomUUID(),
     onStateChange: (chatId) => broadcastChatState?.(chatId),
   })
+
   const vapid = await loadOrGenerateVapidKeys(store.dataDir)
   await diffStore.initialize()
   await store.migrateLegacyTranscripts(options.onMigrationProgress)
-  let discoveredProjects: DiscoveredProject[] = []
 
+  let discoveredProjects: DiscoveredProject[] = []
   const runDiscovery = options.discoverProjects ?? discoverProjects
   async function refreshDiscovery() {
     discoveredProjects = runDiscovery()
     return discoveredProjects
   }
-
   await refreshDiscovery()
 
-  let server: Server<ClientState>
-  let router: ReturnType<typeof createWsRouter>
   const terminalPidRegistry = new TerminalPidRegistry(path.join(store.dataDir, "terminals.json"))
   const reapedTerminals = await terminalPidRegistry.reapStale()
   if (reapedTerminals.length > 0) {
@@ -282,12 +231,8 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   }
   const claudePtyRegistry = new ClaudePtyRegistry(path.join(store.dataDir, "claude-pty.json"))
   const ptyInstanceRegistry = createPtyInstanceRegistry()
-  // Boards live in their own SQLite file beside the event logs — same
-  // local-first data dir, different engine (see the boards ADR).
   const boardStore = createBoardStore({ filePath: path.join(store.dataDir, "boards.db") })
   const boardRegistry = createBoardRegistry({ store: boardStore })
-  // Credentials come from the `gh` CLI: a developer running Kanna has almost
-  // always already logged in, and Kanna has no redirect server for OAuth.
   const boardSync = createBoardSync({
     registry: boardRegistry,
     store: boardStore,
@@ -316,10 +261,6 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   const keybindings = new KeybindingsManager()
   const appSettings = new AppSettingsManager(path.join(store.dataDir, "settings.json"))
   await appSettings.initialize()
-  // Deliberately after the settings load: the telemetry setting gates OTel
-  // export, and the memlog + heap-snapshot concerns lose nothing by starting
-  // a few ms later. The onChange hook is what makes the Settings toggle
-  // apply without a restart.
   const observability = initObservability({
     dataDir: store.dataDir,
     telemetry: appSettings.getSnapshot().telemetry,
@@ -330,74 +271,54 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     store,
     sender: realWebPushSender,
     vapid,
-    // Resolve the VAPID subject at send time from the user setting (falling
-    // back to the persisted vapid.json subject, then the neutral default) so
-    // an edit in Settings → Push takes effect without a restart.
     getContactSubject: () =>
       resolveVapidSubject(appSettings.getSnapshot().push.contactSubject, vapid.subject),
   })
   await pushManager.initialize()
-
   const openrouterModelCache = new OpenRouterModelCache({
     fetchRaw: fetchOpenRouterModelsRaw,
-    ttlMs: 60 * 60 * 1000, // 1h
+    ttlMs: 60 * 60 * 1000,
     now: () => Date.now(),
   })
-
   const snapshotStore = new SnapshotStore(path.join(store.dataDir, "shares"))
-
   const snapshotSources: SnapshotSources = {
     getChatMeta(chatId): ChatMeta | null {
       const chat = store.getChat(chatId)
       if (!chat) return null
-      // Find model from the first system_init transcript entry
       const transcript = store.getMessages(chatId)
       const systemInit = transcript.find((e) => e.kind === "system_init")
       const model = systemInit?.kind === "system_init" ? systemInit.model : "unknown"
-      return {
-        id: chat.id,
-        title: chat.title ?? "Untitled chat",
-        model,
-        createdAt: chat.createdAt ?? 0,
-      }
+      return { id: chat.id, title: chat.title ?? "Untitled chat", model, createdAt: chat.createdAt ?? 0 }
     },
     getTranscript(chatId): ChatSnapshotMessage[] {
       const out: ChatSnapshotMessage[] = []
       for (const entry of store.getMessages(chatId)) {
         switch (entry.kind) {
-          case "user_prompt": {
+          case "user_prompt":
             out.push({ kind: "user_prompt", id: entry._id, createdAt: entry.createdAt, text: entry.content })
             break
-          }
-          case "assistant_text": {
+          case "assistant_text":
             out.push({ kind: "assistant_text", id: entry._id, createdAt: entry.createdAt, text: entry.text })
             break
-          }
-          case "assistant_thinking": {
+          case "assistant_thinking":
             out.push({ kind: "assistant_thinking", id: entry._id, createdAt: entry.createdAt, text: entry.text })
             break
-          }
-          case "tool_call": {
+          case "tool_call":
             out.push({ kind: "tool_call", id: entry._id, createdAt: entry.createdAt, name: entry.tool.toolName, input: entry.tool.input })
             break
-          }
-          case "tool_result": {
+          case "tool_result":
             out.push({ kind: "tool_result", id: entry._id, createdAt: entry.createdAt, toolCallId: entry.toolId, output: entry.content, isError: entry.isError ?? false })
             break
-          }
           default:
-            // skip status/system_init/account_info/etc — public viewers see only the transcript
             break
         }
       }
       return out
     },
     getAttachments(_chatId): AttachmentManifestEntry[] {
-      // Attachments manifest is deferred — surface stays stable for forward-compat.
       return []
     },
   }
-
   const sessionShareService = new SessionShareService({
     events: store,
     snapshotStore,
@@ -406,13 +327,6 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     owner: () => "owner",
   })
   const snapshotSweepHandle = startSnapshotSweep(sessionShareService, 24 * 60 * 60 * 1000)
-
-  // PTY preflight gate + OS sandbox + mcp tool-callback shims are gone:
-  // kanna trusts the claude CLI as the source of truth for tool execution.
-  // The driver spawns claude directly with `--dangerously-skip-permissions`
-  // and no `--tools` / `--strict-mcp-config` restrictions, so user's installed
-  // skills, slash commands, plugins, MCP servers, and agents all load
-  // alongside kanna's own MCP (offer_download / expose_port / lsp).
   await keybindings.initialize()
   const auth = options.password
     ? createAuthManager(options.password, {
@@ -456,14 +370,12 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     })
     return manager
   })()
-  const broadcastTunnel = (chatId: string) => {
-    router.scheduleChatStateBroadcast(chatId)
-  }
   const tunnelManager = new TunnelManager({
     cloudflaredPath: resolveCloudflaredPath(appSettings.getSnapshot().cloudflareTunnel.cloudflaredPath),
     onEvent: async (event) => {
       await store.appendTunnelEvent(event)
-      broadcastTunnel(event.chatId)
+      // broadcastChatState is populated after router creation
+      broadcastChatState?.(event.chatId)
     },
   })
   const tunnelLifecycle = new TunnelLifecycle({
@@ -474,9 +386,8 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     lifecycle: tunnelLifecycle,
     settings: appSettings,
     store,
-    broadcast: broadcastTunnel,
+    broadcast: (chatId) => broadcastChatState?.(chatId),
   })
-
   const oauthPool = new OAuthTokenPool(
     () => appSettings.getSnapshot().claudeAuth.tokens,
     (id, patch) => {
@@ -488,12 +399,14 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     () => appSettings.getSnapshot().claudeAuth.concurrencyDefault,
   )
   setQuickResponseOAuthPool(oauthPool)
-
   const localCatalog = new LocalCatalogService({
     scan: scanLocalCatalog,
     statMtimes,
     homeDir: defaultHomeDir(),
   })
+
+  // scheduleManager and cronScheduler reference agent via closures; agent is
+  // created immediately below once both are ready.
   let agent!: AgentCoordinator
   const scheduleManager = new ScheduleManager({
     fire: async (chatId, scheduleId) => {
@@ -527,24 +440,15 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     loopTrackingRegistry,
     subagentTranscriptRegistry,
     localCatalog,
-    // Kanna is a personal-use tool on the developer's own machine. Tool calls
-    // auto-allow at the kanna gate layer (the claude CLI itself runs with
-    // `--dangerously-skip-permissions` so it doesn't gate either). The
-    // POLICY_DEFAULT path-deny + tool-deny rules still apply for kanna's own
-    // MCP tools (offer_download, expose_port, lsp) — those are the only
-    // requests that ever reach the kanna gate now.
-    chatPolicy: {
-      ...POLICY_DEFAULT,
-      defaultAction: "auto-allow",
-    },
+    chatPolicy: { ...POLICY_DEFAULT, defaultAction: "auto-allow" },
     getSubagents: () => appSettings.getSnapshot().subagents,
     getAppSettingsSnapshot: () => buildAgentAppSettingsView(appSettings.getSnapshot()),
     persistOAuthState: (id, oauth) => void appSettings.writePatch({ customMcpServers: { setOAuthState: { id, oauth } } }),
     readLlmProvider: () => readLlmProviderSnapshot(),
     listOpenRouterModels: () => openrouterModelCache.list(),
-    onStateChange: (chatId?: string, options?: { immediate?: boolean }) => {
+    onStateChange: (chatId?: string, broadcastOptions?: { immediate?: boolean }) => {
       if (chatId) {
-        if (options?.immediate) {
+        if (broadcastOptions?.immediate) {
           void router.broadcastChatStateImmediately(chatId)
           return
         }
@@ -555,9 +459,6 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     },
   })
 
-  // "Start work" spans three subsystems that must not import each other: the
-  // board registry, git, and the chat store. All three are in scope here, so
-  // the binding happens here and the orchestrator stays free of IO.
   const startWorkDeps: StartWorkDeps = {
     registry: boardRegistry,
     getProject: (projectId) => {
@@ -568,16 +469,13 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     listWorktrees,
     localBranchExists,
     addWorktree,
-    createChat: (projectId, options) => store.createChat(projectId, options),
+    createChat: (projectId, chatOptions) => store.createChat(projectId, chatOptions),
     sendPrompt: async (chatId, content) => {
       await agent.send({ type: "chat.send", chatId, content })
     },
   }
   const startWork = (cardId: string) => runStartWork(startWorkDeps, cardId)
   const startWorkView = (cardId: string) => runStartWorkView(startWorkDeps, cardId)
-
-  // Merging a card's branch goes through the same machinery as merging one from
-  // the Changes panel — same rules, same conflict detection, one implementation.
   const cleanupDeps: WorktreeCleanupDeps = {
     registry: boardRegistry,
     getProject: startWorkDeps.getProject,
@@ -599,8 +497,6 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     },
     removeWorktree,
   }
-  // A developer who already cloned the repo should not have to type its name
-  // back in to bind a board to it.
   const suggestSyncRepo = async (boardId: string) => {
     const board = boardRegistry.getBoard(boardId)
     if (!board || board.ownerKind !== "project") return null
@@ -611,7 +507,6 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     const [owner, repo] = slug.split("/")
     return owner && repo ? { owner, repo } : null
   }
-
   const cleanupView = (cardId: string) => worktreeCleanupView(cleanupDeps, cardId)
   const resolveCleanup = (cardId: string, decision: CleanupDecision) =>
     resolveWorktreeCleanup(cleanupDeps, cardId, decision)
@@ -632,7 +527,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     idleMs: parsePositiveIntEnv(process.env.KANNA_IMPORT_FOLLOW_IDLE_MS, IMPORT_FOLLOW_IDLE_MS),
   })
 
-  router = createWsRouter({
+  const router = createWsRouter({
     store,
     diffStore,
     agent,
@@ -674,70 +569,120 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     },
     sessionShare: sessionShareService,
   })
-  // Wire the deferred tool-callback broadcast holder now that the router
-  // exists. Every subsequent submit/answer/cancel/cancelAllForChat fires
-  // a chat-state broadcast so the UI sees pending_tool_request the moment
-  // the model emits the call (previously the broadcast only fired on the
-  // next unrelated event, leaving prompts invisible).
-  broadcastChatState = (chatId: string) => {
-    router.scheduleChatStateBroadcast(chatId)
-  }
-  pushFollowedSessions = () => {
-    router.pushFollowedSessions()
-  }
-  agent.onCronJobsChange = () => {
-    router.pushCronJobs()
-  }
-  scheduleManager.rehydrate(
-    store.listAutoContinueChats().flatMap((chatId) => store.getAutoContinueEvents(chatId))
-  )
-  {
-    const cronChatIds = store.listAutoContinueChats()
-    const missedCronFires = cronScheduler.rehydrate(
-      cronChatIds.flatMap((chatId) => store.getAutoContinueEvents(chatId)),
-    )
-    // Detached like queued-message recovery: reconciliation appends visible
-    // notices + settles orphaned runs and must not delay the listener.
-    void agent.reconcileCronRunsAtBoot(missedCronFires, cronChatIds).catch((error) => {
-      log.error("[kanna/cron] boot reconciliation failed:", String(error))
-    })
-  }
-  rehydrateLoopTracking(
-    { getAutoContinueEvents: (chatId) => store.getAutoContinueEvents(chatId), registry: loopTrackingRegistry },
-    store.listAutoContinueChats(),
-  )
-  // Detached: a recovered chat spawns a provider session, which must not
-  // delay the listener coming up.
-  void recoverQueuedMessages({
-    listChatsWithQueuedMessages: () => store.listChatsWithQueuedMessages(),
-    maybeStartNextQueuedMessage: (chatId, options) => agent.maybeStartNextQueuedMessage(chatId, options),
-  }).then(async (recovered) => {
-    if (recovered.length > 0) {
-      log.info("[kanna] resumed queued messages after restart", { chats: recovered.length })
-    }
-    // AFTER the queue drain on purpose: a chat whose wake survived to the
-    // queue is busy (or still queued) by now, so the armed-loop pass cannot
-    // double-fire it. This covers the wake that never reached the queue —
-    // the subagent (or its delivery) died with the process.
-    const rearmed = await agent.recoverArmedLoopWakes()
-    if (rearmed.length > 0) {
-      log.info("[kanna] re-fired lost loop wakes after restart", { chats: rearmed.length })
-    }
-  })
 
-  await tunnelGateway.reapOrphanedTunnels()
+  // Resolve deferred holders now that the router exists.
+  broadcastChatState = (chatId: string) => { router.scheduleChatStateBroadcast(chatId) }
+  pushFollowedSessions = () => { router.pushFollowedSessions() }
+  agent.onCronJobsChange = () => { router.pushCronJobs() }
+
   const staleEmptyChatPruneInterval = setInterval(() => {
-    void router.pruneStaleEmptyChats()
-      .then(() => router.broadcastSnapshots())
+    void router.pruneStaleEmptyChats().then(() => router.broadcastSnapshots())
   }, STALE_EMPTY_CHAT_PRUNE_INTERVAL_MS)
   const followedSessionTickInterval = setInterval(
     () => { void followedSessionRegistry.tick() },
     parsePositiveIntEnv(process.env.KANNA_IMPORT_FOLLOW_POLL_MS, IMPORT_FOLLOW_POLL_MS),
   )
 
-  const distDir = options.distDir ?? path.join(import.meta.dir, "..", "..", "dist", "client")
+  return {
+    store,
+    diffStore,
+    auth,
+    analytics,
+    terminals,
+    updateManager,
+    agent,
+    router,
+    appSettings,
+    keybindings,
+    tunnelGateway,
+    pushManager,
+    sessionShareService,
+    observability,
+    scheduleManager,
+    cronScheduler,
+    loopTrackingRegistry,
+    staleEmptyChatPruneInterval,
+    followedSessionTickInterval,
+    snapshotSweepHandle,
+  }
+}
 
-  const MAX_PORT_ATTEMPTS = 20
+function rehydrateScheduledWork(services: ApplicationServices): void {
+  const { store, agent, scheduleManager, cronScheduler, loopTrackingRegistry } = services
+
+  scheduleManager.rehydrate(
+    store.listAutoContinueChats().flatMap((chatId) => store.getAutoContinueEvents(chatId))
+  )
+
+  const cronChatIds = store.listAutoContinueChats()
+  const missedCronFires = cronScheduler.rehydrate(
+    cronChatIds.flatMap((chatId) => store.getAutoContinueEvents(chatId)),
+  )
+  void agent.reconcileCronRunsAtBoot(missedCronFires, cronChatIds).catch((error) => {
+    log.error("[kanna/cron] boot reconciliation failed:", String(error))
+  })
+
+  rehydrateLoopTracking(
+    { getAutoContinueEvents: (chatId) => store.getAutoContinueEvents(chatId), registry: loopTrackingRegistry },
+    store.listAutoContinueChats(),
+  )
+
+  void recoverQueuedMessages({
+    listChatsWithQueuedMessages: () => store.listChatsWithQueuedMessages(),
+    maybeStartNextQueuedMessage: (chatId, opts) => agent.maybeStartNextQueuedMessage(chatId, opts),
+  }).then(async (recovered) => {
+    if (recovered.length > 0) {
+      log.info("[kanna] resumed queued messages after restart", { chats: recovered.length })
+    }
+    const rearmed = await agent.recoverArmedLoopWakes()
+    if (rearmed.length > 0) {
+      log.info("[kanna] re-fired lost loop wakes after restart", { chats: rearmed.length })
+    }
+  })
+}
+
+async function shutdownServices(services: ApplicationServices, server: Server<ClientState>): Promise<void> {
+  const { store, agent, auth, appSettings, keybindings, scheduleManager, cronScheduler,
+    tunnelGateway, snapshotSweepHandle, observability, staleEmptyChatPruneInterval,
+    followedSessionTickInterval, router, terminals } = services
+
+  appSettings.dispose()
+  keybindings.dispose()
+  scheduleManager.shutdown()
+  const cronDrain = cronScheduler.shutdown()
+  tunnelGateway.shutdown()
+  snapshotSweepHandle.stop()
+  await observability.shutdown()
+  clearInterval(staleEmptyChatPruneInterval)
+  clearInterval(followedSessionTickInterval)
+  for (const chatId of [...agent.activeTurns.keys()]) {
+    await agent.cancel(chatId)
+  }
+  await agent.drainCronOutcomes()
+  await cronDrain
+  agent.dispose()
+  router.dispose()
+  await auth?.dispose()
+  terminals.closeAll()
+  await store.flush()
+  await store.snapshotAndTruncateLogs()
+  server.stop(true)
+}
+
+const MAX_PORT_ATTEMPTS = 20
+
+export async function startKannaServer(options: StartKannaServerOptions = {}) {
+  const services = await createApplicationServices(options)
+  const { store, diffStore, updateManager, appSettings, auth, sessionShareService, router, analytics } = services
+
+  const distDir = options.distDir ?? path.join(import.meta.dir, "..", "..", "dist", "client")
+  const fetchHandler = createHttpDispatcher({ store, appSettings, auth, sessionShare: sessionShareService, distDir })
+
+  const port = options.port ?? 3210
+  const hostname = options.host ?? "127.0.0.1"
+  const strictPort = options.strictPort ?? false
+
+  let server!: Server<ClientState>
   let actualPort = port
 
   for (let attempt = 0; attempt < MAX_PORT_ATTEMPTS; attempt++) {
@@ -746,125 +691,28 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
         port: actualPort,
         hostname,
         maxRequestBodySize: MAX_REQUEST_BODY_BYTES,
-        async fetch(req, serverInstance) {
-          const url = new URL(req.url)
-
-          if (url.pathname === "/auth/status") {
-            return auth
-              ? auth.handleStatus(req)
-              : Response.json({ enabled: false, authenticated: true })
-          }
-
-          if (url.pathname === "/auth/logout") {
-            if (req.method !== "POST") {
-              return new Response(null, { status: 405, headers: { Allow: "POST" } })
-            }
-
-            return auth
-              ? auth.handleLogout(req)
-              : Response.json({ ok: true })
-          }
-
-          if (url.pathname.startsWith("/api/share/")) {
-            return handleShareApiRequest(req, sessionShareService)
-          }
-
-          if (auth) {
-            if (url.pathname === "/auth/login") {
-              if (req.method === "GET") {
-                return auth.redirectToApp(req)
-              }
-              if (req.method === "POST") {
-                return auth.handleLogin(req, "/")
-              }
-              return new Response(null, { status: 405, headers: { Allow: "GET, POST" } })
-            }
-
-            if (url.pathname === "/ws") {
-              if (!auth.validateOrigin(req)) {
-                return new Response("Forbidden", { status: 403 })
-              }
-              if (!auth.isAuthenticated(req)) {
-                return new Response("Unauthorized", { status: 401 })
-              }
-            } else if (url.pathname.startsWith("/api/") && !auth.isAuthenticated(req)) {
-              return Response.json({ error: "Unauthorized" }, { status: 401 })
-            }
-          }
-
-          if (url.pathname === "/ws") {
-            const upgraded = serverInstance.upgrade(req, {
-              data: {
-                subscriptions: new Map(),
-                snapshotSignatures: new Map(),
-                originHost: deriveOriginFromUpgrade(req, url),
-              },
-            })
-            return upgraded ? undefined : new Response("WebSocket upgrade failed", { status: 400 })
-          }
-
-          if (url.pathname === "/health") {
-            return Response.json({ ok: true, port: actualPort })
-          }
-
-          const uploadResponse = await handleProjectUpload(req, url, store, appSettings)
-          if (uploadResponse) {
-            return uploadResponse
-          }
-
-          const deleteUploadResponse = await handleProjectUploadDelete(req, url, store)
-          if (deleteUploadResponse) {
-            return deleteUploadResponse
-          }
-
-          const attachmentContentResponse = await handleAttachmentContent(req, url, store)
-          if (attachmentContentResponse) {
-            return attachmentContentResponse
-          }
-
-          const projectFileContentResponse = await handleProjectFileContent(req, url, store)
-          if (projectFileContentResponse) {
-            return projectFileContentResponse
-          }
-
-          const localFileResponse = await handleLocalFileContent(req, url)
-          if (localFileResponse) {
-            return localFileResponse
-          }
-
-          const projectPathsResponse = await handleProjectPaths(req, url, store)
-          if (projectPathsResponse) {
-            return projectPathsResponse
-          }
-
-          return serveStatic(distDir, url.pathname)
-        },
+        fetch: fetchHandler,
         websocket: {
-          open(ws) {
-            router.handleOpen(ws)
-          },
-          message(ws, raw) {
-            router.handleMessage(ws, raw)
-          },
-          close(ws) {
-            router.handleClose(ws)
-          },
+          open(ws) { router.handleOpen(ws) },
+          message(ws, raw) { router.handleMessage(ws, raw) },
+          close(ws) { router.handleClose(ws) },
         },
       })
       break
     } catch (err) {
-      const isAddrInUse =
-        isErrnoException(err) && err.code === "EADDRINUSE"
-      if (!isAddrInUse || strictPort || attempt === MAX_PORT_ATTEMPTS - 1) {
-        throw err
-      }
+      const isAddrInUse = isErrnoException(err) && err.code === "EADDRINUSE"
+      if (!isAddrInUse || strictPort || attempt === MAX_PORT_ATTEMPTS - 1) throw err
       log.info(`Port ${actualPort} is in use, trying ${actualPort + 1}...`)
       actualPort++
     }
   }
 
+  await services.tunnelGateway.reapOrphanedTunnels()
+
+  const boundPort = server.port ?? actualPort
+
   analytics.trackLaunch({
-    port: actualPort,
+    port: boundPort,
     host: hostname,
     openBrowser: options.openBrowser ?? true,
     share: options.share ?? false,
@@ -872,376 +720,14 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     strictPort,
   })
 
-  const shutdown = async () => {
-    // Dispose the fs.watch-backed managers FIRST, before any await. bun keeps a
-    // single shared inotify "File Watcher" thread alive for any open fs.watch;
-    // if a watcher is still open when the process ends, bun blocks joining that
-    // thread and the process hangs until SIGKILL. The awaits below (agent.cancel,
-    // auth.dispose) can throw or stall under load, so disposing here guarantees
-    // the watchers close even if the rest of shutdown fails.
-    appSettings.dispose()
-    keybindings.dispose()
-    scheduleManager.shutdown()
-    // cronScheduler.shutdown() sets stopped=true and clears timers synchronously
-    // (the first part of its body runs before the first await), so no new fires
-    // can start after this line. The async drain runs concurrently while we
-    // cancel active turns, then we await it below.
-    const cronDrain = cronScheduler.shutdown()
-    tunnelGateway.shutdown()
-    snapshotSweepHandle.stop()
-    await observability.shutdown()
-    clearInterval(staleEmptyChatPruneInterval)
-    clearInterval(followedSessionTickInterval)
-    for (const chatId of [...agent.activeTurns.keys()]) {
-      await agent.cancel(chatId)
-    }
-    // Drain any cron_run_outcome writes triggered by the cancel loop above,
-    // then wait for in-flight cron fires that were already running at shutdown.
-    // Both must complete before we flush + truncate the event log.
-    await agent.drainCronOutcomes()
-    await cronDrain
-    // After cancel handles in-flight turns, dispose() closes any RESIDENT
-    // claudeSessions that have no active turn (idle but cached) — without
-    // this, those PTY children leak past server shutdown.
-    agent.dispose()
-    router.dispose()
-    await auth?.dispose()
-    terminals.closeAll()
-    // Flush all queued event writes before snapshotting so no event is lost
-    // in the race between an in-flight appendText and the log truncation.
-    await store.flush()
-    await store.snapshotAndTruncateLogs()
-    server.stop(true)
-  }
+  rehydrateScheduledWork(services)
 
   return {
-    port: actualPort,
+    port: boundPort,
     store,
     diffStore,
     updateManager,
     appSettings,
-    stop: shutdown,
+    stop: () => shutdownServices(services, server),
   }
-}
-
-async function handleProjectUpload(req: Request, url: URL, store: EventStore, appSettings: AppSettingsManager) {
-  if (req.method !== "POST") {
-    return null
-  }
-
-  const match = url.pathname.match(/^\/api\/projects\/([^/]+)\/uploads$/)
-  if (!match) {
-    return null
-  }
-
-  const project = store.getProject(match[1])
-  if (!project) {
-    return Response.json({ error: "Project not found" }, { status: 404 })
-  }
-
-  const formData = await req.formData()
-  const files = formData
-    .getAll("files")
-    .filter((value): value is File => value instanceof File)
-
-  if (files.length === 0) {
-    return Response.json({ error: "No files uploaded" }, { status: 400 })
-  }
-
-  if (files.length > MAX_UPLOAD_FILES) {
-    return Response.json({ error: `You can upload up to ${MAX_UPLOAD_FILES} files at a time.` }, { status: 400 })
-  }
-
-  const { maxFileSizeMb } = appSettings.getSnapshot().uploads
-  const maxBytes = maxFileSizeMb * 1024 * 1024
-  for (const file of files) {
-    if (file.size > maxBytes) {
-      return Response.json(
-        { error: `File "${file.name}" exceeds the ${maxFileSizeMb} MB limit.` },
-        { status: 413 }
-      )
-    }
-  }
-
-  try {
-    const attachments = await persistUploadedFiles({
-      projectId: project.id,
-      localPath: project.localPath,
-      files,
-    })
-    return Response.json({ attachments })
-  } catch (error) {
-    log.error("[uploads] Upload failed:", String(error))
-    return Response.json({ error: "Upload failed" }, { status: 500 })
-  }
-}
-
-async function handleAttachmentContent(req: Request, url: URL, store: EventStore) {
-  const match = url.pathname.match(/^\/api\/projects\/([^/]+)\/uploads\/([^/]+)\/content$/)
-  if (!match) {
-    return null
-  }
-
-  if (req.method !== "GET" && req.method !== "HEAD") {
-    return new Response(null, {
-      status: 405,
-      headers: {
-        Allow: "GET, HEAD",
-      },
-    })
-  }
-
-  const project = store.getProject(match[1])
-  if (!project) {
-    return Response.json({ error: "Project not found" }, { status: 404 })
-  }
-
-  const storedName = decodeURIComponent(match[2])
-  if (!storedName || storedName.includes("/") || storedName.includes("\\") || storedName === "." || storedName === "..") {
-    return Response.json({ error: "Invalid attachment path" }, { status: 400 })
-  }
-
-  const filePath = path.join(getProjectUploadDir(project.localPath), storedName)
-  const file = getServerFile(filePath)
-  let fileSize: number
-  try {
-    const info = await statFile(filePath)
-    if (!info.isFile()) {
-      return Response.json({ error: "Attachment not found" }, { status: 404 })
-    }
-    fileSize = info.size
-  } catch {
-    return Response.json({ error: "Attachment not found" }, { status: 404 })
-  }
-
-  return new Response(req.method === "HEAD" ? null : file, {
-    headers: {
-      "Content-Type": inferAttachmentContentType(storedName, file.type),
-      "Content-Length": String(fileSize),
-    },
-  })
-}
-
-async function handleProjectFileContent(req: Request, url: URL, store: EventStore) {
-  const match = url.pathname.match(/^\/api\/projects\/([^/]+)\/files\/(.+)\/content$/)
-  if (!match) {
-    return null
-  }
-
-  if (req.method !== "GET" && req.method !== "HEAD") {
-    return new Response(null, {
-      status: 405,
-      headers: {
-        Allow: "GET, HEAD",
-      },
-    })
-  }
-
-  const project = store.getProject(match[1])
-  if (!project) {
-    return Response.json({ error: "Project not found" }, { status: 404 })
-  }
-
-  const relativePath = path.posix.normalize(decodeURIComponent(match[2]).replaceAll("\\", "/"))
-  if (!relativePath || relativePath === "." || relativePath.startsWith("../") || relativePath.includes("/../") || path.posix.isAbsolute(relativePath)) {
-    return Response.json({ error: "Invalid project file path" }, { status: 400 })
-  }
-
-  const filePath = path.resolve(project.localPath, relativePath)
-  const projectRoot = path.resolve(project.localPath)
-  if (filePath !== projectRoot && !filePath.startsWith(`${projectRoot}${path.sep}`)) {
-    return Response.json({ error: "Invalid project file path" }, { status: 400 })
-  }
-
-  const file = getServerFile(filePath)
-  let fileSize: number
-  try {
-    const info = await statFile(filePath)
-    if (!info.isFile()) {
-      return Response.json({ error: "File not found" }, { status: 404 })
-    }
-    fileSize = info.size
-  } catch {
-    return Response.json({ error: "File not found" }, { status: 404 })
-  }
-
-  return new Response(req.method === "HEAD" ? null : file, {
-    headers: {
-      "Content-Type": inferProjectFileContentType(relativePath, file.type),
-      "Content-Length": String(fileSize),
-    },
-  })
-}
-
-async function handleLocalFileContent(req: Request, url: URL) {
-  if (url.pathname !== "/api/local-file") {
-    return null
-  }
-
-  if (req.method !== "GET" && req.method !== "HEAD") {
-    return new Response(null, {
-      status: 405,
-      headers: { Allow: "GET, HEAD" },
-    })
-  }
-
-  const rawPath = url.searchParams.get("path")
-  if (!rawPath) {
-    return Response.json({ error: "path query parameter is required" }, { status: 400 })
-  }
-
-  let absolutePath: string
-  try {
-    absolutePath = path.resolve(rawPath)
-  } catch {
-    return Response.json({ error: "Invalid path" }, { status: 400 })
-  }
-
-  if (!path.isAbsolute(absolutePath)) {
-    return Response.json({ error: "Path must be absolute" }, { status: 400 })
-  }
-
-  let fileSize: number
-  try {
-    const info = await statFile(absolutePath)
-    if (!info.isFile()) {
-      return Response.json({ error: "Not a file" }, { status: 404 })
-    }
-    fileSize = info.size
-  } catch {
-    return Response.json({ error: "File not found" }, { status: 404 })
-  }
-
-  const file = getServerFile(absolutePath)
-  const fileName = path.basename(absolutePath)
-  return new Response(req.method === "HEAD" ? null : file, {
-    headers: {
-      "Content-Type": inferProjectFileContentType(fileName, file.type),
-      "Content-Length": String(fileSize),
-    },
-  })
-}
-
-async function handleProjectUploadDelete(req: Request, url: URL, store: EventStore) {
-  if (req.method !== "DELETE") {
-    return null
-  }
-
-  const match = url.pathname.match(/^\/api\/projects\/([^/]+)\/uploads\/([^/]+)$/)
-  if (!match) {
-    return null
-  }
-
-  const project = store.getProject(match[1])
-  if (!project) {
-    return Response.json({ error: "Project not found" }, { status: 404 })
-  }
-
-  const storedName = decodeURIComponent(match[2])
-  if (!storedName || storedName.includes("/") || storedName.includes("\\") || storedName === "." || storedName === "..") {
-    return Response.json({ error: "Invalid attachment path" }, { status: 400 })
-  }
-
-  const deleted = await deleteProjectUpload({
-    localPath: project.localPath,
-    storedName,
-  })
-
-  return Response.json({ ok: deleted })
-}
-
-async function handleProjectPaths(req: Request, url: URL, store: EventStore) {
-  if (req.method !== "GET") return null
-  const match = url.pathname.match(/^\/api\/projects\/([^/]+)\/paths$/)
-  if (!match) return null
-
-  const project = store.getProject(match[1])
-  if (!project) {
-    return Response.json({ error: "Project not found" }, { status: 404 })
-  }
-
-  const query = url.searchParams.get("query") ?? ""
-  const limitRaw = url.searchParams.get("limit")
-  const limit = limitRaw !== null ? Number.parseInt(limitRaw, 10) : undefined
-
-  try {
-    const paths = await listProjectPaths({
-      projectId: project.id,
-      localPath: project.localPath,
-      query,
-      limit: Number.isFinite(limit) ? limit : undefined,
-    })
-    return Response.json({ paths })
-  } catch (error) {
-    log.error("[paths] list failed:", String(error))
-    return Response.json({ error: "Failed to list paths" }, { status: 500 })
-  }
-}
-
-/**
- * True when the path names a build artifact rather than a client route — i.e. its
- * last segment carries a file extension. Every SPA route is extensionless (`/`,
- * `/chat/:chatId`, `/settings/:sectionId`, `/workflows/:chatId`, `/share/:token`),
- * so an extension is a reliable "this is a file" signal.
- *
- * `.html` is excluded: those are navigation documents that keep falling back to the
- * shell.
- */
-function isAssetRequest(requestedPath: string): boolean {
-  const lastSegment = requestedPath.slice(requestedPath.lastIndexOf("/") + 1)
-  const dot = lastSegment.lastIndexOf(".")
-  if (dot <= 0) return false
-  return lastSegment.slice(dot).toLowerCase() !== ".html"
-}
-
-async function serveStatic(distDir: string, pathname: string) {
-  const requestedPath = pathname === "/" ? "/index.html" : pathname
-  const filePath = path.join(distDir, requestedPath)
-  const indexPath = path.join(distDir, "index.html")
-
-  const file = getServerFile(filePath)
-  if (await file.exists()) {
-    return new Response(file, {
-      headers: getStaticHeaders(requestedPath),
-    })
-  }
-
-  // Never answer a missing asset with the SPA shell. A tab left open across a deploy
-  // requests hashed chunks this build no longer ships; returning `200 index.html`
-  // makes the browser fail with an opaque "Failed to fetch dynamically imported
-  // module" instead of a clean 404 the client can recognize and recover from.
-  if (isAssetRequest(requestedPath)) {
-    return new Response("Not found", {
-      status: 404,
-      headers: {
-        "Content-Type": "text/plain; charset=utf-8",
-        "Cache-Control": "no-store",
-      },
-    })
-  }
-
-  const indexFile = getServerFile(indexPath)
-  if (await indexFile.exists()) {
-    return new Response(indexFile, {
-      headers: {
-        "Content-Type": "text/html; charset=utf-8",
-        "Cache-Control": "no-store",
-      },
-    })
-  }
-
-  return new Response(
-    `${APP_NAME} client bundle not found. Run \`bun run build\` inside workbench/ first.`,
-    { status: 503 }
-  )
-}
-
-function getStaticHeaders(requestedPath: string) {
-  if (requestedPath.endsWith(".html")) {
-    return {
-      "Cache-Control": "no-store",
-    }
-  }
-
-  return undefined
 }

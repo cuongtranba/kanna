@@ -93,6 +93,9 @@ c3-201:
 c3-202:
   - src/server/app-settings.ts
   - src/server/server.ts
+  - src/server/http-dispatcher.ts
+  - src/server/http-api-routes.ts
+  - src/server/http-static.ts
 c3-203:
   - src/server/auth.test.ts
   - src/server/auth.ts
