@@ -48,6 +48,8 @@ export function isTypeaheadMenuOpen(dom: Pick<DomPort, "hasTypeaheadMenuOpen"> =
  * keyboard behaviour:
  *
  *   – Plain Enter (no modifier, not on touch device) → submit + clear
+ *   – Plain Enter on touch device with fine pointer  → submit + clear
+ *     (iPad + Magic Keyboard / Universal Control where trackpad is primary)
  *   – Shift+Enter                                    → insert newline (default)
  *   – Enter during IME composition (CJK)             → confirm candidate, no submit
  *   – When disabled                                  → noop
@@ -102,8 +104,10 @@ export function SubmitPlugin({ onSubmit, disabled, dom = domAdapter }: SubmitPlu
         // submitting the raw trigger text.
         if (isTypeaheadMenuOpen(dom)) return false
 
-        // Touch devices: allow the OS keyboard's Return key to insert newlines.
-        if (dom.isTouchDevice()) return false
+        // Touch devices: allow the OS keyboard's Return key to insert newlines,
+        // unless a fine pointer (mouse/trackpad) indicates a hardware keyboard
+        // is connected — e.g. iPad + Magic Keyboard or Universal Control.
+        if (dom.isTouchDevice() && !dom.matchesMediaQuery("(hover: hover) and (pointer: fine)")) return false
 
         // Check the editor has content worth sending.
         const payload = serializeEditorToWire(editor)
