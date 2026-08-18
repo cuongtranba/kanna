@@ -7,8 +7,10 @@
  */
 
 import type { TranscriptEntry } from "../../shared/types"
-import type { CronParseError, CronParseResult } from "../../shared/cron/types"
+import type { CronArmSummary, CronParseError, CronParseResult } from "../../shared/cron/types"
 import type { CronRepair } from "./repair"
+import type { CronConfirm } from "./confirm"
+import { cronModeConsequence } from "../../shared/cron/arm-summary"
 import { humanizeSchedule } from "../../shared/cron/humanize"
 import { nextFireAt } from "./next-fire"
 import type { AutoContinueEvent } from "../auto-continue/events"
@@ -41,6 +43,13 @@ export interface CronCommandDeps {
    * Optional so tests exercising event/entry output need not wire it.
    */
   cronRepair?: CronRepair
+  /**
+   * Escalates a successful typed arm to a model review turn so the user can
+   * confirm, adjust, or disarm the job before it runs unchecked.
+   * Optional: absent on the arm_cron tool path (model already confirms
+   * in-turn) and in tests exercising event/entry output only.
+   */
+  cronConfirm?: CronConfirm
   now?: () => number
   newJobId?: () => string
   resolveChatCwd?: (chatId: string) => string | undefined
@@ -112,18 +121,31 @@ export async function runCronCommand(
         ...(model !== undefined ? { model } : {}),
       })
       const cwd = deps.resolveChatCwd?.(chatId)
+      const scheduleHuman = humanizeSchedule(command.schedule, command.scheduleText)
       await appendCronEntry(deps, chatId, {
         kind: "cron_armed",
         jobId,
         instruction: command.instruction,
         mode: command.mode,
         scheduleText: command.scheduleText,
-        scheduleHuman: humanizeSchedule(command.schedule, command.scheduleText),
+        scheduleHuman,
         nextFireAt: fires[0] ?? null,
         ...(model !== undefined ? { model } : {}),
         upcomingFires: fires,
         ...(cwd !== undefined ? { cwd } : {}),
       })
+      const summary: CronArmSummary = {
+        jobId,
+        instruction: command.instruction,
+        mode: command.mode,
+        modeConsequence: cronModeConsequence(command.mode),
+        scheduleText: command.scheduleText,
+        scheduleHuman,
+        upcomingFires: fires,
+        model: model ?? null,
+        cwd: cwd ?? null,
+      }
+      await deps.cronConfirm?.offer(chatId, jobId, summary)
       return jobId
     }
     case "remove":

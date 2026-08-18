@@ -6,6 +6,7 @@ export const envVars: EnvVar[] = [
   { name: 'KANNA_CLAUDE_SESSION_IDLE_MS', default: "600000", description: "Idle window before a resident Claude session is reaped (10 min)." },
   { name: 'KANNA_CLAUDE_SESSION_MAX_RESIDENT', default: "4", description: "Max simultaneously resident Claude sessions before the least-recently-used is reaped." },
   { name: 'KANNA_CLAUDE_SESSION_SWEEP_INTERVAL_MS', default: "60000", description: "How often the resident-session reaper sweeps for idle sessions." },
+  { name: 'KANNA_CRON_CONFIRM', default: "enabled", description: "Set to \"disabled\" to stop the host from escalating a typed /cron arm to a model review turn. When enabled, the model presents the full job config and asks the user to confirm, change, or disarm. Only fires on the typed path — arm_cron already confirms in-turn." },
   { name: 'KANNA_CRON_REPAIR', default: "enabled", description: "Set to \"disabled\" to stop handing an invalid /cron line to the agent for repair. It only ever fires where Kanna has no corrected command of its own; the validate_cron / arm_cron tools stay registered either way." },
   { name: 'KANNA_DISABLE_SELF_UPDATE', default: "0", description: "Set to \"1\" to disable the in-app self-update path." },
   { name: 'KANNA_HEAP_SNAPSHOT', default: "(undocumented)", description: "(no description — add one to extract-env-vars.ts DESCRIPTIONS)" },

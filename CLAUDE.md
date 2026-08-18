@@ -701,6 +701,34 @@ parser as the deterministic layer.
 `KANNA_CRON_REPAIR=disabled` turns the escalation off; the tools stay. See
 `adr-20260816-cron-llm-repair`.
 
+# `/cron` Arm Confirmation (KANNA_CRON_CONFIRM)
+
+After a user types a `/cron` command that arms successfully, `createCronConfirm`
+escalates the result to a model review turn so the user can confirm, adjust, or
+disarm the job before it runs unchecked. This mirrors `createCronRepair`'s shape
+exactly — same four bounds:
+
+| `createCronRepair` bound | Confirm equivalent |
+| --- | --- |
+| Stands down when a suggestion exists | Arm-shaped failures only (this path never sees failures) |
+| One ask per line | One confirmation per `jobId` — a re-arm is a new job |
+| Stands aside for queued user message | Identical |
+| Never throws into the send path | Identical |
+
+**Only on the typed path.** `createCronConfirm` is wired into `buildCronCommandDeps`
+but `armCron` (the `arm_cron` MCP tool) overrides `cronConfirm: undefined` — the
+model path already instructs the model to call `AskUserQuestion` after arming
+(see `arm_cron` post-arm review below), so double-confirming is worse than not
+confirming.
+
+The escalation enqueues a `formatCronConfirmRequest` prompt with
+`autoContinue: { scheduleId: 'cron-confirm-<jobId>' }` and drains the queue
+(`/cron` starts no turn, so nothing else would ever pick it up — same as the
+repair path).
+
+`KANNA_CRON_CONFIRM=disabled` turns the escalation off. See
+`adr-20260818-cron-arm-confirmation`.
+
 # `arm_cron` post-arm review
 
 After a successful `arm_cron` call the tool result carries:
