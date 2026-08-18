@@ -10,10 +10,14 @@ export interface DiscoveredProject {
   localPath: string
   title: string
   modifiedAt: number
+  discoveredByProviders: AgentProvider[]
 }
 
-export interface ProviderDiscoveredProject extends DiscoveredProject {
+export interface ProviderDiscoveredProject {
   provider: AgentProvider
+  localPath: string
+  title: string
+  modifiedAt: number
 }
 
 export interface ProjectDiscoveryAdapter {
@@ -63,22 +67,27 @@ function normalizeExistingDirectory(localPath: string) {
   }
 }
 
-function mergeDiscoveredProjects(projects: Iterable<DiscoveredProject>): DiscoveredProject[] {
+function mergeDiscoveredProjects(projects: Iterable<ProviderDiscoveredProject>): DiscoveredProject[] {
   const merged = new Map<string, DiscoveredProject>()
 
   for (const project of projects) {
     const existing = merged.get(project.localPath)
-    if (!existing || project.modifiedAt > existing.modifiedAt) {
+    if (!existing) {
       merged.set(project.localPath, {
         localPath: project.localPath,
         title: project.title || path.basename(project.localPath) || project.localPath,
         modifiedAt: project.modifiedAt,
+        discoveredByProviders: [project.provider],
       })
       continue
     }
 
-    if (!existing.title && project.title) {
-      existing.title = project.title
+    if (project.modifiedAt > existing.modifiedAt) {
+      existing.modifiedAt = project.modifiedAt
+      existing.title = project.title || path.basename(project.localPath) || project.localPath
+    }
+    if (!existing.discoveredByProviders.includes(project.provider)) {
+      existing.discoveredByProviders.push(project.provider)
     }
   }
 
@@ -115,12 +124,12 @@ export class ClaudeProjectDiscoveryAdapter implements ProjectDiscoveryAdapter {
       })
     }
 
-    const mergedProjects = mergeDiscoveredProjects(projects).map((project) => ({
+    return mergeDiscoveredProjects(projects).map((project): ProviderDiscoveredProject => ({
       provider: this.provider,
-      ...project,
+      localPath: project.localPath,
+      title: project.title,
+      modifiedAt: project.modifiedAt,
     }))
-
-    return mergedProjects
   }
 }
 
@@ -270,12 +279,12 @@ export class CodexProjectDiscoveryAdapter implements ProjectDiscoveryAdapter {
       })
     }
 
-    const mergedProjects = mergeDiscoveredProjects(projects).map((project) => ({
+    return mergeDiscoveredProjects(projects).map((project): ProviderDiscoveredProject => ({
       provider: this.provider,
-      ...project,
+      localPath: project.localPath,
+      title: project.title,
+      modifiedAt: project.modifiedAt,
     }))
-
-    return mergedProjects
   }
 }
 
@@ -288,9 +297,5 @@ export function discoverProjects(
   homeDir: string = homedir(),
   adapters: ProjectDiscoveryAdapter[] = DEFAULT_PROJECT_DISCOVERY_ADAPTERS
 ): DiscoveredProject[] {
-  const mergedProjects = mergeDiscoveredProjects(
-    adapters.flatMap((adapter) => adapter.scan(homeDir).map(({ provider: _provider, ...project }) => project))
-  )
-
-  return mergedProjects
+  return mergeDiscoveredProjects(adapters.flatMap((adapter) => adapter.scan(homeDir)))
 }

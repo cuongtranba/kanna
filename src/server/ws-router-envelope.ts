@@ -113,10 +113,14 @@ function buildSidebarSnapshotCacheEntry(
 
   const { store, agent, pushManager } = deps
   const startedAt = performance.now()
+  const discoveredProvidersByPath = new Map(
+    deps.getDiscoveredProjects().map((p) => [p.localPath, p.discoveredByProviders])
+  )
   const data = deriveSidebarData(store.state, agent.getActiveStatuses(), {
     sidebarProjectOrder: getSidebarProjectOrder(store),
     drainingChatIds: agent.getDrainingChatIds(),
     claudeSessionStates: agent.getClaudeSessionStates?.(),
+    discoveredProvidersByPath,
   })
   const observed = data.projectGroups.flatMap((group) =>
     group.chats.map((chat) => ({

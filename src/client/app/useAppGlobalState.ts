@@ -231,7 +231,9 @@ export function getMostRecentProjectProvider(
   projectId: string,
 ): AgentProvider | null {
   const group = projectGroups.find((g) => g.groupKey === projectId)
-  return group?.chats[0]?.provider ?? null
+  if (!group) return null
+  const providerFromHistory = group.chats.find((c) => c.provider != null)?.provider ?? null
+  return providerFromHistory ?? group.sourceProvider ?? null
 }
 
 export function getUiUpdateRestartReconnectAction(

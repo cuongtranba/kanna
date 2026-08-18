@@ -224,6 +224,7 @@ export interface SidebarProjectGroup {
   archivedChats?: SidebarChatRow[]
   defaultCollapsed: boolean
   starredAt?: number
+  sourceProvider?: AgentProvider | null
 }
 
 export interface SidebarData {
