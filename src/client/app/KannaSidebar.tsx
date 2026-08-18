@@ -141,6 +141,14 @@ function KannaSidebarImpl({
     },
     [navigate],
   )
+  // Mirrors handleOpenBoards, one owner kind over: a Stack row's Boards
+  // affordance opens the Stack's own board list, not any one member project's.
+  const handleOpenStackBoards = useCallback(
+    (stackId: string) => {
+      navigate(`/boards/stack/${stackId}`)
+    },
+    [navigate],
+  )
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const resizeStartRef = useRef<{ pointerX: number; width: number } | null>(null)
 
@@ -722,6 +730,7 @@ function KannaSidebarImpl({
               onToggleExpanded={toggleStackExpanded}
               onOpenCreatePanel={openStackCreatePanel}
               onOpenStackMenu={openStackEditPanel}
+              onOpenBoards={handleOpenStackBoards}
               onDeleteStack={(stackId) => setStackDeleteConfirmId(stackId)}
               onStartChat={(stackId) => { void handleStartStackChat(stackId) }}
               renderChatCreate={(stack) => {

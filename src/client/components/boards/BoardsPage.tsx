@@ -8,13 +8,14 @@ import { ownerKey, selectBoards, useBoardsStore } from "../../stores/boardsStore
 import { selectTemplates, useBoardsPageStore } from "./BoardsPage.store"
 import { COLUMN_DOT_CLASS } from "../../lib/boards/columnStyle"
 import type { BoardsSnapshot } from "../../../shared/protocol"
-import type { BoardSummary, BoardTemplate } from "../../../shared/boards/types"
+import type { BoardOwnerKind, BoardSummary, BoardTemplate } from "../../../shared/boards/types"
 import type { AnyValue } from "../../../shared/errors"
 
 /**
- * The Boards page — `/boards/:projectId`.
+ * The Boards page — `/boards/:projectId` for a project owner, or
+ * `/boards/stack/:stackId` for a Stack owner.
  *
- * It answers "what boards does this project have?"; the board PANE answers
+ * It answers "what boards does this owner have?"; the board PANE answers
  * "where is this card up to?". Opening a row hands the board to a pane tab
  * rather than navigating into it, which is what lets a board sit beside the
  * chat an agent is working in.
@@ -29,15 +30,16 @@ export interface BoardsPageSocket {
 }
 
 export interface BoardsPageProps {
-  projectId: string
-  projectName: string
+  ownerKind: BoardOwnerKind
+  ownerId: string
+  ownerName: string
   socket: BoardsPageSocket
   /** Hands a board to the pane workspace. */
   onOpenBoard: (boardId: string) => void
 }
 
-export function BoardsPage({ projectId, projectName, socket, onOpenBoard }: BoardsPageProps) {
-  const key = ownerKey("project", projectId)
+export function BoardsPage({ ownerKind, ownerId, ownerName, socket, onOpenBoard }: BoardsPageProps) {
+  const key = ownerKey(ownerKind, ownerId)
   const boards = useBoardsStore(selectBoards(key))
   const templates = useBoardsPageStore(selectTemplates)
   const picking = useBoardsPageStore((state) => state.picking)
@@ -48,12 +50,12 @@ export function BoardsPage({ projectId, projectName, socket, onOpenBoard }: Boar
 
   useEffect(() => {
     return socket.subscribe<BoardsSnapshot>(
-      { type: "boards", ownerKind: "project", ownerId: projectId },
+      { type: "boards", ownerKind, ownerId },
       (snapshot) => {
         useBoardsStore.getState().setBoards(ownerKey(snapshot.ownerKind, snapshot.ownerId), snapshot.boards)
       },
     )
-  }, [projectId, socket])
+  }, [ownerKind, ownerId, socket])
 
   useEffect(() => {
     let cancelled = false
@@ -88,13 +90,13 @@ export function BoardsPage({ projectId, projectName, socket, onOpenBoard }: Boar
       closePicker()
       void run({
         type: "board.create",
-        ownerKind: "project",
-        ownerId: projectId,
+        ownerKind,
+        ownerId,
         title: template ? template.name : "Untitled board",
         templateId: template?.id ?? null,
       })
     },
-    [closePicker, projectId, run],
+    [closePicker, ownerKind, ownerId, run],
   )
 
   const handleRename = useCallback(
@@ -115,7 +117,7 @@ export function BoardsPage({ projectId, projectName, socket, onOpenBoard }: Boar
         <div className="min-w-0">
           <h1 className="text-lg font-medium leading-tight tracking-[-0.01em] text-foreground">Boards</h1>
           <p className="truncate text-[13px] text-muted-foreground">
-            {projectName}
+            {ownerName}
             {boards.length > 0 ? <span className="tabular-nums"> · {boards.length} boards</span> : null}
           </p>
         </div>
@@ -339,7 +341,7 @@ function TemplatePicker({
     <div className="px-6 py-8">
       {firstRun ? (
         <>
-          <h2 className="text-[15px] font-semibold text-foreground">No boards in this project yet.</h2>
+          <h2 className="text-[15px] font-semibold text-foreground">No boards yet.</h2>
           <p className="mt-1 max-w-[58ch] text-sm text-muted-foreground">
             A board turns issues into work your agents can pick up. Start from a shape, or import an existing
             tracker.

@@ -114,6 +114,31 @@ describe("KannaSidebar section headings", () => {
   })
 })
 
+describe("KannaSidebar Stacks Boards affordance", () => {
+  // KannaSidebar owns navigation (handleOpenStackBoards → `/boards/stack/:id`)
+  // and hands it to StacksSection as a plain prop; this pins that wiring the
+  // whole way down without throwing, mirroring the project row's own Boards
+  // item which is exercised the same way (structural render, not a click sim).
+  test("renders a Stack row's actions menu without throwing", () => {
+    expect(() =>
+      renderSidebar({
+        starredProjectGroups: [],
+        projectGroups: [],
+        stacks: [
+          {
+            id: "stack-1",
+            title: "Kanna + ccom",
+            projectIds: [],
+            memberCount: 0,
+            createdAt: 0,
+            updatedAt: 0,
+          },
+        ],
+      })
+    ).not.toThrow()
+  })
+})
+
 describe("KannaSidebar top chrome band", () => {
   // The other half of the shell's top-band contract (the pane tab strip side is
   // asserted in PaneTabStrip.test.tsx). Both bands must read their height from

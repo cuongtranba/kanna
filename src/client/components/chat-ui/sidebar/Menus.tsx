@@ -221,12 +221,14 @@ export function ChatRowMenu({
 
 function StackActionsPopoverInner({
   stackTitle,
+  onOpenBoards,
   onRename,
   onEditMembers,
   onDelete,
   children,
 }: {
   stackTitle: string
+  onOpenBoards?: () => void
   onRename: () => void
   onEditMembers: () => void
   onDelete: () => void
@@ -252,6 +254,20 @@ function StackActionsPopoverInner({
         role="menu"
         aria-label={`Actions for ${stackTitle}`}
       >
+        {onOpenBoards ? (
+          <>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={handle(onOpenBoards)}
+              className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs font-medium hover:bg-muted focus-visible:bg-muted outline-hidden"
+            >
+              <SquareKanban className="h-3.5 w-3.5" />
+              <span>Boards</span>
+            </button>
+            <div className="my-1 h-px bg-border" />
+          </>
+        ) : null}
         <button
           type="button"
           role="menuitem"
@@ -286,12 +302,14 @@ function StackActionsPopoverInner({
 
 export function StackActionsPopover({
   stackTitle,
+  onOpenBoards,
   onRename,
   onEditMembers,
   onDelete,
   children,
 }: {
   stackTitle: string
+  onOpenBoards?: () => void
   onRename: () => void
   onEditMembers: () => void
   onDelete: () => void
@@ -301,6 +319,7 @@ export function StackActionsPopover({
     <stackActionsPopoverStore.Provider init={{}}>
       <StackActionsPopoverInner
         stackTitle={stackTitle}
+        onOpenBoards={onOpenBoards}
         onRename={onRename}
         onEditMembers={onEditMembers}
         onDelete={onDelete}
@@ -313,12 +332,14 @@ export function StackActionsPopover({
 
 export function StackSectionMenu({
   stackTitle,
+  onOpenBoards,
   onRename,
   onEditMembers,
   onDelete,
   children,
 }: {
   stackTitle: string
+  onOpenBoards?: () => void
   onRename: () => void
   onEditMembers: () => void
   onDelete: () => void
@@ -330,6 +351,20 @@ export function StackSectionMenu({
         {children}
       </ContextMenuTrigger>
       <ContextMenuContent>
+        {onOpenBoards ? (
+          <>
+            <ContextMenuItem
+              onSelect={(event) => {
+                event.stopPropagation()
+                onOpenBoards()
+              }}
+            >
+              <SquareKanban className="h-3.5 w-3.5" />
+              <span className="text-xs font-medium">Boards</span>
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+          </>
+        ) : null}
         <ContextMenuItem
           onSelect={(event) => {
             event.preventDefault()

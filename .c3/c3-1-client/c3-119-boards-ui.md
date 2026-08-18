@@ -1,6 +1,6 @@
 ---
 id: c3-119
-c3-seal: 71b91984a8f6a2d5ec5abfd64a864bff1bbf840e05b34ab7190bb2650f26f202
+c3-seal: 70944dc0394dd3456282d51c827e05e2ff4ee486eb692f12eb42031bf7335bbf
 title: boards-ui
 type: component
 category: feature
@@ -46,7 +46,7 @@ Owns the board surface: `BoardsPage` and `BoardPane`, the `KannaBoard` renderer 
 
 | Surface | Direction | Contract | Boundary | Evidence |
 | --- | --- | --- | --- | --- |
-| Board tab | OUT | /boards/:projectId/:boardId mounts the same route-neutral workspace page a chat does and opens a board tab | c3-112 | src/client/app/BoardsRoutePage.tsx |
+| Board tab | OUT | /boards/:projectId/:boardId and /boards/stack/:stackId/:boardId both mount the same route-neutral workspace page a chat does and open a board tab | c3-112 | src/client/app/BoardsRoutePage.tsx, src/client/app/StackBoardsRoutePage.tsx |
 | Board topic subscription | IN | Subscribes to the board topic and renders the last snapshot received | c3-101 | src/client/components/boards/BoardPane.tsx |
 | board.* commands | OUT | Emits board / column / card commands; never mutates server state locally except optimistically | c3-208 | src/client/components/boards/BoardPane.tsx |
 | Drag translation | OUT | dnd.ts resolves a drop edge to NEIGHBOURS, never to an index | c3-310 | src/client/lib/boards/dnd.ts |

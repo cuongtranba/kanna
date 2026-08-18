@@ -24,6 +24,7 @@ import { KannaSidebar } from "./KannaSidebar"
 import { WorkspacePage } from "./ChatPage"
 import { LocalProjectsPage } from "./LocalProjectsPage"
 import { BoardsRoutePage } from "./BoardsRoutePage"
+import { StackBoardsRoutePage } from "./StackBoardsRoutePage"
 import { SettingsPage } from "./SettingsPage"
 import { WorkflowsPage } from "./WorkflowsPage"
 import { CronJobsPage } from "./CronJobsPage"
@@ -582,6 +583,12 @@ function AuthedApp() {
               switching board↔chat is the tab strip rather than a round trip
               through the sidebar. */}
           <Route path="/boards/:projectId/:boardId" element={<WorkspacePage />} />
+          {/* A Stack board's owner is the Stack, not any one of its projects —
+              the literal "stack" segment ranks these above the two routes
+              above (react-router scores static segments over dynamic ones),
+              so `/boards/stack/:stackId` never gets read as a project id. */}
+          <Route path="/boards/stack/:stackId" element={<StackBoardsRoutePage />} />
+          <Route path="/boards/stack/:stackId/:boardId" element={<WorkspacePage />} />
         </Route>
       </Routes>
     </KannaSocketProvider>

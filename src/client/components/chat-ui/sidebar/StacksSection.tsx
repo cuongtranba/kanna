@@ -13,6 +13,7 @@ interface StacksSectionProps {
   onToggleExpanded: (stackId: string) => void
   onOpenCreatePanel: () => void
   onOpenStackMenu: (stackId: string) => void
+  onOpenBoards?: (stackId: string) => void
   onDeleteStack?: (stackId: string) => void
   onStartChat?: (stackId: string) => void
   renderChatCreate?: (stack: StackSummary) => ReactNode
@@ -27,6 +28,7 @@ export function StacksSection({
   onToggleExpanded,
   onOpenCreatePanel,
   onOpenStackMenu,
+  onOpenBoards,
   onDeleteStack,
   onStartChat,
   renderChatCreate,
@@ -111,6 +113,7 @@ export function StacksSection({
                 {onDeleteStack ? (
                   <StackActionsPopover
                     stackTitle={stack.title}
+                    onOpenBoards={onOpenBoards ? () => onOpenBoards(stack.id) : undefined}
                     onRename={() => onOpenStackMenu(stack.id)}
                     onEditMembers={() => onOpenStackMenu(stack.id)}
                     onDelete={() => onDeleteStack(stack.id)}
@@ -160,6 +163,7 @@ export function StacksSection({
                 {onDeleteStack ? (
                   <StackSectionMenu
                     stackTitle={stack.title}
+                    onOpenBoards={onOpenBoards ? () => onOpenBoards(stack.id) : undefined}
                     onRename={() => onOpenStackMenu(stack.id)}
                     onEditMembers={() => onOpenStackMenu(stack.id)}
                     onDelete={() => onDeleteStack(stack.id)}
