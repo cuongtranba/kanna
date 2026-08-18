@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.26.7](https://github.com/cuongtranba/kanna/compare/v1.26.6...v1.26.7) (2026-08-18)
+
+
+### Bug Fixes
+
+* **discovery:** default composer to Codex for Codex-only discovered projects ([#745](https://github.com/cuongtranba/kanna/issues/745)) ([8e2eb67](https://github.com/cuongtranba/kanna/commit/8e2eb6785561e7321708ed6754e662145b9070ba))
+
 ## [1.26.6](https://github.com/cuongtranba/kanna/compare/v1.26.5...v1.26.6) (2026-08-18)
 
 
