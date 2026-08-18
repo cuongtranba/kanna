@@ -78,3 +78,13 @@ export function CronRunStatusPill({ status }: { status: CronRunStatus }) {
     </span>
   )
 }
+
+/** Schedule-lifecycle indicator — distinct from run execution status. */
+export function CronPausedPill() {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-xs font-medium text-muted-foreground">
+      <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground" />
+      Paused
+    </span>
+  )
+}

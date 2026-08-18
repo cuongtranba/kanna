@@ -5,7 +5,7 @@ import { useCronJobsStore } from "../stores/cronJobsStore"
 import { useKannaSocketInstance } from "./KannaSocketProvider"
 import type { CronJobsGlobalRow } from "../../shared/cron/types"
 import { humanizeSchedule } from "../../shared/cron/humanize"
-import { CronRunStatusPill } from "../components/messages/CronRunMessage"
+import { CronPausedPill, CronRunStatusPill } from "../components/messages/CronRunMessage"
 import { formatCompactDuration, formatLiveDuration } from "../lib/formatDuration"
 import { getPathBasename } from "../lib/formatters"
 import { useNow } from "../hooks/useNow"
@@ -16,6 +16,11 @@ import { HoverHint } from "../components/ui/truncated-text"
  * Global cron management page (/cron): every armed job across every project
  * and chat, grouped by project, with the same pause/resume/remove controls
  * as the per-chat footer panel and a link into each job's chat.
+ *
+ * Display model: schedule lifecycle (paused/active) takes precedence over run
+ * execution status. A paused job shows the Paused pill as its primary indicator;
+ * any last-run status is rendered as a clearly-labeled secondary so it cannot
+ * override the schedule state.
  */
 export function CronJobsPage() {
   const rows = useCronJobsStore((s) => s.rows)
@@ -75,7 +80,8 @@ export function CronJobsPage() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <span className="truncate text-sm text-foreground">{job.instruction}</span>
-                          {job.lastRun ? <CronRunStatusPill status={job.lastRun.status} /> : null}
+                          {job.paused ? <CronPausedPill /> : null}
+                          {!job.paused && job.lastRun ? <CronRunStatusPill status={job.lastRun.status} /> : null}
                         </div>
                         <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
                           <span className="font-mono">{job.jobId}</span>
@@ -85,11 +91,12 @@ export function CronJobsPage() {
                           <HoverHint label={new Date(job.armedAt).toLocaleString()} side="top">
                             <span className="tabular-nums">created {formatCompactDuration(elapsedMs)} ago</span>
                           </HoverHint>
-                          <span className="tabular-nums">running for {formatCompactDuration(elapsedMs)}</span>
-                          {job.paused ? (
-                            <span className="inline-flex items-center gap-1">
-                              <Pause className="h-3 w-3" aria-hidden="true" />
-                              paused
+                          {!job.paused ? (
+                            <span className="tabular-nums">running for {formatCompactDuration(elapsedMs)}</span>
+                          ) : null}
+                          {job.paused && job.lastRun ? (
+                            <span className="tabular-nums">
+                              Last run: <CronRunStatusPill status={job.lastRun.status} />
                             </span>
                           ) : null}
                           {!job.paused && job.nextFireAt !== null ? (
