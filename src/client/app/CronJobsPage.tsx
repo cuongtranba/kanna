@@ -69,6 +69,7 @@ export function CronJobsPage() {
                   const job = row.job
                   const isLast = index === group.rows.length - 1
                   const elapsedMs = now - job.armedAt
+                  const activeRun = job.lastRun?.status === "running" ? job.lastRun : null
                   return (
                     <div
                       key={`${row.chatId} ${job.jobId}`}
@@ -91,8 +92,8 @@ export function CronJobsPage() {
                           <HoverHint label={new Date(job.armedAt).toLocaleString()} side="top">
                             <span className="tabular-nums">created {formatCompactDuration(elapsedMs)} ago</span>
                           </HoverHint>
-                          {!job.paused ? (
-                            <span className="tabular-nums">running for {formatCompactDuration(elapsedMs)}</span>
+                          {activeRun ? (
+                            <span className="tabular-nums">running for {formatLiveDuration(now - activeRun.firedAt)}</span>
                           ) : null}
                           {job.paused && job.lastRun ? (
                             <span className="tabular-nums">
