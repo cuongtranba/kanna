@@ -435,6 +435,7 @@ interface TranscriptSingleRowProps {
   onAutoContinueReschedule: (scheduleId: string, scheduledAt: number) => void
   onAutoContinueCancel: (scheduleId: string) => void
   onRetryFailedTurn?: (resultMessageId: string) => void | Promise<void>
+  onCronRemove?: (jobId: string) => void
   chatId?: string
 }
 
@@ -459,6 +460,7 @@ const TranscriptSingleRow = memo(({
   onAutoContinueReschedule,
   onAutoContinueCancel,
   onRetryFailedTurn,
+  onCronRemove,
   chatId,
 }: TranscriptSingleRowProps) => {
   let rendered: React.ReactNode = null
@@ -590,7 +592,7 @@ const TranscriptSingleRow = memo(({
         )
         break
       case "cron_armed":
-        rendered = <CronArmedMessage key={message.id} message={message} />
+        rendered = <CronArmedMessage key={message.id} message={message} onRemove={onCronRemove} />
         break
       case "cron_command_error":
         rendered = <CronCommandErrorMessage key={message.id} message={message} />
@@ -640,6 +642,7 @@ const TranscriptSingleRow = memo(({
   && prev.onAutoContinueAccept === next.onAutoContinueAccept
   && prev.onAutoContinueReschedule === next.onAutoContinueReschedule
   && prev.onAutoContinueCancel === next.onAutoContinueCancel
+  && prev.onCronRemove === next.onCronRemove
   && prev.chatId === next.chatId
   && sameMessage(prev.message, next.message)
 ))
@@ -784,6 +787,7 @@ interface KannaTranscriptProps {
     response: { confirmed: boolean; clearContext?: boolean; message?: string },
   ) => void
   onCancelSubagentRun?: (chatId: string, runId: string) => void
+  onCronRemove?: (jobId: string) => void
 }
 
 const EMPTY_SUBAGENT_RUNS: Record<string, SubagentRunSnapshot> = {}
@@ -832,6 +836,7 @@ interface KannaTranscriptRowProps {
   onAutoContinueReschedule: (scheduleId: string, scheduledAt: number) => void
   onAutoContinueCancel: (scheduleId: string) => void
   onRetryFailedTurn?: (resultMessageId: string) => void | Promise<void>
+  onCronRemove?: (jobId: string) => void
   chatId?: string
 }
 
@@ -848,6 +853,7 @@ export const KannaTranscriptRow = memo(({
   onAutoContinueReschedule,
   onAutoContinueCancel,
   onRetryFailedTurn,
+  onCronRemove,
   chatId,
 }: KannaTranscriptRowProps) => {
   if (row.kind === "tool-group") {
@@ -887,6 +893,7 @@ export const KannaTranscriptRow = memo(({
       onAutoContinueReschedule={onAutoContinueReschedule}
       onAutoContinueCancel={onAutoContinueCancel}
       onRetryFailedTurn={onRetryFailedTurn}
+      onCronRemove={onCronRemove}
       chatId={chatId}
     />
   )
@@ -902,6 +909,7 @@ export const KannaTranscriptRow = memo(({
   if (prev.onAutoContinueReschedule !== next.onAutoContinueReschedule) return false
   if (prev.onAutoContinueCancel !== next.onAutoContinueCancel) return false
   if (prev.onRetryFailedTurn !== next.onRetryFailedTurn) return false
+  if (prev.onCronRemove !== next.onCronRemove) return false
   if (prev.chatId !== next.chatId) return false
   if (prev.row.kind !== next.row.kind) return false
   if (prev.row.id !== next.row.id) return false
@@ -962,6 +970,7 @@ function KannaTranscriptInner({
   onSubagentAskUserQuestionSubmit,
   onSubagentExitPlanModeSubmit,
   onCancelSubagentRun,
+  onCronRemove,
 }: KannaTranscriptProps) {
   const toolGroupExpanded = KannaTranscriptStore.useScopedStore((s) => s.toolGroupExpanded)
   const setToolGroupExpanded = KannaTranscriptStore.useScopedStore((s) => s.setToolGroupExpanded)
@@ -1022,6 +1031,7 @@ function KannaTranscriptInner({
               onAutoContinueReschedule={onAutoContinueReschedule}
               onAutoContinueCancel={onAutoContinueCancel}
               onRetryFailedTurn={onRetryFailedTurn}
+              onCronRemove={onCronRemove}
               chatId={chatId}
             />
             {matchedRun ? renderSubagentRunTree(matchedRun, 0, childrenByParentRunId, localPath ?? "", onSubagentAskUserQuestionSubmit, onSubagentExitPlanModeSubmit, onCancelSubagentRun) : null}

@@ -1,6 +1,6 @@
 ---
 id: c3-120
-c3-seal: 96f736d6b217c348fd9516ff969e509346a739a344de09953af2b8608e8a2339
+c3-seal: ae1ad89ceb4dc8f7ccc8d649984952c19a3bb77ddb528ff323fe68b711b625ee
 title: cron-ui
 type: component
 category: feature
@@ -36,19 +36,22 @@ the global /cron management page across all projects.
 ## Purpose
 
 Owns every cron surface the user sees. Transcript cards: CronArmedMessage
-(static arming record), CronCommandErrorMessage (field-level error + the
-ready-to-send corrected command behind the sanctioned CopyStateStore +
-clipboard adapter), CronRunMessage (spawn-mode run card whose LIVE status
-pill joins ChatSnapshot.cronJobs by runId — the entry itself stays
-immutable), CronRunSkippedMessage and CronJobChangeMessage one-liners, and
-CronListMessage (renders the CURRENT job list, not a frozen copy).
-CronJobsSection is the live footer panel (humanized schedule, mode,
-next-fire countdown in tabular-nums, last-run status, controls issuing
-cron.pause/resume/remove WS commands). CronJobsPage at /cron consumes the
-global cron-jobs topic through cronJobsStore (stable EMPTY ref), grouped by
-project with chat links; a sidebar nav entry reaches it. Non-goals: any cron
-domain logic (c3-311) or scheduling (c3-233); the client never computes
-occurrences — it renders the server-computed nextFireAt.
+(full arming record: instruction, mode, model, server-computed upcomingFires —
+up to 3 upcoming timestamps in tabular-nums; falls back to nextFireAt for older
+entries; cwd for spawn mode; Edit copies the reconstructed /cron command to the
+clipboard; Disarm issues cron.remove), CronCommandErrorMessage (field-level
+error + the ready-to-send corrected command behind the sanctioned CopyStateStore
++ clipboard adapter), CronRunMessage (spawn-mode run card whose LIVE status pill
+joins ChatSnapshot.cronJobs by runId — the entry itself stays immutable),
+CronRunSkippedMessage and CronJobChangeMessage one-liners, and CronListMessage
+(renders the CURRENT job list, not a frozen copy). CronJobsSection is the live
+footer panel (humanized schedule, mode, next-fire countdown in tabular-nums,
+last-run status, controls issuing cron.pause/resume/remove WS commands).
+CronJobsPage at /cron consumes the global cron-jobs topic through cronJobsStore
+(stable EMPTY ref), grouped by project with chat links; a sidebar nav entry
+reaches it. Non-goals: any cron domain logic (c3-311) or scheduling (c3-233);
+the client never computes occurrences — it renders server-computed upcomingFires
+(3 upcoming timestamps per arm; falls back to nextFireAt for older entries).
 
 ## Governance
 

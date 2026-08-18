@@ -43,6 +43,7 @@ export interface CronCommandDeps {
   cronRepair?: CronRepair
   now?: () => number
   newJobId?: () => string
+  resolveChatCwd?: (chatId: string) => string | undefined
 }
 
 /**
@@ -87,8 +88,8 @@ export async function runCronCommand(
       return
     case "arm": {
       const now = deps.now?.() ?? Date.now()
-      const firstFire = nextFireAt(command.schedule, now, now)
-      if (firstFire === null) {
+      const fires = computeUpcomingFires(command.schedule, now, 3)
+      if (fires.length === 0) {
         // Parseable but with no occurrence (Feb 30). Still a setup the user
         // meant something by, so it is refused on the canonical line rather
         // than dead-ending — only the model can ask what they meant.
@@ -113,6 +114,7 @@ export async function runCronCommand(
         schedule: command.schedule,
         ...(model !== undefined ? { model } : {}),
       })
+      const cwd = deps.resolveChatCwd?.(chatId)
       await appendCronEntry(deps, chatId, {
         kind: "cron_armed",
         jobId,
@@ -120,7 +122,10 @@ export async function runCronCommand(
         mode: command.mode,
         scheduleText: command.scheduleText,
         scheduleHuman: humanizeSchedule(command.schedule, command.scheduleText),
-        nextFireAt: firstFire,
+        nextFireAt: fires[0] ?? null,
+        ...(model !== undefined ? { model } : {}),
+        upcomingFires: fires,
+        ...(cwd !== undefined ? { cwd } : {}),
       })
       return
     }
@@ -237,6 +242,18 @@ export async function appendCronEntry(
   const stamped: TranscriptEntry = timestamped(entry, deps.now?.() ?? Date.now())
   await deps.store.appendMessage(chatId, stamped)
   deps.emitStateChange(chatId)
+}
+
+function computeUpcomingFires(schedule: import("../../shared/cron/types").CronSchedule, nowMs: number, count: number): number[] {
+  const fires: number[] = []
+  let cursor = nowMs
+  for (let i = 0; i < count; i++) {
+    const next = nextFireAt(schedule, cursor, nowMs)
+    if (next === null) break
+    fires.push(next)
+    cursor = next
+  }
+  return fires
 }
 
 function pickJobId(deps: CronCommandDeps, chatId: string): string {

@@ -419,12 +419,13 @@ export const ChatTranscriptViewport = memo(({
           onAutoContinueReschedule={onAutoContinueReschedule}
           onAutoContinueCancel={onAutoContinueCancel}
           onRetryFailedTurn={onRetryFailedTurn}
+          onCronRemove={onCronRemove}
           chatId={activeChatId ?? undefined}
         />
         {rowRuns.map((run) => renderRunTree(run, 0))}
       </div>
     )
-  }, [handleToolGroupExpandedChange, onAskUserQuestionSubmit, onExitPlanModeConfirm, onToolRequestAnswer, schedules, cronJobs, onAutoContinueAccept, onAutoContinueReschedule, onAutoContinueCancel, onRetryFailedTurn, toolGroupExpanded, runsByUserMessageId, renderRunTree, activeChatId, gapClassByRowId])
+  }, [handleToolGroupExpandedChange, onAskUserQuestionSubmit, onExitPlanModeConfirm, onToolRequestAnswer, schedules, cronJobs, onAutoContinueAccept, onAutoContinueReschedule, onAutoContinueCancel, onRetryFailedTurn, onCronRemove, toolGroupExpanded, runsByUserMessageId, renderRunTree, activeChatId, gapClassByRowId])
 
   const listHeader = (
     <div className="mx-auto w-full max-w-[800px]" style={{ paddingTop: `${headerOffsetPx}px` }}>

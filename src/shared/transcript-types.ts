@@ -258,6 +258,9 @@ export interface CronArmedEntry extends TranscriptEntryBase {
   scheduleText: string
   scheduleHuman: string
   nextFireAt: number | null
+  model?: string
+  upcomingFires?: readonly number[]
+  cwd?: string
 }
 
 /** A `/cron` line that failed hard validation — precise error + optional ready-to-send fix. */
@@ -357,7 +360,7 @@ export type HydratedTranscriptMessage =
   | ({ kind: "unknown"; json: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "auto_continue_prompt"; scheduleId: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "pending_tool_request"; toolRequestId: string; toolName: string; arguments: Record<string, unknown>; id: string; messageId?: string; timestamp: string; hidden?: boolean })
-  | ({ kind: "cron_armed"; jobId: string; instruction: string; mode: CronMode; scheduleText: string; scheduleHuman: string; nextFireAt: number | null; id: string; messageId?: string; timestamp: string; hidden?: boolean })
+  | ({ kind: "cron_armed"; jobId: string; instruction: string; mode: CronMode; scheduleText: string; scheduleHuman: string; nextFireAt: number | null; model?: string; upcomingFires?: readonly number[]; cwd?: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "cron_command_error"; message: string; input?: string; suggestion?: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "cron_run"; jobId: string; runId: string; instruction: string; spawnedChatId?: string; firedAt: number; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "cron_run_skipped"; jobId: string; reason: CronSkipReason; missedCount?: number; id: string; messageId?: string; timestamp: string; hidden?: boolean })

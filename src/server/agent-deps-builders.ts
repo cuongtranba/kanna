@@ -49,6 +49,7 @@ import { createMermaidGuard, type MermaidGuard } from "./mermaid-guard"
 import { createCronRepair, type CronRepair } from "./cron/repair"
 import { parseMermaid } from "./mermaid-parse.adapter"
 import { repairMermaidSource } from "../shared/mermaidRepair"
+import { resolveSpawnPaths } from "./claude-session-config"
 
 // ---------------------------------------------------------------------------
 // 1. Session config helpers
@@ -160,6 +161,13 @@ export function buildCronCommandDeps(agent: AgentCoordinator): CronCommandDeps {
     emitStateChange: (chatId) => agent.emitStateChange(chatId),
     pushCronJobsUpdate: () => agent.onCronJobsChange?.(),
     cronRepair: buildCronRepair(agent),
+    resolveChatCwd: (chatId) => {
+      const chat = agent.store.getChat(chatId)
+      if (!chat) return undefined
+      const project = agent.store.getProject(chat.projectId)
+      if (!project) return undefined
+      return resolveSpawnPaths(chat, project.localPath).cwd
+    },
   }
 }
 

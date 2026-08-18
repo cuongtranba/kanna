@@ -94,6 +94,35 @@ describe("runCronCommand", () => {
     expect((events[0] as { model?: string }).model).toBeUndefined()
   })
 
+  test("arm includes model and upcomingFires (3 fires) on the transcript entry", async () => {
+    const { deps, entries } = makeDeps({ jobIds: ["cron-abc"], now: 1_000_000 })
+    await runCronCommand(deps, CHAT, parsed("/cron check ci inline every 5m"), "claude-sonnet-5")
+    const entry = entries[0]
+    expect(entry).toMatchObject({ kind: "cron_armed", model: "claude-sonnet-5" })
+    if (entry?.kind !== "cron_armed") throw new Error("expected cron_armed entry")
+    expect(entry.upcomingFires).toHaveLength(3)
+    expect(entry.upcomingFires?.[0]).toBe(1_300_000)
+    expect(entry.upcomingFires?.[1]).toBe(1_600_000)
+    expect(entry.upcomingFires?.[2]).toBe(1_900_000)
+  })
+
+  test("arm includes cwd from resolveChatCwd on the transcript entry", async () => {
+    const { deps, entries } = makeDeps({ jobIds: ["cron-abc"] })
+    deps.resolveChatCwd = (_chatId) => "/home/user/project"
+    await runCronCommand(deps, CHAT, parsed("/cron check ci inline every 5m"))
+    const entry = entries[0]
+    if (entry?.kind !== "cron_armed") throw new Error("expected cron_armed entry")
+    expect(entry.cwd).toBe("/home/user/project")
+  })
+
+  test("arm omits cwd when resolveChatCwd is not wired", async () => {
+    const { deps, entries } = makeDeps({ jobIds: ["cron-abc"] })
+    await runCronCommand(deps, CHAT, parsed("/cron check ci inline every 5m"))
+    const entry = entries[0]
+    if (entry?.kind !== "cron_armed") throw new Error("expected cron_armed entry")
+    expect(entry.cwd).toBeUndefined()
+  })
+
   test("a schedule that never fires is refused at arm time", async () => {
     const { deps, entries, events } = makeDeps()
     await runCronCommand(deps, CHAT, parsed("/cron impossible inline 0 0 30 2 *"))
