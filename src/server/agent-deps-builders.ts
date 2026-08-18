@@ -232,6 +232,14 @@ export function buildCronFireDeps(agent: AgentCoordinator): CronFireDeps {
     enqueueMessage: (chatId, content, attachments, options) =>
       agent.enqueueMessage(chatId, content, attachments, options),
     maybeStartNextQueuedMessage: async (chatId) => agent.maybeStartNextQueuedMessage(chatId),
+    onChatSpawned: agent.boardRegistry
+      ? (originChatId, spawnedChatId) => {
+          const registry = agent.boardRegistry!
+          for (const card of registry.findCardsByLink("chat", originChatId)) {
+            registry.addCardLink(card.id, "chat", spawnedChatId)
+          }
+        }
+      : undefined,
   }
 }
 
