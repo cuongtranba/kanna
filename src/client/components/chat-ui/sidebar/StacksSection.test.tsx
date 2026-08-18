@@ -23,9 +23,11 @@ function renderSection(
     expandedStackIds?: Set<string>
     onStartChat?: (stackId: string) => void
     renderChatCreate?: (stack: StackSummary) => React.ReactNode
+    onOpenBoards?: (stackId: string) => void
+    onDeleteStack?: (stackId: string) => void
   } = {}
 ): string {
-  const { expandedStackIds = new Set<string>(), onStartChat, renderChatCreate } = opts
+  const { expandedStackIds = new Set<string>(), onStartChat, renderChatCreate, onOpenBoards, onDeleteStack } = opts
   return renderToStaticMarkup(
     createElement(
       TooltipProvider,
@@ -37,6 +39,8 @@ function renderSection(
         onToggleExpanded: () => undefined,
         onOpenCreatePanel: () => undefined,
         onOpenStackMenu: () => undefined,
+        onOpenBoards,
+        onDeleteStack,
         onStartChat,
         renderChatCreate,
         chats: [] as SidebarChatRow[],
@@ -152,5 +156,19 @@ describe("StacksSection", () => {
     const projects = [{ id: "p1", title: "P1" }, { id: "p2", title: "P2" }]
     const html = renderSection(stacks, projects)
     expect(html).not.toContain('data-testid="stack-separator"')
+  })
+
+  test("renders without throwing when onOpenBoards and onDeleteStack are both provided", () => {
+    const stacks = [makeStack("s1", "My Stack", 2)]
+    const projects = [{ id: "p1", title: "Project A" }, { id: "p2", title: "Project B" }]
+    expect(() =>
+      renderSection(stacks, projects, { onOpenBoards: () => undefined, onDeleteStack: () => undefined }),
+    ).not.toThrow()
+  })
+
+  test("renders without throwing when onOpenBoards is omitted", () => {
+    const stacks = [makeStack("s1", "My Stack", 2)]
+    const projects = [{ id: "p1", title: "Project A" }, { id: "p2", title: "Project B" }]
+    expect(() => renderSection(stacks, projects, { onDeleteStack: () => undefined })).not.toThrow()
   })
 })

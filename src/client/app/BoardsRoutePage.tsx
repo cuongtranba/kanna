@@ -38,8 +38,9 @@ export function BoardsRoutePage() {
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
       <BoardsPage
-        projectId={projectId}
-        projectName={projectName}
+        ownerKind="project"
+        ownerId={projectId}
+        ownerName={projectName}
         socket={state.socket}
         onOpenBoard={handleOpenBoard}
       />
