@@ -176,3 +176,24 @@ export interface CronRunTag {
    */
   originChatId: string
 }
+
+/**
+ * Structured payload describing one armed (or previewed) cron job. Every
+ * surface that describes a cron job — the `cron_armed` transcript card, the
+ * `validate_cron` / `arm_cron` tool results, the confirmation prompt — derives
+ * from this one type, so they can never disagree about the job they describe.
+ *
+ * `upcomingFires` are epoch-ms timestamps computed server-side; the client
+ * never computes fire times.
+ */
+export interface CronArmSummary {
+  jobId: string | null
+  instruction: string
+  mode: CronMode
+  modeConsequence: string
+  scheduleText: string
+  scheduleHuman: string
+  upcomingFires: readonly number[]
+  model: string | null
+  cwd: string | null
+}

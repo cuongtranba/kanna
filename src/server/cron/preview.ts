@@ -11,16 +11,17 @@
  * deliberately never computes.
  */
 
+import { cronModeConsequence } from "../../shared/cron/arm-summary"
 import { humanizeSchedule } from "../../shared/cron/humanize"
 import { parseCronCommand } from "../../shared/cron/parse-command"
 import { formatCronDefect } from "../../shared/cron/repair-report"
-import type { CronCommand } from "../../shared/cron/types"
+import type { CronArmSummary, CronCommand } from "../../shared/cron/types"
 import { nextFireAt } from "./next-fire"
 
 type ArmCommand = Extract<CronCommand, { sub: "arm" }>
 
 export type CronPreview =
-  | { ok: true; command: ArmCommand; summary: string }
+  | { ok: true; command: ArmCommand; summary: CronArmSummary }
   | { ok: false; reason: string }
 
 /** How many upcoming fires to show. Enough to reveal the cadence, not a calendar. */
@@ -51,12 +52,17 @@ export function previewCronCommand(line: string, nowMs: number): CronPreview {
     }
   }
 
-  const summary = [
-    `VALID — ${humanizeSchedule(command.schedule, command.scheduleText)}`,
-    `instruction: ${command.instruction}`,
-    `mode: ${command.mode} (${command.mode === "inline" ? "runs in this chat, context cleared each cycle" : "a new chat per run"})`,
-    `next ${String(fires.length)} runs: ${fires.map((at) => new Date(at).toISOString()).join(", ")}`,
-  ].join("\n")
+  const summary: CronArmSummary = {
+    jobId: null,
+    instruction: command.instruction,
+    mode: command.mode,
+    modeConsequence: cronModeConsequence(command.mode),
+    scheduleText: command.scheduleText,
+    scheduleHuman: humanizeSchedule(command.schedule, command.scheduleText),
+    upcomingFires: fires,
+    model: null,
+    cwd: null,
+  }
 
   return { ok: true, command, summary }
 }

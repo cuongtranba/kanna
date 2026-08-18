@@ -1,6 +1,6 @@
 ---
 id: c3-311
-c3-seal: c29231806559212b3264e645af013859094e0bb7a32eacf19de9aca4f6b5be33
+c3-seal: 734d7173cc84671a8547aa4a8b36e74f0cfc19b088c4e1580ea798c557b33fd7
 title: cron-domain
 type: component
 category: feature
@@ -49,11 +49,16 @@ chosen in the `/cron` line and nowhere else), `humanizeSchedule` (which reads
 a sub-minute cadence in seconds rather than fractional minutes),
 `formatCronDefect` / `formatCronRepairRequest`
 (the words both the validate_cron tool result and the model repair prompt
-speak, so the model is never taught two vocabularies for one defect), and the
-`CronJobSnapshot` / `CronRunSnapshot` / `CronRunTag` / `CronJobsGlobalSnapshot`
-types. Non-goals: next-occurrence computation (server-only, delegated to the
-`cron` npm package in c3-233 so luxon stays out of the client bundle), timers,
-event persistence, and any IO — the side-effect seal holds this module pure.
+speak, so the model is never taught two vocabularies for one defect),
+`CronArmSummary` / `cronModeConsequence` / `formatCronArmSummary`
+(`cronModeConsequence` is the SINGLE authoring site for the mode description
+strings; `formatCronArmSummary` projects a structured `CronArmSummary` to
+prose byte-identically, so all surfaces that describe an armed job derive from
+one type and can never disagree), and the `CronJobSnapshot` / `CronRunSnapshot`
+/ `CronRunTag` / `CronJobsGlobalSnapshot` types. Non-goals:
+next-occurrence computation (server-only, delegated to the `cron` npm package
+in c3-233 so luxon stays out of the client bundle), timers, event persistence,
+and any IO — the side-effect seal holds this module pure.
 
 ## Governance
 
@@ -71,6 +76,7 @@ event persistence, and any IO — the side-effect seal holds this module pure.
 | CronSchedule shape | OUT | Cron schedules carry the canonical 5- or 6-field expression (the occurrence engine's input) plus parsed CronFields for validation and humanize; the 6-field form's leading second lands on an OPTIONAL second field, so a job armed before sub-minute support replays from the durable log unchanged; intervals carry ms (down to 1000) and anchor at arm time | c3-233 | src/shared/cron/types.ts, src/shared/cron/parse-schedule.ts |
 | Snapshot types | OUT | CronJobSnapshot/CronRunSnapshot/CronJobsGlobalSnapshot are the server-to-client cron read-model shapes on ChatSnapshot.cronJobs and the cron-jobs topic | c3-207 | src/shared/cron/types.ts |
 | Offending line recorded | OUT | Every CronParseError carries the trimmed line it rejected, and its suggestion being absent is the signal c3-233 escalates on. parseCronCommand stamps the line once over an internal Outcome type whose error omits it, so a failure path cannot record a defect without its line — /cron starts no turn, so nothing else in the transcript does | c3-233 | src/shared/cron/parse-command.ts, src/shared/cron/types.ts |
+| CronArmSummary payload | OUT | CronArmSummary is the structured description of one armed/previewed cron job; cronModeConsequence is its single authoring site for the mode description strings; formatCronArmSummary projects it to prose byte-identically, so every surface derives from one type | c3-233 | src/shared/cron/types.ts, src/shared/cron/arm-summary.ts |
 
 ## Derived Materials
 
@@ -81,3 +87,4 @@ event persistence, and any IO — the side-effect seal holds this module pure.
 | src/shared/cron/humanize.ts | Contract (snapshot types) | Pattern coverage; falls back to raw schedule text | src/shared/cron/humanize.ts |
 | src/shared/cron/parse-command.test.ts | Contract (suggestion re-parse guarantee) | Fixture selection | src/shared/cron/parse-command.test.ts |
 | src/shared/cron/repair-report.ts | Contract (offending line recorded) | Prompt wording, so long as it names both cron tools and the ask-when-ambiguous rule | src/shared/cron/repair-report.ts, src/shared/cron/repair-report.test.ts |
+| src/shared/cron/arm-summary.ts | Contract (CronArmSummary payload) | Prose wording of formatCronArmSummary output | src/shared/cron/arm-summary.ts, src/shared/cron/arm-summary.test.ts |
