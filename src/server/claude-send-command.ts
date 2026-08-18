@@ -138,8 +138,8 @@ export interface SendCommandDeps {
   /** Wipe every provider's context for the chat — backs the `/clear` builtin. */
   clearChatContext(chatId: string): Promise<void>
 
-  /** Dispatch a parsed `/cron` message (arm/list/manage or validation error). */
-  runCronCommand(chatId: string, result: import("../shared/cron/types").CronParseResult, model?: string): Promise<void>
+  /** Dispatch a parsed `/cron` message (arm/list/manage or validation error). Returns the job id for arm commands, null otherwise. */
+  runCronCommand(chatId: string, result: import("../shared/cron/types").CronParseResult, model?: string): Promise<string | null>
 }
 
 // ---------------------------------------------------------------------------

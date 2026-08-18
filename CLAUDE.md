@@ -701,6 +701,29 @@ parser as the deterministic layer.
 `KANNA_CRON_REPAIR=disabled` turns the escalation off; the tools stay. See
 `adr-20260816-cron-llm-repair`.
 
+# `arm_cron` post-arm review
+
+After a successful `arm_cron` call the tool result carries:
+
+1. `Armed as <jobId>.` — the durable id the model can pass to `/cron remove`
+   if the user wants to disarm.
+2. `formatCronArmSummary` — the same structured summary the `cron_armed` card
+   renders: schedule (human + raw), mode + consequence, next 3 fires, model, cwd.
+3. An explicit instruction to present the config and confirm via
+   `AskUserQuestion` — options: Confirm / Change schedule / Change mode /
+   Change instruction / Disarm.
+
+**This is a prompt contract, not an env-var gate.** The arming happens before
+the review instruction is returned, so a timed-out or unanswered question
+leaves the job armed — the correct direction to fail. The instruction covers
+the change path: arm a corrected line, then `/cron remove <old-jobId>`.
+
+`armCron` now returns `Promise<{ jobId: string }>` instead of `void`. Every
+call site that forwards it (`claude-session-spawner.ts`, `claude-session-start.ts`,
+`claude-pty/driver.ts`, `agent-coordinator-types.ts`) and every interface that
+owns a `runCronCommand` slot (`claude-send-command.ts`, `ws-router-agent-ctrl.ts`)
+carry the updated return type. See `adr-20260818-cron-arm-confirm-tool-result`.
+
 **A multiline `/cron` message is its own `part` (`"multiline"`), not
 `"subcommand"`.** Chat `061b8856` reproduced 39b0d210's dead end even with
 `input` recorded: the user's message wrapped onto a second line, the guard in

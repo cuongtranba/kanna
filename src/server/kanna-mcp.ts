@@ -125,7 +125,7 @@ export interface KannaMcpArgs extends OfferDownloadArgs {
    * model-armed job takes exactly the path a typed command takes. Omit to
    * hide the tool; supplied only for main chats, like `setup_loop`.
    */
-  armCron?: (command: string) => Promise<void>
+  armCron?: (command: string) => Promise<{ jobId: string }>
 }
 
 /** The slice of the armed loop the MCP tools need. */
@@ -976,9 +976,14 @@ const ARM_CRON_DESCRIPTION =
   + "the user mistyped, once you know what they meant. Takes the complete line "
   + "and runs it through the same dispatch a typed command takes, so anything "
   + "the user could not have typed is refused here too. Validate with "
-  + "validate_cron first. If the user's intent is genuinely ambiguous (the mode "
-  + "is neither stated nor implied, the time could mean more than one thing), "
-  + "ask them with AskUserQuestion before arming — do not guess."
+  + "validate_cron first. Pre-arm: if the user's intent is genuinely ambiguous "
+  + "(the mode is neither stated nor implied, the time could mean more than one "
+  + "thing), ask them with AskUserQuestion before arming — do not guess. "
+  + "Post-arm: after a successful arm, present the full configuration to the user "
+  + "and confirm it with AskUserQuestion — options: Confirm / Change schedule / "
+  + "Change mode / Change instruction / Disarm. If they choose a change, call "
+  + "arm_cron again with the corrected line and remove the old job with "
+  + "`/cron remove <jobId>`."
 
 /**
  * The `/cron` pair, mirroring the mermaid gate: `validate_cron` is the in-turn
@@ -993,7 +998,7 @@ const ARM_CRON_DESCRIPTION =
  */
 function buildCronToolList(args: {
   chatId: string | null
-  armCron?: (command: string) => Promise<void>
+  armCron?: (command: string) => Promise<{ jobId: string }>
   now?: () => number
 }): KannaSdkToolList {
   if (!args.chatId) return []
@@ -1029,8 +1034,16 @@ function buildCronToolList(args: {
           content: [{ type: "text" as const, text: `Not armed. ${preview.reason}` }],
         }
       }
-      await armCron(input.command)
-      return { content: [{ type: "text" as const, text: `Armed.\n${formatCronArmSummary(preview.summary)}` }] }
+      const { jobId } = await armCron(input.command)
+      const text = [
+        `Armed as ${jobId}.`,
+        formatCronArmSummary(preview.summary),
+        "",
+        "Now show this configuration to the user and confirm it with AskUserQuestion —",
+        "options: Confirm / Change schedule / Change mode / Change instruction / Disarm.",
+        `If they choose a change, call arm_cron again with the corrected line and remove the old job with \`/cron remove ${jobId}\`.`,
+      ].join("\n")
+      return { content: [{ type: "text" as const, text }] }
     }),
   )
   return tools

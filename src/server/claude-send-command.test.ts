@@ -148,6 +148,7 @@ function makeDeps(opts: DepsOptions = {}): SendCommandDeps & { startTurnCalled: 
     clearChatContext: async (chatId: string) => { (opts.clearedChatIds ?? []).push(chatId) },
     runCronCommand: async (chatId: string, result: { ok: boolean }) => {
       (opts.cronCalls ?? []).push({ chatId, ok: result.ok })
+      return null
     },
   }
 }

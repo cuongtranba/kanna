@@ -1030,13 +1030,14 @@ describe("validate_cron", () => {
 
 describe("arm_cron", () => {
   const armed: string[] = []
+  const TEST_JOB_ID = "cron-abc123"
   const build = (over: Record<string, unknown> = {}) =>
     buildKannaMcpTools({
       ...makeArgs(undefined),
       chatId: "c",
       armCron: (line: string) => {
         armed.push(line)
-        return Promise.resolve()
+        return Promise.resolve({ jobId: TEST_JOB_ID })
       },
       ...over,
     })
@@ -1054,12 +1055,16 @@ describe("arm_cron", () => {
       .not.toContain("arm_cron")
   })
 
-  test("arms a valid line and reports what was scheduled", async () => {
+  test("arms a valid line and includes job id, summary fields, and AskUserQuestion instruction", async () => {
     armed.length = 0
     const result = await invoke({ command: "/cron check ci inline 0 9 * * *" })
     expect(result.isError).toBeUndefined()
     expect(armed).toEqual(["/cron check ci inline 0 9 * * *"])
-    expect(result.content[0]?.text).toContain("check ci")
+    const text = result.content[0]?.text ?? ""
+    expect(text).toContain(TEST_JOB_ID)
+    expect(text).toContain("check ci")
+    expect(text).toContain("AskUserQuestion")
+    expect(text).toContain("/cron remove")
   })
 
   // The model must never be able to arm something the send pipeline would
@@ -1083,5 +1088,14 @@ describe("arm_cron", () => {
     const result = await invoke({ command: "/cron impossible inline 0 0 30 2 *" })
     expect(result.isError).toBe(true)
     expect(armed).toEqual([])
+  })
+
+  test("description covers pre-arm ambiguity and post-arm review", () => {
+    const found = build().find((t) => t.name === "arm_cron")
+    if (!found) throw new Error("arm_cron not registered")
+    const desc = (found as { description: string }).description
+    expect(desc).toMatch(/ambiguous/i)
+    expect(desc).toMatch(/AskUserQuestion/i)
+    expect(desc).toMatch(/confirm/i)
   })
 })
