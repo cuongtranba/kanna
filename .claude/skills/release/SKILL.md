@@ -75,10 +75,10 @@ Small example (patch-level changes):
 
 ```markdown
 ## Improvements
-**Sidebar Toggle Fix** — Right sidebar visibility is now independent of its width, preventing layout glitches when toggling. [jake](https://github.com/jakemor/kanna/commit/187fba5)
+**Sidebar Toggle Fix** — Right sidebar visibility is now independent of its width, preventing layout glitches when toggling. [jake](https://github.com/cuongtranba/kanna/commit/187fba5)
 
 ## Under the Hood
-**Modular ChatPage** — Split ChatPage into smaller components. [jake](https://github.com/jakemor/kanna/commit/def456)
+**Modular ChatPage** — Split ChatPage into smaller components. [jake](https://github.com/cuongtranba/kanna/commit/def456)
 ```
 
 Big example (v0.31.0 — a feature-rich release with detailed user-facing descriptions):
@@ -86,7 +86,7 @@ Big example (v0.31.0 — a feature-rich release with detailed user-facing descri
 ```markdown
 ## New Features
 
-**Password Protection (`--password`)** — Lock your Kanna instance behind a password. When enabled, all routes — including the UI, API, health checks, and WebSocket connections — require authentication before anything loads. Passwords are verified using **timing-safe comparison** to prevent timing attacks, and sessions use **32-byte cryptographically random tokens** stored in `HttpOnly`, `SameSite=Strict`, `Secure` cookies. Sessions live in memory and reset when the process restarts — no tokens are ever written to disk. [jake](https://github.com/jakemor/kanna/commit/6e83973)
+**Password Protection (`--password`)** — Lock your Kanna instance behind a password. When enabled, all routes — including the UI, API, health checks, and WebSocket connections — require authentication before anything loads. Passwords are verified using **timing-safe comparison** to prevent timing attacks, and sessions use **32-byte cryptographically random tokens** stored in `HttpOnly`, `SameSite=Strict`, `Secure` cookies. Sessions live in memory and reset when the process restarts — no tokens are ever written to disk. [jake](https://github.com/cuongtranba/kanna/commit/6e83973)
 
 ---
 
