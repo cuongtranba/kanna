@@ -72,33 +72,30 @@ export async function runCronCommand(
   chatId: string,
   result: CronParseResult,
   model?: string,
-): Promise<void> {
+): Promise<string | null> {
   if (!result.ok) {
     await refuseCronCommand(deps, chatId, result.error)
-    return
+    return null
   }
 
   const command = result.command
   switch (command.sub) {
     case "help":
       await appendCronEntry(deps, chatId, { kind: "cron_list", help: true })
-      return
+      return null
     case "list":
       await appendCronEntry(deps, chatId, { kind: "cron_list" })
-      return
+      return null
     case "arm": {
       const now = deps.now?.() ?? Date.now()
       const fires = computeUpcomingFires(command.schedule, now, 3)
       if (fires.length === 0) {
-        // Parseable but with no occurrence (Feb 30). Still a setup the user
-        // meant something by, so it is refused on the canonical line rather
-        // than dead-ending — only the model can ask what they meant.
         await refuseCronCommand(deps, chatId, {
           part: "schedule",
           message: `schedule "${command.scheduleText}" never fires (no matching date exists) — not armed`,
           input: `/cron ${command.instruction} ${command.mode} ${command.scheduleText}`,
         })
-        return
+        return null
       }
 
       const jobId = pickJobId(deps, chatId)
@@ -127,7 +124,7 @@ export async function runCronCommand(
         upcomingFires: fires,
         ...(cwd !== undefined ? { cwd } : {}),
       })
-      return
+      return jobId
     }
     case "remove":
     case "pause":
@@ -141,21 +138,21 @@ export async function runCronCommand(
           message: `no cron job "${command.jobId}" in this chat — run \`/cron list\` to see armed jobs`,
           suggestion: "/cron list",
         })
-        return
+        return null
       }
       if (command.sub === "pause" && job.paused) {
         await appendCronEntry(deps, chatId, {
           kind: "cron_command_error",
           message: `cron job "${command.jobId}" is already paused`,
         })
-        return
+        return null
       }
       if (command.sub === "resume" && !job.paused) {
         await appendCronEntry(deps, chatId, {
           kind: "cron_command_error",
           message: `cron job "${command.jobId}" is not paused`,
         })
-        return
+        return null
       }
 
       const base = {
@@ -182,8 +179,10 @@ export async function runCronCommand(
         jobId: command.jobId,
         change,
       })
+      return null
     }
   }
+  return null
 }
 
 /**

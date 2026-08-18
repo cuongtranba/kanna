@@ -145,7 +145,7 @@ export interface SpawnClaudeTurnDeps {
   buildOAuthBearers: (servers: readonly McpServerConfig[]) => Promise<Map<string, string>>
   setupLoop: (chatId: string, input: LoopSetupInput) => Promise<SetupLoopHandlerResult>
   /** Backs the `arm_cron` MCP tool — see AgentCoordinator.armCron. */
-  armCron: (chatId: string, command: string) => Promise<void>
+  armCron: (chatId: string, command: string) => Promise<{ jobId: string }>
   stopLoop: (chatId: string, reason: "goal_met" | "user_send" | "chat_deleted") => Promise<void>
   resolveChatPolicy: (chatId: string) => ChatPermissionPolicy
   /** Fires the session event loop. Return value is discarded (fire-and-forget). */

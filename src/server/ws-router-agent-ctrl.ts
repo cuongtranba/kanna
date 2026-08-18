@@ -20,7 +20,7 @@ export interface AgentCtrlAgentDep {
   acceptAutoContinue(chatId: string, scheduleId: string, scheduledAt: number): Promise<void>
   rescheduleAutoContinue(chatId: string, scheduleId: string, scheduledAt: number): Promise<void>
   cancelAutoContinue(chatId: string, scheduleId: string, reason: "user" | "chat_deleted"): Promise<void>
-  runCronCommand(chatId: string, result: import("../shared/cron/types").CronParseResult): Promise<void>
+  runCronCommand(chatId: string, result: import("../shared/cron/types").CronParseResult): Promise<string | null>
   cancel(chatId: string): Promise<void>
 }
 

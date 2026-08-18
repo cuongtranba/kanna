@@ -983,7 +983,7 @@ export class AgentCoordinator {
     chatId: string,
     result: import("../shared/cron/types").CronParseResult,
     model?: string,
-  ): Promise<void> {
+  ): Promise<string | null> {
     return runCronCommandFn(this.buildCronCommandDeps(), chatId, result, model)
   }
 
@@ -996,12 +996,14 @@ export class AgentCoordinator {
    * model for repair, so a model answering its own repair prompt with another
    * bad line would loop. Refusing keeps escalation strictly user-initiated.
    */
-  async armCron(chatId: string, command: string): Promise<void> {
+  async armCron(chatId: string, command: string): Promise<{ jobId: string }> {
     const parsed = parseCronCommand(command)
     if (!parsed?.ok || parsed.command.sub !== "arm") {
       throw new Error(`not an armable /cron command: ${command}`)
     }
-    return this.runCronCommand(chatId, parsed)
+    const jobId = await this.runCronCommand(chatId, parsed)
+    if (!jobId) throw new Error(`arm_cron: no job id returned for command: ${command}`)
+    return { jobId }
   }
 
   /**
