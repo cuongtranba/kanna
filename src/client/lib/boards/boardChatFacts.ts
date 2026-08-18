@@ -34,6 +34,7 @@ export function buildBoardChatFacts(sidebarData: SidebarData): Record<string, Bo
         title: row.title,
         status: row.status,
         unread: row.unread,
+        activity: row.activity,
         ...(row.stateEnteredAt == null ? {} : { stateEnteredAt: row.stateEnteredAt }),
       },
     ]),

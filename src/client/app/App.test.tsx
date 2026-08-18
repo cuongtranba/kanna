@@ -4,6 +4,7 @@ import { getChatNotificationSnapshot, getChatSoundBurstCount, getNotificationTit
 import { DEFAULT_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH, clampSidebarWidth } from "./KannaSidebar"
 import { isBrowserUnfocused, shouldPlayChatSound } from "../lib/chatSounds"
 import { makeFakeDomPort } from "../adapters/testing/makeFakePorts"
+import { EMPTY_CHAT_ACTIVITY } from "../../shared/types"
 import type { AppSettingsSnapshot, SidebarChatRow } from "../../shared/types"
 
 function createProjectGroup(chats: SidebarChatRow[]) {
@@ -67,7 +68,7 @@ describe("getNotificationTitleCount", () => {
             unread: true,
             localPath: "/tmp/project",
             provider: null,
-            hasAutomation: false,
+            activity: EMPTY_CHAT_ACTIVITY,
           },
           {
             _id: "chat-2",
@@ -78,7 +79,7 @@ describe("getNotificationTitleCount", () => {
             unread: false,
             localPath: "/tmp/project",
             provider: null,
-            hasAutomation: false,
+            activity: EMPTY_CHAT_ACTIVITY,
           },
           {
             _id: "chat-3",
@@ -89,7 +90,7 @@ describe("getNotificationTitleCount", () => {
             unread: true,
             localPath: "/tmp/project",
             provider: null,
-            hasAutomation: false,
+            activity: EMPTY_CHAT_ACTIVITY,
           },
         ])],
       stacks: [],
@@ -109,7 +110,7 @@ describe("chat sound helpers", () => {
         unread: false,
         localPath: "/tmp/project",
         provider: null,
-        hasAutomation: false,
+        activity: EMPTY_CHAT_ACTIVITY,
       }])],
     stacks: [],
   }
@@ -127,7 +128,7 @@ describe("chat sound helpers", () => {
             unread: true,
             localPath: "/tmp/project",
             provider: null,
-            hasAutomation: false,
+            activity: EMPTY_CHAT_ACTIVITY,
           },
           {
             _id: "chat-2",
@@ -138,7 +139,7 @@ describe("chat sound helpers", () => {
             unread: false,
             localPath: "/tmp/project",
             provider: null,
-            hasAutomation: false,
+            activity: EMPTY_CHAT_ACTIVITY,
           },
         ])],
       stacks: [],
@@ -165,7 +166,7 @@ describe("chat sound helpers", () => {
             unread: true,
             localPath: "/tmp/project",
             provider: null,
-            hasAutomation: false,
+            activity: EMPTY_CHAT_ACTIVITY,
           },
           {
             _id: "chat-2",
@@ -176,7 +177,7 @@ describe("chat sound helpers", () => {
             unread: true,
             localPath: "/tmp/project",
             provider: null,
-            hasAutomation: false,
+            activity: EMPTY_CHAT_ACTIVITY,
           },
         ])],
       stacks: [],
@@ -195,7 +196,7 @@ describe("chat sound helpers", () => {
           unread: false,
           localPath: "/tmp/project",
           provider: null,
-          hasAutomation: false,
+          activity: EMPTY_CHAT_ACTIVITY,
         }])],
       stacks: [],
     }

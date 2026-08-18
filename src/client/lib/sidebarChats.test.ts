@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { EMPTY_CHAT_ACTIVITY } from "../../shared/types"
 import type { SidebarChatRow } from "../../shared/types"
 import {
   getSidebarChatBuckets,
@@ -20,7 +21,7 @@ function createChat(chatId: string, lastMessageAt?: number): SidebarChatRow {
     localPath: "/tmp/project",
     provider: "codex",
     lastMessageAt,
-    hasAutomation: false,
+    activity: EMPTY_CHAT_ACTIVITY,
   }
 }
 

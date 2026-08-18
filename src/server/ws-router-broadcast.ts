@@ -153,7 +153,8 @@ export class BroadcastManager {
       }
     }) ?? (() => {})
 
-    // Workflow snapshot push on change
+    // Workflow snapshot push on change — also schedules sidebar re-push so
+    // ChatActivity.workflow reflects the live workflow state.
     this.disposeWorkflows = workflowRegistry?.subscribe((chatId) => {
       for (const ws of this.sockets) {
         const snapshotSignatures = ensureSnapshotSignatures(ws)
@@ -167,6 +168,7 @@ export class BroadcastManager {
           send(ws, envelope)
         }
       }
+      this.scheduleChatStateBroadcast(chatId)
     }) ?? (() => {})
 
     // Board changes: one write can move both the board view and its owner's

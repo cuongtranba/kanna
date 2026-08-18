@@ -6,6 +6,7 @@ import { CardDrawer, type CardDrawerSocket } from "./CardDrawer"
 import { useCardDrawerStore } from "./CardDrawer.store"
 import { usePaneLayoutStore } from "../../stores/paneLayoutStore"
 import { collectPanes, createDefaultLayout } from "../../lib/paneTree"
+import { EMPTY_CHAT_ACTIVITY } from "../../../shared/types"
 import type { BoardChatFacts } from "../../lib/boards/boardChatFacts"
 import type { CardContent, CardLink, FieldDef } from "../../../shared/boards/types"
 import type { CardDetailView, StartWorkResult, StartWorkStatus } from "../../../shared/boards/start-work"
@@ -205,7 +206,7 @@ describe("CardDrawer linked chats", () => {
     const harness = await mount(
       linkedDetail([link("chat-77", "chat", 2), link("/wt/card-412", "worktree", 1)]),
       () => Promise.resolve(RESULT),
-      { "chat-77": { title: "Fix login redirect", status: "running", unread: false } },
+      { "chat-77": { title: "Fix login redirect", status: "running", unread: false, activity: EMPTY_CHAT_ACTIVITY } },
     )
 
     expect(harness.container.textContent).toContain("Fix login redirect")
@@ -219,7 +220,7 @@ describe("CardDrawer linked chats", () => {
     const harness = await mount(
       linkedDetail([link("chat-77", "chat", 2)]),
       () => Promise.resolve(RESULT),
-      { "chat-77": { title: "Fix login redirect", status: "idle", unread: false } },
+      { "chat-77": { title: "Fix login redirect", status: "idle", unread: false, activity: EMPTY_CHAT_ACTIVITY } },
     )
 
     expect(harness.container.textContent).toContain("Idle")
@@ -231,7 +232,7 @@ describe("CardDrawer linked chats", () => {
     const harness = await mount(
       linkedDetail([link("chat-77", "chat", 2)]),
       () => Promise.resolve(RESULT),
-      { "chat-77": { title: "Fix login redirect", status: "idle", unread: false } },
+      { "chat-77": { title: "Fix login redirect", status: "idle", unread: false, activity: EMPTY_CHAT_ACTIVITY } },
     )
 
     await act(async () => {
