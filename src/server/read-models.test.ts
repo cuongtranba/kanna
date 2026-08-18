@@ -4,6 +4,7 @@ import type { ComputeChatActivityDeps } from "./read-models"
 import type { ChatRecord } from "./events"
 import { createEmptyState } from "./events"
 import type { AgentProvider } from "../shared/types"
+import type { SubagentRunSnapshot } from "../shared/subagent-types"
 
 describe("read models", () => {
   test("include provider data in sidebar rows", () => {
@@ -1065,10 +1066,10 @@ describe("computeChatActivity", () => {
 
   test("agents counts only running subagent runs", () => {
     const state = baseState()
-    const runMap = new Map<string, { status: string }>([
-      ["r1", { runId: "r1", chatId: "c1", subagentId: "s1", subagentName: "a", provider: "claude", model: "m", status: "running", parentUserMessageId: "u1", parentRunId: null, depth: 0, startedAt: 1, finishedAt: null, finalText: null, error: null, usage: null, entries: [], pendingTool: null }],
-      ["r2", { runId: "r2", chatId: "c1", subagentId: "s1", subagentName: "a", provider: "claude", model: "m", status: "completed", parentUserMessageId: "u1", parentRunId: null, depth: 0, startedAt: 1, finishedAt: 2, finalText: "", error: null, usage: null, entries: [], pendingTool: null }],
-      ["r3", { runId: "r3", chatId: "c1", subagentId: "s1", subagentName: "a", provider: "claude", model: "m", status: "running", parentUserMessageId: "u1", parentRunId: null, depth: 0, startedAt: 1, finishedAt: null, finalText: null, error: null, usage: null, entries: [], pendingTool: null }],
+    const runMap = new Map<string, SubagentRunSnapshot>([
+      ["r1", { runId: "r1", chatId: "c1", subagentId: "s1", subagentName: "a", label: null, provider: "claude", model: "m", status: "running", parentUserMessageId: "u1", parentRunId: null, depth: 0, startedAt: 1, finishedAt: null, finalText: null, error: null, usage: null, entries: [], pendingTool: null }],
+      ["r2", { runId: "r2", chatId: "c1", subagentId: "s1", subagentName: "a", label: null, provider: "claude", model: "m", status: "completed", parentUserMessageId: "u1", parentRunId: null, depth: 0, startedAt: 1, finishedAt: 2, finalText: "", error: null, usage: null, entries: [], pendingTool: null }],
+      ["r3", { runId: "r3", chatId: "c1", subagentId: "s1", subagentName: "a", label: null, provider: "claude", model: "m", status: "running", parentUserMessageId: "u1", parentRunId: null, depth: 0, startedAt: 1, finishedAt: null, finalText: null, error: null, usage: null, entries: [], pendingTool: null }],
     ])
     state.subagentRunsByChatId.set("c1", runMap as never)
     const result = computeChatActivity("c1", baseDeps({ state }))
