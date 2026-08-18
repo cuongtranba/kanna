@@ -1,7 +1,7 @@
 ---
 id: c3-207
 c3-version: 4
-c3-seal: d0c98004912a63b929ee35eb18654a5d284b50dfc347da3301bb36a3c20ad6e3
+c3-seal: 9f371b66ccc9b8d89ed28f63f1588b3bef65034c9ead0fc5d717d3084e949bed
 title: read-models
 type: component
 category: foundation
@@ -68,6 +68,9 @@ Subscribes to event-store appends, derives per-feature views (sidebar list, chat
 | subscribe(topic) | OUT | Returns latest snapshot + push stream | c3-208 | src/server/read-models.ts |
 | Projection map | IN | Event-store appends drive projection update | c3-206 | src/server/read-models.ts |
 | getLoopTracking(chatId) | IN | Injected reader supplying the armed loop's tracking-file view; defaults to () => null so the projection stays pure and callers without the registry are unchanged | c3-208 | src/server/read-models.ts |
+| computeChatActivity(chatId, deps) | OUT | Pure function deriving ChatActivity from live state plus injected registries; consumed by deriveSidebarData | c3-208 | src/server/read-models.ts |
+| backgroundTasksByChatId | IN | Optional map of chatId to live background tasks injected into ComputeChatActivityDeps; absent callers receive zero background-task count | c3-208 | src/server/read-models.ts |
+| workflowRegistry | IN | Optional WorkflowRegistry snapshot accessor injected into ComputeChatActivityDeps; absent callers receive no workflow activity | c3-208 | src/server/read-models.ts |
 
 ## Change Safety
 
