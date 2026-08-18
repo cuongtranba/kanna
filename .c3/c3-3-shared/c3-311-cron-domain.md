@@ -1,6 +1,6 @@
 ---
 id: c3-311
-c3-seal: 734d7173cc84671a8547aa4a8b36e74f0cfc19b088c4e1580ea798c557b33fd7
+c3-seal: fe480b5691378a4bb98ea4b83cb27b017c69748957144d84855485cdb5ed8433
 title: cron-domain
 type: component
 category: feature
@@ -50,6 +50,9 @@ a sub-minute cadence in seconds rather than fractional minutes),
 `formatCronDefect` / `formatCronRepairRequest`
 (the words both the validate_cron tool result and the model repair prompt
 speak, so the model is never taught two vocabularies for one defect),
+`formatCronConfirmRequest` (the confirm prompt the model receives after a
+successful typed arm, derived from `formatCronArmSummary` so every review
+surface shares one vocabulary),
 `CronArmSummary` / `cronModeConsequence` / `formatCronArmSummary`
 (`cronModeConsequence` is the SINGLE authoring site for the mode description
 strings; `formatCronArmSummary` projects a structured `CronArmSummary` to
@@ -77,6 +80,7 @@ and any IO — the side-effect seal holds this module pure.
 | Snapshot types | OUT | CronJobSnapshot/CronRunSnapshot/CronJobsGlobalSnapshot are the server-to-client cron read-model shapes on ChatSnapshot.cronJobs and the cron-jobs topic | c3-207 | src/shared/cron/types.ts |
 | Offending line recorded | OUT | Every CronParseError carries the trimmed line it rejected, and its suggestion being absent is the signal c3-233 escalates on. parseCronCommand stamps the line once over an internal Outcome type whose error omits it, so a failure path cannot record a defect without its line — /cron starts no turn, so nothing else in the transcript does | c3-233 | src/shared/cron/parse-command.ts, src/shared/cron/types.ts |
 | CronArmSummary payload | OUT | CronArmSummary is the structured description of one armed/previewed cron job; cronModeConsequence is its single authoring site for the mode description strings; formatCronArmSummary projects it to prose byte-identically, so every surface derives from one type | c3-233 | src/shared/cron/types.ts, src/shared/cron/arm-summary.ts |
+| Confirm request prompt | OUT | formatCronConfirmRequest builds the model prompt that presents the full CronArmSummary and instructs AskUserQuestion options after a typed /cron arm succeeds; derives from formatCronArmSummary so the confirm and the card speak the same vocabulary | c3-233 | src/shared/cron/confirm-report.ts |
 
 ## Derived Materials
 
@@ -88,3 +92,4 @@ and any IO — the side-effect seal holds this module pure.
 | src/shared/cron/parse-command.test.ts | Contract (suggestion re-parse guarantee) | Fixture selection | src/shared/cron/parse-command.test.ts |
 | src/shared/cron/repair-report.ts | Contract (offending line recorded) | Prompt wording, so long as it names both cron tools and the ask-when-ambiguous rule | src/shared/cron/repair-report.ts, src/shared/cron/repair-report.test.ts |
 | src/shared/cron/arm-summary.ts | Contract (CronArmSummary payload) | Prose wording of formatCronArmSummary output | src/shared/cron/arm-summary.ts, src/shared/cron/arm-summary.test.ts |
+| src/shared/cron/confirm-report.ts | Contract (Confirm request prompt) | Prompt wording | src/shared/cron/confirm-report.ts |

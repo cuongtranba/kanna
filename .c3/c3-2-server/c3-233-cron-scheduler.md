@@ -1,6 +1,6 @@
 ---
 id: c3-233
-c3-seal: cfac6bcd51e790411423e160e9910196cf13e7ac0e0c11b68a62e4e88cc9992f
+c3-seal: 87feb2187929c7744c7532e17f42e073cd7ac352ecdbda3d2623d8cdb5d10507
 title: cron-scheduler
 type: component
 category: feature
@@ -47,7 +47,15 @@ choke point, which cards the failure and offers it to the model together.
 its own it enqueues a repair prompt and drains the queue (`/cron` starts no
 turn, so nothing else would), bounded to arm-shaped failures, one ask per
 line per chat, standing aside for a queued user message, swallowing its own
-failures, and disabled by `KANNA_CRON_REPAIR=disabled`. `previewCronCommand`
+failures, and disabled by `KANNA_CRON_REPAIR=disabled`. `createCronConfirm`
+is the success-case sibling: after every successful typed `/cron` arm it
+enqueues a `formatCronConfirmRequest` prompt and drains the queue so the
+model presents the full `CronArmSummary` and calls `AskUserQuestion` —
+options: Confirm / Change schedule / Change mode / Change instruction / Disarm
+— bounded to one ask per jobId per chat, standing aside for a queued user
+message, swallowing its own failures, and disabled by
+`KANNA_CRON_CONFIRM=disabled`. Does not fire on `arm_cron` calls (that path
+already confirms in-turn via the tool result). `previewCronCommand`
 is the single answer behind the `validate_cron` / `arm_cron` MCP tools in
 c3-226, so neither can contradict the other. `CronScheduler` (a deliberate
 sibling of the one-shot ScheduleManager, sharing its injected Clock) re-arms
@@ -84,6 +92,7 @@ scheduler (c3-227), UI rendering (c3-120).
 | rule-colocated-bun-test | rule | scheduler/fire/commands/read-model each sit next to their .test.ts | wired compliance target | FakeClock drives scheduler tests |
 | adr-20260816-builtin-cron-jobs | adr | The whole component: grammar interception, node-cron adoption, outcome attribution, overlap policy | decision record | authored with this component |
 | adr-20260816-cron-seconds | adr | Sub-minute schedules and the coalescing of consecutive skips into one counted record | decision record | seconds come from node-cron's own 6-field form; the count is tallied at the tick, never derived at read time |
+| adr-20260818-cron-arm-confirmation | adr | Arm-first-then-confirm design and the createCronConfirm skip rules | decision record | typed /cron path only; arm_cron confirms in-turn |
 
 ## Contract
 
@@ -95,6 +104,7 @@ scheduler (c3-227), UI rendering (c3-120).
 | Run outcome | IN | EventStore.onTurnTerminal (the single recordTurnFinished/Failed/Cancelled choke point) reports the tagged turn's outcome; recordCronTurnOutcome lands it on the arming chat | c3-206 | src/server/event-store.ts, src/server/cron/fire.ts |
 | Cron read model | OUT | deriveCronJobs projects CronJobSnapshot[] onto ChatSnapshot.cronJobs; the cron-jobs WS topic aggregates every chat for the global page; cron.remove/pause/resume WS commands reuse the /cron dispatch | c3-207 | src/server/cron/read-model.ts, src/server/ws-router-envelope.ts, src/server/ws-router-agent-ctrl.ts |
 | Refusal + model escalation | OUT | refuseCronCommand is the one path a /cron line is refused on: it appends the cron_command_error card carrying the typed line AND offers the error to createCronRepair, which enqueues a repair prompt and drains the queue only when the parser had no suggestion, for arm-shaped parts, once per line per chat, standing aside for a queued user message. A schedule that parses but never fires escalates too, on a reconstructed canonical line. KANNA_CRON_REPAIR=disabled turns it off | c3-226 | src/server/cron/commands.ts, src/server/cron/repair.ts |
+| Success + model confirm escalation | OUT | After a typed /cron arm succeeds, createCronConfirm enqueues a formatCronConfirmRequest prompt and drains the queue so the model presents the full CronArmSummary and confirms via AskUserQuestion; bounded to one ask per jobId per chat, standing aside for a queued user message, swallowing its own failures. Does not fire for arm_cron calls. KANNA_CRON_CONFIRM=disabled turns it off | c3-226 | src/server/cron/confirm.ts, src/server/cron/commands.ts |
 | Preview payload | OUT | previewCronCommand returns CronArmSummary (structured) on success; callers project to prose via formatCronArmSummary; both validate_cron and arm_cron derive from the same structured payload so they can never disagree about the job they describe | c3-311 | src/server/cron/preview.ts |
 
 ## Change Safety
@@ -119,3 +129,4 @@ scheduler (c3-227), UI rendering (c3-120).
 | src/server/cron/read-model.ts | Contract (Cron read model) | Bounded recentRuns cap | src/server/cron/read-model.ts |
 | src/server/cron/next-fire.ts | Contract (Fire) | Engine call shape | src/server/cron/next-fire.ts |
 | src/server/cron/skip-coalescer.ts | Contract (Fire) | Flush window length | src/server/cron/skip-coalescer.ts |
+| src/server/cron/confirm.ts | Contract (Success + model confirm escalation) | Prompt wording | src/server/cron/confirm.ts |
