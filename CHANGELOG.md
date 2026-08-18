@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.26.6](https://github.com/cuongtranba/kanna/compare/v1.26.5...v1.26.6) (2026-08-18)
+
+
+### Bug Fixes
+
+* **cron:** paused jobs show Paused indicator instead of Running ([#734](https://github.com/cuongtranba/kanna/issues/734)) ([67a9a4e](https://github.com/cuongtranba/kanna/commit/67a9a4e6d708290bf7617e46c51e1fd16ca82c1d)), closes [#733](https://github.com/cuongtranba/kanna/issues/733)
+
 ## [1.26.5](https://github.com/cuongtranba/kanna/compare/v1.26.4...v1.26.5) (2026-08-17)
 
 
