@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.27.0](https://github.com/cuongtranba/kanna/compare/v1.26.8...v1.27.0) (2026-08-18)
+
+
+### Features
+
+* **cron:** extract CronArmSummary as structured review payload ([#741](https://github.com/cuongtranba/kanna/issues/741)) ([#749](https://github.com/cuongtranba/kanna/issues/749)) ([f045919](https://github.com/cuongtranba/kanna/commit/f045919fa97dc56f61ac65421f1fbc0823228222))
+
 ## [1.26.8](https://github.com/cuongtranba/kanna/compare/v1.26.7...v1.26.8) (2026-08-18)
 
 
