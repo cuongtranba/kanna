@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { renderToStaticMarkup } from "react-dom/server"
+import { EMPTY_CHAT_ACTIVITY } from "../../../../shared/types"
 import { ChatRow } from "./ChatRow"
 
 const baseChat = {
@@ -12,7 +13,7 @@ const baseChat = {
   localPath: "/tmp/project",
   provider: "codex" as const,
   lastMessageAt: 0,
-  hasAutomation: false,
+  activity: EMPTY_CHAT_ACTIVITY,
 }
 
 describe("ChatRow", () => {

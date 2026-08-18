@@ -1,5 +1,5 @@
 import { chatStatusIndicator, type ChatDotTone } from "../chatStatusIndicator"
-import type { KannaStatus } from "../../../shared/types"
+import type { ChatActivity, KannaStatus } from "../../../shared/types"
 
 /**
  * What a card says about the chats working it.
@@ -17,6 +17,7 @@ export interface CardChatFacts {
   status: KannaStatus
   unread: boolean
   stateEnteredAt?: number
+  activity: ChatActivity
 }
 
 export interface CardChatSignal {

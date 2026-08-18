@@ -20,6 +20,7 @@ import {
   shouldMarkActiveChatRead,
   shouldAutoFollowTranscript,
 } from "./useKannaState"
+import { EMPTY_CHAT_ACTIVITY } from "../../shared/types"
 import type { ChatAttachment, ChatSnapshot, SidebarData, UserPromptEntry } from "../../shared/types"
 import { useSlashCommandsStore } from "../stores/slashCommandsStore"
 
@@ -41,7 +42,7 @@ function createSidebarData(): SidebarData {
             localPath: "/tmp/project-1",
             provider: null,
             lastMessageAt: 3,
-            hasAutomation: false,
+            activity: EMPTY_CHAT_ACTIVITY,
             sessionState: "cold",
             hasPolicyOverride: false,
           },
@@ -55,7 +56,7 @@ function createSidebarData(): SidebarData {
             localPath: "/tmp/project-1",
             provider: null,
             lastMessageAt: 2,
-            hasAutomation: false,
+            activity: EMPTY_CHAT_ACTIVITY,
             sessionState: "cold",
             hasPolicyOverride: false,
           },
@@ -69,7 +70,7 @@ function createSidebarData(): SidebarData {
             localPath: "/tmp/project-1",
             provider: null,
             lastMessageAt: 1,
-            hasAutomation: false,
+            activity: EMPTY_CHAT_ACTIVITY,
             sessionState: "cold",
             hasPolicyOverride: false,
           },
@@ -92,7 +93,7 @@ function createSidebarData(): SidebarData {
             localPath: "/tmp/project-2",
             provider: null,
             lastMessageAt: 1,
-            hasAutomation: false,
+            activity: EMPTY_CHAT_ACTIVITY,
             sessionState: "cold",
             hasPolicyOverride: false,
           },

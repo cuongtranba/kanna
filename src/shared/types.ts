@@ -195,6 +195,24 @@ export interface StackBinding {
   role: "primary" | "additional"
 }
 
+export interface ChatActivity {
+  agents: number
+  workflow: { name: string | null; agentCount: number } | null
+  loop: { done: number; total: number } | null
+  backgroundTasks: number
+  cron: { nextFireAt: number | null; paused: boolean } | null
+  awaitingAnswer: boolean
+}
+
+export const EMPTY_CHAT_ACTIVITY: ChatActivity = {
+  agents: 0,
+  workflow: null,
+  loop: null,
+  backgroundTasks: 0,
+  cron: null,
+  awaitingAnswer: false,
+}
+
 export interface SidebarChatRow {
   _id: string
   _creationTime: number
@@ -205,7 +223,7 @@ export interface SidebarChatRow {
   localPath: string
   provider: AgentProvider | null
   lastMessageAt?: number
-  hasAutomation: boolean
+  activity: ChatActivity
   canFork?: boolean
   stateEnteredAt?: number
   stackId?: string

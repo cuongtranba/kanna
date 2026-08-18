@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { buildBoardChatFacts } from "./boardChatFacts"
+import { EMPTY_CHAT_ACTIVITY } from "../../../shared/types"
 import type { SidebarChatRow, SidebarData, SidebarProjectGroup } from "../../../shared/types"
 
 /**
@@ -16,7 +17,7 @@ function row(partial: Partial<SidebarChatRow> & { chatId: string }): SidebarChat
     unread: false,
     localPath: "/repo",
     provider: null,
-    hasAutomation: false,
+    activity: EMPTY_CHAT_ACTIVITY,
     ...partial,
   }
 }
@@ -56,6 +57,7 @@ describe("buildBoardChatFacts", () => {
       status: "running",
       unread: false,
       stateEnteredAt: 90,
+      activity: EMPTY_CHAT_ACTIVITY,
     })
   })
 

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { EMPTY_CHAT_ACTIVITY } from "../../../shared/types"
 import { cardChatSignal, type CardChatFacts } from "./cardChatSignal"
 
 /**
@@ -11,7 +12,7 @@ function facts(rows: Record<string, CardChatFacts>): Record<string, CardChatFact
   return rows
 }
 
-const IDLE: CardChatFacts = { status: "idle", unread: false }
+const IDLE: CardChatFacts = { status: "idle", unread: false, activity: EMPTY_CHAT_ACTIVITY }
 
 describe("cardChatSignal", () => {
   test("says nothing for a card with no linked chat", () => {
@@ -30,7 +31,7 @@ describe("cardChatSignal", () => {
   test("reports a running chat with its tone and the moment it started", () => {
     const signal = cardChatSignal(
       ["chat-1"],
-      facts({ "chat-1": { status: "running", unread: false, stateEnteredAt: 1_000 } }),
+      facts({ "chat-1": { status: "running", unread: false, stateEnteredAt: 1_000, activity: EMPTY_CHAT_ACTIVITY } }),
     )
 
     expect(signal).toEqual({
@@ -45,7 +46,7 @@ describe("cardChatSignal", () => {
   test("a chat waiting on the user reads as info, not as running", () => {
     const signal = cardChatSignal(
       ["chat-1"],
-      facts({ "chat-1": { status: "waiting_for_user", unread: false, stateEnteredAt: 5 } }),
+      facts({ "chat-1": { status: "waiting_for_user", unread: false, stateEnteredAt: 5, activity: EMPTY_CHAT_ACTIVITY } }),
     )
     expect(signal?.tone).toBe("info")
     expect(signal?.liveSince).toBe(5)
@@ -54,7 +55,7 @@ describe("cardChatSignal", () => {
   test("a failed chat reads as destructive and carries no ticker", () => {
     const signal = cardChatSignal(
       ["chat-1"],
-      facts({ "chat-1": { status: "failed", unread: false, stateEnteredAt: 5 } }),
+      facts({ "chat-1": { status: "failed", unread: false, stateEnteredAt: 5, activity: EMPTY_CHAT_ACTIVITY } }),
     )
     expect(signal?.tone).toBe("destructive")
     // Failure is not a duration; a ticker on it would imply it is still going.
@@ -91,7 +92,7 @@ describe("cardChatSignal", () => {
       ["chat-new", "chat-old"],
       facts({
         "chat-new": IDLE,
-        "chat-old": { status: "running", unread: false, stateEnteredAt: 1 },
+        "chat-old": { status: "running", unread: false, stateEnteredAt: 1, activity: EMPTY_CHAT_ACTIVITY },
       }),
     )
 
@@ -101,7 +102,7 @@ describe("cardChatSignal", () => {
   })
 
   test("unread output counts as something to say", () => {
-    const signal = cardChatSignal(["chat-1"], facts({ "chat-1": { status: "idle", unread: true } }))
+    const signal = cardChatSignal(["chat-1"], facts({ "chat-1": { status: "idle", unread: true, activity: EMPTY_CHAT_ACTIVITY } }))
     expect(signal?.tone).toBe("success")
     expect(signal?.label).toBe("Unread")
   })

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { renderToStaticMarkup } from "react-dom/server"
 import { KannaBoard } from "./KannaBoard"
+import { EMPTY_CHAT_ACTIVITY } from "../../../shared/types"
 import type { BoardChatFacts } from "../../lib/boards/boardChatFacts"
 import type { BoardViewSnapshot, Card } from "../../../shared/boards/types"
 
@@ -74,7 +75,7 @@ function facts(rows: Record<string, BoardChatFacts>): Record<string, BoardChatFa
   return rows
 }
 
-const QUIET: BoardChatFacts = { title: "Quiet chat", status: "idle", unread: false }
+const QUIET: BoardChatFacts = { title: "Quiet chat", status: "idle", unread: false, activity: EMPTY_CHAT_ACTIVITY }
 
 describe("BoardCard chat signal", () => {
   test("a running chat shows the amber dot, the word, and a ticking stamp", () => {
@@ -86,6 +87,7 @@ describe("BoardCard chat signal", () => {
           status: "running",
           unread: false,
           stateEnteredAt: Date.now() - 80_000,
+          activity: EMPTY_CHAT_ACTIVITY,
         },
       }),
     )
@@ -100,7 +102,7 @@ describe("BoardCard chat signal", () => {
   test("the signal is never colour alone, and never animates", () => {
     const html = render(
       view({ "card-1": ["chat-1"] }, [card("card-1")]),
-      facts({ "chat-1": { title: "Fix login", status: "failed", unread: false } }),
+      facts({ "chat-1": { title: "Fix login", status: "failed", unread: false, activity: EMPTY_CHAT_ACTIVITY } }),
     )
 
     expect(html).toContain("bg-destructive")

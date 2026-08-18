@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { canForkChat, deriveChatSnapshot, deriveLocalProjectsSnapshot, deriveSidebarData, deriveTimings, stackSummaries } from "./read-models"
+import { canForkChat, computeChatActivity, deriveChatSnapshot, deriveLocalProjectsSnapshot, deriveSidebarData, deriveTimings, stackSummaries } from "./read-models"
+import type { ComputeChatActivityDeps } from "./read-models"
 import type { ChatRecord } from "./events"
 import { createEmptyState } from "./events"
 import type { AgentProvider } from "../shared/types"
@@ -1026,5 +1027,167 @@ describe("deriveChatSnapshot loopProgress", () => {
       ["done", "chunk one DONE"],
       ["pending", "chunk two"],
     ])
+  })
+})
+
+describe("computeChatActivity", () => {
+  function baseState() {
+    const state = createEmptyState()
+    state.projectsById.set("p1", { id: "p1", localPath: "/p1", title: "P", createdAt: 1, updatedAt: 1 })
+    state.chatsById.set("c1", {
+      id: "c1", projectId: "p1", title: "C", createdAt: 1, updatedAt: 1,
+      unread: false, provider: null, planMode: false,
+      sessionTokensByProvider: {}, sourceHash: null, lastTurnOutcome: null,
+    })
+    return state
+  }
+
+  function baseDeps(overrides: Partial<ComputeChatActivityDeps> = {}): ComputeChatActivityDeps {
+    return {
+      state: baseState(),
+      activeStatuses: new Map(),
+      nowMs: 1_000_000,
+      ...overrides,
+    }
+  }
+
+  test("all fields are zero/null when no activity", () => {
+    const result = computeChatActivity("c1", baseDeps())
+    expect(result).toEqual({
+      agents: 0,
+      workflow: null,
+      loop: null,
+      backgroundTasks: 0,
+      cron: null,
+      awaitingAnswer: false,
+    })
+  })
+
+  test("agents counts only running subagent runs", () => {
+    const state = baseState()
+    const runMap = new Map<string, { status: string }>([
+      ["r1", { runId: "r1", chatId: "c1", subagentId: "s1", subagentName: "a", provider: "claude", model: "m", status: "running", parentUserMessageId: "u1", parentRunId: null, depth: 0, startedAt: 1, finishedAt: null, finalText: null, error: null, usage: null, entries: [], pendingTool: null }],
+      ["r2", { runId: "r2", chatId: "c1", subagentId: "s1", subagentName: "a", provider: "claude", model: "m", status: "completed", parentUserMessageId: "u1", parentRunId: null, depth: 0, startedAt: 1, finishedAt: 2, finalText: "", error: null, usage: null, entries: [], pendingTool: null }],
+      ["r3", { runId: "r3", chatId: "c1", subagentId: "s1", subagentName: "a", provider: "claude", model: "m", status: "running", parentUserMessageId: "u1", parentRunId: null, depth: 0, startedAt: 1, finishedAt: null, finalText: null, error: null, usage: null, entries: [], pendingTool: null }],
+    ])
+    state.subagentRunsByChatId.set("c1", runMap as never)
+    const result = computeChatActivity("c1", baseDeps({ state }))
+    expect(result.agents).toBe(2)
+  })
+
+  test("workflow picks the first running workflow from registry", () => {
+    const workflowRegistry = {
+      snapshot: (chatId: string) => chatId === "c1"
+        ? [
+            { runId: "wf1", status: "completed", workflowName: "done-wf", agentCount: 3 },
+            { runId: "wf2", status: "running", workflowName: "active-wf", agentCount: 5 },
+          ]
+        : [],
+    }
+    const result = computeChatActivity("c1", baseDeps({ workflowRegistry: workflowRegistry as never }))
+    expect(result.workflow).toEqual({ name: "active-wf", agentCount: 5 })
+  })
+
+  test("workflow is null when no running workflow", () => {
+    const workflowRegistry = {
+      snapshot: () => [{ runId: "wf1", status: "completed", workflowName: "done-wf", agentCount: 3 }],
+    }
+    const result = computeChatActivity("c1", baseDeps({ workflowRegistry: workflowRegistry as never }))
+    expect(result.workflow).toBeNull()
+  })
+
+  test("loop is null when no loop armed", () => {
+    const result = computeChatActivity("c1", baseDeps())
+    expect(result.loop).toBeNull()
+  })
+
+  test("loop reflects done/total when loop is armed", () => {
+    const state = baseState()
+    state.autoContinueEventsByChatId.set("c1", [{
+      kind: "loop_armed", chatId: "c1", timestamp: 100,
+      subagentId: "sa-1", prompt: "Do next chunk",
+      workdirAbs: "/p1", trackingFileRel: "PROGRESS.md",
+    }] as never)
+    const getLoopTracking = () => ({
+      doneEntries: ["chunk 1 done", "chunk 2 done"],
+      nextChunkSection: "chunk 3",
+    })
+    const result = computeChatActivity("c1", baseDeps({ state, getLoopTracking }))
+    expect(result.loop).toEqual({ done: 2, total: 3 })
+  })
+
+  test("loop total includes running agents", () => {
+    const state = baseState()
+    state.autoContinueEventsByChatId.set("c1", [{
+      kind: "loop_armed", chatId: "c1", timestamp: 100,
+      subagentId: "sa-1", prompt: "Do next chunk",
+      workdirAbs: "/p1", trackingFileRel: "PROGRESS.md",
+    }] as never)
+    const runMap = new Map([
+      ["r1", { runId: "r1", chatId: "c1", subagentId: "s1", subagentName: "a", provider: "claude", model: "m", status: "running", parentUserMessageId: "u1", parentRunId: null, depth: 0, startedAt: 1, finishedAt: null, finalText: null, error: null, usage: null, entries: [], pendingTool: null }],
+    ])
+    state.subagentRunsByChatId.set("c1", runMap as never)
+    const getLoopTracking = () => ({
+      doneEntries: ["chunk 1 done"],
+      nextChunkSection: "",
+    })
+    const result = computeChatActivity("c1", baseDeps({ state, getLoopTracking }))
+    expect(result.loop).toEqual({ done: 1, total: 2 })
+  })
+
+  test("backgroundTasks reflects the background task count for the chat", () => {
+    const backgroundTasksByChatId = new Map([
+      ["c1", [{ id: "t1", taskType: "bash", description: "task" }, { id: "t2", taskType: "agent", description: "agent" }]],
+    ])
+    const result = computeChatActivity("c1", baseDeps({ backgroundTasksByChatId: backgroundTasksByChatId as never }))
+    expect(result.backgroundTasks).toBe(2)
+  })
+
+  test("cron picks first unpaused cron job", () => {
+    const state = baseState()
+    state.autoContinueEventsByChatId.set("c1", [{
+      kind: "cron_armed",
+      chatId: "c1",
+      timestamp: 100,
+      jobId: "job-1",
+      instruction: "run lint",
+      mode: "spawn",
+      scheduleText: "every 1h",
+      schedule: { minute: "0", hour: "*", dayOfMonth: "*", month: "*", dayOfWeek: "*" },
+      model: null,
+    }] as never)
+    const result = computeChatActivity("c1", baseDeps({ state, nowMs: 200 }))
+    expect(result.cron).not.toBeNull()
+    expect(result.cron?.paused).toBe(false)
+  })
+
+  test("awaitingAnswer is true when status is waiting_for_user", () => {
+    const activeStatuses = new Map([["c1", "waiting_for_user" as const]])
+    const result = computeChatActivity("c1", baseDeps({ activeStatuses }))
+    expect(result.awaitingAnswer).toBe(true)
+  })
+
+  test("awaitingAnswer is false for a chat absent from active statuses", () => {
+    const result = computeChatActivity("unknown-chat", baseDeps())
+    expect(result.awaitingAnswer).toBe(false)
+  })
+
+  test("deriveSidebarData includes activity on each chat row", () => {
+    const state = createEmptyState()
+    state.projectsById.set("p1", { id: "p1", localPath: "/p1", title: "P", createdAt: 1, updatedAt: 1 })
+    state.chatsById.set("c1", {
+      id: "c1", projectId: "p1", title: "C", createdAt: 1, updatedAt: 1,
+      unread: false, provider: null, planMode: false,
+      sessionTokensByProvider: {}, sourceHash: null, lastTurnOutcome: null,
+    })
+    const activeStatuses = new Map([["c1", "waiting_for_user" as const]])
+    const sidebar = deriveSidebarData(state, activeStatuses, { nowMs: 1_000_000 })
+    const row = sidebar.projectGroups[0]?.chats[0]
+    expect(row?.activity.awaitingAnswer).toBe(true)
+    expect(row?.activity.agents).toBe(0)
+    expect(row?.activity.workflow).toBeNull()
+    expect(row?.activity.loop).toBeNull()
+    expect(row?.activity.backgroundTasks).toBe(0)
+    expect(row?.activity.cron).toBeNull()
   })
 })

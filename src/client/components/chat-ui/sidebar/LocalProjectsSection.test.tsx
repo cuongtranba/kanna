@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import type { ClientRect } from "@dnd-kit/core"
+import { EMPTY_CHAT_ACTIVITY } from "../../../../shared/types"
 import type { SidebarChatRow, SidebarProjectGroup } from "../../../../shared/types"
 import { TooltipProvider } from "../../ui/tooltip"
 import {
@@ -24,7 +25,7 @@ function createChat(chatId: string, lastMessageAt: number): SidebarChatRow {
     localPath: "/tmp/project-a",
     provider: "codex",
     lastMessageAt,
-    hasAutomation: false,
+    activity: EMPTY_CHAT_ACTIVITY,
   }
 }
 

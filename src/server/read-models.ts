@@ -1,6 +1,7 @@
 import process from "node:process"
 import type {
   AgentProvider,
+  ChatActivity,
   ChatBackgroundTask,
   ChatRuntime,
   ChatSnapshot,
@@ -23,8 +24,9 @@ import { resolveLocalPath } from "./paths"
 import { resolveSpawnPaths } from "./claude-session-config"
 import { SERVER_PROVIDERS } from "./provider-catalog"
 import { deriveChatSchedules, deriveLoopState } from "./auto-continue/read-model"
-import { deriveCronJobs, hasUnpausedCronJob } from "./cron/read-model"
+import { deriveCronJobs } from "./cron/read-model"
 import type { CronJobSnapshot } from "../shared/cron/types"
+import type { WorkflowRegistry } from "./workflow-registry"
 
 const EMPTY_CRON_JOBS: readonly CronJobSnapshot[] = []
 import { deriveChatTunnels } from "./cloudflare-tunnel/read-model"
@@ -33,6 +35,50 @@ import type { CloudflareTunnelEvent } from "./cloudflare-tunnel/events"
 export const ACTIVE_SESSION_IDLE_GAP_MS = 30 * 60 * 1_000
 const SIDEBAR_RECENT_WINDOW_MS = 24 * 60 * 60 * 1_000
 const SIDEBAR_FALLBACK_PREVIEW_LIMIT = 5
+
+export interface ComputeChatActivityDeps {
+  state: StoreState
+  activeStatuses: Map<string, KannaStatus>
+  workflowRegistry?: Pick<WorkflowRegistry, "snapshot">
+  backgroundTasksByChatId?: Map<string, ChatBackgroundTask[]>
+  getLoopTracking?: (chatId: string) => LoopTrackingSnapshot | null
+  nowMs: number
+}
+
+export function computeChatActivity(chatId: string, deps: ComputeChatActivityDeps): ChatActivity {
+  const { state, activeStatuses, workflowRegistry, backgroundTasksByChatId, getLoopTracking, nowMs } = deps
+
+  const runMap = state.subagentRunsByChatId.get(chatId)
+  const agents = runMap ? [...runMap.values()].filter((r) => r.status === "running").length : 0
+
+  const workflowSummaries = workflowRegistry?.snapshot(chatId) ?? []
+  const activeWorkflow = workflowSummaries.find((s) => s.status === "running") ?? null
+  const workflow = activeWorkflow
+    ? { name: activeWorkflow.workflowName ?? null, agentCount: activeWorkflow.agentCount ?? 0 }
+    : null
+
+  const autoContinueEvents = state.autoContinueEventsByChatId.get(chatId) ?? []
+  const loopState = deriveLoopState(autoContinueEvents, chatId)
+  let loop: ChatActivity["loop"] = null
+  if (loopState !== null) {
+    const tracking = getLoopTracking?.(chatId) ?? null
+    const done = tracking?.doneEntries.length ?? 0
+    const liveCount = runMap ? [...runMap.values()].filter((r) => r.status === "running").length : 0
+    const hasNext = tracking !== null && tracking.nextChunkSection.trim().length > 0
+    const total = done + liveCount + (hasNext ? 1 : 0)
+    loop = { done, total }
+  }
+
+  const backgroundTasks = backgroundTasksByChatId?.get(chatId)?.length ?? 0
+
+  const cronJobs = deriveCronJobs(autoContinueEvents, chatId, nowMs)
+  const activeCron = cronJobs.find((j) => !j.paused) ?? cronJobs[0] ?? null
+  const cron = activeCron ? { nextFireAt: activeCron.nextFireAt, paused: activeCron.paused } : null
+
+  const awaitingAnswer = activeStatuses.get(chatId) === "waiting_for_user"
+
+  return { agents, workflow, loop, backgroundTasks, cron, awaitingAnswer }
+}
 
 export function deriveStatus(chat: ChatRecord, activeStatus?: KannaStatus): KannaStatus {
   if (activeStatus) return activeStatus
@@ -103,12 +149,23 @@ export function deriveSidebarData(
     drainingChatIds?: Set<string>
     claudeSessionStates?: Map<string, ClaudeSessionLifecycleStatus>
     discoveredProvidersByPath?: Map<string, AgentProvider[]>
+    workflowRegistry?: Pick<WorkflowRegistry, "snapshot">
+    backgroundTasksByChatId?: Map<string, ChatBackgroundTask[]>
+    getLoopTracking?: (chatId: string) => LoopTrackingSnapshot | null
   }
 ): SidebarData {
   const nowMs = options?.nowMs ?? Date.now()
   const drainingChatIds = options?.drainingChatIds ?? new Set<string>()
   const claudeSessionStates = options?.claudeSessionStates ?? new Map<string, ClaudeSessionLifecycleStatus>()
   const discoveredProvidersByPath = options?.discoveredProvidersByPath ?? new Map<string, AgentProvider[]>()
+  const activityDeps: ComputeChatActivityDeps = {
+    state,
+    activeStatuses,
+    workflowRegistry: options?.workflowRegistry,
+    backgroundTasksByChatId: options?.backgroundTasksByChatId,
+    getLoopTracking: options?.getLoopTracking,
+    nowMs,
+  }
   const chatsByProjectId = new Map<string, ChatRecord[]>()
   const archivedChatsByProjectId = new Map<string, ChatRecord[]>()
   for (const chat of state.chatsById.values()) {
@@ -149,10 +206,7 @@ export function deriveSidebarData(
         localPath: project.localPath,
         provider: chat.provider,
         lastMessageAt: chat.lastMessageAt,
-        hasAutomation: hasUnpausedCronJob(
-          state.autoContinueEventsByChatId.get(chat.id) ?? [],
-          chat.id,
-        ),
+        activity: computeChatActivity(chat.id, activityDeps),
         canFork: canForkChat(chat, activeStatuses, drainingChatIds) || undefined,
         stateEnteredAt: state.chatTimingsByChatId.get(chat.id)?.stateEnteredAt,
         stackId: chat.stackId,

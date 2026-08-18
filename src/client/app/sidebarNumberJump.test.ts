@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { DEFAULT_KEYBINDINGS } from "../../shared/types"
+import { DEFAULT_KEYBINDINGS, EMPTY_CHAT_ACTIVITY } from "../../shared/types"
 import type { KeybindingsSnapshot, SidebarProjectGroup } from "../../shared/types"
 import {
   getSidebarJumpTargetIndex,
@@ -45,7 +45,7 @@ const PROJECT_GROUPS: SidebarProjectGroup[] = [
         localPath: "/tmp/project-a",
         provider: "codex",
         lastMessageAt: nowMs - hourMs,
-        hasAutomation: false,
+        activity: EMPTY_CHAT_ACTIVITY,
       },
       {
         _id: "a-2",
@@ -57,7 +57,7 @@ const PROJECT_GROUPS: SidebarProjectGroup[] = [
         localPath: "/tmp/project-a",
         provider: "codex",
         lastMessageAt: nowMs - 2 * hourMs,
-        hasAutomation: false,
+        activity: EMPTY_CHAT_ACTIVITY,
       },
       {
         _id: "a-3",
@@ -69,7 +69,7 @@ const PROJECT_GROUPS: SidebarProjectGroup[] = [
         localPath: "/tmp/project-a",
         provider: "codex",
         lastMessageAt: nowMs - 26 * hourMs,
-        hasAutomation: false,
+        activity: EMPTY_CHAT_ACTIVITY,
       },
     ],
     previewChats: [],
@@ -90,7 +90,7 @@ const PROJECT_GROUPS: SidebarProjectGroup[] = [
         localPath: "/tmp/project-b",
         provider: "claude",
         lastMessageAt: nowMs - 27 * hourMs,
-        hasAutomation: false,
+        activity: EMPTY_CHAT_ACTIVITY,
       },
       {
         _id: "b-2",
@@ -102,7 +102,7 @@ const PROJECT_GROUPS: SidebarProjectGroup[] = [
         localPath: "/tmp/project-b",
         provider: "claude",
         lastMessageAt: nowMs - 28 * hourMs,
-        hasAutomation: false,
+        activity: EMPTY_CHAT_ACTIVITY,
       },
     ],
     previewChats: [],
@@ -156,7 +156,7 @@ describe("getVisibleSidebarChats", () => {
         localPath: "/tmp/project-c",
         provider: "codex" as const,
         lastMessageAt: nowMs - (25 + index) * hourMs,
-        hasAutomation: false,
+        activity: EMPTY_CHAT_ACTIVITY,
       })),
       previewChats: [],
       olderChats: [],

@@ -4,10 +4,10 @@ import { randomUUID } from "node:crypto"
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLAUDE_DRIVER_DEFAULTS, CLAUDE_PTY_LIFECYCLE_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, DEFAULT_OPENROUTER_SDK_MODEL, PROTOCOL_VERSION, PUSH_DEFAULTS,
+import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLAUDE_DRIVER_DEFAULTS, CLAUDE_PTY_LIFECYCLE_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, DEFAULT_OPENROUTER_SDK_MODEL, EMPTY_CHAT_ACTIVITY, PROTOCOL_VERSION, PUSH_DEFAULTS,
   TELEMETRY_DEFAULTS, UPLOAD_DEFAULTS } from "../shared/types"
 import { BUILTIN_SLASH_COMMANDS } from "../shared/builtin-commands"
-import type { AppSettingsSnapshot, KeybindingsSnapshot, LlmProviderSnapshot, McpServerConfig, McpServerTestResult, OpenRouterModel, UpdateSnapshot } from "../shared/types"
+import type { AppSettingsSnapshot, ChatActivity, KeybindingsSnapshot, LlmProviderSnapshot, McpServerConfig, McpServerTestResult, OpenRouterModel, UpdateSnapshot } from "../shared/types"
 import { createEmptyState } from "./events"
 import {
   assertSafeSkillId,
@@ -39,7 +39,7 @@ function withSidebarGroupDefaults(group: {
     provider: "claude" | "codex" | null
     lastMessageAt?: number
     canFork?: boolean
-    hasAutomation: boolean
+    activity: ChatActivity
   }>
 }) {
   const chatsWithDefaults = group.chats.map((chat) => ({ sessionState: "cold" as const, hasPolicyOverride: false, ...chat }))
@@ -1596,7 +1596,7 @@ describe("ws-router", () => {
               unread: false,
               localPath: "/tmp/project",
               provider: null,
-              hasAutomation: false,
+              activity: EMPTY_CHAT_ACTIVITY,
             }],
           })],
           stacks: [],
@@ -1623,7 +1623,7 @@ describe("ws-router", () => {
               unread: false,
               localPath: "/tmp/project",
               provider: null,
-              hasAutomation: false,
+              activity: EMPTY_CHAT_ACTIVITY,
             }],
           })],
           stacks: [],
@@ -1848,7 +1848,7 @@ describe("ws-router", () => {
                 localPath: "/tmp/project",
                 provider: "claude",
                 canFork: true,
-                hasAutomation: false,
+                activity: EMPTY_CHAT_ACTIVITY,
               }, {
                 _id: "chat-1",
                 _creationTime: 1,
@@ -1859,7 +1859,7 @@ describe("ws-router", () => {
                 localPath: "/tmp/project",
                 provider: "claude",
                 canFork: true,
-                hasAutomation: false,
+                activity: EMPTY_CHAT_ACTIVITY,
               }],
             }),
             sourceProvider: "claude",
