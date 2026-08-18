@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.29.0](https://github.com/cuongtranba/kanna/compare/v1.28.0...v1.29.0) (2026-08-18)
+
+
+### Features
+
+* **cron:** arm_cron result includes job id and AskUserQuestion review instruction ([#743](https://github.com/cuongtranba/kanna/issues/743)) ([#753](https://github.com/cuongtranba/kanna/issues/753)) ([7e7f4a0](https://github.com/cuongtranba/kanna/commit/7e7f4a0c964dfbbba5be163073bf356503562c36))
+
 ## [1.28.0](https://github.com/cuongtranba/kanna/compare/v1.27.0...v1.28.0) (2026-08-18)
 
 
