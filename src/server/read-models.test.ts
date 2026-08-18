@@ -544,6 +544,60 @@ describe("read models", () => {
     expect(sidebar.stacks[0]?.title).toBe("Integration")
   })
 
+  test("sourceProvider comes from chat history when chats have a provider", () => {
+    const state = createEmptyState()
+    state.projectsById.set("p1", { id: "p1", localPath: "/tmp/p1", title: "P1", createdAt: 1, updatedAt: 1 })
+    state.chatsById.set("c1", {
+      id: "c1", projectId: "p1", title: "Chat", createdAt: 1, updatedAt: 1,
+      unread: false, provider: "codex" as AgentProvider, planMode: false,
+      sessionTokensByProvider: {}, sourceHash: null, lastTurnOutcome: null,
+    })
+    const sidebar = deriveSidebarData(state, new Map())
+    expect(sidebar.projectGroups[0]?.sourceProvider).toBe("codex")
+  })
+
+  test("sourceProvider comes from discoveredProvidersByPath when only one provider discovered the project", () => {
+    const state = createEmptyState()
+    state.projectsById.set("p1", { id: "p1", localPath: "/tmp/p1", title: "P1", createdAt: 1, updatedAt: 1 })
+    const discoveredProvidersByPath = new Map([
+      ["/tmp/p1", ["codex" as AgentProvider]],
+    ])
+    const sidebar = deriveSidebarData(state, new Map(), { discoveredProvidersByPath })
+    expect(sidebar.projectGroups[0]?.sourceProvider).toBe("codex")
+  })
+
+  test("sourceProvider is absent when multiple providers discovered the project", () => {
+    const state = createEmptyState()
+    state.projectsById.set("p1", { id: "p1", localPath: "/tmp/p1", title: "P1", createdAt: 1, updatedAt: 1 })
+    const discoveredProvidersByPath = new Map([
+      ["/tmp/p1", ["claude" as AgentProvider, "codex" as AgentProvider]],
+    ])
+    const sidebar = deriveSidebarData(state, new Map(), { discoveredProvidersByPath })
+    expect(sidebar.projectGroups[0]?.sourceProvider).toBeUndefined()
+  })
+
+  test("sourceProvider is absent when project has no chats and no discovery info", () => {
+    const state = createEmptyState()
+    state.projectsById.set("p1", { id: "p1", localPath: "/tmp/p1", title: "P1", createdAt: 1, updatedAt: 1 })
+    const sidebar = deriveSidebarData(state, new Map())
+    expect(sidebar.projectGroups[0]?.sourceProvider).toBeUndefined()
+  })
+
+  test("sourceProvider prefers chat history over discovery info", () => {
+    const state = createEmptyState()
+    state.projectsById.set("p1", { id: "p1", localPath: "/tmp/p1", title: "P1", createdAt: 1, updatedAt: 1 })
+    state.chatsById.set("c1", {
+      id: "c1", projectId: "p1", title: "Chat", createdAt: 1, updatedAt: 1,
+      unread: false, provider: "claude" as AgentProvider, planMode: false,
+      sessionTokensByProvider: {}, sourceHash: null, lastTurnOutcome: null,
+    })
+    const discoveredProvidersByPath = new Map([
+      ["/tmp/p1", ["codex" as AgentProvider]],
+    ])
+    const sidebar = deriveSidebarData(state, new Map(), { discoveredProvidersByPath })
+    expect(sidebar.projectGroups[0]?.sourceProvider).toBe("claude")
+  })
+
   test("availableProviders includes custom models", () => {
     const state = createEmptyState()
     state.projectsById.set("project-1", {

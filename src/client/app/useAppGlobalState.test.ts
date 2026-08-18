@@ -340,4 +340,60 @@ describe("getMostRecentProjectProvider", () => {
     }
     expect(getMostRecentProjectProvider([group], "proj-b")).toBe("claude")
   })
+
+  test("returns sourceProvider when all chats have null provider", () => {
+    const group: SidebarGroup = {
+      groupKey: "proj-c",
+      localPath: "/projects/proj-c",
+      chats: [{ chatId: "c1", provider: null } as unknown as SidebarChat],
+      previewChats: [],
+      olderChats: [],
+      defaultCollapsed: false,
+      sourceProvider: "codex",
+    }
+    expect(getMostRecentProjectProvider([group], "proj-c")).toBe("codex")
+  })
+
+  test("returns sourceProvider when the project has no chats", () => {
+    const group: SidebarGroup = {
+      groupKey: "proj-d",
+      localPath: "/projects/proj-d",
+      chats: [],
+      previewChats: [],
+      olderChats: [],
+      defaultCollapsed: false,
+      sourceProvider: "codex",
+    }
+    expect(getMostRecentProjectProvider([group], "proj-d")).toBe("codex")
+  })
+
+  test("prefers first chat provider over sourceProvider", () => {
+    const group: SidebarGroup = {
+      groupKey: "proj-e",
+      localPath: "/projects/proj-e",
+      chats: [
+        { chatId: "c1", provider: "claude" } as unknown as SidebarChat,
+      ],
+      previewChats: [],
+      olderChats: [],
+      defaultCollapsed: false,
+      sourceProvider: "codex",
+    }
+    expect(getMostRecentProjectProvider([group], "proj-e")).toBe("claude")
+  })
+
+  test("skips null-provider chats to find first chat with a provider", () => {
+    const group: SidebarGroup = {
+      groupKey: "proj-f",
+      localPath: "/projects/proj-f",
+      chats: [
+        { chatId: "c1", provider: null } as unknown as SidebarChat,
+        { chatId: "c2", provider: "codex" } as unknown as SidebarChat,
+      ],
+      previewChats: [],
+      olderChats: [],
+      defaultCollapsed: false,
+    }
+    expect(getMostRecentProjectProvider([group], "proj-f")).toBe("codex")
+  })
 })

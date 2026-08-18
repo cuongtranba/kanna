@@ -200,11 +200,13 @@ describe("project discovery", () => {
         localPath: "/tmp/project",
         title: "Codex Project",
         modifiedAt: 20,
+        discoveredByProviders: ["claude", "codex"],
       },
       {
         localPath: "/tmp/other-project",
         title: "Other Project",
         modifiedAt: 15,
+        discoveredByProviders: ["codex"],
       },
     ])
   })

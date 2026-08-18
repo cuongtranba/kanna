@@ -1,5 +1,6 @@
 import process from "node:process"
 import type {
+  AgentProvider,
   ChatBackgroundTask,
   ChatRuntime,
   ChatSnapshot,
@@ -80,6 +81,19 @@ function getSidebarChatBuckets(chats: SidebarChatRow[], nowMs: number) {
   }
 }
 
+function computeSourceProvider(
+  chats: SidebarChatRow[],
+  localPath: string,
+  discoveredProvidersByPath: Map<string, AgentProvider[]>,
+): AgentProvider | null {
+  const providerFromHistory = chats.find((c) => c.provider != null)?.provider ?? null
+  if (providerFromHistory != null) return providerFromHistory
+
+  const discoveredProviders = discoveredProvidersByPath.get(localPath)
+  if (discoveredProviders?.length === 1) return discoveredProviders[0] ?? null
+  return null
+}
+
 export function deriveSidebarData(
   state: StoreState,
   activeStatuses: Map<string, KannaStatus>,
@@ -88,11 +102,13 @@ export function deriveSidebarData(
     sidebarProjectOrder?: string[]
     drainingChatIds?: Set<string>
     claudeSessionStates?: Map<string, ClaudeSessionLifecycleStatus>
+    discoveredProvidersByPath?: Map<string, AgentProvider[]>
   }
 ): SidebarData {
   const nowMs = options?.nowMs ?? Date.now()
   const drainingChatIds = options?.drainingChatIds ?? new Set<string>()
   const claudeSessionStates = options?.claudeSessionStates ?? new Map<string, ClaudeSessionLifecycleStatus>()
+  const discoveredProvidersByPath = options?.discoveredProvidersByPath ?? new Map<string, AgentProvider[]>()
   const chatsByProjectId = new Map<string, ChatRecord[]>()
   const archivedChatsByProjectId = new Map<string, ChatRecord[]>()
   for (const chat of state.chatsById.values()) {
@@ -150,6 +166,8 @@ export function deriveSidebarData(
     const archivedChats = toSidebarChatRows(project, archivedChatsByProjectId.get(project.id) ?? [])
     const { previewChats, olderChats } = getSidebarChatBuckets(chats, nowMs)
 
+    const sourceProvider = computeSourceProvider(chats, project.localPath, discoveredProvidersByPath)
+
     return {
       groupKey: project.id,
       localPath: project.localPath,
@@ -159,6 +177,7 @@ export function deriveSidebarData(
       ...(archivedChats.length ? { archivedChats } : {}),
       defaultCollapsed: chats.every((chat) => !isSidebarChatRecent(chat, nowMs)),
       ...(project.starredAt != null ? { starredAt: project.starredAt } : {}),
+      ...(sourceProvider != null ? { sourceProvider } : {}),
     }
   })
 

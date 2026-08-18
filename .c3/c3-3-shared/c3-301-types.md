@@ -1,7 +1,7 @@
 ---
 id: c3-301
 c3-version: 4
-c3-seal: 5bd91dec4df66b4e925a455ecd28e2d0d6adb0b5a00af7af2a6d571343079b2b
+c3-seal: 94d01e297cac7baa1eaea11dcb32973c719d78a6bf99413a80a0d07130a5c248
 title: types
 type: component
 category: foundation
@@ -64,6 +64,7 @@ Defines the discriminated unions and structural types that cross the wire: proje
 | Domain type exports | OUT | Project/chat/turn/transcript types | c3-1 | src/shared/types.ts |
 | Catalog re-exports | OUT | Provider catalog types via shared module | c3-115 | src/shared/types.ts |
 | Subagent restriction fields | OUT | workingDir + allowedPaths on Subagent / SubagentInput / SubagentPatch; SubagentValidationErrorCode includes RESTRICTION_NOT_SUPPORTED, INVALID_PATH, PATH_ESCAPE, EMPTY_ALLOWED_PATHS | c3-210 | src/shared/types.ts |
+| SidebarProjectGroup.sourceProvider | OUT | Optional AgentProvider inferred from chat history or unambiguous single-provider discovery; absent when ambiguous; consumed by getMostRecentProjectProvider as provider hint for new chats | c3-110 | src/shared/types.ts |
 
 ## Change Safety
 
