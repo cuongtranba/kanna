@@ -1,6 +1,6 @@
 ---
 id: c3-233
-c3-seal: 0d000a34e7a8cebcf7590d59b7052274918ef753bf662cf437945dc7017f6368
+c3-seal: cfac6bcd51e790411423e160e9910196cf13e7ac0e0c11b68a62e4e88cc9992f
 title: cron-scheduler
 type: component
 category: feature
@@ -95,6 +95,7 @@ scheduler (c3-227), UI rendering (c3-120).
 | Run outcome | IN | EventStore.onTurnTerminal (the single recordTurnFinished/Failed/Cancelled choke point) reports the tagged turn's outcome; recordCronTurnOutcome lands it on the arming chat | c3-206 | src/server/event-store.ts, src/server/cron/fire.ts |
 | Cron read model | OUT | deriveCronJobs projects CronJobSnapshot[] onto ChatSnapshot.cronJobs; the cron-jobs WS topic aggregates every chat for the global page; cron.remove/pause/resume WS commands reuse the /cron dispatch | c3-207 | src/server/cron/read-model.ts, src/server/ws-router-envelope.ts, src/server/ws-router-agent-ctrl.ts |
 | Refusal + model escalation | OUT | refuseCronCommand is the one path a /cron line is refused on: it appends the cron_command_error card carrying the typed line AND offers the error to createCronRepair, which enqueues a repair prompt and drains the queue only when the parser had no suggestion, for arm-shaped parts, once per line per chat, standing aside for a queued user message. A schedule that parses but never fires escalates too, on a reconstructed canonical line. KANNA_CRON_REPAIR=disabled turns it off | c3-226 | src/server/cron/commands.ts, src/server/cron/repair.ts |
+| Preview payload | OUT | previewCronCommand returns CronArmSummary (structured) on success; callers project to prose via formatCronArmSummary; both validate_cron and arm_cron derive from the same structured payload so they can never disagree about the job they describe | c3-311 | src/server/cron/preview.ts |
 
 ## Change Safety
 

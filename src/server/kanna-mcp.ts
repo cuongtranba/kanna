@@ -27,6 +27,7 @@ import {
   DELEGATE_SUBAGENT_DESCRIPTION,
   type DelegateSubagentContext,
 } from "./kanna-mcp-tools/delegate-subagent"
+import { formatCronArmSummary } from "../shared/cron/arm-summary"
 import { previewCronCommand } from "./cron/preview"
 import type { SubagentOrchestrator } from "./subagent-orchestrator"
 import type { LoopSetupInput } from "./loop-template"
@@ -1012,7 +1013,7 @@ function buildCronToolList(args: {
           content: [{ type: "text" as const, text: preview.reason }],
         })
       }
-      return Promise.resolve({ content: [{ type: "text" as const, text: preview.summary }] })
+      return Promise.resolve({ content: [{ type: "text" as const, text: formatCronArmSummary(preview.summary) }] })
     }),
   ]
 
@@ -1029,7 +1030,7 @@ function buildCronToolList(args: {
         }
       }
       await armCron(input.command)
-      return { content: [{ type: "text" as const, text: `Armed.\n${preview.summary}` }] }
+      return { content: [{ type: "text" as const, text: `Armed.\n${formatCronArmSummary(preview.summary)}` }] }
     }),
   )
   return tools

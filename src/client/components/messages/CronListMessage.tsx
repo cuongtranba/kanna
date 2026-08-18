@@ -1,4 +1,5 @@
 import { CalendarClock } from "lucide-react"
+import { cronModeConsequence } from "../../../shared/cron/arm-summary"
 import type { CronJobSnapshot } from "../../../shared/cron/types"
 import { humanizeSchedule } from "../../../shared/cron/humanize"
 import { CronRunStatusPill } from "./CronRunMessage"
@@ -47,7 +48,7 @@ export function CronListMessage({ message, cronJobs }: Props) {
           <div>/cron list · /cron remove &lt;id&gt; · /cron pause &lt;id&gt; · /cron resume &lt;id&gt;</div>
           <div>schedules: `0 9 * * 1-5` · `*/30 * * * * *` (leading second) · @hourly @daily @weekly @monthly · every 30s / every 5m / every 2h</div>
           <div className="mt-1">
-            inline runs in this chat with context cleared each cycle; spawn creates a new chat per run.
+            inline: {cronModeConsequence("inline")}; spawn: {cronModeConsequence("spawn")}.
             Next-fire times use server-local time.
           </div>
         </div>
