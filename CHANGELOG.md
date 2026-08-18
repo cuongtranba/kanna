@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.28.0](https://github.com/cuongtranba/kanna/compare/v1.27.0...v1.28.0) (2026-08-18)
+
+
+### Features
+
+* **cron:** show full config on CronArmedMessage (model, fires, cwd, edit/disarm) ([#751](https://github.com/cuongtranba/kanna/issues/751)) ([e69c872](https://github.com/cuongtranba/kanna/commit/e69c872c6393ce3e89ad0308d5dd5a7aab275517)), closes [#742](https://github.com/cuongtranba/kanna/issues/742)
+
 ## [1.27.0](https://github.com/cuongtranba/kanna/compare/v1.26.8...v1.27.0) (2026-08-18)
 
 
