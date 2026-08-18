@@ -1,6 +1,8 @@
 ---
 id: adr-20260818-cron-arm-confirmation
+c3-seal: 9149e76e4a70dfa663ebcf228f553ce6a072f01deb843ff8c656f5adf86f7ffc
 title: cron-arm-confirmation
+type: adr
 status: done
 ---
 
@@ -34,15 +36,15 @@ removes the old job.
 ## Four bounds (each load-bearing)
 
 1. **One confirmation per `jobId`.** A re-arm of the same line is a new job and
-   gets its own confirmation. Bounded memory at 32 entries per chat.
+gets its own confirmation. Bounded memory at 32 entries per chat.
 2. **Stands aside for a queued user message.** Their explicit turn outranks this
-   host-initiated one — same rule as `createCronRepair`.
+host-initiated one — same rule as `createCronRepair`.
 3. **Typed path only.** `armCron` (the `arm_cron` MCP tool path) overrides
-   `cronConfirm: undefined` at the call site — the tool result already instructs
-   the model to call `AskUserQuestion`, so double-confirming degrades rather
-   than improves the experience.
+`cronConfirm: undefined` at the call site — the tool result already instructs
+the model to call `AskUserQuestion`, so double-confirming degrades rather
+than improves the experience.
 4. **Never throws into the send path.** A failed enqueue or drain is logged and
-   swallowed; a working cron job survives the loss.
+swallowed; a working cron job survives the loss.
 
 ## Gate
 
@@ -52,9 +54,9 @@ removes the old job.
 ## Components changed
 
 - c3-233 (cron-scheduler): `createCronConfirm`, `CronConfirmDeps`, `CronConfirm`
-  in `src/server/cron/confirm.ts`; `cronConfirm` dep added to `CronCommandDeps`
-  in `src/server/cron/commands.ts`; wired in `src/server/agent-deps-builders.ts`;
-  `armCron` in `src/server/agent-coordinator.ts` overrides `cronConfirm:
-  undefined`.
+in `src/server/cron/confirm.ts`; `cronConfirm` dep added to `CronCommandDeps`
+in `src/server/cron/commands.ts`; wired in `src/server/agent-deps-builders.ts`;
+`armCron` in `src/server/agent-coordinator.ts` overrides `cronConfirm:
+undefined`.
 - c3-311 (cron-domain): `formatCronConfirmRequest` in
-  `src/shared/cron/confirm-report.ts`.
+`src/shared/cron/confirm-report.ts`.

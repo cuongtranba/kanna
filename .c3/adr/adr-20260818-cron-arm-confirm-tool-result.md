@@ -1,8 +1,9 @@
 ---
 id: adr-20260818-cron-arm-confirm-tool-result
+c3-seal: 850991af5b908ca5771f8099fe056c43c086945b5ad3955fadc161f01708d985
 title: cron-arm-confirm-tool-result
 type: adr
-goal: 'After a successful arm_cron call, return the job id, the full CronArmSummary, and an explicit AskUserQuestion instruction so the model presents the configuration for user confirmation before the job runs unchecked.'
+goal: After a successful `arm_cron` call, return the job id, the full `CronArmSummary`, and an explicit `AskUserQuestion` instruction so the model presents the configuration for user confirmation before the job runs unchecked.
 status: done
 date: "2026-08-18"
 ---
@@ -24,6 +25,7 @@ Because `arm_cron` commits the `cron_armed` event before returning (arm-first, r
 Change `runCronCommand` to return `Promise<string | null>` — the job id for successful arm commands, `null` for all other commands. Thread this through `AgentCoordinator.runCronCommand` (`Promise<string | null>`), `AgentCoordinator.armCron` (`Promise<{ jobId: string }>`), and every interface that declares either method (`claude-send-command.ts`, `ws-router-agent-ctrl.ts`, `claude-session-spawner.ts`, `claude-session-start.ts`, `claude-pty/driver.ts`, `agent-coordinator-types.ts`, `kanna-mcp.ts`).
 
 The `arm_cron` tool result now reads:
+
 ```
 Armed as <jobId>.
 <formatCronArmSummary(summary)>
