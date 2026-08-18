@@ -8,6 +8,14 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.32.0](https://github.com/cuongtranba/kanna/compare/v1.31.0...v1.32.0) (2026-08-18)
+
+
+### Features
+
+* **boards:** give ownerKind "stack" a door (routes + sidebar + BoardsPage) ([#771](https://github.com/cuongtranba/kanna/issues/771)) ([6b6d045](https://github.com/cuongtranba/kanna/commit/6b6d045521f065641afc62689dd7d20a13c2fd21))
+* **cron:** link spawned chat to originating card via onChatSpawned hook ([#763](https://github.com/cuongtranba/kanna/issues/763)) ([#769](https://github.com/cuongtranba/kanna/issues/769)) ([8f00884](https://github.com/cuongtranba/kanna/commit/8f008842068db1aa9157c72b886b87c24227bbb5))
+
 ## [1.31.0](https://github.com/cuongtranba/kanna/compare/v1.30.0...v1.31.0) (2026-08-18)
 
 
