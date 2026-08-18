@@ -38,10 +38,12 @@ via `C3X_LOCAL_BINARY=<path> bash <skill-dir>/bin/c3x.sh …`.
 
 # Pull Requests
 
-This is a fork. `origin` = `cuongtranba/kanna` (mine), `upstream` = `jakemor/kanna`.
-PRs MUST target `cuongtranba/kanna`, never `jakemor/kanna`.
-`gh repo set-default cuongtranba/kanna` is set; always pass `--repo cuongtranba/kanna`
-or `--base main --head <branch>` to `gh pr create` to make the target explicit.
+`origin` = `cuongtranba/kanna` is the ONLY remote. There is no `upstream`, and
+no other repository is a valid PR target.
+
+`gh repo set-default` is NOT set, so `gh pr create` with no explicit target
+prompts or guesses. Always pass `--repo cuongtranba/kanna` or
+`--base main --head <branch>` to make the target explicit.
 
 # TypeScript (dual install: TS7 compiler + TS6 API for tooling)
 

@@ -3,13 +3,12 @@ title: Pull Requests
 description: Targeting, branching, conventions.
 ---
 
-## Target the fork, not upstream
+## Target this repository
 
-This is a fork. `origin` = `cuongtranba/kanna` (mine), `upstream` = `jakemor/kanna`.
+`origin` = `cuongtranba/kanna` is the only remote, and the only valid PR target.
 
-**PRs MUST target `cuongtranba/kanna`, never `jakemor/kanna`.**
-
-`gh repo set-default cuongtranba/kanna` is set by default. Always pass:
+`gh repo set-default` is not set, so `gh pr create` with no explicit target
+prompts or guesses. Always pass:
 
 ```bash
 gh pr create --repo cuongtranba/kanna ...

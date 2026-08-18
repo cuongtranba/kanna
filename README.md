@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <em>Community fork of <a href="https://github.com/jakemor/kanna">jakemor/kanna</a> — kept in sync with upstream and extended with subscription-billing PTY mode, OAuth token pooling, multi-provider chat (Claude + Codex + OpenRouter), subagent orchestration, custom MCP servers, a workflow status panel, durable tool-approval protocol, in-app self-update, and more.</em>
+  <em>Subscription-billing PTY mode, OAuth token pooling, multi-provider chat (Claude + Codex + OpenRouter), subagent orchestration, custom MCP servers, a workflow status panel, durable tool-approval protocol, in-app self-update, and more.</em>
 </p>
 
 <p align="center">
@@ -35,11 +35,11 @@
 
 <br />
 
-## About this fork
+## About Kanna
 
-Kanna started life as [jakemor/kanna](https://github.com/jakemor/kanna) — a clean web UI for the Claude Code CLI. This fork (`@cuongtran001/kanna`) tracks upstream and layers on features needed for heavier day-to-day use, multi-account billing, and self-hosting.
+Kanna (`@cuongtran001/kanna`) is a clean web UI for the Claude Code and Codex CLIs, built for heavier day-to-day use, multi-account billing, and self-hosting.
 
-**Headline additions vs. upstream:**
+**Headline features:**
 
 - **Subscription-billing PTY driver** (`KANNA_CLAUDE_DRIVER=pty`) — runs the `claude` CLI under a pseudo-terminal so Pro/Max plans are charged instead of API rates. Parses the on-disk transcript JSONL as the sole event source, with HarnessEvent parity with the SDK driver, a cached per-spawn smoke-test gate, and failure-mode parity.
 - **OAuth token pool** — register multiple Claude OAuth tokens; Kanna rotates across them per chat with automatic fallover on rate-limit and an explicit disabled state.
