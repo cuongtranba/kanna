@@ -1,7 +1,7 @@
 ---
 id: c3-214
 c3-version: 4
-c3-seal: b5c69902545c67359460c69f8ae09cb81d918fd6a29d8ab82e74e83269e8b919
+c3-seal: 301d0675f3ea2c6c5a090def7aad9750e37a51dd48f8faab4fa55e576c3f6af7
 title: discovery
 type: component
 category: feature
@@ -59,7 +59,7 @@ Walks Claude Code and Codex history directories on disk, identifies candidate pr
 
 | Surface | Direction | Contract | Boundary | Evidence |
 | --- | --- | --- | --- | --- |
-| Discovery projection | OUT | Typed list of discovered projects | c3-207 | src/server/discovery.adapter.ts |
+| Discovery projection | OUT | DiscoveredProject[] with localPath, title, modifiedAt, discoveredByProviders (AgentProvider[] of all adapters that found the path) | c3-207 | src/server/discovery.adapter.ts |
 | Rescan trigger | IN | Manual full rescan on user request (no filesystem watch exists) | c3-214 | src/server/discovery.adapter.ts |
 
 ## Change Safety
