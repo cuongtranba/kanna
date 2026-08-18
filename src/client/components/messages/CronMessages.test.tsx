@@ -49,6 +49,123 @@ describe("CronArmedMessage", () => {
     expect(html).toContain("every 5 minutes")
     expect(html).toContain("monitoring view")
   })
+
+  test("shows model when present", () => {
+    const html = renderToStaticMarkup(
+      <CronArmedMessage
+        message={{
+          ...base,
+          kind: "cron_armed",
+          jobId: "cron-abc",
+          instruction: "check ci",
+          mode: "inline",
+          scheduleText: "@daily",
+          scheduleHuman: "every day at midnight",
+          nextFireAt: 1_000_000,
+          model: "claude-sonnet-5",
+        }}
+      />,
+    )
+    expect(html).toContain("claude-sonnet-5")
+  })
+
+  test("shows all 3 upcoming fires when upcomingFires is present", () => {
+    const fire1 = 1_700_000_000_000
+    const fire2 = 1_700_086_400_000
+    const fire3 = 1_700_172_800_000
+    const html = renderToStaticMarkup(
+      <CronArmedMessage
+        message={{
+          ...base,
+          kind: "cron_armed",
+          jobId: "cron-abc",
+          instruction: "check ci",
+          mode: "inline",
+          scheduleText: "@daily",
+          scheduleHuman: "every day at midnight",
+          nextFireAt: fire1,
+          upcomingFires: [fire1, fire2, fire3],
+        }}
+      />,
+    )
+    expect(html).toContain(new Date(fire2).toLocaleString())
+    expect(html).toContain(new Date(fire3).toLocaleString())
+  })
+
+  test("falls back to nextFireAt when upcomingFires is absent", () => {
+    const fire1 = 1_700_000_000_000
+    const html = renderToStaticMarkup(
+      <CronArmedMessage
+        message={{
+          ...base,
+          kind: "cron_armed",
+          jobId: "cron-abc",
+          instruction: "check ci",
+          mode: "inline",
+          scheduleText: "@daily",
+          scheduleHuman: "every day at midnight",
+          nextFireAt: fire1,
+        }}
+      />,
+    )
+    expect(html).toContain(new Date(fire1).toLocaleString())
+  })
+
+  test("shows cwd for spawn mode", () => {
+    const html = renderToStaticMarkup(
+      <CronArmedMessage
+        message={{
+          ...base,
+          kind: "cron_armed",
+          jobId: "cron-abc",
+          instruction: "check ci",
+          mode: "spawn",
+          scheduleText: "@daily",
+          scheduleHuman: "every day at midnight",
+          nextFireAt: 1_000_000,
+          cwd: "/Users/dev/project",
+        }}
+      />,
+    )
+    expect(html).toContain("/Users/dev/project")
+  })
+
+  test("renders Disarm button when onRemove is provided", () => {
+    const html = renderToStaticMarkup(
+      <CronArmedMessage
+        message={{
+          ...base,
+          kind: "cron_armed",
+          jobId: "cron-abc",
+          instruction: "check ci",
+          mode: "inline",
+          scheduleText: "@daily",
+          scheduleHuman: "every day at midnight",
+          nextFireAt: null,
+        }}
+        onRemove={() => {}}
+      />,
+    )
+    expect(html).toContain("Disarm")
+  })
+
+  test("renders Edit (copy) button", () => {
+    const html = renderToStaticMarkup(
+      <CronArmedMessage
+        message={{
+          ...base,
+          kind: "cron_armed",
+          jobId: "cron-abc",
+          instruction: "check ci",
+          mode: "inline",
+          scheduleText: "@daily",
+          scheduleHuman: "every day at midnight",
+          nextFireAt: null,
+        }}
+      />,
+    )
+    expect(html).toContain("Edit")
+  })
 })
 
 describe("CronCommandErrorMessage", () => {

@@ -301,6 +301,9 @@ export function processTranscriptMessages(entries: TranscriptEntry[]): HydratedT
           scheduleText: entry.scheduleText,
           scheduleHuman: entry.scheduleHuman,
           nextFireAt: entry.nextFireAt,
+          ...(entry.model !== undefined ? { model: entry.model } : {}),
+          ...(entry.upcomingFires !== undefined ? { upcomingFires: entry.upcomingFires } : {}),
+          ...(entry.cwd !== undefined ? { cwd: entry.cwd } : {}),
         })
         break
       case "cron_command_error":
