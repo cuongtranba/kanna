@@ -47,6 +47,7 @@ import type { RunClaudeSessionDeps } from "./claude-session-runner"
 import type { RunTurnDeps } from "./claude-turn-runner"
 import { createMermaidGuard, type MermaidGuard } from "./mermaid-guard"
 import { createCronRepair, type CronRepair } from "./cron/repair"
+import { createCronConfirm, type CronConfirm } from "./cron/confirm"
 import { parseMermaid } from "./mermaid-parse.adapter"
 import { repairMermaidSource } from "../shared/mermaidRepair"
 import { resolveSpawnPaths } from "./claude-session-config"
@@ -161,6 +162,7 @@ export function buildCronCommandDeps(agent: AgentCoordinator): CronCommandDeps {
     emitStateChange: (chatId) => agent.emitStateChange(chatId),
     pushCronJobsUpdate: () => agent.onCronJobsChange?.(),
     cronRepair: buildCronRepair(agent),
+    cronConfirm: buildCronConfirm(agent),
     resolveChatCwd: (chatId) => {
       const chat = agent.store.getChat(chatId)
       if (!chat) return undefined
@@ -197,6 +199,26 @@ function buildCronRepair(agent: AgentCoordinator): CronRepair {
   })
   cronRepairByAgent.set(agent, repair)
   return repair
+}
+
+const cronConfirmByAgent = new WeakMap<AgentCoordinator, CronConfirm>()
+
+function buildCronConfirm(agent: AgentCoordinator): CronConfirm {
+  const existing = cronConfirmByAgent.get(agent)
+  if (existing) return existing
+
+  const confirm = createCronConfirm({
+    enabled: process.env.KANNA_CRON_CONFIRM !== "disabled",
+    hasQueuedMessage: (chatId) => agent.store.getQueuedMessages(chatId).length > 0,
+    enqueueMessage: async (chatId, content, options) => {
+      await agent.enqueueMessage(chatId, content, [], options)
+    },
+    drainQueue: async (chatId) => {
+      await agent.maybeStartNextQueuedMessage(chatId)
+    },
+  })
+  cronConfirmByAgent.set(agent, confirm)
+  return confirm
 }
 
 export function buildCronFireDeps(agent: AgentCoordinator): CronFireDeps {

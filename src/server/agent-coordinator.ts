@@ -1001,7 +1001,10 @@ export class AgentCoordinator {
     if (!parsed?.ok || parsed.command.sub !== "arm") {
       throw new Error(`not an armable /cron command: ${command}`)
     }
-    const jobId = await this.runCronCommand(chatId, parsed)
+    // arm_cron already instructs the model to call AskUserQuestion after arming,
+    // so skip the host-escalated confirm turn to avoid double-confirming.
+    const deps = { ...this.buildCronCommandDeps(), cronConfirm: undefined }
+    const jobId = await runCronCommandFn(deps, chatId, parsed)
     if (!jobId) throw new Error(`arm_cron: no job id returned for command: ${command}`)
     return { jobId }
   }
