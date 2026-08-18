@@ -44,6 +44,12 @@ export interface CronFireDeps extends CronCommandDeps {
     options?: SendMessageOptions,
   ): Promise<unknown>
   maybeStartNextQueuedMessage(chatId: string): Promise<boolean>
+  /**
+   * Called after a spawn run creates its chat. The callee links the new chat
+   * to whatever the origin chat is linked to (e.g. board cards). Errors are
+   * swallowed — a link failure must never fail the cron run.
+   */
+  onChatSpawned?(originChatId: string, spawnedChatId: string): void
 }
 
 export async function fireCronJob(deps: CronFireDeps, chatId: string, jobId: string): Promise<void> {
@@ -109,6 +115,11 @@ export async function fireCronJob(deps: CronFireDeps, chatId: string, jobId: str
   if (!project) return
   await flushSkipStreak(deps, chatId, jobId)
   const spawned = await deps.createChat(project.projectId)
+  try {
+    deps.onChatSpawned?.(chatId, spawned.id)
+  } catch {
+    // Linking is best-effort; a failure must never abort the cron run.
+  }
   const runId = newRunId()
   const firedAt = deps.now?.() ?? Date.now()
   await emitCronEvent(deps, {

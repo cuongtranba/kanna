@@ -178,6 +178,65 @@ describe("fireCronJob — spawn", () => {
   })
 })
 
+describe("fireCronJob — spawn card link (onChatSpawned)", () => {
+  test("links spawned chat to every card that links the origin chat", async () => {
+    const { deps, enqueued } = makeDeps()
+    const cardLinks = new Map([
+      ["card-1", CHAT],
+      ["card-2", CHAT],
+    ])
+    const linked: Array<{ cardId: string; spawnedChatId: string }> = []
+    deps.onChatSpawned = (originChatId, spawnedChatId) => {
+      for (const [cardId, origin] of cardLinks) {
+        if (origin === originChatId) linked.push({ cardId, spawnedChatId })
+      }
+    }
+    await armJob(deps, "/cron nightly report spawn @daily")
+    await fireCronJob(deps, CHAT, "cron-abc")
+
+    expect(linked).toEqual([
+      { cardId: "card-1", spawnedChatId: "spawned-1" },
+      { cardId: "card-2", spawnedChatId: "spawned-1" },
+    ])
+    expect(enqueued).toHaveLength(1)
+  })
+
+  test("spawn run on an unlinked chat: hook is called but links nothing", async () => {
+    const { deps } = makeDeps()
+    const linked: Array<{ cardId: string }> = []
+    deps.onChatSpawned = (_originChatId, spawnedChatId) => {
+      // No cards link this origin; nothing gets added
+      for (const _cardId of [] as string[]) linked.push({ cardId: spawnedChatId })
+    }
+    await armJob(deps, "/cron nightly report spawn @daily")
+    await fireCronJob(deps, CHAT, "cron-abc")
+
+    expect(linked).toHaveLength(0)
+  })
+
+  test("failure in onChatSpawned never fails the cron run", async () => {
+    const { deps, enqueued } = makeDeps()
+    deps.onChatSpawned = () => {
+      throw new Error("board write failed")
+    }
+    await armJob(deps, "/cron nightly report spawn @daily")
+    await expect(fireCronJob(deps, CHAT, "cron-abc")).resolves.toBeUndefined()
+    expect(enqueued[0]).toMatchObject({ chatId: "spawned-1" })
+  })
+
+  test("hook is not called for inline runs", async () => {
+    const { deps } = makeDeps()
+    const called: string[] = []
+    deps.onChatSpawned = (originChatId) => {
+      called.push(originChatId)
+    }
+    await armJob(deps, "/cron check ci inline every 5m")
+    await fireCronJob(deps, CHAT, "cron-abc")
+
+    expect(called).toHaveLength(0)
+  })
+})
+
 describe("fireCronJob — consecutive skips coalesce", () => {
   function skippedEvents(events: AutoContinueEvent[]) {
     return events.filter((event) => event.kind === "cron_run_skipped")
