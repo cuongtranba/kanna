@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.31.0](https://github.com/cuongtranba/kanna/compare/v1.30.0...v1.31.0) (2026-08-18)
+
+
+### Features
+
+* **chat:** add ChatActivity to SidebarChatRow ([#761](https://github.com/cuongtranba/kanna/issues/761)) ([#767](https://github.com/cuongtranba/kanna/issues/767)) ([6cf7ad7](https://github.com/cuongtranba/kanna/commit/6cf7ad7b84ecbb6dac009dff5eb71a7897f23698))
+
 ## [1.30.0](https://github.com/cuongtranba/kanna/compare/v1.29.0...v1.30.0) (2026-08-18)
 
 
