@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.26.8](https://github.com/cuongtranba/kanna/compare/v1.26.7...v1.26.8) (2026-08-18)
+
+
+### Bug Fixes
+
+* **cron:** show 'running for' only during active runs, derived from firedAt ([#747](https://github.com/cuongtranba/kanna/issues/747)) ([bfe5f62](https://github.com/cuongtranba/kanna/commit/bfe5f627aa7fa56a6f3bb74eacbc9fbc8428217f)), closes [#739](https://github.com/cuongtranba/kanna/issues/739)
+
 ## [1.26.7](https://github.com/cuongtranba/kanna/compare/v1.26.6...v1.26.7) (2026-08-18)
 
 
