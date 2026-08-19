@@ -229,6 +229,50 @@ describe("shouldInjectProactiveCompact", () => {
     const deps = makeDeps({ chatCompactFailures: 5 }) // MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES = 5
     expect(shouldInjectProactiveCompact(deps, "chat-1", "hello")).toBe(false)
   })
+
+  test("prefers store.getLatestContextWindowUsage over a full getMessages read", () => {
+    const deps = makeDeps({ chatCompactFailures: 0 })
+    deps.store.getLatestContextWindowUsage = () => ({
+      usedTokens: 190_000,
+      maxTokens: 200_000,
+      compactsAutomatically: false,
+    })
+    // The whole point of the change: the hot path must not load the transcript.
+    deps.store.getMessages = () => { throw new Error("must not read the whole transcript") }
+
+    expect(shouldInjectProactiveCompact(deps, "chat-1", "hello")).toBe(true)
+  })
+
+  test("a null from store.getLatestContextWindowUsage does NOT fall through to getMessages", () => {
+    // `null` is a meaningful answer (post-compact, or a chat with no usage yet),
+    // so resolving the optional method with `??` would fall through to a full
+    // transcript load on exactly the chats this exists to protect.
+    const deps = makeDeps({ chatCompactFailures: 0 })
+    deps.store.getLatestContextWindowUsage = () => null
+    deps.store.getMessages = () => { throw new Error("must not fall through on a null usage") }
+
+    expect(shouldInjectProactiveCompact(deps, "chat-1", "hello")).toBe(false)
+  })
+
+  test("falls back to getMessages on a store fake without the method", () => {
+    // The hand-rolled fakes across the agent suites are injected as
+    // `store as never`, so a REQUIRED method would fail at runtime with no
+    // compile-time warning. This pins the optional shape.
+    const deps = makeDeps({
+      chatCompactFailures: 0,
+      transcript: [
+        {
+          _id: "u-1",
+          createdAt: 1,
+          kind: "context_window_updated",
+          usage: { usedTokens: 190_000, maxTokens: 200_000, compactsAutomatically: false },
+        } as TranscriptEntry,
+      ],
+    })
+    expect(deps.store.getLatestContextWindowUsage).toBeUndefined()
+
+    expect(shouldInjectProactiveCompact(deps, "chat-1", "hello")).toBe(true)
+  })
 })
 
 // ---------------------------------------------------------------------------

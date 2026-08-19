@@ -3,10 +3,14 @@ claim: "agent coordinator and subagent orchestration are at src/server/agent.ts,
 code:
   - src/server/agent.test.ts
   - src/server/agent.ts
+  - src/server/claude-send-command.test.ts
+  - src/server/claude-send-command.ts
   - src/server/history-primer.test.ts
   - src/server/history-primer.ts
   - src/server/mention-parser.test.ts
   - src/server/mention-parser.ts
+  - src/server/proactive-compact.test.ts
+  - src/server/proactive-compact.ts
   - src/server/subagent-entry-cap.test.ts
   - src/server/subagent-orchestrator.test.ts
   - src/server/subagent-orchestrator.ts

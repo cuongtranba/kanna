@@ -1308,6 +1308,47 @@ and `state.autoContinueEventsByChatId` are evicted only by whole-chat delete.
 The latter is MEASURED at 285 KB for one long loop chat, 91% of it the same
 rendered loop prompt re-embedded on every wake by `deliverSubagentToMain`.
 
+**The corpus has since outgrown the numbers above.** Re-measured 2026-08-19:
+1.0 GB across 262 chats, largest single transcript **96 MB / 36k entries**
+costing **524 MB peak RSS** to parse (5.4x, not 4.7x). The 24 MiB cache budget
+cannot bound one such file, and `evict()`'s `size > 1` guard means it is never
+evicted — so its "degrades to a re-read" trade now costs 524 MB per re-read.
+Under pm2 that hit `max_memory_restart` and restarted the server 75 times in a
+day, and every restart runs `shutdownServices()`, which cancels in-flight turns
+and writes an `interrupted` entry indistinguishable from a user Stop. **pm2
+7.0.3 silently clamps `max_memory_restart` at 2^31** (both `"3G"` and `"4G"`
+resolve to `2147483648`), so raising the ceiling is not available — only
+lowering RSS is.
+
+**The proactive-compact trigger reads the TAIL, not the transcript.**
+`shouldInjectProactiveCompact` runs on every send and needs only the newest
+`context_window_updated` / `compact_boundary`; it used to get them from
+`store.getMessages`. It now calls `EventStore.getLatestContextWindowUsage`
+(`getLatestChatContextWindowUsage` in `event-store-messages.adapter.ts`), which
+walks backwards over `readTranscriptTail` windows. Three invariants, each of
+which cost a measured regression to find:
+
+- **The scan is TRI-STATE** (`scanLatestContextWindowUsage` in
+  `proactive-compact.ts`). `found: false` (nothing decisive in this window) is
+  not `found: true, usage: null` (a `compact_boundary` — conclusive). Collapsing
+  them makes every chat past a compact widen to BOF on every send, forever.
+- **Windows do not overlap.** Each round passes `endOffset = tail.lineOffsets[0]`
+  so no byte is read twice. Re-widening from EOF instead re-parses everything
+  already seen: measured 644 ms / 791 MB versus the full load's 216 ms / 291 MB
+  — slower and heavier than the code it replaced.
+- **`USAGE_SCAN_MAX_LOOKBACK_BYTES` (8 MiB) bounds the walk.** MEASURED: 241 of
+  264 transcripts contain NO usage marker at all (imported and PTY sessions never
+  emit one), so "scan to BOF" is the common path, not the tail case. A marker
+  further back than one turn cannot describe the current context window anyway.
+
+`SendCommandStore.getLatestContextWindowUsage` is **optional by design** and must
+be resolved with an explicit `if`, never `??` — `null` is a meaningful, common
+answer, so coalescing falls straight back into the full load on exactly the
+chats this protects. Optional because the agent-suite store fakes are injected
+as `store as never`: a required member typechecks and then fails at runtime,
+which is the regression `adr-20260813-transcript-memory-budget` records as
+"tried and reverted". See `adr-20260819-context-window-usage-tail-read`.
+
 # Notification-Driven Loop Orchestration (supersedes Agent Self-Scheduled Wake)
 
 Long-horizon autonomous loops (eslint burn-downs, migration sweeps, multi-hour

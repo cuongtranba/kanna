@@ -114,6 +114,8 @@ c3-206:
   - src/server/chat-op-log.test.ts
   - src/server/chat-op-log.ts
   - src/server/chat-ops-parity.test.ts
+  - src/server/event-store-messages.adapter.test.ts
+  - src/server/event-store-messages.adapter.ts
   - src/server/event-store.test.ts
   - src/server/event-store.ts
 c3-207:
@@ -130,10 +132,14 @@ c3-209:
 c3-210:
   - src/server/agent.test.ts
   - src/server/agent.ts
+  - src/server/claude-send-command.test.ts
+  - src/server/claude-send-command.ts
   - src/server/history-primer.test.ts
   - src/server/history-primer.ts
   - src/server/mention-parser.test.ts
   - src/server/mention-parser.ts
+  - src/server/proactive-compact.test.ts
+  - src/server/proactive-compact.ts
   - src/server/subagent-entry-cap.test.ts
   - src/server/subagent-orchestrator.test.ts
   - src/server/subagent-orchestrator.ts

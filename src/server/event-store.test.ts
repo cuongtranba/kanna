@@ -8,6 +8,7 @@ import type { TranscriptEntry } from "../shared/types"
 import type { SnapshotFile } from "./events"
 import type { AutoContinueEvent } from "./auto-continue/events"
 import { EventStore } from "./event-store"
+import { getLatestContextWindowUsage } from "./proactive-compact"
 import { ACTIVE_SESSION_IDLE_GAP_MS } from "./read-models"
 
 const originalRuntimeProfile = process.env.KANNA_RUNTIME_PROFILE
@@ -134,6 +135,40 @@ describe("EventStore", () => {
     const snapshot = JSON.parse(await readFile(join(dataDir, "snapshot.json"), "utf8")) as SnapshotFile
     expect(snapshot.messages).toBeUndefined()
     expect(existsSync(join(dataDir, "transcripts", `${chat.id}.jsonl`))).toBe(true)
+  })
+
+  test("getLatestContextWindowUsage reads the tail and agrees with a full scan", async () => {
+    // The only case exercising the real FsStorageBackend slice APIs end to end —
+    // every other test of this read runs against fakes.
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+
+    const project = await store.openProject("/tmp/project")
+    const chat = await store.createChat(project.id)
+    for (let i = 0; i < 300; i += 1) {
+      await store.appendMessage(chat.id, entry("assistant_text", 200 + i, { content: `msg ${i}` }))
+    }
+    await store.appendMessage(chat.id, {
+      _id: "u-final",
+      createdAt: 9999,
+      kind: "context_window_updated",
+      usage: { usedTokens: 180_000, maxTokens: 200_000, compactsAutomatically: false },
+    } as TranscriptEntry)
+    await store.flush()
+
+    // Cold stores: a warm cache would answer from memory and prove nothing
+    // about the tail read. Each gets its own instance so the full-scan
+    // comparison cannot be served by the cache the tail read populated.
+    const tailStore = new EventStore(dataDir)
+    await tailStore.initialize()
+    const fullStore = new EventStore(dataDir)
+    await fullStore.initialize()
+
+    expect(tailStore.getLatestContextWindowUsage(chat.id)?.usedTokens).toBe(180_000)
+    expect(tailStore.getLatestContextWindowUsage(chat.id)).toEqual(
+      getLatestContextWindowUsage(fullStore.getMessages(chat.id)),
+    )
   })
 
   test("pages recent transcript history and older entries by cursor", async () => {

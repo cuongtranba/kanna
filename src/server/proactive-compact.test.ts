@@ -8,6 +8,7 @@ import {
   getAutoCompactThreshold,
   getEffectiveContextWindow,
   getLatestContextWindowUsage,
+  scanLatestContextWindowUsage,
   shouldProactivelyCompact,
 } from "./proactive-compact"
 
@@ -166,6 +167,59 @@ describe("getLatestContextWindowUsage", () => {
       usageEntry(40_000, 200_000, 3),
     ]
     expect(getLatestContextWindowUsage(messages)?.usedTokens).toBe(40_000)
+  })
+})
+
+describe("scanLatestContextWindowUsage", () => {
+  // getLatestContextWindowUsage answers null for two different reasons, and a
+  // caller reading only a WINDOW of the transcript has to tell them apart: a
+  // boundary hit is conclusive, running off the front of the window is not.
+  // Without the distinction a tail reader cannot know whether widening the
+  // window would change the answer.
+  test("reports found:false on an empty window", () => {
+    expect(scanLatestContextWindowUsage([])).toEqual({ found: false })
+  })
+
+  test("reports found:false when the window holds neither marker", () => {
+    const messages = [
+      { _id: "a-1", createdAt: 1, kind: "assistant_text", text: "hi" },
+      { _id: "a-2", createdAt: 2, kind: "assistant_text", text: "there" },
+    ] as TranscriptEntry[]
+    expect(scanLatestContextWindowUsage(messages)).toEqual({ found: false })
+  })
+
+  test("reports found:true with the usage of the newest context_window_updated", () => {
+    const messages = [
+      usageEntry(50_000, 200_000, 1),
+      usageEntry(180_000, 200_000, 2),
+    ]
+    const scan = scanLatestContextWindowUsage(messages)
+    expect(scan.found).toBe(true)
+    // Identity, not equality — the scan hands back the entry's own usage
+    // object rather than a copy.
+    expect(scan.found ? scan.usage : undefined).toBe(
+      (messages[1] as Extract<TranscriptEntry, { kind: "context_window_updated" }>).usage,
+    )
+  })
+
+  test("reports found:true with a null usage for a newer compact_boundary", () => {
+    // The case the tri-state exists for. A boundary stays the newest marker
+    // for the rest of a chat's life after any compact, so a scanner that read
+    // this as "not found" would widen its window to the start of the file on
+    // every send from then on.
+    const messages = [
+      usageEntry(180_000, 200_000, 1),
+      compactBoundary(2),
+    ]
+    expect(scanLatestContextWindowUsage(messages)).toEqual({ found: true, usage: null })
+  })
+
+  test("getLatestContextWindowUsage flattens both null shapes identically", () => {
+    expect(getLatestContextWindowUsage([])).toBe(null)
+    expect(getLatestContextWindowUsage([compactBoundary(1)])).toBe(null)
+    expect(
+      getLatestContextWindowUsage([usageEntry(180_000, 200_000, 1)])?.usedTokens,
+    ).toBe(180_000)
   })
 })
 

@@ -14,10 +14,12 @@ import {
   getQueuedMessages,
   getRecentChatHistory,
   getRecentMessagesPage,
+  getLatestChatContextWindowUsage,
   getSeenMessageIds,
   loadTranscriptFromDisk,
   type MessageReadDeps,
 } from "./event-store-messages.adapter"
+import { getLatestContextWindowUsage } from "./proactive-compact"
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -487,25 +489,25 @@ describe("TranscriptCache", () => {
 // Tail-read fast path (byte-offset cursors)
 // ---------------------------------------------------------------------------
 
+function makeSliceStorage(content: string): StorageBackend {
+  const buf = Buffer.from(content, "utf8")
+  const base = makeStorage(new Map([["/data/transcripts/chat-t.jsonl", content]]))
+  return {
+    ...base,
+    sizeSync: () => buf.length,
+    readSliceSync: (_p, start, end) => Uint8Array.prototype.slice.call(buf, start, end),
+  }
+}
+
+function entryLine(i: number, text?: string): string {
+  return JSON.stringify({ _id: `e-${i}`, createdAt: i, kind: "assistant_text", text: text ?? `msg ${i} ${"x".repeat(40)}` })
+}
+
+function fileOf(count: number): string {
+  return `${Array.from({ length: count }, (_v, i) => entryLine(i)).join("\n")  }\n`
+}
+
 describe("transcript tail-read", () => {
-  function makeSliceStorage(content: string): StorageBackend {
-    const buf = Buffer.from(content, "utf8")
-    const base = makeStorage(new Map([["/data/transcripts/chat-t.jsonl", content]]))
-    return {
-      ...base,
-      sizeSync: () => buf.length,
-      readSliceSync: (_p, start, end) => Uint8Array.prototype.slice.call(buf, start, end),
-    }
-  }
-
-  function entryLine(i: number, text?: string): string {
-    return JSON.stringify({ _id: `e-${i}`, createdAt: i, kind: "assistant_text", text: text ?? `msg ${i} ${"x".repeat(40)}` })
-  }
-
-  function fileOf(count: number): string {
-    return `${Array.from({ length: count }, (_v, i) => entryLine(i)).join("\n")  }\n`
-  }
-
   test("readTranscriptTail with small chunk grows until minEntries+1 without reading whole file", () => {
     const content = fileOf(50)
     const deps = makeDeps({ storage: makeSliceStorage(content) })
@@ -571,5 +573,204 @@ describe("transcript tail-read", () => {
     const page = getRecentMessagesPage(deps, "chat-t", 3)
     expect(page.messages.map((m) => m._id)).toEqual(["e-3", "e-4", "e-5"])
     expect(cache.has("chat-t")).toBe(true)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// getLatestChatContextWindowUsage — tail-backed proactive-compact trigger
+// ---------------------------------------------------------------------------
+
+const TRANSCRIPT_PATH = "/data/transcripts/chat-t.jsonl"
+
+function usageLine(usedTokens: number, maxTokens: number, i: number): string {
+  return JSON.stringify({
+    _id: `u-${i}`,
+    createdAt: i,
+    kind: "context_window_updated",
+    usage: { usedTokens, maxTokens, compactsAutomatically: false },
+  })
+}
+
+function boundaryLine(i: number): string {
+  return JSON.stringify({ _id: `cb-${i}`, createdAt: i, kind: "compact_boundary" })
+}
+
+function linesToFile(lines: string[]): string {
+  return `${lines.join("\n")}\n`
+}
+
+/**
+ * Slice storage that records the span of every byte read. "Did not read the
+ * whole file" is the actual claim of this change, and the read spans are the
+ * only direct evidence for it.
+ */
+function makeCountingSliceStorage(content: string): { storage: StorageBackend; spans: number[] } {
+  const spans: number[] = []
+  const base = makeSliceStorage(content)
+  return {
+    storage: {
+      ...base,
+      readSliceSync: (p, start, end) => {
+        spans.push(end - start)
+        return base.readSliceSync!(p, start, end)
+      },
+    },
+    spans,
+  }
+}
+
+/** Padding large enough that one 64 KiB window cannot cover the whole file. */
+function padding(count: number): string[] {
+  return Array.from({ length: count }, (_v, i) => entryLine(i))
+}
+
+describe("getLatestChatContextWindowUsage", () => {
+  test("finds usage in the last few entries without reading the whole file", () => {
+    const content = linesToFile([...padding(1500), usageLine(180_000, 200_000, 9999)])
+    const { storage, spans } = makeCountingSliceStorage(content)
+    const deps = makeDeps({ storage })
+
+    expect(getLatestChatContextWindowUsage(deps, "chat-t")?.usedTokens).toBe(180_000)
+    expect(spans.length).toBe(1)
+    expect(spans.reduce((a, b) => a + b, 0)).toBeLessThan(Buffer.byteLength(content, "utf8"))
+  })
+
+  test("grows the window when the marker is far from EOF", () => {
+    const content = linesToFile([usageLine(180_000, 200_000, 0), ...padding(1500)])
+    const { storage, spans } = makeCountingSliceStorage(content)
+    const deps = makeDeps({ storage })
+
+    expect(getLatestChatContextWindowUsage(deps, "chat-t")?.usedTokens).toBe(180_000)
+    // Pins that growth actually happened rather than one lucky oversized read.
+    expect(spans.length).toBeGreaterThan(1)
+  })
+
+  test("returns null after reaching BOF when no marker exists anywhere", () => {
+    const content = linesToFile(padding(1500))
+    const { storage } = makeCountingSliceStorage(content)
+    const cache = new TranscriptCache(4)
+    const deps = makeDeps({ storage, transcriptCache: cache })
+
+    expect(getLatestChatContextWindowUsage(deps, "chat-t")).toBe(null)
+    // Reaching BOF must NOT promote the transcript into the full cache — that
+    // would re-introduce the very memory this read exists to avoid.
+    expect(cache.has("chat-t")).toBe(false)
+  })
+
+  test("a compact_boundary newer than the last usage wins, and stops the scan early", () => {
+    const content = linesToFile([
+      usageLine(180_000, 200_000, 0),
+      ...padding(1500),
+      boundaryLine(9999),
+    ])
+    const { storage, spans } = makeCountingSliceStorage(content)
+    const deps = makeDeps({ storage })
+
+    expect(getLatestChatContextWindowUsage(deps, "chat-t")).toBe(null)
+    // The perf assertion for the tri-state: a boundary is a CONCLUSIVE null,
+    // so the scan must stop at the first window. Treating it as "not found"
+    // would walk to BOF on every send for the rest of the chat's life.
+    expect(spans.length).toBe(1)
+  })
+
+  test("agrees with a full backward scan on randomized transcripts", () => {
+    // Seeded LCG — deterministic, no Math.random.
+    let seed = 0x2f6e2b1
+    const next = () => {
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff
+      return seed / 0x7fffffff
+    }
+
+    for (let shape = 0; shape < 20; shape += 1) {
+      const lines: string[] = []
+      for (let i = 0; i < 200; i += 1) {
+        const roll = next()
+        if (roll < 0.1) lines.push(usageLine(100_000 + i, 200_000, i))
+        else if (roll < 0.15) lines.push(boundaryLine(i))
+        else lines.push(entryLine(i))
+      }
+      const content = linesToFile(lines)
+      const deps = makeDeps({ storage: makeSliceStorage(content), transcriptCache: new TranscriptCache(4) })
+      const full = makeDeps({ storage: makeSliceStorage(content), transcriptCache: new TranscriptCache(4) })
+
+      expect(getLatestChatContextWindowUsage(deps, "chat-t")).toEqual(
+        getLatestContextWindowUsage(loadTranscriptFromDisk(full, "chat-t")),
+      )
+    }
+  })
+
+  test("falls back to the full load on a backend without byte-slice APIs", () => {
+    const content = linesToFile([...padding(50), usageLine(180_000, 200_000, 9999)])
+    const deps = makeDeps({ storage: makeStorage(new Map([[TRANSCRIPT_PATH, content]])) })
+
+    expect(getLatestChatContextWindowUsage(deps, "chat-t")?.usedTokens).toBe(180_000)
+  })
+
+  test("uses the cached transcript when one is present, without touching storage", () => {
+    const cache = new TranscriptCache(4)
+    cache.set("chat-t", [
+      JSON.parse(usageLine(90_000, 200_000, 1)) as TranscriptEntry,
+    ])
+    const base = makeSliceStorage(linesToFile(padding(10)))
+    const deps = makeDeps({
+      transcriptCache: cache,
+      storage: {
+        ...base,
+        readSliceSync: () => { throw new Error("must not read from disk when cached") },
+        readTextSync: () => { throw new Error("must not read from disk when cached") },
+      },
+    })
+
+    expect(getLatestChatContextWindowUsage(deps, "chat-t")?.usedTokens).toBe(90_000)
+  })
+
+  test("reads legacy in-memory messages that have no file on disk", () => {
+    // A legacy chat has no transcript file at all, so a tail read would see an
+    // empty transcript and wrongly report "no usage", silently disabling the
+    // proactive compact for it.
+    const deps = makeDeps({
+      storage: makeSliceStorage(""),
+      legacyMessagesByChatId: new Map([
+        ["chat-t", [JSON.parse(usageLine(120_000, 200_000, 1)) as TranscriptEntry]],
+      ]),
+    })
+
+    expect(getLatestChatContextWindowUsage(deps, "chat-t")?.usedTokens).toBe(120_000)
+  })
+
+  test("returns null for a chat with no transcript at all", () => {
+    const deps = makeDeps({ storage: makeSliceStorage("") })
+    expect(getLatestChatContextWindowUsage(deps, "chat-unknown")).toBe(null)
+  })
+
+  test("reads each byte at most once when no marker exists", () => {
+    // Non-overlapping windows are what keep the marker-less case — MEASURED as
+    // 241 of 264 chats on the reference install — cheaper than a flat read.
+    // Re-reading from EOF with a growing window costs ~2x the file instead.
+    const content = linesToFile(padding(4000))
+    const fileBytes = Buffer.byteLength(content, "utf8")
+    const { storage, spans } = makeCountingSliceStorage(content)
+    const deps = makeDeps({ storage })
+
+    expect(getLatestChatContextWindowUsage(deps, "chat-t")).toBe(null)
+    // A little slack for the torn leading line each window re-covers.
+    expect(spans.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(fileBytes * 1.1)
+  })
+
+  test("stops looking past the lookback bound and reports no current usage", () => {
+    // A marker further back than one turn's worth of entries describes a
+    // context window that has since been fully replaced, so `null` (no
+    // proactive compact) is the correct answer rather than a stale reading.
+    const farBack = [
+      usageLine(180_000, 200_000, 0),
+      ...padding(200_000), // pushes the marker well past 8 MiB from EOF
+    ]
+    const content = linesToFile(farBack)
+    expect(Buffer.byteLength(content, "utf8")).toBeGreaterThan(8 * 1024 * 1024)
+    const { storage, spans } = makeCountingSliceStorage(content)
+    const deps = makeDeps({ storage })
+
+    expect(getLatestChatContextWindowUsage(deps, "chat-t")).toBe(null)
+    expect(spans.reduce((a, b) => a + b, 0)).toBeLessThan(9 * 1024 * 1024)
   })
 })
