@@ -17,6 +17,23 @@ export function formatCompactDuration(ms: number): string {
   return h === 0 ? `${d}d` : `${d}d ${h}h`
 }
 
+/**
+ * Time REMAINING, rounded UP — the mirror of the elapsed formatters, which
+ * floor. A 12-minute wait has to read "12m" the moment it is set; flooring it
+ * shows "11m" in the same instant, which reads as a clock already running late.
+ * Each unit is only used while it still fits, so a rounded-up 60s reads "1m".
+ */
+export function formatCountdown(ms: number): string {
+  const v = Math.max(0, ms)
+  const seconds = Math.ceil(v / SECOND)
+  if (seconds < 60) return `${String(seconds)}s`
+  const minutes = Math.ceil(v / MINUTE)
+  if (minutes < 60) return `${String(minutes)}m`
+  const hours = Math.ceil(v / HOUR)
+  if (hours < 24) return `${String(hours)}h`
+  return `${String(Math.ceil(v / DAY))}d`
+}
+
 export function formatLiveDuration(ms: number): string {
   const v = Math.max(0, ms)
   if (v >= HOUR) return formatCompactDuration(v)

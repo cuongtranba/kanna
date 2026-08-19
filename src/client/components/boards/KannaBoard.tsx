@@ -6,9 +6,9 @@ import { autoScrollForElements } from "@atlaskit/pragmatic-drag-and-drop-auto-sc
 import { attachClosestEdge, extractClosestEdge } from "@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge"
 import { cn } from "../../lib/utils"
 import { chatDotBgClass, chatDotTextClass } from "../../lib/chatStatusIndicator"
-import { formatLiveDuration } from "../../lib/formatDuration"
+import { formatCountdown, formatLiveDuration } from "../../lib/formatDuration"
 import { useNow } from "../../hooks/useNow"
-import { cardChatSignal, type CardChatFacts } from "../../lib/boards/cardChatSignal"
+import { cardWorkSignal, type CardChatFacts, type WorkClock } from "../../lib/boards/cardWorkSignal"
 import { COLUMN_DOT_CLASS, isOverWipLimit } from "../../lib/boards/columnStyle"
 import {
   dropTargetForCardEdge,
@@ -366,7 +366,7 @@ function BoardCard({
   // Liveness, not attribution. `card.updatedBy.kind === "agent"` — what this row
   // used to key on — says an agent wrote the row last, so a card finished an
   // hour ago looked identical to one mid-turn.
-  const signal = cardChatSignal(chatIds, chatFacts)
+  const signal = cardWorkSignal(chatIds, chatFacts)
 
   return (
     <div ref={ref} className="relative">
@@ -404,7 +404,7 @@ function BoardCard({
               <MessageSquare aria-hidden className="size-3 shrink-0" />
             )}
             <span>{signal.label}</span>
-            {signal.liveSince === null ? null : <LiveStamp since={signal.liveSince} />}
+            {signal.clock === null ? null : <LiveStamp clock={signal.clock} />}
           </span>
         ) : null}
       </button>
@@ -418,10 +418,17 @@ function BoardCard({
  * Its own component so the second hand re-renders a stamp rather than the
  * board: a card is silent unless its chat is live, so at most a handful of
  * these exist at once, and the other 200 cards never re-render for the clock.
+ *
+ * Elapsed reads m:ss because a turn is watched second by second; a countdown
+ * reads 12m because a schedule is not, and a scheduled job ticking down by the
+ * second would pull the eye to the one row asking for no attention.
  */
-function LiveStamp({ since }: { since: number }) {
+function LiveStamp({ clock }: { clock: WorkClock }) {
   const now = useNow(1_000)
-  return <span className="tabular-nums">{formatLiveDuration(Math.max(0, now - since))}</span>
+  const text = clock.kind === "elapsed"
+    ? formatLiveDuration(Math.max(0, now - clock.since))
+    : formatCountdown(clock.until - now)
+  return <span className="tabular-nums">{text}</span>
 }
 
 function applyCardEdge(

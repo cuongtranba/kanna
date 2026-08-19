@@ -149,4 +149,66 @@ describe("BoardCard chat signal", () => {
     expect(html).toContain("card-1")
     expect(html).not.toContain("Running")
   })
+
+  function withActivity(activity: Partial<BoardChatFacts["activity"]>, status: "idle" | "running" = "idle") {
+    return facts({
+      "chat-1": {
+        title: "Fix login",
+        status,
+        unread: false,
+        stateEnteredAt: Date.now() - 80_000,
+        activity: { ...EMPTY_CHAT_ACTIVITY, ...activity },
+      },
+    })
+  }
+
+  test("a live workflow names itself and its agent count over a bare session", () => {
+    const html = render(
+      view({ "card-1": ["chat-1"] }, [card("card-1")]),
+      withActivity({ workflow: { name: "audit", agentCount: 4 } }, "running"),
+    )
+
+    expect(html).toContain("audit · 4 agents")
+    expect(html).not.toContain("Running")
+  })
+
+  /** `5/8` says more than `1 agent`: it names the shape of the work. */
+  test("a loop outranks the agent running its chunk", () => {
+    const html = render(
+      view({ "card-1": ["chat-1"] }, [card("card-1")]),
+      withActivity({ loop: { done: 5, total: 8 }, agents: 1 }, "running"),
+    )
+
+    expect(html).toContain("Loop · 5/8")
+  })
+
+  /**
+   * Scheduled work is not running work, so it takes the muted dot rather than
+   * amber — and it counts DOWN, which is why it never shares the elapsed stamp.
+   */
+  test("an armed cron job reads muted and counts down to its next fire", () => {
+    const html = render(
+      view({ "card-1": ["chat-1"] }, [card("card-1")]),
+      withActivity({ cron: { nextFireAt: Date.now() + 12 * 60_000, paused: false } }),
+    )
+
+    expect(html).toContain("bg-muted-foreground")
+    expect(html).toContain("Runs in")
+    expect(html).toMatch(/tabular-nums[^>]*>12m</u)
+    expect(html).not.toContain("bg-warning")
+  })
+
+  /** A dead background agent is the outcome most worth seeing on a card face. */
+  test("a failed background agent turns the card destructive and names the code", () => {
+    const html = render(
+      view({ "card-1": ["chat-1"] }, [card("card-1")]),
+      withActivity({ lastRunFailure: { code: "TIMEOUT" } }),
+    )
+
+    expect(html).toContain("bg-destructive")
+    // Nothing follows the label: a ticker beside a failure would imply it has
+    // not stopped. Asserted as the row's closing markup because `tabular-nums`
+    // also belongs to the column's card count.
+    expect(html).toContain("<span>Agent failed — TIMEOUT</span></span>")
+  })
 })

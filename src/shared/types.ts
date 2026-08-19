@@ -24,7 +24,7 @@ import type {
   ClaudeSessionLifecycleStatus,
   CloudflareTunnelRecord,
 } from "./app-settings-types"
-import type { SubagentRunSnapshot, LoopProgressSnapshot } from "./subagent-types"
+import type { SubagentErrorCode, SubagentRunSnapshot, LoopProgressSnapshot } from "./subagent-types"
 
 export interface SkillSearchResult {
   id: string
@@ -202,6 +202,16 @@ export interface ChatActivity {
   backgroundTasks: number
   cron: { nextFireAt: number | null; paused: boolean } | null
   awaitingAnswer: boolean
+  /**
+   * Set when the chat's most recent subagent run ended in failure.
+   *
+   * `agents` counts only what is RUNNING, so a background agent that died left
+   * no trace anywhere a card could read — the one outcome most worth saying out
+   * loud was the one thing invisible. A newer run of any status clears this:
+   * work resumed is not work failed. `code` stays null on a run that failed
+   * without one rather than inventing a reason for it.
+   */
+  lastRunFailure: { code: SubagentErrorCode | null } | null
 }
 
 export const EMPTY_CHAT_ACTIVITY: ChatActivity = {
@@ -211,6 +221,7 @@ export const EMPTY_CHAT_ACTIVITY: ChatActivity = {
   backgroundTasks: 0,
   cron: null,
   awaitingAnswer: false,
+  lastRunFailure: null,
 }
 
 export interface SidebarChatRow {

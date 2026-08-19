@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { formatCompactDuration, formatLiveDuration } from "./formatDuration"
+import { formatCompactDuration, formatCountdown, formatLiveDuration } from "./formatDuration"
 
 describe("formatCompactDuration", () => {
   test("under a minute → Ns", () => {
@@ -37,5 +37,26 @@ describe("formatLiveDuration", () => {
   test("≥ 1h → falls back to compact", () => {
     expect(formatLiveDuration(60 * 60_000)).toBe("1h")
     expect(formatLiveDuration(3_660_000)).toBe("1h 1m")
+  })
+})
+
+describe("formatCountdown", () => {
+  /**
+   * The reason this is not `formatCompactDuration`: a 12-minute wait must read
+   * "12m" the moment it is set, not "11m" because 11m59.9s floors down.
+   */
+  test("rounds up, so a wait never reads as already late", () => {
+    expect(formatCountdown(12 * 60_000)).toBe("12m")
+    expect(formatCountdown(11 * 60_000 + 59_900)).toBe("12m")
+    expect(formatCountdown(1)).toBe("1s")
+  })
+  test("a unit is only used while it still fits", () => {
+    expect(formatCountdown(59_900)).toBe("1m")
+    expect(formatCountdown(59 * 60_000 + 59_900)).toBe("1h")
+    expect(formatCountdown(23 * 60 * 60_000 + 59 * 60_000 + 59_900)).toBe("1d")
+  })
+  test("reaching zero says zero, and a passed deadline clamps to it", () => {
+    expect(formatCountdown(0)).toBe("0s")
+    expect(formatCountdown(-5_000)).toBe("0s")
   })
 })

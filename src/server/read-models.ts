@@ -15,6 +15,7 @@ import type {
   SidebarData,
   SidebarProjectGroup,
   StackSummary,
+  SubagentRunSnapshot,
 } from "../shared/types"
 import { mergeCustomModels } from "../shared/types"
 import type { LoopTrackingSnapshot } from "../shared/loop-progress"
@@ -49,7 +50,15 @@ export function computeChatActivity(chatId: string, deps: ComputeChatActivityDep
   const { state, activeStatuses, workflowRegistry, backgroundTasksByChatId, getLoopTracking, nowMs } = deps
 
   const runMap = state.subagentRunsByChatId.get(chatId)
-  const agents = runMap ? [...runMap.values()].filter((r) => r.status === "running").length : 0
+  const runs = runMap ? [...runMap.values()] : []
+  const agents = runs.filter((r) => r.status === "running").length
+  const newestRun = runs.reduce<SubagentRunSnapshot | null>(
+    (newest, run) => (newest === null || run.startedAt > newest.startedAt ? run : newest),
+    null,
+  )
+  // Only the NEWEST run speaks: a newer run of any status means work resumed,
+  // and a card that stayed red after the retry would be reporting history.
+  const lastRunFailure = newestRun?.status === "failed" ? { code: newestRun.error?.code ?? null } : null
 
   const workflowSummaries = workflowRegistry?.snapshot(chatId) ?? []
   const activeWorkflow = workflowSummaries.find((s) => s.status === "running") ?? null
@@ -63,9 +72,8 @@ export function computeChatActivity(chatId: string, deps: ComputeChatActivityDep
   if (loopState !== null) {
     const tracking = getLoopTracking?.(chatId) ?? null
     const done = tracking?.doneEntries.length ?? 0
-    const liveCount = runMap ? [...runMap.values()].filter((r) => r.status === "running").length : 0
     const hasNext = tracking !== null && tracking.nextChunkSection.trim().length > 0
-    const total = done + liveCount + (hasNext ? 1 : 0)
+    const total = done + agents + (hasNext ? 1 : 0)
     loop = { done, total }
   }
 
@@ -77,7 +85,7 @@ export function computeChatActivity(chatId: string, deps: ComputeChatActivityDep
 
   const awaitingAnswer = activeStatuses.get(chatId) === "waiting_for_user"
 
-  return { agents, workflow, loop, backgroundTasks, cron, awaitingAnswer }
+  return { agents, workflow, loop, backgroundTasks, cron, awaitingAnswer, lastRunFailure }
 }
 
 export function deriveStatus(chat: ChatRecord, activeStatus?: KannaStatus): KannaStatus {

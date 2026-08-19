@@ -1,6 +1,6 @@
 ---
 id: c3-119
-c3-seal: 0bac5419e2773e31a58a06d261677d9f38eacebb29b10fd1e1d8f90138a237ba
+c3-seal: 36b8a181ea4ae0224cb2c8feafa60538d7f9211d6aa4fd7dd7c269e7ccb1c905
 title: boards-ui
 type: component
 category: feature
@@ -53,6 +53,7 @@ Owns the board surface: `BoardsPage` and `BoardPane`, the `KannaBoard` renderer 
 | Optimistic apply | OUT | moveCardInView / moveColumnInView apply to Kanna's own snapshot shape, replaced by the next server push | c3-310 | src/client/lib/boards/optimistic.ts |
 | Card drawer | IN/OUT | Renders the card's fields from the board's own schema, its links, its start-work status, and its cleanup question | c3-232 | src/client/components/boards/CardDrawer.tsx |
 | Sync panel | IN/OUT | Connects a board to one or more repos, lists the connected ones with a per-row disconnect, shows held and conflicted rows, and triggers a pull | c3-232 | src/client/components/boards/BoardSyncPanel.tsx |
+| Card work signal | OUT | cardWorkSignal ranks a card's six work kinds plus failure, unread and a bare count into the one line a card has room for, first match wins; session rows are placed by the tone chatStatusIndicator gives them so the card cannot disagree with the sidebar; a WorkClock carries either an elapsed ticker or a countdown, never both | c3-301 | src/client/lib/boards/cardWorkSignal.ts |
 
 ## Derived Materials
 
