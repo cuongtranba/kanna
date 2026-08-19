@@ -8,6 +8,18 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.32.1](https://github.com/cuongtranba/kanna/compare/v1.32.0...v1.32.1) (2026-08-19)
+
+
+### Bug Fixes
+
+* **cron:** give /cron its own scroll container ([#772](https://github.com/cuongtranba/kanna/issues/772)) ([#774](https://github.com/cuongtranba/kanna/issues/774)) ([49e543b](https://github.com/cuongtranba/kanna/commit/49e543b00f1a4c803e905a97afdb6bdf698c0cac))
+
+
+### Performance Improvements
+
+* **event-store:** read latest context-window usage from the transcript tail ([#775](https://github.com/cuongtranba/kanna/issues/775)) ([f1cd01e](https://github.com/cuongtranba/kanna/commit/f1cd01ee8093854d0dc784f5dc5fb643cc3863ad))
+
 ## [1.32.0](https://github.com/cuongtranba/kanna/compare/v1.31.0...v1.32.0) (2026-08-18)
 
 
