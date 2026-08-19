@@ -4,6 +4,16 @@ on:
   push:
     branches:
       - main
+  # Recovery path. A publish that fails (expired npm token, registry outage)
+  # leaves the version tagged but unpublished, and re-running this workflow
+  # cannot fix it: release-please reports `release_created: false` once the
+  # release exists, so `publish` would skip. Dispatch the tag instead.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to publish to npm (e.g. v1.32.0)"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -11,6 +21,8 @@ permissions:
 
 jobs:
   release-please:
+    # Dispatch is for publishing an existing tag; it must never cut a release.
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
@@ -29,13 +41,17 @@ jobs:
 
   publish:
     needs: release-please
-    if: needs.release-please.outputs.release_created == 'true'
+    # `!cancelled()` is required: on dispatch the `release-please` job is
+    # skipped, and a skipped dependency would otherwise skip this job too.
+    if: ${{ !cancelled() && (needs.release-please.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.sha }}
 
       - uses: oven-sh/setup-bun@v2
 
