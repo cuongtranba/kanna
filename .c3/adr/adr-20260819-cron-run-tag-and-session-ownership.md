@@ -1,6 +1,6 @@
 ---
 id: adr-20260819-cron-run-tag-and-session-ownership
-c3-seal: a578fee3fa4f5d035f531c13aabc4d7ab813607ba9b1802f83c085e8b3cdf768
+c3-seal: 67813a2c82e887a1f51cd91d52ebccc4fcaa1e0c0562052a25c1380b5f3d6ab7
 title: cron-run-tag-and-session-ownership
 type: adr
 goal: |-
@@ -9,7 +9,7 @@ goal: |-
     defects that compound: a cron run that never settles keeps re-firing
     `clearChatContext` on its arming chat, and a session torn down out of band
     leaves an `ActiveTurn` that never ends, so the chat reports busy forever.
-status: accepted
+status: done
 date: "2026-08-19"
 ---
 
