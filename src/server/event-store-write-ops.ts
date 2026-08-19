@@ -368,16 +368,19 @@ export function buildEnqueueMessageResult(
   message: Omit<QueuedChatMessage, "id" | "createdAt"> & Partial<Pick<QueuedChatMessage, "id" | "createdAt">>,
 ): { event: QueuedMessageEvent; queuedMessage: QueuedChatMessage } {
   requireChat(chatsById, chatId)
+  // Spread, never re-enumerate. This builder owns exactly three things — the
+  // generated id, the timestamp, and a defensive copy of `attachments`; the
+  // rest of the dispatch metadata is the caller's and must survive verbatim.
+  // Listing the fields by hand made every addition to QueuedChatMessage a
+  // silent data-loss bug (an omitted optional property is not a type error),
+  // and `cronRun` was lost that way: the queued message reached the turn with
+  // no tag, so `onTurnTerminal` could not attribute the outcome and the cron
+  // run was never settled.
   const queuedMessage: QueuedChatMessage = {
+    ...message,
     id: message.id ?? crypto.randomUUID(),
-    content: message.content,
     attachments: [...(message.attachments ?? [])],
     createdAt: message.createdAt ?? Date.now(),
-    provider: message.provider,
-    model: message.model,
-    modelOptions: message.modelOptions,
-    planMode: message.planMode,
-    autoContinue: message.autoContinue,
   }
   const event: QueuedMessageEvent = {
     v: STORE_VERSION,

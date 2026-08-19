@@ -89,6 +89,7 @@ function makeDeps(overrides: Partial<LoopCommandDeps> = {}): LoopCommandDeps {
     store,
     claudeSessions: new Map<string, ClaudeSessionState>(),
     activeTurns: new Map<string, unknown>(),
+    startingTurns: new Map<string, unknown>(),
     getSubagents: () => [],
     getAppSettingsSnapshot: () => ({}),
     closeClaudeSession: (chatId) => {

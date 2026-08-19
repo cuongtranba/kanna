@@ -1175,6 +1175,79 @@ adr-20260616-subagent-run-in-background.
   timeout. Every delivery is a real event, never a self-poll — no runaway
   budget is meaningful here.
 
+# A queued message carries the whole dispatch, and the builder must not enumerate it
+
+`buildEnqueueMessageResult` (`event-store-write-ops.ts`) owns exactly three
+things — the generated `id`, `createdAt`, and a defensive copy of
+`attachments`. Everything else on `QueuedChatMessage` is the caller's dispatch
+metadata and must survive **verbatim**, so the builder **spreads**
+`...message`. It used to list the fields by hand, which made every addition to
+`QueuedChatMessage` a silent data-loss bug: an omitted optional property in an
+object literal is not a type error, so nothing failed to compile and nothing
+failed at runtime — the field simply vanished.
+
+`cronRun` was lost exactly that way, and the queue is the only place it could
+be lost: the tag is the sole link between a fired cron run and the turn that
+answers it (`fireCronJob` → `enqueueMessage` → dequeue → `ActiveTurn.cronRun`
+→ `store.onTurnTerminal` → `cron_run_outcome`). With no tag, **every cron run
+finished unattributed and stayed `running` forever**, so each later tick either
+orphan-healed it (`errorCode: "orphaned"`) or skipped it as
+`previous_run_active` — and on the inline path each orphan-then-restart ran
+`clearChatContext`, killing and respawning that chat's claude process every
+cycle. The tell in a live log is the total absence of `cron_run_outcome
+{ok: true}` while `turn_finished` events are present.
+
+**Do not re-enumerate the shape here**, and note that the cron fire suite fakes
+`enqueueMessage` and hand-preserves the tag — it is *more* faithful than
+production was, which is why it stayed green. The round-trip is pinned against
+the real `EventStore` in `event-store.test.ts`.
+
+# A session in use is never torn down — `startingTurns` is part of "in use"
+
+A turn registers its `ActiveTurn` only **after** the provider session spawns
+(`claude-turn-starter.ts`), so for the whole boot window `startingTurns` is the
+only signal that a chat is live. Three teardown gates each hand-rolled a
+busy-subset and all three omitted it:
+
+| Gate | What it protects |
+| --- | --- |
+| `enforceClaudeSessionBudget` | LRU eviction once resident sessions exceed `maxConcurrent` (default **4**) |
+| `isClaudeSessionIdle` | the 60 s idle reaper |
+| `clearClaudeSessionContext` | `/clear` and every inline cron fire |
+
+All three now check `startingTurns` alongside `activeTurns`. The eviction case
+is the sharpest: a **warm** session reused for a follow-up still carries the
+*previous* turn's `lastUsedAt`, so it sorts **first** in LRU — without the
+guard the prime eviction victim is the chat the user has just come back to.
+`clearClaudeSessionContext` needs it because inline cron re-checks
+`isChatBusy` and then awaits twice before calling it, so a turn can legitimately
+start inside that window.
+
+## A turn is settled by the session that OWNS it, not the one that is resident
+
+`closeClaudeSession` deletes the `claudeSessions` entry **first**. So by the
+time `runClaudeSession`'s `finally` unwinds, `claudeSessions.get(chatId) ===
+session` is false for any teardown initiated anywhere but the runner — and
+gating the fail-close on that residency check skipped it entirely:
+`recordTurnFailed`, `activeTurns.delete` and `pendingTools.discard` never ran.
+The result was a **ghost `ActiveTurn`**: a turn that never ended, a chat busy
+forever, and no terminal event for any observer — including the cron outcome
+hook.
+
+`ActiveTurn.sessionId` binds a turn to the session it runs on, and the `finally`
+now splits its guards by what each one actually owns:
+
+- **map delete + OAuth release** — residency (`isCurrentSession`), unchanged.
+- **settling the turn** — ownership (`active.sessionId === session.id`). A turn
+  that declares no session falls back to the residency rule, so a missing
+  binding can never leave a turn unsettled.
+- **`pendingTools.discard`** — skipped only when a *successor* session is
+  resident, which owns its own parked requests.
+
+A superseding session's bookkeeping is still left strictly alone: wiping it
+leaves its stream running headless (no isError branch fires → `sessionToken`
+never cleared → the next turn loops on the same too-large `--resume` context).
+
 # Queued messages are released on commit, not on dequeue
 
 A queued message is a chat's only durable "start this once idle" trigger. For a

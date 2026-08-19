@@ -116,6 +116,8 @@ c3-206:
   - src/server/chat-ops-parity.test.ts
   - src/server/event-store-messages.adapter.test.ts
   - src/server/event-store-messages.adapter.ts
+  - src/server/event-store-write-ops.test.ts
+  - src/server/event-store-write-ops.ts
   - src/server/event-store.test.ts
   - src/server/event-store.ts
 c3-207:
@@ -132,8 +134,18 @@ c3-209:
 c3-210:
   - src/server/agent.test.ts
   - src/server/agent.ts
+  - src/server/claude-context-commands.test.ts
+  - src/server/claude-context-commands.ts
   - src/server/claude-send-command.test.ts
   - src/server/claude-send-command.ts
+  - src/server/claude-session-lifecycle.test.ts
+  - src/server/claude-session-lifecycle.ts
+  - src/server/claude-session-runner.test.ts
+  - src/server/claude-session-runner.ts
+  - src/server/claude-session-state-queries.test.ts
+  - src/server/claude-session-state-queries.ts
+  - src/server/claude-session-state.ts
+  - src/server/claude-turn-starter.ts
   - src/server/history-primer.test.ts
   - src/server/history-primer.ts
   - src/server/mention-parser.test.ts

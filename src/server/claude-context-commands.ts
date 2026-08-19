@@ -23,6 +23,8 @@ export interface ClearClaudeContextDeps {
   }
   claudeSessions: { get(chatId: string): ClaudeSessionState | undefined }
   activeTurns: { has(chatId: string): boolean }
+  /** Turns still spawning their provider session — see the teardown guard. */
+  startingTurns: { has(chatId: string): boolean }
   closeClaudeSession(chatId: string, session: ClaudeSessionState): void
 }
 
@@ -44,6 +46,12 @@ export interface ClearChatContextDeps extends ClearClaudeContextDeps {
  *   121 ms race on setup_loop /clear).
  * - An idle warm SDK session is torn down so it cannot be reused in-band by
  *   the next turn (which would make the clear a no-op).
+ *
+ * "Idle" here means no turn is using the session — booting counts. Inline
+ * cron re-checks `isChatBusy` and then awaits twice before calling this, so a
+ * turn can legitimately start inside that window; closing its session then
+ * kills the spawn, and because `closeClaudeSession` drops the map entry the
+ * runner's fail-close never runs, stranding a ghost ActiveTurn.
  */
 export async function clearClaudeSessionContext(
   deps: ClearClaudeContextDeps,
@@ -53,7 +61,7 @@ export async function clearClaudeSessionContext(
   const session = deps.claudeSessions.get(chatId)
   if (!session) return
   session.suppressSessionTokenPersist = true
-  if (!deps.activeTurns.has(chatId)) {
+  if (!deps.activeTurns.has(chatId) && !deps.startingTurns.has(chatId)) {
     deps.closeClaudeSession(chatId, session)
   }
 }

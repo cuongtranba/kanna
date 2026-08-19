@@ -82,6 +82,7 @@ function makeDeps(overrides: Partial<SessionLifecycleDeps> = {}): SessionLifecyc
     defaultMaxResidentSessions: 3,
     claudeSessions: new Map(),
     activeTurns: new Map(),
+    startingTurns: { has: () => false },
     pendingTools: { has: () => false },
     oauthPool: null,
     workflowRegistry: null,
@@ -531,6 +532,30 @@ describe("enforceClaudeSessionBudget", () => {
       emitStateChange: (chatId) => { emitted.push(chatId) },
     })
   }
+
+  // A turn registers its ActiveTurn only AFTER the provider session spawns,
+  // so for the whole boot window the chat is live but invisible to every
+  // clause here except this one. Evicting there kills the session the spawn
+  // is still using — and because closeClaudeSession removes the map entry,
+  // the runner's fail-close is skipped, leaving a ghost ActiveTurn that
+  // reports the chat busy forever.
+  test("never evicts a chat whose turn is still booting", () => {
+    const now = Date.now()
+    const sessions = new Map<string, ClaudeSessionState>([
+      ["booting", makeSession({ chatId: "booting", lastUsedAt: now - 10_000 })],
+      ["idle", makeSession({ chatId: "idle", lastUsedAt: now - 1_000 })],
+      ["fresh", makeSession({ chatId: "fresh", lastUsedAt: now })],
+    ])
+    const deps: SessionLifecycleDeps = {
+      ...makeBudgetDeps(sessions, 2),
+      startingTurns: { has: (chatId: string) => chatId === "booting" },
+    }
+
+    enforceClaudeSessionBudget(deps)
+
+    expect(sessions.has("booting")).toBe(true)
+    expect(sessions.has("idle")).toBe(false)
+  })
 
   test("no-op when sessions at or below max", () => {
     const sessions = new Map([

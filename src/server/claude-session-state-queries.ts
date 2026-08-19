@@ -237,6 +237,11 @@ export function isClaudeSessionIdle(
 ): boolean {
   const activeProv = deps.activeTurns.get(chatId)?.provider
   if (activeProv !== undefined && deps.isClaudeSdkProvider(activeProv)) return false
+  // A booting turn owns this session but has no ActiveTurn yet, and nothing
+  // streams while it boots — so lastUsedAt still reads from the PREVIOUS turn
+  // and a warm session reused for a follow-up looks maximally idle for
+  // exactly the window in which it is being spawned into.
+  if (deps.startingTurns.has(chatId)) return false
   // A parked question means the provider worker is BLOCKED inside canUseTool
   // — no entries stream, so lastUsedAt stales while the user reads the
   // question. Reaping here would kill the very session holding the parked

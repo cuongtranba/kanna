@@ -1,7 +1,7 @@
 ---
 id: c3-210
 c3-version: 4
-c3-seal: fcded5c1dfccddfd77ed5bfc771ae7343aa94142f512f0c93b717122998288d2
+c3-seal: 0daf586cc3c185c4a668969120ebb64dee9ddffb297858d00e05928c9787d2f3
 title: agent-coordinator
 type: component
 category: feature
@@ -100,6 +100,7 @@ Owns the agent turn lifecycle: receives `chat.send` commands, picks the provider
 | Lost turn on crash | Event written after broadcast | Replay missing turn | bun run test src/server/agent-coordinator.test.ts |
 | Provider drift | Provider event shape change | Tool entries malformed | bun run check against src/server/agent-coordinator.ts |
 | Mermaid correction loop — the model cannot fix its diagram and is asked every turn | RunClaudeSessionDeps.mermaidGuard is rebuilt per turn instead of per coordinator (its asked-diagram memory is what makes the ask once-only), or the once-per-diagram / queued-user-message / repairable-diagram short-circuits are dropped | mermaid-guard.test.ts asserts one ask per diagram, one message per turn, and no ask for a diagram repairMermaidSource saves; runner tests assert the guard runs on the success branch only and BEFORE maybeStartNextQueuedMessage | bun test --conditions production src/server/mermaid-guard.test.ts src/server/claude-session-runner.test.ts |
+| Session torn down under a booting turn, stranding a turn that never ends | A teardown gate that hand-rolls a busy-subset and omits startingTurns — the ActiveTurn is registered only after the spawn resolves, and a reused warm session still carries the previous turn's lastUsedAt so it sorts first in LRU. Compounded when closeClaudeSession deletes the session-map entry before the runner's finally, which then skips recordTurnFailed, activeTurns.delete and pendingTools.discard | enforceClaudeSessionBudget, isClaudeSessionIdle and clearClaudeSessionContext all consult startingTurns; the runner settles by ownership via ActiveTurn.sessionId rather than residency, falling back to residency when the turn declares no session, and leaves a superseding session strictly alone | bun test src/server/claude-session-runner.test.ts src/server/claude-session-lifecycle.test.ts src/server/claude-session-state-queries.test.ts src/server/claude-context-commands.test.ts |
 
 ## Derived Materials
 

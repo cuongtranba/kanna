@@ -22,6 +22,7 @@ interface Harness {
 function makeHarness(options?: {
   session?: Partial<ClaudeSessionState>
   hasActiveTurn?: boolean
+  hasStartingTurn?: boolean
 }): Harness {
   const tokenWrites: { provider: AgentProvider; token: string | null }[] = []
   const appended: TranscriptEntry[] = []
@@ -49,6 +50,7 @@ function makeHarness(options?: {
       },
       claudeSessions: { get: () => session },
       activeTurns: { has: () => options?.hasActiveTurn === true },
+      startingTurns: { has: () => options?.hasStartingTurn === true },
       closeClaudeSession: (chatId) => { closedChatIds.push(chatId) },
       stopCodexSession: (chatId) => { stoppedCodexChatIds.push(chatId) },
       emitStateChange: (chatId) => { stateChanges.push(chatId) },
@@ -92,6 +94,19 @@ describe("clearChatContext", () => {
 
   test("does not close a claude session that has an active turn", async () => {
     const h = makeHarness({ session: {}, hasActiveTurn: true })
+
+    await clearChatContext(h.deps, "chat-1")
+
+    expect(h.closedChatIds).toEqual([])
+    expect(h.session?.suppressSessionTokenPersist).toBe(true)
+  })
+
+  // A booting turn owns the session just as much as a registered one — it is
+  // mid-spawn on it — but it has no ActiveTurn yet. Inline cron re-checks
+  // `isChatBusy` and then awaits twice before calling here, so a turn can
+  // start inside that window; closing its session there kills the spawn.
+  test("does not close a claude session whose turn is still booting", async () => {
+    const h = makeHarness({ session: {}, hasStartingTurn: true })
 
     await clearChatContext(h.deps, "chat-1")
 

@@ -16,3 +16,13 @@ code:
   - src/server/subagent-orchestrator.ts
   - src/server/subagent-provider-run.test.ts
   - src/server/subagent-provider-run.ts
+  - src/server/claude-context-commands.ts
+  - src/server/claude-context-commands.test.ts
+  - src/server/claude-session-lifecycle.ts
+  - src/server/claude-session-lifecycle.test.ts
+  - src/server/claude-session-runner.ts
+  - src/server/claude-session-runner.test.ts
+  - src/server/claude-session-state.ts
+  - src/server/claude-session-state-queries.ts
+  - src/server/claude-session-state-queries.test.ts
+  - src/server/claude-turn-starter.ts

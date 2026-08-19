@@ -80,6 +80,17 @@ export interface ActiveTurn {
   chatId: string
   provider: AgentProvider
   turn: HarnessTurn
+  /**
+   * `ClaudeSessionState.id` of the session this turn runs on, when it runs on
+   * one (absent for providers with no Claude session, e.g. codex).
+   *
+   * This is what lets a dying session decide whether the chat's ActiveTurn is
+   * ITS turn. The session map cannot answer that: a teardown initiated
+   * anywhere but the runner (budget eviction, idle reap, `/clear`) deletes the
+   * map entry first, so by the time the runner unwinds it no longer recognises
+   * itself and used to skip the fail-close — leaving a turn that never ended.
+   */
+  sessionId?: string
   claudePromptSeq?: number
   model: string
   effort?: string

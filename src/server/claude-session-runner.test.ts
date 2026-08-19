@@ -174,6 +174,59 @@ function makeDeps(session: ClaudeSessionState, overrides: Partial<RunClaudeSessi
 // ---------------------------------------------------------------------------
 
 describe("runClaudeSession", () => {
+  // A session torn down out of band (budget eviction, idle reap, /clear)
+  // removes its own map entry BEFORE this runner's stream unwinds. Gating the
+  // fail-close on "am I still the current session" therefore skipped it
+  // entirely: the ActiveTurn survived with no terminal event, the chat
+  // reported busy forever, and every consumer of that event — above all the
+  // cron outcome observer — was starved.
+  test("out-of-band close still fail-closes the turn it owned", async () => {
+    const session = makeSession({ id: "sess-1" })
+    const active = makeActiveTurn("chat-1", { sessionId: "sess-1" })
+    const activeTurns = new Map([["chat-1", active]])
+    const failures: string[] = []
+
+    const deps = makeDeps(session, {
+      activeTurns,
+      // Evicted: closeClaudeSession already dropped the entry, and nothing
+      // took its place.
+      claudeSessions: new Map(),
+      store: {
+        ...makeDeps(session).store,
+        recordTurnFailed: async (_chatId, message) => { failures.push(message) },
+      },
+    })
+    session.session.stream = fakeStream([])
+
+    await runClaudeSession(deps, session)
+
+    expect(activeTurns.has("chat-1")).toBe(false)
+    expect(failures).toHaveLength(1)
+  })
+
+  test("a turn belonging to a newer session is left untouched", async () => {
+    const session = makeSession({ id: "sess-old" })
+    const replacement = makeSession({ id: "sess-new" })
+    const active = makeActiveTurn("chat-1", { sessionId: "sess-new" })
+    const activeTurns = new Map([["chat-1", active]])
+    const failures: string[] = []
+
+    const deps = makeDeps(session, {
+      activeTurns,
+      claudeSessions: new Map([["chat-1", replacement]]),
+      store: {
+        ...makeDeps(session).store,
+        recordTurnFailed: async (_chatId, message) => { failures.push(message) },
+      },
+    })
+    session.session.stream = fakeStream([])
+
+    await runClaudeSession(deps, session)
+
+    expect(activeTurns.get("chat-1")).toBe(active)
+    expect(failures).toHaveLength(0)
+  })
+
   test("empty stream → session closed and emitStateChange called", async () => {
     const session = makeSession()
     const closeCalls: string[] = []

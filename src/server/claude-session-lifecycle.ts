@@ -62,6 +62,12 @@ export interface SessionLifecycleDeps {
   claudeSessions: Map<string, ClaudeSessionState>
   /** Active turns map — only `.has()` is called. */
   activeTurns: Pick<Map<string, ActiveTurn>, "has">
+  /**
+   * Turns whose provider session is still booting. A turn registers its
+   * ActiveTurn only once the spawn resolves, so this is the only signal that
+   * a chat is live during the boot window.
+   */
+  startingTurns: { has(chatId: string): boolean }
   /** Parked tool continuations — only `.has()` is called. */
   pendingTools: { has(chatId: string): boolean }
 
@@ -244,6 +250,12 @@ export function enforceClaudeSessionBudget(
     .filter(([chatId, session]) => (
       chatId !== protectedChatId
       && !deps.activeTurns.has(chatId)
+      // A booting turn is already using this session — it just has no
+      // ActiveTurn yet (registered only after the spawn resolves). Worse, a
+      // warm session reused for a follow-up still carries the PREVIOUS turn's
+      // lastUsedAt, so it sorts first in LRU: without this clause the prime
+      // eviction victim is the chat the user just came back to.
+      && !deps.startingTurns.has(chatId)
       // A parked question blocks the worker inside canUseTool; evicting the
       // session would orphan the continuation the user is about to answer.
       && !deps.pendingTools.has(chatId)

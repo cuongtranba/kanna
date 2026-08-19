@@ -595,7 +595,21 @@ export async function runClaudeSession(
   } finally {
     clearFirstEntryWatchdog()
     const active = deps.activeTurns.get(session.chatId)
-    const isCurrentSession = deps.claudeSessions.get(session.chatId) === session
+    const resident = deps.claudeSessions.get(session.chatId)
+    const isCurrentSession = resident === session
+    // A LATER session took this chat over (cancel-then-steer, oauth rotation).
+    // Its bookkeeping is not ours to touch. Distinct from simply not being
+    // resident, which is what an out-of-band teardown leaves behind.
+    const supersededBySession = resident !== undefined && !isCurrentSession
+    // Whether the chat's turn is OURS. The session map cannot answer this:
+    // every teardown outside this runner deletes the entry first, so
+    // `isCurrentSession` reads false for a session whose turn is still live.
+    // A turn that declares no session (a provider that runs without one, or a
+    // turn built before this binding existed) falls back to the old residency
+    // rule — never worse than the previous behaviour, and never a turn left
+    // unsettled because the binding happened to be missing.
+    const ownsActiveTurn = active !== undefined
+      && (active.sessionId === undefined ? isCurrentSession : active.sessionId === session.id)
     // Trace point: stream-end-without-final-result is the hang signature.
     // If `hasActiveTurn=true` && `hasFinalResult=false` && this fires,
     // the user will see "still running" forever unless we fail-close.
@@ -609,36 +623,42 @@ export async function runClaudeSession(
       cancelRequested: active?.cancelRequested,
       hasFinalResult: active?.hasFinalResult,
     })
-    // Only clear chat state if it still points at us. A cancel-then-steer,
-    // or an oauth-pool rotation that closes this session and schedules an
-    // auto-continue, can install a fresh session (and activeTurn) under
-    // the same chatId before this finally runs; wiping either
-    // unconditionally would break the fresh session's bookkeeping and
-    // leave its stream running headless (no isError branch fires →
-    // sessionToken never cleared → next turn loops with the same
-    // too-large --resume context).
+    // Each clause below settles exactly what belongs to THIS session, and
+    // nothing that a successor installed under the same chatId — wiping a
+    // fresh session's bookkeeping leaves its stream running headless (no
+    // isError branch fires → sessionToken never cleared → the next turn loops
+    // on the same too-large --resume context).
     if (isCurrentSession) {
       deps.claudeSessions.delete(session.chatId)
       deps.oauthPool?.release(session.chatId)
-      if (active?.provider === "claude") {
-        if (active.cancelRequested && !active.cancelRecorded) {
-          await deps.store.recordTurnCancelled(session.chatId)
-        } else if (!active.hasFinalResult) {
-          // Stream ended without any terminal result event (PTY died,
-          // SDK transport dropped, etc). Fail-close the turn so the UI
-          // stops showing "running" forever. Without this the chat is
-          // wedged until the user manually clicks Stop or reloads.
-          log.warn("[kanna/agent] stream ended with no final result — recording turn failure", { chatId: session.chatId, sessionId: session.id })
-          await deps.store.recordTurnFailed(session.chatId, "session stream ended without a result")
-        }
-        deps.activeTurns.delete(session.chatId)
-      }
-      // The session's provider worker dies with the stream — any parked
-      // canUseTool continuation is unreachable from here on. Settle it so
-      // the question card clears and the chat cannot report busy forever.
-      deps.pendingTools.discard(session.chatId)
-      if (session.selfWakeActive) session.selfWakeActive = false
     }
+    // Settling the turn keys on ownership, NOT residency. An out-of-band
+    // teardown (budget eviction, idle reap, `/clear`) unregisters the session
+    // before this runs, and gating here on residency skipped the fail-close
+    // altogether: the turn never ended, the chat reported busy forever, and
+    // no terminal event reached `onTurnTerminal` — which is how cron runs
+    // stopped being attributed and stalled at "running".
+    if (ownsActiveTurn && active.provider === "claude") {
+      if (active.cancelRequested && !active.cancelRecorded) {
+        await deps.store.recordTurnCancelled(session.chatId)
+      } else if (!active.hasFinalResult) {
+        // Stream ended without any terminal result event (PTY died,
+        // SDK transport dropped, evicted mid-turn, etc). Fail-close the turn
+        // so the UI stops showing "running" forever. Without this the chat is
+        // wedged until the user manually clicks Stop or reloads.
+        log.warn("[kanna/agent] stream ended with no final result — recording turn failure", { chatId: session.chatId, sessionId: session.id })
+        await deps.store.recordTurnFailed(session.chatId, "session stream ended without a result")
+      }
+      deps.activeTurns.delete(session.chatId)
+    }
+    // The session's provider worker dies with the stream — any parked
+    // canUseTool continuation is unreachable from here on. Settle it so the
+    // question card clears and the chat cannot report busy forever. A
+    // successor owns its own parked requests, so stand down for one.
+    if (!supersededBySession) {
+      deps.pendingTools.discard(session.chatId)
+    }
+    session.selfWakeActive = false
     session.session.close()
     deps.emitStateChange(session.chatId)
   }
