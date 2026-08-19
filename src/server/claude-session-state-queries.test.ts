@@ -398,6 +398,19 @@ describe("isClaudeSessionIdle", () => {
     expect(isClaudeSessionIdle(deps, "chat-1", session, Date.now())).toBe(false)
   })
 
+  // Nothing streams while a turn boots, so `lastUsedAt` stays at the previous
+  // turn's end — a warm session reused for a follow-up looks maximally idle
+  // for exactly the window in which it is being used. Reaping there kills the
+  // spawn in flight.
+  it("returns false when the chat's turn is still booting", () => {
+    const session = makeSession({ lastUsedAt: 0 })
+    const deps = makeDeps({
+      startingTurns: new Map([["chat-1", makeStartingTurn()]]),
+      resolveClaudeIdleMs: () => 1,
+    })
+    expect(isClaudeSessionIdle(deps, "chat-1", session, Date.now())).toBe(false)
+  })
+
   it("returns true when all idle conditions met", () => {
     const session = makeSession({ lastUsedAt: 0, pendingPromptSeqs: [] })
     const deps = makeDeps({ resolveClaudeIdleMs: () => 1 })

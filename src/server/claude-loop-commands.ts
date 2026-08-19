@@ -70,6 +70,12 @@ export interface LoopCommandDeps {
   /** Active turns map — `.has()` to check existence. */
   activeTurns: Pick<Map<string, unknown>, "has">
 
+  /**
+   * Turns whose provider session is still booting. A booting turn owns its
+   * session as much as a registered one, so both block a context teardown.
+   */
+  startingTurns: Pick<Map<string, unknown>, "has">
+
   /** Returns all configured subagents. */
   getSubagents(): Subagent[]
 

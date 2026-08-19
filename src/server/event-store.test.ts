@@ -302,6 +302,38 @@ describe("EventStore", () => {
     expect(reloaded.getQueuedMessages(chat.id).map((message) => message.id)).toEqual([second.id])
   })
 
+  // The cron tag is the ONLY link between a fired run and the turn that
+  // answers it: the dequeue copies it onto the ActiveTurn, and the store's
+  // turn-terminal observer reads it there to attribute `cron_run_outcome`.
+  // Lose it in the queue and every cron run finishes unattributed and stays
+  // "running" forever. This has to exercise the REAL store — the cron fire
+  // suite fakes `enqueueMessage` and hand-preserves the tag, so it stayed
+  // green for as long as production was dropping the field.
+  test("carries the cron run tag through enqueue and reload", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+
+    const project = await store.openProject("/tmp/project")
+    const chat = await store.createChat(project.id)
+    const cronRun = { jobId: "cron-abc", runId: "run-1", originChatId: chat.id }
+
+    const queued = await store.enqueueMessage(chat.id, {
+      content: "check ci",
+      attachments: [],
+      provider: "claude",
+      model: "claude-sonnet-4-6",
+      planMode: false,
+      cronRun,
+    })
+    expect(queued.cronRun).toEqual(cronRun)
+    expect(store.getQueuedMessages(chat.id)[0]?.cronRun).toEqual(cronRun)
+
+    const reloaded = new EventStore(dataDir)
+    await reloaded.initialize()
+    expect(reloaded.getQueuedMessages(chat.id)[0]?.cronRun).toEqual(cronRun)
+  })
+
   test("marks chats unread on completed turns and clears unread when marked read", async () => {
     const dataDir = await createTempDataDir()
     const store = new EventStore(dataDir)

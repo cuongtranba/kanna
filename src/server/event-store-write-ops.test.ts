@@ -510,6 +510,36 @@ describe("buildEnqueueMessageResult", () => {
     })
     expect(queuedMessage.id).toBe("fixed-id")
   })
+
+  // The queued message is the ONLY durable carrier of a turn's dispatch
+  // metadata, and this builder copies fields one at a time — so a field it
+  // forgets is lost silently, because an omitted optional property in an
+  // object literal is not a type error. `cronRun` was lost exactly that way:
+  // every cron turn then ran with no tag on its ActiveTurn, `onTurnTerminal`
+  // had nothing to attribute, and the run's `cron_run_outcome` was never
+  // written. The run stayed "running" forever, so each later tick either
+  // orphan-healed it or skipped it as `previous_run_active`.
+  test("carries every dispatch field through to the persisted message", () => {
+    const chatsById = new Map([["chat-1", makeChat()]])
+    const dispatch = {
+      content: "hello",
+      attachments: [],
+      provider: "claude" as const,
+      model: "claude-3-5-sonnet",
+      planMode: true,
+      autoContinue: { scheduleId: "sched-1" },
+      cronRun: { jobId: "cron-abc", runId: "run-1", originChatId: "chat-1" },
+    }
+    const { event, queuedMessage } = buildEnqueueMessageResult(chatsById, "chat-1", dispatch)
+
+    for (const key of Object.keys(dispatch) as Array<keyof typeof dispatch>) {
+      expect([key, queuedMessage[key]]).toEqual([key, dispatch[key]])
+    }
+    expect(event.type).toBe("queued_message_enqueued")
+    if (event.type === "queued_message_enqueued") {
+      expect(event.message.cronRun).toEqual(dispatch.cronRun)
+    }
+  })
 })
 
 describe("buildRemoveQueuedMessageEvent", () => {
