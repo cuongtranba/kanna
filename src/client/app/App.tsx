@@ -517,6 +517,12 @@ function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
           The outlet is a card inset to match the sidebar's own md:my-2 card, so
           both columns' top edges — and therefore the sidebar header and the
           pane tab strip that sit on them — start on the same line.
+
+          It is also `overflow-hidden`, so NOTHING above a route page scrolls:
+          every full-page route below must own its own scroll container, via
+          SHELL_PAGE_SCROLL_CLASS (src/client/lib/shellChrome.ts). A page that
+          skips it is clipped at the viewport edge with no way to reach the
+          content below the fold — issue #772.
         */}
         <div className={cn("flex flex-1 flex-col overflow-hidden", SHELL_CONTENT_CARD_CLASS)}>
           <Outlet context={state} />
