@@ -34,3 +34,22 @@ export const SHELL_TOP_BAND_CLASS =
  */
 export const SHELL_CONTENT_CARD_CLASS =
   "md:my-2 md:mr-2 md:rounded-2xl md:border md:border-border"
+
+/**
+ * The scroll container every full-page route under the shell must own.
+ *
+ * The app frame is `h-[100dvh] overflow-hidden` and the outlet wrapper is
+ * `flex flex-1 flex-col overflow-hidden`, so nothing above a page scrolls. A
+ * page that does not scroll itself is simply clipped at the viewport edge —
+ * no scrollbar, no touch scroll, and the content below the fold is
+ * unreachable. `/cron` shipped exactly that defect (issue #772): the root was
+ * a plain centred block with no height participation at all.
+ *
+ * `min-h-0` is not decoration. A flex child defaults to `min-height: auto` and
+ * refuses to shrink below its content, so `overflow-y-auto` alone never
+ * engages and the page grows past the frame instead of scrolling inside it.
+ *
+ * Put this on the page ROOT and keep any `max-w-*` reading column INSIDE it,
+ * so the scrollbar lands on the viewport edge rather than mid-page.
+ */
+export const SHELL_PAGE_SCROLL_CLASS = "flex min-h-0 flex-1 flex-col overflow-y-auto"
