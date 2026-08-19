@@ -1,7 +1,7 @@
 ---
 id: c3-206
 c3-version: 4
-c3-seal: 8c9542d0c6c1b3d80a03ede5d4d1177585ee7d0e4254791ea6562b52a243846f
+c3-seal: b4da0e649dd9c95079ff62073af6e20099c4df683c5599712655c894ed9dda9b
 title: event-store
 type: component
 category: foundation
@@ -78,6 +78,7 @@ Owns the JSONL event log: append-only writes, in-order replay on boot, snapshot 
 | --- | --- | --- | --- |
 | Lost events on crash | Write order regression | Replay yields incomplete state | bun run test src/server/event-store.test.ts |
 | Snapshot/log divergence | Compact bug | Boot replays stale state | bun run check plus replay smoke against src/server/event-store.ts |
+| Queued message silently drops a dispatch field | buildEnqueueMessageResult enumerating QueuedChatMessage field by field instead of spreading the caller's message; an omitted optional property is not a type error, so neither compile nor runtime signals the loss | The builder owns only id, createdAt and the defensive attachments copy and spreads the rest; a round-trip test asserts every dispatch field survives enqueue and reload | bun test src/server/event-store-write-ops.test.ts src/server/event-store.test.ts |
 
 ## Derived Materials
 

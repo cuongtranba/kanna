@@ -1,6 +1,6 @@
 ---
 id: c3-233
-c3-seal: 87feb2187929c7744c7532e17f42e073cd7ac352ecdbda3d2623d8cdb5d10507
+c3-seal: bb77508d193fe605c56f0f3dee3b691f0500b5cdef015fce8dc18750eb2a9585
 title: cron-scheduler
 type: component
 category: feature
@@ -118,6 +118,7 @@ scheduler (c3-227), UI rendering (c3-120).
 | In-flight cron event lost when log is truncated at shutdown | A new write path in fire.ts or server.ts that bypasses flush() before snapshotAndTruncateLogs(), or a cancel path that drops the drainCronOutcomes() await | scheduler.test.ts shutdown drain test asserts in-flight fire completes before shutdown returns; EventStore.flush() call in server.ts shutdown is the choke point | bun test src/server/cron/scheduler.test.ts |
 | Boot reconcile double-settles a queued run | reconcileCronRunsAtBoot orphans a run whose tagged message survived in the durable queue; recoverQueuedMessages then re-drains it and emits a second cron_run_outcome for the same runId | reconcileCronRunsAtBoot checks getQueuedMessages before emitting orphaned — a run with a surviving queued message is skipped | bun test src/server/cron/fire.test.ts |
 | cron_run_outcome corrupt row from double-settle | two outcome events for the same runId; errorCode set by the orphaned event is never cleared when the success event lands | deriveCronJobs cron_run_outcome handler is first-terminal-wins — only settles a run still in running status, so a second outcome is ignored | bun test src/server/cron/read-model.test.ts |
+| Cron run never settles because its tag is lost before the turn starts | A queued-message write path that does not carry CronRunTag verbatim; the tag is the only link from a fired run to the turn that answers it, and onTurnTerminal reads it off the ActiveTurn | Absence of any cron_run_outcome ok:true while turn_finished events exist — every run then settles via fireCronJob's orphan self-heal or skips as previous_run_active. The cron fire suite fakes enqueueMessage and hand-preserves the tag, so it cannot detect this; the round-trip is pinned against the real EventStore | bun test src/server/event-store.test.ts src/server/event-store-write-ops.test.ts |
 
 ## Derived Materials
 
