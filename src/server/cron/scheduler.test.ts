@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import type { Clock } from "../auto-continue/schedule-manager"
 import { AUTO_CONTINUE_EVENT_VERSION, type AutoContinueEvent } from "../auto-continue/events"
 import { CronScheduler } from "./scheduler"
+import { compactCronRunEvents } from "./compact"
 import { parseSchedule } from "../../shared/cron/parse-schedule"
 import type { CronSchedule } from "../../shared/cron/types"
 
@@ -190,6 +191,34 @@ describe("CronScheduler", () => {
     await settle()
     expect(fires).toEqual([{ chatId: "c1", jobId: "j1", at: 2_100_000 }])
     scheduler.shutdown()
+  })
+
+  // `rehydrate` derives `lastSeen` from the newest run record, so retention
+  // dropping the wrong end would make boot claim fires were missed that were
+  // not — a visible `server_offline` card, on every boot.
+  test("rehydrate reports the same missed count over a compacted log", () => {
+    const full: AutoContinueEvent[] = [armedEvent()]
+    for (let i = 0; i < 120; i += 1) {
+      const at = 300_000 + i * 1000
+      full.push(
+        { v: AUTO_CONTINUE_EVENT_VERSION, kind: "cron_run_started", chatId: "c1", scheduleId: "j1", timestamp: at, runId: `r${i}` },
+        { v: AUTO_CONTINUE_EVENT_VERSION, kind: "cron_run_outcome", chatId: "c1", scheduleId: "j1", timestamp: at + 1, runId: `r${i}`, ok: true },
+      )
+    }
+    const compacted = compactCronRunEvents([...full])
+    expect(compacted.length).toBeLessThan(full.length)
+
+    const fullClock = new FakeClock()
+    fullClock.advance(2_000_000)
+    const fullScheduler = makeScheduler(fullClock).scheduler
+    const compactedClock = new FakeClock()
+    compactedClock.advance(2_000_000)
+    const compactedScheduler = makeScheduler(compactedClock).scheduler
+
+    expect(compactedScheduler.rehydrate(compacted)).toEqual(fullScheduler.rehydrate(full))
+
+    fullScheduler.shutdown()
+    compactedScheduler.shutdown()
   })
 
   test("rehydrate does not arm paused or disarmed jobs", () => {

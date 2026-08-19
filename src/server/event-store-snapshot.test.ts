@@ -18,6 +18,9 @@ import {
   type SnapshotLogPaths,
 } from "./event-store-snapshot"
 import type { TranscriptEntry } from "../shared/types"
+import type { AutoContinueEvent } from "./auto-continue/events"
+import { deriveCronJobs } from "./cron/read-model"
+import { MAX_RECENT_CRON_RUNS } from "../shared/cron/types"
 import type { StoreEvent } from "./events"
 
 // ---------------------------------------------------------------------------
@@ -175,6 +178,43 @@ describe("loadSnapshotIntoState", () => {
     await loadSnapshotIntoState(storage, "/data/snapshot.json", state, new Map(), async () => {})
     expect(state.chatsById.has("chat-1")).toBe(true)
     expect(state.chatsById.get("chat-1")?.unread).toBe(false)
+  })
+
+  // A chat whose jobs are all disarmed never appends again, so without
+  // retention on this path an already-bloated snapshot would stay bloated for
+  // the life of the process.
+  test("converges an already-bloated cron history from the snapshot", async () => {
+    const events: AutoContinueEvent[] = [{
+      v: 3,
+      kind: "cron_armed",
+      chatId: "chat-1",
+      scheduleId: "job-1",
+      timestamp: 1,
+      instruction: "check ci",
+      mode: "inline",
+      scheduleText: "every 5m",
+      schedule: { type: "interval", ms: 300_000 },
+    }]
+    for (let i = 0; i < 250; i += 1) {
+      events.push(
+        { v: 3, kind: "cron_run_started", chatId: "chat-1", scheduleId: "job-1", timestamp: 100 + i * 10, runId: `r${i}` },
+        { v: 3, kind: "cron_run_outcome", chatId: "chat-1", scheduleId: "job-1", timestamp: 101 + i * 10, runId: `r${i}`, ok: true },
+      )
+    }
+    const snapshot: SnapshotFile = {
+      v: STORE_VERSION,
+      generatedAt: 100,
+      projects: [],
+      chats: [],
+      autoContinueEvents: [{ chatId: "chat-1", events }],
+    }
+    const storage = makeStorage({ "/data/snapshot.json": JSON.stringify(snapshot) })
+    const state = createEmptyState()
+    await loadSnapshotIntoState(storage, "/data/snapshot.json", state, new Map(), async () => {})
+
+    const kept = state.autoContinueEventsByChatId.get("chat-1") ?? []
+    expect(kept.filter((e) => e.kind === "cron_run_started")).toHaveLength(MAX_RECENT_CRON_RUNS)
+    expect(deriveCronJobs(kept, "chat-1", 1_000_000)).toEqual(deriveCronJobs(events, "chat-1", 1_000_000))
   })
 
   test("sets snapshotHasLegacyMessages when messages field present", async () => {

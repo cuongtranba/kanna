@@ -17,6 +17,7 @@ import type { StorageBackend } from "./storage/backend"
 import type { CloudflareTunnelEvent } from "./cloudflare-tunnel/events"
 import type { PushEvent } from "./push/events"
 import type { ShareEvent } from "./session-share/share-projection"
+import { compactCronRunEvents } from "./cron/compact"
 import {
   type ChatRecord,
   type ProjectRecord,
@@ -169,7 +170,11 @@ export async function loadSnapshotIntoState(
 
     if (parsed.autoContinueEvents?.length) {
       for (const entry of parsed.autoContinueEvents) {
-        state.autoContinueEventsByChatId.set(entry.chatId, [...entry.events])
+        // This path replaces the array wholesale rather than going through
+        // `applyAutoContinueToState`, so retention has to be applied here too
+        // — otherwise a snapshot written before retention existed, or one for
+        // a chat that never appends again, stays bloated forever.
+        state.autoContinueEventsByChatId.set(entry.chatId, compactCronRunEvents([...entry.events]))
       }
     }
 

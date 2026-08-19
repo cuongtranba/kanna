@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import type { AgentProvider } from "../shared/types"
 import type { ChatRecord, ChatTimingState, ProjectRecord, StackRecord, StoreState } from "./events"
 import type { AutoContinueEvent } from "./auto-continue/events"
+import { MAX_RECENT_CRON_RUNS } from "../shared/cron/types"
 import {
   applyChatLifecycleEvent,
   applyChatMessageMetadata,
@@ -355,6 +356,48 @@ describe("applyAutoContinueToState", () => {
     applyAutoContinueToState(m, ev)
     applyAutoContinueToState(m, { ...ev, timestamp: TS + 1 })
     expect(m.get("c1")?.length).toBe(2)
+  })
+
+  // This seam is shared by live append and boot replay, so bounding it here is
+  // what keeps a chat's cron history from growing without limit in memory.
+  test("keeps cron run history bounded as events arrive one at a time", () => {
+    const m = new Map<string, AutoContinueEvent[]>()
+    applyAutoContinueToState(m, {
+      v: 3,
+      kind: "cron_armed",
+      chatId: "c1",
+      scheduleId: "job-1",
+      timestamp: TS,
+      instruction: "check ci",
+      mode: "inline",
+      scheduleText: "every 5m",
+      schedule: { type: "interval", ms: 300_000 },
+    })
+    for (let i = 0; i < 100; i += 1) {
+      const at = TS + (i + 1) * 1000
+      applyAutoContinueToState(m, {
+        v: 3, kind: "cron_run_started", chatId: "c1", scheduleId: "job-1", timestamp: at, runId: `r${i}`,
+      })
+      applyAutoContinueToState(m, {
+        v: 3, kind: "cron_run_outcome", chatId: "c1", scheduleId: "job-1", timestamp: at + 1, runId: `r${i}`, ok: true,
+      })
+    }
+
+    const kept = m.get("c1") ?? []
+    expect(kept.filter((e) => e.kind === "cron_run_started")).toHaveLength(MAX_RECENT_CRON_RUNS)
+    expect(kept.filter((e) => e.kind === "cron_armed")).toHaveLength(1)
+  })
+
+  test("leaves the array reference untouched when nothing is dropped", () => {
+    const m = new Map<string, AutoContinueEvent[]>()
+    const ev: AutoContinueEvent = {
+      v: 3, kind: "loop_run_outcome", chatId: "c1", scheduleId: "loop-1", timestamp: TS, ok: true,
+    }
+    applyAutoContinueToState(m, ev)
+    const first = m.get("c1")
+    applyAutoContinueToState(m, { ...ev, timestamp: TS + 1 })
+
+    expect(m.get("c1")).toBe(first)
   })
 })
 
