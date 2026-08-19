@@ -8,6 +8,23 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.33.0](https://github.com/cuongtranba/kanna/compare/v1.32.1...v1.33.0) (2026-08-19)
+
+
+### Features
+
+* **boards:** one board, N sync bindings (getBinding → listBindings) ([#779](https://github.com/cuongtranba/kanna/issues/779)) ([67bd3cd](https://github.com/cuongtranba/kanna/commit/67bd3cdab5819ee8c0abdbba56e34c82b8323b8b)), closes [#758](https://github.com/cuongtranba/kanna/issues/758)
+
+
+### Bug Fixes
+
+* **cron:** settle every cron run, and stop tearing down sessions in use ([#777](https://github.com/cuongtranba/kanna/issues/777)) ([a8fb278](https://github.com/cuongtranba/kanna/commit/a8fb278624360e834a7c3bcc8abc56f4f2b4aeea))
+
+
+### Performance Improvements
+
+* **cron:** bound cron run events on the auto-continue log ([#781](https://github.com/cuongtranba/kanna/issues/781)) ([297e578](https://github.com/cuongtranba/kanna/commit/297e578e2f9bbdc73b1dcfde651fed9a50b37498))
+
 ## [1.32.1](https://github.com/cuongtranba/kanna/compare/v1.32.0...v1.32.1) (2026-08-19)
 
 
