@@ -568,6 +568,39 @@ To add another reload mechanism (e.g., docker, systemd) at the strategy layer, i
  </picture>
 </a>
 
+## Releasing
+
+Releases are automated. Merging to `main` runs
+[release-please](.github/workflows/release-please.yml), which opens a release PR;
+merging that PR tags the version, creates the GitHub Release, and publishes
+`@cuongtran001/kanna` to npm with a provenance attestation.
+
+### Recovering a failed publish
+
+If the `publish` job fails, the version is tagged on GitHub but missing from npm.
+**Re-running the workflow will not fix it** — release-please reports
+`release_created: false` once the release exists, so `publish` is skipped.
+Publish the existing tag instead:
+
+```bash
+gh workflow run release-please.yml -f tag=v1.32.0
+```
+
+This rebuilds and republishes from the tag through CI, so the package keeps its
+provenance signature. A local `npm publish` would not.
+
+### npm token expiry
+
+`NPM_TOKEN` is an npm granular access token, and npm caps those at **90 days**.
+When it expires, `npm publish` fails with a misleading `E404 Not Found` rather
+than an auth error — npm masks a permission failure as a missing package. Rotate
+the token at [npmjs.com](https://www.npmjs.com/settings/cuongtran001/tokens)
+(scope: all packages, permission: read/write), then:
+
+```bash
+gh secret set NPM_TOKEN
+```
+
 ## Contributing
 
 Contributions are welcome! Feel free to open PRs
