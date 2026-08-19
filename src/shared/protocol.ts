@@ -328,6 +328,8 @@ export type ClientCommand =
       direction: SyncDirection
       allowAgentPush: boolean
     }
+  /** Disconnect ONE repo from a board that may sync several. */
+  | { type: "board.sync.unbind"; boardId: string; bindingId: string }
   | { type: "board.sync.pull"; boardId: string }
   | { type: "board.sync.push"; boardId: string }
   | { type: "board.sync.status"; boardId: string }

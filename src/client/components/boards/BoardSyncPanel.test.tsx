@@ -32,9 +32,9 @@ const CONFLICT: SyncConflict = {
 
 function status(overrides: Partial<BoardSyncStatus> = {}): BoardSyncStatus {
   return {
-    binding: null,
+    bindings: [],
     conflicts: [],
-    suggestedRepo: { owner: "cuongtranba", repo: "kanna" },
+    suggestedRepos: [{ projectId: "p1", projectName: "kanna", repo: { owner: "cuongtranba", repo: "kanna" } }],
     routing: { open: { id: "c1", title: "Todo" }, closed: { id: "c3", title: "Done" } },
     ...overrides,
   }
@@ -107,11 +107,36 @@ describe("BoardSyncPanel", () => {
     harness.unmount()
   })
 
-  /** A bound board must never show a repo it is not actually bound to. */
-  test("a bound board shows its binding, not the suggestion", async () => {
-    const harness = await mount(status({ binding: BINDING }))
-    expect(repoInput(harness.container).value).toBe("acme/widgets")
-    expect(saveButton(harness.container).textContent).toBe("Update")
+  /**
+   * A board holds N bindings, so the field ADDS one — it is not an edit of
+   * "the" binding. Seeding it from an existing binding would make Connect look
+   * like a no-op and, on a Stack board, hide every project still unconnected.
+   */
+  test("a bound board lists what it is connected to and offers the next unbound repo", async () => {
+    const harness = await mount(status({ bindings: [BINDING] }))
+    expect(harness.container.textContent).toContain("acme/widgets")
+    expect(repoInput(harness.container).value).toBe("cuongtranba/kanna")
+    expect(saveButton(harness.container).textContent).toBe("Connect")
+    harness.unmount()
+  })
+
+  test("a repo already bound is not offered again", async () => {
+    const harness = await mount(
+      status({
+        bindings: [BINDING],
+        suggestedRepos: [
+          { projectId: "p1", projectName: "widgets", repo: { owner: "acme", repo: "widgets" } },
+        ],
+      }),
+    )
+    expect(repoInput(harness.container).value).toBe("")
+    harness.unmount()
+  })
+
+  test("each connected repo can be disconnected on its own", async () => {
+    const harness = await mount(status({ bindings: [BINDING] }))
+    const button = harness.container.querySelector<HTMLButtonElement>('[aria-label="Disconnect bind-1"]')
+    expect(button).not.toBeNull()
     harness.unmount()
   })
 

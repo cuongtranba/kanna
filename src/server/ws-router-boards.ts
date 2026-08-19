@@ -18,7 +18,7 @@ import type { ClientCommand, ServerEnvelope } from "../shared/protocol"
 import type { BoardColumn, CardActor } from "../shared/boards/types"
 import { columnForRemoteState } from "../shared/boards/types"
 import { decodeContentForFields, decodeFieldDefsForWrite } from "../shared/boards/decode"
-import type { BoardSyncStatus, SyncColumnRef } from "../shared/boards/sync-types"
+import type { BoardSyncStatus, RepoSuggestion, SyncColumnRef } from "../shared/boards/sync-types"
 import { BoardStoreError, type UpdateBoardPatch, type UpdateCardPatch } from "./board-store"
 import type { BoardRegistry } from "./board-registry"
 import type { BoardSync } from "./board-sync"
@@ -44,7 +44,13 @@ export interface BoardCommandDeps {
   cleanupView: ((cardId: string) => Promise<WorktreeCleanupView | null>) | undefined
   resolveCleanup: ((cardId: string, decision: CleanupDecision) => Promise<WorktreeCleanupOutcome>) | undefined
   /** `owner/repo` from the board project's `origin`, offered as a default when binding. */
-  suggestSyncRepo: ((boardId: string) => Promise<{ owner: string; repo: string } | null>) | undefined
+  /**
+   * One suggestion per project the board's owner covers — a project board
+   * yields at most one, a Stack board one per member project. Reads each
+   * project's `origin` remote, so it is async and never called on a broadcast
+   * path (`board.sync.status` is request/response only).
+   */
+  suggestSyncRepos: ((boardId: string) => Promise<readonly RepoSuggestion[]>) | undefined
   send: (envelope: ServerEnvelope) => void
 }
 
@@ -69,6 +75,7 @@ const BOARD_COMMAND_TYPES = new Set<string>([
   "board.cards.page",
   "board.templates.list",
   "board.sync.bind",
+  "board.sync.unbind",
   "board.sync.pull",
   "board.sync.push",
   "board.sync.status",
@@ -97,7 +104,7 @@ export async function handleBoardCommand(
     startWorkView,
     cleanupView,
     resolveCleanup,
-    suggestSyncRepo,
+    suggestSyncRepos,
     send,
   } = deps
   if (!isBoardCommand(command)) return false
@@ -142,7 +149,7 @@ export async function handleBoardCommand(
       return true
     }
     if (command.type.startsWith("board.sync.")) {
-      return await dispatchSync(boardRegistry, boardSync, suggestSyncRepo, send, command, id)
+      return await dispatchSync(boardRegistry, boardSync, suggestSyncRepos, send, command, id)
     }
     return dispatch(boardRegistry, send, command, id)
   } catch (error) {
@@ -162,7 +169,7 @@ export async function handleBoardCommand(
 async function dispatchSync(
   registry: BoardRegistry,
   sync: BoardSync | undefined,
-  suggestRepo: BoardCommandDeps["suggestSyncRepo"],
+  suggestRepos: BoardCommandDeps["suggestSyncRepos"],
   send: (envelope: ServerEnvelope) => void,
   command: ClientCommand,
   id: string,
@@ -179,14 +186,22 @@ async function dispatchSync(
     return true
   }
 
+  if (command.type === "board.sync.unbind") {
+    // Disconnecting one repo, not the board: the other bindings and every
+    // card this one produced stay exactly where they are.
+    registry.unbindSync(command.boardId, command.bindingId)
+    send({ v: PROTOCOL_VERSION, type: "ack", id, result: { bindingId: command.bindingId } })
+    return true
+  }
+
   if (command.type === "board.sync.status") {
     const columns = registry.listColumns(command.boardId)
     const named = (column: BoardColumn | null): SyncColumnRef | null =>
       column ? { id: column.id, title: column.title } : null
     const status: BoardSyncStatus = {
-      binding: registry.getBinding(command.boardId),
+      bindings: registry.listBindings(command.boardId),
       conflicts: registry.listConflicts(command.boardId),
-      suggestedRepo: suggestRepo ? await suggestRepo(command.boardId) : null,
+      suggestedRepos: suggestRepos ? await suggestRepos(command.boardId) : [],
       // Shown, not offered: the engine routes by the same function.
       routing: {
         open: named(columnForRemoteState(columns, "open")),

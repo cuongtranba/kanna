@@ -32,28 +32,31 @@ interface BoardSyncPanelState {
   reset(): void
 }
 
+/** `owner/repo` for a github-issues binding; null for any other provider. */
+export function bindingSlug(binding: BoardSyncStatus["bindings"][number]): string | null {
+  return binding.sourceRef.provider === "github-issues"
+    ? `${binding.sourceRef.owner}/${binding.sourceRef.repo}`
+    : null
+}
+
 /**
- * Seed the editable fields from the binding when there is one, and from the
- * detected remote when there is not. A bound board must never show a repo it
- * is not actually bound to.
+ * Seed the draft with a repo the board is NOT yet connected to.
+ *
+ * A board holds N bindings, so the field is an ADD row, not an edit of "the"
+ * binding — seeding it from the first existing binding would make Save look
+ * like a no-op and, on a Stack board, hide every project still waiting to be
+ * connected. Existing bindings are listed and disconnected individually.
  */
 function seedFrom(status: BoardSyncStatus): Pick<
   BoardSyncPanelState,
   "repoDraft" | "direction" | "allowAgentPush"
 > {
-  if (status.binding && status.binding.sourceRef.provider === "github-issues") {
-    const { owner, repo } = status.binding.sourceRef
-    return {
-      repoDraft: `${owner}/${repo}`,
-      direction: status.binding.direction,
-      allowAgentPush: status.binding.allowAgentPush,
-    }
-  }
-  return {
-    repoDraft: status.suggestedRepo ? `${status.suggestedRepo.owner}/${status.suggestedRepo.repo}` : "",
-    direction: "pull",
-    allowAgentPush: false,
-  }
+  const bound = new Set(status.bindings.map(bindingSlug).filter((slug): slug is string => slug !== null))
+  const nextUnbound = status.suggestedRepos
+    .map((suggestion) => (suggestion.repo ? `${suggestion.repo.owner}/${suggestion.repo.repo}` : null))
+    .find((slug): slug is string => slug !== null && !bound.has(slug))
+
+  return { repoDraft: nextUnbound ?? "", direction: "pull", allowAgentPush: false }
 }
 
 export const useBoardSyncPanelStore = create<BoardSyncPanelState>()((set) => ({

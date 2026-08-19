@@ -1,6 +1,6 @@
 ---
 id: c3-119
-c3-seal: 70944dc0394dd3456282d51c827e05e2ff4ee486eb692f12eb42031bf7335bbf
+c3-seal: 0bac5419e2773e31a58a06d261677d9f38eacebb29b10fd1e1d8f90138a237ba
 title: boards-ui
 type: component
 category: feature
@@ -52,7 +52,7 @@ Owns the board surface: `BoardsPage` and `BoardPane`, the `KannaBoard` renderer 
 | Drag translation | OUT | dnd.ts resolves a drop edge to NEIGHBOURS, never to an index | c3-310 | src/client/lib/boards/dnd.ts |
 | Optimistic apply | OUT | moveCardInView / moveColumnInView apply to Kanna's own snapshot shape, replaced by the next server push | c3-310 | src/client/lib/boards/optimistic.ts |
 | Card drawer | IN/OUT | Renders the card's fields from the board's own schema, its links, its start-work status, and its cleanup question | c3-232 | src/client/components/boards/CardDrawer.tsx |
-| Sync panel | IN/OUT | Binds a board to a tracker, shows held and conflicted rows, and triggers a pull | c3-232 | src/client/components/boards/BoardSyncPanel.tsx |
+| Sync panel | IN/OUT | Connects a board to one or more repos, lists the connected ones with a per-row disconnect, shows held and conflicted rows, and triggers a pull | c3-232 | src/client/components/boards/BoardSyncPanel.tsx |
 
 ## Derived Materials
 

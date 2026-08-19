@@ -57,6 +57,7 @@ import {
 import type { ClientState } from "./ws-router-utils"
 import { createEnvelopeBuilder } from "./ws-router-envelope"
 import { BroadcastManager } from "./ws-router-broadcast"
+import type { RepoSuggestion } from "../shared/boards/sync-types"
 
 // Re-export skill utilities so existing callers (tests, server.ts, etc.) keep working.
 export {
@@ -110,7 +111,7 @@ interface CreateWsRouterArgs {
   startWorkView?: (cardId: string) => Promise<StartWorkView>
   cleanupView?: (cardId: string) => Promise<WorktreeCleanupView | null>
   resolveCleanup?: (cardId: string, decision: CleanupDecision) => Promise<WorktreeCleanupOutcome>
-  suggestSyncRepo?: (boardId: string) => Promise<{ owner: string; repo: string } | null>
+  suggestSyncRepos?: (boardId: string) => Promise<readonly RepoSuggestion[]>
   loopTrackingRegistry?: LoopTrackingRegistry
   subagentTranscriptRegistry?: SubagentTranscriptRegistry
   followedSessionRegistry?: FollowedSessionRegistry
@@ -142,7 +143,7 @@ export function createWsRouter({
   startWorkView,
   cleanupView,
   resolveCleanup,
-  suggestSyncRepo,
+  suggestSyncRepos,
   loopTrackingRegistry,
   subagentTranscriptRegistry,
   followedSessionRegistry,
@@ -484,7 +485,7 @@ export function createWsRouter({
               startWorkView,
               cleanupView,
               resolveCleanup,
-              suggestSyncRepo,
+              suggestSyncRepos,
               send: (envelope) => send(ws, envelope),
             },
             command,

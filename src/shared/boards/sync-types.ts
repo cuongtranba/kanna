@@ -105,11 +105,31 @@ export interface SyncColumnRouting {
   closed: SyncColumnRef | null
 }
 
+/**
+ * A repo the board could connect to, derived from a project's `origin` remote.
+ *
+ * One entry per project the board's owner covers: a project board yields at
+ * most one, a Stack board one per member project. A project with no `origin`
+ * is LISTED with `repo: null` rather than dropped — the connect screen has to
+ * say "no remote" about it, and silence would read as "already handled".
+ */
+export interface RepoSuggestion {
+  projectId: string
+  /** For the reader — the project's title, not its path. */
+  projectName: string
+  repo: { owner: string; repo: string } | null
+}
+
 /** Everything the sync screen renders, in one read. */
 export interface BoardSyncStatus {
-  binding: SyncBinding | null
+  /**
+   * Every binding on the board. A board syncs N repos; this was a single
+   * nullable binding while that was an application-level assumption the
+   * schema never made.
+   */
+  bindings: SyncBinding[]
   conflicts: readonly SyncConflict[]
-  /** Read from the project's `origin` remote and offered as the default. */
-  suggestedRepo: { owner: string; repo: string } | null
+  /** Read from each project's `origin` remote and offered as defaults. */
+  suggestedRepos: readonly RepoSuggestion[]
   routing: SyncColumnRouting
 }

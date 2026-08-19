@@ -887,3 +887,113 @@ describe("card content is checked against the board's fields", () => {
     ).toEqual({ anything: { kind: "text", value: "x" } })
   })
 })
+
+/**
+ * The table always allowed many bindings per board — `sync_binding_board_idx`
+ * is a plain, non-unique index — so nothing here needed a migration. What was
+ * missing was an application-level identity: `upsertBinding` used to look a
+ * board up by `board_id` alone, which silently made "connect this board to a
+ * second repo" mean "retarget the first".
+ */
+describe("sync bindings", () => {
+  const REPO_1 = { provider: "github-issues", owner: "o1", repo: "r1" } as const
+  const REPO_2 = { provider: "github-issues", owner: "o2", repo: "r2" } as const
+
+  function seedBound(store: BoardStore) {
+    const { board } = seedBoard(store)
+    const binding = store.upsertBinding({
+      boardId: board.id,
+      providerId: "github-issues",
+      sourceRef: REPO_1,
+      direction: "both",
+      allowAgentPush: false,
+    })
+    return { board, binding }
+  }
+
+  test("re-binding the same repo updates it in place rather than adding a duplicate", () => {
+    const store = newStore()
+    const { board, binding } = seedBound(store)
+
+    const again = store.upsertBinding({
+      boardId: board.id,
+      providerId: "github-issues",
+      sourceRef: REPO_1,
+      direction: "pull",
+      allowAgentPush: true,
+    })
+
+    expect(again.id).toBe(binding.id)
+    const all = store.listBindings(board.id)
+    expect(all).toHaveLength(1)
+    expect(all[0]).toMatchObject({ direction: "pull", allowAgentPush: true })
+  })
+
+  test("binding a second repo adds a binding instead of retargeting the first", () => {
+    const store = newStore()
+    const { board, binding } = seedBound(store)
+
+    const second = store.upsertBinding({
+      boardId: board.id,
+      providerId: "github-issues",
+      sourceRef: REPO_2,
+      direction: "both",
+      allowAgentPush: false,
+    })
+
+    expect(second.id).not.toBe(binding.id)
+    expect(store.listBindings(board.id).map((b) => b.sourceRef)).toEqual([REPO_1, REPO_2])
+  })
+
+  test("re-binding does not reset the cursor — a repo already read is not re-read", () => {
+    const store = newStore()
+    const { board, binding } = seedBound(store)
+    store.setBindingCursor(binding.id, "cursor-1", 1_700_000_000_000)
+
+    store.upsertBinding({
+      boardId: board.id,
+      providerId: "github-issues",
+      sourceRef: REPO_1,
+      direction: "pull",
+      allowAgentPush: false,
+    })
+
+    expect(store.listBindings(board.id)[0]?.cursor).toBe("cursor-1")
+  })
+
+  test("deleting a binding takes its sync links with it and leaves the others alone", () => {
+    const store = newStore()
+    const { board, binding } = seedBound(store)
+    const second = store.upsertBinding({
+      boardId: board.id,
+      providerId: "github-issues",
+      sourceRef: REPO_2,
+      direction: "both",
+      allowAgentPush: false,
+    })
+    const { columns } = { columns: store.listColumns(board.id) }
+    const column = columns[0]
+    if (!column) throw new Error("no column")
+    const card = store.createCard({ boardId: board.id, columnId: column.id, title: "Issue", actor: USER })
+    store.upsertSyncLink({
+      cardId: card.id,
+      bindingId: binding.id,
+      externalId: "1",
+      externalUrl: null,
+      fieldWatermarks: {},
+      lastSyncedAt: 1,
+    })
+
+    store.deleteBinding(binding.id)
+
+    expect(store.listBindings(board.id).map((b) => b.id)).toEqual([second.id])
+    expect(store.getSyncLinkByCard(card.id, binding.id)).toBeNull()
+    // The card itself survives: unbinding a repo is not deleting the work.
+    expect(store.getCard(card.id)).not.toBeNull()
+  })
+
+  test("deleting a binding that is not there says so rather than silently succeeding", () => {
+    const store = newStore()
+    expect(() => store.deleteBinding("nope")).toThrow(BoardStoreError)
+  })
+})

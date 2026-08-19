@@ -1108,25 +1108,22 @@ export function createBoardStore(options: CreateBoardStoreOptions): BoardStore {
 
     // ── Sync ────────────────────────────────────────────────────────────────
 
-    getBinding(boardId: string): SyncBinding | null {
-      const row = db.query<BindingRow, [string]>("SELECT * FROM sync_binding WHERE board_id = ?").get(boardId)
-      return row ? toBinding(row) : null
+    listBindings(boardId: string): SyncBinding[] {
+      return db
+        .query<BindingRow, [string]>("SELECT * FROM sync_binding WHERE board_id = ?")
+        .all(boardId)
+        .map(toBinding)
     },
 
     upsertBinding(input: UpsertBindingInput): SyncBinding {
+      const sourceRefJson = JSON.stringify(input.sourceRef)
       const existing = db
-        .query<BindingRow, [string]>("SELECT * FROM sync_binding WHERE board_id = ?")
-        .get(input.boardId)
+        .query<BindingRow, [string, string]>("SELECT * FROM sync_binding WHERE board_id = ? AND source_ref = ?")
+        .get(input.boardId, sourceRefJson)
       if (existing) {
         db.run(
-          "UPDATE sync_binding SET provider_id = ?, source_ref = ?, direction = ?, allow_agent_push = ? WHERE id = ?",
-          [
-            input.providerId,
-            JSON.stringify(input.sourceRef),
-            input.direction,
-            input.allowAgentPush ? 1 : 0,
-            existing.id,
-          ],
+          "UPDATE sync_binding SET direction = ?, allow_agent_push = ? WHERE id = ?",
+          [input.direction, input.allowAgentPush ? 1 : 0, existing.id],
         )
       } else {
         db.run(
@@ -1136,15 +1133,27 @@ export function createBoardStore(options: CreateBoardStoreOptions): BoardStore {
             newId(),
             input.boardId,
             input.providerId,
-            JSON.stringify(input.sourceRef),
+            sourceRefJson,
             input.direction,
             input.allowAgentPush ? 1 : 0,
           ],
         )
       }
-      const row = db.query<BindingRow, [string]>("SELECT * FROM sync_binding WHERE board_id = ?").get(input.boardId)
+      const row = db
+        .query<BindingRow, [string, string]>("SELECT * FROM sync_binding WHERE board_id = ? AND source_ref = ?")
+        .get(input.boardId, sourceRefJson)
       if (!row) throw new BoardStoreError("conflict", "binding disappeared immediately after write")
       return toBinding(row)
+    },
+
+    deleteBinding(bindingId: string): void {
+      const row = db.query<BindingRow, [string]>("SELECT * FROM sync_binding WHERE id = ?").get(bindingId)
+      if (!row) throw new BoardStoreError("not_found", `binding ${bindingId} does not exist`)
+      // `sync_link`, `sync_outbox`, `sync_conflict` and `column_mapping` all
+      // declare ON DELETE CASCADE against this row, so one delete takes the
+      // whole binding with it. The CARDS stay: unbinding a repo is not
+      // deleting the work it produced.
+      db.run("DELETE FROM sync_binding WHERE id = ?", [bindingId])
     },
 
     setBindingCursor(bindingId: string, cursor: string | null, lastPulledAt: number): void {
@@ -1217,6 +1226,18 @@ export function createBoardStore(options: CreateBoardStoreOptions): BoardStore {
         )
         .all(bindingId, now, Math.max(1, limit))
         .map(toOutbox)
+    },
+
+    countHeldOutbox(bindingId: string): number {
+      // The complement of `dueOutbox`'s filter. Without it a drain can report
+      // "pushed 0" for a binding holding a queue of agent edits and a binding
+      // with nothing to say, which are not the same answer.
+      const row = db
+        .query<{ n: number }, [string]>(
+          "SELECT COUNT(*) AS n FROM sync_outbox WHERE binding_id = ? AND held_reason IS NOT NULL",
+        )
+        .get(bindingId)
+      return row?.n ?? 0
     },
 
     settleOutbox(entryId: string): void {
