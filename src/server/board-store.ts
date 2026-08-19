@@ -216,8 +216,21 @@ export interface BoardStore {
   deleteTemplate(templateId: string): void
 
   // Sync
-  getBinding(boardId: string): SyncBinding | null
+  /**
+   * Every binding on the board, in creation order.
+   *
+   * A board holds N of them — `sync_binding_board_idx` was always a plain,
+   * non-unique index, so the one-repo-per-board rule was only ever an
+   * application-level assumption. Identity is `(boardId, sourceRef)`: binding
+   * the same repo twice updates it, binding a different one adds.
+   */
+  listBindings(boardId: string): SyncBinding[]
   upsertBinding(input: UpsertBindingInput): SyncBinding
+  /**
+   * Disconnect one repo. Cascades to its sync links, outbox and conflicts;
+   * the cards it created stay, because unbinding is not deleting the work.
+   */
+  deleteBinding(bindingId: string): void
   setBindingCursor(bindingId: string, cursor: string | null, lastPulledAt: number): void
   getSyncLinkByExternal(bindingId: string, externalId: string): SyncLink | null
   getSyncLinkByCard(cardId: string, bindingId: string): SyncLink | null
@@ -229,6 +242,8 @@ export interface BoardStore {
    */
   enqueueOutbox(entry: EnqueueOutboxInput): SyncOutboxEntry
   dueOutbox(bindingId: string, now: number, limit: number): SyncOutboxEntry[]
+  /** Entries the agent-push guard is holding back — what `dueOutbox` excludes. */
+  countHeldOutbox(bindingId: string): number
   settleOutbox(entryId: string): void
   deferOutbox(entryId: string, nextAttemptAt: number, error: string): void
   recordConflict(conflict: RecordConflictInput): SyncConflict

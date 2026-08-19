@@ -97,9 +97,17 @@ export interface BoardRegistry {
    * the two can never disagree.
    */
   // Sync
-  getBinding(boardId: string): SyncBinding | null
+  listBindings(boardId: string): SyncBinding[]
   /** Connect a board to a tracker. Broadcasts: the board's sync state is visible on it. */
   bindSync(input: UpsertBindingInput): SyncBinding
+  /**
+   * Disconnect one repo. The cards it created stay; only the link is cut.
+   *
+   * Takes the board id as well as the binding id and refuses a binding that
+   * belongs to another board — the same discipline the MCP board tools use, so
+   * a guessed id cannot reach across boards.
+   */
+  unbindSync(boardId: string, bindingId: string): void
   listConflicts(boardId: string): SyncConflict[]
 
   duplicateBoard(boardId: string, title: string): Board
@@ -227,8 +235,9 @@ export function createBoardRegistry(options: CreateBoardRegistryOptions): BoardR
     cardDetail(cardId: string): CardDetail | null {
       const card = store.getCard(cardId)
       if (!card) return null
-      const binding = store.getBinding(card.boardId)
-      const syncLink = binding ? store.getSyncLinkByCard(cardId, binding.id) : null
+      const bindings = store.listBindings(card.boardId)
+      const syncLink =
+        bindings.map((b) => store.getSyncLinkByCard(cardId, b.id)).find((link) => link !== null) ?? null
       return {
         card,
         links: store.listCardLinks(cardId),
@@ -269,11 +278,24 @@ export function createBoardRegistry(options: CreateBoardRegistryOptions): BoardR
     addComment: (cardId, author, body) =>
       mutate(() => boardIdOfCard(cardId), () => store.addComment(cardId, author, body)),
 
-    getBinding: (boardId) => store.getBinding(boardId),
+    listBindings: (boardId) => store.listBindings(boardId),
     listConflicts: (boardId) => store.listConflicts(boardId, MAX_CONFLICTS),
 
     bindSync(input: UpsertBindingInput): SyncBinding {
       return mutate(() => input.boardId, () => store.upsertBinding(input))
+    },
+
+    unbindSync(boardId: string, bindingId: string): void {
+      mutate(
+        () => boardId,
+        () => {
+          const owned = store.listBindings(boardId).some((b) => b.id === bindingId)
+          if (!owned) {
+            throw new BoardStoreError("not_found", `binding ${bindingId} is not on this board`)
+          }
+          store.deleteBinding(bindingId)
+        },
+      )
     },
 
     createTemplate: (input) => store.createTemplate(input),

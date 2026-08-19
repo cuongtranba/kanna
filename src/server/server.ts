@@ -43,6 +43,7 @@ import {
   type WorktreeCleanupDeps,
 } from "./board-worktree-cleanup"
 import type { CleanupDecision } from "../shared/boards/worktree-cleanup"
+import type { RepoSuggestion } from "../shared/boards/sync-types"
 import { readOriginRepoSlug } from "./diff-store-git-branch.adapter"
 import { createGitHubIssuesProvider } from "./github-issues.adapter"
 import { readGitHubCliToken } from "./github-cli.adapter"
@@ -497,15 +498,40 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     },
     removeWorktree,
   }
-  const suggestSyncRepo = async (boardId: string) => {
+  /**
+   * The repos a board could connect to, one row per project it covers.
+   *
+   * A project board yields at most one; a Stack board yields one per member
+   * project, which is what turns the connect screen into a single "connect all
+   * N" gesture. A project with no `origin` is listed with `repo: null` rather
+   * than dropped — the screen has to say "no remote" about it.
+   *
+   * Each row costs a `git remote get-url` subprocess, so this is deliberately
+   * only reachable from `board.sync.status`, a request/response command. It
+   * must not be pulled onto a broadcast path.
+   */
+  const suggestSyncRepos = async (boardId: string): Promise<readonly RepoSuggestion[]> => {
     const board = boardRegistry.getBoard(boardId)
-    if (!board || board.ownerKind !== "project") return null
-    const project = store.getProject(board.ownerId)
-    if (!project) return null
-    const slug = await readOriginRepoSlug(project.localPath)
-    if (!slug) return null
-    const [owner, repo] = slug.split("/")
-    return owner && repo ? { owner, repo } : null
+    if (!board) return []
+    const projectIds =
+      board.ownerKind === "stack"
+        ? (store.getStack(board.ownerId)?.projectIds ?? [])
+        : [board.ownerId]
+
+    const suggestions = await Promise.all(
+      projectIds.map(async (projectId): Promise<RepoSuggestion | null> => {
+        const project = store.getProject(projectId)
+        if (!project) return null
+        const slug = await readOriginRepoSlug(project.localPath)
+        const [owner, repo] = slug?.split("/") ?? []
+        return {
+          projectId,
+          projectName: project.title,
+          repo: owner && repo ? { owner, repo } : null,
+        }
+      }),
+    )
+    return suggestions.filter((entry): entry is RepoSuggestion => entry !== null)
   }
   const cleanupView = (cardId: string) => worktreeCleanupView(cleanupDeps, cardId)
   const resolveCleanup = (cardId: string, decision: CleanupDecision) =>
@@ -555,7 +581,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     startWorkView,
     cleanupView,
     resolveCleanup,
-    suggestSyncRepo,
+    suggestSyncRepos,
     loopTrackingRegistry,
     subagentTranscriptRegistry,
     followedSessionRegistry,

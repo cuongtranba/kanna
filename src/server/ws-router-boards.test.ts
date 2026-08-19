@@ -18,19 +18,20 @@ const RESULT: StartWorkResult = {
 function setup(overrides: Partial<BoardCommandDeps> = {}) {
   const sent: ServerEnvelope[] = []
   const store = createBoardStore({ filePath: ":memory:" })
+  const registry = createBoardRegistry({ store })
   const deps: BoardCommandDeps = {
-    boardRegistry: createBoardRegistry({ store }),
+    boardRegistry: registry,
     boardSync: undefined,
     startWork: () => Promise.resolve(RESULT),
     startWorkView: () =>
       Promise.resolve({ status: { kind: "idle" as const }, branch: "card/1-task", blockedReason: null }),
     cleanupView: () => Promise.resolve(null),
-    suggestSyncRepo: () => Promise.resolve(null),
+    suggestSyncRepos: () => Promise.resolve([]),
     resolveCleanup: () => Promise.resolve({ decision: "leave" as const, worktreePath: "/wt/card-1" }),
     send: (envelope) => sent.push(envelope),
     ...overrides,
   }
-  return { deps, sent }
+  return { deps, sent, registry }
 }
 
 describe("board.card.startWork", () => {
@@ -250,5 +251,98 @@ describe("board.update cardFields", () => {
 
   test("is routed as a board command", () => {
     expect(isBoardCommand({ type: "board.update", boardId: "board-1", cardFields: [] })).toBe(true)
+  })
+})
+
+/**
+ * `board.sync.status` is the ONLY way `BoardSyncStatus` reaches the client —
+ * a plain request/ack, not a broadcast topic — so nothing else would catch a
+ * shape change here.
+ */
+describe("board.sync", () => {
+  function boundBoard(registry: ReturnType<typeof createBoardRegistry>) {
+    return registry.createBoard({ owner: { kind: "project", id: "project-1" }, title: "Board" })
+  }
+
+  test("status carries EVERY binding, not just the first", async () => {
+    const { deps, sent, registry } = setup()
+    const board = boundBoard(registry)
+    registry.bindSync({
+      boardId: board.id,
+      providerId: "github-issues",
+      sourceRef: { provider: "github-issues", owner: "o1", repo: "r1" },
+      direction: "both",
+      allowAgentPush: false,
+    })
+    registry.bindSync({
+      boardId: board.id,
+      providerId: "github-issues",
+      sourceRef: { provider: "github-issues", owner: "o2", repo: "r2" },
+      direction: "pull",
+      allowAgentPush: false,
+    })
+
+    await handleBoardCommand(deps, { type: "board.sync.status", boardId: board.id }, "req-1")
+
+    const ack = sent[0] as { result: { bindings: { sourceRef: { owner: string } }[] } }
+    expect(ack.result.bindings.map((b) => b.sourceRef.owner)).toEqual(["o1", "o2"])
+  })
+
+  test("status offers one repo suggestion per project, including projects with no remote", async () => {
+    const { deps, sent, registry } = setup({
+      suggestSyncRepos: () =>
+        Promise.resolve([
+          { projectId: "p1", projectName: "kanna", repo: { owner: "cuongtranba", repo: "kanna" } },
+          // Listed, not dropped: the connect screen has to SAY "no remote"
+          // about it, and silence would read as "already handled".
+          { projectId: "p2", projectName: "scratch", repo: null },
+        ]),
+    })
+    const board = boundBoard(registry)
+
+    await handleBoardCommand(deps, { type: "board.sync.status", boardId: board.id }, "req-1")
+
+    const ack = sent[0] as { result: { suggestedRepos: { projectId: string; repo: unknown }[] } }
+    expect(ack.result.suggestedRepos).toHaveLength(2)
+    expect(ack.result.suggestedRepos[1]).toMatchObject({ projectId: "p2", repo: null })
+  })
+
+  test("unbind disconnects one repo and leaves the board's other bindings alone", async () => {
+    const { deps, sent, registry } = setup()
+    const board = boundBoard(registry)
+    const first = registry.bindSync({
+      boardId: board.id,
+      providerId: "github-issues",
+      sourceRef: { provider: "github-issues", owner: "o1", repo: "r1" },
+      direction: "both",
+      allowAgentPush: false,
+    })
+    registry.bindSync({
+      boardId: board.id,
+      providerId: "github-issues",
+      sourceRef: { provider: "github-issues", owner: "o2", repo: "r2" },
+      direction: "both",
+      allowAgentPush: false,
+    })
+
+    await handleBoardCommand(
+      deps,
+      { type: "board.sync.unbind", boardId: board.id, bindingId: first.id },
+      "req-1",
+    )
+
+    expect(sent[0]).toMatchObject({ type: "ack", id: "req-1" })
+    expect(registry.listBindings(board.id).map((b) => b.sourceRef.owner)).toEqual(["o2"])
+  })
+
+  test("unbinding something that is not bound is an error envelope, not a throw", async () => {
+    const { deps, sent, registry } = setup()
+    const board = boundBoard(registry)
+    await handleBoardCommand(
+      deps,
+      { type: "board.sync.unbind", boardId: board.id, bindingId: "nope" },
+      "req-1",
+    )
+    expect(sent[0]).toMatchObject({ type: "error", id: "req-1" })
   })
 })

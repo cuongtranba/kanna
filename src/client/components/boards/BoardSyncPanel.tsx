@@ -3,7 +3,7 @@ import { X } from "lucide-react"
 import { Button } from "../ui/button"
 import { Input } from "../ui/input"
 import { SegmentedControl, type SegmentedOption } from "../ui/segmented-control"
-import { useBoardSyncPanelStore } from "./BoardSyncPanel.store"
+import { bindingSlug, useBoardSyncPanelStore } from "./BoardSyncPanel.store"
 import { parseRepoSlug } from "../../../shared/boards/repo-slug"
 import type { BoardSyncStatus, SyncColumnRouting } from "../../../shared/boards/sync-types"
 import type { SyncConflict, SyncDirection } from "../../../shared/boards/types"
@@ -38,15 +38,44 @@ const DIRECTIONS: SegmentedOption<SyncDirection>[] = [
   { value: "both", label: "Both" },
 ]
 
-/** The button says which of the two things it does. */
-function saveLabel(status: BoardSyncStatus | null): string {
-  return status?.binding ? "Update" : "Connect"
-}
+/**
+ * The button always ADDS a repo — a board holds N bindings, and an existing
+ * one is changed by disconnecting it and connecting it again, not by editing
+ * "the" binding through a field that cannot say which one it means.
+ */
+const SAVE_LABEL = "Connect"
 
 /** What a conflict was about, in the reader's terms rather than the store's. */
 function conflictLine(conflict: SyncConflict): string {
   const kept = conflict.resolvedAs === "local" ? "kept yours" : "took theirs"
   return `${conflict.field} changed in both places · ${kept}`
+}
+
+/**
+ * One row's disconnect button. A component rather than an inline arrow in the
+ * map so the handler is bound once per row instead of re-created every render.
+ */
+function BindingDisconnect({
+  bindingId,
+  onDisconnect,
+}: {
+  bindingId: string
+  onDisconnect: (bindingId: string) => void
+}) {
+  const handleClick = useCallback(() => {
+    onDisconnect(bindingId)
+  }, [bindingId, onDisconnect])
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      aria-label={`Disconnect ${bindingId}`}
+      className="shrink-0 rounded-md p-1 text-muted-foreground hover:bg-secondary hover:text-destructive-text"
+    >
+      <X className="size-3.5" />
+    </button>
+  )
 }
 
 function RoutingRow({ label, column, absent }: { label: string; column: { title: string } | null; absent: string }) {
@@ -135,6 +164,20 @@ export function BoardSyncPanel({ boardId, socket, onClose }: BoardSyncPanelProps
       })
   }, [boardId, load, setError, socket])
 
+  const handleDisconnect = useCallback(
+    (bindingId: string) => {
+      // Disconnecting a repo leaves its cards alone — only the link is cut —
+      // so this needs no confirm step the way archiving a board does.
+      void socket
+        .command({ type: "board.sync.unbind", boardId, bindingId })
+        .then(load)
+        .catch((cause: AnyValue) => {
+          setError(errorMessage(cause))
+        })
+    },
+    [boardId, load, setError, socket],
+  )
+
   const warning = status ? routingWarning(status.routing, direction) : null
 
   return (
@@ -170,10 +213,30 @@ export function BoardSyncPanel({ boardId, socket, onClose }: BoardSyncPanelProps
               spellCheck={false}
               className="font-mono text-[13px]"
             />
-            {!status.binding && status.suggestedRepo ? (
+            {repoDraft.length > 0 ? (
               <p className="text-[13px] text-muted-foreground">Read from this project&rsquo;s origin remote.</p>
             ) : null}
           </section>
+
+          {status.bindings.length > 0 ? (
+            <section className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">Connected repositories</p>
+              <ul className="space-y-1">
+                {status.bindings.map((binding) => (
+                  <li
+                    key={binding.id}
+                    className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5"
+                  >
+                    <span className="min-w-0 flex-1 truncate font-mono text-[13px] text-foreground">
+                      {bindingSlug(binding) ?? binding.providerId}
+                    </span>
+                    <span className="shrink-0 text-xs text-muted-foreground">{binding.direction}</span>
+                    <BindingDisconnect bindingId={binding.id} onDisconnect={handleDisconnect} />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
 
           <section className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground">Direction</p>
@@ -232,7 +295,7 @@ export function BoardSyncPanel({ boardId, socket, onClose }: BoardSyncPanelProps
 
       <footer className="flex items-center gap-2 border-t border-border px-4 py-3">
         <Button size="sm" onClick={handleSave} disabled={saving || !status}>
-          {saving ? "Saving…" : saveLabel(status)}
+          {saving ? "Saving…" : SAVE_LABEL}
         </Button>
       </footer>
     </aside>
