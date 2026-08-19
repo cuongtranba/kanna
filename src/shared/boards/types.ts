@@ -226,6 +226,16 @@ export type ProviderId = RemoteSourceRef["provider"]
 export interface SyncBinding {
   id: string
   boardId: string
+  /**
+   * The checkout this repo lives in, so a card pulled into a Stack board knows
+   * which worktree Start work should mint.
+   *
+   * A project board could infer it from the board's owner; a Stack board cannot
+   * — its cards come from several repos and the board itself names none of
+   * them. Null for a binding created before this was recorded, and for one the
+   * caller could not attribute to a project.
+   */
+  projectId: string | null
   providerId: ProviderId
   sourceRef: RemoteSourceRef
   direction: SyncDirection

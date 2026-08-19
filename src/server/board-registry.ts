@@ -26,9 +26,12 @@ import type {
   CardDetail,
   CardLink,
   CardLinkKind,
+  ProviderId,
+  RemoteSourceRef,
   SyncBinding,
   SyncConflict,
 } from "../shared/boards/types"
+import type { RepoBoardOwner } from "../shared/boards/sync-types"
 import {
   BoardStoreError,
   type BoardOwnerRef,
@@ -58,6 +61,24 @@ export type { BoardSummary, BoardViewSnapshot, CardDetail }
 export interface BoardChange {
   boardId: string
   owner: BoardOwnerRef
+}
+
+export interface BindSyncInput extends UpsertBindingInput {
+  /**
+   * The board this repo is being taken FROM, when another board holds it.
+   *
+   * Required only for a move, and checked against the live owner rather than
+   * trusted — so a screen whose view of the world went stale is refused instead
+   * of silently detaching a board the user never saw.
+   */
+  detachFromBoardId?: string | null
+}
+
+/** `owner/repo` for a refusal a human has to act on. */
+function sourceLabel(ref: RemoteSourceRef): string {
+  return ref.provider === "github-issues"
+    ? `${ref.owner}/${ref.repo}`
+    : `${ref.owner}/#${ref.projectNumber}`
 }
 
 export interface BoardRegistry {
@@ -98,8 +119,30 @@ export interface BoardRegistry {
    */
   // Sync
   listBindings(boardId: string): SyncBinding[]
-  /** Connect a board to a tracker. Broadcasts: the board's sync state is visible on it. */
-  bindSync(input: UpsertBindingInput): SyncBinding
+  /**
+   * The board already holding this repo, if it is not `excludingBoardId`.
+   *
+   * Read-only, and the connect screen's whole basis for asking before moving:
+   * a repo binds to exactly one board, so a second board wanting it is a MOVE.
+   */
+  repoBindingOwner(
+    providerId: ProviderId,
+    sourceRef: RemoteSourceRef,
+    excludingBoardId: string,
+  ): RepoBoardOwner | null
+  /**
+   * Connect a board to a tracker. Broadcasts: the board's sync state is visible on it.
+   *
+   * A repo binds to exactly ONE board. `sync_link_external_idx` is unique per
+   * `(binding_id, external_id)` — per BINDING, not per issue — so two bindings
+   * on the same repo each hold every issue as a SEPARATE card, with two sync
+   * links and two outbox entries, and the two boards then race each other
+   * last-writer-wins onto the real tracker. Binding a repo another board holds
+   * is therefore refused unless `detachFromBoardId` names that board, which
+   * makes the move explicit and auditable rather than an accident of clicking
+   * Connect twice.
+   */
+  bindSync(input: BindSyncInput): SyncBinding
   /**
    * Disconnect one repo. The cards it created stay; only the link is cut.
    *
@@ -281,8 +324,56 @@ export function createBoardRegistry(options: CreateBoardRegistryOptions): BoardR
     listBindings: (boardId) => store.listBindings(boardId),
     listConflicts: (boardId) => store.listConflicts(boardId, MAX_CONFLICTS),
 
-    bindSync(input: UpsertBindingInput): SyncBinding {
-      return mutate(() => input.boardId, () => store.upsertBinding(input))
+    repoBindingOwner(
+      providerId: ProviderId,
+      sourceRef: RemoteSourceRef,
+      excludingBoardId: string,
+    ): RepoBoardOwner | null {
+      const foreign = store
+        .findBindingsBySource(providerId, sourceRef)
+        .find((binding) => binding.boardId !== excludingBoardId)
+      if (!foreign) return null
+      const board = store.getBoard(foreign.boardId)
+      if (!board) return null
+      const counts = store.countCardsByColumn(board.id)
+      return {
+        boardId: board.id,
+        boardTitle: board.title,
+        cardCount: Object.values(counts).reduce((total, count) => total + count, 0),
+      }
+    },
+
+    bindSync(input: BindSyncInput): SyncBinding {
+      const { detachFromBoardId, ...binding } = input
+      return mutate(
+        () => binding.boardId,
+        () => {
+          const foreign = store
+            .findBindingsBySource(binding.providerId, binding.sourceRef)
+            .filter((existing) => existing.boardId !== binding.boardId)
+
+          if (foreign.length > 0) {
+            // Naming the board is what makes this a move the user chose rather
+            // than one they discovered afterwards, and re-checking it here
+            // closes the window between the screen reading the owner and the
+            // user confirming.
+            const holder = foreign[0]
+            if (!detachFromBoardId || !foreign.some((b) => b.boardId === detachFromBoardId)) {
+              throw new BoardStoreError(
+                "conflict",
+                `${sourceLabel(binding.sourceRef)} is already synced by board ${holder?.boardId}; ` +
+                  "connecting it here detaches it from that board — pass detachFromBoardId to confirm",
+              )
+            }
+            // Deleting the binding cascades its sync links and outbox; the
+            // other board's CARDS stay, because unbinding is not deleting the
+            // work (see unbindSync).
+            for (const stale of foreign) store.deleteBinding(stale.id)
+          }
+
+          return store.upsertBinding(binding)
+        },
+      )
     },
 
     unbindSync(boardId: string, bindingId: string): void {

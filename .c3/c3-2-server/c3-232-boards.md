@@ -1,6 +1,6 @@
 ---
 id: c3-232
-c3-seal: 298b9a5d70b703c5ab2ccb73f03940177aedb3f16dc1a54d58dd0e31152bd003
+c3-seal: 58f5efe5cfbe6712f5cc8b14932789d0b9bb7005ce1e46dff8bbd0ab702b7c13
 title: boards
 type: component
 category: feature
@@ -48,12 +48,12 @@ Owns board persistence (`board-store.ts` port + `board-store.adapter.ts` over `b
 
 | Surface | Direction | Contract | Boundary | Evidence |
 | --- | --- | --- | --- | --- |
-| BoardRegistry | IN/OUT | Reads (listBoards / boardView / cardPage / cardDetail / findCardsByLink / listBindings) and writes (board, column, card, link, comment, template, bind and unbind); every write notifies subscribers | c3-207 | src/server/board-registry.ts |
+| BoardRegistry | IN/OUT | Reads (listBoards / boardView / cardPage / cardDetail / findCardsByLink / listBindings / repoBindingOwner) and writes (board, column, card, link, comment, template, bind and unbind); every write notifies subscribers; bindSync refuses a repo another board holds unless detachFromBoardId names that board, re-checked against the live owner so a stale screen cannot detach a board the user never saw | c3-207 | src/server/board-registry.ts |
 | SQLite store | OUT | Append-only migrations gated on PRAGMA user_version; listColumns orders by rank | c3-232 | src/server/board-store.adapter.ts |
 | board.* WS commands | IN | board.create / update / duplicate / saveAsTemplate / archive, board.column.*, board.card.create / move / archive / comment / update, board.cards.page, board.templates.list | c3-208 | src/server/ws-router-boards.ts |
 | Start work | IN/OUT | One card becomes one worktree, one branch, one chat; idempotent — a live chat is reused, a surviving worktree is reattached | c3-210 | src/server/board-start-work.ts |
 | Worktree cleanup | IN/OUT | On done, offers merge / discard / leave; discard refuses while the worktree is dirty and says what would be lost | c3-215 | src/server/board-worktree-cleanup.ts |
-| Tracker sync | IN/OUT | One board holds one binding per repo; pull and push loop over listBindings, each binding reconciling per field watermark against its own cursor, and a failing binding is reported on BindingPullResult rather than stopping the others; an agent-origin change is held with heldReason: "agent_push_disabled" unless the binding allows it | c3-232 | src/server/board-sync.ts |
+| Tracker sync | IN/OUT | One board holds one binding per repo and a repo binds to one board; pull and push loop over listBindings, each binding reconciling per field watermark against its own cursor, and a failing binding is reported on BindingPullResult rather than stopping the others; a created card is stamped with its binding's projectId, which on a Stack board is the only thing that can tell Start work which checkout the issue came from; an agent-origin change is held with heldReason: "agent_push_disabled" unless the binding allows it | c3-232 | src/server/board-sync.ts |
 | Agent board tools | OUT | board_list, board_get, card_move, card_create, card_comment — every id resolved against the chat's project, writes attributed {kind:"agent", chatId} | c3-226 | src/server/kanna-mcp-boards.ts |
 
 ## Derived Materials

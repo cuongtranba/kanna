@@ -236,6 +236,11 @@ export function createBoardSync(deps: BoardSyncDeps) {
           columnId: column.id,
           title: remote.title,
           actor: SYNC_ACTOR,
+          // Which checkout this issue belongs to. A project board could infer
+          // it from the board's owner; a Stack board spans several repos and
+          // names none, so the binding that pulled the issue is the only thing
+          // that knows — and Start work has nowhere else to look.
+          projectId: binding.projectId,
           afterCardId: lastCreatedIn.get(column.id) ?? lastCardIdIn(column.id),
           content: {
             description: { kind: "longtext", value: remote.body ?? "" },

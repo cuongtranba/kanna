@@ -283,6 +283,7 @@ describe("read models", () => {
     const binding = registry.bindSync({
       boardId: board.id,
       providerId: "github-issues",
+      projectId: null,
       sourceRef: { provider: "github-issues", owner: "o", repo: "r" },
       direction: "pull",
       allowAgentPush: false,
@@ -308,5 +309,144 @@ describe("read models", () => {
       "active",
       "done",
     ])
+  })
+})
+
+/**
+ * One repo binds to exactly ONE board.
+ *
+ * `sync_link_external_idx` is unique per `(binding_id, external_id)` — per
+ * BINDING, not per issue — so two bindings on the same repo each hold every
+ * issue as a SEPARATE card, with two sync links and two outbox entries, and the
+ * two boards then race each other last-writer-wins onto the real tracker. The
+ * rule is cross-board, so no index can express it; the registry is where it
+ * lives.
+ */
+describe("one repo, one board", () => {
+  const REPO = { provider: "github-issues", owner: "acme", repo: "widgets" } as const
+
+  function boards() {
+    const project = registry.createBoard({
+      owner: { kind: "project", id: "project-1" },
+      title: "Widgets",
+      definition: DEFINITION,
+    })
+    const stack = registry.createBoard({
+      owner: { kind: "stack", id: "stack-1" },
+      title: "Q3",
+      definition: DEFINITION,
+    })
+    return { project, stack }
+  }
+
+  function bind(boardId: string, extra: { detachFromBoardId?: string | null } = {}) {
+    return registry.bindSync({
+      boardId,
+      providerId: "github-issues",
+      projectId: "project-1",
+      sourceRef: REPO,
+      direction: "pull",
+      allowAgentPush: false,
+      ...extra,
+    })
+  }
+
+  test("connecting a repo another board holds is refused without the explicit move", () => {
+    const { project, stack } = boards()
+    bind(project.id)
+
+    expect(() => bind(stack.id)).toThrow(BoardStoreError)
+    // Refused means nothing moved: the original binding is untouched.
+    expect(registry.listBindings(project.id)).toHaveLength(1)
+    expect(registry.listBindings(stack.id)).toHaveLength(0)
+  })
+
+  test("the refusal names the repo, because a board id is not something a reader can act on", () => {
+    const { project, stack } = boards()
+    bind(project.id)
+    expect(() => bind(stack.id)).toThrow(/acme\/widgets/)
+  })
+
+  test("naming the WRONG board is refused too — a stale screen must not detach a board nobody saw", () => {
+    const { project, stack } = boards()
+    bind(project.id)
+    expect(() => bind(stack.id, { detachFromBoardId: "some-other-board" })).toThrow(BoardStoreError)
+    expect(registry.listBindings(project.id)).toHaveLength(1)
+  })
+
+  test("a confirmed move takes the old binding and its sync links, and orphans no card", () => {
+    const { project, stack } = boards()
+    const original = bind(project.id)
+    const column = store.listColumns(project.id)[0]
+    if (!column) throw new Error("seeded board has no columns")
+    const card = registry.createCard({
+      boardId: project.id,
+      columnId: column.id,
+      title: "Issue 412",
+      actor: USER,
+    })
+    store.upsertSyncLink({
+      cardId: card.id,
+      bindingId: original.id,
+      externalId: "412",
+      externalUrl: "https://github.test/acme/widgets/issues/412",
+      fieldWatermarks: {},
+      lastSyncedAt: 0,
+    })
+
+    const moved = bind(stack.id, { detachFromBoardId: project.id })
+
+    expect(moved.boardId).toBe(stack.id)
+    expect(registry.listBindings(project.id)).toHaveLength(0)
+    expect(registry.listBindings(stack.id).map((b) => b.sourceRef)).toEqual([REPO])
+    // The link went with the binding it belonged to...
+    expect(store.getSyncLinkByExternal(original.id, "412")).toBeNull()
+    // ...but unbinding is not deleting the work: the card stays where it is.
+    expect(store.getCard(card.id)?.title).toBe("Issue 412")
+  })
+
+  test("re-connecting the SAME board needs no confirmation — that is an edit, not a move", () => {
+    const { project } = boards()
+    const first = bind(project.id)
+    const again = registry.bindSync({
+      boardId: project.id,
+      providerId: "github-issues",
+      projectId: "project-1",
+      sourceRef: REPO,
+      direction: "both",
+      allowAgentPush: true,
+    })
+    expect(again.id).toBe(first.id)
+    expect(again.direction).toBe("both")
+  })
+
+  test("repoBindingOwner names the holder and its card count, and ignores the board asking", () => {
+    const { project, stack } = boards()
+    bind(project.id)
+    const column = store.listColumns(project.id)[0]
+    if (!column) throw new Error("seeded board has no columns")
+    registry.createCard({ boardId: project.id, columnId: column.id, title: "one", actor: USER })
+    registry.createCard({ boardId: project.id, columnId: column.id, title: "two", actor: USER })
+
+    expect(registry.repoBindingOwner("github-issues", REPO, stack.id)).toEqual({
+      boardId: project.id,
+      boardTitle: "Widgets",
+      cardCount: 2,
+    })
+    // The board already holding it is not a conflict with itself.
+    expect(registry.repoBindingOwner("github-issues", REPO, project.id)).toBeNull()
+  })
+
+  test("an unheld repo has no owner, so the screen offers a plain Connect", () => {
+    const { stack } = boards()
+    expect(registry.repoBindingOwner("github-issues", REPO, stack.id)).toBeNull()
+  })
+
+  test("a move broadcasts, so both boards' viewers see the change", () => {
+    const { project, stack } = boards()
+    bind(project.id)
+    changes = []
+    bind(stack.id, { detachFromBoardId: project.id })
+    expect(changes.map((c) => c.boardId)).toContain(stack.id)
   })
 })

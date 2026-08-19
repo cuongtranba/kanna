@@ -5,6 +5,7 @@ import { createBoardStore } from "./board-store.adapter"
 import type { BoardStore } from "./board-store"
 import type { BoardSyncProvider, PullInput, PushInput, PushOutcome, RemoteItem } from "../shared/boards/sync-types"
 import type { BoardTemplateDefinition, ProviderId } from "../shared/boards/types"
+import { resolveStartWorkProjectId } from "../shared/boards/start-work"
 
 const T0 = 1_700_000_000_000
 const MINUTE = 60_000
@@ -91,6 +92,7 @@ function setup(allowAgentPush = false) {
   store.upsertBinding({
     boardId,
     providerId: "github-issues",
+    projectId: null,
     sourceRef: { provider: "github-issues", owner: "o", repo: "r" },
     direction: "both",
     allowAgentPush,
@@ -328,6 +330,7 @@ describe("drain", () => {
     store.upsertBinding({
       boardId,
       providerId: "github-issues",
+      projectId: null,
       sourceRef: { provider: "github-issues", owner: "o", repo: "r" },
       direction: "pull",
       allowAgentPush: false,
@@ -402,6 +405,7 @@ describe("multiple bindings", () => {
     multiStore.upsertBinding({
       boardId: multiBoardId,
       providerId: "github-issues",
+      projectId: null,
       sourceRef: { provider: "github-issues", owner: "o1", repo: "r1" },
       direction: "both",
       allowAgentPush: false,
@@ -409,6 +413,7 @@ describe("multiple bindings", () => {
     multiStore.upsertBinding({
       boardId: multiBoardId,
       providerId: "github-issues",
+      projectId: null,
       sourceRef: { provider: "github-issues", owner: "o2", repo: "r2" },
       direction: "both",
       allowAgentPush: false,
@@ -497,6 +502,7 @@ describe("multiple bindings", () => {
     multiStore.upsertBinding({
       boardId: multiBoardId,
       providerId: "github-projectv2",
+      projectId: null,
       sourceRef: { provider: "github-projectv2", owner: "o3", projectNumber: 1, projectId: "pv2" },
       direction: "both",
       allowAgentPush: false,
@@ -508,6 +514,97 @@ describe("multiple bindings", () => {
       .listBindings(multiBoardId)
       .find((b) => b.providerId === "github-projectv2")!
     expect(summary.bindings.find((r) => r.bindingId === orphan.id)?.error).toContain("github-projectv2")
+  })
+
+  /**
+   * The reason `projectId` is on a binding at all. A Stack board's cards come
+   * from several checkouts and the board names none of them, so the binding
+   * that pulled an issue is the ONLY thing that knows where its code lives —
+   * and `resolveStartWorkProjectId` reads the card, not the binding. Break the
+   * hand-off and Start work mints a worktree in the wrong repo, or refuses.
+   */
+  test("a pulled card carries its binding's project, so Start work finds the right checkout", async () => {
+    const stackStore = createBoardStore({
+      filePath: ":memory:",
+      now: () => clock,
+      newId: (() => {
+        let counter = 0
+        return () => `stack-${(counter += 1).toString().padStart(4, "0")}`
+      })(),
+    })
+    const stackRegistry = createBoardRegistry({ store: stackStore })
+    const stackFake = smartFake()
+    // Stack-owned: `resolveStartWorkProjectId` has no board-level fallback
+    // here, so a card with a null project cannot be worked at all.
+    const board = stackRegistry.createBoard({
+      owner: { kind: "stack", id: "s1" },
+      title: "Stack",
+      definition: DEFINITION,
+    })
+    for (const [owner, repo, projectId] of [
+      ["o1", "r1", "proj-api"],
+      ["o2", "r2", "proj-web"],
+    ] as const) {
+      stackStore.upsertBinding({
+        boardId: board.id,
+        providerId: "github-issues",
+        projectId,
+        sourceRef: { provider: "github-issues", owner, repo },
+        direction: "both",
+        allowAgentPush: false,
+      })
+    }
+    const stackSync = createBoardSync({
+      registry: stackRegistry,
+      store: stackStore,
+      providers: new Map<ProviderId, BoardSyncProvider>([["github-issues", stackFake.provider]]),
+      readToken: () => Promise.resolve({ token: "t", reason: "ok", detail: null }),
+      now: () => clock,
+    })
+
+    stackFake.serveFor("o1", "r1", [issue({ externalId: "101", title: "API item" })])
+    stackFake.serveFor("o2", "r2", [issue({ externalId: "201", title: "Web item" })])
+    await stackSync.pull(board.id)
+
+    const open = stackStore.listColumns(board.id).find((column) => column.title === "Open")!
+    const byTitle = new Map(
+      stackStore
+        .listCardPage({ columnId: open.id, limit: 50 })
+        .cards.map((card) => [card.title, card.projectId]),
+    )
+    expect(byTitle.get("API item")).toBe("proj-api")
+    expect(byTitle.get("Web item")).toBe("proj-web")
+  })
+
+  /**
+   * A binding created before `projectId` existed reads back null, and a Stack
+   * board cannot fall back to an owner project — so Start work must REFUSE
+   * rather than guess a checkout. Pinned because the tempting "fall back to the
+   * first binding" fix would silently work in the wrong repo.
+   */
+  test("a binding with no project leaves the card unattributed rather than guessing one", async () => {
+    const board = multiRegistry.createBoard({
+      owner: { kind: "stack", id: "s2" },
+      title: "Legacy stack",
+      definition: DEFINITION,
+    })
+    multiStore.upsertBinding({
+      boardId: board.id,
+      providerId: "github-issues",
+      projectId: null,
+      sourceRef: { provider: "github-issues", owner: "o1", repo: "r1" },
+      direction: "both",
+      allowAgentPush: false,
+    })
+    smart.serveFor("o1", "r1", [issue({ externalId: "301", title: "Orphan" })])
+
+    await multiSync.pull(board.id)
+
+    const open = multiStore.listColumns(board.id).find((column) => column.title === "Open")!
+    const card = multiStore.listCardPage({ columnId: open.id, limit: 50 }).cards[0]
+    expect(card?.title).toBe("Orphan")
+    expect(card?.projectId).toBeNull()
+    expect(resolveStartWorkProjectId(card!, multiStore.getBoard(board.id)!)).toBeNull()
   })
 
   test("held entries are counted on the drain summary rather than reported as zero", async () => {

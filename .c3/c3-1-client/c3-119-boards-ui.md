@@ -1,6 +1,6 @@
 ---
 id: c3-119
-c3-seal: 0bac5419e2773e31a58a06d261677d9f38eacebb29b10fd1e1d8f90138a237ba
+c3-seal: f996264f3cf15f0b945fa48dd3927936c7cfeb7c1e4d2f0f4b434e02365fef14
 title: boards-ui
 type: component
 category: feature
@@ -52,7 +52,7 @@ Owns the board surface: `BoardsPage` and `BoardPane`, the `KannaBoard` renderer 
 | Drag translation | OUT | dnd.ts resolves a drop edge to NEIGHBOURS, never to an index | c3-310 | src/client/lib/boards/dnd.ts |
 | Optimistic apply | OUT | moveCardInView / moveColumnInView apply to Kanna's own snapshot shape, replaced by the next server push | c3-310 | src/client/lib/boards/optimistic.ts |
 | Card drawer | IN/OUT | Renders the card's fields from the board's own schema, its links, its start-work status, and its cleanup question | c3-232 | src/client/components/boards/CardDrawer.tsx |
-| Sync panel | IN/OUT | Connects a board to one or more repos, lists the connected ones with a per-row disconnect, shows held and conflicted rows, and triggers a pull | c3-232 | src/client/components/boards/BoardSyncPanel.tsx |
+| Sync panel | IN/OUT | Offers every project in the workspace as its own row so a Stack connects N repos in one pass, with Connect all for the unheld ones; a repo another board holds reads "Move here" and takes two clicks, naming that board and the cards it keeps; direction and agent-push are board policy that a row may override; lists the connected repos with a per-row disconnect, shows held and conflicted rows, and triggers a pull | c3-232 | src/client/components/boards/BoardSyncPanel.tsx |
 
 ## Derived Materials
 

@@ -118,6 +118,24 @@ export interface RepoSuggestion {
   /** For the reader — the project's title, not its path. */
   projectName: string
   repo: { owner: string; repo: string } | null
+  /**
+   * The board already syncing this repo, when it is not the board being
+   * configured.
+   *
+   * A repo binds to exactly ONE board, so connecting it here DETACHES it from
+   * there. That is a move, not an addition, and the screen has to say so before
+   * the user commits — which is why the card count rides along: "and its 47
+   * cards stay on that board" is the part a reader cannot guess.
+   */
+  boundTo: RepoBoardOwner | null
+}
+
+/** Who currently holds a repo, named for a confirm prompt. */
+export interface RepoBoardOwner {
+  boardId: string
+  boardTitle: string
+  /** Cards on that board — what the reader is being asked to leave behind. */
+  cardCount: number
 }
 
 /** Everything the sync screen renders, in one read. */

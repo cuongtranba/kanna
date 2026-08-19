@@ -12,6 +12,7 @@ const BINDING: SyncBinding = {
   id: "bind-1",
   boardId: "board-1",
   providerId: "github-issues",
+  projectId: null,
   sourceRef: { provider: "github-issues", owner: "acme", repo: "widgets" },
   direction: "both",
   allowAgentPush: true,
@@ -34,7 +35,7 @@ function status(overrides: Partial<BoardSyncStatus> = {}): BoardSyncStatus {
   return {
     bindings: [],
     conflicts: [],
-    suggestedRepos: [{ projectId: "p1", projectName: "kanna", repo: { owner: "cuongtranba", repo: "kanna" } }],
+    suggestedRepos: [{ projectId: "p1", projectName: "kanna", repo: { owner: "cuongtranba", repo: "kanna" }, boundTo: null }],
     routing: { open: { id: "c1", title: "Todo" }, closed: { id: "c3", title: "Done" } },
     ...overrides,
   }
@@ -78,11 +79,25 @@ function repoInput(container: HTMLElement): HTMLInputElement {
   return input
 }
 
+/**
+ * The button beside the typed field — NOT a suggestion row's Connect. Both say
+ * "Connect", and matching on the label alone silently clicked the first row.
+ */
 function saveButton(container: HTMLElement): HTMLButtonElement {
-  const button = [...container.querySelectorAll("button")].find((candidate) =>
-    /Connect|Update|Saving/u.test(candidate.textContent ?? ""),
-  )
+  const button = repoInput(container).parentElement?.querySelector("button")
   if (!button) throw new Error(`no save button in: ${container.textContent ?? ""}`)
+  return button
+}
+
+/** A suggestion row's own connect/move button, by the project it offers. */
+function suggestionButton(container: HTMLElement, projectName: string): HTMLButtonElement {
+  const row = [...container.querySelectorAll("li")].find((candidate) =>
+    candidate.textContent?.includes(projectName),
+  )
+  const button = [...(row?.querySelectorAll("button") ?? [])].find((candidate) =>
+    /Connect|Move here|Confirm move/u.test(candidate.textContent ?? ""),
+  )
+  if (!button) throw new Error(`no suggestion button for ${projectName} in: ${container.textContent ?? ""}`)
   return button
 }
 
@@ -99,24 +114,27 @@ beforeEach(() => {
 })
 
 describe("BoardSyncPanel", () => {
-  test("an unbound board is offered the repo its project is already cloned from", async () => {
+  /**
+   * Each project the workspace already holds gets its OWN row. The typed field
+   * stays empty — it is for a repo the rows do not offer, and prefilling it
+   * with one listed directly above is a second way to do the same thing.
+   */
+  test("every project in the workspace is offered as its own row", async () => {
     const harness = await mount(status())
-    expect(repoInput(harness.container).value).toBe("cuongtranba/kanna")
-    expect(harness.container.textContent).toContain("origin remote")
-    expect(saveButton(harness.container).textContent).toBe("Connect")
+    expect(harness.container.textContent).toContain("cuongtranba/kanna")
+    expect(suggestionButton(harness.container, "kanna").textContent).toBe("Connect")
+    expect(repoInput(harness.container).value).toBe("")
     harness.unmount()
   })
 
   /**
    * A board holds N bindings, so the field ADDS one — it is not an edit of
-   * "the" binding. Seeding it from an existing binding would make Connect look
-   * like a no-op and, on a Stack board, hide every project still unconnected.
+   * "the" binding. An existing binding is listed and disconnected on its own.
    */
-  test("a bound board lists what it is connected to and offers the next unbound repo", async () => {
+  test("a bound board lists what it is connected to and still offers the unbound repos", async () => {
     const harness = await mount(status({ bindings: [BINDING] }))
     expect(harness.container.textContent).toContain("acme/widgets")
-    expect(repoInput(harness.container).value).toBe("cuongtranba/kanna")
-    expect(saveButton(harness.container).textContent).toBe("Connect")
+    expect(suggestionButton(harness.container, "kanna").textContent).toBe("Connect")
     harness.unmount()
   })
 
@@ -125,11 +143,39 @@ describe("BoardSyncPanel", () => {
       status({
         bindings: [BINDING],
         suggestedRepos: [
-          { projectId: "p1", projectName: "widgets", repo: { owner: "acme", repo: "widgets" } },
+          { projectId: "p1", projectName: "widgets", repo: { owner: "acme", repo: "widgets" }, boundTo: null },
         ],
       }),
     )
-    expect(repoInput(harness.container).value).toBe("")
+    expect(() => suggestionButton(harness.container, "widgets")).toThrow()
+    harness.unmount()
+  })
+
+  /** A project with no `origin` cannot be connected, and says why. */
+  test("a project with no remote is listed without a connect button", async () => {
+    const harness = await mount(
+      status({ suggestedRepos: [{ projectId: "p1", projectName: "scratch", repo: null, boundTo: null }] }),
+    )
+    expect(harness.container.textContent).toContain("No remote configured")
+    expect(() => suggestionButton(harness.container, "scratch")).toThrow()
+    harness.unmount()
+  })
+
+  test("connecting a suggestion binds it with its project, so Start work finds the checkout", async () => {
+    const harness = await mount(status())
+    await act(async () => {
+      suggestionButton(harness.container, "kanna").click()
+    })
+    expect(harness.commands).toContainEqual({
+      type: "board.sync.bind",
+      boardId: "board-1",
+      owner: "cuongtranba",
+      repo: "kanna",
+      direction: "pull",
+      allowAgentPush: false,
+      projectId: "p1",
+      detachFromBoardId: null,
+    })
     harness.unmount()
   })
 
@@ -153,7 +199,7 @@ describe("BoardSyncPanel", () => {
   test("a board marking no columns warns instead of blocking", async () => {
     const harness = await mount(status({ routing: { open: null, closed: null } }))
     expect(harness.container.textContent).toContain("marks no column as start or done")
-    expect(saveButton(harness.container).disabled).toBe(false)
+    expect(suggestionButton(harness.container, "kanna").disabled).toBe(false)
     harness.unmount()
   })
 
@@ -170,7 +216,36 @@ describe("BoardSyncPanel", () => {
       repo: "widgets",
       direction: "pull",
       allowAgentPush: false,
+      projectId: null,
     })
+    harness.unmount()
+  })
+
+  /**
+   * A typed repo the workspace already holds still carries its project — the
+   * user reached the same repo by a different route, not a different repo.
+   */
+  test("a typed repo that matches a project carries that project", async () => {
+    const harness = await mount(status())
+    type(repoInput(harness.container), "cuongtranba/kanna")
+    await act(async () => {
+      saveButton(harness.container).click()
+    })
+    expect(harness.commands).toContainEqual({
+      type: "board.sync.bind",
+      boardId: "board-1",
+      owner: "cuongtranba",
+      repo: "kanna",
+      direction: "pull",
+      allowAgentPush: false,
+      projectId: "p1",
+    })
+    harness.unmount()
+  })
+
+  test("the typed field cannot be submitted empty", async () => {
+    const harness = await mount(status())
+    expect(saveButton(harness.container).disabled).toBe(true)
     harness.unmount()
   })
 
@@ -182,6 +257,154 @@ describe("BoardSyncPanel", () => {
     })
     expect(harness.container.textContent).toContain("not a repository")
     expect(harness.commands.some((c) => (c as { type: string }).type === "board.sync.bind")).toBe(false)
+    harness.unmount()
+  })
+
+  /**
+   * A repo belongs to one board. Moving it is not additive — the other board
+   * loses its issue feed — so the first click states the cost and the second
+   * accepts it. One gesture with no undo is the shape this exists to avoid.
+   */
+  test("moving a repo off another board takes two clicks, and only the second sends", async () => {
+    const harness = await mount(
+      status({
+        suggestedRepos: [
+          {
+            projectId: "p1",
+            projectName: "kanna",
+            repo: { owner: "cuongtranba", repo: "kanna" },
+            boundTo: { boardId: "board-9", boardTitle: "Old board", cardCount: 12 },
+          },
+        ],
+      }),
+    )
+    expect(harness.container.textContent).toContain('Already connected to board "Old board"')
+    expect(suggestionButton(harness.container, "kanna").textContent).toBe("Move here")
+
+    await act(async () => {
+      suggestionButton(harness.container, "kanna").click()
+    })
+    expect(harness.commands.some((c) => (c as { type: string }).type === "board.sync.bind")).toBe(false)
+    expect(harness.container.textContent).toContain("will detach it from")
+    expect(harness.container.textContent).toContain("12 cards stay on that board")
+
+    await act(async () => {
+      suggestionButton(harness.container, "kanna").click()
+    })
+    expect(harness.commands).toContainEqual({
+      type: "board.sync.bind",
+      boardId: "board-1",
+      owner: "cuongtranba",
+      repo: "kanna",
+      direction: "pull",
+      allowAgentPush: false,
+      projectId: "p1",
+      detachFromBoardId: "board-9",
+    })
+    harness.unmount()
+  })
+
+  test("cancelling the move sends nothing and restores the offer", async () => {
+    const harness = await mount(
+      status({
+        suggestedRepos: [
+          {
+            projectId: "p1",
+            projectName: "kanna",
+            repo: { owner: "cuongtranba", repo: "kanna" },
+            boundTo: { boardId: "board-9", boardTitle: "Old board", cardCount: 1 },
+          },
+        ],
+      }),
+    )
+    await act(async () => {
+      suggestionButton(harness.container, "kanna").click()
+    })
+    const cancel = [...harness.container.querySelectorAll("button")].find((b) => b.textContent === "Cancel")
+    await act(async () => {
+      cancel?.click()
+    })
+    expect(harness.commands.some((c) => (c as { type: string }).type === "board.sync.bind")).toBe(false)
+    expect(suggestionButton(harness.container, "kanna").textContent).toBe("Move here")
+    harness.unmount()
+  })
+
+  /** A Stack's whole point is N repos; connecting them one at a time is the bug. */
+  test("a Stack connects every unbound project at once", async () => {
+    const harness = await mount(
+      status({
+        suggestedRepos: [
+          { projectId: "p1", projectName: "api", repo: { owner: "acme", repo: "api" }, boundTo: null },
+          { projectId: "p2", projectName: "web", repo: { owner: "acme", repo: "web" }, boundTo: null },
+        ],
+      }),
+    )
+    const connectAll = [...harness.container.querySelectorAll("button")].find((b) =>
+      b.textContent?.startsWith("Connect all"),
+    )
+    expect(connectAll?.textContent).toBe("Connect all 2")
+    await act(async () => {
+      connectAll?.click()
+    })
+    const bound = harness.commands.filter((c) => (c as { type: string }).type === "board.sync.bind")
+    expect(bound.map((c) => (c as { repo: string }).repo).sort()).toEqual(["api", "web"])
+    harness.unmount()
+  })
+
+  /**
+   * A repo already on another board is excluded from the bulk action: a move
+   * costs another board its feed, and that decision is never made in bulk.
+   */
+  test("Connect all skips a repo that belongs to another board", async () => {
+    const harness = await mount(
+      status({
+        suggestedRepos: [
+          { projectId: "p1", projectName: "api", repo: { owner: "acme", repo: "api" }, boundTo: null },
+          { projectId: "p2", projectName: "web", repo: { owner: "acme", repo: "web" }, boundTo: null },
+          {
+            projectId: "p3",
+            projectName: "docs",
+            repo: { owner: "acme", repo: "docs" },
+            boundTo: { boardId: "board-9", boardTitle: "Old board", cardCount: 3 },
+          },
+        ],
+      }),
+    )
+    const connectAll = [...harness.container.querySelectorAll("button")].find((b) =>
+      b.textContent?.startsWith("Connect all"),
+    )
+    expect(connectAll?.textContent).toBe("Connect all 2")
+    await act(async () => {
+      connectAll?.click()
+    })
+    const bound = harness.commands.filter((c) => (c as { type: string }).type === "board.sync.bind")
+    expect(bound.map((c) => (c as { repo: string }).repo).sort()).toEqual(["api", "web"])
+    harness.unmount()
+  })
+
+  /**
+   * Direction is board POLICY, so a row with no override follows it as it
+   * changes. Freezing a copy at load makes the control silently partial.
+   */
+  test("a row follows the board's direction until it overrides it", async () => {
+    const harness = await mount(status())
+    const push = [...harness.container.querySelectorAll("button")].filter((b) => b.textContent === "Push")
+    await act(async () => {
+      push[0]?.click() // the policy control, rendered above the rows
+    })
+    await act(async () => {
+      suggestionButton(harness.container, "kanna").click()
+    })
+    expect(harness.commands).toContainEqual({
+      type: "board.sync.bind",
+      boardId: "board-1",
+      owner: "cuongtranba",
+      repo: "kanna",
+      direction: "push",
+      allowAgentPush: false,
+      projectId: "p1",
+      detachFromBoardId: null,
+    })
     harness.unmount()
   })
 

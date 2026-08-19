@@ -270,6 +270,7 @@ describe("board.sync", () => {
     registry.bindSync({
       boardId: board.id,
       providerId: "github-issues",
+      projectId: null,
       sourceRef: { provider: "github-issues", owner: "o1", repo: "r1" },
       direction: "both",
       allowAgentPush: false,
@@ -277,6 +278,7 @@ describe("board.sync", () => {
     registry.bindSync({
       boardId: board.id,
       providerId: "github-issues",
+      projectId: null,
       sourceRef: { provider: "github-issues", owner: "o2", repo: "r2" },
       direction: "pull",
       allowAgentPush: false,
@@ -292,10 +294,10 @@ describe("board.sync", () => {
     const { deps, sent, registry } = setup({
       suggestSyncRepos: () =>
         Promise.resolve([
-          { projectId: "p1", projectName: "kanna", repo: { owner: "cuongtranba", repo: "kanna" } },
+          { projectId: "p1", projectName: "kanna", repo: { owner: "cuongtranba", repo: "kanna" }, boundTo: null },
           // Listed, not dropped: the connect screen has to SAY "no remote"
           // about it, and silence would read as "already handled".
-          { projectId: "p2", projectName: "scratch", repo: null },
+          { projectId: "p2", projectName: "scratch", repo: null, boundTo: null },
         ]),
     })
     const board = boundBoard(registry)
@@ -313,6 +315,7 @@ describe("board.sync", () => {
     const first = registry.bindSync({
       boardId: board.id,
       providerId: "github-issues",
+      projectId: null,
       sourceRef: { provider: "github-issues", owner: "o1", repo: "r1" },
       direction: "both",
       allowAgentPush: false,
@@ -320,6 +323,7 @@ describe("board.sync", () => {
     registry.bindSync({
       boardId: board.id,
       providerId: "github-issues",
+      projectId: null,
       sourceRef: { provider: "github-issues", owner: "o2", repo: "r2" },
       direction: "both",
       allowAgentPush: false,

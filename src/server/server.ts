@@ -524,10 +524,21 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
         if (!project) return null
         const slug = await readOriginRepoSlug(project.localPath)
         const [owner, repo] = slug?.split("/") ?? []
+        const named = owner && repo ? { owner, repo } : null
         return {
           projectId,
           projectName: project.title,
-          repo: owner && repo ? { owner, repo } : null,
+          repo: named,
+          // A repo binds to exactly one board, so the screen has to know who
+          // holds it BEFORE offering Connect — otherwise the first the user
+          // hears of a move is the refusal.
+          boundTo: named
+            ? boardRegistry.repoBindingOwner(
+                "github-issues",
+                { provider: "github-issues", ...named },
+                boardId,
+              )
+            : null,
         }
       }),
     )
