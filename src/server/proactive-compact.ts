@@ -61,17 +61,38 @@ export function shouldProactivelyCompact(
   return used >= getAutoCompactThreshold(max, maxOutputTokens)
 }
 
-export function getLatestContextWindowUsage(
+/**
+ * Outcome of scanning a transcript WINDOW for the newest usage marker.
+ *
+ * `found: false` is not the same answer as `found: true, usage: null`, and
+ * conflating them is what makes a windowed reader unsound: the first says
+ * "nothing decisive in the bytes I looked at, a wider window may differ", the
+ * second says "a compact_boundary is the newest marker, no wider window can
+ * change that". A caller reading the transcript tail needs the difference to
+ * know when it may stop widening.
+ */
+export type LatestContextWindowUsageScan =
+  | { found: true; usage: ContextWindowUsageSnapshot | null }
+  | { found: false }
+
+export function scanLatestContextWindowUsage(
   messages: readonly TranscriptEntry[],
-): ContextWindowUsageSnapshot | null {
+): LatestContextWindowUsageScan {
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const entry = messages[i]
-    if (entry.kind === "context_window_updated") return entry.usage
+    if (entry.kind === "context_window_updated") return { found: true, usage: entry.usage }
     // Treat a recent compact_boundary as "context already compacted" — its
     // own usage snapshot will follow on the next turn's result. Stopping
     // here keeps us from triggering another compact off the pre-compaction
     // usage entries that linger before the boundary.
-    if (entry.kind === "compact_boundary") return null
+    if (entry.kind === "compact_boundary") return { found: true, usage: null }
   }
-  return null
+  return { found: false }
+}
+
+export function getLatestContextWindowUsage(
+  messages: readonly TranscriptEntry[],
+): ContextWindowUsageSnapshot | null {
+  const scan = scanLatestContextWindowUsage(messages)
+  return scan.found ? scan.usage : null
 }

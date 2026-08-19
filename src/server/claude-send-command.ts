@@ -10,7 +10,7 @@
  * the deps interface.
  */
 
-import type { AgentProvider, ChatAttachment, CustomModelEntry, QueuedChatMessage, TranscriptEntry } from "../shared/types"
+import type { AgentProvider, ChatAttachment, ContextWindowUsageSnapshot, CustomModelEntry, QueuedChatMessage, TranscriptEntry } from "../shared/types"
 import { resolveClaudeApiModelId } from "../shared/types"
 import type { ClientCommand } from "../shared/protocol"
 import {
@@ -57,6 +57,14 @@ interface SendCommandStore {
   removeQueuedMessage(chatId: string, queuedMessageId: string): Promise<void>
   getQueuedMessages?: (chatId: string) => readonly QueuedChatMessage[]
   getMessages(chatId: string): readonly TranscriptEntry[]
+  /**
+   * Latest context-window usage, read from the transcript TAIL rather than the
+   * whole file. OPTIONAL by design: the hand-rolled store fakes across the
+   * agent suites are injected as `store as never`, so a required member would
+   * pass typecheck and then fail at runtime — the exact failure
+   * adr-20260813-transcript-memory-budget records as "tried and reverted".
+   */
+  getLatestContextWindowUsage?: (chatId: string) => ContextWindowUsageSnapshot | null
 }
 
 /** Subset of the activeTurns map used by the send command handler. */
@@ -228,7 +236,13 @@ export function shouldInjectProactiveCompact(
   if (content.trimStart().startsWith("/")) return false
   const failures = deps.store.getChat(chatId)?.compactFailureCount ?? 0
   if (failures >= MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES) return false
-  const usage = getLatestContextWindowUsage(deps.store.getMessages(chatId))
+  // Explicit branch, never `??`: `null` is a meaningful answer here (a chat
+  // just past a compact_boundary, or one with no usage yet), so a nullish
+  // coalesce would fall through to the whole-transcript read on exactly the
+  // chats the tail read exists to spare.
+  const usage = deps.store.getLatestContextWindowUsage
+    ? deps.store.getLatestContextWindowUsage(chatId)
+    : getLatestContextWindowUsage(deps.store.getMessages(chatId))
   return shouldProactivelyCompact(usage)
 }
 

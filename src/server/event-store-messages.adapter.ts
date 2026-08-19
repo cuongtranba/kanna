@@ -9,7 +9,13 @@
  * This module must NOT import from event-store.ts (no circular deps).
  */
 import path from "node:path"
-import type { ChatHistoryPage, QueuedChatMessage, TranscriptEntry } from "../shared/types"
+import type {
+  ChatHistoryPage,
+  ContextWindowUsageSnapshot,
+  QueuedChatMessage,
+  TranscriptEntry,
+} from "../shared/types"
+import { getLatestContextWindowUsage, scanLatestContextWindowUsage } from "./proactive-compact"
 import type { StorageBackend } from "./storage/backend"
 import type { ToolRequest } from "../shared/permission-policy"
 import type { ChatRecord, StoreState } from "./events"
@@ -414,6 +420,100 @@ export function getRecentMessagesPageTail(
     seedFullTranscript(deps, chatId, tail.entries)
   }
   return pageFromTail(tail, limit, undefined, RECENT_PAGE_BYTE_BUDGET)
+}
+
+// ─── Proactive-compact trigger read ────────────────────────────────────────
+
+/**
+ * Window sizes for the usage scan. Deliberately smaller than the page tail's
+ * 256 KiB: the answer is almost always in the last turn's entries, and the
+ * cost that matters is the common case, not the outlier.
+ */
+const USAGE_SCAN_MIN_ENTRIES = 32
+const USAGE_SCAN_FIRST_CHUNK_BYTES = 64 * 1024
+const USAGE_SCAN_GROWTH = 8
+const USAGE_SCAN_MAX_CHUNK_BYTES = 1024 * 1024
+
+/**
+ * How far back from EOF the scan will look before giving up and reporting "no
+ * current usage data".
+ *
+ * This bound is what keeps the scan cheap on a transcript that holds NO marker
+ * at all — MEASURED as 241 of 264 chats on the reference install, because
+ * imported and PTY-driver sessions never emit `context_window_updated`. Without
+ * it those chats re-reads their whole history on every send, which is the cost
+ * this read exists to remove.
+ *
+ * 8 MiB is far more than one turn of entries, and one turn is as far as a
+ * CURRENT marker can be: `context_window_updated` is emitted on every turn
+ * result. A marker further back than this describes a context window that has
+ * since been entirely replaced, so acting on it would be wrong anyway — the
+ * conservative `null` (no proactive compact) is the better answer.
+ */
+const USAGE_SCAN_MAX_LOOKBACK_BYTES = 8 * 1024 * 1024
+
+/**
+ * Latest context-window usage for a chat, read from the transcript TAIL.
+ *
+ * `shouldInjectProactiveCompact` runs on every send and needs only the newest
+ * `context_window_updated` / `compact_boundary`. Answering it via `getMessages`
+ * parsed the whole transcript — MEASURED at 524 MB peak RSS on a 96 MB / 36k
+ * entry chat, on every message. This reads backwards a window at a time and
+ * stops at the first marker.
+ *
+ * Within `USAGE_SCAN_MAX_LOOKBACK_BYTES` of EOF the result is identical to a
+ * full backward scan: the loop ends only when the scan is CONCLUSIVE (a marker
+ * was hit) or when the window reached the start of the file. Past that bound it
+ * reports `null` rather than keep reading — see the constant for why a marker
+ * that far back cannot describe the current context window.
+ */
+export function getLatestChatContextWindowUsage(
+  deps: MessageReadDeps,
+  chatId: string,
+): ContextWindowUsageSnapshot | null {
+  // Already in memory: the scan is free. The legacy map matters beyond speed —
+  // those chats have no file on disk at all, so a tail read would see an empty
+  // transcript and wrongly report no usage.
+  if (deps.transcriptCache.has(chatId) || deps.legacyMessagesByChatId.has(chatId)) {
+    return getLatestContextWindowUsage(getMessagesView(deps, chatId))
+  }
+
+  // Walk backwards in NON-OVERLAPPING windows. Re-reading from EOF with an
+  // ever-growing window instead re-parses everything already seen, so a
+  // transcript holding no marker costs ~2x a flat read — measured slower AND
+  // heavier than the whole-file load this replaces.
+  const fileSize = deps.storage.sizeSync?.(transcriptPath(deps, chatId)) ?? 0
+  let windowEnd = fileSize
+  let chunkBytes = USAGE_SCAN_FIRST_CHUNK_BYTES
+  for (;;) {
+    // No byteBudget: a budget makes readTranscriptTail stop early and hand back
+    // an inconclusive window we would only have to read again. For the same
+    // reason this does not consult getTail/setTail — that cache is keyed on
+    // (fileSize, limit) and its entries were produced WITH the page byte
+    // budget, so a matching limit would serve a truncated window to this
+    // unbudgeted query.
+    const tail = readTranscriptTail(deps, chatId, USAGE_SCAN_MIN_ENTRIES, windowEnd, chunkBytes)
+    if (!tail) break
+
+    // Raw entries, never coalesced — coalescing is a live-window concern.
+    const scan = scanLatestContextWindowUsage(tail.entries)
+    if (scan.found) return scan.usage
+    if (tail.reachedStart) return null
+
+    // The next window ends where this one's first COMPLETE line began, so the
+    // torn leading line is picked up by that window and no byte is read twice.
+    const nextEnd = tail.lineOffsets[0]
+    if (nextEnd === undefined || nextEnd <= 0) return null
+
+    windowEnd = nextEnd
+    if (fileSize - windowEnd >= USAGE_SCAN_MAX_LOOKBACK_BYTES) return null
+    chunkBytes = Math.min(chunkBytes * USAGE_SCAN_GROWTH, USAGE_SCAN_MAX_CHUNK_BYTES)
+  }
+
+  // Backend without byte-slice APIs — behave exactly as before. Unlike the page
+  // tail this never calls seedFullTranscript on reachedStart: promoting the
+  // transcript into the cache would re-introduce the memory this read avoids.
+  return getLatestContextWindowUsage(getMessagesView(deps, chatId))
 }
 
 // ─── Exported functions ────────────────────────────────────────────────────

@@ -408,6 +408,10 @@ export class EventStore implements PushEventStore {
 
   getMessages(chatId: string) { return MessageRead.getMessages(this.buildMessageReadDeps(), chatId) }
 
+  getLatestContextWindowUsage(chatId: string) {
+    return MessageRead.getLatestChatContextWindowUsage(this.buildMessageReadDeps(), chatId)
+  }
+
   getQueuedMessages(chatId: string) { return MessageRead.getQueuedMessages(this.buildMessageReadDeps(), chatId) }
 
   getQueuedMessage(chatId: string, queuedMessageId: string) { return MessageRead.getQueuedMessage(this.buildMessageReadDeps(), chatId, queuedMessageId) }
