@@ -202,6 +202,13 @@ export interface ChatActivity {
   backgroundTasks: number
   cron: { nextFireAt: number | null; paused: boolean } | null
   awaitingAnswer: boolean
+  /**
+   * Why the chat's last run failed, when it did and a reason was recorded.
+   * Null covers both "nothing failed" and "something failed with nothing to
+   * say about it" — a surface that renders the reason must degrade to a bare
+   * failure label rather than a dangling separator.
+   */
+  lastFailure: { reason: string } | null
 }
 
 export const EMPTY_CHAT_ACTIVITY: ChatActivity = {
@@ -211,6 +218,7 @@ export const EMPTY_CHAT_ACTIVITY: ChatActivity = {
   backgroundTasks: 0,
   cron: null,
   awaitingAnswer: false,
+  lastFailure: null,
 }
 
 export interface SidebarChatRow {

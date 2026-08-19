@@ -8,7 +8,7 @@ import { cn } from "../../lib/utils"
 import { chatDotBgClass, chatDotTextClass } from "../../lib/chatStatusIndicator"
 import { formatLiveDuration } from "../../lib/formatDuration"
 import { useNow } from "../../hooks/useNow"
-import { cardChatSignal, type CardChatFacts } from "../../lib/boards/cardChatSignal"
+import { cardWorkSignal, type CardChatFacts } from "../../lib/boards/cardWorkSignal"
 import { COLUMN_DOT_CLASS, isOverWipLimit } from "../../lib/boards/columnStyle"
 import {
   dropTargetForCardEdge,
@@ -366,7 +366,12 @@ function BoardCard({
   // Liveness, not attribution. `card.updatedBy.kind === "agent"` — what this row
   // used to key on — says an agent wrote the row last, so a card finished an
   // hour ago looked identical to one mid-turn.
-  const signal = cardChatSignal(chatIds, chatFacts)
+  // The clock is read once per render rather than ticked: the only row that
+  // needs it is the muted cron countdown, and a per-card interval would
+  // re-render all 200 cards every minute — exactly what `LiveStamp` exists to
+  // avoid. A minute-granularity countdown that lags a render is not a defect.
+  // eslint-disable-next-line react-hooks/purity
+  const signal = cardWorkSignal(chatIds, chatFacts, Date.now())
 
   return (
     <div ref={ref} className="relative">

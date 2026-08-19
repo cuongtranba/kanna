@@ -35,6 +35,13 @@ export interface ChatRecord {
   hasMessages?: boolean
   lastMessageAt?: number
   lastTurnOutcome: "success" | "failed" | "cancelled" | null
+  /**
+   * The `turn_failed` error text for the outcome above, so a surface can say
+   * WHY rather than only THAT. Optional: chats recorded before this field
+   * existed replay without it, and it is cleared the moment a new turn starts —
+   * a chat that is running again is not a chat that is failing.
+   */
+  lastTurnError?: string | null
   stackId?: string
   stackBindings?: StackBinding[]
   /** Per-chat permission policy overlay; merges over the global defaults. */

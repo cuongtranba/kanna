@@ -77,7 +77,32 @@ export function computeChatActivity(chatId: string, deps: ComputeChatActivityDep
 
   const awaitingAnswer = activeStatuses.get(chatId) === "waiting_for_user"
 
-  return { agents, workflow, loop, backgroundTasks, cron, awaitingAnswer }
+  const chat = state.chatsById.get(chatId)
+  const lastFailure = chat?.lastTurnOutcome === "failed"
+    ? failureReason(chat.lastTurnError)
+    : null
+
+  return { agents, workflow, loop, backgroundTasks, cron, awaitingAnswer, lastFailure }
+}
+
+/** How much of a failure a one-line card face can carry. */
+const FAILURE_REASON_MAX_CHARS = 120
+
+/**
+ * A turn's error text is prose of arbitrary length and may be several lines.
+ * The read model publishes the first line, capped — a surface rendering this
+ * has one line to work with, and truncating there rather than in the component
+ * keeps every consumer honest about the same bound.
+ *
+ * Null when there is nothing to say, which the consumer must render as a bare
+ * failure rather than an empty reason.
+ */
+function failureReason(raw: string | null | undefined): { reason: string } | null {
+  if (raw == null) return null
+  const firstLine = raw.split("\n")[0]?.trim() ?? ""
+  if (firstLine.length === 0) return null
+  if (firstLine.length <= FAILURE_REASON_MAX_CHARS) return { reason: firstLine }
+  return { reason: `${firstLine.slice(0, FAILURE_REASON_MAX_CHARS - 1)}…` }
 }
 
 export function deriveStatus(chat: ChatRecord, activeStatus?: KannaStatus): KannaStatus {

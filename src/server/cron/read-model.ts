@@ -119,8 +119,8 @@ function pushRun(accum: JobAccum, run: CronRunSnapshot): void {
 
 /**
  * Whether the chat has at least one armed, unpaused cron job — a light fold
- * for the sidebar's `hasAutomation` badge that skips run bookkeeping (the
- * sidebar derives every chat on every broadcast).
+ * for `ChatActivity.cron` that skips run bookkeeping (the sidebar derives
+ * every chat on every broadcast).
  */
 export function hasUnpausedCronJob(events: readonly AutoContinueEvent[], chatId: string): boolean {
   const armed = new Set<string>()

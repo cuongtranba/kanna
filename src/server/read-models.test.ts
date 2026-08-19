@@ -1061,7 +1061,54 @@ describe("computeChatActivity", () => {
       backgroundTasks: 0,
       cron: null,
       awaitingAnswer: false,
+      lastFailure: null,
     })
+  })
+
+  /**
+   * A card face says "agent failed — <reason>", so the reason has to be a fact
+   * the read model publishes; deriving it in the UI from a status alone is how
+   * a surface ends up with a dangling em dash.
+   */
+  test("lastFailure carries the failed turn's reason", () => {
+    const state = baseState()
+    const chat = state.chatsById.get("c1")
+    if (!chat) throw new Error("fixture chat missing")
+    chat.lastTurnOutcome = "failed"
+    chat.lastTurnError = "OAuth token expired"
+    expect(computeChatActivity("c1", baseDeps({ state })).lastFailure).toEqual({ reason: "OAuth token expired" })
+  })
+
+  test("lastFailure is null when the last turn succeeded", () => {
+    const state = baseState()
+    const chat = state.chatsById.get("c1")
+    if (!chat) throw new Error("fixture chat missing")
+    chat.lastTurnOutcome = "success"
+    chat.lastTurnError = "stale text nobody cleared"
+    expect(computeChatActivity("c1", baseDeps({ state })).lastFailure).toBeNull()
+  })
+
+  /** A failure with no recorded text must not publish an empty reason. */
+  test("lastFailure is null when the failure carried no text", () => {
+    const state = baseState()
+    const chat = state.chatsById.get("c1")
+    if (!chat) throw new Error("fixture chat missing")
+    chat.lastTurnOutcome = "failed"
+    chat.lastTurnError = "   \n  "
+    expect(computeChatActivity("c1", baseDeps({ state })).lastFailure).toBeNull()
+  })
+
+  /** One line is all a card row has; the bound belongs here, not in the view. */
+  test("lastFailure takes the first line and caps its length", () => {
+    const state = baseState()
+    const chat = state.chatsById.get("c1")
+    if (!chat) throw new Error("fixture chat missing")
+    chat.lastTurnOutcome = "failed"
+    chat.lastTurnError = `${"x".repeat(300)}\nstack frame 1\nstack frame 2`
+    const reason = computeChatActivity("c1", baseDeps({ state })).lastFailure?.reason ?? ""
+    expect(reason).toHaveLength(120)
+    expect(reason.endsWith("…")).toBe(true)
+    expect(reason).not.toContain("stack frame")
   })
 
   test("agents counts only running subagent runs", () => {

@@ -58,6 +58,16 @@ describe("dot classes", () => {
     expect(chatDotBgClass(null)).toBe("")
     expect(chatDotTextClass(null)).toBe("text-muted-foreground")
   })
+
+  /**
+   * `muted` is a real tone, not the absence of one: it paints a dot (scheduled
+   * work exists) but in the quiet neutral, so it cannot be mistaken for amber's
+   * "attention available".
+   */
+  test("muted paints a dot, in the neutral token", () => {
+    expect(chatDotBgClass("muted")).toBe("bg-muted-foreground")
+    expect(chatDotTextClass("muted")).toBe("text-muted-foreground")
+  })
 })
 
 describe("sessionStateBadge", () => {

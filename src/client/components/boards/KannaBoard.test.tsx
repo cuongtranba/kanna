@@ -93,7 +93,7 @@ describe("BoardCard chat signal", () => {
     )
 
     expect(html).toContain("bg-warning")
-    expect(html).toContain("Running")
+    expect(html).toContain("running")
     // tabular-nums so the ticker cannot reflow the card underneath it.
     expect(html).toMatch(/tabular-nums[^>]*>1:20</u)
   })
@@ -106,7 +106,7 @@ describe("BoardCard chat signal", () => {
     )
 
     expect(html).toContain("bg-destructive")
-    expect(html).toContain("Failed")
+    expect(html).toContain("agent failed")
     expect(html).not.toContain("animate-pulse")
   })
 
@@ -127,7 +127,7 @@ describe("BoardCard chat signal", () => {
 
     expect(html).toContain("card-1")
     expect(html).not.toContain("chats")
-    expect(html).not.toContain("Running")
+    expect(html).not.toContain("running")
     expect(html).not.toContain("rounded-full")
   })
 

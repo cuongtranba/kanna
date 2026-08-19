@@ -1,7 +1,7 @@
 ---
 id: c3-301
 c3-version: 4
-c3-seal: 6040c8495858c34213f53143dc370f2fee8b8526b2637c3fe59baabbc8c6cc77
+c3-seal: e40d35fd9b3e7afa28ff2a5a46aa5bce3de9e7193a4af74077e36887b83fcf3e
 title: types
 type: component
 category: foundation
@@ -65,7 +65,7 @@ Defines the discriminated unions and structural types that cross the wire: proje
 | Catalog re-exports | OUT | Provider catalog types via shared module | c3-115 | src/shared/types.ts |
 | Subagent restriction fields | OUT | workingDir + allowedPaths on Subagent / SubagentInput / SubagentPatch; SubagentValidationErrorCode includes RESTRICTION_NOT_SUPPORTED, INVALID_PATH, PATH_ESCAPE, EMPTY_ALLOWED_PATHS | c3-210 | src/shared/types.ts |
 | SidebarProjectGroup.sourceProvider | OUT | Optional AgentProvider inferred from chat history or unambiguous single-provider discovery; absent when ambiguous; consumed by getMostRecentProjectProvider as provider hint for new chats | c3-110 | src/shared/types.ts |
-| ChatActivity / EMPTY_CHAT_ACTIVITY | OUT | Compact live-state for a sidebar chat row (agents, workflow, loop, backgroundTasks, cron, awaitingAnswer); EMPTY_CHAT_ACTIVITY is the zero value; replaces hasAutomation on SidebarChatRow | c3-208 | src/shared/types.ts |
+| ChatActivity / EMPTY_CHAT_ACTIVITY | OUT | Compact live-state for a sidebar chat row (agents, workflow, loop, backgroundTasks, cron, awaitingAnswer, lastFailure); lastFailure carries the reason the chat's last run failed, null when nothing failed OR the failure recorded no reason, so a surface degrades to a bare failure label rather than a dangling separator; EMPTY_CHAT_ACTIVITY is the zero value | c3-208 | src/shared/types.ts |
 
 ## Change Safety
 

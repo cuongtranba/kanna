@@ -226,6 +226,7 @@ export function applyChatLifecycleEvent(
         pendingForkSessionToken: null,
         hasMessages: false,
         lastTurnOutcome: null,
+        lastTurnError: null,
       }
       if (event.stackId !== undefined) chat.stackId = event.stackId
       if (event.stackBindings !== undefined) chat.stackBindings = event.stackBindings.map((b) => ({ ...b }))
@@ -341,6 +342,9 @@ export function applyChatLifecycleEvent(
       const chat = state.chatsById.get(event.chatId)
       if (!chat) break
       chat.updatedAt = event.timestamp
+      // A chat that is running again is not a chat that is failing: the
+      // previous failure's reason must not outlive the turn that replaced it.
+      chat.lastTurnError = null
       updateChatTiming(state.chatTimingsByChatId, event.chatId, event.timestamp, "running", true, false)
       break
     }
@@ -350,6 +354,7 @@ export function applyChatLifecycleEvent(
       chat.updatedAt = event.timestamp
       chat.unread = true
       chat.lastTurnOutcome = "success"
+      chat.lastTurnError = null
       updateChatTiming(state.chatTimingsByChatId, event.chatId, event.timestamp, "idle", false, true)
       break
     }
@@ -359,6 +364,7 @@ export function applyChatLifecycleEvent(
       chat.updatedAt = event.timestamp
       chat.unread = true
       chat.lastTurnOutcome = "failed"
+      chat.lastTurnError = event.error
       updateChatTiming(state.chatTimingsByChatId, event.chatId, event.timestamp, "failed", false, true)
       break
     }
@@ -367,6 +373,7 @@ export function applyChatLifecycleEvent(
       if (!chat) break
       chat.updatedAt = event.timestamp
       chat.lastTurnOutcome = "cancelled"
+      chat.lastTurnError = null
       updateChatTiming(state.chatTimingsByChatId, event.chatId, event.timestamp, "idle", false, true)
       break
     }

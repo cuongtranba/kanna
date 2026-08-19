@@ -293,7 +293,30 @@ describe("applyChatLifecycleEvent — turn events", () => {
     applyChatLifecycleEvent(state, replay, { v: 3, type: "chat_created", timestamp: TS, chatId: "c1", projectId: "p1", title: "C" })
     applyChatLifecycleEvent(state, replay, { v: 3, type: "turn_failed", timestamp: TS + 200, chatId: "c1", error: "oops" })
     expect(state.chatsById.get("c1")!.lastTurnOutcome).toBe("failed")
+    expect(state.chatsById.get("c1")!.lastTurnError).toBe("oops")
     expect(state.chatTimingsByChatId.get("c1")!.status).toBe("failed")
+  })
+
+  /**
+   * A chat that is running again is not a chat that is failing: leaving the
+   * reason behind would make every retry look like the failure it replaced.
+   */
+  test("a new turn clears the previous failure's reason", () => {
+    const state = makeChatLifecycleState()
+    const replay = makeReplayChatProvider()
+    applyChatLifecycleEvent(state, replay, { v: 3, type: "chat_created", timestamp: TS, chatId: "c1", projectId: "p1", title: "C" })
+    applyChatLifecycleEvent(state, replay, { v: 3, type: "turn_failed", timestamp: TS + 100, chatId: "c1", error: "oops" })
+    applyChatLifecycleEvent(state, replay, { v: 3, type: "turn_started", timestamp: TS + 200, chatId: "c1" })
+    expect(state.chatsById.get("c1")!.lastTurnError).toBeNull()
+  })
+
+  test("a successful turn clears the previous failure's reason", () => {
+    const state = makeChatLifecycleState()
+    const replay = makeReplayChatProvider()
+    applyChatLifecycleEvent(state, replay, { v: 3, type: "chat_created", timestamp: TS, chatId: "c1", projectId: "p1", title: "C" })
+    applyChatLifecycleEvent(state, replay, { v: 3, type: "turn_failed", timestamp: TS + 100, chatId: "c1", error: "oops" })
+    applyChatLifecycleEvent(state, replay, { v: 3, type: "turn_finished", timestamp: TS + 300, chatId: "c1" })
+    expect(state.chatsById.get("c1")!.lastTurnError).toBeNull()
   })
 })
 

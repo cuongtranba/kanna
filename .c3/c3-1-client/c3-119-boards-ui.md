@@ -1,6 +1,6 @@
 ---
 id: c3-119
-c3-seal: 70944dc0394dd3456282d51c827e05e2ff4ee486eb692f12eb42031bf7335bbf
+c3-seal: c0f77145fa95d0bdfd690078a7857c7aaf65d9e278236ab824f52ff75cd5ee0e
 title: boards-ui
 type: component
 category: feature
@@ -53,6 +53,7 @@ Owns the board surface: `BoardsPage` and `BoardPane`, the `KannaBoard` renderer 
 | Optimistic apply | OUT | moveCardInView / moveColumnInView apply to Kanna's own snapshot shape, replaced by the next server push | c3-310 | src/client/lib/boards/optimistic.ts |
 | Card drawer | IN/OUT | Renders the card's fields from the board's own schema, its links, its start-work status, and its cleanup question | c3-232 | src/client/components/boards/CardDrawer.tsx |
 | Sync panel | IN/OUT | Binds a board to a tracker, shows held and conflicted rows, and triggers a pull | c3-232 | src/client/components/boards/BoardSyncPanel.tsx |
+| Card work signal | OUT | cardWorkSignal owns an ordered precedence table over ChatActivity — failed, awaiting answer, workflow, loop, agents, running, background tasks, cron, unread, chat count — first match wins; a loop outranks a bare agent count because it names the shape of the work; the elapsed ticker follows the ROW, so the failure and cron rows carry none; the cron row is muted, never amber | c3-301 | src/client/lib/boards/cardWorkSignal.ts |
 
 ## Derived Materials
 
