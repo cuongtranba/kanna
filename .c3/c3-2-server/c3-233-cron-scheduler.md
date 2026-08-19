@@ -1,6 +1,6 @@
 ---
 id: c3-233
-c3-seal: bb77508d193fe605c56f0f3dee3b691f0500b5cdef015fce8dc18750eb2a9585
+c3-seal: 9298c080983ada20fb0db6724808b54018687ab20eb49b2a8440ac55cc1892c7
 title: cron-scheduler
 type: component
 category: feature
@@ -69,6 +69,16 @@ CONSECUTIVE skips collapse into one counted record (`CronSkipCoalescer`, a
 per-job leading-edge throttle) so a sub-minute schedule's runs are not buried
 under one card per skipped tick. Occurrence math delegates to the `cron` npm
 package (CronTime.getNextDateFrom), including its 6-field seconds form.
+`compactCronRunEvents` owns RETENTION for run events on c3-227's log, which
+never expires on its own: measured on one install, cron run events were 96% of
+every auto-continue event and 69% of the whole snapshot, resident in memory and
+re-walked by deriveCronJobs on every broadcast. It keeps each job's newest
+MAX_RECENT_CRON_RUNS settled runs plus every run still in flight, reclaims
+everything before a job's most recent arm, and never touches a non-run event.
+Retention is derived from the display cap rather than chosen, so the read model
+provably cannot notice; both readers are asserted unchanged over a compacted
+log. It is applied at the two places that build the array — applyAutoContinueToState
+and the snapshot load — and is IRREVERSIBLE once the log is truncated.
 Shutdown: `CronScheduler.shutdown()` is async — it sets a `stopped` flag
 (so any timer callback that fires concurrently declines to start a new fire),
 clears all timers, then drains every in-flight `runFire` call under
@@ -106,6 +116,7 @@ scheduler (c3-227), UI rendering (c3-120).
 | Refusal + model escalation | OUT | refuseCronCommand is the one path a /cron line is refused on: it appends the cron_command_error card carrying the typed line AND offers the error to createCronRepair, which enqueues a repair prompt and drains the queue only when the parser had no suggestion, for arm-shaped parts, once per line per chat, standing aside for a queued user message. A schedule that parses but never fires escalates too, on a reconstructed canonical line. KANNA_CRON_REPAIR=disabled turns it off | c3-226 | src/server/cron/commands.ts, src/server/cron/repair.ts |
 | Success + model confirm escalation | OUT | After a typed /cron arm succeeds, createCronConfirm enqueues a formatCronConfirmRequest prompt and drains the queue so the model presents the full CronArmSummary and confirms via AskUserQuestion; bounded to one ask per jobId per chat, standing aside for a queued user message, swallowing its own failures. Does not fire for arm_cron calls. KANNA_CRON_CONFIRM=disabled turns it off | c3-226 | src/server/cron/confirm.ts, src/server/cron/commands.ts |
 | Preview payload | OUT | previewCronCommand returns CronArmSummary (structured) on success; callers project to prose via formatCronArmSummary; both validate_cron and arm_cron derive from the same structured payload so they can never disagree about the job they describe | c3-311 | src/server/cron/preview.ts |
+| Run-event retention | OUT | compactCronRunEvents bounds the cron run events on the auto-continue log to each job's newest MAX_RECENT_CRON_RUNS settled runs plus every unsettled start, dropping start/outcome pairs atomically and reclaiming everything before a job's most recent arm; applied at applyAutoContinueToState and at snapshot load, the only two places the per-chat array is built | c3-227 | src/server/cron/compact.ts |
 
 ## Change Safety
 
@@ -119,6 +130,7 @@ scheduler (c3-227), UI rendering (c3-120).
 | Boot reconcile double-settles a queued run | reconcileCronRunsAtBoot orphans a run whose tagged message survived in the durable queue; recoverQueuedMessages then re-drains it and emits a second cron_run_outcome for the same runId | reconcileCronRunsAtBoot checks getQueuedMessages before emitting orphaned — a run with a surviving queued message is skipped | bun test src/server/cron/fire.test.ts |
 | cron_run_outcome corrupt row from double-settle | two outcome events for the same runId; errorCode set by the orphaned event is never cleared when the success event lands | deriveCronJobs cron_run_outcome handler is first-terminal-wins — only settles a run still in running status, so a second outcome is ignored | bun test src/server/cron/read-model.test.ts |
 | Cron run never settles because its tag is lost before the turn starts | A queued-message write path that does not carry CronRunTag verbatim; the tag is the only link from a fired run to the turn that answers it, and onTurnTerminal reads it off the ActiveTurn | Absence of any cron_run_outcome ok:true while turn_finished events exist — every run then settles via fireCronJob's orphan self-heal or skips as previous_run_active. The cron fire suite fakes enqueueMessage and hand-preserves the tag, so it cannot detect this; the round-trip is pinned against the real EventStore | bun test src/server/event-store.test.ts src/server/event-store-write-ops.test.ts |
+| Retention drops a run the readers still need | compactCronRunEvents evicting an unsettled start (the overlap guard inverts and inline mode clears the context of a live turn), splitting a start/outcome pair (boot writes a bogus orphaned outcome every boot), or dropping the newest record (boot claims up to 100 missed fires) | compact.test.ts asserts deriveCronJobs and findRunningCronRuns are unchanged over a compacted log across nine log shapes, one case per invariant, and scheduler.test.ts asserts rehydrate reports the same missed count; retention is derived from MAX_RECENT_CRON_RUNS so it cannot be set below the display cap | bun test src/server/cron/compact.test.ts src/server/cron/scheduler.test.ts src/server/event-store.test.ts |
 
 ## Derived Materials
 
@@ -131,3 +143,4 @@ scheduler (c3-227), UI rendering (c3-120).
 | src/server/cron/next-fire.ts | Contract (Fire) | Engine call shape | src/server/cron/next-fire.ts |
 | src/server/cron/skip-coalescer.ts | Contract (Fire) | Flush window length | src/server/cron/skip-coalescer.ts |
 | src/server/cron/confirm.ts | Contract (Success + model confirm escalation) | Prompt wording | src/server/cron/confirm.ts |
+| src/server/cron/compact.ts | Contract (Run-event retention) | Eviction bookkeeping | src/server/cron/compact.ts |

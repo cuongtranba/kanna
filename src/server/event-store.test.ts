@@ -9,6 +9,8 @@ import type { SnapshotFile } from "./events"
 import type { AutoContinueEvent } from "./auto-continue/events"
 import { EventStore } from "./event-store"
 import { getLatestContextWindowUsage } from "./proactive-compact"
+import { deriveCronJobs, findRunningCronRuns } from "./cron/read-model"
+import { MAX_RECENT_CRON_RUNS } from "../shared/cron/types"
 import { ACTIVE_SESSION_IDLE_GAP_MS } from "./read-models"
 
 const originalRuntimeProfile = process.env.KANNA_RUNTIME_PROFILE
@@ -361,6 +363,56 @@ describe("EventStore", () => {
     const reloaded = new EventStore(dataDir)
     await reloaded.initialize()
     expect(reloaded.getChat(chat.id)?.unread).toBe(true)
+  })
+
+  // The end-to-end shape of the retention: append through the real store,
+  // snapshot + truncate the log, reboot, and the history must still be bounded
+  // — and must derive to exactly what the uncompacted log would have.
+  test("bounds cron run history across snapshot and restart", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+
+    const project = await store.openProject("/tmp/project")
+    const chat = await store.createChat(project.id)
+
+    const armed: AutoContinueEvent = {
+      v: 3,
+      kind: "cron_armed",
+      chatId: chat.id,
+      scheduleId: "job-1",
+      timestamp: 1,
+      instruction: "check ci",
+      mode: "inline",
+      scheduleText: "every 5m",
+      schedule: { type: "interval", ms: 300_000 },
+    }
+    await store.appendAutoContinueEvent(armed)
+    const full: AutoContinueEvent[] = [armed]
+    for (let i = 0; i < 120; i += 1) {
+      const started: AutoContinueEvent = {
+        v: 3, kind: "cron_run_started", chatId: chat.id, scheduleId: "job-1", timestamp: 100 + i * 10, runId: `r${i}`,
+      }
+      const outcome: AutoContinueEvent = {
+        v: 3, kind: "cron_run_outcome", chatId: chat.id, scheduleId: "job-1", timestamp: 101 + i * 10, runId: `r${i}`, ok: true,
+      }
+      await store.appendAutoContinueEvent(started)
+      await store.appendAutoContinueEvent(outcome)
+      full.push(started, outcome)
+    }
+
+    expect(store.getAutoContinueEvents(chat.id).filter((e) => e.kind === "cron_run_started"))
+      .toHaveLength(MAX_RECENT_CRON_RUNS)
+
+    await store.snapshotAndTruncateLogs()
+
+    const reloaded = new EventStore(dataDir)
+    await reloaded.initialize()
+    const kept = reloaded.getAutoContinueEvents(chat.id)
+
+    expect(kept.filter((e) => e.kind === "cron_run_started")).toHaveLength(MAX_RECENT_CRON_RUNS)
+    expect(deriveCronJobs(kept, chat.id, 5_000_000)).toEqual(deriveCronJobs(full, chat.id, 5_000_000))
+    expect(findRunningCronRuns(kept, chat.id)).toEqual([])
   })
 
   test("preserves read state after a finished turn across restart", async () => {

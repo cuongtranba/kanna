@@ -1377,9 +1377,58 @@ actually built. Adding an unconditional `deps.store.getMessages(...)` back to
 this path silently restores the whole cost.
 
 Still unbounded, deliberately out of scope here: `state.subagentRunsByChatId`
-and `state.autoContinueEventsByChatId` are evicted only by whole-chat delete.
-The latter is MEASURED at 285 KB for one long loop chat, 91% of it the same
+is evicted only by whole-chat delete. `state.autoContinueEventsByChatId` is
+evicted the same way, but its dominant contributor is now bounded — see **Cron
+run-event retention** below. What remains unbounded there is `loop_armed`
+prompt bloat, MEASURED at 285 KB for one long loop chat, 91% of it the same
 rendered loop prompt re-embedded on every wake by `deliverSubagentToMain`.
+
+# Cron run-event retention (`compactCronRunEvents`)
+
+The auto-continue log never expires, so a recurring `/cron` job wrote into it
+forever. MEASURED on one install: 8,507 cron run events were **96%** of every
+auto-continue event and **69%** of the whole snapshot (2.29 MB of 3.34 MB),
+worst chat 2,599. That array is resident in memory AND re-walked by
+`deriveCronJobs` on every chat broadcast (`read-models.ts`) and for every chat
+on the global cron topic (`ws-router-envelope.ts`) — so the cost of an
+unrelated UI update grew with the number of fires.
+
+`src/server/cron/compact.ts` keeps each job's newest `MAX_RECENT_CRON_RUNS`
+**settled** runs plus **every run still in flight**, and reclaims everything
+before a job's most recent `cron_armed`. Re-measured on the same data after the
+change: 8,860 → 353 events (−96%), 2.16 MB → 677 KB (−69%), worst chat
+2,603 → 11, with **zero** read-model difference across all 21 chats.
+
+**Why it is safe:** `pushRun` already discards everything past
+`MAX_RECENT_CRON_RUNS`, so this only stops STORING what the read model throws
+away. Retention is DERIVED from that display cap, not chosen — there is no N to
+set wrong. `deriveCronJobs` and `findRunningCronRuns` are the complete reader
+set and both are asserted unchanged over a compacted log.
+
+**Three invariants that are load-bearing, not defensive:**
+
+1. **Never drop an unsettled `cron_run_started`.** `evictSettled` only selects
+   settled records. Losing a live start inverts `hasActiveRun` (`fire.ts`),
+   which starts a CONCURRENT run — and inline mode then calls
+   `clearChatContext` on a live turn.
+2. **Drop a start and its outcome atomically.** They share one record. A
+   surviving half-pair makes `reconcileCronRunsAtBoot` write a bogus
+   `errorCode:"orphaned"` — every boot, forever.
+3. **Evict oldest-first, and do NOT count in-flight runs against the budget.**
+   `CronScheduler.rehydrate` reads the newest record as `lastSeen`; losing it
+   makes boot emit a false `server_offline` skip claiming up to 100 missed
+   fires. Charging a pin against the budget would evict a settled record still
+   inside the read model's newest-N window.
+
+Applied at the only two places the per-chat array is built:
+`applyAutoContinueToState` (shared by live append AND boot replay) and the
+snapshot load in `event-store-snapshot.ts`. Do NOT add a third enforcement
+point — `buildSnapshotFile` serializes already-compacted memory.
+
+**Irreversible.** Once `snapshotAndTruncateLogs` runs the dropped events are
+gone from `schedules.jsonl`; reverting the module does not bring them back. The
+user-visible record lives in the transcript log (`cron_run` cards), a different
+log that is never compacted.
 
 **The corpus has since outgrown the numbers above.** Re-measured 2026-08-19:
 1.0 GB across 262 chats, largest single transcript **96 MB / 36k entries**
