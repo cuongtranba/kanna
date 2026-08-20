@@ -61,6 +61,7 @@ function positiveIntEnv(raw: string | undefined, fallback: number): number {
 function startOtel(config: ResolvedOtelConfig): () => Promise<void> {
   const resource = resourceFromAttributes({
     "service.name": config.serviceName,
+    "service.version": config.serviceVersion,
     "host.name": config.machineName,
   })
   const tracerProvider = new NodeTracerProvider({

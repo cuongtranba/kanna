@@ -1323,7 +1323,11 @@ setting gates OTel export) and shut down in the server stop path:
   `KANNA_OTEL_SERVICE_NAME` beats the derived name. Service name defaults to
   `kanna-<machine name>` (sanitized `getMachineDisplayName()` — each install
   reports under its computer name; the raw name rides the `host.name`
-  resource attribute). The toggle applies at RUNTIME:
+  resource attribute). The `service.version` attribute is always set to
+  `APP_VERSION` (`package.json` version, bumped by release-please on every
+  release) so every span and metric is version-tagged — TraceQL
+  `{resource.service.version="1.37.0"}` selects and
+  `by (service_version)` groups in Prometheus. The toggle applies at RUNTIME:
   `AppSettingsManager.onChange` → `ObservabilityHandle.applyTelemetrySettings`
   restarts/stops the providers, and the facade's instrument cache is cleared
   on each transition (`resetMetricInstrumentCache`) so cached counters never
