@@ -117,6 +117,8 @@ export interface StartClaudeSessionPtyArgs {
   setupLoop?: (input: LoopSetupInput) => Promise<SetupLoopHandlerResult>
   /** Backs the `arm_cron` MCP tool; main chats only. */
   armCron?: (command: string) => Promise<{ jobId: string }>
+  /** Backs the `update_cron` MCP tool; main chats only. */
+  updateCron?: (jobId: string, patch: import("../../shared/cron/types").CronJobPatch) => Promise<void>
   /** Backs the `stop_loop` MCP tool. Omit to hide the tool from the model. */
   stopLoop?: () => Promise<void>
   /** Evaluated at spawn: when true, add LOOP_BLOCKED tools to --disallowedTools. */
@@ -500,6 +502,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
         delegationContext: args.delegationContext,
         setupLoop: args.setupLoop,
         armCron: args.armCron,
+        updateCron: args.updateCron,
         stopLoop: args.stopLoop,
         getArmedLoop: args.getArmedLoop,
         boardRegistry: args.boardRegistry,

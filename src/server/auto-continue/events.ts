@@ -124,6 +124,13 @@ export type AutoContinueEvent =
       schedule: CronSchedule
       /** Model resolved at arm time. Optional for backward compat with older events. */
       model?: string
+      /**
+       * Set to `true` when the arm is an update-in-place of an already-paused
+       * job, so the read model and scheduler can preserve the paused state
+       * instead of resetting to unpaused (the default for a fresh arm).
+       * Absent on new arms and on events persisted before this field existed.
+       */
+      paused?: boolean
     })
   | (AutoContinueEventBase & {
       kind: "cron_disarmed"

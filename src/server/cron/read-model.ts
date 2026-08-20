@@ -32,7 +32,9 @@ export function deriveCronJobs(
     switch (event.kind) {
       case "cron_armed":
         // Re-arming an existing id replaces the job wholesale — run history
-        // belongs to the arming, not the id.
+        // belongs to the arming, not the id. `event.paused` is set on
+        // update-in-place of a paused job so the paused state is preserved;
+        // absent means a fresh arm which always starts unpaused.
         jobs.set(event.scheduleId, {
           job: {
             jobId: event.scheduleId,
@@ -40,7 +42,7 @@ export function deriveCronJobs(
             mode: event.mode,
             scheduleText: event.scheduleText,
             schedule: event.schedule,
-            paused: false,
+            paused: event.paused ?? false,
             armedAt: event.timestamp,
             ...(event.model !== undefined ? { model: event.model } : {}),
           },

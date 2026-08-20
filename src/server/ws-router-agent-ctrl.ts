@@ -97,6 +97,15 @@ export async function handleAgentCtrlCommand(
       await broadcastChatAndSidebar(command.chatId)
       return true
     }
+    case "cron.update": {
+      await agent.runCronCommand(command.chatId, {
+        ok: true,
+        command: { sub: "update", jobId: command.jobId, patch: command.patch },
+      })
+      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      await broadcastChatAndSidebar(command.chatId)
+      return true
+    }
     case "tunnel.accept": {
       if (tunnelGateway) {
         await tunnelGateway.accept(command.chatId, command.tunnelId)

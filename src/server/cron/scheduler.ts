@@ -121,12 +121,12 @@ export class CronScheduler {
           jobId: event.scheduleId,
           schedule: event.schedule,
           armedAt: event.timestamp,
-          paused: false,
+          paused: event.paused ?? false,
           timerId: null,
           nextFireAtMs: null,
         }
         this.jobs.set(keyOf(event.chatId, event.scheduleId), job)
-        this.arm(job)
+        if (!job.paused) this.arm(job)
         return
       }
       case "cron_disarmed":
