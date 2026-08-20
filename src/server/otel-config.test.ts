@@ -1,4 +1,5 @@
 import { describe, test, expect } from "bun:test"
+import { APP_VERSION } from "../shared/branding"
 import { resolveOtelConfig, sanitizeServiceNamePart } from "./otel-config"
 
 const TELEMETRY_ON = { enabled: true, endpoint: "https://kanna-otel.lowbit.link" }
@@ -102,5 +103,10 @@ describe("resolveOtelConfig", () => {
     })
     expect(config?.traceUrl).toBeUndefined()
     expect(config?.metricUrl).toBeUndefined()
+  })
+
+  test("serviceVersion equals APP_VERSION", () => {
+    const config = resolveOtelConfig({ env: {}, telemetry: TELEMETRY_ON, machineName: "Mac" })
+    expect(config?.serviceVersion).toBe(APP_VERSION)
   })
 })

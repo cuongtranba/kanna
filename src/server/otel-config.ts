@@ -7,6 +7,8 @@
  * machine's display name (each distribution is one machine).
  */
 
+import { APP_VERSION } from "../shared/branding"
+
 export interface TelemetrySettingsInput {
   enabled: boolean
   endpoint: string
@@ -20,6 +22,7 @@ export interface OtelEnvInput {
 
 export interface ResolvedOtelConfig {
   serviceName: string
+  serviceVersion: string
   /** Raw machine display name, exported as the host.name resource attribute. */
   machineName: string
   /** Unset when OTEL_EXPORTER_OTLP_ENDPOINT is set — the exporter reads the env itself. */
@@ -60,6 +63,7 @@ export function resolveOtelConfig(args: {
 
   return {
     serviceName,
+    serviceVersion: APP_VERSION,
     machineName,
     traceUrl: settingsEndpoint ? `${settingsEndpoint}/v1/traces` : undefined,
     metricUrl: settingsEndpoint ? `${settingsEndpoint}/v1/metrics` : undefined,
