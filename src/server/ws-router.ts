@@ -31,6 +31,7 @@ import type { SessionShareService } from "./session-share"
 import type { PtyInstanceRegistry } from "./claude-pty/pty-instance-registry"
 import type { LoopTrackingRegistry } from "./loop-tracking-registry"
 import type { WorkflowRegistry } from "./workflow-registry"
+import type { BackgroundTaskOutputRegistry } from "./background-task-output-registry"
 import { handleBoardCommand } from "./ws-router-boards"
 import type { StartWorkResult, StartWorkView } from "../shared/boards/start-work"
 import type { CleanupDecision, WorktreeCleanupView } from "../shared/boards/worktree-cleanup"
@@ -113,6 +114,7 @@ interface CreateWsRouterArgs {
   resolveCleanup?: (cardId: string, decision: CleanupDecision) => Promise<WorktreeCleanupOutcome>
   suggestSyncRepos?: (boardId: string) => Promise<readonly RepoSuggestion[]>
   loopTrackingRegistry?: LoopTrackingRegistry
+  backgroundTaskOutputRegistry?: BackgroundTaskOutputRegistry
   subagentTranscriptRegistry?: SubagentTranscriptRegistry
   followedSessionRegistry?: FollowedSessionRegistry
   sessionShare?: SessionShareService
@@ -145,6 +147,7 @@ export function createWsRouter({
   resolveCleanup,
   suggestSyncRepos,
   loopTrackingRegistry,
+  backgroundTaskOutputRegistry,
   subagentTranscriptRegistry,
   followedSessionRegistry,
   sessionShare,
@@ -164,6 +167,7 @@ export function createWsRouter({
     workflowRegistry,
     boardRegistry,
     loopTrackingRegistry,
+    backgroundTaskOutputRegistry,
     followedSessionRegistry,
     machineDisplayName,
     updateManager,
@@ -183,6 +187,7 @@ export function createWsRouter({
     workflowRegistry,
     boardRegistry,
     loopTrackingRegistry,
+    backgroundTaskOutputRegistry,
     envelopeBuilder,
   })
 
@@ -508,6 +513,24 @@ export function createWsRouter({
           )
           return
         }
+        case "backgroundTasks.getOutput": {
+          const output = backgroundTaskOutputRegistry?.getOutput(command.chatId, command.taskId)
+          send(ws, {
+            v: PROTOCOL_VERSION,
+            type: "snapshot",
+            id,
+            snapshot: {
+              type: "background-task-output",
+              data: {
+                chatId: command.chatId,
+                taskId: command.taskId,
+                content: output?.content ?? "",
+                truncated: output?.truncated ?? false,
+              },
+            },
+          })
+          return
+        }
         case "system.ping":
         case "system.openExternal":
         case "update.check":
@@ -570,6 +593,9 @@ export function createWsRouter({
       if (ws.data.pushDeviceId) {
         pushManager.clearFocus(ws.data.pushDeviceId)
       }
+      for (const dispose of ws.data.backgroundTaskWatchers?.values() ?? []) {
+        dispose()
+      }
       broadcast.removeSocket(ws)
     },
     broadcastSnapshots: () => broadcast.broadcastSnapshots(),
@@ -597,6 +623,13 @@ export function createWsRouter({
         const snapshotSignatures = ensureSnapshotSignatures(ws)
         ws.data.subscriptions.set(parsed.id, parsed.topic)
         snapshotSignatures.delete(parsed.id)
+        if (parsed.topic.type === "background-task-output") {
+          const dispose = backgroundTaskOutputRegistry?.addWatcher(parsed.topic.chatId, parsed.topic.taskId)
+          if (dispose) {
+            ws.data.backgroundTaskWatchers ??= new Map()
+            ws.data.backgroundTaskWatchers.set(parsed.id, dispose)
+          }
+        }
         if (parsed.topic.type === "local-projects") {
           void refreshDiscovery().then(() => {
             if (ws.data.subscriptions.has(parsed.id)) {
@@ -614,6 +647,11 @@ export function createWsRouter({
         ws.data.subscriptions.delete(parsed.id)
         snapshotSignatures.delete(parsed.id)
         ws.data.chatOpSeqBySubId?.delete(parsed.id)
+        const disposeWatcher = ws.data.backgroundTaskWatchers?.get(parsed.id)
+        if (disposeWatcher) {
+          disposeWatcher()
+          ws.data.backgroundTaskWatchers!.delete(parsed.id)
+        }
         send(ws, { v: PROTOCOL_VERSION, type: "ack", id: parsed.id })
         return
       }

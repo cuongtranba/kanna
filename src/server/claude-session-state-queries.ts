@@ -146,6 +146,7 @@ export function getBackgroundTasksByChatId(
         taskType: meta.taskType,
         description: meta.description,
         startedAt: meta.startedAt,
+        hasOutput: meta.outputPath != null,
       }))
       .sort((a, b) => a.startedAt - b.startedAt || a.id.localeCompare(b.id))
     out.set(chatId, tasks)

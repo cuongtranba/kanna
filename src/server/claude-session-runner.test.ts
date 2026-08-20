@@ -587,7 +587,7 @@ describe("runClaudeSession", () => {
   test("status entry with backgroundTaskIdsSnapshot REPLACES the guard set", async () => {
     // Pre-arm with a stale id: the level signal must replace, not merge, so a
     // missed settle bookend can never wedge a stale running indicator.
-    const session = makeSession({ backgroundTasks: new Map([["stale1", { taskType: null, description: null, startedAt: 0 }]]) })
+    const session = makeSession({ backgroundTasks: new Map([["stale1", { taskType: null, description: null, startedAt: 0, outputPath: null }]]) })
 
     const snapshotEntry = {
       _id: "status-snap-1",
@@ -610,7 +610,7 @@ describe("runClaudeSession", () => {
 
   test("empty backgroundTaskIdsSnapshot clears the guard set and deadline", async () => {
     const session = makeSession({
-      backgroundTasks: new Map([["a1", { taskType: null, description: null, startedAt: 0 }], ["b2", { taskType: null, description: null, startedAt: 0 }]]),
+      backgroundTasks: new Map([["a1", { taskType: null, description: null, startedAt: 0, outputPath: null }], ["b2", { taskType: null, description: null, startedAt: 0, outputPath: null }]]),
       backgroundTaskDeadlineAt: Date.now() + 100_000,
     })
 
@@ -751,7 +751,7 @@ describe("runClaudeSession", () => {
 
   test("backgroundTasksSnapshot meta labels tasks; surviving ids keep startedAt", async () => {
     const session = makeSession({
-      backgroundTasks: new Map([["keep1", { taskType: null, description: "old label", startedAt: 111 }]]),
+      backgroundTasks: new Map([["keep1", { taskType: null, description: "old label", startedAt: 111, outputPath: null }]]),
     })
     const snapshotEntry = {
       _id: "status-meta-1",

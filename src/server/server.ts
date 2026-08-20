@@ -73,6 +73,8 @@ import { defaultHomeDir, scanLocalCatalog, statMtimes } from "./local-catalog-io
 import { createSubagentTranscriptRegistry } from "./subagent-transcript-registry"
 import { createFollowedSessionRegistry } from "./followed-session-registry"
 import { statSessionFile } from "./followed-session-io.adapter"
+import { createBackgroundTaskOutputRegistry } from "./background-task-output-registry"
+import { backgroundTaskOutputIo } from "./background-task-output-io.adapter"
 import { importOneSession } from "./claude-session-importer.adapter"
 import { parseClaudeSessionFile } from "./claude-session-parser.adapter"
 import { listWorkflowRunDirs, readWorkflowDir, readWorkflowRunJournal, watchWorkflowDir, watchWorkflowRunDirs } from "./workflow-watch-io.adapter"
@@ -255,6 +257,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     resolveDoc: (abs) => resolveStructuredDoc(path.extname(abs)),
   })
   const subagentTranscriptRegistry = createSubagentTranscriptRegistry()
+  const backgroundTaskOutputRegistry = createBackgroundTaskOutputRegistry(backgroundTaskOutputIo)
   const reapedClaudePty = await claudePtyRegistry.reapStale()
   if (reapedClaudePty.length > 0) {
     log.info(`[kanna] reaped ${reapedClaudePty.length} orphan claude PTY process group(s) from previous run`)
@@ -439,6 +442,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     workflowRegistry,
     boardRegistry,
     loopTrackingRegistry,
+    backgroundTaskOutputRegistry,
     subagentTranscriptRegistry,
     localCatalog,
     chatPolicy: { ...POLICY_DEFAULT, defaultAction: "auto-allow" },
@@ -583,6 +587,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     resolveCleanup,
     suggestSyncRepos,
     loopTrackingRegistry,
+    backgroundTaskOutputRegistry,
     subagentTranscriptRegistry,
     followedSessionRegistry,
     killPtyInstance: async (chatId: string) => {

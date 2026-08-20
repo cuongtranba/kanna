@@ -24,6 +24,7 @@ import type { TerminalManager } from "./terminal-manager"
 import type { KeybindingsManager } from "./keybindings"
 import type { PtyInstanceRegistry } from "./claude-pty/pty-instance-registry"
 import type { WorkflowRegistry } from "./workflow-registry"
+import type { BackgroundTaskOutputRegistry } from "./background-task-output-registry"
 import type { BoardRegistry } from "./board-registry"
 import type { LoopTrackingRegistry } from "./loop-tracking-registry"
 import type { FollowedSessionRegistry } from "./followed-session-registry"
@@ -91,6 +92,7 @@ export interface EnvelopeDeps {
     "commitFiles" | "discardFile" | "ignoreFile" | "readPatch">
   ptyInstances?: PtyInstanceRegistry
   workflowRegistry?: WorkflowRegistry
+  backgroundTaskOutputRegistry?: BackgroundTaskOutputRegistry
   boardRegistry?: BoardRegistry
   loopTrackingRegistry?: LoopTrackingRegistry
   followedSessionRegistry?: FollowedSessionRegistry
@@ -200,6 +202,7 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
     resolvedDiffStore,
     ptyInstances,
     workflowRegistry,
+    backgroundTaskOutputRegistry,
     boardRegistry,
     loopTrackingRegistry,
     followedSessionRegistry,
@@ -390,6 +393,24 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
         snapshot: {
           type: "workflows",
           data: { chatId: topic.chatId, runs: workflowRegistry?.snapshot(topic.chatId) ?? [] },
+        },
+      }
+    }
+
+    if (topic.type === "background-task-output") {
+      const output = backgroundTaskOutputRegistry?.getOutput(topic.chatId, topic.taskId)
+      return {
+        v: PROTOCOL_VERSION,
+        type: "snapshot",
+        id,
+        snapshot: {
+          type: "background-task-output",
+          data: {
+            chatId: topic.chatId,
+            taskId: topic.taskId,
+            content: output?.content ?? "",
+            truncated: output?.truncated ?? false,
+          },
         },
       }
     }

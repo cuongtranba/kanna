@@ -226,8 +226,14 @@ c3-227:
 c3-229:
   - src/server/agent-transcript-parse.test.ts
   - src/server/agent-transcript-parse.ts
+  - src/server/background-task-output-io.adapter.ts
+  - src/server/background-task-output-registry.test.ts
+  - src/server/background-task-output-registry.ts
   - src/server/watched-registry.test.ts
   - src/server/watched-registry.ts
+  - src/client/app/BackgroundTasksSection.store.ts
+  - src/client/app/BackgroundTasksSection.test.tsx
+  - src/client/app/BackgroundTasksSection.tsx
   - src/client/app/WorkflowAgentTranscriptPanel.test.tsx
   - src/client/app/WorkflowAgentTranscriptPanel.tsx
   - src/client/app/WorkflowsPage.test.tsx

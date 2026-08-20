@@ -486,9 +486,9 @@ export const ChatTranscriptViewport = memo(({
           />
         </div>
       )}
-      {backgroundTasks && backgroundTasks.length > 0 ? (
+      {activeChatId && backgroundTasks && backgroundTasks.length > 0 ? (
         <div className="pb-4">
-          <BackgroundTasksSection tasks={backgroundTasks} />
+          <BackgroundTasksSection chatId={activeChatId} tasks={backgroundTasks} />
         </div>
       ) : null}
       {isProcessing ? <ProcessingMessage status={runtimeStatus ?? undefined} /> : null}

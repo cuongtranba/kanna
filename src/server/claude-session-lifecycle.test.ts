@@ -251,7 +251,7 @@ describe("hasPendingBackgroundTask", () => {
   test("returns true when task ids present and deadline not expired", () => {
     const now = Date.now()
     const session = makeSession({
-      backgroundTasks: new Map([["task-1", { taskType: null, description: null, startedAt: 0 }]]),
+      backgroundTasks: new Map([["task-1", { taskType: null, description: null, startedAt: 0, outputPath: null }]]),
       backgroundTaskDeadlineAt: now + 60_000,
     })
     expect(hasPendingBackgroundTask(session, now)).toBe(true)
@@ -263,7 +263,7 @@ describe("hasPendingBackgroundTask", () => {
     // destroy it, or the wake path never sees which tasks were pending.
     const now = Date.now()
     const session = makeSession({
-      backgroundTasks: new Map([["task-1", { taskType: null, description: null, startedAt: 0 }]]),
+      backgroundTasks: new Map([["task-1", { taskType: null, description: null, startedAt: 0, outputPath: null }]]),
       backgroundTaskDeadlineAt: now - 1,
     })
     const result = hasPendingBackgroundTask(session, now)
@@ -285,7 +285,7 @@ describe("hasPendingBackgroundTask", () => {
 
 describe("background-task guard with an SDK level signal", () => {
   const oneTask = () =>
-    new Map([["ba35e96q4", { taskType: "local_bash", description: "task dev", startedAt: 0 }]])
+    new Map([["ba35e96q4", { taskType: "local_bash", description: "task dev", startedAt: 0, outputPath: null }]])
 
   test("hasPendingBackgroundTask stays true long after the deadline lapsed", () => {
     const now = Date.now()

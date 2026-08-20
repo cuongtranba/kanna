@@ -169,7 +169,7 @@ describe("read models", () => {
     })
 
     const tasks = [
-      { id: "bsh42", taskType: "local_bash", description: "CI watch", startedAt: 100 },
+      { id: "bsh42", taskType: "local_bash", description: "CI watch", startedAt: 100, hasOutput: false },
     ]
     const chat = deriveChatSnapshot(
       state,

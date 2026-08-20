@@ -80,6 +80,7 @@ export type SubscriptionTopic =
   | { type: "board"; boardId: string; pageSize?: number }
   | { type: "followed-sessions" }
   | { type: "cron-jobs" }
+  | { type: "background-task-output"; chatId: string; taskId: string }
 
 export interface TerminalSnapshot {
   terminalId: string
@@ -113,6 +114,13 @@ export type PtyInstancesEvent =
 export interface WorkflowsSnapshot {
   chatId: string
   runs: WorkflowRunSummary[]
+}
+
+export interface BackgroundTaskOutputSnapshot {
+  chatId: string
+  taskId: string
+  content: string
+  truncated: boolean
 }
 
 export interface FollowedSessionsSnapshot {
@@ -373,6 +381,7 @@ export type ClientCommand =
   | { type: "workflows.getRun"; chatId: string; runId: string }
   | { type: "workflows.getAgentTranscript"; chatId: string; runId: string; agentId: string }
   | { type: "subagents.getRun"; chatId: string; agentId: string }
+  | { type: "backgroundTasks.getOutput"; chatId: string; taskId: string }
   | {
       type: "message.enqueue"
       chatId: string
@@ -442,6 +451,7 @@ export type ServerSnapshot =
   | { type: "board"; data: BoardSnapshot }
   | { type: "followed-sessions"; data: FollowedSessionsSnapshot }
   | { type: "cron-jobs"; data: import("./cron/types").CronJobsGlobalSnapshot }
+  | { type: "background-task-output"; data: BackgroundTaskOutputSnapshot }
 
 export interface BoardsSnapshot {
   ownerKind: BoardOwnerKind
