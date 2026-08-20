@@ -254,7 +254,7 @@ browser download. Verified this session: real computed font-size 16px → 24px a
 `16px`. Paste the run output. If the app cannot boot headless (auth wall, missing binary), STOP and
 report `BLOCKED` with the exact error — do not stub the assertion out.
 
-- [ ] **Step 1: Commit** — exactly one commit ends this task:
+- [x] **Step 1: Commit** — exactly one commit ends this task:
 
 ```bash
 git add -A
@@ -262,7 +262,7 @@ git commit -m "test(typography): playwright harness bootstrap" \
   -m $'Tribe-Card: typography-scale-preference\nTribe-Task: 5/16'
 ```
 
-- [ ] Task 5 complete
+- [x] Task 5 complete
 
 ---
 
