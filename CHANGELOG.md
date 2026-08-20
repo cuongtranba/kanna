@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.34.0](https://github.com/cuongtranba/kanna/compare/v1.33.0...v1.34.0) (2026-08-20)
+
+
+### Features
+
+* **boards:** filter bar, move to top, and new-issue marker in the Inbox column ([#765](https://github.com/cuongtranba/kanna/issues/765)) ([#786](https://github.com/cuongtranba/kanna/issues/786)) ([76f6928](https://github.com/cuongtranba/kanna/commit/76f69280b7596560352cf28300d7904f8e5f01b5))
+
 ## [1.33.0](https://github.com/cuongtranba/kanna/compare/v1.32.1...v1.33.0) (2026-08-19)
 
 
