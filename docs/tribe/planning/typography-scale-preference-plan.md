@@ -109,7 +109,7 @@ git commit -m "feat(typography): pure font-scale core" \
   -m $'Tribe-Card: typography-scale-preference\nTribe-Task: 1/16'
 ```
 
-- [ ] Task 1 complete
+- [x] Task 1 complete
 
 ### Task 2 — settings normalizer module · owns `src/shared/settings/typography.ts`
 
