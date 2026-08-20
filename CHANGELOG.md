@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.37.0](https://github.com/cuongtranba/kanna/compare/v1.36.0...v1.37.0) (2026-08-20)
+
+
+### Features
+
+* **cron:** add /cron update subcommand and update_cron MCP tool ([#794](https://github.com/cuongtranba/kanna/issues/794)) ([b2be044](https://github.com/cuongtranba/kanna/commit/b2be04454565a1c1e1b74c5ed414421ccf8fe5ee))
+
 ## [1.36.0](https://github.com/cuongtranba/kanna/compare/v1.35.0...v1.36.0) (2026-08-20)
 
 
