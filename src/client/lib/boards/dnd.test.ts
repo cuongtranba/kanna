@@ -48,6 +48,7 @@ function view(): BoardViewSnapshot {
     cards: { c1: [card("a", "c1"), card("b", "c1"), card("c", "c1")], c2: [] },
     cursors: {},
     chatLinksByCard: {},
+    newSince: null,
   }
 }
 

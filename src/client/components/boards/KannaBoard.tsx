@@ -17,10 +17,20 @@ import {
   resolveColumnDrop,
   type CardMoveRequest,
 } from "../../lib/boards/dnd"
+import { filterCards } from "../../lib/boards/filterCards"
+import { isNewCard, countNewCards } from "../../lib/boards/isNewCard"
 import { selectDropAtColumnEnd, selectDropBeforeCard, useBoardDragStore } from "./BoardDrag.store"
+import { selectBoardFilter, useBoardFilterStore } from "./BoardFilter.store"
+import { InboxFilterBar } from "./InboxFilterBar"
 import { ColumnSettings, type ColumnSettingsValue } from "./ColumnSettings"
 import { useColumnAdderStore } from "./ColumnAdder.store"
 import { selectCardDraft, useCardAdderStore } from "./CardAdder.store"
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "../ui/context-menu"
 import type { BoardColumn, BoardViewSnapshot, Card } from "../../../shared/boards/types"
 
 /**
@@ -64,6 +74,7 @@ export interface KannaBoardProps {
   onColumnDelete: (columnId: string) => void
   onColumnAdd: (title: string) => void
   onCardAdd: (columnId: string, title: string) => void
+  onMoveToTop: (cardId: string) => void
 }
 
 /** Data keys marking what a drag is carrying, so a card cannot drop as a column. */
@@ -94,11 +105,16 @@ export function KannaBoard(props: KannaBoardProps) {
     liveColumns.current = view.columns
   })
 
+  const boardId = view.board.id
+  const filter = useBoardFilterStore(selectBoardFilter(boardId))
+
   const handleCardDrop = useCallback(
     (cardId: string) => {
       const target = useBoardDragStore.getState().cardDrop
       useBoardDragStore.getState().endDrag()
       if (!target) return
+      // Always resolve against the FULL (unfiltered) view so a drag performed
+      // inside an active filter lands correctly among all cards in the column.
       const move = resolveCardDrop(viewRef.current, cardId, target)
       if (move) onCardMove(move)
     },
@@ -128,23 +144,30 @@ export function KannaBoard(props: KannaBoardProps) {
       ref={boardRef}
       className="kanna-board flex h-full w-full items-stretch gap-0 overflow-x-auto bg-background p-4"
     >
-      {view.columns.map((column) => (
-        <BoardColumnView
-          key={column.id}
-          column={column}
-          cards={view.cards[column.id] ?? EMPTY_CARDS}
-          total={view.counts[column.id] ?? (view.cards[column.id] ?? EMPTY_CARDS).length}
-          chatLinksByCard={view.chatLinksByCard ?? EMPTY_CHAT_LINKS}
-          chatFacts={props.chatFacts ?? EMPTY_CHAT_FACTS}
-          onCardDrop={handleCardDrop}
-          onColumnDrop={handleColumnDrop}
-          onOpenCard={props.onOpenCard}
-          onLoadMore={props.onLoadMore}
-          onColumnSave={props.onColumnSave}
-          onColumnDelete={props.onColumnDelete}
-          onCardAdd={props.onCardAdd}
-        />
-      ))}
+      {view.columns.map((column) => {
+        const allCards = view.cards[column.id] ?? EMPTY_CARDS
+        const isStart = column.semantic === "start"
+        const displayCards = isStart ? filterCards(allCards, filter) : allCards
+        return (
+          <BoardColumnView
+            key={column.id}
+            column={column}
+            cards={displayCards}
+            total={view.counts[column.id] ?? allCards.length}
+            newSince={isStart ? (view.newSince ?? null) : null}
+            chatLinksByCard={view.chatLinksByCard ?? EMPTY_CHAT_LINKS}
+            chatFacts={props.chatFacts ?? EMPTY_CHAT_FACTS}
+            onCardDrop={handleCardDrop}
+            onColumnDrop={handleColumnDrop}
+            onOpenCard={props.onOpenCard}
+            onLoadMore={props.onLoadMore}
+            onColumnSave={props.onColumnSave}
+            onColumnDelete={props.onColumnDelete}
+            onCardAdd={props.onCardAdd}
+            onMoveToTop={props.onMoveToTop}
+          />
+        )
+      })}
       <ColumnAdder onAdd={props.onColumnAdd} isFirst={view.columns.length === 0} />
     </div>
   )
@@ -159,6 +182,7 @@ interface ColumnViewProps {
   column: BoardColumn
   cards: readonly Card[]
   total: number
+  newSince: number | null
   chatLinksByCard: Readonly<Record<string, string[]>>
   chatFacts: Readonly<Record<string, CardChatFacts>>
   onCardDrop: (cardId: string) => void
@@ -168,12 +192,14 @@ interface ColumnViewProps {
   onColumnSave: (columnId: string, patch: ColumnSettingsValue) => void
   onColumnDelete: (columnId: string) => void
   onCardAdd: (columnId: string, title: string) => void
+  onMoveToTop: (cardId: string) => void
 }
 
 function BoardColumnView({
   column,
   cards,
   total,
+  newSince,
   chatLinksByCard,
   chatFacts,
   onOpenCard,
@@ -183,6 +209,7 @@ function BoardColumnView({
   onCardAdd,
   onCardDrop,
   onColumnDrop,
+  onMoveToTop,
 }: ColumnViewProps) {
   const outerRef = useRef<HTMLDivElement | null>(null)
   const listRef = useRef<HTMLDivElement | null>(null)
@@ -244,6 +271,9 @@ function BoardColumnView({
     [column.colorToken, column.semantic, column.title, column.wipLimit],
   )
 
+  const isStart = column.semantic === "start"
+  const newCount = newSince !== null ? countNewCards(cards, newSince) : 0
+
   return (
     <div
       ref={outerRef}
@@ -271,7 +301,14 @@ function BoardColumnView({
             overLimit ? "text-warning" : "text-muted-foreground",
           )}
         >
-          {total}
+          {isStart && newCount > 0 ? (
+            <>
+              {total}
+              <span className="text-info"> · {newCount} new</span>
+            </>
+          ) : (
+            total
+          )}
         </span>
         <ColumnSettings
           columnId={columnId}
@@ -282,6 +319,8 @@ function BoardColumnView({
         />
       </div>
 
+      {isStart ? <InboxFilterBar boardId={column.boardId} /> : null}
+
       <div ref={listRef} className="min-h-0 flex-1 space-y-2 overflow-y-auto px-1 py-2">
         {cards.map((card) => (
           <BoardCard
@@ -291,8 +330,10 @@ function BoardColumnView({
             cards={cards}
             chatIds={chatLinksByCard[card.id] ?? EMPTY_CHAT_IDS}
             chatFacts={chatFacts}
+            newSince={newSince}
             onOpen={onOpenCard}
             onCardDrop={onCardDrop}
+            onMoveToTop={onMoveToTop}
           />
         ))}
         {dropAtEnd ? <CardDropLine /> : null}
@@ -317,16 +358,20 @@ function BoardCard({
   cards,
   chatIds,
   chatFacts,
+  newSince,
   onOpen,
   onCardDrop,
+  onMoveToTop,
 }: {
   card: Card
   columnId: string
   cards: readonly Card[]
   chatIds: readonly string[]
   chatFacts: Readonly<Record<string, CardChatFacts>>
+  newSince: number | null
   onOpen: (cardId: string) => void
   onCardDrop: (cardId: string) => void
+  onMoveToTop: (cardId: string) => void
 }) {
   const ref = useRef<HTMLDivElement | null>(null)
   const cardId = card.id
@@ -362,52 +407,67 @@ function BoardCard({
   }, [cardId, columnId, onCardDrop])
 
   const handleOpen = useCallback(() => { onOpen(cardId) }, [cardId, onOpen])
+  const handleMoveToTop = useCallback(() => { onMoveToTop(cardId) }, [cardId, onMoveToTop])
 
   // Liveness, not attribution. `card.updatedBy.kind === "agent"` — what this row
   // used to key on — says an agent wrote the row last, so a card finished an
   // hour ago looked identical to one mid-turn.
   const signal = cardChatSignal(chatIds, chatFacts)
+  const isNew = isNewCard(card, newSince)
 
   return (
     <div ref={ref} className="relative">
       {dropBefore ? <CardDropLine /> : null}
-      <button
-        type="button"
-        onClick={handleOpen}
-        className={cn(
-          // Flat by default: 1px edge, no shadow, no left stripe.
-          "w-full cursor-grab rounded-lg border border-border bg-card px-3 py-2 text-left",
-          "transition-colors duration-150 hover:bg-secondary",
-          "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-          dragging && "opacity-40",
-        )}
-      >
-        <span className="line-clamp-2 text-sm font-medium leading-snug text-foreground [text-wrap:pretty]">
-          {card.title}
-        </span>
-        {signal ? (
-          // Only rendered when there is something to say. A healthy card is silent.
-          <span
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <button
+            type="button"
+            onClick={handleOpen}
             className={cn(
-              "mt-1.5 flex items-center gap-1.5 text-xs",
-              chatDotTextClass(signal.tone),
+              // Flat by default: 1px edge, no shadow, no left stripe.
+              "w-full cursor-grab rounded-lg border border-border bg-card px-3 py-2 text-left",
+              "transition-colors duration-150 hover:bg-secondary",
+              "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+              dragging && "opacity-40",
             )}
           >
-            {signal.tone ? (
-              // A resting dot: no pulse, no glow. The label beside it is what
-              // carries the meaning — the colour only sharpens it.
+            <span className="line-clamp-2 text-sm font-medium leading-snug text-foreground [text-wrap:pretty]">
+              {card.title}
+            </span>
+            {isNew ? (
+              <span className="mt-1 flex items-center gap-1 text-xs text-info">
+                <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-info" />
+                <span>New</span>
+              </span>
+            ) : null}
+            {signal ? (
+              // Only rendered when there is something to say. A healthy card is silent.
               <span
-                aria-hidden
-                className={cn("size-1.5 shrink-0 rounded-full", chatDotBgClass(signal.tone))}
-              />
-            ) : (
-              <MessageSquare aria-hidden className="size-3 shrink-0" />
-            )}
-            <span>{signal.label}</span>
-            {signal.liveSince === null ? null : <LiveStamp since={signal.liveSince} />}
-          </span>
-        ) : null}
-      </button>
+                className={cn(
+                  "mt-1.5 flex items-center gap-1.5 text-xs",
+                  chatDotTextClass(signal.tone),
+                )}
+              >
+                {signal.tone ? (
+                  // A resting dot: no pulse, no glow. The label beside it is what
+                  // carries the meaning — the colour only sharpens it.
+                  <span
+                    aria-hidden
+                    className={cn("size-1.5 shrink-0 rounded-full", chatDotBgClass(signal.tone))}
+                  />
+                ) : (
+                  <MessageSquare aria-hidden className="size-3 shrink-0" />
+                )}
+                <span>{signal.label}</span>
+                {signal.liveSince === null ? null : <LiveStamp since={signal.liveSince} />}
+              </span>
+            ) : null}
+          </button>
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          <ContextMenuItem onSelect={handleMoveToTop}>Move to top</ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
     </div>
   )
 }

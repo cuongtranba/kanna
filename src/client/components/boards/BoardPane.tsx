@@ -205,6 +205,30 @@ export function BoardPane({ boardId, socket, chatFacts, onOpenCard, onOpenBoards
     [boardId, socket],
   )
 
+  const handleMoveToTop = useCallback(
+    (cardId: string) => {
+      const current = useBoardsStore.getState().viewByBoard[boardId]
+      if (!current) return
+      const card = Object.values(current.cards).flat().find((c) => c.id === cardId)
+      if (!card) return
+      const columnCards = current.cards[card.columnId] ?? []
+      const topCard = columnCards[0]
+      if (topCard?.id === cardId) return
+      void socket
+        .command({
+          type: "board.card.move",
+          cardId,
+          toColumnId: card.columnId,
+          aboveCardId: null,
+          belowCardId: topCard?.id ?? null,
+        })
+        .catch(() => {
+          // The authoritative snapshot is the correction.
+        })
+    },
+    [boardId, socket],
+  )
+
   const handleCardAdd = useCallback(
     (columnId: string, title: string) => {
       const current = useBoardsStore.getState().viewByBoard[boardId]
@@ -371,6 +395,7 @@ export function BoardPane({ boardId, socket, chatFacts, onOpenCard, onOpenBoards
           onColumnDelete={handleColumnDelete}
           onColumnAdd={handleColumnAdd}
           onCardAdd={handleCardAdd}
+          onMoveToTop={handleMoveToTop}
         />
       </div>
     </div>

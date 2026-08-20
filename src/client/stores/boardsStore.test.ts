@@ -26,6 +26,7 @@ function view(cursors: Record<string, string | null>): BoardViewSnapshot {
     cards: {},
     cursors,
     chatLinksByCard: {},
+    newSince: null,
   }
 }
 

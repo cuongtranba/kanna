@@ -43,6 +43,7 @@ function view(): BoardViewSnapshot {
     },
     cursors: { todo: null, doing: null },
     chatLinksByCard: {},
+    newSince: null,
   }
 }
 
@@ -155,6 +156,7 @@ describe("moveColumnInView", () => {
       cards: {},
       cursors: {},
       chatLinksByCard: {},
+      newSince: null,
     }
   }
 
