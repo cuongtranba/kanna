@@ -10,6 +10,7 @@ import { chatDotBgClass, chatStatusIndicator } from "../../lib/chatStatusIndicat
 import { statusLabel } from "../../lib/statusLabel"
 import { NO_BOARD_CHAT_FACTS, type BoardChatFacts } from "../../lib/boards/boardChatFacts"
 import { COLUMN_DOT_CLASS } from "../../lib/boards/columnStyle"
+import type { ChatActivity } from "../../../shared/types"
 import {
   fieldDisplayText,
   fieldDraftText,
@@ -89,6 +90,8 @@ const NO_LINKS: readonly CardLink[] = []
 const NO_FIELDS: readonly FieldDef[] = []
 const NO_CONTENT: CardContent = {}
 
+const GITHUB_SYNCED_FIELDS = new Set(["labels", "assignee"])
+
 /** Newest first, matching the order the card face picks its signal chat by. */
 function chatLinksOf(links: readonly CardLink[]): CardLink[] {
   return links.filter((entry) => entry.kind === "chat").sort((a, b) => b.createdAt - a.createdAt)
@@ -137,6 +140,34 @@ function describeStartWork(result: StartWorkResult): string | null {
   if (result.reused) return null
   if (result.movedToColumnId === null) return "Started · no column marked active"
   return null
+}
+
+function workDetailRows(activity: ChatActivity): readonly string[] {
+  if (activity.agents > 0) return [`${activity.agents} agent${activity.agents === 1 ? "" : "s"}`]
+  if (activity.workflow) return [activity.workflow.name ?? "Workflow"]
+  if (activity.loop) return [`Loop · ${String(activity.loop.done)}/${String(activity.loop.total)}`]
+  return []
+}
+
+function IssueIdentityRow({ externalRef, content }: { externalRef: string; content: CardContent }) {
+  const urlEntry = content.externalUrl
+  const url = urlEntry?.kind === "url" ? urlEntry.value : null
+  return (
+    <div className="mt-1 flex items-center gap-1.5">
+      <span className="font-mono text-xs tabular-nums text-muted-foreground">#{externalRef}</span>
+      {url ? (
+        <a
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+          aria-label="Open on GitHub"
+          className="text-muted-foreground hover:text-foreground"
+        >
+          <ExternalLink aria-hidden className="size-3" />
+        </a>
+      ) : null}
+    </div>
+  )
 }
 
 export function CardDrawer({
@@ -287,6 +318,10 @@ export function CardDrawer({
   const fields = cardFields ?? NO_FIELDS
   const chatLinks = chatLinksOf(detail?.links ?? NO_LINKS)
   const facts = chatFacts ?? NO_BOARD_CHAT_FACTS
+  const githubCard =
+    detail?.externalRef != null &&
+    fields.length > 0 &&
+    fields.every((f) => GITHUB_SYNCED_FIELDS.has(f.id))
 
   return (
     <aside
@@ -299,9 +334,14 @@ export function CardDrawer({
       aria-label="Card detail"
     >
       <header className="flex items-start gap-2 border-b border-border px-4 py-3">
-        <h2 className="min-w-0 flex-1 text-[15px] font-semibold leading-snug text-foreground [text-wrap:pretty]">
-          {card?.title ?? "Loading…"}
-        </h2>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-[15px] font-semibold leading-snug text-foreground [text-wrap:pretty]">
+            {card?.title ?? "Loading…"}
+          </h2>
+          {detail?.externalRef ? (
+            <IssueIdentityRow externalRef={detail.externalRef} content={content} />
+          ) : null}
+        </div>
         <button
           type="button"
           onClick={onClose}
@@ -395,6 +435,7 @@ export function CardDrawer({
                 field={field}
                 value={content[field.id]}
                 onCommit={handleFieldCommit}
+                readOnly={githubCard}
               />
             ))}
           </dl>
@@ -455,9 +496,10 @@ interface CardFieldProps {
   field: FieldDef
   value: FieldValue | undefined
   onCommit: (fieldId: string, value: FieldValue | null) => void
+  readOnly?: boolean
 }
 
-function CardFieldRow({ field, value, onCommit }: CardFieldProps) {
+function CardFieldRow({ field, value, onCommit, readOnly }: CardFieldProps) {
   // Prose needs the width; a name, a number or a date does not, and a label
   // beside it keeps eight fields readable as a list rather than a stack.
   const stacked = field.kind === "longtext"
@@ -472,14 +514,29 @@ function CardFieldRow({ field, value, onCommit }: CardFieldProps) {
         {field.label}
       </dt>
       <dd className="min-w-0 flex-1">
-        <CardFieldControl field={field} value={value} onCommit={onCommit} />
+        <CardFieldControl field={field} value={value} onCommit={onCommit} readOnly={readOnly} />
       </dd>
     </div>
   )
 }
 
+function ReadOnlyFieldValue({ field, value }: Pick<CardFieldProps, "field" | "value">) {
+  const display = fieldDisplayText(field, value)
+  return (
+    <span
+      className={cn(
+        "px-1.5 py-0.5 text-[13px]",
+        display === "" ? "text-muted-foreground" : "text-foreground",
+      )}
+    >
+      {display === "" ? emptyHint(field) : display}
+    </span>
+  )
+}
+
 /** The control a kind is edited with. Rendered, not called: each holds hooks. */
-function CardFieldControl(props: CardFieldProps) {
+function CardFieldControl({ readOnly, ...props }: CardFieldProps) {
+  if (readOnly) return <ReadOnlyFieldValue field={props.field} value={props.value} />
   switch (props.field.kind) {
     case "select":
       return <SelectFieldValue {...props} />
@@ -742,6 +799,7 @@ function LinkedChat({ chatId, chat }: { chatId: string; chat: BoardChatFacts | u
   }
 
   const indicator = chatStatusIndicator(chat)
+  const detailRows = workDetailRows(chat.activity)
 
   return (
     <li>
@@ -762,6 +820,11 @@ function LinkedChat({ chatId, chat }: { chatId: string; chat: BoardChatFacts | u
           {indicator?.label ?? statusLabel(chat.status)}
         </span>
       </button>
+      {detailRows.map((row) => (
+        <p key={row} data-work-row className="px-3.5 py-0.5 text-xs text-muted-foreground">
+          {row}
+        </p>
+      ))}
     </li>
   )
 }
