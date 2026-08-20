@@ -5,7 +5,7 @@ import path from "node:path"
 import { createBoardStore } from "./board-store.adapter"
 import { BoardStoreError, cardBranchName, validateCardContent, type BoardStore } from "./board-store"
 import { BUILTIN_BOARD_TEMPLATES } from "./board-templates"
-import type { BoardTemplateDefinition, CardActor, FieldDef } from "../shared/boards/types"
+import type { BoardTemplateDefinition, CardActor, FieldDef, RemoteSourceRef } from "../shared/boards/types"
 
 const USER: CardActor = { kind: "user" }
 const AGENT: CardActor = { kind: "agent", chatId: "chat-1" }
@@ -904,6 +904,7 @@ describe("sync bindings", () => {
     const binding = store.upsertBinding({
       boardId: board.id,
       providerId: "github-issues",
+      projectId: null,
       sourceRef: REPO_1,
       direction: "both",
       allowAgentPush: false,
@@ -918,6 +919,7 @@ describe("sync bindings", () => {
     const again = store.upsertBinding({
       boardId: board.id,
       providerId: "github-issues",
+      projectId: null,
       sourceRef: REPO_1,
       direction: "pull",
       allowAgentPush: true,
@@ -936,6 +938,7 @@ describe("sync bindings", () => {
     const second = store.upsertBinding({
       boardId: board.id,
       providerId: "github-issues",
+      projectId: null,
       sourceRef: REPO_2,
       direction: "both",
       allowAgentPush: false,
@@ -953,6 +956,7 @@ describe("sync bindings", () => {
     store.upsertBinding({
       boardId: board.id,
       providerId: "github-issues",
+      projectId: null,
       sourceRef: REPO_1,
       direction: "pull",
       allowAgentPush: false,
@@ -967,6 +971,7 @@ describe("sync bindings", () => {
     const second = store.upsertBinding({
       boardId: board.id,
       providerId: "github-issues",
+      projectId: null,
       sourceRef: REPO_2,
       direction: "both",
       allowAgentPush: false,
@@ -995,5 +1000,84 @@ describe("sync bindings", () => {
   test("deleting a binding that is not there says so rather than silently succeeding", () => {
     const store = newStore()
     expect(() => store.deleteBinding("nope")).toThrow(BoardStoreError)
+  })
+})
+
+/**
+ * A binding remembers its checkout, and repos are findable across boards.
+ *
+ * Both exist for the Stack board: its cards come from several repos and the
+ * board itself names none, so `projectId` is the only thing that can tell Start
+ * work which worktree to mint — and `findBindingsBySource` is what lets the
+ * connect screen see that a repo already belongs somewhere before it offers to
+ * take it.
+ */
+describe("binding project + cross-board lookup", () => {
+  const REPO_1 = { provider: "github-issues", owner: "o1", repo: "r1" } as const
+  const REPO_2 = { provider: "github-issues", owner: "o2", repo: "r2" } as const
+
+  function bind(store: BoardStore, boardId: string, sourceRef: RemoteSourceRef, projectId: string | null) {
+    return store.upsertBinding({
+      boardId,
+      providerId: "github-issues",
+      projectId,
+      sourceRef,
+      direction: "pull",
+      allowAgentPush: false,
+    })
+  }
+
+  test("projectId round-trips, and a binding that names no project reads back null", () => {
+    const store = newStore()
+    const { board } = seedBoard(store)
+
+    expect(bind(store, board.id, REPO_1, "project-7").projectId).toBe("project-7")
+    expect(bind(store, board.id, REPO_2, null).projectId).toBeNull()
+    expect(store.listBindings(board.id).map((b) => b.projectId)).toEqual(["project-7", null])
+  })
+
+  test("re-binding updates the project, so a repo moved between checkouts is not stuck", () => {
+    const store = newStore()
+    const { board } = seedBoard(store)
+    const first = bind(store, board.id, REPO_1, "project-7")
+
+    const again = bind(store, board.id, REPO_1, "project-9")
+
+    expect(again.id).toBe(first.id)
+    expect(again.projectId).toBe("project-9")
+  })
+
+  test("findBindingsBySource reaches across boards — that is the whole point of it", () => {
+    const store = newStore()
+    const a = seedBoard(store).board
+    const b = seedBoard(store).board
+    bind(store, a.id, REPO_1, "p1")
+    bind(store, b.id, REPO_1, "p1")
+    bind(store, b.id, REPO_2, "p2")
+
+    const holders = store.findBindingsBySource("github-issues", REPO_1)
+    expect(holders.map((binding) => binding.boardId).sort()).toEqual([a.id, b.id].sort())
+  })
+
+  test("findBindingsBySource returns every holder, so a database that already broke the rule reports it whole", () => {
+    const store = newStore()
+    const a = seedBoard(store).board
+    const b = seedBoard(store).board
+    bind(store, a.id, REPO_1, "p1")
+    bind(store, b.id, REPO_1, "p1")
+    expect(store.findBindingsBySource("github-issues", REPO_1)).toHaveLength(2)
+  })
+
+  test("an unbound repo has no holders", () => {
+    const store = newStore()
+    seedBoard(store)
+    expect(store.findBindingsBySource("github-issues", REPO_1)).toEqual([])
+  })
+
+  test("a different repo is not a match, even on a board that syncs one", () => {
+    const store = newStore()
+    const { board } = seedBoard(store)
+    bind(store, board.id, REPO_1, "p1")
+    expect(store.findBindingsBySource("github-issues", REPO_2)).toEqual([])
   })
 })

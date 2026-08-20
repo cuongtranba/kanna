@@ -225,6 +225,17 @@ export interface BoardStore {
    * the same repo twice updates it, binding a different one adds.
    */
   listBindings(boardId: string): SyncBinding[]
+  /**
+   * Every binding on ANY board holding this repo.
+   *
+   * The one-repo-one-board rule is cross-board, so it cannot be a unique index:
+   * uniqueness would have to span `(provider_id, source_ref)` globally, and a
+   * constraint cannot tell "already yours" from "someone else's" — which is the
+   * whole question the connect screen asks. Returns a list rather than the
+   * first match so a database that already violated the rule reports it instead
+   * of hiding half of it.
+   */
+  findBindingsBySource(providerId: ProviderId, sourceRef: RemoteSourceRef): SyncBinding[]
   upsertBinding(input: UpsertBindingInput): SyncBinding
   /**
    * Disconnect one repo. Cascades to its sync links, outbox and conflicts;
@@ -258,6 +269,8 @@ export interface UpsertBindingInput {
   sourceRef: RemoteSourceRef
   direction: SyncDirection
   allowAgentPush: boolean
+  /** The checkout this repo lives in; see {@link SyncBinding.projectId}. */
+  projectId: string | null
 }
 
 export interface EnqueueOutboxInput {

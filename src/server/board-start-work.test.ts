@@ -238,6 +238,7 @@ describe("startWork", () => {
     const binding = registry.bindSync({
       boardId: board.id,
       providerId: "github-issues",
+      projectId: null,
       sourceRef: { provider: "github-issues", owner: "o", repo: "r" },
       direction: "pull",
       allowAgentPush: false,

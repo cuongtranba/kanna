@@ -51,6 +51,7 @@ import {
   type CardLink,
   type CardLinkKind,
   type FieldValue,
+  type ProviderId,
   type RemoteSourceRef,
   type SyncBinding,
   type SyncConflict,
@@ -154,6 +155,7 @@ interface TemplateRow {
 interface BindingRow {
   id: string
   board_id: string
+  project_id: string | null
   provider_id: string
   source_ref: string
   direction: string
@@ -330,6 +332,22 @@ const MIGRATIONS: readonly string[] = [
   );
   CREATE INDEX sync_conflict_card_idx ON sync_conflict (card_id, detected_at);
   `,
+  // 2 — a binding remembers its checkout, and repos are searchable across boards.
+  //
+  // `project_id` is what lets a card pulled onto a STACK board know which
+  // worktree Start work should mint: the board spans several repos and names
+  // none of them, so the answer can only come from the binding that pulled it.
+  // Nullable because every binding written before this has no answer, and
+  // inventing one would be worse than admitting it.
+  //
+  // The index is on `source_ref` alone, NOT unique: one repo belongs to one
+  // board, but that rule is cross-board and has to distinguish "already yours"
+  // from "someone else's" before it can be enforced — a job for the connect
+  // screen, not for a constraint that can only say no.
+  `
+  ALTER TABLE sync_binding ADD COLUMN project_id TEXT;
+  CREATE INDEX sync_binding_source_idx ON sync_binding (source_ref);
+  `,
 ]
 
 // ── JSON helpers ──────────────────────────────────────────────────────────────
@@ -464,6 +482,7 @@ function toBinding(row: BindingRow): SyncBinding {
   return {
     id: row.id,
     boardId: row.board_id,
+    projectId: row.project_id,
     providerId: sourceRef.provider,
     sourceRef,
     direction: isSyncDirection(row.direction) ? row.direction : "pull",
@@ -1115,6 +1134,15 @@ export function createBoardStore(options: CreateBoardStoreOptions): BoardStore {
         .map(toBinding)
     },
 
+    findBindingsBySource(providerId: ProviderId, sourceRef: RemoteSourceRef): SyncBinding[] {
+      return db
+        .query<BindingRow, [string, string]>(
+          "SELECT * FROM sync_binding WHERE provider_id = ? AND source_ref = ?",
+        )
+        .all(providerId, JSON.stringify(sourceRef))
+        .map(toBinding)
+    },
+
     upsertBinding(input: UpsertBindingInput): SyncBinding {
       const sourceRefJson = JSON.stringify(input.sourceRef)
       const existing = db
@@ -1122,16 +1150,17 @@ export function createBoardStore(options: CreateBoardStoreOptions): BoardStore {
         .get(input.boardId, sourceRefJson)
       if (existing) {
         db.run(
-          "UPDATE sync_binding SET direction = ?, allow_agent_push = ? WHERE id = ?",
-          [input.direction, input.allowAgentPush ? 1 : 0, existing.id],
+          "UPDATE sync_binding SET direction = ?, allow_agent_push = ?, project_id = ? WHERE id = ?",
+          [input.direction, input.allowAgentPush ? 1 : 0, input.projectId, existing.id],
         )
       } else {
         db.run(
-          `INSERT INTO sync_binding (id, board_id, provider_id, source_ref, direction, allow_agent_push, cursor, last_pulled_at)
-           VALUES (?, ?, ?, ?, ?, ?, NULL, NULL)`,
+          `INSERT INTO sync_binding (id, board_id, project_id, provider_id, source_ref, direction, allow_agent_push, cursor, last_pulled_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL)`,
           [
             newId(),
             input.boardId,
+            input.projectId,
             input.providerId,
             sourceRefJson,
             input.direction,

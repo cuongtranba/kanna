@@ -335,6 +335,16 @@ export type ClientCommand =
       repo: string
       direction: SyncDirection
       allowAgentPush: boolean
+      /** The checkout this repo lives in, so a Stack board's cards can Start work. */
+      projectId?: string | null
+      /**
+       * Confirms a MOVE: the board this repo is currently synced by.
+       *
+       * A repo binds to exactly one board, so connecting one another board
+       * holds detaches it there. Omitting this on a held repo is refused rather
+       * than resolved — the server will not guess that a user meant to move.
+       */
+      detachFromBoardId?: string | null
     }
   /** Disconnect ONE repo from a board that may sync several. */
   | { type: "board.sync.unbind"; boardId: string; bindingId: string }

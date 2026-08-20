@@ -181,6 +181,8 @@ async function dispatchSync(
       sourceRef: { provider: "github-issues", owner: command.owner, repo: command.repo },
       direction: command.direction,
       allowAgentPush: command.allowAgentPush,
+      projectId: command.projectId ?? null,
+      detachFromBoardId: command.detachFromBoardId ?? null,
     })
     send({ v: PROTOCOL_VERSION, type: "ack", id, result: binding })
     return true
