@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.35.0](https://github.com/cuongtranba/kanna/compare/v1.34.0...v1.35.0) (2026-08-20)
+
+
+### Features
+
+* **background-tasks:** stream task output to the chat UI ([#788](https://github.com/cuongtranba/kanna/issues/788)) ([ea96c66](https://github.com/cuongtranba/kanna/commit/ea96c66bd687a4c6ca15a7fd214cae9da4625313))
+
 ## [1.34.0](https://github.com/cuongtranba/kanna/compare/v1.33.0...v1.34.0) (2026-08-20)
 
 
