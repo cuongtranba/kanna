@@ -24,7 +24,7 @@ import type {
   ClaudeSessionLifecycleStatus,
   CloudflareTunnelRecord,
 } from "./app-settings-types"
-import type { SubagentRunSnapshot, LoopProgressSnapshot } from "./subagent-types"
+import type { SubagentErrorCode, SubagentRunSnapshot, LoopProgressSnapshot } from "./subagent-types"
 
 export interface SkillSearchResult {
   id: string
@@ -202,6 +202,7 @@ export interface ChatActivity {
   backgroundTasks: number
   cron: { nextFireAt: number | null; paused: boolean } | null
   awaitingAnswer: boolean
+  lastRunFailure: { code: SubagentErrorCode | null } | null
 }
 
 export const EMPTY_CHAT_ACTIVITY: ChatActivity = {
@@ -211,6 +212,7 @@ export const EMPTY_CHAT_ACTIVITY: ChatActivity = {
   backgroundTasks: 0,
   cron: null,
   awaitingAnswer: false,
+  lastRunFailure: null,
 }
 
 export interface SidebarChatRow {
