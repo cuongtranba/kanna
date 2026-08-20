@@ -240,7 +240,7 @@ git commit -m "test(typography): ratchet arbitrary-px text utilities at 169" \
   -m $'Tribe-Card: typography-scale-preference\nTribe-Task: 4/16'
 ```
 
-- [ ] Task 4 complete
+- [x] Task 4 complete
 
 ### Task 5 — Playwright harness bootstrap (P10 infrastructure) · owns `e2e/**`, `package.json`
 
