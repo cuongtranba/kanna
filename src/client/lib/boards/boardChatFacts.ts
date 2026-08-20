@@ -1,5 +1,5 @@
 import type { SidebarData } from "../../../shared/types"
-import type { CardChatFacts } from "./cardChatSignal"
+import type { CardChatFacts } from "./cardWorkSignal"
 
 /**
  * The chat facts a board needs, gathered from the live sidebar snapshot rather

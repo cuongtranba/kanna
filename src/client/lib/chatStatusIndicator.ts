@@ -14,7 +14,7 @@ import { statusLabel } from "./statusLabel"
  * design gate rejects hex, and a token follows the palette into dark mode.
  */
 
-export type ChatDotTone = "warning" | "info" | "success" | "destructive"
+export type ChatDotTone = "warning" | "info" | "success" | "destructive" | "muted"
 
 /** The status inputs a dot is derived from — a structural subset of SidebarChatRow. */
 export interface ChatIndicatorInput {
@@ -57,6 +57,7 @@ export function chatDotBgClass(tone: ChatDotTone | null): string {
     case "info": return "bg-info"
     case "success": return "bg-success"
     case "destructive": return "bg-destructive"
+    case "muted": return "bg-muted-foreground"
     default: return ""
   }
 }
@@ -67,6 +68,7 @@ export function chatDotTextClass(tone: ChatDotTone | null): string {
     case "info": return "text-info"
     case "success": return "text-success"
     case "destructive": return "text-destructive"
+    case "muted":
     default: return "text-muted-foreground"
   }
 }

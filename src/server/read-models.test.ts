@@ -1061,7 +1061,55 @@ describe("computeChatActivity", () => {
       backgroundTasks: 0,
       cron: null,
       awaitingAnswer: false,
+      lastRunFailure: null,
     })
+  })
+
+  function withRuns(...runs: { startedAt: number; status: string; code?: string }[]) {
+    const state = baseState()
+    const runMap = new Map(runs.map((run, index) => [
+      `r${String(index)}`,
+      {
+        runId: `r${String(index)}`, chatId: "c1", subagentId: "s1", subagentName: "a", label: null,
+        provider: "claude", model: "m", status: run.status, parentUserMessageId: "u1", parentRunId: null,
+        depth: 0, startedAt: run.startedAt, finishedAt: null, finalText: null,
+        error: run.code === undefined ? null : { code: run.code, message: "boom" },
+        usage: null, entries: [], pendingTool: null,
+      },
+    ]))
+    state.subagentRunsByChatId.set("c1", runMap as never)
+    return state
+  }
+
+  test("lastRunFailure reports the newest run's failure and its code", () => {
+    const state = withRuns({ startedAt: 5, status: "failed", code: "TIMEOUT" })
+    expect(computeChatActivity("c1", baseDeps({ state })).lastRunFailure).toEqual({ code: "TIMEOUT" })
+  })
+
+  test("a failure with no error object still reports, with no code", () => {
+    const state = withRuns({ startedAt: 5, status: "failed" })
+    expect(computeChatActivity("c1", baseDeps({ state })).lastRunFailure).toEqual({ code: null })
+  })
+
+  test("a newer run supersedes an older failure", () => {
+    const state = withRuns(
+      { startedAt: 5, status: "failed", code: "TIMEOUT" },
+      { startedAt: 9, status: "running" },
+    )
+    expect(computeChatActivity("c1", baseDeps({ state })).lastRunFailure).toBeNull()
+  })
+
+  test("a cancelled newest run is not a failure", () => {
+    const state = withRuns({ startedAt: 5, status: "cancelled", code: "USER_CANCELLED" })
+    expect(computeChatActivity("c1", baseDeps({ state })).lastRunFailure).toBeNull()
+  })
+
+  test("an older success does not hide the newest failure", () => {
+    const state = withRuns(
+      { startedAt: 9, status: "failed", code: "MAX_TURNS" },
+      { startedAt: 5, status: "completed" },
+    )
+    expect(computeChatActivity("c1", baseDeps({ state })).lastRunFailure).toEqual({ code: "MAX_TURNS" })
   })
 
   test("agents counts only running subagent runs", () => {
