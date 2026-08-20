@@ -86,6 +86,19 @@ export interface CronParseError {
   suggestion?: string
 }
 
+/**
+ * A partial update to an armed cron job. Exactly one field is set per command;
+ * the other two remain at their existing values. The server merges the patch
+ * over the existing job and emits a single `cron_armed` event.
+ */
+export interface CronJobPatch {
+  instruction?: string
+  mode?: CronMode
+  schedule?: CronSchedule
+  /** Present when `schedule` is set — the user-typed text for display. */
+  scheduleText?: string
+}
+
 export type CronCommand =
   | { sub: "help" }
   | { sub: "list" }
@@ -100,6 +113,7 @@ export type CronCommand =
       /** The schedule exactly as the user typed it, for display. */
       scheduleText: string
     }
+  | { sub: "update"; jobId: string; patch: CronJobPatch }
 
 export type CronParseResult =
   | { ok: true; command: CronCommand }

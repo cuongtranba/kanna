@@ -474,6 +474,7 @@ export function buildSpawnClaudeTurnDeps(agent: AgentCoordinator): SpawnClaudeTu
     buildOAuthBearers: (servers) => agent.buildOAuthBearers(servers),
     setupLoop: (chatId, input) => agent.setupLoop({ chatId, input }),
     armCron: (chatId, command) => agent.armCron(chatId, command),
+    updateCron: (chatId, jobId, patch) => agent.updateCron(chatId, jobId, patch),
     stopLoop: (chatId, reason) => agent.stopLoop(chatId, reason),
     resolveChatPolicy: (chatId) => agent.resolveChatPolicy(chatId),
     runClaudeSession: (session) => { void agent.runClaudeSession(session) },

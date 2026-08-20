@@ -146,6 +146,8 @@ export interface SpawnClaudeTurnDeps {
   setupLoop: (chatId: string, input: LoopSetupInput) => Promise<SetupLoopHandlerResult>
   /** Backs the `arm_cron` MCP tool — see AgentCoordinator.armCron. */
   armCron: (chatId: string, command: string) => Promise<{ jobId: string }>
+  /** Backs the `update_cron` MCP tool — see AgentCoordinator.updateCron. */
+  updateCron?: (chatId: string, jobId: string, patch: import("../shared/cron/types").CronJobPatch) => Promise<void>
   stopLoop: (chatId: string, reason: "goal_met" | "user_send" | "chat_deleted") => Promise<void>
   resolveChatPolicy: (chatId: string) => ChatPermissionPolicy
   /** Fires the session event loop. Return value is discarded (fire-and-forget). */
@@ -267,6 +269,9 @@ export async function spawnClaudeTurn(
             armCron: delegationContext.depth === 0
               ? (command: string) => deps.armCron(chatIdForCtx, command)
               : undefined,
+            updateCron: delegationContext.depth === 0 && deps.updateCron
+              ? (jobId, patch) => deps.updateCron!(chatIdForCtx, jobId, patch)
+              : undefined,
             stopLoop: delegationContext.depth === 0
               ? () => deps.stopLoop(chatIdForCtx, "goal_met")
               : undefined,
@@ -310,6 +315,9 @@ export async function spawnClaudeTurn(
               : undefined,
             armCron: delegationContext.depth === 0
               ? (command: string) => deps.armCron(chatIdForCtx, command)
+              : undefined,
+            updateCron: delegationContext.depth === 0 && deps.updateCron
+              ? (jobId, patch) => deps.updateCron!(chatIdForCtx, jobId, patch)
               : undefined,
             stopLoop: delegationContext.depth === 0
               ? () => deps.stopLoop(chatIdForCtx, "goal_met")

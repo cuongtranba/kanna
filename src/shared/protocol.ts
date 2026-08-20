@@ -1,3 +1,4 @@
+import type { CronJobPatch } from "./cron/types"
 import type { ShareClientCommand } from "./session-share/protocol"
 import type { AnyValue } from "./errors"
 import { isRecord } from "./errors"
@@ -419,6 +420,7 @@ export type ClientCommand =
   | { type: "cron.remove"; chatId: string; jobId: string }
   | { type: "cron.pause"; chatId: string; jobId: string }
   | { type: "cron.resume"; chatId: string; jobId: string }
+  | { type: "cron.update"; chatId: string; jobId: string; patch: CronJobPatch }
   | { type: "tunnel.accept"; chatId: string; tunnelId: string }
   | { type: "tunnel.stop"; chatId: string; tunnelId: string }
   | { type: "tunnel.retry"; chatId: string; tunnelId: string }

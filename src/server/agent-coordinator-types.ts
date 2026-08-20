@@ -115,6 +115,8 @@ export interface AgentCoordinatorArgs {
     setupLoop?: (input: LoopSetupInput) => Promise<SetupLoopHandlerResult>
     /** Backs the `arm_cron` MCP tool; main chats only. */
     armCron?: (command: string) => Promise<{ jobId: string }>
+    /** Backs the `update_cron` MCP tool; main chats only. */
+    updateCron?: (jobId: string, patch: import("../shared/cron/types").CronJobPatch) => Promise<void>
     /** Backs the `stop_loop` MCP tool. Omit to hide the tool. */
     stopLoop?: () => Promise<void>
     /** Live check: true while an autonomous loop is armed. */

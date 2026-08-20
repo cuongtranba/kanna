@@ -28,6 +28,7 @@ import {
   type DelegateSubagentContext,
 } from "./kanna-mcp-tools/delegate-subagent"
 import { formatCronArmSummary } from "../shared/cron/arm-summary"
+import { parseCronCommand } from "../shared/cron/parse-command"
 import { previewCronCommand } from "./cron/preview"
 import type { SubagentOrchestrator } from "./subagent-orchestrator"
 import type { LoopSetupInput } from "./loop-template"
@@ -126,6 +127,11 @@ export interface KannaMcpArgs extends OfferDownloadArgs {
    * hide the tool; supplied only for main chats, like `setup_loop`.
    */
   armCron?: (command: string) => Promise<{ jobId: string }>
+  /**
+   * Backs `update_cron` — edits a field on an already-armed job in place.
+   * Supplied only for main chats alongside `armCron`.
+   */
+  updateCron?: (jobId: string, patch: import("../shared/cron/types").CronJobPatch) => Promise<void>
 }
 
 /** The slice of the armed loop the MCP tools need. */
@@ -999,6 +1005,7 @@ const ARM_CRON_DESCRIPTION =
 function buildCronToolList(args: {
   chatId: string | null
   armCron?: (command: string) => Promise<{ jobId: string }>
+  updateCron?: (jobId: string, patch: import("../shared/cron/types").CronJobPatch) => Promise<void>
   now?: () => number
 }): KannaSdkToolList {
   if (!args.chatId) return []
@@ -1041,11 +1048,70 @@ function buildCronToolList(args: {
         "",
         "Now show this configuration to the user and confirm it with AskUserQuestion —",
         "options: Confirm / Change schedule / Change mode / Change instruction / Disarm.",
-        `If they choose a change, call arm_cron again with the corrected line and remove the old job with \`/cron remove ${jobId}\`.`,
+        `If they choose a change, call update_cron with jobId "${jobId}" and the field to change — no need to remove and re-arm.`,
       ].join("\n")
       return { content: [{ type: "text" as const, text }] }
     }),
   )
+
+  const updateCron = args.updateCron
+  if (updateCron) {
+    tools.push(
+      tool(
+        "update_cron",
+        "Edit one field (schedule, mode, or instruction) of an already-armed cron job in place. " +
+          "Use instead of arm_cron + /cron remove when the user wants to change a single field. " +
+          "Call validate_cron first when changing the schedule. " +
+          "After a successful update, show the user what changed and confirm with AskUserQuestion.",
+        {
+          jobId: z.string().describe("The job ID returned by arm_cron or listed by /cron list."),
+          field: z
+            .enum(["schedule", "mode", "instruction"])
+            .describe("Which field to change."),
+          value: z
+            .string()
+            .describe(
+              "New value: a cron expression / shortcut / interval for schedule, 'inline' or 'spawn' for mode, or free text for instruction.",
+            ),
+        },
+        async (input) => {
+          const line = `/cron update ${input.jobId} ${input.field} ${input.value}`
+          const parsed = parseCronCommand(line)
+          if (!parsed?.ok) {
+            return {
+              isError: true as const,
+              content: [
+                {
+                  type: "text" as const,
+                  text: `Not updated. ${parsed ? parsed.error.message : "could not parse as an update command"}`,
+                },
+              ],
+            }
+          }
+          if (parsed.command.sub !== "update") {
+            return {
+              isError: true as const,
+              content: [
+                {
+                  type: "text" as const,
+                  text: "Not updated. The constructed command was not recognized as an update.",
+                },
+              ],
+            }
+          }
+          await updateCron(input.jobId, parsed.command.patch)
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: `Updated ${input.field} on job ${input.jobId}. Show the user the change and confirm with AskUserQuestion.`,
+              },
+            ],
+          }
+        },
+      ),
+    )
+  }
   return tools
 }
 
@@ -1117,7 +1183,7 @@ export function buildKannaMcpTools(args: KannaMcpArgs): KannaSdkToolList {
     ...buildBoardToolList({ boardRegistry: args.boardRegistry, chatId, projectId: args.projectId ?? null }, tool),
     ...buildRunVerifyToolList({ chatId, cwd, getArmedLoop: args.getArmedLoop }),
     ...buildValidateMermaidToolList({ chatId, parse: args.parseMermaid ?? parseMermaid }),
-    ...buildCronToolList({ chatId, armCron: args.armCron }),
+    ...buildCronToolList({ chatId, armCron: args.armCron, updateCron: args.updateCron }),
     tool(
       "expose_port",
       EXPOSE_PORT_DESCRIPTION,

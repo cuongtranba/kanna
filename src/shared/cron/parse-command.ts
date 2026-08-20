@@ -1,17 +1,27 @@
 /**
  * The `/cron` command grammar.
  *
- *   /cron                                   → help
- *   /cron list                              → list armed jobs
- *   /cron remove <jobId>                    → disarm one job
- *   /cron pause <jobId> | resume <jobId>    → suspend / resume firing
- *   /cron <instruction> <inline|spawn> <schedule>   → arm a job
+ *   /cron                                          → help
+ *   /cron list                                     → list armed jobs
+ *   /cron remove <jobId>                           → disarm one job
+ *   /cron pause <jobId> | resume <jobId>           → suspend / resume firing
+ *   /cron update <jobId> schedule <schedule>       → change schedule in place
+ *   /cron update <jobId> mode <inline|spawn>       → change mode in place
+ *   /cron update <jobId> instruction <text…>       → change instruction in place
+ *   /cron <instruction> <inline|spawn> <schedule>  → arm a job
  *
  * The arm form needs no quoting: the parser anchors on the LAST
  * `inline`/`spawn` token — everything before it (after `/cron`) is the
  * instruction verbatim, everything after is the schedule text. A
  * double-quoted instruction is also accepted as an escape hatch for
  * instructions that end with a literal mode word.
+ *
+ * Disambiguation for `update`: a line is treated as an `update` subcommand
+ * only when tokens[3] is a recognised field name (`schedule`, `mode`,
+ * `instruction`) AND no mode word (`inline`/`spawn`) appears after position 3
+ * — or, for the `mode` field specifically, when the line is exactly five
+ * tokens long (/cron update <id> mode <value>). Everything else falls through
+ * to `parseArm`, so `/cron update the docs inline @daily` arms as usual.
  *
  * Unlike `/clear` (whole-message-or-fallthrough), `/cron` ALWAYS intercepts:
  * an invalid `/cron …` line must surface a precise error plus a ready-to-send
@@ -21,6 +31,7 @@
 import {
   isCronMode,
   type CronCommand,
+  type CronJobPatch,
   type CronMode,
   type CronParseError,
   type CronParseResult,
@@ -94,11 +105,15 @@ function tokenize(line: string): Token[] {
 /**
  * Management subcommands only claim the line when no mode token follows —
  * `/cron remove old sessions inline @daily` is an arm whose instruction
- * happens to start with "remove".
+ * happens to start with "remove". `update` has its own disambiguation
+ * because the `mode` field takes a mode word as its value.
  */
 function parseSubcommand(line: string, tokens: Token[]): Outcome | null {
   const first = tokens[1]!.text.toLowerCase()
   const modeLater = tokens.slice(2).some((token) => isCronMode(token.text))
+
+  if (first === "update") return parseUpdate(line, tokens, modeLater)
+
   if (modeLater) return null
 
   if (first === "list") {
@@ -138,6 +153,125 @@ function parseSubcommand(line: string, tokens: Token[]): Outcome | null {
   }
 
   return null
+}
+
+/**
+ * `/cron update <jobId> <field> <value…>`
+ *
+ * Claims the line only when tokens[3] is a recognised field AND the line
+ * cannot be an arm (no mode word after position 3, or exactly five tokens
+ * for the `mode` field whose value IS a mode word).
+ */
+function parseUpdate(line: string, tokens: Token[], modeLater: boolean): Outcome | null {
+  const jobId = tokens[2]?.text
+
+  if (tokens.length < 4) {
+    if (modeLater) return null
+    if (!jobId) {
+      return {
+        ok: false,
+        error: {
+          part: "subcommand",
+          message: "`/cron update` needs a job id and a field — run `/cron list` to see armed jobs",
+          suggestion: "/cron list",
+        },
+      }
+    }
+    return {
+      ok: false,
+      error: {
+        part: "subcommand",
+        message: `\`/cron update ${jobId}\` needs a field: \`schedule\`, \`mode\`, or \`instruction\``,
+        suggestion: "/cron list",
+      },
+    }
+  }
+
+  const field = tokens[3]!.text.toLowerCase()
+
+  if (field === "mode") {
+    // Mode value IS a mode word, so apply a tighter check: exactly 5 tokens.
+    if (tokens.length !== 5) return null
+    return parseUpdateMode(tokens)
+  }
+
+  if (field === "schedule" || field === "instruction") {
+    if (modeLater) return null
+    return parseUpdateFieldValue(line, tokens, field)
+  }
+
+  // Unknown field — fall through to arm when mode tokens are present; otherwise
+  // surface a helpful error so the user knows the shape.
+  if (modeLater) return null
+  return {
+    ok: false,
+    error: {
+      part: "subcommand",
+      message:
+        `\`/cron update\` accepts \`schedule\`, \`mode\`, or \`instruction\` as the field${field ? `, got "${field}"` : ""}`,
+    },
+  }
+}
+
+function parseUpdateMode(tokens: Token[]): Outcome {
+  const jobId = tokens[2]!.text
+  const value = tokens[4]!.text
+  if (!isCronMode(value)) {
+    return {
+      ok: false,
+      error: {
+        part: "subcommand",
+        message: `\`/cron update\` mode expects \`inline\` or \`spawn\`, got "${value}"`,
+      },
+    }
+  }
+  return { ok: true, command: { sub: "update", jobId, patch: { mode: value } } }
+}
+
+function parseUpdateFieldValue(line: string, tokens: Token[], field: "schedule" | "instruction"): Outcome {
+  const jobId = tokens[2]!.text
+  const valueText = tokens[4] !== undefined ? line.slice(tokens[4].start).trim() : ""
+
+  if (field === "instruction") {
+    if (!valueText) {
+      return {
+        ok: false,
+        error: {
+          part: "instruction",
+          message: "`/cron update` instruction needs a value",
+        },
+      }
+    }
+    const patch: CronJobPatch = { instruction: valueText }
+    return { ok: true, command: { sub: "update", jobId, patch } }
+  }
+
+  if (!valueText) {
+    return {
+      ok: false,
+      error: {
+        part: "schedule",
+        message:
+          "missing schedule value — expected 5- or 6-field cron (e.g. `0 9 * * 1`), a shortcut (`@daily`), or an interval (`every 5m`)",
+      },
+    }
+  }
+  const parsed = parseSchedule(valueText)
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      error: {
+        part: parsed.part,
+        message: parsed.message,
+        suggestion:
+          parsed.correctedSchedule !== undefined
+            ? validateSuggestion(`/cron update ${jobId} schedule ${parsed.correctedSchedule}`)
+            : undefined,
+      },
+    }
+  }
+  const patch: CronJobPatch = { schedule: parsed.schedule, scheduleText: valueText }
+  return { ok: true, command: { sub: "update", jobId, patch } }
 }
 
 function parseArm(line: string, tokens: Token[]): Outcome {

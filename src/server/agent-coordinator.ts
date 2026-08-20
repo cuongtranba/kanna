@@ -1012,6 +1012,21 @@ export class AgentCoordinator {
   }
 
   /**
+   * Edit one field on an already-armed job in place. Refuses when the job is
+   * unknown or has an active run — mirrors `runCronCommand`'s "update" case.
+   */
+  async updateCron(
+    chatId: string,
+    jobId: string,
+    patch: import("../shared/cron/types").CronJobPatch,
+  ): Promise<void> {
+    await runCronCommandFn(this.buildCronCommandDeps(), chatId, {
+      ok: true,
+      command: { sub: "update", jobId, patch },
+    })
+  }
+
+  /**
    * Disarm every cron job on a chat (chat deleted) and drop its timers.
    * Delegates to disarmCronJobsForChatFn — see cron/commands.ts.
    */

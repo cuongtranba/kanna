@@ -15,7 +15,7 @@ import { humanizeSchedule } from "../../shared/cron/humanize"
 import { nextFireAt } from "./next-fire"
 import type { AutoContinueEvent } from "../auto-continue/events"
 import { AUTO_CONTINUE_EVENT_VERSION } from "../auto-continue/events"
-import { deriveCronJobs } from "./read-model"
+import { deriveCronJobs, hasActiveRun } from "./read-model"
 import { timestamped } from "../claude-message-normalizer"
 
 export interface CronCommandStore {
@@ -200,6 +200,50 @@ export async function runCronCommand(
         kind: "cron_job_change",
         jobId: command.jobId,
         change,
+      })
+      return null
+    }
+    case "update": {
+      const now = deps.now?.() ?? Date.now()
+      const jobs = deriveCronJobs(deps.store.getAutoContinueEvents(chatId), chatId, now)
+      const job = jobs.find((candidate) => candidate.jobId === command.jobId)
+      if (!job) {
+        await appendCronEntry(deps, chatId, {
+          kind: "cron_command_error",
+          message: `no cron job "${command.jobId}" in this chat — run \`/cron list\` to see armed jobs`,
+          suggestion: "/cron list",
+        })
+        return null
+      }
+      if (hasActiveRun(job)) {
+        await appendCronEntry(deps, chatId, {
+          kind: "cron_command_error",
+          message: `cannot update cron job "${command.jobId}" while a run is in flight — wait for it to finish`,
+        })
+        return null
+      }
+      const patch = command.patch
+      const instruction = patch.instruction ?? job.instruction
+      const mode = patch.mode ?? job.mode
+      const schedule = patch.schedule ?? job.schedule
+      const scheduleText = patch.scheduleText ?? job.scheduleText
+      await emitCronEvent(deps, {
+        v: AUTO_CONTINUE_EVENT_VERSION,
+        kind: "cron_armed",
+        chatId,
+        scheduleId: command.jobId,
+        timestamp: now,
+        instruction,
+        mode,
+        schedule,
+        scheduleText,
+        ...(job.model !== undefined ? { model: job.model } : {}),
+        ...(job.paused ? { paused: true } : {}),
+      })
+      await appendCronEntry(deps, chatId, {
+        kind: "cron_job_change",
+        jobId: command.jobId,
+        change: "updated",
       })
       return null
     }

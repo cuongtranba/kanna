@@ -8,7 +8,7 @@ export function formatCronConfirmRequest(summary: CronArmSummary): string {
     "Call AskUserQuestion with these exact options: Confirm / Change schedule / Change mode / Change instruction / Disarm.",
     [
       `- If they confirm, acknowledge and stop — the job is live.`,
-      `- If they choose a change, call arm_cron with the corrected line and remove the old job with \`/cron remove ${summary.jobId ?? "<jobId>"}\`.`,
+      `- If they choose a change, call update_cron with the jobId and the field to change (schedule, mode, or instruction) — no need to remove and re-arm.`,
       `- If they disarm, remove the job with \`/cron remove ${summary.jobId ?? "<jobId>"}\` and tell them it was removed.`,
     ].join("\n"),
     "Note: the job is already running. If it fires before the user answers, the Disarm option removes it.",

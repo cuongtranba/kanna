@@ -218,3 +218,72 @@ describe("suggestion drift guard", () => {
     expect(withSuggestions.length).toBeGreaterThanOrEqual(10)
   })
 })
+
+describe("update subcommand", () => {
+  test("schedule field parses to an update command with a CronSchedule", () => {
+    const command = commandOf("/cron update cron-a1 schedule 0 10 * * *")
+    expect(command).toMatchObject({ sub: "update", jobId: "cron-a1" })
+    if (command.sub !== "update") throw new Error("expected update")
+    expect(command.patch.scheduleText).toBe("0 10 * * *")
+    expect(command.patch.schedule?.type).toBe("cron")
+    expect(command.patch.instruction).toBeUndefined()
+    expect(command.patch.mode).toBeUndefined()
+  })
+
+  test("mode field parses to an update command", () => {
+    const command = commandOf("/cron update cron-a1 mode spawn")
+    expect(command).toMatchObject({ sub: "update", jobId: "cron-a1", patch: { mode: "spawn" } })
+    if (command.sub !== "update") throw new Error("expected update")
+    expect(command.patch.schedule).toBeUndefined()
+    expect(command.patch.instruction).toBeUndefined()
+  })
+
+  test("instruction field parses to an update command (multi-word allowed)", () => {
+    const command = commandOf("/cron update cron-a1 instruction check nightly builds")
+    expect(command).toMatchObject({
+      sub: "update",
+      jobId: "cron-a1",
+      patch: { instruction: "check nightly builds" },
+    })
+  })
+
+  test("arm disambiguation: /cron update the docs inline @daily still arms", () => {
+    const command = commandOf("/cron update the docs inline @daily")
+    expect(command).toMatchObject({ sub: "arm", instruction: "update the docs", mode: "inline" })
+  })
+
+  test("arm disambiguation: /cron update old-job instruction redo spawn @daily still arms", () => {
+    const command = commandOf("/cron update old-job instruction redo spawn @daily")
+    expect(command).toMatchObject({
+      sub: "arm",
+      instruction: "update old-job instruction redo",
+      mode: "spawn",
+    })
+  })
+
+  test("missing field name after jobId is an error pointing at /cron list", () => {
+    const error = errorOf("/cron update cron-a1")
+    expect(error.part).toBe("subcommand")
+    expect(error.suggestion).toBe("/cron list")
+  })
+
+  test("unknown field name is a subcommand error", () => {
+    const error = errorOf("/cron update cron-a1 badfield value")
+    expect(error.part).toBe("subcommand")
+  })
+
+  test("invalid schedule value is a schedule error", () => {
+    const error = errorOf("/cron update cron-a1 schedule notacron")
+    expect(error.part).toBe("schedule")
+  })
+
+  test("invalid mode value is a subcommand error", () => {
+    const error = errorOf("/cron update cron-a1 mode badmode")
+    expect(error.part).toBe("subcommand")
+  })
+
+  test("missing schedule value is a schedule error", () => {
+    const error = errorOf("/cron update cron-a1 schedule")
+    expect(error.part).toBe("schedule")
+  })
+})

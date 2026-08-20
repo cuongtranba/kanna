@@ -1,6 +1,6 @@
 ---
 id: c3-233
-c3-seal: 9298c080983ada20fb0db6724808b54018687ab20eb49b2a8440ac55cc1892c7
+c3-seal: 65efaa66738a9db79eb60e33f39920fe9ea7e3f7791bedf8eee5dd3baad846b9
 title: cron-scheduler
 type: component
 category: feature
@@ -39,11 +39,19 @@ read models.
 ## Purpose
 
 Owns the server half of the `/cron` feature. `runCronCommand` dispatches
-parsed commands (arm/list/remove/pause/resume) through `emitCronEvent` — the
+parsed commands (arm/list/remove/pause/resume/update) through `emitCronEvent` — the
 one write path: append event, scheduler.onEvent, chat broadcast, global-topic
 push — and refuses every invalid line through the single `refuseCronCommand`
 choke point, which cards the failure and offers it to the model together.
-`createCronRepair` is that offer: when the parser produced no suggestion of
+The `update` case reads the current job from `deriveCronJobs`, guards against
+an active run (`hasActiveRun`), merges the `CronJobPatch`, and emits ONE
+`cron_armed` event with the same `scheduleId` — the "re-arming replaces
+wholesale" read-model rule handles idempotency. An optional `paused?: boolean`
+field on `cron_armed` preserves the paused state on update; both `deriveCronJobs`
+and `CronScheduler.onEvent` derive paused as `event.paused ?? false`; the
+scheduler skips `arm()` when the job is paused. The `update_cron` MCP tool
+wraps the update dispatch; a `cron.update` WS command exposes it from the UI.
+`createCronRepair` is the repair offer: when the parser produced no suggestion of
 its own it enqueues a repair prompt and drains the queue (`/cron` starts no
 turn, so nothing else would), bounded to arm-shaped failures, one ask per
 line per chat, standing aside for a queued user message, swallowing its own

@@ -306,7 +306,7 @@ export interface CronListEntry extends TranscriptEntryBase {
 export interface CronJobChangeEntry extends TranscriptEntryBase {
   kind: "cron_job_change"
   jobId: string
-  change: "removed" | "paused" | "resumed"
+  change: "removed" | "paused" | "resumed" | "updated"
 }
 
 export type TranscriptEntry =
@@ -365,5 +365,5 @@ export type HydratedTranscriptMessage =
   | ({ kind: "cron_run"; jobId: string; runId: string; instruction: string; spawnedChatId?: string; firedAt: number; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "cron_run_skipped"; jobId: string; reason: CronSkipReason; missedCount?: number; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "cron_list"; help?: boolean; id: string; messageId?: string; timestamp: string; hidden?: boolean })
-  | ({ kind: "cron_job_change"; jobId: string; change: "removed" | "paused" | "resumed"; id: string; messageId?: string; timestamp: string; hidden?: boolean })
+  | ({ kind: "cron_job_change"; jobId: string; change: "removed" | "paused" | "resumed" | "updated"; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ id: string; messageId?: string; hidden?: boolean } & HydratedToolCall)

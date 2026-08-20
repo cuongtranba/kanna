@@ -1064,7 +1064,7 @@ describe("arm_cron", () => {
     expect(text).toContain(TEST_JOB_ID)
     expect(text).toContain("check ci")
     expect(text).toContain("AskUserQuestion")
-    expect(text).toContain("/cron remove")
+    expect(text).toContain("update_cron")
   })
 
   // The model must never be able to arm something the send pipeline would
