@@ -204,7 +204,7 @@ git commit -m "feat(typography): wire --kanna-font-scale into the stylesheet" \
   -m $'Tribe-Card: typography-scale-preference\nTribe-Task: 3/16'
 ```
 
-- [ ] Task 3 complete
+- [x] Task 3 complete
 
 ### Task 4 — the px ratchet (P4) · owns `src/client/design/px-text-ratchet.test.ts`
 
