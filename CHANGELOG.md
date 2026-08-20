@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.38.0](https://github.com/cuongtranba/kanna/compare/v1.37.0...v1.38.0) (2026-08-20)
+
+
+### Features
+
+* **telemetry:** add service.version to OTel resource attributes ([#797](https://github.com/cuongtranba/kanna/issues/797)) ([005930e](https://github.com/cuongtranba/kanna/commit/005930e9d671e44582c931cd4f846847f57f0693)), closes [#796](https://github.com/cuongtranba/kanna/issues/796)
+
 ## [1.37.0](https://github.com/cuongtranba/kanna/compare/v1.36.0...v1.37.0) (2026-08-20)
 
 
