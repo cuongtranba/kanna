@@ -8,6 +8,15 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.36.0](https://github.com/cuongtranba/kanna/compare/v1.35.0...v1.36.0) (2026-08-20)
+
+
+### Features
+
+* **boards:** card drawer — issue identity, Work section, GitHub read-only fields ([#792](https://github.com/cuongtranba/kanna/issues/792)) ([24544a9](https://github.com/cuongtranba/kanna/commit/24544a9e8b83465a86fc0141c482f1cb897cd020))
+* **boards:** cardChatSignal → cardWorkSignal with 10-row precedence table ([#790](https://github.com/cuongtranba/kanna/issues/790)) ([b916e9f](https://github.com/cuongtranba/kanna/commit/b916e9f7968a15603b2742bc513f11874373839d))
+* **boards:** connect every repo in a Stack, one repo to one board ([#782](https://github.com/cuongtranba/kanna/issues/782)) ([d5da225](https://github.com/cuongtranba/kanna/commit/d5da225693f9e3975940e8d9d933beb5480ef94d))
+
 ## [1.35.0](https://github.com/cuongtranba/kanna/compare/v1.34.0...v1.35.0) (2026-08-20)
 
 
