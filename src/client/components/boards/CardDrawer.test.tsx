@@ -201,6 +201,31 @@ function chatButton(container: HTMLElement, text: string): HTMLButtonElement | u
  * showed none of it, so the only way from a card to its conversation was to
  * press Start work and hope it resolved to the same chat.
  */
+describe("CardDrawer issue identity", () => {
+  test("identity renders from externalRef with a GitHub link", async () => {
+    const detail: CardDetailView = {
+      ...detailWith({ kind: "idle" }),
+      externalRef: "412",
+      card: {
+        ...detailWith({ kind: "idle" }).card,
+        content: { externalUrl: { kind: "url", value: "https://github.com/cuongtranba/kanna/issues/412" } },
+      },
+    }
+    const harness = await mount(detail, () => Promise.resolve(RESULT))
+    expect(harness.container.textContent).toContain("#412")
+    const identityLink = harness.container.querySelector<HTMLAnchorElement>('header a[aria-label="Open on GitHub"]')
+    expect(identityLink?.getAttribute("href")).toBe("https://github.com/cuongtranba/kanna/issues/412")
+    harness.unmount()
+  })
+
+  test("a card from nowhere renders no identity row", async () => {
+    const detail: CardDetailView = { ...detailWith({ kind: "idle" }), externalRef: null }
+    const harness = await mount(detail, () => Promise.resolve(RESULT))
+    expect(harness.container.querySelector('header a[aria-label="Open on GitHub"]')).toBeNull()
+    harness.unmount()
+  })
+})
+
 describe("CardDrawer linked chats", () => {
   test("lists each linked chat with its live status", async () => {
     const harness = await mount(
@@ -482,7 +507,7 @@ describe("CardDrawer card schema", () => {
 
   test("a url still opens in a new tab, with the scheme stripped from what is read", async () => {
     const harness = await mountSchema(FULL)
-    const link = harness.container.querySelector<HTMLAnchorElement>('a[target="_blank"]')
+    const link = harness.container.querySelector<HTMLAnchorElement>('dl a[target="_blank"]')
     expect(link?.getAttribute("href")).toBe("https://github.com/o/r/issues/412")
     expect(link?.textContent).toBe("github.com/o/r/issues/412")
     harness.unmount()
@@ -635,5 +660,88 @@ describe("CardDrawer field editing", () => {
     expect(container.textContent).toContain("Ada")
     act(() => root.unmount())
     container.remove()
+  })
+})
+
+describe("CardDrawer Work section", () => {
+  test("Work groups agent activity under its chat", async () => {
+    const harness = await mount(
+      linkedDetail([link("chat-77", "chat", 2)]),
+      () => Promise.resolve(RESULT),
+      { "chat-77": { title: "Fix login redirect", status: "running", unread: false, activity: { ...EMPTY_CHAT_ACTIVITY, agents: 2 } } },
+    )
+    expect(harness.container.textContent).toContain("2 agents")
+    harness.unmount()
+  })
+
+  test("Work section shows workflow name under its chat", async () => {
+    const harness = await mount(
+      linkedDetail([link("chat-77", "chat", 2)]),
+      () => Promise.resolve(RESULT),
+      { "chat-77": { title: "Review changes", status: "running", unread: false, activity: { ...EMPTY_CHAT_ACTIVITY, workflow: { name: "deep-research", agentCount: 4 } } } },
+    )
+    expect(harness.container.textContent).toContain("deep-research")
+    harness.unmount()
+  })
+
+  test("a chat with no active work shows its status only, not a work row", async () => {
+    const harness = await mount(
+      linkedDetail([link("chat-77", "chat", 2)]),
+      () => Promise.resolve(RESULT),
+      { "chat-77": { title: "Fix login redirect", status: "idle", unread: false, activity: EMPTY_CHAT_ACTIVITY } },
+    )
+    expect(harness.container.textContent).toContain("Idle")
+    const workRows = harness.container.querySelectorAll("[data-work-row]")
+    expect(workRows).toHaveLength(0)
+    harness.unmount()
+  })
+})
+
+describe("CardDrawer From GitHub fields", () => {
+  test("labels and assignee render with no edit affordance when from GitHub", async () => {
+    const fromGitHubSchema: readonly FieldDef[] = [
+      { id: "labels", label: "Labels", kind: "label", options: null, required: false },
+      { id: "assignee", label: "Assignee", kind: "text", options: null, required: false },
+    ]
+    const detail: CardDetailView = {
+      ...detailWith({ kind: "idle" }),
+      externalRef: "412",
+      card: {
+        ...detailWith({ kind: "idle" }).card,
+        content: {
+          labels: { kind: "label", values: ["bug", "auth"] },
+          assignee: { kind: "text", value: "Ada" },
+        },
+      },
+    }
+    const harness = await mount(detail, () => Promise.resolve(RESULT), undefined, fromGitHubSchema)
+    expect(harness.container.textContent).toContain("bug")
+    expect(harness.container.textContent).toContain("Ada")
+    const editLabels = harness.container.querySelector('button[aria-label="Edit Labels"]')
+    const editAssignee = harness.container.querySelector('button[aria-label="Edit Assignee"]')
+    expect(editLabels).toBeNull()
+    expect(editAssignee).toBeNull()
+    harness.unmount()
+  })
+
+  test("labels and assignee remain editable when the card has no GitHub ref", async () => {
+    const fromGitHubSchema: readonly FieldDef[] = [
+      { id: "labels", label: "Labels", kind: "label", options: null, required: false },
+      { id: "assignee", label: "Assignee", kind: "text", options: null, required: false },
+    ]
+    const detail: CardDetailView = {
+      ...detailWith({ kind: "idle" }),
+      externalRef: null,
+      card: {
+        ...detailWith({ kind: "idle" }).card,
+        content: {
+          labels: { kind: "label", values: ["bug"] },
+          assignee: { kind: "text", value: "Ada" },
+        },
+      },
+    }
+    const harness = await mount(detail, () => Promise.resolve(RESULT), undefined, fromGitHubSchema)
+    expect(harness.container.querySelector('button[aria-label="Edit Assignee"]')).not.toBeNull()
+    harness.unmount()
   })
 })
