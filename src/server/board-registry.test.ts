@@ -309,4 +309,22 @@ describe("read models", () => {
       "done",
     ])
   })
+
+  test("boardView has newSince null when there are no sync bindings", () => {
+    const { board } = seed()
+    expect(registry.boardView(board.id)?.newSince).toBeNull()
+  })
+
+  test("boardView has newSince equal to the max lastPulledAt across bindings", () => {
+    const { board } = seed()
+    const binding = registry.bindSync({
+      boardId: board.id,
+      providerId: "github-issues",
+      sourceRef: { provider: "github-issues", owner: "o", repo: "r" },
+      direction: "pull",
+      allowAgentPush: false,
+    })
+    store.setBindingCursor(binding.id, null, 1_700_000_000_000)
+    expect(registry.boardView(board.id)?.newSince).toBe(1_700_000_000_000)
+  })
 })

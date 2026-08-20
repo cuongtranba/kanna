@@ -409,6 +409,12 @@ export interface BoardViewSnapshot {
    * liveness.
    */
   chatLinksByCard: Record<string, string[]>
+  /**
+   * The most recent `lastPulledAt` across all sync bindings, or null when the
+   * board has no bindings. Cards with `createdAt > newSince` are "new since
+   * last pull" and receive a quiet marker in the start column.
+   */
+  newSince: number | null
 }
 
 export interface CardDetail {

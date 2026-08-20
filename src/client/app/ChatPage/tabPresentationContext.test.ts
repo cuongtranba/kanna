@@ -63,6 +63,7 @@ function boardView(id: string, title: string): BoardViewSnapshot {
     cards: {},
     cursors: {},
     chatLinksByCard: {},
+    newSince: null,
   }
 }
 

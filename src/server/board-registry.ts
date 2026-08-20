@@ -225,7 +225,10 @@ export function createBoardRegistry(options: CreateBoardRegistryOptions): BoardR
         if (!shipped.has(link.cardId)) continue
         ;(chatLinksByCard[link.cardId] ??= []).push(link.targetId)
       }
-      return { board, columns, counts, cards, cursors, chatLinksByCard }
+      const bindings = store.listBindings(boardId)
+      const newSince =
+        bindings.reduce<number>((max, b) => (b.lastPulledAt !== null && b.lastPulledAt > max ? b.lastPulledAt : max), 0) || null
+      return { board, columns, counts, cards, cursors, chatLinksByCard, newSince }
     },
 
     cardPage(query: CardPageQuery): CardPage {

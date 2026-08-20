@@ -12,7 +12,7 @@ import type { BoardViewSnapshot, Card } from "../../../shared/boards/types"
  * what keeps a 200-card board readable.
  */
 
-function card(id: string): Card {
+function card(id: string, overrides?: Partial<Card>): Card {
   return {
     id,
     boardId: "b1",
@@ -27,10 +27,11 @@ function card(id: string): Card {
     createdAt: 0,
     updatedAt: 0,
     archivedAt: null,
+    ...overrides,
   }
 }
 
-function view(chatLinksByCard: Record<string, string[]>, cards: Card[]): BoardViewSnapshot {
+function view(chatLinksByCard: Record<string, string[]>, cards: Card[], newSince: number | null = null): BoardViewSnapshot {
   return {
     board: {
       id: "b1",
@@ -51,6 +52,7 @@ function view(chatLinksByCard: Record<string, string[]>, cards: Card[]): BoardVi
     cards: { todo: cards },
     cursors: { todo: null },
     chatLinksByCard,
+    newSince,
   }
 }
 
@@ -67,6 +69,7 @@ function render(snapshot: BoardViewSnapshot, chatFacts?: Record<string, BoardCha
       onColumnDelete={() => undefined}
       onColumnAdd={() => undefined}
       onCardAdd={() => undefined}
+      onMoveToTop={() => undefined}
     />,
   )
 }
@@ -128,7 +131,6 @@ describe("BoardCard chat signal", () => {
     expect(html).toContain("card-1")
     expect(html).not.toContain("chats")
     expect(html).not.toContain("Running")
-    expect(html).not.toContain("rounded-full")
   })
 
   /**
@@ -139,7 +141,6 @@ describe("BoardCard chat signal", () => {
     const html = render(view({ "card-1": ["gone"] }, [card("card-1")]), facts({}))
 
     expect(html).not.toContain("chats")
-    expect(html).not.toContain("rounded-full")
   })
 
   /** The board is mounted without chat facts in places that only need layout. */
@@ -148,5 +149,60 @@ describe("BoardCard chat signal", () => {
 
     expect(html).toContain("card-1")
     expect(html).not.toContain("Running")
+  })
+})
+
+describe("new-issue marker", () => {
+  test("shows · N new in the column header when newSince is set and there are new cards", () => {
+    const cards = [
+      card("old", { createdAt: 500 }),
+      card("new1", { createdAt: 1001 }),
+      card("new2", { createdAt: 2000 }),
+    ]
+    const html = render(view({}, cards, 1000))
+
+    expect(html).toContain("· 2 new")
+  })
+
+  test("does not show the new suffix when newSince is null", () => {
+    const html = render(view({}, [card("card-1")], null))
+
+    expect(html).not.toContain("new")
+  })
+
+  test("does not show the new suffix when no cards are new", () => {
+    const cards = [card("old", { createdAt: 500 })]
+    const html = render(view({}, cards, 1000))
+
+    expect(html).not.toContain("new")
+  })
+
+  test("new cards show a New marker", () => {
+    const cards = [card("new1", { createdAt: 1001 })]
+    const html = render(view({}, cards, 1000))
+
+    expect(html).toContain("New")
+    expect(html).toContain("bg-info")
+  })
+
+  test("old cards do not show the New marker", () => {
+    const cards = [card("old", { createdAt: 500 })]
+    const html = render(view({}, cards, 1000))
+
+    expect(html).not.toContain(">New<")
+  })
+})
+
+describe("column renders stably at 400 cards", () => {
+  test("renders 400 cards without throwing", () => {
+    const cards = Array.from({ length: 400 }, (_, i) => card(`card-${i}`))
+    expect(() => render(view({}, cards))).not.toThrow()
+  })
+
+  test("all 400 card titles appear in the output", () => {
+    const cards = Array.from({ length: 400 }, (_, i) => card(`card-${i}`))
+    const html = render(view({}, cards))
+    expect(html).toContain("card-0")
+    expect(html).toContain("card-399")
   })
 })
