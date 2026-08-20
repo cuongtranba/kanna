@@ -15,6 +15,7 @@ import type { PtyInstanceDelta } from "../shared/pty-instance"
 import type { PtyInstanceRegistry } from "./claude-pty/pty-instance-registry"
 import type { LoopTrackingRegistry } from "./loop-tracking-registry"
 import type { WorkflowRegistry } from "./workflow-registry"
+import type { BackgroundTaskOutputRegistry } from "./background-task-output-registry"
 import type { BoardChange, BoardRegistry } from "./board-registry"
 import type { EventStore } from "./event-store"
 import type { AgentCoordinator } from "./agent"
@@ -51,6 +52,7 @@ export interface BroadcastManagerDeps {
   workflowRegistry?: WorkflowRegistry
   boardRegistry?: BoardRegistry
   loopTrackingRegistry?: LoopTrackingRegistry
+  backgroundTaskOutputRegistry?: BackgroundTaskOutputRegistry
   envelopeBuilder: EnvelopeBuilder
 }
 
@@ -72,6 +74,7 @@ export class BroadcastManager {
   private readonly disposeWorkflows: () => void
   private readonly disposeBoards: () => void
   private readonly disposeLoopTracking: () => void
+  private readonly disposeBackgroundTaskOutput: () => void
 
   constructor(private readonly deps: BroadcastManagerDeps) {
     const {
@@ -84,6 +87,7 @@ export class BroadcastManager {
       workflowRegistry,
       boardRegistry,
       loopTrackingRegistry,
+      backgroundTaskOutputRegistry,
     } = deps
 
     // Wire background error reporter
@@ -199,6 +203,23 @@ export class BroadcastManager {
     // subagent-completion push that lands milliseconds later.
     this.disposeLoopTracking = loopTrackingRegistry?.subscribe((chatId) => {
       this.scheduleChatStateBroadcast(chatId)
+    }) ?? (() => {})
+
+    // Background task output: push updated snapshot to sockets subscribed to
+    // the matching topic whenever new output arrives from the poller.
+    this.disposeBackgroundTaskOutput = backgroundTaskOutputRegistry?.subscribe((chatId, taskId) => {
+      for (const ws of this.sockets) {
+        const snapshotSignatures = ensureSnapshotSignatures(ws)
+        for (const [id, topic] of ws.data.subscriptions.entries()) {
+          if (topic.type !== "background-task-output" || topic.chatId !== chatId || topic.taskId !== taskId) continue
+          const envelope = deps.envelopeBuilder.createEnvelope(id, topic, undefined, ws)
+          if (envelope.type !== "snapshot") continue
+          const signature = JSON.stringify(envelope.snapshot)
+          if (snapshotSignatures.get(id) === signature) continue
+          snapshotSignatures.set(id, signature)
+          send(ws, envelope)
+        }
+      }
     }) ?? (() => {})
   }
 
@@ -609,5 +630,6 @@ export class BroadcastManager {
     this.disposeWorkflows()
     this.disposeBoards()
     this.disposeLoopTracking()
+    this.disposeBackgroundTaskOutput()
   }
 }

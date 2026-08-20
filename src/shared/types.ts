@@ -355,6 +355,8 @@ export interface ChatBackgroundTask {
   description: string | null
   /** Epoch ms the server first observed the task. */
   startedAt: number
+  /** True when the server has an output file path and can stream content for this task. */
+  hasOutput: boolean
 }
 
 export interface ChatRuntime {

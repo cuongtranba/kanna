@@ -20,6 +20,7 @@ export interface SessionBackgroundTask {
   taskType: string | null
   description: string | null
   startedAt: number
+  outputPath: string | null
 }
 
 /**

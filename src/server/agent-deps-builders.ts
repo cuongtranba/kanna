@@ -507,6 +507,16 @@ export function buildRunClaudeSessionDeps(agent: AgentCoordinator): RunClaudeSes
     maybeStartNextQueuedMessage: (chatId) => agent.maybeStartNextQueuedMessage(chatId),
     resolveClaudeDriverPreference: () => agent.resolveClaudeDriverPreference(),
     mermaidGuard: buildMermaidGuard(agent),
+    onBackgroundTaskLaunch: agent.backgroundTaskOutputRegistry
+      ? (chatId, taskId, outputPath) => {
+          agent.backgroundTaskOutputRegistry!.trackTask(chatId, taskId, outputPath)
+        }
+      : undefined,
+    onBackgroundTaskSettle: agent.backgroundTaskOutputRegistry
+      ? (chatId, taskId) => {
+          agent.backgroundTaskOutputRegistry!.untrackTask(chatId, taskId)
+        }
+      : undefined,
   }
 }
 

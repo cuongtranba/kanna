@@ -167,4 +167,6 @@ export interface AgentCoordinatorArgs {
   localCatalog?: import("./local-catalog").LocalCatalogService
   /** Persist updated OAuth state for a custom MCP server (called after token refresh at spawn). */
   persistOAuthState?: (id: string, oauth: McpOAuthState) => void
+  /** Tracks bash background-task output file paths so the UI can tail them. */
+  backgroundTaskOutputRegistry?: import("./background-task-output-registry").BackgroundTaskOutputRegistry
 }

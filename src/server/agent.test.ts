@@ -2643,7 +2643,7 @@ describe("AgentCoordinator claude integration", () => {
         pendingPromptSeqs: [],
         activeTokenId: null,
         lastUsedAt,
-        backgroundTasks: new Map((bg?.ids ?? []).map((id) => [id, { taskType: null, description: null, startedAt: 0 }] as const)),
+        backgroundTasks: new Map((bg?.ids ?? []).map((id) => [id, { taskType: null, description: null, startedAt: 0, outputPath: null }] as const)),
         backgroundTaskDeadlineAt: bg?.deadlineAt ?? 0,
       } as any)
     }

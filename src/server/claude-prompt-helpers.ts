@@ -99,11 +99,12 @@ export function toSdkEffort(effort: string | undefined): "low" | "medium" | "hig
 // ---------------------------------------------------------------------------
 
 // Claude Code's BashTool emits this exact line in the tool_result when a command
-// is launched with `run_in_background: true`. It is the only observable launch
-// signal in Kanna's entry stream (the later `<task-notification>` line produces
-// no transcript entry). The id is alphanumeric. Global flag: one result may
-// report multiple launches in theory; capture every id.
-const BACKGROUND_TASK_LAUNCH_RE = /Command running in background with ID:\s*(\w+)/g
+// is launched with `run_in_background: true`. Captures the id (group 1) and,
+// when present, the output-file path (group 2). The path segment is optional:
+// older CLI versions omit it, and agent launches never carry it.
+// "Command running in background with ID: X. Output is being written to: /p. You …"
+const BACKGROUND_TASK_LAUNCH_RE =
+  /Command running in background with ID:\s*(\w+)\.?\s*(?:Output is being written to:\s*(.+?)(?=\. [A-Z]|\n|$))?/g
 
 // Claude Code's AgentTool background launch (`Agent(run_in_background: true)`)
 // emits "Async agent launched successfully." followed by an `agentId:` line
@@ -115,33 +116,51 @@ const BACKGROUND_TASK_LAUNCH_RE = /Command running in background with ID:\s*(\w+
 const ASYNC_AGENT_LAUNCH_MARKER = "Async agent launched successfully"
 const ASYNC_AGENT_ID_RE = /agentId:\s*(\w+)/g
 
-/** Extract background-task ids from a tool_result entry's content (string or content blocks). */
-export function backgroundTaskIdsFromToolResult<T>(content: T): string[] {
-  let text = ""
-  if (typeof content === "string") {
-    text = content
-  } else if (Array.isArray(content)) {
+export interface BackgroundTaskLaunch {
+  id: string
+  outputPath: string | null
+}
+
+function toolResultText<T>(content: T): string | null {
+  if (typeof content === "string") return content
+  if (Array.isArray(content)) {
+    let text = ""
     for (const block of content) {
       if (isRecord(block)) {
         const blockText = block.text
-        if (typeof blockText === "string") {
-          text += `${blockText}\n`
-        }
+        if (typeof blockText === "string") text += `${blockText}\n`
       }
     }
-  } else {
-    return []
+    return text
   }
-  const ids: string[] = []
+  return null
+}
+
+/** Extract {id, outputPath} from a tool_result entry's content (string or content blocks). */
+export function backgroundTaskLaunchesFromToolResult<T>(content: T): BackgroundTaskLaunch[] {
+  const text = toolResultText(content)
+  if (text === null) return []
+  const launches: BackgroundTaskLaunch[] = []
   for (const match of text.matchAll(BACKGROUND_TASK_LAUNCH_RE)) {
-    if (match[1]) ids.push(match[1])
-  }
-  if (text.includes(ASYNC_AGENT_LAUNCH_MARKER)) {
-    for (const match of text.matchAll(ASYNC_AGENT_ID_RE)) {
-      if (match[1] && !ids.includes(match[1])) ids.push(match[1])
+    if (match[1]) {
+      launches.push({ id: match[1], outputPath: match[2]?.trim() ?? null })
     }
   }
-  return ids
+  if (text.includes(ASYNC_AGENT_LAUNCH_MARKER)) {
+    const seen = new Set(launches.map((l) => l.id))
+    for (const match of text.matchAll(ASYNC_AGENT_ID_RE)) {
+      if (match[1] && !seen.has(match[1])) {
+        launches.push({ id: match[1], outputPath: null })
+        seen.add(match[1])
+      }
+    }
+  }
+  return launches
+}
+
+/** Extract background-task ids from a tool_result entry's content. */
+export function backgroundTaskIdsFromToolResult<T>(content: T): string[] {
+  return backgroundTaskLaunchesFromToolResult(content).map((l) => l.id)
 }
 
 /**
@@ -180,6 +199,7 @@ export function mergeBackgroundTaskSnapshot(
       taskType: snapshotMeta?.taskType ?? prev?.taskType ?? null,
       description: snapshotMeta?.description ?? prev?.description ?? null,
       startedAt: prev?.startedAt ?? now,
+      outputPath: prev?.outputPath ?? null,
     })
   }
   return next

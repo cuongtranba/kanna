@@ -16,6 +16,8 @@ export interface ClientState {
   snapshotSignatures: Map<string, string>
   /** Per-subscription last-delivered chat op-log seq (ops delta path). */
   chatOpSeqBySubId?: Map<string, number>
+  /** Dispose fns for background-task-output watchers, keyed by subscription id. */
+  backgroundTaskWatchers?: Map<string, () => void>
   protectedDraftChatIds?: Set<string>
   pushDeviceId?: string | null
   originHost?: string

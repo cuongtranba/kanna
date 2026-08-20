@@ -18,7 +18,7 @@ import type { ClaudeDriverPreference } from "../shared/types"
 import {
   isPromptTooLongMessage,
   isNoConversationFoundMessage,
-  backgroundTaskIdsFromToolResult,
+  backgroundTaskLaunchesFromToolResult,
   mergeBackgroundTaskSnapshot,
   toolCallDescription,
 } from "./claude-prompt-helpers"
@@ -108,6 +108,8 @@ export interface RunClaudeSessionDeps {
    * that will not render. Omit to disable the backstop.
    */
   mermaidGuard?: MermaidGuard
+  onBackgroundTaskLaunch?(chatId: string, taskId: string, outputPath: string | null): void
+  onBackgroundTaskSettle?(chatId: string, taskId: string): void
 }
 
 // ---------------------------------------------------------------------------
@@ -317,21 +319,21 @@ export async function runClaudeSession(
       // A `backgroundTaskIdsSnapshot` status entry (SDK background_tasks_changed
       // level signal) REPLACES the whole set — authoritative over both edges.
       if (event.entry.kind === "tool_result") {
-        const launchedIds = backgroundTaskIdsFromToolResult(
-          event.entry.content,
-        )
-        if (launchedIds.length > 0) {
+        const launches = backgroundTaskLaunchesFromToolResult(event.entry.content)
+        if (launches.length > 0) {
           // empty→non-empty = a fresh watch epoch: restore the watchdog
           // wake budget (adr-20260801-background-task-wake-escalation).
           if (session.backgroundTasks.size === 0) session.backgroundTaskWakeCount = 0
           const launchDescription = session.recentToolDescriptions.get(event.entry.toolId) ?? null
-          for (const id of launchedIds) {
+          for (const { id, outputPath } of launches) {
             if (!session.backgroundTasks.has(id)) {
               session.backgroundTasks.set(id, {
                 taskType: null,
                 description: launchDescription,
                 startedAt: Date.now(),
+                outputPath,
               })
+              deps.onBackgroundTaskLaunch?.(session.chatId, id, outputPath)
             }
           }
           session.backgroundTaskDeadlineAt = Date.now() + deps.resolveBackgroundTaskMaxMs()
@@ -361,6 +363,7 @@ export async function runClaudeSession(
       } else if (event.entry.kind === "status" && event.entry.backgroundTaskId) {
         const settledId = event.entry.backgroundTaskId
         session.backgroundTasks.delete(settledId)
+        deps.onBackgroundTaskSettle?.(session.chatId, settledId)
         if (session.backgroundTasks.size > 0) {
           session.backgroundTaskDeadlineAt = Date.now() + deps.resolveBackgroundTaskMaxMs()
         } else {

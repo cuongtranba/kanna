@@ -268,6 +268,7 @@ export class AgentCoordinator {
    */
   readonly boardRegistry: import("./board-registry").BoardRegistry | null
   readonly loopTrackingRegistry: import("./loop-tracking-registry").LoopTrackingRegistry | null
+  readonly backgroundTaskOutputRegistry: import("./background-task-output-registry").BackgroundTaskOutputRegistry | null
   readonly subagentTranscriptRegistry: import("./subagent-transcript-registry").SubagentTranscriptRegistry | null
   readonly localCatalog: import("./local-catalog").LocalCatalogService | null
   readonly readLlmProvider: () => Promise<LlmProviderSnapshot>
@@ -380,6 +381,7 @@ export class AgentCoordinator {
     this.workflowRegistry = args.workflowRegistry ?? null
     this.boardRegistry = args.boardRegistry ?? null
     this.loopTrackingRegistry = args.loopTrackingRegistry ?? null
+    this.backgroundTaskOutputRegistry = args.backgroundTaskOutputRegistry ?? null
     this.subagentTranscriptRegistry = args.subagentTranscriptRegistry ?? null
     this.localCatalog = args.localCatalog ?? null
   }

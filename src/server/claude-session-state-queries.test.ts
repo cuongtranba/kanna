@@ -173,15 +173,15 @@ describe("getBackgroundTasksByChatId", () => {
   it("maps task metadata to UI shape sorted oldest-first", () => {
     const session = makeSession({
       backgroundTasks: new Map([
-        ["b2", { taskType: "local_agent", description: "Later task", startedAt: 200 }],
-        ["a1", { taskType: "local_bash", description: "Earlier task", startedAt: 100 }],
+        ["b2", { taskType: "local_agent", description: "Later task", startedAt: 200, outputPath: null }],
+        ["a1", { taskType: "local_bash", description: "Earlier task", startedAt: 100, outputPath: null }],
       ]),
     })
     const deps = makeDeps({ claudeSessions: new Map([["chat-1", session]]) })
     const tasks = getBackgroundTasksByChatId(deps).get("chat-1")
     expect(tasks).toEqual([
-      { id: "a1", taskType: "local_bash", description: "Earlier task", startedAt: 100 },
-      { id: "b2", taskType: "local_agent", description: "Later task", startedAt: 200 },
+      { id: "a1", taskType: "local_bash", description: "Earlier task", startedAt: 100, hasOutput: false },
+      { id: "b2", taskType: "local_agent", description: "Later task", startedAt: 200, hasOutput: false },
     ])
   })
 })
@@ -471,7 +471,7 @@ describe("sweepIdleClaudeSessions background-task escalation", () => {
       chatId: "chat-1",
       lastUsedAt: 0,
       pendingPromptSeqs: [],
-      backgroundTasks: new Map([["bsh1", { taskType: null, description: null, startedAt: 0 }]]),
+      backgroundTasks: new Map([["bsh1", { taskType: null, description: null, startedAt: 0, outputPath: null }]]),
       backgroundTaskDeadlineAt: Date.now() - 1,
       backgroundTaskWakeCount: 0,
       ...overrides,
@@ -490,7 +490,7 @@ describe("sweepIdleClaudeSessions background-task escalation", () => {
     const now = Date.now()
     const session = makeExpiredSession({
       backgroundTasks: new Map([
-        ["ba35e96q4", { taskType: "local_bash", description: "task dev", startedAt: now - 32 * 60_000 }],
+        ["ba35e96q4", { taskType: "local_bash", description: "task dev", startedAt: now - 32 * 60_000, outputPath: null }],
       ]),
       backgroundTaskDeadlineAt: now - 2 * 60_000,
       lastUsedAt: now - 32 * 60_000,

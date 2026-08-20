@@ -7,6 +7,7 @@ import {
   isNoConversationFoundMessage,
   toSdkEffort,
   backgroundTaskIdsFromToolResult,
+  backgroundTaskLaunchesFromToolResult,
   mergeBackgroundTaskSnapshot,
   toolCallDescription,
   positiveIntegerFromEnv,
@@ -242,6 +243,84 @@ describe("backgroundTaskIdsFromToolResult", () => {
 })
 
 // ---------------------------------------------------------------------------
+// backgroundTaskLaunchesFromToolResult
+// ---------------------------------------------------------------------------
+
+describe("backgroundTaskLaunchesFromToolResult", () => {
+  test("extracts id and outputPath from full launch message", () => {
+    const text =
+      "Command running in background with ID: bgABC123. Output is being written to: /tmp/x.output. You will be notified when it completes."
+    expect(backgroundTaskLaunchesFromToolResult(text)).toEqual([
+      { id: "bgABC123", outputPath: "/tmp/x.output" },
+    ])
+  })
+
+  test("extracts id with null outputPath when path is absent", () => {
+    expect(backgroundTaskLaunchesFromToolResult("Command running in background with ID: abc123")).toEqual([
+      { id: "abc123", outputPath: null },
+    ])
+  })
+
+  test("extracts multiple launches from the same string", () => {
+    const text =
+      "Command running in background with ID: t1. Output is being written to: /tmp/t1.output. You will be notified when it completes.\n" +
+      "Command running in background with ID: t2. Output is being written to: /tmp/t2.output. You will be notified when it completes."
+    expect(backgroundTaskLaunchesFromToolResult(text)).toEqual([
+      { id: "t1", outputPath: "/tmp/t1.output" },
+      { id: "t2", outputPath: "/tmp/t2.output" },
+    ])
+  })
+
+  test("extracts from content-block array", () => {
+    const blocks = [
+      {
+        type: "text",
+        text: "Command running in background with ID: xyz99. Output is being written to: /tmp/z.output. You will be notified when it completes.",
+      },
+    ]
+    expect(backgroundTaskLaunchesFromToolResult(blocks)).toEqual([
+      { id: "xyz99", outputPath: "/tmp/z.output" },
+    ])
+  })
+
+  test("agent launches have null outputPath", () => {
+    const text =
+      "Async agent launched successfully.\nagentId: a6de6ce841521b5df (internal ID)"
+    const launches = backgroundTaskLaunchesFromToolResult(text)
+    expect(launches).toEqual([{ id: "a6de6ce841521b5df", outputPath: null }])
+  })
+
+  test("returns empty array for no match", () => {
+    expect(backgroundTaskLaunchesFromToolResult("nothing here")).toEqual([])
+  })
+
+  test("backgroundTaskIdsFromToolResult still works unchanged", () => {
+    const text =
+      "Command running in background with ID: bgABC123. Output is being written to: /tmp/x.output. You will be notified when it completes."
+    expect(backgroundTaskIdsFromToolResult(text)).toEqual(["bgABC123"])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// mergeBackgroundTaskSnapshot preserves outputPath
+// ---------------------------------------------------------------------------
+
+describe("mergeBackgroundTaskSnapshot outputPath preservation", () => {
+  test("preserves outputPath from a previous entry when snapshot has no path", () => {
+    const previous = new Map([
+      ["t1", { taskType: null, description: null, startedAt: 100, outputPath: "/tmp/t1.out" }],
+    ])
+    const result = mergeBackgroundTaskSnapshot(previous, ["t1"], undefined, 200)
+    expect(result.get("t1")?.outputPath).toBe("/tmp/t1.out")
+  })
+
+  test("new task not in previous gets null outputPath from snapshot alone", () => {
+    const result = mergeBackgroundTaskSnapshot(new Map(), ["t2"], undefined, 200)
+    expect(result.get("t2")?.outputPath).toBeNull()
+  })
+})
+
+// ---------------------------------------------------------------------------
 // positiveIntegerFromEnv
 // ---------------------------------------------------------------------------
 
@@ -331,8 +410,8 @@ describe("toolCallDescription", () => {
 describe("mergeBackgroundTaskSnapshot", () => {
   test("REPLACE semantics: absent ids drop, new ids appear with snapshot meta", () => {
     const previous = new Map([
-      ["gone", { taskType: null, description: "stale", startedAt: 1 }],
-      ["kept", { taskType: null, description: null, startedAt: 2 }],
+      ["gone", { taskType: null, description: "stale", startedAt: 1, outputPath: null }],
+      ["kept", { taskType: null, description: null, startedAt: 2, outputPath: null }],
     ])
     const next = mergeBackgroundTaskSnapshot(
       previous,
@@ -344,16 +423,16 @@ describe("mergeBackgroundTaskSnapshot", () => {
       1_000,
     )
     expect(next.has("gone")).toBe(false)
-    expect(next.get("kept")).toEqual({ taskType: "local_bash", description: "CI watch", startedAt: 2 })
-    expect(next.get("fresh")).toEqual({ taskType: "local_agent", description: null, startedAt: 1_000 })
+    expect(next.get("kept")).toEqual({ taskType: "local_bash", description: "CI watch", startedAt: 2, outputPath: null })
+    expect(next.get("fresh")).toEqual({ taskType: "local_agent", description: null, startedAt: 1_000, outputPath: null })
   })
 
   test("snapshot without meta preserves previously learned labels", () => {
     const previous = new Map([
-      ["t1", { taskType: "local_bash", description: "Watch deploy", startedAt: 5 }],
+      ["t1", { taskType: "local_bash", description: "Watch deploy", startedAt: 5, outputPath: null }],
     ])
     const next = mergeBackgroundTaskSnapshot(previous, ["t1"], undefined, 999)
-    expect(next.get("t1")).toEqual({ taskType: "local_bash", description: "Watch deploy", startedAt: 5 })
+    expect(next.get("t1")).toEqual({ taskType: "local_bash", description: "Watch deploy", startedAt: 5, outputPath: null })
   })
 })
 

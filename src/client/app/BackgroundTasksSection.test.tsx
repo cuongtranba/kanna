@@ -10,6 +10,7 @@ function makeTask(overrides: Partial<ChatBackgroundTask> = {}): ChatBackgroundTa
     taskType: "local_bash",
     description: "Watch the deploy",
     startedAt: Date.now() - 65_000,
+    hasOutput: false,
     ...overrides,
   }
 }
@@ -20,7 +21,7 @@ describe("BackgroundTasksSection", () => {
       makeTask(),
       makeTask({ id: "agent7", taskType: "local_agent", description: "Summarise benchmark" }),
     ]
-    const result = await renderForLoopCheck(<BackgroundTasksSection tasks={tasks} />)
+    const result = await renderForLoopCheck(<BackgroundTasksSection chatId="chat-1" tasks={tasks} />)
     try {
       expect(result.loopWarnings).toEqual([])
       const text = document.body.textContent ?? ""
@@ -37,7 +38,7 @@ describe("BackgroundTasksSection", () => {
 
   test("falls back to a generic label when description is missing", async () => {
     const result = await renderForLoopCheck(
-      <BackgroundTasksSection tasks={[makeTask({ description: null })]} />,
+      <BackgroundTasksSection chatId="chat-1" tasks={[makeTask({ description: null })]} />,
     )
     try {
       expect(result.loopWarnings).toEqual([])
@@ -48,7 +49,7 @@ describe("BackgroundTasksSection", () => {
   })
 
   test("renders nothing when there are no tasks", async () => {
-    const result = await renderForLoopCheck(<BackgroundTasksSection tasks={[]} />)
+    const result = await renderForLoopCheck(<BackgroundTasksSection chatId="chat-1" tasks={[]} />)
     try {
       expect(result.loopWarnings).toEqual([])
       expect((document.body.textContent ?? "").includes("Background tasks")).toBe(false)
