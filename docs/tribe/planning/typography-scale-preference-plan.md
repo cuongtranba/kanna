@@ -33,6 +33,15 @@
 - **Scope fence:** do **not** fix `"Roboto Mono"` being referenced but never loaded
   (`src/index.css:267`). It is a known pre-existing bug, explicitly out of scope.
 
+
+> **Amendment (Warchief, after Task 4's `NEEDS_CONTEXT`):** filesystem-reading tests live in
+> `src/server/design/`, never `src/client/design/`. `eslint.config.js:228-236` bans `node:fs` (and the
+> `Bun` global) across ALL of `src/client/**` and `src/shared/**` with **no** test exemption, while the
+> `src/server/**` block at `:304-312` explicitly exempts `*.test.ts`. The in-repo precedent is
+> `src/server/design/tone-pairings.test.ts`, which already parses `src/index.css` — a client asset read
+> from a server-side test. We relocate rather than widen the lint rule: evading an architecture rule to
+> place a test is not a trade this card gets to make.
+
 ### The names every task shares (fix these exactly, do not invent variants)
 
 | Name | Value |
@@ -206,7 +215,7 @@ git commit -m "feat(typography): wire --kanna-font-scale into the stylesheet" \
 
 - [ ] Task 3 complete
 
-### Task 4 — the px ratchet (P4) · owns `src/client/design/px-text-ratchet.test.ts`
+### Task 4 — the px ratchet (P4) · owns `src/server/design/px-text-ratchet.test.ts`
 
 A ratchet test that counts arbitrary-px text utilities in `src/client/**` and asserts
 `count <= CAP`, with `CAP = 169` (the true current count — verified: 169 across 46 files).
@@ -220,7 +229,7 @@ Walk `src/client/**` for `.ts`/`.tsx`, match `/text-\[\d+px\]/g`, sum. Assert `<
 assert the count is `> 0` **only while CAP > 0** — so the test cannot pass vacuously if the walker
 silently globs nothing (a walker bug must fail, not pass).
 
-**Expected result:** `bun test --conditions production src/client/design/px-text-ratchet.test.ts`
+**Expected result:** `bun test --conditions production src/server/design/px-text-ratchet.test.ts`
 passes at exactly 169; temporarily setting `CAP = 168` makes it fail. Paste both outputs.
 
 - [ ] **Step 1: Commit** — exactly one commit ends this task:
@@ -431,7 +440,7 @@ git commit -m "feat(typography): apply the typography var map to the document" \
 
 - [ ] Task 8 complete
 
-### Task 9 — pre-paint, no flash (P6) · owns `index.html`, `src/client/design/prePaint.test.ts`
+### Task 9 — pre-paint, no flash (P6) · owns `index.html`, `src/server/design/prePaint.test.ts`
 
 A font-size FOUC reflows the **entire** layout — far worse than the theme flash that exists today.
 Extend the existing blocking IIFE at `index.html:14-26` (a classic, non-module `<script>`, so it
@@ -453,7 +462,7 @@ module for the same seeded input. That pins the shipped snippet to the pure orac
 Cover: no blob; malformed JSON; `version 1` blob with no typography keys; override only; cache only;
 both (override wins); garbage step value (falls back to `1`).
 
-**Expected result:** `bun test --conditions production src/client/design/prePaint.test.ts` passes,
+**Expected result:** `bun test --conditions production src/server/design/prePaint.test.ts` passes,
 including a case proving a seeded `xxl` override yields `--kanna-font-scale: "1.5"` **before** any
 React code runs.
 
@@ -656,7 +665,7 @@ git commit -m "refactor(typography): convert app and hooks px text utilities" \
 
 ### Task 16 — ratchet to 0, regression lock, and the oracle · owns `rules/**`, `rule-tests/**`, `scripts/verify-typography-scale.sh`, ratchet test, `e2e/typography.spec.ts`, `CLAUDE.md`
 
-**16a — CAP to 0.** Set `CAP = 0` in `src/client/design/px-text-ratchet.test.ts` and drop the
+**16a — CAP to 0.** Set `CAP = 0` in `src/server/design/px-text-ratchet.test.ts` and drop the
 `> 0` vacuity guard (it is conditioned on `CAP > 0`).
 
 **16b — the ast-grep regression lock.** Now — and only now — add a rule banning **new** arbitrary-px
