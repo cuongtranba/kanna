@@ -1,3 +1,28 @@
+# Project skills
+
+`.claude/skills/kanna/SKILL.md` is the router — a symptom→skill table plus the
+ground rules that hold for every task here. Read it first when you are unsure
+which skill applies, or when a task spans several. The specialists it routes to
+carry their own trigger phrases and fire on their own; the router exists so a
+task that matches none of them cleanly still lands somewhere.
+
+| Skill | Owns |
+| --- | --- |
+| `kanna` | Routing table + rules that apply to every task |
+| `kanna-debug` | Reading a chat's transcript and event logs to explain what happened |
+| `kanna-telemetry` | Adding spans/metrics, and operating the otel-lgtm collector |
+| `kanna-react-style` | React + TypeScript conventions for `src/client/**` |
+| `kanna-test` | Running tests; the lint, ast-grep, and design gates |
+| `release` | Version bump + npm publish |
+| `review-pr` | Security-focused PR review via the GitHub API |
+
+These files have two consumers — Claude Code auto-triggers on the frontmatter
+`description`, and Kanna's own `/` picker parses the same files through
+`LocalCatalogService` (`c3-231`). That parser is **line-based**, so a description
+must stay on one line: a folded `>-` block silently becomes an empty description
+in the picker. `user-invocable: false` hides a skill from the picker while leaving
+auto-triggering intact.
+
 # Architecture
 
 This project uses C3 docs in `.c3/`.

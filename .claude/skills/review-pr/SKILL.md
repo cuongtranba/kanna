@@ -1,6 +1,11 @@
-# /review-pr - Security-focused PR review
+---
+name: review-pr
+description: Review a pull request for malicious or unsafe content and summarize its changes, working entirely through the GitHub API so no untrusted code is ever fetched or run locally. Use whenever a PR URL or number appears with a request to review, check, audit, or summarize it — "review PR 123", "is this PR safe to merge", "what does this PR do", "look at this pull request", "check this contribution", or a dependency-bump PR from a bot. Especially use for PRs from outside contributors or forks, where the safety review is the point.
+argument-hint: "<pr-url-or-number>"
+---
 
-## Description
+# /review-pr — security-focused PR review
+
 Analyze a pull request for malicious content, summarize all changes, and produce a safety/security score — all without pulling any code locally.
 
 ## Usage

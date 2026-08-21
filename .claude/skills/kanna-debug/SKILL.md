@@ -1,6 +1,6 @@
 ---
 name: kanna-debug
-description: Pull rich context from a Kanna chat session transcript when debugging or troubleshooting a Kanna issue. Use whenever the user pastes a Kanna session/chat id (UUID like `ab06e5ab-6f15-42ab-b630-fbb7abfe7640`), says things like "debug this session", "what happened in chat X", "the chat got stuck", "this session crashed", "investigate session Y", "explain why the tool failed", or otherwise references a Kanna chat that needs analysis. Also use when the user is debugging Kanna server behavior (event-store, agent loop, tool callbacks, PTY driver) and mentions a session id — the transcript shows exactly which tool calls fired, what the model said, and where errors surfaced. Do not use for stack traces or logs that are not Kanna chat transcripts.
+description: Read a Kanna chat's on-disk transcript and event logs to find out what actually happened in a session. Scope — this reads Kanna's OWN chat transcripts, identified by a chat/session id; an ordinary stack trace, exception, or application log from any other program is not one of these and needs no skill, so do not reach for it there. Use whenever a chat/session id appears (a UUID like `ab06e5ab-6f15-42ab-b630-fbb7abfe7640`), or the user says "debug this session", "what happened in chat X", "the chat got stuck", "this session crashed", "investigate session Y", "why did the tool fail", "the turn never finished", "it says running forever", "the loop stopped waking", "the cron job never fired", "my queued message vanished", "it cleared context on its own", or reports a wrong model or billing hitting the API instead of the subscription. Also use when debugging Kanna server behavior — event store, agent loop, tool callbacks, auto-continue, PTY driver — since the transcript records every tool call, its result, and where the error surfaced. Reach for it before theorizing about a session; skip it for stack traces or logs that are not Kanna transcripts.
 user-invocable: false
 ---
 
@@ -29,8 +29,11 @@ TRANSCRIPT="$HOME/.kanna/data/transcripts/<chatId>.jsonl"
 Transcripts get big fast (hundreds of tool calls = tens of MB). Reading the raw file blindly burns context. Run the bundled summarizer first; it produces a compact timeline of every entry with tool name, status, and a short preview. Only after you know which entry is interesting should you `jq` the original line for full detail.
 
 ```bash
-python3 scripts/summarize_transcript.py "$TRANSCRIPT"
+python3 .claude/skills/kanna-debug/scripts/summarize_transcript.py "$TRANSCRIPT"
 ```
+
+(Path is relative to the repo root. From another cwd, use the absolute path — the
+script does not have to run from the skill directory.)
 
 Flags (all optional):
 
@@ -73,6 +76,10 @@ Pair `tool_call.tool.toolId` with `tool_result.toolId` to match a call to its re
 - **"Permission denied / approval loop"** → search for `tool` names matching `mcp__kanna__*` and look at the result content; the durable approval protocol writes a deny reason there.
 - **"Billing went to API not subscription"** → check the `system_init.debugRaw.apiKeySource` and the `account_info.tokenSource`. PTY driver requires `apiKeySource: "none"` and a CLAUDE_CODE_OAUTH_TOKEN source.
 - **"Wrong model / unexpected model switch"** → `system_init.model` shows the start model; the SDK writes a new `system_init` on model switch, so multiple `system_init` lines = mid-session switch.
+- **"The loop stopped waking"** → an armed loop should always hold exactly one pending wake: a running subagent, a queued message, or an active turn. Find which one is missing. Look for the last `loop_run_outcome` and whether an `auto_continue_accepted` followed it — a gap between them is a wake lost to a crash mid-delivery, which boot recovery is supposed to re-emit.
+- **"A cron job never ran / ran but nothing happened"** → a fired run should produce a `cron_run_outcome`. Runs that finish unattributed stay `running` forever, so later ticks either heal them as `orphaned` or skip them as `previous_run_active`. The tell is `turn_finished` events present with no `cron_run_outcome {ok: true}` anywhere.
+- **"My queued message vanished"** → a queued message is released when its turn is recorded, not when it is dequeued. A restart in that window is recovered at boot; a message that is simply gone with the chat idle is the case worth reporting.
+- **"It cleared context by itself"** → `context_cleared` entries are expected on every background-subagent delivery and on `/clear`. Several in a row with no delivery between them is not.
 
 ## Step 3 — connect to the server-side event log if needed
 

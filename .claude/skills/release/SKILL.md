@@ -1,6 +1,11 @@
-# /release - Publish a new version to npm
+---
+name: release
+description: Publish a new Kanna version to npm — pick the version bump from what changed since the last tag, push, and create the GitHub release whose structured changelog triggers the publish workflow. Use whenever the user says "cut a release", "ship a new version", "publish to npm", "bump the version", "tag a release", "release 1.2.3", or asks what the next version number should be. Also use when asked whether a set of changes is a patch, minor, or major bump, since the decision and the release steps belong together.
+argument-hint: "[version]"
+---
 
-## Description
+# /release — publish a new version to npm
+
 Bump the package version, push to GitHub, and create a release with a structured changelog that triggers the npm publish workflow.
 
 ## Instructions

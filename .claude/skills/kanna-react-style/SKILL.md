@@ -1,6 +1,6 @@
 ---
 name: kanna-react-style
-description: React + TypeScript coding style for Kanna's client (src/client/**). Apply when creating or editing any .tsx/.ts file under src/client, src/shared, or src/server that ships UI behavior. Covers component shape, props typing, state-aware helpers, format helpers, snapshot-stable rendering, mobile/desktop variants, tabular numerics, project-Tooltip-over-native-title, centralized abstractions, co-located tests, and TDD commit cadence. Trigger on phrases like "add a component", "render X in the navbar", "format duration", "show state", "fix this UI bug", "extract a shared component", "write a test for this", or whenever editing existing components in src/client/components, src/client/app, or src/client/lib.
+description: React + TypeScript coding style for Kanna's client (src/client/**). Apply when creating or editing any .tsx/.ts file under src/client, src/shared, or src/server that ships UI behavior. Covers component shape, props typing, state-aware label and tone helpers, pure format helpers, snapshot-stable rendering, mobile/desktop CSS variants, tabular numerics, project-Tooltip-over-native-title, reusing existing primitives before writing new markup, co-located tests, and commit cadence. Trigger on phrases like "add a component", "render X in the navbar", "put this in the sidebar", "format a duration", "show the status", "fix this UI bug", "the number jitters on every tick", "extract a shared component", "make it work on mobile", or whenever editing anything under src/client/components, src/client/app, or src/client/lib. Read it before writing the component, not after.
 user-invocable: false
 ---
 
@@ -248,17 +248,21 @@ When extending a shared type, keep new fields:
 - Required if every snapshot will populate them (e.g. `timings: ChatStateTimings` on `ChatRuntime`)
 - Optional if only some rows carry them (e.g. `stateEnteredAt?: number` on `SidebarChatRow`)
 
-## Resource safety when running tests
+## Running tests and clearing the gates
 
-Tests run via `bun test <path>`. Only run tests for files you change:
+`.claude/skills/kanna-test/SKILL.md` owns this: the flags that matter (`bun run
+test`, never bare `bun test`), the requirement to unmount every React root you
+mount, and the ast-grep and design gates that reject inline hook arguments, unstable
+store selectors, raw hex colors, and native `title` attributes. Read it before
+writing a test that mounts a component.
+
+Scope runs to what you changed — a full suite from a subagent while other agents
+share the host exhausts it:
 
 ```bash
-bun test src/server/event-store src/server/read-models
-bun test src/client/lib/formatDuration src/client/components/messages
-bunx tsc --noEmit
+bun test --conditions production src/client/lib/formatDuration
+bun run typecheck
 ```
-
-Never run the full suite from a subagent — parallel full builds exhaust the host. Targeted runs scoped to changed files + a typecheck cover the same ground for the work you actually did.
 
 ## When in doubt
 
