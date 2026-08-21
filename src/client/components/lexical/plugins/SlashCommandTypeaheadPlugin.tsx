@@ -208,7 +208,7 @@ export function SlashCommandTypeaheadPlugin({
                     /{normalizeCommandName(cmd.name)}
                   </span>
                   {cmd.kind === "skill" ? (
-                    <span className="shrink-0 rounded-sm border border-border bg-muted px-1 py-px text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    <span className="shrink-0 rounded-sm border border-border bg-muted px-1 py-px text-10 font-medium uppercase tracking-wide text-muted-foreground">
                       skill
                     </span>
                   ) : null}

@@ -142,7 +142,7 @@ export function RuledLabel({ children, className }: { children: ReactNode; class
   return (
     <MetaRow className={cn("px-0.5 text-xs tracking-wide", className)}>
       <div className="w-full h-[1px] bg-border" />
-      <MetaLabel className="whitespace-nowrap text-[11px] tracking-widest text-muted-foreground/60 uppercase flex-shrink-0">
+      <MetaLabel className="whitespace-nowrap text-11 tracking-widest text-muted-foreground/60 uppercase flex-shrink-0">
         {children}
       </MetaLabel>
       <div className="w-full h-[1px] bg-border" />

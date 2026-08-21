@@ -644,7 +644,7 @@ bun test --conditions production src/client/components
 
 **Expected result:** prints `0`; typecheck, lint and the area's tests all pass.
 
-- [ ] **Step 1: Commit** — exactly one commit ends this task:
+- [x] **Step 1: Commit** — exactly one commit ends this task:
 
 ```bash
 git add -A
@@ -652,7 +652,7 @@ git commit -m "refactor(typography): convert remaining component px text utiliti
   -m $'Tribe-Card: typography-scale-preference\nTribe-Task: 14/16'
 ```
 
-- [ ] Task 14 complete
+- [x] Task 14 complete
 
 ### Task 15 — convert `src/client/app/**`, `src/client/hooks/**`, and any remaining `src/client/**`
 
