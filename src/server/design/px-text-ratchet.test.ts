@@ -2,8 +2,15 @@ import { describe, expect, test } from "bun:test"
 import { readdirSync } from "node:fs"
 import { join } from "node:path"
 
-// CAP only ever goes DOWN. Never raise it. The typography-scale card drives it to 0.
-const CAP = 169
+// CAP only ever goes DOWN. Never raise it. The typography-scale card drove it to 0.
+const CAP = 0
+
+// The walker must never be able to satisfy `count <= CAP` by globbing nothing.
+// At CAP = 0 the old `count > 0` vacuity guard is dead, so coverage is asserted
+// directly instead: src/client holds hundreds of .ts/.tsx sources, so a walker
+// that resolves the wrong directory (or silently returns an empty list) fails
+// here rather than reporting a false zero.
+const MIN_FILES_WALKED = 100
 
 const CLIENT_DIR = join(import.meta.dir, "../../..", "src/client")
 const PX_TEXT_PATTERN = /text-\[\d+px\]/g
@@ -21,26 +28,24 @@ function listSourceFiles(dir: string): string[] {
   return files
 }
 
-async function countArbitraryPxTextUtilities(): Promise<number> {
+async function countArbitraryPxTextUtilities(): Promise<{ count: number; filesWalked: number }> {
+  const files = listSourceFiles(CLIENT_DIR)
   let count = 0
-  for (const file of listSourceFiles(CLIENT_DIR)) {
+  for (const file of files) {
     const content = await Bun.file(file).text()
     const matches = content.match(PX_TEXT_PATTERN)
     count += matches?.length ?? 0
   }
-  return count
+  return { count, filesWalked: files.length }
 }
 
 describe("px-text ratchet — arbitrary-px text utilities under src/client", () => {
   test(`count never rises above CAP (${CAP})`, async () => {
-    const count = await countArbitraryPxTextUtilities()
+    const { count, filesWalked } = await countArbitraryPxTextUtilities()
 
-    // Vacuity guard: while CAP > 0, a count of 0 means the walker silently
-    // globbed nothing, which would make the <= CAP assertion pass without
-    // proving anything. Drop this guard only when Task 16 sets CAP = 0.
-    if (CAP > 0) {
-      expect(count).toBeGreaterThan(0)
-    }
+    // Anti-vacuity: prove the walker actually read the client tree before
+    // trusting its zero.
+    expect(filesWalked).toBeGreaterThan(MIN_FILES_WALKED)
 
     expect(count).toBeLessThanOrEqual(CAP)
   })

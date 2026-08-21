@@ -1,0 +1,20 @@
+id: no-arbitrary-px-text-ts
+snapshots:
+  '"flex items-center text-[10px] text-muted-foreground"':
+    labels:
+    - source: flex items-center text-[10px] text-muted-foreground
+      style: primary
+      start: 1
+      end: 52
+  '"text-[14px]"':
+    labels:
+    - source: text-[14px]
+      style: primary
+      start: 1
+      end: 12
+  '"text-[22px] font-semibold"':
+    labels:
+    - source: text-[22px] font-semibold
+      style: primary
+      start: 1
+      end: 26

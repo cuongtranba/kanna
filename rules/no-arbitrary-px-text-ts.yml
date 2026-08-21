@@ -1,0 +1,20 @@
+id: no-arbitrary-px-text-ts
+language: typescript
+severity: error
+message: >
+  Arbitrary-px text utility (e.g. text-[14px]) is banned in src/client — the
+  typography-scale ratchet is at 0. Use one of the --text-N scale tokens
+  (see src/index.css and px-text-ratchet.test.ts) instead of a raw pixel value.
+note: |
+  See docs/tribe/planning/typography-scale-preference-spec.md and
+  src/server/design/px-text-ratchet.test.ts (CAP = 0, never raised). Every
+  arbitrary-px text utility under src/client was converted to a --text-N
+  token; this rule stops a new one from landing.
+files:
+  - src/client/**
+ignores:
+  - src/client/**/*.test.ts
+  - src/client/**/*.test.tsx
+rule:
+  kind: string_fragment
+  regex: 'text-\[\d+px\]'
