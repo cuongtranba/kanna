@@ -1,0 +1,13 @@
+#!/bin/sh
+set -e
+
+if command -v gitleaks >/dev/null 2>&1; then
+  GITLEAKS="gitleaks"
+elif command -v docker >/dev/null 2>&1; then
+  GITLEAKS="docker run --rm -v $PWD:/repo -w /repo zricethezav/gitleaks:v8.30.1"
+else
+  echo "gitleaks not installed - skipping secret scan (CI will still enforce)" >&2
+  exit 0
+fi
+
+$GITLEAKS git --staged --no-banner --redact
