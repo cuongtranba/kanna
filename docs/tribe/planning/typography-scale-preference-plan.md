@@ -664,7 +664,7 @@ bun test --conditions production src/client/app
 
 **Expected result:** prints `0`; typecheck, lint and the area's tests all pass.
 
-- [ ] **Step 1: Commit** — exactly one commit ends this task:
+- [x] **Step 1: Commit** — exactly one commit ends this task:
 
 ```bash
 git add -A
@@ -672,7 +672,7 @@ git commit -m "refactor(typography): convert app and hooks px text utilities" \
   -m $'Tribe-Card: typography-scale-preference\nTribe-Task: 15/16'
 ```
 
-- [ ] Task 15 complete
+- [x] Task 15 complete
 
 ---
 
