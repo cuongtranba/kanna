@@ -723,7 +723,7 @@ that line to describe the harness this card actually ships.
 passes with the new rules active; `grep -roE 'text-\[[0-9]+px\]' src/client | wc -l` prints `0`;
 `bun run test:e2e` passes and writes the screenshot set. Paste the meta-test's deliberate failure.
 
-- [ ] **Step 1: Commit** — exactly one commit ends this task:
+- [x] **Step 1: Commit** — exactly one commit ends this task:
 
 ```bash
 git add -A
@@ -731,7 +731,7 @@ git commit -m "feat(typography): lock the ratchet at zero and add the oracle" \
   -m $'Tribe-Card: typography-scale-preference\nTribe-Task: 16/16'
 ```
 
-- [ ] Task 16 complete
+- [x] Task 16 complete
 
 ---
 
