@@ -336,7 +336,7 @@ Test 3 is the one that catches site 7, which no existing test covers.
 
 **Expected result:** `bun test --conditions production src/server/app-settings.test.ts src/server/ws-router-defaults.test.ts` passes, and `bun run typecheck` is clean.
 
-- [ ] **Step 1: Commit** — exactly one commit ends this task:
+- [x] **Step 1: Commit** — exactly one commit ends this task:
 
 ```bash
 git add -A
@@ -344,7 +344,7 @@ git commit -m "feat(typography): persist typography group server-side" \
   -m $'Tribe-Card: typography-scale-preference\nTribe-Task: 6/16'
 ```
 
-- [ ] Task 6 complete
+- [x] Task 6 complete
 
 ### Task 7 — DomPort method + device store · owns `src/client/ports/domPort.ts`, `src/client/adapters/dom.adapter.ts`, the three fakes, `src/client/stores/preferences.ts`
 

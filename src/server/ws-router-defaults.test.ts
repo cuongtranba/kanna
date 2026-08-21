@@ -129,6 +129,20 @@ describe("mergeAppSettingsPatch", () => {
     expect(snapshot.analyticsEnabled).toBe(true) // original unchanged
     expect(result.analyticsEnabled).toBe(false)
   })
+
+  // typography is a GROUP (never a bare scalar), so a patch touching an
+  // unrelated field must leave typography untouched, and vice versa -- the
+  // server twin of applyPatch's own merge (app-settings.ts applyPatch site 8).
+  test("typography is preserved across an unrelated patch, and mergeable on its own", () => {
+    const snapshot = { ...makeSnapshot(), typography: { scale: "lg" as const } }
+
+    const unrelated = mergeAppSettingsPatch(snapshot, { theme: "dark" })
+    expect(unrelated.typography).toEqual({ scale: "lg" })
+    expect(unrelated.theme).toBe("dark")
+
+    const merged = mergeAppSettingsPatch(snapshot, { typography: { scale: "xl" } })
+    expect(merged.typography).toEqual({ scale: "xl" })
+  })
 })
 
 // ---------------------------------------------------------------------------
