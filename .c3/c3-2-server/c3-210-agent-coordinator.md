@@ -1,7 +1,7 @@
 ---
 id: c3-210
 c3-version: 4
-c3-seal: 0daf586cc3c185c4a668969120ebb64dee9ddffb297858d00e05928c9787d2f3
+c3-seal: 0af92715037358ff212ea11f3145f9d7a022125875129f81a53d6f1ba09b5954
 title: agent-coordinator
 type: component
 category: feature
@@ -92,6 +92,7 @@ Owns the agent turn lifecycle: receives `chat.send` commands, picks the provider
 | describeUnknownSubagent(requested) | IN | Builds the UNKNOWN_SUBAGENT error text from the LIVE settings snapshot (each subagent as "name [id=...]", manual-trigger entries annotated, empty roster points at Settings) so the model self-corrects on retry even when the spawn-time system-prompt roster is stale; consumed by delegateRun's UNKNOWN_SUBAGENT failRun and the delegate tool's pre-delegation rejection | c3-226 | src/server/subagent-orchestrator.ts, src/server/kanna-mcp-tools/delegate-subagent.ts |
 | emitAutoContinueEvent(event) | IN | Appends the auto-continue event, then reconciles the chat's loop-tracking watch via syncLoopTracking. It is the single append path for loop_armed / loop_disarmed, so arm, stop_loop, user takeover, chat delete and the repeated-failure disarm all reconcile through one hook; the reconcile is total and idempotent and the coordinator gains no IO of its own (the registry owns it) | c3-227 | src/server/agent-coordinator.ts, src/server/loop-tracking-sync.ts |
 | PendingToolSlots | OUT | Per-chat single home for parked AskUserQuestion / ExitPlanMode canUseTool continuations, independent of ActiveTurn (adr-20260807-pending-tool-slot). Transitions: park (dedup — occupied slot discarded first), take/takeAny (caller settles after its transcript append), discard (settle with discardedToolResult → buildCanUseTool denies). Read by respondTool, getPendingTool, getActiveStatuses (waiting_for_user overlay), getWaitStartedAtByChatId (parkedAt overlay), and the isChatBusy derivation consumed by sendCommand + maybeStartNextQueuedMessage; isClaudeSessionIdle and enforceClaudeSessionBudget never close a session whose chat holds a parked slot. ActiveTurn carries NO pendingTool field and ghost turns must not be reintroduced | c3-207 | src/server/pending-tool-slot.ts, src/server/claude-session-state-queries.ts |
+| onTurnTerminal turn duration | OUT | The store's turn-terminal observer records `kanna.turn.duration_ms` (c3-234) before its cron branch, enriched from `activeTurns.get(chatId)` under the same invariant the cron attribution relies on — a turn is deleted from the map only after its terminal record persists. `ActiveTurn.startedAt` is REQUIRED and carried over from the `StartingTurn` at the single construction site, so the measurement includes spawn cost, which is the latency a user actually waits. A terminal with no ActiveTurn — a background-task self-wake — records nothing rather than a fabricated duration. See adr-20260821-perf-alert-github-tickets | c3-234 | src/server/agent-coordinator.ts, src/server/claude-turn-starter.ts, src/server/claude-session-state.ts |
 
 ## Change Safety
 

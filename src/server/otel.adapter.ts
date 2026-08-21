@@ -27,12 +27,18 @@ import fs from "node:fs"
 import path from "node:path"
 import { metrics, trace } from "@opentelemetry/api"
 import { NodeTracerProvider, BatchSpanProcessor } from "@opentelemetry/sdk-trace-node"
-import { MeterProvider, PeriodicExportingMetricReader } from "@opentelemetry/sdk-metrics"
+import { AggregationType, MeterProvider, PeriodicExportingMetricReader } from "@opentelemetry/sdk-metrics"
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http"
 import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-http"
 import { resourceFromAttributes } from "@opentelemetry/resources"
 import { log } from "../shared/log"
-import { resetMetricInstrumentCache } from "./observability"
+import {
+  resetMetricInstrumentCache,
+  DURATION_BUCKETS_MS,
+  PROCESS_RSS_BYTES,
+  SUBAGENT_RUN_DURATION_MS,
+  TURN_DURATION_MS,
+} from "./observability"
 import { resolveOtelConfig, type ResolvedOtelConfig, type TelemetrySettingsInput } from "./otel-config"
 
 export interface ObservabilityHandle {
@@ -73,6 +79,16 @@ function startOtel(config: ResolvedOtelConfig): () => Promise<void> {
   tracerProvider.register()
   const meterProvider = new MeterProvider({
     resource,
+    // Without these the duration histograms inherit OTel's default boundaries,
+    // which stop at 10s — every turn would land in the +Inf bucket and no
+    // quantile could be computed from them. See DURATION_BUCKETS_MS.
+    views: [TURN_DURATION_MS, SUBAGENT_RUN_DURATION_MS].map((instrumentName) => ({
+      instrumentName,
+      aggregation: {
+        type: AggregationType.EXPLICIT_BUCKET_HISTOGRAM as const,
+        options: { boundaries: [...DURATION_BUCKETS_MS] },
+      },
+    })),
     readers: [
       new PeriodicExportingMetricReader({
         exporter: new OTLPMetricExporter(config.metricUrl ? { url: config.metricUrl } : {}),
@@ -222,7 +238,7 @@ export function initObservability(args: InitObservabilityArgs): ObservabilityHan
  */
 function registerMemoryGauges(): void {
   const meter = metrics.getMeter("kanna")
-  const rss = meter.createObservableGauge("kanna.process.rss_bytes")
+  const rss = meter.createObservableGauge(PROCESS_RSS_BYTES)
   const heapUsed = meter.createObservableGauge("kanna.process.heap_used_bytes")
   const heapTotal = meter.createObservableGauge("kanna.process.heap_total_bytes")
   const external = meter.createObservableGauge("kanna.process.external_bytes")

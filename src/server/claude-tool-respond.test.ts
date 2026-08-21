@@ -49,6 +49,7 @@ function makeActiveTurn(overrides: Partial<ActiveTurn> = {}): ActiveTurn {
     chatId: "chat-1",
     provider: "claude",
     turn: {} as ActiveTurn["turn"],
+    startedAt: Date.now(),
     model: "claude-opus-4-5",
     planMode: true,
     status: "waiting_for_user",

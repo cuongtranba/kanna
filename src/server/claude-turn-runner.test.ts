@@ -61,6 +61,7 @@ function makeActiveTurn(overrides: Partial<ActiveTurn> = {}, turn?: HarnessTurn)
     chatId: "chat-1",
     provider: "codex",
     turn: turn ?? makeFakeTurn(),
+    startedAt: Date.now(),
     model: "gpt-4o",
     planMode: false,
     status: "running",

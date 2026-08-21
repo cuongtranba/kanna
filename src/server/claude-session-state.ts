@@ -82,6 +82,12 @@ export interface ActiveTurn {
   provider: AgentProvider
   turn: HarnessTurn
   /**
+   * When the user's send began, carried over from the `StartingTurn` this
+   * replaced — so `kanna.turn.duration_ms` measures the latency a user
+   * actually waits, spawn included, not just the streaming phase.
+   */
+  startedAt: number
+  /**
    * `ClaudeSessionState.id` of the session this turn runs on, when it runs on
    * one (absent for providers with no Claude session, e.g. codex).
    *

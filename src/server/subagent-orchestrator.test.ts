@@ -13,6 +13,8 @@ import {
   type ProviderRunStart,
 } from "./subagent-orchestrator"
 import { buildSubagentProviderRun } from "./subagent-provider-run"
+import { SUBAGENT_RUN_DURATION_MS } from "./observability"
+import { startMetricRecorder, type MetricRecorder } from "./test-helpers/metric-recorder"
 
 const tempDirs: string[] = []
 
@@ -1860,6 +1862,41 @@ describe("SubagentOrchestrator", () => {
         subagentId: "sa-1", prompt: "x", mentionedSubagentIds: [],
       })
       expect(outcome.status).toBe("completed")
+    })
+  })
+
+  // The duration rides the span that already wraps the whole run, so what needs
+  // pinning is that every run contributes exactly one observation carrying its
+  // outcome — a failed run must not vanish from the distribution, or the
+  // latency a user actually experiences would look better than it is.
+  describe("kanna.subagent.run.duration_ms", () => {
+    let recorder: MetricRecorder | null = null
+
+    afterEach(async () => {
+      await recorder?.dispose()
+      recorder = null
+    })
+
+    test("records one observation per run, keyed by outcome and provider", async () => {
+      const h = await setupHarness({
+        subagents: [makeSubagent({ id: "sa-1" }), makeSubagent({ id: "sa-2" })],
+      })
+      h.programReply("sa-1", "ran")
+      h.programs.set("sa-2", { authReady: true, error: "boom" })
+      recorder = startMetricRecorder()
+
+      for (const subagentId of ["sa-1", "sa-2"]) {
+        await h.orchestrator.delegateRun({
+          chatId: h.chatId, parentUserMessageId: h.userMessageId, parentRunId: null,
+          parentSubagentId: null, ancestorSubagentIds: [], depth: 0,
+          subagentId, prompt: "x", mentionedSubagentIds: [subagentId],
+        })
+      }
+
+      const points = await recorder.histogram(SUBAGENT_RUN_DURATION_MS)
+      expect(points.map((p) => p.attributes.outcome).sort()).toEqual(["completed", "failed"])
+      expect(points.every((p) => p.count === 1)).toBe(true)
+      expect(points.every((p) => p.attributes.provider === "claude")).toBe(true)
     })
   })
 })

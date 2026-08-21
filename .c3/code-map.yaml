@@ -303,5 +303,14 @@ c3-120:
   - src/client/stores/cronJobsStore.ts
 c3-233:
   - src/server/cron/**/*.ts
+c3-234:
+  - src/server/observability.ts
+  - src/server/otel.adapter.ts
+  - src/server/otel-config.ts
+  - src/server/ws-router-observability.ts
+  - src/server/test-helpers/metric-recorder.ts
+  - src/ops/alerting/**/*.ts
+  - scripts/grafana-alerts.ts
+  - scripts/perf-alert-issue.ts
 c3-311:
   - src/shared/cron/**/*.ts

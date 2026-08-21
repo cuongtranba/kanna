@@ -56,6 +56,7 @@ export default defineConfig({
           items: [
             { label: 'Env Vars', slug: 'reference/env-vars' },
             { label: 'Keybindings', slug: 'reference/keybindings' },
+            { label: 'Performance Alerts', slug: 'reference/performance-alerts' },
           ],
         },
         {

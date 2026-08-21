@@ -1,5 +1,13 @@
-import { describe, test, expect } from "bun:test"
-import { withSpan, addCounter, recordUpDown } from "./observability"
+import { afterEach, describe, test, expect } from "bun:test"
+import {
+  withSpan,
+  addCounter,
+  recordUpDown,
+  recordHistogram,
+  DURATION_BUCKETS_MS,
+  TURN_DURATION_MS,
+} from "./observability"
+import { startMetricRecorder, type MetricRecorder } from "./test-helpers/metric-recorder"
 
 // No provider is registered in tests, so every call runs against the
 // @opentelemetry/api no-op implementations — the exact configuration the
@@ -40,5 +48,61 @@ describe("metric helpers", () => {
       recordUpDown("kanna.test.updown", 5)
       recordUpDown("kanna.test.updown", -5)
     }).not.toThrow()
+  })
+
+  test("recordHistogram is a safe no-op without an SDK", () => {
+    expect(() => {
+      recordHistogram("kanna.test.duration_ms", 1234, { provider: "claude" })
+    }).not.toThrow()
+  })
+})
+
+// These register a real SDK meter provider, so they assert what was RECORDED
+// rather than that recording is harmless. Disposal is not optional — see
+// test-helpers/metric-recorder.ts.
+describe("recordHistogram against a real meter provider", () => {
+  let recorder: MetricRecorder | null = null
+
+  afterEach(async () => {
+    await recorder?.dispose()
+    recorder = null
+  })
+
+  test("records the observation with its attributes", async () => {
+    recorder = startMetricRecorder()
+    recordHistogram(TURN_DURATION_MS, 4_000, { provider: "claude", outcome: "finished" })
+    recordHistogram(TURN_DURATION_MS, 6_000, { provider: "claude", outcome: "finished" })
+    recordHistogram(TURN_DURATION_MS, 1_000, { provider: "codex", outcome: "failed" })
+
+    const points = await recorder.histogram(TURN_DURATION_MS)
+    const claude = points.find((p) => p.attributes.provider === "claude")
+    const codex = points.find((p) => p.attributes.provider === "codex")
+
+    expect(claude).toMatchObject({ count: 2, sum: 10_000 })
+    expect(claude?.attributes).toEqual({ provider: "claude", outcome: "finished" })
+    expect(codex).toMatchObject({ count: 1, sum: 1_000 })
+  })
+
+  // The regression this pins: OTel's DEFAULT explicit buckets top out at
+  // 10_000 ms. A Kanna turn runs 10s-10min, so under the defaults every
+  // observation falls in the +Inf bucket and histogram_quantile — the whole
+  // point of the metric — returns garbage.
+  test("turn-length durations land in distinct finite buckets", async () => {
+    recorder = startMetricRecorder({ buckets: { [TURN_DURATION_MS]: DURATION_BUCKETS_MS } })
+    const durations = [5_000, 30_000, 120_000, 600_000]
+    for (const ms of durations) recordHistogram(TURN_DURATION_MS, ms, { provider: "claude" })
+
+    const [point] = await recorder.histogram(TURN_DURATION_MS)
+    if (!point) throw new Error("no histogram recorded")
+
+    expect(point.count).toBe(durations.length)
+    expect(point.counts.at(-1)).toBe(0)
+    const occupied = point.counts.filter((n) => n > 0)
+    expect(occupied).toEqual([1, 1, 1, 1])
+  })
+
+  test("buckets reach beyond the longest plausible turn", () => {
+    expect(Math.max(...DURATION_BUCKETS_MS)).toBeGreaterThanOrEqual(1_800_000)
+    expect([...DURATION_BUCKETS_MS]).toEqual([...DURATION_BUCKETS_MS].sort((a, b) => a - b))
   })
 })
