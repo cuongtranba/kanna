@@ -216,7 +216,11 @@ describe("loop tracking end to end, over a real file", () => {
       file,
       markdownDoc.append(DOC, { section: "Progress", entry: "- 2026-08-07 chunk three DONE", position: "top" }).content,
     )
-    await Bun.sleep(300)
+
+    for (let i = 0; i < 200; i++) {
+      if (rowsNow()[2]?.[0] === "done") break
+      await Bun.sleep(20)
+    }
 
     expect(notified).toContain("c1")
     expect(rowsNow()[2]).toEqual(["done", "2026-08-07 chunk three DONE"])

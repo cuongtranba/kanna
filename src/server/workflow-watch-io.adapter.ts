@@ -257,8 +257,16 @@ export function watchWorkflowDir(
     parentPoll.unref?.()
   }
 
-  if (existsSync(dir)) armTarget()
-  else armParent()
+  if (existsSync(dir)) {
+    armTarget()
+    // Safety-net: fire once after arming so writes that land before the first
+    // fs.watch event are not silently dropped. Mirrors the promote() call in
+    // armParent — same "poll beats arming window" rationale as
+    // adr-20260607-pty-transcript-pure-poll.
+    deps.setTimeout(() => fire(), 0)
+  } else {
+    armParent()
+  }
 
   return () => {
     disposed = true
