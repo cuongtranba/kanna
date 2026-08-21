@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLAUDE_DRIVER_DEFAULTS, CLAUDE_PTY_LIFECYCLE_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, DEFAULT_OPENROUTER_SDK_MODEL, GLOBAL_PROMPT_APPEND_MAX_CHARS, mergeCustomModels, PROVIDERS, PUSH_DEFAULTS,
-  TELEMETRY_DEFAULTS, UPLOAD_DEFAULTS } from "../shared/types"
+  TELEMETRY_DEFAULTS, TYPOGRAPHY_DEFAULTS, UPLOAD_DEFAULTS } from "../shared/types"
 import { AppSettingsManager, readAppSettingsSnapshot, seedCustomModelsFromBuiltins } from "./app-settings"
 import type { AppSettingsSnapshot, McpOAuthState, SubagentInput } from "../shared/types"
 import { DEFAULT_TAB_MIN_WIDTH, MAX_TAB_WIDTH } from "../shared/pane-tab-width"
@@ -42,6 +42,7 @@ function expectedSettingsSnapshot(filePath: string, overrides: Partial<AppSettin
     analyticsEnabled: true,
     browserSettingsMigrated: false,
     theme: "system",
+    typography: TYPOGRAPHY_DEFAULTS,
     chatSoundPreference: "always",
     chatSoundId: "funk",
     terminal: {
@@ -1647,5 +1648,49 @@ describe("collection CRUD contracts", () => {
       .toMatchObject({ id, name: "keeper", systemPrompt: "same name" })
     expect(await manager.updateSubagent(id, { systemPrompt: "no name in patch" }))
       .toMatchObject({ id, name: "keeper" })
+  })
+})
+
+// typography is a GROUP (never a bare scalar) so that a future `bodyFamily`
+// field is purely additive. These pin the three sites most likely to silently
+// drop it: toFilePayload (on-disk write), toComparablePayload (shouldWrite),
+// and the server twin of mergeAppSettingsPatch is covered separately in
+// ws-router-defaults.test.ts.
+describe("typography settings", () => {
+  test("writePatch round-trips typography.scale through the file (toFilePayload)", async () => {
+    const filePath = await createTempFilePath()
+    const manager = trackManager(new AppSettingsManager(filePath))
+    await manager.initialize()
+
+    const snapshot = await manager.writePatch({ typography: { scale: "lg" } })
+    expect(snapshot.typography.scale).toBe("lg")
+
+    const onDisk = JSON.parse(await readFile(filePath, "utf8")) as { typography?: { scale?: string } }
+    expect(onDisk.typography?.scale).toBe("lg")
+
+    manager.dispose()
+  })
+
+  test("initializing twice with no patch does not rewrite the settings file (toComparablePayload)", async () => {
+    const filePath = await createTempFilePath()
+    const manager = trackManager(new AppSettingsManager(filePath))
+    await manager.initialize()
+    const firstContent = await readFile(filePath, "utf8")
+    const firstStat = await stat(filePath)
+    manager.dispose()
+
+    const reloaded = trackManager(new AppSettingsManager(filePath))
+    await reloaded.initialize()
+    const secondContent = await readFile(filePath, "utf8")
+    const secondStat = await stat(filePath)
+    reloaded.dispose()
+
+    expect(secondContent).toBe(firstContent)
+    // atomicWriteJson replaces the file via a tmp-file + rename, which always
+    // produces a NEW inode. If toComparablePayload omits a field that
+    // toFilePayload includes, `shouldWrite` is (wrongly) always true and the
+    // file is rewritten on every load -- same bytes, but a fresh inode. A
+    // genuine no-op load must leave the inode untouched.
+    expect(secondStat.ino).toBe(firstStat.ino)
   })
 })

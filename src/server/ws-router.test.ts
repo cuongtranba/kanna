@@ -5,7 +5,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLAUDE_DRIVER_DEFAULTS, CLAUDE_PTY_LIFECYCLE_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, DEFAULT_OPENROUTER_SDK_MODEL, EMPTY_CHAT_ACTIVITY, PROTOCOL_VERSION, PUSH_DEFAULTS,
-  TELEMETRY_DEFAULTS, UPLOAD_DEFAULTS } from "../shared/types"
+  TELEMETRY_DEFAULTS, TYPOGRAPHY_DEFAULTS, UPLOAD_DEFAULTS } from "../shared/types"
 import { BUILTIN_SLASH_COMMANDS } from "../shared/builtin-commands"
 import type { AppSettingsSnapshot, ChatActivity, KeybindingsSnapshot, LlmProviderSnapshot, McpServerConfig, McpServerTestResult, OpenRouterModel, UpdateSnapshot } from "../shared/types"
 import { createEmptyState } from "./events"
@@ -92,6 +92,7 @@ const DEFAULT_APP_SETTINGS_SNAPSHOT: AppSettingsSnapshot = {
   claudeAuth: CLAUDE_AUTH_DEFAULTS,
   browserSettingsMigrated: false,
   theme: "system",
+  typography: TYPOGRAPHY_DEFAULTS,
   chatSoundPreference: "always",
   chatSoundId: "funk",
   terminal: {
@@ -553,6 +554,7 @@ describe("ws-router", () => {
             analyticsEnabled: patch.analyticsEnabled ?? snapshot.analyticsEnabled,
             browserSettingsMigrated: patch.browserSettingsMigrated ?? snapshot.browserSettingsMigrated,
             theme: patch.theme ?? snapshot.theme,
+            typography: { ...snapshot.typography, ...patch.typography },
             chatSoundPreference: patch.chatSoundPreference ?? snapshot.chatSoundPreference,
             chatSoundId: patch.chatSoundId ?? snapshot.chatSoundId,
             defaultProvider: patch.defaultProvider ?? snapshot.defaultProvider,
@@ -3314,6 +3316,7 @@ function makeAppSettingsStub(initial?: Partial<AppSettingsSnapshot>) {
           ...snapshot,
           analyticsEnabled: patch.analyticsEnabled ?? snapshot.analyticsEnabled,
           theme: patch.theme ?? snapshot.theme,
+          typography: { ...snapshot.typography, ...patch.typography },
         }
       }
       notify()

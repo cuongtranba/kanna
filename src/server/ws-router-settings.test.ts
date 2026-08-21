@@ -12,6 +12,7 @@ import {
   DEFAULT_OPENROUTER_SDK_MODEL,
   PUSH_DEFAULTS,
   TELEMETRY_DEFAULTS,
+  TYPOGRAPHY_DEFAULTS,
   UPLOAD_DEFAULTS,
 } from "../shared/types"
 import { KeybindingsManager } from "./keybindings"
@@ -29,6 +30,7 @@ function makeSnapshot(): AppSettingsSnapshot {
     analyticsEnabled: true,
     browserSettingsMigrated: false,
     theme: "system",
+    typography: TYPOGRAPHY_DEFAULTS,
     chatSoundPreference: "always",
     chatSoundId: "funk",
     terminal: { scrollbackLines: 1_000, minColumnWidth: 450 },
