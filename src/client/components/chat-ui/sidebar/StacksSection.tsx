@@ -55,7 +55,7 @@ export function StacksSection({
   return (
     <div className="flex flex-col mb-3">
       <div className="pl-2 pr-2 pt-2 pb-1 flex items-center gap-1">
-        <span className="flex-1 min-w-0 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        <span className="flex-1 min-w-0 text-11 font-semibold uppercase tracking-wide text-muted-foreground">
           Stacks
         </span>
         <Tooltip>
@@ -103,11 +103,11 @@ export function StacksSection({
                       isExpanded && "rotate-90"
                     )}
                   />
-                  <span className="truncate min-w-0 text-[13px] font-semibold text-foreground/80">
+                  <span className="truncate min-w-0 text-13 font-semibold text-foreground/80">
                     {stack.title}
                   </span>
                 </div>
-                <span className="text-[11px] tabular-nums text-muted-foreground px-1.5 py-0.5 rounded bg-muted/60 shrink-0">
+                <span className="text-11 tabular-nums text-muted-foreground px-1.5 py-0.5 rounded bg-muted/60 shrink-0">
                   {stack.memberCount}
                 </span>
                 {onDeleteStack ? (
@@ -155,7 +155,7 @@ export function StacksSection({
                     data-testid="stack-separator"
                     className="flex justify-center py-1.5 select-none"
                   >
-                    <span className="text-[10px] tracking-[0.6em] text-muted-foreground/40 pl-[0.6em] leading-none">
+                    <span className="text-10 tracking-[0.6em] text-muted-foreground/40 pl-[0.6em] leading-none">
                       ✦ ✦ ✦
                     </span>
                   </div>
@@ -179,7 +179,7 @@ export function StacksSection({
                     {memberProjects.map((project) => (
                       <div
                         key={project.id}
-                        className="pl-[28px] pr-2 py-1 text-[13px] text-muted-foreground truncate"
+                        className="pl-[28px] pr-2 py-1 text-13 text-muted-foreground truncate"
                       >
                         {project.title}
                       </div>
