@@ -560,7 +560,7 @@ they can never drift again. The test must fail if any one copy changes alone.
 new `getTerminalOptions` case proving the font size changes with the scale, and a drift test that
 fails when one Lexical copy is edited in isolation. Paste the deliberately-broken-copy failure.
 
-- [ ] **Step 1: Commit** — exactly one commit ends this task:
+- [x] **Step 1: Commit** — exactly one commit ends this task:
 
 ```bash
 git add -A
@@ -568,7 +568,7 @@ git commit -m "feat(typography): scale terminal, lexical and diff typography" \
   -m $'Tribe-Card: typography-scale-preference\nTribe-Task: 11/16'
 ```
 
-- [ ] Task 11 complete
+- [x] Task 11 complete
 
 ---
 

@@ -10,6 +10,10 @@ import type { DomPort } from "../../ports/domPort"
 import type { TimerPort } from "../../ports/timerPort"
 import { domAdapter } from "../../adapters/dom.adapter"
 import { timerAdapter } from "../../adapters/timer.adapter"
+import { resolveEffectiveScaleStep, resolveFontScale } from "../../../shared/design/typography"
+import type { AnyValue } from "../../../shared/errors"
+import { useAppSettingsStore } from "../../stores/appSettingsStore"
+import { usePreferencesStore } from "../../stores/preferences"
 
 export interface TerminalPanePorts {
   dom?: DomPort
@@ -150,7 +154,20 @@ interface MacOptionKeyEvent {
   getModifierState?: (key: string) => boolean
 }
 
-export function getTerminalOptions(scrollback: number, theme: ITheme, platform = globalThis.navigator?.platform ?? ""): ITerminalOptions {
+/** Terminal font size at the default (md, 1.0) typography scale. */
+const TERMINAL_BASE_FONT_SIZE = 13
+
+/**
+ * xterm renders to a canvas, so it is wholly immune to the `--kanna-font-scale`
+ * CSS variable — its font size must be derived from the same pure core and
+ * pushed in explicitly. Rounded to the nearest pixel (canvas glyph metrics are
+ * integral).
+ */
+export function getTerminalFontSize(step: AnyValue): number {
+  return Math.round(TERMINAL_BASE_FONT_SIZE * resolveFontScale(step))
+}
+
+export function getTerminalOptions(scrollback: number, theme: ITheme, fontSize: number, platform = globalThis.navigator?.platform ?? ""): ITerminalOptions {
   return {
     scrollback,
     cursorBlink: true,
@@ -160,7 +177,7 @@ export function getTerminalOptions(scrollback: number, theme: ITheme, platform =
     convertEol: false,
     allowTransparency: true,
     fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-    fontSize: 13,
+    fontSize,
     theme,
     macOptionIsMeta: isMacPlatform(platform),
   }
@@ -253,6 +270,7 @@ function TerminalPaneInner({
   const terminalRef = useRef<Terminal | null>(null)
   const replayStateRef = useRef<string | null>(null)
   const onCommandSentRef = useRef<Props["onCommandSent"]>(onCommandSent)
+  const terminalFontSizeRef = useRef(TERMINAL_BASE_FONT_SIZE)
   const hasCreatedRef = useRef(false)
   const createAttemptRef = useRef(0)
   const lastAppliedSnapshotKeyRef = useRef<string | null>(null)
@@ -264,6 +282,10 @@ function TerminalPaneInner({
   const setMetadataFromExit = TerminalPaneStore.useScopedStore((state) => state.setMetadataFromExit)
   const resetTerminal = TerminalPaneStore.useScopedStore((state) => state.resetTerminal)
   const terminalTheme = buildTerminalTheme(resolvedTheme === "dark" ? "dark" : "light", dom)
+  const typographyServerDefault = useAppSettingsStore((state) => state.settings?.typography?.scale)
+  const typographyOverride = usePreferencesStore((state) => state.typographyOverride)
+  const typographyStep = resolveEffectiveScaleStep(typographyOverride, typographyServerDefault)
+  const terminalFontSize = getTerminalFontSize(typographyStep)
   const sendInput = useCallback((data: string) => {
     void socket.command({
       type: "terminal.input",
@@ -303,7 +325,11 @@ function TerminalPaneInner({
   }, [onCommandSent])
 
   useEffect(() => {
-    const terminal = new Terminal(getTerminalOptions(scrollback, terminalTheme))
+    terminalFontSizeRef.current = terminalFontSize
+  }, [terminalFontSize])
+
+  useEffect(() => {
+    const terminal = new Terminal(getTerminalOptions(scrollback, terminalTheme, terminalFontSizeRef.current))
     const serializeAddon = new SerializeAddon()
     terminal.loadAddon(serializeAddon)
     terminal.loadAddon(new WebLinksAddon())
@@ -386,6 +412,19 @@ function TerminalPaneInner({
     terminal.options.theme = terminalTheme
     refreshTerminal(terminal)
   }, [terminalTheme])
+
+  // xterm is canvas, wholly immune to the CSS `--kanna-font-scale` variable — a
+  // scale change must refit the cell-metric path (getMeasuredTerminalSize) and
+  // send a PTY resize in-place, or the server's terminal dimensions silently
+  // desync from what the user sees.
+  useEffect(() => {
+    const terminal = terminalRef.current
+    const element = containerRef.current
+    if (!terminal || !element) return
+    terminal.options.fontSize = terminalFontSize
+    refreshTerminal(terminal)
+    syncTerminalSize(terminal, element, lastSizeRef, hasCreatedRef.current, sendResize, dom)
+  }, [terminalFontSize, dom, sendResize])
 
   useEffect(() => {
     if (focusRequestVersion === 0) return
