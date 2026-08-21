@@ -122,4 +122,39 @@ describe("index.html pre-paint script — --kanna-font-scale (P6)", () => {
     expect(result).toEqual(oracle("not-a-real-step", undefined))
     expect(result["--kanna-font-scale"]).toBe("1")
   })
+
+  test("an invalid override falls through to a valid cache, not the CSS default", () => {
+    const result = runPrePaintScript(
+      envelope({ typographyOverride: "not-a-real-step", typographyServerDefaultCache: "lg" }),
+    )
+    expect(result).toEqual(oracle("not-a-real-step", "lg"))
+    expect(result["--kanna-font-scale"]).toBe("1.125")
+  })
+
+  // Cross-product matrix: pins the shipped snippet to the pure oracle across
+  // every combination of (override, cache) input classes, so no single point
+  // in the input space (like the invalid-override/valid-cache case above) can
+  // silently drift again. Expectations always come from the oracle — never a
+  // hand-written table — so the assertion cannot itself encode the bug.
+  const INPUT_CLASSES: readonly [label: string, value: unknown][] = [
+    ["valid step", "lg"],
+    ["invalid non-empty string", "not-a-real-step"],
+    ["empty string", ""],
+    ["null", null],
+    ["undefined", undefined],
+    ["non-string garbage", 42],
+  ]
+
+  const MATRIX: readonly [title: string, override: unknown, cache: unknown][] = INPUT_CLASSES.flatMap(
+    ([overrideLabel, override]) =>
+      INPUT_CLASSES.map(
+        ([cacheLabel, cache]) =>
+          [`override=${overrideLabel}, cache=${cacheLabel}`, override, cache] as [string, unknown, unknown],
+      ),
+  )
+
+  test.each(MATRIX)("%s matches the pure oracle", (_title, override, cache) => {
+    const result = runPrePaintScript(envelope({ typographyOverride: override, typographyServerDefaultCache: cache }))
+    expect(result).toEqual(oracle(override, cache))
+  })
 })
