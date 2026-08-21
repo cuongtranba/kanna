@@ -37,15 +37,15 @@ function AccountInfoMessageInner({ message }: Props) {
           aria-expanded={expanded}
           className="group/account flex w-full items-center gap-2.5 text-left transition-opacity hover:opacity-80 focus-visible:opacity-100"
         >
-          <span className="text-[12px] font-medium text-muted-foreground">
+          <span className="text-12 font-medium text-muted-foreground">
             Account
           </span>
           <span className="h-3 w-px bg-border/60" aria-hidden />
-          <span className="min-w-0 flex-1 truncate font-mono text-[13px] font-medium leading-snug text-foreground">
+          <span className="min-w-0 flex-1 truncate font-mono text-13 font-medium leading-snug text-foreground">
             {primaryKey}
           </span>
           {sourceLabel ? (
-            <span className="hidden whitespace-nowrap text-[11px] text-muted-foreground sm:inline">
+            <span className="hidden whitespace-nowrap text-11 text-muted-foreground sm:inline">
               {sourceLabel}
             </span>
           ) : null}
@@ -58,7 +58,7 @@ function AccountInfoMessageInner({ message }: Props) {
           />
         </button>
         {sourceLabel ? (
-          <span className="mt-0.5 text-[11px] text-muted-foreground sm:hidden">
+          <span className="mt-0.5 text-11 text-muted-foreground sm:hidden">
             {sourceLabel}
           </span>
         ) : null}

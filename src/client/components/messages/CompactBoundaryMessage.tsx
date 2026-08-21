@@ -13,7 +13,7 @@ export function CompactBoundaryMessage() {
   return (
     <div className="flex items-center gap-3">
       <ZigZagLine />
-      <span className="text-[11px] tracking-widest text-muted-foreground uppercase flex-shrink-0">Compacted</span>
+      <span className="text-11 tracking-widest text-muted-foreground uppercase flex-shrink-0">Compacted</span>
       <ZigZagLine />
     </div>
   )
@@ -23,7 +23,7 @@ export function ContextClearedMessage() {
   return (
     <div className="flex items-center gap-3">
       <ZigZagLine />
-      <span className="text-[11px] tracking-widest text-muted-foreground uppercase flex-shrink-0">Context Cleared</span>
+      <span className="text-11 tracking-widest text-muted-foreground uppercase flex-shrink-0">Context Cleared</span>
       <ZigZagLine />
     </div>
   )

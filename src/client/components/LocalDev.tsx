@@ -92,7 +92,7 @@ function InfoCard({ children }: { children: ReactNode }) {
 
 function SectionHeader({ children }: { children: ReactNode }) {
   return (
-    <h2 className="text-[13px] font-medium text-muted-foreground uppercase tracking-wider mb-3">
+    <h2 className="text-13 font-medium text-muted-foreground uppercase tracking-wider mb-3">
       {children}
     </h2>
   )
@@ -288,7 +288,7 @@ export function LocalDev({
 
           <div className="w-full px-6 mb-10">
             <div className="flex items-baseline justify-between mb-3">
-              <h2 className="text-[13px] font-medium text-muted-foreground uppercase tracking-wider">Projects</h2>
+              <h2 className="text-13 font-medium text-muted-foreground uppercase tracking-wider">Projects</h2>
               <Button variant="default" size="sm" onClick={() => onNewProjectOpenChange(true)}>
                 <Plus className="h-4 w-4 mr-1.5" />
                 Add Project

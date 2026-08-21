@@ -114,12 +114,12 @@ const SnippetCard = function SnippetCardImpl({
       className="flex w-full max-w-md flex-col items-start gap-1 rounded-xl border border-border bg-background p-3 text-left hover:bg-accent/40"
     >
       <div className="text-sm font-medium text-foreground">{source.displayName}</div>
-      <div className="text-[11px] text-muted-foreground">
+      <div className="text-11 text-muted-foreground">
         {friendlyType}
         {sizeLabel ? ` · ${sizeLabel}` : ""}
       </div>
       {snippet ? (
-        <pre className="line-clamp-3 max-h-16 w-full whitespace-pre-wrap break-words text-[11px] text-muted-foreground">
+        <pre className="line-clamp-3 max-h-16 w-full whitespace-pre-wrap break-words text-11 text-muted-foreground">
           {snippet}
         </pre>
       ) : null}
