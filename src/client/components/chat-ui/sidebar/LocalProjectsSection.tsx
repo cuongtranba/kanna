@@ -248,7 +248,7 @@ const SortableProjectGroup = memo(({
         />
         <Tooltip>
           <TooltipTrigger asChild>
-            <span className="truncate min-w-0 text-[13px] font-semibold text-foreground/80">
+            <span className="truncate min-w-0 text-13 font-semibold text-foreground/80">
               {getPathBasename(localPath)}
             </span>
           </TooltipTrigger>
@@ -355,7 +355,7 @@ const SortableProjectGroup = memo(({
               {hasMore && isExpanded ? (
                 <button
                   onClick={() => onToggleExpandedGroup(groupKey)}
-                  className="ml-6 mt-1 self-start px-2 py-0.5 text-[11px] text-muted-foreground hover:text-foreground rounded-md transition-colors duration-150"
+                  className="ml-6 mt-1 self-start px-2 py-0.5 text-11 text-muted-foreground hover:text-foreground rounded-md transition-colors duration-150"
                 >
                   Show less
                 </button>
@@ -364,7 +364,7 @@ const SortableProjectGroup = memo(({
               {hasMore && !isExpanded ? (
                 <button
                   onClick={() => onToggleExpandedGroup(groupKey)}
-                  className="ml-6 mt-1 self-start px-2 py-0.5 text-[11px] text-muted-foreground hover:text-foreground rounded-md transition-colors duration-150"
+                  className="ml-6 mt-1 self-start px-2 py-0.5 text-11 text-muted-foreground hover:text-foreground rounded-md transition-colors duration-150"
                 >
                   Show more
                 </button>
@@ -382,7 +382,7 @@ function SectionHeading({ label }: { label: string }) {
     <div className="pl-2 pr-2 pt-2 pb-1 flex items-center gap-1">
       <span
         data-testid="sidebar-section-heading"
-        className="flex-1 min-w-0 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
+        className="flex-1 min-w-0 text-11 font-semibold uppercase tracking-wide text-muted-foreground"
       >
         {label}
       </span>

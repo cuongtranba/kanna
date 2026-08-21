@@ -103,7 +103,7 @@ function StackChatCreateRowInner({
                 <div className="flex items-baseline justify-between gap-2 min-w-0">
                   <TruncatedText
                     inline
-                    className="text-[15px] font-semibold leading-snug min-w-0"
+                    className="text-15 font-semibold leading-snug min-w-0"
                     tooltip={project.title}
                   >
                     {project.title}
@@ -128,7 +128,7 @@ function StackChatCreateRowInner({
                   value={selectedPath}
                   onChange={(e) => selectWorktree(project.id, e.target.value)}
                   disabled={onlyOneWorktree}
-                  className="w-full text-[13px] font-mono tabular-nums border border-border rounded-md px-2 py-1.5 bg-background text-foreground truncate disabled:opacity-70 disabled:cursor-not-allowed"
+                  className="w-full text-13 font-mono tabular-nums border border-border rounded-md px-2 py-1.5 bg-background text-foreground truncate disabled:opacity-70 disabled:cursor-not-allowed"
                   aria-label={`Worktree for ${project.title}`}
                 >
                   {project.worktrees.map((wt) => (
@@ -187,7 +187,7 @@ function StackChatCreateRowInner({
           )}
         >
           <div className="mx-auto mb-1 h-1 w-9 rounded-full bg-border" aria-hidden />
-          <DialogPrimitive.Title className="text-[15px] font-semibold leading-snug">
+          <DialogPrimitive.Title className="text-15 font-semibold leading-snug">
             New chat in {stack.title}
           </DialogPrimitive.Title>
           {body}

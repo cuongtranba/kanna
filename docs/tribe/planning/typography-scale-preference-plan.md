@@ -622,7 +622,7 @@ bun test --conditions production src/client/components/chat-ui
 
 **Expected result:** prints `0`; typecheck, lint and the area's tests all pass.
 
-- [ ] **Step 1: Commit** — exactly one commit ends this task:
+- [x] **Step 1: Commit** — exactly one commit ends this task:
 
 ```bash
 git add -A
@@ -630,7 +630,7 @@ git commit -m "refactor(typography): convert chat-ui px text utilities to rem to
   -m $'Tribe-Card: typography-scale-preference\nTribe-Task: 13/16'
 ```
 
-- [ ] Task 13 complete
+- [x] Task 13 complete
 
 ### Task 14 — convert `src/client/components/**` EXCEPT `boards/` and `chat-ui/`
 

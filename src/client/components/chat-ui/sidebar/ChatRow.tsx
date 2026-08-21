@@ -68,8 +68,8 @@ function ChatRowImpl({
   if (trailingLabel) {
     if (showShortcutKeycap) {
       trailingLabelContent = (
-        <span className="hidden md:flex absolute inset-0 items-center justify-end pr-0.5 text-[11px] text-foreground transition-opacity duration-150 group-hover:opacity-0">
-          <Kbd className="h-4 min-w-4 rounded-sm border-border/50 bg-transparent px-1 text-[10px]">
+        <span className="hidden md:flex absolute inset-0 items-center justify-end pr-0.5 text-11 text-foreground transition-opacity duration-150 group-hover:opacity-0">
+          <Kbd className="h-4 min-w-4 rounded-sm border-border/50 bg-transparent px-1 text-10">
             {shortcutHint}
           </Kbd>
         </span>
@@ -78,7 +78,7 @@ function ChatRowImpl({
       trailingLabelContent = (
         <span
           className={cn(
-            "hidden md:flex absolute inset-0 items-center justify-end pr-1 text-[11px] tabular-nums transition-opacity duration-150 group-hover:opacity-0 whitespace-nowrap",
+            "hidden md:flex absolute inset-0 items-center justify-end pr-1 text-11 tabular-nums transition-opacity duration-150 group-hover:opacity-0 whitespace-nowrap",
             isLiveState ? chatDotTextClass(tone) : "text-muted-foreground"
           )}
         >
@@ -113,7 +113,7 @@ function ChatRowImpl({
         return badge ? (
           <HoverHint label={badge.title}>
             <span
-              className={cn("shrink-0 text-[10px] leading-none", badge.toneClass)}
+              className={cn("shrink-0 text-10 leading-none", badge.toneClass)}
               aria-label={badge.title}
             >
               {badge.glyph}
