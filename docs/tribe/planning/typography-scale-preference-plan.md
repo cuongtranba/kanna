@@ -150,7 +150,7 @@ each threading its own `const warnings: string[] = []` and asserting on it.
 passes; `normalizeTypographySettings({ scale: "nope" }, w)` returns `{ scale: "md" }` and pushes
 exactly one warning into `w`.
 
-- [ ] **Step 1: Commit** — exactly one commit ends this task:
+- [x] **Step 1: Commit** — exactly one commit ends this task:
 
 ```bash
 git add -A
@@ -158,7 +158,7 @@ git commit -m "feat(typography): settings normalizer for typography group" \
   -m $'Tribe-Card: typography-scale-preference\nTribe-Task: 2/16'
 ```
 
-- [ ] Task 2 complete
+- [x] Task 2 complete
 
 ### Task 3 — stylesheet foundation (P3, P5-CSS) · owns `src/index.css`, `src/server/design/typography-css.test.ts`
 
