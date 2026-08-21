@@ -52,4 +52,17 @@ describe("migratePreferencesState", () => {
     expect(migrated.typographyOverride).toBeUndefined()
     expect(migrated.typographyServerDefaultCache).toBeUndefined()
   })
+
+  test("garbage typography values are dropped to undefined while autoResumeOnRateLimit survives", () => {
+    // biome-ignore lint/suspicious/noExplicitAny: simulating untrusted/hand-edited localStorage JSON
+    const migrated = migratePreferencesState({
+      autoResumeOnRateLimit: true,
+      typographyOverride: "huge" as any,
+      typographyServerDefaultCache: 12345 as any,
+    })
+
+    expect(migrated.autoResumeOnRateLimit).toBe(true)
+    expect(migrated.typographyOverride).toBeUndefined()
+    expect(migrated.typographyServerDefaultCache).toBeUndefined()
+  })
 })

@@ -1,6 +1,6 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
-import type { FontScaleStep } from "../../shared/design/typography"
+import { isFontScaleStep, type FontScaleStep } from "../../shared/design/typography"
 
 interface PreferencesState {
   autoResumeOnRateLimit: boolean
@@ -25,8 +25,12 @@ export function migratePreferencesState(
 ): Pick<PreferencesState, "autoResumeOnRateLimit" | "typographyOverride" | "typographyServerDefaultCache"> {
   return {
     autoResumeOnRateLimit: Boolean(persistedState?.autoResumeOnRateLimit),
-    typographyOverride: persistedState?.typographyOverride,
-    typographyServerDefaultCache: persistedState?.typographyServerDefaultCache,
+    typographyOverride: isFontScaleStep(persistedState?.typographyOverride)
+      ? persistedState.typographyOverride
+      : undefined,
+    typographyServerDefaultCache: isFontScaleStep(persistedState?.typographyServerDefaultCache)
+      ? persistedState.typographyServerDefaultCache
+      : undefined,
   }
 }
 
