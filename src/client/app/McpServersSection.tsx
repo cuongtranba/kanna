@@ -199,7 +199,7 @@ function McpRow({
 
 function TransportBadge({ transport }: { transport: McpServerTransport }) {
   return (
-    <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase">{transport}</span>
+    <span className="rounded bg-muted px-1.5 py-0.5 text-10 uppercase">{transport}</span>
   )
 }
 

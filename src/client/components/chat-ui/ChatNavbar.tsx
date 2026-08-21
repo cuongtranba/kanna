@@ -80,7 +80,7 @@ function FollowingPill({ chatId }: { chatId?: string }) {
     <Tooltip>
       <TooltipTrigger asChild>
         <span
-          className="inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-full text-[10px] font-mono uppercase tracking-wide flex-shrink-0"
+          className="inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-full text-10 font-mono uppercase tracking-wide flex-shrink-0"
           style={{ background: "color-mix(in oklch, var(--muted) 60%, transparent)" }}
         >
           <span aria-hidden className="inline-block w-[6px] h-[6px] rounded-full" style={{ backgroundColor: "var(--warning)" }} />
@@ -340,7 +340,7 @@ export function ChatNavbar({
                         )}
                       >
                         {rightSidebarVisible ? <PanelRight strokeWidth={2.25} className="h-4" /> : <GitBranch strokeWidth={2.25} className="h-4" />}
-                        {branchLabel && !rightSidebarVisible ? <div className="text-[13px] font-mono max-w-[280px] truncate hidden md:block">{branchLabel}</div> : null}
+                        {branchLabel && !rightSidebarVisible ? <div className="text-13 font-mono max-w-[280px] truncate hidden md:block">{branchLabel}</div> : null}
                       </Button>
                     </HotkeyTooltipTrigger>
                     <HotkeyTooltipContent side="bottom" shortcut={rightSidebarShortcut} />

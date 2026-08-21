@@ -6,7 +6,7 @@ title: settings-page
 type: component
 category: feature
 parent: c3-1
-goal: 'Expose user settings: provider keys, theme, keybindings, chat preferences, notifications, data location.'
+goal: 'Expose user settings: provider keys, theme, typography scale, keybindings, chat preferences, notifications, data location.'
 uses:
     - ref-local-first-data
     - ref-zustand-store
@@ -17,7 +17,7 @@ uses:
 
 ## Goal
 
-Expose user settings: provider keys, theme, keybindings, chat preferences, notifications, data location.
+Expose user settings: provider keys, theme, typography scale, keybindings, chat preferences, notifications, data location.
 
 ## Parent Fit
 
@@ -31,7 +31,9 @@ Expose user settings: provider keys, theme, keybindings, chat preferences, notif
 
 ## Purpose
 
-Surfaces user-facing configuration: provider API keys, theme, custom keybindings, chat preferences, notification toggles, data directory, cloudflare tunnel toggles. Non-goals: server-side preference enforcement, secret storage policy, multi-user identity.
+Surfaces user-facing configuration: provider API keys, theme, typography scale, custom keybindings, chat preferences, notification toggles, data directory, cloudflare tunnel toggles. Non-goals: server-side preference enforcement, secret storage policy, multi-user identity.
+
+Typography scale is a root-font-size UI zoom: the row writes `typography.scale` into app settings, `TypographyProvider` (`src/client/hooks/useTypography.tsx`) resolves the effective step and writes the CSS custom-property map onto `<html>` through `DomPort`, and `html { font-size: calc(16px * var(--kanna-font-scale, 1)) }` scales every rem-valued token — type, spacing and radius alike. Because the app ships `user-scalable=no`, this row is the only way a user can enlarge Kanna's text, which gives it accessibility weight rather than polish. Font *family* selection is deliberately not built, but the applier writes a **map** of custom properties rather than one key, so adding a family later is an additive change here and in the stylesheet only.
 
 ## Foundational Flow
 
@@ -69,12 +71,17 @@ Surfaces user-facing configuration: provider API keys, theme, custom keybindings
 | Setting setters | OUT | Emit typed commands (keybindings.set, tunnel.set, ...) | c3-208 | src/client/app/SettingsPage.tsx |
 | Provider key form | IN/OUT | Reads/writes provider config via server | c3-203 | src/client/app/SettingsPage.tsx |
 | Share expiry row | IN/OUT | "Default share link expiry (hours)" input wired through settings.writeAppSettingsPatch | c3-228 | src/client/app/SettingsPage.tsx |
+| Typography Scale row | IN/OUT | Five-step UI zoom (sm/md/lg/xl/xxl). Shows the effective step, flags a device override, offers "Use account default". Writes the account default via settings.writeAppSettingsPatch ({ typography: { scale } }) | c3-102 | src/client/app/SettingsPage.tsx |
 
 ## Change Safety
 
 | Risk | Trigger | Detection | Required Verification |
 | --- | --- | --- | --- |
 | Lost preferences on schema bump | Persist field rename | Settings reset after upgrade | Add migrate in src/client/stores/ + bun run check |
+| Blank settings route with a green suite | Every test mounts the page by hand; none renders the real router | Blank white page at /settings only in the real app | src/client/app/SettingsPage.route.test.tsx must mount MemoryRouter + the real outlet context; enforced by scripts/verify-typography-scale.sh |
+| Typography scale stops reaching the document | Applier, DomPort method, or --kanna-font-scale rule removed | UI type size stops responding to the setting | bun test --conditions production src/client/hooks/useTypography.test.tsx + src/server/design/typography-css.test.ts |
+| Font-size flash on load | Pre-paint snippet in index.html drifts from the pure resolver | Whole layout reflows after hydration | src/server/design/prePaint.test.ts pins the shipped index.html snippet to resolveTypographyVars/resolveEffectiveScaleStep across the input matrix |
+| Arbitrary-px text creeps back | New text-[Npx] utility added under src/client | Type stops scaling on that element only | rules/no-arbitrary-px-text*.yml (bun run lint:usestate) + the CAP-0 ratchet in src/server/design/px-text-ratchet.test.ts |
 | Secret leakage | Provider key shown in DOM | Manual inspect of input element | bun run check + grep src/client/app/SettingsPage.tsx for plain logs |
 
 ## Derived Materials

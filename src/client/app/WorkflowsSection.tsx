@@ -178,7 +178,7 @@ export function WorkflowRunDetailDialog({ run, open, onClose }: WorkflowRunDetai
 function AgentPreviewBlock({ label, text }: { label: string; text: string }) {
   return (
     <div className="rounded border border-border/50 bg-muted/40 px-2 py-1">
-      <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{label}</span>
+      <span className="text-10 font-medium uppercase tracking-wide text-muted-foreground">{label}</span>
       <p className="whitespace-pre-wrap break-words text-xs text-muted-foreground/90">{text}</p>
     </div>
   )
@@ -211,7 +211,7 @@ function WorkflowAgentRow({
         <div className="flex items-center gap-2">
           <span className={cn("truncate text-sm text-foreground", live && "font-medium")}>{agent.label}</span>
           {agent.model ? (
-            <span className="shrink-0 rounded border border-border bg-card px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+            <span className="shrink-0 rounded border border-border bg-card px-1.5 py-0.5 text-10 font-medium text-muted-foreground">
               {agent.model}
             </span>
           ) : null}
@@ -220,7 +220,7 @@ function WorkflowAgentRow({
               type="button"
               data-testid={`workflow-agent-transcript:${agent.agentId}`}
               onClick={() => onSelectAgent?.(agent.agentId!)}
-              className="ml-auto inline-flex shrink-0 items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              className="ml-auto inline-flex shrink-0 items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 text-10 font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
               <FileText className="size-3" aria-hidden />
               Transcript
@@ -310,7 +310,7 @@ export function WorkflowRunDetail({ run, onSelectAgent, title }: WorkflowRunDeta
                 {group.phaseIndex != null ? (
                   <span
                     aria-hidden
-                    className="flex size-4 shrink-0 items-center justify-center rounded bg-muted text-[10px] font-medium text-muted-foreground tabular-nums"
+                    className="flex size-4 shrink-0 items-center justify-center rounded bg-muted text-10 font-medium text-muted-foreground tabular-nums"
                   >
                     {group.phaseIndex}
                   </span>
@@ -318,7 +318,7 @@ export function WorkflowRunDetail({ run, onSelectAgent, title }: WorkflowRunDeta
                 <h4 className="text-xs font-semibold uppercase tracking-wide text-foreground">
                   {group.title}
                 </h4>
-                <span className="text-[10px] text-muted-foreground tabular-nums">
+                <span className="text-10 text-muted-foreground tabular-nums">
                   {group.agents.length} {group.agents.length === 1 ? "agent" : "agents"}
                 </span>
               </div>

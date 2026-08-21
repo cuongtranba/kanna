@@ -84,7 +84,7 @@ export function AttachmentUploadOverlay({
           <span
             className={cn(
               "pointer-events-none select-none font-mono tabular-nums text-foreground transition-opacity",
-              size === "sm" ? "text-[10px]" : "text-xs",
+              size === "sm" ? "text-10" : "text-xs",
               onCancel && "group-hover/overlay:opacity-0",
             )}
           >

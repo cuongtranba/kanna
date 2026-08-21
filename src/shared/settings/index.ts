@@ -23,6 +23,9 @@ export { PUSH_DEFAULTS, normalizePushSettings } from "./push"
 export type { TelemetrySettings } from "./telemetry"
 export { TELEMETRY_DEFAULTS, normalizeTelemetrySettings } from "./telemetry"
 
+export type { TypographySettings } from "./typography"
+export { TYPOGRAPHY_DEFAULTS, normalizeTypographySettings } from "./typography"
+
 export type { UploadSettings } from "./uploads"
 export {
   UPLOAD_DEFAULTS,

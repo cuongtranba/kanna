@@ -318,11 +318,11 @@ export function BoardPane({ boardId, socket, chatFacts, onOpenCard, onOpenBoards
             <button
               type="button"
               onClick={handleOpenBoards}
-              className="shrink-0 rounded-md px-1.5 py-0.5 text-[13px] text-muted-foreground hover:bg-secondary hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className="shrink-0 rounded-md px-1.5 py-0.5 text-13 text-muted-foreground hover:bg-secondary hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             >
               Boards
             </button>
-            <span aria-hidden className="shrink-0 text-[13px] text-muted-foreground">
+            <span aria-hidden className="shrink-0 text-13 text-muted-foreground">
               /
             </span>
           </>
@@ -335,13 +335,13 @@ export function BoardPane({ boardId, socket, chatFacts, onOpenCard, onOpenBoards
             onKeyDown={handleTitleKey}
             onBlur={handleCommitRename}
             aria-label="Board name"
-            className="min-w-0 flex-1 rounded-md bg-secondary px-1.5 py-0.5 text-[15px] font-semibold text-foreground focus:outline-none"
+            className="min-w-0 flex-1 rounded-md bg-secondary px-1.5 py-0.5 text-15 font-semibold text-foreground focus:outline-none"
           />
         ) : (
           <button
             type="button"
             onClick={handleStartRename}
-            className="min-w-0 truncate rounded-md px-1.5 py-0.5 text-left text-[15px] font-semibold text-foreground hover:bg-secondary"
+            className="min-w-0 truncate rounded-md px-1.5 py-0.5 text-left text-15 font-semibold text-foreground hover:bg-secondary"
           >
             {view.board.title}
           </button>

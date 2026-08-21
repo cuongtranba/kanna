@@ -187,12 +187,12 @@ function CommitHistoryRow({ entry, isPendingPush = false, ports }: { entry: Chat
     tagSection = (
       <div className="flex shrink-0 flex-wrap justify-end gap-1">
         {entry.tags.map((tag) => (
-          <span key={tag} className="inline-flex items-center rounded-full bg-muted border border-border  px-2 py-0.5 text-[11px]">
+          <span key={tag} className="inline-flex items-center rounded-full bg-muted border border-border  px-2 py-0.5 text-11">
             {tag}
           </span>
         ))}
         {isPendingPush ? (
-          <span className="inline-flex items-center rounded-full bg-muted border border-border  px-2 py-0.5 text-[11px]">
+          <span className="inline-flex items-center rounded-full bg-muted border border-border  px-2 py-0.5 text-11">
             <ArrowUp className="size-3" />
           </span>
         ) : null}
@@ -201,7 +201,7 @@ function CommitHistoryRow({ entry, isPendingPush = false, ports }: { entry: Chat
   } else if (isPendingPush) {
     tagSection = (
       <div className="flex shrink-0 flex-wrap justify-end gap-1">
-        <span className="inline-flex items-center rounded-full bg-muted border border-border  px-2 py-0.5 text-[11px]">
+        <span className="inline-flex items-center rounded-full bg-muted border border-border  px-2 py-0.5 text-11">
           <ArrowUp className="size-3" />
         </span>
       </div>
@@ -581,7 +581,7 @@ function BranchListSection({
   return (
     <div className="space-y-1">
       <div className={cn(
-        "px-1 py-1 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground",
+        "px-1 py-1 text-11 font-medium uppercase tracking-[0.08em] text-muted-foreground",
         stickyTitle && "sticky top-0 z-10 bg-background"
       )}>
         {title}
@@ -611,7 +611,7 @@ function BranchListSection({
                 <div className="flex w-full items-center gap-3">
                   <div className="min-w-0 flex-1 overflow-hidden whitespace-nowrap text-sm text-foreground">{entry.displayName}</div>
                   {entry.updatedAt ? (
-                    <div className="ml-auto shrink-0 text-right text-[11px] text-muted-foreground">
+                    <div className="ml-auto shrink-0 text-right text-11 text-muted-foreground">
                       {formatRelativeTime(entry.updatedAt)}
                     </div>
                   ) : null}
@@ -1280,7 +1280,7 @@ function DiffFileCard({
               handleToggleRequest()
             }}
             className={cn(
-              "group/header sticky top-0 z-20 flex cursor-pointer items-center justify-between gap-3 bg-background pl-[7px] pr-2.5 py-1.5 text-[13px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
+              "group/header sticky top-0 z-20 flex cursor-pointer items-center justify-between gap-3 bg-background pl-[7px] pr-2.5 py-1.5 text-13 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
               !isCollapsed && !isStuck && "rounded-t-[calc(theme(borderRadius.lg)-1px)]",
               isCollapsed && "rounded-[calc(theme(borderRadius.lg)-1px)]",
               !isCollapsed && "border-b border-border/50"
@@ -1787,7 +1787,7 @@ function RightSidebarImpl({
             >
               {isSyncing ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
               <span>Pull</span>
-              <span className="inline-flex min-w-4 items-center justify-center rounded-full bg-muted px-1 text-[10px] text-muted-foreground">
+              <span className="inline-flex min-w-4 items-center justify-center rounded-full bg-muted px-1 text-10 text-muted-foreground">
                 {behindCount}
               </span>
             </Button>
@@ -1802,7 +1802,7 @@ function RightSidebarImpl({
             >
               {isSyncing ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
               <span>Push</span>
-              <span className="inline-flex min-w-4 items-center justify-center rounded-full bg-primary-foreground/15 px-1 text-[10px] text-primary-foreground">
+              <span className="inline-flex min-w-4 items-center justify-center rounded-full bg-primary-foreground/15 px-1 text-10 text-primary-foreground">
                 {aheadCount}
               </span>
             </Button>
@@ -1918,7 +1918,7 @@ function RightSidebarImpl({
             <div className="relative h-[40px]  flex min-w-0 items-center justify-center gap-[13px]">
               <div className="flex min-w-0 flex-1 items-center justify-between gap-[13px] relative">
                 {viewMode === "changes" ? (
-                  <div className="flex items-center gap-2 text-[11px] text-muted-foreground/70">
+                  <div className="flex items-center gap-2 text-11 text-muted-foreground/70">
                     <StageCheckbox
                       checked={allSelected}
                       mixed={someSelected}

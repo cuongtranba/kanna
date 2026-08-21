@@ -143,17 +143,17 @@ export function AttachmentFileCard({
   let subtitle: React.ReactNode
   if (isMention) {
     subtitle = (
-      <div className="max-w-[150px] truncate text-[11px] text-muted-foreground">
+      <div className="max-w-[150px] truncate text-11 text-muted-foreground">
         {mentionSubtitle ? `@${mentionSubtitle}` : "@mention"}
       </div>
     )
   } else if (disabledReason) {
-    subtitle = <div className="truncate text-[11px] text-muted-foreground">{disabledReason}</div>
+    subtitle = <div className="truncate text-11 text-muted-foreground">{disabledReason}</div>
   } else if (meta !== undefined) {
-    subtitle = <div className="truncate text-[11px] text-muted-foreground">{meta}</div>
+    subtitle = <div className="truncate text-11 text-muted-foreground">{meta}</div>
   } else {
     subtitle = (
-      <div className="truncate text-[11px] text-muted-foreground">
+      <div className="truncate text-11 text-muted-foreground">
         {attachment.mimeType} · {formatAttachmentSize(attachment.size)}
       </div>
     )
@@ -165,7 +165,7 @@ export function AttachmentFileCard({
         <LucideIconWrapper icon={Icon} className="size-5" />
       </div>
       <div className="min-w-0">
-        <div className={cn("max-w-[150px] truncate text-[13px] font-medium", isDisabled ? "text-muted-foreground line-through" : "text-foreground")}>
+        <div className={cn("max-w-[150px] truncate text-13 font-medium", isDisabled ? "text-muted-foreground line-through" : "text-foreground")}>
           {mentionLabel}
         </div>
         {subtitle}

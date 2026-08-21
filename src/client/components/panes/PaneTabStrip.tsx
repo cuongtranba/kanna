@@ -321,7 +321,7 @@ function PaneTab({
         <span
           aria-hidden
           data-tab-session-badge
-          className={cn("shrink-0 text-[10px] leading-none", sessionBadge.toneClass)}
+          className={cn("shrink-0 text-10 leading-none", sessionBadge.toneClass)}
         >
           {sessionBadge.glyph}
         </span>

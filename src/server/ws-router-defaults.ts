@@ -17,6 +17,7 @@ import {
   DEFAULT_OPENROUTER_SDK_MODEL,
   PUSH_DEFAULTS,
   TELEMETRY_DEFAULTS,
+  TYPOGRAPHY_DEFAULTS,
   UPLOAD_DEFAULTS,
 } from "../shared/types"
 import type {
@@ -92,6 +93,10 @@ export function mergeAppSettingsPatch(
     editor: {
       ...snapshot.editor,
       ...patch.editor,
+    },
+    typography: {
+      ...snapshot.typography,
+      ...patch.typography,
     },
     providerDefaults: {
       claude: {
@@ -169,6 +174,7 @@ export function buildInitialAppSettingsSnapshot(): AppSettingsSnapshot {
     analyticsEnabled: true,
     browserSettingsMigrated: false,
     theme: "system",
+    typography: TYPOGRAPHY_DEFAULTS,
     chatSoundPreference: "always",
     chatSoundId: "funk",
     terminal: {

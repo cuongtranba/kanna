@@ -335,7 +335,7 @@ export function CardDrawer({
     >
       <header className="flex items-start gap-2 border-b border-border px-4 py-3">
         <div className="min-w-0 flex-1">
-          <h2 className="text-[15px] font-semibold leading-snug text-foreground [text-wrap:pretty]">
+          <h2 className="text-15 font-semibold leading-snug text-foreground [text-wrap:pretty]">
             {card?.title ?? "Loading…"}
           </h2>
           {detail?.externalRef ? (
@@ -352,7 +352,7 @@ export function CardDrawer({
         </button>
       </header>
 
-      {error ? <p className="px-4 py-2 text-[13px] text-destructive-text">{error}</p> : null}
+      {error ? <p className="px-4 py-2 text-13 text-destructive-text">{error}</p> : null}
 
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-4">
         {startWork ? (
@@ -371,18 +371,18 @@ export function CardDrawer({
               </span>
             </div>
             {startWork.blockedReason ? (
-              <p className="text-[13px] text-muted-foreground">{startWork.blockedReason}</p>
+              <p className="text-13 text-muted-foreground">{startWork.blockedReason}</p>
             ) : null}
-            {startWorkNote ? <p className="text-[13px] text-muted-foreground">{startWorkNote}</p> : null}
+            {startWorkNote ? <p className="text-13 text-muted-foreground">{startWorkNote}</p> : null}
           </section>
         ) : null}
 
         {cleanup ? (
           <section className="space-y-2 border border-border p-3">
-            <p className="text-[13px] text-foreground [text-wrap:pretty]">
+            <p className="text-13 text-foreground [text-wrap:pretty]">
               This card is done. What should happen to <span className="font-mono">{cleanup.branch}</span>?
             </p>
-            <p className="text-[13px] tabular-nums text-muted-foreground">
+            <p className="text-13 tabular-nums text-muted-foreground">
               {describeWorktreeContents(cleanup)}
             </p>
             <div className="flex flex-wrap items-center gap-2">
@@ -402,8 +402,8 @@ export function CardDrawer({
               </Button>
             </div>
             {/* A refusal, not a confirmation: uncommitted work exists nowhere else. */}
-            {discardBlocked ? <p className="text-[13px] text-muted-foreground">{discardBlocked}</p> : null}
-            {mergeBlocked ? <p className="text-[13px] text-muted-foreground">{mergeBlocked}</p> : null}
+            {discardBlocked ? <p className="text-13 text-muted-foreground">{discardBlocked}</p> : null}
+            {mergeBlocked ? <p className="text-13 text-muted-foreground">{mergeBlocked}</p> : null}
           </section>
         ) : null}
 
@@ -428,7 +428,7 @@ export function CardDrawer({
           still reads as prose without this code knowing what a description is.
         */}
         {fields.length > 0 ? (
-          <dl className="space-y-3 text-[13px]">
+          <dl className="space-y-3 text-13">
             {fields.map((field) => (
               <CardFieldRow
                 key={field.id}
@@ -444,13 +444,13 @@ export function CardDrawer({
         <section>
           <h3 className="mb-2 text-xs font-medium text-muted-foreground">Comments</h3>
           {detail && detail.comments.length === 0 ? (
-            <p className="text-[13px] text-muted-foreground">Nothing recorded yet.</p>
+            <p className="text-13 text-muted-foreground">Nothing recorded yet.</p>
           ) : null}
           <ul className="space-y-3">
             {(detail?.comments ?? []).map((comment) => (
               <li key={comment.id} className="border-b border-border pb-3 last:border-b-0">
                 <p className="text-xs text-muted-foreground">{authorLabel(comment.author.kind)}</p>
-                <p className="whitespace-pre-wrap text-[13px] text-foreground">{comment.body}</p>
+                <p className="whitespace-pre-wrap text-13 text-foreground">{comment.body}</p>
               </li>
             ))}
           </ul>
@@ -525,7 +525,7 @@ function ReadOnlyFieldValue({ field, value }: Pick<CardFieldProps, "field" | "va
   return (
     <span
       className={cn(
-        "px-1.5 py-0.5 text-[13px]",
+        "px-1.5 py-0.5 text-13",
         display === "" ? "text-muted-foreground" : "text-foreground",
       )}
     >
@@ -627,7 +627,7 @@ function InlineFieldValue({ field, value, onCommit }: CardFieldProps) {
         onBlur={handleCommit}
         onKeyDown={handleKey}
         className={cn(
-          "w-full rounded-md border border-border bg-background px-1.5 py-0.5 text-[13px] text-foreground",
+          "w-full rounded-md border border-border bg-background px-1.5 py-0.5 text-13 text-foreground",
           "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
           numeric && "tabular-nums",
         )}
@@ -709,7 +709,7 @@ function SelectFieldValue({ field, value, onCommit }: CardFieldProps) {
     <Select value={optionId === null ? CLEAR_SELECTION : optionValue(optionId)} onValueChange={handleChange}>
       <SelectTrigger
         aria-label={field.label}
-        className="h-8 px-2 text-[13px] [&>span]:flex [&>span]:min-w-0 [&>span]:items-center [&>span]:gap-2"
+        className="h-8 px-2 text-13 [&>span]:flex [&>span]:min-w-0 [&>span]:items-center [&>span]:gap-2"
       >
         <SelectValue placeholder={emptyHint(field)} />
       </SelectTrigger>
@@ -795,7 +795,7 @@ function LinkedChat({ chatId, chat }: { chatId: string; chat: BoardChatFacts | u
   }, [chatId])
 
   if (!chat) {
-    return <li className="px-1.5 py-1 text-[13px] text-muted-foreground">This chat no longer exists.</li>
+    return <li className="px-1.5 py-1 text-13 text-muted-foreground">This chat no longer exists.</li>
   }
 
   const indicator = chatStatusIndicator(chat)
@@ -814,7 +814,7 @@ function LinkedChat({ chatId, chat }: { chatId: string; chat: BoardChatFacts | u
             <span className={cn("size-1.5 rounded-full", chatDotBgClass(indicator.tone))} />
           ) : null}
         </span>
-        <span className="min-w-0 flex-1 truncate text-[13px] text-foreground">{chat.title}</span>
+        <span className="min-w-0 flex-1 truncate text-13 text-foreground">{chat.title}</span>
         {/* The word, always — colour never carries the state on its own. */}
         <span className="shrink-0 text-xs text-muted-foreground">
           {indicator?.label ?? statusLabel(chat.status)}

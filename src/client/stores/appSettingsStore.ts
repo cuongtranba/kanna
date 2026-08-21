@@ -30,6 +30,10 @@ export function mergeAppSettingsPatch(
       ...settings.editor,
       ...patch.editor,
     },
+    typography: {
+      ...settings.typography,
+      ...patch.typography,
+    },
     providerDefaults: {
       claude: {
         ...settings.providerDefaults.claude,

@@ -2306,15 +2306,18 @@ hook fires after the sweep has already failed the test.
 Public docs site lives in `wiki/` (Astro Starlight) and is deployed to
 https://kanna-wiki.lowbit.link on every push to `main` that touches `wiki/**`.
 
-Regenerate screenshots:
+The Playwright harness this repo ships lives at `e2e/` (`*.pw.ts` specs,
+`e2e/playwright.config.ts`), boots the production single-process server
+against a seeded temp `KANNA_HOME`, drives real Chrome, and is run on
+demand:
 
 ```bash
-bash wiki/scripts/capture-all.sh
+bun run test:e2e
 ```
 
-This spawns a seeded demo Kanna under a tmpdir `KANNA_HOME`, captures all
-~32 PNGs via Playwright, and writes them to `wiki/public/screenshots/`.
-Commit the PNGs.
+It is deliberately off the CI critical path — never wired into
+`.github/workflows/test.yml` — because it needs a real Chrome, not the
+happy-dom `bun test` runs against.
 
 Regenerate env-var reference table:
 

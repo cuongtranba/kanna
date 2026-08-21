@@ -21,7 +21,7 @@ describe("renderMarkdownToReact", () => {
   test("renders h1 with correct class", () => {
     const html = render("# Hello")
     expect(html).toContain("<h1")
-    expect(html).toContain("text-[20px]")
+    expect(html).toContain("text-20")
     expect(html).toContain("font-normal")
     expect(html).toContain("Hello")
   })
@@ -29,21 +29,21 @@ describe("renderMarkdownToReact", () => {
   test("renders h2 with correct class", () => {
     const html = render("## World")
     expect(html).toContain("<h2")
-    expect(html).toContain("text-[18px]")
+    expect(html).toContain("text-18")
     expect(html).toContain("World")
   })
 
   test("renders h3 with correct class", () => {
     const html = render("### Sub")
     expect(html).toContain("<h3")
-    expect(html).toContain("text-[16px]")
+    expect(html).toContain("text-16")
     expect(html).toContain("Sub")
   })
 
   test("renders h4 through h6 with same class as h3", () => {
     const h4 = render("#### Four")
     expect(h4).toContain("<h4")
-    expect(h4).toContain("text-[16px]")
+    expect(h4).toContain("text-16")
 
     const h5 = render("##### Five")
     expect(h5).toContain("<h5")

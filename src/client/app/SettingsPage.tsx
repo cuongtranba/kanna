@@ -112,6 +112,7 @@ import {
 import { useChatPreferencesStore } from "../stores/chatPreferencesStore"
 import { CHAT_SOUND_OPTIONS, useChatSoundPreferencesStore, type ChatSoundId, type ChatSoundPreference } from "../stores/chatSoundPreferencesStore"
 import { usePreferencesStore } from "../stores/preferences"
+import { isFontScaleStep, resolveEffectiveScaleStep, type FontScaleStep } from "../../shared/design/typography"
 import type { KannaState } from "./useKannaState"
 import { PushNotificationsSection } from "../components/settings/PushNotificationsSection"
 import {
@@ -199,6 +200,14 @@ const themeOptions: Array<{ value: ThemePreference; label: string; icon: typeof 
   { value: "light", label: "Light", icon: Sun },
   { value: "dark", label: "Dark", icon: Moon },
   { value: "system", label: "System", icon: Monitor },
+]
+
+const typographyScaleOptions: { value: FontScaleStep; label: string }[] = [
+  { value: "sm", label: "Small" },
+  { value: "md", label: "Default" },
+  { value: "lg", label: "Large" },
+  { value: "xl", label: "Extra Large" },
+  { value: "xxl", label: "XX-Large" },
 ]
 
 const chatSoundPreferenceOptions: { value: ChatSoundPreference; label: string }[] = [
@@ -965,7 +974,7 @@ function SettingsRow({
       >
         <div className="min-w-0 max-w-xl">
           <div className="text-sm font-medium text-foreground">{title}</div>
-          <div className="mt-1 text-[13px] text-muted-foreground">{description}</div>
+          <div className="mt-1 text-13 text-muted-foreground">{description}</div>
         </div>
         <div className="flex items-center justify-start md:shrink-0 md:justify-end">{children}</div>
       </div>
@@ -1127,6 +1136,10 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
   const llmProvider = state.llmProvider
   const autoResumeOnRateLimit = usePreferencesStore((state) => state.autoResumeOnRateLimit)
   const setAutoResumeOnRateLimit = usePreferencesStore((state) => state.setAutoResumeOnRateLimit)
+  const typographyOverride = usePreferencesStore((state) => state.typographyOverride)
+  const clearTypographyOverride = usePreferencesStore((state) => state.clearTypographyOverride)
+  const typographyServerDefault = useAppSettingsStore((store) => store.settings?.typography.scale)
+  const effectiveTypographyScale = resolveEffectiveScaleStep(typographyOverride, typographyServerDefault)
   const defaultProvider = useChatPreferencesStore((store) => store.defaultProvider)
   const providerDefaults = useChatPreferencesStore((store) => store.providerDefaults)
   const setDefaultProvider = useChatPreferencesStore((store) => store.setDefaultProvider)
@@ -1514,6 +1527,12 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
     })
   }
 
+  function handleTypographyScaleChange(nextScale: FontScaleStep) {
+    void handleWriteAppSettings({ typography: { scale: nextScale } }).catch((error) => {
+      setAppSettingsError(error instanceof Error ? error.message : "Unable to save typography settings.")
+    })
+  }
+
   function handleEditorPresetChange(nextPreset: EditorPreset) {
     setEditorPreset(nextPreset)
     const commandTemplate = nextPreset === "custom" ? editorCommandTemplate : getDefaultEditorCommandTemplate(nextPreset)
@@ -1757,7 +1776,7 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
       <div className="flex min-w-0 flex-1">
         <aside className={`hidden w-[200px] shrink-0 md:block ${showFooter ? "pb-[89px]" : ""}`}>
           <div className="flex flex-col gap-1 px-4 py-6">
-            <div className="px-3 pb-5 text-[22px] font-extrabold tracking-[-0.5px] text-foreground">
+            <div className="px-3 pb-5 text-22 font-extrabold tracking-[-0.5px] text-foreground">
               Settings
             </div>
             {sidebarItems.map((item) => {
@@ -1777,7 +1796,7 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
                     <item.icon className="h-4 w-4 shrink-0" />
                     <span>{item.label}</span>
                     {showUpdateBadge ? (
-                      <span className="ml-auto inline-flex items-center rounded-full bg-logo/20 px-2 py-0.5 text-[10px] font-bold tracking-wider text-logo">
+                      <span className="ml-auto inline-flex items-center rounded-full bg-logo/20 px-2 py-0.5 text-10 font-bold tracking-wider text-logo">
                         UPDATE
                       </span>
                     ) : null}
@@ -1944,6 +1963,40 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
                       </SettingsRow>
 
                       <SettingsRow
+                        title="Typography Scale"
+                        description={
+                          typographyOverride
+                            ? "This device uses its own text size instead of the account default."
+                            : "Choose how large text and UI elements appear across the app."
+                        }
+                      >
+                        <div className="flex items-center gap-3">
+                          <Select
+                            value={effectiveTypographyScale}
+                            onValueChange={(value) => { if (isFontScaleStep(value)) handleTypographyScaleChange(value) }}
+                          >
+                            <SelectTrigger className="min-w-[180px]">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectGroup>
+                                {typographyScaleOptions.map((option) => (
+                                  <SelectItem key={option.value} value={option.value}>
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectGroup>
+                            </SelectContent>
+                          </Select>
+                          {typographyOverride ? (
+                            <Button type="button" variant="link" size="sm" onClick={clearTypographyOverride}>
+                              Use account default
+                            </Button>
+                          ) : null}
+                        </div>
+                      </SettingsRow>
+
+                      <SettingsRow
                         title="Chat Sounds"
                         description="Play a pop when a chat starts waiting on you or the unread chat count increases"
                       >
@@ -2021,7 +2074,7 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
                           <div className="flex justify-between gap-8 py-5 pl-6">
                             <div className="min-w-0 max-w-xl">
                               <div className="text-sm font-medium text-foreground">Command Template</div>
-                              <div className="mt-1 text-[13px] text-muted-foreground">
+                              <div className="mt-1 text-13 text-muted-foreground">
                                 Include {"{path}"} and optionally {"{line}"} and {"{column}"} in your command.
                               </div>
                             </div>
@@ -2654,19 +2707,19 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
           <div className="px-6 py-[14.25px]">
             <div className="grid gap-3 text-xs text-muted-foreground grid-cols-2 lg:grid-cols-4">
               <div>
-                <div className="mb-1 uppercase tracking-wide text-[11px] text-muted-foreground/80">Machine</div>
+                <div className="mb-1 uppercase tracking-wide text-11 text-muted-foreground/80">Machine</div>
                 <div className="text-foreground/80">{machineName}</div>
               </div>
               <div className="hidden md:block">
-                <div className="mb-1 uppercase tracking-wide text-[11px] text-muted-foreground/80">Connection</div>
+                <div className="mb-1 uppercase tracking-wide text-11 text-muted-foreground/80">Connection</div>
                 <div className="text-foreground/80">{state.connectionStatus}</div>
               </div>
               <div className="hidden md:block">
-                <div className="mb-1 uppercase tracking-wide text-[11px] text-muted-foreground/80">Projects Indexed</div>
+                <div className="mb-1 uppercase tracking-wide text-11 text-muted-foreground/80">Projects Indexed</div>
                 <div className="text-foreground/80">{projectCount}</div>
               </div>
               <div>
-                <div className="mb-1 uppercase tracking-wide text-[11px] text-muted-foreground/80">App Version</div>
+                <div className="mb-1 uppercase tracking-wide text-11 text-muted-foreground/80">App Version</div>
                 <div className="text-foreground/80">{appVersion}</div>
               </div>
             </div>

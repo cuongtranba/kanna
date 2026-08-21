@@ -66,7 +66,7 @@ interface RowProps {
 function StatusPill({ phase }: { phase: PtyInstancePhase }) {
   return (
     <span
-      className="inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-full text-[10px] font-mono uppercase tracking-wide tabular-nums"
+      className="inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-full text-10 font-mono uppercase tracking-wide tabular-nums"
       style={{ background: "color-mix(in oklch, var(--muted) 60%, transparent)" }}
     >
       <span
@@ -114,7 +114,7 @@ function PtyInstanceRowContent({ instance, onOpenChat, onCancel, onKill }: RowPr
         <StatusPill phase={instance.phase} />
       </div>
 
-      <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-muted-foreground font-mono tabular-nums">
+      <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-11 text-muted-foreground font-mono tabular-nums">
         <TruncatedText tooltip={instance.cwd}>
           <span className="text-foreground/40">cwd</span> {shortenCwd(instance.cwd)}
         </TruncatedText>
@@ -169,14 +169,14 @@ function PtyInstanceRowContent({ instance, onOpenChat, onCancel, onKill }: RowPr
           <button
             type="button"
             onClick={() => onOpenChat(instance.chatId)}
-            className="text-[10px] font-mono px-2 py-1 rounded-md border border-border/60 hover:bg-muted/40 transition-colors"
+            className="text-10 font-mono px-2 py-1 rounded-md border border-border/60 hover:bg-muted/40 transition-colors"
           >
             open
           </button>
           <button
             type="button"
             onClick={() => onCancel(instance.chatId)}
-            className="text-[10px] font-mono px-2 py-1 rounded-md border border-border/60 hover:bg-muted/40 transition-colors"
+            className="text-10 font-mono px-2 py-1 rounded-md border border-border/60 hover:bg-muted/40 transition-colors"
           >
             cancel
           </button>
@@ -184,7 +184,7 @@ function PtyInstanceRowContent({ instance, onOpenChat, onCancel, onKill }: RowPr
             type="button"
             onClick={handleKillClick}
             onBlur={() => storeApi.getState().setConfirmKill(false)}
-            className="text-[10px] font-mono px-2 py-1 rounded-md border transition-colors ml-auto"
+            className="text-10 font-mono px-2 py-1 rounded-md border transition-colors ml-auto"
             style={{
               borderColor: confirmKill ? "var(--destructive)" : "var(--border)",
               color: confirmKill ? "var(--destructive)" : undefined,
@@ -195,7 +195,7 @@ function PtyInstanceRowContent({ instance, onOpenChat, onCancel, onKill }: RowPr
           </button>
         </div>
       ) : (
-        <div className="text-[10px] font-mono text-muted-foreground pt-1">
+        <div className="text-10 font-mono text-muted-foreground pt-1">
           exited{instance.exitCode !== null ? ` · code ${instance.exitCode}` : ""}
         </div>
       )}
@@ -259,7 +259,7 @@ export function PtyInstancesIndicatorView({
           <h3 className="text-xs font-mono uppercase tracking-wider text-foreground/60">
             claude pty instances
           </h3>
-          <span className="text-[10px] font-mono text-muted-foreground tabular-nums">
+          <span className="text-10 font-mono text-muted-foreground tabular-nums">
             {liveCount} live
           </span>
         </div>

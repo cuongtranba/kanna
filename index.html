@@ -22,6 +22,18 @@
         document
           .querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')
           ?.setAttribute("content", resolved === "dark" ? "black-translucent" : "default")
+
+        try {
+          const parsed = JSON.parse(localStorage.getItem("kanna-preferences"))
+          const override = parsed?.state?.typographyOverride
+          const cache = parsed?.state?.typographyServerDefaultCache
+          const multipliers = { sm: 0.875, md: 1, lg: 1.125, xl: 1.25, xxl: 1.5 }
+          const isStep = (value) => typeof value === "string" && Object.hasOwn(multipliers, value)
+          const step = isStep(override) ? override : cache
+          if (isStep(step)) {
+            document.documentElement.style.setProperty("--kanna-font-scale", String(multipliers[step]))
+          }
+        } catch {}
       })()
     </script>
     <title>Kanna</title>

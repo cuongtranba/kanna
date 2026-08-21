@@ -1,0 +1,14 @@
+id: no-arbitrary-px-text
+valid:
+  # scale token, not a raw px value
+  - '"text-[--text-3]"'
+  # named Tailwind size utility
+  - '"text-sm font-medium"'
+  # arbitrary px value on an unrelated utility — not text-*
+  - '"w-[14px] h-[14px]"'
+  # px inside an arbitrary color/shadow value, not text-[Npx]
+  - '"shadow-[0_1px_2px_rgba(0,0,0,0.1)]"'
+invalid:
+  - '"text-[14px]"'
+  - '"text-[22px] font-semibold"'
+  - '"flex items-center text-[10px] text-muted-foreground"'

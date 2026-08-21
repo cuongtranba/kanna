@@ -10,7 +10,7 @@ interface Props {
 
 function StartedPill() {
   return (
-    <span className="inline-flex items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+    <span className="inline-flex items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 text-10 font-medium uppercase tracking-wide text-muted-foreground">
       started…
     </span>
   )

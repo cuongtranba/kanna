@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test"
-import { getMacOptionInputSequence, getTerminalOptions } from "./TerminalPane"
+import { getMacOptionInputSequence, getTerminalFontSize, getTerminalOptions } from "./TerminalPane"
 
 describe("getTerminalOptions", () => {
   test("treats Option as Meta on macOS", () => {
-    const options = getTerminalOptions(1_000, { foreground: "#fff" }, "MacIntel")
+    const options = getTerminalOptions(1_000, { foreground: "#fff" }, 13, "MacIntel")
 
     expect(options.macOptionIsMeta).toBe(true)
     expect(options.scrollback).toBe(1_000)
@@ -11,10 +11,37 @@ describe("getTerminalOptions", () => {
   })
 
   test("does not enable macOS Option behavior on non-mac platforms", () => {
-    const options = getTerminalOptions(500, { foreground: "#fff" }, "Linux x86_64")
+    const options = getTerminalOptions(500, { foreground: "#fff" }, 13, "Linux x86_64")
 
     expect(options.macOptionIsMeta).toBe(false)
     expect(options.scrollback).toBe(500)
+  })
+
+  test("takes the font size as a parameter instead of hardcoding it", () => {
+    const options = getTerminalOptions(500, { foreground: "#fff" }, 20, "MacIntel")
+
+    expect(options.fontSize).toBe(20)
+  })
+})
+
+describe("getTerminalFontSize", () => {
+  test("md (default) resolves to the base 13px size", () => {
+    expect(getTerminalFontSize("md")).toBe(13)
+  })
+
+  test("scales up with lg/xl/xxl, rounded to the nearest pixel", () => {
+    expect(getTerminalFontSize("lg")).toBe(15) // 13 * 1.125 = 14.625 -> 15
+    expect(getTerminalFontSize("xl")).toBe(16) // 13 * 1.25  = 16.25  -> 16
+    expect(getTerminalFontSize("xxl")).toBe(20) // 13 * 1.5   = 19.5   -> 20
+  })
+
+  test("scales down with sm, rounded to the nearest pixel", () => {
+    expect(getTerminalFontSize("sm")).toBe(11) // 13 * 0.875 = 11.375 -> 11
+  })
+
+  test("falls back to the base size for garbage input, same as resolveFontScale", () => {
+    expect(getTerminalFontSize("huge")).toBe(13)
+    expect(getTerminalFontSize(undefined)).toBe(13)
   })
 })
 

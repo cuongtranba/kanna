@@ -72,13 +72,22 @@
       borders on the same lines. Consume it through SHELL_TOP_BAND_CLASS
       (src/client/lib/shellChrome.ts), never by re-typing a pixel height.
     */
-    --shell-top-band: 64px;
+    --shell-top-band: 4rem;
+
+    /*
+      Font stacks, named so a family swap is a value change here, not a hunt
+      through every consuming rule. Values are byte-identical to what they
+      replace — this is a redirection, not a restyle.
+    */
+    --kanna-font-body: "Body", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --kanna-font-logo: "Bricolage Grotesque Variable", "Bricolage Grotesque", sans-serif;
+    --kanna-font-mono: "Roboto Mono", monospace;
   }
 
   /* Tailwind `md:` — the one responsive pivot (BREAKPOINT_MD in lib/viewport.ts). */
   @media (min-width: 768px) {
     :root {
-      --shell-top-band: 55px;
+      --shell-top-band: 3.4375rem;
     }
   }
 
@@ -153,6 +162,20 @@
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
+
+  /* Typography steps, named for their px size at scale 1.0 (root 16px).
+     Deliberately NO --text-N--line-height pair: these must set font-size only,
+     exactly like the text-[Npx] utilities they replace. */
+  --text-9: 0.5625rem;
+  --text-10: 0.625rem;
+  --text-11: 0.6875rem;
+  --text-12: 0.75rem;
+  --text-13: 0.8125rem;
+  --text-15: 0.9375rem;
+  --text-16: 1rem;
+  --text-18: 1.125rem;
+  --text-20: 1.25rem;
+  --text-22: 1.375rem;
 }
 
 @layer base {
@@ -167,10 +190,16 @@
     overflow: hidden;
   }
 
+  /* User-adjustable typography scale (Settings > General). The `, 1`
+     fallback means no-JS and pre-hydration render exactly as today. */
+  html {
+    font-size: calc(16px * var(--kanna-font-scale, 1));
+  }
+
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
-    font-family: "Body", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-family: var(--kanna-font-body);
     /* font-weight: ; */
     margin: 0;
     min-height: 100dvh;
@@ -179,15 +208,17 @@
   }
 
   .font-logo {
-    font-family: "Bricolage Grotesque Variable", "Bricolage Grotesque", sans-serif;
+    font-family: var(--kanna-font-logo);
     font-weight: 800;
   }
 
-  /* Prevent iOS zoom on input focus */
+  /* Prevent iOS zoom on input focus. Scales UP with the typography
+     preference but never below 16px — dropping this floor would reintroduce
+     iOS zoom-on-focus (Mobile-Input-16 Rule, DESIGN.md:207). */
   input,
   textarea,
   select {
-    font-size: 16px;
+    font-size: max(16px, 1rem);
     touch-action: manipulation;
   }
 
@@ -264,7 +295,7 @@
 
   code,
   pre {
-    font-family: "Roboto Mono", monospace;
+    font-family: var(--kanna-font-mono);
   }
 
   .prose code {
@@ -315,7 +346,7 @@
     --diffs-dark-bg: var(--background) !important;
     --diffs-gap-block: 0px !important;
     --diffs-bg-separator: var(--background) !important;
-    --diffs-font-size: 11px;
+    --diffs-font-size: 0.6875rem;
   }
 
   [data-panel][data-terminal-open] {

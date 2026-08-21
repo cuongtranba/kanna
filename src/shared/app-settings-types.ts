@@ -23,6 +23,8 @@ import type { PushSettings } from "./settings/push"
 import { PUSH_DEFAULTS } from "./settings/push"
 import type { TelemetrySettings } from "./settings/telemetry"
 import { TELEMETRY_DEFAULTS } from "./settings/telemetry"
+import type { TypographySettings } from "./settings/typography"
+import { TYPOGRAPHY_DEFAULTS } from "./settings/typography"
 import type { UploadSettings } from "./settings/uploads"
 import {
   UPLOAD_DEFAULTS,
@@ -37,6 +39,7 @@ export type {
   CloudflareTunnelState,
   PushSettings,
   TelemetrySettings,
+  TypographySettings,
   UploadSettings,
 }
 export {
@@ -46,6 +49,7 @@ export {
   CLOUDFLARE_TUNNEL_DEFAULTS,
   PUSH_DEFAULTS,
   TELEMETRY_DEFAULTS,
+  TYPOGRAPHY_DEFAULTS,
   UPLOAD_DEFAULTS,
   UPLOAD_MAX_FILE_SIZE_MB_MAX,
   UPLOAD_MAX_FILE_SIZE_MB_MIN,
@@ -283,6 +287,7 @@ export interface AppSettingsSnapshot {
   analyticsEnabled: boolean
   browserSettingsMigrated: boolean
   theme: AppThemePreference
+  typography: TypographySettings
   chatSoundPreference: ChatSoundPreference
   chatSoundId: ChatSoundId
   terminal: {
@@ -333,6 +338,7 @@ export interface AppSettingsPatch {
   analyticsEnabled?: boolean
   browserSettingsMigrated?: boolean
   theme?: AppThemePreference
+  typography?: Partial<TypographySettings>
   chatSoundPreference?: ChatSoundPreference
   chatSoundId?: ChatSoundId
   terminal?: Partial<AppSettingsSnapshot["terminal"]>

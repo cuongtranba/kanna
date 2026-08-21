@@ -157,6 +157,9 @@ export interface DomPort {
   /** Sets `document.documentElement.style.colorScheme`. */
   setDocumentElementColorScheme(scheme: "light" | "dark"): void
 
+  /** Sets a CSS property on `document.documentElement.style` (e.g. a CSS custom property). */
+  setDocumentElementStyleProperty(property: string, value: string): void
+
   /** Calls `document.documentElement.classList.toggle(className, force)`. */
   toggleDocumentElementClass(className: string, force: boolean): void
 

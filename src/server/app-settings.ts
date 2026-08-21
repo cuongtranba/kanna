@@ -15,6 +15,7 @@ import {
   normalizeCloudflareTunnelSettings,
   normalizePushSettings,
   normalizeTelemetrySettings,
+  normalizeTypographySettings,
   normalizeUploadSettings,
 } from "../shared/settings/index"
 import {
@@ -99,6 +100,7 @@ interface AppSettingsFile {
   analyticsUserId?: string
   browserSettingsMigrated?: boolean
   theme?: string
+  typography?: { scale?: string }
   chatSoundPreference?: string
   chatSoundId?: string
   terminal?: {
@@ -857,6 +859,7 @@ function toFilePayload(state: AppSettingsState) {
     analyticsUserId: state.analyticsUserId,
     browserSettingsMigrated: state.browserSettingsMigrated,
     theme: state.theme,
+    typography: state.typography,
     chatSoundPreference: state.chatSoundPreference,
     chatSoundId: state.chatSoundId,
     terminal: state.terminal,
@@ -886,6 +889,7 @@ function toSnapshot(state: AppSettingsState): AppSettingsSnapshot {
     analyticsEnabled: state.analyticsEnabled,
     browserSettingsMigrated: state.browserSettingsMigrated,
     theme: state.theme,
+    typography: state.typography,
     chatSoundPreference: state.chatSoundPreference,
     chatSoundId: state.chatSoundId,
     terminal: state.terminal,
@@ -967,6 +971,7 @@ function normalizeAppSettings<T>(
     analyticsUserId,
     browserSettingsMigrated: source?.browserSettingsMigrated === true,
     theme: normalizeTheme(source?.theme),
+    typography: normalizeTypographySettings(source?.typography, warnings),
     chatSoundPreference: normalizeChatSoundPreference(source?.chatSoundPreference),
     chatSoundId: normalizeChatSoundId(source?.chatSoundId),
     terminal: {
@@ -1018,6 +1023,7 @@ function toComparablePayload(source: AppSettingsFile) {
     analyticsUserId: typeof source.analyticsUserId === "string" ? source.analyticsUserId.trim() : source.analyticsUserId,
     browserSettingsMigrated: source.browserSettingsMigrated,
     theme: source.theme,
+    typography: source.typography,
     chatSoundPreference: source.chatSoundPreference,
     chatSoundId: source.chatSoundId,
     terminal: source.terminal,
@@ -1560,6 +1566,10 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
     editor: {
       ...state.editor,
       ...patch.editor,
+    },
+    typography: {
+      ...state.typography,
+      ...patch.typography,
     },
     providerDefaults: {
       claude: {

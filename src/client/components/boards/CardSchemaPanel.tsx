@@ -91,7 +91,7 @@ export function CardSchemaPanel({ boardId, socket, onClose }: CardSchemaPanelPro
       aria-label="Card fields"
     >
       <header className="flex items-start gap-2 border-b border-border px-4 py-3">
-        <h2 className="min-w-0 flex-1 text-[15px] font-semibold leading-snug text-foreground">Card fields</h2>
+        <h2 className="min-w-0 flex-1 text-15 font-semibold leading-snug text-foreground">Card fields</h2>
         <button
           type="button"
           onClick={onClose}
@@ -102,16 +102,16 @@ export function CardSchemaPanel({ boardId, socket, onClose }: CardSchemaPanelPro
         </button>
       </header>
 
-      {error ? <p className="px-4 py-2 text-[13px] text-destructive-text">{error}</p> : null}
+      {error ? <p className="px-4 py-2 text-13 text-destructive-text">{error}</p> : null}
 
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-4">
-        <p className="text-[13px] text-muted-foreground [text-wrap:pretty]">
+        <p className="text-13 text-muted-foreground [text-wrap:pretty]">
           What every card on this board has, in the order the card opens them. Cards keep the values of a
           field you remove, and get them back if you add it again.
         </p>
 
         {draft.length === 0 ? (
-          <p className="text-[13px] text-muted-foreground">
+          <p className="text-13 text-muted-foreground">
             No fields yet, so cards on this board are title-only.
           </p>
         ) : (
@@ -136,7 +136,7 @@ export function CardSchemaPanel({ boardId, socket, onClose }: CardSchemaPanelPro
               aria-label="New field kind"
               value={newKind}
               onChange={handleNewKind}
-              className="rounded-md border border-border bg-background px-2 py-1.5 text-[13px] text-foreground"
+              className="rounded-md border border-border bg-background px-2 py-1.5 text-13 text-foreground"
             >
               {KINDS.map((kind) => (
                 <option key={kind} value={kind}>
@@ -149,7 +149,7 @@ export function CardSchemaPanel({ boardId, socket, onClose }: CardSchemaPanelPro
             Add field
           </Button>
           {missing.length > 0 ? (
-            <p className="text-[13px] text-muted-foreground [text-wrap:pretty]">
+            <p className="text-13 text-muted-foreground [text-wrap:pretty]">
               Not on this board: <span className="font-mono text-xs">{missing.join(", ")}</span>. GitHub sync
               and Start work read those ids by name, and quietly do less without them.
             </p>
@@ -161,7 +161,7 @@ export function CardSchemaPanel({ boardId, socket, onClose }: CardSchemaPanelPro
         <Button size="sm" onClick={handleSave} disabled={saving}>
           {saving ? "Saving…" : "Save"}
         </Button>
-        <span className="text-[13px] text-muted-foreground">Nothing is written until you save.</span>
+        <span className="text-13 text-muted-foreground">Nothing is written until you save.</span>
       </footer>
     </aside>
   )
@@ -234,7 +234,7 @@ function FieldRow({ field, first, last }: { field: FieldDef; first: boolean; las
         </RowButton>
       </div>
 
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-13 text-muted-foreground">
         <span className="font-mono text-xs">{field.id}</span>
         <span aria-hidden>·</span>
         <span>{FIELD_KIND_LABELS[field.kind]}</span>
@@ -252,13 +252,13 @@ function FieldRow({ field, first, last }: { field: FieldDef; first: boolean; las
 
       {pendingRemoval ? (
         <div className="space-y-2 rounded-md border border-border p-2">
-          <p className="text-[13px] text-foreground [text-wrap:pretty]">
+          <p className="text-13 text-foreground [text-wrap:pretty]">
             Remove {field.label}? Cards keep the values they already have, and get them back if this field
             comes back.
           </p>
           {/* Stated where the removal happens, and not blocking it: a board with
               no tracker and no agent is entitled to drop the field. */}
-          {note ? <p className="text-[13px] text-destructive-text [text-wrap:pretty]">{note}</p> : null}
+          {note ? <p className="text-13 text-destructive-text [text-wrap:pretty]">{note}</p> : null}
           <div className="flex items-center gap-2">
             <Button size="sm" variant="ghost" className="text-destructive-text" onClick={handleRemove}>
               Remove
@@ -274,7 +274,7 @@ function FieldRow({ field, first, last }: { field: FieldDef; first: boolean; las
         <div className="space-y-2 border-l border-border pl-3">
           <p className="text-xs font-medium text-muted-foreground">Options</p>
           {field.options.length === 0 ? (
-            <p className="text-[13px] text-muted-foreground">No options yet, so this field offers nothing.</p>
+            <p className="text-13 text-muted-foreground">No options yet, so this field offers nothing.</p>
           ) : (
             <ul className="space-y-2">
               {field.options.map((option) => (

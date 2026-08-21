@@ -141,10 +141,10 @@ function ModelRow({
       </div>
       <div className="ml-auto flex items-center gap-2">
         {model.supportsEffort && (
-          <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase">effort</span>
+          <span className="rounded bg-muted px-1.5 py-0.5 text-10 uppercase">effort</span>
         )}
         {model.supportsMaxReasoningEffort && (
-          <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase">max</span>
+          <span className="rounded bg-muted px-1.5 py-0.5 text-10 uppercase">max</span>
         )}
         <SettingsRowActions label={model.label} onEdit={onEdit} onDelete={onDelete} />
       </div>
