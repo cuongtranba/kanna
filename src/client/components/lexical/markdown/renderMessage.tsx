@@ -97,6 +97,21 @@ function nextKey(): string {
 let renderEditor: LexicalEditor | null = null
 let renderConfig: EditorConfig | null = null
 
+// Heading className map, triplicated (deliberately, see the file header above)
+// across this file, ../config.ts and ./lexicalToReact.tsx.
+// ../../headingClassMap.test.ts pins all three copies equal to each other so
+// they cannot silently drift. Uses the --text-N tokens (src/index.css @theme)
+// instead of arbitrary text-[Npx] utilities so headings respond to
+// --kanna-font-scale.
+export const HEADING_CLASS_MAP: Record<string, string> = {
+  h1: "text-20 font-normal leading-tight mt-5 mb-3 first:mt-0 last:mb-0",
+  h2: "text-18 font-normal leading-tight mt-5 mb-3 first:mt-0 last:mb-0",
+  h3: "text-16 font-normal leading-tight mt-5 mb-3 first:mt-0 last:mb-0",
+  h4: "text-16 font-normal leading-tight mt-5 mb-3 first:mt-0 last:mb-0",
+  h5: "text-16 font-normal leading-tight mt-5 mb-3 first:mt-0 last:mb-0",
+  h6: "text-16 font-normal leading-tight mt-5 mb-3 first:mt-0 last:mb-0",
+}
+
 /** Walk a single Lexical node and return its React representation. */
 function walkNode(node: LexicalNode): ReactNode {
   // --- MermaidNode (DecoratorNode, block) ---
@@ -113,15 +128,7 @@ function walkNode(node: LexicalNode): ReactNode {
   if ($isHeadingNode(node)) {
     const tag = node.getTag()
     const children = walkChildren(node)
-    const classMap: Record<string, string> = {
-      h1: "text-[20px] font-normal leading-tight mt-5 mb-3 first:mt-0 last:mb-0",
-      h2: "text-[18px] font-normal leading-tight mt-5 mb-3 first:mt-0 last:mb-0",
-      h3: "text-[16px] font-normal leading-tight mt-5 mb-3 first:mt-0 last:mb-0",
-      h4: "text-[16px] font-normal leading-tight mt-5 mb-3 first:mt-0 last:mb-0",
-      h5: "text-[16px] font-normal leading-tight mt-5 mb-3 first:mt-0 last:mb-0",
-      h6: "text-[16px] font-normal leading-tight mt-5 mb-3 first:mt-0 last:mb-0",
-    }
-    const cls = classMap[tag] ?? classMap.h1
+    const cls = HEADING_CLASS_MAP[tag] ?? HEADING_CLASS_MAP.h1
     const k = nextKey()
     switch (tag) {
       case "h1": return <h1 key={k} className={cls}>{children}</h1>
