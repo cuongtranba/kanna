@@ -92,8 +92,8 @@ export const ALERT_RULES: readonly AlertRuleSpec[] = [
       + " <dataDir>/heap-snapshots, then open it in Chrome DevTools' Memory tab"
       + " to see what holds the bytes.",
     codeHints: [
-      "src/server/transcript-cache.ts — byte-budgeted, but one oversized transcript is never evicted",
-      "src/server/event-store-messages.adapter.ts — whole-file loads with a deep clone",
+      "src/server/event-store-messages.adapter.ts — TranscriptCache: byte-budgeted, but one oversized transcript degrades to re-reads rather than eviction",
+      "src/server/event-store-messages.adapter.ts — loadTranscriptWithBytes: whole-file loads with a deep clone",
       "src/server/claude-session-state.ts — subagentRunsByChatId is evicted only by whole-chat delete",
     ],
     armed: true,
@@ -153,7 +153,7 @@ export const ALERT_RULES: readonly AlertRuleSpec[] = [
       + " largest in the heap snapshot.",
     codeHints: [
       "git log --oneline <lean-version>..<regressed-version>",
-      "src/server/transcript-cache.ts and its callers — the usual home of a memory regression",
+      "src/server/event-store-messages.adapter.ts — TranscriptCache and callers (event-store.ts) — the usual home of a memory regression",
     ],
     armed: true,
   },
