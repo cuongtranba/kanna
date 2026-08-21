@@ -28,8 +28,9 @@
           const override = parsed?.state?.typographyOverride
           const cache = parsed?.state?.typographyServerDefaultCache
           const multipliers = { sm: 0.875, md: 1, lg: 1.125, xl: 1.25, xxl: 1.5 }
-          const step = Object.hasOwn(multipliers, override) ? override : cache
-          if (Object.hasOwn(multipliers, step)) {
+          const isStep = (value) => typeof value === "string" && Object.hasOwn(multipliers, value)
+          const step = isStep(override) ? override : cache
+          if (isStep(step)) {
             document.documentElement.style.setProperty("--kanna-font-scale", String(multipliers[step]))
           }
         } catch {}

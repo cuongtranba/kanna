@@ -143,6 +143,12 @@ describe("index.html pre-paint script — --kanna-font-scale (P6)", () => {
     ["null", null],
     ["undefined", undefined],
     ["non-string garbage", 42],
+    // Object.hasOwn coerces its key argument to a string via ToPropertyKey, so a
+    // single-element array whose String() equals a valid step name (e.g.
+    // String(["xxl"]) === "xxl") is a distinct input class from plain non-string
+    // garbage like `42` (String(42) === "42", not a key). Reachable: the envelope
+    // comes from JSON.parse(localStorage.getItem(...)), and JSON carries arrays.
+    ["array whose String() is a valid step", ["xxl"]],
   ]
 
   const MATRIX: readonly [title: string, override: unknown, cache: unknown][] = INPUT_CLASSES.flatMap(
