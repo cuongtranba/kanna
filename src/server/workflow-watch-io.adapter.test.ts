@@ -43,6 +43,29 @@ describe("workflow-watch-io.adapter", () => {
     dispose()
   }, 5000)
 
+  test("fires once on arming to cover writes that land before the first fs.watch event", () => {
+    const d = tmp()
+    let calls = 0
+    const pendingTimeouts = new Map<number, () => void>()
+    let nextTimerId = 1
+    const deps: WatchWorkflowDeps = {
+      watch: ((_dir: string, _opts: unknown, _cb: () => void) => ({ close() {} })) as unknown as WatchWorkflowDeps["watch"],
+      setTimeout: (fn) => { const id = nextTimerId++; pendingTimeouts.set(id, fn); return id as unknown as ReturnType<typeof setTimeout> },
+      clearTimeout: (handle) => { pendingTimeouts.delete(handle as unknown as number) },
+      setInterval: (() => 0 as unknown as ReturnType<typeof setInterval>),
+      clearInterval: () => {},
+    }
+    const flushTimers = () => { const fns = [...pendingTimeouts.values()]; pendingTimeouts.clear(); for (const fn of fns) fn() }
+
+    const dispose = watchWorkflowDir(d, () => { calls += 1 }, { debounceMs: 30, deps })
+
+    flushTimers() // runs the arming-window safety-net scheduled by watchWorkflowDir
+    flushTimers() // runs the debounce timer it enqueued
+    expect(calls).toBe(1)
+
+    dispose()
+  })
+
   test("watchWorkflowDir coalesces rapid change events into one debounced call; dispose stops it", () => {
     // Deterministic: inject a fake watcher + controllable timers so the test
     // never depends on real fs-event delivery latency or wall-clock timer
