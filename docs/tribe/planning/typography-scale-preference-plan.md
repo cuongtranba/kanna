@@ -603,7 +603,7 @@ bun test --conditions production src/client/components/boards
 
 **Expected result:** prints `0`; typecheck, lint and the area's tests all pass.
 
-- [ ] **Step 1: Commit** — exactly one commit ends this task:
+- [x] **Step 1: Commit** — exactly one commit ends this task:
 
 ```bash
 git add -A
@@ -611,7 +611,7 @@ git commit -m "refactor(typography): convert boards px text utilities to rem tok
   -m $'Tribe-Card: typography-scale-preference\nTribe-Task: 12/16'
 ```
 
-- [ ] Task 12 complete
+- [x] Task 12 complete
 
 ### Task 13 — convert `src/client/components/chat-ui/**`
 
