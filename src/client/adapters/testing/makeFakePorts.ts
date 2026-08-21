@@ -247,6 +247,8 @@ export interface FakeDomPort extends DomPort {
   reloaded: boolean
   /** Maps CSS property name → current value set via setBodyStyle. */
   bodyStyles: Map<string, string>
+  /** Maps CSS property name → current value set via setDocumentElementStyleProperty. */
+  documentElementStyles: Map<string, string>
   /** Maps event type → count of currently-registered handlers. */
   eventListenerCounts: Map<string, number>
   /** Settable active element for tests. */
@@ -315,6 +317,7 @@ export function makeFakeDomPort(overrides: Partial<{
   let title = overrides.title ?? ""
   let reloaded = false
   const bodyStyles = new Map<string, string>()
+  const documentElementStyles = new Map<string, string>()
   const webShareCalls: Array<{ title?: string; url?: string }> = []
   const downloadCalls: Array<{ url: string; filename: string }> = []
   const openWindowCalls: Array<{ url: string; target: string; features: string }> = []
@@ -350,6 +353,7 @@ export function makeFakeDomPort(overrides: Partial<{
     innerHeight: overrides.innerHeight ?? 768,
     get reloaded() { return reloaded },
     bodyStyles,
+    documentElementStyles,
     eventListenerCounts,
     activeElement: null,
     selection: null,
@@ -484,6 +488,10 @@ export function makeFakeDomPort(overrides: Partial<{
     getComputedBackgroundColor(): string { return "" },
 
     setDocumentElementColorScheme(_scheme: "light" | "dark"): void { /* no-op */ },
+
+    setDocumentElementStyleProperty(property: string, value: string): void {
+      documentElementStyles.set(property, value)
+    },
 
     toggleDocumentElementClass(_className: string, _force: boolean): void { /* no-op */ },
 

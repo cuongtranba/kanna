@@ -176,6 +176,10 @@ export const domAdapter: DomPort = {
     document.documentElement.style.colorScheme = scheme
   },
 
+  setDocumentElementStyleProperty(property: string, value: string): void {
+    document.documentElement.style.setProperty(property, value)
+  },
+
   toggleDocumentElementClass(className: string, force: boolean): void {
     document.documentElement.classList.toggle(className, force)
   },

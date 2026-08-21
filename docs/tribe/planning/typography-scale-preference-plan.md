@@ -392,7 +392,7 @@ migration test proving a `version: 1` blob (`{ autoResumeOnRateLimit: true }`) s
 **Expected result:** `bun run typecheck` clean (all three fakes updated) and
 `bun test --conditions production src/client/stores/preferences.test.ts src/client/hooks/useTheme.test.ts` passes.
 
-- [ ] **Step 1: Commit** — exactly one commit ends this task:
+- [x] **Step 1: Commit** — exactly one commit ends this task:
 
 ```bash
 git add -A
@@ -400,7 +400,7 @@ git commit -m "feat(typography): document-element style port + device override s
   -m $'Tribe-Card: typography-scale-preference\nTribe-Task: 7/16'
 ```
 
-- [ ] Task 7 complete
+- [x] Task 7 complete
 
 ---
 

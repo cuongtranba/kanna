@@ -40,6 +40,7 @@ function createFakeDomPort(overrides: Partial<DomPort> = {}): DomPort {
     },
     getComputedBackgroundColor: () => "rgb(34, 34, 34)",
     setDocumentElementColorScheme: () => { /* no-op */ },
+    setDocumentElementStyleProperty: () => { /* no-op */ },
     toggleDocumentElementClass: () => { /* no-op */ },
     matchesMediaQuery: () => false,
     addMediaQueryListener: () => () => { /* no-op */ },
