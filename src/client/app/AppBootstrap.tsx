@@ -27,7 +27,7 @@ function AppBootstrapImpl({ label = "Preparing workspace" }: AppBootstrapProps) 
               className="absolute inset-y-0 left-0 block h-full w-1/3 bg-foreground/70 motion-safe:animate-kanna-bootstrap-sweep motion-reduce:left-0 motion-reduce:w-full motion-reduce:opacity-40"
             />
           </div>
-          <p className="text-[12px] tabular-nums text-muted-foreground">{label}…</p>
+          <p className="text-12 tabular-nums text-muted-foreground">{label}…</p>
         </div>
       </div>
     </div>
