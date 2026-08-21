@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.39.2](https://github.com/cuongtranba/kanna/compare/v1.39.1...v1.39.2) (2026-08-21)
+
+
+### Bug Fixes
+
+* **alerting:** correct stale src/server/transcript-cache.ts code hints ([#821](https://github.com/cuongtranba/kanna/issues/821)) ([6d8029d](https://github.com/cuongtranba/kanna/commit/6d8029d1ba1504172ad65c7c00a183cb035d6506)), closes [#818](https://github.com/cuongtranba/kanna/issues/818)
+
 ## [1.39.1](https://github.com/cuongtranba/kanna/compare/v1.39.0...v1.39.1) (2026-08-21)
 
 
