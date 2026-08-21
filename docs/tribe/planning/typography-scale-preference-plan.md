@@ -42,6 +42,21 @@
 > from a server-side test. We relocate rather than widen the lint rule: evading an architecture rule to
 > place a test is not a trade this card gets to make.
 
+> **Amendment (Warchief, after wave-1 audit — e2e harness boots the PRODUCTION build, not `bun run dev`):**
+> The card/spec named `bun run dev` (Vite 5174 + backend 5175) as the Playwright boot mechanism. That
+> mechanism is **unusable in this environment**: Vite's dev-server WebSocket proxy leg (`vite.config.ts`
+> `"/ws": { ws: true }`) never completes the upgrade under Bun — verified by the Warchief with raw `curl`
+> (through Vite `/ws` → `http_code=000`, hangs; direct to the Bun backend `/ws` → `101 Switching Protocols`).
+> So the app never leaves the "Connecting to workspace" splash under `bun run dev`, and no real-browser
+> font-size can be observed. **Resolution (How-level, Warchief's call):** the harness (`e2e/boot.ts`, Task 5;
+> and the P10 assertions, Task 16d) boots the **production single-process server** — `bun run build` then
+> `bun run start --port <testPort> --no-open --strict-port` against a seeded temp `HOME` — which serves the
+> SPA and `/ws` from one Bun process with **no proxy hop** (same origin). Warchief-proved: real Chrome vs.
+> the production server leaves the splash, renders the real app UI, `documentElement` font-size `16px`, zero
+> console errors. This **preserves the card's measurable goal** (real browser, real computed font-size, real
+> app) and is arguably stronger evidence — it exercises the artifact users actually run. Task 16d's P10
+> assertions build against this production-serve harness, not `bun run dev`.
+
 ### The names every task shares (fix these exactly, do not invent variants)
 
 | Name | Value |
@@ -101,7 +116,7 @@ server → server wins, because garbage is not an override).
 **Expected result:** `bun test --conditions production src/shared/design/typography.test.ts` passes;
 `resolveTypographyVars({ scale: "lg" })` deep-equals `{ "--kanna-font-scale": "1.125" }`.
 
-- [ ] **Step 1: Commit** — exactly one commit ends this task:
+- [x] **Step 1: Commit** — exactly one commit ends this task:
 
 ```bash
 git add -A
