@@ -161,6 +161,7 @@ import {
   type SessionStateQueryDeps,
 } from "./claude-session-state-queries"
 import * as agentDepsBuilders from "./agent-deps-builders"
+import { recordHistogram, TURN_DURATION_MS } from "./observability"
 import type {
   AgentCoordinatorArgs,
   ClaudeSessionLifecycleOptions,
@@ -293,11 +294,22 @@ export class AgentCoordinator {
     this.scheduleManager = args.scheduleManager ?? null
     this.cronScheduler = args.cronScheduler ?? null
     // The store's turn-terminal observer is how a cron-fired turn's outcome
-    // reaches its job: every provider path funnels through recordTurn*, and
-    // the ActiveTurn still holds its CronRunTag at that moment (turns are
-    // deleted from the map only after the terminal record persists).
+    // reaches its job, and how a turn's duration reaches telemetry: every
+    // provider path funnels through recordTurn*, and the ActiveTurn still holds
+    // its CronRunTag and start time at that moment (turns are deleted from the
+    // map only after the terminal record persists).
     this.store.onTurnTerminal = (chatId, outcome) => {
-      const tag = this.activeTurns.get(chatId)?.cronRun
+      const active = this.activeTurns.get(chatId)
+      // A background-task self-wake streams entries with no ActiveTurn: it is
+      // not a turn a user waited on, so it contributes no latency observation.
+      if (active) {
+        recordHistogram(TURN_DURATION_MS, Date.now() - active.startedAt, {
+          provider: active.provider,
+          model: active.model,
+          outcome,
+        })
+      }
+      const tag = active?.cronRun
       if (!tag) return
       const p = recordCronTurnOutcomeFn(this.buildCronCommandDeps(), tag, outcome).catch((error) => {
         log.error("[kanna/cron] failed to record run outcome:", String(error))

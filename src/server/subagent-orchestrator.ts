@@ -1,7 +1,13 @@
 import crypto from "node:crypto"
 import { LOG_PREFIX } from "../shared/branding"
 import { log } from "../shared/log"
-import { addCounter, withSpan } from "./observability"
+import {
+  addCounter,
+  recordHistogram,
+  withSpan,
+  SUBAGENT_RUN_DURATION_MS,
+  SUBAGENT_RUN_FINISHED,
+} from "./observability"
 import { deriveChunkLabel } from "../shared/loop-progress"
 import type {
   AgentProvider,
@@ -797,6 +803,7 @@ export class SubagentOrchestrator {
     runId?: string
   }): Promise<DelegationOutcome> {
     const runId = args.runId ?? crypto.randomUUID()
+    const startedAt = this.now()
     const outcome = await withSpan(
       "kanna.subagent.run",
       {
@@ -811,7 +818,11 @@ export class SubagentOrchestrator {
         return result
       }),
     )
-    addCounter("kanna.subagent.run.finished", 1, { outcome: outcome.status })
+    addCounter(SUBAGENT_RUN_FINISHED, 1, { outcome: outcome.status })
+    recordHistogram(SUBAGENT_RUN_DURATION_MS, this.now() - startedAt, {
+      outcome: outcome.status,
+      provider: args.subagent.provider,
+    })
     return outcome
   }
 

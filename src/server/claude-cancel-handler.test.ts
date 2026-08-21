@@ -47,6 +47,7 @@ function makeActiveTurn(overrides: Partial<ActiveTurn> = {}): ActiveTurn {
     chatId: "chat-1",
     provider: "claude",
     turn: makeFakeTurn(),
+    startedAt: Date.now(),
     model: "claude-opus-4",
     planMode: false,
     status: "running",

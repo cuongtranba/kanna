@@ -1,0 +1,35 @@
+name: Performance Alert Ticket
+
+# Fired by the Grafana webhook contact point (see src/ops/alerting/webhook-payload.ts),
+# which posts a repository dispatch when a Kanna performance alert fires or resolves.
+on:
+  repository_dispatch:
+    types: [kanna-perf-alert]
+
+permissions:
+  contents: read
+  issues: write
+
+# The dedup check is read-then-write: two dispatches for the same alert running
+# concurrently would each see no existing ticket and each open one. Serialising
+# per alert+release — the same key the tickets group by — closes that race.
+# Never cancel in progress: a cancelled resolve would leave a ticket open.
+concurrency:
+  group: perf-alert-${{ github.event.client_payload.alert.alertname }}-${{ github.event.client_payload.alert.service_version }}
+  cancel-in-progress: false
+
+jobs:
+  ticket:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+
+      # No `bun install`: the issue logic is dependency-free on purpose, so a
+      # lockfile problem can never stop an alert from being filed.
+      - run: bun run scripts/perf-alert-issue.ts
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          KANNA_ALERT_PAYLOAD: ${{ toJSON(github.event.client_payload) }}

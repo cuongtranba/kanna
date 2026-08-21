@@ -80,6 +80,7 @@ function makeActiveTurn(chatId = "chat-1"): ActiveTurn {
     chatId,
     provider: "claude",
     turn: null as never,
+    startedAt: Date.now(),
     model: "claude-opus-4",
     planMode: false,
     status: "running",

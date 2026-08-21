@@ -17,9 +17,37 @@ import {
   SpanStatusCode,
   type Attributes,
   type Counter,
+  type Histogram,
   type Span,
   type UpDownCounter,
 } from "@opentelemetry/api"
+
+/** Resident set size of the server process, sampled at each metric collection. */
+export const PROCESS_RSS_BYTES = "kanna.process.rss_bytes"
+
+/** One increment per finished subagent run, keyed by outcome. */
+export const SUBAGENT_RUN_FINISHED = "kanna.subagent.run.finished"
+
+/** End-to-end wall clock of one chat turn, spawn included. */
+export const TURN_DURATION_MS = "kanna.turn.duration_ms"
+
+/** End-to-end wall clock of one delegated subagent run. */
+export const SUBAGENT_RUN_DURATION_MS = "kanna.subagent.run.duration_ms"
+
+/**
+ * Explicit bucket boundaries for the duration histograms above, in ms.
+ *
+ * OTel's default boundaries stop at 10s. A turn runs seconds to tens of
+ * minutes, so under the defaults every observation lands in the +Inf bucket and
+ * `histogram_quantile` — the only reason to record a histogram rather than a
+ * counter — cannot tell a healthy turn from a pathological one. These are
+ * spaced so a normal fleet's p95 and a regressed one's fall in different
+ * buckets across that whole range.
+ */
+export const DURATION_BUCKETS_MS: readonly number[] = [
+  1_000, 2_000, 5_000, 10_000, 20_000, 30_000,
+  60_000, 120_000, 300_000, 600_000, 1_200_000, 1_800_000,
+]
 
 /**
  * One instrumentation scope for the whole server. Span names carry the
@@ -62,6 +90,7 @@ export async function withSpan<T>(
 // map lookup inside the SDK and spams its duplicate-instrument bookkeeping.
 const counters = new Map<string, Counter>()
 const upDowns = new Map<string, UpDownCounter>()
+const histograms = new Map<string, Histogram>()
 
 /**
  * A cached instrument is bound to the meter provider that created it, so a
@@ -72,6 +101,7 @@ const upDowns = new Map<string, UpDownCounter>()
 export function resetMetricInstrumentCache(): void {
   counters.clear()
   upDowns.clear()
+  histograms.clear()
 }
 
 /** Increments a monotonic counter (e.g. turns started, wakes recovered). */
@@ -92,4 +122,20 @@ export function recordUpDown(name: string, value: number, attributes?: Attribute
     upDowns.set(name, instrument)
   }
   instrument.add(value, attributes)
+}
+
+/**
+ * Records one observation of a distribution (e.g. a turn's duration in ms).
+ *
+ * Bucket boundaries are a provider-side concern: the adapter registers a view
+ * over DURATION_BUCKETS_MS, and without a registered SDK this is a no-op like
+ * every other facade call.
+ */
+export function recordHistogram(name: string, value: number, attributes?: Attributes): void {
+  let instrument = histograms.get(name)
+  if (!instrument) {
+    instrument = metrics.getMeter(SCOPE).createHistogram(name)
+    histograms.set(name, instrument)
+  }
+  instrument.record(value, attributes)
 }

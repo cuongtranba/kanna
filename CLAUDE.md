@@ -1355,6 +1355,84 @@ Instrumented so far: `kanna.turn.start` (spawn pipeline), `kanna.subagent.run`
 process-memory gauges. Spans nest via AsyncLocalStorage — add depth with a
 one-line `withSpan` at the call site, no handle threading.
 
+**Duration histograms — `kanna.turn.duration_ms`, `kanna.subagent.run.duration_ms`.**
+Turn duration is recorded from `EventStore.onTurnTerminal` (`agent-coordinator.ts`),
+the one choke point every provider terminal path funnels through, enriched from
+`activeTurns.get(chatId)` — the same lookup the cron-outcome consumer already
+does there, valid because a turn leaves the map only after its terminal record
+persists. `ActiveTurn.startedAt` is REQUIRED and carried over from the
+`StartingTurn`, so the measurement includes spawn cost. A terminal with no
+ActiveTurn (a background-task self-wake) records nothing rather than a
+fabricated duration. Do NOT widen `onTurnTerminal`'s signature to carry this —
+24 call sites would ripple to serve one observer.
+
+**`DURATION_BUCKETS_MS` is load-bearing.** OTel's default explicit boundaries
+stop at 10s and a turn runs seconds to tens of minutes, so without the adapter's
+view every observation lands in the `+Inf` bucket and `histogram_quantile`
+returns garbage. `observability.test.ts` pins it by asserting turn-length
+durations land in distinct finite buckets.
+
+**Metric names are constants, because an alert query reads them back.**
+`PROCESS_RSS_BYTES`, `SUBAGENT_RUN_FINISHED`, `TURN_DURATION_MS` and
+`SUBAGENT_RUN_DURATION_MS` live in `observability.ts` and are consumed by
+`src/ops/alerting/rules.ts`. A rule naming a metric that does not exist selects
+no series and therefore never fires — indistinguishable from a healthy fleet —
+so `rules.test.ts` asserts every `kanna_*` token in a query resolves to an
+exported instrument.
+
+# Performance alerts → GitHub tickets
+
+A fleet performance regression opens its own GitHub issue on
+`cuongtranba/kanna`, labelled `performance` + `agent-fix`, carrying the firing
+query, every affected host, and the code hints an agent needs to start.
+Prometheus → Grafana alert rule → webhook contact point → GitHub
+`repository_dispatch` → `.github/workflows/perf-alert.yml`. See
+`adr-20260821-perf-alert-github-tickets` and component `c3-234`.
+
+**Everything that decides what an alert is, and what the ticket says, lives in
+this repo.** Grafana holds only the payload template it was given by
+`scripts/grafana-alerts.ts`. `src/ops/alerting/rules.ts` is a flat spec table
+(query, threshold, summary, runbook, `codeHints`) over a builder that hides
+Grafana's rule model. Apply with `bun run scripts/grafana-alerts.ts`
+(`--dry-run` prints redacted payloads); it is idempotent — rules keyed by uid,
+contact point by name, route merged.
+
+- **Instance-level rules, version-level grouping.** Rules query per install so
+  the ticket can name every affected host; the notification policy groups by
+  `alertname` + `service_version`, so ten breaching installs are ONE ticket. A
+  fix targets a release, not a laptop. Installs older than 1.38.0 report no
+  `service_version` at all — queries must never require the label; those group
+  as `@unversioned`.
+- **`mergePerfRoute`, never a rebuilt policy.** Grafana's notification-policy
+  endpoint is a whole-tree PUT on a shared instance; building the tree from
+  scratch would delete routes this repo does not own.
+- **Minimum-volume guards are not defensive trimming.** At current fleet volumes
+  one failed subagent run out of five is a 20% failure rate. The failure-rate
+  and latency rules `and` themselves against an `increase(...) >= N` clause.
+- **Unarmed rules ship paused, with a `baselineNote`.** `kanna.turn.duration_ms`
+  has no history, so both latency rules are applied paused until a threshold can
+  be set from observed p95 rather than guessed. `rules.test.ts` requires the note
+  on any unarmed rule; arming is one flag plus a re-apply.
+- **Ticket noise is bounded on purpose.** Dedup by a readable
+  `<!-- kanna-alert:<alertname>@<version> -->` marker (not a hash — a
+  mis-grouped ticket is diagnosed by reading it), a 6h quiet period before a
+  repeat firing comments, auto-close on resolve, and `MAX_OPEN_PERF_ISSUES`
+  (10). The cap is deliberately IGNORED on the resolve path, so a storm can
+  still close what it opened. **The OTLP ingest endpoint is unauthenticated**,
+  so forged metrics can drive this path; the cap is what bounds that.
+- **Two silent-failure modes are gated by tests, not review.**
+  `perf-alert-workflow.test.ts` asserts the workflow's `repository_dispatch`
+  type equals `PERF_ALERT_EVENT_TYPE` (a mismatch is accepted by GitHub and
+  matches no workflow — alerts just vanish), and the workflow's `concurrency`
+  key serialises runs per alert so the read-then-write dedup cannot race two
+  dispatches into two issues.
+
+**One manual step:** the contact point needs a GitHub token permitted to POST
+repository dispatches (classic `repo`, or fine-grained with Contents: write).
+It is passed to the applier as `KANNA_GITHUB_DISPATCH_TOKEN` and stored as a
+Grafana secure setting — never in the repo. The workflow itself needs no
+secret; it uses the built-in `GITHUB_TOKEN`.
+
 # Transcript memory is bounded by bytes, and loaded lazily
 
 Transcript JSONL is never compacted, so a chat's transcript has no size limit

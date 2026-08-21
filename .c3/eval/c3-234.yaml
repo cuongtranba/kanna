@@ -1,0 +1,11 @@
+fact: c3-234
+claim: "observability lives in the observability facade, its single OTel adapter, the config resolver, and the alerting surface derived from them"
+code:
+  - src/server/observability.ts
+  - src/server/otel.adapter.ts
+  - src/server/otel-config.ts
+  - src/server/ws-router-observability.ts
+  - src/server/test-helpers/metric-recorder.ts
+  - src/ops/alerting/**/*.ts
+  - scripts/grafana-alerts.ts
+  - scripts/perf-alert-issue.ts

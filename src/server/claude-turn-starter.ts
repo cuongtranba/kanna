@@ -551,6 +551,7 @@ async function startTurnAfterTurnStarted(
     chatId: args.chatId,
     provider: args.provider,
     turn,
+    startedAt: starting.startedAt,
     // Binds the turn to the session it runs on, so that session can still
     // recognise (and fail-close) its own turn after an out-of-band teardown
     // has unregistered it. Undefined for providers with no Claude session.

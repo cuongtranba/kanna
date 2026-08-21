@@ -54,6 +54,7 @@ async function runSummarizeTurn(history: TranscriptEntry[], summaryChunks: strin
     chatId: "chat-1",
     provider: "codex",
     turn,
+    startedAt: Date.now(),
     model: "gpt-5.4",
     planMode: false,
     status: "running",

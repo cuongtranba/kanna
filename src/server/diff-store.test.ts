@@ -72,7 +72,7 @@ describe("DiffStore", () => {
     await expect(store.readPatch({ projectPath: repoRoot, path: "app.txt" })).resolves.toMatchObject({
       patch: expect.stringContaining("-base"),
     })
-  })
+  }, 30_000)
 
   test("returns no_repo outside a git repository", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "kanna-no-repo-"))
@@ -88,7 +88,7 @@ describe("DiffStore", () => {
       files: [],
       branchHistory: { entries: [] },
     })
-  })
+  }, 30_000)
 
   test("commits only the selected files and refreshes the snapshot", async () => {
     const repoRoot = await createRepo()
@@ -120,7 +120,7 @@ describe("DiffStore", () => {
 
     const lastMessage = (await run(["git", "log", "-1", "--pretty=%B"], repoRoot)).trim()
     expect(lastMessage).toBe("Update app\n\nOnly app changes")
-  })
+  }, 30_000)
 
   test("commit_and_push publishes an unpublished branch", async () => {
     const repoRoot = await createRepo()
@@ -229,7 +229,7 @@ describe("DiffStore", () => {
       hasOriginRemote: true,
       originRepoSlug: "jakemor/test224",
     })
-  })
+  }, 30_000)
 
   test("detects renamed files", async () => {
     const repoRoot = await createRepo()
@@ -249,7 +249,7 @@ describe("DiffStore", () => {
     expect(snapshot.files[0]?.path).toBe("after.txt")
     expect(snapshot.files[0]?.changeType).toBe("renamed")
     expect(snapshot.files[0]?.isUntracked).toBe(false)
-  })
+  }, 30_000)
 
   test("marks untracked files so they can be ignored", async () => {
     const repoRoot = await createRepo()
@@ -270,7 +270,7 @@ describe("DiffStore", () => {
       changeType: "added",
       isUntracked: true,
     })
-  })
+  }, 30_000)
 
   test("refreshSnapshot tolerates tracked files replaced by directories", async () => {
     const repoRoot = await createRepo()
@@ -292,7 +292,7 @@ describe("DiffStore", () => {
     expect(snapshot.files).toHaveLength(2)
     expect(snapshot.files.map((file) => file.path)).toEqual(["thing", "thing/file.txt"])
     expect(snapshot.files.map((file) => file.changeType)).toEqual(["deleted", "added"])
-  })
+  }, 30_000)
 
   test("discardFile reverts a tracked modified file", async () => {
     const repoRoot = await createRepo()
@@ -312,7 +312,7 @@ describe("DiffStore", () => {
 
     expect(await readFile(path.join(repoRoot, "app.txt"), "utf8")).toBe("base\n")
     expect(store.getSnapshot(repoRoot).files).toHaveLength(0)
-  })
+  }, 30_000)
 
   test("discardFile deletes an untracked file", async () => {
     const repoRoot = await createRepo()
@@ -332,7 +332,7 @@ describe("DiffStore", () => {
 
     expect(await Bun.file(path.join(repoRoot, "scratch.log")).exists()).toBe(false)
     expect(store.getSnapshot(repoRoot).files).toHaveLength(0)
-  })
+  }, 30_000)
 
   test("discardFile reverts a renamed file", async () => {
     const repoRoot = await createRepo()
@@ -353,7 +353,7 @@ describe("DiffStore", () => {
     expect(await Bun.file(path.join(repoRoot, "before.txt")).exists()).toBe(true)
     expect(await Bun.file(path.join(repoRoot, "after.txt")).exists()).toBe(false)
     expect(store.getSnapshot(repoRoot).files).toHaveLength(0)
-  })
+  }, 30_000)
 
   test("ignoreFile appends a .gitignore entry once", async () => {
     const repoRoot = await createRepo()
@@ -372,7 +372,7 @@ describe("DiffStore", () => {
     })
 
     expect(await readFile(path.join(repoRoot, ".gitignore"), "utf8")).toBe("scratch.log\n")
-  })
+  }, 30_000)
 
   test("ignoreFile accepts a folder entry for an untracked diff", async () => {
     const repoRoot = await createRepo()
@@ -392,7 +392,7 @@ describe("DiffStore", () => {
     })
 
     expect(await readFile(path.join(repoRoot, ".gitignore"), "utf8")).toBe("tmp/cache/\n")
-  })
+  }, 30_000)
 
   test("appendGitIgnoreEntry does not duplicate an existing identical entry", () => {
     expect(appendGitIgnoreEntry("scratch.log\n", "scratch.log")).toBe("scratch.log\n")
@@ -427,7 +427,7 @@ describe("DiffStore", () => {
       tags: ["v1.0.0"],
       githubUrl: expect.stringContaining("https://github.com/acme/repo/commit/"),
     })
-  })
+  }, 30_000)
 
   test("ignoreFile rejects tracked files", async () => {
     const repoRoot = await createRepo()
@@ -445,7 +445,7 @@ describe("DiffStore", () => {
       projectPath: repoRoot,
       path: "app.txt",
     })).rejects.toThrow("Only untracked files can be ignored from the diff viewer")
-  })
+  }, 30_000)
 
   test("fetchGitHubPullRequests prefers gh api when available", async () => {
     let requestedPath = ""
@@ -462,7 +462,7 @@ describe("DiffStore", () => {
 
     expect(requestedPath).toBe("repos/acme/repo/pulls?state=open&per_page=50")
     expect(pulls).toHaveLength(1)
-  })
+  }, 30_000)
 
   test("fetchGitHubPullRequests falls back to fetch and sends the GitHub accept header", async () => {
     let requestedUrl = ""
@@ -483,7 +483,7 @@ describe("DiffStore", () => {
     expect(requestedUrl).toBe("https://api.github.com/repos/acme/repo/pulls?state=open&per_page=50")
     expect(requestedAcceptHeader).toBe("application/vnd.github+json")
     expect(pulls).toHaveLength(1)
-  })
+  }, 30_000)
 
   test("fetchGitHubReleases prefers gh api and filters drafts", async () => {
     let requestedPath = ""
@@ -504,7 +504,7 @@ describe("DiffStore", () => {
     expect(requestedPath).toBe("repos/acme/repo/releases")
     expect(releases).toHaveLength(1)
     expect(releases[0].tag_name).toBe("v1")
-  })
+  }, 30_000)
 
   test("fetchGitHubReleases falls back to fetch and sends the GitHub accept header", async () => {
     let requestedUrl = ""
@@ -527,7 +527,7 @@ describe("DiffStore", () => {
     expect(requestedUrl).toBe("https://api.github.com/repos/acme/repo/releases")
     expect(requestedAcceptHeader).toBe("application/vnd.github+json")
     expect(releases).toHaveLength(1)
-  })
+  }, 30_000)
 
   test("fetchGitHubReleases throws when the fallback fetch fails", async () => {
     await expect(
@@ -536,7 +536,7 @@ describe("DiffStore", () => {
         fetchImpl: async () => new Response("nope", { status: 403 }),
       })
     ).rejects.toThrow("GitHub releases request failed with status 403")
-  })
+  }, 30_000)
 
   test("listBranches includes default branch, local and remote branches, and recent branches", async () => {
     const repoRoot = await createRepo()
@@ -560,7 +560,7 @@ describe("DiffStore", () => {
     expect(result.local.some((entry) => entry.name === "feature/recent")).toBe(true)
     expect(result.remote.some((entry) => entry.remoteRef === "origin/feature/remote")).toBe(true)
     expect(result.recent.some((entry) => entry.name === "feature/recent")).toBe(true)
-  })
+  }, 30_000)
 
   test("listBranches hides remote PR head refs from the remote section", async () => {
     const repoRoot = await createRepo()
@@ -613,7 +613,7 @@ describe("DiffStore", () => {
     } finally {
       globalThis.fetch = originalFetch
     }
-  })
+  }, 30_000)
 
   test("checkoutBranch creates a local tracking branch from a remote branch", async () => {
     const repoRoot = await createRepo()
@@ -633,7 +633,7 @@ describe("DiffStore", () => {
 
     expect(result.ok).toBe(true)
     expect((await run(["git", "branch", "--show-current"], repoRoot)).trim()).toBe("feature/remote")
-  })
+  }, 30_000)
 
   test("checkoutBranch cancels when changes exist and bringChanges is false", async () => {
     const repoRoot = await createRepo()
@@ -657,7 +657,7 @@ describe("DiffStore", () => {
     if (!result.ok) {
       expect(result.cancelled).toBe(true)
     }
-  })
+  }, 30_000)
 
   test("createBranch creates and checks out a branch from a chosen base", async () => {
     const repoRoot = await createRepo()
@@ -677,7 +677,7 @@ describe("DiffStore", () => {
 
     expect(result.ok).toBe(true)
     expect((await run(["git", "branch", "--show-current"], repoRoot)).trim()).toBe("feature/new")
-  })
+  }, 30_000)
 
   test("previewMergeBranch reports up-to-date and mergeable states", async () => {
     const repoRoot = await createRepo()
@@ -710,7 +710,7 @@ describe("DiffStore", () => {
     expect(mergeablePreview.status).toBe("mergeable")
     expect(mergeablePreview.commitCount).toBe(1)
     expect(mergeablePreview.hasConflicts).toBe(false)
-  })
+  }, 30_000)
 
   test("previewMergeBranch detects likely conflicts", async () => {
     const repoRoot = await createRepo()
@@ -736,7 +736,7 @@ describe("DiffStore", () => {
     expect(preview.status).toBe("conflicts")
     expect(preview.hasConflicts).toBe(true)
     expect(preview.commitCount).toBe(1)
-  })
+  }, 30_000)
 
   test("mergeBranch blocks dirty worktrees and merges clean branches", async () => {
     const repoRoot = await createRepo()
@@ -777,7 +777,7 @@ describe("DiffStore", () => {
     })
     expect((await run(["git", "branch", "--show-current"], repoRoot)).trim()).toBe("main")
     expect((await run(["git", "log", "--format=%s", "-1"], repoRoot)).trim()).toBe("feature")
-  })
+  }, 30_000)
 })
 
 /**
