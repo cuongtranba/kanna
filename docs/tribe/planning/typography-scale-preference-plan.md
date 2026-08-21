@@ -445,7 +445,7 @@ clearing the override falls back to the server value. Follow the house idiom
 **Expected result:** `bun test --conditions production src/client/hooks/useTypography.test.tsx`
 passes, and `bun run lint:usestate` stays clean (proving no `useState` crept in).
 
-- [ ] **Step 1: Commit** — exactly one commit ends this task:
+- [x] **Step 1: Commit** — exactly one commit ends this task:
 
 ```bash
 git add -A
@@ -453,7 +453,7 @@ git commit -m "feat(typography): apply the typography var map to the document" \
   -m $'Tribe-Card: typography-scale-preference\nTribe-Task: 8/16'
 ```
 
-- [ ] Task 8 complete
+- [x] Task 8 complete
 
 ### Task 9 — pre-paint, no flash (P6) · owns `index.html`, `src/server/design/prePaint.test.ts`
 
