@@ -112,6 +112,7 @@ import {
 import { useChatPreferencesStore } from "../stores/chatPreferencesStore"
 import { CHAT_SOUND_OPTIONS, useChatSoundPreferencesStore, type ChatSoundId, type ChatSoundPreference } from "../stores/chatSoundPreferencesStore"
 import { usePreferencesStore } from "../stores/preferences"
+import { isFontScaleStep, resolveEffectiveScaleStep, type FontScaleStep } from "../../shared/design/typography"
 import type { KannaState } from "./useKannaState"
 import { PushNotificationsSection } from "../components/settings/PushNotificationsSection"
 import {
@@ -199,6 +200,14 @@ const themeOptions: Array<{ value: ThemePreference; label: string; icon: typeof 
   { value: "light", label: "Light", icon: Sun },
   { value: "dark", label: "Dark", icon: Moon },
   { value: "system", label: "System", icon: Monitor },
+]
+
+const typographyScaleOptions: { value: FontScaleStep; label: string }[] = [
+  { value: "sm", label: "Small" },
+  { value: "md", label: "Default" },
+  { value: "lg", label: "Large" },
+  { value: "xl", label: "Extra Large" },
+  { value: "xxl", label: "XX-Large" },
 ]
 
 const chatSoundPreferenceOptions: { value: ChatSoundPreference; label: string }[] = [
@@ -1127,6 +1136,10 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
   const llmProvider = state.llmProvider
   const autoResumeOnRateLimit = usePreferencesStore((state) => state.autoResumeOnRateLimit)
   const setAutoResumeOnRateLimit = usePreferencesStore((state) => state.setAutoResumeOnRateLimit)
+  const typographyOverride = usePreferencesStore((state) => state.typographyOverride)
+  const clearTypographyOverride = usePreferencesStore((state) => state.clearTypographyOverride)
+  const typographyServerDefault = useAppSettingsStore((store) => store.settings?.typography.scale)
+  const effectiveTypographyScale = resolveEffectiveScaleStep(typographyOverride, typographyServerDefault)
   const defaultProvider = useChatPreferencesStore((store) => store.defaultProvider)
   const providerDefaults = useChatPreferencesStore((store) => store.providerDefaults)
   const setDefaultProvider = useChatPreferencesStore((store) => store.setDefaultProvider)
@@ -1511,6 +1524,12 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
     setTheme(nextTheme)
     void handleWriteAppSettings({ theme: nextTheme }).catch((error) => {
       setAppSettingsError(error instanceof Error ? error.message : "Unable to save theme settings.")
+    })
+  }
+
+  function handleTypographyScaleChange(nextScale: FontScaleStep) {
+    void handleWriteAppSettings({ typography: { scale: nextScale } }).catch((error) => {
+      setAppSettingsError(error instanceof Error ? error.message : "Unable to save typography settings.")
     })
   }
 
@@ -1941,6 +1960,40 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
                           options={themeOptions}
                           size="sm"
                         />
+                      </SettingsRow>
+
+                      <SettingsRow
+                        title="Typography Scale"
+                        description={
+                          typographyOverride
+                            ? "This device uses its own text size instead of the account default."
+                            : "Choose how large text and UI elements appear across the app."
+                        }
+                      >
+                        <div className="flex items-center gap-3">
+                          <Select
+                            value={effectiveTypographyScale}
+                            onValueChange={(value) => { if (isFontScaleStep(value)) handleTypographyScaleChange(value) }}
+                          >
+                            <SelectTrigger className="min-w-[180px]">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectGroup>
+                                {typographyScaleOptions.map((option) => (
+                                  <SelectItem key={option.value} value={option.value}>
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectGroup>
+                            </SelectContent>
+                          </Select>
+                          {typographyOverride ? (
+                            <Button type="button" variant="link" size="sm" onClick={clearTypographyOverride}>
+                              Use account default
+                            </Button>
+                          ) : null}
+                        </div>
                       </SettingsRow>
 
                       <SettingsRow

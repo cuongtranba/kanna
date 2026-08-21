@@ -532,7 +532,7 @@ Assert the typography control is actually present in the rendered output.
 asserts the typography control is present; `bun test --conditions production src/client/app/` passes
 with no leaked-node failure.
 
-- [ ] **Step 1: Commit** — exactly one commit ends this task:
+- [x] **Step 1: Commit** — exactly one commit ends this task:
 
 ```bash
 git add -A
@@ -540,7 +540,7 @@ git commit -m "feat(typography): Settings > General typography row" \
   -m $'Tribe-Card: typography-scale-preference\nTribe-Task: 10/16'
 ```
 
-- [ ] Task 10 complete
+- [x] Task 10 complete
 
 ### Task 11 — the three independent scales (P5) · owns `TerminalPane.tsx` + test, `lexical/config.ts`, `markdown/renderMessage.tsx`, `markdown/lexicalToReact.tsx`, + drift test
 
