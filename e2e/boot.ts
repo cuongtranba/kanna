@@ -210,7 +210,13 @@ export async function bootKanna(): Promise<KannaBoot> {
     ["run", "start", "--port", String(TEST_PORT), "--no-open", "--strict-port"],
     {
       cwd: repoRoot,
-      env: { ...process.env, HOME: kannaHome },
+      // KANNA_DISABLE_SELF_UPDATE mirrors the same flag scripts/dev-server.ts and
+      // scripts/dev-fake-limit.ts already set (see src/server/cli-runtime.ts's
+      // maybeSelfUpdate): without it, a fresh temp HOME with network access reachable makes
+      // the CLI attempt an in-place self-update on every boot, then re-exec with a restart
+      // exit code (75) this harness's simple readiness race does not know how to follow —
+      // turning an unrelated npm-registry roundtrip into a boot failure.
+      env: { ...process.env, HOME: kannaHome, KANNA_DISABLE_SELF_UPDATE: "1" },
       stdio: ["ignore", "pipe", "pipe"],
       detached: true,
     },
