@@ -127,7 +127,7 @@ function SuggestionRow({
     <li className="space-y-2 rounded-md border border-border px-3 py-2.5">
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
-          <p className="text-[13px] font-medium text-foreground">{suggestion.projectName}</p>
+          <p className="text-13 font-medium text-foreground">{suggestion.projectName}</p>
           <p className={slug ? "font-mono text-xs text-muted-foreground" : "text-xs italic text-muted-foreground"}>
             {slug ?? "No remote configured"}
           </p>
@@ -135,7 +135,7 @@ function SuggestionRow({
       </div>
 
       {slug && suggestion.boundTo ? (
-        <p className="text-[13px] text-warning-text [text-wrap:pretty]">
+        <p className="text-13 text-warning-text [text-wrap:pretty]">
           {isConfirming
             ? `Moving "${slug}" will detach it from "${suggestion.boundTo.boardTitle}". Its ${suggestion.boundTo.cardCount} card${suggestion.boundTo.cardCount === 1 ? "" : "s"} stay on that board.`
             : `Already connected to board "${suggestion.boundTo.boardTitle}" (${suggestion.boundTo.cardCount} card${suggestion.boundTo.cardCount === 1 ? "" : "s"}).`}
@@ -366,7 +366,7 @@ export function BoardSyncPanel({ boardId, socket, onClose }: BoardSyncPanelProps
       aria-label="Sync settings"
     >
       <header className="flex items-start gap-2 border-b border-border px-4 py-3">
-        <h2 className="min-w-0 flex-1 text-[15px] font-semibold leading-snug text-foreground">Sync</h2>
+        <h2 className="min-w-0 flex-1 text-15 font-semibold leading-snug text-foreground">Sync</h2>
         <button
           type="button"
           onClick={onClose}
@@ -377,7 +377,7 @@ export function BoardSyncPanel({ boardId, socket, onClose }: BoardSyncPanelProps
         </button>
       </header>
 
-      {error ? <p className="px-4 py-2 text-[13px] text-destructive-text">{error}</p> : null}
+      {error ? <p className="px-4 py-2 text-13 text-destructive-text">{error}</p> : null}
 
       {status ? (
         <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-4">
@@ -389,7 +389,7 @@ export function BoardSyncPanel({ boardId, socket, onClose }: BoardSyncPanelProps
           </section>
 
           <section className="space-y-2">
-            <label className="flex items-start gap-2 text-[13px] text-foreground">
+            <label className="flex items-start gap-2 text-13 text-foreground">
               <input
                 type="checkbox"
                 checked={allowAgentPush}
@@ -447,7 +447,7 @@ export function BoardSyncPanel({ boardId, socket, onClose }: BoardSyncPanelProps
                 onChange={handleRepo}
                 placeholder="owner/repo"
                 spellCheck={false}
-                className="flex-1 font-mono text-[13px]"
+                className="flex-1 font-mono text-13"
               />
               {/* Beside the field it acts on. A footer button would read as
                   applying to the panel, which is what the rows above do. */}
@@ -466,7 +466,7 @@ export function BoardSyncPanel({ boardId, socket, onClose }: BoardSyncPanelProps
                     key={binding.id}
                     className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5"
                   >
-                    <span className="min-w-0 flex-1 truncate font-mono text-[13px] text-foreground">
+                    <span className="min-w-0 flex-1 truncate font-mono text-13 text-foreground">
                       {bindingSlug(binding) ?? binding.providerId}
                     </span>
                     <span className="shrink-0 text-xs text-muted-foreground">{binding.direction}</span>
@@ -479,21 +479,21 @@ export function BoardSyncPanel({ boardId, socket, onClose }: BoardSyncPanelProps
 
           <section className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground">Where issues land</p>
-            <dl className="space-y-2 text-[13px]">
+            <dl className="space-y-2 text-13">
               <RoutingRow label="Open issues" column={status.routing.open} absent="First column" />
               <RoutingRow label="Closed issues" column={status.routing.closed} absent="Nowhere" />
             </dl>
-            {warning ? <p className="text-[13px] text-muted-foreground [text-wrap:pretty]">{warning}</p> : null}
+            {warning ? <p className="text-13 text-muted-foreground [text-wrap:pretty]">{warning}</p> : null}
           </section>
 
           <section className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground">Conflicts</p>
             {status.conflicts.length === 0 ? (
-              <p className="text-[13px] text-muted-foreground">Nothing has changed in both places.</p>
+              <p className="text-13 text-muted-foreground">Nothing has changed in both places.</p>
             ) : (
               <ul className="space-y-2">
                 {status.conflicts.map((conflict) => (
-                  <li key={conflict.id} className="border-b border-border pb-2 text-[13px] last:border-b-0">
+                  <li key={conflict.id} className="border-b border-border pb-2 text-13 last:border-b-0">
                     <p className="text-foreground">{conflictLine(conflict)}</p>
                     <p className="font-mono text-xs tabular-nums text-muted-foreground">{conflict.cardId}</p>
                   </li>

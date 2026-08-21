@@ -118,7 +118,7 @@ export function ColumnSettings({ columnId, value, canDelete, onSave, onDelete }:
             id={`column-role-${columnId}`}
             value={draft.semantic ?? ""}
             onChange={handleSemantic}
-            className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-[13px] text-foreground"
+            className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-13 text-foreground"
           >
             {SEMANTICS.map((entry) => (
               <option key={entry.label} value={entry.value}>
@@ -126,7 +126,7 @@ export function ColumnSettings({ columnId, value, canDelete, onSave, onDelete }:
               </option>
             ))}
           </select>
-          {hint ? <p className="text-[13px] text-muted-foreground">{hint}</p> : null}
+          {hint ? <p className="text-13 text-muted-foreground">{hint}</p> : null}
         </div>
 
         <div className="space-y-1.5">
@@ -157,7 +157,7 @@ export function ColumnSettings({ columnId, value, canDelete, onSave, onDelete }:
             placeholder="None"
             className="tabular-nums"
           />
-          <p className="text-[13px] text-muted-foreground">Advisory. Going over is shown, never blocked.</p>
+          <p className="text-13 text-muted-foreground">Advisory. Going over is shown, never blocked.</p>
         </div>
 
         <div className="flex items-center gap-2 border-t border-border pt-3">
@@ -175,7 +175,7 @@ export function ColumnSettings({ columnId, value, canDelete, onSave, onDelete }:
           </Button>
         </div>
         {canDelete ? null : (
-          <p className="text-[13px] text-muted-foreground">Move or archive its cards before deleting it.</p>
+          <p className="text-13 text-muted-foreground">Move or archive its cards before deleting it.</p>
         )}
       </PopoverContent>
     </Popover>

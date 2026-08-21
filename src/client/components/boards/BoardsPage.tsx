@@ -116,7 +116,7 @@ export function BoardsPage({ ownerKind, ownerId, ownerName, socket, onOpenBoard 
       <header className="flex items-end justify-between gap-4 border-b border-border px-6 py-4">
         <div className="min-w-0">
           <h1 className="text-lg font-medium leading-tight tracking-[-0.01em] text-foreground">Boards</h1>
-          <p className="truncate text-[13px] text-muted-foreground">
+          <p className="truncate text-13 text-muted-foreground">
             {ownerName}
             {boards.length > 0 ? <span className="tabular-nums"> · {boards.length} boards</span> : null}
           </p>
@@ -130,7 +130,7 @@ export function BoardsPage({ ownerKind, ownerId, ownerName, socket, onOpenBoard 
       </header>
 
       {error ? (
-        <p className="border-b border-border px-6 py-2 text-[13px] text-destructive-text">{error}</p>
+        <p className="border-b border-border px-6 py-2 text-13 text-destructive-text">{error}</p>
       ) : null}
 
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -210,11 +210,11 @@ function BoardRow({
           />
         ) : (
           <button type="button" onClick={handleOpen} className="block w-full text-left">
-            <span className="block truncate text-[15px] font-semibold tracking-[-0.005em] text-foreground">
+            <span className="block truncate text-15 font-semibold tracking-[-0.005em] text-foreground">
               {board.title}
             </span>
             {board.description ? (
-              <span className="mt-0.5 block truncate text-[13px] text-muted-foreground">{board.description}</span>
+              <span className="mt-0.5 block truncate text-13 text-muted-foreground">{board.description}</span>
             ) : null}
           </button>
         )}
@@ -341,14 +341,14 @@ function TemplatePicker({
     <div className="px-6 py-8">
       {firstRun ? (
         <>
-          <h2 className="text-[15px] font-semibold text-foreground">No boards yet.</h2>
+          <h2 className="text-15 font-semibold text-foreground">No boards yet.</h2>
           <p className="mt-1 max-w-[58ch] text-sm text-muted-foreground">
             A board turns issues into work your agents can pick up. Start from a shape, or import an existing
             tracker.
           </p>
         </>
       ) : (
-        <h2 className="text-[15px] font-semibold text-foreground">Start from a shape</h2>
+        <h2 className="text-15 font-semibold text-foreground">Start from a shape</h2>
       )}
 
       <div className="mt-4 max-w-xl rounded-lg border border-border">
