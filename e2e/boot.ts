@@ -201,15 +201,17 @@ export async function bootKanna(): Promise<KannaBoot> {
   const outputTail = new OutputTail()
 
   // `detached: true` makes `child` the leader of its own process group, so `killChildTree` can
-  // signal the whole tree via `-pgid`. `stdio: "pipe"` (rather than "ignore") means a boot
-  // failure leaves a diagnostic trail instead of vanishing silently.
+  // signal the whole tree via `-pgid`. stdout/stderr are piped (rather than "ignore") so a boot
+  // failure leaves a diagnostic trail instead of vanishing silently; stdin is explicitly
+  // "ignore" (not piped) so a hung prompt on the child's stdin can never exhaust the test
+  // timeout — see CLAUDE.md § Tests.
   const child = spawn(
     "bun",
     ["run", "start", "--port", String(TEST_PORT), "--no-open", "--strict-port"],
     {
       cwd: repoRoot,
       env: { ...process.env, HOME: kannaHome },
-      stdio: "pipe",
+      stdio: ["ignore", "pipe", "pipe"],
       detached: true,
     },
   )
