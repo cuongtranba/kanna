@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.39.0](https://github.com/cuongtranba/kanna/compare/v1.38.1...v1.39.0) (2026-08-21)
+
+
+### Features
+
+* **observability:** open a GitHub ticket when the fleet regresses ([#799](https://github.com/cuongtranba/kanna/issues/799)) ([db6b9b8](https://github.com/cuongtranba/kanna/commit/db6b9b87850abffb721eff705296ae46ddbf584c))
+
 ## [1.38.1](https://github.com/cuongtranba/kanna/compare/v1.38.0...v1.38.1) (2026-08-21)
 
 
