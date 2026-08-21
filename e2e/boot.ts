@@ -216,9 +216,12 @@ export async function bootKanna(): Promise<KannaBoot> {
     },
   )
 
-  // Prevent an unhandled-error crash on spawn failure (ENOENT, EACCES);
-  // waitForLocalUrl will then time out and the catch block calls stop() for cleanup.
-  child.once("error", () => undefined)
+  // Prevent an unhandled-error crash on spawn failure (ENOENT, EACCES). Node does not reliably
+  // follow an 'error' event with an 'exit' event (verified: a spawn ENOENT fires 'error' but
+  // never 'exit'), so `waitForChildExit` cannot race this failure in — capture it into the
+  // output tail instead of discarding it, so the diagnostic thrown below (readiness timeout)
+  // names the real cause instead of an empty tail.
+  child.once("error", (error) => outputTail.append(`${String(error)}\n`))
 
   child.stdout?.on("data", (chunk: Buffer) => outputTail.append(chunk))
   child.stderr?.on("data", (chunk: Buffer) => outputTail.append(chunk))
