@@ -481,7 +481,7 @@ both (override wins); garbage step value (falls back to `1`).
 including a case proving a seeded `xxl` override yields `--kanna-font-scale: "1.5"` **before** any
 React code runs.
 
-- [ ] **Step 1: Commit** — exactly one commit ends this task:
+- [x] **Step 1: Commit** — exactly one commit ends this task:
 
 ```bash
 git add -A
@@ -489,7 +489,7 @@ git commit -m "feat(typography): apply scale pre-paint to avoid layout flash" \
   -m $'Tribe-Card: typography-scale-preference\nTribe-Task: 9/16'
 ```
 
-- [ ] Task 9 complete
+- [x] Task 9 complete
 
 ---
 
