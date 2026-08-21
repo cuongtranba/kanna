@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.38.1](https://github.com/cuongtranba/kanna/compare/v1.38.0...v1.38.1) (2026-08-21)
+
+
+### Bug Fixes
+
+* **watch:** fire once after arming to close the arming-window drop ([#801](https://github.com/cuongtranba/kanna/issues/801)) ([0a5e40f](https://github.com/cuongtranba/kanna/commit/0a5e40fa9b49a98f27490f312ad101a2873df8ad)), closes [#800](https://github.com/cuongtranba/kanna/issues/800)
+
 ## [1.38.0](https://github.com/cuongtranba/kanna/compare/v1.37.0...v1.38.0) (2026-08-20)
 
 
