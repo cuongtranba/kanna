@@ -2419,6 +2419,14 @@ describe("AgentCoordinator claude integration", () => {
             events.push({
               type: "transcript" as const,
               entry: timestamped({
+                kind: "tool_call",
+                tool: { kind: "tool", toolKind: "bash", toolName: "Bash", toolId: "toolu_bg",
+                  input: { command: "ci-watch.sh", runInBackground: true } },
+              }),
+            })
+            events.push({
+              type: "transcript" as const,
+              entry: timestamped({
                 kind: "tool_result",
                 toolId: "toolu_bg",
                 content: "Command running in background with ID: bgABC123. Output is being written to: /tmp/x.output. You will be notified when it completes.",
@@ -2751,10 +2759,26 @@ describe("AgentCoordinator claude integration", () => {
             events.push({
               type: "transcript" as const,
               entry: timestamped({
+                kind: "tool_call",
+                tool: { kind: "tool", toolKind: "bash", toolName: "Bash", toolId: "toolu_bg1",
+                  input: { command: "task1.sh", runInBackground: true } },
+              }),
+            })
+            events.push({
+              type: "transcript" as const,
+              entry: timestamped({
                 kind: "tool_result",
                 toolId: "toolu_bg1",
                 content: "Command running in background with ID: bgTask1. Output is being written to: /tmp/t1.output. You will be notified when it completes.",
                 isError: false,
+              }),
+            })
+            events.push({
+              type: "transcript" as const,
+              entry: timestamped({
+                kind: "tool_call",
+                tool: { kind: "tool", toolKind: "bash", toolName: "Bash", toolId: "toolu_bg2",
+                  input: { command: "task2.sh", runInBackground: true } },
               }),
             })
             events.push({
