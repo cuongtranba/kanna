@@ -8,6 +8,14 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.39.1](https://github.com/cuongtranba/kanna/compare/v1.39.0...v1.39.1) (2026-08-21)
+
+
+### Bug Fixes
+
+* **runner:** enrich background task entry with outputPath when SDK snapshot arrives first ([#811](https://github.com/cuongtranba/kanna/issues/811)) ([b5471f5](https://github.com/cuongtranba/kanna/commit/b5471f52d4e17af8558c2243ce0b5822efd61e54))
+* **runner:** gate background task launch detection on tool_call provenance ([#816](https://github.com/cuongtranba/kanna/issues/816)) ([70ef598](https://github.com/cuongtranba/kanna/commit/70ef5981ffdb023eb828f25d611b48923856dc08)), closes [#814](https://github.com/cuongtranba/kanna/issues/814)
+
 ## [1.39.0](https://github.com/cuongtranba/kanna/compare/v1.38.1...v1.39.0) (2026-08-21)
 
 
