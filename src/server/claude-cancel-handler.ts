@@ -205,6 +205,12 @@ export async function cancelChat(
     const session = deps.claudeSessions.get(chatId)
     if (session?.selfWakeActive) {
       session.selfWakeActive = false
+      // Mark the session so that any task completing AFTER this Stop cannot
+      // re-enter the model via a self-wake. The user must re-engage explicitly
+      // (chat.send) before task-notification wakes are allowed again.
+      if (session.backgroundTasks.size > 0) {
+        session.backgroundTaskWakeSuppressed = true
+      }
       // The SDK answers interrupt() with a tail error result (subtype
       // error_during_execution, empty text); suppress it exactly like a
       // cancelled Kanna turn so it never renders as an unknown error.
@@ -253,6 +259,18 @@ export async function cancelChat(
   // Remove from activeTurns immediately so the UI reflects the cancellation
   // right away, rather than waiting for interrupt() which may hang.
   deps.activeTurns.delete(chatId)
+
+  // Mark the session so that task-notification self-wakes from background
+  // tasks that were running at Stop time cannot re-enter the model without
+  // an explicit user chat.send. Without this mark, the SDK session stays
+  // warm and a task that completes minutes later triggers a self-wake that
+  // resumes the model as if the user never pressed Stop (issue #819).
+  if (active.provider === "claude") {
+    const sessionForWakeGate = deps.claudeSessions.get(chatId)
+    if (sessionForWakeGate && sessionForWakeGate.backgroundTasks.size > 0) {
+      sessionForWakeGate.backgroundTaskWakeSuppressed = true
+    }
+  }
 
   // Drain the cancelled prompt's seq from the Claude session's pending
   // queue. The SDK does not always echo a `result.subtype=cancelled` for

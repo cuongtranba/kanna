@@ -63,6 +63,7 @@ function makeSession(overrides: Partial<ClaudeSessionState> = {}): ClaudeSession
     loopArmedAtSpawn: false,
     cancelledResultPending: 0,
     suppressSessionTokenPersist: false,
+    backgroundTaskWakeSuppressed: false,
     ...overrides,
   }
 }
@@ -1014,6 +1015,25 @@ describe("runClaudeSession", () => {
     } as unknown as TranscriptEntry
     const deps = makeDeps(session)
     session.session.stream = fakeStream([{ type: "transcript", entry: snapshotEntry }])
+
+    await runClaudeSession(deps, session)
+
+    expect(session.selfWakeActive).toBe(false)
+  })
+
+  test("backgroundTaskWakeSuppressed blocks self-wake arming (issue #819: Stop must prevent re-entry from pre-Stop tasks)", async () => {
+    const session = makeSession({ backgroundTaskWakeSuppressed: true })
+    const assistantEntry = {
+      _id: "sw-suppressed-1",
+      createdAt: Date.now(),
+      kind: "assistant_text",
+      text: "resuming after task completion",
+    } as unknown as TranscriptEntry
+    const deps = makeDeps(session)
+    session.session.stream = fakeStream([
+      { type: "transcript", entry: assistantEntry },
+      { type: "transcript", entry: fakeResultEntry(false) },
+    ])
 
     await runClaudeSession(deps, session)
 

@@ -85,6 +85,7 @@ interface ClaudeSessionsMap {
     backgroundTaskDeadlineAt: number
     backgroundTaskWakeCount: number
     selfWakeActive: boolean
+    backgroundTaskWakeSuppressed: boolean
   } | undefined
 }
 
@@ -454,6 +455,9 @@ export async function sendCommand(
   if (existingClaudeSession && existingClaudeSession.backgroundTasks.size > 0) {
     existingClaudeSession.backgroundTaskDeadlineAt = Date.now() + deps.resolveBackgroundTaskMaxMs()
     existingClaudeSession.backgroundTaskWakeCount = 0
+  }
+  if (existingClaudeSession) {
+    existingClaudeSession.backgroundTaskWakeSuppressed = false
   }
 
   // A real user send is a takeover: disarm any armed loop so tools are

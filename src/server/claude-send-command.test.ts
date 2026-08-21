@@ -54,7 +54,7 @@ type DepsOptions = {
   removedMessages?: Array<{ chatId: string; id: string }>
   createdChats?: string[]
   analyticsEvents?: string[]
-  session?: { backgroundTasks: Map<string, { taskType: null; description: null; startedAt: number }>; backgroundTaskDeadlineAt: number; backgroundTaskWakeCount: number; selfWakeActive: boolean } | null
+  session?: { backgroundTasks: Map<string, { taskType: null; description: null; startedAt: number }>; backgroundTaskDeadlineAt: number; backgroundTaskWakeCount: number; selfWakeActive: boolean; backgroundTaskWakeSuppressed: boolean } | null
   customModels?: readonly CustomModelEntry[]
   clearedChatIds?: string[]
   activeTurn?: { compactionTurn?: CompactionTurnKind }
@@ -548,6 +548,7 @@ describe("sendCommand", () => {
       backgroundTaskDeadlineAt: 9999,
       backgroundTaskWakeCount: 2,
       selfWakeActive: false,
+      backgroundTaskWakeSuppressed: false,
     }
     const d = makeDeps({ session })
     const before = Date.now()
@@ -559,6 +560,23 @@ describe("sendCommand", () => {
     expect(session.backgroundTasks.size).toBe(1)
     expect(session.backgroundTaskDeadlineAt).toBeGreaterThanOrEqual(before + 1_800_000)
     expect(session.backgroundTaskWakeCount).toBe(0)
+  })
+
+  test("clears backgroundTaskWakeSuppressed so a user re-engage after Stop unlocks self-wakes (issue #819)", async () => {
+    const session = {
+      backgroundTasks: new Map<string, { taskType: null; description: null; startedAt: number }>(),
+      backgroundTaskDeadlineAt: 0,
+      backgroundTaskWakeCount: 0,
+      selfWakeActive: false,
+      backgroundTaskWakeSuppressed: true,
+    }
+    const d = makeDeps({ session })
+    await sendCommand(d, {
+      type: "chat.send",
+      content: "hi",
+      chatId: "chat-1",
+    } as Parameters<typeof sendCommand>[1])
+    expect(session.backgroundTaskWakeSuppressed).toBe(false)
   })
 
   test("tracks message_sent analytics", async () => {

@@ -317,8 +317,10 @@ export async function runClaudeSession(
             await deps.maybeStartNextQueuedMessage(session.chatId)
           }
         } else if (SELF_WAKE_ARMING_KINDS.has(event.entry.kind) && !session.selfWakeActive) {
-          session.selfWakeActive = true
-          deps.emitStateChange(session.chatId)
+          if (!session.backgroundTaskWakeSuppressed) {
+            session.selfWakeActive = true
+            deps.emitStateChange(session.chatId)
+          }
         }
       }
       // Background-task keep-alive guard (SDK + PTY).
