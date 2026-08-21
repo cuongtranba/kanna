@@ -1420,6 +1420,16 @@ contact point by name, route merged.
   (10). The cap is deliberately IGNORED on the resolve path, so a storm can
   still close what it opened. **The OTLP ingest endpoint is unauthenticated**,
   so forged metrics can drive this path; the cap is what bounds that.
+- **`repository_dispatch` only fires a workflow that is already on the DEFAULT
+  branch.** A dispatch sent while `perf-alert.yml` exists only on a feature
+  branch returns `204 No Content` and runs nothing — verified, and there is no
+  error anywhere to notice. It fails safe (Grafana re-notifies on its repeat
+  interval, so the first notification after the merge files the ticket), but it
+  means the pipeline cannot be proven end-to-end from a PR branch.
+- **Grafana's rule-group `interval` is SECONDS as a number.** A duration string
+  is rejected with a bare `400 bad request data` that names no field, while the
+  individual rules validate fine — so the failure looks like it is anywhere but
+  there. `rules.test.ts` pins the type.
 - **Two silent-failure modes are gated by tests, not review.**
   `perf-alert-workflow.test.ts` asserts the workflow's `repository_dispatch`
   type equals `PERF_ALERT_EVENT_TYPE` (a mismatch is accepted by GitHub and

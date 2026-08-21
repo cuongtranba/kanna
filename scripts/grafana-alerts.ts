@@ -87,15 +87,18 @@ if (dryRun) {
   process.exit(0)
 }
 
-// Folder: 409 means it already exists, which is the normal path on re-apply.
-try {
+// Re-applying is the normal path, so ask whether the folder exists rather than
+// creating and interpreting the failure — Grafana answers an existing folder
+// with 409 or 412 depending on how it collides, and neither is an error here.
+const folderExists = await grafana(`/api/folders/${FOLDER_UID}`)
+  .then(() => true)
+  .catch(() => false)
+if (!folderExists) {
   await grafana("/api/folders", {
     method: "POST",
     body: JSON.stringify({ uid: FOLDER_UID, title: FOLDER_TITLE }),
   })
   console.log(`created folder ${FOLDER_TITLE}`)
-} catch (error) {
-  if (!String(error).includes("409")) throw error
 }
 
 const existingContactPoints = await grafana("/api/v1/provisioning/contact-points") as Array<{

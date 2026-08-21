@@ -82,6 +82,14 @@ describe("buildRuleGroup", () => {
     }
   })
 
+  // Grafana's rule-group endpoint takes SECONDS here and rejects a duration
+  // string with a bare "bad request data" that names nothing — the individual
+  // rules validate fine, so the failure looks like it is anywhere but here.
+  test("the evaluation interval is seconds, not a duration string", () => {
+    expect(typeof group.interval).toBe("number")
+    expect(group.interval).toBeGreaterThanOrEqual(60)
+  })
+
   test("the query node runs the spec's PromQL against the given datasource", () => {
     const [first] = group.rules
     const query = first?.data.find((node) => node.refId === "A")

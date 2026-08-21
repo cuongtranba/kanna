@@ -245,7 +245,8 @@ export interface GrafanaAlertRule {
 
 export interface GrafanaRuleGroup {
   title: string
-  interval: string
+  /** Evaluation interval in SECONDS. Grafana rejects a duration string here. */
+  interval: number
   rules: GrafanaAlertRule[]
   folderUid: string
 }
@@ -258,7 +259,7 @@ export function buildRuleGroup(
 ): GrafanaRuleGroup {
   return {
     title: RULE_GROUP_TITLE,
-    interval: "5m",
+    interval: 300,
     folderUid: target.folderUid,
     rules: specs.map((spec) => ({
       uid: spec.uid,

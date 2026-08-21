@@ -55,6 +55,17 @@ metric Kanna does not export (it would select no series and never fire), and a
 dispatch event name that no workflow listens for (GitHub accepts it and nothing
 happens).
 
+## The workflow must be on the default branch
+
+`repository_dispatch` only triggers a workflow that already exists on the
+repository's **default branch**. A dispatch sent while `perf-alert.yml` lives
+only on a feature branch is accepted by GitHub with `204 No Content` and then
+runs nothing — there is no error anywhere to notice.
+
+This fails safe: alerts firing before the workflow merges are silent no-ops, and
+Grafana re-notifies on its repeat interval, so the first notification after the
+merge opens the ticket.
+
 ## Why one ticket, not ten
 
 Alert rules evaluate per install, so the ticket can name every affected host —
