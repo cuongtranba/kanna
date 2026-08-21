@@ -92,7 +92,7 @@ export const ALERT_RULES: readonly AlertRuleSpec[] = [
       + " <dataDir>/heap-snapshots, then open it in Chrome DevTools' Memory tab"
       + " to see what holds the bytes.",
     codeHints: [
-      "src/server/event-store-messages.adapter.ts — TranscriptCache: byte-budgeted, but one oversized transcript degrades to re-reads rather than eviction",
+      "src/server/event-store-messages.adapter.ts — TranscriptCache: transcripts larger than maxBytes are never cached; each re-read of a large transcript (e.g., 96 MB → 524 MB peak RSS) spikes on parse",
       "src/server/event-store-messages.adapter.ts — loadTranscriptWithBytes: whole-file loads with a deep clone",
       "src/server/claude-session-state.ts — subagentRunsByChatId is evicted only by whole-chat delete",
     ],

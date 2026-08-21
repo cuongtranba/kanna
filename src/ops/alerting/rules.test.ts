@@ -85,6 +85,18 @@ describe("ALERT_RULES", () => {
       }
     }
   })
+
+  // PR #829 fixed two TranscriptCache bugs: set() now returns early for oversized
+  // transcripts (never admitted) and evict() no longer guards on size > 1. A hint
+  // describing the old "degrades to re-reads rather than eviction" phrasing implies
+  // the eviction bug still exists, misdirecting agents on fresh alerts.
+  test("KannaMemoryPressure TranscriptCache hint reflects post-PR-829 behaviour", () => {
+    const rule = ALERT_RULES.find((r) => r.uid === "kanna-perf-memory")
+    expect(rule).toBeDefined()
+    const transcriptHint = rule!.codeHints.find((h) => h.includes("TranscriptCache"))
+    expect(transcriptHint).toBeDefined()
+    expect(transcriptHint).not.toMatch(/degrades to re-reads rather than eviction/)
+  })
 })
 
 describe("buildRuleGroup", () => {
