@@ -2818,6 +2818,7 @@ describe("AgentCoordinator claude integration", () => {
     })
     await waitFor(() => session.backgroundTasks.size === 0)
     expect(session.backgroundTaskDeadlineAt).toBe(0)
+    session.lastUsedAt = 0
     ;(coordinator as any).sweepIdleClaudeSessions(Date.now())
     expect(coordinator.claudeSessions.has("chat-1")).toBe(false)
     expect(closeCount).toBe(1)
