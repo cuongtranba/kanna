@@ -340,6 +340,8 @@ Requires the `cloudflared` binary installed locally — `brew install cloudflare
 ## Development
 
 ```bash
+bun install
+bun run setup:hooks  # wire the gitleaks pre-commit hook (one-time per clone/worktree)
 bun run dev
 ```
 
@@ -375,6 +377,8 @@ bun run dev:server   # http://localhost:5175
 | `bun run dev:server` | Bun backend only (`:5175`)           |
 | `bun run start`      | Start production server              |
 | `bun test`           | Run the test suite                   |
+| `bun run setup:hooks` | Wire the gitleaks pre-commit hook (once per clone/worktree) |
+| `bun run scan:secrets` | Full working-tree secret scan on demand |
 
 ## Project Structure
 

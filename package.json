@@ -46,6 +46,8 @@
     "start": "bun run ./src/server/cli.ts",
     "test": "bun test --conditions production --timeout 30000",
     "verify:client-arch": "bunx ast-grep scan && bun run lint && bun run typecheck && bun run test",
+    "scan:secrets": "gitleaks dir --no-banner --redact",
+    "setup:hooks": "git config core.hooksPath .githooks",
     "prepublishOnly": "bun run build"
   },
   "dependencies": {
