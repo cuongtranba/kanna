@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs"
+import { join } from "node:path"
 import { describe, expect, test } from "bun:test"
 import {
   ALERT_RULES,
@@ -7,6 +9,8 @@ import {
   type AlertRuleSpec,
 } from "./rules"
 import { PROCESS_RSS_BYTES, TURN_DURATION_MS } from "../../server/observability"
+
+const REPO_ROOT = join(import.meta.dir, "../../..")
 
 // This suite is the gate that keeps a rule honest. A rule is only useful if it
 // queries a metric Kanna really exports, breaches on a number someone chose on
@@ -67,6 +71,19 @@ describe("ALERT_RULES", () => {
 
   test("at least one rule is armed", () => {
     expect(ALERT_RULES.some((r) => r.armed)).toBe(true)
+  })
+
+  // A code hint pointing to a non-existent file is worse than no hint: an agent
+  // wastes a turn looking for a file that never existed, then reports nothing.
+  test("every src/ path in a code hint refers to a file that exists", () => {
+    for (const rule of ALERT_RULES) {
+      for (const hint of rule.codeHints) {
+        const match = hint.match(/^(src\/[^\s—]+)/)
+        if (!match) continue
+        const filePath = join(REPO_ROOT, match[1])
+        expect(existsSync(filePath), `${rule.title}: "${match[1]}" does not exist`).toBe(true)
+      }
+    }
   })
 })
 

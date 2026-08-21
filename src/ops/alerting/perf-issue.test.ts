@@ -18,7 +18,7 @@ function payload(over: Partial<PerfAlertPayload> = {}): PerfAlertPayload {
       summary: "Kanna RSS is close to the pm2 restart ceiling",
       description: "Resident memory averaged over 1.8 GiB for 25 minutes.",
       runbook: "Send SIGUSR2 to write a heap snapshot.",
-      code_hints: "src/server/transcript-cache.ts — one oversized transcript is never evicted",
+      code_hints: "src/server/event-store-messages.adapter.ts — TranscriptCache: one oversized transcript is never evicted",
       promql: "avg_over_time(kanna_process_rss_bytes[15m])",
       threshold: "1887436800",
     },
@@ -45,7 +45,7 @@ describe("renderIssue", () => {
   test("body carries what an agent needs to start fixing", () => {
     const { body } = renderIssue(payload())
     expect(body).toContain("avg_over_time(kanna_process_rss_bytes[15m])")
-    expect(body).toContain("src/server/transcript-cache.ts")
+    expect(body).toContain("src/server/event-store-messages.adapter.ts")
     expect(body).toContain("Send SIGUSR2")
     expect(body).toContain("https://kanna-grafana.lowbit.link")
   })
