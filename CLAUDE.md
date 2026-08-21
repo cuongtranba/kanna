@@ -137,6 +137,23 @@ purify), #286 (call-site selectors), #287 (ratchet infrastructure),
 #288–#302 (burn-down 90 → 0), and the final flip (server override
 moved to `error` + ratchet tooling deleted).
 
+# Secret Scanning
+
+**Tool:** `gitleaks` pinned at **v8.30.1**, image `zricethezav/gitleaks:v8.30.1`, config at `.gitleaks.toml`.
+
+**CI gate** (`.github/workflows/gitleaks.yml`) runs on every push to `main` and every PR; merges are blocked on any finding. The pre-commit hook (`.githooks/`) runs the same scan locally — `bun run setup:hooks` wires it.
+
+**Two non-obvious v8.x facts that stale tutorials get wrong:**
+
+- **`gitleaks protect` does not exist in v8.x.** The staged-scan command is `gitleaks git --staged`. An agent seeing an older tutorial will "fix" the hook to `protect`; it would break silently.
+- **`gitleaks dir` does not respect `.gitignore`.** No flag exists on v8.30.1 to enable that. The `.gitleaks.toml` `paths` allowlist exists for this reason — deleting it takes a local scan from 11 findings to 112.
+
+**Exemption mechanism.** A new test fixture that contains a synthetic credential needs one narrow `regexes` entry in `.gitleaks.toml` anchored to the literal fixture value — never a `paths` entry over `src/**` or `*.test.ts`. One placeholder credential = one regex line, added in the same PR that introduces the fixture. `stopwords` covers short dummy values that would be too broad for a regex.
+
+**Version policy.** The upstream `gitleaks/gitleaks` project is effectively feature-complete and ships security patches only. The intended successor is [Betterleaks](https://github.com/betterleaks/betterleaks). The exact pin exists deliberately — do not float it. Revisiting the tool is a conscious future decision, not a routine upgrade.
+
+**Leak response runbook:** see the wiki's [Secret Scanning](https://kanna-wiki.lowbit.link/guides/contributing/secret-scanning/) page. The summary: **rotate the credential first**, then remove it from the tree. History rewrite (`git filter-repo` / BFG) breaks every open PR and worktree — rewrite only when the credential cannot be rotated; a rotated credential in history is inert.
+
 # Design System (MANDATORY)
 
 `DESIGN.md` (repo root) is the single source of truth for Kanna's visual
