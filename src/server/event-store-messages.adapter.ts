@@ -56,9 +56,7 @@ export class TranscriptCache {
   /**
    * `maxChats` alone was never a memory bound: a transcript has no size limit
    * (the JSONL is never compacted), so "4 chats" measured 220 MB RSS on this
-   * install's four largest. `maxBytes` bounds the resource actually being
-   * spent. Both are enforced, and the most recent entry is always retained so
-   * a single oversized transcript degrades to a re-read, never a thrash.
+   * install's four largest. Both `maxChats` and `maxBytes` are enforced.
    */
   constructor(
     private readonly maxChats: number = 4,
@@ -76,12 +74,16 @@ export class TranscriptCache {
 
   /**
    * `bytes` is the transcript's source size. Callers holding the file text
-   * pass its length for free; the rest fall back to measuring.
+   * pass its length for free; the rest fall back to measuring. Transcripts
+   * larger than `maxBytes` are never cached: the parsed heap cost (measured
+   * ~5x the JSONL size) would exceed the budget regardless of eviction order.
    */
   set(chatId: string, entries: TranscriptEntry[], bytes?: number): void {
+    const entryBytes = bytes ?? estimateTranscriptBytes(entries)
+    if (entryBytes > this.maxBytes) return
     this.drop(chatId)
     this.byChat.set(chatId, entries)
-    this.addBytes(chatId, bytes ?? estimateTranscriptBytes(entries))
+    this.addBytes(chatId, entryBytes)
     this.evict()
   }
 
@@ -121,12 +123,8 @@ export class TranscriptCache {
     this.bytesByChat.delete(chatId)
   }
 
-  /** Evicts LRU-first until both bounds hold, never dropping the last entry. */
   private evict(): void {
-    while (
-      this.byChat.size > 1
-      && (this.byChat.size > this.maxChats || this.totalBytes > this.maxBytes)
-    ) {
+    while (this.byChat.size > this.maxChats || this.totalBytes > this.maxBytes) {
       const oldest = this.byChat.keys().next().value
       if (oldest === undefined) break
       this.drop(oldest)

@@ -429,14 +429,15 @@ describe("TranscriptCache", () => {
     expect(reads()).toBe(4)
   })
 
-  test("keeps the newest transcript even when it alone exceeds the budget", () => {
+  test("does not cache a transcript that individually exceeds the byte budget", () => {
     const files = new Map([transcriptFile("chat-a")])
     const { storage, reads } = countingStorage(files)
+    // 1-byte budget: every real transcript exceeds it and must not be pinned.
     const deps = makeDeps({ storage, transcriptCache: new TranscriptCache(4, 1) })
 
     getMessages(deps, "chat-a")
-    getMessages(deps, "chat-a") // must still be a cache hit, not a thrash
-    expect(reads()).toBe(1)
+    getMessages(deps, "chat-a") // not cached: degrades to disk re-reads, not a memory pin
+    expect(reads()).toBe(2)
   })
 
   test("appended entries count toward the byte budget", () => {
