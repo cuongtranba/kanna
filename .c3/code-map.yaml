@@ -312,5 +312,10 @@ c3-234:
   - src/ops/alerting/**/*.ts
   - scripts/grafana-alerts.ts
   - scripts/perf-alert-issue.ts
+c3-235:
+  - .gitleaks.toml
+  - .githooks/pre-commit
+  - .github/workflows/gitleaks.yml
+  - src/server/gitleaks-hook.test.ts
 c3-311:
   - src/shared/cron/**/*.ts

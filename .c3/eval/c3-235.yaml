@@ -1,0 +1,7 @@
+fact: c3-235
+claim: "secret scanning is implemented via gitleaks config, the pre-commit hook, and the CI workflow"
+code:
+  - .gitleaks.toml
+  - .githooks/pre-commit
+  - .github/workflows/gitleaks.yml
+  - src/server/gitleaks-hook.test.ts
