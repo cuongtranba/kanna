@@ -326,13 +326,17 @@ export async function runClaudeSession(
           if (session.backgroundTasks.size === 0) session.backgroundTaskWakeCount = 0
           const launchDescription = session.recentToolDescriptions.get(event.entry.toolId) ?? null
           for (const { id, outputPath } of launches) {
-            if (!session.backgroundTasks.has(id)) {
+            const existing = session.backgroundTasks.get(id)
+            if (!existing) {
               session.backgroundTasks.set(id, {
                 taskType: null,
                 description: launchDescription,
                 startedAt: Date.now(),
                 outputPath,
               })
+              deps.onBackgroundTaskLaunch?.(session.chatId, id, outputPath)
+            } else if (existing.outputPath === null && outputPath !== null) {
+              session.backgroundTasks.set(id, { ...existing, outputPath })
               deps.onBackgroundTaskLaunch?.(session.chatId, id, outputPath)
             }
           }
