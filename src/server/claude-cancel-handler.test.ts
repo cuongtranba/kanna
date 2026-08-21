@@ -91,6 +91,7 @@ function makeSession(overrides: Partial<ClaudeSessionState> = {}): ClaudeSession
     workflowsDirRegistered: false,
     cancelledResultPending: 0,
     suppressSessionTokenPersist: false,
+    backgroundTaskWakeSuppressed: false,
     ...overrides,
   }
 }
@@ -669,5 +670,55 @@ describe("queued messages", () => {
 
     // The dep is gone entirely — the cancel path has no way to start a turn.
     expect("maybeStartNextQueuedMessage" in deps).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// backgroundTaskWakeSuppressed — Stop marks the session so task-notification
+// self-wakes from pre-Stop background tasks cannot re-enter the model.
+// Issue #819: Stop pressed while background tasks were pending; the tasks
+// later completed and triggered a self-wake that merged a PR unattended.
+// ---------------------------------------------------------------------------
+
+describe("backgroundTaskWakeSuppressed", () => {
+  test("cancelling an active turn with pending background tasks sets the flag", async () => {
+    const active = makeActiveTurn()
+    const activeTurns = new Map([["chat-1", active]])
+    const session = makeSession({
+      backgroundTasks: new Map([
+        ["task-1", { taskType: null, description: null, startedAt: Date.now(), outputPath: null }],
+      ]),
+    })
+    const deps = makeDeps({ activeTurns, claudeSessions: new Map([["chat-1", session]]) })
+
+    await cancelChat(deps, "chat-1")
+
+    expect(session.backgroundTaskWakeSuppressed).toBe(true)
+  })
+
+  test("cancelling an active turn WITHOUT pending tasks does not set the flag", async () => {
+    const active = makeActiveTurn()
+    const activeTurns = new Map([["chat-1", active]])
+    const session = makeSession({ backgroundTasks: new Map() })
+    const deps = makeDeps({ activeTurns, claudeSessions: new Map([["chat-1", session]]) })
+
+    await cancelChat(deps, "chat-1")
+
+    expect(session.backgroundTaskWakeSuppressed).toBe(false)
+  })
+
+  test("cancelling a self-wake turn with pending background tasks sets the flag", async () => {
+    const session = makeSession({
+      selfWakeActive: true,
+      backgroundTasks: new Map([
+        ["task-2", { taskType: null, description: null, startedAt: Date.now(), outputPath: null }],
+      ]),
+    })
+    session.session = { ...session.session, interrupt: async () => {} }
+    const deps = makeDeps({ claudeSessions: new Map([["chat-1", session]]) })
+
+    await cancelChat(deps, "chat-1")
+
+    expect(session.backgroundTaskWakeSuppressed).toBe(true)
   })
 })

@@ -220,6 +220,12 @@ export interface ClaudeSessionState {
   // this in-flight session still emits belongs to the OLD conversation and
   // must never re-persist over the wipe. Fresh spawns start unsuppressed.
   suppressSessionTokenPersist: boolean
+  // Set by cancelChat when Stop is pressed while background tasks are pending.
+  // Blocks the self-wake arming logic in the session runner so that
+  // task-notification completions from pre-Stop work cannot re-enter the model
+  // without explicit user action (issue #819). Cleared on the next real user
+  // chat.send so the user can re-engage after reviewing what happened.
+  backgroundTaskWakeSuppressed: boolean
 }
 
 // Re-export SlashCommand as a convenience so importers of this module can get

@@ -81,6 +81,7 @@ function makeSession(overrides: Partial<ClaudeSessionState> = {}): ClaudeSession
     loopArmedAtSpawn: false,
     cancelledResultPending: 0,
     suppressSessionTokenPersist: false,
+    backgroundTaskWakeSuppressed: false,
     ...overrides,
   }
 }

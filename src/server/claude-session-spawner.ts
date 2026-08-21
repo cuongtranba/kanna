@@ -375,6 +375,7 @@ export async function spawnClaudeTurn(
       loopArmedAtSpawn: loopArmedNow,
       cancelledResultPending: 0,
       suppressSessionTokenPersist: false,
+      backgroundTaskWakeSuppressed: false,
     }
     deps.claudeSessions.set(args.chatId, session)
     deps.enforceClaudeSessionBudget(args.chatId)
