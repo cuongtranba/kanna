@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.39.3](https://github.com/cuongtranba/kanna/compare/v1.39.2...v1.39.3) (2026-08-21)
+
+
+### Bug Fixes
+
+* **runner:** suppress self-wake re-entry after Stop with pending background tasks ([#823](https://github.com/cuongtranba/kanna/issues/823)) ([4de21ae](https://github.com/cuongtranba/kanna/commit/4de21ae1c529d0e901e44c3292b8976f3794a6ed))
+
 ## [1.39.2](https://github.com/cuongtranba/kanna/compare/v1.39.1...v1.39.2) (2026-08-21)
 
 
