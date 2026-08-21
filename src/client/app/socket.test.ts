@@ -192,6 +192,7 @@ class FakeDomPort implements DomPort {
   upsertHeadMeta(_name: string, _content: string): void { /* no-op */ }
   getComputedBackgroundColor(): string { return "" }
   setDocumentElementColorScheme(_scheme: "light" | "dark"): void { /* no-op */ }
+  setDocumentElementStyleProperty(_property: string, _value: string): void { /* no-op */ }
   toggleDocumentElementClass(_className: string, _force: boolean): void { /* no-op */ }
   matchesMediaQuery(_query: string): boolean { return false }
   addMediaQueryListener(_query: string, _handler: (matches: boolean) => void): () => void {

@@ -73,6 +73,7 @@ export function makeFakeDomPort(options: FakeDomPortOptions = {}): DomPort {
     upsertHeadMeta: () => { /* no-op */ },
     getComputedBackgroundColor: () => "",
     setDocumentElementColorScheme: () => { /* no-op */ },
+    setDocumentElementStyleProperty: () => { /* no-op */ },
     toggleDocumentElementClass: () => { /* no-op */ },
     matchesMediaQuery: () => false,
     addMediaQueryListener: () => noopUnsubscribe,
