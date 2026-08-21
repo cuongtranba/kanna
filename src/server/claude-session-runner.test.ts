@@ -56,6 +56,7 @@ function makeSession(overrides: Partial<ClaudeSessionState> = {}): ClaudeSession
     backgroundTasks: new Map(),
     selfWakeActive: false,
     recentToolDescriptions: new Map(),
+    backgroundLaunchToolIds: new Set<string>(),
     backgroundTaskDeadlineAt: 0,
     backgroundTaskWakeCount: 0,
     backgroundTasksLevelSourced: false,
@@ -558,12 +559,22 @@ describe("runClaudeSession", () => {
   test("tool_result with background task ID updates backgroundTaskIds and deadline", async () => {
     const session = makeSession()
     const taskId = "bgtask42"
+    const toolId = "toolu_launch1"
     const toolResultContent = `\nCommand running in background with ID: ${taskId}\nSome other output`
+
+    const bgToolCallEntry = {
+      _id: "tool-call-1",
+      createdAt: Date.now(),
+      kind: "tool_call",
+      tool: { kind: "tool", toolKind: "bash", toolName: "Bash", toolId,
+        input: { command: "watch.sh", runInBackground: true } },
+    } as unknown as TranscriptEntry
 
     const bgToolResultEntry = {
       _id: "tool-res-1",
       createdAt: Date.now(),
       kind: "tool_result",
+      toolId,
       content: toolResultContent,
     } as unknown as TranscriptEntry
 
@@ -575,6 +586,7 @@ describe("runClaudeSession", () => {
       },
     })
     session.session.stream = fakeStream([
+      { type: "transcript", entry: bgToolCallEntry },
       { type: "transcript", entry: bgToolResultEntry },
     ])
 
@@ -637,14 +649,25 @@ describe("runClaudeSession", () => {
     // A fresh watch epoch gets a fresh wake budget
     // (adr-20260801-background-task-wake-escalation).
     const session = makeSession({ backgroundTaskWakeCount: 3 })
+    const bgToolCallEntry = {
+      _id: "tool-call-reset",
+      createdAt: Date.now(),
+      kind: "tool_call",
+      tool: { kind: "tool", toolKind: "bash", toolName: "Bash", toolId: "toolu_fresh",
+        input: { command: "fresh.sh", runInBackground: true } },
+    } as unknown as TranscriptEntry
     const bgToolResultEntry = {
       _id: "tool-res-reset",
       createdAt: Date.now(),
       kind: "tool_result",
+      toolId: "toolu_fresh",
       content: "Command running in background with ID: fresh1",
     } as unknown as TranscriptEntry
     const deps = makeDeps(session)
-    session.session.stream = fakeStream([{ type: "transcript", entry: bgToolResultEntry }])
+    session.session.stream = fakeStream([
+      { type: "transcript", entry: bgToolCallEntry },
+      { type: "transcript", entry: bgToolResultEntry },
+    ])
 
     await runClaudeSession(deps, session)
 
@@ -729,25 +752,57 @@ describe("runClaudeSession", () => {
     expect(session.backgroundTasksLevelSourced).toBe(true)
   })
 
-  test("a launch tool_result alone does NOT promote the session (PTY invariant)", async () => {
+  test("a launch tool_result paired with its tool_call does NOT promote the session (PTY invariant)", async () => {
     // The launch-regex fallback is the ONLY signal on PTY, where CLI >= 2.1.x
     // writes no system rows. Promoting on it would hand PTY sessions SDK
     // semantics they cannot support and disable their only keep-alive bound.
     const session = makeSession()
+    const toolCallEntry = {
+      _id: "tool-call-pty",
+      createdAt: Date.now(),
+      kind: "tool_call",
+      tool: { kind: "tool", toolKind: "bash", toolName: "Bash", toolId: "toolu_pty1",
+        input: { command: "watch.sh", runInBackground: true } },
+    } as unknown as TranscriptEntry
     const bgToolResultEntry = {
       _id: "tool-res-no-promote",
       createdAt: Date.now(),
       kind: "tool_result",
+      toolId: "toolu_pty1",
       content: "Command running in background with ID: ptyonly1",
     } as unknown as TranscriptEntry
     const deps = makeDeps(session)
-    session.session.stream = fakeStream([{ type: "transcript", entry: bgToolResultEntry }])
+    session.session.stream = fakeStream([
+      { type: "transcript", entry: toolCallEntry },
+      { type: "transcript", entry: bgToolResultEntry },
+    ])
 
     await runClaudeSession(deps, session)
 
     expect(session.backgroundTasks.has("ptyonly1")).toBe(true)
     expect(session.backgroundTasksLevelSourced).toBe(false)
     expect(session.backgroundTaskDeadlineAt).toBeGreaterThan(Date.now())
+  })
+
+  test("a tool_result without a matching tool_call does not arm the background task guard (phantom-arm prevention)", async () => {
+    // Scenario: the model reads another chat's transcript with Bash/Read and
+    // the echoed content contains a launch marker. Without the provenance gate,
+    // this would phantom-arm the guard for a task the session never launched.
+    const session = makeSession()
+    const readToolResultEntry = {
+      _id: "tool-res-read",
+      createdAt: Date.now(),
+      kind: "tool_result",
+      toolId: "toolu_read1",
+      content: "Command running in background with ID: phantom1. Output is being written to: /other-session/tasks/phantom1.output. You will be notified when it completes.",
+    } as unknown as TranscriptEntry
+    const deps = makeDeps(session)
+    session.session.stream = fakeStream([{ type: "transcript", entry: readToolResultEntry }])
+
+    await runClaudeSession(deps, session)
+
+    expect(session.backgroundTasks.has("phantom1")).toBe(false)
+    expect(session.backgroundTaskDeadlineAt).toBe(0)
   })
 
   test("backgroundTasksSnapshot meta labels tasks; surviving ids keep startedAt", async () => {
@@ -792,7 +847,7 @@ describe("runClaudeSession", () => {
         toolKind: "bash",
         toolName: "Bash",
         toolId: "toolu_bg1",
-        input: { command: "sleep 600", description: "Watch the deploy" },
+        input: { command: "sleep 600", description: "Watch the deploy", runInBackground: true },
       },
     } as unknown as TranscriptEntry
     const toolResultEntry = {
@@ -830,6 +885,13 @@ describe("runClaudeSession", () => {
         { id: "b3tqaogys", taskType: "local_bash", description: "Build pvs Go image" },
       ],
     } as unknown as TranscriptEntry
+    const toolCallEntry = {
+      _id: "tc-sdk-order",
+      createdAt: Date.now(),
+      kind: "tool_call",
+      tool: { kind: "tool", toolKind: "bash", toolName: "Bash", toolId: "toolu_sdk1",
+        input: { command: "build.sh", runInBackground: true } },
+    } as unknown as TranscriptEntry
     const toolResultEntry = {
       _id: "tr-sdk-order",
       createdAt: Date.now(),
@@ -844,6 +906,7 @@ describe("runClaudeSession", () => {
     })
     session.session.stream = fakeStream([
       { type: "transcript", entry: snapshotEntry },
+      { type: "transcript", entry: toolCallEntry },
       { type: "transcript", entry: toolResultEntry },
     ])
 
@@ -864,6 +927,13 @@ describe("runClaudeSession", () => {
     const session = makeSession({
       backgroundTasks: new Map([["known1", { taskType: "local_bash", description: "existing", startedAt: 100, outputPath: "/tmp/known1.output" }]]),
     })
+    const toolCallEntry = {
+      _id: "tc-no-double",
+      createdAt: Date.now(),
+      kind: "tool_call",
+      tool: { kind: "tool", toolKind: "bash", toolName: "Bash", toolId: "toolu_nd1",
+        input: { command: "repeat.sh", runInBackground: true } },
+    } as unknown as TranscriptEntry
     const toolResultEntry = {
       _id: "tr-no-double",
       createdAt: Date.now(),
@@ -876,7 +946,10 @@ describe("runClaudeSession", () => {
     const deps = makeDeps(session, {
       onBackgroundTaskLaunch: (_chatId, id, outputPath) => launched.push({ id, outputPath }),
     })
-    session.session.stream = fakeStream([{ type: "transcript", entry: toolResultEntry }])
+    session.session.stream = fakeStream([
+      { type: "transcript", entry: toolCallEntry },
+      { type: "transcript", entry: toolResultEntry },
+    ])
 
     await runClaudeSession(deps, session)
 

@@ -190,6 +190,14 @@ export interface ClaudeSessionState {
   // background task when no background_tasks_changed snapshot arrives (PTY
   // driver; SDK version skew).
   recentToolDescriptions: Map<string, string>
+  // Provenance gate for the regex-based background task launch detector:
+  // toolIds whose tool_call was a known background-launching tool (Bash with
+  // run_in_background, subagent_task, workflow). Only tool_results from ids in
+  // this set are scanned for "Command running in background with ID: …" or
+  // "Async agent launched successfully" — prevents a read of another chat's
+  // transcript (whose content may echo those strings) from phantom-arming the
+  // guard. Entries are removed once the corresponding tool_result is processed.
+  backgroundLaunchToolIds: Set<string>
   // Armed-loop state captured at spawn. Both drivers bake the loop tool-block
   // into the spawn (PTY: --disallowedTools CLI args; SDK: options.disallowedTools
   // so the model never sees the blocked tools — Claude Code's filter-at-spawn

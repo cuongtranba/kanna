@@ -74,6 +74,7 @@ function makeSession(overrides: Partial<ClaudeSessionState> = {}): ClaudeSession
     backgroundTasks: new Map(),
     selfWakeActive: false,
     recentToolDescriptions: new Map(),
+    backgroundLaunchToolIds: new Set<string>(),
     backgroundTaskDeadlineAt: 0,
     backgroundTaskWakeCount: 0,
     backgroundTasksLevelSourced: false,

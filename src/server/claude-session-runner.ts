@@ -273,6 +273,10 @@ export async function runClaudeSession(
       // Remember recent tool_call descriptions so a background launch seen
       // only through the tool_result regex (PTY driver; SDK version skew)
       // can label the task in the UI with the launching call's description.
+      // Also record which toolIds are background-launching tools — only their
+      // tool_results are scanned for the launch marker (provenance gate that
+      // prevents a Read/Bash-cat of another session's transcript from
+      // phantom-arming the background task guard, see issue #814).
       if (event.entry.kind === "tool_call") {
         const description = toolCallDescription(event.entry.tool)
         if (description) {
@@ -282,6 +286,14 @@ export async function runClaudeSession(
             if (oldest === undefined) break
             session.recentToolDescriptions.delete(oldest)
           }
+        }
+        const tool = event.entry.tool
+        if (
+          (tool.toolKind === "bash" && tool.input.runInBackground === true) ||
+          tool.toolKind === "subagent_task" ||
+          tool.toolKind === "workflow"
+        ) {
+          session.backgroundLaunchToolIds.add(tool.toolId)
         }
       }
       // Task-notification self-wake turns stream entries with NO ActiveTurn
@@ -318,30 +330,38 @@ export async function runClaudeSession(
       // snapshot (PTY / old CLI) — see backgroundTasksLevelSourced.
       // A `backgroundTaskIdsSnapshot` status entry (SDK background_tasks_changed
       // level signal) REPLACES the whole set — authoritative over both edges.
+      // Provenance gate (issue #814): only scan tool_results whose toolId
+      // belongs to a known background-launching tool_call (bash runInBackground,
+      // subagent_task, workflow). Without this, a Read/Bash tool that echoes
+      // another session's transcript phantom-arms this session's guard.
       if (event.entry.kind === "tool_result") {
-        const launches = backgroundTaskLaunchesFromToolResult(event.entry.content)
-        if (launches.length > 0) {
-          // empty→non-empty = a fresh watch epoch: restore the watchdog
-          // wake budget (adr-20260801-background-task-wake-escalation).
-          if (session.backgroundTasks.size === 0) session.backgroundTaskWakeCount = 0
-          const launchDescription = session.recentToolDescriptions.get(event.entry.toolId) ?? null
-          for (const { id, outputPath } of launches) {
-            const existing = session.backgroundTasks.get(id)
-            if (!existing) {
-              session.backgroundTasks.set(id, {
-                taskType: null,
-                description: launchDescription,
-                startedAt: Date.now(),
-                outputPath,
-              })
-              deps.onBackgroundTaskLaunch?.(session.chatId, id, outputPath)
-            } else if (existing.outputPath === null && outputPath !== null) {
-              session.backgroundTasks.set(id, { ...existing, outputPath })
-              deps.onBackgroundTaskLaunch?.(session.chatId, id, outputPath)
+        const isLaunchResult = session.backgroundLaunchToolIds.has(event.entry.toolId)
+        session.backgroundLaunchToolIds.delete(event.entry.toolId)
+        if (isLaunchResult) {
+          const launches = backgroundTaskLaunchesFromToolResult(event.entry.content)
+          if (launches.length > 0) {
+            // empty→non-empty = a fresh watch epoch: restore the watchdog
+            // wake budget (adr-20260801-background-task-wake-escalation).
+            if (session.backgroundTasks.size === 0) session.backgroundTaskWakeCount = 0
+            const launchDescription = session.recentToolDescriptions.get(event.entry.toolId) ?? null
+            for (const { id, outputPath } of launches) {
+              const existing = session.backgroundTasks.get(id)
+              if (!existing) {
+                session.backgroundTasks.set(id, {
+                  taskType: null,
+                  description: launchDescription,
+                  startedAt: Date.now(),
+                  outputPath,
+                })
+                deps.onBackgroundTaskLaunch?.(session.chatId, id, outputPath)
+              } else if (existing.outputPath === null && outputPath !== null) {
+                session.backgroundTasks.set(id, { ...existing, outputPath })
+                deps.onBackgroundTaskLaunch?.(session.chatId, id, outputPath)
+              }
             }
+            session.backgroundTaskDeadlineAt = Date.now() + deps.resolveBackgroundTaskMaxMs()
+            deps.emitStateChange(session.chatId)
           }
-          session.backgroundTaskDeadlineAt = Date.now() + deps.resolveBackgroundTaskMaxMs()
-          deps.emitStateChange(session.chatId)
         }
       }
       if (event.entry.kind === "status" && event.entry.backgroundTaskIdsSnapshot) {
