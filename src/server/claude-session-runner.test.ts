@@ -813,6 +813,77 @@ describe("runClaudeSession", () => {
     expect(session.backgroundTasks.get("bglabeled1")?.description).toBe("Watch the deploy")
   })
 
+  test("SDK ordering: level snapshot before tool_result enriches outputPath and fires onBackgroundTaskLaunch once", async () => {
+    // The SDK's background_tasks_changed level snapshot arrives ~1ms before the
+    // Bash tool_result that carries the output path (observed in chat 3cf1de5c,
+    // issue #806). The launch branch must enrich the existing entry with outputPath
+    // rather than skip it, preserving snapshot-supplied taskType/description/startedAt.
+    const session = makeSession()
+    const snapshotEntry = {
+      _id: "snap-sdk-order",
+      createdAt: Date.now(),
+      kind: "status",
+      status: "Background tasks: 1 running",
+      hidden: true,
+      backgroundTaskIdsSnapshot: ["b3tqaogys"],
+      backgroundTasksSnapshot: [
+        { id: "b3tqaogys", taskType: "local_bash", description: "Build pvs Go image" },
+      ],
+    } as unknown as TranscriptEntry
+    const toolResultEntry = {
+      _id: "tr-sdk-order",
+      createdAt: Date.now(),
+      kind: "tool_result",
+      toolId: "toolu_sdk1",
+      content: "Command running in background with ID: b3tqaogys\nOutput is being written to: /tmp/b3tqaogys.output",
+    } as unknown as TranscriptEntry
+
+    const launched: Array<{ id: string; outputPath: string | null }> = []
+    const deps = makeDeps(session, {
+      onBackgroundTaskLaunch: (_chatId, id, outputPath) => launched.push({ id, outputPath }),
+    })
+    session.session.stream = fakeStream([
+      { type: "transcript", entry: snapshotEntry },
+      { type: "transcript", entry: toolResultEntry },
+    ])
+
+    await runClaudeSession(deps, session)
+
+    const task = session.backgroundTasks.get("b3tqaogys")
+    expect(task?.outputPath).toBe("/tmp/b3tqaogys.output")
+    expect(launched).toHaveLength(1)
+    expect(launched[0]).toEqual({ id: "b3tqaogys", outputPath: "/tmp/b3tqaogys.output" })
+    expect(task?.description).toBe("Build pvs Go image")
+    expect(task?.taskType).toBe("local_bash")
+  })
+
+  test("SDK ordering: onBackgroundTaskLaunch not fired again when outputPath already known", async () => {
+    // Guard: if somehow a tool_result arrives for an id whose outputPath is already set
+    // (e.g. a replay scenario), do not double-fire trackTask — it would re-register
+    // the file reader from offset 0.
+    const session = makeSession({
+      backgroundTasks: new Map([["known1", { taskType: "local_bash", description: "existing", startedAt: 100, outputPath: "/tmp/known1.output" }]]),
+    })
+    const toolResultEntry = {
+      _id: "tr-no-double",
+      createdAt: Date.now(),
+      kind: "tool_result",
+      toolId: "toolu_nd1",
+      content: "Command running in background with ID: known1\nOutput is being written to: /tmp/known1.output",
+    } as unknown as TranscriptEntry
+
+    const launched: Array<{ id: string; outputPath: string | null }> = []
+    const deps = makeDeps(session, {
+      onBackgroundTaskLaunch: (_chatId, id, outputPath) => launched.push({ id, outputPath }),
+    })
+    session.session.stream = fakeStream([{ type: "transcript", entry: toolResultEntry }])
+
+    await runClaudeSession(deps, session)
+
+    expect(launched).toHaveLength(0)
+    expect(session.backgroundTasks.get("known1")?.outputPath).toBe("/tmp/known1.output")
+  })
+
   test("self-wake: model entries with no active turn arm selfWakeActive; result disarms", async () => {
     const session = makeSession()
     const observed: boolean[] = []
