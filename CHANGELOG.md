@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.41.0](https://github.com/cuongtranba/kanna/compare/v1.40.7...v1.41.0) (2026-08-22)
+
+
+### Features
+
+* **push:** per-chat silent toggle for push notifications ([#852](https://github.com/cuongtranba/kanna/issues/852)) ([3657b58](https://github.com/cuongtranba/kanna/commit/3657b581c1983baafd6c842b9bf06e9cb8300ee6)), closes [#851](https://github.com/cuongtranba/kanna/issues/851)
+
 ## [1.40.7](https://github.com/cuongtranba/kanna/compare/v1.40.6...v1.40.7) (2026-08-22)
 
 
