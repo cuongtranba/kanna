@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.41.6](https://github.com/cuongtranba/kanna/compare/v1.41.5...v1.41.6) (2026-08-22)
+
+
+### Bug Fixes
+
+* **event-store:** free per-chat private caches on chat deletion ([#868](https://github.com/cuongtranba/kanna/issues/868)) ([e8e0400](https://github.com/cuongtranba/kanna/commit/e8e0400fc562df7b4b113bfc7c7a77eede2d1d82)), closes [#863](https://github.com/cuongtranba/kanna/issues/863)
+
 ## [1.41.5](https://github.com/cuongtranba/kanna/compare/v1.41.4...v1.41.5) (2026-08-22)
 
 
