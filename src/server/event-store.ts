@@ -76,6 +76,7 @@ export class EventStore implements PushEventStore {
   // PTY respawn / server restart (Claude appends to the same JSONL via
   // --resume; on cold-wake the reader starts at byte 0 and would re-emit).
   private seenMessageIdsByChatId = new Map<string, Set<string>>()
+  private lastUserMessageIdByChatId = new Map<string, string>()
   private legacySidebarProjectOrder: string[] = []
   private readonly sidebarProjectOrderRef: { value: string[] } = { value: [] }
   private snapshotHasLegacyMessages = false
@@ -336,7 +337,12 @@ export class EventStore implements PushEventStore {
 
   async setChatPolicyOverride(chatId: string, policyOverride: ChatPermissionPolicyOverride | null) { return EntityWrite.setChatPolicyOverride(this.buildEntityWriteDeps(), chatId, policyOverride) }
 
-  async appendMessage(chatId: string, entry: TranscriptEntry) { return TranscriptWrite.appendMessage(this.buildChatTranscriptWriteDeps(), chatId, entry) }
+  async appendMessage(chatId: string, entry: TranscriptEntry) {
+    await TranscriptWrite.appendMessage(this.buildChatTranscriptWriteDeps(), chatId, entry)
+    if (entry.kind === "user_prompt") {
+      this.lastUserMessageIdByChatId.set(chatId, entry._id)
+    }
+  }
 
   async enqueueMessage(chatId: string, message: Omit<QueuedChatMessage, "id" | "createdAt"> & Partial<Pick<QueuedChatMessage, "id" | "createdAt">>) { return EntityWrite.enqueueMessage(this.buildEntityWriteDeps(), chatId, message) }
 
@@ -407,6 +413,32 @@ export class EventStore implements PushEventStore {
   // ─── Message read methods (thin delegates) ────────────────────────────────
 
   getMessages(chatId: string) { return MessageRead.getMessages(this.buildMessageReadDeps(), chatId) }
+
+  /**
+   * Returns the `_id` of the most recent `user_prompt` entry for this chat.
+   *
+   * Hot path: served from the in-memory map that `appendMessage` keeps current.
+   * Cold-start fallback: tail-reads the transcript (avoids a full 96 MB load)
+   * and caches the result so the next call is free.
+   */
+  getLastUserMessageId(chatId: string): string | null {
+    const cached = this.lastUserMessageIdByChatId.get(chatId)
+    if (cached !== undefined) return cached
+
+    const entries = MessageRead.getRecentRawEntries(this.buildMessageReadDeps(), chatId, 100)
+    for (let i = entries.length - 1; i >= 0; i--) {
+      const e = entries[i]!
+      if (e.kind === "user_prompt") {
+        this.lastUserMessageIdByChatId.set(chatId, e._id)
+        return e._id
+      }
+    }
+    return null
+  }
+
+  getRecentRawEntries(chatId: string, limit: number) {
+    return MessageRead.getRecentRawEntries(this.buildMessageReadDeps(), chatId, limit)
+  }
 
   getLatestContextWindowUsage(chatId: string) {
     return MessageRead.getLatestChatContextWindowUsage(this.buildMessageReadDeps(), chatId)

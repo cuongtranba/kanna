@@ -22,6 +22,7 @@ import type {
 } from "./events"
 import type { AutoContinueEvent } from "./auto-continue/events"
 import { compactCronRunEvents } from "./cron/compact"
+import { compactLoopWakeEvents } from "./auto-continue/compact-loop-wakes"
 import { ACTIVE_SESSION_IDLE_GAP_MS } from "./read-models"
 import { resolveLocalPath } from "./paths"
 
@@ -404,10 +405,11 @@ export function applyChatLifecycleEvent(
 /**
  * Push an AutoContinueEvent onto the per-chat event list. Pure map mutation.
  *
- * Live append and boot replay both land here, so the cron-run retention applied
- * on the way in is the one thing keeping this list bounded — the log itself
- * never expires. `compactCronRunEvents` returns its input untouched unless a
- * job actually exceeded retention.
+ * Live append and boot replay both land here, so the retention passes applied
+ * on the way in are what keep this list bounded — the log itself never expires.
+ * `compactCronRunEvents` caps recurring-job run history. `compactLoopWakeEvents`
+ * drops fired/cancelled loop-wake accepted events whose large prompts would
+ * otherwise accumulate unboundedly over many iterations.
  */
 export function applyAutoContinueToState(
   autoContinueEventsByChatId: Map<string, AutoContinueEvent[]>,
@@ -415,7 +417,10 @@ export function applyAutoContinueToState(
 ): void {
   const existing = autoContinueEventsByChatId.get(event.chatId) ?? []
   existing.push(event)
-  autoContinueEventsByChatId.set(event.chatId, compactCronRunEvents(existing))
+  autoContinueEventsByChatId.set(
+    event.chatId,
+    compactLoopWakeEvents(compactCronRunEvents(existing)),
+  )
 }
 
 // ─── Transcript message metadata ───────────────────────────────────────────

@@ -116,7 +116,7 @@ export function buildHistoryPrimer(
   return `${header}${truncMarker}${selected.map((entry) => entry.text).join("")}${footer}${userText}`
 }
 
-export function extractPreviousAssistantReply(entries: TranscriptEntry[]): string | null {
+export function extractPreviousAssistantReply(entries: readonly TranscriptEntry[]): string | null {
   for (let i = entries.length - 1; i >= 0; i -= 1) {
     const entry = entries[i]
     if (entry.kind === "assistant_text") return entry.text

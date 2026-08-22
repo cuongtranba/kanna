@@ -598,6 +598,35 @@ export function getMessages(deps: MessageReadDeps, chatId: string): TranscriptEn
   return cloneTranscriptEntries(getMessagesView(deps, chatId))
 }
 
+/**
+ * Returns the last `limit` raw transcript entries without cloning and without
+ * loading the full transcript when it is not already cached.
+ *
+ * When the full transcript is cached, slices it in-place (O(1) bounds check).
+ * Otherwise uses the tail-read path (readSliceSync) so a 96 MB transcript on
+ * disk costs only a small chunk read, not a full 524 MB RSS spike.
+ * Falls back to getMessagesView when slice reads are unsupported.
+ */
+export function getRecentRawEntries(
+  deps: MessageReadDeps,
+  chatId: string,
+  limit: number,
+): readonly TranscriptEntry[] {
+  const cached = deps.transcriptCache.get(chatId)
+  if (cached) {
+    return cached.length <= limit ? cached : cached.slice(-limit)
+  }
+
+  const tail = readTranscriptTail(deps, chatId, limit)
+  if (tail) {
+    const { entries } = tail
+    return entries.length <= limit ? entries : entries.slice(-limit)
+  }
+
+  const entries = getMessagesView(deps, chatId)
+  return entries.length <= limit ? entries : entries.slice(-limit)
+}
+
 /** Returns queued messages for a chat, with attachment arrays cloned. */
 export function getQueuedMessages(
   deps: MessageReadDeps,
