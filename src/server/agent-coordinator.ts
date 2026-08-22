@@ -1,5 +1,4 @@
 import { type SetupLoopHandlerResult } from "./kanna-mcp"
-import { findLastUserMessageId as findLastUserMessageIdFn } from "./claude-prompt-helpers"
 import { PendingToolSlots } from "./pending-tool-slot"
 import type { LoopSetupInput } from "./loop-template"
 import type {
@@ -803,7 +802,7 @@ export class AgentCoordinator {
 
   /** @internal used by agent-deps-builders.ts via buildStartTurnDeps */
   findLastUserMessageId(chatId: string): string | null {
-    return findLastUserMessageIdFn(this.store.getMessages(chatId))
+    return this.store.getLastUserMessageId(chatId)
   }
 
   private buildSpawnClaudeTurnDeps(): SpawnClaudeTurnDeps {

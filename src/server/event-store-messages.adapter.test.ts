@@ -16,6 +16,7 @@ import {
   getRecentMessagesPage,
   getLatestChatContextWindowUsage,
   getSeenMessageIds,
+  getRecentRawEntries,
   loadTranscriptFromDisk,
   type MessageReadDeps,
 } from "./event-store-messages.adapter"
@@ -773,5 +774,65 @@ describe("getLatestChatContextWindowUsage", () => {
 
     expect(getLatestChatContextWindowUsage(deps, "chat-t")).toBe(null)
     expect(spans.reduce((a, b) => a + b, 0)).toBeLessThan(9 * 1024 * 1024)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// getRecentRawEntries
+// ---------------------------------------------------------------------------
+
+describe("getRecentRawEntries", () => {
+  function makeSliceStorage(content: string): StorageBackend {
+    const buf = Buffer.from(content, "utf8")
+    return {
+      mkdir: async () => {},
+      exists: async (p) => p.endsWith(".jsonl"),
+      existsSync: (p) => p.endsWith(".jsonl"),
+      size: async () => buf.length,
+      sizeSync: () => buf.length,
+      readText: async () => content,
+      readTextSync: () => content,
+      writeText: async () => {},
+      appendText: async () => {},
+      rename: async () => {},
+      remove: async () => {},
+      readSliceSync: (_p: string, start: number, end: number) => buf.subarray(start, end),
+    }
+  }
+
+  function lines(count: number): string {
+    return Array.from({ length: count }, (_, i) =>
+      JSON.stringify({ _id: `e${i}`, createdAt: i, kind: "assistant_text", text: `t${i}` })
+    ).join("\n").concat("\n")
+  }
+
+  test("returns all entries when transcript is smaller than limit", () => {
+    const content = lines(5)
+    const deps = makeDeps({ storage: makeSliceStorage(content) })
+    const result = getRecentRawEntries(deps, "chat-1", 100)
+    expect(result.length).toBe(5)
+    expect(result[0]._id).toBe("e0")
+    expect(result[4]._id).toBe("e4")
+  })
+
+  test("returns only the last `limit` entries for a large transcript", () => {
+    const content = lines(200)
+    const deps = makeDeps({ storage: makeSliceStorage(content) })
+    const result = getRecentRawEntries(deps, "chat-1", 10)
+    expect(result.length).toBe(10)
+    expect(result[result.length - 1]._id).toBe("e199")
+  })
+
+  test("serves from full-transcript cache when available", () => {
+    const cache = new TranscriptCache()
+    const cached: TranscriptEntry[] = [
+      { _id: "c0", createdAt: 0, kind: "user_prompt", content: "hi" } as TranscriptEntry,
+      { _id: "c1", createdAt: 1, kind: "assistant_text", text: "yo" } as TranscriptEntry,
+    ]
+    cache.set("chat-1", cached, 50)
+    const deps = makeDeps({ storage: makeSliceStorage(""), transcriptCache: cache })
+    const result = getRecentRawEntries(deps, "chat-1", 10)
+    expect(result.length).toBe(2)
+    expect(result[0]._id).toBe("c0")
   })
 })

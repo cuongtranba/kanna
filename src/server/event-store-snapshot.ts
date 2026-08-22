@@ -18,6 +18,7 @@ import type { CloudflareTunnelEvent } from "./cloudflare-tunnel/events"
 import type { PushEvent } from "./push/events"
 import type { ShareEvent } from "./session-share/share-projection"
 import { compactCronRunEvents } from "./cron/compact"
+import { compactLoopWakeEvents } from "./auto-continue/compact-loop-wakes"
 import {
   type ChatRecord,
   type ProjectRecord,
@@ -174,7 +175,10 @@ export async function loadSnapshotIntoState(
         // `applyAutoContinueToState`, so retention has to be applied here too
         // — otherwise a snapshot written before retention existed, or one for
         // a chat that never appends again, stays bloated forever.
-        state.autoContinueEventsByChatId.set(entry.chatId, compactCronRunEvents([...entry.events]))
+        state.autoContinueEventsByChatId.set(
+          entry.chatId,
+          compactLoopWakeEvents(compactCronRunEvents([...entry.events])),
+        )
       }
     }
 

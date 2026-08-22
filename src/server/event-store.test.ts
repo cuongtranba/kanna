@@ -2084,3 +2084,80 @@ describe("chat op-log integration", () => {
     expect(store.chatOps.currentSeq(chat.id)).toBe(0)
   })
 })
+
+describe("getLastUserMessageId", () => {
+  test("returns null for a chat with no appended messages", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+    const project = await store.openProject("/tmp/project-lum")
+    const chat = await store.createChat(project.id)
+
+    expect(store.getLastUserMessageId(chat.id)).toBeNull()
+  })
+
+  test("returns null when only non-user_prompt entries have been appended", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+    const project = await store.openProject("/tmp/project-lum2")
+    const chat = await store.createChat(project.id)
+    await store.appendMessage(chat.id, entry("assistant_text", 200, { text: "hi" }))
+    await store.flush()
+
+    expect(store.getLastUserMessageId(chat.id)).toBeNull()
+  })
+
+  test("returns the id of the most recently appended user_prompt", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+    const project = await store.openProject("/tmp/project-lum3")
+    const chat = await store.createChat(project.id)
+    const first = entry("user_prompt", 100, { content: "first" })
+    const second = entry("user_prompt", 200, { content: "second" })
+    await store.appendMessage(chat.id, first)
+    await store.appendMessage(chat.id, entry("assistant_text", 150, { text: "ack" }))
+    await store.appendMessage(chat.id, second)
+    await store.flush()
+
+    expect(store.getLastUserMessageId(chat.id)).toBe(second._id)
+  })
+
+  test("falls back to tail scan on cold start (no prior appendMessage calls)", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+    const project = await store.openProject("/tmp/project-lum4")
+    const chat = await store.createChat(project.id)
+    const userEntry = entry("user_prompt", 100, { content: "cold" })
+    await store.appendMessage(chat.id, userEntry)
+    await store.flush()
+
+    // Fresh store instance — in-memory map is empty
+    const coldStore = new EventStore(dataDir)
+    await coldStore.initialize()
+
+    expect(coldStore.getLastUserMessageId(chat.id)).toBe(userEntry._id)
+  })
+})
+
+describe("getRecentRawEntries (EventStore delegate)", () => {
+  test("returns the last N entries without cloning the full transcript", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+    const project = await store.openProject("/tmp/project-rre")
+    const chat = await store.createChat(project.id)
+    for (let i = 0; i < 50; i++) {
+      await store.appendMessage(chat.id, entry("assistant_text", 200 + i, { text: `msg ${i}` }))
+    }
+    const userMsg = entry("user_prompt", 9999, { content: "last" })
+    await store.appendMessage(chat.id, userMsg)
+    await store.flush()
+
+    const recent = store.getRecentRawEntries(chat.id, 5)
+    expect(recent.length).toBe(5)
+    expect(recent[recent.length - 1]._id).toBe(userMsg._id)
+  })
+})

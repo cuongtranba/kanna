@@ -3973,6 +3973,13 @@ function createFakeStore() {
     getMessages() {
       return this.messages
     },
+    getLastUserMessageId(_chatId: string) {
+      const last = [...this.messages].reverse().find((e) => e.kind === "user_prompt")
+      return last?._id ?? null
+    },
+    getRecentRawEntries(_chatId: string, limit: number) {
+      return this.messages.slice(-limit)
+    },
     async setChatProvider(_chatId: string, provider: "claude" | "codex") {
       chat.provider = provider
     },

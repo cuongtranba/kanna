@@ -46,6 +46,13 @@ function createFakeStore() {
     getChat(chatId: string) { return chatId === "chat-1" ? chat : null },
     getProject() { return project },
     getMessages() { return this.messages },
+    getLastUserMessageId(_chatId: string) {
+      const last = [...this.messages].reverse().find((e) => e.kind === "user_prompt")
+      return last?._id ?? null
+    },
+    getRecentRawEntries(_chatId: string, limit: number) {
+      return this.messages.slice(-limit)
+    },
     async setChatProvider(_chatId: string, provider: "claude" | "codex") { chat.provider = provider },
     async setPlanMode(_chatId: string, planMode: boolean) { chat.planMode = planMode },
     async renameChat(_chatId: string, title: string) { chat.title = title },
