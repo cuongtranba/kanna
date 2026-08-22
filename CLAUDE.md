@@ -1565,10 +1565,14 @@ evicted. The `entries[]` array inside each retained snapshot is capped at
 `MAX_SUBAGENT_ENTRIES_PER_RUN` (2000) — oldest entries are spliced out when the
 cap is exceeded, keeping the most recent interactions in memory.
 `state.autoContinueEventsByChatId` is evicted only by whole-chat delete, but its
-dominant contributor is now bounded — see **Cron run-event retention** below.
-What remains unbounded there is `loop_armed` prompt bloat, MEASURED at 285 KB
-for one long loop chat, 91% of it the same rendered loop prompt re-embedded on
-every wake by `deliverSubagentToMain`.
+dominant contributors are now bounded — see **Cron run-event retention** below.
+`compactLoopWakeEvents` (`auto-continue/compact-loop-wakes.ts`) also trims
+superseded `loop_armed` events: once a later `loop_armed` or `loop_disarmed`
+arrives, all prior loop-state events (`loop_armed`, `loop_disarmed`,
+`loop_run_outcome`) carry no weight in any live read and are dropped. When the
+loop is currently disarmed every loop-state event is dropped. MEASURED before
+this fix: 285 KB for one long loop chat, 91% of it the same rendered loop prompt
+re-embedded on every wake by `deliverSubagentToMain`.
 
 # Cron run-event retention (`compactCronRunEvents`)
 

@@ -18,6 +18,7 @@ import {
   getSeenMessageIds,
   getRecentRawEntries,
   loadTranscriptFromDisk,
+  getMessagesView,
   type MessageReadDeps,
 } from "./event-store-messages.adapter"
 import { getLatestContextWindowUsage } from "./proactive-compact"
@@ -854,5 +855,100 @@ describe("getRecentRawEntries", () => {
     const result = getRecentRawEntries(deps, "chat-1", 10)
     expect(result.length).toBe(2)
     expect(result[0]._id).toBe("c0")
+  })
+})
+
+// ---------------------------------------------------------------------------
+// TranscriptCache.isSeeded / markSeeded — seeding state independent of LRU
+// ---------------------------------------------------------------------------
+
+describe("TranscriptCache isSeeded / markSeeded", () => {
+  test("isSeeded returns false for an unknown chatId", () => {
+    const cache = new TranscriptCache()
+    expect(cache.isSeeded("chat-x")).toBe(false)
+  })
+
+  test("isSeeded returns true after markSeeded", () => {
+    const cache = new TranscriptCache()
+    cache.markSeeded("chat-1")
+    expect(cache.isSeeded("chat-1")).toBe(true)
+  })
+
+  test("isSeeded returns true when transcript is in the LRU cache", () => {
+    const cache = new TranscriptCache()
+    const e = makeTranscriptEntry()
+    cache.set("chat-1", [e], 50)
+    expect(cache.isSeeded("chat-1")).toBe(true)
+  })
+
+  test("isSeeded returns false for a different chatId after markSeeded on another", () => {
+    const cache = new TranscriptCache()
+    cache.markSeeded("chat-1")
+    expect(cache.isSeeded("chat-2")).toBe(false)
+  })
+
+  test("invalidate clears the seeded flag", () => {
+    const cache = new TranscriptCache()
+    cache.markSeeded("chat-1")
+    cache.invalidate("chat-1")
+    expect(cache.isSeeded("chat-1")).toBe(false)
+  })
+
+  test("invalidateAll clears all seeded flags", () => {
+    const cache = new TranscriptCache()
+    cache.markSeeded("chat-1")
+    cache.markSeeded("chat-2")
+    cache.invalidateAll()
+    expect(cache.isSeeded("chat-1")).toBe(false)
+    expect(cache.isSeeded("chat-2")).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// getMessagesView — marks oversized transcripts as seeded without caching them
+// ---------------------------------------------------------------------------
+
+describe("getMessagesView seeding for oversized transcripts", () => {
+  test("marks chat as seeded after disk load even when transcript exceeds maxBytes", () => {
+    const e1 = makeTranscriptEntry("chat-1")
+    const content = `${JSON.stringify(e1)}\n`
+    const files = new Map([["/data/transcripts/chat-1.jsonl", content]])
+    const transcriptCache = new TranscriptCache(4, 10)
+    const deps = makeDeps({ storage: makeStorage(files), transcriptCache })
+
+    expect(transcriptCache.isSeeded("chat-1")).toBe(false)
+    getMessagesView(deps, "chat-1")
+
+    expect(transcriptCache.isSeeded("chat-1")).toBe(true)
+    expect(transcriptCache.has("chat-1")).toBe(false)
+  })
+
+  test("isSeeded guard prevents repeated disk reads (simulates ensureTranscriptLoaded fix)", () => {
+    let readCount = 0
+    const e1 = makeTranscriptEntry("chat-1")
+    const content = `${JSON.stringify(e1)}\n`
+    const files = new Map([["/data/transcripts/chat-1.jsonl", content]])
+    const spyStorage: StorageBackend = {
+      ...makeStorage(files),
+      readTextSync: (p) => {
+        readCount += 1
+        return files.get(p) ?? ""
+      },
+    }
+    const transcriptCache = new TranscriptCache(4, 10)
+    const deps = makeDeps({ storage: spyStorage, transcriptCache })
+
+    const ensureTranscriptLoaded = () => {
+      if (!transcriptCache.isSeeded("chat-1")) {
+        getMessagesView(deps, "chat-1")
+      }
+    }
+
+    ensureTranscriptLoaded()
+    expect(readCount).toBe(1)
+
+    ensureTranscriptLoaded()
+    ensureTranscriptLoaded()
+    expect(readCount).toBe(1)
   })
 })
