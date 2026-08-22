@@ -246,6 +246,7 @@ export async function runClaudeSession(
         session.cancelledResultPending > 0
       ) {
         session.cancelledResultPending -= 1
+        session.selfWakeActive = false
         continue
       }
       if (event.entry.kind === "system_init") {
@@ -317,7 +318,7 @@ export async function runClaudeSession(
             await deps.maybeStartNextQueuedMessage(session.chatId)
           }
         } else if (SELF_WAKE_ARMING_KINDS.has(event.entry.kind) && !session.selfWakeActive) {
-          if (!session.backgroundTaskWakeSuppressed) {
+          if (!session.backgroundTaskWakeSuppressed && session.cancelledResultPending === 0) {
             session.selfWakeActive = true
             deps.emitStateChange(session.chatId)
           }

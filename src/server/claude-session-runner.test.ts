@@ -1412,4 +1412,77 @@ describe("runClaudeSession — mermaid guard", () => {
     expect(harness.calls[0]?.text).toEqual(["wake text"])
     expect(harness.calls[1]).toBeUndefined()
   })
+
+  // ---------------------------------------------------------------------------
+  // Orphaned-stream self-wake barrier (issue #860)
+  //
+  // When cancelChat removes the ActiveTurn and sets cancelledResultPending > 0,
+  // the SDK stream may keep flowing for seconds with model output belonging to
+  // the cancelled prompt. Those entries must NOT arm selfWakeActive — there is
+  // no new self-wake turn, only orphaned output from a turn already cancelled.
+  // Without this guard each assistant_text / tool_call re-renders the chat as
+  // "running" and the user needs repeated Stop presses.
+  // ---------------------------------------------------------------------------
+
+  test("orphaned stream entries after cancel do not arm selfWakeActive mid-stream (issue #860)", async () => {
+    const session = makeSession({ cancelledResultPending: 1 })
+    const observed: boolean[] = []
+    const deps = makeDeps(session, {
+      emitStateChange: () => observed.push(session.selfWakeActive),
+    })
+
+    const assistantEntry = {
+      _id: "orphan-text-1",
+      createdAt: Date.now(),
+      kind: "assistant_text",
+      text: "I'll start by pulling...",
+    } as unknown as TranscriptEntry
+    const toolCallEntry = {
+      _id: "orphan-tool-1",
+      createdAt: Date.now(),
+      kind: "tool_call",
+      tool: {
+        toolId: "tc-1",
+        toolKind: "bash",
+        toolName: "Bash",
+        input: { command: "git pull", runInBackground: false },
+      },
+    } as unknown as TranscriptEntry
+
+    session.session.stream = fakeStream([
+      { type: "transcript", entry: assistantEntry },
+      { type: "transcript", entry: toolCallEntry },
+      { type: "transcript", entry: fakeResultEntry(true, "") },
+    ])
+
+    await runClaudeSession(deps, session)
+
+    expect(observed).not.toContain(true)
+  })
+
+test("a second Stop during the orphaned stream does not re-arm selfWakeActive via tool_result entries (issue #860)", async () => {
+    const session = makeSession({ cancelledResultPending: 2 })
+    const observed: boolean[] = []
+    const deps = makeDeps(session, {
+      emitStateChange: () => observed.push(session.selfWakeActive),
+    })
+
+    const toolResultEntry = {
+      _id: "orphan-tr-1",
+      createdAt: Date.now(),
+      kind: "tool_result",
+      toolId: "tc-1",
+      content: "The user doesn't want to proceed with this tool use.",
+      isError: true,
+    } as unknown as TranscriptEntry
+
+    session.session.stream = fakeStream([
+      { type: "transcript", entry: toolResultEntry },
+      { type: "transcript", entry: fakeResultEntry(true, "") },
+    ])
+
+    await runClaudeSession(deps, session)
+
+    expect(observed).not.toContain(true)
+  })
 })
