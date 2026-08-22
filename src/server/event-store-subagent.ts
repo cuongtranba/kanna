@@ -5,6 +5,7 @@
  * `appendSubagentEvent` has IO via injected deps (enqueueDiskAppend) and
  * calls capTranscriptEntry for tool_result capping.
  */
+import { MAX_SUBAGENT_RUNS_PER_CHAT } from "../shared/subagent-types"
 import type { SubagentRunSnapshot, TranscriptEntry } from "../shared/types"
 import type { ChatRecord, SubagentRunEvent } from "./events"
 import { capTranscriptEntry } from "./subagent-entry-cap.adapter"
@@ -84,32 +85,38 @@ export function applySubagentEvent(
       break
     }
     case "subagent_run_completed": {
-      const run = subagentRunsByChatId.get(event.chatId)?.get(event.runId)
-      if (!run) break
+      const chatMap = subagentRunsByChatId.get(event.chatId)
+      const run = chatMap?.get(event.runId)
+      if (!run || !chatMap) break
       run.status = "completed"
       run.finishedAt = event.timestamp
       run.finalText = event.finalContent
-      // Merge: prefer event.usage if present, otherwise keep what subagent_entry_appended
-      // already mirrored. Otherwise null. Without this guard a streaming run
-      // whose completion event omits usage would silently erase it.
+      // Prefer event.usage if present; otherwise keep what subagent_entry_appended
+      // already mirrored — without this guard a streaming run whose completion
+      // event omits usage would silently erase it.
       run.usage = event.usage ?? run.usage ?? null
+      evictSettledRuns(chatMap)
       break
     }
     case "subagent_run_failed": {
-      const run = subagentRunsByChatId.get(event.chatId)?.get(event.runId)
-      if (!run) break
+      const chatMap = subagentRunsByChatId.get(event.chatId)
+      const run = chatMap?.get(event.runId)
+      if (!run || !chatMap) break
       run.status = "failed"
       run.finishedAt = event.timestamp
       run.error = event.error
       run.pendingTool = null
+      evictSettledRuns(chatMap)
       break
     }
     case "subagent_run_cancelled": {
-      const run = subagentRunsByChatId.get(event.chatId)?.get(event.runId)
-      if (!run) break
+      const chatMap = subagentRunsByChatId.get(event.chatId)
+      const run = chatMap?.get(event.runId)
+      if (!run || !chatMap) break
       run.status = "cancelled"
       run.finishedAt = event.timestamp
       run.pendingTool = null
+      evictSettledRuns(chatMap)
       break
     }
     case "subagent_tool_pending": {
@@ -137,6 +144,20 @@ export function applySubagentEvent(
       run.entries.push(syntheticEntry)
       break
     }
+  }
+}
+
+function evictSettledRuns(map: SubagentRunMap): void {
+  let settled = 0
+  for (const run of map.values()) {
+    if (run.status !== "running") settled++
+  }
+  if (settled <= MAX_SUBAGENT_RUNS_PER_CHAT) return
+  for (const [runId, run] of map) {
+    if (run.status === "running") continue
+    map.delete(runId)
+    settled--
+    if (settled <= MAX_SUBAGENT_RUNS_PER_CHAT) break
   }
 }
 

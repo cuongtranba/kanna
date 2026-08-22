@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { SubagentRunSnapshot } from "../shared/types"
+import { MAX_SUBAGENT_RUNS_PER_CHAT } from "../shared/subagent-types"
 import type { SubagentRunEvent } from "./events"
 import {
   applySubagentEvent,
@@ -404,5 +405,123 @@ describe("runningSubagentRuns", () => {
 
   test("returns empty iterable for empty map", () => {
     expect([...runningSubagentRuns(new Map())]).toHaveLength(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// settled-run eviction cap (MAX_SUBAGENT_RUNS_PER_CHAT)
+// ---------------------------------------------------------------------------
+
+describe("applySubagentEvent / settled-run eviction", () => {
+  function addAndComplete(
+    outer: Map<string, SubagentRunMap>,
+    chatId: string,
+    runId: string,
+    ts: number,
+  ) {
+    applySubagentEvent(outer, {
+      v: 3,
+      type: "subagent_run_started",
+      timestamp: ts,
+      chatId,
+      runId,
+      subagentId: "agent-1",
+      subagentName: "Test Agent",
+      provider: "claude",
+      model: "claude-opus-4-5",
+      parentUserMessageId: "msg-1",
+      parentRunId: null,
+      depth: 0,
+    })
+    applySubagentEvent(outer, {
+      v: 3,
+      type: "subagent_run_completed",
+      timestamp: ts + 1,
+      chatId,
+      runId,
+      finalContent: "done",
+    })
+  }
+
+  test("evicts oldest settled runs when cap is exceeded", () => {
+    const chatId = "chat-1"
+    const outer = new Map<string, SubagentRunMap>([[chatId, new Map()]])
+    const total = MAX_SUBAGENT_RUNS_PER_CHAT + 5
+    for (let i = 0; i < total; i++) {
+      addAndComplete(outer, chatId, `run-${i}`, TS + i)
+    }
+    const map = outer.get(chatId)!
+    expect(map.size).toBe(MAX_SUBAGENT_RUNS_PER_CHAT)
+    expect(map.has("run-0")).toBe(false)
+    expect(map.has("run-4")).toBe(false)
+    expect(map.has(`run-${total - 1}`)).toBe(true)
+  })
+
+  test("evicts on failed terminal event too", () => {
+    const chatId = "chat-1"
+    const outer = new Map<string, SubagentRunMap>([[chatId, new Map()]])
+    for (let i = 0; i < MAX_SUBAGENT_RUNS_PER_CHAT + 1; i++) {
+      applySubagentEvent(outer, {
+        v: 3,
+        type: "subagent_run_started",
+        timestamp: TS + i,
+        chatId,
+        runId: `run-${i}`,
+        subagentId: "a",
+        subagentName: "A",
+        provider: "claude",
+        model: "claude-opus-4-5",
+        parentUserMessageId: "m",
+        parentRunId: null,
+        depth: 0,
+      })
+      applySubagentEvent(outer, {
+        v: 3,
+        type: "subagent_run_failed",
+        timestamp: TS + i + 1,
+        chatId,
+        runId: `run-${i}`,
+        error: { code: "TIMEOUT", message: "timed out" },
+      })
+    }
+    const map = outer.get(chatId)!
+    expect(map.size).toBe(MAX_SUBAGENT_RUNS_PER_CHAT)
+    expect(map.has("run-0")).toBe(false)
+  })
+
+  test("never evicts running runs even beyond the cap", () => {
+    const chatId = "chat-1"
+    const outer = new Map<string, SubagentRunMap>([[chatId, new Map()]])
+    for (let i = 0; i < MAX_SUBAGENT_RUNS_PER_CHAT; i++) {
+      addAndComplete(outer, chatId, `settled-${i}`, TS + i)
+    }
+    applySubagentEvent(outer, {
+      v: 3,
+      type: "subagent_run_started",
+      timestamp: TS + MAX_SUBAGENT_RUNS_PER_CHAT,
+      chatId,
+      runId: "running-1",
+      subagentId: "a",
+      subagentName: "A",
+      provider: "claude",
+      model: "claude-opus-4-5",
+      parentUserMessageId: "m",
+      parentRunId: null,
+      depth: 0,
+    })
+    addAndComplete(outer, chatId, `settled-extra`, TS + MAX_SUBAGENT_RUNS_PER_CHAT + 1)
+    const map = outer.get(chatId)!
+    expect(map.has("running-1")).toBe(true)
+    expect(map.get("running-1")?.status).toBe("running")
+  })
+
+  test("does not evict below the cap", () => {
+    const chatId = "chat-1"
+    const outer = new Map<string, SubagentRunMap>([[chatId, new Map()]])
+    for (let i = 0; i < MAX_SUBAGENT_RUNS_PER_CHAT; i++) {
+      addAndComplete(outer, chatId, `run-${i}`, TS + i)
+    }
+    expect(outer.get(chatId)!.size).toBe(MAX_SUBAGENT_RUNS_PER_CHAT)
+    expect(outer.get(chatId)!.has("run-0")).toBe(true)
   })
 })

@@ -97,6 +97,8 @@ export type SubagentErrorCode =
 
 export type SubagentRunStatus = "running" | "completed" | "failed" | "cancelled"
 
+export const MAX_SUBAGENT_RUNS_PER_CHAT = 200
+
 export interface ProviderUsage {
   inputTokens?: number
   outputTokens?: number
