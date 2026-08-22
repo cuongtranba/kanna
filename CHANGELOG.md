@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.41.3](https://github.com/cuongtranba/kanna/compare/v1.41.2...v1.41.3) (2026-08-22)
+
+
+### Bug Fixes
+
+* **cancel:** orphaned SDK stream no longer re-arms selfWakeActive after Stop ([#861](https://github.com/cuongtranba/kanna/issues/861)) ([22bbf5c](https://github.com/cuongtranba/kanna/commit/22bbf5cb586cb404eaf0b4b044b0598ae5f00c1a)), closes [#860](https://github.com/cuongtranba/kanna/issues/860)
+
 ## [1.41.2](https://github.com/cuongtranba/kanna/compare/v1.41.1...v1.41.2) (2026-08-22)
 
 
