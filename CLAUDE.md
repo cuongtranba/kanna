@@ -1619,15 +1619,16 @@ log that is never compacted.
 
 **The corpus has since outgrown the numbers above.** Re-measured 2026-08-19:
 1.0 GB across 262 chats, largest single transcript **96 MB / 36k entries**
-costing **524 MB peak RSS** to parse (5.4x, not 4.7x). The 24 MiB cache budget
-cannot bound one such file, and `evict()`'s `size > 1` guard means it is never
-evicted — so its "degrades to a re-read" trade now costs 524 MB per re-read.
-Under pm2 that hit `max_memory_restart` and restarted the server 75 times in a
-day, and every restart runs `shutdownServices()`, which cancels in-flight turns
-and writes an `interrupted` entry indistinguishable from a user Stop. **pm2
-7.0.3 silently clamps `max_memory_restart` at 2^31** (both `"3G"` and `"4G"`
-resolve to `2147483648`), so raising the ceiling is not available — only
-lowering RSS is.
+costing **524 MB peak RSS** to parse (5.4x, not 4.7x). `evict()` previously
+kept a `size > 1` guard that prevented the sole cached entry from being dropped
+even once it grew past `maxBytes` via `appendTo()` — pinning 524 MB RSS
+permanently. The guard is removed: a solo entry that exceeds the budget IS
+evicted, and subsequent reads use `getRecentMessagesPageTail` (a small tail
+chunk, not a full load) because the hot paths — history primer,
+proactive-compact trigger, subagent scope primer — already took the tail path
+when the transcript is not in cache. **pm2 7.0.3 silently clamps
+`max_memory_restart` at 2^31** (both `"3G"` and `"4G"` resolve to
+`2147483648`), so raising the ceiling is not available — only lowering RSS is.
 
 **The proactive-compact trigger reads the TAIL, not the transcript.**
 `shouldInjectProactiveCompact` runs on every send and needs only the newest
