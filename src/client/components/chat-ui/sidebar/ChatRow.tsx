@@ -57,20 +57,13 @@ function ChatRowImpl({
   const isActive = activeChatId === normalizedChatId
 
   const tone = chatStatusIndicator(chat)?.tone ?? null
-  let trailingSlotWidth: string
-  if (chat.canFork) {
-    trailingSlotWidth = "w-12"
-  } else if (isLiveState) {
-    trailingSlotWidth = "w-12 md:w-20"
-  } else {
-    trailingSlotWidth = "w-6 md:w-14"
-  }
+  const minSlotWidth = chat.canFork ? "min-w-12" : "min-w-6"
 
   let trailingLabelContent: React.ReactNode = null
   if (trailingLabel) {
     if (showShortcutKeycap) {
       trailingLabelContent = (
-        <span className="hidden md:flex absolute inset-0 items-center justify-end pr-0.5 text-11 text-foreground transition-opacity duration-150 group-hover:opacity-0">
+        <span className="hidden md:flex items-center justify-end pr-0.5 text-11 text-foreground transition-opacity duration-150 group-hover:opacity-0">
           <Kbd className="h-4 min-w-4 rounded-sm border-border/50 bg-transparent px-1 text-10">
             {shortcutHint}
           </Kbd>
@@ -80,7 +73,7 @@ function ChatRowImpl({
       trailingLabelContent = (
         <span
           className={cn(
-            "hidden md:flex absolute inset-0 items-center justify-end pr-1 text-11 tabular-nums transition-opacity duration-150 group-hover:opacity-0 whitespace-nowrap",
+            "hidden md:flex items-center justify-end pr-1 text-11 tabular-nums transition-opacity duration-150 group-hover:opacity-0 whitespace-nowrap",
             isLiveState ? chatDotTextClass(tone) : "text-muted-foreground"
           )}
         >
@@ -138,10 +131,16 @@ function ChatRowImpl({
       >
         {chat.title}
       </span>
-      {silent ? (
-        <BellOff className="size-3 shrink-0 text-muted-foreground" aria-label="Silenced" />
-      ) : null}
-      <div className={cn("relative h-6 shrink-0", trailingSlotWidth)}>
+      <div className={cn("relative flex items-center justify-end gap-1.5 h-6 shrink-0", minSlotWidth)}>
+        {silent ? (
+          <BellOff
+            className={cn(
+              "size-3 shrink-0 text-muted-foreground transition-opacity duration-150",
+              trailingLabel ? "group-hover:opacity-0" : ""
+            )}
+            aria-label="Silenced"
+          />
+        ) : null}
         {trailingLabelContent}
         <div
           className={cn(

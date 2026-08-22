@@ -226,7 +226,7 @@ export function ChatNavbar({
           <div className="flex-1 min-w-0 flex items-center justify-center select-none">
             <Tooltip>
               <TooltipTrigger asChild>
-                <div className="flex items-center gap-2 cursor-default">
+                <div className="flex items-center gap-2 cursor-default min-w-0">
                   {/* Mobile: state pill + live duration only */}
                   <span className="flex md:hidden items-center gap-1">
                     <span className={cn("text-xs font-medium", statusToneClass(statusTone(status)))}>●</span>
@@ -291,7 +291,7 @@ export function ChatNavbar({
                     silent && "text-muted-foreground"
                   )}
                 >
-                  {silent ? <BellOff strokeWidth={2} className="h-4.5" /> : <Bell strokeWidth={2} className="h-4.5" />}
+                  {silent ? <BellOff strokeWidth={2} className="size-4.5" /> : <Bell strokeWidth={2} className="size-4.5" />}
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="bottom">
