@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.41.2](https://github.com/cuongtranba/kanna/compare/v1.41.1...v1.41.2) (2026-08-22)
+
+
+### Performance Improvements
+
+* **transcript-cache:** remove size&gt;1 evict guard pinning oversized transcripts ([ceee741](https://github.com/cuongtranba/kanna/commit/ceee741b4a96b05e52b02097bfae085043a17b88)), closes [#855](https://github.com/cuongtranba/kanna/issues/855)
+
 ## [1.41.1](https://github.com/cuongtranba/kanna/compare/v1.41.0...v1.41.1) (2026-08-22)
 
 
