@@ -19,6 +19,9 @@ type Workflow = {
 const workflow = Bun.YAML.parse(await Bun.file(WORKFLOW_PATH).text()) as Workflow
 const steps = Object.values(workflow.jobs).flatMap((job) => job.steps ?? [])
 const issueScript = await Bun.file(new URL("./perf-alert-issue.ts", import.meta.url)).text()
+const decisionModule = await Bun.file(
+  new URL("../src/ops/alerting/perf-issue.ts", import.meta.url),
+).text()
 
 describe("perf-alert workflow", () => {
   test("listens for the event type the Grafana template sends", () => {
@@ -61,5 +64,23 @@ describe("perf-alert issue script", () => {
   test("orders by recent activity so the reopen window fits in one page", () => {
     expect(issueScript).toContain("sort=updated")
     expect(issueScript).toContain("direction=desc")
+  })
+
+  // The workflow runs this with no `bun install`, deliberately, so a lockfile
+  // problem can never stop an alert being filed. That only holds while nothing
+  // it imports reaches node_modules — importing rules.ts for the ticket scope
+  // would drag observability.ts and @opentelemetry/api in, and the job would
+  // die on module resolution with tickets simply never appearing.
+  test("imports nothing outside the repo", () => {
+    for (const [, specifier] of issueScript.matchAll(/\bfrom\s+"([^"]+)"/g)) {
+      expect(specifier.startsWith("."), specifier).toBe(true)
+    }
+  })
+
+  test("the decision module it loads has no runtime imports at all", () => {
+    const runtimeImports = decisionModule
+      .split("\n")
+      .filter((line) => /^import\b/.test(line) && !/^import\s+type\b/.test(line))
+    expect(runtimeImports).toEqual([])
   })
 })

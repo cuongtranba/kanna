@@ -1483,13 +1483,44 @@ contact point by name, route merged.
   be set from observed p95 rather than guessed. `rules.test.ts` requires the note
   on any unarmed rule; arming is one flag plus a re-apply.
 - **Ticket noise is bounded on purpose.** Dedup by a readable
-  `<!-- kanna-alert:<alertname>@<version> -->` marker (not a hash — a
-  mis-grouped ticket is diagnosed by reading it), a 6h quiet period before a
-  repeat firing comments, auto-close on resolve, and `MAX_OPEN_PERF_ISSUES`
-  (10). The cap is deliberately IGNORED on the resolve and reopen paths, so a
-  storm can still close what it opened. **The OTLP ingest endpoint is
-  unauthenticated**, so forged metrics can drive this path; the cap is what
-  bounds that.
+  `<!-- kanna-alert:… -->` marker (not a hash — a mis-grouped ticket is
+  diagnosed by reading it), a 6h quiet period before a repeat firing comments,
+  and `MAX_OPEN_PERF_ISSUES` (10). The cap is deliberately IGNORED on the
+  resolve and reopen paths, so a storm can still close what it opened. **The
+  OTLP ingest endpoint is unauthenticated**, so forged metrics can drive this
+  path; the cap is what bounds that.
+- **`AlertRuleSpec.ticketScope` decides what a ticket IS, and therefore both
+  how it dedups and what a resolve means** (`adr-20260822-perf-alert-ticket-scope`).
+  It is one field rather than two flags because those are one question:
+
+  | scope | marker | on resolve | rules |
+  | --- | --- | --- | --- |
+  | `release` | `<alertname>@<version>` | closes | the two `…ReleaseRegression` rules, whose query compares releases |
+  | `condition` | `<alertname>` | **stays open** | the three absolute-threshold rules (memory, subagent failures, turn latency) |
+
+  Scoping a condition per release was the second flap, after
+  `adr-20260822-perf-alert-reopen-dedup` fixed the first. release-please cuts
+  several releases a day, so a problem that survives the upgrade got a fresh
+  dedup key on every deploy: #855 (@1.41.0) and #863 (@1.41.3) were filed
+  hours apart WITH the reopen fix already live. A condition ticket also never
+  auto-closes — #863 opened at 10:19 and closed at 10:24, and a five-minute dip
+  under the threshold is not the work being done. Whether a rule is firing
+  right now is Grafana's question; the ticket tracks the fix.
+- **The scope rides the wire, and must keep doing so.** `buildRuleGroup` emits
+  it as the `ticket_scope` ANNOTATION (`TICKET_SCOPE_ANNOTATION`), exactly as
+  `promql` / `threshold` / `code_hints` already travel; `perf-issue.ts` reads it
+  off the payload. Looking it up from `ALERT_RULES` instead is the obvious
+  refactor and it breaks the pipeline: `perf-alert.yml` runs the script with
+  **no `bun install`** on purpose, so importing `rules.ts` drags in
+  `observability.ts` + `@opentelemetry/api` and the job dies on module
+  resolution — with tickets simply never appearing. `perf-alert-workflow.test.ts`
+  pins `perf-issue.ts` at zero runtime imports. Anything but an explicit
+  `condition` reads as `release`, so a notification from a Grafana state
+  predating the annotation behaves exactly as it did.
+- **Both marker shapes close with `" -->"`,** so neither substring-matches the
+  other: tickets filed under the old `@<version>` key for a now-condition rule
+  are left alone rather than adopted. Expect exactly one new ticket per
+  condition rule after applying, then stability.
 - **A flap is one episode, so it gets one ticket** (`REOPEN_WINDOW_MS`, 7 days).
   `decideAction` is fed CLOSED tickets as well as open ones and REOPENS the most
   recently closed match instead of filing a new one. Dedup over open issues
@@ -1502,14 +1533,20 @@ contact point by name, route merged.
   as noise. **`scripts/perf-alert-issue.ts` must query `state=all`** —
   narrowing it back to `state=open` restores the bug with every unit test still
   green, which is why `perf-alert-workflow.test.ts` asserts the query string.
-- **Closing as _not planned_ is the mute**, and the only off-switch short of
-  pausing the rule. `CloseReason` is `completed | not_planned`; the adapter maps
-  GitHub's `not_planned` AND `duplicate` onto the latter (both say "not the
-  ticket to track this on" — reopening either would undo a human decision).
-  It is scoped by marker, so muting `@1.40.4` cannot silence `@1.40.5`. The
-  gesture has no UI affordance hinting it exists, so `renderIssue` names it in
-  every ticket footer, pinned by a test — delete that line and the mute becomes
-  undiscoverable.
+- **Closing as _not planned_ is the mute**, and for a `condition` rule it is the
+  ONLY way the ticket ever ends. `CloseReason` is `completed | not_planned`; the
+  adapter maps GitHub's `not_planned` AND `duplicate` onto the latter (both say
+  "not the ticket to track this on" — reopening either would undo a human
+  decision). It is scoped by marker, so muting one rule cannot silence another,
+  and muting `@1.40.4` cannot silence `@1.40.5`. The gesture has no UI affordance
+  hinting it exists, so `renderIssue` names it in every ticket footer, pinned by
+  a test — delete that line and the mute becomes undiscoverable.
+- **The mute is checked BEFORE the reopen window, and is not bounded by it.**
+  The two ask different questions — the window asks "is this the same episode",
+  a mute asks "should this be tracked at all" — and a decision to stop tracking
+  does not age. Resolving the mute through `mostRecentlyClosed` (which filters by
+  `REOPEN_WINDOW_MS` first) made every deliberate mute expire after seven days,
+  silently, and the rule start filing again. Do not fold the check back in.
 - **`repository_dispatch` only fires a workflow that is already on the DEFAULT
   branch.** A dispatch sent while `perf-alert.yml` exists only on a feature
   branch returns `204 No Content` and runs nothing — verified, and there is no
