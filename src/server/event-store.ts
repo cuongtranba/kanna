@@ -119,6 +119,16 @@ export class EventStore implements PushEventStore {
 
   private applyEvent(event: StoreEvent) {
     applyStoreEvent(event, this.state, this.legacyMessagesByChatId, this.replayChatProvider)
+    if ("kind" in event) return
+    const typedEvent: Exclude<StoreEvent, AutoContinueEvent> = event
+    if (typedEvent.type === "chat_deleted") {
+      const { chatId } = typedEvent
+      this.seenMessageIdsByChatId.delete(chatId)
+      this.lastUserMessageIdByChatId.delete(chatId)
+      this.transcriptCache.invalidate(chatId)
+      this.legacyMessagesByChatId.delete(chatId)
+      this.tunnelEventsByChatId.delete(chatId)
+    }
   }
 
   private enqueueDiskAppend(filePath: string, payload: string): void {

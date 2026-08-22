@@ -2161,3 +2161,39 @@ describe("getRecentRawEntries (EventStore delegate)", () => {
     expect(recent[recent.length - 1]._id).toBe(userMsg._id)
   })
 })
+
+describe("EventStore deleteChat clears per-chat private caches", () => {
+  test("seenMessageIdsByChatId, lastUserMessageIdByChatId, and transcriptCache are freed on chat deletion", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+    const project = await store.openProject("/tmp/project-del-priv")
+    const chat = await store.createChat(project.id)
+
+    await store.appendMessage(chat.id, {
+      _id: "msg-user",
+      kind: "user_prompt",
+      createdAt: 100,
+      content: "hello",
+      messageId: "claude-msg-1",
+    } as TranscriptEntry)
+    store.getMessages(chat.id)
+
+    type StoreInternals = {
+      seenMessageIdsByChatId: Map<string, Set<string>>
+      lastUserMessageIdByChatId: Map<string, string>
+      transcriptCache: { has(chatId: string): boolean }
+    }
+    const internals = store as unknown as StoreInternals
+
+    expect(internals.seenMessageIdsByChatId.has(chat.id)).toBe(true)
+    expect(internals.lastUserMessageIdByChatId.has(chat.id)).toBe(true)
+    expect(internals.transcriptCache.has(chat.id)).toBe(true)
+
+    await store.deleteChat(chat.id)
+
+    expect(internals.seenMessageIdsByChatId.has(chat.id)).toBe(false)
+    expect(internals.lastUserMessageIdByChatId.has(chat.id)).toBe(false)
+    expect(internals.transcriptCache.has(chat.id)).toBe(false)
+  })
+})
