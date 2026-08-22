@@ -42,12 +42,15 @@ import {
   resolveSidebarWidth,
 } from "../stores/kannaSidebarStore"
 import { useViewportStore } from "../stores/viewportStore"
+import { useKannaStateStore } from "../stores/kannaStateStore"
 import type { DomPort } from "../ports/domPort"
 import type { TimerPort } from "../ports/timerPort"
 import { domAdapter } from "../adapters/dom.adapter"
 import { timerAdapter } from "../adapters/timer.adapter"
 
 export { DEFAULT_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH, clampSidebarWidth }
+
+const EMPTY_MUTED_CHAT_IDS: string[] = []
 
 export interface KannaSidebarPorts {
   dom?: DomPort
@@ -177,6 +180,7 @@ function KannaSidebarImpl({
   const stackChatWorktrees = useKannaSidebarStore((s) => s.stackChatWorktrees)
   const stackChatLoading = useKannaSidebarStore((s) => s.stackChatLoading)
   const isImporting = useKannaSidebarStore((s) => s.isImporting)
+  const mutedChatIds = useKannaStateStore((s) => s.pushConfig?.preferences.mutedChatIds ?? EMPTY_MUTED_CHAT_IDS)
   const importDialogOpen = useKannaSidebarStore((s) => s.importDialogOpen)
 
   const reconcileSidebarGroups = useKannaSidebarStore((s) => s.reconcileSidebarGroups)
@@ -376,9 +380,10 @@ function KannaSidebarImpl({
         onArchiveChat={() => onArchiveChat(chat)}
         onDeleteChat={() => onDeleteChat(chat)}
         onEditPermissions={onEditChatPermissions}
+        silent={mutedChatIds.includes(chat.chatId)}
       />
     )
-  }, [activeChatId, navigate, nowMs, onArchiveChat, onClose, onDeleteChat, onEditChatPermissions, onForkChat, onOpenExternalPath, onRenameChat, resolvedKeybindings, showNumberJumpHints, visibleIndexByChatId])
+  }, [activeChatId, mutedChatIds, navigate, nowMs, onArchiveChat, onClose, onDeleteChat, onEditChatPermissions, onForkChat, onOpenExternalPath, onRenameChat, resolvedKeybindings, showNumberJumpHints, visibleIndexByChatId])
 
   useEffect(() => {
     const intervalId = timer.setInterval(() => {

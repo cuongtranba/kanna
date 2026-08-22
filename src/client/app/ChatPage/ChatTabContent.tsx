@@ -32,6 +32,9 @@ import type { WorkflowRun } from "../../../shared/workflow-types"
 import type { TranscriptEntry } from "../../../shared/types"
 import { useChatPageStore } from "../../stores/chatPageStore"
 import { ChatTabScopedStore } from "../../stores/chatTabScopedStore"
+import { useKannaStateStore } from "../../stores/kannaStateStore"
+
+const EMPTY_MUTED_CHAT_IDS: string[] = []
 
 // ─── Tab-local hooks (MUST run inside ChatTabRoot Provider) ──────────────────
 
@@ -372,6 +375,16 @@ export function ChatTabContent({
     return state.socket.command<TranscriptEntry[]>({ type: "subagents.getRun", chatId, agentId })
   }, [state.activeChatId, state.socket])
 
+  // ─── Silent toggle ───────────────────────────────────────────────────────
+
+  const mutedChatIds = useKannaStateStore((s) => s.pushConfig?.preferences.mutedChatIds ?? EMPTY_MUTED_CHAT_IDS)
+  const isSilent = state.activeChatId != null && mutedChatIds.includes(state.activeChatId)
+  const handleToggleSilent = useCallback(() => {
+    const chatId = state.activeChatId
+    if (!chatId) return
+    void state.socket.command({ type: "push.setChatMute", chatId, muted: !isSilent }).catch(() => {})
+  }, [state.activeChatId, state.socket, isSilent])
+
   // ─── Share ────────────────────────────────────────────────────────────────
 
   const shareShares = useShareStore((s) => s.listForChat(state.activeChatId ?? ""))
@@ -528,6 +541,8 @@ export function ChatTabContent({
           shareShares={shareShares}
           onShareMint={handleShareMint}
           onShareRevoke={handleShareRevoke}
+          silent={isSilent}
+          onToggleSilent={handleToggleSilent}
         />
         <ChatTranscriptViewport
           activeChatId={state.activeChatId}
