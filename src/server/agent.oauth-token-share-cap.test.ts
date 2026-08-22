@@ -74,6 +74,9 @@ function createMultiChatStore(chatIds: string[]) {
     getMessages() {
       return this.messages
     },
+    getRecentRawEntries(_chatId: string, limit: number) {
+      return this.messages.slice(-limit)
+    },
     async setChatProvider(chatId: string, provider: "claude" | "codex") {
       const c = chats.get(chatId); if (c) c.provider = provider
     },

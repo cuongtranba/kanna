@@ -43,6 +43,8 @@ import { log } from "../shared/log"
 import { withSpan } from "./observability"
 import { LOG_PREFIX } from "../shared/branding"
 
+const PRIMER_TAIL_LIMIT = 1000
+
 // ---------------------------------------------------------------------------
 // Dep types
 // ---------------------------------------------------------------------------
@@ -146,8 +148,8 @@ interface StartTurnAfterTurnStartedCtx {
   starting: StartingTurn
   chat: ChatRecord
   project: ProjectRecord
-  /** Lazy: loads + clones the whole transcript, so only the primer path calls it. */
-  loadExistingMessages: () => TranscriptEntry[]
+  /** Lazy: reads recent tail entries for primer injection — avoids loading the full transcript. */
+  loadExistingMessages: () => readonly TranscriptEntry[]
   shouldGenerateTitle: boolean
   optimisticTitle: string | null
   appendedUserMessageId: string | null
@@ -257,12 +259,12 @@ async function startTurnForChatInner(
     planMode: args.planMode,
   })
 
-  // Both reads below are lazy on purpose. `store.getMessages` loads the WHOLE
-  // transcript from disk and then deep-clones it — on a MB-scale chat that is
-  // tens of MB of heap per turn, and it pins that chat in the transcript LRU.
-  // The `&&` chain short-circuits for any chat that already has a title, and
-  // the primer thunk runs only when a primer is actually built.
-  const loadExistingMessages = () => deps.store.getMessages(args.chatId)
+  // Both reads below are lazy on purpose. The `&&` chain short-circuits for
+  // any chat that already has a title, and the primer thunk runs only when
+  // a primer is actually built. getRecentRawEntries reads only the tail via
+  // readTranscriptTail — avoids loading a multi-MB transcript for every loop
+  // iteration where shouldInjectPrimer is true (session_token cleared by /clear).
+  const loadExistingMessages = () => deps.store.getRecentRawEntries(args.chatId, PRIMER_TAIL_LIMIT)
   const shouldGenerateTitle = args.appendUserPrompt
     && chat.title === "New Chat"
     && !chat.hasMessages

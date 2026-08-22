@@ -8,6 +8,7 @@ import { OAuthPoolUnavailableError } from "./oauth-errors"
 import type { ActiveTurn, ClaudeSessionState, StartingTurn } from "./claude-session-state"
 import { PendingToolSlots } from "./pending-tool-slot"
 import type { HarnessTurn } from "./harness-types"
+import type { TranscriptEntry } from "../shared/types"
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -64,6 +65,7 @@ function makeDeps(overrides: Partial<StartTurnDeps> = {}): StartTurnDeps {
     store: {
       requireChat: mock(() => chat),
       getMessages: mock(() => []),
+      getRecentRawEntries: mock(() => [] as readonly TranscriptEntry[]),
       getProject: mock(() => project),
       appendMessage: mock(async () => {}),
       setChatProvider: mock(async () => {}),
@@ -492,5 +494,89 @@ describe("startTurnForChat — starting-turn marker", () => {
     expect(deps.pendingTools.get("chat-1")?.toolUseId).toBe("toolu_live")
     expect(active?.status).toBe("waiting_for_user")
     expect(active?.waitStartedAt).not.toBeNull()
+  })
+})
+
+describe("history primer loading", () => {
+  const primerEntries: TranscriptEntry[] = [
+    { _id: "u-1", kind: "user_prompt", createdAt: 100, content: "hello" } as TranscriptEntry,
+    { _id: "a-1", kind: "assistant_text", createdAt: 200, text: "world" } as TranscriptEntry,
+  ]
+
+  test("uses getRecentRawEntries instead of getMessages when injecting primer", async () => {
+    const getMessagesMock = mock(() => primerEntries)
+    const getRecentRawEntriesMock = mock((_chatId: string, _limit: number) => primerEntries as readonly TranscriptEntry[])
+    const fakeTurn = makeFakeTurn()
+
+    const establishedChat = makeFakeChatRecord({
+      title: "Established Chat",
+      hasMessages: true,
+      sessionTokensByProvider: {},
+    })
+
+    const deps = makeDeps({
+      store: {
+        requireChat: mock(() => establishedChat),
+        getMessages: getMessagesMock,
+        getRecentRawEntries: getRecentRawEntriesMock,
+        getProject: mock(() => makeFakeProjectRecord()),
+        appendMessage: mock(async () => {}),
+        setChatProvider: mock(async () => {}),
+        setPlanMode: mock(async () => {}),
+        renameChat: mock(async () => {}),
+        recordTurnStarted: mock(async () => {}),
+        recordTurnFailed: mock(async () => {}),
+        setPendingForkSessionToken: mock(async () => {}),
+      } as unknown as StartTurnDeps["store"],
+      codexManager: {
+        startSession: mock(async () => null),
+        startTurn: mock(async () => fakeTurn),
+      } as unknown as StartTurnDeps["codexManager"],
+    })
+
+    await startTurnForChat(deps, makeArgs({ provider: "codex" }))
+
+    expect(getRecentRawEntriesMock.mock.calls.length).toBeGreaterThan(0)
+    expect(getMessagesMock.mock.calls.length).toBe(0)
+  })
+
+  test("passes a positive tail limit to getRecentRawEntries for primer", async () => {
+    const capturedLimits: number[] = []
+    const getRecentRawEntriesMock = mock((_chatId: string, limit: number) => {
+      capturedLimits.push(limit)
+      return primerEntries as readonly TranscriptEntry[]
+    })
+    const fakeTurn = makeFakeTurn()
+
+    const establishedChat = makeFakeChatRecord({
+      title: "Established Chat",
+      hasMessages: true,
+      sessionTokensByProvider: {},
+    })
+
+    const deps = makeDeps({
+      store: {
+        requireChat: mock(() => establishedChat),
+        getMessages: mock(() => []),
+        getRecentRawEntries: getRecentRawEntriesMock,
+        getProject: mock(() => makeFakeProjectRecord()),
+        appendMessage: mock(async () => {}),
+        setChatProvider: mock(async () => {}),
+        setPlanMode: mock(async () => {}),
+        renameChat: mock(async () => {}),
+        recordTurnStarted: mock(async () => {}),
+        recordTurnFailed: mock(async () => {}),
+        setPendingForkSessionToken: mock(async () => {}),
+      } as unknown as StartTurnDeps["store"],
+      codexManager: {
+        startSession: mock(async () => null),
+        startTurn: mock(async () => fakeTurn),
+      } as unknown as StartTurnDeps["codexManager"],
+    })
+
+    await startTurnForChat(deps, makeArgs({ provider: "codex" }))
+
+    expect(capturedLimits.length).toBeGreaterThan(0)
+    expect(capturedLimits[0]).toBeGreaterThanOrEqual(500)
   })
 })
