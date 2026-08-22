@@ -5,7 +5,7 @@
  * `appendSubagentEvent` has IO via injected deps (enqueueDiskAppend) and
  * calls capTranscriptEntry for tool_result capping.
  */
-import { MAX_SUBAGENT_RUNS_PER_CHAT } from "../shared/subagent-types"
+import { MAX_SUBAGENT_ENTRIES_PER_RUN, MAX_SUBAGENT_RUNS_PER_CHAT } from "../shared/subagent-types"
 import type { SubagentRunSnapshot, TranscriptEntry } from "../shared/types"
 import type { ChatRecord, SubagentRunEvent } from "./events"
 import { capTranscriptEntry } from "./subagent-entry-cap.adapter"
@@ -70,8 +70,7 @@ export function applySubagentEvent(
       const run = subagentRunsByChatId.get(event.chatId)?.get(event.runId)
       if (!run) break
       run.entries.push(event.entry)
-      // If the entry carries usage (the SDK's terminal "result" message), mirror
-      // it onto run.usage so callers can read it without scanning entries.
+      trimEntries(run.entries)
       if (event.entry.kind === "result") {
         const usage = event.entry.usage
         const cost = event.entry.costUsd
@@ -142,9 +141,15 @@ export function applySubagentEvent(
         content: event.result,
       }
       run.entries.push(syntheticEntry)
+      trimEntries(run.entries)
       break
     }
   }
+}
+
+function trimEntries(entries: TranscriptEntry[]): void {
+  const excess = entries.length - MAX_SUBAGENT_ENTRIES_PER_RUN
+  if (excess > 0) entries.splice(0, excess)
 }
 
 function evictSettledRuns(map: SubagentRunMap): void {

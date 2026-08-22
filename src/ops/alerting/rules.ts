@@ -94,7 +94,7 @@ export const ALERT_RULES: readonly AlertRuleSpec[] = [
     codeHints: [
       "src/server/event-store-messages.adapter.ts — TranscriptCache: transcripts larger than maxBytes are never cached; each re-read of a large transcript (e.g., 96 MB → 524 MB peak RSS) spikes on parse",
       "src/server/event-store-messages.adapter.ts — loadTranscriptWithBytes: whole-file loads with a deep clone",
-      "src/server/event-store-subagent.ts — subagentRunsByChatId is now capped at MAX_SUBAGENT_RUNS_PER_CHAT (200) settled runs per chat; subagent entries[] arrays inside each run are still unbounded per run",
+      "src/server/event-store-subagent.ts — subagentRunsByChatId capped at MAX_SUBAGENT_RUNS_PER_CHAT (200) settled runs; entries[] per run capped at MAX_SUBAGENT_ENTRIES_PER_RUN (2000), oldest dropped first",
     ],
     armed: true,
   },

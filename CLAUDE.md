@@ -1513,8 +1513,9 @@ this path silently restores the whole cost.
 `state.subagentRunsByChatId` is now capped at `MAX_SUBAGENT_RUNS_PER_CHAT`
 (200) settled runs per chat — oldest settled runs are evicted on each terminal
 event (`applySubagentEvent`, `event-store-subagent.ts`); running runs are never
-evicted. The `entries[]` array inside each retained snapshot is still unbounded
-per run (tool_result + assistant_text entries accumulate for the run's lifetime).
+evicted. The `entries[]` array inside each retained snapshot is capped at
+`MAX_SUBAGENT_ENTRIES_PER_RUN` (2000) — oldest entries are spliced out when the
+cap is exceeded, keeping the most recent interactions in memory.
 `state.autoContinueEventsByChatId` is evicted only by whole-chat delete, but its
 dominant contributor is now bounded — see **Cron run-event retention** below.
 What remains unbounded there is `loop_armed` prompt bloat, MEASURED at 285 KB
