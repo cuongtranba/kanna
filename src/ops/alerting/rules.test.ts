@@ -8,6 +8,7 @@ import {
   promMetricName,
   type AlertRuleSpec,
 } from "./rules"
+import { TICKET_SCOPE_ANNOTATION } from "./webhook-payload"
 import { PROCESS_RSS_BYTES, TURN_DURATION_MS } from "../../server/observability"
 
 const REPO_ROOT = join(import.meta.dir, "../../..")
@@ -60,6 +61,15 @@ describe("ALERT_RULES", () => {
         expect(EXPORTED_PROM_METRICS, `${rule.title} references ${referenced}`)
           .toContain(referenced)
       }
+    }
+  })
+
+  // Scoping a ticket per release only means something if the query can tell
+  // releases apart. If it cannot, the version in the dedup key is noise that
+  // files a fresh ticket on every deploy.
+  test("a release-scoped rule actually distinguishes releases", () => {
+    for (const rule of ALERT_RULES.filter((r) => r.ticketScope === "release")) {
+      expect(rule.promql, rule.title).toContain("service_version")
     }
   })
 
@@ -142,6 +152,17 @@ describe("buildRuleGroup", () => {
   test("every rule is routable to the GitHub contact point", () => {
     for (const rule of group.rules) {
       expect(rule.labels.kanna_alert, rule.title).toBe("perf")
+    }
+  })
+
+  // The scope decides the ticket's dedup key and whether a resolve closes it,
+  // and it reaches the pipeline ONLY through this annotation — the workflow
+  // cannot import the rule table. Drop it here and every rule silently reverts
+  // to per-release tickets that mute for a week.
+  test("every rule ships the scope its ticket is deduped by", () => {
+    for (const rule of group.rules) {
+      const spec = ALERT_RULES.find((s) => s.title === rule.title) as AlertRuleSpec
+      expect(rule.annotations[TICKET_SCOPE_ANNOTATION], rule.title).toBe(spec.ticketScope)
     }
   })
 

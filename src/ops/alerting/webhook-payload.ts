@@ -13,6 +13,22 @@ export const PERF_ALERT_EVENT_TYPE = "kanna-perf-alert"
 
 export const CONTACT_POINT_NAME = "github-perf-tickets"
 
+/**
+ * Annotation carrying the rule's `TicketScope` to the ticket pipeline.
+ *
+ * The scope is a property of the rule, so reading it from `ALERT_RULES` would
+ * be the obvious thing — but `.github/workflows/perf-alert.yml` runs
+ * `perf-alert-issue.ts` with NO `bun install`, deliberately, so a lockfile
+ * problem can never stop an alert being filed. Importing `rules.ts` from the
+ * decision module would drag in `observability.ts` and `@opentelemetry/api`
+ * with it. Every other rule property the ticket renders — promql, threshold,
+ * runbook, code_hints — already travels this way; the scope is one more.
+ *
+ * An annotation rather than a label: labels take part in Alertmanager's
+ * fingerprint and routing, and this is neither.
+ */
+export const TICKET_SCOPE_ANNOTATION = "ticket_scope"
+
 /** Bounds the body: GitHub rejects a client_payload over 64 KB. */
 export const MAX_ALERTS_PER_NOTIFICATION = 20
 
@@ -31,6 +47,7 @@ export const TEMPLATED_FIELDS: readonly string[] = [
   ".CommonAnnotations.code_hints",
   ".CommonAnnotations.promql",
   ".CommonAnnotations.threshold",
+  `.CommonAnnotations.${TICKET_SCOPE_ANNOTATION}`,
   ".Labels.host_name",
   ".Labels.service_name",
   ".ValueString",
@@ -74,7 +91,8 @@ export function buildWebhookPayloadTemplate(): string {
       "runbook": ${q(".CommonAnnotations.runbook")},
       "code_hints": ${q(".CommonAnnotations.code_hints")},
       "promql": ${q(".CommonAnnotations.promql")},
-      "threshold": ${q(".CommonAnnotations.threshold")}
+      "threshold": ${q(".CommonAnnotations.threshold")},
+      "${TICKET_SCOPE_ANNOTATION}": ${q(`.CommonAnnotations.${TICKET_SCOPE_ANNOTATION}`)}
     },
     "instances": [{{ range $i, $alert := .Alerts }}{{ if $i }},{{ end }}${instance}{{ end }}],
     "grafana_url": ${q(".ExternalURL")}

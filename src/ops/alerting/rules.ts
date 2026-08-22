@@ -15,6 +15,7 @@ import {
   SUBAGENT_RUN_DURATION_MS,
   TURN_DURATION_MS,
 } from "../../server/observability"
+import { TICKET_SCOPE_ANNOTATION } from "./webhook-payload"
 
 /** How the OTLP collector mangles an instrument name into a Prometheus one. */
 export function promMetricName(otelName: string): string {
@@ -47,11 +48,35 @@ export const EXPORTED_PROM_METRICS: readonly string[] = [
   ]),
 ]
 
+/**
+ * What a ticket for this rule is ABOUT — which decides how it is deduplicated
+ * and what a resolve means. It is one field rather than two flags because the
+ * two questions have one answer: a ticket is settled by the same thing that
+ * identifies it.
+ *
+ * - `release` — the rule compares releases to each other, so the release IS the
+ *   subject. Keyed per version, and a resolve closes it: that version has been
+ *   judged, and it never ships again.
+ * - `condition` — the rule is an absolute threshold on an install's health. The
+ *   version is incidental; the condition survives the upgrade. Keyed on the
+ *   rule alone, and a resolve leaves the ticket open, because a dip back under
+ *   the threshold is not the work being done.
+ *
+ * Getting this wrong is not a small mistake. Kanna cuts releases several times
+ * a day, so scoping a condition per release mints a fresh ticket per deploy for
+ * one continuous problem — and makes the operator's only mute expire with it.
+ */
+export type TicketScope = "release" | "condition"
+
 export interface AlertRuleSpec {
   /** Stable across re-applies, so a rule is updated rather than duplicated. */
   uid: string
-  /** Becomes the `alertname` label, and half of a ticket's dedup fingerprint. */
+  /**
+   * Becomes the `alertname` label, and the ticket's dedup fingerprint. The
+   * ticket pipeline resolves a rule's scope by this string — see ticketScopeOf.
+   */
   title: string
+  ticketScope: TicketScope
   /** Evaluated instant; the rule fires when the result exceeds `threshold`. */
   promql: string
   threshold: number
@@ -75,6 +100,10 @@ export const ALERT_RULES: readonly AlertRuleSpec[] = [
   {
     uid: "kanna-perf-memory",
     title: "KannaMemoryPressure",
+    // An install sitting over the ceiling stays over it across an upgrade, so
+    // the ticket is about the condition; every affected release is listed in
+    // its instance table.
+    ticketScope: "condition",
     // Instance-level on purpose: the notification groups by version, so the
     // ticket can still name every host that breached.
     promql: `avg_over_time(${rss}[15m])`,
@@ -102,6 +131,7 @@ export const ALERT_RULES: readonly AlertRuleSpec[] = [
   {
     uid: "kanna-perf-subagent-failures",
     title: "KannaSubagentFailureRate",
+    ticketScope: "condition",
     // The volume guard is not defensive trimming: at fleet volumes seen today
     // (single-digit runs per day) one failure is 20% and means nothing.
     promql:
@@ -132,6 +162,7 @@ export const ALERT_RULES: readonly AlertRuleSpec[] = [
   {
     uid: "kanna-perf-memory-regression",
     title: "KannaMemoryReleaseRegression",
+    ticketScope: "release",
     // scalar(min(...)) makes this self-guarding: with one version live the
     // ratio is exactly 1 and the rule cannot fire. The count guard keeps a
     // single unusual install from defining a version's average.
@@ -163,6 +194,7 @@ export const ALERT_RULES: readonly AlertRuleSpec[] = [
   {
     uid: "kanna-perf-turn-latency",
     title: "KannaTurnLatencyHigh",
+    ticketScope: "condition",
     promql:
       `histogram_quantile(0.95, sum by (service_version, le) (rate(${turnDuration}_bucket[30m])))`
       + ` and on (service_version)`
@@ -191,6 +223,7 @@ export const ALERT_RULES: readonly AlertRuleSpec[] = [
   {
     uid: "kanna-perf-latency-regression",
     title: "KannaTurnLatencyReleaseRegression",
+    ticketScope: "release",
     promql:
       `(histogram_quantile(0.95, sum by (service_version, le) (rate(${turnDuration}_bucket[6h])))`
       + ` / scalar(min(histogram_quantile(0.95,`
@@ -303,6 +336,10 @@ export function buildRuleGroup(
         code_hints: spec.codeHints.join("\n"),
         promql: spec.promql,
         threshold: String(spec.threshold),
+        // Rides the wire rather than being looked up from this table, because
+        // the workflow that files the ticket runs with no node_modules — see
+        // TICKET_SCOPE_ANNOTATION.
+        [TICKET_SCOPE_ANNOTATION]: spec.ticketScope,
       },
       isPaused: !spec.armed,
     })),
