@@ -245,7 +245,11 @@ export class EventStore implements PushEventStore {
       setWriteChain: (p) => { this.writeChain = p },
       append: (filePath, event) => this.append(filePath, event),
       getMessages: (chatId) => this.getMessages(chatId),
-      ensureTranscriptLoaded: (chatId) => { MessageRead.getMessagesView(this.buildMessageReadDeps(), chatId) },
+      ensureTranscriptLoaded: (chatId) => {
+        if (!this.transcriptCache.isSeeded(chatId)) {
+          MessageRead.getMessagesView(this.buildMessageReadDeps(), chatId)
+        }
+      },
       getSeenMessageIds: (chatId) => this.getSeenMessageIds(chatId),
       listPendingToolRequests: (chatId) => this.listPendingToolRequests(chatId),
       recordChatOp: (chatId, op) => { this.chatOps.record(chatId, op) },

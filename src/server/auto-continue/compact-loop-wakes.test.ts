@@ -167,7 +167,7 @@ describe("compactLoopWakeEvents — invariants", () => {
     expect(compacted.some((e) => e.kind === "auto_continue_accepted" && e.scheduleId === "s-1")).toBe(true)
   })
 
-  test("never drops loop_armed, loop_disarmed, loop_run_outcome events", () => {
+  test("keeps the sole loop_armed when there is no successor", () => {
     const log: AutoContinueEvent[] = [
       loopArmed("la-1"),
       loopRunOutcome(true, "lo-1"),
@@ -219,5 +219,106 @@ describe("compactLoopWakeEvents — invariants", () => {
     const promptBytes = compacted.filter((e) => e.kind === "auto_continue_accepted")
       .reduce((sum, e) => sum + (e.prompt?.length ?? 0), 0)
     expect(promptBytes).toBe(LOOP_PROMPT.length)
+  })
+})
+
+function loopDisarmed(scheduleId = "ld-1"): AutoContinueEvent {
+  return {
+    v: AUTO_CONTINUE_EVENT_VERSION,
+    kind: "loop_disarmed",
+    timestamp: 4,
+    chatId: CHAT,
+    scheduleId,
+    reason: "goal_met",
+  }
+}
+
+describe("compactLoopWakeEvents — superseded loop_armed trimming", () => {
+  test("superseded loop_armed dropped when a later loop_armed follows", () => {
+    const log: AutoContinueEvent[] = [
+      loopArmed("la-1"),
+      loopRunOutcome(true, "lo-1"),
+      loopArmed("la-2"),
+    ]
+    const compacted = compactLoopWakeEvents([...log])
+    expect(compacted.filter((e) => e.kind === "loop_armed")).toHaveLength(1)
+    expect(compacted.find((e) => e.kind === "loop_armed")?.scheduleId).toBe("la-2")
+  })
+
+  test("loop_run_outcome events before the superseded arm are also dropped", () => {
+    const log: AutoContinueEvent[] = [
+      loopArmed("la-1"),
+      loopRunOutcome(true, "lo-1"),
+      loopRunOutcome(false, "lo-2"),
+      loopArmed("la-2"),
+      loopRunOutcome(true, "lo-3"),
+    ]
+    const compacted = compactLoopWakeEvents([...log])
+    expect(compacted.filter((e) => e.kind === "loop_run_outcome")).toHaveLength(1)
+    expect(compacted.find((e) => e.kind === "loop_run_outcome")?.scheduleId).toBe("lo-3")
+  })
+
+  test("all loop-state events dropped when loop is currently disarmed", () => {
+    const log: AutoContinueEvent[] = [
+      loopArmed("la-1"),
+      loopRunOutcome(true, "lo-1"),
+      loopDisarmed("ld-1"),
+    ]
+    const compacted = compactLoopWakeEvents([...log])
+    expect(compacted.some((e) => e.kind === "loop_armed")).toBe(false)
+    expect(compacted.some((e) => e.kind === "loop_disarmed")).toBe(false)
+    expect(compacted.some((e) => e.kind === "loop_run_outcome")).toBe(false)
+  })
+
+  test("non-loop events preserved when loop is disarmed", () => {
+    const log: AutoContinueEvent[] = [
+      loopArmed("la-1"),
+      accepted("s-1"),
+      fired("s-1"),
+      loopDisarmed("ld-1"),
+      nonLoopAccepted("s-user"),
+    ]
+    const compacted = compactLoopWakeEvents([...log])
+    expect(compacted.some((e) => e.kind === "auto_continue_accepted" && e.scheduleId === "s-user")).toBe(true)
+  })
+
+  test("deriveLoopState output unchanged after superseded-arm compaction", () => {
+    const log: AutoContinueEvent[] = [
+      loopArmed("la-1"),
+      loopRunOutcome(false, "lo-1"),
+      loopArmed("la-2"),
+      loopRunOutcome(false, "lo-2"),
+      loopRunOutcome(false, "lo-3"),
+      accepted("s-1"),
+    ]
+    const compacted = compactLoopWakeEvents([...log])
+    expect(deriveLoopState(compacted, CHAT)).toEqual(deriveLoopState(log, CHAT))
+  })
+
+  test("deriveLoopState returns null after disarmed-loop compaction", () => {
+    const log: AutoContinueEvent[] = [
+      loopArmed("la-1"),
+      loopRunOutcome(true, "lo-1"),
+      loopDisarmed("ld-1"),
+    ]
+    const compacted = compactLoopWakeEvents([...log])
+    expect(deriveLoopState(compacted, CHAT)).toBeNull()
+    expect(deriveLoopState(log, CHAT)).toBeNull()
+  })
+
+  test("deriveChatSchedules output unchanged after superseded-arm compaction", () => {
+    const log: AutoContinueEvent[] = [
+      loopArmed("la-1"),
+      loopArmed("la-2"),
+      accepted("s-pending"),
+    ]
+    const compacted = compactLoopWakeEvents([...log])
+    expect(deriveChatSchedules(compacted, CHAT)).toEqual(deriveChatSchedules(log, CHAT))
+  })
+
+  test("returns input by reference when only one loop_armed and no disarm", () => {
+    const log: AutoContinueEvent[] = [loopArmed("la-1"), accepted("s-1")]
+    const compacted = compactLoopWakeEvents(log)
+    expect(compacted).toBe(log)
   })
 })

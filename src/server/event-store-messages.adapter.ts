@@ -52,6 +52,7 @@ export class TranscriptCache {
   private readonly byChat = new Map<string, TranscriptEntry[]>()
   private readonly bytesByChat = new Map<string, number>()
   private totalBytes = 0
+  private readonly seededChatIds = new Set<string>()
 
   /**
    * `maxChats` alone was never a memory bound: a transcript has no size limit
@@ -100,9 +101,26 @@ export class TranscriptCache {
     return this.byChat.has(chatId)
   }
 
+  /**
+   * Marks that this chat's seenMessageIds have been seeded from its transcript.
+   * Persists even when the transcript itself is evicted from the LRU (too large
+   * to cache): a 96 MB transcript that can't fit in the 24 MiB budget would
+   * otherwise cause ensureTranscriptLoaded to reload from disk on every append
+   * that carries a messageId, spiking RSS ~524 MB per call.
+   */
+  markSeeded(chatId: string): void {
+    this.seededChatIds.add(chatId)
+  }
+
+  /** True when seenMessageIds for this chat have been fully seeded from disk. */
+  isSeeded(chatId: string): boolean {
+    return this.byChat.has(chatId) || this.seededChatIds.has(chatId)
+  }
+
   invalidate(chatId: string): void {
     this.drop(chatId)
     this.tailByChat.delete(chatId)
+    this.seededChatIds.delete(chatId)
   }
 
   invalidateAll(): void {
@@ -110,6 +128,7 @@ export class TranscriptCache {
     this.bytesByChat.clear()
     this.totalBytes = 0
     this.tailByChat.clear()
+    this.seededChatIds.clear()
   }
 
   private addBytes(chatId: string, bytes: number): void {
@@ -324,6 +343,7 @@ function seedFullTranscript(deps: MessageReadDeps, chatId: string, entries: Tran
     }
   }
   deps.transcriptCache.set(chatId, entries)
+  deps.transcriptCache.markSeeded(chatId)
 }
 
 /**
@@ -587,6 +607,7 @@ export function getMessagesView(deps: MessageReadDeps, chatId: string): readonly
 
   const { entries, bytes } = loadTranscriptWithBytes(deps, chatId)
   deps.transcriptCache.set(chatId, entries, bytes)
+  deps.transcriptCache.markSeeded(chatId)
   return entries
 }
 

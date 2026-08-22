@@ -94,7 +94,7 @@ export const ALERT_RULES: readonly AlertRuleSpec[] = [
     codeHints: [
       "src/server/event-store-messages.adapter.ts — TranscriptCache: transcripts larger than maxBytes are never cached; each re-read of a large transcript (e.g., 96 MB → 524 MB peak RSS) spikes on parse",
       "src/server/event-store-messages.adapter.ts — loadTranscriptWithBytes: whole-file loads with a deep clone; search callers of store.getMessages() for new full-load sites",
-      "src/server/claude-turn-starter.ts — history primer now uses getRecentRawEntries (tail-read, PRIMER_TAIL_LIMIT=1000) instead of getMessages, eliminating per-loop-iteration full transcript loads",
+      "src/server/auto-continue/compact-loop-wakes.ts — compactLoopWakeEvents now also trims superseded loop_armed events (each carries the full ~5 KB loop prompt); check if the fix landed in this version",
       "src/server/event-store-subagent.ts — subagentRunsByChatId capped at MAX_SUBAGENT_RUNS_PER_CHAT (200) settled runs; entries[] per run capped at MAX_SUBAGENT_ENTRIES_PER_RUN (2000), oldest dropped first",
     ],
     armed: true,
