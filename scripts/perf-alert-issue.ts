@@ -2,14 +2,15 @@
  * Files the GitHub issue for a Grafana performance alert.
  *
  * The IO half of `src/ops/alerting/perf-issue.ts`: reads the dispatch payload,
- * fetches the open performance tickets, and performs whatever the pure decision
+ * fetches the performance tickets, and performs whatever the pure decision
  * says. Run by `.github/workflows/perf-alert.yml` with the workflow's own
  * GITHUB_TOKEN — no extra secret.
  */
 
 import {
   decideAction,
-  type OpenIssue,
+  type CloseReason,
+  type KnownIssue,
   type PerfAlertPayload,
 } from "../src/ops/alerting/perf-issue"
 
@@ -52,22 +53,45 @@ const api = async (path: string, init: RequestInit = {}) => {
   return response.json()
 }
 
-const listed = await api(`/repos/${repo}/issues?state=open&labels=performance&per_page=100`) as Array<{
+// Closed tickets are fetched too, so a rule that dips under its threshold and
+// breaches again reopens its ticket rather than filing a new one. Newest-first
+// by activity bounds the page: anything closed inside REOPEN_WINDOW_MS is here
+// unless 100 perf tickets were touched more recently, which the open cap and
+// the dedup together make unreachable.
+const listed = await api(
+  `/repos/${repo}/issues?state=all&labels=performance&sort=updated&direction=desc&per_page=100`,
+) as Array<{
   number: number
   body: string | null
   updated_at: string
+  state: string
+  closed_at: string | null
+  state_reason: string | null
   pull_request?: unknown
 }>
 
-const openIssues: OpenIssue[] = listed
+// "Close as duplicate" says the same thing "close as not planned" does: this is
+// not the ticket to track it on. Reopening either would undo a human decision.
+const MUTING_CLOSE_REASONS = new Set(["not_planned", "duplicate"])
+
+function closedState(issue: (typeof listed)[number]): KnownIssue["closed"] {
+  if (issue.state !== "closed") return null
+  const reason: CloseReason = MUTING_CLOSE_REASONS.has(issue.state_reason ?? "")
+    ? "not_planned"
+    : "completed"
+  return { at: Date.parse(issue.closed_at ?? issue.updated_at), reason }
+}
+
+const issues: KnownIssue[] = listed
   .filter((issue) => !issue.pull_request)
   .map((issue) => ({
     number: issue.number,
     body: issue.body ?? "",
     updatedAt: Date.parse(issue.updated_at),
+    closed: closedState(issue),
   }))
 
-const action = decideAction(payload, openIssues, Date.now())
+const action = decideAction(payload, issues, Date.now())
 
 switch (action.kind) {
   case "create": {
@@ -84,6 +108,18 @@ switch (action.kind) {
       body: JSON.stringify({ body: action.body }),
     })
     console.log(`commented on #${action.number}`)
+    break
+  }
+  case "reopen": {
+    await api(`/repos/${repo}/issues/${action.number}`, {
+      method: "PATCH",
+      body: JSON.stringify({ state: "open", state_reason: "reopened" }),
+    })
+    await api(`/repos/${repo}/issues/${action.number}/comments`, {
+      method: "POST",
+      body: JSON.stringify({ body: action.body }),
+    })
+    console.log(`reopened #${action.number}`)
     break
   }
   case "close": {

@@ -81,8 +81,27 @@ Installs older than 1.38.0 report no version at all; those group under
 - A repeat firing comments rather than opening a second issue, and only if the
   issue has been quiet for 6 hours.
 - Resolving closes the issue with a comment.
+- Firing again after the issue closed **reopens that issue** with a comment,
+  for up to 7 days after it closed. A rule that hovers near its threshold
+  resolves and re-fires repeatedly, and each flap used to file a fresh ticket.
+  Past 7 days the breach is treated as a new episode and gets a new issue.
 - At most 10 open `performance` issues; past that, creation is skipped. Closing
-  is never blocked by the cap.
+  and reopening are never blocked by the cap — a reopen is bounded by the rules
+  already ticketed, so it cannot be a runaway-creation path.
+
+### Muting a rule for a release
+
+**Close the issue as _not planned_** (GitHub's "Close as not planned", and
+likewise "Close as duplicate"). Nothing will reopen it, and no new ticket is
+filed for that rule on that release.
+
+Use this when the fix has already shipped and the install still reporting is
+simply out of date — the alert is real, but the work is done. The marker
+carries the version, so muting one release never silences the next: a
+regression in a later release files its own ticket.
+
+Closing normally (**Close as completed**) leaves the issue reopenable, which is
+what you want while the cause is still live.
 
 ## Metrics behind the rules
 
