@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.41.5](https://github.com/cuongtranba/kanna/compare/v1.41.4...v1.41.5) (2026-08-22)
+
+
+### Bug Fixes
+
+* **alerting:** scope a perf ticket to the condition, not the release ([#864](https://github.com/cuongtranba/kanna/issues/864)) ([b8003d9](https://github.com/cuongtranba/kanna/commit/b8003d920c4e2e13708109de369f57ddcaa3acf2))
+
 ## [1.41.4](https://github.com/cuongtranba/kanna/compare/v1.41.3...v1.41.4) (2026-08-22)
 
 
