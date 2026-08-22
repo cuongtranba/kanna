@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { SubagentRunSnapshot } from "../shared/types"
-import { MAX_SUBAGENT_RUNS_PER_CHAT } from "../shared/subagent-types"
+import { MAX_SUBAGENT_ENTRIES_PER_RUN, MAX_SUBAGENT_RUNS_PER_CHAT } from "../shared/subagent-types"
 import type { SubagentRunEvent } from "./events"
 import {
   applySubagentEvent,
@@ -523,5 +523,57 @@ describe("applySubagentEvent / settled-run eviction", () => {
     }
     expect(outer.get(chatId)!.size).toBe(MAX_SUBAGENT_RUNS_PER_CHAT)
     expect(outer.get(chatId)!.has("run-0")).toBe(true)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// per-run entries cap (MAX_SUBAGENT_ENTRIES_PER_RUN)
+// ---------------------------------------------------------------------------
+
+describe("applySubagentEvent / per-run entries cap", () => {
+  function appendEntry(outer: Map<string, SubagentRunMap>, runId: string, id: string) {
+    applySubagentEvent(outer, {
+      v: 3,
+      type: "subagent_entry_appended",
+      timestamp: TS,
+      chatId: "chat-1",
+      runId,
+      entry: { kind: "assistant_text" as const, _id: id, createdAt: TS, text: "chunk" },
+    })
+  }
+
+  test("entries below cap are all retained", () => {
+    const outer = new Map<string, SubagentRunMap>([["chat-1", new Map()]])
+    applySubagentEvent(outer, startedEvent())
+    for (let i = 0; i < 10; i++) appendEntry(outer, "run-1", `e${i}`)
+    expect(outer.get("chat-1")!.get("run-1")!.entries).toHaveLength(10)
+  })
+
+  test("entries exceeding cap drop the oldest, keeping at most MAX_SUBAGENT_ENTRIES_PER_RUN", () => {
+    const outer = new Map<string, SubagentRunMap>([["chat-1", new Map()]])
+    applySubagentEvent(outer, startedEvent())
+    const total = MAX_SUBAGENT_ENTRIES_PER_RUN + 5
+    for (let i = 0; i < total; i++) appendEntry(outer, "run-1", `e${i}`)
+    const entries = outer.get("chat-1")!.get("run-1")!.entries
+    expect(entries).toHaveLength(MAX_SUBAGENT_ENTRIES_PER_RUN)
+    expect(entries[0]!._id).toBe(`e${5}`)
+    expect(entries[entries.length - 1]!._id).toBe(`e${total - 1}`)
+  })
+
+  test("synthetic tool_result from subagent_tool_resolved also respects the cap", () => {
+    const outer = new Map<string, SubagentRunMap>([["chat-1", new Map()]])
+    applySubagentEvent(outer, startedEvent())
+    for (let i = 0; i < MAX_SUBAGENT_ENTRIES_PER_RUN; i++) appendEntry(outer, "run-1", `pre${i}`)
+    applySubagentEvent(outer, {
+      v: 3,
+      type: "subagent_tool_resolved",
+      timestamp: TS,
+      chatId: "chat-1",
+      runId: "run-1",
+      toolUseId: "tu-1",
+      result: "yes",
+      resolution: "user",
+    })
+    expect(outer.get("chat-1")!.get("run-1")!.entries).toHaveLength(MAX_SUBAGENT_ENTRIES_PER_RUN)
   })
 })
