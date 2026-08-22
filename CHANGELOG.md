@@ -8,6 +8,18 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.40.6](https://github.com/cuongtranba/kanna/compare/v1.40.5...v1.40.6) (2026-08-22)
+
+
+### Bug Fixes
+
+* **alerting:** reopen a perf ticket instead of filing one per alert flap ([#847](https://github.com/cuongtranba/kanna/issues/847)) ([2d0e102](https://github.com/cuongtranba/kanna/commit/2d0e10202e096c69c728915a4244bd8c83463dc6))
+
+
+### Performance Improvements
+
+* use getRecentRawEntries for history primer to avoid full transcript load per loop iteration ([#845](https://github.com/cuongtranba/kanna/issues/845)) ([64dabcd](https://github.com/cuongtranba/kanna/commit/64dabcdaa0779af07c19df39eee8399d465210b3)), closes [#843](https://github.com/cuongtranba/kanna/issues/843)
+
 ## [1.40.5](https://github.com/cuongtranba/kanna/compare/v1.40.4...v1.40.5) (2026-08-22)
 
 
