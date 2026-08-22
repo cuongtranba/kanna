@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.40.4](https://github.com/cuongtranba/kanna/compare/v1.40.3...v1.40.4) (2026-08-22)
+
+
+### Performance Improvements
+
+* **subagent:** cap entries[] per run at MAX_SUBAGENT_ENTRIES_PER_RUN ([#837](https://github.com/cuongtranba/kanna/issues/837)) ([2cad366](https://github.com/cuongtranba/kanna/commit/2cad36645ec4dcc0afed547ea2ddde05ab024287)), closes [#836](https://github.com/cuongtranba/kanna/issues/836)
+
 ## [1.40.3](https://github.com/cuongtranba/kanna/compare/v1.40.2...v1.40.3) (2026-08-22)
 
 
