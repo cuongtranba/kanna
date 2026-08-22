@@ -112,8 +112,30 @@ describe("ChatRow", () => {
     expect(html).toContain("Running")
     // Elapsed time in M:SS format
     expect(html).toContain("0:12")
-    // Slot must be widened for live state
-    expect(html).toContain("w-20")
+  })
+
+  test("silent + live state: status label is in-flow, not absolute-positioned over BellOff", () => {
+    const html = renderToStaticMarkup(
+      <ChatRow
+        chat={{ ...baseChat, status: "running", stateEnteredAt: 0 }}
+        activeChatId={null}
+        nowMs={12_000}
+        silent
+        onSelectChat={() => undefined}
+        onRenameChat={() => undefined}
+        onOpenInFinder={() => undefined}
+        onForkChat={() => undefined}
+        onArchiveChat={() => undefined}
+        onDeleteChat={() => undefined}
+      />
+    )
+    expect(html).toContain("Running")
+    expect(html).toContain('aria-label="Silenced"')
+    // After fix: label span is in-flow (no `absolute`), so only the action-buttons
+    // div has `absolute inset-0`. Before fix: both the label span AND the action-buttons
+    // div carry `absolute inset-0`, causing the label to overflow left onto the BellOff.
+    const absoluteInset0Count = (html.match(/absolute\s+inset-0/g) ?? []).length
+    expect(absoluteInset0Count).toBe(1)
   })
 
   test("live waiting_for_user state shows Waiting label", () => {
