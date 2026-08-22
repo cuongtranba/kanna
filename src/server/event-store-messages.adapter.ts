@@ -124,7 +124,7 @@ export class TranscriptCache {
   }
 
   private evict(): void {
-    while (this.byChat.size > this.maxChats || this.totalBytes > this.maxBytes) {
+    while (this.byChat.size > this.maxChats || (this.byChat.size > 1 && this.totalBytes > this.maxBytes)) {
       const oldest = this.byChat.keys().next().value
       if (oldest === undefined) break
       this.drop(oldest)

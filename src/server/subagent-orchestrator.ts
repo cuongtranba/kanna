@@ -243,6 +243,7 @@ export type BackgroundRunOutcome =
 // wired at AgentCoordinator construction; tests override via
 // SubagentOrchestratorDeps.runTimeoutMs.
 const DEFAULT_RUN_TIMEOUT_MS = 600_000
+const SUBAGENT_HISTORY_PRIMER_TAIL_LIMIT = 1000
 
 interface LiveSession {
   chatId: string
@@ -905,7 +906,7 @@ export class SubagentOrchestrator {
     try {
       let primer: string | null
       if (args.subagent.contextScope === "full-transcript") {
-        primer = buildHistoryPrimer(this.deps.store.getMessages(args.chatId), args.subagent.provider, "")
+        primer = buildHistoryPrimer(this.deps.store.getRecentRawEntries(args.chatId, SUBAGENT_HISTORY_PRIMER_TAIL_LIMIT), args.subagent.provider, "")
       } else {
         const reply = extractPreviousAssistantReply(this.deps.store.getRecentRawEntries(args.chatId, 100))
         primer = reply == null ? null : `Previous assistant reply:\n${reply}`
