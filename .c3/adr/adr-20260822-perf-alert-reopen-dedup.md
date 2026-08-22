@@ -1,15 +1,9 @@
 ---
 id: adr-20260822-perf-alert-reopen-dedup
+c3-seal: 6affa2341e08375385484ff2d2cb2c23758a6a1f4675f6ffb19a8a9c3717f42a
 title: perf-alert-reopen-dedup
 type: adr
-goal: |-
-    Make a flapping performance alert reuse one GitHub ticket instead of filing a
-    new one per breach. `decideAction` was only ever shown OPEN issues, so the
-    auto-close-on-resolve behaviour defeated its own dedup: the next breach
-    matched nothing and created a fresh ticket. Five identical
-    KannaMemoryPressure tickets landed in five hours. This adds a reopen path
-    over recently-closed tickets and, with it, the first way for an operator to
-    mute a rule for a release without pausing the rule fleet-wide.
+goal: 'Make a flapping performance alert reuse one GitHub ticket instead of filing a new one per breach. `decideAction` was only ever shown OPEN issues, so the auto-close-on-resolve behaviour defeated its own dedup: the next breach matched nothing and created a fresh ticket. Five identical KannaMemoryPressure tickets landed in five hours. This adds a reopen path over recently-closed tickets and, with it, the first way for an operator to mute a rule for a release without pausing the rule fleet-wide.'
 status: proposed
 date: "2026-08-22"
 ---

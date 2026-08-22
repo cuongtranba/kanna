@@ -1,11 +1,14 @@
 ---
 id: adr-20260820-background-task-output-streaming
+c3-seal: 8cbdbee77f24f08956018e54be621f0a564a1d3085cbdd146ed212e3ff8d6145
 title: background-task-output-streaming
 type: adr
 goal: |-
-    Stream the output of Claude-Code background tasks (Bash run_in_background,
+    Stream the output of Claude-Code background tasks (Bash `run_in_background`,
     background Agent runs) to the Kanna UI so users can see live task progress
-    without leaving the chat.
+    without leaving the chat. Currently, background tasks are shown in the footer
+    panel with an ID, type, and elapsed time, but the actual command output is
+    inaccessible unless the user reads the file directly.
 status: proposed
 date: "2026-08-20"
 ---
@@ -27,11 +30,10 @@ ID from this text (via `backgroundTaskLaunchesFromToolResult`). The file is an
 append-only log that grows while the task runs.
 
 The feature needed:
+
 1. Server to know which file belongs to which task.
-2. A polling registry that reads the file's tail and notifies subscribers when
-   new bytes arrive, bounded in memory (256 KB `OutputRing` per task).
-3. A per-client WS subscription topic so each browser tab independently controls
-   its own polling — no global polling overhead for tasks no client is watching.
+2. A polling registry that reads the file's tail and notifies subscribers when new bytes arrive, bounded in memory (256 KB `OutputRing` per task).
+3. A per-client WS subscription topic so each browser tab independently controls its own polling — no global polling overhead for tasks no client is watching.
 4. A client-side expand UI that subscribes and streams the content inline.
 
 ## Decision
