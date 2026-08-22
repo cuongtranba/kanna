@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.40.5](https://github.com/cuongtranba/kanna/compare/v1.40.4...v1.40.5) (2026-08-22)
+
+
+### Performance Improvements
+
+* cut RSS on auto-continue turns and subagent spawns ([#841](https://github.com/cuongtranba/kanna/issues/841)) ([ddf255c](https://github.com/cuongtranba/kanna/commit/ddf255c96c491cdd06def04f5eca8ec6b4bafe7c))
+
 ## [1.40.4](https://github.com/cuongtranba/kanna/compare/v1.40.3...v1.40.4) (2026-08-22)
 
 
