@@ -1865,6 +1865,48 @@ describe("SubagentOrchestrator", () => {
     })
   })
 
+  test("full-transcript scope builds primer via tail read, not getMessages", async () => {
+    // full-transcript scope still called store.getMessages() after PR #841,
+    // which on a 96 MB transcript costs ~524 MB peak RSS for a 60 k-char primer.
+    // getRecentRawEntries() with a 1000-entry tail is equivalent in practice
+    // because buildHistoryPrimer already truncates the output to PRIMER_MAX_CHARS.
+    const h = await setupHarness({ subagents: [makeSubagent({ contextScope: "full-transcript" })] })
+
+    await h.store.appendMessage(h.chatId, {
+      _id: "u1", createdAt: 1, kind: "user_prompt", content: "hello",
+    })
+    await h.store.appendMessage(h.chatId, {
+      _id: "a1", createdAt: 2, kind: "assistant_text", text: "hi there",
+    })
+
+    let getMessagesCalls = 0
+    const origGetMessages = h.store.getMessages.bind(h.store)
+    ;(h.store as unknown as { getMessages: typeof origGetMessages }).getMessages = (chatId) => {
+      getMessagesCalls++
+      return origGetMessages(chatId)
+    }
+
+    let capturedPrimer: string | null | undefined
+    const realDeps = (h.orchestrator as unknown as {
+      deps: { startProviderRun: (a: { primer: string | null }) => unknown }
+    }).deps
+    const origStartProviderRun = realDeps.startProviderRun
+    realDeps.startProviderRun = (spawnArgs) => {
+      capturedPrimer = spawnArgs.primer
+      return origStartProviderRun(spawnArgs as Parameters<typeof origStartProviderRun>[0])
+    }
+
+    await h.orchestrator.runMentionsForUserMessage({
+      chatId: h.chatId,
+      userMessageId: h.userMessageId,
+      mentions: [{ kind: "subagent", subagentId: "sa-1", raw: "@agent/alpha" }],
+    })
+
+    expect(getMessagesCalls).toBe(0)
+    expect(capturedPrimer).not.toBeNull()
+    expect(capturedPrimer).toContain("hi there")
+  })
+
   // The duration rides the span that already wraps the whole run, so what needs
   // pinning is that every run contributes exactly one observation carrying its
   // outcome — a failed run must not vanish from the distribution, or the

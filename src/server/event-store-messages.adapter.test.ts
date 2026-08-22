@@ -485,6 +485,26 @@ describe("TranscriptCache", () => {
     cache.appendTo("chat-z", makeTranscriptEntry("chat-z"))
     expect(cache.has("chat-z")).toBe(false)
   })
+
+  test("retains the sole cached entry when it grows past the byte budget via appendTo", () => {
+    // Without a size > 1 guard, evict() drops the only cached entry once
+    // totalBytes exceeds maxBytes. That forces a full disk re-read on every
+    // subsequent getMessages() call: measured 5.4× RSS amplification on a
+    // 96 MB transcript means each read spikes ~524 MB.
+    const files = new Map([transcriptFile("chat-a")])
+    const { storage, reads } = countingStorage(files)
+    const cache = new TranscriptCache(4, 200)
+    const deps = makeDeps({ storage, transcriptCache: cache })
+
+    getMessages(deps, "chat-a")
+    expect(reads()).toBe(1)
+
+    cache.appendTo("chat-a", makeTranscriptEntry("chat-a", "assistant_text", { _id: "big", text: "x".repeat(100) }))
+
+    expect(cache.has("chat-a")).toBe(true)
+    getMessages(deps, "chat-a")
+    expect(reads()).toBe(1)
+  })
 })
 
 // ---------------------------------------------------------------------------

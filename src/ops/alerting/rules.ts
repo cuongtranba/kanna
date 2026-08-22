@@ -153,8 +153,10 @@ export const ALERT_RULES: readonly AlertRuleSpec[] = [
       + " regression is in what changed between them, not in whatever is"
       + " largest in the heap snapshot.",
     codeHints: [
-      "git log --oneline <lean-version>..<regressed-version>",
-      "src/server/event-store-messages.adapter.ts — TranscriptCache and callers (event-store.ts) — the usual home of a memory regression",
+      "git log --oneline <lean-version>..<regressed-version> — diff the releases; look for new getMessages() calls on hot paths (every turn / every loop iteration / every subagent spawn)",
+      "src/server/event-store-messages.adapter.ts — TranscriptCache: evict() has a size>1 guard (last entry is never dropped); appendTo() grows entries past maxBytes (next getMessages() loads from disk at 5.4x amplification)",
+      "src/server/subagent-orchestrator.ts — subagent primer path: full-transcript scope uses getRecentRawEntries (tail read); any reversion to getMessages() here costs ~524 MB peak per spawn on a 96 MB transcript",
+      "src/server/claude-turn-starter.ts — history primer: loadExistingMessages thunk must call getRecentRawEntries, not getMessages; fires on every loop iteration (session token cleared by deliverSubagentToMain)",
     ],
     armed: true,
   },
