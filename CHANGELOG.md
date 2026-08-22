@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.40.7](https://github.com/cuongtranba/kanna/compare/v1.40.6...v1.40.7) (2026-08-22)
+
+
+### Performance Improvements
+
+* fix TranscriptCache evict guard and full-transcript scope primer ([#848](https://github.com/cuongtranba/kanna/issues/848)) ([84d9980](https://github.com/cuongtranba/kanna/commit/84d9980ef074b4190df05202ebfdad11362c0a82)), closes [#844](https://github.com/cuongtranba/kanna/issues/844)
+
 ## [1.40.6](https://github.com/cuongtranba/kanna/compare/v1.40.5...v1.40.6) (2026-08-22)
 
 
