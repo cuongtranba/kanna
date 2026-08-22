@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.41.1](https://github.com/cuongtranba/kanna/compare/v1.41.0...v1.41.1) (2026-08-22)
+
+
+### Bug Fixes
+
+* **ui:** silent icon overlaps live status text in sidebar and navbar ([#856](https://github.com/cuongtranba/kanna/issues/856)) ([d3cfc00](https://github.com/cuongtranba/kanna/commit/d3cfc005e64ba0cb5e203b231452112e0c19496b)), closes [#854](https://github.com/cuongtranba/kanna/issues/854)
+
 ## [1.41.0](https://github.com/cuongtranba/kanna/compare/v1.40.7...v1.41.0) (2026-08-22)
 
 
