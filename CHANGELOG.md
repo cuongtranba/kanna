@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.41.4](https://github.com/cuongtranba/kanna/compare/v1.41.3...v1.41.4) (2026-08-22)
+
+
+### Performance Improvements
+
+* **transcript:** prevent repeated full-load spikes for oversized transcripts and trim dead loop events ([#865](https://github.com/cuongtranba/kanna/issues/865)) ([6d96f33](https://github.com/cuongtranba/kanna/commit/6d96f3332f8279f4659370f5c331238d3c0282b8)), closes [#863](https://github.com/cuongtranba/kanna/issues/863)
+
 ## [1.41.3](https://github.com/cuongtranba/kanna/compare/v1.41.2...v1.41.3) (2026-08-22)
 
 
