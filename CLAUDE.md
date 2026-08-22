@@ -1510,12 +1510,16 @@ chat never triggers the load; the primer thunk runs only when a primer is
 actually built. Adding an unconditional `deps.store.getMessages(...)` back to
 this path silently restores the whole cost.
 
-Still unbounded, deliberately out of scope here: `state.subagentRunsByChatId`
-is evicted only by whole-chat delete. `state.autoContinueEventsByChatId` is
-evicted the same way, but its dominant contributor is now bounded — see **Cron
-run-event retention** below. What remains unbounded there is `loop_armed`
-prompt bloat, MEASURED at 285 KB for one long loop chat, 91% of it the same
-rendered loop prompt re-embedded on every wake by `deliverSubagentToMain`.
+`state.subagentRunsByChatId` is now capped at `MAX_SUBAGENT_RUNS_PER_CHAT`
+(200) settled runs per chat — oldest settled runs are evicted on each terminal
+event (`applySubagentEvent`, `event-store-subagent.ts`); running runs are never
+evicted. The `entries[]` array inside each retained snapshot is still unbounded
+per run (tool_result + assistant_text entries accumulate for the run's lifetime).
+`state.autoContinueEventsByChatId` is evicted only by whole-chat delete, but its
+dominant contributor is now bounded — see **Cron run-event retention** below.
+What remains unbounded there is `loop_armed` prompt bloat, MEASURED at 285 KB
+for one long loop chat, 91% of it the same rendered loop prompt re-embedded on
+every wake by `deliverSubagentToMain`.
 
 # Cron run-event retention (`compactCronRunEvents`)
 
