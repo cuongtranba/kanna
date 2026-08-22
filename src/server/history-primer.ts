@@ -80,7 +80,7 @@ function selectPrimerEntries(entries: readonly TranscriptEntry[]): TranscriptEnt
 }
 
 export function buildHistoryPrimer(
-  entries: TranscriptEntry[],
+  entries: readonly TranscriptEntry[],
   _targetProvider: AgentProvider,
   userText: string,
 ): string | null {
