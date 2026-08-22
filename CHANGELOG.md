@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.40.3](https://github.com/cuongtranba/kanna/compare/v1.40.2...v1.40.3) (2026-08-22)
+
+
+### Performance Improvements
+
+* **subagent:** cap settled runs per chat at MAX_SUBAGENT_RUNS_PER_CHAT ([#834](https://github.com/cuongtranba/kanna/issues/834)) ([8f92116](https://github.com/cuongtranba/kanna/commit/8f92116103dfa8cc1197e70c5630c7b23e75deca)), closes [#833](https://github.com/cuongtranba/kanna/issues/833)
+
 ## [1.40.2](https://github.com/cuongtranba/kanna/compare/v1.40.1...v1.40.2) (2026-08-21)
 
 
