@@ -402,6 +402,7 @@ export function createWsRouter({
         case "push.unsubscribe":
         case "push.test":
         case "push.setProjectMute":
+        case "push.setChatMute":
         case "push.setFocusedChat": {
           await handlePushCommand(
             {

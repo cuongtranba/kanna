@@ -1,5 +1,5 @@
 import { type MouseEvent as ReactMouseEvent } from "react"
-import { Flower, GitBranch, Menu, MoreHorizontal, PanelLeft, PanelRight, SquarePen, Terminal } from "lucide-react"
+import { Bell, BellOff, Flower, GitBranch, Menu, MoreHorizontal, PanelLeft, PanelRight, SquarePen, Terminal } from "lucide-react"
 import { ShareButton } from "../share/ShareButton"
 import { SharePopover } from "../share/SharePopover"
 import type { ShareSummary } from "../../../shared/session-share/types"
@@ -127,6 +127,8 @@ interface Props {
   shareShares?: readonly ShareSummary[]
   onShareMint?: (chatId: string) => Promise<void>
   onShareRevoke?: (tokenId: string) => Promise<void>
+  silent?: boolean
+  onToggleSilent?: () => void
   dom?: DomPort
 }
 
@@ -163,6 +165,8 @@ export function ChatNavbar({
   shareShares,
   onShareMint,
   onShareRevoke,
+  silent,
+  onToggleSilent,
   dom: domProp,
 }: Props) {
   const dom = domProp ?? domAdapter
@@ -273,6 +277,28 @@ export function ChatNavbar({
 
         <div className="flex items-center flex-shrink-0 border border-border rounded-2xl">
           <PtyInstancesIndicator socket={socket} onOpenChat={onOpenPtyChat} />
+          {onToggleSilent != null ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="none"
+                  onClick={onToggleSilent}
+                  aria-pressed={silent ?? false}
+                  aria-label={silent ? "Unsilence notifications" : "Silence notifications"}
+                  className={cn(
+                    "border border-border/0 hover:!border-border/0 px-1.5 h-9 hover:!bg-transparent",
+                    silent && "text-muted-foreground"
+                  )}
+                >
+                  {silent ? <BellOff strokeWidth={2} className="h-4.5" /> : <Bell strokeWidth={2} className="h-4.5" />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                {silent ? "Unsilence notifications" : "Silence notifications"}
+              </TooltipContent>
+            </Tooltip>
+          ) : null}
         </div>
 
         {localPath && (onOpenExternal || onToggleEmbeddedTerminal || onToggleRightSidebar) ? (

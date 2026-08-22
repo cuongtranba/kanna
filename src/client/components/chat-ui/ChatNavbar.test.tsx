@@ -15,6 +15,78 @@ function baseProps() {
   }
 }
 
+describe("ChatNavbar silent toggle", () => {
+  test("renders Bell button when onToggleSilent is provided (silent=false)", async () => {
+    const r = await renderForLoopCheck(
+      <ChatTabScopedStore.Provider init={undefined}>
+        <TooltipProvider>
+          <ChatNavbar {...baseProps()} silent={false} onToggleSilent={() => {}} />
+        </TooltipProvider>
+      </ChatTabScopedStore.Provider>,
+    )
+    try {
+      expect(r.loopWarnings).toEqual([])
+      const btn = document.querySelector('[aria-label="Silence notifications"]') as HTMLButtonElement | null
+      expect(btn).not.toBeNull()
+      expect(btn?.getAttribute("aria-pressed")).toBe("false")
+    } finally {
+      await r.cleanup()
+    }
+  })
+
+  test("renders BellOff button when silent=true", async () => {
+    const r = await renderForLoopCheck(
+      <ChatTabScopedStore.Provider init={undefined}>
+        <TooltipProvider>
+          <ChatNavbar {...baseProps()} silent={true} onToggleSilent={() => {}} />
+        </TooltipProvider>
+      </ChatTabScopedStore.Provider>,
+    )
+    try {
+      expect(r.loopWarnings).toEqual([])
+      const btn = document.querySelector('[aria-label="Unsilence notifications"]') as HTMLButtonElement | null
+      expect(btn).not.toBeNull()
+      expect(btn?.getAttribute("aria-pressed")).toBe("true")
+    } finally {
+      await r.cleanup()
+    }
+  })
+
+  test("calls onToggleSilent when button is clicked", async () => {
+    let called = 0
+    const r = await renderForLoopCheck(
+      <ChatTabScopedStore.Provider init={undefined}>
+        <TooltipProvider>
+          <ChatNavbar {...baseProps()} silent={false} onToggleSilent={() => { called++ }} />
+        </TooltipProvider>
+      </ChatTabScopedStore.Provider>,
+    )
+    try {
+      const btn = document.querySelector('[aria-label="Silence notifications"]') as HTMLButtonElement | null
+      btn?.click()
+      expect(called).toBe(1)
+    } finally {
+      await r.cleanup()
+    }
+  })
+
+  test("no bell button when onToggleSilent is not provided", async () => {
+    const r = await renderForLoopCheck(
+      <ChatTabScopedStore.Provider init={undefined}>
+        <TooltipProvider>
+          <ChatNavbar {...baseProps()} />
+        </TooltipProvider>
+      </ChatTabScopedStore.Provider>,
+    )
+    try {
+      expect(document.querySelector('[aria-label="Silence notifications"]')).toBeNull()
+      expect(document.querySelector('[aria-label="Unsilence notifications"]')).toBeNull()
+    } finally {
+      await r.cleanup()
+    }
+  })
+})
+
 describe("ChatNavbar following pill", () => {
   test("hidden when chat is not followed, no render loop", async () => {
     useFollowedSessionsStore.getState().setFollowed([])

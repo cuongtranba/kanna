@@ -1,5 +1,5 @@
 import { memo } from "react"
-import { Archive, ShieldAlert, Split } from "lucide-react"
+import { Archive, BellOff, ShieldAlert, Split } from "lucide-react"
 import type { SidebarChatRow } from "../../../../shared/types"
 import { Button } from "../../ui/button"
 import { Kbd } from "../../ui/kbd"
@@ -28,6 +28,7 @@ interface Props {
   onArchiveChat: (chatId: string) => void
   onDeleteChat: (chatId: string) => void
   onEditPermissions?: (chatId: string) => void
+  silent?: boolean
 }
 
 function ChatRowImpl({
@@ -43,6 +44,7 @@ function ChatRowImpl({
   onArchiveChat,
   onDeleteChat,
   onEditPermissions,
+  silent = false,
 }: Props) {
   const isLiveState = (chat.status === "running" || chat.status === "waiting_for_user") && chat.stateEnteredAt != null
   const stampLabel = isLiveState && chat.stateEnteredAt != null
@@ -136,6 +138,9 @@ function ChatRowImpl({
       >
         {chat.title}
       </span>
+      {silent ? (
+        <BellOff className="size-3 shrink-0 text-muted-foreground" aria-label="Silenced" />
+      ) : null}
       <div className={cn("relative h-6 shrink-0", trailingSlotWidth)}>
         {trailingLabelContent}
         <div

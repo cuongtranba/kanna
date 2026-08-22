@@ -67,6 +67,7 @@ export class PushManager {
   private readonly now: () => number
   private readonly subscriptions = new Map<string, PushSubscriptionRecord>()
   private readonly mutedProjects = new Set<string>()
+  private readonly mutedChats = new Set<string>()
   private readonly lastStatusByChat = new Map<string, KannaStatus>()
   private seeded = false
   private readonly dedupKeyToTs = new Map<string, number>()
@@ -104,6 +105,10 @@ export class PushManager {
       case "project_mute_set":
         if (event.muted) this.mutedProjects.add(event.localPath)
         else this.mutedProjects.delete(event.localPath)
+        break
+      case "chat_mute_set":
+        if (event.muted) this.mutedChats.add(event.chatId)
+        else this.mutedChats.delete(event.chatId)
         break
     }
   }
@@ -176,6 +181,21 @@ export class PushManager {
     await this.store.appendPushEvent(event)
   }
 
+  async setChatMute(chatId: string, muted: boolean): Promise<void> {
+    const event: PushEvent = {
+      kind: "chat_mute_set",
+      ts: this.now(),
+      chatId,
+      muted,
+    }
+    this.applyEvent(event)
+    await this.store.appendPushEvent(event)
+  }
+
+  isChatMuted(chatId: string): boolean {
+    return this.mutedChats.has(chatId)
+  }
+
   async recordDeviceSeen(id: string): Promise<void> {
     const sub = this.subscriptions.get(id)
     if (!sub) return
@@ -217,16 +237,17 @@ export class PushManager {
     return [...this.subscriptions.values()]
   }
 
-  getPreferences(): { globalEnabled: boolean; mutedProjectPaths: string[] } {
+  getPreferences(): { globalEnabled: boolean; mutedProjectPaths: string[]; mutedChatIds: string[] } {
     return {
       globalEnabled: true,
       mutedProjectPaths: [...this.mutedProjects],
+      mutedChatIds: [...this.mutedChats],
     }
   }
 
   getConfigSnapshot(currentDeviceId: string | null): {
     vapidPublicKey: string
-    preferences: { globalEnabled: boolean; mutedProjectPaths: string[] }
+    preferences: { globalEnabled: boolean; mutedProjectPaths: string[]; mutedChatIds: string[] }
     devices: Array<{
       id: string
       label: string
@@ -265,6 +286,7 @@ export class PushManager {
       if (!kind) continue
       if (this.isDuplicate(chat.chatId, kind)) continue
       if (this.mutedProjects.has(chat.projectLocalPath)) continue
+      if (this.mutedChats.has(chat.chatId)) continue
       const payload = this.buildPayload(chat, kind)
       await this.fanOut(payload)
     }

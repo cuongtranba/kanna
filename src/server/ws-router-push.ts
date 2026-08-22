@@ -3,7 +3,7 @@
  *
  * WS command handlers for push-notification lifecycle operations:
  *   push.identifyDevice, push.subscribe, push.unsubscribe,
- *   push.test, push.setProjectMute, push.setFocusedChat
+ *   push.test, push.setProjectMute, push.setChatMute, push.setFocusedChat
  *
  * Extracted from ws-router.ts.
  */
@@ -26,6 +26,7 @@ export interface PushManagerDep {
   removeSubscription(id: string, reason: "user_revoked" | "expired" | "replaced"): Promise<void>
   sendTest(id: string): Promise<void>
   setProjectMute(localPath: string, muted: boolean): Promise<void>
+  setChatMute(chatId: string, muted: boolean): Promise<void>
   setFocusedChat(deviceId: string, chatId: string | null): void
 }
 
@@ -102,6 +103,12 @@ export async function handlePushCommand(
     }
     case "push.setProjectMute": {
       await pushManager.setProjectMute(command.localPath, command.muted)
+      await broadcastPushConfig()
+      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      return true
+    }
+    case "push.setChatMute": {
+      await pushManager.setChatMute(command.chatId, command.muted)
       await broadcastPushConfig()
       send({ v: PROTOCOL_VERSION, type: "ack", id })
       return true

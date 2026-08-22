@@ -142,6 +142,7 @@ export interface PushPayload {
 export interface PushPreferences {
   globalEnabled: boolean
   mutedProjectPaths: string[]
+  mutedChatIds: string[]
 }
 
 export interface PushDeviceSummary {

@@ -435,6 +435,7 @@ export type ClientCommand =
   | { type: "push.unsubscribe"; pushDeviceId: string }
   | { type: "push.test" }
   | { type: "push.setProjectMute"; localPath: string; muted: boolean }
+  | { type: "push.setChatMute"; chatId: string; muted: boolean }
   | { type: "push.setFocusedChat"; chatId: string | null }
   | ShareClientCommand
 

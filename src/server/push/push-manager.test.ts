@@ -481,3 +481,89 @@ describe("PushManager subscriptions", () => {
     expect(snap.devices[0]).not.toHaveProperty("keys")
   })
 })
+
+describe("PushManager chat mute", () => {
+  let store: FakeStore
+  let sender: FakeSender
+  let manager: PushManager
+
+  beforeEach(() => {
+    store = new FakeStore()
+    sender = new FakeSender()
+    manager = new PushManager({ store, sender, vapid: VAPID, now: () => 1000 })
+  })
+
+  async function sub() {
+    await registerSub(manager, store, "d1", "https://push.example/x")
+  }
+
+  test("muted chat suppresses completed transition", async () => {
+    await sub()
+    await manager.setChatMute("c1", true)
+    await manager.observeStatuses([chat({ status: "running" })])
+    await manager.observeStatuses([chat({ status: "idle" })])
+    expect(sender.sent).toEqual([])
+  })
+
+  test("muted chat suppresses failed transition", async () => {
+    await sub()
+    await manager.setChatMute("c1", true)
+    await manager.observeStatuses([chat({ status: "running" })])
+    await manager.observeStatuses([chat({ status: "failed" })])
+    expect(sender.sent).toEqual([])
+  })
+
+  test("muted chat suppresses waiting_for_user transition", async () => {
+    await sub()
+    await manager.setChatMute("c1", true)
+    await manager.observeStatuses([chat({ status: "running" })])
+    await manager.observeStatuses([chat({ status: "waiting_for_user" })])
+    expect(sender.sent).toEqual([])
+  })
+
+  test("unmuting a muted chat restores pushes", async () => {
+    await sub()
+    await manager.setChatMute("c1", true)
+    await manager.setChatMute("c1", false)
+    await manager.observeStatuses([chat({ status: "running" })])
+    await manager.observeStatuses([chat({ status: "idle" })])
+    expect(sender.sent).toHaveLength(1)
+  })
+
+  test("mute state replays via initialize()", async () => {
+    await sub()
+    await manager.setChatMute("c1", true)
+
+    const replay = new PushManager({ store, sender, vapid: VAPID, now: () => 1000 })
+    await replay.initialize()
+    await replay.observeStatuses([chat({ status: "running" })])
+    await replay.observeStatuses([chat({ status: "idle" })])
+    expect(sender.sent).toEqual([])
+  })
+
+  test("muting c1 does not suppress pushes for sibling c2", async () => {
+    await sub()
+    await manager.setChatMute("c1", true)
+    await manager.observeStatuses([chat({ chatId: "c2", status: "running" })])
+    await manager.observeStatuses([chat({ chatId: "c2", status: "idle" })])
+    expect(sender.sent).toHaveLength(1)
+    const payload = JSON.parse(sender.sent[0].payload) as PushPayload
+    expect(payload.chatId).toBe("c2")
+  })
+
+  test("getPreferences includes mutedChatIds", async () => {
+    await manager.initialize()
+    await manager.setChatMute("c1", true)
+    await manager.setChatMute("c2", true)
+    const prefs = manager.getPreferences()
+    expect(prefs.mutedChatIds).toContain("c1")
+    expect(prefs.mutedChatIds).toContain("c2")
+  })
+
+  test("getConfigSnapshot includes mutedChatIds in preferences", async () => {
+    await manager.initialize()
+    await manager.setChatMute("c1", true)
+    const snap = manager.getConfigSnapshot(null)
+    expect(snap.preferences.mutedChatIds).toContain("c1")
+  })
+})

@@ -235,6 +235,19 @@ describe("fireCronJob — spawn card link (onChatSpawned)", () => {
 
     expect(called).toHaveLength(0)
   })
+
+  test("silent state inheritance: onChatSpawned receives both ids for caller to propagate mute", async () => {
+    const { deps } = makeDeps()
+    const inherited: Array<{ originChatId: string; spawnedChatId: string }> = []
+    const mutedChats = new Set<string>([CHAT])
+    deps.onChatSpawned = (originChatId, spawnedChatId) => {
+      if (mutedChats.has(originChatId)) inherited.push({ originChatId, spawnedChatId })
+    }
+    await armJob(deps, "/cron nightly report spawn @daily")
+    await fireCronJob(deps, CHAT, "cron-abc")
+
+    expect(inherited).toEqual([{ originChatId: CHAT, spawnedChatId: "spawned-1" }])
+  })
 })
 
 describe("fireCronJob — consecutive skips coalesce", () => {

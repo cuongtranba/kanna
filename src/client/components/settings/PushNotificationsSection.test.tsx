@@ -5,7 +5,7 @@ import type { PushConfigSnapshot, LocalProjectsSnapshot } from "../../../shared/
 
 const baseConfig: PushConfigSnapshot = {
   vapidPublicKey: "key",
-  preferences: { globalEnabled: true, mutedProjectPaths: [] },
+  preferences: { globalEnabled: true, mutedProjectPaths: [], mutedChatIds: [] },
   devices: [],
 }
 
@@ -87,7 +87,7 @@ describe("PushNotificationsSection", () => {
         config={{
           ...baseConfig,
           devices: [{ id: "d1", label: "iPhone", userAgent: "ua", createdAt: 0, lastSeenAt: 0, isCurrentDevice: true }],
-          preferences: { globalEnabled: true, mutedProjectPaths: ["/tmp/a"] },
+          preferences: { globalEnabled: true, mutedProjectPaths: ["/tmp/a"], mutedChatIds: [] },
         }}
         projects={baseProjects}
         currentDeviceId="d1"

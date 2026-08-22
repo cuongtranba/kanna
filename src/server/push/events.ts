@@ -5,6 +5,7 @@ export type PushEvent =
   | { kind: "subscription_removed"; ts: number; id: string; reason: "user_revoked" | "expired" | "replaced" }
   | { kind: "subscription_seen"; ts: number; id: string }
   | { kind: "project_mute_set"; ts: number; localPath: string; muted: boolean }
+  | { kind: "chat_mute_set"; ts: number; chatId: string; muted: boolean }
 
 export interface PushEventStore {
   appendPushEvent(event: PushEvent): Promise<void>

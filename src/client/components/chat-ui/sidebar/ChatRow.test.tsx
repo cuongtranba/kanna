@@ -152,4 +152,42 @@ describe("ChatRow", () => {
     expect(html).toContain("Fork chat")
     expect(html).toContain("Archive chat")
   })
+
+  test("renders BellOff aria-label when silent is true", () => {
+    const html = renderToStaticMarkup(
+      <ChatRow
+        chat={baseChat}
+        activeChatId={null}
+        nowMs={60_000}
+        silent
+        onSelectChat={() => undefined}
+        onRenameChat={() => undefined}
+        onOpenInFinder={() => undefined}
+        onForkChat={() => undefined}
+        onArchiveChat={() => undefined}
+        onDeleteChat={() => undefined}
+      />
+    )
+
+    expect(html).toContain("aria-label=\"Silenced\"")
+  })
+
+  test("does not render silent indicator when silent is false", () => {
+    const html = renderToStaticMarkup(
+      <ChatRow
+        chat={baseChat}
+        activeChatId={null}
+        nowMs={60_000}
+        silent={false}
+        onSelectChat={() => undefined}
+        onRenameChat={() => undefined}
+        onOpenInFinder={() => undefined}
+        onForkChat={() => undefined}
+        onArchiveChat={() => undefined}
+        onDeleteChat={() => undefined}
+      />
+    )
+
+    expect(html).not.toContain("aria-label=\"Silenced\"")
+  })
 })

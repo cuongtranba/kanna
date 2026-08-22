@@ -14,6 +14,7 @@ function makePushManager(overrides: Partial<PushManagerDep> = {}): PushManagerDe
     removeSubscription: mock(async () => {}),
     sendTest: mock(async () => {}),
     setProjectMute: mock(async () => {}),
+    setChatMute: mock(async () => {}),
     setFocusedChat: mock(() => {}),
     ...overrides,
   }
@@ -167,6 +168,30 @@ describe("handlePushCommand", () => {
     expect(deps.broadcasts).toHaveLength(1)
     expect(deps.broadcasts[0]).toEqual({ includePushConfig: true })
     expect((deps.sent[0] as { type: string }).type).toBe("ack")
+  })
+
+  // ---------------------------------------------------------------------------
+  // push.setChatMute
+  // ---------------------------------------------------------------------------
+
+  test("push.setChatMute — calls setChatMute, broadcasts, acks", async () => {
+    const deps = makeDeps()
+    const cmd: ClientCommand = { type: "push.setChatMute", chatId: "chat-42", muted: true }
+    const handled = await handlePushCommand(deps, cmd, "r11")
+    expect(handled).toBe(true)
+    expect(deps.pushManager.setChatMute as ReturnType<typeof mock>).toHaveBeenCalledWith("chat-42", true)
+    expect(deps.broadcasts).toHaveLength(1)
+    expect(deps.broadcasts[0]).toEqual({ includePushConfig: true })
+    expect((deps.sent[0] as { type: string }).type).toBe("ack")
+  })
+
+  test("push.setChatMute — unmute broadcasts, acks", async () => {
+    const deps = makeDeps()
+    const cmd: ClientCommand = { type: "push.setChatMute", chatId: "chat-42", muted: false }
+    const handled = await handlePushCommand(deps, cmd, "r12")
+    expect(handled).toBe(true)
+    expect(deps.pushManager.setChatMute as ReturnType<typeof mock>).toHaveBeenCalledWith("chat-42", false)
+    expect(deps.broadcasts).toHaveLength(1)
   })
 
   // ---------------------------------------------------------------------------
