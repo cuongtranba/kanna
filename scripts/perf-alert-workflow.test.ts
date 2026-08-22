@@ -18,6 +18,7 @@ type Workflow = {
 
 const workflow = Bun.YAML.parse(await Bun.file(WORKFLOW_PATH).text()) as Workflow
 const steps = Object.values(workflow.jobs).flatMap((job) => job.steps ?? [])
+const issueScript = await Bun.file(new URL("./perf-alert-issue.ts", import.meta.url)).text()
 
 describe("perf-alert workflow", () => {
   test("listens for the event type the Grafana template sends", () => {
@@ -45,5 +46,20 @@ describe("perf-alert workflow", () => {
   test("serialises runs per alert so the dedup check cannot race", () => {
     expect(workflow.concurrency?.group).toContain("client_payload.alert.alertname")
     expect(workflow.concurrency?.["cancel-in-progress"]).toBe(false)
+  })
+})
+
+// decideAction can only reopen a ticket it is shown. Narrowing this query back
+// to state=open would leave every unit test green while the pipeline silently
+// returned to filing a fresh ticket per flap.
+describe("perf-alert issue script", () => {
+  test("fetches closed tickets too, so a re-firing alert can reopen one", () => {
+    expect(issueScript).toContain("state=all")
+    expect(issueScript).not.toContain("state=open")
+  })
+
+  test("orders by recent activity so the reopen window fits in one page", () => {
+    expect(issueScript).toContain("sort=updated")
+    expect(issueScript).toContain("direction=desc")
   })
 })

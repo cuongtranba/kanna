@@ -1459,9 +1459,30 @@ contact point by name, route merged.
   `<!-- kanna-alert:<alertname>@<version> -->` marker (not a hash — a
   mis-grouped ticket is diagnosed by reading it), a 6h quiet period before a
   repeat firing comments, auto-close on resolve, and `MAX_OPEN_PERF_ISSUES`
-  (10). The cap is deliberately IGNORED on the resolve path, so a storm can
-  still close what it opened. **The OTLP ingest endpoint is unauthenticated**,
-  so forged metrics can drive this path; the cap is what bounds that.
+  (10). The cap is deliberately IGNORED on the resolve and reopen paths, so a
+  storm can still close what it opened. **The OTLP ingest endpoint is
+  unauthenticated**, so forged metrics can drive this path; the cap is what
+  bounds that.
+- **A flap is one episode, so it gets one ticket** (`REOPEN_WINDOW_MS`, 7 days).
+  `decideAction` is fed CLOSED tickets as well as open ones and REOPENS the most
+  recently closed match instead of filing a new one. Dedup over open issues
+  alone was not dedup: auto-close on resolve meant the next breach matched
+  nothing, so a rule hovering at its threshold filed a fresh ticket per flap —
+  five identical `KannaMemoryPressure` tickets in five hours (#827, #833, #836,
+  #840, #843). The quiet period never covered this; it throttles chatter on a
+  ticket that is already visible, and a closed one is not. Past the window a
+  breach is a genuinely new episode and resurrecting a months-old thread reads
+  as noise. **`scripts/perf-alert-issue.ts` must query `state=all`** —
+  narrowing it back to `state=open` restores the bug with every unit test still
+  green, which is why `perf-alert-workflow.test.ts` asserts the query string.
+- **Closing as _not planned_ is the mute**, and the only off-switch short of
+  pausing the rule. `CloseReason` is `completed | not_planned`; the adapter maps
+  GitHub's `not_planned` AND `duplicate` onto the latter (both say "not the
+  ticket to track this on" — reopening either would undo a human decision).
+  It is scoped by marker, so muting `@1.40.4` cannot silence `@1.40.5`. The
+  gesture has no UI affordance hinting it exists, so `renderIssue` names it in
+  every ticket footer, pinned by a test — delete that line and the mute becomes
+  undiscoverable.
 - **`repository_dispatch` only fires a workflow that is already on the DEFAULT
   branch.** A dispatch sent while `perf-alert.yml` exists only on a feature
   branch returns `204 No Content` and runs nothing — verified, and there is no
