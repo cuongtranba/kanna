@@ -61,6 +61,33 @@ also fails on any `insert` after a non-last table row
 (`UNIQUE constraint failed: index 'idx_nodes_order'`); build the fork and run
 via `C3X_LOCAL_BINARY=<path> bash <skill-dir>/bin/c3x.sh …`.
 
+**`repair` is idempotent on this tree as of 2026-08-22 — a second run changes
+nothing, so ANY diff it produces is about YOUR change and worth reading.** It
+was not, and the three causes are all authoring mistakes rather than tool bugs,
+so they will come back the same way:
+
+1. **An `.c3/adr/` file with no YAML frontmatter is DELETED, not skipped.**
+   `adr-20260821-watch-arming-window-safety-net.md` was hand-written starting at
+   `# adr-…`, so c3x did not recognise it as an entity and removed it on every
+   repair. An ADR needs the `id`/`title`/`type`/`goal`/`status`/`date` block —
+   `c3x add adr` writes it; hand-authoring means writing it yourself.
+2. **One unsealed fact blocks EVERY cache rebuild**, and the error names only
+   that file (`broken C3 seal in c3-1-client/c3-116-settings-page.md`) while the
+   visible symptom is elsewhere: reads fall back to a stale cache, so facts
+   added since — c3-234, c3-235 — resolve to nothing and `c3x lookup` answers
+   "no component mapping" for files that are correctly bound.
+3. **A wrapped list item loses its continuation indent.** c3x re-serialises
+   `2. …\n   continued` as `2. …\ncontinued`, breaking the list. Keep list items
+   on one line in `.c3/` prose; the normalizer then has nothing to mangle.
+
+`goal:` frontmatter being rewritten to match the body's `## Goal` is c3x syncing
+the two, not damage — the body wins.
+
+Still open: `c3-235` is referenced by `.c3/eval/c3-235.yaml` and
+`code-map.yaml` (secret scanning, from #820) but no component fact was ever
+created, so `c3x repair` warns and `c3x lookup .gitleaks.toml` resolves to
+nothing. Either author the fact or drop the two references.
+
 # Pull Requests
 
 `origin` = `cuongtranba/kanna` is the ONLY remote. There is no `upstream`, and
