@@ -138,8 +138,30 @@ export interface SingleImportResultRow {
    * exceeded the import size cap, which the user can act on (raise
    * `KANNA_IMPORT_MAX_ROLLOUT_BYTES`). Reporting a 91 MB rollout as
    * `parse_failed` is a misdiagnosis they cannot do anything with.
+   *
+   * `subagent`, `unreadable`, `no_cwd` and `no_records` are here for the same
+   * reason, and `subagent` is the one that matters most: 99 of 534 rollouts on
+   * the reference machine are subagent/forked, so it is the refusal a user is
+   * likeliest to hit — and it is PERMANENT, a deliberate v1 refusal. Told
+   * `parse_failed` they read it as corruption and retry forever.
+   *
+   * `transcript_mismatch` means the source file's records cannot be matched
+   * against the chat's existing transcript at all — see `applyDelta`. Appending
+   * anyway duplicates the whole transcript on every pass, so the import is
+   * refused instead.
    */
-  error?: "invalid_id" | "not_found" | "cwd_missing" | "parse_failed" | "too_large" | "store_error"
+  error?:
+    | "invalid_id"
+    | "not_found"
+    | "cwd_missing"
+    | "parse_failed"
+    | "too_large"
+    | "subagent"
+    | "unreadable"
+    | "no_cwd"
+    | "no_records"
+    | "transcript_mismatch"
+    | "store_error"
 }
 
 export interface ImportSessionsByIdsResult {

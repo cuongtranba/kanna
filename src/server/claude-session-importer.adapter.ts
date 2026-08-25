@@ -5,7 +5,12 @@ import type { ChatRecord } from "./events"
 import { log } from "../shared/log"
 import { extractSessionId } from "../shared/claude-session-id"
 import type { ImportSessionsByIdsResult, SingleImportResultRow } from "../shared/protocol"
-import type { ImportableSession, SessionParseResult, SessionSource } from "./session-source"
+import type {
+  ImportableSession,
+  SessionParseRejection,
+  SessionParseResult,
+  SessionSource,
+} from "./session-source"
 import { createSessionSources } from "./session-source-registry.adapter"
 
 export interface ImportClaudeSessionsResult {
@@ -197,6 +202,38 @@ export async function importAllSessions(
   return { imported, updated, skipped, failed, newProjects }
 }
 
+/**
+ * `SessionParseRejection` → the code the user sees.
+ *
+ * A `switch` with NO `default` on purpose: `SessionParseRejection` is the union
+ * that exists so a refusal can say WHY, and the import dialog is the one place
+ * a user reads the answer. A new reason added to that union must therefore be a
+ * COMPILE ERROR here rather than silently collapsing back onto `parse_failed` —
+ * which is exactly how five distinct reasons came to share one bucket.
+ *
+ * `no_session_meta` is the deliberate exception: "readable, but nothing
+ * identified the session" IS `parse_failed` from the user's side, and a second
+ * word for it would not tell them anything more.
+ */
+function importErrorForRejection(
+  reason: SessionParseRejection,
+): NonNullable<SingleImportResultRow["error"]> {
+  switch (reason) {
+    case "unreadable":
+      return "unreadable"
+    case "no_session_meta":
+      return "parse_failed"
+    case "no_cwd":
+      return "no_cwd"
+    case "subagent":
+      return "subagent"
+    case "no_records":
+      return "no_records"
+    case "parse_failed":
+      return "parse_failed"
+  }
+}
+
 export interface SessionImportedInfo {
   chatId: string
   sessionId: string
@@ -254,7 +291,9 @@ export async function importSessionsByIds(args: ImportSessionsByIdsArgs): Promis
       continue
     }
     if (result.kind === "rejected") {
-      results.push({ sessionId, status: "failed", error: "parse_failed" })
+      const error = importErrorForRejection(result.reason)
+      log.warn("[kanna/import] session refused", filePath, result.reason)
+      results.push({ sessionId, status: "failed", error })
       continue
     }
     const session = result.session

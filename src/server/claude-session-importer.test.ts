@@ -9,7 +9,7 @@ import {
   importSessionsByIds,
 } from "./claude-session-importer.adapter"
 import type { SessionImportedInfo } from "./claude-session-importer.adapter"
-import { writeCodexRolloutFixture } from "./__fixtures__/codex-rollout-fixture"
+import { writeCodexRolloutFixture, writeSubagentRollout } from "./__fixtures__/codex-rollout-fixture"
 import { codexSessionSource } from "./session-source-registry.adapter"
 import { createTestEventStore } from "./storage/test-helpers"
 
@@ -64,6 +64,10 @@ function codexDayDir(homeDir: string) {
 
 function seedCodexSession(homeDir: string, cwd: string, sessionId: string) {
   return writeCodexRolloutFixture(codexDayDir(homeDir), { sessionId, cwd })
+}
+
+function seedCodexSubagentSession(homeDir: string, cwd: string, sessionId: string) {
+  return writeSubagentRollout(codexDayDir(homeDir), { sessionId, cwd })
 }
 
 function md5File(filePath: string) {
@@ -706,6 +710,114 @@ describe("codex session import", () => {
       const again = await importOneSession(store, parseRollout())
       expect(again.status).toBe("skipped")
       expect(store.getMessages(chatId).length).toBe(baseline + 2)
+    } finally {
+      ctx.cleanup()
+    }
+  })
+})
+
+describe("rejection reasons reach the user", () => {
+  // The sharpest of the five collapsed reasons: 99 of 534 reference rollouts
+  // are subagent/forked, so this is the refusal a user is most likely to hit.
+  // Reported as `parse_failed` it reads as corruption and they retry forever;
+  // it is a permanent, deliberate v1 refusal.
+  test("a subagent rollout fails `subagent`, not `parse_failed`", async () => {
+    const ctx = fresh()
+    try {
+      const CODEX_ID = "5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b"
+      seedCodexSubagentSession(ctx.homeDir, ctx.realProj, CODEX_ID)
+      const store = createTestEventStore(ctx.dataDir)
+      await store.initialize()
+
+      const result = await importSessionsByIds({
+        store,
+        homeDir: ctx.homeDir,
+        sessionIds: [CODEX_ID],
+      })
+
+      expect(result.results[0]).toMatchObject({ status: "failed", error: "subagent" })
+    } finally {
+      ctx.cleanup()
+    }
+  })
+
+  // "Import all" used to drop every refused file BEFORE `importOneSession`, so a
+  // user with 99 subagent rollouts saw "imported 0, failed 0" and could not
+  // learn that anything had been refused, let alone why.
+  test("`import all` counts a refused rollout as failed", async () => {
+    const ctx = fresh()
+    try {
+      seedCodexSubagentSession(ctx.homeDir, ctx.realProj, "6f7a8b9c-0d1e-4f2a-8b3c-4d5e6f7a8b9c")
+      const store = createTestEventStore(ctx.dataDir)
+      await store.initialize()
+
+      const result = await importAllSessions({ store, homeDir: ctx.homeDir })
+
+      expect(result.imported).toBe(0)
+      expect(result.failed).toBe(1)
+    } finally {
+      ctx.cleanup()
+    }
+  })
+
+  // Over-cap files land in the same blind spot: `tooLarge` is dropped by the
+  // scan, so the whole rollout set vanishes from every counter.
+  test("`import all` counts an over-cap rollout as failed", async () => {
+    const ctx = fresh()
+    try {
+      seedCodexSession(ctx.homeDir, ctx.realProj, "7a8b9c0d-1e2f-4a3b-8c4d-5e6f7a8b9c0d")
+      const store = createTestEventStore(ctx.dataDir)
+      await store.initialize()
+
+      const result = await importAllSessions({ store, homeDir: ctx.homeDir, maxBytes: 16 })
+
+      expect(result.imported).toBe(0)
+      expect(result.failed).toBe(1)
+    } finally {
+      ctx.cleanup()
+    }
+  })
+})
+
+describe("cross-provider sourceHash collision", () => {
+  // `ChatRecord.sourceHash` is ONE field while dedup is per-provider, so a chat
+  // imported from claude and later given a codex token is the import target of
+  // both. The hashes then never match, `applyDelta` runs, and NO existing entry
+  // is keyable by the codex codec (they are claude ids) — an EMPTY `seen` over a
+  // non-empty transcript, which reads as "everything is new" and re-appends the
+  // whole rollout on top of the transcript the user already watched, forever.
+  test("a codex rollout never re-appends over a claude transcript", async () => {
+    const ctx = fresh()
+    try {
+      const CLAUDE_ID = "8b9c0d1e-2f3a-4b4c-8d5e-6f7a8b9c0d1e"
+      const CODEX_ID = "9c0d1e2f-3a4b-4c5d-8e6f-7a8b9c0d1e2f"
+      seedSession(ctx.homeDir, ctx.realProj, CLAUDE_ID)
+      const store = createTestEventStore(ctx.dataDir)
+      await store.initialize()
+
+      const first = await importAllSessions({ store, homeDir: ctx.homeDir })
+      expect(first.imported).toBe(1)
+      const chat = [...store.state.chatsById.values()].find((c) => !c.deletedAt)
+      const chatId = chat?.id ?? ""
+      const claudeEntryCount = store.getMessages(chatId).length
+      expect(claudeEntryCount).toBeGreaterThan(0)
+
+      // The user switches the chat to codex and runs a turn: codex writes a
+      // rollout and the chat gains a codex session token.
+      seedCodexSession(ctx.homeDir, ctx.realProj, CODEX_ID)
+      await store.setChatProvider(chatId, "codex")
+      await store.setSessionTokenForProvider(chatId, "codex", CODEX_ID)
+
+      const second = await importAllSessions({ store, homeDir: ctx.homeDir })
+
+      expect(store.getMessages(chatId).length).toBe(claudeEntryCount)
+      expect(second.failed).toBe(1)
+      expect(second.updated).toBe(0)
+
+      // And it must not oscillate: a second pass changes nothing either.
+      const third = await importAllSessions({ store, homeDir: ctx.homeDir })
+      expect(store.getMessages(chatId).length).toBe(claudeEntryCount)
+      expect(third.failed).toBe(1)
     } finally {
       ctx.cleanup()
     }
