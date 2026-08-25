@@ -9,7 +9,7 @@ import {
 } from "./followed-session-registry"
 import { statSessionFile } from "./followed-session-io.adapter"
 import { importOneSession, importSessionsByIds, type SessionImportedInfo } from "./claude-session-importer.adapter"
-import { sourceForProvider } from "./session-source-registry.adapter"
+import { sourceForProvider } from "./session-source-registry"
 import { createTestEventStore } from "./storage/test-helpers"
 import type { AgentProvider } from "../shared/types"
 import type { ImportableSession, SessionParseResult, SessionSource } from "./session-source"

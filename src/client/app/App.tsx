@@ -30,6 +30,7 @@ import { useSidebarSwipeGesture } from "./sidebarSwipeGesture"
 import { useViewportStore, useViewportSubscription } from "../stores/viewportStore"
 import { isMobileViewport } from "../lib/viewport"
 import type { AppSettingsSnapshot } from "../../shared/types"
+import type { SingleImportResultRow } from "../../shared/protocol"
 import { log } from "../../shared/log"
 import { useAppShellStore } from "../stores/appShellStore"
 import { PasswordScreenStore } from "./PasswordScreen.store"
@@ -50,6 +51,34 @@ const StackBoardsRoutePage = lazy(() => import("./StackBoardsRoutePage").then((m
 const SettingsPage = lazy(() => import("./SettingsPage").then((module) => ({ default: module.SettingsPage })))
 const WorkflowsPage = lazy(() => import("./WorkflowsPage").then((module) => ({ default: module.WorkflowsPage })))
 const CronJobsPage = lazy(() => import("./CronJobsPage").then((module) => ({ default: module.CronJobsPage })))
+
+/**
+ * One short sentence per import failure code. The raw token used to be rendered
+ * verbatim (`019e…: too_large`), which names the internal reason and answers
+ * none of "can I do anything about this?".
+ *
+ * `subagent` deliberately says NOT IMPORTABLE rather than anything that reads as
+ * damage — it is a permanent, deliberate refusal, and a user told their file
+ * failed will keep retrying it.
+ */
+const IMPORT_ERROR_TEXT: Record<NonNullable<SingleImportResultRow["error"]>, string> = {
+  invalid_id: "Not a valid session id.",
+  not_found: "No session file with that id was found.",
+  cwd_missing: "The project folder this session ran in no longer exists.",
+  parse_failed: "The session file could not be read.",
+  too_large: "The session file is over the import size limit.",
+  subagent: "Subagent and forked sessions are not importable.",
+  unreadable: "The session file could not be opened.",
+  no_cwd: "The session file records no project folder.",
+  no_records: "The session file holds no messages to import.",
+  transcript_mismatch: "This chat already holds a transcript from another session.",
+  store_error: "Kanna could not save the imported session.",
+}
+
+function describeImportError(error: SingleImportResultRow["error"]): string {
+  if (!error) return "Import failed."
+  return IMPORT_ERROR_TEXT[error]
+}
 
 function DeferredRoute({ children }: { children: ReactNode }) {
   return <Suspense fallback={<AppBootstrap label="Opening workspace" />}>{children}</Suspense>
@@ -351,7 +380,7 @@ function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
       if (failures.length > 0) {
         await dialog.alert({
           title: firstChat ? "Imported with errors" : "Import failed",
-          description: failures.map((f) => `${f.sessionId}: ${f.error}`).join("\n"),
+          description: failures.map((f) => `${f.sessionId}: ${describeImportError(f.error)}`).join("\n"),
         })
       }
       if (firstChat?.chatId) navigate(`/chat/${firstChat.chatId}`)

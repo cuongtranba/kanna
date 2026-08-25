@@ -1,11 +1,16 @@
-// src/server/session-source-registry.adapter.ts
+// src/server/session-source-registry.ts
 //
 // The list of providers the session importer knows how to read. Adding a
 // provider is one entry here plus its own scanner/parser/codec — the importer
 // itself never names a provider.
 //
-// `.adapter.ts` because it wires the scanner + parser adapters (which do the
-// file IO) onto their pure codec.
+// NOT `.adapter.ts`: this file performs no IO of its own. It is a composition
+// root holding domain policy — provider precedence, the default size cap, and
+// the claude parser's `null` → `parse_failed` mapping — and merely wires the
+// scanner + parser adapters (which do the file IO) onto their pure codec.
+// CLAUDE.md reserves the suffix for a file whose SINGLE responsibility is to
+// perform the side effect; importing an `.adapter.ts` from a plain module is
+// allowed and is all this does.
 
 import type { AgentProvider } from "../shared/types"
 import { claudeSessionCodec } from "./claude-session-mapper"
@@ -18,6 +23,7 @@ import { locateCodexRolloutFile, scanCodexRollouts } from "./codex-session-scann
 import {
   createImportableSession,
   type ImportableSession,
+  type SessionParseRejection,
   type SessionParseResult,
   type SessionSource,
 } from "./session-source"
@@ -55,6 +61,52 @@ function codexParserDeps(maxBytes: number): CodexParserDeps {
   return { classifyLine: classifyRolloutLine, isSubagentMeta: isSubagentSessionMeta, maxBytes }
 }
 
+/**
+ * Why the scan would not offer a file.
+ *
+ * `SessionSource.scan` answers `ImportableSession[]`, so a file it refuses is
+ * simply absent — it reaches no counter and no log. That is fine for the
+ * per-id path (which parses one named file and reports the result) and wrong
+ * for "import all": with 99 subagent rollouts and 4 over-cap files a user sees
+ * "imported N" and cannot learn that 103 were refused, or why.
+ */
+export type SessionScanRefusalReason = SessionParseRejection | "too_large"
+
+export interface SessionScanRefusal {
+  readonly provider: AgentProvider
+  readonly filePath: string
+  readonly reason: SessionScanRefusalReason
+}
+
+export interface SessionScanResult {
+  readonly sessions: ImportableSession[]
+  readonly refusals: SessionScanRefusal[]
+}
+
+/**
+ * Walks every codex rollout under `homeDir`, appending to BOTH lists.
+ *
+ * Shared by `SessionSource.scan` (which discards the refusals to keep the
+ * provider-agnostic contract) and `scanAllSessions` (which keeps them). One
+ * loop, so the two can never disagree about which files were offered.
+ */
+function scanCodexInto(
+  homeDir: string,
+  parse: (filePath: string) => SessionParseResult,
+  sessions: ImportableSession[],
+  refusals: SessionScanRefusal[],
+): void {
+  for (const filePath of scanCodexRollouts(homeDir)) {
+    const result = parse(filePath)
+    if (result.kind === "parsed") {
+      sessions.push(result.session)
+      continue
+    }
+    const reason: SessionScanRefusalReason = result.kind === "tooLarge" ? "too_large" : result.reason
+    refusals.push({ provider: "codex", filePath, reason })
+  }
+}
+
 export function createCodexSessionSource(maxBytes = DEFAULT_MAX_ROLLOUT_BYTES): SessionSource {
   const deps = codexParserDeps(maxBytes)
   const parse = (filePath: string): SessionParseResult => {
@@ -65,13 +117,11 @@ export function createCodexSessionSource(maxBytes = DEFAULT_MAX_ROLLOUT_BYTES): 
   return {
     provider: "codex",
     // A full scan parses every rollout, so the size cap and the subagent refusal
-    // both apply here — a `tooLarge` or `rejected` file is simply not offered.
+    // both apply here. Callers that need to REPORT what was refused go through
+    // `scanAllSessions` instead — this signature can only drop it.
     scan: (homeDir) => {
       const sessions: ImportableSession[] = []
-      for (const filePath of scanCodexRollouts(homeDir)) {
-        const result = parse(filePath)
-        if (result.kind === "parsed") sessions.push(result.session)
-      }
+      scanCodexInto(homeDir, parse, sessions, [])
       return sessions
     },
     locate: (homeDir, sessionId) => locateCodexRolloutFile(homeDir, sessionId),
@@ -93,7 +143,32 @@ export function createSessionSources(maxBytes = DEFAULT_MAX_ROLLOUT_BYTES): read
   return [claudeSessionSource, createCodexSessionSource(maxBytes)]
 }
 
-export const SESSION_SOURCES: readonly SessionSource[] = createSessionSources()
+/**
+ * Every importable session under `homeDir`, PLUS the files that were refused.
+ *
+ * This is what "import all" scans with. Claude contributes no refusals: its
+ * parser answers `null` for every failure and its scanner drops those before
+ * anything here can see a path, so a claude file that will not parse is still
+ * invisible to the tally. Codex — where the measured blind spot is, 99 subagent
+ * rollouts and 4 over-cap files — reports every one.
+ */
+export function scanAllSessions(
+  homeDir: string,
+  maxBytes = DEFAULT_MAX_ROLLOUT_BYTES,
+): SessionScanResult {
+  const sessions: ImportableSession[] = []
+  const refusals: SessionScanRefusal[] = []
+  // Iterating `createSessionSources` rather than naming the two sources keeps
+  // that function the single ordering authority.
+  for (const source of createSessionSources(maxBytes)) {
+    if (source.provider === "codex") {
+      scanCodexInto(homeDir, source.parse, sessions, refusals)
+      continue
+    }
+    for (const session of source.scan(homeDir)) sessions.push(session)
+  }
+  return { sessions, refusals }
+}
 
 export function sourceForProvider(
   provider: AgentProvider,
