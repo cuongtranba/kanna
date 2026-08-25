@@ -42,6 +42,31 @@ export function createTranscriptEntry<T extends Omit<TranscriptEntry, "_id" | "c
 
 const timestamped = createTranscriptEntry
 
+/**
+ * Re-stamp an entry this module minted with a CALLER-CHOSEN identity.
+ *
+ * `createTranscriptEntry` (above) mints `_id: randomUUID()`, which is right for
+ * the live path — a streamed entry is appended once and never reconciled — and
+ * fatal for the import path, where the entry id is the dedupe key. A random id
+ * reads as "never seen before" on every live-tail tick, so the whole transcript
+ * re-appends every couple of seconds with nothing failing anywhere.
+ *
+ * Threading an id through `createTranscriptEntry` instead would mean touching
+ * its ~50 `timestamped(...)` call sites in this file, each of which would have
+ * to invent an identity it has no basis for. Post-stamping is the deliberate
+ * trade-off: the UUID minted a microsecond earlier is DISCARDED, and that waste
+ * is a known, accepted cost of keeping the live path's call sites untouched.
+ *
+ * Returns a copy; the input entry is not mutated.
+ */
+export function withEntryIdentity<T extends TranscriptEntry>(
+  entry: T,
+  id: string,
+  createdAt: number,
+): T {
+  return { ...entry, _id: id, createdAt }
+}
+
 export function asRecord(value: AnyValue): Record<string, unknown> | null {
   if (!isRecord(value)) return null
   return value
@@ -68,6 +93,12 @@ export function normalizeCodexTokenUsage(
   resolveTurnPrice?: () => ModelPrice | null,
 ): ContextWindowUsageSnapshot | null {
   const usage = notification.tokenUsage
+  // The type says non-null, the WIRE disagrees: a rollout `event_msg/token_count`
+  // line carries `payload.info: null` on 175 of 10163 reference records, and the
+  // import path hands that straight through. Reading `.total_token_usage` off it
+  // throws and loses the whole session over one line. No usage is not an error —
+  // it is simply nothing to report, which is what `null` already means here.
+  if (usage === null || usage === undefined) return null
   const totalUsage = usage.total_token_usage ?? usage.total
   const lastUsage = usage.last_token_usage ?? usage.last
 
