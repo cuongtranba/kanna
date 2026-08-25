@@ -1,9 +1,10 @@
 import { describe, test, expect } from "bun:test"
-import { mkdtempSync, readFileSync } from "node:fs"
+import { mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
   classifyRolloutLine,
+  classifyRolloutLineOutcome,
   isSubagentSessionMeta,
   isSyntheticUserText,
 } from "./codex-rollout-line"
@@ -545,6 +546,135 @@ describe("session_meta + subagent refusal", () => {
       expect(isSubagentSessionMeta(record.meta)).toBe(true)
     })
   }
+})
+
+describe("classifyRolloutLineOutcome — WHY a line produced nothing", () => {
+  function outcome(line: string) {
+    return classifyRolloutLineOutcome(line, 0, FALLBACK)
+  }
+  function outcomeOf(line: object) {
+    return outcome(JSON.stringify(line))
+  }
+
+  test("a blank line is `blank`, never confused with damage", () => {
+    expect(outcome("")).toEqual({ kind: "skipped", reason: "blank" })
+    expect(outcome("   \t ")).toEqual({ kind: "skipped", reason: "blank" })
+    expect(outcome("\n")).toEqual({ kind: "skipped", reason: "blank" })
+  })
+
+  // THE distinction this export exists for: a half-written or disk-corrupted
+  // rollout must not read as an intentional drop, or the operator gets a
+  // transcript missing turns and a green "imported".
+  for (const [label, line] of [
+    ["truncated JSON", "{\"type\":\"response_item\",\"pay"],
+    ["not JSON at all", " garbage"],
+    ["a JSON null", "null"],
+    ["a JSON array", "[1,2,3]"],
+    ["a JSON scalar", "\"just a string\""],
+  ] as const) {
+    test(`${label} is \`unparseable\``, () => {
+      expect(outcome(line)).toEqual({ kind: "skipped", reason: "unparseable" })
+    })
+  }
+
+  test("a recognized envelope whose payload is not an object is `unparseable`", () => {
+    expect(outcomeOf({ type: "response_item", payload: "oops" }))
+      .toEqual({ kind: "skipped", reason: "unparseable" })
+    expect(outcomeOf({ type: "event_msg" }))
+      .toEqual({ kind: "skipped", reason: "unparseable" })
+    expect(outcomeOf({ type: "turn_context", payload: null }))
+      .toEqual({ kind: "skipped", reason: "unparseable" })
+  })
+
+  test("a retained type missing a REQUIRED field is `unparseable`", () => {
+    expect(outcomeOf(envelope("session_meta", { id: "s1" })))
+      .toEqual({ kind: "skipped", reason: "unparseable" })
+    expect(outcomeOf(envelope("session_meta", { cwd: "/tmp" })))
+      .toEqual({ kind: "skipped", reason: "unparseable" })
+    expect(outcomeOf(envelope("response_item", {
+      type: "function_call",
+      name: "exec_command",
+      arguments: "{}",
+    }))).toEqual({ kind: "skipped", reason: "unparseable" })
+    expect(outcomeOf(envelope("response_item", {
+      type: "function_call_output",
+      output: "exit 0",
+    }))).toEqual({ kind: "skipped", reason: "unparseable" })
+  })
+
+  // Read fine and complete; Kanna simply does not import them.
+  for (const [label, line] of [
+    ["an unknown top-level type", envelope("world_state", { snapshot: {} })],
+    ["a future top-level type", envelope("inter_agent_communication_metadata", {})],
+    ["an unretained event_msg", envelope("event_msg", { type: "item_completed", item: {} })],
+    ["an unretained response_item", envelope("response_item", { type: "tool_search_call" })],
+    ["a developer-role message", envelope("response_item", {
+      type: "message",
+      role: "developer",
+      content: [{ type: "input_text", text: "# Skill preamble" }],
+    })],
+    ["a synthetic user preamble", envelope("response_item", {
+      type: "message",
+      role: "user",
+      content: [{ type: "input_text", text: "<environment_context>x</environment_context>" }],
+    })],
+    ["an empty-content message", envelope("response_item", {
+      type: "message",
+      role: "assistant",
+      content: [],
+    })],
+  ] as const) {
+    test(`${label} is \`dropped_type\``, () => {
+      expect(outcomeOf(line)).toEqual({ kind: "skipped", reason: "dropped_type" })
+    })
+  }
+
+  test("a retained line comes back as a record", () => {
+    const result = outcomeOf(envelope("response_item", {
+      type: "message",
+      role: "user",
+      content: [{ type: "input_text", text: "do the thing" }],
+    }))
+    expect(result.kind).toBe("record")
+    if (result.kind !== "record") throw new Error("expected a record")
+    expect(result.record).toMatchObject({ kind: "user_message", text: "do the thing" })
+  })
+
+  // The wrapper keeps its exact signature; nothing that consumes it has to
+  // change, and the two can never disagree about whether a line was retained.
+  test("classifyRolloutLine is exactly the outcome with the reason erased", () => {
+    const dir = mkdtempSync(join(tmpdir(), "codex-outcome-"))
+    try {
+      const fixture = writeCodexRolloutFixture(dir, { sessionId: "sess-outcome", cwd: dir })
+      const lines = readFileSync(fixture.rolloutPath, "utf8").split("\n")
+      lines.push("{truncated", "", "   ")
+      expect(lines.length).toBeGreaterThan(20)
+      for (const [lineIndex, line] of lines.entries()) {
+        const result = classifyRolloutLineOutcome(line, lineIndex, FALLBACK)
+        const legacy = classifyRolloutLine(line, lineIndex, FALLBACK)
+        expect(legacy).toEqual(result.kind === "record" ? result.record : null)
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("every reason is reachable from one real, damaged file", () => {
+    const dir = mkdtempSync(join(tmpdir(), "codex-outcome-"))
+    try {
+      const fixture = writeCodexRolloutFixture(dir, { sessionId: "sess-outcome", cwd: dir })
+      // What a half-written rollout looks like: a torn tail and a stray blank.
+      const lines = [...readFileSync(fixture.rolloutPath, "utf8").split("\n"), "{\"type\":\"resp"]
+      const reasons = new Set(
+        lines
+          .map((line, lineIndex) => classifyRolloutLineOutcome(line, lineIndex, FALLBACK))
+          .flatMap((result) => (result.kind === "skipped" ? [result.reason] : [])),
+      )
+      expect([...reasons].sort()).toEqual(["blank", "dropped_type", "unparseable"])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
 })
 
 describe("against the on-disk fixture", () => {

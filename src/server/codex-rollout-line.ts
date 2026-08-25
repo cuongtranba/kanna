@@ -212,34 +212,80 @@ function webSearchQueryOf(payload: Record<string, unknown>): string {
   return stringList(action.queries)[0] ?? ""
 }
 
+// ---------------------------------------------------------------------------
+// outcomes
+// ---------------------------------------------------------------------------
+
+/**
+ * Why a physical line produced no record.
+ *
+ * The three are NOT interchangeable, which is the whole reason this type
+ * exists: `classifyRolloutLine` returned a bare `null` for all of them, so an
+ * operator with a half-written or disk-corrupted rollout got a transcript
+ * missing turns and a green "imported", with nothing anywhere to say so.
+ *
+ *  - `blank` — whitespace only. Expected; JSONL files end with a newline.
+ *  - `unparseable` — the line could NOT be read as a rollout line: bad JSON, a
+ *    non-object, a recognized envelope whose `payload` is not an object, or a
+ *    retained record type missing a field it cannot be built without
+ *    (`session_meta` with no id/cwd, a tool call or output with no `call_id`).
+ *    **This is the damage signal.** A caller that counts these has the only
+ *    evidence there is that a file was truncated or corrupted.
+ *  - `dropped_type` — read cleanly and completely; Kanna deliberately does not
+ *    import it (`world_state`, `event_msg/item_completed`, the `developer`
+ *    role, a synthetic user preamble, an empty-content message, …). Expected on
+ *    a healthy file, in bulk.
+ */
+export type RolloutLineSkipReason = "blank" | "unparseable" | "dropped_type"
+
+/** One physical line's classification, with the reason kept when there is none. */
+export type RolloutLineOutcome =
+  | { readonly kind: "record"; readonly record: CodexRolloutRecord }
+  | { readonly kind: "skipped"; readonly reason: RolloutLineSkipReason }
+
+function skipped(reason: RolloutLineSkipReason): RolloutLineOutcome {
+  return { kind: "skipped", reason }
+}
+
+function kept(record: CodexRolloutRecord): RolloutLineOutcome {
+  return { kind: "record", record }
+}
+
 function classifyResponseItem(
   payload: Record<string, unknown>,
   lineIndex: number,
   timestamp: number,
-): CodexRolloutRecord | null {
+): RolloutLineOutcome {
   switch (payload.type) {
     case "message": {
       const role = stringOrNull(payload.role)
       // `developer` is the system/skill preamble Codex injects — 940 of 6045
       // messages in the reference corpus. It is never a turn anyone wrote.
-      if (role !== "user" && role !== "assistant") return null
+      if (role !== "user" && role !== "assistant") return skipped("dropped_type")
       const text = textOfContentItems(payload.content)
-      if (text.length === 0) return null
+      if (text.length === 0) return skipped("dropped_type")
       if (role === "user") {
-        if (isSyntheticUserText(text)) return null
-        return { kind: "user_message", lineIndex, timestamp, text }
+        if (isSyntheticUserText(text)) return skipped("dropped_type")
+        return kept({ kind: "user_message", lineIndex, timestamp, text })
       }
-      return { kind: "assistant_message", lineIndex, timestamp, text }
+      return kept({ kind: "assistant_message", lineIndex, timestamp, text })
     }
     case "reasoning":
       // `encrypted_content` is deliberately not read; `summary` is empty in
       // every record of the reference corpus but is the only readable half.
-      return { kind: "reasoning", lineIndex, timestamp, summary: stringList(payload.summary) }
+      return kept({
+        kind: "reasoning",
+        lineIndex,
+        timestamp,
+        summary: stringList(payload.summary),
+      })
     case "custom_tool_call": {
       const callId = stringOrNull(payload.call_id)
       const name = stringOrNull(payload.name)
-      if (callId === null || name === null) return null
-      return {
+      // A call with no id or no name cannot be built or joined — that is
+      // damage, not a type Kanna chose to drop.
+      if (callId === null || name === null) return skipped("unparseable")
+      return kept({
         kind: "tool_call",
         lineIndex,
         timestamp,
@@ -247,13 +293,13 @@ function classifyResponseItem(
         name,
         input: stringOrNull(payload.input) ?? "",
         family: "custom",
-      }
+      })
     }
     case "function_call": {
       const callId = stringOrNull(payload.call_id)
       const name = stringOrNull(payload.name)
-      if (callId === null || name === null) return null
-      return {
+      if (callId === null || name === null) return skipped("unparseable")
+      return kept({
         kind: "tool_call",
         lineIndex,
         timestamp,
@@ -261,26 +307,26 @@ function classifyResponseItem(
         name,
         input: stringOrNull(payload.arguments) ?? "",
         family: "function",
-      }
+      })
     }
     case "custom_tool_call_output":
     case "function_call_output": {
       const callId = stringOrNull(payload.call_id)
-      if (callId === null) return null
-      return {
+      if (callId === null) return skipped("unparseable")
+      return kept({
         kind: "tool_output",
         lineIndex,
         timestamp,
         callId,
         output: flattenOutput(payload.output),
-      }
+      })
     }
     case "web_search_call":
-      return { kind: "web_search", lineIndex, timestamp, query: webSearchQueryOf(payload) }
+      return kept({ kind: "web_search", lineIndex, timestamp, query: webSearchQueryOf(payload) })
     default:
       // `agent_message`, `image_generation_call`, `tool_search_call`,
       // `tool_search_output` — all dropped.
-      return null
+      return skipped("dropped_type")
   }
 }
 
@@ -288,82 +334,89 @@ function classifyEventMsg(
   payload: Record<string, unknown>,
   lineIndex: number,
   timestamp: number,
-): CodexRolloutRecord | null {
+): RolloutLineOutcome {
   switch (payload.type) {
     case "token_count":
       // `info` is null on 175 of 10163 reference records. Carry the null
       // through rather than dropping the record: it still marks the turn
       // boundary a reader sees, and `CodexTokenCountRecord.info` is nullable
       // precisely so `normalizeCodexTokenUsage` is never handed one.
-      return { kind: "token_count", lineIndex, timestamp, info: tokenInfo(payload.info) }
+      return kept({ kind: "token_count", lineIndex, timestamp, info: tokenInfo(payload.info) })
     case "task_complete":
-      return {
+      return kept({
         kind: "turn_complete",
         lineIndex,
         timestamp,
         lastAgentMessage: stringOrNull(payload.last_agent_message) ?? "",
         durationMs: numberOr(payload.duration_ms, 0),
-      }
+      })
     case "turn_aborted":
-      return {
+      return kept({
         kind: "turn_aborted",
         lineIndex,
         timestamp,
         reason: stringOrNull(payload.reason) ?? "",
         durationMs: numberOr(payload.duration_ms, 0),
-      }
+      })
     case "thread_settings_applied": {
       // The model is NESTED under `thread_settings` here, unlike
       // `turn_context` where it sits directly on the payload. All 240
       // reference records carry exactly `{thread_settings, type}`.
       const settings = payload.thread_settings
       const model = isRecord(settings) ? stringOrNull(settings.model) : null
-      return { kind: "model_hint", lineIndex, timestamp, model }
+      return kept({ kind: "model_hint", lineIndex, timestamp, model })
     }
     default:
       // `item_completed`, `agent_message`, `task_started`, `user_message`,
       // `patch_apply_end`, `context_compacted`, `sub_agent_activity`,
       // `web_search_end` — all dropped.
-      return null
+      return skipped("dropped_type")
   }
 }
 
 /**
- * Narrow one physical rollout line to the classified union, or `null`.
+ * Narrow one physical rollout line to the classified union, KEEPING the reason
+ * when it produced nothing. PURE.
  *
- * `null` covers blank lines, unparseable JSON, and every dropped record type.
- * The caller MUST still advance `lineIndex` for those lines — see the
+ * Prefer this over `classifyRolloutLine` in a parser: `unparseable` is the only
+ * evidence a rollout was truncated or corrupted, and collapsing it onto the
+ * same `null` as a deliberately-dropped `world_state` is what let a damaged
+ * file import silently.
+ *
+ * The caller MUST still advance `lineIndex` for skipped lines — see the
  * line-index contract at the top of this file.
  *
  * `fallbackTimestamp` (epoch ms) is used when the envelope carries no usable
  * `timestamp`; callers pass the session's first timestamp.
  */
-export function classifyRolloutLine(
+export function classifyRolloutLineOutcome(
   rawLine: string,
   lineIndex: number,
   fallbackTimestamp: number,
-): CodexRolloutRecord | null {
-  if (rawLine.trim().length === 0) return null
+): RolloutLineOutcome {
+  if (rawLine.trim().length === 0) return skipped("blank")
   const parsed = parseJson(rawLine)
-  if (!isRecord(parsed)) return null
+  if (!isRecord(parsed)) return skipped("unparseable")
 
   const timestamp = timestampOf(parsed, fallbackTimestamp)
 
   switch (parsed.type) {
     case "session_meta": {
       const payload = payloadOf(parsed)
-      if (payload === null) return null
+      if (payload === null) return skipped("unparseable")
       const meta = sessionMetaOf(payload)
-      if (meta === null) return null
-      return { kind: "session_meta", lineIndex, timestamp, meta }
+      // No session id or no cwd: the file names itself a session and then
+      // cannot say which. Damage, not a drop.
+      if (meta === null) return skipped("unparseable")
+      return kept({ kind: "session_meta", lineIndex, timestamp, meta })
     }
     case "turn_context": {
       const payload = payloadOf(parsed)
-      if (payload === null) return null
+      if (payload === null) return skipped("unparseable")
       // `session_meta.model_provider` is a PROVIDER id (`cliproxyapi`,
       // `openai`), not a model name — `turn_context.model` and
       // `thread_settings_applied` are the only sources of the latter.
-      return { kind: "model_hint", lineIndex, timestamp, model: stringOrNull(payload.model) }
+      return kept({ kind: "model_hint", lineIndex, timestamp, model: stringOrNull(payload.model) })
     }
     case "compacted": {
       // `payload.message` ONLY, and by name. `payload.replacement_history` is a
@@ -375,21 +428,38 @@ export function classifyRolloutLine(
       // it is refused nowhere, it just has no summary.
       const payload = payloadOf(parsed)
       const message = payload === null ? null : stringOrNull(payload.message)
-      return { kind: "compacted", lineIndex, timestamp, summary: nonBlankOrNull(message) }
+      return kept({ kind: "compacted", lineIndex, timestamp, summary: nonBlankOrNull(message) })
     }
     case "response_item": {
       const payload = payloadOf(parsed)
-      if (payload === null) return null
+      if (payload === null) return skipped("unparseable")
       return classifyResponseItem(payload, lineIndex, timestamp)
     }
     case "event_msg": {
       const payload = payloadOf(parsed)
-      if (payload === null) return null
+      if (payload === null) return skipped("unparseable")
       return classifyEventMsg(payload, lineIndex, timestamp)
     }
     default:
       // `world_state`, `inter_agent_communication_metadata`, and anything a
       // future Codex adds.
-      return null
+      return skipped("dropped_type")
   }
+}
+
+/**
+ * `classifyRolloutLineOutcome` with the reason erased.
+ *
+ * Kept at its original signature so existing callers need no change, but a
+ * caller that wants to TELL a corrupt line from an intentional drop — and any
+ * parser reporting to a user should — must use the outcome form instead. This
+ * one cannot answer that question and never could.
+ */
+export function classifyRolloutLine(
+  rawLine: string,
+  lineIndex: number,
+  fallbackTimestamp: number,
+): CodexRolloutRecord | null {
+  const outcome = classifyRolloutLineOutcome(rawLine, lineIndex, fallbackTimestamp)
+  return outcome.kind === "record" ? outcome.record : null
 }
