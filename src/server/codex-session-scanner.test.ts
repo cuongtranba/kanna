@@ -1,7 +1,8 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, spyOn, test } from "bun:test"
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
+import { log } from "../shared/log"
 import { locateCodexRolloutFile, scanCodexRollouts } from "./codex-session-scanner.adapter"
 
 function withTempHome<T>(run: (homeDir: string) => T): T {
@@ -22,6 +23,19 @@ function writeAt(homeDir: string, relative: string, body = "{}\n"): string {
   mkdirSync(path.dirname(full), { recursive: true })
   writeFileSync(full, body)
   return full
+}
+
+/** Captures what the scanner logged, and always restores the real logger. */
+function withWarnSpy<T>(run: (messages: string[]) => T): T {
+  const messages: string[] = []
+  const spy = spyOn(log, "warn").mockImplementation((...args) => {
+    messages.push(args.map((arg) => String(arg)).join(" "))
+  })
+  try {
+    return run(messages)
+  } finally {
+    spy.mockRestore()
+  }
 }
 
 const ID_A = "019fe1f6-b759-7f10-8e11-171db6cdc3fa"
@@ -46,6 +60,37 @@ describe("scanCodexRollouts", () => {
       expect(scanCodexRollouts(home)).toEqual([])
       mkdirSync(path.join(home, ".codex"), { recursive: true })
       expect(scanCodexRollouts(home)).toEqual([])
+    })
+  })
+
+  test("a missing ~/.codex or sessions/ says nothing — that is not a failure", () => {
+    withTempHome((home) => {
+      const messages = withWarnSpy((captured) => {
+        expect(scanCodexRollouts(home)).toEqual([])
+        expect(locateCodexRolloutFile(home, ID_A)).toBeNull()
+        return captured
+      })
+      expect(messages).toEqual([])
+    })
+  })
+
+  test("a directory that cannot be READ is reported, not silently empty", () => {
+    withTempHome((home) => {
+      // `sessions` as a regular FILE makes `readdirSync` throw ENOTDIR for every
+      // user, root included — a non-ENOENT failure with no uid dependence.
+      // Without a warning this is indistinguishable from an empty corpus, and
+      // an EACCES subtree the user believes is importable vanishes whole.
+      mkdirSync(path.join(home, ".codex"), { recursive: true })
+      writeFileSync(sessionsDir(home), "not a directory\n")
+
+      const messages = withWarnSpy((captured) => {
+        expect(scanCodexRollouts(home)).toEqual([])
+        return captured
+      })
+
+      expect(messages).toHaveLength(1)
+      expect(messages[0]).toContain(sessionsDir(home))
+      expect(messages[0]).toContain("ENOTDIR")
     })
   })
 

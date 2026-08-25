@@ -15,10 +15,20 @@
 //    existing discovery walk slow.
 //
 // Nothing here throws: a missing `~/.codex`, a missing `sessions/`, or a
-// directory the user cannot read yields empty / null.
+// directory the user cannot read yields empty / null. A MISSING directory is
+// silent because it is the normal state of a machine with no codex; anything
+// else is logged — see `readDirSorted`.
+//
+// SYMLINKS ARE SKIPPED, DELIBERATELY. `Dirent.isFile()` / `isDirectory()` do
+// not follow links, so a symlinked rollout, and a `sessions` tree symlinked to
+// external storage, are both invisible here. That is what makes a symlink loop
+// impossible to walk into — but it is also a silent zero for anyone who
+// arranges their corpus that way, so it is a choice, not an oversight.
 
 import { readdirSync } from "node:fs"
 import path from "node:path"
+import { errorMessage, isErrnoException } from "../shared/errors"
+import { log } from "../shared/log"
 
 const ROLLOUT_PREFIX = "rollout-"
 const ROLLOUT_SUFFIX = ".jsonl"
@@ -38,17 +48,33 @@ function isRolloutName(name: string): boolean {
 
 /**
  * Directory entries sorted by name. Sorting makes the walk deterministic —
- * `readdirSync` order is the filesystem's, which differs between APFS and ext4
- * and has bitten this repo before (see the React-root sweep note in CLAUDE.md).
+ * `readdirSync` returns the filesystem's own order, which differs between APFS
+ * and ext4, so an unsorted walk gives one result locally and another on CI.
+ * (The React-root sweep note in CLAUDE.md is the same CLASS of bug on bun's
+ * test-FILE ordering, not about `readdirSync` entry order.)
+ *
+ * A directory that cannot be read yields no entries either way, but the two
+ * causes are not the same fact:
+ *
+ *  - ENOENT is silent and correct. A machine with no `~/.codex` is not broken,
+ *    and `walk` starts at a root that need not exist.
+ *  - Anything else — EACCES on `sessions/2026/07`, ENOTDIR, EIO — makes a whole
+ *    subtree the user believes is importable vanish, and `locateCodexRolloutFile`
+ *    then answers `not_found` for a session that exists. One warning per
+ *    directory is the only thing that separates that from an empty corpus.
  */
 function readDirSorted(directory: string): { name: string; isDirectory: boolean; isFile: boolean }[] {
   let entries
   try {
     entries = readdirSync(directory, { withFileTypes: true })
-  } catch {
+  } catch (error) {
+    if (isErrnoException(error) && error.code === "ENOENT") return []
+    log.warn(`[kanna/import] codex sessions directory unreadable ${directory}: ${errorMessage(error)}`)
     return []
   }
   return entries
+    // Neither predicate follows a symlink, so a linked rollout or a linked
+    // subtree reads as neither — see the symlink note in the file header.
     .map((entry) => ({ name: entry.name, isDirectory: entry.isDirectory(), isFile: entry.isFile() }))
     .sort((a, b) => compareNames(a.name, b.name))
 }
