@@ -55,42 +55,73 @@ async function backfillImportedChatTitle(
 }
 
 /**
- * Collect the set of record keys already stored for a chat.
+ * Collect the set of record keys already stored for a chat, and how many
+ * entries were walked.
+ *
  * Entries with a random uuid prefix (records that had no uuid) will always
  * be absent from any record-key lookup — assumed acceptable since real Claude
- * sessions always include uuid.
+ * sessions always include uuid. The COUNT is returned because "no key matched"
+ * and "there was nothing to match against" are different facts, and only the
+ * first is a defect (see `applyDelta`).
  */
 function collectExistingRecordKeys(
   store: EventStore,
   chatId: string,
   session: ImportableSession,
-): Set<string> {
+): { seen: Set<string>; entryCount: number } {
   const seen = new Set<string>()
+  let entryCount = 0
   for (const entry of store.getMessages(chatId)) {
+    entryCount += 1
     const key = session.recordKeyFromEntryId(entry._id)
     if (key) seen.add(key)
   }
-  return seen
+  return { seen, entryCount }
 }
 
+type DeltaOutcome =
+  | { ok: true; appended: number }
+  | { ok: false; reason: "transcript_mismatch" }
+
+/**
+ * Appends the records this chat does not already hold.
+ *
+ * An EMPTY `seen` over a NON-EMPTY transcript is the append-storm signature and
+ * must never mean "everything is new". `ChatRecord.sourceHash` is a single
+ * field while dedup is per-provider (`sessionTokensByProvider[provider]`), so
+ * ONE chat can be the import target of a claude session AND a codex one:
+ * import a claude session, switch the chat to codex, run a turn, then "Import
+ * all" — the codex source matches that chat, the hashes differ because the
+ * stored hash is the claude file's, and `codexRecordKeyFromEntryId` returns
+ * null for every existing entry because they carry claude ids. The whole
+ * rollout then reads as new and is re-appended on top of the transcript the
+ * user already watched, oscillating forever and paying a full `getMessages`
+ * (whole-file load + deep clone) on every pass.
+ *
+ * Refusing is right rather than merely safe: there is no reading of this state
+ * under which appending a second provider's whole transcript is what the user
+ * asked for. The source hash is deliberately left UNCHANGED so the refusal
+ * stays visible on the next run instead of silently resolving itself.
+ */
 async function applyDelta(
   store: EventStore,
   chatId: string,
   session: ImportableSession,
-): Promise<number> {
-  const seen = collectExistingRecordKeys(store, chatId, session)
+): Promise<DeltaOutcome> {
+  const { seen, entryCount } = collectExistingRecordKeys(store, chatId, session)
+  if (seen.size === 0 && entryCount > 0) return { ok: false, reason: "transcript_mismatch" }
   const entries = session.newEntriesSince(seen)
   for (const entry of entries) {
     await store.appendMessage(chatId, entry)
   }
-  return entries.length
+  return { ok: true, appended: entries.length }
 }
 
 export type ImportOutcome =
   | { status: "created"; chatId: string; newProject: boolean }
   | { status: "updated"; chatId: string }
   | { status: "skipped"; chatId?: string }
-  | { status: "failed"; reason: "cwd_missing" | "store_error" }
+  | { status: "failed"; reason: "cwd_missing" | "store_error" | "transcript_mismatch" }
 
 export async function importOneSession(
   store: EventStore,
@@ -117,8 +148,19 @@ export async function importOneSession(
       }
 
       // Hash changed → append only new records
-      const appended = await applyDelta(store, existingChat.id, session)
-      const outcome: ImportOutcome = appended > 0 || titleBackfilled
+      const delta = await applyDelta(store, existingChat.id, session)
+      if (!delta.ok) {
+        log.warn(
+          "[kanna/import] refusing delta: no existing entry matches this session's records",
+          session.filePath,
+          "chat",
+          existingChat.id,
+          "provider",
+          session.provider,
+        )
+        return { status: "failed", reason: delta.reason }
+      }
+      const outcome: ImportOutcome = delta.appended > 0 || titleBackfilled
         ? { status: "updated", chatId: existingChat.id }
         : { status: "skipped", chatId: existingChat.id }
       await store.setSourceHash(existingChat.id, session.sourceHash)
