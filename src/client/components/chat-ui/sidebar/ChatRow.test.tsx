@@ -114,6 +114,32 @@ describe("ChatRow", () => {
     expect(html).toContain("0:12")
   })
 
+  /**
+   * A codex turn registers as `starting` and only becomes `running` once its
+   * system_init arrives, so this window is a real, visible part of every codex
+   * run. `stateEnteredAt` already dates from turn_started, so the elapsed value
+   * is "time since this turn began" here exactly as it is while running.
+   */
+  test("live starting state shows the elapsed turn timer, not the stale message age", () => {
+    const html = renderToStaticMarkup(
+      <ChatRow
+        chat={{ ...baseChat, status: "starting", stateEnteredAt: 0 }}
+        activeChatId={null}
+        nowMs={72_000}
+        onSelectChat={() => undefined}
+        onRenameChat={() => undefined}
+        onOpenInFinder={() => undefined}
+        onForkChat={() => undefined}
+        onArchiveChat={() => undefined}
+        onDeleteChat={() => undefined}
+      />
+    )
+    expect(html).toContain("Starting")
+    expect(html).toContain("1:12")
+    // The bug: the row fell back to formatCompactDuration(now - lastMessageAt).
+    expect(html).not.toContain(">1m<")
+  })
+
   test("silent + live state: status label is in-flow, not absolute-positioned over BellOff", () => {
     const html = renderToStaticMarkup(
       <ChatRow

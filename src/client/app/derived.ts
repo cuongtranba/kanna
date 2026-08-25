@@ -1,5 +1,6 @@
-import type { HydratedTranscriptMessage } from "../../shared/types"
+import type { HydratedTranscriptMessage, KannaStatus } from "../../shared/types"
 import type { ProcessedToolCall } from "../components/messages/types"
+import { isLiveChatStatus } from "../lib/chatStatusIndicator"
 
 function isProcessedToolCall(m: HydratedTranscriptMessage): m is ProcessedToolCall {
   return m.kind === "tool"
@@ -58,10 +59,33 @@ export function isPrimaryChatInstance(chatId: string | null, activeChatId: strin
   return chatId !== null && chatId === activeChatId
 }
 
+/**
+ * Narrows a wire-shaped status string to the union, so the predicates below can
+ * delegate to `isLiveChatStatus` without a cast. It enumerates the status NAMES
+ * (a parse), never which of them are live — that answer has exactly one home.
+ */
+function toKannaStatus(status: string | undefined): KannaStatus | null {
+  switch (status) {
+    case "idle":
+    case "starting":
+    case "running":
+    case "waiting_for_user":
+    case "failed":
+      return status
+    default:
+      return null
+  }
+}
+
+function isLiveStatusName(status?: string): boolean {
+  const parsed = toKannaStatus(status)
+  return parsed !== null && isLiveChatStatus(parsed)
+}
+
 export function canCancelStatus(status?: string) {
-  return status === "starting" || status === "running" || status === "waiting_for_user"
+  return isLiveStatusName(status)
 }
 
 export function isProcessingStatus(status?: string) {
-  return status === "starting" || status === "running" || status === "waiting_for_user"
+  return isLiveStatusName(status)
 }
