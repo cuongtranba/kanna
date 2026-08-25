@@ -5,6 +5,7 @@ import { Terminal } from "@xterm/headless"
 import { SerializeAddon } from "@xterm/addon-serialize"
 import type { TerminalEvent, TerminalSnapshot } from "../shared/protocol"
 import { clampScrollback } from "../shared/terminal-scrollback"
+import { log } from "../shared/log"
 import type { TerminalPidRegistry } from "./terminal-pid-registry.adapter"
 import { createBunTerminal, hasBunTerminal, spawnTerminalProcess } from "./terminal-manager-io.adapter"
 
@@ -172,6 +173,20 @@ export class TerminalManager {
     this.pidRegistry = args.pidRegistry ?? null
   }
 
+  /**
+   * The pid registry is best-effort bookkeeping for reaping stale terminals, so
+   * its writes are detached — a terminal must not wait on them. But a detached
+   * promise with no rejection handler is an unhandled rejection the moment the
+   * write fails, and it fails routinely: the registry file lives under a
+   * directory that can be gone by the time a closing shell gets here.
+   */
+  private detachRegistryWrite(write: Promise<void> | undefined) {
+    if (!write) return
+    void write.catch((error) => {
+      log.warn("[kanna/terminal] pid registry write failed", error)
+    })
+  }
+
   onEvent(listener: (event: TerminalEvent) => void) {
     this.listeners.add(listener)
     return () => {
@@ -254,15 +269,15 @@ export class TerminalManager {
     }
     const shellPid = session.process.pid
     if (typeof shellPid === "number") {
-      void this.pidRegistry?.register({
+      this.detachRegistryWrite(this.pidRegistry?.register({
         terminalId: args.terminalId,
         pid: shellPid,
         cwd: args.projectPath,
-      })
+      }))
     }
     const handleShellExit = () => {
       reapShellPgroup(shellPid)
-      void this.pidRegistry?.unregister(args.terminalId)
+      this.detachRegistryWrite(this.pidRegistry?.unregister(args.terminalId))
     }
     void session.process.exited.then((exitCode) => {
       handleShellExit()
@@ -344,7 +359,7 @@ export class TerminalManager {
 
     this.sessions.delete(terminalId)
     killTerminalProcessTree(session.process)
-    void this.pidRegistry?.unregister(terminalId)
+    this.detachRegistryWrite(this.pidRegistry?.unregister(terminalId))
     session.terminal.close()
     session.serializeAddon.dispose()
     session.headless.dispose()
