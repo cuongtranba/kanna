@@ -76,7 +76,7 @@ import { statSessionFile } from "./followed-session-io.adapter"
 import { createBackgroundTaskOutputRegistry } from "./background-task-output-registry"
 import { backgroundTaskOutputIo } from "./background-task-output-io.adapter"
 import { importOneSession } from "./claude-session-importer.adapter"
-import { parseClaudeSessionFile } from "./claude-session-parser.adapter"
+import { claudeSessionSource } from "./session-source-registry.adapter"
 import { listWorkflowRunDirs, readWorkflowDir, readWorkflowRunJournal, watchWorkflowDir, watchWorkflowRunDirs } from "./workflow-watch-io.adapter"
 import { readWorkflowAgentTranscriptLines } from "./workflow-agent-transcript-io.adapter"
 import { SnapshotStore } from "./session-share/snapshot-store.adapter"
@@ -555,7 +555,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
   const followedSessionRegistry = createFollowedSessionRegistry({
     statFile: statSessionFile,
     runDelta: async (_chatId, sourcePath) => {
-      const session = parseClaudeSessionFile(sourcePath)
+      const session = claudeSessionSource.parse(sourcePath)
       if (session) await importOneSession(store, session)
     },
     isTurnActive: (chatId) => agent.hasActiveTurn(chatId),

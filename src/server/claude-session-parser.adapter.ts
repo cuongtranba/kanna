@@ -58,6 +58,7 @@ export function parseClaudeSessionFile(filePath: string): ParsedClaudeSession | 
     mtime = Date.now()
   }
   return {
+    provider: "claude",
     sessionId,
     filePath,
     cwd: cwd ?? "",
