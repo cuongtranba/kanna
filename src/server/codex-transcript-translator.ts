@@ -322,7 +322,7 @@ function fileChangePayload(
   return isRecord(payload) ? payload : {}
 }
 
-function parseUnifiedDiff(diff: string): { oldString: string; newString: string } {
+export function parseUnifiedDiff(diff: string): { oldString: string; newString: string } {
   const oldLines: string[] = []
   const newLines: string[] = []
 
@@ -354,7 +354,7 @@ function parseUnifiedDiff(diff: string): { oldString: string; newString: string 
   }
 }
 
-function isUnifiedDiff(diff: string) {
+export function isUnifiedDiff(diff: string) {
   return diff.includes("@@")
     || diff.startsWith("---")
     || diff.startsWith("+++")
