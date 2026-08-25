@@ -5,7 +5,6 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import {
   importAllSessions,
-  importClaudeSessions,
   importOneSession,
   importSessionsByIds,
 } from "./claude-session-importer.adapter"
@@ -71,7 +70,7 @@ function md5File(filePath: string) {
   return createHash("md5").update(readFileSync(filePath, "utf8")).digest("hex")
 }
 
-describe("importClaudeSessions", () => {
+describe("importAllSessions", () => {
   test("imports a session, creating project + chat + messages", async () => {
     const ctx = fresh()
     try {
@@ -79,7 +78,7 @@ describe("importClaudeSessions", () => {
       const store = createTestEventStore(ctx.dataDir)
       await store.initialize()
 
-      const result = await importClaudeSessions({ store, homeDir: ctx.homeDir })
+      const result = await importAllSessions({ store, homeDir: ctx.homeDir })
 
       expect(result.imported).toBe(1)
       expect(result.skipped).toBe(0)
@@ -102,8 +101,8 @@ describe("importClaudeSessions", () => {
       const store = createTestEventStore(ctx.dataDir)
       await store.initialize()
 
-      await importClaudeSessions({ store, homeDir: ctx.homeDir })
-      const second = await importClaudeSessions({ store, homeDir: ctx.homeDir })
+      await importAllSessions({ store, homeDir: ctx.homeDir })
+      const second = await importAllSessions({ store, homeDir: ctx.homeDir })
 
       expect(second.imported).toBe(0)
       expect(second.skipped).toBe(1)
@@ -120,7 +119,7 @@ describe("importClaudeSessions", () => {
       const store = createTestEventStore(ctx.dataDir)
       await store.initialize()
 
-      const result = await importClaudeSessions({ store, homeDir: ctx.homeDir })
+      const result = await importAllSessions({ store, homeDir: ctx.homeDir })
       expect(result.imported).toBe(0)
       expect(result.failed).toBe(1)
     } finally {
@@ -157,7 +156,7 @@ describe("importClaudeSessions", () => {
 
       const store = createTestEventStore(ctx.dataDir)
       await store.initialize()
-      const result = await importClaudeSessions({ store, homeDir: ctx.homeDir })
+      const result = await importAllSessions({ store, homeDir: ctx.homeDir })
       expect(result.imported).toBe(1)
 
       const chats = [...store.state.chatsById.values()].filter((c) => !c.deletedAt)
@@ -217,7 +216,7 @@ describe("importClaudeSessions", () => {
 
       const store = createTestEventStore(ctx.dataDir)
       await store.initialize()
-      const result = await importClaudeSessions({ store, homeDir: ctx.homeDir })
+      const result = await importAllSessions({ store, homeDir: ctx.homeDir })
       expect(result.imported).toBe(1)
 
       const chats = [...store.state.chatsById.values()].filter((c) => !c.deletedAt)
@@ -275,7 +274,7 @@ describe("importClaudeSessions", () => {
 
       const store = createTestEventStore(ctx.dataDir)
       await store.initialize()
-      const result = await importClaudeSessions({ store, homeDir: ctx.homeDir })
+      const result = await importAllSessions({ store, homeDir: ctx.homeDir })
       expect(result.imported).toBe(1)
 
       const chats = [...store.state.chatsById.values()].filter((c) => !c.deletedAt)
@@ -318,7 +317,7 @@ describe("importClaudeSessions", () => {
       await store.setSessionTokenForProvider(chat.id, "claude", "sess-backfill-title")
       await store.setSourceHash(chat.id, md5File(jsonlPath))
 
-      const result = await importClaudeSessions({ store, homeDir: ctx.homeDir })
+      const result = await importAllSessions({ store, homeDir: ctx.homeDir })
       expect(result.imported).toBe(0)
       expect(result.updated).toBe(1)
       expect(result.skipped).toBe(0)
@@ -358,7 +357,7 @@ describe("importClaudeSessions", () => {
       await store.setSessionTokenForProvider(chat.id, "claude", "sess-manual-title")
       await store.setSourceHash(chat.id, md5File(jsonlPath))
 
-      const result = await importClaudeSessions({ store, homeDir: ctx.homeDir })
+      const result = await importAllSessions({ store, homeDir: ctx.homeDir })
       expect(result.imported).toBe(0)
       expect(result.updated).toBe(0)
       expect(result.skipped).toBe(1)
@@ -375,10 +374,10 @@ describe("importClaudeSessions", () => {
       const store = createTestEventStore(ctx.dataDir)
       await store.initialize()
 
-      const first = await importClaudeSessions({ store, homeDir: ctx.homeDir })
+      const first = await importAllSessions({ store, homeDir: ctx.homeDir })
       expect(first.imported).toBe(1)
 
-      const second = await importClaudeSessions({ store, homeDir: ctx.homeDir })
+      const second = await importAllSessions({ store, homeDir: ctx.homeDir })
       expect(second.imported).toBe(0)
       expect(second.updated).toBe(0)
       expect(second.skipped).toBe(1)
@@ -410,7 +409,7 @@ describe("importClaudeSessions", () => {
       const store = createTestEventStore(ctx.dataDir)
       await store.initialize()
 
-      const first = await importClaudeSessions({ store, homeDir: ctx.homeDir })
+      const first = await importAllSessions({ store, homeDir: ctx.homeDir })
       expect(first.imported).toBe(1)
       const chats = [...store.state.chatsById.values()].filter((c) => !c.deletedAt)
       expect(chats.length).toBe(1)
@@ -429,7 +428,7 @@ describe("importClaudeSessions", () => {
       })
       writeFileSync(jsonlPath, `${line1}\n${line2}\n${line3}\n${line4}\n`, "utf8")
 
-      const second = await importClaudeSessions({ store, homeDir: ctx.homeDir })
+      const second = await importAllSessions({ store, homeDir: ctx.homeDir })
       expect(second.imported).toBe(0)
       expect(second.updated).toBe(1)
       expect(second.skipped).toBe(0)

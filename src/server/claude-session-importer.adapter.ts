@@ -197,12 +197,6 @@ export async function importAllSessions(
   return { imported, updated, skipped, failed, newProjects }
 }
 
-/**
- * @deprecated Name kept while the WS router still calls it; use
- * `importAllSessions` — the scan is no longer claude-specific.
- */
-export const importClaudeSessions = importAllSessions
-
 export interface SessionImportedInfo {
   chatId: string
   sessionId: string
