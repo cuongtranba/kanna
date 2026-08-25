@@ -419,10 +419,17 @@ export function parseCodexRolloutFile(filePath: string, deps: CodexParserDeps): 
     log.warn(`[kanna/import] rollout had ${state.unparseableLines} unparseable lines ${filePath}`)
   }
 
+  // Order is the order of the QUESTIONS, not of the checks that are cheapest:
+  // "did anything identify this session" precedes "was anything retained".
+  // Reversed, an empty file and a non-rollout JSONL both reported "readable and
+  // identified, but nothing was retained" — a sentence about a file that was
+  // never identified at all. `no_records` is last and, because the `meta`
+  // record is itself retained, currently unreachable; it stays as the honest
+  // answer if the retain table ever stops keeping it.
   if (state.isSubagent) return rejected("subagent")
-  if (state.records.length === 0) return rejected("no_records")
   if (!state.meta) return rejected("no_session_meta")
   if (!state.meta.cwd) return rejected("no_cwd")
+  if (state.records.length === 0) return rejected("no_records")
 
   return {
     kind: "parsed",

@@ -306,19 +306,26 @@ describe("parseCodexRolloutFile", () => {
     })
   })
 
-  test("rejects a rollout with no session_meta, no cwd, or no records", () => {
+  test("rejects a rollout with no session_meta or no cwd", () => {
     withTempDir((dir) => {
       const noMeta = writeRollout(dir, "rollout-nometa.jsonl", `${userLine("a", 1)}\n`)
       expect(parseCodexRolloutFile(noMeta, makeDeps())).toEqual({ kind: "rejected", reason: "no_session_meta" })
 
       const noCwd = writeRollout(dir, "rollout-nocwd.jsonl", `${metaLine({ cwd: "" })}\n${userLine("a", 1)}\n`)
       expect(parseCodexRolloutFile(noCwd, makeDeps())).toEqual({ kind: "rejected", reason: "no_cwd" })
+    })
+  })
 
+  test("an empty file and a non-rollout JSONL are UNIDENTIFIED, not empty-of-records", () => {
+    withTempDir((dir) => {
+      // `no_records` reads "readable and identified, but nothing was retained".
+      // Neither file identified anything, so that is the wrong sentence to show
+      // a user once these reasons are rendered.
       const empty = writeRollout(dir, "rollout-empty.jsonl", "")
-      expect(parseCodexRolloutFile(empty, makeDeps())).toEqual({ kind: "rejected", reason: "no_records" })
+      expect(parseCodexRolloutFile(empty, makeDeps())).toEqual({ kind: "rejected", reason: "no_session_meta" })
 
       const noneKept = writeRollout(dir, "rollout-nokeep.jsonl", "garbage\nmore garbage\n")
-      expect(parseCodexRolloutFile(noneKept, makeDeps())).toEqual({ kind: "rejected", reason: "no_records" })
+      expect(parseCodexRolloutFile(noneKept, makeDeps())).toEqual({ kind: "rejected", reason: "no_session_meta" })
     })
   })
 
