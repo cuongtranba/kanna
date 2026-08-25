@@ -23,7 +23,7 @@ function ThinkingBlockInner({ content }: Props) {
         className="group/thinking flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
       >
         <Brain className="h-3.5 w-3.5" />
-        <span className="font-medium uppercase tracking-wider">Thinking</span>
+        <span className="font-medium tracking-wider">Thinking</span>
         <ChevronRight
           className={cn(
             "h-3.5 w-3.5 transition-transform duration-200",

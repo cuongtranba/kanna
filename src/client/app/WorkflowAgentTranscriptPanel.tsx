@@ -83,11 +83,11 @@ function WorkflowAgentTranscriptPanelInner({
           <ArrowLeft className="size-4" aria-hidden />
         </button>
         <span className="truncate text-sm font-semibold text-foreground">{agentLabel}</span>
-        <span className="shrink-0 rounded border border-border bg-card px-1.5 py-0.5 text-10 font-medium uppercase tracking-wide text-muted-foreground">
+        <span className="shrink-0 rounded border border-border bg-card px-1.5 py-0.5 text-xs font-medium tracking-wide text-muted-foreground">
           Transcript
         </span>
         {agentIsRunning ? (
-          <span className="inline-flex shrink-0 items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 text-10 font-medium uppercase tracking-wide">
+          <span className="inline-flex shrink-0 items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 text-xs font-medium tracking-wide">
             <span aria-hidden className="inline-block size-1.5 animate-pulse rounded-full bg-emerald-500 dark:bg-emerald-400" />
             <span className="text-emerald-500 dark:text-emerald-400">Running</span>
           </span>
@@ -103,14 +103,14 @@ function WorkflowAgentTranscriptPanelInner({
       </div>
 
       {agentIsRunning ? (
-        <p className="rounded-md border border-amber-500/20 bg-amber-500/5 px-2.5 py-1.5 text-11 text-amber-600 dark:text-amber-400">
+        <p className="rounded-md border border-amber-500/20 bg-amber-500/5 px-2.5 py-1.5 text-xs text-amber-600 dark:text-amber-400">
           This agent is still running — the transcript may be incomplete. Refresh to update.
         </p>
       ) : null}
 
       {promptPreview ? (
         <div className="rounded-md border border-border/50 bg-muted/40 px-2.5 py-1.5">
-          <span className="text-10 font-medium uppercase tracking-wide text-muted-foreground">Prompt (preview)</span>
+          <span className="text-xs font-medium tracking-wide text-muted-foreground">Prompt (preview)</span>
           <p className="whitespace-pre-wrap break-words text-xs text-muted-foreground/90">{promptPreview}</p>
         </div>
       ) : null}

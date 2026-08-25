@@ -195,7 +195,8 @@ describe("renderMarkdownToReact", () => {
     const html = render(md)
     expect(html).toContain("<th")
     expect(html).toContain("text-muted-foreground")
-    expect(html).toContain("uppercase")
+    expect(html).toContain("text-xs")
+    expect(html).not.toContain("uppercase")
   })
 
   test("table wrapper div has rounded-xl class", () => {

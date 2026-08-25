@@ -24,7 +24,7 @@ export function PolicyRefusalMessage({ message }: Props) {
       <div className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2.5 space-y-1.5">
         <div className="flex items-center gap-2 text-xs font-medium text-warning">
           <ShieldAlert className="h-3.5 w-3.5" />
-          <span className="uppercase tracking-wide">Blocked by Usage Policy</span>
+          <span className=" tracking-wide">Blocked by Usage Policy</span>
         </div>
         <div className="text-sm whitespace-pre-wrap break-words text-foreground/90">
           {body}

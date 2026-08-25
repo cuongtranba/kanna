@@ -227,11 +227,12 @@ const SortableProjectGroup = memo(({
         type="button"
         aria-label="Drag to reorder project"
         className={cn(
-          "absolute left-0 top-1/2 -translate-y-1/2 flex h-6 w-4 items-center justify-center rounded-sm text-muted-foreground/60 cursor-grab active:cursor-grabbing touch-none transition-opacity duration-150",
+          "absolute left-0 top-1/2 -translate-y-1/2 flex size-8 max-md:size-11 items-center justify-center rounded-sm text-muted-foreground/60 cursor-grab active:cursor-grabbing touch-none transition-opacity duration-150",
           "opacity-0 md:group-hover/section:opacity-100",
           isDragging && "opacity-100 cursor-grabbing"
         )}
         {...listeners}
+        {...attributes}
       >
         <GripVertical className="size-3" />
       </button>
@@ -265,15 +266,27 @@ const SortableProjectGroup = memo(({
           {hasProjectMenu ? (
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-6 rounded-sm text-muted-foreground hover:text-foreground"
-                  onClick={(e) => openContextMenuFromButton(e, dom)}
-                  aria-label="Project options"
+                <ProjectSectionMenu
+                  editorLabel={editorLabel}
+                  starred={group.starredAt !== undefined}
+                  onCopyPath={() => onCopyPath?.(localPath)}
+                  onShowArchived={() => onShowArchivedProject?.(groupKey)}
+                  onOpenInFinder={() => onOpenExternalPath?.("open_finder", localPath)}
+                  onOpenInEditor={() => onOpenExternalPath?.("open_editor", localPath)}
+                  onToggleStar={() => onToggleStar?.(groupKey, group.starredAt === undefined)}
+                  onHide={() => onHideProject?.(groupKey)}
+                  onOpenBoards={onOpenBoards ? () => onOpenBoards(groupKey) : undefined}
                 >
-                  <MoreHorizontal className="size-3.5" />
-                </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 rounded-sm text-muted-foreground hover:text-foreground"
+                    onClick={(event) => openContextMenuFromButton(event, dom)}
+                    aria-label="Project options"
+                  >
+                    <MoreHorizontal className="size-3.5" />
+                  </Button>
+                </ProjectSectionMenu>
               </TooltipTrigger>
               <TooltipContent side="right" sideOffset={4}>
                 More
@@ -287,7 +300,7 @@ const SortableProjectGroup = memo(({
                   variant="ghost"
                   size="icon"
                   className={cn(
-                    "size-6 rounded-sm text-muted-foreground hover:text-foreground",
+                    "size-8 rounded-sm text-muted-foreground hover:text-foreground",
                     (!isConnected || startingLocalPath === localPath) && "opacity-50 cursor-not-allowed"
                   )}
                   disabled={!isConnected || startingLocalPath === localPath}
@@ -322,23 +335,8 @@ const SortableProjectGroup = memo(({
         "group/section mb-3",
         isDragging && "opacity-50 shadow-lg z-50 relative"
       )}
-      {...attributes}
     >
-      {hasProjectMenu ? (
-        <ProjectSectionMenu
-          editorLabel={editorLabel}
-          starred={group.starredAt !== undefined}
-          onCopyPath={() => onCopyPath?.(localPath)}
-          onShowArchived={() => onShowArchivedProject?.(groupKey)}
-          onOpenInFinder={() => onOpenExternalPath?.("open_finder", localPath)}
-          onOpenInEditor={() => onOpenExternalPath?.("open_editor", localPath)}
-          onToggleStar={() => onToggleStar?.(groupKey, group.starredAt === undefined)}
-          onHide={() => onHideProject?.(groupKey)}
-          onOpenBoards={onOpenBoards ? () => onOpenBoards(groupKey) : undefined}
-        >
-          {header}
-        </ProjectSectionMenu>
-      ) : header}
+      {header}
 
       {!collapsedSections.has(groupKey) && (isEmptyProject ? Boolean(onNewLocalChat) : group.previewChats.length > 0 || hasMore) && (
         <div className="flex flex-col gap-px pl-1">
@@ -355,7 +353,7 @@ const SortableProjectGroup = memo(({
               {hasMore && isExpanded ? (
                 <button
                   onClick={() => onToggleExpandedGroup(groupKey)}
-                  className="ml-6 mt-1 self-start px-2 py-0.5 text-11 text-muted-foreground hover:text-foreground rounded-md transition-colors duration-150"
+                  className="ml-6 mt-1 self-start px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground rounded-md transition-colors duration-150"
                 >
                   Show less
                 </button>
@@ -364,7 +362,7 @@ const SortableProjectGroup = memo(({
               {hasMore && !isExpanded ? (
                 <button
                   onClick={() => onToggleExpandedGroup(groupKey)}
-                  className="ml-6 mt-1 self-start px-2 py-0.5 text-11 text-muted-foreground hover:text-foreground rounded-md transition-colors duration-150"
+                  className="ml-6 mt-1 self-start px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground rounded-md transition-colors duration-150"
                 >
                   Show more
                 </button>
@@ -382,7 +380,7 @@ function SectionHeading({ label }: { label: string }) {
     <div className="pl-2 pr-2 pt-2 pb-1 flex items-center gap-1">
       <span
         data-testid="sidebar-section-heading"
-        className="flex-1 min-w-0 text-11 font-semibold uppercase tracking-wide text-muted-foreground"
+        className="flex-1 min-w-0 text-xs font-semibold tracking-wide text-muted-foreground"
       >
         {label}
       </span>

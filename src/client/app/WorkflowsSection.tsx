@@ -35,7 +35,7 @@ export function WorkflowsSection({ runs, onSelectRun, selectedRunId }: Workflows
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between gap-2">
         <span
-          className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+          className="text-xs font-medium tracking-wide text-muted-foreground"
           style={{ fontVariantNumeric: "tabular-nums" }}
         >
           {runs.length} {runs.length === 1 ? "run" : "runs"}
@@ -178,7 +178,7 @@ export function WorkflowRunDetailDialog({ run, open, onClose }: WorkflowRunDetai
 function AgentPreviewBlock({ label, text }: { label: string; text: string }) {
   return (
     <div className="rounded border border-border/50 bg-muted/40 px-2 py-1">
-      <span className="text-10 font-medium uppercase tracking-wide text-muted-foreground">{label}</span>
+      <span className="text-xs font-medium tracking-wide text-muted-foreground">{label}</span>
       <p className="whitespace-pre-wrap break-words text-xs text-muted-foreground/90">{text}</p>
     </div>
   )
@@ -211,7 +211,7 @@ function WorkflowAgentRow({
         <div className="flex items-center gap-2">
           <span className={cn("truncate text-sm text-foreground", live && "font-medium")}>{agent.label}</span>
           {agent.model ? (
-            <span className="shrink-0 rounded border border-border bg-card px-1.5 py-0.5 text-10 font-medium text-muted-foreground">
+            <span className="shrink-0 rounded border border-border bg-card px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
               {agent.model}
             </span>
           ) : null}
@@ -220,7 +220,7 @@ function WorkflowAgentRow({
               type="button"
               data-testid={`workflow-agent-transcript:${agent.agentId}`}
               onClick={() => onSelectAgent?.(agent.agentId!)}
-              className="ml-auto inline-flex shrink-0 items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 text-10 font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              className="ml-auto inline-flex shrink-0 items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
               <FileText className="size-3" aria-hidden />
               Transcript
@@ -296,7 +296,7 @@ export function WorkflowRunDetail({ run, onSelectAgent, title }: WorkflowRunDeta
       {/* Summary */}
       {run.summary ? (
         <section className="flex flex-col gap-1">
-          <h4 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Summary</h4>
+          <h4 className="text-xs font-medium tracking-wide text-muted-foreground">Summary</h4>
           <p className="text-sm text-foreground whitespace-pre-wrap">{run.summary}</p>
         </section>
       ) : null}
@@ -310,15 +310,15 @@ export function WorkflowRunDetail({ run, onSelectAgent, title }: WorkflowRunDeta
                 {group.phaseIndex != null ? (
                   <span
                     aria-hidden
-                    className="flex size-4 shrink-0 items-center justify-center rounded bg-muted text-10 font-medium text-muted-foreground tabular-nums"
+                    className="flex size-4 shrink-0 items-center justify-center rounded bg-muted text-xs font-medium text-muted-foreground tabular-nums"
                   >
                     {group.phaseIndex}
                   </span>
                 ) : null}
-                <h4 className="text-xs font-semibold uppercase tracking-wide text-foreground">
+                <h4 className="text-xs font-semibold tracking-wide text-foreground">
                   {group.title}
                 </h4>
-                <span className="text-10 text-muted-foreground tabular-nums">
+                <span className="text-xs text-muted-foreground tabular-nums">
                   {group.agents.length} {group.agents.length === 1 ? "agent" : "agents"}
                 </span>
               </div>
@@ -342,7 +342,7 @@ export function WorkflowRunDetail({ run, onSelectAgent, title }: WorkflowRunDeta
       {/* Result */}
       {run.result ? (
         <section className="flex flex-col gap-1">
-          <h4 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Result</h4>
+          <h4 className="text-xs font-medium tracking-wide text-muted-foreground">Result</h4>
           <pre className="max-h-80 overflow-auto rounded-md border border-border/60 bg-muted/40 px-3 py-2 text-xs text-foreground whitespace-pre-wrap break-words">
             {formatWorkflowResult(run.result)}
           </pre>
@@ -352,7 +352,7 @@ export function WorkflowRunDetail({ run, onSelectAgent, title }: WorkflowRunDeta
       {/* Script (collapsed by default) */}
       {run.script ? (
         <details className="flex flex-col gap-1">
-          <summary className="cursor-pointer text-xs font-medium uppercase tracking-wide text-muted-foreground hover:text-foreground">
+          <summary className="cursor-pointer text-xs font-medium tracking-wide text-muted-foreground hover:text-foreground">
             Script
           </summary>
           <pre className="mt-1.5 max-h-96 overflow-auto rounded-md border border-border/60 bg-muted/40 px-3 py-2 text-xs text-foreground whitespace-pre-wrap break-words">
@@ -364,7 +364,7 @@ export function WorkflowRunDetail({ run, onSelectAgent, title }: WorkflowRunDeta
       {/* Error */}
       {run.error && run.status !== "completed" ? (
         <section className="flex flex-col gap-1">
-          <h4 className={cn("text-xs font-medium uppercase tracking-wide", statusToneClass(tone))}>
+          <h4 className={cn("text-xs font-medium tracking-wide", statusToneClass(tone))}>
             Error
           </h4>
           <p className="rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive whitespace-pre-wrap">

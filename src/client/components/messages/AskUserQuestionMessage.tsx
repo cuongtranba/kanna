@@ -61,7 +61,7 @@ function QuestionSummaryCard({
           >
             <div className="flex-1 min-w-0">
               {question.header && (
-                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground text-pretty">{question.header}</div>
+                <div className="text-xs font-semibold tracking-wide text-muted-foreground text-pretty">{question.header}</div>
               )}
               <div className="text-sm text-pretty">{question.question}</div>
             </div>
@@ -132,7 +132,7 @@ function AskUserQuestionMessageInner({ message, onSubmit, isLatest }: Props) {
               >
                 <div className="flex-1 min-w-0">
                   {question.header && (
-                    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground text-pretty">{question.header}</div>
+                    <div className="text-xs font-semibold tracking-wide text-muted-foreground text-pretty">{question.header}</div>
                   )}
                   <div className="text-sm text-pretty">{question.question}</div>
                 </div>

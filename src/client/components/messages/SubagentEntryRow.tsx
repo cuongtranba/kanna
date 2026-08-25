@@ -37,7 +37,7 @@ export function SubagentEntryRow({ message, localPath, isRunning = false }: Suba
         <div className="font-medium">
           {message.toolName}: output too large ({formatBytes(message.persisted.originalSize)}) — saved to disk
         </div>
-        <pre className="text-11 whitespace-pre-wrap overflow-hidden max-h-48">
+        <pre className="text-xs whitespace-pre-wrap overflow-hidden max-h-48">
           {previewBody}
         </pre>
         <a

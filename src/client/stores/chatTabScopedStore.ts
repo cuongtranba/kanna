@@ -79,6 +79,8 @@ export interface ChatTabScopedState {
   // ─── Chat navbar: share popover ────────────────────────────────────────────
   sharePopoverOpen: boolean
   setSharePopoverOpen: (open: boolean) => void
+  chatSettingsOpen: boolean
+  setChatSettingsOpen: (open: boolean) => void
 }
 
 // ---------------------------------------------------------------------------
@@ -139,5 +141,7 @@ export const ChatTabScopedStore = createScopedStore<void, ChatTabScopedState>(
     // Share popover open
     sharePopoverOpen: false,
     setSharePopoverOpen: (open) => set({ sharePopoverOpen: open }),
+    chatSettingsOpen: false,
+    setChatSettingsOpen: (open) => set({ chatSettingsOpen: open }),
   }),
 )

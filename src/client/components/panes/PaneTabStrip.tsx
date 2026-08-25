@@ -116,7 +116,7 @@ export function PaneTabStrip({
         className={cn(
           "flex min-w-0 flex-1 items-stretch",
           layout.scrolls &&
-            "overflow-x-auto scrollbar-hide overscroll-x-contain touch-pan-x motion-safe:scroll-smooth",
+            "overflow-x-auto overscroll-x-contain touch-pan-x motion-safe:scroll-smooth",
         )}
         style={{ WebkitOverflowScrolling: "touch" }}
       >
@@ -321,7 +321,7 @@ function PaneTab({
         <span
           aria-hidden
           data-tab-session-badge
-          className={cn("shrink-0 text-10 leading-none", sessionBadge.toneClass)}
+          className={cn("shrink-0 text-xs leading-none", sessionBadge.toneClass)}
         >
           {sessionBadge.glyph}
         </span>
@@ -334,7 +334,7 @@ function PaneTab({
           type="button"
           aria-label={`Close ${label}`}
           onClick={handleClose}
-          className="ml-auto flex size-[18px] shrink-0 items-center justify-center rounded-sm opacity-0 hover:bg-muted focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
+          className="ml-auto flex size-8 max-md:size-11 shrink-0 items-center justify-center rounded-sm opacity-0 hover:bg-muted focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
         >
           <X className="size-3" />
         </button>

@@ -78,7 +78,7 @@ export function SlashCommandPicker({ items, activeIndex, loading, onSelect, onHo
             <div className="flex min-w-0 items-baseline gap-2">
               <span className="font-mono break-all sm:whitespace-nowrap sm:break-normal">/{normalizeCommandName(cmd.name)}</span>
               {cmd.kind === "skill" ? (
-                <span className="shrink-0 rounded-sm border border-border bg-muted px-1 py-px text-10 font-medium uppercase tracking-wide text-muted-foreground">
+                <span className="shrink-0 rounded-sm border border-border bg-muted px-1 py-px text-xs font-medium tracking-wide text-muted-foreground">
                   skill
                 </span>
               ) : null}

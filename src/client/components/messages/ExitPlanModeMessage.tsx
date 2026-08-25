@@ -194,14 +194,14 @@ function ExitPlanModeMessageInner({ message, onConfirm, isLatest, ports = {} }: 
           </Button>
         )}
         <div className={cn(
-          "!pt-5 !pb-0 px-4 md:py-4.5 md:px-5.5 bg-muted dark:bg-card overflow-scroll no-pre-highlight transition-all",
+          "!pt-5 !pb-0 px-4 md:py-4.5 md:px-5.5 bg-muted dark:bg-card overflow-scroll no-pre-highlight transition-colors",
           isComplete && !expanded ? "max-h-[min(400px,40vh)] " : "",
           isComplete ? "hover:!pb-[32px]" : ''
         )}>
           {isComplete && (
             <Button
               variant="ghost"
-              className={`absolute z-10 bottom-2 pr-2.5 !pl-3.5 h-[34px] inline-flex gap-1 text-sm left-[50%] -translate-x-[50%] text-muted-foreground bg-background hover:text-foreground opacity-0 group-hover/plan:opacity-100 transition-all rounded-full border border-border`}
+              className={`absolute z-10 bottom-2 pr-2.5 !pl-3.5 h-[34px] inline-flex gap-1 text-sm left-[50%] -translate-x-[50%] text-muted-foreground bg-background hover:text-foreground opacity-0 group-hover/plan:opacity-100 transition-[color,opacity] rounded-md border border-border`}
               onClick={() => setExpanded(!expanded)}
             >
               {expanded ? "Show Less" : "Show More"}

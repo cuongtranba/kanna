@@ -21,7 +21,7 @@ import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin"
 import { ContentEditable } from "@lexical/react/LexicalContentEditable"
 import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin"
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext"
-import { ArrowUp, Bot, Paperclip } from "lucide-react"
+import { ArrowUp, Bot, Paperclip, SlidersHorizontal } from "lucide-react"
 
 import {
   type AgentProvider,
@@ -37,6 +37,7 @@ import {
   resolveClaudeContextWindowTokens,
 } from "../../../shared/types"
 import { Button } from "../ui/button"
+import { Dialog, DialogBody, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../ui/dialog"
 import { ScrollArea } from "../ui/scroll-area"
 import { cn } from "../../lib/utils"
 import { useIsStandalone } from "../../hooks/useIsStandalone"
@@ -499,8 +500,11 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
   const setUploadError = ChatTabScopedStore.useScopedStore((state) => state.setUploadError)
   const currentText = ChatTabScopedStore.useScopedStore((state) => state.currentText)
   const setCurrentText = ChatTabScopedStore.useScopedStore((state) => state.setCurrentText)
+  const chatSettingsOpen = ChatTabScopedStore.useScopedStore((state) => state.chatSettingsOpen)
+  const setChatSettingsOpen = ChatTabScopedStore.useScopedStore((state) => state.setChatSettingsOpen)
 
   const uploadQueueRef = useRef<File[]>([])
+  const chatSettingsTriggerRef = useRef<HTMLButtonElement>(null)
   const activeUploadsRef = useRef(0)
   const attachmentsRef = useRef<ComposerAttachment[]>([])
   const uploadGenerationRef = useRef(0)
@@ -1063,10 +1067,44 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
     [composerChatId],
   )
 
+  function renderPreferenceControls(className: string) {
+    return (
+      <ChatPreferenceControls
+        availableProviders={availableProviders}
+        selectedProvider={selectedProvider}
+        showCodexCliRequirementHints
+        model={providerPrefs.model}
+        modelOptions={providerPrefs.modelOptions}
+        onProviderChange={(provider) => resetChatComposerFromProvider(composerChatId, provider)}
+        onModelChange={hasUnpausedCronJob ? undefined : (_, model) => setChatComposerModel(composerChatId, model)}
+        onModelOptionChange={(change) => {
+          switch (change.type) {
+            case "claudeReasoningEffort":
+            case "codexReasoningEffort":
+              setReasoningEffort(change.effort)
+              break
+            case "contextWindow":
+              setClaudeContextWindow(change.contextWindow)
+              break
+            case "fastMode":
+              updateComposerState((state) => state.provider === "claude" || state.provider === "openrouter"
+                ? state
+                : { ...state, modelOptions: { ...state.modelOptions, fastMode: change.fastMode } })
+              break
+          }
+        }}
+        planMode={providerPrefs.planMode}
+        onPlanModeChange={setEffectivePlanMode}
+        includePlanMode={showPlanMode}
+        className={className}
+      />
+    )
+  }
+
   return (
     <div>
       <div className={cn("px-3 pt-0", isStandalone && "px-5")}>
-        <div className="max-w-[840px] mx-auto rounded-[32px]">
+        <div className="max-w-[840px] mx-auto">
           {/* @agent/<name> mention chips */}
           {mentionChips.length > 0 ? (
             <div className="flex flex-wrap gap-1 px-2 pt-2">
@@ -1153,7 +1191,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
 
           {/* Input row */}
           <div
-            className="relative flex items-end max-w-[840px] mx-auto border bg-background dark:bg-card/90 border-border rounded-[29px] pr-1.5 transition-colors focus-within:border-ring/60 focus-within:ring-2 focus-within:ring-ring/30"
+            className="relative flex items-end max-w-[840px] mx-auto rounded-xl border border-border bg-background pr-1.5 transition-colors focus-within:border-ring/60 focus-within:ring-2 focus-within:ring-ring/30 dark:bg-card/90"
             onKeyDown={handleKeyDown}
           >
             {/* Attachment button */}
@@ -1267,52 +1305,35 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
       {/* Preference controls row */}
       <div className={cn("relative py-3 max-w-[840px] mx-auto", isStandalone && "p-5 pt-3")}>
         <div className="flex items-center gap-2">
-          <div className="min-w-0 flex-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden flex flex-row">
-            <div className="min-w-3" />
-            <ChatPreferenceControls
-              availableProviders={availableProviders}
-              selectedProvider={selectedProvider}
-              showCodexCliRequirementHints
-              model={providerPrefs.model}
-              modelOptions={providerPrefs.modelOptions}
-              onProviderChange={(provider) => {
-                resetChatComposerFromProvider(composerChatId, provider)
-              }}
-              onModelChange={hasUnpausedCronJob ? undefined : (_, model) => {
-                setChatComposerModel(composerChatId, model)
-              }}
-              onModelOptionChange={(change) => {
-                switch (change.type) {
-                  case "claudeReasoningEffort":
-                    setReasoningEffort(change.effort)
-                    break
-                  case "codexReasoningEffort":
-                    setReasoningEffort(change.effort)
-                    break
-                  case "contextWindow":
-                    setClaudeContextWindow(change.contextWindow)
-                    break
-                  case "fastMode":
-                    updateComposerState((state) =>
-                      state.provider === "claude" || state.provider === "openrouter"
-                        ? state
-                        : {
-                            ...state,
-                            modelOptions: {
-                              ...state.modelOptions,
-                              fastMode: change.fastMode,
-                            },
-                          },
-                    )
-                    break
-                }
-              }}
-              planMode={providerPrefs.planMode}
-              onPlanModeChange={setEffectivePlanMode}
-              includePlanMode={showPlanMode}
-              className="max-w-[840px] mx-auto"
-            />
-            <div className="min-w-3" />
+          <div className="min-w-0 flex-1">
+            <div className="hidden md:block">{renderPreferenceControls("mx-auto max-w-[840px]")}</div>
+            <Dialog open={chatSettingsOpen} onOpenChange={setChatSettingsOpen}>
+              <Button
+                ref={chatSettingsTriggerRef}
+                variant="outline"
+                size="default"
+                className="ml-3 md:hidden"
+                onClick={() => setChatSettingsOpen(true)}
+                aria-haspopup="dialog"
+              >
+                <SlidersHorizontal className="size-4" />
+                Chat settings
+              </Button>
+              <DialogContent
+                size="sm"
+                restoreFocus="trigger"
+                onCloseAutoFocus={(event) => {
+                  event.preventDefault()
+                  chatSettingsTriggerRef.current?.focus({ preventScroll: true })
+                }}
+              >
+                <DialogHeader>
+                  <DialogTitle>Chat settings</DialogTitle>
+                  <DialogDescription>Choose the provider, model, reasoning, context, and permission mode for this chat.</DialogDescription>
+                </DialogHeader>
+                <DialogBody>{renderPreferenceControls("flex-wrap justify-start gap-2")}</DialogBody>
+              </DialogContent>
+            </Dialog>
           </div>
 
           {(sessionTotals ?? activeContextWindow) ? (

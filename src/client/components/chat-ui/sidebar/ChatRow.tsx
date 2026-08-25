@@ -63,8 +63,8 @@ function ChatRowImpl({
   if (trailingLabel) {
     if (showShortcutKeycap) {
       trailingLabelContent = (
-        <span className="hidden md:flex items-center justify-end pr-0.5 text-11 text-foreground transition-opacity duration-150 group-hover:opacity-0">
-          <Kbd className="h-4 min-w-4 rounded-sm border-border/50 bg-transparent px-1 text-10">
+        <span className="hidden md:flex items-center justify-end pr-0.5 text-xs text-foreground transition-opacity duration-150 group-hover:opacity-0">
+          <Kbd className="h-4 min-w-4 rounded-sm border-border/50 bg-transparent px-1 text-xs">
             {shortcutHint}
           </Kbd>
         </span>
@@ -73,7 +73,7 @@ function ChatRowImpl({
       trailingLabelContent = (
         <span
           className={cn(
-            "hidden md:flex items-center justify-end pr-1 text-11 tabular-nums transition-opacity duration-150 group-hover:opacity-0 whitespace-nowrap",
+            "hidden md:flex items-center justify-end pr-1 text-xs tabular-nums transition-opacity duration-150 group-hover:opacity-0 whitespace-nowrap",
             isLiveState ? chatDotTextClass(tone) : "text-muted-foreground"
           )}
         >
@@ -83,78 +83,70 @@ function ChatRowImpl({
     }
   }
 
-  const row = (
-    <div
-      key={chat._id}
-      data-chat-id={normalizedChatId}
-      className={cn(
-        "group flex items-center gap-2 pl-2 pr-1 py-1.5 rounded-md cursor-pointer transition-colors duration-150",
-        isActive
-          ? "bg-muted"
-          : "hover:bg-muted/40"
-      )}
+  const mainAction = (
+    <button
+      type="button"
+      className="flex min-w-0 flex-1 items-center gap-2 py-1.5 pl-2 text-left"
       onClick={() => onSelectChat(chat.chatId)}
     >
-      <span
-        className="relative flex h-3.5 w-3.5 shrink-0 items-center justify-center"
-        aria-hidden
-      >
-        {tone ? (
-          <span className={cn("h-2 w-2 rounded-full", chatDotBgClass(tone))} />
-        ) : null}
+      <span className="relative flex h-3.5 w-3.5 shrink-0 items-center justify-center" aria-hidden>
+        {tone ? <span className={cn("h-2 w-2 rounded-full", chatDotBgClass(tone))} /> : null}
       </span>
       {(() => {
         const badge = sessionStateBadge(chat.sessionState)
         return badge ? (
           <HoverHint label={badge.title}>
-            <span
-              className={cn("shrink-0 text-10 leading-none", badge.toneClass)}
-              aria-label={badge.title}
-            >
+            <span className={cn("shrink-0 text-xs leading-none", badge.toneClass)} aria-label={badge.title}>
               {badge.glyph}
             </span>
           </HoverHint>
         ) : null
       })()}
       {chat.hasPolicyOverride ? (
-        <ShieldAlert
-          className="size-3 shrink-0 text-warning"
-          aria-label="Per-chat permission override active"
-        />
+        <ShieldAlert className="size-3 shrink-0 text-warning" aria-label="Per-chat permission override active" />
       ) : null}
       <span
         className={cn(
-          "truncate flex-1 text-sm",
-          isActive ? "text-foreground font-medium" : "text-foreground/90",
-          chat.status === "idle" && !chat.unread && !isActive ? "text-muted-foreground" : ""
+          "min-w-0 flex-1 truncate text-sm",
+          isActive ? "font-medium text-foreground" : "text-foreground/90",
+          chat.status === "idle" && !chat.unread && !isActive ? "text-muted-foreground" : "",
         )}
       >
         {chat.title}
       </span>
-      <div className={cn("relative flex items-center justify-end gap-1.5 h-6 shrink-0", minSlotWidth)}>
-        {silent ? (
-          <BellOff
-            className={cn(
-              "size-3 shrink-0 text-muted-foreground transition-opacity duration-150",
-              trailingLabel ? "group-hover:opacity-0" : ""
-            )}
-            aria-label="Silenced"
-          />
-        ) : null}
-        {trailingLabelContent}
-        <div
-          className={cn(
-            "absolute inset-0 flex items-center justify-end gap-0 transition-opacity duration-150",
-            trailingLabel
-              ? "opacity-100 md:opacity-0 md:group-hover:opacity-100"
-              : "opacity-100"
-          )}
-        >
+      {silent ? <BellOff className="size-3 shrink-0 text-muted-foreground" aria-label="Silenced" /> : null}
+      {trailingLabelContent}
+    </button>
+  )
+
+  const row = (
+    <div
+      key={chat._id}
+      data-chat-id={normalizedChatId}
+      className={cn(
+        "group flex items-center rounded-md pr-1 transition-colors duration-150",
+        isActive
+          ? "bg-muted"
+          : "hover:bg-muted/40"
+      )}
+    >
+      <ChatRowMenu
+        canFork={chat.canFork}
+        onRename={() => onRenameChat(chat.chatId)}
+        onOpenInFinder={() => onOpenInFinder(chat.localPath)}
+        onFork={() => onForkChat(chat.chatId)}
+        onArchive={() => onArchiveChat(chat.chatId)}
+        onDelete={() => onDeleteChat(chat.chatId)}
+        onEditPermissions={onEditPermissions ? () => onEditPermissions(chat.chatId) : undefined}
+      >
+        {mainAction}
+      </ChatRowMenu>
+      <div className={cn("flex h-8 shrink-0 items-center justify-end gap-0", minSlotWidth)}>
           {chat.canFork ? (
             <Button
               variant="ghost"
               size="icon"
-              className="h-6 w-6 cursor-pointer rounded-sm hover:!bg-transparent !border-0"
+              className="size-8 cursor-pointer rounded-sm hover:!bg-transparent !border-0"
               onClick={(event) => {
                 event.stopPropagation()
                 onForkChat(chat.chatId)
@@ -167,7 +159,7 @@ function ChatRowImpl({
           <Button
             variant="ghost"
             size="icon"
-            className="h-6 w-6 cursor-pointer rounded-sm hover:!bg-transparent !border-0"
+            className="size-8 cursor-pointer rounded-sm hover:!bg-transparent !border-0"
             onClick={(event) => {
               event.stopPropagation()
               onArchiveChat(chat.chatId)
@@ -176,24 +168,11 @@ function ChatRowImpl({
           >
             <Archive className="size-3.5" />
           </Button>
-        </div>
       </div>
     </div>
   )
 
-  return (
-    <ChatRowMenu
-      canFork={chat.canFork}
-      onRename={() => onRenameChat(chat.chatId)}
-      onOpenInFinder={() => onOpenInFinder(chat.localPath)}
-      onFork={() => onForkChat(chat.chatId)}
-      onArchive={() => onArchiveChat(chat.chatId)}
-      onDelete={() => onDeleteChat(chat.chatId)}
-      onEditPermissions={onEditPermissions ? () => onEditPermissions(chat.chatId) : undefined}
-    >
-      {row}
-    </ChatRowMenu>
-  )
+  return row
 }
 
 export const ChatRow = memo(ChatRowImpl)

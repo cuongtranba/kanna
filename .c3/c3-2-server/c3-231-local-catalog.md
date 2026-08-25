@@ -1,6 +1,6 @@
 ---
 id: c3-231
-c3-seal: 9a97d79a4ba12b2a7c07567953b8a9304dd05b7c99a2f01d2d436d50763f6ab5
+c3-seal: 59efb8754bd6d800bfc9e2347d24532977f30b26580e441914b3eda81da6dc53
 title: local-catalog
 type: component
 category: feature
@@ -47,10 +47,10 @@ Owns the disk scan + dedupe + cache that turns raw `SKILL.md` and `.md` command 
 | Aspect | Detail | Reference |
 | --- | --- | --- |
 | Outcome | User sees all local skills + commands when typing / | c3-115 |
-| Primary path | The project-commands envelope reads the list synchronously per project; every scope is surfaced, no CLI merge, no async load. Its consumer `localCommandsForCwd` prepends Kanna's static `BUILTIN_SLASH_COMMANDS` (`/clear`, `/compact`) and drops any disk entry sharing a builtin name, since dispatch intercepts that name before the CLI sees it. `LocalCatalogService.list(cwd)` is unchanged — it still returns disk entries only | c3-208 |
+| Primary path | The project-commands envelope reads the list synchronously per project; every scope is surfaced, no CLI merge, no async load. Its consumer localCommandsForCwd prepends Kanna's static BUILTIN_SLASH_COMMANDS (/clear, /compact) and drops any disk entry sharing a builtin name, since dispatch intercepts that name before the CLI sees it. LocalCatalogService.list(cwd) is unchanged — it still returns disk entries only | c3-208 |
 | Alternate — cache hit | Same cwd with every mtime stamp unchanged returns the cached list without rescanning | c3-231 |
 | Alternate — invalidate | invalidate(cwd?) drops cache row(s) | c3-231 |
-| Failure — scan throws | Error logged; the picker falls back to the builtins alone rather than an empty list, so `/clear` and `/compact` stay reachable when the disk scan fails | c3-208 |
+| Failure — scan throws | Error logged; the picker falls back to the builtins alone rather than an empty list, so /clear and /compact stay reachable when the disk scan fails | c3-208 |
 
 ## Governance
 

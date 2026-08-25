@@ -224,7 +224,7 @@ function walkNode(node: LexicalNode): ReactNode {
       <a
         key={nextKey()}
         href={url}
-        className="transition-all underline decoration-2 text-logo decoration-logo/50 hover:text-logo/70 dark:text-logo dark:decoration-logo/70 dark:hover:text-logo/60 dark:hover:decoration-logo/40"
+        className="transition-colors underline decoration-2 text-logo decoration-logo/50 hover:text-logo/70 dark:text-logo dark:decoration-logo/70 dark:hover:text-logo/60 dark:hover:decoration-logo/40"
         target="_blank"
         rel="noopener noreferrer"
       >
@@ -258,7 +258,7 @@ function walkNode(node: LexicalNode): ReactNode {
                 {headerRow.getChildren<TableCellNode>().map((cell) => (
                   <th
                     key={nextKey()}
-                    className="text-left text-xs uppercase text-muted-foreground tracking-wider p-2 pl-0 first:pl-3 bg-muted dark:bg-card [&_*]:font-semibold"
+                    className="text-left text-xs text-muted-foreground tracking-wider p-2 pl-0 first:pl-3 bg-muted dark:bg-card [&_*]:font-semibold"
                   >
                     {walkChildren(cell)}
                   </th>

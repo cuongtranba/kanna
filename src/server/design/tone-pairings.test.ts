@@ -38,6 +38,22 @@ describe("TONE_PAIRINGS — WCAG AA (4.5:1) in both themes", () => {
   }
 })
 
+test("filled destructive actions are included in the contrast catalog", () => {
+  expect(TONE_PAIRINGS.some((pairing) => pairing.name === "action/destructive-filled")).toBe(true)
+})
+
+describe("muted editorial text — WCAG AAA (7:1)", () => {
+  for (const theme of THEMES) {
+    test(theme, () => {
+      const ratio = measuredContrast(
+        { fg: "muted-foreground", bg: "background", alpha: 1, base: "background" },
+        theme,
+      )
+      expect(ratio).toBeGreaterThanOrEqual(7)
+    })
+  }
+})
+
 describe("contrast engine sanity", () => {
   test("near-black on near-white gives high ratio", () => {
     const ratio = measuredContrast(
