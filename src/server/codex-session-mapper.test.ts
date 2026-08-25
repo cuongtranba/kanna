@@ -298,20 +298,54 @@ describe("rendering parity with the live translator", () => {
 })
 
 describe("compaction", () => {
-  test("a compacted record yields exactly one compact_boundary and no replay", () => {
+  test("a compacted record with a summary yields boundary THEN summary", () => {
     const compacted = recordsOfKind("compacted")
     expect(compacted.length).toBe(1)
-    const produced = entriesProducedBy(RECORDS.indexOf(compacted[0]))
-    expect(produced.length).toBe(1)
-    expect(produced[0].kind).toBe("compact_boundary")
+    expect(compacted[0].summary).toBe("Summary of the conversation so far.")
 
+    const produced = entriesProducedBy(RECORDS.indexOf(compacted[0]))
+    // The order is load-bearing: `buildHistoryPrimer` resumes at the LAST
+    // boundary and counts `compact_summary` as assistant content, so a summary
+    // emitted before its own boundary is discarded.
+    expect(produced.map((entry) => entry.kind)).toEqual(["compact_boundary", "compact_summary"])
+    const summary = produced[1]
+    if (summary.kind !== "compact_summary") throw new Error("expected compact_summary")
+    expect(summary.summary).toBe("Summary of the conversation so far.")
+  })
+
+  test("both entries are keyed on the same line, with distinct stable ids", () => {
+    const compacted = recordsOfKind("compacted")[0]
+    const produced = entriesProducedBy(RECORDS.indexOf(compacted))
+    const key = codexRecordKey(compacted)
+    for (const entry of produced) {
+      expect(codexRecordKeyFromEntryId(entry._id)).toBe(key)
+      expect(entry.createdAt).toBe(compacted.timestamp)
+    }
+    expect(new Set(produced.map((entry) => entry._id)).size).toBe(produced.length)
+    // Stable across passes — a re-import must not mint a second summary card.
+    expect(mapCodexRecordsToEntries([compacted], SESSION).map((entry) => entry._id))
+      .toEqual(produced.map((entry) => entry._id))
+  })
+
+  test("a compacted record with no summary yields the boundary alone", () => {
+    const bare: CodexRolloutRecord = {
+      kind: "compacted",
+      lineIndex: 88,
+      timestamp: SESSION.lastTimestamp,
+      summary: null,
+    }
+    const entries = mapCodexRecordsToEntries([bare], sessionWith([bare]))
+    expect(entries.map((entry) => entry.kind)).toEqual(["compact_boundary"])
+  })
+
+  test("the replay is never walked", () => {
     // `replacement_history` is a full replay of the conversation so far; a
     // mapper that walks it duplicates the whole transcript with nothing failing.
     const serialized = JSON.stringify(ENTRIES)
     expect(serialized).not.toContain("replay one")
     expect(serialized).not.toContain("replay two")
     expect(serialized).not.toContain("replay three")
-    expect(ENTRIES.some((entry) => entry.kind === "compact_summary")).toBe(false)
+    expect(ENTRIES.filter((entry) => entry.kind === "compact_summary").length).toBe(1)
   })
 })
 

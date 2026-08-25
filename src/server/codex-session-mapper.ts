@@ -32,6 +32,7 @@ import {
   rolloutToolOutputToThreadItem,
 } from "./codex-rollout-to-thread-item"
 import type {
+  CodexCompactedRecord,
   CodexReasoningRecord,
   CodexRolloutRecord,
   CodexToolCallRecord,
@@ -177,6 +178,34 @@ function webSearchItem(record: CodexRolloutRecord, query: string): ThreadItem {
   return { type: "webSearch", id: codexRecordKey(record), query }
 }
 
+/**
+ * `compact_boundary` THEN `compact_summary`, off the same line key.
+ *
+ * THE ORDER IS LOAD-BEARING, and it is the same order `claude-turn-runner.ts`
+ * emits on the live codex `/compact` path. `buildHistoryPrimer` resumes at the
+ * most recent boundary and counts `compact_summary` as assistant content, so a
+ * summary emitted BEFORE its own boundary sits on the older side of it and is
+ * discarded — the reader keeps the card, the next turn's primer does not.
+ *
+ * `CodexCompactedRecord` still carries no `replacement_history`; `summary` is
+ * `payload.message`, a different field. A record with none yields the bare
+ * boundary, which is what every pre-`message` rollout produces.
+ */
+function compactionEntries(record: CodexCompactedRecord): TranscriptEntry[] {
+  const boundary: TranscriptEntry = {
+    _id: entryId(record, "compact_boundary"),
+    kind: "compact_boundary",
+    createdAt: record.timestamp,
+  }
+  if (record.summary === null) return [boundary]
+  return [boundary, {
+    _id: entryId(record, "compact_summary"),
+    kind: "compact_summary",
+    createdAt: record.timestamp,
+    summary: record.summary,
+  }]
+}
+
 function mapRecord(
   record: CodexRolloutRecord,
   session: ParsedSession<CodexRolloutRecord>,
@@ -254,15 +283,7 @@ function mapRecord(
       ]
 
     case "compacted":
-      // ONE boundary and nothing else. `CodexCompactedRecord` carries no summary
-      // and no `replacement_history` by construction — the latter is a full
-      // replay of the conversation, and a mapper that walks it duplicates the
-      // entire transcript while every assertion still passes.
-      return [{
-        _id: entryId(record, "compact_boundary"),
-        kind: "compact_boundary",
-        createdAt: record.timestamp,
-      }]
+      return compactionEntries(record)
 
     case "model_hint":
       // Consumed by `deriveModel`; it is not an event a reader sees.

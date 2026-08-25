@@ -431,8 +431,25 @@ describe("classifyRolloutLine — turn terminals and model hints", () => {
   })
 })
 
-describe("classifyRolloutLine — compacted is BARE", () => {
-  test("neither message nor replacement_history reaches the record", () => {
+describe("classifyRolloutLine — compacted carries the summary and NOTHING else", () => {
+  // `payload.message` is a short human-readable summary and is present on
+  // 230 of 230 `compacted` records in the reference corpus. Dropping it left
+  // imported sessions showing a bare boundary where a live codex `/compact`
+  // renders boundary + summary.
+  test("payload.message becomes the summary", () => {
+    const record = classify(envelope("compacted", {
+      window_id: "w2",
+      message: "Summary of the conversation so far.",
+    }))
+    expect(record).toEqual({
+      kind: "compacted",
+      lineIndex: 0,
+      timestamp: Date.parse("2026-06-07T06:00:00.000Z"),
+      summary: "Summary of the conversation so far.",
+    })
+  })
+
+  test("replacement_history stays structurally unreachable", () => {
     const record = classify(envelope("compacted", {
       window_id: "w2",
       message: "Summary of the conversation so far.",
@@ -445,10 +462,32 @@ describe("classifyRolloutLine — compacted is BARE", () => {
       kind: "compacted",
       lineIndex: 0,
       timestamp: Date.parse("2026-06-07T06:00:00.000Z"),
+      summary: "Summary of the conversation so far.",
     })
     const serialized = JSON.stringify(record)
     expect(serialized).not.toContain("replay one")
-    expect(serialized).not.toContain("Summary of the conversation")
+    expect(serialized).not.toContain("replay two")
+    expect(serialized).not.toContain("replacement_history")
+  })
+
+  for (const [label, payload] of [
+    ["absent", { window_id: "w2" }],
+    ["empty", { window_id: "w2", message: "" }],
+    ["blank", { window_id: "w2", message: "   \n " }],
+    ["not a string", { window_id: "w2", message: { text: "nope" } }],
+  ] as const) {
+    test(`a ${label} message reads as no summary`, () => {
+      expect(classify(envelope("compacted", payload)))
+        .toMatchObject({ kind: "compacted", summary: null })
+    })
+  }
+
+  test("a compacted line with no payload object at all is still a boundary", () => {
+    expect(classifyRolloutLine(
+      JSON.stringify({ timestamp: "2026-06-07T06:00:00.000Z", type: "compacted" }),
+      0,
+      FALLBACK,
+    )).toMatchObject({ kind: "compacted", summary: null })
   })
 })
 

@@ -84,6 +84,12 @@ function stringOrNull(value: AnyValue): string | null {
   return typeof value === "string" ? value : null
 }
 
+/** Trimmed, or `null` for absent / blank — a whitespace summary is no summary. */
+function nonBlankOrNull(value: string | null): string | null {
+  const trimmed = value?.trim() ?? ""
+  return trimmed.length === 0 ? null : trimmed
+}
+
 function numberOr(value: AnyValue, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback
 }
@@ -359,12 +365,18 @@ export function classifyRolloutLine(
       // `thread_settings_applied` are the only sources of the latter.
       return { kind: "model_hint", lineIndex, timestamp, model: stringOrNull(payload.model) }
     }
-    case "compacted":
-      // Bare on purpose. `payload.replacement_history` is a full replay of the
-      // conversation so far; walking it duplicates the entire transcript while
-      // every test still passes, so `CodexCompactedRecord` gives it nowhere to
-      // land and this branch never reads the payload at all.
-      return { kind: "compacted", lineIndex, timestamp }
+    case "compacted": {
+      // `payload.message` ONLY, and by name. `payload.replacement_history` is a
+      // full replay of the conversation so far; walking it duplicates the entire
+      // transcript while every test still passes, so `CodexCompactedRecord`
+      // gives it nowhere to land and this branch never goes near it.
+      //
+      // A `compacted` line with no readable payload is still a real boundary —
+      // it is refused nowhere, it just has no summary.
+      const payload = payloadOf(parsed)
+      const message = payload === null ? null : stringOrNull(payload.message)
+      return { kind: "compacted", lineIndex, timestamp, summary: nonBlankOrNull(message) }
+    }
     case "response_item": {
       const payload = payloadOf(parsed)
       if (payload === null) return null
