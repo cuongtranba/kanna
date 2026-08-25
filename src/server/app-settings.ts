@@ -44,8 +44,8 @@ import {
   OAUTH_TOKEN_VALUE_MAX,
   clampTokenConcurrency,
   isTokenConcurrency,
+  normalizeClaudeReasoningEffort,
   PROVIDERS,
-  supportsClaudeMaxReasoningEffort,
   UPLOAD_MAX_FILE_SIZE_MB_MAX,
   UPLOAD_MAX_FILE_SIZE_MB_MIN,
   type AgentProvider,
@@ -63,6 +63,7 @@ import {
   type ClaudePtyLifecycleSettings,
   type CloudflareTunnelSettings,
   type CodexModelOptions,
+  type ClaudeReasoningEffort,
   type CustomModelEntry,
   type CustomModelInput,
   type CustomModelPatch,
@@ -358,7 +359,7 @@ function normalizeClaudePreference(value?: {
   return {
     model,
     modelOptions: {
-      reasoningEffort: !supportsClaudeMaxReasoningEffort(model, customModels) && normalizedEffort === "max" ? "high" : normalizedEffort,
+      reasoningEffort: normalizeClaudeReasoningEffort(model, normalizedEffort, customModels),
       contextWindow: normalizeClaudeContextWindow(model, typeof value?.modelOptions?.contextWindow === "string" ? value.modelOptions.contextWindow : undefined, customModels),
     },
     planMode: value?.planMode === true,
@@ -1205,10 +1206,9 @@ function buildCustomModelFromInput(input: CustomModelInput): CustomModelEntry {
     id: input.id.trim(),
     label: input.label.trim(),
     provider: input.provider,
-    supportsEffort: input.supportsEffort,
+    ...(input.supportedEfforts ? { supportedEfforts: input.supportedEfforts } : {}),
     ...(input.aliases ? { aliases: input.aliases } : {}),
     ...(input.contextWindowOptions ? { contextWindowOptions: input.contextWindowOptions } : {}),
-    ...(input.supportsMaxReasoningEffort !== undefined ? { supportsMaxReasoningEffort: input.supportsMaxReasoningEffort } : {}),
     createdAt: now,
     updatedAt: now,
   }
@@ -1218,10 +1218,9 @@ function applyCustomModelPatch(existing: CustomModelEntry, patch: CustomModelPat
   return {
     ...existing,
     label: patch.label !== undefined ? patch.label.trim() : existing.label,
-    supportsEffort: patch.supportsEffort ?? existing.supportsEffort,
+    supportedEfforts: patch.supportedEfforts === null ? undefined : (patch.supportedEfforts ?? existing.supportedEfforts),
     aliases: patch.aliases === null ? undefined : patch.aliases ?? existing.aliases,
     contextWindowOptions: patch.contextWindowOptions === null ? undefined : patch.contextWindowOptions ?? existing.contextWindowOptions,
-    supportsMaxReasoningEffort: patch.supportsMaxReasoningEffort ?? existing.supportsMaxReasoningEffort,
     updatedAt: Date.now(),
   }
 }
@@ -1297,16 +1296,32 @@ export function seedCustomModelsFromBuiltins(): CustomModelEntry[] {
         id: model.id,
         label: model.label,
         provider: provId,
-        supportsEffort: model.supportsEffort,
+        ...(model.supportedEfforts ? { supportedEfforts: model.supportedEfforts } : {}),
         ...(model.aliases ? { aliases: model.aliases } : {}),
         ...(model.contextWindowOptions ? { contextWindowOptions: model.contextWindowOptions } : {}),
-        ...(model.supportsMaxReasoningEffort !== undefined ? { supportsMaxReasoningEffort: model.supportsMaxReasoningEffort } : {}),
         createdAt: 0,
         updatedAt: 0,
       })
     }
   }
   return out
+}
+
+function migrateToSupportedEfforts(raw: Record<string, unknown>): Pick<CustomModelEntry, "supportedEfforts"> {
+  if (Array.isArray(raw.supportedEfforts)) {
+    const filtered = raw.supportedEfforts.filter(
+      (v): v is ClaudeReasoningEffort => typeof v === "string" && isClaudeReasoningEffort(v),
+    )
+    return filtered.length > 0 ? { supportedEfforts: filtered } : {}
+  }
+  if (!raw.supportsEffort) return {}
+  const builtinModel = PROVIDERS
+    .find((p) => p.id === "claude")?.models
+    .find((m) => m.id === String(raw.id ?? ""))
+  if (builtinModel?.supportedEfforts) return { supportedEfforts: builtinModel.supportedEfforts }
+  return raw.supportsMaxReasoningEffort === true
+    ? { supportedEfforts: ["low", "medium", "high", "max"] as const }
+    : { supportedEfforts: ["low", "medium", "high"] as const }
 }
 
 function normalizeCustomModels<T>(value: T, warnings: string[]): CustomModelEntry[] {
@@ -1322,10 +1337,9 @@ function normalizeCustomModels<T>(value: T, warnings: string[]): CustomModelEntr
       id: String(raw.id ?? ""),
       label: String(raw.label ?? ""),
       provider: raw.provider === "codex" ? "codex" : "claude",
-      supportsEffort: raw.supportsEffort === true,
+      ...migrateToSupportedEfforts(raw),
       ...(Array.isArray(raw.aliases) ? { aliases: raw.aliases.map(String) } : {}),
       ...(Array.isArray(raw.contextWindowOptions) ? { contextWindowOptions: raw.contextWindowOptions } : {}),
-      ...(typeof raw.supportsMaxReasoningEffort === "boolean" ? { supportsMaxReasoningEffort: raw.supportsMaxReasoningEffort } : {}),
       createdAt: typeof raw.createdAt === "number" ? raw.createdAt : 0,
       updatedAt: typeof raw.updatedAt === "number" ? raw.updatedAt : 0,
     }

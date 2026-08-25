@@ -625,7 +625,7 @@ describe("read models", () => {
     })
 
     const custom = [
-      { id: "claude-plan-only", label: "Plan Only", provider: "claude" as const, supportsEffort: true, createdAt: 1, updatedAt: 1 },
+      { id: "claude-plan-only", label: "Plan Only", provider: "claude" as const, createdAt: 1, updatedAt: 1 },
     ]
     const snap = deriveChatSnapshot(
       state,

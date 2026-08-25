@@ -10,7 +10,7 @@ import {
   normalizeCodexModelId,
   isClaudeReasoningEffort,
   isCodexReasoningEffort,
-  supportsClaudeMaxReasoningEffort,
+  normalizeClaudeReasoningEffort,
   type AgentProvider,
   type ChatProviderPreferences,
   type ClaudeModelOptions,
@@ -148,7 +148,7 @@ export function normalizeClaudePreference(value?: {
   return {
     model,
     modelOptions: {
-      reasoningEffort: !supportsClaudeMaxReasoningEffort(model, customModels) && normalizedEffort === "max" ? "high" : normalizedEffort,
+      reasoningEffort: normalizeClaudeReasoningEffort(model, normalizedEffort, customModels),
       contextWindow,
     },
     planMode: Boolean(value?.planMode),
