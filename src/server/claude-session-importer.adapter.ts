@@ -2,19 +2,11 @@ import { statSync } from "node:fs"
 import { homedir } from "node:os"
 import type { EventStore } from "./event-store"
 import type { ChatRecord } from "./events"
-import { mapClaudeRecordsToEntries } from "./claude-session-mapper"
 import { log } from "../shared/log"
-import { scanClaudeSessions, locateClaudeSessionFile } from "./claude-session-scanner.adapter"
-import { parseClaudeSessionFile } from "./claude-session-parser.adapter"
 import { extractSessionId } from "../shared/claude-session-id"
 import type { ImportSessionsByIdsResult, SingleImportResultRow } from "../shared/protocol"
-import type { AnyValue } from "../shared/errors"
-import { isRecord } from "../shared/errors"
-import type {
-  ClaudeSessionCustomTitleRecord,
-  ClaudeSessionSummaryRecord,
-  ParsedClaudeSession,
-} from "./claude-session-types"
+import type { ImportableSession } from "./session-source"
+import { SESSION_SOURCES } from "./session-source-registry.adapter"
 
 export interface ImportClaudeSessionsResult {
   imported: number    // brand new sessions
@@ -23,10 +15,6 @@ export interface ImportClaudeSessionsResult {
   failed: number      // cwd missing or store error
   newProjects: number
 }
-
-const IMPORTED_SESSION_TITLE = "Imported session"
-const NEW_CHAT_TITLE = "New Chat"
-const TITLE_MAX_LENGTH = 60
 
 export interface ImportClaudeSessionsArgs {
   store: EventStore
@@ -43,128 +31,33 @@ function cwdExists(cwd: string): boolean {
   }
 }
 
-function extractUserText(content: AnyValue): string | null {
-  if (typeof content === "string") {
-    const trimmed = content.trim()
-    return trimmed ? trimmed : null
-  }
-  if (!Array.isArray(content)) return null
-  for (const block of content) {
-    if (!isRecord(block)) continue
-    if (block.type === "text" && typeof block.text === "string") {
-      const trimmed = block.text.trim()
-      if (trimmed) return trimmed
-    }
-  }
-  return null
-}
-
-function extractSummaryText(record: ClaudeSessionSummaryRecord): string | null {
-  const trimmed = record.summary?.trim()
-  return trimmed ? trimmed : null
-}
-
-function extractCustomTitleText(record: ClaudeSessionCustomTitleRecord): string | null {
-  const trimmed = record.customTitle?.trim()
-  return trimmed ? trimmed : null
-}
-
-function truncateTitle(text: string): string {
-  return text.slice(0, TITLE_MAX_LENGTH).trim()
-}
-
-function isCustomTitleRecord(record: ParsedClaudeSession["records"][number]): record is ClaudeSessionCustomTitleRecord {
-  return record.type === "custom-title"
-}
-
-function isSummaryRecord(record: ParsedClaudeSession["records"][number]): record is ClaudeSessionSummaryRecord {
-  return record.type === "summary"
-}
-
-function deriveCustomTitle(session: ParsedClaudeSession): string | null {
-  for (let i = session.records.length - 1; i >= 0; i -= 1) {
-    const record = session.records[i]
-    if (!isCustomTitleRecord(record)) continue
-    const text = extractCustomTitleText(record)
-    if (text) return truncateTitle(text)
-  }
-  return null
-}
-
-function deriveSummaryTitle(session: ParsedClaudeSession): string | null {
-  for (let i = session.records.length - 1; i >= 0; i -= 1) {
-    const record = session.records[i]
-    if (!isSummaryRecord(record)) continue
-    const text = extractSummaryText(record)
-    if (text) return truncateTitle(text)
-  }
-  return null
-}
-
-function deriveUserTitle(session: ParsedClaudeSession): string | null {
-  for (const record of session.records) {
-    if (record.type !== "user") continue
-    const recordRec = isRecord(record) ? record : null
-    const message = recordRec && isRecord(recordRec.message) ? recordRec.message : null
-    const content = message?.content
-    const text = extractUserText(content)
-    if (text) return truncateTitle(text)
-  }
-  return null
-}
-
-function deriveTitle(session: ParsedClaudeSession): string {
-  return deriveCustomTitle(session)
-    ?? deriveSummaryTitle(session)
-    ?? deriveUserTitle(session)
-    ?? IMPORTED_SESSION_TITLE
-}
-
-function legacyImportedTitleCandidates(session: ParsedClaudeSession): Set<string> {
-  const userTitle = deriveUserTitle(session)
-  const summaryTitle = deriveSummaryTitle(session)
-  return new Set([
-    summaryTitle ?? userTitle ?? IMPORTED_SESSION_TITLE,
-    userTitle ?? IMPORTED_SESSION_TITLE,
-    IMPORTED_SESSION_TITLE,
-    NEW_CHAT_TITLE,
-  ])
-}
-
 async function backfillImportedChatTitle(
   store: EventStore,
   chat: ChatRecord,
-  session: ParsedClaudeSession,
+  session: ImportableSession,
 ): Promise<boolean> {
-  const title = deriveTitle(session)
+  const title = session.title()
   if (chat.title === title) return false
-  if (!legacyImportedTitleCandidates(session).has(chat.title)) return false
+  if (!session.legacyTitleCandidates().has(chat.title)) return false
   await store.renameChat(chat.id, title)
   return true
 }
 
 /**
- * Extract the source record uuid from an entry _id.
- * Mapper format: `${uuid}-user`, `${uuid}-text-<n>`, `${uuid}-tool_call-<n>`,
- * `${uuid}-tool_result-<n>`. We match known trailing suffixes so that UUID v4
- * values (which contain dashes) are not split incorrectly.
- */
-function extractUuidFromEntryId(entryId: string): string | null {
-  const match = entryId.match(/^(.+)-(?:user|text-\d+|tool_call-\d+|tool_result-\d+)$/)
-  return match ? match[1] : null
-}
-
-/**
- * Collect the set of record uuids already stored for a chat.
+ * Collect the set of record keys already stored for a chat.
  * Entries with a random uuid prefix (records that had no uuid) will always
- * be absent from any record.uuid lookup — assumed acceptable since real Claude
+ * be absent from any record-key lookup — assumed acceptable since real Claude
  * sessions always include uuid.
  */
-function collectExistingUuids(store: EventStore, chatId: string): Set<string> {
+function collectExistingRecordKeys(
+  store: EventStore,
+  chatId: string,
+  session: ImportableSession,
+): Set<string> {
   const seen = new Set<string>()
   for (const entry of store.getMessages(chatId)) {
-    const uuid = extractUuidFromEntryId(entry._id)
-    if (uuid) seen.add(uuid)
+    const key = session.recordKeyFromEntryId(entry._id)
+    if (key) seen.add(key)
   }
   return seen
 }
@@ -172,15 +65,10 @@ function collectExistingUuids(store: EventStore, chatId: string): Set<string> {
 async function applyDelta(
   store: EventStore,
   chatId: string,
-  session: ParsedClaudeSession,
+  session: ImportableSession,
 ): Promise<number> {
-  const seen = collectExistingUuids(store, chatId)
-  const newRecords = session.records.filter(
-    (record) => !record.uuid || !seen.has(record.uuid),
-  )
-  if (newRecords.length === 0) return 0
-
-  const entries = mapClaudeRecordsToEntries(newRecords)
+  const seen = collectExistingRecordKeys(store, chatId, session)
+  const entries = session.newEntriesSince(seen)
   for (const entry of entries) {
     await store.appendMessage(chatId, entry)
   }
@@ -195,12 +83,12 @@ export type ImportOutcome =
 
 export async function importOneSession(
   store: EventStore,
-  session: ParsedClaudeSession,
+  session: ImportableSession,
 ): Promise<ImportOutcome> {
   // Check if a chat already exists for this sessionId
   let existingChat: ChatRecord | undefined
   for (const chat of store.state.chatsById.values()) {
-    if (!chat.deletedAt && chat.sessionTokensByProvider.claude === session.sessionId) {
+    if (!chat.deletedAt && chat.sessionTokensByProvider[session.provider] === session.sessionId) {
       existingChat = chat
       break
     }
@@ -235,7 +123,7 @@ export async function importOneSession(
     return { status: "failed", reason: "cwd_missing" }
   }
 
-  const entries = mapClaudeRecordsToEntries(session.records)
+  const entries = session.toEntries()
   if (entries.length === 0) {
     return { status: "skipped" }
   }
@@ -246,14 +134,14 @@ export async function importOneSession(
     const newProject = !projectBefore
 
     const chat = await store.createChat(project.id)
-    await store.setChatProvider(chat.id, "claude")
-    await store.renameChat(chat.id, deriveTitle(session))
+    await store.setChatProvider(chat.id, session.provider)
+    await store.renameChat(chat.id, session.title())
 
     for (const entry of entries) {
       await store.appendMessage(chat.id, entry)
     }
 
-    await store.setSessionTokenForProvider(chat.id, "claude", session.sessionId)
+    await store.setSessionTokenForProvider(chat.id, session.provider, session.sessionId)
     await store.setSourceHash(chat.id, session.sourceHash)
     return { status: "created", chatId: chat.id, newProject }
   } catch (error) {
@@ -262,11 +150,11 @@ export async function importOneSession(
   }
 }
 
-export async function importClaudeSessions(
+export async function importAllSessions(
   args: ImportClaudeSessionsArgs,
 ): Promise<ImportClaudeSessionsResult> {
   const { store, homeDir = homedir(), onProgress } = args
-  const sessions = scanClaudeSessions(homeDir)
+  const sessions = SESSION_SOURCES.flatMap((source) => source.scan(homeDir))
 
   let imported = 0
   let updated = 0
@@ -301,6 +189,12 @@ export async function importClaudeSessions(
   return { imported, updated, skipped, failed, newProjects }
 }
 
+/**
+ * @deprecated Name kept while the WS router still calls it; use
+ * `importAllSessions` — the scan is no longer claude-specific.
+ */
+export const importClaudeSessions = importAllSessions
+
 export interface SessionImportedInfo {
   chatId: string
   sessionId: string
@@ -315,6 +209,16 @@ export interface ImportSessionsByIdsArgs {
   onSessionImported?: (info: SessionImportedInfo) => void
 }
 
+/** First source that can locate the id owns it; a later one is never consulted. */
+function locateSession(homeDir: string, sessionId: string): { filePath: string; session: ImportableSession | null } | null {
+  for (const source of SESSION_SOURCES) {
+    const filePath = source.locate(homeDir, sessionId)
+    if (!filePath) continue
+    return { filePath, session: source.parse(filePath) }
+  }
+  return null
+}
+
 export async function importSessionsByIds(args: ImportSessionsByIdsArgs): Promise<ImportSessionsByIdsResult> {
   const { store, sessionIds, homeDir = homedir(), onSessionImported } = args
   const results: SingleImportResultRow[] = []
@@ -325,12 +229,12 @@ export async function importSessionsByIds(args: ImportSessionsByIdsArgs): Promis
       results.push({ sessionId: raw, status: "failed", error: "invalid_id" })
       continue
     }
-    const filePath = locateClaudeSessionFile(homeDir, sessionId)
-    if (!filePath) {
+    const located = locateSession(homeDir, sessionId)
+    if (!located) {
       results.push({ sessionId, status: "failed", error: "not_found" })
       continue
     }
-    const session = parseClaudeSessionFile(filePath)
+    const { filePath, session } = located
     if (!session) {
       results.push({ sessionId, status: "failed", error: "parse_failed" })
       continue

@@ -5,7 +5,7 @@ import path from "node:path"
 import { createFollowedSessionRegistry, type FollowedSessionRegistryDeps } from "./followed-session-registry"
 import { statSessionFile } from "./followed-session-io.adapter"
 import { importOneSession, importSessionsByIds, type SessionImportedInfo } from "./claude-session-importer.adapter"
-import { parseClaudeSessionFile } from "./claude-session-parser.adapter"
+import { claudeSessionSource } from "./session-source-registry.adapter"
 import { createTestEventStore } from "./storage/test-helpers"
 
 function makeRegistry(over: Partial<FollowedSessionRegistryDeps> = {}) {
@@ -118,7 +118,7 @@ describe("FollowedSessionRegistry integration (real fs + importer)", () => {
       const registry = createFollowedSessionRegistry({
         statFile: statSessionFile,
         runDelta: async (deltaChatId, sourcePath) => {
-          const session = parseClaudeSessionFile(sourcePath)
+          const session = claudeSessionSource.parse(sourcePath)
           if (session) await importOneSession(store, session)
         },
         isTurnActive: () => false,

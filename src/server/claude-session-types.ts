@@ -1,5 +1,7 @@
 // src/server/claude-session-types.ts
 
+import type { ParsedSession } from "./session-source"
+
 export interface ClaudeSessionRecordBase {
   type: string
   uuid?: string
@@ -64,12 +66,9 @@ export type ClaudeSessionRecord =
   | ClaudeSessionSystemRecord
   | ClaudeSessionRecordBase
 
-export interface ParsedClaudeSession {
-  sessionId: string
-  filePath: string
-  cwd: string
-  firstTimestamp: number
-  lastTimestamp: number
-  records: ClaudeSessionRecord[]
-  sourceHash: string
-}
+/**
+ * Claude's shape of the provider-agnostic `ParsedSession`. Kept as a named
+ * alias so the existing claude-side call sites (parser, scanner) read the same
+ * as before while the importer speaks only the generic contract.
+ */
+export type ParsedClaudeSession = ParsedSession<ClaudeSessionRecord>

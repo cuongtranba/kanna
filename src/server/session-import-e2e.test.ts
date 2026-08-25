@@ -5,7 +5,7 @@ import { join } from "node:path"
 import { importOneSession, importSessionsByIds } from "./claude-session-importer.adapter"
 import { createFollowedSessionRegistry } from "./followed-session-registry"
 import { statSessionFile } from "./followed-session-io.adapter"
-import { parseClaudeSessionFile } from "./claude-session-parser.adapter"
+import { claudeSessionSource } from "./session-source-registry.adapter"
 import { writeTribeSessionFixture } from "./__fixtures__/tribe-session-fixture"
 import { createTestEventStore } from "./storage/test-helpers"
 
@@ -40,7 +40,7 @@ describe("session import E2E (Tribe-shaped fixture)", () => {
       const registry = createFollowedSessionRegistry({
         statFile: statSessionFile,
         runDelta: async (cid, sourcePath) => {
-          const session = parseClaudeSessionFile(sourcePath)
+          const session = claudeSessionSource.parse(sourcePath)
           if (session) await importOneSession(store, session)
         },
         isTurnActive: () => false,
