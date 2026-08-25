@@ -5,6 +5,7 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { importClaudeSessions, importSessionsByIds } from "./claude-session-importer.adapter"
 import type { SessionImportedInfo } from "./claude-session-importer.adapter"
+import { writeCodexRolloutFixture } from "./__fixtures__/codex-rollout-fixture"
 import { createTestEventStore } from "./storage/test-helpers"
 
 function fresh() {
@@ -49,6 +50,15 @@ function seedSession(homeDir: string, realProj: string, sessionId: string) {
 function claudeProjectDir(homeDir: string, realProj: string) {
   const folderName = realProj.replace(/\//g, "-")
   return path.join(homeDir, ".claude", "projects", folderName)
+}
+
+/** `<homeDir>/.codex/sessions/YYYY/MM/DD` — the layout the codex scanner walks. */
+function codexDayDir(homeDir: string) {
+  return path.join(homeDir, ".codex", "sessions", "2026", "06", "07")
+}
+
+function seedCodexSession(homeDir: string, cwd: string, sessionId: string) {
+  return writeCodexRolloutFixture(codexDayDir(homeDir), { sessionId, cwd })
 }
 
 function md5File(filePath: string) {
@@ -514,6 +524,34 @@ describe("importSessionsByIds", () => {
       })
       expect(result.results[0].status).toBe("updated")
       expect(seen[0]).toMatchObject({ sessionId: SESSION_ID, sourcePath: jsonlPath })
+    } finally {
+      ctx.cleanup()
+    }
+  })
+
+  // The user-visible defect: a real codex session id pasted into the import
+  // dialog answered `not_found`, so ~1200 rollouts under `~/.codex/sessions`
+  // were unreachable while claude ids imported fine.
+  test("a codex session id resolves to a codex chat", async () => {
+    const ctx = fresh()
+    try {
+      const CODEX_ID = "7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d"
+      seedCodexSession(ctx.homeDir, ctx.realProj, CODEX_ID)
+      const store = createTestEventStore(ctx.dataDir)
+      await store.initialize()
+
+      const result = await importSessionsByIds({
+        store,
+        homeDir: ctx.homeDir,
+        sessionIds: [CODEX_ID],
+      })
+
+      expect(result.results[0]).toMatchObject({ sessionId: CODEX_ID, status: "created" })
+      const chatId = result.results[0].chatId
+      expect(chatId).toBeDefined()
+      const chat = chatId ? store.state.chatsById.get(chatId) : undefined
+      expect(chat?.provider).toBe("codex")
+      expect(chat?.sessionTokensByProvider.codex).toBe(CODEX_ID)
     } finally {
       ctx.cleanup()
     }
