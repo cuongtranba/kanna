@@ -1,14 +1,16 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, spyOn, test } from "bun:test"
 import { appendFileSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { isRecord } from "../shared/errors"
+import { log } from "../shared/log"
 import { safeJsonParse } from "../shared/safe-json"
 import {
   hasCodexSourceShrunk,
   parseCodexRolloutFile,
   parseCodexSourceHash,
   READ_CHUNK_BYTES,
+  type CodexLineClassification,
   type CodexParserDeps,
   type CodexParseResult,
 } from "./codex-session-parser.adapter"
@@ -61,6 +63,23 @@ function fakeClassify(rawLine: string, lineIndex: number, fallbackTimestamp: num
   return null
 }
 
+/**
+ * The companion classifier: the same decision as `fakeClassify`, plus WHY a
+ * line was dropped. Stands in for whatever `codex-rollout-line.ts` exports —
+ * the adapter only needs the three reasons told apart.
+ */
+function fakeClassifyWithReason(
+  rawLine: string,
+  lineIndex: number,
+  fallbackTimestamp: number,
+): CodexLineClassification {
+  if (rawLine.trim().length === 0) return { kind: "skipped", reason: "blank" }
+  const parsed = safeJsonParse(rawLine)
+  if (!isRecord(parsed)) return { kind: "skipped", reason: "unparseable" }
+  const record = fakeClassify(rawLine, lineIndex, fallbackTimestamp)
+  return record ? { kind: "record", record } : { kind: "skipped", reason: "dropped" }
+}
+
 /** Echoes the physical line index into `text`, so the index is directly assertable. */
 function echoIndexClassify(rawLine: string, lineIndex: number, fallbackTimestamp: number): CodexRolloutRecord | null {
   const record = fakeClassify(rawLine, lineIndex, fallbackTimestamp)
@@ -94,12 +113,29 @@ function writeRollout(dir: string, name: string, body: string): string {
   return filePath
 }
 
-/** Narrows to the happy case so tests read the session without a cast. */
-function expectParsed(result: CodexParseResult) {
+/** Narrows to the happy case so tests read the result without a cast. */
+function expectParsedResult(result: CodexParseResult) {
   if (result.kind !== "parsed") {
     throw new Error(`expected parsed, got ${result.kind}${result.kind === "rejected" ? `:${result.reason}` : ""}`)
   }
-  return result.session
+  return result
+}
+
+function expectParsed(result: CodexParseResult) {
+  return expectParsedResult(result).session
+}
+
+/** Captures what the adapter logged, and always restores the real logger. */
+function withLogSpy<T>(level: "warn" | "error", run: (messages: string[]) => T): T {
+  const messages: string[] = []
+  const spy = spyOn(log, level).mockImplementation((...args) => {
+    messages.push(args.map((arg) => String(arg)).join(" "))
+  })
+  try {
+    return run(messages)
+  } finally {
+    spy.mockRestore()
+  }
 }
 
 describe("parseCodexRolloutFile", () => {
@@ -307,6 +343,102 @@ describe("parseCodexRolloutFile", () => {
       const session = expectParsed(parseCodexRolloutFile(file, makeDeps()))
       expect(session.firstTimestamp).toBeGreaterThan(0)
       expect(session.lastTimestamp).toBe(session.firstTimestamp)
+    })
+  })
+})
+
+describe("unparseable-line accounting", () => {
+  test("counts corrupt lines and warns ONCE for the file", () => {
+    withTempDir((dir) => {
+      const file = writeRollout(
+        dir,
+        "rollout-corrupt.jsonl",
+        [
+          metaLine(),
+          "not json at all",
+          userLine("kept", 2000),
+          '{"type":"user","text":"half-writ',
+          // A recognised line the classifier deliberately drops — never corruption.
+          JSON.stringify({ type: "world_state" }),
+          "",
+        ].join("\n"),
+      )
+
+      const messages = withLogSpy("warn", (captured) => {
+        const result = expectParsedResult(
+          parseCodexRolloutFile(file, makeDeps({ classifyLineWithReason: fakeClassifyWithReason })),
+        )
+        expect(result.diagnostics.unparseableLines).toBe(2)
+        expect(result.diagnostics.truncatedFinalLine).toBe(false)
+        expect(result.session.records).toHaveLength(2)
+        return captured
+      })
+
+      expect(messages).toHaveLength(1)
+      expect(messages[0]).toContain("2 unparseable lines")
+      expect(messages[0]).toContain(file)
+    })
+  })
+
+  test("a truncated FINAL line is codex mid-write — not counted, not warned", () => {
+    withTempDir((dir) => {
+      // No trailing newline: this is exactly what a rollout looks like between
+      // the write of a record and the write of its `\n`.
+      const file = writeRollout(
+        dir,
+        "rollout-midwrite.jsonl",
+        `${metaLine()}\n${userLine("kept", 2000)}\n{"type":"user","text":"half-writ`,
+      )
+
+      const messages = withLogSpy("warn", (captured) => {
+        const result = expectParsedResult(
+          parseCodexRolloutFile(file, makeDeps({ classifyLineWithReason: fakeClassifyWithReason })),
+        )
+        expect(result.diagnostics.unparseableLines).toBe(0)
+        expect(result.diagnostics.truncatedFinalLine).toBe(true)
+        // The next tick re-reads the same byte offset, so the record arrives
+        // later at the SAME lineIndex. Nothing is lost and nothing is alarming.
+        expect(result.session.records.map((r) => r.lineIndex)).toEqual([0, 1])
+        return captured
+      })
+
+      expect(messages).toEqual([])
+    })
+  })
+
+  test("reports null — not zero — when no reason classifier is injected", () => {
+    withTempDir((dir) => {
+      const file = writeRollout(
+        dir,
+        "rollout-noreason.jsonl",
+        [metaLine(), "not json at all", userLine("kept", 2000), ""].join("\n"),
+      )
+
+      const messages = withLogSpy("warn", (captured) => {
+        const result = expectParsedResult(parseCodexRolloutFile(file, makeDeps()))
+        // `classifyLine` answers null for a blank line, a corrupt line and a
+        // dropped type alike, so zero would be a claim the adapter cannot make.
+        expect(result.diagnostics.unparseableLines).toBeNull()
+        expect(result.diagnostics.truncatedFinalLine).toBe(false)
+        return captured
+      })
+
+      expect(messages).toEqual([])
+    })
+  })
+
+  test("the reason classifier decides which records are retained", () => {
+    withTempDir((dir) => {
+      const file = writeRollout(
+        dir,
+        "rollout-reason-records.jsonl",
+        [metaLine(), "", userLine("a", 1), "garbage", userLine("b", 2), ""].join("\n"),
+      )
+
+      const session = withLogSpy("warn", () =>
+        expectParsed(parseCodexRolloutFile(file, makeDeps({ classifyLineWithReason: fakeClassifyWithReason }))),
+      )
+      expect(session.records.map((r) => r.lineIndex)).toEqual([0, 2, 4])
     })
   })
 })
