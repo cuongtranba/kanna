@@ -532,6 +532,9 @@ describe("against the on-disk fixture", () => {
       "token_count",
       "compacted",
       // world_state dropped here
+      "tool_call",
+      "assistant_message",
+      "tool_output",
       "assistant_message",
       "turn_complete",
     ])

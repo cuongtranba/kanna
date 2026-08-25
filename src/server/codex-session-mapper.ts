@@ -44,13 +44,16 @@ const NEW_CHAT_TITLE = "New Chat"
 const FALLBACK_MODEL = "codex"
 
 /**
- * A record's stable identity. **TOTAL — this never returns null.**
+ * A record's stable identity, minted into every entry `_id` this module
+ * produces. **TOTAL — this never returns null.**
  *
- * The codec slot it fills is declared `string | null`, and `null` there means
- * "cannot be identified", which `applyDelta` treats as ALWAYS-NEW — the append
- * storm. A codex record always has a `lineIndex` (the parser counts every
- * physical line), so there is nothing to be unsure about and the return type
- * says so. Widening it back to `string | null` re-opens the storm path.
+ * MODULE-LOCAL BY DESIGN. `SessionRecordCodec` carries no `recordKey` slot;
+ * `codexRecordKeyFromEntryId` is the only keying function the importer sees,
+ * and it reads the `_id` rather than the record. A codex record always has a
+ * `lineIndex` (the parser counts every physical line), so there is nothing to
+ * be unsure about — widening the return to `string | null` would put an
+ * unkeyable entry back on the wire, and an entry the inverse cannot recover
+ * reads as ALWAYS-NEW: the append storm.
  *
  * It deliberately does NOT include the session id: a key only needs to be
  * unique within its own chat, and one chat is one session. The `codex#` prefix
@@ -276,12 +279,18 @@ export function mapCodexRecordsToEntries(
     cwd: session.cwd,
     relocate: (externalPath: string) => externalPath,
   }
-  // Built AS WE GO over the records being mapped — records arrive in line order,
-  // so a call always precedes its output within one pass.
+  // Built over the WHOLE session, never over `records`. `createImportableSession`
+  // only ever passes the full list, but a mapper whose fidelity depends on that
+  // is one refactor away from silently losing the pairing — and the loss shows
+  // as a multi-file `apply_patch` whose result joins to no card it opened, with
+  // no error anywhere. Reading the session makes the subset case impossible
+  // rather than merely unused.
   const callsById = new Map<string, CodexToolCallRecord>()
+  for (const record of session.records) {
+    if (record.kind === "tool_call") callsById.set(record.callId, record)
+  }
   const entries: TranscriptEntry[] = []
   for (const record of records) {
-    if (record.kind === "tool_call") callsById.set(record.callId, record)
     entries.push(...mapRecord(record, session, ctx, callsById))
   }
   return entries
@@ -312,7 +321,6 @@ function codexLegacyTitleCandidates(): ReadonlySet<string> {
 
 export const codexSessionCodec: SessionRecordCodec<CodexRolloutRecord> = {
   map: mapCodexRecordsToEntries,
-  recordKey: codexRecordKey,
   recordKeyFromEntryId: codexRecordKeyFromEntryId,
   deriveTitle: deriveCodexTitle,
   legacyTitleCandidates: codexLegacyTitleCandidates,
