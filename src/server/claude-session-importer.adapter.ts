@@ -11,7 +11,11 @@ import type {
   SessionParseResult,
   SessionSource,
 } from "./session-source"
-import { createSessionSources } from "./session-source-registry.adapter"
+import {
+  createSessionSources,
+  scanAllSessions,
+  type SessionScanRefusal,
+} from "./session-source-registry.adapter"
 
 export interface ImportClaudeSessionsResult {
   imported: number    // brand new sessions
@@ -157,6 +161,15 @@ export async function importOneSession(
   }
 }
 
+/** `subagent=99, too_large=4` — one line naming every reason and its count. */
+function summarizeRefusals(refusals: readonly SessionScanRefusal[]): string {
+  const counts = new Map<string, number>()
+  for (const refusal of refusals) {
+    counts.set(refusal.reason, (counts.get(refusal.reason) ?? 0) + 1)
+  }
+  return [...counts.entries()].map(([reason, count]) => `${reason}=${count}`).join(", ")
+}
+
 /**
  * Scans EVERY registered provider and returns ONE summed tally. Two providers
  * can hold the same session id (unrelated sessions that happen to share a uuid)
@@ -167,13 +180,26 @@ export async function importAllSessions(
   args: ImportClaudeSessionsArgs,
 ): Promise<ImportClaudeSessionsResult> {
   const { store, homeDir = homedir(), maxBytes, onProgress } = args
-  const sessions = createSessionSources(maxBytes).flatMap((source) => source.scan(homeDir))
+  const { sessions, refusals } = scanAllSessions(homeDir, maxBytes)
 
   let imported = 0
   let updated = 0
   let skipped = 0
-  let failed = 0
+  // A refused file never reaches `importOneSession`, so before this it landed in
+  // NONE of the four tallies and was logged nowhere — a user with 99 subagent
+  // rollouts and 4 over-cap files read "imported N" and could not learn that
+  // 103 files had been refused, let alone why.
+  let failed = refusals.length
   let newProjects = 0
+
+  if (refusals.length > 0) {
+    log.warn(
+      "[kanna/import] refused",
+      refusals.length,
+      "source files:",
+      summarizeRefusals(refusals),
+    )
+  }
 
   let scanned = 0
   for (const session of sessions) {
@@ -252,7 +278,7 @@ export interface ImportSessionsByIdsArgs {
 
 /**
  * First source that can locate the id owns it; a later one is never consulted.
- * With `SESSION_SOURCES` ordered claude-first, a uuid present under both
+ * With `createSessionSources` ordered claude-first, a uuid present under both
  * providers therefore resolves to the claude session.
  */
 function locateSession(

@@ -566,7 +566,7 @@ describe("importSessionsByIds", () => {
     }
   })
 
-  // Documented precedence: `SESSION_SOURCES` is ordered claude-first and the
+  // Documented precedence: `createSessionSources` is ordered claude-first and the
   // first source that LOCATES the id owns it. The two files are unrelated
   // sessions that merely share a uuid; claude wins because that is what every
   // id resolved to before codex was registered.
