@@ -15,15 +15,28 @@
 // is a leaf: it wraps `node:fs` + `node:crypto` and holds no domain knowledge
 // about what a rollout line means. The classifier is the domain half and lives
 // in a pure module.
+//
+// A dropped line is COUNTED when the injected classifier can say why it was
+// dropped (`classifyLineWithReason`), because "corrupt" and "deliberately not
+// retained" are the same `null` otherwise — and a rollout quietly missing turns
+// still imports green. See `CodexLineDiagnostics`.
 
 import { createHash } from "node:crypto"
 import { closeSync, openSync, readSync, statSync } from "node:fs"
 import { StringDecoder } from "node:string_decoder"
+import { errorMessage, toError } from "../shared/errors"
+import { log } from "../shared/log"
 import type { CodexRolloutRecord, CodexSessionMeta } from "./codex-session-types"
 import type { ParsedSession } from "./session-source"
 
-/** Bytes read per `readSync`. One page-friendly MiB; the remainder is carried. */
-const READ_CHUNK_BYTES = 1024 * 1024
+/**
+ * Bytes read per `readSync`. One page-friendly MiB; the remainder is carried.
+ *
+ * Exported because the boundary-straddling test has to build a line that lands
+ * on it — a second copy in the test with a "keep these in sync" comment is the
+ * drift this repo bans.
+ */
+export const READ_CHUNK_BYTES = 1024 * 1024
 
 /**
  * Bytes hashed from each end of the file for `sourceHash`. Hashing the whole
@@ -32,8 +45,67 @@ const READ_CHUNK_BYTES = 1024 * 1024
  */
 const HASH_WINDOW_BYTES = 64 * 1024
 
-/** Prefix of `sourceHash`. Readable on purpose — a future shrink-guard parses it. */
+/** Prefix of `sourceHash`. Readable on purpose — `parseCodexSourceHash` parses it. */
 export const CODEX_SOURCE_HASH_PREFIX = "codex:v1"
+
+/** The facts `sourceHash` carries in the clear. See `computeSourceHash`. */
+export interface CodexSourceHashParts {
+  readonly size: number
+  readonly mtimeMs: number
+  readonly digest: string
+}
+
+function positiveNumberOrNull(raw: string | undefined): number | null {
+  // `Number("")` is 0, so an empty field has to be rejected before the parse.
+  if (raw === undefined || raw.length === 0) return null
+  const value = Number(raw)
+  return Number.isFinite(value) && value >= 0 ? value : null
+}
+
+/**
+ * Reads `size` / `mtimeMs` / `digest` back off a `sourceHash`, or null when the
+ * string was not minted by THIS version of `computeSourceHash`.
+ *
+ * Null is not an error: a hash from another provider, or from a future
+ * `codex:v2`, simply carries no size this code may reason about.
+ */
+export function parseCodexSourceHash(sourceHash: string): CodexSourceHashParts | null {
+  const parts = sourceHash.split(":")
+  if (parts.length !== 5) return null
+  if (`${parts[0]}:${parts[1]}` !== CODEX_SOURCE_HASH_PREFIX) return null
+  const size = positiveNumberOrNull(parts[2])
+  const mtimeMs = positiveNumberOrNull(parts[3])
+  const digest = parts[4] ?? ""
+  if (size === null || mtimeMs === null || digest.length === 0) return null
+  return { size, mtimeMs, digest }
+}
+
+/**
+ * True when the file behind `currentSourceHash` is SMALLER than the one behind
+ * `previousSourceHash` — the one thing a codex delta import must refuse.
+ *
+ * A codex record key is `codex#<lineIndex>` and `lineIndex` is a pure function
+ * of byte position, so any rewrite that shifts line numbers (a rotation, a
+ * truncation, a re-serialised rollout) re-keys every record past the shift.
+ * `applyDelta` then reads all of them as new and re-appends the whole
+ * transcript with no error anywhere. A shrink is the one such rewrite that can
+ * be DETECTED without re-reading the file, because the size rides the hash.
+ *
+ * The live-tail path is already covered by the registry's
+ * `stat.size > entry.lastSize` gate; the manual paths — re-importing an
+ * already-imported id, and "Import all" — have no size gate at all and are why
+ * this exists. **Callers on those paths must consult it before applying a
+ * delta** and refuse visibly (a full re-import is the honest recovery).
+ *
+ * False when either hash is unreadable: absence of evidence, not evidence of
+ * absence — an unparseable hash says nothing about the file's size.
+ */
+export function hasCodexSourceShrunk(previousSourceHash: string, currentSourceHash: string): boolean {
+  const previous = parseCodexSourceHash(previousSourceHash)
+  const current = parseCodexSourceHash(currentSourceHash)
+  if (previous === null || current === null) return false
+  return current.size < previous.size
+}
 
 /**
  * Why a rollout produced no session. Distinguishing these is the whole reason
@@ -53,8 +125,48 @@ export type CodexParseRejection =
   /** Readable and identified, but the classifier retained nothing. */
   | "no_records"
 
+/**
+ * Why one physical line produced no record.
+ *
+ * `classifyLine` collapses all three onto `null`, which is why a half-written
+ * or disk-corrupted rollout imports as a transcript quietly missing turns under
+ * a green "imported". Only `unparseable` is a defect worth telling anyone about
+ * — `blank` and `dropped` are the format working as designed.
+ */
+export type CodexLineSkipReason = "blank" | "unparseable" | "dropped"
+
+export type CodexLineClassification =
+  | { readonly kind: "record"; readonly record: CodexRolloutRecord }
+  | { readonly kind: "skipped"; readonly reason: CodexLineSkipReason }
+
+/** What the scan noticed about lines it kept nothing from. */
+export interface CodexLineDiagnostics {
+  /**
+   * Physical lines the classifier could not parse at all — "codex changed its
+   * format" or "your disk is failing", as distinct from a deliberate drop.
+   *
+   * `null` means CANNOT DISTINGUISH: no `classifyLineWithReason` was injected,
+   * so a corrupt line and an intentional drop are the same `null` and any count
+   * would be a claim this adapter is not entitled to make. Zero means the file
+   * was scanned WITH a reason classifier and held no corrupt line.
+   */
+  readonly unparseableLines: number | null
+  /**
+   * The file's last line had no trailing newline and did not parse — codex
+   * caught mid-write. Excluded from `unparseableLines` on purpose: the next
+   * tick re-reads the same byte offset and the record arrives at the SAME
+   * `lineIndex`, so this is the design working, not corruption, and warning on
+   * it would mean an alarming line every poll of every actively-written file.
+   */
+  readonly truncatedFinalLine: boolean
+}
+
 export type CodexParseResult =
-  | { readonly kind: "parsed"; readonly session: ParsedSession<CodexRolloutRecord> }
+  | {
+      readonly kind: "parsed"
+      readonly session: ParsedSession<CodexRolloutRecord>
+      readonly diagnostics: CodexLineDiagnostics
+    }
   | { readonly kind: "tooLarge"; readonly size: number; readonly maxBytes: number }
   | { readonly kind: "rejected"; readonly reason: CodexParseRejection }
 
@@ -70,6 +182,16 @@ export interface CodexParserDeps {
    * been seen, and the file's mtime before that.
    */
   classifyLine(rawLine: string, lineIndex: number, fallbackTimestamp: number): CodexRolloutRecord | null
+  /**
+   * OPTIONAL. The same decision as `classifyLine`, plus WHY a line was dropped.
+   *
+   * When supplied it is used INSTEAD of `classifyLine` — one parse per line,
+   * full information. When absent the adapter cannot tell a corrupt line from
+   * an intentional drop and reports `unparseableLines: null` rather than
+   * guessing. `classifyLine` stays required so a host that has not adopted the
+   * companion classifier is unchanged.
+   */
+  classifyLineWithReason?(rawLine: string, lineIndex: number, fallbackTimestamp: number): CodexLineClassification
   isSubagentMeta(meta: CodexSessionMeta): boolean
   /** Files larger than this are refused as `tooLarge` before a byte is read. */
   maxBytes: number
@@ -113,6 +235,43 @@ interface ScanState {
   first: number
   last: number
   fallbackTimestamp: number
+  unparseableLines: number
+  truncatedFinalLine: boolean
+}
+
+/**
+ * A throw that came out of the INJECTED classifier rather than out of the file.
+ *
+ * Private, and it exists only so the one catch below can tell the two apart:
+ * `unreadable` is documented as an IO failure, so reporting a classifier bug as
+ * one presents a whole-corpus regression to the user as "all my rollouts are
+ * unreadable" and tells the operator nothing about where to look.
+ */
+class ClassifierFailure extends Error {
+  readonly reason: Error
+
+  constructor(reason: Error) {
+    super(reason.message)
+    this.name = "ClassifierFailure"
+    this.reason = reason
+  }
+}
+
+/** One line → a record or the reason there is none. Reasons only when injected. */
+function classifyOne(
+  text: string,
+  lineIndex: number,
+  state: ScanState,
+  deps: CodexParserDeps,
+): CodexLineClassification {
+  try {
+    if (deps.classifyLineWithReason) return deps.classifyLineWithReason(text, lineIndex, state.fallbackTimestamp)
+    const record = deps.classifyLine(text, lineIndex, state.fallbackTimestamp)
+    // No reason dep: a drop is a drop, and `unparseableLines` stays null.
+    return record ? { kind: "record", record } : { kind: "skipped", reason: "dropped" }
+  } catch (error) {
+    throw new ClassifierFailure(toError(error))
+  }
 }
 
 /**
@@ -122,12 +281,16 @@ interface ScanState {
 function consumeLine(line: string, lineIndex: number, state: ScanState, deps: CodexParserDeps): boolean {
   // A `\r\n` file must not hand the classifier a trailing CR.
   const text = line.endsWith("\r") ? line.slice(0, -1) : line
-  // Blank lines can never classify. Skipping them without calling out is the
-  // one shortcut taken here; `lineIndex` has already accounted for them.
+  // Blank lines can never classify, and their reason is not in doubt, so they
+  // never reach the classifier; `lineIndex` has already accounted for them.
   if (text.trim().length === 0) return true
 
-  const record = deps.classifyLine(text, lineIndex, state.fallbackTimestamp)
-  if (!record) return true
+  const classified = classifyOne(text, lineIndex, state, deps)
+  if (classified.kind === "skipped") {
+    if (classified.reason === "unparseable") state.unparseableLines += 1
+    return true
+  }
+  const record = classified.record
 
   if (!state.meta && record.kind === "session_meta") {
     state.meta = record.meta
@@ -177,7 +340,15 @@ function scanFile(fd: number, buffer: Buffer, size: number, state: ScanState, de
 
   // A final line with no trailing newline is a real line, not a remainder.
   pending += decoder.end()
-  if (pending.length > 0) consumeLine(pending, lineIndex, state, deps)
+  if (pending.length === 0) return
+  const unparseableBefore = state.unparseableLines
+  consumeLine(pending, lineIndex, state, deps)
+  if (state.unparseableLines > unparseableBefore) {
+    // Codex caught mid-write. Expected on every actively-written rollout, so it
+    // is recorded as its own fact instead of inflating the corruption count.
+    state.unparseableLines = unparseableBefore
+    state.truncatedFinalLine = true
+  }
 }
 
 /**
@@ -205,6 +376,8 @@ export function parseCodexRolloutFile(filePath: string, deps: CodexParserDeps): 
     first: Number.POSITIVE_INFINITY,
     last: Number.NEGATIVE_INFINITY,
     fallbackTimestamp: mtimeMs,
+    unparseableLines: 0,
+    truncatedFinalLine: false,
   }
 
   let sourceHash: string
@@ -220,7 +393,15 @@ export function parseCodexRolloutFile(filePath: string, deps: CodexParserDeps): 
     // and the early-out on a subagent meta must not skip the head/tail reads.
     sourceHash = computeSourceHash(fd, buffer, size, mtimeMs)
     scanFile(fd, buffer, size, state, deps)
-  } catch {
+  } catch (error) {
+    // Both outcomes are still `unreadable` — `SessionSource.parse` promises
+    // never to throw and the rejection vocabulary is shared with every other
+    // provider — but the two are not the same fact, so the log says which.
+    if (error instanceof ClassifierFailure) {
+      log.error(`[kanna/import] rollout classifier threw ${filePath}: ${error.reason.message}`)
+    } else {
+      log.error(`[kanna/import] rollout read failed ${filePath}: ${errorMessage(error)}`)
+    }
     return rejected("unreadable")
   } finally {
     try {
@@ -230,13 +411,32 @@ export function parseCodexRolloutFile(filePath: string, deps: CodexParserDeps): 
     }
   }
 
+  // Once per file, and only for corruption — a truncated final line is already
+  // excluded, so an actively-written rollout polled every two seconds says
+  // nothing. This is the line that separates "codex changed its format" from
+  // "your disk is failing"; without it both import green and short a few turns.
+  if (state.unparseableLines > 0) {
+    log.warn(`[kanna/import] rollout had ${state.unparseableLines} unparseable lines ${filePath}`)
+  }
+
+  // Order is the order of the QUESTIONS, not of the checks that are cheapest:
+  // "did anything identify this session" precedes "was anything retained".
+  // Reversed, an empty file and a non-rollout JSONL both reported "readable and
+  // identified, but nothing was retained" — a sentence about a file that was
+  // never identified at all. `no_records` is last and, because the `meta`
+  // record is itself retained, currently unreachable; it stays as the honest
+  // answer if the retain table ever stops keeping it.
   if (state.isSubagent) return rejected("subagent")
-  if (state.records.length === 0) return rejected("no_records")
   if (!state.meta) return rejected("no_session_meta")
   if (!state.meta.cwd) return rejected("no_cwd")
+  if (state.records.length === 0) return rejected("no_records")
 
   return {
     kind: "parsed",
+    diagnostics: {
+      unparseableLines: deps.classifyLineWithReason ? state.unparseableLines : null,
+      truncatedFinalLine: state.truncatedFinalLine,
+    },
     session: {
       provider: "codex",
       sessionId: state.meta.sessionId,
