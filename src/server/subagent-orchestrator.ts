@@ -7,7 +7,9 @@ import {
   withSpan,
   SUBAGENT_RUN_DURATION_MS,
   SUBAGENT_RUN_FINISHED,
+  SUBAGENT_TOKENS,
 } from "./observability"
+import { splitBilledTokens } from "../shared/token-pricing"
 import { deriveChunkLabel } from "../shared/loop-progress"
 import type {
   AgentProvider,
@@ -242,6 +244,21 @@ export type BackgroundRunOutcome =
 // `subagentRunTimeoutMs` app setting / `KANNA_SUBAGENT_RUN_TIMEOUT_MS` env,
 // wired at AgentCoordinator construction; tests override via
 // SubagentOrchestratorDeps.runTimeoutMs.
+/**
+ * Records what one delegated run spent. Only the completed path reports usage
+ * — a failed or cancelled run carries none — so a run that ends any other way
+ * contributes nothing rather than a zero.
+ *
+ * No `model` attribute: a subagent's model is its own configured one, and the
+ * run-duration histogram beside this already dimensions by provider alone.
+ */
+function recordSubagentSpend(provider: AgentProvider, usage: ProviderUsage | undefined): void {
+  if (!usage) return
+  for (const [kind, count] of splitBilledTokens(usage)) {
+    addCounter(SUBAGENT_TOKENS, count, { provider, kind })
+  }
+}
+
 const DEFAULT_RUN_TIMEOUT_MS = 600_000
 const SUBAGENT_HISTORY_PRIMER_TAIL_LIMIT = 1000
 
@@ -1110,6 +1127,7 @@ export class SubagentOrchestrator {
         finalContent: finalText,
         usage,
       })
+      recordSubagentSpend(args.subagent.provider, usage)
       try {
         this.deps.onRunTerminal?.(args.chatId, runId, "completed")
       } catch (err) {

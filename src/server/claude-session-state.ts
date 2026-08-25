@@ -118,6 +118,17 @@ export interface ActiveTurn {
    * — see cron/fire.ts.
    */
   cronRun?: import("../shared/cron/types").CronRunTag
+  /**
+   * Billed usage from this turn's result entry, stashed by the runner for the
+   * same reason `startedAt` and `cronRun` live here: `onTurnTerminal` carries
+   * only `(chatId, outcome)`, and widening it would ripple through 24 call
+   * sites to serve one observer.
+   *
+   * Absent for a turn that ended without a result — a cancel, a spawn failure.
+   * Those reported no tokens, which is not the same claim as zero tokens, so
+   * the observer records nothing rather than a zero.
+   */
+  usage?: import("../shared/subagent-types").ProviderUsage
   // _id of the user_prompt entry that triggered this turn (when appended on
   // this turn). Used to attribute main-Claude-initiated subagent runs to the
   // originating user message.

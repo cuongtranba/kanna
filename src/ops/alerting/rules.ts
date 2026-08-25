@@ -13,7 +13,10 @@ import {
   PROCESS_RSS_BYTES,
   SUBAGENT_RUN_FINISHED,
   SUBAGENT_RUN_DURATION_MS,
+  SUBAGENT_TOKENS,
+  TURN_COST_USD,
   TURN_DURATION_MS,
+  TURN_TOKENS,
 } from "../../server/observability"
 import { TICKET_SCOPE_ANNOTATION } from "./webhook-payload"
 
@@ -41,6 +44,9 @@ export const EXPORTED_PROM_METRICS: readonly string[] = [
   "kanna_autocontinue_fired_total",
   "kanna_queued_message_recovered_total",
   "kanna_loop_wake_recovered_total",
+  `${promMetricName(TURN_TOKENS)}_total`,
+  `${promMetricName(TURN_COST_USD)}_total`,
+  `${promMetricName(SUBAGENT_TOKENS)}_total`,
   ...[turnDuration, subagentDuration].flatMap((base) => [
     `${base}_bucket`,
     `${base}_count`,

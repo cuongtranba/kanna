@@ -160,7 +160,14 @@ import {
   type SessionStateQueryDeps,
 } from "./claude-session-state-queries"
 import * as agentDepsBuilders from "./agent-deps-builders"
-import { recordHistogram, TURN_DURATION_MS } from "./observability"
+import {
+  addCounter,
+  recordHistogram,
+  TURN_COST_USD,
+  TURN_DURATION_MS,
+  TURN_TOKENS,
+} from "./observability"
+import { splitBilledTokens } from "../shared/token-pricing"
 import type {
   AgentCoordinatorArgs,
   ClaudeSessionLifecycleOptions,
@@ -185,6 +192,24 @@ const DEFAULT_BACKGROUND_TASK_MAX_WAKES = 3
 // entry arrives within this window. system_init is the SDK init echo (precedes
 // model inference), so 2 min is generous; env-tunable per deployment.
 const DEFAULT_OPENROUTER_FIRST_ENTRY_TIMEOUT_MS = 2 * 60 * 1000
+
+/**
+ * Records what one turn spent, off the usage its runner stashed on the
+ * ActiveTurn. A turn that reported nothing records nothing: absent usage means
+ * the provider told us nothing, which is a different claim from zero.
+ */
+function recordTurnSpend(active: ActiveTurn): void {
+  const usage = active.usage
+  if (!usage) return
+  const attributes = { provider: active.provider, model: active.model }
+  for (const [kind, count] of splitBilledTokens(usage)) {
+    addCounter(TURN_TOKENS, count, { ...attributes, kind })
+  }
+  const cost = usage.costUsd
+  if (cost !== undefined && Number.isFinite(cost) && cost >= 0) {
+    addCounter(TURN_COST_USD, cost, attributes)
+  }
+}
 
 // Thrown by Claude spawn paths when the OAuth pool has tokens but every one
 // is currently unusable (rate-limited, errored, disabled, or reserved by
@@ -307,6 +332,7 @@ export class AgentCoordinator {
           model: active.model,
           outcome,
         })
+        recordTurnSpend(active)
       }
       const tag = active?.cronRun
       if (!tag) return

@@ -28,6 +28,48 @@ export function computeCostUsd(usage: ProviderUsage, price: ModelPrice): number 
   )
 }
 
+/**
+ * The billed usage a result entry reports, with the entry-level cost folded in.
+ *
+ * Providers put the cost on the entry, inside `usage`, or nowhere at all, and
+ * the entry-level value wins because that is the one the provider itself
+ * totalled. Returns undefined when neither is present: "nothing was reported"
+ * has to stay distinguishable from "this turn was free".
+ */
+export function billedUsageOfResult(
+  entry: { usage?: ProviderUsage; costUsd?: number },
+): ProviderUsage | undefined {
+  const costUsd = entry.costUsd ?? entry.usage?.costUsd
+  if (!entry.usage && costUsd === undefined) return undefined
+  return { ...entry.usage, ...(costUsd !== undefined ? { costUsd } : {}) }
+}
+
+/** The disjoint classes billed tokens are reported under. */
+export type BilledTokenKind = "input" | "cached_input" | "output"
+
+/**
+ * Splits one turn's usage into classes that PARTITION the billed tokens, so
+ * summing them yields the total and never double-counts.
+ *
+ * `inputTokens` arrives already including the cache reads, so the non-cached
+ * remainder is what `input` means here — the same subtraction `computeCostUsd`
+ * makes, kept beside it because the two must never disagree about what was
+ * billed. Kinds with nothing to report are omitted: a metric point of zero is
+ * a claim that zero tokens were billed, which is not what "the provider told
+ * us nothing" means.
+ */
+export function splitBilledTokens(
+  usage: ProviderUsage,
+): ReadonlyArray<readonly [BilledTokenKind, number]> {
+  const cached = nonNeg(usage.cachedInputTokens)
+  const counts: ReadonlyArray<readonly [BilledTokenKind, number]> = [
+    ["input", Math.max(0, nonNeg(usage.inputTokens) - cached)],
+    ["cached_input", cached],
+    ["output", nonNeg(usage.outputTokens)],
+  ]
+  return counts.filter(([, count]) => count > 0)
+}
+
 // USD per 1M tokens. Approximate list prices as of 2026-06; used only as a
 // fallback when the provider does not report cost. Update when prices change.
 const STATIC_PRICES: ReadonlyArray<readonly [string, ModelPrice]> = [

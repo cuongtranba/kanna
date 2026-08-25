@@ -35,6 +35,42 @@ export const TURN_DURATION_MS = "kanna.turn.duration_ms"
 export const SUBAGENT_RUN_DURATION_MS = "kanna.subagent.run.duration_ms"
 
 /**
+ * Tokens billed for one chat turn, split by `kind` — the only metric that
+ * answers "what is this install spending", which turn and run counts cannot:
+ * a 200k-token turn and a 2k-token turn are one turn each.
+ *
+ * One instrument with a `kind` attribute rather than three named metrics, so
+ * `sum by (kind)` separates them and a bare `sum` is the billable total. A new
+ * token class the providers start reporting is a new attribute VALUE, not a
+ * new metric name an alert rule would have to learn.
+ *
+ * Attributes are `provider`, `model` and `kind` — deliberately NOT `chat_id`,
+ * which is unbounded and would multiply the fleet's series count by every chat
+ * anyone ever opens. High-cardinality identity belongs on spans.
+ *
+ * The `kind` values PARTITION the billed tokens (see `splitBilledTokens`), so
+ * a bare `sum` is the total and never double-counts.
+ */
+export const TURN_TOKENS = "kanna.turn.tokens"
+
+/**
+ * What the provider says one turn cost, in USD. Recorded only when the
+ * provider reports it: a turn whose cost is unknown records nothing rather
+ * than a zero, because a zero is indistinguishable from "free" and would drag
+ * any fleet total toward it. PTY-mode turns have no price resolver wired, so
+ * this metric is deliberately sparser than `TURN_TOKENS`.
+ */
+export const TURN_COST_USD = "kanna.turn.cost_usd"
+
+/**
+ * Tokens billed for one delegated subagent run, split the same way as
+ * `TURN_TOKENS`. Separate from it because a subagent run is not a chat turn
+ * and never passes through the turn-terminal choke point — and because a loop
+ * spends most of its budget here, where turn counts show nothing at all.
+ */
+export const SUBAGENT_TOKENS = "kanna.subagent.tokens"
+
+/**
  * Explicit bucket boundaries for the duration histograms above, in ms.
  *
  * OTel's default boundaries stop at 10s. A turn runs seconds to tens of

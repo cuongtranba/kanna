@@ -1,0 +1,6 @@
+---
+target: c3-210
+scope: insert
+base: c3-210#n10318@v1:sha256:cdd19a6bd6d4ddb1a4ea9d799c955b24809af3a11232ae0967dffa63f0618e82
+---
+| onTurnTerminal token spend | OUT | The same turn-terminal observer records the turn's token spend (c3-234 TURN_TOKENS / TURN_COST_USD) beside the duration, reading ActiveTurn.usage. onTurnTerminal's signature stays (chatId, outcome, error?) — widening it would ripple through 24 call sites to serve one observer — so both runners stash the result entry's usage onto ActiveTurn where they already set hasFinalResult: Claude and OpenRouter in claude-session-runner.ts, Codex in claude-turn-runner.ts, both through c3-307 billedUsageOfResult so the entry-vs-usage cost precedence is settled in one place. A terminal with no result entry (cancel, spawn failure) stashed nothing and records nothing rather than a zero. Subagent spend never passes through here and is recorded separately at the subagent_run_completed emission, which is where a loop's per-iteration cost actually lands. See adr-20260825-fleet-token-spend-metrics | c3-234 | src/server/agent-coordinator.ts, src/server/claude-session-state.ts, src/server/claude-session-runner.ts, src/server/claude-turn-runner.ts |

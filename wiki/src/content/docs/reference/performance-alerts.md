@@ -111,6 +111,35 @@ what you want while the cause is still live.
 | `kanna_turn_duration_ms` | End-to-end wall clock of one chat turn, spawn included |
 | `kanna_subagent_run_duration_ms` | End-to-end wall clock of one delegated subagent run |
 | `kanna_subagent_run_finished_total` | Subagent runs, labelled by outcome |
+| `kanna_turn_tokens_total` | Tokens billed for a chat turn, labelled by `provider`, `model` and `kind` |
+| `kanna_turn_cost_usd_total` | What the provider said a turn cost, labelled by `provider` and `model` |
+| `kanna_subagent_tokens_total` | Tokens billed for a delegated subagent run, labelled by `provider` and `kind` |
 
 All carry `service_name` (`kanna-<machine name>`) and, from 1.38.0,
 `service_version`.
+
+No rule queries the three token metrics yet — they are exported so a spend
+question can be answered at all, and a threshold for "too much" is a policy
+choice nobody has made. They are listed here because a rule may name only a
+metric on this list.
+
+### Reading the token metrics
+
+The `kind` values **partition** the billed tokens (`input` is the non-cached
+remainder, because a provider's `inputTokens` already includes its cache
+reads), so `sum` is the billable total and `sum by (kind)` splits it without
+double-counting:
+
+```promql
+sort_desc(sum by (job) (increase(kanna_turn_tokens_total[24h])))
+sum by (job, kind) (increase(kanna_turn_tokens_total[24h]))
+```
+
+A loop's per-iteration cost is a **subagent run, not a chat turn**, so a loop
+that looks idle in `kanna_turn_tokens_total` shows up in
+`kanna_subagent_tokens_total`. Check both before concluding an install is quiet.
+
+**A missing series means unknown, never zero.** A turn that ended without a
+result entry reports no usage, and PTY-mode turns have no price resolver wired
+at all — so `kanna_turn_cost_usd_total` is deliberately sparser than the token
+counters. Derive spend from tokens and your own rates when the cost is absent.
