@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.42.0](https://github.com/cuongtranba/kanna/compare/v1.41.7...v1.42.0) (2026-08-25)
+
+
+### Features
+
+* **observability:** export per-turn and per-subagent token spend ([#874](https://github.com/cuongtranba/kanna/issues/874)) ([8bea0e4](https://github.com/cuongtranba/kanna/commit/8bea0e4991d825dc945c6c4861c69df326503f40))
+
 ## [1.41.7](https://github.com/cuongtranba/kanna/compare/v1.41.6...v1.41.7) (2026-08-25)
 
 
