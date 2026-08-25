@@ -3,8 +3,14 @@ import { createHash } from "node:crypto"
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { importClaudeSessions, importSessionsByIds } from "./claude-session-importer.adapter"
+import {
+  importAllSessions,
+  importOneSession,
+  importSessionsByIds,
+} from "./claude-session-importer.adapter"
 import type { SessionImportedInfo } from "./claude-session-importer.adapter"
+import { writeCodexRolloutFixture } from "./__fixtures__/codex-rollout-fixture"
+import { codexSessionSource } from "./session-source-registry.adapter"
 import { createTestEventStore } from "./storage/test-helpers"
 
 function fresh() {
@@ -51,11 +57,20 @@ function claudeProjectDir(homeDir: string, realProj: string) {
   return path.join(homeDir, ".claude", "projects", folderName)
 }
 
+/** `<homeDir>/.codex/sessions/YYYY/MM/DD` — the layout the codex scanner walks. */
+function codexDayDir(homeDir: string) {
+  return path.join(homeDir, ".codex", "sessions", "2026", "06", "07")
+}
+
+function seedCodexSession(homeDir: string, cwd: string, sessionId: string) {
+  return writeCodexRolloutFixture(codexDayDir(homeDir), { sessionId, cwd })
+}
+
 function md5File(filePath: string) {
   return createHash("md5").update(readFileSync(filePath, "utf8")).digest("hex")
 }
 
-describe("importClaudeSessions", () => {
+describe("importAllSessions", () => {
   test("imports a session, creating project + chat + messages", async () => {
     const ctx = fresh()
     try {
@@ -63,7 +78,7 @@ describe("importClaudeSessions", () => {
       const store = createTestEventStore(ctx.dataDir)
       await store.initialize()
 
-      const result = await importClaudeSessions({ store, homeDir: ctx.homeDir })
+      const result = await importAllSessions({ store, homeDir: ctx.homeDir })
 
       expect(result.imported).toBe(1)
       expect(result.skipped).toBe(0)
@@ -86,8 +101,8 @@ describe("importClaudeSessions", () => {
       const store = createTestEventStore(ctx.dataDir)
       await store.initialize()
 
-      await importClaudeSessions({ store, homeDir: ctx.homeDir })
-      const second = await importClaudeSessions({ store, homeDir: ctx.homeDir })
+      await importAllSessions({ store, homeDir: ctx.homeDir })
+      const second = await importAllSessions({ store, homeDir: ctx.homeDir })
 
       expect(second.imported).toBe(0)
       expect(second.skipped).toBe(1)
@@ -104,7 +119,7 @@ describe("importClaudeSessions", () => {
       const store = createTestEventStore(ctx.dataDir)
       await store.initialize()
 
-      const result = await importClaudeSessions({ store, homeDir: ctx.homeDir })
+      const result = await importAllSessions({ store, homeDir: ctx.homeDir })
       expect(result.imported).toBe(0)
       expect(result.failed).toBe(1)
     } finally {
@@ -141,7 +156,7 @@ describe("importClaudeSessions", () => {
 
       const store = createTestEventStore(ctx.dataDir)
       await store.initialize()
-      const result = await importClaudeSessions({ store, homeDir: ctx.homeDir })
+      const result = await importAllSessions({ store, homeDir: ctx.homeDir })
       expect(result.imported).toBe(1)
 
       const chats = [...store.state.chatsById.values()].filter((c) => !c.deletedAt)
@@ -201,7 +216,7 @@ describe("importClaudeSessions", () => {
 
       const store = createTestEventStore(ctx.dataDir)
       await store.initialize()
-      const result = await importClaudeSessions({ store, homeDir: ctx.homeDir })
+      const result = await importAllSessions({ store, homeDir: ctx.homeDir })
       expect(result.imported).toBe(1)
 
       const chats = [...store.state.chatsById.values()].filter((c) => !c.deletedAt)
@@ -259,7 +274,7 @@ describe("importClaudeSessions", () => {
 
       const store = createTestEventStore(ctx.dataDir)
       await store.initialize()
-      const result = await importClaudeSessions({ store, homeDir: ctx.homeDir })
+      const result = await importAllSessions({ store, homeDir: ctx.homeDir })
       expect(result.imported).toBe(1)
 
       const chats = [...store.state.chatsById.values()].filter((c) => !c.deletedAt)
@@ -302,7 +317,7 @@ describe("importClaudeSessions", () => {
       await store.setSessionTokenForProvider(chat.id, "claude", "sess-backfill-title")
       await store.setSourceHash(chat.id, md5File(jsonlPath))
 
-      const result = await importClaudeSessions({ store, homeDir: ctx.homeDir })
+      const result = await importAllSessions({ store, homeDir: ctx.homeDir })
       expect(result.imported).toBe(0)
       expect(result.updated).toBe(1)
       expect(result.skipped).toBe(0)
@@ -342,7 +357,7 @@ describe("importClaudeSessions", () => {
       await store.setSessionTokenForProvider(chat.id, "claude", "sess-manual-title")
       await store.setSourceHash(chat.id, md5File(jsonlPath))
 
-      const result = await importClaudeSessions({ store, homeDir: ctx.homeDir })
+      const result = await importAllSessions({ store, homeDir: ctx.homeDir })
       expect(result.imported).toBe(0)
       expect(result.updated).toBe(0)
       expect(result.skipped).toBe(1)
@@ -359,10 +374,10 @@ describe("importClaudeSessions", () => {
       const store = createTestEventStore(ctx.dataDir)
       await store.initialize()
 
-      const first = await importClaudeSessions({ store, homeDir: ctx.homeDir })
+      const first = await importAllSessions({ store, homeDir: ctx.homeDir })
       expect(first.imported).toBe(1)
 
-      const second = await importClaudeSessions({ store, homeDir: ctx.homeDir })
+      const second = await importAllSessions({ store, homeDir: ctx.homeDir })
       expect(second.imported).toBe(0)
       expect(second.updated).toBe(0)
       expect(second.skipped).toBe(1)
@@ -394,7 +409,7 @@ describe("importClaudeSessions", () => {
       const store = createTestEventStore(ctx.dataDir)
       await store.initialize()
 
-      const first = await importClaudeSessions({ store, homeDir: ctx.homeDir })
+      const first = await importAllSessions({ store, homeDir: ctx.homeDir })
       expect(first.imported).toBe(1)
       const chats = [...store.state.chatsById.values()].filter((c) => !c.deletedAt)
       expect(chats.length).toBe(1)
@@ -413,7 +428,7 @@ describe("importClaudeSessions", () => {
       })
       writeFileSync(jsonlPath, `${line1}\n${line2}\n${line3}\n${line4}\n`, "utf8")
 
-      const second = await importClaudeSessions({ store, homeDir: ctx.homeDir })
+      const second = await importAllSessions({ store, homeDir: ctx.homeDir })
       expect(second.imported).toBe(0)
       expect(second.updated).toBe(1)
       expect(second.skipped).toBe(0)
@@ -514,6 +529,183 @@ describe("importSessionsByIds", () => {
       })
       expect(result.results[0].status).toBe("updated")
       expect(seen[0]).toMatchObject({ sessionId: SESSION_ID, sourcePath: jsonlPath })
+    } finally {
+      ctx.cleanup()
+    }
+  })
+
+  // The user-visible defect: a real codex session id pasted into the import
+  // dialog answered `not_found`, so ~1200 rollouts under `~/.codex/sessions`
+  // were unreachable while claude ids imported fine.
+  test("a codex session id resolves to a codex chat", async () => {
+    const ctx = fresh()
+    try {
+      const CODEX_ID = "7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d"
+      seedCodexSession(ctx.homeDir, ctx.realProj, CODEX_ID)
+      const store = createTestEventStore(ctx.dataDir)
+      await store.initialize()
+
+      const result = await importSessionsByIds({
+        store,
+        homeDir: ctx.homeDir,
+        sessionIds: [CODEX_ID],
+      })
+
+      expect(result.results[0]).toMatchObject({ sessionId: CODEX_ID, status: "created" })
+      const chatId = result.results[0].chatId
+      expect(chatId).toBeDefined()
+      const chat = chatId ? store.state.chatsById.get(chatId) : undefined
+      expect(chat?.provider).toBe("codex")
+      expect(chat?.sessionTokensByProvider.codex).toBe(CODEX_ID)
+    } finally {
+      ctx.cleanup()
+    }
+  })
+
+  // Documented precedence: `SESSION_SOURCES` is ordered claude-first and the
+  // first source that LOCATES the id owns it. The two files are unrelated
+  // sessions that merely share a uuid; claude wins because that is what every
+  // id resolved to before codex was registered.
+  test("an id present under both providers resolves to claude", async () => {
+    const ctx = fresh()
+    try {
+      const SHARED_ID = "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f"
+      seedSession(ctx.homeDir, ctx.realProj, SHARED_ID)
+      seedCodexSession(ctx.homeDir, ctx.realProj, SHARED_ID)
+      const store = createTestEventStore(ctx.dataDir)
+      await store.initialize()
+
+      const result = await importSessionsByIds({
+        store,
+        homeDir: ctx.homeDir,
+        sessionIds: [SHARED_ID],
+      })
+
+      expect(result.results[0].status).toBe("created")
+      const chatId = result.results[0].chatId
+      const chat = chatId ? store.state.chatsById.get(chatId) : undefined
+      expect(chat?.provider).toBe("claude")
+      expect(chat?.sessionTokensByProvider.claude).toBe(SHARED_ID)
+      expect(chat?.sessionTokensByProvider.codex).toBeFalsy()
+    } finally {
+      ctx.cleanup()
+    }
+  })
+})
+
+describe("codex session import", () => {
+  // The crossover the provider-erased dedup has to get right: dedup is keyed on
+  // `sessionTokensByProvider[provider]`, so one uuid living under BOTH providers
+  // is two unrelated sessions and must become two chats. The SECOND run is the
+  // half that actually catches a dedupe regression — a scan that re-imports
+  // would double every transcript with no error anywhere.
+  test("the same uuid under both providers imports as two chats, idempotently", async () => {
+    const ctx = fresh()
+    try {
+      const SHARED_ID = "2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e"
+      seedSession(ctx.homeDir, ctx.realProj, SHARED_ID)
+      seedCodexSession(ctx.homeDir, ctx.realProj, SHARED_ID)
+      const store = createTestEventStore(ctx.dataDir)
+      await store.initialize()
+
+      const first = await importAllSessions({ store, homeDir: ctx.homeDir })
+      expect(first.imported).toBe(2)
+
+      const chats = [...store.state.chatsById.values()].filter((c) => !c.deletedAt)
+      expect(chats.length).toBe(2)
+
+      const claudeChat = chats.find((c) => c.provider === "claude")
+      const codexChat = chats.find((c) => c.provider === "codex")
+      expect(claudeChat?.sessionTokensByProvider.claude).toBe(SHARED_ID)
+      expect(claudeChat?.sessionTokensByProvider.codex).toBeFalsy()
+      expect(codexChat?.sessionTokensByProvider.codex).toBe(SHARED_ID)
+      expect(codexChat?.sessionTokensByProvider.claude).toBeFalsy()
+
+      const claudeCount = store.getMessages(claudeChat!.id).length
+      const codexCount = store.getMessages(codexChat!.id).length
+      expect(claudeCount).toBeGreaterThan(0)
+      expect(codexCount).toBeGreaterThan(0)
+      // Different transcripts, not one file imported twice.
+      expect(codexCount).not.toBe(claudeCount)
+
+      const second = await importAllSessions({ store, homeDir: ctx.homeDir })
+      expect(second.imported).toBe(0)
+      expect([...store.state.chatsById.values()].filter((c) => !c.deletedAt).length).toBe(2)
+      expect(store.getMessages(claudeChat!.id).length).toBe(claudeCount)
+      expect(store.getMessages(codexChat!.id).length).toBe(codexCount)
+    } finally {
+      ctx.cleanup()
+    }
+  })
+
+  // `too_large` must not read as `parse_failed`: the file is fine, the cap is
+  // the thing the user can change. `maxBytes` is injected rather than read from
+  // the environment so this needs no 32 MiB fixture.
+  test("a rollout over the size cap fails too_large, not parse_failed", async () => {
+    const ctx = fresh()
+    try {
+      const CODEX_ID = "4d5e6f7a-8b9c-4d0e-8f1a-2b3c4d5e6f7a"
+      seedCodexSession(ctx.homeDir, ctx.realProj, CODEX_ID)
+      const store = createTestEventStore(ctx.dataDir)
+      await store.initialize()
+
+      const result = await importSessionsByIds({
+        store,
+        homeDir: ctx.homeDir,
+        sessionIds: [CODEX_ID],
+        maxBytes: 16,
+      })
+
+      expect(result.results[0]).toMatchObject({ status: "failed", error: "too_large" })
+      expect([...store.state.chatsById.values()].filter((c) => !c.deletedAt).length).toBe(0)
+    } finally {
+      ctx.cleanup()
+    }
+  })
+
+  // The append-storm gate. `codexRecordKey` is the physical line index and
+  // `codexRecordKeyFromEntryId` its inverse; if the two drift, every already
+  // imported record reads as new and a live-tail tick re-appends the whole
+  // transcript. Two appended records must produce exactly two entries, and a
+  // re-run over an unchanged file exactly zero.
+  test("live-tail delta appends only the new records", async () => {
+    const ctx = fresh()
+    try {
+      const CODEX_ID = "3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f"
+      const fixture = seedCodexSession(ctx.homeDir, ctx.realProj, CODEX_ID)
+      const store = createTestEventStore(ctx.dataDir)
+      await store.initialize()
+
+      const parseRollout = () => {
+        const parsed = codexSessionSource.parse(fixture.rolloutPath)
+        if (parsed.kind !== "parsed") throw new Error(`expected parsed, got ${parsed.kind}`)
+        return parsed.session
+      }
+
+      const created = await importOneSession(store, parseRollout())
+      expect(created.status).toBe("created")
+      const chatId = created.status === "created" ? created.chatId : ""
+      const baseline = store.getMessages(chatId).length
+      expect(baseline).toBeGreaterThan(0)
+
+      fixture.appendLine({
+        timestamp: "2026-06-07T06:00:20.000Z",
+        type: "response_item",
+        payload: { type: "message", role: "user", content: [{ type: "input_text", text: "one more thing" }] },
+      })
+      fixture.appendLine({
+        timestamp: "2026-06-07T06:00:21.000Z",
+        type: "response_item",
+        payload: { type: "message", role: "assistant", content: [{ type: "output_text", text: "done" }] },
+      })
+
+      const grown = await importOneSession(store, parseRollout())
+      expect(grown.status).toBe("updated")
+      expect(store.getMessages(chatId).length).toBe(baseline + 2)
+
+      const again = await importOneSession(store, parseRollout())
+      expect(again.status).toBe("skipped")
+      expect(store.getMessages(chatId).length).toBe(baseline + 2)
     } finally {
       ctx.cleanup()
     }

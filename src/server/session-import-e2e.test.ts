@@ -40,8 +40,8 @@ describe("session import E2E (Tribe-shaped fixture)", () => {
       const registry = createFollowedSessionRegistry({
         statFile: statSessionFile,
         runDelta: async (cid, sourcePath) => {
-          const session = claudeSessionSource.parse(sourcePath)
-          if (session) await importOneSession(store, session)
+          const parsed = claudeSessionSource.parse(sourcePath)
+          if (parsed.kind === "parsed") await importOneSession(store, parsed.session)
         },
         isTurnActive: () => false,
         now: () => Date.now(),

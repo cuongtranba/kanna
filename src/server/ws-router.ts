@@ -23,7 +23,7 @@ import type {
   LlmProviderValidationResult,
   OpenRouterModel,
 } from "../shared/types"
-import { importClaudeSessions, importSessionsByIds } from "./claude-session-importer.adapter"
+import { importAllSessions, importSessionsByIds } from "./claude-session-importer.adapter"
 import { listWorktrees } from "./worktree-store.adapter"
 import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
 import type { PushManager } from "./push/push-manager"
@@ -554,7 +554,7 @@ export function createWsRouter({
               refreshDiscovery,
               ensureProjectDirectory,
               resolveLocalPath,
-              importClaudeSessionsFn: () => importClaudeSessions({ store }),
+              importAllSessionsFn: () => importAllSessions({ store }),
               importSessionsByIdsFn: (sessionIds) => importSessionsByIds({
                 store,
                 sessionIds,

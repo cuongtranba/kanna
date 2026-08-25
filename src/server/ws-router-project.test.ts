@@ -103,7 +103,7 @@ function makeDeps(
     refreshDiscovery: mock(async () => []),
     ensureProjectDirectory: mock(async () => {}),
     resolveLocalPath: (p) => p,
-    importClaudeSessionsFn: mock(async () => ({
+    importAllSessionsFn: mock(async () => ({
       imported: 1,
       updated: 0,
       skipped: 0,

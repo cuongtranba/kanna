@@ -76,7 +76,7 @@ import { statSessionFile } from "./followed-session-io.adapter"
 import { createBackgroundTaskOutputRegistry } from "./background-task-output-registry"
 import { backgroundTaskOutputIo } from "./background-task-output-io.adapter"
 import { importOneSession } from "./claude-session-importer.adapter"
-import { claudeSessionSource } from "./session-source-registry.adapter"
+import { DEFAULT_MAX_ROLLOUT_BYTES, sourceForProvider } from "./session-source-registry.adapter"
 import { listWorkflowRunDirs, readWorkflowDir, readWorkflowRunJournal, watchWorkflowDir, watchWorkflowRunDirs } from "./workflow-watch-io.adapter"
 import { readWorkflowAgentTranscriptLines } from "./workflow-agent-transcript-io.adapter"
 import { SnapshotStore } from "./session-share/snapshot-store.adapter"
@@ -552,11 +552,22 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
   const resolveCleanup = (cardId: string, decision: CleanupDecision) =>
     resolveWorktreeCleanup(cleanupDeps, cardId, decision)
 
+  // The tail must be parsed by the source that WROTE the file. Hardcoding the
+  // claude source meant a followed codex chat re-parsed a rollout with claude's
+  // reader, which finds no `sessionId` and answers `rejected` — the delta was
+  // silently dropped on every tick.
+  const importMaxRolloutBytes = parsePositiveIntEnv(
+    process.env.KANNA_IMPORT_MAX_ROLLOUT_BYTES,
+    DEFAULT_MAX_ROLLOUT_BYTES,
+  )
   const followedSessionRegistry = createFollowedSessionRegistry({
     statFile: statSessionFile,
-    runDelta: async (_chatId, sourcePath) => {
-      const session = claudeSessionSource.parse(sourcePath)
-      if (session) await importOneSession(store, session)
+    runDelta: async (chatId, sourcePath) => {
+      const provider = store.state.chatsById.get(chatId)?.provider ?? "claude"
+      const source = sourceForProvider(provider, importMaxRolloutBytes)
+      if (!source) return
+      const parsed = source.parse(sourcePath)
+      if (parsed.kind === "parsed") await importOneSession(store, parsed.session)
     },
     isTurnActive: (chatId) => agent.hasActiveTurn(chatId),
     now: Date.now,

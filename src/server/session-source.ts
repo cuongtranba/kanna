@@ -78,6 +78,39 @@ export interface ImportableSession {
   legacyTitleCandidates(): ReadonlySet<string>
 }
 
+/**
+ * Why a file produced no session.
+ *
+ * A superset of every provider's own rejection vocabulary, so a provider-local
+ * union (e.g. `CodexParseRejection`) is assignable here without a cast.
+ */
+export type SessionParseRejection =
+  /** stat/open/read failed, or the path is not a regular file. */
+  | "unreadable"
+  /** Readable, but nothing identified the session (no meta / no session id). */
+  | "no_session_meta"
+  /** The session meta carried no usable `cwd`. */
+  | "no_cwd"
+  /** A subagent / forked rollout. Not imported in v1. */
+  | "subagent"
+  /** Readable and identified, but nothing was retained. */
+  | "no_records"
+  /** The provider's parser refused the file without saying more. */
+  | "parse_failed"
+
+/**
+ * The outcome of parsing one file.
+ *
+ * This is a UNION rather than `ImportableSession | null` because `null` cannot
+ * say WHY. A 91 MB rollout refused on size and an unparseable file are two
+ * different facts for the user — one is actionable ("raise the cap"), the other
+ * is not — and collapsing both onto `null` reported the first as the second.
+ */
+export type SessionParseResult =
+  | { readonly kind: "parsed"; readonly session: ImportableSession }
+  | { readonly kind: "tooLarge"; readonly size: number; readonly maxBytes: number }
+  | { readonly kind: "rejected"; readonly reason: SessionParseRejection }
+
 /** Where a provider's sessions live on disk. Implementations perform IO. */
 export interface SessionSource {
   readonly provider: AgentProvider
@@ -85,8 +118,8 @@ export interface SessionSource {
   scan(homeDir: string): ImportableSession[]
   /** Path of the file holding `sessionId`, or null if this provider has none. */
   locate(homeDir: string, sessionId: string): string | null
-  /** Parse one file. `null` when it is unreadable, empty, or out of scope. */
-  parse(filePath: string): ImportableSession | null
+  /** Parse one file. Never throws — a failure is a `rejected` / `tooLarge` result. */
+  parse(filePath: string): SessionParseResult
 }
 
 /** Binds a parsed session to its codec, erasing the record type. Pure. */

@@ -133,7 +133,13 @@ export interface SingleImportResultRow {
   status: "created" | "updated" | "skipped" | "failed"
   chatId?: string
   title?: string
-  error?: "invalid_id" | "not_found" | "cwd_missing" | "parse_failed" | "store_error"
+  /**
+   * `too_large` is distinct from `parse_failed` on purpose: the source file
+   * exceeded the import size cap, which the user can act on (raise
+   * `KANNA_IMPORT_MAX_ROLLOUT_BYTES`). Reporting a 91 MB rollout as
+   * `parse_failed` is a misdiagnosis they cannot do anything with.
+   */
+  error?: "invalid_id" | "not_found" | "cwd_missing" | "parse_failed" | "too_large" | "store_error"
 }
 
 export interface ImportSessionsByIdsResult {

@@ -73,10 +73,12 @@ export interface ProjectCommandDeps {
   /** Normalizes / resolves a local path string. */
   resolveLocalPath: (path: string) => string
   /**
-   * Imports Claude sessions from disk.
+   * Imports every provider's sessions from disk (claude + codex), returning one
+   * summed tally. The wire command is still `sessions.importClaude` — renaming
+   * it would be a breaking protocol change for no gain.
    * Caller pre-binds the store so the function signature is simple.
    */
-  importClaudeSessionsFn: () => Promise<ImportClaudeSessionsResult>
+  importAllSessionsFn: () => Promise<ImportClaudeSessionsResult>
   /**
    * Imports specific Claude sessions by id.
    * Caller pre-binds the store so the function signature is simple.
@@ -121,7 +123,7 @@ export async function handleProjectCommand(
     refreshDiscovery,
     ensureProjectDirectory,
     resolveLocalPath,
-    importClaudeSessionsFn,
+    importAllSessionsFn,
     importSessionsByIdsFn,
     openExternalFn,
     terminals,
@@ -245,7 +247,7 @@ export async function handleProjectCommand(
     // sessions
     // -----------------------------------------------------------------------
     case "sessions.importClaude": {
-      const result = await importClaudeSessionsFn()
+      const result = await importAllSessionsFn()
       if (result.newProjects > 0) {
         await refreshDiscovery()
       }

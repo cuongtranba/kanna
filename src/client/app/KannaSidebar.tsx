@@ -698,8 +698,8 @@ function KannaSidebarImpl({
                 onClick={() => setImportDialogOpen(true)}
                 disabled={isImporting}
                 className="inline-flex size-10 rounded-lg hover:!border-border/0"
-                title="Import Claude Code sessions"
-                aria-label="Import Claude Code sessions"
+                title="Import sessions"
+                aria-label="Import sessions"
               >
                 <Download className="size-4" />
               </Button>

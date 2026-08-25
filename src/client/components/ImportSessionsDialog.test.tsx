@@ -87,6 +87,18 @@ describe("ImportSessionsDialog", () => {
     expect(calls.importSessions).toEqual([])
   })
 
+  // The dialog imports Claude AND Codex sessions. Copy naming only Claude sent
+  // users away from the one surface that reaches their ~1200 codex rollouts.
+  test("copy is provider-neutral and names Codex", async () => {
+    await renderDialog()
+    const text = document.body.textContent ?? ""
+    expect(text).toContain("Import sessions")
+    expect(text).not.toContain("Import Claude sessions")
+    expect(text).toContain("Claude Code and Codex sessions")
+    const textarea = document.querySelector("textarea") as HTMLTextAreaElement
+    expect(textarea.placeholder).toContain("Claude or Codex session ids")
+  })
+
   test("busy disables all action buttons", async () => {
     await renderDialog({ busy: true })
     expect(importAllButton().disabled).toBe(true)
