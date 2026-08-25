@@ -23,7 +23,6 @@ import type {
   LlmProviderValidationResult,
   OpenRouterModel,
 } from "../shared/types"
-import { importAllSessions, importSessionsByIds } from "./claude-session-importer.adapter"
 import { listWorktrees } from "./worktree-store.adapter"
 import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
 import type { PushManager } from "./push/push-manager"
@@ -47,7 +46,7 @@ import { handleObservabilityCommand } from "./ws-router-observability"
 import { handleAgentCtrlCommand } from "./ws-router-agent-ctrl"
 import { handlePushCommand } from "./ws-router-push"
 import { handleMiscCommand } from "./ws-router-misc"
-import { handleProjectCommand } from "./ws-router-project"
+import { buildSessionImportFns, handleProjectCommand } from "./ws-router-project"
 import { handleChatCommand } from "./ws-router-chat"
 import {
   ensureSnapshotSignatures,
@@ -117,6 +116,14 @@ interface CreateWsRouterArgs {
   backgroundTaskOutputRegistry?: BackgroundTaskOutputRegistry
   subagentTranscriptRegistry?: SubagentTranscriptRegistry
   followedSessionRegistry?: FollowedSessionRegistry
+  /**
+   * Ceiling on one session source file, read from
+   * `KANNA_IMPORT_MAX_ROLLOUT_BYTES` by `server.ts`. Threaded here because the
+   * two import COMMANDS are what produce the `too_large` error the user is told
+   * to raise this var against; leaving it out silently pinned them to the
+   * importer's built-in default.
+   */
+  importMaxRolloutBytes?: number
   sessionShare?: SessionShareService
 }
 
@@ -150,8 +157,14 @@ export function createWsRouter({
   backgroundTaskOutputRegistry,
   subagentTranscriptRegistry,
   followedSessionRegistry,
+  importMaxRolloutBytes,
   sessionShare,
 }: CreateWsRouterArgs) {
+  const sessionImportFns = buildSessionImportFns({
+    store,
+    maxBytes: importMaxRolloutBytes,
+    onSessionImported: (info) => followedSessionRegistry?.consider(info),
+  })
   const resolvedDiffStore = diffStore ?? buildFallbackDiffStore()
   const resolvedLlmProvider = llmProvider ?? buildFallbackLlmProvider()
   const resolvedAppSettings = buildResolvedAppSettings(appSettings)
@@ -554,12 +567,7 @@ export function createWsRouter({
               refreshDiscovery,
               ensureProjectDirectory,
               resolveLocalPath,
-              importAllSessionsFn: () => importAllSessions({ store }),
-              importSessionsByIdsFn: (sessionIds) => importSessionsByIds({
-                store,
-                sessionIds,
-                onSessionImported: (info) => followedSessionRegistry?.consider(info),
-              }),
+              ...sessionImportFns,
               openExternalFn: openExternal,
               terminals,
               send: (envelope) => send(ws, envelope),

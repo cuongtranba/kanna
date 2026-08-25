@@ -12,9 +12,11 @@ import type {
   ProjectTerminalsDep,
   ProjectUpdateManagerDep,
 } from "./ws-router-project"
-import { handleProjectCommand } from "./ws-router-project"
+import { buildSessionImportFns, handleProjectCommand } from "./ws-router-project"
+import type { ImportClaudeSessionsArgs, ImportSessionsByIdsArgs } from "./claude-session-importer.adapter"
 import type { ClientCommand, ServerEnvelope } from "../shared/protocol"
 import type { UpdateInstallResult, UpdateSnapshot } from "../shared/types"
+import { createTestEventStore } from "./storage/test-helpers"
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -401,5 +403,72 @@ describe("handleProjectCommand", () => {
     expect(handled).toBe(true)
     expect(openExternalFn as ReturnType<typeof mock>).toHaveBeenCalledWith(cmd)
     expect(deps.sent[0]).toMatchObject({ type: "ack", id: "r16" })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// buildSessionImportFns — the KANNA_IMPORT_MAX_ROLLOUT_BYTES seam
+// ---------------------------------------------------------------------------
+
+describe("buildSessionImportFns", () => {
+  function bind(maxBytes: number | undefined) {
+    const allArgs: ImportClaudeSessionsArgs[] = []
+    const byIdArgs: ImportSessionsByIdsArgs[] = []
+    const fns = buildSessionImportFns({
+      store: createTestEventStore("/virtual-import-cap"),
+      maxBytes,
+      onSessionImported: () => {},
+      importAll: async (args) => {
+        allArgs.push(args)
+        return { imported: 0, updated: 0, skipped: 0, failed: 0, newProjects: 0 }
+      },
+      importByIds: async (args) => {
+        byIdArgs.push(args)
+        return { results: [], newProjects: 0 }
+      },
+    })
+    return { fns, allArgs, byIdArgs }
+  }
+
+  // `too_large` is produced by these two commands and by nothing else, and
+  // protocol.ts tells the user to raise KANNA_IMPORT_MAX_ROLLOUT_BYTES to get
+  // past it. A binding that drops the cap makes that documented remedy a lie —
+  // the existing too_large test injects maxBytes straight into the importer and
+  // so never touches this wiring.
+  test("forwards the cap to BOTH import commands", async () => {
+    const { fns, allArgs, byIdArgs } = bind(4096)
+    await fns.importAllSessionsFn()
+    await fns.importSessionsByIdsFn(["s-1"])
+    expect(allArgs[0].maxBytes).toBe(4096)
+    expect(byIdArgs[0].maxBytes).toBe(4096)
+    expect(byIdArgs[0].sessionIds).toEqual(["s-1"])
+  })
+
+  test("an unset cap forwards undefined, leaving the importer default in charge", async () => {
+    const { fns, allArgs, byIdArgs } = bind(undefined)
+    await fns.importAllSessionsFn()
+    await fns.importSessionsByIdsFn(["s-1"])
+    expect(allArgs[0].maxBytes).toBeUndefined()
+    expect(byIdArgs[0].maxBytes).toBeUndefined()
+  })
+
+  test("the single-session import still reports back to the live-tail registry", async () => {
+    const seen: string[] = []
+    const byIdArgs: ImportSessionsByIdsArgs[] = []
+    const fns = buildSessionImportFns({
+      store: createTestEventStore("/virtual-import-cap"),
+      maxBytes: 1,
+      onSessionImported: (info) => seen.push(info.chatId),
+      importAll: async () => ({ imported: 0, updated: 0, skipped: 0, failed: 0, newProjects: 0 }),
+      importByIds: async (args) => {
+        byIdArgs.push(args)
+        return { results: [], newProjects: 0 }
+      },
+    })
+    await fns.importSessionsByIdsFn(["s-1"])
+    byIdArgs[0].onSessionImported?.({
+      chatId: "chat-1", sessionId: "s-1", sourcePath: "/p/s-1.jsonl", sourceMtimeMs: 1,
+    })
+    expect(seen).toEqual(["chat-1"])
   })
 })
