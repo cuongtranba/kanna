@@ -16,6 +16,24 @@ import { statusLabel } from "./statusLabel"
 
 export type ChatDotTone = "warning" | "info" | "success" | "destructive" | "muted"
 
+const LIVE_STATUSES: ReadonlySet<KannaStatus> = new Set(["starting", "running", "waiting_for_user"])
+
+/**
+ * True while a turn is in flight — the one definition of "this chat is doing
+ * something right now", so the sidebar row, the tab strip and the composer
+ * cannot disagree about it.
+ *
+ * `starting` is live: a codex turn registers as `starting` and only becomes
+ * `running` when its `system_init` arrives, so excluding it hides the opening
+ * seconds of every codex run behind a stale "time since last message". The
+ * elapsed value is safe throughout that window — `stateEnteredAt` is written at
+ * `turn_started`, before the provider spawns, so it means "time since this turn
+ * began" in both states.
+ */
+export function isLiveChatStatus(status: KannaStatus): boolean {
+  return LIVE_STATUSES.has(status)
+}
+
 /** The status inputs a dot is derived from — a structural subset of SidebarChatRow. */
 export interface ChatIndicatorInput {
   status: KannaStatus

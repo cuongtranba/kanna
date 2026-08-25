@@ -11,6 +11,7 @@ import {
   chatDotBgClass,
   chatDotTextClass,
   chatStatusIndicator,
+  isLiveChatStatus,
   sessionStateBadge,
 } from "../../../lib/chatStatusIndicator"
 import { ChatRowMenu } from "./Menus"
@@ -46,7 +47,7 @@ function ChatRowImpl({
   onEditPermissions,
   silent = false,
 }: Props) {
-  const isLiveState = (chat.status === "running" || chat.status === "waiting_for_user") && chat.stateEnteredAt != null
+  const isLiveState = isLiveChatStatus(chat.status) && chat.stateEnteredAt != null
   const stampLabel = isLiveState && chat.stateEnteredAt != null
     ? `${statusLabel(chat.status)} ${formatLiveDuration(nowMs - chat.stateEnteredAt)}`
     : formatCompactDuration(nowMs - (chat.lastMessageAt ?? chat._creationTime))
