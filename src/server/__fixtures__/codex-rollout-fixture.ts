@@ -66,6 +66,15 @@ import { join } from "node:path"
  *     `MULTI_FILE_APPLY_PATCH_INPUT` below — a single-file patch cannot tell a
  *     correctly-paired output from a degraded one, because both mint the bare
  *     `call_id` as the tool id.
+ *
+ * 10. **An `update_plan` `function_call`.** Protects the `kind: "plan"` branch
+ *     of `rolloutToolCallToThreadItem` and the `todoToolCall` path in
+ *     `codex-session-mapper.ts` — the ONLY tool call that is not a `ThreadItem`
+ *     and so the only one whose entry-id round trip runs through different
+ *     code. Without it that branch was dead in the WHOLE suite: made to throw,
+ *     all 4100 server tests still passed. `status` is spelled `in_progress`
+ *     (rollout snake_case) where the app-server sends `inProgress`; a fixture
+ *     using the camelCase form renders every step as pending and says nothing.
  */
 export interface CodexRolloutFixture {
   rolloutPath: string
@@ -267,41 +276,61 @@ export function writeCodexRolloutFixture(
     }, 15),
     // line 16 — dropped
     envelope("world_state", { snapshot: { files: [] } }, 16),
-    // line 17 — call C: invariant 9, a MULTI-FILE apply_patch
+    // line 17 — invariant 10: an update_plan call, snake_case `in_progress`
+    envelope("response_item", {
+      type: "function_call",
+      name: "update_plan",
+      call_id: "call_P",
+      arguments: JSON.stringify({
+        explanation: "Rename the heading, then the imports.",
+        plan: [
+          { step: "rename the note heading", status: "completed" },
+          { step: "update the two importers", status: "in_progress" },
+          { step: "run the suite", status: "pending" },
+        ],
+      }),
+    }, 17),
+    // line 18 — update_plan's own output
+    envelope("response_item", {
+      type: "function_call_output",
+      call_id: "call_P",
+      output: "Plan updated",
+    }, 18),
+    // line 19 — call C: invariant 9, a MULTI-FILE apply_patch
     envelope("response_item", {
       type: "custom_tool_call",
       status: "completed",
       call_id: "call_C",
       name: "apply_patch",
       input: MULTI_FILE_APPLY_PATCH_INPUT,
-    }, 17),
-    // line 18 — invariant 4 again: a message between call C and its output
+    }, 19),
+    // line 20 — invariant 4 again: a message between call C and its output
     envelope("response_item", {
       type: "message",
       role: "assistant",
       content: [{ type: "output_text", text: "Both files updated." }],
-    }, 18),
-    // line 19 — call C's output. Mapping THIS line alone (the live-tail tick
+    }, 20),
+    // line 21 — call C's output. Mapping THIS line alone (the live-tail tick
     // where only the output is new) must still resolve the two `:change:<i>`
     // tool ids the call minted.
     envelope("response_item", {
       type: "custom_tool_call_output",
       call_id: "call_C",
       output: "Success. Updated the following files:\nM /tmp/demo/first.ts\nM /tmp/demo/second.ts\n",
-    }, 19),
-    // line 20 — assistant close
+    }, 21),
+    // line 22 — assistant close
     envelope("response_item", {
       type: "message",
       role: "assistant",
       content: [{ type: "output_text", text: "Heading renamed." }],
-    }, 20),
-    // line 21
+    }, 22),
+    // line 23
     envelope("event_msg", {
       type: "task_complete",
       turn_id: "turn_1",
       last_agent_message: "Heading renamed.",
       duration_ms: 2899,
-    }, 21),
+    }, 23),
   ]
 
   writeLines(rolloutPath, lines)

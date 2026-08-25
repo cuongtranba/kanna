@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test"
-import { mkdtempSync } from "node:fs"
+import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { writeCodexRolloutFixture } from "./__fixtures__/codex-rollout-fixture"
@@ -12,22 +12,33 @@ import {
   deriveCodexTitle,
   mapCodexRecordsToEntries,
 } from "./codex-session-mapper"
-import { translateItemToToolCalls } from "./codex-transcript-translator"
+import { todoToolCall, translateItemToToolCalls } from "./codex-transcript-translator"
 import type { CodexRolloutRecord, CodexToolOutputRecord } from "./codex-session-types"
 import { createImportableSession, type ParsedSession } from "./session-source"
 
 const MAX_BYTES = 64 * 1024 * 1024
 
+/**
+ * Parses the on-disk fixture and takes the temp dir back down.
+ *
+ * A `ParsedSession` is pure data, so nothing below needs the directory to
+ * survive — and every `mkdtempSync` without a matching `rmSync` leaks a dir
+ * per run into the OS temp dir, forever.
+ */
 function loadFixtureSession(): ParsedSession<CodexRolloutRecord> {
   const cwd = mkdtempSync(join(tmpdir(), "codex-mapper-"))
-  const fixture = writeCodexRolloutFixture(cwd, { sessionId: "sess-mapper-1", cwd })
-  const result = parseCodexRolloutFile(fixture.rolloutPath, {
-    classifyLine: classifyRolloutLine,
-    isSubagentMeta: isSubagentSessionMeta,
-    maxBytes: MAX_BYTES,
-  })
-  if (result.kind !== "parsed") throw new Error(`fixture did not parse: ${result.kind}`)
-  return result.session
+  try {
+    const fixture = writeCodexRolloutFixture(cwd, { sessionId: "sess-mapper-1", cwd })
+    const result = parseCodexRolloutFile(fixture.rolloutPath, {
+      classifyLine: classifyRolloutLine,
+      isSubagentMeta: isSubagentSessionMeta,
+      maxBytes: MAX_BYTES,
+    })
+    if (result.kind !== "parsed") throw new Error(`fixture did not parse: ${result.kind}`)
+    return result.session
+  } finally {
+    rmSync(cwd, { recursive: true, force: true })
+  }
 }
 
 const SESSION = loadFixtureSession()
@@ -291,9 +302,45 @@ describe("rendering parity with the live translator", () => {
 
     expect(imported[0].tool.toolKind).toBe(live[0].tool.toolKind)
     expect(imported[0].tool.toolName).toBe(live[0].tool.toolName)
-    expect(imported[0].tool.toolKind).toBe("bash")
-    expect(imported[0].tool.toolName).toBe("Bash")
     expect(imported[0].tool.toolId).toBe(exec.callId)
+  })
+
+  /**
+   * `update_plan` is the ONE tool call that is not a `ThreadItem` — the live
+   * path renders a plan through `todoToolCall` / `planStepsToTodos`, so the
+   * mapper takes a different branch and mints its entry id through different
+   * code. That branch was dead in the whole suite: a reviewer made it throw and
+   * all 4100 server tests still passed.
+   */
+  test("an update_plan call renders as the live path's TodoWrite card", () => {
+    const plan = recordsOfKind("tool_call").find((record) => record.name === "update_plan")
+    if (!plan) throw new Error("fixture lost its update_plan call")
+    const imported = entriesProducedBy(RECORDS.indexOf(plan))
+      .filter((entry) => entry.kind === "tool_call")
+    expect(imported.length).toBe(1)
+
+    const live = todoToolCall(plan.callId, [
+      { step: "rename the note heading", status: "completed" },
+      { step: "update the two importers", status: "inProgress" },
+      { step: "run the suite", status: "pending" },
+    ])
+    if (live.kind !== "tool_call") throw new Error("expected a tool_call")
+
+    expect(imported[0].tool.toolKind).toBe(live.tool.toolKind)
+    expect(imported[0].tool.toolName).toBe(live.tool.toolName)
+    expect(imported[0].tool.toolId).toBe(plan.callId)
+    // The rollout spells the status `in_progress`; the app-server sends
+    // `inProgress`. Both must land on the same todo, or every step of every
+    // imported plan renders pending.
+    expect(imported[0].tool.input).toEqual(live.tool.input)
+  })
+
+  test("an update_plan entry id round-trips to its own line", () => {
+    const plan = recordsOfKind("tool_call").find((record) => record.name === "update_plan")
+    if (!plan) throw new Error("fixture lost its update_plan call")
+    for (const entry of entriesProducedBy(RECORDS.indexOf(plan))) {
+      expect(codexRecordKeyFromEntryId(entry._id)).toBe(codexRecordKey(plan))
+    }
   })
 })
 

@@ -16,6 +16,19 @@ import {
 
 const FALLBACK = Date.parse("2020-01-01T00:00:00.000Z")
 
+/**
+ * Same shape the parser and scanner suites use. Every bare `mkdtempSync` leaks
+ * one directory into the OS temp dir per run, forever — this file leaked six.
+ */
+function withTempDir<T>(run: (dir: string) => T): T {
+  const dir = mkdtempSync(join(tmpdir(), "codex-rollout-"))
+  try {
+    return run(dir)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+}
+
 function classify(line: object, lineIndex = 0): CodexRolloutRecord | null {
   return classifyRolloutLine(JSON.stringify(line), lineIndex, FALLBACK)
 }
@@ -643,8 +656,7 @@ describe("classifyRolloutLineOutcome — WHY a line produced nothing", () => {
   // The wrapper keeps its exact signature; nothing that consumes it has to
   // change, and the two can never disagree about whether a line was retained.
   test("classifyRolloutLine is exactly the outcome with the reason erased", () => {
-    const dir = mkdtempSync(join(tmpdir(), "codex-outcome-"))
-    try {
+    withTempDir((dir) => {
       const fixture = writeCodexRolloutFixture(dir, { sessionId: "sess-outcome", cwd: dir })
       const lines = readFileSync(fixture.rolloutPath, "utf8").split("\n")
       lines.push("{truncated", "", "   ")
@@ -654,14 +666,11 @@ describe("classifyRolloutLineOutcome — WHY a line produced nothing", () => {
         const legacy = classifyRolloutLine(line, lineIndex, FALLBACK)
         expect(legacy).toEqual(result.kind === "record" ? result.record : null)
       }
-    } finally {
-      rmSync(dir, { recursive: true, force: true })
-    }
+    })
   })
 
   test("every reason is reachable from one real, damaged file", () => {
-    const dir = mkdtempSync(join(tmpdir(), "codex-outcome-"))
-    try {
+    withTempDir((dir) => {
       const fixture = writeCodexRolloutFixture(dir, { sessionId: "sess-outcome", cwd: dir })
       // What a half-written rollout looks like: a torn tail and a stray blank.
       const lines = [...readFileSync(fixture.rolloutPath, "utf8").split("\n"), "{\"type\":\"resp"]
@@ -671,99 +680,109 @@ describe("classifyRolloutLineOutcome — WHY a line produced nothing", () => {
           .flatMap((result) => (result.kind === "skipped" ? [result.reason] : [])),
       )
       expect([...reasons].sort()).toEqual(["blank", "dropped_type", "unparseable"])
-    } finally {
-      rmSync(dir, { recursive: true, force: true })
-    }
+    })
   })
 })
 
 describe("against the on-disk fixture", () => {
   test("classifies the importable rollout and drops everything it should", () => {
-    const dir = mkdtempSync(join(tmpdir(), "codex-rollout-"))
-    const fixture = writeCodexRolloutFixture(dir, { sessionId: "sess-fixture", cwd: dir })
-    const { records } = classifyFile(fixture.rolloutPath)
+    withTempDir((dir) => {
+      const fixture = writeCodexRolloutFixture(dir, { sessionId: "sess-fixture", cwd: dir })
+      const { records } = classifyFile(fixture.rolloutPath)
 
-    expect(records.map((r) => r.kind)).toEqual([
-      "session_meta",
-      "model_hint",
-      // the synthetic <environment_context> user message and the developer
-      // message are both gone; the human turn is first
-      "user_message",
-      "reasoning",
-      "tool_call",
-      "assistant_message",
-      "tool_output",
-      // event_msg/item_completed dropped here
-      "tool_call",
-      // event_msg/patch_apply_end dropped here
-      "tool_output",
-      "token_count",
-      "token_count",
-      "compacted",
-      // world_state dropped here
-      "tool_call",
-      "assistant_message",
-      "tool_output",
-      "assistant_message",
-      "turn_complete",
-    ])
+      expect(records.map((r) => r.kind)).toEqual([
+        "session_meta",
+        "model_hint",
+        // the synthetic <environment_context> user message and the developer
+        // message are both gone; the human turn is first
+        "user_message",
+        "reasoning",
+        "tool_call",
+        "assistant_message",
+        "tool_output",
+        // event_msg/item_completed dropped here
+        "tool_call",
+        // event_msg/patch_apply_end dropped here
+        "tool_output",
+        "token_count",
+        "token_count",
+        "compacted",
+        // world_state dropped here
+        "tool_call",
+        "tool_output",
+        "tool_call",
+        "assistant_message",
+        "tool_output",
+        "assistant_message",
+        "turn_complete",
+      ])
 
-    const first = records.find((r) => r.kind === "user_message")
-    expect(first?.kind === "user_message" && first.text).toBe("rename the note heading")
+      const first = records.find((r) => r.kind === "user_message")
+      expect(first?.kind === "user_message" && first.text).toBe("rename the note heading")
+    })
   })
 
   test("the fixture carries no payload.id and no ordinal — the trap it exists for", () => {
-    const dir = mkdtempSync(join(tmpdir(), "codex-rollout-"))
-    const fixture = writeCodexRolloutFixture(dir, { sessionId: "sess-fixture", cwd: dir })
-    for (const line of readFileSync(fixture.rolloutPath, "utf8").trim().split("\n")) {
-      const parsed = JSON.parse(line)
-      expect(parsed.ordinal).toBeUndefined()
-      // session_meta's `id` IS the session id, not a per-record key
-      if (parsed.type !== "session_meta") expect(parsed.payload.id).toBeUndefined()
-    }
+    withTempDir((dir) => {
+      const fixture = writeCodexRolloutFixture(dir, { sessionId: "sess-fixture", cwd: dir })
+      for (const line of readFileSync(fixture.rolloutPath, "utf8").trim().split("\n")) {
+        const parsed = JSON.parse(line)
+        expect(parsed.ordinal).toBeUndefined()
+        // session_meta's `id` IS the session id, not a per-record key
+        if (parsed.type !== "session_meta") expect(parsed.payload.id).toBeUndefined()
+      }
+    })
   })
 
   test("compacted's replacement_history never duplicates the transcript", () => {
-    const dir = mkdtempSync(join(tmpdir(), "codex-rollout-"))
-    const fixture = writeCodexRolloutFixture(dir, { sessionId: "sess-fixture", cwd: dir })
-    const { records } = classifyFile(fixture.rolloutPath)
-    const texts = records.flatMap((r) =>
-      r.kind === "user_message" || r.kind === "assistant_message" ? [r.text] : []
-    )
-    expect(texts).not.toContain("replay one")
-    expect(texts).not.toContain("replay two")
-    expect(texts).not.toContain("replay three")
+    withTempDir((dir) => {
+      const fixture = writeCodexRolloutFixture(dir, { sessionId: "sess-fixture", cwd: dir })
+      const { records } = classifyFile(fixture.rolloutPath)
+      const texts = records.flatMap((r) =>
+        r.kind === "user_message" || r.kind === "assistant_message" ? [r.text] : []
+      )
+      expect(texts).not.toContain("replay one")
+      expect(texts).not.toContain("replay two")
+      expect(texts).not.toContain("replay three")
+      // The SIBLING field `message` is a summary and IS carried — the bare
+      // record dropped it along with the replay.
+      const compacted = records.find((r) => r.kind === "compacted")
+      expect(compacted?.kind === "compacted" && compacted.summary)
+        .toBe("Summary of the conversation so far.")
+    })
   })
 
   test("line indices stay a pure function of byte position across the file", () => {
-    const dir = mkdtempSync(join(tmpdir(), "codex-rollout-"))
-    const fixture = writeCodexRolloutFixture(dir, { sessionId: "sess-fixture", cwd: dir })
-    const before = classifyFile(fixture.rolloutPath).records
+    withTempDir((dir) => {
+      const fixture = writeCodexRolloutFixture(dir, { sessionId: "sess-fixture", cwd: dir })
+      const before = classifyFile(fixture.rolloutPath).records
 
-    fixture.appendLine({
-      timestamp: "2026-06-07T07:00:00.000Z",
-      type: "response_item",
-      payload: {
-        type: "message",
-        role: "user",
-        content: [{ type: "input_text", text: "one more thing" }],
-      },
+      fixture.appendLine({
+        timestamp: "2026-06-07T07:00:00.000Z",
+        type: "response_item",
+        payload: {
+          type: "message",
+          role: "user",
+          content: [{ type: "input_text", text: "one more thing" }],
+        },
+      })
+
+      const after = classifyFile(fixture.rolloutPath).records
+      // Every previously-classified record keeps its index; only the delta is new.
+      expect(after.slice(0, before.length)).toEqual(before)
+      const tail = after[after.length - 1]
+      expect(tail).toMatchObject({ kind: "user_message", text: "one more thing" })
     })
-
-    const after = classifyFile(fixture.rolloutPath).records
-    // Every previously-classified record keeps its index; only the delta is new.
-    expect(after.slice(0, before.length)).toEqual(before)
-    const tail = after[after.length - 1]
-    expect(tail).toMatchObject({ kind: "user_message", text: "one more thing" })
   })
 
   test("the subagent variant is refused at its session_meta", () => {
-    const dir = mkdtempSync(join(tmpdir(), "codex-rollout-"))
-    const fixture = writeSubagentRollout(dir, { sessionId: "sess-sub", cwd: dir })
-    const { records } = classifyFile(fixture.rolloutPath)
-    const meta = records[0]
-    if (meta?.kind !== "session_meta") throw new Error("expected session_meta on line 0")
-    expect(meta.meta.parentThreadId).toBe("parent-thread-0001")
-    expect(isSubagentSessionMeta(meta.meta)).toBe(true)
+    withTempDir((dir) => {
+      const fixture = writeSubagentRollout(dir, { sessionId: "sess-sub", cwd: dir })
+      const { records } = classifyFile(fixture.rolloutPath)
+      const meta = records[0]
+      if (meta?.kind !== "session_meta") throw new Error("expected session_meta on line 0")
+      expect(meta.meta.parentThreadId).toBe("parent-thread-0001")
+      expect(isSubagentSessionMeta(meta.meta)).toBe(true)
+    })
   })
 })
