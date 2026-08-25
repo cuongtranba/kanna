@@ -17,7 +17,12 @@ import { resolveSpawnPaths } from "./claude-session-config"
 import type { ChatRecord } from "./events"
 import type { UpdateInstallResult, UpdateSnapshot } from "../shared/types"
 import type { ClientCommand, ImportSessionsByIdsResult, ServerEnvelope } from "../shared/protocol"
-import type { ImportClaudeSessionsResult } from "./claude-session-importer.adapter"
+import { importAllSessions, importSessionsByIds } from "./claude-session-importer.adapter"
+import type {
+  ImportClaudeSessionsArgs,
+  ImportClaudeSessionsResult,
+  SessionImportedInfo,
+} from "./claude-session-importer.adapter"
 
 // ---------------------------------------------------------------------------
 // Dep interfaces (duck-typed; avoids circular imports with ws-router.ts)
@@ -98,6 +103,52 @@ export interface ProjectCommandDeps {
    * Corresponds to `broadcastFilteredSnapshots({ includeSidebar: true })`.
    */
   broadcastSidebar: () => Promise<void>
+}
+
+// ---------------------------------------------------------------------------
+// Session-import binding
+// ---------------------------------------------------------------------------
+
+export interface SessionImportBinding {
+  /** Pre-bound event store, as both importers take it. */
+  store: ImportClaudeSessionsArgs["store"]
+  /**
+   * Ceiling on one source file, read from `KANNA_IMPORT_MAX_ROLLOUT_BYTES` by
+   * `server.ts`. `undefined` means the importer's own default.
+   */
+  maxBytes: number | undefined
+  /** Fired per imported single session, so the live-tail registry can arm. */
+  onSessionImported: (info: SessionImportedInfo) => void
+  /** Injected only by tests; production always uses the real importers. */
+  importAll?: typeof importAllSessions
+  /** Injected only by tests; production always uses the real importers. */
+  importByIds?: typeof importSessionsByIds
+}
+
+/**
+ * Binds `sessions.importClaude` / `sessions.importClaudeSession` to the store
+ * AND to the size cap.
+ *
+ * The cap has to arrive HERE, not only on the live-tail `runDelta`: these two
+ * commands are the ones that actually PRODUCE the `too_large` error, and
+ * `protocol.ts` documents that error as something the user can act on by
+ * raising `KANNA_IMPORT_MAX_ROLLOUT_BYTES`. Bound without `maxBytes` both fell
+ * back to the hardcoded 32 MiB default, so the documented remedy did nothing.
+ *
+ * One function builds BOTH so a future third import command cannot be bound
+ * with the cap dropped on one path only.
+ */
+export function buildSessionImportFns(
+  binding: SessionImportBinding,
+): Pick<ProjectCommandDeps, "importAllSessionsFn" | "importSessionsByIdsFn"> {
+  const { store, maxBytes, onSessionImported } = binding
+  const importAll = binding.importAll ?? importAllSessions
+  const importByIds = binding.importByIds ?? importSessionsByIds
+  return {
+    importAllSessionsFn: () => importAll({ store, maxBytes }),
+    importSessionsByIdsFn: (sessionIds) =>
+      importByIds({ store, sessionIds, maxBytes, onSessionImported }),
+  }
 }
 
 // ---------------------------------------------------------------------------

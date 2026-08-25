@@ -612,6 +612,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     backgroundTaskOutputRegistry,
     subagentTranscriptRegistry,
     followedSessionRegistry,
+    importMaxRolloutBytes,
     killPtyInstance: async (chatId: string) => {
       try {
         await agent.killPtyInstance(chatId)
