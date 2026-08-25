@@ -22,8 +22,14 @@ import { StringDecoder } from "node:string_decoder"
 import type { CodexRolloutRecord, CodexSessionMeta } from "./codex-session-types"
 import type { ParsedSession } from "./session-source"
 
-/** Bytes read per `readSync`. One page-friendly MiB; the remainder is carried. */
-const READ_CHUNK_BYTES = 1024 * 1024
+/**
+ * Bytes read per `readSync`. One page-friendly MiB; the remainder is carried.
+ *
+ * Exported because the boundary-straddling test has to build a line that lands
+ * on it — a second copy in the test with a "keep these in sync" comment is the
+ * drift this repo bans.
+ */
+export const READ_CHUNK_BYTES = 1024 * 1024
 
 /**
  * Bytes hashed from each end of the file for `sourceHash`. Hashing the whole
@@ -32,8 +38,67 @@ const READ_CHUNK_BYTES = 1024 * 1024
  */
 const HASH_WINDOW_BYTES = 64 * 1024
 
-/** Prefix of `sourceHash`. Readable on purpose — a future shrink-guard parses it. */
+/** Prefix of `sourceHash`. Readable on purpose — `parseCodexSourceHash` parses it. */
 export const CODEX_SOURCE_HASH_PREFIX = "codex:v1"
+
+/** The facts `sourceHash` carries in the clear. See `computeSourceHash`. */
+export interface CodexSourceHashParts {
+  readonly size: number
+  readonly mtimeMs: number
+  readonly digest: string
+}
+
+function positiveNumberOrNull(raw: string | undefined): number | null {
+  // `Number("")` is 0, so an empty field has to be rejected before the parse.
+  if (raw === undefined || raw.length === 0) return null
+  const value = Number(raw)
+  return Number.isFinite(value) && value >= 0 ? value : null
+}
+
+/**
+ * Reads `size` / `mtimeMs` / `digest` back off a `sourceHash`, or null when the
+ * string was not minted by THIS version of `computeSourceHash`.
+ *
+ * Null is not an error: a hash from another provider, or from a future
+ * `codex:v2`, simply carries no size this code may reason about.
+ */
+export function parseCodexSourceHash(sourceHash: string): CodexSourceHashParts | null {
+  const parts = sourceHash.split(":")
+  if (parts.length !== 5) return null
+  if (`${parts[0]}:${parts[1]}` !== CODEX_SOURCE_HASH_PREFIX) return null
+  const size = positiveNumberOrNull(parts[2])
+  const mtimeMs = positiveNumberOrNull(parts[3])
+  const digest = parts[4] ?? ""
+  if (size === null || mtimeMs === null || digest.length === 0) return null
+  return { size, mtimeMs, digest }
+}
+
+/**
+ * True when the file behind `currentSourceHash` is SMALLER than the one behind
+ * `previousSourceHash` — the one thing a codex delta import must refuse.
+ *
+ * A codex record key is `codex#<lineIndex>` and `lineIndex` is a pure function
+ * of byte position, so any rewrite that shifts line numbers (a rotation, a
+ * truncation, a re-serialised rollout) re-keys every record past the shift.
+ * `applyDelta` then reads all of them as new and re-appends the whole
+ * transcript with no error anywhere. A shrink is the one such rewrite that can
+ * be DETECTED without re-reading the file, because the size rides the hash.
+ *
+ * The live-tail path is already covered by the registry's
+ * `stat.size > entry.lastSize` gate; the manual paths — re-importing an
+ * already-imported id, and "Import all" — have no size gate at all and are why
+ * this exists. **Callers on those paths must consult it before applying a
+ * delta** and refuse visibly (a full re-import is the honest recovery).
+ *
+ * False when either hash is unreadable: absence of evidence, not evidence of
+ * absence — an unparseable hash says nothing about the file's size.
+ */
+export function hasCodexSourceShrunk(previousSourceHash: string, currentSourceHash: string): boolean {
+  const previous = parseCodexSourceHash(previousSourceHash)
+  const current = parseCodexSourceHash(currentSourceHash)
+  if (previous === null || current === null) return false
+  return current.size < previous.size
+}
 
 /**
  * Why a rollout produced no session. Distinguishing these is the whole reason

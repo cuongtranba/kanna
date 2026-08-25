@@ -4,11 +4,15 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { isRecord } from "../shared/errors"
 import { safeJsonParse } from "../shared/safe-json"
-import { parseCodexRolloutFile, type CodexParserDeps, type CodexParseResult } from "./codex-session-parser.adapter"
+import {
+  hasCodexSourceShrunk,
+  parseCodexRolloutFile,
+  parseCodexSourceHash,
+  READ_CHUNK_BYTES,
+  type CodexParserDeps,
+  type CodexParseResult,
+} from "./codex-session-parser.adapter"
 import type { CodexRolloutRecord } from "./codex-session-types"
-
-/** Must match READ_CHUNK_BYTES in the adapter — the boundary the tests target. */
-const READ_CHUNK_BYTES = 1024 * 1024
 
 function withTempDir<T>(run: (dir: string) => T): T {
   const dir = mkdtempSync(path.join(tmpdir(), "codex-parser-"))
@@ -20,9 +24,9 @@ function withTempDir<T>(run: (dir: string) => T): T {
 }
 
 /**
- * A stand-in for the real classifier (built in parallel by another agent). It
- * understands exactly two line shapes, which is all the adapter's contract
- * needs: the adapter never inspects a line itself.
+ * A stand-in for the real classifier. It understands exactly two line shapes,
+ * which is all the adapter's contract needs: the adapter never inspects a line
+ * itself.
  */
 function fakeClassify(rawLine: string, lineIndex: number, fallbackTimestamp: number): CodexRolloutRecord | null {
   const parsed = safeJsonParse(rawLine)
@@ -304,5 +308,56 @@ describe("parseCodexRolloutFile", () => {
       expect(session.firstTimestamp).toBeGreaterThan(0)
       expect(session.lastTimestamp).toBe(session.firstTimestamp)
     })
+  })
+})
+
+describe("the shrink guard", () => {
+  test("parseCodexSourceHash reads the size back off a hash the parser minted", () => {
+    withTempDir((dir) => {
+      const body = `${metaLine()}\n${userLine("a", 1)}\n`
+      const file = writeRollout(dir, "rollout-parts.jsonl", body)
+
+      const parts = parseCodexSourceHash(expectParsed(parseCodexRolloutFile(file, makeDeps())).sourceHash)
+      expect(parts?.size).toBe(Buffer.byteLength(body))
+      expect(parts?.mtimeMs).toBeGreaterThan(0)
+      expect(parts?.digest).toMatch(/^[0-9a-f]{32}$/)
+    })
+  })
+
+  test("parseCodexSourceHash returns null for anything it did not mint", () => {
+    expect(parseCodexSourceHash("")).toBeNull()
+    expect(parseCodexSourceHash("codex:v1:12:34")).toBeNull()
+    expect(parseCodexSourceHash("codex:v2:12:34:abc")).toBeNull()
+    expect(parseCodexSourceHash("codex:v1::34:abc")).toBeNull()
+    expect(parseCodexSourceHash("codex:v1:12:34:")).toBeNull()
+    // A claude sourceHash, which is what a mis-keyed lookup would hand over.
+    expect(parseCodexSourceHash("9f2b1c4d")).toBeNull()
+  })
+
+  test("detects a rewritten rollout that SHRANK, and stays quiet on an append", () => {
+    withTempDir((dir) => {
+      const file = writeRollout(
+        dir,
+        "rollout-shrink.jsonl",
+        [metaLine(), userLine("one", 1), userLine("two", 2), ""].join("\n"),
+      )
+      const before = expectParsed(parseCodexRolloutFile(file, makeDeps())).sourceHash
+
+      appendFileSync(file, `${userLine("three", 3)}\n`)
+      const grown = expectParsed(parseCodexRolloutFile(file, makeDeps())).sourceHash
+      expect(hasCodexSourceShrunk(before, grown)).toBe(false)
+      expect(hasCodexSourceShrunk(before, before)).toBe(false)
+
+      // A rotation / truncation / re-serialisation: every `codex#<lineIndex>`
+      // key past the shift now names a different record.
+      writeFileSync(file, [metaLine(), userLine("two", 2), ""].join("\n"))
+      const shrunk = expectParsed(parseCodexRolloutFile(file, makeDeps())).sourceHash
+      expect(hasCodexSourceShrunk(before, shrunk)).toBe(true)
+    })
+  })
+
+  test("reports no shrink when either hash is unreadable — absence of evidence, not evidence", () => {
+    expect(hasCodexSourceShrunk("not-a-codex-hash", "codex:v1:10:1:abc")).toBe(false)
+    expect(hasCodexSourceShrunk("codex:v1:99:1:abc", "not-a-codex-hash")).toBe(false)
   })
 })
