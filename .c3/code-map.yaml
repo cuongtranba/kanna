@@ -183,8 +183,23 @@ c3-214:
   - src/server/claude-session-scanner.adapter.ts
   - src/server/claude-session-scanner.test.ts
   - src/server/claude-session-types.ts
+  - src/server/codex-rollout-line.test.ts
+  - src/server/codex-rollout-line.ts
+  - src/server/codex-rollout-to-thread-item.test.ts
+  - src/server/codex-rollout-to-thread-item.ts
+  - src/server/codex-session-mapper.test.ts
+  - src/server/codex-session-mapper.ts
+  - src/server/codex-session-parser.adapter.ts
+  - src/server/codex-session-parser.test.ts
+  - src/server/codex-session-scanner.adapter.ts
+  - src/server/codex-session-scanner.test.ts
+  - src/server/codex-session-types.ts
   - src/server/discovery.adapter.ts
   - src/server/discovery.test.ts
+  - src/server/followed-session-registry.test.ts
+  - src/server/followed-session-registry.ts
+  - src/server/session-source-registry.adapter.ts
+  - src/server/session-source.ts
 c3-215:
   - src/server/diff-store.test.ts
   - src/server/diff-store.ts

@@ -1,5 +1,5 @@
 fact: c3-214
-claim: "Claude session import, parsing and scanning are at src/server/claude-session-*.ts"
+claim: "Session import is provider-agnostic behind the SessionSource port in src/server/session-source.ts; Claude sources live at src/server/claude-session-*.ts and Codex sources at src/server/codex-*.ts"
 code:
   - src/server/claude-session-importer.adapter.ts
   - src/server/claude-session-importer.test.ts
@@ -10,5 +10,20 @@ code:
   - src/server/claude-session-scanner.adapter.ts
   - src/server/claude-session-scanner.test.ts
   - src/server/claude-session-types.ts
+  - src/server/codex-rollout-line.test.ts
+  - src/server/codex-rollout-line.ts
+  - src/server/codex-rollout-to-thread-item.test.ts
+  - src/server/codex-rollout-to-thread-item.ts
+  - src/server/codex-session-mapper.test.ts
+  - src/server/codex-session-mapper.ts
+  - src/server/codex-session-parser.adapter.ts
+  - src/server/codex-session-parser.test.ts
+  - src/server/codex-session-scanner.adapter.ts
+  - src/server/codex-session-scanner.test.ts
+  - src/server/codex-session-types.ts
   - src/server/discovery.adapter.ts
   - src/server/discovery.test.ts
+  - src/server/followed-session-registry.test.ts
+  - src/server/followed-session-registry.ts
+  - src/server/session-source-registry.adapter.ts
+  - src/server/session-source.ts
