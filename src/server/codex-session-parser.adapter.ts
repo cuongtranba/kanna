@@ -24,6 +24,7 @@
 import { createHash } from "node:crypto"
 import { closeSync, openSync, readSync, statSync } from "node:fs"
 import { StringDecoder } from "node:string_decoder"
+import { errorMessage, toError } from "../shared/errors"
 import { log } from "../shared/log"
 import type { CodexRolloutRecord, CodexSessionMeta } from "./codex-session-types"
 import type { ParsedSession } from "./session-source"
@@ -238,6 +239,24 @@ interface ScanState {
   truncatedFinalLine: boolean
 }
 
+/**
+ * A throw that came out of the INJECTED classifier rather than out of the file.
+ *
+ * Private, and it exists only so the one catch below can tell the two apart:
+ * `unreadable` is documented as an IO failure, so reporting a classifier bug as
+ * one presents a whole-corpus regression to the user as "all my rollouts are
+ * unreadable" and tells the operator nothing about where to look.
+ */
+class ClassifierFailure extends Error {
+  readonly reason: Error
+
+  constructor(reason: Error) {
+    super(reason.message)
+    this.name = "ClassifierFailure"
+    this.reason = reason
+  }
+}
+
 /** One line → a record or the reason there is none. Reasons only when injected. */
 function classifyOne(
   text: string,
@@ -245,10 +264,14 @@ function classifyOne(
   state: ScanState,
   deps: CodexParserDeps,
 ): CodexLineClassification {
-  if (deps.classifyLineWithReason) return deps.classifyLineWithReason(text, lineIndex, state.fallbackTimestamp)
-  const record = deps.classifyLine(text, lineIndex, state.fallbackTimestamp)
-  // No reason dep: a drop is a drop, and `unparseableLines` stays null.
-  return record ? { kind: "record", record } : { kind: "skipped", reason: "dropped" }
+  try {
+    if (deps.classifyLineWithReason) return deps.classifyLineWithReason(text, lineIndex, state.fallbackTimestamp)
+    const record = deps.classifyLine(text, lineIndex, state.fallbackTimestamp)
+    // No reason dep: a drop is a drop, and `unparseableLines` stays null.
+    return record ? { kind: "record", record } : { kind: "skipped", reason: "dropped" }
+  } catch (error) {
+    throw new ClassifierFailure(toError(error))
+  }
 }
 
 /**
@@ -370,7 +393,15 @@ export function parseCodexRolloutFile(filePath: string, deps: CodexParserDeps): 
     // and the early-out on a subagent meta must not skip the head/tail reads.
     sourceHash = computeSourceHash(fd, buffer, size, mtimeMs)
     scanFile(fd, buffer, size, state, deps)
-  } catch {
+  } catch (error) {
+    // Both outcomes are still `unreadable` — `SessionSource.parse` promises
+    // never to throw and the rejection vocabulary is shared with every other
+    // provider — but the two are not the same fact, so the log says which.
+    if (error instanceof ClassifierFailure) {
+      log.error(`[kanna/import] rollout classifier threw ${filePath}: ${error.reason.message}`)
+    } else {
+      log.error(`[kanna/import] rollout read failed ${filePath}: ${errorMessage(error)}`)
+    }
     return rejected("unreadable")
   } finally {
     try {

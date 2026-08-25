@@ -335,6 +335,32 @@ describe("parseCodexRolloutFile", () => {
     })
   })
 
+  test("says so when the CLASSIFIER threw, instead of blaming the file", () => {
+    withTempDir((dir) => {
+      const file = writeRollout(dir, "rollout-throws.jsonl", `${metaLine()}\n${userLine("a", 1)}\n`)
+      const boom = () => {
+        throw new TypeError("classifier regression")
+      }
+
+      const messages = withLogSpy("error", (captured) => {
+        // Still `unreadable`: `SessionSource.parse` promises never to throw and
+        // the rejection vocabulary is not this adapter's to widen. What changes
+        // is that the operator is told a whole-corpus classifier regression is
+        // not "all my rollouts are unreadable".
+        expect(parseCodexRolloutFile(file, makeDeps({ classifyLine: boom }))).toEqual({
+          kind: "rejected",
+          reason: "unreadable",
+        })
+        return captured
+      })
+
+      expect(messages).toHaveLength(1)
+      expect(messages[0]).toContain("classifier")
+      expect(messages[0]).toContain(file)
+      expect(messages[0]).toContain("classifier regression")
+    })
+  })
+
   test("falls back to file mtime when no record carries a timestamp", () => {
     withTempDir((dir) => {
       const file = writeRollout(dir, "rollout-nots.jsonl", `${metaLine({ ts: Number.NaN })}\n`)
