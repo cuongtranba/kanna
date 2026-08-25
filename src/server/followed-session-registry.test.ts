@@ -5,7 +5,7 @@ import path from "node:path"
 import { createFollowedSessionRegistry, type FollowedSessionRegistryDeps } from "./followed-session-registry"
 import { statSessionFile } from "./followed-session-io.adapter"
 import { importOneSession, importSessionsByIds, type SessionImportedInfo } from "./claude-session-importer.adapter"
-import { claudeSessionSource } from "./session-source-registry.adapter"
+import { claudeSessionSource } from "./session-source-registry"
 import { createTestEventStore } from "./storage/test-helpers"
 
 function makeRegistry(over: Partial<FollowedSessionRegistryDeps> = {}) {

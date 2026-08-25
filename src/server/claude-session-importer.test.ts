@@ -10,7 +10,7 @@ import {
 } from "./claude-session-importer.adapter"
 import type { SessionImportedInfo } from "./claude-session-importer.adapter"
 import { writeCodexRolloutFixture, writeSubagentRollout } from "./__fixtures__/codex-rollout-fixture"
-import { codexSessionSource } from "./session-source-registry.adapter"
+import { codexSessionSource } from "./session-source-registry"
 import { createTestEventStore } from "./storage/test-helpers"
 
 function fresh() {

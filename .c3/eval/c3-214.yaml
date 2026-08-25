@@ -25,5 +25,5 @@ code:
   - src/server/discovery.test.ts
   - src/server/followed-session-registry.test.ts
   - src/server/followed-session-registry.ts
-  - src/server/session-source-registry.adapter.ts
+  - src/server/session-source-registry.ts
   - src/server/session-source.ts

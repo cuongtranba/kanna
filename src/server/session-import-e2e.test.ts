@@ -5,7 +5,7 @@ import { join } from "node:path"
 import { importOneSession, importSessionsByIds } from "./claude-session-importer.adapter"
 import { createFollowedSessionRegistry } from "./followed-session-registry"
 import { statSessionFile } from "./followed-session-io.adapter"
-import { claudeSessionSource } from "./session-source-registry.adapter"
+import { claudeSessionSource } from "./session-source-registry"
 import { writeTribeSessionFixture } from "./__fixtures__/tribe-session-fixture"
 import { createTestEventStore } from "./storage/test-helpers"
 

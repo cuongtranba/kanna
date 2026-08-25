@@ -1,11 +1,16 @@
-// src/server/session-source-registry.adapter.ts
+// src/server/session-source-registry.ts
 //
 // The list of providers the session importer knows how to read. Adding a
 // provider is one entry here plus its own scanner/parser/codec — the importer
 // itself never names a provider.
 //
-// `.adapter.ts` because it wires the scanner + parser adapters (which do the
-// file IO) onto their pure codec.
+// NOT `.adapter.ts`: this file performs no IO of its own. It is a composition
+// root holding domain policy — provider precedence, the default size cap, and
+// the claude parser's `null` → `parse_failed` mapping — and merely wires the
+// scanner + parser adapters (which do the file IO) onto their pure codec.
+// CLAUDE.md reserves the suffix for a file whose SINGLE responsibility is to
+// perform the side effect; importing an `.adapter.ts` from a plain module is
+// allowed and is all this does.
 
 import type { AgentProvider } from "../shared/types"
 import { claudeSessionCodec } from "./claude-session-mapper"

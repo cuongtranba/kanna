@@ -15,7 +15,7 @@ import {
   createSessionSources,
   scanAllSessions,
   type SessionScanRefusal,
-} from "./session-source-registry.adapter"
+} from "./session-source-registry"
 
 export interface ImportClaudeSessionsResult {
   imported: number    // brand new sessions
