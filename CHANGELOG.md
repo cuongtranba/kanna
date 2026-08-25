@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.41.7](https://github.com/cuongtranba/kanna/compare/v1.41.6...v1.41.7) (2026-08-25)
+
+
+### Bug Fixes
+
+* **ui:** close ui ux audit findings ([#872](https://github.com/cuongtranba/kanna/issues/872)) ([aad1ade](https://github.com/cuongtranba/kanna/commit/aad1ade679ca62838186d8256eaeb03d51f541ac))
+
 ## [1.41.6](https://github.com/cuongtranba/kanna/compare/v1.41.5...v1.41.6) (2026-08-22)
 
 
