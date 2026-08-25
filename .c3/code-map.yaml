@@ -161,6 +161,8 @@ c3-211:
   - src/server/codex-app-server-protocol.ts
   - src/server/codex-app-server.test.ts
   - src/server/codex-app-server.ts
+  - src/server/codex-transcript-translator.test.ts
+  - src/server/codex-transcript-translator.ts
 c3-212:
   - src/server/provider-catalog.test.ts
   - src/server/provider-catalog.ts

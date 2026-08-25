@@ -4,3 +4,5 @@ code:
   - src/server/codex-app-server-protocol.ts
   - src/server/codex-app-server.test.ts
   - src/server/codex-app-server.ts
+  - src/server/codex-transcript-translator.test.ts
+  - src/server/codex-transcript-translator.ts

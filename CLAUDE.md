@@ -55,6 +55,14 @@ c3-210's `compactionTurn` row carried that broken escape from a193638 (#649)
 until 36217ff, and lost 533 bytes mid-sentence on the way. If you see `\ |` in a
 `.c3/` table cell, it is damage — restore `\|`.
 
+**A glob in a table cell loses its `*` the same way.** Stripping the backticks
+leaves the star exposed to markdown emphasis, and the next serialization eats
+it: `` `mermaid-*.js` `` in `adr-20260810-mermaid-validation-gate.md` became
+`mermaid-.js` on a plain `c3x repair` (verified 2026-08-25). This is the same
+class as `\ |` — silent, and it changes what the doc MEANS, not just how it
+looks. Any cell holding a glob, a wildcard, or `_`-delimited text is exposed.
+Read the diff of a repair, do not skim its file count.
+
 Both defects are fixed in `cuongtranba/c3-skill` (the `insert-after` seq shift
 and the table-row normalizer). Until a release ships with them, `change apply`
 also fails on any `insert` after a non-last table row
