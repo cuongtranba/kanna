@@ -41,19 +41,19 @@ export function ImportSessionsDialog({
     <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose() }}>
       <DialogContent size="sm">
         <DialogBody className="space-y-3">
-          <DialogTitle>Import Claude sessions</DialogTitle>
+          <DialogTitle>Import sessions</DialogTitle>
           <Textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder="Paste one or more session ids (uuid, filename, or full path)…"
+            placeholder="Paste one or more Claude or Codex session ids (uuid, filename, or full path)…"
             rows={4}
           />
           {invalid ? (
             <p className="text-xs text-destructive">No valid session id found in the pasted text.</p>
           ) : null}
           <p className="text-xs text-muted-foreground">
-            Empty input imports ALL sessions (full scan). Active sessions import as a live view —
-            sending a message there takes over the session.
+            Empty input imports ALL Claude Code and Codex sessions (full scan). Active sessions
+            import as a live view — sending a message there takes over the session.
           </p>
         </DialogBody>
         <DialogFooter>
