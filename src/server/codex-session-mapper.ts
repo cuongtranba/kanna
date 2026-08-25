@@ -32,6 +32,7 @@ import {
   rolloutToolOutputToThreadItem,
 } from "./codex-rollout-to-thread-item"
 import type {
+  CodexCompactedRecord,
   CodexReasoningRecord,
   CodexRolloutRecord,
   CodexToolCallRecord,
@@ -44,13 +45,16 @@ const NEW_CHAT_TITLE = "New Chat"
 const FALLBACK_MODEL = "codex"
 
 /**
- * A record's stable identity. **TOTAL — this never returns null.**
+ * A record's stable identity, minted into every entry `_id` this module
+ * produces. **TOTAL — this never returns null.**
  *
- * The codec slot it fills is declared `string | null`, and `null` there means
- * "cannot be identified", which `applyDelta` treats as ALWAYS-NEW — the append
- * storm. A codex record always has a `lineIndex` (the parser counts every
- * physical line), so there is nothing to be unsure about and the return type
- * says so. Widening it back to `string | null` re-opens the storm path.
+ * MODULE-LOCAL BY DESIGN. `SessionRecordCodec` carries no `recordKey` slot;
+ * `codexRecordKeyFromEntryId` is the only keying function the importer sees,
+ * and it reads the `_id` rather than the record. A codex record always has a
+ * `lineIndex` (the parser counts every physical line), so there is nothing to
+ * be unsure about — widening the return to `string | null` would put an
+ * unkeyable entry back on the wire, and an entry the inverse cannot recover
+ * reads as ALWAYS-NEW: the append storm.
  *
  * It deliberately does NOT include the session id: a key only needs to be
  * unique within its own chat, and one chat is one session. The `codex#` prefix
@@ -174,6 +178,34 @@ function webSearchItem(record: CodexRolloutRecord, query: string): ThreadItem {
   return { type: "webSearch", id: codexRecordKey(record), query }
 }
 
+/**
+ * `compact_boundary` THEN `compact_summary`, off the same line key.
+ *
+ * THE ORDER IS LOAD-BEARING, and it is the same order `claude-turn-runner.ts`
+ * emits on the live codex `/compact` path. `buildHistoryPrimer` resumes at the
+ * most recent boundary and counts `compact_summary` as assistant content, so a
+ * summary emitted BEFORE its own boundary sits on the older side of it and is
+ * discarded — the reader keeps the card, the next turn's primer does not.
+ *
+ * `CodexCompactedRecord` still carries no `replacement_history`; `summary` is
+ * `payload.message`, a different field. A record with none yields the bare
+ * boundary, which is what every pre-`message` rollout produces.
+ */
+function compactionEntries(record: CodexCompactedRecord): TranscriptEntry[] {
+  const boundary: TranscriptEntry = {
+    _id: entryId(record, "compact_boundary"),
+    kind: "compact_boundary",
+    createdAt: record.timestamp,
+  }
+  if (record.summary === null) return [boundary]
+  return [boundary, {
+    _id: entryId(record, "compact_summary"),
+    kind: "compact_summary",
+    createdAt: record.timestamp,
+    summary: record.summary,
+  }]
+}
+
 function mapRecord(
   record: CodexRolloutRecord,
   session: ParsedSession<CodexRolloutRecord>,
@@ -251,15 +283,7 @@ function mapRecord(
       ]
 
     case "compacted":
-      // ONE boundary and nothing else. `CodexCompactedRecord` carries no summary
-      // and no `replacement_history` by construction — the latter is a full
-      // replay of the conversation, and a mapper that walks it duplicates the
-      // entire transcript while every assertion still passes.
-      return [{
-        _id: entryId(record, "compact_boundary"),
-        kind: "compact_boundary",
-        createdAt: record.timestamp,
-      }]
+      return compactionEntries(record)
 
     case "model_hint":
       // Consumed by `deriveModel`; it is not an event a reader sees.
@@ -276,12 +300,18 @@ export function mapCodexRecordsToEntries(
     cwd: session.cwd,
     relocate: (externalPath: string) => externalPath,
   }
-  // Built AS WE GO over the records being mapped — records arrive in line order,
-  // so a call always precedes its output within one pass.
+  // Built over the WHOLE session, never over `records`. `createImportableSession`
+  // only ever passes the full list, but a mapper whose fidelity depends on that
+  // is one refactor away from silently losing the pairing — and the loss shows
+  // as a multi-file `apply_patch` whose result joins to no card it opened, with
+  // no error anywhere. Reading the session makes the subset case impossible
+  // rather than merely unused.
   const callsById = new Map<string, CodexToolCallRecord>()
+  for (const record of session.records) {
+    if (record.kind === "tool_call") callsById.set(record.callId, record)
+  }
   const entries: TranscriptEntry[] = []
   for (const record of records) {
-    if (record.kind === "tool_call") callsById.set(record.callId, record)
     entries.push(...mapRecord(record, session, ctx, callsById))
   }
   return entries
@@ -312,7 +342,6 @@ function codexLegacyTitleCandidates(): ReadonlySet<string> {
 
 export const codexSessionCodec: SessionRecordCodec<CodexRolloutRecord> = {
   map: mapCodexRecordsToEntries,
-  recordKey: codexRecordKey,
   recordKeyFromEntryId: codexRecordKeyFromEntryId,
   deriveTitle: deriveCodexTitle,
   legacyTitleCandidates: codexLegacyTitleCandidates,

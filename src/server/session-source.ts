@@ -32,23 +32,42 @@ export interface ParsedSession<TRecord> {
 /**
  * The pure, provider-specific half of a session source.
  *
- * `recordKey` and `recordKeyFromEntryId` are INVERSE FUNCTIONS and live on one
- * object deliberately. Every append-storm bug in this pipeline comes from the
- * two drifting: a key the inverse cannot recover reads as "record is new" in
- * `applyDelta`, so a live-tail tick re-appends the whole transcript every two
- * seconds with no error anywhere. Side by side, drift is a one-file review
- * concern, and a colocated property test can assert the round-trip.
+ * IDENTITY LIVES ON THE ENTRY, NOT ON THE RECORD. There is exactly ONE keying
+ * function here — `recordKeyFromEntryId` — and it reads an `_id` that `map`
+ * minted. A provider still needs a private record→key helper to mint those ids
+ * (`codexRecordKey`, `claudeRecordKey`), but it is not a port slot, because a
+ * second slot is a second thing to keep in sync: this interface used to carry
+ * `recordKey` as well, and every append-storm bug in this pipeline was the two
+ * drifting — a key the inverse cannot recover reads as "record is new", so a
+ * live-tail tick re-appends the whole transcript every two seconds with no
+ * error anywhere.
+ *
+ * With one function, `toEntries` and `newEntriesSince` both run `map` over the
+ * WHOLE session and differ only in a filter over the resulting entries. That is
+ * what makes drift unrepresentable rather than merely tested — and it is why
+ * `map` is never handed a subset (see `createImportableSession`).
  */
 export interface SessionRecordCodec<TRecord> {
-  /** Records → transcript entries. Entry `_id`s MUST embed `recordKey(record)`. */
+  /**
+   * Records → transcript entries.
+   *
+   * Called with `session.records` in full, ALWAYS. A mapper may therefore rely
+   * on cross-record context — codex pairs a `tool_output` with the
+   * `tool_call` that produced it, and a subset that dropped the call would
+   * silently degrade the result to a generic card with a tool id matching
+   * nothing the call minted.
+   *
+   * Every entry `_id` MUST be recoverable by `recordKeyFromEntryId`, or the
+   * entry reads as always-new on every tick.
+   */
   map(records: TRecord[], session: ParsedSession<TRecord>): TranscriptEntry[]
   /**
-   * A stable identity for this record, unique within the session and derived
-   * only from append-only facts. `null` means "cannot be identified", which
-   * `applyDelta` treats as always-new — total implementations avoid that.
+   * The identity of the record that produced this entry — a stable key, unique
+   * within the session and derived only from append-only facts.
+   *
+   * `null` means "this entry cannot be identified", which the delta filter
+   * treats as ALWAYS-NEW. Total implementations avoid that.
    */
-  recordKey(record: TRecord): string | null
-  /** Recovers `recordKey` from an entry `_id` minted by `map`. */
   recordKeyFromEntryId(entryId: string): string | null
   deriveTitle(session: ParsedSession<TRecord>): string
   /**
@@ -70,7 +89,10 @@ export interface ImportableSession {
   readonly sourceHash: string
   /** Entries for every record in the session. */
   toEntries(): TranscriptEntry[]
-  /** Entries for records whose key is absent from `seenRecordKeys`. */
+  /**
+   * `toEntries()` minus the entries whose record key is already in
+   * `seenRecordKeys`. An entry whose key cannot be recovered is always new.
+   */
   newEntriesSince(seenRecordKeys: ReadonlySet<string>): TranscriptEntry[]
   /** Inverse of the entry-id scheme `toEntries` mints. */
   recordKeyFromEntryId(entryId: string): string | null
@@ -136,14 +158,29 @@ export function createImportableSession<TRecord>(
     lastTimestamp: session.lastTimestamp,
     sourceHash: session.sourceHash,
     toEntries: () => codec.map(session.records, session),
-    newEntriesSince: (seenRecordKeys) => {
-      const fresh = session.records.filter((record) => {
-        const key = codec.recordKey(record)
-        return !key || !seenRecordKeys.has(key)
-      })
-      if (fresh.length === 0) return []
-      return codec.map(fresh, session)
-    },
+    /**
+     * MAP EVERYTHING, THEN FILTER THE ENTRIES. Filtering the RECORDS first and
+     * mapping the subset is the same function on paper and not in practice: it
+     * forces every mapper to be correct under subsetting, an invariant stated
+     * nowhere and one codex does not hold. On a tick where a `tool_call` is
+     * already imported and only its `tool_output` is new, the subset drops the
+     * call, the output degrades to a generic card, and its bare `call_id`
+     * matches none of the `:change:<i>` ids a multi-file `apply_patch` minted —
+     * so the reader is left with Edit cards stuck "in progress" plus an orphan,
+     * and nothing fails.
+     *
+     * Mapping the whole session also makes this and `toEntries` literally the
+     * same call, so the two can no longer disagree about what an entry is.
+     *
+     * COST: the caller re-reads and re-parses the whole file on every live-tail
+     * tick anyway, so re-mapping already-in-memory records is small change
+     * against IO already paid.
+     */
+    newEntriesSince: (seenRecordKeys) =>
+      codec.map(session.records, session).filter((entry) => {
+        const key = codec.recordKeyFromEntryId(entry._id)
+        return key === null || !seenRecordKeys.has(key)
+      }),
     recordKeyFromEntryId: (entryId) => codec.recordKeyFromEntryId(entryId),
     title: () => codec.deriveTitle(session),
     legacyTitleCandidates: () => codec.legacyTitleCandidates(session),

@@ -1,9 +1,10 @@
 import { describe, test, expect } from "bun:test"
-import { mkdtempSync, readFileSync } from "node:fs"
+import { mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
   classifyRolloutLine,
+  classifyRolloutLineOutcome,
   isSubagentSessionMeta,
   isSyntheticUserText,
 } from "./codex-rollout-line"
@@ -14,6 +15,19 @@ import {
 } from "./__fixtures__/codex-rollout-fixture"
 
 const FALLBACK = Date.parse("2020-01-01T00:00:00.000Z")
+
+/**
+ * Same shape the parser and scanner suites use. Every bare `mkdtempSync` leaks
+ * one directory into the OS temp dir per run, forever — this file leaked six.
+ */
+function withTempDir<T>(run: (dir: string) => T): T {
+  const dir = mkdtempSync(join(tmpdir(), "codex-rollout-"))
+  try {
+    return run(dir)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+}
 
 function classify(line: object, lineIndex = 0): CodexRolloutRecord | null {
   return classifyRolloutLine(JSON.stringify(line), lineIndex, FALLBACK)
@@ -431,8 +445,25 @@ describe("classifyRolloutLine — turn terminals and model hints", () => {
   })
 })
 
-describe("classifyRolloutLine — compacted is BARE", () => {
-  test("neither message nor replacement_history reaches the record", () => {
+describe("classifyRolloutLine — compacted carries the summary and NOTHING else", () => {
+  // `payload.message` is a short human-readable summary and is present on
+  // 230 of 230 `compacted` records in the reference corpus. Dropping it left
+  // imported sessions showing a bare boundary where a live codex `/compact`
+  // renders boundary + summary.
+  test("payload.message becomes the summary", () => {
+    const record = classify(envelope("compacted", {
+      window_id: "w2",
+      message: "Summary of the conversation so far.",
+    }))
+    expect(record).toEqual({
+      kind: "compacted",
+      lineIndex: 0,
+      timestamp: Date.parse("2026-06-07T06:00:00.000Z"),
+      summary: "Summary of the conversation so far.",
+    })
+  })
+
+  test("replacement_history stays structurally unreachable", () => {
     const record = classify(envelope("compacted", {
       window_id: "w2",
       message: "Summary of the conversation so far.",
@@ -445,10 +476,32 @@ describe("classifyRolloutLine — compacted is BARE", () => {
       kind: "compacted",
       lineIndex: 0,
       timestamp: Date.parse("2026-06-07T06:00:00.000Z"),
+      summary: "Summary of the conversation so far.",
     })
     const serialized = JSON.stringify(record)
     expect(serialized).not.toContain("replay one")
-    expect(serialized).not.toContain("Summary of the conversation")
+    expect(serialized).not.toContain("replay two")
+    expect(serialized).not.toContain("replacement_history")
+  })
+
+  for (const [label, payload] of [
+    ["absent", { window_id: "w2" }],
+    ["empty", { window_id: "w2", message: "" }],
+    ["blank", { window_id: "w2", message: "   \n " }],
+    ["not a string", { window_id: "w2", message: { text: "nope" } }],
+  ] as const) {
+    test(`a ${label} message reads as no summary`, () => {
+      expect(classify(envelope("compacted", payload)))
+        .toMatchObject({ kind: "compacted", summary: null })
+    })
+  }
+
+  test("a compacted line with no payload object at all is still a boundary", () => {
+    expect(classifyRolloutLine(
+      JSON.stringify({ timestamp: "2026-06-07T06:00:00.000Z", type: "compacted" }),
+      0,
+      FALLBACK,
+    )).toMatchObject({ kind: "compacted", summary: null })
   })
 })
 
@@ -508,90 +561,228 @@ describe("session_meta + subagent refusal", () => {
   }
 })
 
+describe("classifyRolloutLineOutcome — WHY a line produced nothing", () => {
+  function outcome(line: string) {
+    return classifyRolloutLineOutcome(line, 0, FALLBACK)
+  }
+  function outcomeOf(line: object) {
+    return outcome(JSON.stringify(line))
+  }
+
+  test("a blank line is `blank`, never confused with damage", () => {
+    expect(outcome("")).toEqual({ kind: "skipped", reason: "blank" })
+    expect(outcome("   \t ")).toEqual({ kind: "skipped", reason: "blank" })
+    expect(outcome("\n")).toEqual({ kind: "skipped", reason: "blank" })
+  })
+
+  // THE distinction this export exists for: a half-written or disk-corrupted
+  // rollout must not read as an intentional drop, or the operator gets a
+  // transcript missing turns and a green "imported".
+  for (const [label, line] of [
+    ["truncated JSON", "{\"type\":\"response_item\",\"pay"],
+    ["not JSON at all", " garbage"],
+    ["a JSON null", "null"],
+    ["a JSON array", "[1,2,3]"],
+    ["a JSON scalar", "\"just a string\""],
+  ] as const) {
+    test(`${label} is \`unparseable\``, () => {
+      expect(outcome(line)).toEqual({ kind: "skipped", reason: "unparseable" })
+    })
+  }
+
+  test("a recognized envelope whose payload is not an object is `unparseable`", () => {
+    expect(outcomeOf({ type: "response_item", payload: "oops" }))
+      .toEqual({ kind: "skipped", reason: "unparseable" })
+    expect(outcomeOf({ type: "event_msg" }))
+      .toEqual({ kind: "skipped", reason: "unparseable" })
+    expect(outcomeOf({ type: "turn_context", payload: null }))
+      .toEqual({ kind: "skipped", reason: "unparseable" })
+  })
+
+  test("a retained type missing a REQUIRED field is `unparseable`", () => {
+    expect(outcomeOf(envelope("session_meta", { id: "s1" })))
+      .toEqual({ kind: "skipped", reason: "unparseable" })
+    expect(outcomeOf(envelope("session_meta", { cwd: "/tmp" })))
+      .toEqual({ kind: "skipped", reason: "unparseable" })
+    expect(outcomeOf(envelope("response_item", {
+      type: "function_call",
+      name: "exec_command",
+      arguments: "{}",
+    }))).toEqual({ kind: "skipped", reason: "unparseable" })
+    expect(outcomeOf(envelope("response_item", {
+      type: "function_call_output",
+      output: "exit 0",
+    }))).toEqual({ kind: "skipped", reason: "unparseable" })
+  })
+
+  // Read fine and complete; Kanna simply does not import them.
+  for (const [label, line] of [
+    ["an unknown top-level type", envelope("world_state", { snapshot: {} })],
+    ["a future top-level type", envelope("inter_agent_communication_metadata", {})],
+    ["an unretained event_msg", envelope("event_msg", { type: "item_completed", item: {} })],
+    ["an unretained response_item", envelope("response_item", { type: "tool_search_call" })],
+    ["a developer-role message", envelope("response_item", {
+      type: "message",
+      role: "developer",
+      content: [{ type: "input_text", text: "# Skill preamble" }],
+    })],
+    ["a synthetic user preamble", envelope("response_item", {
+      type: "message",
+      role: "user",
+      content: [{ type: "input_text", text: "<environment_context>x</environment_context>" }],
+    })],
+    ["an empty-content message", envelope("response_item", {
+      type: "message",
+      role: "assistant",
+      content: [],
+    })],
+  ] as const) {
+    test(`${label} is \`dropped_type\``, () => {
+      expect(outcomeOf(line)).toEqual({ kind: "skipped", reason: "dropped_type" })
+    })
+  }
+
+  test("a retained line comes back as a record", () => {
+    const result = outcomeOf(envelope("response_item", {
+      type: "message",
+      role: "user",
+      content: [{ type: "input_text", text: "do the thing" }],
+    }))
+    expect(result.kind).toBe("record")
+    if (result.kind !== "record") throw new Error("expected a record")
+    expect(result.record).toMatchObject({ kind: "user_message", text: "do the thing" })
+  })
+
+  // The wrapper keeps its exact signature; nothing that consumes it has to
+  // change, and the two can never disagree about whether a line was retained.
+  test("classifyRolloutLine is exactly the outcome with the reason erased", () => {
+    withTempDir((dir) => {
+      const fixture = writeCodexRolloutFixture(dir, { sessionId: "sess-outcome", cwd: dir })
+      const lines = readFileSync(fixture.rolloutPath, "utf8").split("\n")
+      lines.push("{truncated", "", "   ")
+      expect(lines.length).toBeGreaterThan(20)
+      for (const [lineIndex, line] of lines.entries()) {
+        const result = classifyRolloutLineOutcome(line, lineIndex, FALLBACK)
+        const legacy = classifyRolloutLine(line, lineIndex, FALLBACK)
+        expect(legacy).toEqual(result.kind === "record" ? result.record : null)
+      }
+    })
+  })
+
+  test("every reason is reachable from one real, damaged file", () => {
+    withTempDir((dir) => {
+      const fixture = writeCodexRolloutFixture(dir, { sessionId: "sess-outcome", cwd: dir })
+      // What a half-written rollout looks like: a torn tail and a stray blank.
+      const lines = [...readFileSync(fixture.rolloutPath, "utf8").split("\n"), "{\"type\":\"resp"]
+      const reasons = new Set(
+        lines
+          .map((line, lineIndex) => classifyRolloutLineOutcome(line, lineIndex, FALLBACK))
+          .flatMap((result) => (result.kind === "skipped" ? [result.reason] : [])),
+      )
+      expect([...reasons].sort()).toEqual(["blank", "dropped_type", "unparseable"])
+    })
+  })
+})
+
 describe("against the on-disk fixture", () => {
   test("classifies the importable rollout and drops everything it should", () => {
-    const dir = mkdtempSync(join(tmpdir(), "codex-rollout-"))
-    const fixture = writeCodexRolloutFixture(dir, { sessionId: "sess-fixture", cwd: dir })
-    const { records } = classifyFile(fixture.rolloutPath)
+    withTempDir((dir) => {
+      const fixture = writeCodexRolloutFixture(dir, { sessionId: "sess-fixture", cwd: dir })
+      const { records } = classifyFile(fixture.rolloutPath)
 
-    expect(records.map((r) => r.kind)).toEqual([
-      "session_meta",
-      "model_hint",
-      // the synthetic <environment_context> user message and the developer
-      // message are both gone; the human turn is first
-      "user_message",
-      "reasoning",
-      "tool_call",
-      "assistant_message",
-      "tool_output",
-      // event_msg/item_completed dropped here
-      "tool_call",
-      // event_msg/patch_apply_end dropped here
-      "tool_output",
-      "token_count",
-      "token_count",
-      "compacted",
-      // world_state dropped here
-      "assistant_message",
-      "turn_complete",
-    ])
+      expect(records.map((r) => r.kind)).toEqual([
+        "session_meta",
+        "model_hint",
+        // the synthetic <environment_context> user message and the developer
+        // message are both gone; the human turn is first
+        "user_message",
+        "reasoning",
+        "tool_call",
+        "assistant_message",
+        "tool_output",
+        // event_msg/item_completed dropped here
+        "tool_call",
+        // event_msg/patch_apply_end dropped here
+        "tool_output",
+        "token_count",
+        "token_count",
+        "compacted",
+        // world_state dropped here
+        "tool_call",
+        "tool_output",
+        "tool_call",
+        "assistant_message",
+        "tool_output",
+        "assistant_message",
+        "turn_complete",
+      ])
 
-    const first = records.find((r) => r.kind === "user_message")
-    expect(first?.kind === "user_message" && first.text).toBe("rename the note heading")
+      const first = records.find((r) => r.kind === "user_message")
+      expect(first?.kind === "user_message" && first.text).toBe("rename the note heading")
+    })
   })
 
   test("the fixture carries no payload.id and no ordinal — the trap it exists for", () => {
-    const dir = mkdtempSync(join(tmpdir(), "codex-rollout-"))
-    const fixture = writeCodexRolloutFixture(dir, { sessionId: "sess-fixture", cwd: dir })
-    for (const line of readFileSync(fixture.rolloutPath, "utf8").trim().split("\n")) {
-      const parsed = JSON.parse(line)
-      expect(parsed.ordinal).toBeUndefined()
-      // session_meta's `id` IS the session id, not a per-record key
-      if (parsed.type !== "session_meta") expect(parsed.payload.id).toBeUndefined()
-    }
+    withTempDir((dir) => {
+      const fixture = writeCodexRolloutFixture(dir, { sessionId: "sess-fixture", cwd: dir })
+      for (const line of readFileSync(fixture.rolloutPath, "utf8").trim().split("\n")) {
+        const parsed = JSON.parse(line)
+        expect(parsed.ordinal).toBeUndefined()
+        // session_meta's `id` IS the session id, not a per-record key
+        if (parsed.type !== "session_meta") expect(parsed.payload.id).toBeUndefined()
+      }
+    })
   })
 
   test("compacted's replacement_history never duplicates the transcript", () => {
-    const dir = mkdtempSync(join(tmpdir(), "codex-rollout-"))
-    const fixture = writeCodexRolloutFixture(dir, { sessionId: "sess-fixture", cwd: dir })
-    const { records } = classifyFile(fixture.rolloutPath)
-    const texts = records.flatMap((r) =>
-      r.kind === "user_message" || r.kind === "assistant_message" ? [r.text] : []
-    )
-    expect(texts).not.toContain("replay one")
-    expect(texts).not.toContain("replay two")
-    expect(texts).not.toContain("replay three")
+    withTempDir((dir) => {
+      const fixture = writeCodexRolloutFixture(dir, { sessionId: "sess-fixture", cwd: dir })
+      const { records } = classifyFile(fixture.rolloutPath)
+      const texts = records.flatMap((r) =>
+        r.kind === "user_message" || r.kind === "assistant_message" ? [r.text] : []
+      )
+      expect(texts).not.toContain("replay one")
+      expect(texts).not.toContain("replay two")
+      expect(texts).not.toContain("replay three")
+      // The SIBLING field `message` is a summary and IS carried — the bare
+      // record dropped it along with the replay.
+      const compacted = records.find((r) => r.kind === "compacted")
+      expect(compacted?.kind === "compacted" && compacted.summary)
+        .toBe("Summary of the conversation so far.")
+    })
   })
 
   test("line indices stay a pure function of byte position across the file", () => {
-    const dir = mkdtempSync(join(tmpdir(), "codex-rollout-"))
-    const fixture = writeCodexRolloutFixture(dir, { sessionId: "sess-fixture", cwd: dir })
-    const before = classifyFile(fixture.rolloutPath).records
+    withTempDir((dir) => {
+      const fixture = writeCodexRolloutFixture(dir, { sessionId: "sess-fixture", cwd: dir })
+      const before = classifyFile(fixture.rolloutPath).records
 
-    fixture.appendLine({
-      timestamp: "2026-06-07T07:00:00.000Z",
-      type: "response_item",
-      payload: {
-        type: "message",
-        role: "user",
-        content: [{ type: "input_text", text: "one more thing" }],
-      },
+      fixture.appendLine({
+        timestamp: "2026-06-07T07:00:00.000Z",
+        type: "response_item",
+        payload: {
+          type: "message",
+          role: "user",
+          content: [{ type: "input_text", text: "one more thing" }],
+        },
+      })
+
+      const after = classifyFile(fixture.rolloutPath).records
+      // Every previously-classified record keeps its index; only the delta is new.
+      expect(after.slice(0, before.length)).toEqual(before)
+      const tail = after[after.length - 1]
+      expect(tail).toMatchObject({ kind: "user_message", text: "one more thing" })
     })
-
-    const after = classifyFile(fixture.rolloutPath).records
-    // Every previously-classified record keeps its index; only the delta is new.
-    expect(after.slice(0, before.length)).toEqual(before)
-    const tail = after[after.length - 1]
-    expect(tail).toMatchObject({ kind: "user_message", text: "one more thing" })
   })
 
   test("the subagent variant is refused at its session_meta", () => {
-    const dir = mkdtempSync(join(tmpdir(), "codex-rollout-"))
-    const fixture = writeSubagentRollout(dir, { sessionId: "sess-sub", cwd: dir })
-    const { records } = classifyFile(fixture.rolloutPath)
-    const meta = records[0]
-    if (meta?.kind !== "session_meta") throw new Error("expected session_meta on line 0")
-    expect(meta.meta.parentThreadId).toBe("parent-thread-0001")
-    expect(isSubagentSessionMeta(meta.meta)).toBe(true)
+    withTempDir((dir) => {
+      const fixture = writeSubagentRollout(dir, { sessionId: "sess-sub", cwd: dir })
+      const { records } = classifyFile(fixture.rolloutPath)
+      const meta = records[0]
+      if (meta?.kind !== "session_meta") throw new Error("expected session_meta on line 0")
+      expect(meta.meta.parentThreadId).toBe("parent-thread-0001")
+      expect(isSubagentSessionMeta(meta.meta)).toBe(true)
+    })
   })
 })

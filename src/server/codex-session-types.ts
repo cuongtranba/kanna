@@ -10,10 +10,13 @@
 // Two safety rules are encoded in the TYPES rather than left to the mapper's
 // discipline, because both failed silently when they were conventions:
 //
-//  - `CodexCompactedRecord` carries NO `message` and NO `replacement_history`.
-//    `replacement_history` is a full replay of the conversation so far; a
-//    mapper that walks it duplicates the entire transcript, and every test
-//    still passes. It is unreachable from this union by construction.
+//  - `CodexCompactedRecord` carries NO `replacement_history`. That field is a
+//    full replay of the conversation so far; a mapper that walks it duplicates
+//    the entire transcript, and every test still passes. It is unreachable from
+//    this union by construction. Its SIBLING `message` — a short human-readable
+//    summary, a different field answering a different question — IS carried, as
+//    `summary`. Keeping the record bare to block the replay also silently
+//    dropped that.
 //  - `CodexReasoningRecord` carries NO `encrypted_content`, only the plain
 //    `summary`. The encrypted blob is not ours to decode.
 
@@ -117,9 +120,20 @@ export interface CodexTurnAbortedRecord extends CodexRecordBase {
   durationMs: number
 }
 
-/** Deliberately carries no payload — see the header note. */
+/**
+ * A compaction boundary, carrying ONLY `payload.message`.
+ *
+ * `message` is a short human-readable summary and is non-empty on 230 of the
+ * 230 `compacted` records in the reference corpus; dropping it left an imported
+ * session showing a bare boundary where a live codex `/compact` renders
+ * `compact_boundary` then `compact_summary`. `replacement_history` is a
+ * DIFFERENT field on the same payload and still has nowhere to land — see the
+ * header note. Do not add a field for it.
+ */
 export interface CodexCompactedRecord extends CodexRecordBase {
   kind: "compacted"
+  /** `payload.message`, trimmed. `null` when absent, blank, or not a string. */
+  summary: string | null
 }
 
 export type CodexRolloutRecord =

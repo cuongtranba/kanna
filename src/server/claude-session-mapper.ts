@@ -45,10 +45,14 @@ export function claudeRecordKeyFromEntryId(entryId: string): string | null {
 }
 
 /**
- * A record's identity. A record with NO uuid returns null, which the importer
- * treats as always-new — existing, documented behaviour: real Claude sessions
- * always carry a uuid, and `makeId` mints a random prefix for the ones that do
- * not, so no lookup could ever find them anyway.
+ * A record's identity, minted into every entry `_id` `makeId` produces.
+ *
+ * MODULE-LOCAL BY DESIGN — `SessionRecordCodec` carries no `recordKey` slot;
+ * `claudeRecordKeyFromEntryId` is the only keying function the importer sees.
+ * A record with NO uuid returns null, which is existing, documented behaviour:
+ * real Claude sessions always carry a uuid, and `makeId` mints a random prefix
+ * for the ones that do not, so no lookup could ever find them anyway — those
+ * entries read as always-new.
  */
 export function claudeRecordKey(record: ClaudeSessionRecord): string | null {
   return record.uuid ?? null
@@ -238,13 +242,13 @@ export function claudeLegacyTitleCandidates(session: ParsedClaudeSession): Reado
 }
 
 /**
- * Claude's pure half of a session source. `recordKey` and
- * `recordKeyFromEntryId` sit next to `makeId` because they mirror its suffix
- * vocabulary — drift between the three is what produces a silent append storm.
+ * Claude's pure half of a session source. `claudeRecordKey` and
+ * `claudeRecordKeyFromEntryId` sit next to `makeId` because they mirror its
+ * suffix vocabulary — drift between the three is what produces a silent append
+ * storm. Only the inverse is a codec slot; the forward half stays module-local.
  */
 export const claudeSessionCodec: SessionRecordCodec<ClaudeSessionRecord> = {
   map: (records) => mapClaudeRecordsToEntries(records),
-  recordKey: claudeRecordKey,
   recordKeyFromEntryId: claudeRecordKeyFromEntryId,
   deriveTitle: deriveClaudeSessionTitle,
   legacyTitleCandidates: claudeLegacyTitleCandidates,

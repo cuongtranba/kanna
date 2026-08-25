@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test"
-import { mkdtempSync } from "node:fs"
+import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { writeCodexRolloutFixture } from "./__fixtures__/codex-rollout-fixture"
@@ -12,22 +12,33 @@ import {
   deriveCodexTitle,
   mapCodexRecordsToEntries,
 } from "./codex-session-mapper"
-import { translateItemToToolCalls } from "./codex-transcript-translator"
+import { todoToolCall, translateItemToToolCalls } from "./codex-transcript-translator"
 import type { CodexRolloutRecord, CodexToolOutputRecord } from "./codex-session-types"
-import type { ParsedSession } from "./session-source"
+import { createImportableSession, type ParsedSession } from "./session-source"
 
 const MAX_BYTES = 64 * 1024 * 1024
 
+/**
+ * Parses the on-disk fixture and takes the temp dir back down.
+ *
+ * A `ParsedSession` is pure data, so nothing below needs the directory to
+ * survive — and every `mkdtempSync` without a matching `rmSync` leaks a dir
+ * per run into the OS temp dir, forever.
+ */
 function loadFixtureSession(): ParsedSession<CodexRolloutRecord> {
   const cwd = mkdtempSync(join(tmpdir(), "codex-mapper-"))
-  const fixture = writeCodexRolloutFixture(cwd, { sessionId: "sess-mapper-1", cwd })
-  const result = parseCodexRolloutFile(fixture.rolloutPath, {
-    classifyLine: classifyRolloutLine,
-    isSubagentMeta: isSubagentSessionMeta,
-    maxBytes: MAX_BYTES,
-  })
-  if (result.kind !== "parsed") throw new Error(`fixture did not parse: ${result.kind}`)
-  return result.session
+  try {
+    const fixture = writeCodexRolloutFixture(cwd, { sessionId: "sess-mapper-1", cwd })
+    const result = parseCodexRolloutFile(fixture.rolloutPath, {
+      classifyLine: classifyRolloutLine,
+      isSubagentMeta: isSubagentSessionMeta,
+      maxBytes: MAX_BYTES,
+    })
+    if (result.kind !== "parsed") throw new Error(`fixture did not parse: ${result.kind}`)
+    return result.session
+  } finally {
+    rmSync(cwd, { recursive: true, force: true })
+  }
 }
 
 const SESSION = loadFixtureSession()
@@ -78,8 +89,18 @@ describe("codexRecordKey", () => {
     expect(keys.size).toBe(RECORDS.length)
   })
 
-  test("does not embed the session id — one chat is one session", () => {
-    expect(codexRecordKey(RECORDS[0])).not.toContain(SESSION.sessionId)
+  // A `codex#<n>` key trivially contains no session id — that assertion cannot
+  // fail. What CAN fail is the number being a counter over RETAINED records
+  // instead of the physical line: both read `codex#<n>`, and the counter form
+  // renumbers every already-imported record the moment the classifier's retain
+  // table widens. The fixture drops lines, so the two disagree here.
+  test("the key counts PHYSICAL lines, not retained records", () => {
+    const drift = RECORDS.filter((record, index) => record.lineIndex !== index)
+    expect(drift.length).toBeGreaterThan(0)
+    for (const record of drift) {
+      expect(codexRecordKey(record)).toBe(`codex#${record.lineIndex}`)
+      expect(codexRecordKey(record)).not.toBe(`codex#${RECORDS.indexOf(record)}`)
+    }
   })
 })
 
@@ -144,15 +165,121 @@ describe("determinism", () => {
 })
 
 describe("split tool pair", () => {
+  /**
+   * The multi-file `apply_patch` output. Picking THIS one rather than
+   * `recordsOfKind("tool_output")[0]` is the whole point: the exec output's
+   * tool id is the bare `call_id` either way, so a test over it passes
+   * identically whether or not the call was resolved — it cannot fail.
+   */
+  function multiFileOutput(): CodexToolOutputRecord {
+    const call = recordsOfKind("tool_call").find(
+      (record) => record.name === "apply_patch" && record.input.includes("second.ts"),
+    )
+    if (!call) throw new Error("fixture lost its multi-file apply_patch call")
+    const output = recordsOfKind("tool_output").find((record) => record.callId === call.callId)
+    if (!output) throw new Error("fixture lost the multi-file apply_patch output")
+    return output
+  }
+
+  function expectedChangeToolIds(callId: string): string[] {
+    return [`${callId}:change:0`, `${callId}:change:1`]
+  }
+
   // Required, not defensive: a live-tail delta legitimately holds an output
-  // whose call landed in a tick already imported.
-  test("mapping ONLY the output still yields a tool_result on the call_id", () => {
-    const output: CodexToolOutputRecord = recordsOfKind("tool_output")[0]
+  // whose call landed in a tick already imported. The SESSION still holds the
+  // call, so the pairing is recoverable and fidelity must not degrade.
+  test("mapping ONLY the output keeps the call's per-change tool ids", () => {
+    const output = multiFileOutput()
+    const entries = mapCodexRecordsToEntries([output], SESSION)
+    const results = entries.filter((entry) => entry.kind === "tool_result")
+    expect(results.map((entry) => entry.toolId)).toEqual(expectedChangeToolIds(output.callId))
+    for (const entry of results) {
+      expect(codexRecordKeyFromEntryId(entry._id)).toBe(codexRecordKey(output))
+    }
+  })
+
+  // The `:change:<i>` ids the CALL minted must be exactly the ones the output
+  // produces — a bare `call_id` result matches none of them, so every card the
+  // call opened stays "in progress" forever.
+  test("the call's tool ids and the output's tool ids are the same set", () => {
+    const output = multiFileOutput()
+    const call = recordsOfKind("tool_call").find((record) => record.callId === output.callId)
+    if (!call) throw new Error("fixture lost the multi-file apply_patch call")
+
+    const callIds = mapCodexRecordsToEntries([call], SESSION)
+      .filter((entry) => entry.kind === "tool_call")
+      .map((entry) => entry.tool.toolId)
+    const resultIds = mapCodexRecordsToEntries([output], SESSION)
+      .filter((entry) => entry.kind === "tool_result")
+      .map((entry) => entry.toolId)
+
+    expect(callIds).toEqual(expectedChangeToolIds(output.callId))
+    expect(resultIds).toEqual(callIds)
+  })
+
+  // The genuine fallback: the call is absent from the SESSION too, not merely
+  // from the records being mapped. Then there is nothing to recover and the
+  // bare `call_id` is the best available join key.
+  test("an output whose call the session never saw degrades to the bare call_id", () => {
+    const output = multiFileOutput()
     const entries = mapCodexRecordsToEntries([output], sessionWith([output]))
     const results = entries.filter((entry) => entry.kind === "tool_result")
     expect(results.length).toBe(1)
     expect(results[0].toolId).toBe(output.callId)
-    expect(codexRecordKeyFromEntryId(results[0]._id)).toBe(codexRecordKey(output))
+  })
+})
+
+describe("newEntriesSince over the real codec", () => {
+  /**
+   * The live-tail tick this whole file exists for: the `tool_call` line was
+   * imported last tick and only its `tool_output` line is new.
+   *
+   * The delta path must map the SAME way the store path does. Mapping only the
+   * unseen RECORDS makes every mapper carry an unwritten "must be correct under
+   * subsetting" invariant, and codex does not: `callsById` loses the call, the
+   * output degrades to a generic `dynamicOutput`, and its bare `call_id`
+   * matches none of the `:change:<i>` ids the call minted.
+   */
+  test("an output-only tick still carries the call's per-change tool ids", () => {
+    const call = recordsOfKind("tool_call").find(
+      (record) => record.name === "apply_patch" && record.input.includes("second.ts"),
+    )
+    if (!call) throw new Error("fixture lost its multi-file apply_patch call")
+    const output = recordsOfKind("tool_output").find((record) => record.callId === call.callId)
+    if (!output) throw new Error("fixture lost the multi-file apply_patch output")
+
+    const importable = createImportableSession(SESSION, codexSessionCodec)
+    // Everything up to and including the call has been imported already.
+    const seen = new Set(
+      RECORDS.filter((record) => record.lineIndex <= call.lineIndex).map(codexRecordKey),
+    )
+
+    const fresh = importable.newEntriesSince(seen)
+    const results = fresh.filter((entry) => entry.kind === "tool_result")
+    expect(results.map((entry) => entry.toolId)).toEqual([
+      `${call.callId}:change:0`,
+      `${call.callId}:change:1`,
+    ])
+  })
+
+  test("the delta holds exactly the entries of the unseen records", () => {
+    const importable = createImportableSession(SESSION, codexSessionCodec)
+    const seenRecords = RECORDS.slice(0, 6)
+    const seen = new Set(seenRecords.map(codexRecordKey))
+
+    const fresh = importable.newEntriesSince(seen)
+    const expected = ENTRIES.filter((entry) => {
+      const key = codexRecordKeyFromEntryId(entry._id)
+      return key === null || !seen.has(key)
+    })
+    expect(fresh.map((entry) => entry._id)).toEqual(expected.map((entry) => entry._id))
+  })
+
+  test("nothing seen yields the whole transcript; everything seen yields none", () => {
+    const importable = createImportableSession(SESSION, codexSessionCodec)
+    expect(importable.newEntriesSince(new Set()).map((entry) => entry._id))
+      .toEqual(ENTRIES.map((entry) => entry._id))
+    expect(importable.newEntriesSince(new Set(RECORDS.map(codexRecordKey)))).toEqual([])
   })
 })
 
@@ -175,27 +302,97 @@ describe("rendering parity with the live translator", () => {
 
     expect(imported[0].tool.toolKind).toBe(live[0].tool.toolKind)
     expect(imported[0].tool.toolName).toBe(live[0].tool.toolName)
-    expect(imported[0].tool.toolKind).toBe("bash")
-    expect(imported[0].tool.toolName).toBe("Bash")
     expect(imported[0].tool.toolId).toBe(exec.callId)
+  })
+
+  /**
+   * `update_plan` is the ONE tool call that is not a `ThreadItem` — the live
+   * path renders a plan through `todoToolCall` / `planStepsToTodos`, so the
+   * mapper takes a different branch and mints its entry id through different
+   * code. That branch was dead in the whole suite: a reviewer made it throw and
+   * all 4100 server tests still passed.
+   */
+  test("an update_plan call renders as the live path's TodoWrite card", () => {
+    const plan = recordsOfKind("tool_call").find((record) => record.name === "update_plan")
+    if (!plan) throw new Error("fixture lost its update_plan call")
+    const imported = entriesProducedBy(RECORDS.indexOf(plan))
+      .filter((entry) => entry.kind === "tool_call")
+    expect(imported.length).toBe(1)
+
+    const live = todoToolCall(plan.callId, [
+      { step: "rename the note heading", status: "completed" },
+      { step: "update the two importers", status: "inProgress" },
+      { step: "run the suite", status: "pending" },
+    ])
+    if (live.kind !== "tool_call") throw new Error("expected a tool_call")
+
+    expect(imported[0].tool.toolKind).toBe(live.tool.toolKind)
+    expect(imported[0].tool.toolName).toBe(live.tool.toolName)
+    expect(imported[0].tool.toolId).toBe(plan.callId)
+    // The rollout spells the status `in_progress`; the app-server sends
+    // `inProgress`. Both must land on the same todo, or every step of every
+    // imported plan renders pending.
+    expect(imported[0].tool.input).toEqual(live.tool.input)
+  })
+
+  test("an update_plan entry id round-trips to its own line", () => {
+    const plan = recordsOfKind("tool_call").find((record) => record.name === "update_plan")
+    if (!plan) throw new Error("fixture lost its update_plan call")
+    for (const entry of entriesProducedBy(RECORDS.indexOf(plan))) {
+      expect(codexRecordKeyFromEntryId(entry._id)).toBe(codexRecordKey(plan))
+    }
   })
 })
 
 describe("compaction", () => {
-  test("a compacted record yields exactly one compact_boundary and no replay", () => {
+  test("a compacted record with a summary yields boundary THEN summary", () => {
     const compacted = recordsOfKind("compacted")
     expect(compacted.length).toBe(1)
-    const produced = entriesProducedBy(RECORDS.indexOf(compacted[0]))
-    expect(produced.length).toBe(1)
-    expect(produced[0].kind).toBe("compact_boundary")
+    expect(compacted[0].summary).toBe("Summary of the conversation so far.")
 
+    const produced = entriesProducedBy(RECORDS.indexOf(compacted[0]))
+    // The order is load-bearing: `buildHistoryPrimer` resumes at the LAST
+    // boundary and counts `compact_summary` as assistant content, so a summary
+    // emitted before its own boundary is discarded.
+    expect(produced.map((entry) => entry.kind)).toEqual(["compact_boundary", "compact_summary"])
+    const summary = produced[1]
+    if (summary.kind !== "compact_summary") throw new Error("expected compact_summary")
+    expect(summary.summary).toBe("Summary of the conversation so far.")
+  })
+
+  test("both entries are keyed on the same line, with distinct stable ids", () => {
+    const compacted = recordsOfKind("compacted")[0]
+    const produced = entriesProducedBy(RECORDS.indexOf(compacted))
+    const key = codexRecordKey(compacted)
+    for (const entry of produced) {
+      expect(codexRecordKeyFromEntryId(entry._id)).toBe(key)
+      expect(entry.createdAt).toBe(compacted.timestamp)
+    }
+    expect(new Set(produced.map((entry) => entry._id)).size).toBe(produced.length)
+    // Stable across passes — a re-import must not mint a second summary card.
+    expect(mapCodexRecordsToEntries([compacted], SESSION).map((entry) => entry._id))
+      .toEqual(produced.map((entry) => entry._id))
+  })
+
+  test("a compacted record with no summary yields the boundary alone", () => {
+    const bare: CodexRolloutRecord = {
+      kind: "compacted",
+      lineIndex: 88,
+      timestamp: SESSION.lastTimestamp,
+      summary: null,
+    }
+    const entries = mapCodexRecordsToEntries([bare], sessionWith([bare]))
+    expect(entries.map((entry) => entry.kind)).toEqual(["compact_boundary"])
+  })
+
+  test("the replay is never walked", () => {
     // `replacement_history` is a full replay of the conversation so far; a
     // mapper that walks it duplicates the whole transcript with nothing failing.
     const serialized = JSON.stringify(ENTRIES)
     expect(serialized).not.toContain("replay one")
     expect(serialized).not.toContain("replay two")
     expect(serialized).not.toContain("replay three")
-    expect(ENTRIES.some((entry) => entry.kind === "compact_summary")).toBe(false)
+    expect(ENTRIES.filter((entry) => entry.kind === "compact_summary").length).toBe(1)
   })
 })
 
@@ -357,10 +554,23 @@ describe("deriveCodexTitle", () => {
 })
 
 describe("codexSessionCodec", () => {
-  test("exposes the pure parts as its slots", () => {
-    expect(codexSessionCodec.recordKey(RECORDS[0])).toBe(codexRecordKey(RECORDS[0]))
-    expect(codexSessionCodec.deriveTitle(SESSION)).toBe(deriveCodexTitle(SESSION))
-    expect(codexSessionCodec.map(RECORDS, SESSION).length).toBe(ENTRIES.length)
+  // The property, not the wiring: `codexSessionCodec.map === mapCodexRecordsToEntries`
+  // can only fail on something TypeScript already rejects, so asserting it
+  // asserts nothing. What CAN fail is the inverse not recovering an id `map`
+  // minted — an entry the importer cannot key reads as always-new forever.
+  test("every id its map mints is recoverable by its own recordKeyFromEntryId", () => {
+    const entries = codexSessionCodec.map(RECORDS, SESSION)
+    expect(entries.length).toBeGreaterThan(0)
+    const recordKeys = new Set(RECORDS.map(codexRecordKey))
+    for (const entry of entries) {
+      const key = codexSessionCodec.recordKeyFromEntryId(entry._id)
+      expect(key).not.toBeNull()
+      expect(recordKeys.has(key ?? "")).toBe(true)
+    }
+  })
+
+  test("derives the title from the session", () => {
+    expect(codexSessionCodec.deriveTitle(SESSION)).toBe("rename the note heading")
   })
 
   test("legacyTitleCandidates covers only titles Kanna itself wrote", () => {
