@@ -3,16 +3,15 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "../../lib/utils"
 
 const buttonVariants = cva(
-  "touch-manipulation inline-flex items-center justify-center whitespace-nowrap cursor-pointer rounded-md text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none",
+  "touch-manipulation inline-flex items-center justify-center whitespace-nowrap cursor-pointer rounded-md text-sm font-medium ring-offset-background transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none",
   {
     variants: {
       variant: {
         default: "bg-primary text-primary-foreground disabled:bg-primary/50 disabled:text-primary-foreground/90 hover:bg-primary/90",
         juicy: "bg-logo text-primary-foreground disabled:text-primary-foreground/50 hover:bg-logo/90",
-        destructive:
-          "bg-destructive/80  dark:text-white",
+        destructive: "bg-destructive-filled text-destructive-filled-foreground hover:bg-destructive-filled/90",
         outline:
-          "border disabled:bg-transparent disabled:text-foreground/50 border-inpu disabled:border-input/90 bg-card hover:bg-muted hover:text-accent-foreground",
+          "border disabled:bg-transparent disabled:text-foreground/50 border-input disabled:border-input/90 bg-card hover:bg-muted hover:text-accent-foreground",
         secondary:
           "bg-transparent border border-border text-secondary-foreground hover:text-secondary-foreground/60 disabled:text-secondary-foreground/50",
         ghost: "hover:bg-accent dark:hover:bg-card hover:text-accent-foreground text-muted-foreground disabled:text-muted-foreground/50 border border-border/0 hover:border-border",
@@ -20,13 +19,13 @@ const buttonVariants = cva(
         none: "",
       },
       size: {
-        default: "h-10 px-4 rounded-full py-2",
-        sm: "h-9 rounded-full px-3",
-        lg: "h-11 rounded-full px-8",
-        icon: "h-9 w-9 rounded-full",
-        "icon-mobile": "h-11 w-11 rounded-full md:h-9 md:w-9",
+        default: "h-10 px-4 rounded-md py-2 max-md:min-h-11",
+        sm: "h-9 rounded-md px-3 max-md:min-h-11",
+        lg: "h-11 rounded-md px-8",
+        icon: "h-9 w-9 rounded-md max-md:min-h-11 max-md:min-w-11",
+        "icon-mobile": "h-11 w-11 rounded-md md:h-9 md:w-9",
         none: "",
-        "icon-sm": "h-5.5 w-5.5 rounded-md",
+        "icon-sm": "h-8 w-8 rounded-md max-md:min-h-11 max-md:min-w-11",
       },
     },
     defaultVariants: {

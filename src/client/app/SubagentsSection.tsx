@@ -153,7 +153,7 @@ function SubagentList(props: {
     <aside className="flex w-full flex-col gap-2 md:w-64 md:flex-shrink-0">
       <div className="flex items-center justify-between gap-2">
         <span
-          className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+          className="text-xs font-medium tracking-wide text-muted-foreground"
           style={{ fontVariantNumeric: "tabular-nums" }}
         >
           {props.subagents.length} {props.subagents.length === 1 ? "agent" : "agents"}
@@ -207,7 +207,7 @@ function SubagentList(props: {
 function ProviderChip({ provider }: { provider: AgentProvider }) {
   const label = getProviderCatalog(provider).label
   return (
-    <span className="inline-flex items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 text-10 font-medium uppercase tracking-wide text-muted-foreground">
+    <span className="inline-flex items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 text-xs font-medium tracking-wide text-muted-foreground">
       <Bot className="size-3" /> {label}
     </span>
   )

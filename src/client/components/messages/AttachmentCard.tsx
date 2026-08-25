@@ -143,17 +143,17 @@ export function AttachmentFileCard({
   let subtitle: React.ReactNode
   if (isMention) {
     subtitle = (
-      <div className="max-w-[150px] truncate text-11 text-muted-foreground">
+      <div className="max-w-[150px] truncate text-xs text-muted-foreground">
         {mentionSubtitle ? `@${mentionSubtitle}` : "@mention"}
       </div>
     )
   } else if (disabledReason) {
-    subtitle = <div className="truncate text-11 text-muted-foreground">{disabledReason}</div>
+    subtitle = <div className="truncate text-xs text-muted-foreground">{disabledReason}</div>
   } else if (meta !== undefined) {
-    subtitle = <div className="truncate text-11 text-muted-foreground">{meta}</div>
+    subtitle = <div className="truncate text-xs text-muted-foreground">{meta}</div>
   } else {
     subtitle = (
-      <div className="truncate text-11 text-muted-foreground">
+      <div className="truncate text-xs text-muted-foreground">
         {attachment.mimeType} · {formatAttachmentSize(attachment.size)}
       </div>
     )

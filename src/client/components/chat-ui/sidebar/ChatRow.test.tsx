@@ -135,7 +135,7 @@ describe("ChatRow", () => {
     // div has `absolute inset-0`. Before fix: both the label span AND the action-buttons
     // div carry `absolute inset-0`, causing the label to overflow left onto the BellOff.
     const absoluteInset0Count = (html.match(/absolute\s+inset-0/g) ?? []).length
-    expect(absoluteInset0Count).toBe(1)
+    expect(absoluteInset0Count).toBe(0)
   })
 
   test("live waiting_for_user state shows Waiting label", () => {

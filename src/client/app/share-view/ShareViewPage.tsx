@@ -70,7 +70,7 @@ function MessageView({ message }: { message: ChatSnapshotMessage }) {
             message.isError ? "border-destructive/40 bg-destructive/5" : "border-border bg-muted/30"}`
           }
         >
-          <div className="px-3 py-1 text-11 font-mono uppercase tracking-wide text-muted-foreground">
+          <div className="px-3 py-1 text-xs font-mono tracking-wide text-muted-foreground">
             {message.isError ? "tool error" : "tool result"}
           </div>
           <HighlightedCode source={text} lang="json" />
@@ -118,7 +118,7 @@ export function ShareViewPage({ snapshot }: ShareViewPageProps) {
                 Read-only · model {chatMeta.model}
               </p>
             </div>
-            <span className="shrink-0 rounded-full border border-border bg-muted px-2 py-0.5 text-10 font-medium uppercase tracking-wide text-muted-foreground">
+            <span className="shrink-0 rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-medium tracking-wide text-muted-foreground">
               Shared
             </span>
           </div>

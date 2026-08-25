@@ -1,7 +1,6 @@
 import { LegendList, type LegendListRef } from "@legendapp/list/react"
-import { PatchDiff } from "@pierre/diffs/react"
 import { AlertTriangle, ArrowUp, Ban, Building2, Check, ChevronDown, ChevronUp, Code, Columns2, Copy, Download, Ellipsis, FileText, FolderOpen, GitBranch, GitBranchPlus, Github, GitMerge, GitPullRequest, Globe, LoaderCircle, Lock, Minus, PencilLine, PenLine, RefreshCw, Rows3, Search, Trash2, Upload, UserRound, WrapText } from "lucide-react"
-import { memo, useCallback, useEffect, useMemo, useRef, type ChangeEvent as ReactChangeEvent, type MouseEvent as ReactMouseEvent, type ReactNode, type RefObject } from "react"
+import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, type ChangeEvent as ReactChangeEvent, type MouseEvent as ReactMouseEvent, type ReactNode, type RefObject } from "react"
 import type {
   ChatAttachment,
   ChatBranchHistoryEntry,
@@ -65,6 +64,7 @@ function isSidebarViewMode(v: string): v is SidebarViewMode { return SIDEBAR_VIE
 function isRepoVisibility(v: string): v is RepoVisibility { return REPO_VISIBILITY_VALUES.has(v) }
 function isEntryView(v: string): v is EntryView { return ENTRY_VIEW_VALUES.has(v) }
 const EMPTY_CHECKED_PATHS: Record<string, boolean> = {}
+const PatchDiff = lazy(() => import("@pierre/diffs/react").then((module) => ({ default: module.PatchDiff })))
 
 
 export interface RightSidebarPorts {
@@ -187,12 +187,12 @@ function CommitHistoryRow({ entry, isPendingPush = false, ports }: { entry: Chat
     tagSection = (
       <div className="flex shrink-0 flex-wrap justify-end gap-1">
         {entry.tags.map((tag) => (
-          <span key={tag} className="inline-flex items-center rounded-full bg-muted border border-border  px-2 py-0.5 text-11">
+          <span key={tag} className="inline-flex items-center rounded-full bg-muted border border-border  px-2 py-0.5 text-xs">
             {tag}
           </span>
         ))}
         {isPendingPush ? (
-          <span className="inline-flex items-center rounded-full bg-muted border border-border  px-2 py-0.5 text-11">
+          <span className="inline-flex items-center rounded-full bg-muted border border-border  px-2 py-0.5 text-xs">
             <ArrowUp className="size-3" />
           </span>
         ) : null}
@@ -201,7 +201,7 @@ function CommitHistoryRow({ entry, isPendingPush = false, ports }: { entry: Chat
   } else if (isPendingPush) {
     tagSection = (
       <div className="flex shrink-0 flex-wrap justify-end gap-1">
-        <span className="inline-flex items-center rounded-full bg-muted border border-border  px-2 py-0.5 text-11">
+        <span className="inline-flex items-center rounded-full bg-muted border border-border  px-2 py-0.5 text-xs">
           <ArrowUp className="size-3" />
         </span>
       </div>
@@ -581,7 +581,7 @@ function BranchListSection({
   return (
     <div className="space-y-1">
       <div className={cn(
-        "px-1 py-1 text-11 font-medium uppercase tracking-[0.08em] text-muted-foreground",
+        "px-1 py-1 text-xs font-medium tracking-[0.08em] text-muted-foreground",
         stickyTitle && "sticky top-0 z-10 bg-background"
       )}>
         {title}
@@ -611,7 +611,7 @@ function BranchListSection({
                 <div className="flex w-full items-center gap-3">
                   <div className="min-w-0 flex-1 overflow-hidden whitespace-nowrap text-sm text-foreground">{entry.displayName}</div>
                   {entry.updatedAt ? (
-                    <div className="ml-auto shrink-0 text-right text-11 text-muted-foreground">
+                    <div className="ml-auto shrink-0 text-right text-xs text-muted-foreground">
                       {formatRelativeTime(entry.updatedAt)}
                     </div>
                   ) : null}
@@ -1247,17 +1247,19 @@ function DiffFileCard({
     )
   } else if (patch !== undefined) {
     patchContent = (
-      <PatchDiff
-        patch={patch}
-        options={{
-          diffStyle: diffRenderMode,
-          disableFileHeader: true,
-          disableBackground: false,
-          overflow: wrapLines ? "wrap" : "scroll",
-          lineDiffType: "word",
-          diffIndicators: "classic",
-        }}
-      />
+      <Suspense fallback={<div className="px-3 py-8 text-center text-sm text-muted-foreground">Preparing diff…</div>}>
+        <PatchDiff
+          patch={patch}
+          options={{
+            diffStyle: diffRenderMode,
+            disableFileHeader: true,
+            disableBackground: false,
+            overflow: wrapLines ? "wrap" : "scroll",
+            lineDiffType: "word",
+            diffIndicators: "classic",
+          }}
+        />
+      </Suspense>
     )
   } else {
     patchContent = (
@@ -1787,7 +1789,7 @@ function RightSidebarImpl({
             >
               {isSyncing ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
               <span>Pull</span>
-              <span className="inline-flex min-w-4 items-center justify-center rounded-full bg-muted px-1 text-10 text-muted-foreground">
+              <span className="inline-flex min-w-4 items-center justify-center rounded-full bg-muted px-1 text-xs text-muted-foreground">
                 {behindCount}
               </span>
             </Button>
@@ -1802,7 +1804,7 @@ function RightSidebarImpl({
             >
               {isSyncing ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
               <span>Push</span>
-              <span className="inline-flex min-w-4 items-center justify-center rounded-full bg-primary-foreground/15 px-1 text-10 text-primary-foreground">
+              <span className="inline-flex min-w-4 items-center justify-center rounded-full bg-primary-foreground/15 px-1 text-xs text-primary-foreground">
                 {aheadCount}
               </span>
             </Button>
@@ -1918,7 +1920,7 @@ function RightSidebarImpl({
             <div className="relative h-[40px]  flex min-w-0 items-center justify-center gap-[13px]">
               <div className="flex min-w-0 flex-1 items-center justify-between gap-[13px] relative">
                 {viewMode === "changes" ? (
-                  <div className="flex items-center gap-2 text-11 text-muted-foreground/70">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground/70">
                     <StageCheckbox
                       checked={allSelected}
                       mixed={someSelected}

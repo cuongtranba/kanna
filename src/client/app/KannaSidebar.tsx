@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react"
+import { FocusScope } from "@radix-ui/react-focus-scope"
 
 /** Returns CSS custom properties as a React-compatible style object via Object.assign. */
 function cssVars(vars: Record<`--${string}`, string>): CSSProperties {
@@ -47,6 +48,7 @@ import type { DomPort } from "../ports/domPort"
 import type { TimerPort } from "../ports/timerPort"
 import { domAdapter } from "../adapters/dom.adapter"
 import { timerAdapter } from "../adapters/timer.adapter"
+import { isMobileViewport } from "../lib/viewport"
 
 export { DEFAULT_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH, clampSidebarWidth }
 
@@ -154,6 +156,8 @@ function KannaSidebarImpl({
   )
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const resizeStartRef = useRef<{ pointerX: number; width: number } | null>(null)
+  const sidebarRestoreFocusRef = useRef<HTMLElement | null>(null)
+  const wasMobileModalOpenRef = useRef(false)
 
   const collapsedSections = useKannaSidebarStore((s) => s.collapsedSections)
   const expandedGroups = useKannaSidebarStore((s) => s.expandedGroups)
@@ -161,6 +165,7 @@ function KannaSidebarImpl({
   const showNumberJumpHints = useKannaSidebarStore((s) => s.showNumberJumpHints)
   const requestedSidebarWidth = useKannaSidebarStore((s) => s.sidebarWidth)
   const viewportWidth = useViewportStore((s) => s.width)
+  const mobileModalOpen = open && isMobileViewport(viewportWidth)
   // Settings is a two-column split, so it needs a wider content minimum than a
   // chat transcript before the sidebar is allowed to take the space.
   const sidebarWidth = resolveSidebarWidth({
@@ -173,6 +178,19 @@ function KannaSidebarImpl({
   const isResizingSidebar = useKannaSidebarStore((s) => s.isResizingSidebar)
   const archivedProjectId = useKannaSidebarStore((s) => s.archivedProjectId)
   const expandedStackIds = useKannaSidebarStore((s) => s.expandedStackIds)
+
+  useEffect(() => dom.addDocumentListener("focusin", (event) => {
+    if (!mobileModalOpen && event.target instanceof HTMLElement) {
+      sidebarRestoreFocusRef.current = event.target
+    }
+  }), [dom, mobileModalOpen])
+
+  useEffect(() => {
+    if (wasMobileModalOpenRef.current && !mobileModalOpen) {
+      sidebarRestoreFocusRef.current?.focus()
+    }
+    wasMobileModalOpenRef.current = mobileModalOpen
+  }, [mobileModalOpen])
   const stackCreatePanelOpen = useKannaSidebarStore((s) => s.stackCreatePanelOpen)
   const stackEditId = useKannaSidebarStore((s) => s.stackEditId)
   const stackDeleteConfirmId = useKannaSidebarStore((s) => s.stackDeleteConfirmId)
@@ -397,6 +415,12 @@ function KannaSidebarImpl({
     function handleKeyDown(event: KeyboardEvent) {
       setShowNumberJumpHints(shouldShowSidebarNumberJumpHints(resolvedKeybindings, event))
 
+      if (event.key === "Escape" && mobileModalOpen) {
+        event.preventDefault()
+        onClose()
+        return
+      }
+
       if (isSidebarModifierShortcut(resolvedKeybindings, "createChatInCurrentProject", event)) {
         if (!currentProjectId) {
           return
@@ -460,7 +484,7 @@ function KannaSidebarImpl({
       removeKeyUp()
       removeBlur()
     }
-  }, [currentProjectId, dom, navigate, onClose, onCreateChat, onOpenAddProjectModal, resolvedKeybindings, setShowNumberJumpHints, openStackCreatePanel])
+  }, [currentProjectId, dom, mobileModalOpen, navigate, onClose, onCreateChat, onOpenAddProjectModal, resolvedKeybindings, setShowNumberJumpHints, openStackCreatePanel])
 
   useEffect(() => {
     if (!activeChatId || !scrollContainerRef.current) return
@@ -563,7 +587,7 @@ function KannaSidebarImpl({
     : false
   let workflowsButtonClass: string
   if (!activeChatId) {
-    workflowsButtonClass = "opacity-50 cursor-not-allowed"
+    workflowsButtonClass = "opacity-60"
   } else if (isWorkflowsActive) {
     workflowsButtonClass = "bg-muted"
   } else {
@@ -601,8 +625,12 @@ function KannaSidebarImpl({
         </div>
       )}
 
+      <FocusScope key={mobileModalOpen ? "mobile-modal" : "sidebar"} asChild loop trapped={mobileModalOpen}>
       <div
         data-sidebar="open"
+        role={mobileModalOpen ? "dialog" : undefined}
+        aria-modal={mobileModalOpen ? "true" : undefined}
+        aria-label={mobileModalOpen ? "Workspace navigation" : undefined}
         className={cn(
           "fixed inset-0 z-50 bg-background dark:bg-card flex flex-col h-[100dvh] select-none",
           "md:relative md:inset-auto md:w-[var(--sidebar-width)] md:mr-0 md:h-[calc(100%-16px)] md:my-2 md:ml-2 md:border md:border-border md:rounded-2xl",
@@ -635,8 +663,8 @@ function KannaSidebarImpl({
                 aria-label="Collapse sidebar"
                 className="hidden md:flex group/sidebar-collapse relative items-center justify-center h-5 w-5 sm:h-6 sm:w-6"
               >
-                <Flower className="absolute inset-0.5 h-4 w-4 sm:h-5 sm:w-5 text-logo transition-all duration-200 ease-out opacity-100 scale-100 group-hover/sidebar-collapse:opacity-0 group-hover/sidebar-collapse:scale-0" />
-                <PanelLeft className="absolute inset-0 h-4 w-4 sm:h-6 sm:w-6 text-muted-foreground transition-all duration-200 ease-out opacity-0 scale-0 group-hover/sidebar-collapse:opacity-100 group-hover/sidebar-collapse:scale-80 hover:opacity-50" />
+                <Flower className="absolute inset-0.5 h-4 w-4 sm:h-5 sm:w-5 text-logo transition-[transform,opacity] motion-reduce:transition-none duration-200 ease-out opacity-100 scale-100 group-hover/sidebar-collapse:opacity-0 group-hover/sidebar-collapse:scale-0" />
+                <PanelLeft className="absolute inset-0 h-4 w-4 sm:h-6 sm:w-6 text-muted-foreground transition-[transform,opacity] motion-reduce:transition-none duration-200 ease-out opacity-0 scale-0 group-hover/sidebar-collapse:opacity-100 group-hover/sidebar-collapse:scale-80 hover:opacity-50" />
               </button>
             </HoverHint>
             <Flower className="h-5 w-5 sm:h-6 sm:w-6 text-logo md:hidden" />
@@ -658,7 +686,7 @@ function KannaSidebarImpl({
             </Button>
             {showDevBadge ? (
               <HoverHint label="Development build">
-                <span className="mr-1 hidden md:inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-11 font-bold tracking-wider text-muted-foreground">
+                <span className="mr-1 hidden md:inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-bold tracking-wider text-muted-foreground">
                   DEV
                 </span>
               </HoverHint>
@@ -717,7 +745,7 @@ function KannaSidebarImpl({
 
         <div
           ref={scrollContainerRef}
-          className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden scrollbar-hide"
+          className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden"
           style={{
             WebkitOverflowScrolling: "touch",
             touchAction: "pan-y",
@@ -852,23 +880,25 @@ function KannaSidebarImpl({
         </div>
 
         <div className="border-t border-border">
-          <button
-            type="button"
-            disabled={!activeChatId}
-            aria-label="Workflows"
-            onClick={() => {
-              if (!activeChatId) return
-              navigate(`/workflows/${activeChatId}`)
-              onClose()
-            }}
-            className={cn(
-              "w-full flex items-center gap-2 px-3 py-2.5 text-left transition-colors duration-150 rounded-none",
-              workflowsButtonClass
-            )}
-          >
-            <Workflow className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <span className="text-sm flex-1">Workflows</span>
-          </button>
+          <HoverHint label={activeChatId ? "Open workflows" : "Open a chat to view workflows"} side="right">
+            <button
+              type="button"
+              aria-disabled={!activeChatId}
+              aria-label={activeChatId ? "Workflows" : "Workflows — open a chat to view"}
+              onClick={() => {
+                if (!activeChatId) return
+                navigate(`/workflows/${activeChatId}`)
+                onClose()
+              }}
+              className={cn(
+                "w-full flex items-center gap-2 px-3 py-2.5 text-left transition-colors duration-150 rounded-none",
+                workflowsButtonClass
+              )}
+            >
+              <Workflow className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <span className="text-sm flex-1">Workflows</span>
+            </button>
+          </HoverHint>
           <button
             type="button"
             onClick={() => {
@@ -904,7 +934,7 @@ function KannaSidebarImpl({
               className={cn("h-1.5 w-1.5 rounded-full shrink-0", statusDotClass)}
               aria-hidden
             />
-            <span className="text-11 text-muted-foreground tabular-nums">{statusLabel}</span>
+            <span className="text-xs text-muted-foreground tabular-nums">{statusLabel}</span>
           </div>
         </div>
 
@@ -924,6 +954,7 @@ function KannaSidebarImpl({
           onKeyDown={handleResizeKeyDown}
         />
       </div>
+      </FocusScope>
 
       <Dialog
         open={Boolean(archivedProject)}
@@ -968,7 +999,7 @@ function KannaSidebarImpl({
         />
       ) : null}
 
-      {open ? <div className="fixed inset-0 bg-black/40 z-40 md:hidden" onClick={onClose} /> : null}
+      {open ? <div className="fixed inset-0 bg-overlay/40 z-40 md:hidden" onClick={onClose} /> : null}
     </>
   )
 }

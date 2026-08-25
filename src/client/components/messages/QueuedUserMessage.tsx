@@ -21,7 +21,7 @@ export function QueuedUserMessage({ message, onRemove, onSendNow }: QueuedUserMe
                 className="max-w-[220px] rounded-xl border border-dashed border-border bg-transparent px-3 py-2 text-left"
               >
                 <div className="truncate text-13 font-medium text-foreground">{attachment.displayName}</div>
-                <div className="truncate text-11 text-muted-foreground">{attachment.mimeType}</div>
+                <div className="truncate text-xs text-muted-foreground">{attachment.mimeType}</div>
               </div>
             ))}
           </div>

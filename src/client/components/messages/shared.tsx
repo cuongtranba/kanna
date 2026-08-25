@@ -142,7 +142,7 @@ export function RuledLabel({ children, className }: { children: ReactNode; class
   return (
     <MetaRow className={cn("px-0.5 text-xs tracking-wide", className)}>
       <div className="w-full h-[1px] bg-border" />
-      <MetaLabel className="whitespace-nowrap text-11 tracking-widest text-muted-foreground/60 uppercase flex-shrink-0">
+      <MetaLabel className="whitespace-nowrap text-xs tracking-widest text-muted-foreground/60 flex-shrink-0">
         {children}
       </MetaLabel>
       <div className="w-full h-[1px] bg-border" />
@@ -172,7 +172,7 @@ function ExpandableRowInner({ children, expandedContent }: Omit<ExpandableRowPro
           {children}
         </div>
         <ChevronRight
-          className={`h-4.5 w-4.5 text-muted-icon translate-y-[0.5px] transition-all duration-200 opacity-0 group-hover/expandable-row:opacity-100 ${expanded ? "rotate-90 opacity-100" : ""}`}
+          className={`h-4.5 w-4.5 text-muted-icon translate-y-[0.5px] transition-[transform,opacity] motion-reduce:transition-none duration-200 opacity-0 group-hover/expandable-row:opacity-100 ${expanded ? "rotate-90 opacity-100" : ""}`}
         />
       </button>
       {expanded && expandedContent}
@@ -409,4 +409,3 @@ export function MermaidFallbackCodeBlock({
     </PreBlock>
   )
 }
-

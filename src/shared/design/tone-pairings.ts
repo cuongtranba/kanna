@@ -12,6 +12,7 @@ export const TONE_PAIRINGS = [
   { name: "status/failed", fg: "destructive-text", bg: "destructive", alpha: 0.1, base: "card" },
   { name: "status/skipped", fg: "muted-foreground", bg: "muted", alpha: 0.4, base: "card" },
   { name: "error/api", fg: "destructive-text", bg: "destructive", alpha: 0.1, base: "background" },
+  { name: "action/destructive-filled", fg: "destructive-filled-foreground", bg: "destructive-filled", alpha: 1, base: "background" },
 ] as const satisfies readonly TonePairing[]
 
 export type TonePairingName = (typeof TONE_PAIRINGS)[number]["name"]

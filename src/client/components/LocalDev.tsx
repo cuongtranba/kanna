@@ -92,7 +92,7 @@ function InfoCard({ children }: { children: ReactNode }) {
 
 function SectionHeader({ children }: { children: ReactNode }) {
   return (
-    <h2 className="text-13 font-medium text-muted-foreground uppercase tracking-wider mb-3">
+    <h2 className="text-13 font-medium text-muted-foreground tracking-wider mb-3">
       {children}
     </h2>
   )
@@ -261,7 +261,7 @@ export function LocalDev({
                   </Step>
 
                   <div className="mt-8">
-                    <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-4">Notes</h3>
+                    <h3 className="text-sm font-medium text-muted-foreground tracking-wider mb-4">Notes</h3>
                     <div className="space-y-3 text-sm">
                       <div className="flex gap-4">
                         <code className="font-mono text-foreground whitespace-nowrap">{getCliInvocation("").trim()}</code>
@@ -288,7 +288,7 @@ export function LocalDev({
 
           <div className="w-full px-6 mb-10">
             <div className="flex items-baseline justify-between mb-3">
-              <h2 className="text-13 font-medium text-muted-foreground uppercase tracking-wider">Projects</h2>
+              <h2 className="text-13 font-medium text-muted-foreground tracking-wider">Projects</h2>
               <Button variant="default" size="sm" onClick={() => onNewProjectOpenChange(true)}>
                 <Plus className="h-4 w-4 mr-1.5" />
                 Add Project

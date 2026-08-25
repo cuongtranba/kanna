@@ -10,8 +10,8 @@ colors:
   warm-card-dark: "oklch(23% 0.01 13)"
   surface-secondary-light: "oklch(96% 0.005 13)"
   surface-secondary-dark: "oklch(26% 0.01 13)"
-  margin-gray-light: "oklch(55% 0.013 13)"
-  margin-gray-dark: "oklch(70% 0.012 13)"
+  margin-gray-light: "oklch(46% 0.013 13)"
+  margin-gray-dark: "oklch(72% 0.012 13)"
   soft-edge-light: "oklch(91% 0.008 13)"
   soft-edge-dark: "oklch(29% 0.008 13)"
   muted-icon-light: "oklch(82% 0.008 13)"
@@ -135,6 +135,10 @@ The palette is one rose-tinted neutral family with a single saturated coral acce
 
 - **Destructive Text** (`oklch(56% 0.18 13)` light / `oklch(78% 0.18 13)` dark): AA-compliant coral for text and icon-only destructive contexts on tinted surfaces (e.g. "Confirm stop?", "Force kill" labels, the failed-pill in CronRunMessage). The bright Kanna Coral (`oklch(71.2% 0.194 13.428)`) achieves only 2.81:1 on Warm Paper in light mode and 3.94:1 on a `bg-destructive/10` over Warm Card Dark — both below WCAG AA. The light variant hits 5.04:1 on Warm Paper. The dark variant at L=78% achieves 4.76:1 on `bg-destructive/10` over Warm Card Dark and 7.56:1 on Inkstone. Filled destructive buttons continue to use the bright coral as background with Pale Foreground text — this token is only for text or icon-only use on tinted or light surfaces.
 
+- **Destructive Filled** (`oklch(48% 0.16 13)` light / `oklch(68% 0.16 13)` dark): the dedicated filled-action surface, paired with Pale Foreground in light mode and Espresso Ink in dark mode. The `action/destructive-filled` catalog entry machine-checks the complete pair at WCAG AA in both themes; filled destructive controls never reuse the brighter logo coral.
+
+- **Overlay** (`oklch(20% 0.01 13)` light / `oklch(12% 0.008 13)` dark): warm ink behind dialogs and mobile navigation. Use at 50% for modal dialogs and 40% for mobile navigation; raw black overlays are prohibited.
+
 - **Success Text** (`oklch(37% 0.1 155)` light / `oklch(76% 0.14 155)` dark): AA-compliant sage for text-only success contexts on tinted surfaces (completed-pill). Dark value brightened beyond `--success` (oklch 72%) to achieve 5.14:1 on `bg-success/10` over Warm Card Dark.
 
 - **Warning Text** (`oklch(42% 0.09 78)` light / `oklch(80% 0.13 78)` dark): AA-compliant amber for text-only running/warning contexts on tinted surfaces (running-pill). Dark aliases `--warning` (oklch 80% 0.13 78), which achieves 4.98:1 on `bg-warning/10` over Warm Card Dark.
@@ -159,7 +163,7 @@ Adding a new semantic tint context requires: (a) adding an entry to `TONE_PAIRIN
 - **Inkstone** (`oklch(20% 0.01 13)`): dark-mode background. Warm enough to read as ink rather than asphalt.
 - **Espresso Ink** (`oklch(16% 0.01 13)`): light-mode foreground; primary fill in dark-mode buttons.
 - **Pale Foreground** (`oklch(98% 0.003 13)`): dark-mode foreground; readable on Inkstone.
-- **Margin Gray** (`oklch(55% 0.013 13)` light / `oklch(70% 0.012 13)` dark): muted text — timestamps, secondary metadata, system messages.
+- **Margin Gray** (`oklch(46% 0.013 13)` light / `oklch(72% 0.012 13)` dark): muted text — timestamps, secondary metadata, and system messages. Both theme values meet the 7:1 editorial body-text target on the page background.
 - **Soft Edge** (`oklch(91% 0.008 13)` light / `oklch(29% 0.008 13)` dark): borders and dividers. Always 1px, never wider; never colored.
 - **Muted Icon** (`oklch(82% 0.008 13)` light / `oklch(55% 0.01 13)` dark): icon-only fills when the icon is informational, not actionable.
 - **Surface Secondary** (`oklch(96% 0.005 13)` light / `oklch(26% 0.01 13)` dark): tonal layer for secondary buttons, hover states, muted panels.
@@ -277,6 +281,15 @@ Shadows appear only as a response to *state*: focus rings, dialog overlays, and 
 ### Terminal pane (signature component)
 
 `kanna-terminal` overrides xterm's default background to transparent, inheriting the page background. The PTY content sits in the same tonal field as the chat — the terminal is part of the document, not a separate window. Roboto Mono carries content; selection uses Surface Secondary; cursor blink is a single CSS animation, no canvas glow.
+
+### Responsive and performance contracts
+
+- **Mobile navigation:** the sidebar is a modal dialog below the desktop breakpoint. It traps focus, isolates the application outlet with `inert`, closes on Escape, and restores focus to the control that opened it.
+- **Mobile settings:** settings use a sticky labeled section selector. The chat composer keeps preference controls behind a single 44 px “Chat settings” trigger and bottom sheet; closing the sheet restores focus to that trigger.
+- **Interaction targets:** coarse-pointer controls are at least 44×44 px. Dense desktop icon controls are at least 32×32 px unless they qualify as inline text controls.
+- **Overflow:** scrollable navigation and content expose a native scrollbar or replace overflow with a selector or sheet. Hidden-scrollbar utilities are prohibited.
+- **Route boundaries:** non-chat routes and the diff renderer load behind lazy feature boundaries. The initial client entry must remain at or below **350,000 gzip bytes**, enforced by `bun run check:bundle` as part of `bun run check`.
+- **Source contracts:** `transition-all`, sub-12 px utility type, operational all-caps, hidden-scrollbar utilities, and raw black/white interaction surfaces are build-blocking regressions.
 
 ## 6. Do's and Don'ts
 

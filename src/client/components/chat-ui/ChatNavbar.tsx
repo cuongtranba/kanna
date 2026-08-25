@@ -80,7 +80,7 @@ function FollowingPill({ chatId }: { chatId?: string }) {
     <Tooltip>
       <TooltipTrigger asChild>
         <span
-          className="inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-full text-10 font-mono uppercase tracking-wide flex-shrink-0"
+          className="inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-full text-xs font-mono tracking-wide flex-shrink-0"
           style={{ background: "color-mix(in oklch, var(--muted) 60%, transparent)" }}
         >
           <span aria-hidden className="inline-block w-[6px] h-[6px] rounded-full" style={{ backgroundColor: "var(--warning)" }} />
@@ -231,7 +231,7 @@ export function ChatNavbar({
                   <span className="flex md:hidden items-center gap-1">
                     <span className={cn("text-xs font-medium", statusToneClass(statusTone(status)))}>●</span>
                     <span className="text-xs font-medium text-foreground">{statusLabel(status)}</span>
-                    <span className="text-xs font-mono tabular-nums text-foreground/80">
+                    <span className="hidden min-[430px]:inline text-xs font-mono tabular-nums text-foreground/80">
                       {formatLiveDuration(timings.derivedAtMs - timings.stateEnteredAt)}
                     </span>
                   </span>

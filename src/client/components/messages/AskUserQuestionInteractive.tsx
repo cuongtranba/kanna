@@ -30,14 +30,14 @@ function QuestionCard({
     backOrProgress = (
       <button
         onClick={onBack}
-        className="text-muted-foreground hover:opacity-60 transition-all flex items-center"
+        className="text-muted-foreground hover:opacity-60 transition-opacity flex items-center"
       >
         <ChevronLeft className="h-4 w-4 -ml-0.5" strokeWidth={3} />
       </button>
     )
   } else if (totalQuestions > 1) {
     backOrProgress = (
-      <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap">{currentIndex + 1} of {totalQuestions}</span>
+      <span className="text-xs font-semibold tracking-wide text-muted-foreground whitespace-nowrap">{currentIndex + 1} of {totalQuestions}</span>
     )
   } else {
     backOrProgress = null
@@ -51,7 +51,7 @@ function QuestionCard({
             <div className="flex flex-row items-center gap-2 mb-1">
               {backOrProgress}
               {header ? (
-                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground text-pretty">{header}</span>
+                <span className="text-xs font-semibold tracking-wide text-muted-foreground text-pretty">{header}</span>
               ) : null}
             </div>
           )}
@@ -61,7 +61,7 @@ function QuestionCard({
         {totalQuestions > 1 && (
           <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-border">
             <div
-              className="h-full bg-muted-foreground/40 transition-all duration-300"
+              className="h-full bg-muted-foreground/40"
               style={{ width: `${(currentIndex / (totalQuestions)) * 100}%` }}
             />
           </div>
@@ -131,7 +131,7 @@ function OptionRow({
     return (
       <button
         onClick={onClick}
-        className={cn(baseClasses, borderClass, "transition-all cursor-pointer")}
+        className={cn(baseClasses, borderClass, "transition-colors cursor-pointer")}
       >
         <div className="flex items-center justify-between gap-3">
           <div className="flex-1 min-w-0">
@@ -281,7 +281,7 @@ function AskUserQuestionInteractiveInner(
             onClick={() => handleOptionSelect(currentQuestion, option.label)}
           />
         ))}
-        <div className="transition-all bg-background">
+        <div className="transition-colors bg-background">
           <div className="flex pr-5 items-center justify-between gap-3">
             <input
               type="text"

@@ -88,7 +88,7 @@ export function CollapsedToolGroup({ messages, isLoading, localPath, expanded, o
           <div className="grid grid-cols-[auto_1fr] items-center gap-1.5">
             <div className="w-5 h-5 relative flex items-center justify-center">
               <ChevronRight
-                className={`h-4.5 w-4.5 text-muted-icon transition-all duration-200 ${expanded ? "rotate-90" : ""}`}
+                className={`h-4.5 w-4.5 text-muted-icon transition-transform motion-reduce:transition-none duration-200 ${expanded ? "rotate-90" : ""}`}
               />
             </div>
             <MetaLabel className="text-left">

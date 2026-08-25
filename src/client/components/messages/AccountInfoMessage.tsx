@@ -45,7 +45,7 @@ function AccountInfoMessageInner({ message }: Props) {
             {primaryKey}
           </span>
           {sourceLabel ? (
-            <span className="hidden whitespace-nowrap text-11 text-muted-foreground sm:inline">
+            <span className="hidden whitespace-nowrap text-xs text-muted-foreground sm:inline">
               {sourceLabel}
             </span>
           ) : null}
@@ -58,7 +58,7 @@ function AccountInfoMessageInner({ message }: Props) {
           />
         </button>
         {sourceLabel ? (
-          <span className="mt-0.5 text-11 text-muted-foreground sm:hidden">
+          <span className="mt-0.5 text-xs text-muted-foreground sm:hidden">
             {sourceLabel}
           </span>
         ) : null}

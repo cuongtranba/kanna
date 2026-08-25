@@ -61,7 +61,7 @@ export function ContextWindowMeter({ usage }: { usage: ContextWindowSnapshot }) 
             </svg>
             <span
               className={cn(
-                "relative flex h-[15px] w-[15px] items-center justify-center rounded-full bg-background text-9 font-medium",
+                "relative flex size-5 items-center justify-center rounded-full bg-background text-xs font-medium",
                 "text-muted-foreground",
               )}
             >

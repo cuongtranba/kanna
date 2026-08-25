@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react"
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, type ReactNode } from "react"
 import { QueryClientProvider } from "@tanstack/react-query"
 import { Navigate, Outlet, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom"
 import { queryClient } from "../query/queryClient"
@@ -21,20 +21,14 @@ import { getChatSoundBurstCount, getNotificationTitleCount } from "./chatNotific
 import { cn } from "../lib/utils"
 import { SHELL_CONTENT_CARD_CLASS } from "../lib/shellChrome"
 import { KannaSidebar } from "./KannaSidebar"
-import { WorkspacePage } from "./ChatPage"
-import { LocalProjectsPage } from "./LocalProjectsPage"
-import { BoardsRoutePage } from "./BoardsRoutePage"
-import { StackBoardsRoutePage } from "./StackBoardsRoutePage"
-import { SettingsPage } from "./SettingsPage"
-import { WorkflowsPage } from "./WorkflowsPage"
-import { CronJobsPage } from "./CronJobsPage"
 import { AppBootstrap } from "./AppBootstrap"
 import { SharePage } from "./share-view/SharePage"
 import { useKannaState } from "./useKannaState"
 import { KannaSocketProvider } from "./KannaSocketProvider"
 import { AppGlobalProvider } from "./AppGlobalProvider"
 import { useSidebarSwipeGesture } from "./sidebarSwipeGesture"
-import { useViewportSubscription } from "../stores/viewportStore"
+import { useViewportStore, useViewportSubscription } from "../stores/viewportStore"
+import { isMobileViewport } from "../lib/viewport"
 import type { AppSettingsSnapshot } from "../../shared/types"
 import { log } from "../../shared/log"
 import { useAppShellStore } from "../stores/appShellStore"
@@ -49,6 +43,17 @@ import { fetchAuthStatus, postAuthLogin } from "../api/auth"
 
 const VERSION_SEEN_STORAGE_KEY = "kanna:last-seen-version"
 const AUTH_STATUS_RETRY_DELAY_MS = 500
+const WorkspacePage = lazy(() => import("./ChatPage").then((module) => ({ default: module.WorkspacePage })))
+const LocalProjectsPage = lazy(() => import("./LocalProjectsPage").then((module) => ({ default: module.LocalProjectsPage })))
+const BoardsRoutePage = lazy(() => import("./BoardsRoutePage").then((module) => ({ default: module.BoardsRoutePage })))
+const StackBoardsRoutePage = lazy(() => import("./StackBoardsRoutePage").then((module) => ({ default: module.StackBoardsRoutePage })))
+const SettingsPage = lazy(() => import("./SettingsPage").then((module) => ({ default: module.SettingsPage })))
+const WorkflowsPage = lazy(() => import("./WorkflowsPage").then((module) => ({ default: module.WorkflowsPage })))
+const CronJobsPage = lazy(() => import("./CronJobsPage").then((module) => ({ default: module.CronJobsPage })))
+
+function DeferredRoute({ children }: { children: ReactNode }) {
+  return <Suspense fallback={<AppBootstrap label="Opening workspace" />}>{children}</Suspense>
+}
 
 export interface AppPorts {
   dom?: DomPort
@@ -109,7 +114,7 @@ function PasswordScreenInner({
           <div className="flex items-center gap-3">
             <Flower className="h-5 w-5 text-logo" />
             <div>
-              <CardTitle className="font-logo text-xl uppercase text-foreground">{APP_NAME}</CardTitle>
+              <CardTitle className="font-logo text-xl text-foreground">{APP_NAME}</CardTitle>
             </div>
           </div>
           <CardDescription className="leading-6">
@@ -254,6 +259,8 @@ function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
   const chatSoundId = useChatSoundPreferencesStore((store) => store.chatSoundId)
   const showMobileOpenButton = location.pathname === "/"
   const currentVersion = SDK_CLIENT_APP.split("/")[1] ?? "unknown"
+  const viewportWidth = useViewportStore((viewport) => viewport.width)
+  const mobileSidebarModalOpen = state.sidebarOpen && isMobileViewport(viewportWidth)
   useViewportSubscription()
   useSidebarSwipeGesture({
     sidebarOpen: state.sidebarOpen,
@@ -524,7 +531,11 @@ function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
           skips it is clipped at the viewport edge with no way to reach the
           content below the fold — issue #772.
         */}
-        <div className={cn("flex flex-1 flex-col overflow-hidden", SHELL_CONTENT_CARD_CLASS)}>
+        <div
+          className={cn("flex flex-1 flex-col overflow-hidden", SHELL_CONTENT_CARD_CLASS)}
+          inert={mobileSidebarModalOpen ? true : undefined}
+          aria-hidden={mobileSidebarModalOpen ? "true" : undefined}
+        >
           <Outlet context={state} />
         </div>
       </div>
@@ -575,25 +586,25 @@ function AuthedApp() {
     <KannaSocketProvider>
       <Routes>
         <Route element={<KannaLayout />}>
-          <Route path="/" element={<LocalProjectsPage />} />
+          <Route path="/" element={<DeferredRoute><LocalProjectsPage /></DeferredRoute>} />
           <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
-          <Route path="/settings/:sectionId" element={<SettingsPage />} />
-          <Route path="/chat/:chatId" element={<WorkspacePage />} />
-          <Route path="/workflows/:chatId" element={<WorkflowsPage />} />
-          <Route path="/cron" element={<CronJobsPage />} />
+          <Route path="/settings/:sectionId" element={<DeferredRoute><SettingsPage /></DeferredRoute>} />
+          <Route path="/chat/:chatId" element={<DeferredRoute><WorkspacePage /></DeferredRoute>} />
+          <Route path="/workflows/:chatId" element={<DeferredRoute><WorkflowsPage /></DeferredRoute>} />
+          <Route path="/cron" element={<DeferredRoute><CronJobsPage /></DeferredRoute>} />
           {/* The list answers "what boards does this project have" — not a
               workspace question, so it is a page of its own. */}
-          <Route path="/boards/:projectId" element={<BoardsRoutePage />} />
+          <Route path="/boards/:projectId" element={<DeferredRoute><BoardsRoutePage /></DeferredRoute>} />
           {/* A board is its own address, so refresh and Back both work on it —
               and it opens INTO the workspace, as a tab beside the chats, so
               switching board↔chat is the tab strip rather than a round trip
               through the sidebar. */}
-          <Route path="/boards/:projectId/:boardId" element={<WorkspacePage />} />
+          <Route path="/boards/:projectId/:boardId" element={<DeferredRoute><WorkspacePage /></DeferredRoute>} />
           {/* A Stack board's owner is the Stack, not any one of its projects —
               the literal "stack" segment ranks these above the two routes
               above (react-router scores static segments over dynamic ones),
               so `/boards/stack/:stackId` never gets read as a project id. */}
-          <Route path="/boards/stack/:stackId" element={<StackBoardsRoutePage />} />
+          <Route path="/boards/stack/:stackId" element={<DeferredRoute><StackBoardsRoutePage /></DeferredRoute>} />
           <Route path="/boards/stack/:stackId/:boardId" element={<WorkspacePage />} />
         </Route>
       </Routes>

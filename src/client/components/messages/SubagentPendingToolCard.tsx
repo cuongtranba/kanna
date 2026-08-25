@@ -43,7 +43,7 @@ export function SubagentPendingToolCard({
     }
     return (
       <div data-testid={`subagent-pending-tool:${pendingTool.toolUseId}`}>
-        <div className="text-10 uppercase tracking-wide text-muted-foreground mb-1">
+        <div className="text-xs tracking-wide text-muted-foreground mb-1">
           awaiting your response
         </div>
         <AskUserQuestionMessage
@@ -71,7 +71,7 @@ export function SubagentPendingToolCard({
     }
     return (
       <div data-testid={`subagent-pending-tool:${pendingTool.toolUseId}`}>
-        <div className="text-10 uppercase tracking-wide text-muted-foreground mb-1">
+        <div className="text-xs tracking-wide text-muted-foreground mb-1">
           awaiting your response
         </div>
         <ExitPlanModeMessage

@@ -5,6 +5,7 @@ import { cn } from "../../lib/utils"
 import { FOCUS_FALLBACK_IGNORE_ATTRIBUTE, RESTORE_CHAT_INPUT_FOCUS_EVENT } from "../../app/chatFocusPolicy"
 import type { DomPort } from "../../ports/domPort"
 import { domAdapter } from "../../adapters/dom.adapter"
+import { Button, type ButtonProps } from "./button"
 
 const Dialog = DialogPrimitive.Root
 const DialogTrigger = DialogPrimitive.Trigger
@@ -18,7 +19,7 @@ const DialogOverlay = React.forwardRef<
   <DialogPrimitive.Overlay
     ref={ref}
     className={cn(
-      "fixed inset-0 z-50 bg-black/50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+      "fixed inset-0 z-50 bg-overlay/50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 motion-reduce:animate-none",
       className,
     )}
     {...props}
@@ -37,8 +38,9 @@ const DialogContent = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
     size?: "sm" | "md" | "lg"
     ports?: { dom?: DomPort }
+    restoreFocus?: "chat-input" | "trigger"
   }
->(({ className, children, size = "md", ports = {}, ...props }, ref) => {
+>(({ className, children, size = "md", ports = {}, restoreFocus = "chat-input", ...props }, ref) => {
   const dom = ports.dom ?? domAdapter
   return (
   <DialogPortal>
@@ -47,12 +49,14 @@ const DialogContent = React.forwardRef<
       ref={ref}
       {...{ [FOCUS_FALLBACK_IGNORE_ATTRIBUTE]: "" }}
       onCloseAutoFocus={(event) => {
-        event.preventDefault()
-        dom.dispatchCustomWindowEvent(RESTORE_CHAT_INPUT_FOCUS_EVENT)
+        if (restoreFocus === "chat-input") {
+          event.preventDefault()
+          dom.dispatchCustomWindowEvent(RESTORE_CHAT_INPUT_FOCUS_EVENT)
+        }
         props.onCloseAutoFocus?.(event)
       }}
       className={cn(
-        "fixed left-1/2 top-1/2 z-50 w-full -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border bg-background shadow-xl duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]",
+        "fixed left-1/2 bottom-0 z-50 w-full -translate-x-1/2 rounded-t-lg bg-card duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 motion-reduce:animate-none max-md:max-h-[calc(100dvh-1rem)] max-md:pb-[env(safe-area-inset-bottom)] md:bottom-auto md:top-1/2 md:-translate-y-1/2 md:rounded-lg md:border md:border-border",
         "max-h-[85vh] flex flex-col",
         sizeClasses[size],
         className,
@@ -60,7 +64,7 @@ const DialogContent = React.forwardRef<
       {...props}
     >
       {children}
-      <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
+      <DialogPrimitive.Close className="absolute right-1 top-1 flex h-11 w-11 items-center justify-center rounded-md opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground md:right-2 md:top-2 md:h-8 md:w-8">
         <X className="h-4 w-4" />
         <span className="sr-only">Close</span>
       </DialogPrimitive.Close>
@@ -119,34 +123,12 @@ function DialogFooter({ className, ...props }: React.HTMLAttributes<HTMLDivEleme
   )
 }
 
-function DialogPrimaryButton({ className, ...props }: React.ComponentPropsWithoutRef<"button">) {
-  return (
-    <button
-      className={cn(
-        "touch-manipulation inline-flex items-center justify-center whitespace-nowrap cursor-pointer text-sm font-medium transition-colors",
-        "rounded-full h-9 px-4",
-        "bg-primary text-primary-foreground hover:bg-primary/90",
-        "disabled:pointer-events-none disabled:bg-primary/20 disabled:text-primary/60",
-        className,
-      )}
-      {...props}
-    />
-  )
+function DialogPrimaryButton({ className, ...props }: ButtonProps) {
+  return <Button className={className} {...props} />
 }
 
-function DialogGhostButton({ className, ...props }: React.ComponentPropsWithoutRef<"button">) {
-  return (
-    <button
-      className={cn(
-        "touch-manipulation inline-flex items-center justify-center whitespace-nowrap cursor-pointer text-sm font-medium transition-colors",
-        "rounded-full h-9 px-4",
-        "hover:bg-accent dark:hover:bg-card hover:text-accent-foreground text-muted-foreground",
-        "disabled:pointer-events-none disabled:text-muted-foreground/50",
-        className,
-      )}
-      {...props}
-    />
-  )
+function DialogGhostButton({ className, ...props }: ButtonProps) {
+  return <Button variant="ghost" className={className} {...props} />
 }
 
 export {

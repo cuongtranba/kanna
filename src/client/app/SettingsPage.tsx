@@ -478,7 +478,7 @@ export function ChangelogSection({
                 <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm text-muted-foreground">
                   <span>{formatPublishedDate(release.published_at)}</span>
                   {release.prerelease ? (
-                    <span className="rounded-full border border-border px-2.5 py-1 uppercase tracking-wide">
+                    <span className="rounded-full border border-border px-2.5 py-1 tracking-wide">
                       Prerelease
                     </span>
                   ) : null}
@@ -1796,7 +1796,7 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
                     <item.icon className="h-4 w-4 shrink-0" />
                     <span>{item.label}</span>
                     {showUpdateBadge ? (
-                      <span className="ml-auto inline-flex items-center rounded-full bg-logo/20 px-2 py-0.5 text-10 font-bold tracking-wider text-logo">
+                      <span className="ml-auto inline-flex items-center rounded-full bg-logo/20 px-2 py-0.5 text-xs font-bold tracking-wider text-logo">
                         UPDATE
                       </span>
                     ) : null}
@@ -1823,55 +1823,43 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
         </aside>
 
         <div className="min-w-0 flex-1 overflow-y-auto">
-          <div className="border-b border-border py-2 md:hidden">
-            <div className="overflow-x-auto pr-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              <div className="flex min-w-max items-center gap-2">
-                <div className=" sticky left-0 bg-gradient-to-r from-background via-background/80 to-transparent px-2  py-1">
-                <HoverHint label="Open sidebar">
-                  <button
-                    type="button"
-                    onClick={state.openSidebar}
-                    className="flex shrink-0 items-center p-2 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-                    aria-label="Open sidebar"
-                  >
-                    <Menu className="h-4 w-4 shrink-0" />
-                  </button>
-                </HoverHint>
-                </div>
-                {sidebarItems.map((item) => (
-                  <button
-                    key={item.label}
-                    type="button"
-                    onClick={() => navigate(`/settings/${item.id}`)}
-                    className={cn(
-                      "flex shrink-0 items-center gap-2 rounded-full border px-3 py-2 text-sm transition-colors",
-                      item.id === selectedPage
-                        ? "border-transparent bg-muted font-medium text-foreground"
-                        : "border-border bg-background text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                    )}
-                  >
-                    <item.icon className="h-4 w-4 shrink-0" />
-                    <span className="whitespace-nowrap">{item.label}</span>
-                  </button>
-                ))}
-                {authEnabled ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void handleSidebarSignOut()
-                    }}
-                    disabled={signingOut}
-                    className={cn(
-                      "flex shrink-0 items-center gap-2 rounded-full border px-3 py-2 text-sm transition-colors",
-                      "border-border bg-background text-muted-foreground hover:bg-muted/50 hover:text-foreground",
-                      "disabled:cursor-not-allowed disabled:opacity-50"
-                    )}
-                  >
-                    <LogOut className="h-4 w-4 shrink-0" />
-                    <span className="whitespace-nowrap">{signingOut ? "Signing out..." : "Sign out"}</span>
-                  </button>
-                ) : null}
-              </div>
+          <div className="sticky top-0 z-20 border-b border-border bg-background px-2 py-2 md:hidden">
+            <div className="flex items-center gap-2">
+              <HoverHint label="Open sidebar">
+                <button
+                  type="button"
+                  onClick={state.openSidebar}
+                  className="flex size-11 shrink-0 items-center justify-center rounded-md text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                  aria-label="Open sidebar"
+                >
+                  <Menu className="h-4 w-4 shrink-0" />
+                </button>
+              </HoverHint>
+              <Select value={selectedPage} onValueChange={(value) => navigate(`/settings/${value}`)}>
+                <SelectTrigger className="h-11 min-w-0 flex-1" aria-label="Settings section">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    {sidebarItems.map((item) => (
+                      <SelectItem key={item.id} value={item.id}>{item.label}</SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              {authEnabled ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void handleSidebarSignOut()
+                  }}
+                  disabled={signingOut}
+                  className="flex min-h-11 shrink-0 items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <LogOut className="h-4 w-4 shrink-0" />
+                  <span className="sr-only">{signingOut ? "Signing out..." : "Sign out"}</span>
+                </button>
+              ) : null}
             </div>
           </div>
 
@@ -2707,19 +2695,19 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
           <div className="px-6 py-[14.25px]">
             <div className="grid gap-3 text-xs text-muted-foreground grid-cols-2 lg:grid-cols-4">
               <div>
-                <div className="mb-1 uppercase tracking-wide text-11 text-muted-foreground/80">Machine</div>
+                <div className="mb-1 tracking-wide text-xs text-muted-foreground/80">Machine</div>
                 <div className="text-foreground/80">{machineName}</div>
               </div>
               <div className="hidden md:block">
-                <div className="mb-1 uppercase tracking-wide text-11 text-muted-foreground/80">Connection</div>
+                <div className="mb-1 tracking-wide text-xs text-muted-foreground/80">Connection</div>
                 <div className="text-foreground/80">{state.connectionStatus}</div>
               </div>
               <div className="hidden md:block">
-                <div className="mb-1 uppercase tracking-wide text-11 text-muted-foreground/80">Projects Indexed</div>
+                <div className="mb-1 tracking-wide text-xs text-muted-foreground/80">Projects Indexed</div>
                 <div className="text-foreground/80">{projectCount}</div>
               </div>
               <div>
-                <div className="mb-1 uppercase tracking-wide text-11 text-muted-foreground/80">App Version</div>
+                <div className="mb-1 tracking-wide text-xs text-muted-foreground/80">App Version</div>
                 <div className="text-foreground/80">{appVersion}</div>
               </div>
             </div>
@@ -2734,7 +2722,7 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
               Kanna sends these event names plus the limited property keys below, depending on the event type.
             </div>
             <div className="max-h-[60vh] overflow-auto rounded-lg border border-border bg-muted/40 p-3">
-              <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              <div className="text-xs font-medium tracking-wide text-muted-foreground">
                 Event Names
               </div>
               <ul className="mt-3 space-y-2 text-sm">
@@ -2744,7 +2732,7 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
                   </li>
                 ))}
               </ul>
-              <div className="mt-6 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              <div className="mt-6 text-xs font-medium tracking-wide text-muted-foreground">
                 Property Keys
               </div>
               <ul className="mt-3 space-y-2 text-sm">

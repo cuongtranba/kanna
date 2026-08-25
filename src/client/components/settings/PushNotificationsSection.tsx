@@ -29,7 +29,7 @@ const secondaryButton =
 const primaryButton =
   "inline-flex items-center justify-center rounded-lg bg-foreground px-3 py-1.5 text-sm font-medium text-background transition-colors hover:bg-foreground/90"
 const codeChip = "rounded bg-muted px-1 py-0.5 font-mono text-12 text-foreground"
-const sectionLabel = "text-11 font-medium uppercase tracking-wide text-muted-foreground"
+const sectionLabel = "text-xs font-medium tracking-wide text-muted-foreground"
 
 export function PushNotificationsSection(props: PushNotificationsSectionProps) {
   const { permissionState } = props
@@ -140,7 +140,7 @@ export function PushNotificationsSection(props: PushNotificationsSectionProps) {
             >
               <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                 <span className="truncate text-sm font-medium text-foreground">{device.label}</span>
-                <span className="line-clamp-2 break-all text-11 leading-snug text-muted-foreground">
+                <span className="line-clamp-2 break-all text-xs leading-snug text-muted-foreground">
                   {device.userAgent}
                 </span>
               </div>

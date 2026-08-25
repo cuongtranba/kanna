@@ -55,7 +55,7 @@ export function StacksSection({
   return (
     <div className="flex flex-col mb-3">
       <div className="pl-2 pr-2 pt-2 pb-1 flex items-center gap-1">
-        <span className="flex-1 min-w-0 text-11 font-semibold uppercase tracking-wide text-muted-foreground">
+        <span className="flex-1 min-w-0 text-xs font-semibold tracking-wide text-muted-foreground">
           Stacks
         </span>
         <Tooltip>
@@ -107,7 +107,7 @@ export function StacksSection({
                     {stack.title}
                   </span>
                 </div>
-                <span className="text-11 tabular-nums text-muted-foreground px-1.5 py-0.5 rounded bg-muted/60 shrink-0">
+                <span className="text-xs tabular-nums text-muted-foreground px-1.5 py-0.5 rounded bg-muted/60 shrink-0">
                   {stack.memberCount}
                 </span>
                 {onDeleteStack ? (
@@ -123,7 +123,7 @@ export function StacksSection({
                       variant="ghost"
                       size="icon"
                       aria-label="Stack actions"
-                      className="size-6 rounded-sm opacity-0 group-hover/section:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100 transition-opacity duration-150"
+                      className="size-8 rounded-sm opacity-0 group-hover/section:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100 transition-opacity duration-150"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <MoreHorizontal className="size-3.5" />
@@ -135,7 +135,7 @@ export function StacksSection({
                     variant="ghost"
                     size="icon"
                     aria-label="Stack actions"
-                    className="size-6 rounded-sm opacity-0 group-hover/section:opacity-100 transition-opacity duration-150"
+                    className="size-8 rounded-sm opacity-0 group-hover/section:opacity-100 transition-opacity duration-150"
                     onClick={(e) => {
                       e.stopPropagation()
                       onOpenStackMenu(stack.id)
@@ -155,7 +155,7 @@ export function StacksSection({
                     data-testid="stack-separator"
                     className="flex justify-center py-1.5 select-none"
                   >
-                    <span className="text-10 tracking-[0.6em] text-muted-foreground/40 pl-[0.6em] leading-none">
+                    <span className="text-xs tracking-[0.6em] text-muted-foreground/40 pl-[0.6em] leading-none">
                       ✦ ✦ ✦
                     </span>
                   </div>

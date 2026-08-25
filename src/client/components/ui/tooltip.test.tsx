@@ -5,7 +5,7 @@ import {
 } from "./tooltip"
 
 describe("formatHotkeyLabel", () => {
-  test("renders hotkey labels in uppercase", () => {
+  test("renders hotkey labels in", () => {
     expect(formatHotkeyLabel("Cmd+J")).toBe("CMD+J")
     expect(formatHotkeyLabel("Ctrl+`")).toBe("CTRL+`")
   })

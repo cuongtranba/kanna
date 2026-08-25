@@ -668,7 +668,7 @@ export const ChatTranscriptViewport = memo(({
       <div
         style={{ bottom: transcriptPaddingBottom - 20 }}
         className={cn(
-          "absolute left-1/2 z-10 -translate-x-1/2 transition-all",
+          "absolute left-1/2 z-10 -translate-x-1/2 transition-[transform,opacity] motion-reduce:transition-none",
           showScrollButton
             ? "scale-100 opacity-100 duration-200 ease-[cubic-bezier(0.22,1,0.36,1)]"
             : "pointer-events-none scale-75 opacity-0 duration-200 ease-out",
@@ -676,9 +676,10 @@ export const ChatTranscriptViewport = memo(({
       >
         <button
           onClick={scrollToBottom}
-          className="flex aspect-square cursor-pointer items-center gap-1.5 rounded-full border border-border bg-card px-2 text-sm text-foreground transition-colors hover:bg-muted"
+          aria-label="Scroll to latest message"
+          className="flex size-11 cursor-pointer items-center justify-center rounded-md border border-border bg-card text-sm text-foreground transition-colors hover:bg-muted md:size-9"
         >
-          <ArrowDown className="h-5 w-5" />
+          <ArrowDown aria-hidden="true" className="h-5 w-5" />
         </button>
       </div>
     </>
