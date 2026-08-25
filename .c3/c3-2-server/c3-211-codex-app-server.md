@@ -1,7 +1,7 @@
 ---
 id: c3-211
 c3-version: 4
-c3-seal: 3b0fd02e57c04dfdb18750b02a925551fb363401c532023c0543d7fe277c95bf
+c3-seal: f8f92df9f432b8848e897578b8efe71bb30a3b37a89ebc1ccb88cb49c2ff15c9
 title: codex-app-server
 type: component
 category: feature
@@ -67,6 +67,7 @@ Spawns the Codex App Server child process, speaks JSON-RPC, maps its event strea
 | --- | --- | --- | --- | --- |
 | runTurn(spec) | OUT | Streams adapter-shaped events | c3-210 | src/server/codex-app-server.ts |
 | cancel(turnId) | OUT | Aborts running turn | c3-210 | src/server/codex-app-server.ts |
+| Pure transcript translation | OUT | translateItemToToolCalls, translateItemToToolResults, buildResultEntry, codexSystemInitEntry, normalizeCodexTokenUsage, todoToolCall and withEntryIdentity are exported for c3-214's codex session import, and parseUnifiedDiff and isUnifiedDiff were made public for the same reason. Live and imported codex cards therefore derive toolKind and toolName from one place. The module stays pure, so the dependency drags no process spawning into the import path | c3-214 | src/server/codex-transcript-translator.ts |
 
 ## Change Safety
 
@@ -80,4 +81,4 @@ Spawns the Codex App Server child process, speaks JSON-RPC, maps its event strea
 | Material | Must derive from | Allowed variance | Evidence |
 | --- | --- | --- | --- |
 | src/server/codex-app-server.ts | c3-211 Contract | RPC detail | src/server/codex-app-server.ts |
-| src/server/codex-transcript-translator.ts | c3-211 Contract | Pure translation functions; no IO | src/server/codex-transcript-translator.ts |
+| src/server/codex-transcript-translator.ts | c3-211 Contract | Pure translation functions; no IO. Consumed by c3-214's codex session mapper as well as the live path, so a change here moves both the live and the imported tool card | src/server/codex-transcript-translator.ts |
