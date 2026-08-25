@@ -35,8 +35,14 @@ export interface RecordedHistogram {
   counts: number[]
 }
 
+export interface RecordedCounter {
+  attributes: Attributes
+  value: number
+}
+
 export interface MetricRecorder {
   histogram(name: string): Promise<RecordedHistogram[]>
+  counter(name: string): Promise<RecordedCounter[]>
   dispose(): Promise<void>
 }
 
@@ -66,27 +72,37 @@ export function startMetricRecorder(options: MetricRecorderOptions = {}): Metric
   metrics.setGlobalMeterProvider(provider)
   resetMetricInstrumentCache()
 
+  function pointsNamed<T>(name: string): DataPoint<T>[] {
+    const points: DataPoint<T>[] = []
+    for (const resourceMetric of exporter.getMetrics()) {
+      for (const scope of resourceMetric.scopeMetrics) {
+        for (const metric of scope.metrics) {
+          if (metric.descriptor.name !== name) continue
+          points.push(...(metric.dataPoints as DataPoint<T>[]))
+        }
+      }
+    }
+    return points
+  }
+
   return {
     async histogram(name) {
       await provider.forceFlush()
-      const points: RecordedHistogram[] = []
-      for (const resourceMetric of exporter.getMetrics()) {
-        for (const scope of resourceMetric.scopeMetrics) {
-          for (const metric of scope.metrics) {
-            if (metric.descriptor.name !== name) continue
-            for (const point of metric.dataPoints as DataPoint<Histogram>[]) {
-              points.push({
-                attributes: point.attributes,
-                count: point.value.count,
-                sum: point.value.sum ?? 0,
-                boundaries: point.value.buckets.boundaries,
-                counts: point.value.buckets.counts,
-              })
-            }
-          }
-        }
-      }
-      return points
+      return pointsNamed<Histogram>(name).map((point) => ({
+        attributes: point.attributes,
+        count: point.value.count,
+        sum: point.value.sum ?? 0,
+        boundaries: point.value.buckets.boundaries,
+        counts: point.value.buckets.counts,
+      }))
+    },
+
+    async counter(name) {
+      await provider.forceFlush()
+      return pointsNamed<number>(name).map((point) => ({
+        attributes: point.attributes,
+        value: point.value,
+      }))
     },
 
     async dispose() {

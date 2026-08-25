@@ -13,6 +13,7 @@
  */
 
 import type { AgentProvider, TranscriptEntry } from "../shared/types"
+import { billedUsageOfResult } from "../shared/token-pricing"
 import type { AnyValue } from "../shared/errors"
 import type { HarnessTurn } from "./harness-types"
 import type { ActiveTurn } from "./claude-session-state"
@@ -164,6 +165,9 @@ export async function runTurn(deps: RunTurnDeps, active: ActiveTurn): Promise<vo
 
       if (event.entry.kind === "result") {
         active.hasFinalResult = true
+        // Stashed before the terminal record, which is what fires the observer
+        // that records token spend — see ActiveTurn.usage.
+        active.usage = billedUsageOfResult(event.entry)
         if (event.entry.isError) {
           await deps.store.recordTurnFailed(active.chatId, event.entry.result || "Turn failed")
         } else if (!active.cancelRequested) {

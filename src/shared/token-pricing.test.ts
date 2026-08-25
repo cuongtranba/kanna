@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test"
-import { computeCostUsd, resolveModelPrice, stripModelVariantSuffix } from "./token-pricing"
+import {
+  billedUsageOfResult,
+  computeCostUsd,
+  resolveModelPrice,
+  splitBilledTokens,
+  stripModelVariantSuffix,
+} from "./token-pricing"
 
 describe("computeCostUsd", () => {
   test("sums input+output at per-MTok rates", () => {
@@ -38,6 +44,83 @@ describe("computeCostUsd", () => {
     )
     // 800k @ $3/M = 2.4 ; 200k @ $0.3/M = 0.06 ; total 2.46
     expect(cost).toBeCloseTo(2.46, 6)
+  })
+})
+
+describe("splitBilledTokens", () => {
+  // The partition is the whole point: these counts become one metric split by
+  // `kind`, so a bare sum has to be the billable total. `inputTokens` already
+  // includes the cached reads (claude-usage-math sums direct + cacheCreation +
+  // cacheRead into it), which is why the same subtraction appears here and in
+  // computeCostUsd — reporting both whole would bill the cache twice.
+  test("subtracts cached reads from input so the kinds partition", () => {
+    expect(splitBilledTokens({
+      inputTokens: 1_000_000,
+      cachedInputTokens: 200_000,
+      outputTokens: 50_000,
+    })).toEqual([
+      ["input", 800_000],
+      ["cached_input", 200_000],
+      ["output", 50_000],
+    ])
+  })
+
+  test("the split sums to the tokens actually billed, never more", () => {
+    const usage = { inputTokens: 900, cachedInputTokens: 400, outputTokens: 100 }
+    const total = splitBilledTokens(usage).reduce((sum, [, count]) => sum + count, 0)
+    expect(total).toBe(1_000)
+  })
+
+  test("omits kinds with nothing to report rather than emitting zeros", () => {
+    expect(splitBilledTokens({ outputTokens: 12 })).toEqual([["output", 12]])
+    expect(splitBilledTokens({})).toEqual([])
+  })
+
+  // A provider that reports cached >= input is contradicting itself; clamping
+  // to zero keeps the sum honest instead of emitting a negative counter delta,
+  // which OTel would reject outright.
+  test("never yields a negative count when cached exceeds input", () => {
+    expect(splitBilledTokens({ inputTokens: 100, cachedInputTokens: 500 })).toEqual([
+      ["cached_input", 500],
+    ])
+  })
+
+  test("ignores non-finite and negative provider values", () => {
+    expect(splitBilledTokens({
+      inputTokens: Number.NaN,
+      outputTokens: -5,
+      cachedInputTokens: Number.POSITIVE_INFINITY,
+    })).toEqual([])
+  })
+})
+
+describe("billedUsageOfResult", () => {
+  // Providers put the cost on the entry, inside usage, or nowhere. Both
+  // runners stash through here so a turn can never be attributed two amounts.
+  test("prefers the entry-level cost over the one inside usage", () => {
+    expect(billedUsageOfResult({
+      usage: { inputTokens: 10, costUsd: 0.9 },
+      costUsd: 0.25,
+    })).toEqual({ inputTokens: 10, costUsd: 0.25 })
+  })
+
+  test("falls back to the cost inside usage", () => {
+    expect(billedUsageOfResult({ usage: { inputTokens: 10, costUsd: 0.5 } }))
+      .toEqual({ inputTokens: 10, costUsd: 0.5 })
+  })
+
+  test("keeps token counts when no cost was reported at all", () => {
+    expect(billedUsageOfResult({ usage: { inputTokens: 10 } })).toEqual({ inputTokens: 10 })
+  })
+
+  test("carries a cost that arrived with no token counts", () => {
+    expect(billedUsageOfResult({ costUsd: 0.25 })).toEqual({ costUsd: 0.25 })
+  })
+
+  // Nothing reported is not zero reported — the caller must be able to tell
+  // "no data" from "this turn was free".
+  test("returns undefined when the entry reported neither", () => {
+    expect(billedUsageOfResult({})).toBeUndefined()
   })
 })
 

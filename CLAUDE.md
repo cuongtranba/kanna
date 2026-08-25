@@ -1420,9 +1420,44 @@ adapter from domain code; never import SDK packages outside the adapter.
 Instrumented so far: `kanna.turn.start` (spawn pipeline), `kanna.subagent.run`
 (whole run, the loop's unit of work), `kanna.loop.wake.deliver`, counters
 `kanna.subagent.run.finished`, `kanna.autocontinue.fired`,
-`kanna.queued_message.recovered`, `kanna.loop.wake.recovered`, and
+`kanna.queued_message.recovered`, `kanna.loop.wake.recovered`,
+`kanna.turn.tokens`, `kanna.turn.cost_usd`, `kanna.subagent.tokens`, and
 process-memory gauges. Spans nest via AsyncLocalStorage — add depth with a
 one-line `withSpan` at the call site, no handle threading.
+
+**Token spend — `kanna.turn.tokens`, `kanna.turn.cost_usd`,
+`kanna.subagent.tokens`.** Turn and run COUNTS cannot answer "what is this
+install spending": a 200k-token turn and a 2k-token turn are one turn each.
+These are what a fleet-wide cost question reads.
+
+**The `kind` values PARTITION the billed tokens, and that is load-bearing.**
+`ProviderUsage.inputTokens` arrives already including the cache reads
+(`claude-usage-math.ts` sums direct + cacheCreation + cacheRead into it), so
+`splitBilledTokens` (`src/shared/token-pricing.ts`) reports `input` as the
+NON-cached remainder — the same subtraction `computeCostUsd` makes, kept beside
+it so the two can never disagree about what was billed. Emitting both whole
+would bill the cache twice and overstate every install. `sum(...)` over the
+metric is therefore the billable total; `sum by (kind)` splits it.
+
+**A kind with nothing to report is omitted, never recorded as zero.** Absent
+usage means the provider told us nothing, which is a different claim from "this
+turn was free" — and the providers really are uneven here: Codex reports usage
+only after a `thread/tokenUsageUpdated` notification, OpenRouter's token counts
+come from upstream, and **PTY-mode turns have no price resolver wired at all**
+(`createJsonlEventParser` takes none), so `kanna.turn.cost_usd` is deliberately
+sparser than `kanna.turn.tokens`. Read a missing series as unknown, not zero.
+
+**Usage reaches the metric on `ActiveTurn.usage`, not through the callback.**
+`onTurnTerminal` carries only `(chatId, outcome)` and must keep doing so, so
+both runners stash the result entry's usage on the ActiveTurn — Claude/
+OpenRouter at `claude-session-runner.ts`, Codex at `claude-turn-runner.ts`,
+both through `billedUsageOfResult`, which settles the entry-level-cost vs
+`usage.costUsd` precedence in ONE place. Terminal paths with no result entry
+(cancel, spawn failure) stash nothing and so record nothing. Subagent runs
+never pass through that choke point at all and are recorded separately at
+`subagent-orchestrator.ts`'s `subagent_run_completed` emission — which is where
+a loop's spend actually shows up, since its per-iteration cost is a subagent
+run, not a chat turn.
 
 **Duration histograms — `kanna.turn.duration_ms`, `kanna.subagent.run.duration_ms`.**
 Turn duration is recorded from `EventStore.onTurnTerminal` (`agent-coordinator.ts`),
@@ -1442,12 +1477,16 @@ returns garbage. `observability.test.ts` pins it by asserting turn-length
 durations land in distinct finite buckets.
 
 **Metric names are constants, because an alert query reads them back.**
-`PROCESS_RSS_BYTES`, `SUBAGENT_RUN_FINISHED`, `TURN_DURATION_MS` and
-`SUBAGENT_RUN_DURATION_MS` live in `observability.ts` and are consumed by
+`PROCESS_RSS_BYTES`, `SUBAGENT_RUN_FINISHED`, `TURN_DURATION_MS`,
+`SUBAGENT_RUN_DURATION_MS`, `TURN_TOKENS`, `TURN_COST_USD` and
+`SUBAGENT_TOKENS` live in `observability.ts` and are consumed by
 `src/ops/alerting/rules.ts`. A rule naming a metric that does not exist selects
 no series and therefore never fires — indistinguishable from a healthy fleet —
 so `rules.test.ts` asserts every `kanna_*` token in a query resolves to an
-exported instrument.
+exported instrument. A new instrument must also be added to
+`EXPORTED_PROM_METRICS` in its Prometheus form (`_total` for a counter, the
+`_bucket`/`_count`/`_sum` expansion for a histogram) before any rule may name
+it.
 
 # Performance alerts → GitHub tickets
 

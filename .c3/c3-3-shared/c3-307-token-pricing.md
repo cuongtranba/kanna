@@ -1,6 +1,6 @@
 ---
 id: c3-307
-c3-seal: 61f59d23e03ff698d6d860f9015ff858d55124ed1d8e89eda62380e0e6dfc72c
+c3-seal: 1ce2aab76437cea6052cec54ffe971f9409ce3d7ece6f916a09fdb78f781c0cc
 title: token-pricing
 type: component
 category: foundation
@@ -66,6 +66,8 @@ Owns the USD cost arithmetic for per-turn token usage and model-price resolution
 | resolveModelPrice(modelId, openRouterPricing?) | IN | Returns ModelPrice or null; prefers live OpenRouter pricing; falls back to static needle-match table; returns null when no match | shared → server | src/shared/token-pricing.ts |
 | ModelPrice interface | OUT | { inputPerMTok: number, outputPerMTok: number, cachedInputPerMTok?: number } — USD per 1M tokens | shared → server, shared → client | src/shared/token-pricing.ts |
 | OpenRouterPricing interface | OUT | { promptPerTok: number, completionPerTok: number } — used by callers to bridge OpenRouter model list into ModelPrice | shared → server | src/shared/token-pricing.ts |
+| billedUsageOfResult(entry) | IN | The billed usage a result entry reports, with the entry-level cost folded in. Providers put the cost on the entry, inside usage, or nowhere at all, and the entry-level value wins because that is the one the provider itself totalled — settled here so the two runners that stash usage cannot attribute one turn two amounts. Returns undefined when neither is present, keeping nothing-reported distinguishable from free | shared → server | src/shared/token-pricing.ts |
+| splitBilledTokens(usage) | IN | Splits ProviderUsage into classes that PARTITION the billed tokens — input, cached_input, output — so summing them is the total and never double-counts. inputTokens arrives ALREADY INCLUDING the cache reads, so input is reported as the non-cached remainder: the same subtraction computeCostUsd makes, kept in this module so the two can never disagree about what was billed. Kinds with a zero or unreported count are omitted rather than emitted as zero, and a provider reporting cached greater than input clamps to zero instead of yielding a negative counter delta. Consumed by the c3-234 token-spend counters | shared → server | src/shared/token-pricing.ts |
 
 ## Change Safety
 

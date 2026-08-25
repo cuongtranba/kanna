@@ -10,6 +10,7 @@
  */
 
 import { log } from "../shared/log"
+import { billedUsageOfResult } from "../shared/token-pricing"
 import type { AnyValue } from "../shared/errors"
 import type { AgentProvider, Subagent, TranscriptEntry } from "../shared/types"
 import type { LimitDetector, LimitDetection } from "./auto-continue/limit-detector"
@@ -488,6 +489,9 @@ export async function runClaudeSession(
         && completedClaudePromptSeq === active.claudePromptSeq
       ) {
         active.hasFinalResult = true
+        // The turn-terminal observer records this turn's token spend and
+        // cannot reach the result entry from there — see ActiveTurn.usage.
+        active.usage = billedUsageOfResult(event.entry)
         // True once a rate-limit / auth-error was routed through
         // handleLimitDetection / handleAuthFailure. Those paths already
         // marked the failed token limited/errored (dropping its

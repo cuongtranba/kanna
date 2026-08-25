@@ -89,9 +89,36 @@ beyond the recipes below.
 - What arrives: spans `kanna.turn.start`, `kanna.subagent.run`,
   `kanna.loop.wake.deliver`; counters `kanna.subagent.run.finished`,
   `kanna.autocontinue.fired`, `kanna.queued_message.recovered`,
-  `kanna.loop.wake.recovered`; gauges `kanna.process.rss_bytes`,
+  `kanna.loop.wake.recovered`, `kanna.turn.tokens`, `kanna.turn.cost_usd`,
+  `kanna.subagent.tokens`; histograms `kanna.turn.duration_ms`,
+  `kanna.subagent.run.duration_ms`; gauges `kanna.process.rss_bytes`,
   `kanna.process.heap_used_bytes`, `kanna.process.heap_total_bytes`,
   `kanna.process.external_bytes`.
+
+**Answering "which install is burning tokens".** Turn counts do not answer it —
+a 200k-token turn and a 2k-token turn are one turn each. Use the token
+counters, whose `kind` values partition the billed tokens so a bare `sum` is
+the total:
+
+```bash
+GF_PW=<from compose.one env>
+PROM="https://kanna-grafana.lowbit.link/api/datasources/proxy/uid/prometheus/api/v1"
+# tokens/24h per install, highest first
+curl -s -u "admin:$GF_PW" --get "$PROM/query" \
+  --data-urlencode 'query=sort_desc(sum by (job) (increase(kanna_turn_tokens_total[24h])))'
+# split by kind — a high cached_input share is cache working, not waste
+curl -s -u "admin:$GF_PW" --get "$PROM/query" \
+  --data-urlencode 'query=sum by (job, kind) (increase(kanna_turn_tokens_total[24h]))'
+# what a loop spent: its per-iteration cost is a subagent run, not a chat turn
+curl -s -u "admin:$GF_PW" --get "$PROM/query" \
+  --data-urlencode 'query=sum by (job) (increase(kanna_subagent_tokens_total[24h]))'
+```
+
+`kanna_turn_cost_usd_total` is deliberately SPARSER than the token counters —
+PTY-mode turns have no price resolver wired, so a missing cost series means
+unknown, never free. Derive spend from tokens × your own rates when it is
+absent. Installs older than the release that added these report no token series
+at all; that is a version gap, not a quiet install.
 
 ## Recipes
 
