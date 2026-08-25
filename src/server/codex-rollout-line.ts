@@ -236,6 +236,44 @@ function webSearchQueryOf(payload: Record<string, unknown>): string {
  *    role, a synthetic user preamble, an empty-content message, …). Expected on
  *    a healthy file, in bulk.
  */
+/**
+ * Openers that mark a rollout as one Codex wrote to ITSELF, not a conversation
+ * a person had.
+ *
+ * Codex runs its own housekeeping through the same rollout machinery, so those
+ * runs are indistinguishable from real sessions on disk. MEASURED on the
+ * reference machine: of 3916 importable rollouts, **3711 (95%) are the
+ * title-generation call alone**, plus 28 session-prep and 28 compaction runs —
+ * against roughly a dozen genuine conversations. A bulk import without this
+ * filter buries the real sessions under ~3800 five-entry stubs.
+ *
+ * This has to match on TEXT because nothing structural separates them: the
+ * `originator`, `source` and `thread_source` fields on `session_meta` all carry
+ * the same values for both kinds (checked across the whole corpus —
+ * `thread_source: "user"` would have kept 20 sessions and dropped 129 real
+ * ones). Fragile against Codex rewording these prompts, and the failure
+ * direction is right: a reworded prompt means noise reappears in a bulk
+ * import, never that a real conversation is hidden.
+ */
+const MACHINE_SESSION_OPENERS = [
+  "Generate a short, descriptive title",
+  "Analyze the user's instruction for preparing a new coding session",
+  "Compact this transcript for reuse in a new coding session",
+] as const
+
+/**
+ * True when a session's first REAL user message (synthetic preambles already
+ * dropped) is one of Codex's own internal prompts.
+ *
+ * Consulted by the bulk scan only. An explicitly pasted session id is explicit
+ * intent and still imports — refusing there would be Kanna overruling a direct
+ * instruction.
+ */
+export function isMachineGeneratedOpener(firstUserText: string): boolean {
+  const text = firstUserText.trimStart()
+  return MACHINE_SESSION_OPENERS.some((opener) => text.startsWith(opener))
+}
+
 export type RolloutLineSkipReason = "blank" | "unparseable" | "dropped_type"
 
 /** One physical line's classification, with the reason kept when there is none. */

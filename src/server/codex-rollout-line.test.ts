@@ -5,6 +5,7 @@ import { join } from "node:path"
 import {
   classifyRolloutLine,
   classifyRolloutLineOutcome,
+  isMachineGeneratedOpener,
   isSubagentSessionMeta,
   isSyntheticUserText,
 } from "./codex-rollout-line"
@@ -784,5 +785,36 @@ describe("against the on-disk fixture", () => {
       expect(meta.meta.parentThreadId).toBe("parent-thread-0001")
       expect(isSubagentSessionMeta(meta.meta)).toBe(true)
     })
+  })
+})
+
+describe("isMachineGeneratedOpener", () => {
+  // The bulk-scan filter. MEASURED on the reference corpus: 3711 of 3916
+  // importable rollouts open with the title-generation prompt alone, against
+  // roughly a dozen genuine conversations — so getting this wrong in either
+  // direction is the difference between a usable "import all" and an unusable
+  // one. Nothing structural separates these from real sessions; see the
+  // constant's docstring.
+  test("recognises each of codex's own internal openers", () => {
+    expect(isMachineGeneratedOpener("Generate a short, descriptive title (under 30 chars) for a conversation")).toBe(true)
+    expect(isMachineGeneratedOpener("Analyze the user's instruction for preparing a new coding session. Return")).toBe(true)
+    expect(isMachineGeneratedOpener("Compact this transcript for reuse in a new coding session. Optimize the")).toBe(true)
+  })
+
+  test("leaves real conversations alone", () => {
+    expect(isMachineGeneratedOpener("status")).toBe(false)
+    expect(isMachineGeneratedOpener("Let's review the Publish infra images")).toBe(false)
+    // A real user's own agent prompt — long, machine-ish in tone, and NOT ours
+    // to hide. This one is 127 sessions on the reference machine.
+    expect(isMachineGeneratedOpener("# Team conventions — MediAlpha You are operating an autonomous run")).toBe(false)
+  })
+
+  test("matches only at the START, so a mention mid-prompt is not a match", () => {
+    expect(isMachineGeneratedOpener("Can you generate a short, descriptive title for this?")).toBe(false)
+    expect(isMachineGeneratedOpener("why does codex Generate a short, descriptive title every time?")).toBe(false)
+  })
+
+  test("tolerates leading whitespace", () => {
+    expect(isMachineGeneratedOpener("   Generate a short, descriptive title (under 30 chars)")).toBe(true)
   })
 })

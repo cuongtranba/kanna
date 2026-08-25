@@ -19,6 +19,7 @@ import { locateClaudeSessionFile, scanClaudeSessions } from "./claude-session-sc
 import {
   classifyRolloutLine,
   classifyRolloutLineOutcome,
+  isMachineGeneratedOpener,
   isSubagentSessionMeta,
   type RolloutLineSkipReason,
 } from "./codex-rollout-line"
@@ -61,11 +62,6 @@ export const claudeSessionSource: SessionSource = {
   },
 }
 
-/**
- * The pure half of the codex pipeline, injected into the IO half. The parser is
- * a leaf that knows nothing about what a rollout line means; the classifier is
- * the domain half and stays out of the adapter.
- */
 /**
  * Translates the classifier's skip vocabulary into the parser's.
  *
@@ -117,7 +113,7 @@ export function codexParserDeps(maxBytes: number): CodexParserDeps {
  * for "import all": with 99 subagent rollouts and 4 over-cap files a user sees
  * "imported N" and cannot learn that 103 were refused, or why.
  */
-export type SessionScanRefusalReason = SessionParseRejection | "too_large"
+export type SessionScanRefusalReason = SessionParseRejection | "too_large" | "machine_generated"
 
 export interface SessionScanRefusal {
   readonly provider: AgentProvider
@@ -203,16 +199,29 @@ export function scanAllSessions(
   homeDir: string,
   maxBytes = DEFAULT_MAX_ROLLOUT_BYTES,
 ): SessionScanResult {
-  const sessions: ImportableSession[] = []
+  const offered: ImportableSession[] = []
   const refusals: SessionScanRefusal[] = []
   // Iterating `createSessionSources` rather than naming the two sources keeps
   // that function the single ordering authority.
   for (const source of createSessionSources(maxBytes)) {
     if (source.provider === "codex") {
-      scanCodexInto(homeDir, source.parse, sessions, refusals)
+      scanCodexInto(homeDir, source.parse, offered, refusals)
       continue
     }
-    for (const session of source.scan(homeDir)) sessions.push(session)
+    for (const session of source.scan(homeDir)) offered.push(session)
+  }
+  // Applied to EVERY provider, not just codex: an agent talking to itself is a
+  // property of the conversation, not of the file format. Claude Code runs the
+  // same title-generation prompt, and on the reference machine 119 of its 259
+  // scanned sessions are that prompt — filtering only codex would have left
+  // nearly half the claude side as noise while claiming the problem was fixed.
+  const sessions: ImportableSession[] = []
+  for (const session of offered) {
+    if (isMachineGeneratedOpener(session.title())) {
+      refusals.push({ provider: session.provider, filePath: session.filePath, reason: "machine_generated" })
+      continue
+    }
+    sessions.push(session)
   }
   return { sessions, refusals }
 }
