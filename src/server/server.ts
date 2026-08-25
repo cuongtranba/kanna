@@ -555,8 +555,8 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
   const followedSessionRegistry = createFollowedSessionRegistry({
     statFile: statSessionFile,
     runDelta: async (_chatId, sourcePath) => {
-      const session = claudeSessionSource.parse(sourcePath)
-      if (session) await importOneSession(store, session)
+      const parsed = claudeSessionSource.parse(sourcePath)
+      if (parsed.kind === "parsed") await importOneSession(store, parsed.session)
     },
     isTurnActive: (chatId) => agent.hasActiveTurn(chatId),
     now: Date.now,

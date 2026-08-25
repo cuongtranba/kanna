@@ -5,8 +5,8 @@ import type { ChatRecord } from "./events"
 import { log } from "../shared/log"
 import { extractSessionId } from "../shared/claude-session-id"
 import type { ImportSessionsByIdsResult, SingleImportResultRow } from "../shared/protocol"
-import type { ImportableSession } from "./session-source"
-import { SESSION_SOURCES } from "./session-source-registry.adapter"
+import type { ImportableSession, SessionParseResult, SessionSource } from "./session-source"
+import { createSessionSources } from "./session-source-registry.adapter"
 
 export interface ImportClaudeSessionsResult {
   imported: number    // brand new sessions
@@ -19,6 +19,8 @@ export interface ImportClaudeSessionsResult {
 export interface ImportClaudeSessionsArgs {
   store: EventStore
   homeDir?: string
+  /** Ceiling on one source file; injected so `server.ts` owns the env read. */
+  maxBytes?: number
   onProgress?: (update: { scanned: number; imported: number }) => void
 }
 
@@ -150,11 +152,17 @@ export async function importOneSession(
   }
 }
 
+/**
+ * Scans EVERY registered provider and returns ONE summed tally. Two providers
+ * can hold the same session id (unrelated sessions that happen to share a uuid)
+ * and each is imported into its own chat — dedup is per-provider, keyed on that
+ * provider's `sessionTokensByProvider` slot.
+ */
 export async function importAllSessions(
   args: ImportClaudeSessionsArgs,
 ): Promise<ImportClaudeSessionsResult> {
-  const { store, homeDir = homedir(), onProgress } = args
-  const sessions = SESSION_SOURCES.flatMap((source) => source.scan(homeDir))
+  const { store, homeDir = homedir(), maxBytes, onProgress } = args
+  const sessions = createSessionSources(maxBytes).flatMap((source) => source.scan(homeDir))
 
   let imported = 0
   let updated = 0
@@ -206,21 +214,32 @@ export interface ImportSessionsByIdsArgs {
   store: EventStore
   sessionIds: string[]
   homeDir?: string
+  /** Ceiling on one source file; injected so `server.ts` owns the env read. */
+  maxBytes?: number
   onSessionImported?: (info: SessionImportedInfo) => void
 }
 
-/** First source that can locate the id owns it; a later one is never consulted. */
-function locateSession(homeDir: string, sessionId: string): { filePath: string; session: ImportableSession | null } | null {
-  for (const source of SESSION_SOURCES) {
+/**
+ * First source that can locate the id owns it; a later one is never consulted.
+ * With `SESSION_SOURCES` ordered claude-first, a uuid present under both
+ * providers therefore resolves to the claude session.
+ */
+function locateSession(
+  sources: readonly SessionSource[],
+  homeDir: string,
+  sessionId: string,
+): { filePath: string; result: SessionParseResult } | null {
+  for (const source of sources) {
     const filePath = source.locate(homeDir, sessionId)
     if (!filePath) continue
-    return { filePath, session: source.parse(filePath) }
+    return { filePath, result: source.parse(filePath) }
   }
   return null
 }
 
 export async function importSessionsByIds(args: ImportSessionsByIdsArgs): Promise<ImportSessionsByIdsResult> {
-  const { store, sessionIds, homeDir = homedir(), onSessionImported } = args
+  const { store, sessionIds, homeDir = homedir(), maxBytes, onSessionImported } = args
+  const sources = createSessionSources(maxBytes)
   const results: SingleImportResultRow[] = []
   let newProjects = 0
   for (const raw of sessionIds) {
@@ -229,16 +248,17 @@ export async function importSessionsByIds(args: ImportSessionsByIdsArgs): Promis
       results.push({ sessionId: raw, status: "failed", error: "invalid_id" })
       continue
     }
-    const located = locateSession(homeDir, sessionId)
+    const located = locateSession(sources, homeDir, sessionId)
     if (!located) {
       results.push({ sessionId, status: "failed", error: "not_found" })
       continue
     }
-    const { filePath, session } = located
-    if (!session) {
+    const { filePath, result } = located
+    if (result.kind !== "parsed") {
       results.push({ sessionId, status: "failed", error: "parse_failed" })
       continue
     }
+    const session = result.session
     const outcome = await importOneSession(store, session)
     if (outcome.status === "failed") {
       results.push({ sessionId, status: "failed", error: outcome.reason })

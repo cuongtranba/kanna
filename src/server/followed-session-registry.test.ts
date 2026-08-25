@@ -118,8 +118,8 @@ describe("FollowedSessionRegistry integration (real fs + importer)", () => {
       const registry = createFollowedSessionRegistry({
         statFile: statSessionFile,
         runDelta: async (deltaChatId, sourcePath) => {
-          const session = claudeSessionSource.parse(sourcePath)
-          if (session) await importOneSession(store, session)
+          const parsed = claudeSessionSource.parse(sourcePath)
+          if (parsed.kind === "parsed") await importOneSession(store, parsed.session)
         },
         isTurnActive: () => false,
         now: () => Date.now(),
