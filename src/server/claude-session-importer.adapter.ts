@@ -254,7 +254,12 @@ export async function importSessionsByIds(args: ImportSessionsByIdsArgs): Promis
       continue
     }
     const { filePath, result } = located
-    if (result.kind !== "parsed") {
+    if (result.kind === "tooLarge") {
+      log.warn("[kanna/import] rollout over size cap", filePath, result.size, ">", result.maxBytes)
+      results.push({ sessionId, status: "failed", error: "too_large" })
+      continue
+    }
+    if (result.kind === "rejected") {
       results.push({ sessionId, status: "failed", error: "parse_failed" })
       continue
     }

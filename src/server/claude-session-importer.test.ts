@@ -639,6 +639,31 @@ describe("codex session import", () => {
     }
   })
 
+  // `too_large` must not read as `parse_failed`: the file is fine, the cap is
+  // the thing the user can change. `maxBytes` is injected rather than read from
+  // the environment so this needs no 32 MiB fixture.
+  test("a rollout over the size cap fails too_large, not parse_failed", async () => {
+    const ctx = fresh()
+    try {
+      const CODEX_ID = "4d5e6f7a-8b9c-4d0e-8f1a-2b3c4d5e6f7a"
+      seedCodexSession(ctx.homeDir, ctx.realProj, CODEX_ID)
+      const store = createTestEventStore(ctx.dataDir)
+      await store.initialize()
+
+      const result = await importSessionsByIds({
+        store,
+        homeDir: ctx.homeDir,
+        sessionIds: [CODEX_ID],
+        maxBytes: 16,
+      })
+
+      expect(result.results[0]).toMatchObject({ status: "failed", error: "too_large" })
+      expect([...store.state.chatsById.values()].filter((c) => !c.deletedAt).length).toBe(0)
+    } finally {
+      ctx.cleanup()
+    }
+  })
+
   // The append-storm gate. `codexRecordKey` is the physical line index and
   // `codexRecordKeyFromEntryId` its inverse; if the two drift, every already
   // imported record reads as new and a live-tail tick re-appends the whole
