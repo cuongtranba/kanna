@@ -2,23 +2,30 @@ import { describe, expect, mock, test } from "bun:test"
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { createFollowedSessionRegistry, type FollowedSessionRegistryDeps } from "./followed-session-registry"
+import {
+  createFollowedSessionRegistry,
+  createSessionDeltaRunner,
+  type FollowedSessionRegistryDeps,
+} from "./followed-session-registry"
 import { statSessionFile } from "./followed-session-io.adapter"
 import { importOneSession, importSessionsByIds, type SessionImportedInfo } from "./claude-session-importer.adapter"
-import { claudeSessionSource } from "./session-source-registry.adapter"
+import { sourceForProvider } from "./session-source-registry.adapter"
 import { createTestEventStore } from "./storage/test-helpers"
+import type { AgentProvider } from "../shared/types"
+import type { ImportableSession, SessionParseResult, SessionSource } from "./session-source"
 
 function makeRegistry(over: Partial<FollowedSessionRegistryDeps> = {}) {
   let nowMs = 1_000_000
   const stat = { size: 100, mtimeMs: nowMs }
   const deps: FollowedSessionRegistryDeps = {
     statFile: mock(() => ({ ...stat })),
-    runDelta: mock(async () => {}),
+    runDelta: mock(async () => true),
     isTurnActive: mock(() => false),
     now: () => nowMs,
     onChange: mock(() => {}),
     activeWindowMs: 600_000,
     idleMs: 600_000,
+    maxConsecutiveFailures: 3,
     ...over,
   }
   const reg = createFollowedSessionRegistry(deps)
@@ -70,12 +77,183 @@ describe("FollowedSessionRegistry", () => {
     await reg2.tick()
     expect(reg2.isFollowing("chat-1")).toBe(false)
   })
+  // A codex rollout that crosses the size cap mid-session answers `tooLarge` on
+  // every tick while the file keeps growing. Refreshing `lastGrowthAt` on GROWTH
+  // rather than on delta SUCCESS made the idle stop unreachable, so the registry
+  // followed that chat for the life of the process — polling every 2s, appending
+  // nothing, saying nothing, with the UI still showing the live badge.
+  test("a failing delta does not refresh the idle deadline", async () => {
+    const { reg, stat, advance } = makeRegistry({
+      runDelta: mock(async () => false),
+      maxConsecutiveFailures: 1000, // isolate the idle timer from the give-up count
+    })
+    reg.consider(INFO)
+    for (let i = 0; i < 4; i += 1) {
+      stat.size += 100
+      advance(200_000)
+      await reg.tick()
+    }
+    // Growth stopped; the deadline must already be blown, since none of the
+    // deltas above counted as progress.
+    await reg.tick()
+    expect(reg.isFollowing("chat-1")).toBe(false)
+  })
+
+  test("a succeeding delta does refresh the idle deadline", async () => {
+    const { reg, stat, advance } = makeRegistry()
+    reg.consider(INFO)
+    for (let i = 0; i < 4; i += 1) {
+      stat.size += 100
+      advance(200_000)
+      await reg.tick()
+    }
+    await reg.tick()
+    expect(reg.isFollowing("chat-1")).toBe(true)
+  })
+
+  test("gives up after maxConsecutiveFailures failing deltas, and says so on onChange", async () => {
+    const calls: string[][] = []
+    const { reg, deps, stat } = makeRegistry({
+      runDelta: mock(async () => false),
+      maxConsecutiveFailures: 3,
+      onChange: (ids) => calls.push(ids),
+    })
+    reg.consider(INFO)
+    for (let i = 0; i < 2; i += 1) {
+      stat.size += 100
+      await reg.tick()
+    }
+    expect(reg.isFollowing("chat-1")).toBe(true)
+    stat.size += 100
+    await reg.tick()
+    expect(reg.isFollowing("chat-1")).toBe(false)
+    expect(deps.runDelta).toHaveBeenCalledTimes(3)
+    expect(calls).toEqual([["chat-1"], []])
+    // Nothing further is polled once the entry is gone.
+    stat.size += 100
+    await reg.tick()
+    expect(deps.runDelta).toHaveBeenCalledTimes(3)
+  })
+
+  test("a throwing delta counts as a failure and never kills the tick loop", async () => {
+    const { reg, deps, stat } = makeRegistry({
+      runDelta: mock(async () => { throw new Error("unreadable") }),
+      maxConsecutiveFailures: 2,
+    })
+    reg.consider(INFO)
+    stat.size += 100
+    await reg.tick()
+    expect(reg.isFollowing("chat-1")).toBe(true)
+    stat.size += 100
+    await reg.tick()
+    expect(reg.isFollowing("chat-1")).toBe(false)
+    expect(deps.runDelta).toHaveBeenCalledTimes(2)
+  })
+
+  test("one success resets the failure count", async () => {
+    let ok = false
+    const { reg, stat } = makeRegistry({
+      runDelta: mock(async () => ok),
+      maxConsecutiveFailures: 2,
+    })
+    reg.consider(INFO)
+    stat.size += 100
+    await reg.tick() // failure 1
+    ok = true
+    stat.size += 100
+    await reg.tick() // success — resets
+    ok = false
+    stat.size += 100
+    await reg.tick() // failure 1 again, below the cap
+    expect(reg.isFollowing("chat-1")).toBe(true)
+  })
+
   test("onChange fires on every membership change with current ids", () => {
     const calls: string[][] = []
     const { reg } = makeRegistry({ onChange: (ids) => calls.push(ids) })
     reg.consider(INFO)
     reg.stop("chat-1", "chat_deleted")
     expect(calls).toEqual([["chat-1"], []])
+  })
+})
+
+describe("createSessionDeltaRunner", () => {
+  function makeSource(provider: AgentProvider, result: SessionParseResult): SessionSource {
+    return {
+      provider,
+      scan: () => [],
+      locate: () => null,
+      parse: mock(() => result),
+    }
+  }
+  const SESSION: ImportableSession = {
+    provider: "codex",
+    sessionId: "s-1",
+    filePath: "/p/rollout.jsonl",
+    cwd: "/p",
+    firstTimestamp: 0,
+    lastTimestamp: 1,
+    sourceHash: "codex:v1:0:0:deadbeef",
+    toEntries: () => [],
+    newEntriesSince: () => [],
+    recordKeyFromEntryId: () => null,
+    title: () => "s-1",
+    legacyTitleCandidates: () => new Set<string>(),
+  }
+  const PARSED: SessionParseResult = { kind: "parsed", session: SESSION }
+
+  test("routes to the source that WROTE the file, never to a default", async () => {
+    const claude = makeSource("claude", { kind: "rejected", reason: "parse_failed" })
+    const codex = makeSource("codex", PARSED)
+    const imported: string[] = []
+    const run = createSessionDeltaRunner({
+      providerOf: () => "codex",
+      sourceFor: (provider) => (provider === "codex" ? codex : claude),
+      importOne: async (session) => { imported.push(session.sessionId) },
+    })
+    expect(await run("chat-1", "/p/rollout.jsonl")).toBe(true)
+    expect(imported).toEqual(["s-1"])
+    expect(claude.parse as ReturnType<typeof mock>).not.toHaveBeenCalled()
+  })
+
+  // `?? "claude"` handed a codex-sourced chat to the claude reader whenever the
+  // row was gone, which parses `rejected` and drops the delta silently on every
+  // tick — the same silent drop the provider routing exists to fix, pointing the
+  // other way. A vanished chat is reported, never guessed at.
+  test("a missing chat row fails rather than guessing a provider", async () => {
+    const codex = makeSource("codex", PARSED)
+    const run = createSessionDeltaRunner({
+      providerOf: () => null,
+      sourceFor: () => codex,
+      importOne: async () => {},
+    })
+    expect(await run("chat-gone", "/p/rollout.jsonl")).toBe(false)
+    expect(codex.parse as ReturnType<typeof mock>).not.toHaveBeenCalled()
+  })
+
+  test("reports failure for every non-parsed outcome", async () => {
+    const cases: SessionParseResult[] = [
+      { kind: "tooLarge", size: 99, maxBytes: 10 },
+      { kind: "rejected", reason: "unreadable" },
+      { kind: "rejected", reason: "no_session_meta" },
+    ]
+    for (const result of cases) {
+      const run = createSessionDeltaRunner({
+        providerOf: () => "codex",
+        sourceFor: () => makeSource("codex", result),
+        importOne: async () => { throw new Error("must not import") },
+      })
+      expect(await run("chat-1", "/p/rollout.jsonl")).toBe(false)
+    }
+  })
+
+  test("an unknown provider fails rather than importing nothing quietly", async () => {
+    const run = createSessionDeltaRunner({
+      providerOf: () => "openrouter",
+      sourceFor: () => null,
+      importOne: async () => { throw new Error("must not import") },
+    })
+    expect(await run("chat-1", "/p/x.jsonl")).toBe(false)
   })
 })
 
@@ -117,15 +295,20 @@ describe("FollowedSessionRegistry integration (real fs + importer)", () => {
 
       const registry = createFollowedSessionRegistry({
         statFile: statSessionFile,
-        runDelta: async (deltaChatId, sourcePath) => {
-          const parsed = claudeSessionSource.parse(sourcePath)
-          if (parsed.kind === "parsed") await importOneSession(store, parsed.session)
-        },
+        // The REAL routing, as `server.ts` wires it. A hand-rolled claude-only
+        // runDelta here reproduces the pre-fix behaviour and hides the whole
+        // provider-routing question from this suite.
+        runDelta: createSessionDeltaRunner({
+          providerOf: (deltaChatId) => store.state.chatsById.get(deltaChatId)?.provider ?? null,
+          sourceFor: (provider) => sourceForProvider(provider),
+          importOne: async (session) => { await importOneSession(store, session) },
+        }),
         isTurnActive: () => false,
         now: () => Date.now(),
         onChange: () => {},
         activeWindowMs: 600_000,
         idleMs: 600_000,
+        maxConsecutiveFailures: 3,
       })
       if (!followedInfo) throw new Error("expected onSessionImported to fire")
       registry.consider(followedInfo)

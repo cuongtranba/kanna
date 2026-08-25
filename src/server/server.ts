@@ -71,12 +71,12 @@ import { createWorkflowRegistry } from "./workflow-registry"
 import { LocalCatalogService } from "./local-catalog"
 import { defaultHomeDir, scanLocalCatalog, statMtimes } from "./local-catalog-io.adapter"
 import { createSubagentTranscriptRegistry } from "./subagent-transcript-registry"
-import { createFollowedSessionRegistry } from "./followed-session-registry"
+import { createFollowedSessionRegistry, createSessionDeltaRunner } from "./followed-session-registry"
 import { statSessionFile } from "./followed-session-io.adapter"
 import { createBackgroundTaskOutputRegistry } from "./background-task-output-registry"
 import { backgroundTaskOutputIo } from "./background-task-output-io.adapter"
 import { importOneSession } from "./claude-session-importer.adapter"
-import { DEFAULT_MAX_ROLLOUT_BYTES, sourceForProvider } from "./session-source-registry.adapter"
+import { createSessionSources, DEFAULT_MAX_ROLLOUT_BYTES } from "./session-source-registry.adapter"
 import { listWorkflowRunDirs, readWorkflowDir, readWorkflowRunJournal, watchWorkflowDir, watchWorkflowRunDirs } from "./workflow-watch-io.adapter"
 import { readWorkflowAgentTranscriptLines } from "./workflow-agent-transcript-io.adapter"
 import { SnapshotStore } from "./session-share/snapshot-store.adapter"
@@ -133,6 +133,13 @@ const STALE_EMPTY_CHAT_PRUNE_INTERVAL_MS = 60 * 1000
 const IMPORT_FOLLOW_POLL_MS = 2000
 const IMPORT_FOLLOW_ACTIVE_WINDOW_MS = 600_000
 const IMPORT_FOLLOW_IDLE_MS = 600_000
+/**
+ * Consecutive failed live-tail deltas before the registry stops following a
+ * chat. Low on purpose: every failure kind is permanent for a given file
+ * (over the size cap, unreadable, chat row gone), so retrying more just delays
+ * dropping the live badge the UI is still showing.
+ */
+const IMPORT_FOLLOW_MAX_FAILURES = 3
 const MULTIPART_OVERHEAD_BYTES = 16 * 1024 * 1024
 export const MAX_REQUEST_BODY_BYTES = UPLOAD_MAX_FILE_SIZE_MB_MAX * 1024 * 1024 + MULTIPART_OVERHEAD_BYTES
 
@@ -552,23 +559,28 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
   const resolveCleanup = (cardId: string, decision: CleanupDecision) =>
     resolveWorktreeCleanup(cleanupDeps, cardId, decision)
 
-  // The tail must be parsed by the source that WROTE the file. Hardcoding the
-  // claude source meant a followed codex chat re-parsed a rollout with claude's
-  // reader, which finds no `sessionId` and answers `rejected` — the delta was
-  // silently dropped on every tick.
   const importMaxRolloutBytes = parsePositiveIntEnv(
     process.env.KANNA_IMPORT_MAX_ROLLOUT_BYTES,
     DEFAULT_MAX_ROLLOUT_BYTES,
   )
+  /**
+   * Built ONCE, not per delta. `tick` runs at 2 Hz over every followed chat, and
+   * a source carries its parser dep object with it — rebuilding both providers'
+   * sources on every tick is pure garbage in the one subsystem whose entire
+   * design story is memory.
+   */
+  const sessionSourceByProvider = new Map(
+    createSessionSources(importMaxRolloutBytes).map((source) => [source.provider, source]),
+  )
   const followedSessionRegistry = createFollowedSessionRegistry({
     statFile: statSessionFile,
-    runDelta: async (chatId, sourcePath) => {
-      const provider = store.state.chatsById.get(chatId)?.provider ?? "claude"
-      const source = sourceForProvider(provider, importMaxRolloutBytes)
-      if (!source) return
-      const parsed = source.parse(sourcePath)
-      if (parsed.kind === "parsed") await importOneSession(store, parsed.session)
-    },
+    // The tail must be parsed by the source that WROTE the file — see
+    // `createSessionDeltaRunner` for what a wrong reader costs.
+    runDelta: createSessionDeltaRunner({
+      providerOf: (chatId) => store.state.chatsById.get(chatId)?.provider ?? null,
+      sourceFor: (provider) => sessionSourceByProvider.get(provider) ?? null,
+      importOne: async (session) => { await importOneSession(store, session) },
+    }),
     isTurnActive: (chatId) => agent.hasActiveTurn(chatId),
     now: Date.now,
     onChange: () => pushFollowedSessions?.(),
@@ -577,6 +589,10 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
       IMPORT_FOLLOW_ACTIVE_WINDOW_MS,
     ),
     idleMs: parsePositiveIntEnv(process.env.KANNA_IMPORT_FOLLOW_IDLE_MS, IMPORT_FOLLOW_IDLE_MS),
+    maxConsecutiveFailures: parsePositiveIntEnv(
+      process.env.KANNA_IMPORT_FOLLOW_MAX_FAILURES,
+      IMPORT_FOLLOW_MAX_FAILURES,
+    ),
   })
 
   const router = createWsRouter({

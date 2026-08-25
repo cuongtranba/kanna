@@ -3,9 +3,9 @@ import { mkdtempSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { importOneSession, importSessionsByIds } from "./claude-session-importer.adapter"
-import { createFollowedSessionRegistry } from "./followed-session-registry"
+import { createFollowedSessionRegistry, createSessionDeltaRunner } from "./followed-session-registry"
 import { statSessionFile } from "./followed-session-io.adapter"
-import { claudeSessionSource } from "./session-source-registry.adapter"
+import { sourceForProvider } from "./session-source-registry.adapter"
 import { writeTribeSessionFixture } from "./__fixtures__/tribe-session-fixture"
 import { createTestEventStore } from "./storage/test-helpers"
 
@@ -39,15 +39,20 @@ describe("session import E2E (Tribe-shaped fixture)", () => {
 
       const registry = createFollowedSessionRegistry({
         statFile: statSessionFile,
-        runDelta: async (cid, sourcePath) => {
-          const parsed = claudeSessionSource.parse(sourcePath)
-          if (parsed.kind === "parsed") await importOneSession(store, parsed.session)
-        },
+        // The REAL routing, as `server.ts` wires it — a claude-only runDelta
+        // here reproduces the pre-fix behaviour and proves nothing about which
+        // reader a followed chat is actually handed to.
+        runDelta: createSessionDeltaRunner({
+          providerOf: (cid) => store.state.chatsById.get(cid)?.provider ?? null,
+          sourceFor: (provider) => sourceForProvider(provider),
+          importOne: async (session) => { await importOneSession(store, session) },
+        }),
         isTurnActive: () => false,
         now: () => Date.now(),
         onChange: () => {},
         activeWindowMs: 600_000,
         idleMs: 600_000,
+        maxConsecutiveFailures: 3,
       })
       registry.consider(seen[0])
 
