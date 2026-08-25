@@ -16,9 +16,18 @@ import type { AgentProvider } from "../shared/types"
 import { claudeSessionCodec } from "./claude-session-mapper"
 import { parseClaudeSessionFile } from "./claude-session-parser.adapter"
 import { locateClaudeSessionFile, scanClaudeSessions } from "./claude-session-scanner.adapter"
-import { classifyRolloutLine, isSubagentSessionMeta } from "./codex-rollout-line"
+import {
+  classifyRolloutLine,
+  classifyRolloutLineOutcome,
+  isSubagentSessionMeta,
+  type RolloutLineSkipReason,
+} from "./codex-rollout-line"
 import { codexSessionCodec } from "./codex-session-mapper"
-import { parseCodexRolloutFile, type CodexParserDeps } from "./codex-session-parser.adapter"
+import {
+  parseCodexRolloutFile,
+  type CodexLineSkipReason,
+  type CodexParserDeps,
+} from "./codex-session-parser.adapter"
 import { locateCodexRolloutFile, scanCodexRollouts } from "./codex-session-scanner.adapter"
 import {
   createImportableSession,
@@ -57,8 +66,46 @@ export const claudeSessionSource: SessionSource = {
  * a leaf that knows nothing about what a rollout line means; the classifier is
  * the domain half and stays out of the adapter.
  */
-function codexParserDeps(maxBytes: number): CodexParserDeps {
-  return { classifyLine: classifyRolloutLine, isSubagentMeta: isSubagentSessionMeta, maxBytes }
+/**
+ * Translates the classifier's skip vocabulary into the parser's.
+ *
+ * The two are declared independently — the classifier is pure domain, the
+ * parser is an IO leaf that must not import it — so this is the one seam where
+ * they meet. Exhaustive with no `default`, so a new skip reason on either side
+ * is a compile error here rather than a silently mistranslated diagnostic.
+ */
+function toParserSkipReason(reason: RolloutLineSkipReason): CodexLineSkipReason {
+  switch (reason) {
+    case "blank":
+      return "blank"
+    case "unparseable":
+      return "unparseable"
+    case "dropped_type":
+      return "dropped"
+  }
+}
+
+/**
+ * Exported so a test can assert the codex parser is actually given the
+ * skip-reason companion. Without it `diagnostics.unparseableLines` is `null`
+ * ("cannot distinguish") forever, and because the port drops `diagnostics` on
+ * the way to the importer, nothing downstream would ever notice.
+ */
+export function codexParserDeps(maxBytes: number): CodexParserDeps {
+  return {
+    classifyLine: classifyRolloutLine,
+    // Supplying this is what makes `unparseableLines` a number instead of
+    // `null` ("cannot distinguish"): without it a corrupt rollout line and a
+    // deliberately-dropped `world_state` are the same event, and a half-written
+    // file imports short with a green result and no warning.
+    classifyLineWithReason: (rawLine, lineIndex, fallbackTimestamp) => {
+      const outcome = classifyRolloutLineOutcome(rawLine, lineIndex, fallbackTimestamp)
+      if (outcome.kind === "record") return outcome
+      return { kind: "skipped", reason: toParserSkipReason(outcome.reason) }
+    },
+    isSubagentMeta: isSubagentSessionMeta,
+    maxBytes,
+  }
 }
 
 /**

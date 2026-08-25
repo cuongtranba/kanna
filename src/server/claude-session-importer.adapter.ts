@@ -5,6 +5,7 @@ import type { ChatRecord } from "./events"
 import { log } from "../shared/log"
 import { extractSessionId } from "../shared/claude-session-id"
 import type { ImportSessionsByIdsResult, SingleImportResultRow } from "../shared/protocol"
+import { hasCodexSourceShrunk } from "./codex-session-parser.adapter"
 import type {
   ImportableSession,
   SessionParseRejection,
@@ -81,7 +82,7 @@ function collectExistingRecordKeys(
 
 type DeltaOutcome =
   | { ok: true; appended: number }
-  | { ok: false; reason: "transcript_mismatch" }
+  | { ok: false; reason: "transcript_mismatch" | "source_shrunk" }
 
 /**
  * Appends the records this chat does not already hold.
@@ -107,7 +108,18 @@ async function applyDelta(
   store: EventStore,
   chatId: string,
   session: ImportableSession,
+  previousSourceHash: string | null,
 ): Promise<DeltaOutcome> {
+  // A codex entry id embeds the record's PHYSICAL LINE INDEX, so a source file
+  // that shrank has renumbered every record past the shift — the old keys now
+  // name different lines and the delta would re-append most of the transcript.
+  // Only the live-tail path is otherwise protected (it ticks on size growth);
+  // the manual re-import paths reach here with no size check at all.
+  // `hasCodexSourceShrunk` fails open on any hash it did not mint, so claude —
+  // whose hash is a bare md5 — is unaffected.
+  if (previousSourceHash && hasCodexSourceShrunk(previousSourceHash, session.sourceHash)) {
+    return { ok: false, reason: "source_shrunk" }
+  }
   const { seen, entryCount } = collectExistingRecordKeys(store, chatId, session)
   if (seen.size === 0 && entryCount > 0) return { ok: false, reason: "transcript_mismatch" }
   const entries = session.newEntriesSince(seen)
@@ -121,7 +133,7 @@ export type ImportOutcome =
   | { status: "created"; chatId: string; newProject: boolean }
   | { status: "updated"; chatId: string }
   | { status: "skipped"; chatId?: string }
-  | { status: "failed"; reason: "cwd_missing" | "store_error" | "transcript_mismatch" }
+  | { status: "failed"; reason: "cwd_missing" | "store_error" | "transcript_mismatch" | "source_shrunk" }
 
 export async function importOneSession(
   store: EventStore,
@@ -148,10 +160,12 @@ export async function importOneSession(
       }
 
       // Hash changed → append only new records
-      const delta = await applyDelta(store, existingChat.id, session)
+      const delta = await applyDelta(store, existingChat.id, session, existingChat.sourceHash)
       if (!delta.ok) {
         log.warn(
-          "[kanna/import] refusing delta: no existing entry matches this session's records",
+          delta.reason === "source_shrunk"
+            ? "[kanna/import] refusing delta: source file shrank, so its line-keyed records renumbered"
+            : "[kanna/import] refusing delta: no existing entry matches this session's records",
           session.filePath,
           "chat",
           existingChat.id,

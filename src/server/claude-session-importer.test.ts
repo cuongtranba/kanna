@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { createHash } from "node:crypto"
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import {
@@ -10,7 +10,8 @@ import {
 } from "./claude-session-importer.adapter"
 import type { SessionImportedInfo } from "./claude-session-importer.adapter"
 import { writeCodexRolloutFixture, writeSubagentRollout } from "./__fixtures__/codex-rollout-fixture"
-import { codexSessionSource } from "./session-source-registry"
+import { parseCodexRolloutFile } from "./codex-session-parser.adapter"
+import { codexParserDeps, codexSessionSource } from "./session-source-registry"
 import { createTestEventStore } from "./storage/test-helpers"
 
 function fresh() {
@@ -818,6 +819,61 @@ describe("cross-provider sourceHash collision", () => {
       const third = await importAllSessions({ store, homeDir: ctx.homeDir })
       expect(store.getMessages(chatId).length).toBe(claudeEntryCount)
       expect(third.failed).toBe(1)
+    } finally {
+      ctx.cleanup()
+    }
+  })
+  // Both of these pin WIRING, not logic. `hasCodexSourceShrunk` and the
+  // classifier's skip-reason companion were each built, tested, and then left
+  // with no production caller — the exact defect ("a comment promises a
+  // guarantee nothing provides") that this branch's review was opened on.
+  test("a shrunk source file is refused instead of re-appended", async () => {
+    const ctx = fresh()
+    try {
+      const CODEX_ID = "9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b"
+      const fixture = seedCodexSession(ctx.homeDir, ctx.realProj, CODEX_ID)
+      const store = createTestEventStore(ctx.dataDir)
+      await store.initialize()
+
+      const parseRollout = () => {
+        const parsed = codexSessionSource.parse(fixture.rolloutPath)
+        if (parsed.kind !== "parsed") throw new Error(`expected parsed, got ${parsed.kind}`)
+        return parsed.session
+      }
+
+      const created = await importOneSession(store, parseRollout())
+      expect(created.status).toBe("created")
+      const chatId = created.status === "created" ? created.chatId : ""
+      const baseline = store.getMessages(chatId).length
+
+      // Truncate to half. Every codex entry id embeds a physical line index, so
+      // the surviving lines have renumbered — without the guard the delta reads
+      // them as new records and re-appends most of the transcript.
+      const lines = readFileSync(fixture.rolloutPath, "utf8").split("\n").filter(Boolean)
+      writeFileSync(fixture.rolloutPath, `${lines.slice(0, Math.floor(lines.length / 2)).join("\n")}\n`)
+
+      const shrunk = await importOneSession(store, parseRollout())
+      expect(shrunk).toMatchObject({ status: "failed", reason: "source_shrunk" })
+      expect(store.getMessages(chatId).length).toBe(baseline)
+    } finally {
+      ctx.cleanup()
+    }
+  })
+
+  test("the codex parser counts unparseable lines rather than answering null", () => {
+    const ctx = fresh()
+    try {
+      const CODEX_ID = "1f2e3d4c-5b6a-4978-8695-a4b3c2d1e0f9"
+      const fixture = seedCodexSession(ctx.homeDir, ctx.realProj, CODEX_ID)
+      appendFileSync(fixture.rolloutPath, "{ this is not json\n")
+
+      // Asserted at the PARSER, not the port: `SessionParseResult` drops
+      // `diagnostics`, so this is the only surface where the injection shows.
+      // null would mean "cannot distinguish" — the registry never supplied the
+      // skip-reason companion and corrupt lines are invisible.
+      const parsed = parseCodexRolloutFile(fixture.rolloutPath, codexParserDeps(32 * 1024 * 1024))
+      expect(parsed.kind).toBe("parsed")
+      expect(parsed.kind === "parsed" ? parsed.diagnostics.unparseableLines : null).toBe(1)
     } finally {
       ctx.cleanup()
     }

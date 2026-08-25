@@ -72,6 +72,7 @@ const IMPORT_ERROR_TEXT: Record<NonNullable<SingleImportResultRow["error"]>, str
   no_cwd: "The session file records no project folder.",
   no_records: "The session file holds no messages to import.",
   transcript_mismatch: "This chat already holds a transcript from another session.",
+  source_shrunk: "The session file shrank since it was imported; re-import it as a new chat.",
   store_error: "Kanna could not save the imported session.",
 }
 

@@ -161,6 +161,13 @@ export interface SingleImportResultRow {
     | "no_cwd"
     | "no_records"
     | "transcript_mismatch"
+    /**
+     * The source file shrank since it was imported. Codex entry ids embed a
+     * physical line index, so a shrunk file has renumbered its records and a
+     * delta would re-append most of the transcript. Recovery is a fresh import,
+     * not a retry.
+     */
+    | "source_shrunk"
     | "store_error"
 }
 
