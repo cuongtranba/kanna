@@ -1653,8 +1653,8 @@ describe("collection CRUD contracts", () => {
 
 // typography is a GROUP (never a bare scalar) so that a future `bodyFamily`
 // field is purely additive. These pin the three sites most likely to silently
-// drop it: toFilePayload (on-disk write), toComparablePayload (shouldWrite),
-// and the server twin of mergeAppSettingsPatch is covered separately in
+// drop it: toFilePayload (on-disk write), the shouldWrite comparison, and the
+// server twin of mergeAppSettingsPatch is covered separately in
 // ws-router-defaults.test.ts.
 describe("typography settings", () => {
   test("writePatch round-trips typography.scale through the file (toFilePayload)", async () => {
@@ -1671,7 +1671,7 @@ describe("typography settings", () => {
     manager.dispose()
   })
 
-  test("initializing twice with no patch does not rewrite the settings file (toComparablePayload)", async () => {
+  test("initializing twice with no patch does not rewrite the settings file", async () => {
     const filePath = await createTempFilePath()
     const manager = trackManager(new AppSettingsManager(filePath))
     await manager.initialize()
@@ -1687,10 +1687,34 @@ describe("typography settings", () => {
 
     expect(secondContent).toBe(firstContent)
     // atomicWriteJson replaces the file via a tmp-file + rename, which always
-    // produces a NEW inode. If toComparablePayload omits a field that
-    // toFilePayload includes, `shouldWrite` is (wrongly) always true and the
-    // file is rewritten on every load -- same bytes, but a fresh inode. A
-    // genuine no-op load must leave the inode untouched.
+    // produces a NEW inode. A genuine no-op load must leave the inode untouched.
     expect(secondStat.ino).toBe(firstStat.ino)
+  })
+
+  test("file payload excludes warning and filePathDisplay; snapshot excludes analyticsUserId", async () => {
+    const filePath = await createTempFilePath()
+    const manager = trackManager(new AppSettingsManager(filePath))
+    await manager.initialize()
+    manager.dispose()
+
+    const onDisk = JSON.parse(await readFile(filePath, "utf8")) as Record<string, unknown>
+    expect(onDisk).not.toHaveProperty("warning")
+    expect(onDisk).not.toHaveProperty("filePathDisplay")
+    expect(onDisk).toHaveProperty("analyticsUserId")
+  })
+
+  test("initialize rewrites file when analyticsUserId has surrounding whitespace", async () => {
+    const filePath = await createTempFilePath()
+    await writeFile(filePath, JSON.stringify({ analyticsUserId: "  test-uid  " }), "utf8")
+    const firstStat = await stat(filePath)
+
+    const manager = trackManager(new AppSettingsManager(filePath))
+    await manager.initialize()
+    manager.dispose()
+
+    const onDisk = JSON.parse(await readFile(filePath, "utf8")) as { analyticsUserId?: string }
+    const secondStat = await stat(filePath)
+    expect(onDisk.analyticsUserId).toBe("test-uid")
+    expect(secondStat.ino).not.toBe(firstStat.ino)
   })
 })
