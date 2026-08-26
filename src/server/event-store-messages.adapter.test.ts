@@ -19,6 +19,7 @@ import {
   getRecentRawEntries,
   loadTranscriptFromDisk,
   getMessagesView,
+  seedSeenMessageIdsFromTail,
   type MessageReadDeps,
 } from "./event-store-messages.adapter"
 import { getLatestContextWindowUsage } from "./proactive-compact"
@@ -950,5 +951,141 @@ describe("getMessagesView seeding for oversized transcripts", () => {
     ensureTranscriptLoaded()
     ensureTranscriptLoaded()
     expect(readCount).toBe(1)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// seedSeenMessageIdsFromTail — avoids full-transcript parse for large chats
+// ---------------------------------------------------------------------------
+
+describe("seedSeenMessageIdsFromTail", () => {
+  function makeMessageEntry(i: number, messageId?: string): string {
+    const entry: Record<string, unknown> = {
+      _id: `m-${i}`,
+      createdAt: i,
+      kind: "assistant_text",
+      text: `msg ${i} ${"x".repeat(60)}`,
+    }
+    if (messageId !== undefined) entry.messageId = messageId
+    return JSON.stringify(entry)
+  }
+
+  function makeLargeTranscriptWithIds(oldId: string, recentId: string): string {
+    const old = Array.from({ length: 600 }, (_v, i) =>
+      i === 0 ? makeMessageEntry(i, oldId) : makeMessageEntry(i),
+    )
+    const recent = [makeMessageEntry(600, recentId)]
+    return `${[...old, ...recent].join("\n")}\n`
+  }
+
+  function makeSliceStorageForId(content: string): { storage: StorageBackend; readTextCallCount: number } {
+    const buf = Buffer.from(content, "utf8")
+    const baseStorage: StorageBackend = {
+      mkdir: async () => {},
+      exists: async () => true,
+      existsSync: () => true,
+      size: async () => buf.length,
+      readText: async () => content,
+      readTextSync: () => { throw new Error("readTextSync must not be called for large transcripts") },
+      writeText: async () => {},
+      appendText: async () => {},
+      rename: async () => {},
+      remove: async () => {},
+    }
+    let readTextCallCount = 0
+    return {
+      storage: {
+        ...baseStorage,
+        readTextSync: () => {
+          readTextCallCount++
+          return content
+        },
+        sizeSync: () => buf.length,
+        readSliceSync: (_p, start, end) => buf.subarray(start, end),
+      },
+      readTextCallCount,
+    }
+  }
+
+  test("returns false when backend lacks slice APIs", () => {
+    const files = new Map([["/data/transcripts/chat-1.jsonl", makeMessageEntry(0, "mid-0")]])
+    const deps = makeDeps({ storage: makeStorage(files) })
+    const result = seedSeenMessageIdsFromTail(deps, "chat-1")
+    expect(result).toBe(false)
+    expect(deps.transcriptCache.isSeeded("chat-1")).toBe(false)
+  })
+
+  test("seeds messageIds from tail and marks chat seeded", () => {
+    const content = makeLargeTranscriptWithIds("old-mid", "recent-mid")
+    const { storage } = makeSliceStorageForId(content)
+    const transcriptCache = new TranscriptCache(4)
+    const seenMessageIdsByChatId = new Map<string, Set<string>>()
+    const deps = makeDeps({ storage, transcriptCache, seenMessageIdsByChatId })
+
+    const result = seedSeenMessageIdsFromTail(deps, "chat-1")
+
+    expect(result).toBe(true)
+    expect(transcriptCache.isSeeded("chat-1")).toBe(true)
+    const seen = seenMessageIdsByChatId.get("chat-1")
+    expect(seen?.has("recent-mid")).toBe(true)
+  })
+
+  test("does not read the full transcript when entries exceed tail window", () => {
+    const content = makeLargeTranscriptWithIds("old-mid", "recent-mid")
+    const buf = Buffer.from(content, "utf8")
+    let readTextCalls = 0
+    const sliceStorage: StorageBackend = {
+      mkdir: async () => {},
+      exists: async () => true,
+      existsSync: () => true,
+      size: async () => buf.length,
+      readText: async () => content,
+      readTextSync: () => { readTextCalls++; return content },
+      writeText: async () => {},
+      appendText: async () => {},
+      rename: async () => {},
+      remove: async () => {},
+      sizeSync: () => buf.length,
+      readSliceSync: (_p, start, end) => buf.subarray(start, end),
+    }
+    const deps = makeDeps({ storage: sliceStorage })
+
+    seedSeenMessageIdsFromTail(deps, "chat-1")
+
+    expect(readTextCalls).toBe(0)
+  })
+
+  test("on a small transcript that fits in one tail read, promotes to full cache", () => {
+    const entries = `${Array.from({ length: 5 }, (_v, i) =>
+      JSON.stringify({ _id: `s-${i}`, createdAt: i, kind: "assistant_text", text: `msg ${i}`, messageId: `mid-${i}` }),
+    ).join("\n")}\n`
+    const buf = Buffer.from(entries, "utf8")
+    const sliceStorage: StorageBackend = {
+      mkdir: async () => {},
+      exists: async () => true,
+      existsSync: () => true,
+      size: async () => buf.length,
+      readText: async () => entries,
+      readTextSync: () => entries,
+      writeText: async () => {},
+      appendText: async () => {},
+      rename: async () => {},
+      remove: async () => {},
+      sizeSync: () => buf.length,
+      readSliceSync: (_p, start, end) => buf.subarray(start, end),
+    }
+    const transcriptCache = new TranscriptCache(4)
+    const seenMessageIdsByChatId = new Map<string, Set<string>>()
+    const deps = makeDeps({ storage: sliceStorage, transcriptCache, seenMessageIdsByChatId })
+
+    const result = seedSeenMessageIdsFromTail(deps, "chat-1")
+
+    expect(result).toBe(true)
+    expect(transcriptCache.isSeeded("chat-1")).toBe(true)
+    expect(transcriptCache.has("chat-1")).toBe(true)
+    const seen = seenMessageIdsByChatId.get("chat-1")
+    for (let i = 0; i < 5; i++) {
+      expect(seen?.has(`mid-${i}`)).toBe(true)
+    }
   })
 })
