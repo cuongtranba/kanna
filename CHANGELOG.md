@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.43.7](https://github.com/cuongtranba/kanna/compare/v1.43.6...v1.43.7) (2026-08-26)
+
+
+### Bug Fixes
+
+* **codex:** reconcile protocol with codex-cli 0.147.0 — move developerInstructions to thread/start, remove collaborationMode from turn/start ([#920](https://github.com/cuongtranba/kanna/issues/920)) ([20b7770](https://github.com/cuongtranba/kanna/commit/20b7770bda4d63e548252801c8eb61dfffb31342)), closes [#916](https://github.com/cuongtranba/kanna/issues/916)
+
 ## [1.43.6](https://github.com/cuongtranba/kanna/compare/v1.43.5...v1.43.6) (2026-08-26)
 
 
