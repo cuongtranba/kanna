@@ -88,7 +88,7 @@ export const PATTERN_BUDGETS: readonly PatternBudget[] = [
     // The first version counted only `interface`, and #914 evaded it by
     // respelling one bundle as an inline type — renaming, not removing.
     pattern: "interface [A-Za-z]*Deps\\b|type [A-Za-z]*Deps\\b *=|deps: \\{$",
-    max: 82,
+    max: 80,
     issue: 893,
     rationale:
       "Each deps bundle is a hand-maintained slice of the coordinator's fields. Every field is optional, so a builder that omits one compiles and the consumer's fallback is indistinguishable from the feature being off — this is how getArmedLoop shipped declared-but-never-passed. Respelling a bundle as a type alias or an inline parameter object removes nothing, so all three spellings count.",
@@ -106,7 +106,7 @@ export const PATTERN_BUDGETS: readonly PatternBudget[] = [
     id: "event-store-passthroughs",
     include: ["src/server/event-store.ts"],
     pattern: "this\\.build[A-Za-z]*Deps\\(\\)",
-    max: 61,
+    max: 0,
     issue: 892,
     rationale:
       "Per-call deps bundles on EventStore. buildChatTranscriptWriteDeps alone allocates a 19-field literal with ~10 closures on every appendMessage, the hottest write path in the system.",
