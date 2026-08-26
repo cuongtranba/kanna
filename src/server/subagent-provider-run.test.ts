@@ -676,9 +676,10 @@ describe("drainOneTurn", () => {
     // Iterator is still open — TURN2 event must still be consumable.
     // makeIterator returns the same object, so .next() resumes from where drain stopped.
     const next = await it.next()
-    expect((next.value as HarnessEvent).entry?.kind).toBe("assistant_text")
+    const nextEvent = next.value as Extract<HarnessEvent, { type: "transcript" }>
+    expect(nextEvent.entry.kind).toBe("assistant_text")
     expect(
-      ((next.value as HarnessEvent).entry as { kind: "assistant_text"; text: string } & TranscriptEntry).text,
+      (nextEvent.entry as { kind: "assistant_text"; text: string } & TranscriptEntry).text,
     ).toBe("TURN2")
   })
 

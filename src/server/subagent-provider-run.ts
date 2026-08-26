@@ -306,29 +306,39 @@ export async function drainOneTurn(
   let usage: ProviderUsage | undefined
   let sawResult = false
   let sawError = false
-  while (true) {
+  drain: while (true) {
     const next = await iterator.next()
     if (next.done) break
     const event = next.value
-    if (event.type !== "transcript" || !event.entry) continue
-    onEntry(event.entry)
-    if (event.entry.kind === "assistant_text") {
-      const fragment = event.entry.text
-      accumulated += fragment
-      onChunk(fragment)
-    } else if (event.entry.kind === "api_error") {
-      sawError = true
-    } else if (event.entry.kind === "result") {
-      const e = event.entry
-      sawResult = true
-      if (e.isError) sawError = true
-      usage = {
-        inputTokens: e.usage?.inputTokens,
-        outputTokens: e.usage?.outputTokens,
-        cachedInputTokens: e.usage?.cachedInputTokens,
-        costUsd: e.costUsd,
+    switch (event.type) {
+      case "session_token": break
+      case "rate_limit": break
+      case "transcript": {
+        onEntry(event.entry)
+        if (event.entry.kind === "assistant_text") {
+          const fragment = event.entry.text
+          accumulated += fragment
+          onChunk(fragment)
+        } else if (event.entry.kind === "api_error") {
+          sawError = true
+        } else if (event.entry.kind === "result") {
+          const e = event.entry
+          sawResult = true
+          if (e.isError) sawError = true
+          usage = {
+            inputTokens: e.usage?.inputTokens,
+            outputTokens: e.usage?.outputTokens,
+            cachedInputTokens: e.usage?.cachedInputTokens,
+            costUsd: e.costUsd,
+          }
+          break drain
+        }
+        break
       }
-      break // stop at end of THIS turn; leave iterator open for next turn
+      default: {
+        const _never: never = event
+        void _never
+      }
     }
   }
   return { text: accumulated, usage, sawResult, sawError }
