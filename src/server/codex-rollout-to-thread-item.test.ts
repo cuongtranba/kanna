@@ -1,9 +1,10 @@
-import { describe, test, expect } from "bun:test"
+import { describe, test, expect, afterEach } from "bun:test"
 import {
   parseApplyPatch,
   parsePlanSteps,
   rolloutToolCallToThreadItem,
   rolloutToolOutputToThreadItem,
+  createRolloutMapper,
 } from "./codex-rollout-to-thread-item"
 import {
   translateItemToToolCalls,
@@ -51,6 +52,8 @@ const APPLY_PATCH = [
   "+new line",
   "*** End Patch",
 ].join("\n")
+
+const REGEX_MISS_SNIPPET = "tools.update_plan({ steps: [] })"
 
 describe("exec / exec_command → CommandExecutionItem", () => {
   test("function-family exec_command reads cmd out of the JSON arguments", () => {
@@ -327,5 +330,80 @@ describe("unrecognized function_call names fall through to dynamicToolCall", () 
     }))
     if (mapped.kind !== "item") throw new Error("expected item")
     expect(mapped.item.type).toBe("dynamicToolCall")
+  })
+})
+
+describe("createRolloutMapper — exec regex miss tracking (issue #880)", () => {
+  let warnCalls: unknown[][] = []
+  const originalWarn = console.warn
+
+  afterEach(() => {
+    warnCalls = []
+    console.warn = originalWarn
+  })
+
+  function captureWarn() {
+    warnCalls = []
+    console.warn = (...args: unknown[]) => { warnCalls.push(args) }
+  }
+
+  test("getMissCount starts at zero", () => {
+    const mapper = createRolloutMapper()
+    expect(mapper.getMissCount()).toBe(0)
+  })
+
+  test("a regex hit does not increment miss count", () => {
+    const mapper = createRolloutMapper()
+    mapper.rolloutToolCallToThreadItem(call({ name: "exec", family: "custom", input: EXEC_SNIPPET }))
+    expect(mapper.getMissCount()).toBe(0)
+  })
+
+  test("a regex miss increments miss count and preserves fallback", () => {
+    captureWarn()
+    const mapper = createRolloutMapper()
+    const result = mapper.rolloutToolCallToThreadItem(
+      call({ name: "exec", family: "custom", input: REGEX_MISS_SNIPPET }),
+    )
+    if (result.kind !== "item" || result.item.type !== "commandExecution") {
+      throw new Error("expected commandExecution item")
+    }
+    expect(result.item.command).toBe(REGEX_MISS_SNIPPET)
+    expect(mapper.getMissCount()).toBe(1)
+  })
+
+  test("first miss logs once, second miss only counts", () => {
+    captureWarn()
+    const mapper = createRolloutMapper()
+    mapper.rolloutToolCallToThreadItem(call({ name: "exec", family: "custom", input: REGEX_MISS_SNIPPET }))
+    expect(warnCalls).toHaveLength(1)
+    mapper.rolloutToolCallToThreadItem(call({ name: "exec", family: "custom", input: REGEX_MISS_SNIPPET }))
+    expect(warnCalls).toHaveLength(1)
+    expect(mapper.getMissCount()).toBe(2)
+  })
+
+  test("two separate mapper instances have independent miss counts", () => {
+    const mapperA = createRolloutMapper()
+    const mapperB = createRolloutMapper()
+    mapperA.rolloutToolCallToThreadItem(call({ name: "exec", family: "custom", input: REGEX_MISS_SNIPPET }))
+    expect(mapperA.getMissCount()).toBe(1)
+    expect(mapperB.getMissCount()).toBe(0)
+  })
+
+  test("rolloutToolOutputToThreadItem also counts exec output regex misses", () => {
+    captureWarn()
+    const mapper = createRolloutMapper()
+    const callRecord = call({ callId: "c1", name: "exec", family: "custom", input: REGEX_MISS_SNIPPET })
+    mapper.rolloutToolOutputToThreadItem(output("c1", "{}"), callRecord)
+    expect(mapper.getMissCount()).toBe(1)
+  })
+
+  test("a function-family exec miss (null json parse) does not count as regex miss", () => {
+    const mapper = createRolloutMapper()
+    mapper.rolloutToolCallToThreadItem(call({
+      name: "exec",
+      family: "function",
+      input: "not valid json",
+    }))
+    expect(mapper.getMissCount()).toBe(0)
   })
 })
