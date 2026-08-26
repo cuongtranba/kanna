@@ -1,5 +1,6 @@
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk"
 import { buildBoardToolList } from "./kanna-mcp-boards"
+import { ok, fail } from "./kanna-mcp-tool"
 import type { BoardRegistry } from "./board-registry"
 import { z } from "zod"
 import path from "node:path"
@@ -410,10 +411,7 @@ function buildDelegateSubagentToolList(args: {
         if (input.keep_alive) {
           const subagent = orchestrator.findSubagent(input.subagent_id)
           if (subagent && subagent.provider !== "claude") {
-            return {
-              isError: true as const,
-              content: [{ type: "text" as const, text: "keep_alive is only supported for Claude subagents" }],
-            }
+            return fail("keep_alive is only supported for Claude subagents")
           }
         }
         const onEntry = buildDelegateProgressEmitter(extra)
@@ -441,10 +439,7 @@ function buildDelegateSubagentToolList(args: {
           })()
           if (parsed?.status === "completed" && parsed.run_id) {
             const hint = `\n\n[run_id: ${parsed.run_id}] — session kept alive; use send_subagent_message({run_id, prompt}) for more turns, close_subagent({run_id}) when done.`
-            return {
-              ...result,
-              content: [{ type: "text" as const, text: result.content[0].text + hint }],
-            }
+            return ok(result.content[0].text + hint)
           }
         }
         return result
@@ -460,12 +455,9 @@ function buildDelegateSubagentToolList(args: {
       async (input) => {
         const outcome = await orchestrator.sendToLiveRun(input.run_id, input.prompt)
         if (outcome.status === "failed") {
-          return {
-            isError: true as const,
-            content: [{ type: "text" as const, text: `${outcome.errorCode}: ${outcome.errorMessage}` }],
-          }
+          return fail(`${outcome.errorCode}: ${outcome.errorMessage}`)
         }
-        return { content: [{ type: "text" as const, text: outcome.text }] }
+        return ok(outcome.text)
       },
     ),
     tool(
@@ -476,7 +468,7 @@ function buildDelegateSubagentToolList(args: {
       },
       async (input) => {
         await orchestrator.closeLiveRun(chatId, input.run_id, "explicit")
-        return { content: [{ type: "text" as const, text: `closed ${input.run_id}` }] }
+        return ok(`closed ${input.run_id}`)
       },
     ),
   ]
@@ -577,13 +569,7 @@ function buildSetupLoopToolList(args: {
           force: input.force,
         })
         if (!result.ok) {
-          return {
-            isError: true as const,
-            content: [{
-              type: "text" as const,
-              text: `setup_loop rejected:\n- ${result.errors.join("\n- ")}`,
-            }],
-          }
+          return fail(`setup_loop rejected:\n- ${result.errors.join("\n- ")}`)
         }
         let fileNote = " (existing file already conforms to the loop schema)"
         if (result.created) {
@@ -594,14 +580,10 @@ function buildSetupLoopToolList(args: {
         const auditNote = result.oracleWarnings.length > 0
           ? `\nOracle audit:\n- ${result.oracleWarnings.join("\n- ")}`
           : ""
-        return {
-          content: [{
-            type: "text" as const,
-            text:
-              `Loop armed. Tracking file: ${result.trackingFileRel}${fileNote}.`
-              + ` Your main-agent context has been cleared; the next turn will replay the loop prompt.${auditNote}`,
-          }],
-        }
+        return ok(
+          `Loop armed. Tracking file: ${result.trackingFileRel}${fileNote}.`
+          + ` Your main-agent context has been cleared; the next turn will replay the loop prompt.${auditNote}`,
+        )
       },
     ),
   ]
@@ -613,12 +595,7 @@ function buildSetupLoopToolList(args: {
         {},
         async () => {
           await stopLoop()
-          return {
-            content: [{
-              type: "text" as const,
-              text: "Loop disarmed. Normal editing tools are restored; no further loop prompts will be re-injected.",
-            }],
-          }
+          return ok("Loop disarmed. Normal editing tools are restored; no further loop prompts will be re-injected.")
         },
       ),
     )
@@ -659,10 +636,6 @@ const RUN_VERIFY_DESCRIPTION =
   + "the worker subagent both verify each iteration, and a real gate (lint + "
   + "typecheck + tests) costs a minute or more each time."
 
-const trackingDocError = (text: string) => ({
-  isError: true as const,
-  content: [{ type: "text" as const, text }],
-})
 
 /**
  * Deterministic label for the chunk a loop iteration is about to delegate:
@@ -749,18 +722,18 @@ function buildTrackingDocToolList(args: {
       },
       async (input) => {
         const confined = confinePathToDir(input.file ?? "PROGRESS.md", baseDir(), "file")
-        if ("error" in confined) return trackingDocError(confined.error)
+        if ("error" in confined) return fail(confined.error)
         const doc = resolveStructuredDoc(path.extname(confined.abs))
         if (!doc) {
-          return trackingDocError(`structured query supports .md files only (got ${confined.rel})`)
+          return fail(`structured query supports .md files only (got ${confined.rel})`)
         }
         const content = await readDoc(confined.abs)
-        if (content === null) return trackingDocError(`file not found: ${confined.rel}`)
+        if (content === null) return fail(`file not found: ${confined.rel}`)
         const result = doc.query(content, { sections: input.sections, listLimit: input.list_limit })
         const missingNote =
           result.missing.length > 0 ? `\n\n(no section matched: ${result.missing.join(", ")})` : ""
         const body = result.content.length > 0 ? result.content : "(no matching sections)\n"
-        return { content: [{ type: "text" as const, text: `${body}${missingNote}` }] }
+        return ok(`${body}${missingNote}`)
       },
     ),
     tool(
@@ -786,14 +759,14 @@ function buildTrackingDocToolList(args: {
       },
       async (input) => {
         const confined = confinePathToDir(input.file ?? "PROGRESS.md", baseDir(), "file")
-        if ("error" in confined) return trackingDocError(confined.error)
+        if ("error" in confined) return fail(confined.error)
         const doc = resolveStructuredDoc(path.extname(confined.abs))
         if (!doc) {
-          return trackingDocError(`structured append supports .md files only (got ${confined.rel})`)
+          return fail(`structured append supports .md files only (got ${confined.rel})`)
         }
         const content = await readDoc(confined.abs)
         if (content === null) {
-          return trackingDocError(`file not found: ${confined.rel} (run setup_loop to create it first)`)
+          return fail(`file not found: ${confined.rel} (run setup_loop to create it first)`)
         }
         const result = doc.append(content, {
           section: input.section,
@@ -802,9 +775,7 @@ function buildTrackingDocToolList(args: {
         })
         await writeDoc(confined.abs, result.content)
         const note = result.created ? " (section created)" : ""
-        return {
-          content: [{ type: "text" as const, text: `Appended to "${input.section}" in ${confined.rel}${note}.` }],
-        }
+        return ok(`Appended to "${input.section}" in ${confined.rel}${note}.`)
       },
     ),
     ...buildReplaceTrackingSectionTool(baseDir),
@@ -835,24 +806,19 @@ function buildReplaceTrackingSectionTool(baseDir: () => string): KannaSdkToolLis
       },
       async (input) => {
         const confined = confinePathToDir(input.file ?? "PROGRESS.md", baseDir(), "file")
-        if ("error" in confined) return trackingDocError(confined.error)
+        if ("error" in confined) return fail(confined.error)
         const doc = resolveStructuredDoc(path.extname(confined.abs))
         if (!doc) {
-          return trackingDocError(`structured replace supports .md files only (got ${confined.rel})`)
+          return fail(`structured replace supports .md files only (got ${confined.rel})`)
         }
         const content = await readDoc(confined.abs)
         if (content === null) {
-          return trackingDocError(`file not found: ${confined.rel} (run setup_loop to create it first)`)
+          return fail(`file not found: ${confined.rel} (run setup_loop to create it first)`)
         }
         const result = doc.replace(content, { section: input.section, body: input.body })
         await writeDoc(confined.abs, result.content)
         const note = result.created ? " (section created)" : ""
-        return {
-          content: [{
-            type: "text" as const,
-            text: `Replaced "${input.section}" in ${confined.rel}${note}.`,
-          }],
-        }
+        return ok(`Replaced "${input.section}" in ${confined.rel}${note}.`)
       },
     ),
   ]
@@ -884,7 +850,7 @@ function buildRunVerifyToolList(args: {
       async (input) => {
         const loop = getArmedLoop(chatId)
         if (!loop?.verifyCommand) {
-          return trackingDocError(
+          return fail(
             "no armed loop with a recorded verify command on this chat — run the command with Bash, or re-arm the loop via setup_loop.",
           )
         }
@@ -894,14 +860,10 @@ function buildRunVerifyToolList(args: {
         if (input.force !== true) {
           const hit = getCachedVerify(chatId, command, digest)
           if (hit) {
-            return {
-              content: [{
-                type: "text" as const,
-                text:
-                  `exit=${hit.exitCode} (cached — the working tree has not changed since this ran`
-                  + ` in ${hit.durationMs}ms)\n${hit.output}`,
-              }],
-            }
+            return ok(
+              `exit=${hit.exitCode} (cached — the working tree has not changed since this ran`
+              + ` in ${hit.durationMs}ms)\n${hit.output}`,
+            )
           }
         }
         const result = await runVerifyCommand({ command, cwd, timeoutMs: VERIFY_TOOL_TIMEOUT_MS })
@@ -910,12 +872,7 @@ function buildRunVerifyToolList(args: {
           setCachedVerify(chatId, command, digest, result)
         }
         const timedOutNote = result.timedOut ? " (TIMED OUT)" : ""
-        return {
-          content: [{
-            type: "text" as const,
-            text: `exit=${result.exitCode}${timedOutNote} (${result.durationMs}ms)\n${result.output}`,
-          }],
-        }
+        return ok(`exit=${result.exitCode}${timedOutNote} (${result.durationMs}ms)\n${result.output}`)
       },
     ),
   ]
@@ -957,11 +914,8 @@ function buildValidateMermaidToolList(args: {
       },
       async (input) => {
         const validation = await validateMermaid(parse, input.source)
-        if (validation.ok) return { content: [{ type: "text" as const, text: "VALID" }] }
-        return {
-          isError: true as const,
-          content: [{ type: "text" as const, text: formatMermaidDefect(validation.defect) }],
-        }
+        if (validation.ok) return ok("VALID")
+        return fail(formatMermaidDefect(validation.defect))
       },
     ),
   ]
@@ -1019,13 +973,8 @@ function buildCronToolList(args: {
   const tools: KannaSdkToolList = [
     tool("validate_cron", VALIDATE_CRON_DESCRIPTION, commandArg, (input) => {
       const preview = previewCronCommand(input.command, now())
-      if (!preview.ok) {
-        return Promise.resolve({
-          isError: true as const,
-          content: [{ type: "text" as const, text: preview.reason }],
-        })
-      }
-      return Promise.resolve({ content: [{ type: "text" as const, text: formatCronArmSummary(preview.summary) }] })
+      if (!preview.ok) return Promise.resolve(fail(preview.reason))
+      return Promise.resolve(ok(formatCronArmSummary(preview.summary)))
     }),
   ]
 
@@ -1035,12 +984,7 @@ function buildCronToolList(args: {
   tools.push(
     tool("arm_cron", ARM_CRON_DESCRIPTION, commandArg, async (input) => {
       const preview = previewCronCommand(input.command, now())
-      if (!preview.ok) {
-        return {
-          isError: true as const,
-          content: [{ type: "text" as const, text: `Not armed. ${preview.reason}` }],
-        }
-      }
+      if (!preview.ok) return fail(`Not armed. ${preview.reason}`)
       const { jobId } = await armCron(input.command)
       const text = [
         `Armed as ${jobId}.`,
@@ -1050,7 +994,7 @@ function buildCronToolList(args: {
         "options: Confirm / Change schedule / Change mode / Change instruction / Disarm.",
         `If they choose a change, call update_cron with jobId "${jobId}" and the field to change — no need to remove and re-arm.`,
       ].join("\n")
-      return { content: [{ type: "text" as const, text }] }
+      return ok(text)
     }),
   )
 
@@ -1078,36 +1022,13 @@ function buildCronToolList(args: {
           const line = `/cron update ${input.jobId} ${input.field} ${input.value}`
           const parsed = parseCronCommand(line)
           if (!parsed?.ok) {
-            return {
-              isError: true as const,
-              content: [
-                {
-                  type: "text" as const,
-                  text: `Not updated. ${parsed ? parsed.error.message : "could not parse as an update command"}`,
-                },
-              ],
-            }
+            return fail(`Not updated. ${parsed ? parsed.error.message : "could not parse as an update command"}`)
           }
           if (parsed.command.sub !== "update") {
-            return {
-              isError: true as const,
-              content: [
-                {
-                  type: "text" as const,
-                  text: "Not updated. The constructed command was not recognized as an update.",
-                },
-              ],
-            }
+            return fail("Not updated. The constructed command was not recognized as an update.")
           }
           await updateCron(input.jobId, parsed.command.patch)
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: `Updated ${input.field} on job ${input.jobId}. Show the user the change and confirm with AskUserQuestion.`,
-              },
-            ],
-          }
+          return ok(`Updated ${input.field} on job ${input.jobId}. Show the user the change and confirm with AskUserQuestion.`)
         },
       ),
     )
@@ -1132,18 +1053,8 @@ export function buildKannaMcpTools(args: KannaMcpArgs): KannaSdkToolList {
       },
       async (input) => {
         const result = await resolveOfferDownload(args, input)
-        if (!result.ok) {
-          return {
-            content: [{ type: "text" as const, text: result.error }],
-            isError: true,
-          }
-        }
-        return {
-          content: [{
-            type: "text" as const,
-            text: JSON.stringify({ kind: "download_offer", ...result.payload }),
-          }],
-        }
+        if (!result.ok) return fail(result.error)
+        return ok(JSON.stringify({ kind: "download_offer", ...result.payload }))
       },
     ),
     tool(
@@ -1155,18 +1066,8 @@ export function buildKannaMcpTools(args: KannaMcpArgs): KannaSdkToolList {
       },
       async (input) => {
         const result = await resolveWorkspaceFile(args, input)
-        if (!result.ok) {
-          return {
-            content: [{ type: "text" as const, text: result.error }],
-            isError: true,
-          }
-        }
-        return {
-          content: [{
-            type: "text" as const,
-            text: JSON.stringify({ kind: "file_preview", ...result.payload }),
-          }],
-        }
+        if (!result.ok) return fail(result.error)
+        return ok(JSON.stringify({ kind: "file_preview", ...result.payload }))
       },
     ),
     ...buildDelegateSubagentToolList({
@@ -1184,36 +1085,27 @@ export function buildKannaMcpTools(args: KannaMcpArgs): KannaSdkToolList {
     ...buildRunVerifyToolList({ chatId, cwd, getArmedLoop: args.getArmedLoop }),
     ...buildValidateMermaidToolList({ chatId, parse: args.parseMermaid ?? parseMermaid }),
     ...buildCronToolList({ chatId, armCron: args.armCron, updateCron: args.updateCron }),
-    tool(
-      "expose_port",
-      EXPOSE_PORT_DESCRIPTION,
-      {
-        port: z.number().int().min(1).max(65535).describe("Local TCP port the running service is listening on"),
-        reason: z.string().optional().describe("Brief description of the service (e.g. \"vite dev server\") shown to the user"),
-      },
-      async (input) => {
-        if (!tunnelGateway || !chatId) {
-          return {
-            content: [{ type: "text" as const, text: "expose_port is not available in this context" }],
-            isError: true,
-          }
-        }
-        const outcome = await tunnelGateway.proposeFromTool({ chatId, port: input.port })
-        if (outcome.status === "invalid_port") {
-          return {
-            content: [{ type: "text" as const, text: outcome.reason }],
-            isError: true,
-          }
-        }
-        return {
-          content: [{
-            type: "text" as const,
-            text: JSON.stringify({ kind: "expose_port_result", ...outcome, reason: input.reason ?? null }),
-          }],
-        }
-      },
-    ),
   ]
+
+  if (tunnelGateway && chatId) {
+    const boundGateway = tunnelGateway
+    const boundChatId = chatId
+    tools.push(
+      tool(
+        "expose_port",
+        EXPOSE_PORT_DESCRIPTION,
+        {
+          port: z.number().int().min(1).max(65535).describe("Local TCP port the running service is listening on"),
+          reason: z.string().optional().describe("Brief description of the service (e.g. \"vite dev server\") shown to the user"),
+        },
+        async (input) => {
+          const outcome = await boundGateway.proposeFromTool({ chatId: boundChatId, port: input.port })
+          if (outcome.status === "invalid_port") return fail(outcome.reason)
+          return ok(JSON.stringify({ kind: "expose_port_result", ...outcome, reason: input.reason ?? null }))
+        },
+      ),
+    )
+  }
 
   // Two independent gates:
   //  • interactive (ask_user_question / exit_plan_mode): on when the env

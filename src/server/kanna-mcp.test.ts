@@ -8,6 +8,7 @@ import { POLICY_DEFAULT } from "../shared/permission-policy"
 import type { SubagentOrchestrator } from "./subagent-orchestrator"
 import type { ArmedLoopInfo, KannaMcpDelegationContext, SetupLoopHandlerResult } from "./kanna-mcp"
 import type { MermaidParsePort } from "../shared/mermaid-validation"
+import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
 
 let tempRoot: string
 
@@ -1097,5 +1098,41 @@ describe("arm_cron", () => {
     expect(desc).toMatch(/ambiguous/i)
     expect(desc).toMatch(/AskUserQuestion/i)
     expect(desc).toMatch(/confirm/i)
+  })
+})
+
+describe("expose_port registration", () => {
+  const gateway = {
+    proposeFromTool: async (_args: { chatId: string; port: number }) =>
+      ({ status: "proposed" as const }),
+  } as unknown as TunnelGateway
+
+  test("is hidden when tunnelGateway is null", () => {
+    const tools = buildKannaMcpTools({
+      projectId: "p",
+      localPath: "/tmp",
+      chatId: "c",
+      tunnelGateway: null,
+    })
+    expect(tools.map((t) => t.name)).not.toContain("expose_port")
+  })
+
+  test("is hidden when chatId is absent", () => {
+    const tools = buildKannaMcpTools({
+      projectId: "p",
+      localPath: "/tmp",
+      tunnelGateway: gateway,
+    })
+    expect(tools.map((t) => t.name)).not.toContain("expose_port")
+  })
+
+  test("is registered when tunnelGateway and chatId are both present", () => {
+    const tools = buildKannaMcpTools({
+      projectId: "p",
+      localPath: "/tmp",
+      chatId: "c",
+      tunnelGateway: gateway,
+    })
+    expect(tools.map((t) => t.name)).toContain("expose_port")
   })
 })
