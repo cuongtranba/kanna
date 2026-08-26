@@ -494,6 +494,7 @@ async function startTurnAfterTurnStarted(
       serviceTier: args.serviceTier,
       sessionToken: existingToken,
       pendingForkSessionToken: pendingForkToken,
+      developerInstructions: deps.getAppSettingsSnapshot().globalPromptAppend,
     })
     if (pendingForkToken && sessionToken) {
       await deps.store.setPendingForkSessionToken(args.chatId, null)
@@ -511,7 +512,6 @@ async function startTurnAfterTurnStarted(
       serviceTier: args.serviceTier,
       planMode: args.planMode,
       onToolRequest,
-      developerInstructions: deps.getAppSettingsSnapshot().globalPromptAppend,
     })
     logSendToStartingProfile(args.profile, "start_turn.provider_boot.ready", {
       chatId: args.chatId,

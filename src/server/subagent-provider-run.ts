@@ -267,6 +267,7 @@ async function runCodexSubagent(opts: {
     model: args.subagent.model,
     serviceTier: undefined,
     sessionToken: null,
+    developerInstructions: args.globalPromptAppend,
   })
   try {
     const turn = await args.codexManager.startTurn({
@@ -280,7 +281,6 @@ async function runCodexSubagent(opts: {
       serviceTier: undefined,
       planMode: false,
       onToolRequest: args.onToolRequest,
-      developerInstructions: args.globalPromptAppend,
     })
     return await drainHarnessTurn(turn, onChunk, onEntry)
   } finally {

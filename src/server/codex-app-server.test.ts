@@ -207,13 +207,12 @@ describe("CodexAppServerManager", () => {
       | { method: "thread/start"; params: { serviceTier?: string } }
       | undefined
     const turnStart = process.messages.find((message: any) => message.method === "turn/start") as
-      | { method: "turn/start"; params: { effort?: string; serviceTier?: string; collaborationMode?: { settings?: { reasoning_effort?: string | null } } } }
+      | { method: "turn/start"; params: { effort?: string; serviceTier?: string } }
       | undefined
 
     expect(threadStart?.params.serviceTier).toBe("fast")
     expect(turnStart?.params.effort).toBe("xhigh")
     expect(turnStart?.params.serviceTier).toBe("fast")
-    expect(turnStart?.params.collaborationMode?.settings?.reasoning_effort).toBeNull()
   })
 
   test("maps thread token usage updates into context window transcript entries", async () => {
@@ -2486,98 +2485,74 @@ describe("CodexAppServerManager developer_instructions", () => {
     return { process, manager }
   }
 
+  type ThreadStartMessage = {
+    method: "thread/start"
+    params: { developerInstructions?: string | null }
+  }
+
   type TurnStartMessage = {
     method: "turn/start"
-    params: {
-      collaborationMode?: { settings?: { developer_instructions?: string | null } }
-    }
+    params: { collaborationMode?: unknown }
+  }
+
+  function lastThreadStart(process: FakeCodexProcess): ThreadStartMessage | undefined {
+    return process.messages.find((m: any) => m.method === "thread/start") as ThreadStartMessage | undefined
   }
 
   function lastTurnStart(process: FakeCodexProcess): TurnStartMessage | undefined {
     return process.messages.find((m: any) => m.method === "turn/start") as TurnStartMessage | undefined
   }
 
-  test("forwards developer_instructions verbatim on turn/start", async () => {
-    const { process, manager } = makeProcessAndStart()
+  async function runOneTurn(
+    manager: CodexAppServerManager,
+    developerInstructions?: string,
+  ): Promise<void> {
     await manager.startSession({
       chatId: "chat-di",
       cwd: "/tmp/project",
       model: "gpt-5.5",
       serviceTier: "fast",
       sessionToken: null,
+      developerInstructions,
     })
     const turn = await manager.startTurn({
       chatId: "chat-di",
       model: "gpt-5.5",
       content: "go",
       planMode: false,
-      developerInstructions: "Prefer pumped-go.",
       onToolRequest: async () => ({}),
     })
     await collectStream(turn.stream)
-    expect(lastTurnStart(process)?.params.collaborationMode?.settings?.developer_instructions).toBe("Prefer pumped-go.")
+  }
+
+  test("forwards developerInstructions verbatim on thread/start", async () => {
+    const { process, manager } = makeProcessAndStart()
+    await runOneTurn(manager, "Prefer pumped-go.")
+    expect(lastThreadStart(process)?.params.developerInstructions).toBe("Prefer pumped-go.")
   })
 
-  test("sends null when developerInstructions omitted", async () => {
+  test("sends null on thread/start when developerInstructions omitted", async () => {
     const { process, manager } = makeProcessAndStart()
-    await manager.startSession({
-      chatId: "chat-di",
-      cwd: "/tmp/project",
-      model: "gpt-5.5",
-      serviceTier: "fast",
-      sessionToken: null,
-    })
-    const turn = await manager.startTurn({
-      chatId: "chat-di",
-      model: "gpt-5.5",
-      content: "go",
-      planMode: false,
-      onToolRequest: async () => ({}),
-    })
-    await collectStream(turn.stream)
-    expect(lastTurnStart(process)?.params.collaborationMode?.settings?.developer_instructions).toBeNull()
+    await runOneTurn(manager)
+    expect(lastThreadStart(process)?.params.developerInstructions).toBeNull()
   })
 
-  test("sends null when developerInstructions is whitespace-only", async () => {
+  test("sends null on thread/start when developerInstructions is whitespace-only", async () => {
     const { process, manager } = makeProcessAndStart()
-    await manager.startSession({
-      chatId: "chat-di",
-      cwd: "/tmp/project",
-      model: "gpt-5.5",
-      serviceTier: "fast",
-      sessionToken: null,
-    })
-    const turn = await manager.startTurn({
-      chatId: "chat-di",
-      model: "gpt-5.5",
-      content: "go",
-      planMode: false,
-      developerInstructions: "   \n  ",
-      onToolRequest: async () => ({}),
-    })
-    await collectStream(turn.stream)
-    expect(lastTurnStart(process)?.params.collaborationMode?.settings?.developer_instructions).toBeNull()
+    await runOneTurn(manager, "   \n  ")
+    expect(lastThreadStart(process)?.params.developerInstructions).toBeNull()
   })
 
-  test("trims surrounding whitespace before forwarding", async () => {
+  test("trims surrounding whitespace before forwarding to thread/start", async () => {
     const { process, manager } = makeProcessAndStart()
-    await manager.startSession({
-      chatId: "chat-di",
-      cwd: "/tmp/project",
-      model: "gpt-5.5",
-      serviceTier: "fast",
-      sessionToken: null,
-    })
-    const turn = await manager.startTurn({
-      chatId: "chat-di",
-      model: "gpt-5.5",
-      content: "go",
-      planMode: false,
-      developerInstructions: "  Be concise.  \n",
-      onToolRequest: async () => ({}),
-    })
-    await collectStream(turn.stream)
-    expect(lastTurnStart(process)?.params.collaborationMode?.settings?.developer_instructions).toBe("Be concise.")
+    await runOneTurn(manager, "  Be concise.  \n")
+    expect(lastThreadStart(process)?.params.developerInstructions).toBe("Be concise.")
+  })
+
+  test("turn/start carries no collaborationMode", async () => {
+    const { process, manager } = makeProcessAndStart()
+    await runOneTurn(manager, "Some instructions.")
+    expect(lastTurnStart(process)?.params.collaborationMode).toBeUndefined()
   })
 
   test("codex usage snapshot includes computed cost from model price", () => {
