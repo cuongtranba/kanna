@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.43.0](https://github.com/cuongtranba/kanna/compare/v1.42.0...v1.43.0) (2026-08-26)
+
+
+### Features
+
+* **effort-picker:** replace supportsEffort booleans with supportedEfforts list ([#882](https://github.com/cuongtranba/kanna/issues/882)) ([cc30461](https://github.com/cuongtranba/kanna/commit/cc30461c026d24c455d885ff1c94e03c937754fa))
+
 ## [1.42.0](https://github.com/cuongtranba/kanna/compare/v1.41.7...v1.42.0) (2026-08-25)
 
 
