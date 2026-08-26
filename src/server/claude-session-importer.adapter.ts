@@ -101,6 +101,12 @@ function deriveSummaryTitle(session: ParsedClaudeSession): string | null {
   return null
 }
 
+const SYNTHETIC_OPENER_TAGS = ["<local-command-caveat>", "<command-message>"] as const
+
+function isSyntheticClaudeUserText(text: string): boolean {
+  return SYNTHETIC_OPENER_TAGS.some((tag) => text.startsWith(tag))
+}
+
 function deriveUserTitle(session: ParsedClaudeSession): string | null {
   for (const record of session.records) {
     if (record.type !== "user") continue
@@ -108,7 +114,7 @@ function deriveUserTitle(session: ParsedClaudeSession): string | null {
     const message = recordRec && isRecord(recordRec.message) ? recordRec.message : null
     const content = message?.content
     const text = extractUserText(content)
-    if (text) return truncateTitle(text)
+    if (text && !isSyntheticClaudeUserText(text)) return truncateTitle(text)
   }
   return null
 }

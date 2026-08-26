@@ -518,4 +518,143 @@ describe("importSessionsByIds", () => {
       ctx.cleanup()
     }
   })
+
+  test("skips <local-command-caveat> opener and uses next real user text as title", async () => {
+    const ctx = fresh()
+    try {
+      const projDir = claudeProjectDir(ctx.homeDir, ctx.realProj)
+      mkdirSync(projDir, { recursive: true })
+      const syntheticOpener = JSON.stringify({
+        type: "user",
+        uuid: "u0",
+        sessionId: "sess-caveat",
+        cwd: ctx.realProj,
+        timestamp: "2026-04-20T10:00:00.000Z",
+        message: {
+          role: "user",
+          content: "<local-command-caveat>Caveat: The messages below were generated with a different context window.",
+        },
+      })
+      const realPrompt = JSON.stringify({
+        type: "user",
+        uuid: "u1",
+        sessionId: "sess-caveat",
+        cwd: ctx.realProj,
+        timestamp: "2026-04-20T10:00:01.000Z",
+        message: { role: "user", content: "analyse this repo for me" },
+      })
+      const assistant = JSON.stringify({
+        type: "assistant",
+        uuid: "a1",
+        sessionId: "sess-caveat",
+        cwd: ctx.realProj,
+        timestamp: "2026-04-20T10:00:02.000Z",
+        message: { role: "assistant", id: "m1", content: [{ type: "text", text: "sure" }] },
+      })
+      writeFileSync(
+        path.join(projDir, "sess-caveat.jsonl"),
+        `${syntheticOpener}\n${realPrompt}\n${assistant}\n`,
+        "utf8",
+      )
+
+      const store = createTestEventStore(ctx.dataDir)
+      await store.initialize()
+      const result = await importClaudeSessions({ store, homeDir: ctx.homeDir })
+      expect(result.imported).toBe(1)
+
+      const chats = [...store.state.chatsById.values()].filter((c) => !c.deletedAt)
+      expect(chats.length).toBe(1)
+      expect(chats[0].title).toBe("analyse this repo for me")
+    } finally {
+      ctx.cleanup()
+    }
+  })
+
+  test("skips <command-message> opener and uses next real user text as title", async () => {
+    const ctx = fresh()
+    try {
+      const projDir = claudeProjectDir(ctx.homeDir, ctx.realProj)
+      mkdirSync(projDir, { recursive: true })
+      const syntheticOpener = JSON.stringify({
+        type: "user",
+        uuid: "u0",
+        sessionId: "sess-cmd-msg",
+        cwd: ctx.realProj,
+        timestamp: "2026-04-20T10:00:00.000Z",
+        message: { role: "user", content: "<command-message>reverse engineer this file</command-message>" },
+      })
+      const realPrompt = JSON.stringify({
+        type: "user",
+        uuid: "u1",
+        sessionId: "sess-cmd-msg",
+        cwd: ctx.realProj,
+        timestamp: "2026-04-20T10:00:01.000Z",
+        message: { role: "user", content: "explain the output" },
+      })
+      const assistant = JSON.stringify({
+        type: "assistant",
+        uuid: "a1",
+        sessionId: "sess-cmd-msg",
+        cwd: ctx.realProj,
+        timestamp: "2026-04-20T10:00:02.000Z",
+        message: { role: "assistant", id: "m1", content: [{ type: "text", text: "ok" }] },
+      })
+      writeFileSync(
+        path.join(projDir, "sess-cmd-msg.jsonl"),
+        `${syntheticOpener}\n${realPrompt}\n${assistant}\n`,
+        "utf8",
+      )
+
+      const store = createTestEventStore(ctx.dataDir)
+      await store.initialize()
+      const result = await importClaudeSessions({ store, homeDir: ctx.homeDir })
+      expect(result.imported).toBe(1)
+
+      const chats = [...store.state.chatsById.values()].filter((c) => !c.deletedAt)
+      expect(chats.length).toBe(1)
+      expect(chats[0].title).toBe("explain the output")
+    } finally {
+      ctx.cleanup()
+    }
+  })
+
+  test("falls back to Imported session when only user message is a synthetic opener", async () => {
+    const ctx = fresh()
+    try {
+      const projDir = claudeProjectDir(ctx.homeDir, ctx.realProj)
+      mkdirSync(projDir, { recursive: true })
+      const syntheticOpener = JSON.stringify({
+        type: "user",
+        uuid: "u0",
+        sessionId: "sess-only-synthetic",
+        cwd: ctx.realProj,
+        timestamp: "2026-04-20T10:00:00.000Z",
+        message: { role: "user", content: "<local-command-caveat>Caveat: context truncated." },
+      })
+      const assistant = JSON.stringify({
+        type: "assistant",
+        uuid: "a1",
+        sessionId: "sess-only-synthetic",
+        cwd: ctx.realProj,
+        timestamp: "2026-04-20T10:00:01.000Z",
+        message: { role: "assistant", id: "m1", content: [{ type: "text", text: "ok" }] },
+      })
+      writeFileSync(
+        path.join(projDir, "sess-only-synthetic.jsonl"),
+        `${syntheticOpener}\n${assistant}\n`,
+        "utf8",
+      )
+
+      const store = createTestEventStore(ctx.dataDir)
+      await store.initialize()
+      const result = await importClaudeSessions({ store, homeDir: ctx.homeDir })
+      expect(result.imported).toBe(1)
+
+      const chats = [...store.state.chatsById.values()].filter((c) => !c.deletedAt)
+      expect(chats.length).toBe(1)
+      expect(chats[0].title).toBe("Imported session")
+    } finally {
+      ctx.cleanup()
+    }
+  })
 })
