@@ -23,36 +23,9 @@
  *    the command again; an exception thrown into the send path is not.
  */
 
-import { log } from "../../shared/log"
-import { toError } from "../../shared/errors"
 import { formatCronRepairRequest } from "../../shared/cron/repair-report"
 import type { CronParseError, CronParsePart } from "../../shared/cron/types"
-
-export interface CronRepairEnqueueOptions {
-  autoContinue?: { scheduleId: string }
-}
-
-export interface CronRepairDeps {
-  enabled: boolean
-  /** True while a user message waits — their turn outranks this repair. */
-  hasQueuedMessage: (chatId: string) => boolean
-  enqueueMessage: (
-    chatId: string,
-    content: string,
-    options?: CronRepairEnqueueOptions,
-  ) => Promise<void>
-  /**
-   * Start the queued repair prompt. The mermaid guard needs no equivalent: it
-   * runs at a turn boundary where the drain follows anyway, whereas a `/cron`
-   * line starts no turn at all, so nothing would ever pick this up.
-   */
-  drainQueue: (chatId: string) => Promise<void>
-}
-
-export interface CronRepair {
-  /** Offer a failed `/cron` line to the model. Never throws. */
-  offer: (chatId: string, error: CronParseError) => Promise<void>
-}
+import type { ModelEscalation } from "../model-escalation"
 
 /**
  * Parts that describe an arm the user meant but mistyped. `subcommand` is
@@ -75,51 +48,26 @@ const REPAIRABLE_PARTS: readonly CronParsePart[] = [
   "multiline",
 ]
 
-/**
- * Lines remembered per chat. Small on purpose: it only has to outlive the one
- * repair turn, and forgetting early costs at most one extra ask.
- */
-const RETRY_MEMORY_PER_CHAT = 32
+export interface CronRepairDeps {
+  escalation: ModelEscalation
+}
 
-function remember(seen: Set<string>, input: string): void {
-  seen.add(input)
-  while (seen.size > RETRY_MEMORY_PER_CHAT) {
-    const oldest = seen.values().next().value
-    if (oldest === undefined) break
-    seen.delete(oldest)
-  }
+export interface CronRepair {
+  /** Offer a failed `/cron` line to the model. Never throws. */
+  offer: (chatId: string, error: CronParseError) => Promise<void>
 }
 
 export function createCronRepair(deps: CronRepairDeps): CronRepair {
-  const askedByChat = new Map<string, Set<string>>()
-
   return {
     offer: async (chatId, error) => {
-      if (!deps.enabled) return
       if (error.suggestion !== undefined) return
       if (!REPAIRABLE_PARTS.includes(error.part)) return
-      if (deps.hasQueuedMessage(chatId)) return
-
-      const asked = askedByChat.get(chatId) ?? new Set<string>()
-      askedByChat.set(chatId, asked)
-      if (asked.has(error.input)) return
-      remember(asked, error.input)
-
-      try {
-        log.info("[kanna/cron] asking the model to repair a /cron line", {
-          chatId,
-          part: error.part,
-        })
-        await deps.enqueueMessage(chatId, formatCronRepairRequest(error), {
-          autoContinue: { scheduleId: `cron-repair-${error.part}` },
-        })
-        await deps.drainQueue(chatId)
-      } catch (repairError) {
-        log.warn("[kanna/cron] repair offer failed", {
-          chatId,
-          message: toError(repairError).message,
-        })
-      }
+      await deps.escalation.offer(
+        chatId,
+        error.input,
+        formatCronRepairRequest(error),
+        `cron-repair-${error.part}`,
+      )
     },
   }
 }
