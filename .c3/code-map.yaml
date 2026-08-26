@@ -317,5 +317,8 @@ c3-235:
   - .githooks/pre-commit
   - .github/workflows/gitleaks.yml
   - src/server/gitleaks-hook.test.ts
+c3-236:
+  - src/ops/architecture/budget.ts
+  - src/ops/architecture/budget-scan.adapter.ts
 c3-311:
   - src/shared/cron/**/*.ts
