@@ -25,6 +25,7 @@ to the repo root, so `Read` works even if the skill does not auto-trigger.
 | Running tests, a green-locally-red-on-CI failure, lint / ast-grep / design-gate errors, "how do I verify this" | `.claude/skills/kanna-test/SKILL.md` |
 | Publishing a version, changelog, npm release | `.claude/skills/release/SKILL.md` |
 | Reviewing a pull request for safety or correctness | `.claude/skills/review-pr/SKILL.md` |
+| Filing a bug or feature request, writing up a defect found mid-task, handing a finding to another agent | `.claude/skills/github-issue/SKILL.md` |
 | Adding a field the server sends and the client renders, or otherwise changing a contract across the WS boundary | `src/shared/types.ts` defines it once, both sides import it — never redeclare the shape on the client. Then `.claude/skills/kanna-react-style/SKILL.md` for the render, and `c3` if it moves a boundary |
 | "Where does X live", component boundaries, whether a change needs a doc update | the `c3` skill (see below) |
 | Visual design, spacing, color tokens, typography polish | the `impeccable` skill; `DESIGN.md` at the repo root is the source of truth |
