@@ -162,7 +162,7 @@ Two budgets, deliberately shaped differently:
   issue this PR just made worse rather than printing a bare number.
 
 **ESLint owns the complexity measurement; the budget owns the direction.**
-`eslint.config.js` sets four production ceilings — `complexity` 141,
+`eslint.config.js` sets four production ceilings — `complexity` 138,
 `max-params` 12, `max-depth` 7, `max-nested-callbacks` 4 — at today's maxima, so
 they are unbreached but hard. `ESLINT_LIMIT_PINS` must **equal** each configured
 value: raising the ceiling fails `check:arch` as `limit_raised`, and lowering it
@@ -172,8 +172,9 @@ agree on paper while disagreeing in fact. A pin whose rule ESLint no longer
 configures fails as `limit_unconfigured` rather than passing vacuously.
 
 The peaks are the audit's own findings, which is why these are defect counts and
-not style knobs: `complexity` 141 and `max-depth` 7 are both `runClaudeSession`'s
-570-line `for await` loop, and `max-params` 12 is `deriveChatSnapshot`.
+not style knobs: `complexity` 138 is `handleCommand` in `ws-router.ts` (`runClaudeSession`
+dropped from 141 → 132 after the `ClaudeSessionState` class refactor, #923),
+`max-depth` 7 is `runClaudeSession`'s `for await` loop, and `max-params` 12 is `deriveChatSnapshot`.
 
 **`bun run lint:limits` proves a ceiling is still TIGHT.** A ceiling nothing
 reaches gates nothing — pinned at 141 while the worst function is 90 leaves 50

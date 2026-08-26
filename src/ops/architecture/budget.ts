@@ -195,10 +195,10 @@ export interface EslintLimitPin {
 export const ESLINT_LIMIT_PINS: readonly EslintLimitPin[] = [
   {
     rule: "complexity",
-    max: 141,
+    max: 138,
     issue: 893,
     rationale:
-      "Cyclomatic complexity per function. The peak is runClaudeSession's 570-line for-await loop, which interleaves token persist, background tasks, self-wake, compact finalize and result finalize in one body.",
+      "Cyclomatic complexity per function. The peak is handleCommand in ws-router.ts (138). runClaudeSession dropped from 141 → 132 after the ClaudeSessionState class refactor (#923).",
   },
   {
     rule: "max-params",
