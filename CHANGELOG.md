@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.43.9](https://github.com/cuongtranba/kanna/compare/v1.43.8...v1.43.9) (2026-08-26)
+
+
+### Performance Improvements
+
+* **event-store:** seed seenMessageIds from tail to avoid 524 MB RSS spike ([#932](https://github.com/cuongtranba/kanna/issues/932)) ([ad80559](https://github.com/cuongtranba/kanna/commit/ad805591325cb63498a22cd9fe66cf4ab2043826))
+
 ## [1.43.8](https://github.com/cuongtranba/kanna/compare/v1.43.7...v1.43.8) (2026-08-26)
 
 
