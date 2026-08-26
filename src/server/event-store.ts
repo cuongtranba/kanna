@@ -217,7 +217,12 @@ export class EventStore implements PushEventStore {
       getMessages: (chatId) => this.getMessages(chatId),
       ensureTranscriptLoaded: (chatId) => {
         if (!this.transcriptCache.isSeeded(chatId)) {
-          MessageRead.getMessagesView(this.msgReadDeps, chatId)
+          // Fast path: seed messageIds from the tail only, avoiding the full-file
+          // parse that spikes RSS ~524 MB for a 96 MB transcript. Falls back to
+          // the full load when the backend lacks slice APIs.
+          if (!MessageRead.seedSeenMessageIdsFromTail(this.msgReadDeps, chatId)) {
+            MessageRead.getMessagesView(this.msgReadDeps, chatId)
+          }
         }
       },
       getSeenMessageIds: (chatId) => this.getSeenMessageIds(chatId),

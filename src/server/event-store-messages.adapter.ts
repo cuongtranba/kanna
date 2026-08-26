@@ -346,6 +346,22 @@ function seedFullTranscript(deps: MessageReadDeps, chatId: string, entries: Tran
   deps.transcriptCache.markSeeded(chatId)
 }
 
+/** Seeds seenMessageIds from the tail only — avoids the ~524 MB full-file parse for large chats.
+ *  Active streaming always uses a fresh messageId per API message, so the tail covers dedup needs.
+ *  Returns false when the backend lacks slice APIs; the caller falls back to getMessagesView. */
+export function seedSeenMessageIdsFromTail(deps: MessageReadDeps, chatId: string): boolean {
+  const tail = readTranscriptTail(deps, chatId, 500)
+  if (!tail) return false
+  if (tail.reachedStart) { seedFullTranscript(deps, chatId, tail.entries); return true }
+  const seen = getSeenMessageIds(deps, chatId)
+  for (const entry of tail.entries) {
+    const mid = entry.messageId
+    if (typeof mid === "string" && mid.length > 0) seen.add(mid)
+  }
+  deps.transcriptCache.markSeeded(chatId)
+  return true
+}
+
 /**
  * Parses the single JSONL line starting at `offset` (the first entry of the
  * already-served newer page). Used as a coalesce sentinel so a cwu run that
@@ -452,22 +468,9 @@ const USAGE_SCAN_FIRST_CHUNK_BYTES = 64 * 1024
 const USAGE_SCAN_GROWTH = 8
 const USAGE_SCAN_MAX_CHUNK_BYTES = 1024 * 1024
 
-/**
- * How far back from EOF the scan will look before giving up and reporting "no
- * current usage data".
- *
- * This bound is what keeps the scan cheap on a transcript that holds NO marker
- * at all — MEASURED as 241 of 264 chats on the reference install, because
- * imported and PTY-driver sessions never emit `context_window_updated`. Without
- * it those chats re-reads their whole history on every send, which is the cost
- * this read exists to remove.
- *
- * 8 MiB is far more than one turn of entries, and one turn is as far as a
- * CURRENT marker can be: `context_window_updated` is emitted on every turn
- * result. A marker further back than this describes a context window that has
- * since been entirely replaced, so acting on it would be wrong anyway — the
- * conservative `null` (no proactive compact) is the better answer.
- */
+// context_window_updated fires once per turn result, so a marker past 8 MiB
+// describes a stale window — returning null (no compact) is the correct answer.
+// Bound prevents re-scanning the whole file on the 241/264 chats (measured) with no marker.
 const USAGE_SCAN_MAX_LOOKBACK_BYTES = 8 * 1024 * 1024
 
 /**
@@ -477,13 +480,9 @@ const USAGE_SCAN_MAX_LOOKBACK_BYTES = 8 * 1024 * 1024
  * `context_window_updated` / `compact_boundary`. Answering it via `getMessages`
  * parsed the whole transcript — MEASURED at 524 MB peak RSS on a 96 MB / 36k
  * entry chat, on every message. This reads backwards a window at a time and
- * stops at the first marker.
- *
- * Within `USAGE_SCAN_MAX_LOOKBACK_BYTES` of EOF the result is identical to a
- * full backward scan: the loop ends only when the scan is CONCLUSIVE (a marker
- * was hit) or when the window reached the start of the file. Past that bound it
- * reports `null` rather than keep reading — see the constant for why a marker
- * that far back cannot describe the current context window.
+ * stops at the first marker or `USAGE_SCAN_MAX_LOOKBACK_BYTES`.
+ * Past that bound it reports `null` — a stale marker describes a replaced context
+ * window, so null (no proactive compact) is correct rather than wrong.
  */
 export function getLatestChatContextWindowUsage(
   deps: MessageReadDeps,
