@@ -168,10 +168,10 @@ export const PATTERN_BUDGETS: readonly PatternBudget[] = [
     id: "shared-types-star-exports",
     include: ["src/shared/types.ts"],
     pattern: "^export \\* from",
-    max: 9,
+    max: 8,
     issue: 889,
     rationale:
-      "types.ts re-exports nine modules wholesale, giving 227 importers a dependency on 306 declarations to use two or three. Extraction moved the code out but preserved the fan-in, so nothing in the import graph says which part of the domain a module touches.",
+      "types.ts re-exports eight modules wholesale, giving 227 importers a dependency on 306 declarations to use two or three. Extraction moved the code out but preserved the fan-in, so nothing in the import graph says which part of the domain a module touches.",
   },
 ]
 
