@@ -136,6 +136,60 @@ React 19 rules: `rules-of-hooks`, `purity`, `globals` are errors;
 `set-state-in-effect`, `refs`, `immutability`, `preserve-manual-memoization`,
 `exhaustive-deps` are warnings.
 
+# Architecture Budget (ratchet — `bun run check:arch`)
+
+`src/ops/architecture/budget.ts` pins the size of every structural-defect
+population the #889 program is driving down, and `budget.test.ts` fails CI when
+one grows. It exists because the previous complexity program (#674–#681) closed
+all seven workstreams as COMPLETED while its own metrics moved the wrong way —
+modules over 700 lines went **18 → 21 → 23** and production LOC rose from
+~121,700 to ~125,779. Nothing in CI could observe that, so nothing objected.
+
+Two budgets, deliberately shaped differently:
+
+- **`MODULE_ALLOWANCES`** — a per-file **ceiling** for each module over
+  `MODULE_LINE_THRESHOLD` (700). A listed module may shrink freely, may never
+  grow past its pin, and **must be delisted once it drops under the threshold**
+  (`module_delistable`) so the allowance cannot be reclaimed later. A new file
+  crossing 700 fails as `module_unlisted`. It is a ceiling rather than an exact
+  pin because this repo routinely has 15+ live worktrees and exact line pins
+  would make every parallel edit to a large module a manifest merge conflict.
+- **`PATTERN_BUDGETS`** — an **exact ratchet** on counted defect populations
+  (`deps-bundles`, `ws-router-dispatch-arms`, `untyped-command-results`, …).
+  Growing fails; **shrinking also fails**, because a pin left above the real
+  count is a pin the population can creep back up to. Each entry carries the
+  `issue` it regresses and a `rationale`, so a breach message says which filed
+  issue this PR just made worse rather than printing a bare number.
+
+**A budget graduates, it does not settle at a residue.** Once its issue lands and
+the type system or a lint rule enforces the property permanently, delete the entry
+rather than pinning whatever the regex still matches.
+`harness-optional-payload-guards` was removed when #890 shipped the `HarnessEvent`
+discriminated union (#908): narrowing became a compile error, and the two
+remaining regex hits were false positives (`!event.entry.isError`, and a `!==`
+comparison). Pinning them would have implied a defect that no longer exists — the
+compiler is the stronger gate, so the weaker one is retired.
+
+**A pin is a defect count, never a style preference.** Raising one is a visible
+diff that says the PR made a tracked issue worse; the correct response to a
+breach is almost always to put the new code in a module that owns it.
+
+**`filesScanned` is load-bearing.** A budget whose `include` no longer resolves
+(target renamed) would otherwise report as a population that shrank to zero —
+inviting someone to pin it at `0` and **silently retire the check instead of the
+defect**. A zero-file scan is therefore reported as `pattern_unmeasured`
+("this gate is currently inert"), never as a shrink.
+
+Counts match `grep -c`: matching **lines**, not matching occurrences, so any pin
+is checkable by hand. Module lines match `wc -l` (newline count). Tests,
+`__fixtures__`, `test-helpers` and `testing` directories are excluded from both
+scans — production surface only.
+
+`src/ops/**` is outside the side-effect seal, but the split is kept anyway:
+`budget.ts` is pure (manifest + `checkModuleBudget` / `checkPatternBudget` /
+`formatBreach`) and `budget-scan.adapter.ts` is the only file that touches the
+filesystem.
+
 # Side-Effect Lint (ports-and-adapters seal)
 
 Side effects (`node:fs`, `chokidar`, `bun:sqlite`/`better-sqlite3`/`pg`,

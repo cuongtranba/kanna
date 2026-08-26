@@ -40,6 +40,7 @@
     "check:bundle": "bun run ./scripts/check-client-bundle.ts",
     "lint": "eslint src/ --max-warnings=0",
     "lint:usestate": "ast-grep scan --report-style short",
+    "check:arch": "bun test --conditions production src/ops/architecture/",
     "dev": "bun run ./scripts/dev.ts",
     "dev:client": "vite --host 0.0.0.0 --port 5174",
     "dev:server": "bun run ./scripts/dev-server.ts --no-open --port 5175",

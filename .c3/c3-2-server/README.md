@@ -1,7 +1,7 @@
 ---
 id: c3-2
 c3-version: 4
-c3-seal: 76a72849e4d0fb52fe1ace0f8a286ebab973ed5280077c18eaaa85e2b555691d
+c3-seal: 5e618e910bcb47ff145435318e58d667a2a48116fa799e972c37e4c5a5b776cb
 title: Server
 type: container
 boundary: service
@@ -62,3 +62,5 @@ Run the local Bun backend: serve HTTP+WebSocket on localhost, coordinate Claude 
 | c3-232 | boards | feature | active | Persist boards, project them to subscribers, turn a card into an isolated worktree-branch-chat, reconcile a bound tracker, and expose the board to the agent as a work queue. |
 | c3-233 | cron-scheduler | feature | active | Run armed cron jobs: dispatch /cron commands into durable events, keep |
 | c3-234 | observability |  | active | Own the server's process- and turn-level observability: the pure instrument facade domain code calls, the single adapter that exports it, and the alert rules that turn the exported fleet data into a GitHub ticket. |
+| c3-235 | secret-scanning | feature | active | Block a credential from reaching the repository, at the commit and again at the merge, using one pinned scanner and one shared configuration so the local and CI verdicts cannot disagree. |
+| c3-236 | architecture-budget | feature | active | Hold every structural-defect population in the codebase at or below a recorded pin, so a pull request that makes a filed architecture issue worse fails CI instead of merging unobserved. |
