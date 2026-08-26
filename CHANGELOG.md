@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.43.6](https://github.com/cuongtranba/kanna/compare/v1.43.5...v1.43.6) (2026-08-26)
+
+
+### Bug Fixes
+
+* **architecture:** count every spelling of a deps bundle, not just `interface` ([#917](https://github.com/cuongtranba/kanna/issues/917)) ([1438934](https://github.com/cuongtranba/kanna/commit/14389347ec7cb47979850494fd15f246079df534))
+
 ## [1.43.5](https://github.com/cuongtranba/kanna/compare/v1.43.4...v1.43.5) (2026-08-26)
 
 
