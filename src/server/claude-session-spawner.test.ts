@@ -113,8 +113,6 @@ function makeDeps(overrides: Partial<SpawnClaudeTurnDeps> = {}): SpawnClaudeTurn
     activeTurns,
     mentionedSubagentIdsByChat,
     oauthPool: null,
-    store: {
-    },
     startClaudeSessionFn: async () => fakeHandle,
     startClaudeSessionPTYFn: async () => fakeHandle,
     subagentOrchestrator: {} as SpawnClaudeTurnDeps["subagentOrchestrator"],

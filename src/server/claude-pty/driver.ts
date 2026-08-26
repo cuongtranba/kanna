@@ -155,6 +155,13 @@ export interface StartClaudeSessionPtyArgs {
    * stays open so further turns can be delivered via `pushChannelPrompt`.
    */
   keepAlive?: boolean
+  /**
+   * Maximum number of agentic turns. PTY claude has no native enforcement;
+   * the orchestrator's host-side tool-call-count backstop reads this via
+   * ProviderRunStart.maxTurns. Forwarded here so the wiring can pass it
+   * through without losing it on the PTY branch.
+   */
+  maxTurns?: number
   /** Label of the OAuth-pool token. Surfaces in AccountInfo since the CLI doesn't emit account info in stream-json. */
   oauthLabel?: string
   /** Masked OAuth-pool token (e.g. `sk-ant-oat01...XXXX`). Computed by AgentCoordinator; never the raw token. */

@@ -179,6 +179,7 @@ export function buildClaudeSubagentStarter(
         customMcpServers: enabledMcpServers,
         oauthBearers,
         restrictedAllowedPaths: a.restrictedAllowedPaths,
+        maxTurns: a.maxTurns,
         keepAlive: a.keepAlive,
         getArmedLoop: a.getArmedLoop,
       })
