@@ -217,6 +217,19 @@ describe("the manifest itself", () => {
     }
   })
 
+  test("deps-bundles counts every spelling of a bundle, so respelling one is not a fix", () => {
+    const budget = PATTERN_BUDGETS.find((b) => b.id === "deps-bundles")
+    expect(budget).toBeDefined()
+    const expression = new RegExp(budget?.pattern ?? "")
+    // #914 evaded the interface-only pattern by respelling a bundle inline.
+    // Renaming removes nothing, so all three spellings must count.
+    expect(expression.test("export interface SendCommandDeps {")).toBe(true)
+    expect(expression.test("export type StartClaudeSessionDeps = {")).toBe(true)
+    expect(expression.test("  deps: {")).toBe(true)
+    // a reference to a bundle is a use, not a declaration
+    expect(expression.test("  const x: SendCommandDeps = build()")).toBe(false)
+  })
+
   test("no budget scans the manifest or the scanner, which quote every regex as a literal", () => {
     for (const budget of PATTERN_BUDGETS) {
       for (const selfPath of SELF_EXCLUDED_PATHS) {

@@ -83,11 +83,15 @@ export const PATTERN_BUDGETS: readonly PatternBudget[] = [
   {
     id: "deps-bundles",
     include: ["src/server/"],
-    pattern: "interface [A-Za-z]*Deps\\b",
-    max: 79,
+    // Counts the CONCEPT, not one keyword: a named interface, a named type
+    // alias, and an inline anonymous `deps: {` parameter are the same bundle.
+    // The first version counted only `interface`, and #914 evaded it by
+    // respelling one bundle as an inline type — renaming, not removing.
+    pattern: "interface [A-Za-z]*Deps\\b|type [A-Za-z]*Deps\\b *=|deps: \\{$",
+    max: 82,
     issue: 893,
     rationale:
-      "Each *Deps interface is a hand-maintained slice of the coordinator's fields. Every field is optional, so a builder that omits one compiles and the consumer's fallback is indistinguishable from the feature being off — this is how getArmedLoop shipped declared-but-never-passed.",
+      "Each deps bundle is a hand-maintained slice of the coordinator's fields. Every field is optional, so a builder that omits one compiles and the consumer's fallback is indistinguishable from the feature being off — this is how getArmedLoop shipped declared-but-never-passed. Respelling a bundle as a type alias or an inline parameter object removes nothing, so all three spellings count.",
   },
   {
     id: "coordinator-passthroughs",
