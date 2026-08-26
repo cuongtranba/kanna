@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.43.8](https://github.com/cuongtranba/kanna/compare/v1.43.7...v1.43.8) (2026-08-26)
+
+
+### Bug Fixes
+
+* **mcp:** introduce ok/fail helpers, hide expose_port when gateway absent ([#897](https://github.com/cuongtranba/kanna/issues/897)) ([#924](https://github.com/cuongtranba/kanna/issues/924)) ([0fe0462](https://github.com/cuongtranba/kanna/commit/0fe0462bd9ac3a841efcc09473a4570f6a5571aa))
+
 ## [1.43.7](https://github.com/cuongtranba/kanna/compare/v1.43.6...v1.43.7) (2026-08-26)
 
 
