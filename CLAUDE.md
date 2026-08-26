@@ -15,6 +15,7 @@ task that matches none of them cleanly still lands somewhere.
 | `kanna-test` | Running tests; the lint, ast-grep, and design gates |
 | `release` | Version bump + npm publish |
 | `review-pr` | Security-focused PR review via the GitHub API |
+| `github-issue` | Writing bug reports and feature requests detailed enough to implement from |
 
 These files have two consumers — Claude Code auto-triggers on the frontmatter
 `description`, and Kanna's own `/` picker parses the same files through
