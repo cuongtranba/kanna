@@ -182,6 +182,20 @@ by one and requires each rule to report at least one production violation. It is
 the analog of `pattern_shrank` for a measurement a regex cannot make, and it
 reuses `PRODUCTION_EXCLUDES` so "production" means one thing.
 
+**A pattern must count the CONCEPT, not one keyword.** `deps-bundles` first
+matched only `interface [A-Za-z]*Deps`, and #914 satisfied it by respelling one
+bundle as an inline `deps: {` parameter — the commit message said so outright.
+Renaming removes nothing, so the ratchet was driving cosmetic churn instead of
+deletion, which is precisely the failure #889 exists to stop. The pattern now
+matches the named interface, the named type alias, and the inline parameter
+object alike, and the pin was re-baselined 79 → 82 (the original number was an
+undercount, not a regression). A colocated test asserts all three spellings
+match and that a mere *reference* to a bundle does not, so the pattern cannot be
+silently re-narrowed.
+
+When a budget fires, check whether the cheapest way to satisfy it is a rename.
+If it is, the pattern is measuring a spelling rather than the defect.
+
 **A budget graduates, it does not settle at a residue.** Once its issue lands and
 the type system or a lint rule enforces the property permanently, delete the entry
 rather than pinning whatever the regex still matches.

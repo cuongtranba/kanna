@@ -283,14 +283,16 @@ export function backgroundTaskGuardExpired(session: ClaudeSessionState, now: num
  * - a pending Claude-Code background task keeping the session warm
  * - a task-notification self-wake turn streaming on the warm session
  */
+export interface SessionInUseDeps {
+  activeTurns: { has(chatId: string): boolean }
+  startingTurns: { has(chatId: string): boolean }
+  pendingTools: { has(chatId: string): boolean }
+  hasLiveWorkflow: (chatId: string) => boolean
+  hasPendingBackgroundTask: (session: ClaudeSessionState, now: number) => boolean
+}
+
 export function isSessionInUse(
-  deps: {
-    activeTurns: { has(chatId: string): boolean }
-    startingTurns: { has(chatId: string): boolean }
-    pendingTools: { has(chatId: string): boolean }
-    hasLiveWorkflow: (chatId: string) => boolean
-    hasPendingBackgroundTask: (session: ClaudeSessionState, now: number) => boolean
-  },
+  deps: SessionInUseDeps,
   chatId: string,
   session: ClaudeSessionState,
   now: number,
