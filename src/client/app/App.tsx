@@ -285,42 +285,6 @@ function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
     importClaudeSessions,
     importClaudeSession,
   } = state
-  const handleSidebarCreateChat = useCallback((projectId: string) => {
-    void handleCreateChat(projectId)
-  }, [handleCreateChat])
-  const handleSidebarForkChat = useCallback((chat: Parameters<typeof handleForkChat>[0]) => {
-    void handleForkChat(chat)
-  }, [handleForkChat])
-  const handleSidebarRenameChat = useCallback((chat: Parameters<typeof handleRenameChat>[0]) => {
-    void handleRenameChat(chat)
-  }, [handleRenameChat])
-  const handleSidebarArchiveChat = useCallback((chat: Parameters<typeof handleArchiveChat>[0]) => {
-    void handleArchiveChat(chat)
-  }, [handleArchiveChat])
-  const handleOpenArchivedChat = useCallback((chatId: string) => {
-    void stateHandleOpenArchivedChat(chatId)
-  }, [stateHandleOpenArchivedChat])
-  const handleOpenAddProjectModal = useCallback(() => {
-    openAddProjectModal()
-  }, [openAddProjectModal])
-  const handleSidebarDeleteChat = useCallback((chat: Parameters<typeof handleDeleteChat>[0]) => {
-    void handleDeleteChat(chat)
-  }, [handleDeleteChat])
-  const handleSidebarCopyPath = useCallback((localPath: string) => {
-    void handleCopyPath(localPath)
-  }, [handleCopyPath])
-  const handleSidebarOpenExternalPath = useCallback((action: "open_finder" | "open_editor", localPath: string) => {
-    void handleOpenExternalPath(action, localPath)
-  }, [handleOpenExternalPath])
-  const handleSidebarHideProject = useCallback((projectId: string) => {
-    void handleHideProject(projectId)
-  }, [handleHideProject])
-  const handleSidebarToggleProjectStar = useCallback((projectId: string, starred: boolean) => {
-    void handleToggleProjectStar(projectId, starred)
-  }, [handleToggleProjectStar])
-  const handleSidebarReorderProjectGroups = useCallback((projectIds: string[]) => {
-    void handleReorderProjectGroups(projectIds)
-  }, [handleReorderProjectGroups])
   const handleImportClaudeSessions = useCallback(async () => {
     try {
       const result = await importClaudeSessions()
@@ -393,23 +357,23 @@ function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
       onClose={state.closeSidebar}
       onCollapse={state.collapseSidebar}
       onExpand={state.expandSidebar}
-      onCreateChat={handleSidebarCreateChat}
-      onForkChat={handleSidebarForkChat}
+      onCreateChat={handleCreateChat}
+      onForkChat={handleForkChat}
       currentProjectId={state.activeProjectId}
       keybindings={state.keybindings}
-      onRenameChat={handleSidebarRenameChat}
-      onArchiveChat={handleSidebarArchiveChat}
-      onOpenArchivedChat={handleOpenArchivedChat}
-      onDeleteChat={handleSidebarDeleteChat}
+      onRenameChat={handleRenameChat}
+      onArchiveChat={handleArchiveChat}
+      onOpenArchivedChat={stateHandleOpenArchivedChat}
+      onDeleteChat={handleDeleteChat}
       onEditChatPermissions={handleSidebarEditPermissions}
-      onOpenAddProjectModal={handleOpenAddProjectModal}
+      onOpenAddProjectModal={openAddProjectModal}
       onImportClaudeSessions={handleImportClaudeSessions}
       onImportClaudeSessionIds={handleImportClaudeSessionIds}
-      onCopyPath={handleSidebarCopyPath}
-      onOpenExternalPath={handleSidebarOpenExternalPath}
-      onHideProject={handleSidebarHideProject}
-      onToggleStar={handleSidebarToggleProjectStar}
-      onReorderProjectGroups={handleSidebarReorderProjectGroups}
+      onCopyPath={handleCopyPath}
+      onOpenExternalPath={handleOpenExternalPath}
+      onHideProject={handleHideProject}
+      onToggleStar={handleToggleProjectStar}
+      onReorderProjectGroups={handleReorderProjectGroups}
       onCreateStack={state.handleCreateStack}
       onRenameStack={state.handleRenameStack}
       onRemoveStack={state.handleRemoveStack}
@@ -419,21 +383,21 @@ function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
       updateSnapshot={state.updateSnapshot}
     />
   ), [
-    handleOpenAddProjectModal,
+    openAddProjectModal,
     handleImportClaudeSessions,
     handleImportClaudeSessionIds,
-    handleSidebarCopyPath,
-    handleSidebarCreateChat,
-    handleSidebarArchiveChat,
-    handleSidebarDeleteChat,
-    handleOpenArchivedChat,
-    handleSidebarForkChat,
-    handleSidebarOpenExternalPath,
-    handleSidebarRenameChat,
+    handleCopyPath,
+    handleCreateChat,
+    handleArchiveChat,
+    handleDeleteChat,
+    stateHandleOpenArchivedChat,
+    handleForkChat,
+    handleOpenExternalPath,
+    handleRenameChat,
     handleSidebarEditPermissions,
-    handleSidebarReorderProjectGroups,
-    handleSidebarHideProject,
-    handleSidebarToggleProjectStar,
+    handleReorderProjectGroups,
+    handleHideProject,
+    handleToggleProjectStar,
     showMobileOpenButton,
     state.activeChatId,
     state.activeProjectId,

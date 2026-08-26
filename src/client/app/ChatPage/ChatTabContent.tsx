@@ -3,7 +3,7 @@ import type { DomPort } from "../../ports/domPort"
 import type { TimerPort } from "../../ports/timerPort"
 import { type LegendListRef } from "@legendapp/list/react"
 import { useNavigate } from "react-router-dom"
-import type { ChatInputHandle } from "../../components/chat-ui/ChatInput"
+import { ChatInput, type ChatInputHandle } from "../../components/chat-ui/ChatInput"
 import { ChatNavbar } from "../../components/chat-ui/ChatNavbar"
 import { Card, CardContent } from "../../components/ui/card"
 import { computeSessionTotals, deriveLatestContextWindowSnapshot } from "../../lib/contextWindow"
@@ -23,18 +23,19 @@ import { EMPTY_CRON_JOBS, EMPTY_SCHEDULES } from "../KannaTranscript"
 import { findRetryPromptForResult } from "../../lib/retryPrompt"
 import { useShareStore } from "../../components/share/share-store"
 import type { ShareCommandResult } from "../../../shared/session-share/protocol"
-import { ChatInputDock } from "./ChatInputDock"
 import { ChatTranscriptViewport } from "./ChatTranscriptViewport"
+import { TranscriptActionsProvider, type TranscriptActionsContextValue } from "../transcriptActionsContext"
 import { hasFileDragTypes, EMPTY_STATE_TEXT, EMPTY_STATE_TYPING_INTERVAL_MS } from "./utils"
 import { useWorkflowsStore, selectRuns } from "../../stores/workflowsStore"
 import { useShallow } from "zustand/react/shallow"
 import type { WorkflowRun } from "../../../shared/workflow-types"
-import type { TranscriptEntry } from "../../../shared/types"
+import type { SubagentRunSnapshot, TranscriptEntry } from "../../../shared/types"
 import { useChatPageStore } from "../../stores/chatPageStore"
 import { ChatTabScopedStore } from "../../stores/chatTabScopedStore"
 import { useKannaStateStore } from "../../stores/kannaStateStore"
 
 const EMPTY_MUTED_CHAT_IDS: string[] = []
+const EMPTY_SUBAGENT_RUNS: Record<string, SubagentRunSnapshot> = {}
 
 // ─── Tab-local hooks (MUST run inside ChatTabRoot Provider) ──────────────────
 
@@ -202,6 +203,15 @@ export function ChatTabContent({
   const { inputRef, syncInputHeight, transcriptPaddingBottom } = useTranscriptPaddingBottom()
   const showScrollToBottom = ChatTabScopedStore.useScopedStore((s) => s.showScrollToBottom)
   const setShowScrollToBottom = ChatTabScopedStore.useScopedStore((s) => s.setShowScrollToBottom)
+  const setToolGroupExpanded = ChatTabScopedStore.useScopedStore((s) => s.setToolGroupExpanded)
+
+  const handleToolGroupExpandedChange = useCallback((groupId: string, next: boolean) => {
+    setToolGroupExpanded((current) => (
+      current[groupId] === next
+        ? current
+        : { ...current, [groupId]: next }
+    ))
+  }, [setToolGroupExpanded])
 
   const navigate = useNavigate()
   const handleOpenPtyChat = useCallback((chatId: string) => {
@@ -375,6 +385,94 @@ export function ChatTabContent({
     return state.socket.command<TranscriptEntry[]>({ type: "subagents.getRun", chatId, agentId })
   }, [state.activeChatId, state.socket])
 
+  // ─── Transcript actions context ──────────────────────────────────────────
+
+  const transcriptActionsValue = useMemo<TranscriptActionsContextValue>(() => ({
+    onAskUserQuestionSubmit: state.handleAskUserQuestion,
+    onExitPlanModeConfirm: state.handleExitPlanMode,
+    onToolRequestAnswer: state.handleToolRequestAnswer,
+    onAutoContinueAccept: handleAutoContinueAccept,
+    onAutoContinueReschedule: handleAutoContinueReschedule,
+    onAutoContinueCancel: handleAutoContinueCancel,
+    onRetryFailedTurn: handleRetryFailedTurn,
+    onCronRemove: handleCronRemove,
+    schedules: state.chatSnapshot?.schedules ?? EMPTY_SCHEDULES,
+    cronJobs: state.chatSnapshot?.cronJobs ?? EMPTY_CRON_JOBS,
+    chatId: state.activeChatId ?? undefined,
+    onToolGroupExpandedChange: handleToolGroupExpandedChange,
+    onSubagentAskUserQuestionSubmit: state.handleSubagentAskUserQuestion,
+    onSubagentExitPlanModeSubmit: state.handleSubagentExitPlanMode,
+    subagentRuns: state.chatSnapshot?.subagentRuns ?? EMPTY_SUBAGENT_RUNS,
+    editorPreset,
+    editorCommandTemplate,
+    onCancelSubagentRun: handleCancelSubagentRun,
+    getSubagentTranscript: handleGetSubagentTranscript,
+    platform: state.localProjects?.machine.platform ?? "darwin",
+    tunnels: state.chatSnapshot?.tunnels,
+    liveTunnelId: state.chatSnapshot?.liveTunnelId,
+    onTunnelAccept: sendTunnelAccept,
+    onTunnelStop: sendTunnelStop,
+    onTunnelRetry: sendTunnelRetry,
+    queuedMessages: state.queuedMessages,
+    runtimeStatus: state.runtimeStatus,
+    isDraining: state.isDraining,
+    commandError: state.commandError,
+    onStopDraining: state.handleStopDraining,
+    onSteerQueuedMessage: state.handleSteerQueuedMessage,
+    onRemoveQueuedMessage: state.handleRemoveQueuedMessage,
+    loopProgress: state.chatSnapshot?.loopProgress,
+    workflowRuns: workflowRuns.length > 0 ? workflowRuns : undefined,
+    backgroundTasks: state.runtime?.backgroundTasks,
+    getWorkflowRunDetail: handleGetWorkflowRunDetail,
+    onCronPause: handleCronPause,
+    onCronResume: handleCronResume,
+    localPath: state.runtime?.localPath,
+    latestToolIds: state.latestToolIds,
+    isProcessing: state.isProcessing,
+  }), [
+    state.handleAskUserQuestion,
+    state.handleExitPlanMode,
+    state.handleToolRequestAnswer,
+    handleAutoContinueAccept,
+    handleAutoContinueReschedule,
+    handleAutoContinueCancel,
+    handleRetryFailedTurn,
+    handleCronRemove,
+    state.chatSnapshot?.schedules,
+    state.chatSnapshot?.cronJobs,
+    state.activeChatId,
+    handleToolGroupExpandedChange,
+    state.handleSubagentAskUserQuestion,
+    state.handleSubagentExitPlanMode,
+    state.chatSnapshot?.subagentRuns,
+    editorPreset,
+    editorCommandTemplate,
+    handleCancelSubagentRun,
+    handleGetSubagentTranscript,
+    state.localProjects?.machine.platform,
+    state.chatSnapshot?.tunnels,
+    state.chatSnapshot?.liveTunnelId,
+    sendTunnelAccept,
+    sendTunnelStop,
+    sendTunnelRetry,
+    state.queuedMessages,
+    state.runtimeStatus,
+    state.isDraining,
+    state.commandError,
+    state.handleStopDraining,
+    state.handleSteerQueuedMessage,
+    state.handleRemoveQueuedMessage,
+    state.chatSnapshot?.loopProgress,
+    workflowRuns,
+    state.runtime?.backgroundTasks,
+    handleGetWorkflowRunDetail,
+    handleCronPause,
+    handleCronResume,
+    state.runtime?.localPath,
+    state.latestToolIds,
+    state.isProcessing,
+  ])
+
   // ─── Silent toggle ───────────────────────────────────────────────────────
 
   const mutedChatIds = useKannaStateStore((s) => s.pushConfig?.preferences.mutedChatIds ?? EMPTY_MUTED_CHAT_IDS)
@@ -544,82 +642,49 @@ export function ChatTabContent({
           silent={isSilent}
           onToggleSilent={handleToggleSilent}
         />
-        <ChatTranscriptViewport
-          activeChatId={state.activeChatId}
-          listRef={transcriptListRef}
-          messages={state.messages}
-          queuedMessages={state.queuedMessages}
-          transcriptPaddingBottom={transcriptPaddingBottom}
-          localPath={state.runtime?.localPath}
-          latestToolIds={state.latestToolIds}
-          isHistoryLoading={state.isHistoryLoading}
-          hasOlderHistory={state.hasOlderHistory}
-          isProcessing={state.isProcessing}
-          runtimeStatus={state.runtimeStatus}
-          isDraining={state.isDraining}
-          commandError={state.commandError}
-          loadOlderHistory={state.loadOlderHistory}
-          onStopDraining={state.handleStopDraining}
-          onSteerQueuedMessage={state.handleSteerQueuedMessage}
-          onRemoveQueuedMessage={state.handleRemoveQueuedMessage}
-          onOpenLocalLink={state.handleOpenLocalLink}
-          editorPreset={editorPreset}
-          editorCommandTemplate={editorCommandTemplate}
-          platform={state.localProjects?.machine.platform}
-          onAskUserQuestionSubmit={state.handleAskUserQuestion}
-          onExitPlanModeConfirm={state.handleExitPlanMode}
-          onToolRequestAnswer={state.handleToolRequestAnswer}
-          onSubagentAskUserQuestionSubmit={state.handleSubagentAskUserQuestion}
-          onSubagentExitPlanModeSubmit={state.handleSubagentExitPlanMode}
-          schedules={state.chatSnapshot?.schedules ?? EMPTY_SCHEDULES}
-          cronJobs={state.chatSnapshot?.cronJobs ?? EMPTY_CRON_JOBS}
-          onCronPause={handleCronPause}
-          onCronResume={handleCronResume}
-          onCronRemove={handleCronRemove}
-          onAutoContinueAccept={handleAutoContinueAccept}
-          onAutoContinueReschedule={handleAutoContinueReschedule}
-          onAutoContinueCancel={handleAutoContinueCancel}
-          onRetryFailedTurn={handleRetryFailedTurn}
-          tunnels={state.chatSnapshot?.tunnels}
-          liveTunnelId={state.chatSnapshot?.liveTunnelId}
-          onTunnelAccept={sendTunnelAccept}
-          onTunnelStop={sendTunnelStop}
-          onTunnelRetry={sendTunnelRetry}
-          subagentRuns={state.chatSnapshot?.subagentRuns}
-          onCancelSubagentRun={handleCancelSubagentRun}
-          loopProgress={state.chatSnapshot?.loopProgress}
-          workflowRuns={workflowRuns.length > 0 ? workflowRuns : undefined}
-          backgroundTasks={state.runtime?.backgroundTasks}
-          getWorkflowRunDetail={handleGetWorkflowRunDetail}
-          getSubagentTranscript={handleGetSubagentTranscript}
-          showScrollButton={showScrollToBottom && state.messages.length > 0}
-          onIsAtEndChange={onIsAtEndChange}
-          scrollToBottom={() => scrollToTranscriptEnd(true)}
-          typedEmptyStateText={typedEmptyStateText}
-          isEmptyStateTypingComplete={isEmptyStateTypingComplete}
-          isPageFileDragActive={isPageFileDragActive}
-          showEmptyState={showEmptyState}
-        />
+        <TranscriptActionsProvider value={transcriptActionsValue}>
+          <ChatTranscriptViewport
+            activeChatId={state.activeChatId}
+            listRef={transcriptListRef}
+            messages={state.messages}
+            transcriptPaddingBottom={transcriptPaddingBottom}
+            isHistoryLoading={state.isHistoryLoading}
+            hasOlderHistory={state.hasOlderHistory}
+            loadOlderHistory={state.loadOlderHistory}
+            onOpenLocalLink={state.handleOpenLocalLink}
+            showScrollButton={showScrollToBottom && state.messages.length > 0}
+            onIsAtEndChange={onIsAtEndChange}
+            scrollToBottom={() => scrollToTranscriptEnd(true)}
+            typedEmptyStateText={typedEmptyStateText}
+            isEmptyStateTypingComplete={isEmptyStateTypingComplete}
+            isPageFileDragActive={isPageFileDragActive}
+            showEmptyState={showEmptyState}
+          />
+        </TranscriptActionsProvider>
       </CardContent>
 
-      <ChatInputDock
-        inputRef={inputRef}
-        onLayoutChange={syncInputHeight}
-        chatInputRef={chatInputRef}
-        chatInputElementRef={chatInputElementRef}
-        activeChatId={state.activeChatId}
-        previousPrompt={state.previousPrompt}
-        hasSelectedProject={state.hasSelectedProject}
-        canCancel={state.canCancel}
-        projectId={projectId}
-        activeProvider={state.runtime?.provider ?? null}
-        availableProviders={state.availableProviders}
-        contextWindowSnapshot={contextWindowSnapshot}
-        sessionTotals={sessionTotals}
-        onSubmit={handleChatSubmit}
-        onCancel={state.handleCancel}
-        hasUnpausedCronJob={(state.chatSnapshot?.cronJobs ?? EMPTY_CRON_JOBS).some((j) => !j.paused)}
-      />
+      <div className="absolute bottom-0 left-0 right-0 z-20 pointer-events-none">
+        <div className="bg-gradient-to-t from-background via-background pointer-events-auto" ref={inputRef}>
+          <ChatInput
+            ref={chatInputRef}
+            inputElementRef={chatInputElementRef}
+            onLayoutChange={syncInputHeight}
+            key={state.activeChatId ?? "new-chat"}
+            onSubmit={handleChatSubmit}
+            onCancel={state.handleCancel}
+            disabled={!state.hasSelectedProject}
+            canCancel={state.canCancel}
+            chatId={state.activeChatId}
+            projectId={projectId}
+            activeProvider={state.runtime?.provider ?? null}
+            availableProviders={state.availableProviders}
+            contextWindowSnapshot={contextWindowSnapshot}
+            sessionTotals={sessionTotals}
+            previousPrompt={state.previousPrompt}
+            hasUnpausedCronJob={(state.chatSnapshot?.cronJobs ?? EMPTY_CRON_JOBS).some((j) => !j.paused)}
+          />
+        </div>
+      </div>
     </Card>
   )
 }

@@ -1,8 +1,5 @@
-import React, { memo, useCallback, useLayoutEffect, useMemo, useRef } from "react"
-import { KannaTranscriptStore } from "./KannaTranscript.store"
+import React, { memo, useLayoutEffect, useMemo, useRef } from "react"
 import type { AskUserQuestionItem, ProcessedToolCall } from "../components/messages/types"
-import { SubagentMessage } from "../components/messages/SubagentMessage"
-import type { SubagentRunSnapshot } from "../../shared/types"
 import type { AskUserQuestionAnswerMap, ChatAttachment, HydratedTranscriptMessage } from "../../shared/types"
 import { UserMessage } from "../components/messages/UserMessage"
 import { RawJsonMessage } from "../components/messages/RawJsonMessage"
@@ -32,20 +29,15 @@ import { MemoryLoadedMessage } from "../components/messages/MemoryLoadedMessage"
 import { CompactSummaryMessage } from "../components/messages/CompactSummaryMessage"
 import { StatusMessage } from "../components/messages/StatusMessage"
 import { CollapsedToolGroup } from "../components/messages/CollapsedToolGroup"
-import { OpenLocalLinkProvider, type OpenLocalLinkTarget } from "../components/messages/shared"
 import { AutoContinueCard } from "../components/chat-ui/AutoContinueCard"
 import { PendingToolRequestMessage } from "../components/messages/PendingToolRequestMessage"
 import { CHAT_SELECTION_ZONE_ATTRIBUTE } from "./chatFocusPolicy"
 import type { AutoContinueSchedule } from "../../shared/types"
 import type { CronJobSnapshot } from "../../shared/cron/types"
 import type { ToolRequestDecision } from "../../shared/permission-policy"
-import {
-  DELEGATE_SUBAGENT_TOOL_NAME,
-  extractDelegateCalls,
-  matchRunsToDelegateCalls,
-  reportOrphanRuns,
-} from "./subagent-run-placement"
+import { DELEGATE_SUBAGENT_TOOL_NAME } from "./subagent-run-placement"
 import { PREVIEW_FILE_TOOL_NAME } from "../../shared/tools"
+import { useTranscriptActions } from "./transcriptActionsContext"
 
 const SPECIAL_TOOL_NAMES = new Set(["AskUserQuestion", "ExitPlanMode", "TodoWrite", DELEGATE_SUBAGENT_TOOL_NAME, PREVIEW_FILE_TOOL_NAME])
 
@@ -272,7 +264,7 @@ function sameMessage(left: HydratedTranscriptMessage, right: HydratedTranscriptM
         && sameStringArray(left.slashCommands, right.slashCommands)
         && left.debugRaw === right.debugRaw
     case "account_info":
-      return right.kind === "account_info" && JSON.stringify(left.accountInfo) === JSON.stringify(right.accountInfo)
+      return right.kind === "account_info" && left.accountInfo === right.accountInfo
     case "assistant_text":
       return right.kind === "assistant_text" && left.text === right.text
     case "assistant_thinking":
@@ -292,9 +284,9 @@ function sameMessage(left: HydratedTranscriptMessage, right: HydratedTranscriptM
         && left.toolName === right.toolName
         && left.toolId === right.toolId
         && left.isError === right.isError
-        && JSON.stringify(left.input) === JSON.stringify(right.input)
-        && JSON.stringify(left.result) === JSON.stringify(right.result)
-        && JSON.stringify(left.rawResult) === JSON.stringify(right.rawResult)
+        && left.input === right.input
+        && left.result === right.result
+        && left.rawResult === right.rawResult
     case "result":
       return right.kind === "result"
         && left.success === right.success
@@ -308,7 +300,7 @@ function sameMessage(left: HydratedTranscriptMessage, right: HydratedTranscriptM
     case "compact_summary":
       return right.kind === "compact_summary" && left.summary === right.summary
     case "context_window_updated":
-      return right.kind === "context_window_updated" && JSON.stringify(left.usage) === JSON.stringify(right.usage)
+      return right.kind === "context_window_updated" && left.usage === right.usage
     case "memory_loaded":
       return right.kind === "memory_loaded" && left.path === right.path
     case "compact_boundary":
@@ -749,113 +741,30 @@ export function buildResolvedTranscriptRows(
   return rows
 }
 
-interface KannaTranscriptProps {
-  messages: HydratedTranscriptMessage[]
-  isLoading: boolean
-  localPath?: string
-  latestToolIds: Record<string, string | null>
-  onOpenLocalLink: (target: OpenLocalLinkTarget) => void
-  chatId?: string
-  // Widened (not narrowed to Promise<void>) so a rejected chat.respondTool can
-  // roll the optimistic card back while `() => undefined` callers still fit.
-  onAskUserQuestionSubmit: (
-    toolUseId: string,
-    questions: AskUserQuestionItem[],
-    answers: AskUserQuestionAnswerMap
-  ) => void | Promise<void>
-  onExitPlanModeConfirm: (toolUseId: string, confirmed: boolean, clearContext?: boolean, message?: string) => void
-  onToolRequestAnswer?: (toolRequestId: string, decision: ToolRequestDecision) => void
-  schedules?: Record<string, AutoContinueSchedule>
-  cronJobs?: readonly CronJobSnapshot[]
-  onAutoContinueAccept?: (scheduleId: string, scheduledAt: number) => void
-  onAutoContinueReschedule?: (scheduleId: string, scheduledAt: number) => void
-  onAutoContinueCancel?: (scheduleId: string) => void
-  onRetryFailedTurn?: (resultMessageId: string) => void | Promise<void>
-  onTunnelAccept?: (tunnelId: string) => void | Promise<void>
-  onTunnelStop?: (tunnelId: string) => void | Promise<void>
-  onTunnelRetry?: (tunnelId: string) => void | Promise<void>
-  subagentRuns?: Record<string, SubagentRunSnapshot>
-  onSubagentAskUserQuestionSubmit?: (
-    runId: string,
-    toolUseId: string,
-    questions: AskUserQuestionItem[],
-    answers: AskUserQuestionAnswerMap,
-  ) => void
-  onSubagentExitPlanModeSubmit?: (
-    runId: string,
-    toolUseId: string,
-    response: { confirmed: boolean; clearContext?: boolean; message?: string },
-  ) => void
-  onCancelSubagentRun?: (chatId: string, runId: string) => void
-  onCronRemove?: (jobId: string) => void
-}
-
-const EMPTY_SUBAGENT_RUNS: Record<string, SubagentRunSnapshot> = {}
-
-function renderSubagentRunTree(
-  run: SubagentRunSnapshot,
-  depth: number,
-  childrenByParentRunId: Map<string, SubagentRunSnapshot[]>,
-  localPath: string,
-  onSubagentAskUserQuestionSubmit: ((runId: string, toolUseId: string, questions: AskUserQuestionItem[], answers: AskUserQuestionAnswerMap) => void) | undefined,
-  onSubagentExitPlanModeSubmit: ((runId: string, toolUseId: string, response: { confirmed: boolean; clearContext?: boolean; message?: string }) => void) | undefined,
-  onCancelSubagentRun: ((chatId: string, runId: string) => void) | undefined,
-): React.ReactNode {
-  const children = childrenByParentRunId.get(run.runId) ?? []
-  return (
-    <React.Fragment key={run.runId}>
-      <SubagentMessage
-        run={run}
-        indentDepth={depth}
-        localPath={localPath}
-        onSubagentAskUserQuestionSubmit={onSubagentAskUserQuestionSubmit}
-        onSubagentExitPlanModeSubmit={onSubagentExitPlanModeSubmit}
-        onCancelSubagentRun={onCancelSubagentRun}
-      />
-      {children.map((child) => renderSubagentRunTree(child, depth + 1, childrenByParentRunId, localPath, onSubagentAskUserQuestionSubmit, onSubagentExitPlanModeSubmit, onCancelSubagentRun))}
-    </React.Fragment>
-  )
-}
-
 interface KannaTranscriptRowProps {
   row: ResolvedTranscriptRow
   toolGroupExpanded?: boolean
-  onToolGroupExpandedChange: (groupId: string, next: boolean) => void
-  // Widened (not narrowed to Promise<void>) so a rejected chat.respondTool can
-  // roll the optimistic card back while `() => undefined` callers still fit.
-  onAskUserQuestionSubmit: (
-    toolUseId: string,
-    questions: AskUserQuestionItem[],
-    answers: AskUserQuestionAnswerMap
-  ) => void | Promise<void>
-  onExitPlanModeConfirm: (toolUseId: string, confirmed: boolean, clearContext?: boolean, message?: string) => void
-  onToolRequestAnswer?: (toolRequestId: string, decision: ToolRequestDecision) => void
-  schedules: Record<string, AutoContinueSchedule>
-  cronJobs: readonly CronJobSnapshot[]
-  onAutoContinueAccept: (scheduleId: string, scheduledAt: number) => void
-  onAutoContinueReschedule: (scheduleId: string, scheduledAt: number) => void
-  onAutoContinueCancel: (scheduleId: string) => void
-  onRetryFailedTurn?: (resultMessageId: string) => void | Promise<void>
-  onCronRemove?: (jobId: string) => void
-  chatId?: string
 }
 
 export const KannaTranscriptRow = memo(({
   row,
   toolGroupExpanded,
-  onToolGroupExpandedChange,
-  onAskUserQuestionSubmit,
-  onExitPlanModeConfirm,
-  onToolRequestAnswer,
-  schedules,
-  cronJobs,
-  onAutoContinueAccept,
-  onAutoContinueReschedule,
-  onAutoContinueCancel,
-  onRetryFailedTurn,
-  onCronRemove,
-  chatId,
 }: KannaTranscriptRowProps) => {
+  const {
+    onToolGroupExpandedChange,
+    onAskUserQuestionSubmit,
+    onExitPlanModeConfirm,
+    onToolRequestAnswer,
+    schedules,
+    cronJobs,
+    onAutoContinueAccept,
+    onAutoContinueReschedule,
+    onAutoContinueCancel,
+    onRetryFailedTurn,
+    onCronRemove,
+    chatId,
+  } = useTranscriptActions()
+
   if (row.kind === "tool-group") {
     return (
       <TranscriptToolGroup
@@ -899,18 +808,6 @@ export const KannaTranscriptRow = memo(({
   )
 }, (prev, next) => {
   if (prev.toolGroupExpanded !== next.toolGroupExpanded) return false
-  if (prev.onToolGroupExpandedChange !== next.onToolGroupExpandedChange) return false
-  if (prev.onAskUserQuestionSubmit !== next.onAskUserQuestionSubmit) return false
-  if (prev.onExitPlanModeConfirm !== next.onExitPlanModeConfirm) return false
-  if (prev.onToolRequestAnswer !== next.onToolRequestAnswer) return false
-  if (prev.schedules !== next.schedules) return false
-  if (prev.cronJobs !== next.cronJobs) return false
-  if (prev.onAutoContinueAccept !== next.onAutoContinueAccept) return false
-  if (prev.onAutoContinueReschedule !== next.onAutoContinueReschedule) return false
-  if (prev.onAutoContinueCancel !== next.onAutoContinueCancel) return false
-  if (prev.onRetryFailedTurn !== next.onRetryFailedTurn) return false
-  if (prev.onCronRemove !== next.onCronRemove) return false
-  if (prev.chatId !== next.chatId) return false
   if (prev.row.kind !== next.row.kind) return false
   if (prev.row.id !== next.row.id) return false
 
@@ -943,111 +840,3 @@ export const KannaTranscriptRow = memo(({
 
 export const EMPTY_SCHEDULES: Record<string, AutoContinueSchedule> = {}
 export const EMPTY_CRON_JOBS: readonly CronJobSnapshot[] = []
-const NOOP_ACCEPT = (_scheduleId: string, _scheduledAt: number): void => {}
-const NOOP_RESCHEDULE = (_scheduleId: string, _scheduledAt: number): void => {}
-const NOOP_CANCEL = (_scheduleId: string): void => {}
-
-function KannaTranscriptInner({
-  messages,
-  isLoading,
-  localPath,
-  latestToolIds,
-  onOpenLocalLink,
-  chatId,
-  onAskUserQuestionSubmit,
-  onExitPlanModeConfirm,
-  onToolRequestAnswer = NOOP_TOOL_REQUEST_ANSWER,
-  schedules = EMPTY_SCHEDULES,
-  cronJobs = EMPTY_CRON_JOBS,
-  onAutoContinueAccept = NOOP_ACCEPT,
-  onAutoContinueReschedule = NOOP_RESCHEDULE,
-  onAutoContinueCancel = NOOP_CANCEL,
-  onRetryFailedTurn,
-  onTunnelAccept: _onTunnelAccept,  // reserved for future per-message tunnel rendering
-  onTunnelStop: _onTunnelStop,
-  onTunnelRetry: _onTunnelRetry,
-  subagentRuns = EMPTY_SUBAGENT_RUNS,
-  onSubagentAskUserQuestionSubmit,
-  onSubagentExitPlanModeSubmit,
-  onCancelSubagentRun,
-  onCronRemove,
-}: KannaTranscriptProps) {
-  const toolGroupExpanded = KannaTranscriptStore.useScopedStore((s) => s.toolGroupExpanded)
-  const setToolGroupExpanded = KannaTranscriptStore.useScopedStore((s) => s.setToolGroupExpanded)
-  const rows = useMemo(() => buildResolvedTranscriptRows(messages, {
-    isLoading,
-    localPath,
-    latestToolIds,
-  }), [isLoading, latestToolIds, localPath, messages])
-
-  const { matchedRunsByToolId, childrenByParentRunId } = useMemo(() => {
-    const topLevel: SubagentRunSnapshot[] = []
-    const byParent = new Map<string, SubagentRunSnapshot[]>()
-    for (const run of Object.values(subagentRuns)) {
-      if (run.parentRunId === null) {
-        topLevel.push(run)
-      } else {
-        const list = byParent.get(run.parentRunId) ?? []
-        list.push(run)
-        byParent.set(run.parentRunId, list)
-      }
-    }
-    const cmp = (a: SubagentRunSnapshot, b: SubagentRunSnapshot) =>
-      a.startedAt - b.startedAt || a.runId.localeCompare(b.runId)
-    for (const list of byParent.values()) list.sort(cmp)
-    const { matched, orphans } = matchRunsToDelegateCalls(extractDelegateCalls(messages), topLevel)
-    reportOrphanRuns(orphans, Boolean(import.meta.env.DEV))
-    return { matchedRunsByToolId: matched, childrenByParentRunId: byParent }
-  }, [subagentRuns, messages])
-  const handleToolGroupExpandedChange = useCallback((groupId: string, next: boolean) => {
-    setToolGroupExpanded(groupId, next)
-  }, [setToolGroupExpanded])
-
-  return (
-    <OpenLocalLinkProvider onOpenLocalLink={onOpenLocalLink}>
-      {rows.map((row) => {
-        const delegateToolId = row.kind === "single"
-          && row.message.kind === "tool"
-          && row.message.toolName === DELEGATE_SUBAGENT_TOOL_NAME
-          ? row.message.toolId
-          : null
-        const matchedRun = delegateToolId ? matchedRunsByToolId.get(delegateToolId) : undefined
-        return (
-          <div
-            key={row.id}
-            className="mx-auto max-w-[800px] pb-5"
-            data-transcript-row-id={row.id}
-          >
-            <KannaTranscriptRow
-              row={row}
-              toolGroupExpanded={row.kind === "tool-group" ? (toolGroupExpanded[row.id] ?? false) : undefined}
-              onToolGroupExpandedChange={handleToolGroupExpandedChange}
-              onAskUserQuestionSubmit={onAskUserQuestionSubmit}
-              onExitPlanModeConfirm={onExitPlanModeConfirm}
-              onToolRequestAnswer={onToolRequestAnswer}
-              schedules={schedules}
-              cronJobs={cronJobs}
-              onAutoContinueAccept={onAutoContinueAccept}
-              onAutoContinueReschedule={onAutoContinueReschedule}
-              onAutoContinueCancel={onAutoContinueCancel}
-              onRetryFailedTurn={onRetryFailedTurn}
-              onCronRemove={onCronRemove}
-              chatId={chatId}
-            />
-            {matchedRun ? renderSubagentRunTree(matchedRun, 0, childrenByParentRunId, localPath ?? "", onSubagentAskUserQuestionSubmit, onSubagentExitPlanModeSubmit, onCancelSubagentRun) : null}
-          </div>
-        )
-      })}
-    </OpenLocalLinkProvider>
-  )
-}
-
-function KannaTranscriptImpl(props: KannaTranscriptProps) {
-  return (
-    <KannaTranscriptStore.Provider init={{}}>
-      <KannaTranscriptInner {...props} />
-    </KannaTranscriptStore.Provider>
-  )
-}
-
-export const KannaTranscript = memo(KannaTranscriptImpl)

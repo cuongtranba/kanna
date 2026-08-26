@@ -8,7 +8,7 @@ import { AnimatedShinyText } from "../../components/ui/animated-shiny-text"
 import { DrainingIndicator } from "../../components/messages/DrainingIndicator"
 import { QueuedUserMessage } from "../../components/messages/QueuedUserMessage"
 import { OpenLocalLinkProvider, type OpenLocalLinkTarget } from "../../components/messages/shared"
-import { SubagentTranscriptFetchProvider, type GetSubagentTranscript } from "../../components/messages/subagent-fetch-context"
+import { SubagentTranscriptFetchProvider } from "../../components/messages/subagent-fetch-context"
 import { ProcessingMessage } from "../../components/messages/ProcessingMessage"
 import { ContextMenu, ContextMenuTrigger } from "../../components/ui/context-menu"
 import { OpenExternalContextMenuContent } from "../../components/open-external-menu"
@@ -16,17 +16,15 @@ import { cn } from "../../lib/utils"
 import { shouldOpenLocalFileLinkInEditor } from "../../lib/pathUtils"
 import {
   buildResolvedTranscriptRows,
-  EMPTY_CRON_JOBS,
   KannaTranscriptRow,
   type ResolvedTranscriptRow,
   useStableResolvedRows,
 } from "../KannaTranscript"
-import type { CronJobSnapshot } from "../../../shared/cron/types"
+import { useTranscriptActions } from "../transcriptActionsContext"
 import { CronJobsSection } from "../CronJobsSection"
 import { buildTranscriptGapClassMap } from "../transcriptSpacing"
 import type { KannaState } from "../useKannaState"
-import type { AutoContinueSchedule, ChatBackgroundTask, CloudflareTunnelRecord, LoopProgressSnapshot, SubagentRunSnapshot } from "../../../shared/types"
-import type { ToolRequestDecision } from "../../../shared/permission-policy"
+import type { SubagentRunSnapshot } from "../../../shared/types"
 import { SubagentMessage } from "../../components/messages/SubagentMessage"
 import { SubagentPendingToolCard } from "../../components/messages/SubagentPendingToolCard"
 import { AskUserQuestionMessage } from "../../components/messages/AskUserQuestionMessage"
@@ -39,8 +37,6 @@ import {
   CHAT_NAVBAR_OFFSET_PX,
   EMPTY_STATE_TEXT,
 } from "./utils"
-import type { EditorPreset } from "../../../shared/protocol"
-import type { WorkflowRun, WorkflowRunSummary } from "../../../shared/workflow-types"
 import { WorkflowsSectionWithDetail } from "../WorkflowsSection"
 import { domAdapter } from "../../adapters/dom.adapter"
 import { timerAdapter } from "../../adapters/timer.adapter"
@@ -48,6 +44,11 @@ import type { DomPort } from "../../ports/domPort"
 import type { TimerPort } from "../../ports/timerPort"
 import { LoopProgressSection } from "../LoopProgressSection"
 import { BackgroundTasksSection } from "../BackgroundTasksSection"
+import {
+  extractDelegateCalls,
+  matchRunsToDelegateCalls,
+  DELEGATE_SUBAGENT_TOOL_NAME,
+} from "../subagent-run-placement"
 
 export interface ChatTranscriptViewportPorts {
   dom?: DomPort
@@ -111,47 +112,10 @@ interface ChatTranscriptViewportProps {
   activeChatId: string | null
   listRef: React.RefObject<LegendListRef | null>
   messages: KannaState["messages"]
-  queuedMessages: KannaState["queuedMessages"]
   transcriptPaddingBottom: number
-  localPath: string | null | undefined
-  latestToolIds: KannaState["latestToolIds"]
   isHistoryLoading: boolean
   hasOlderHistory: boolean
-  isProcessing: boolean
-  runtimeStatus: string | null
-  isDraining: boolean
-  commandError: string | null
   loadOlderHistory: () => Promise<void>
-  onStopDraining: () => void
-  onSteerQueuedMessage: (queuedMessageId: string) => Promise<void>
-  onRemoveQueuedMessage: (queuedMessageId: string) => Promise<void>
-  onOpenLocalLink: KannaState["handleOpenLocalLink"]
-  onAskUserQuestionSubmit: KannaState["handleAskUserQuestion"]
-  onExitPlanModeConfirm: KannaState["handleExitPlanMode"]
-  onToolRequestAnswer?: (toolRequestId: string, decision: ToolRequestDecision) => void
-  onSubagentAskUserQuestionSubmit?: KannaState["handleSubagentAskUserQuestion"]
-  onSubagentExitPlanModeSubmit?: KannaState["handleSubagentExitPlanMode"]
-  schedules: Record<string, AutoContinueSchedule>
-  cronJobs?: readonly CronJobSnapshot[]
-  onCronPause?: (jobId: string) => void
-  onCronResume?: (jobId: string) => void
-  onCronRemove?: (jobId: string) => void
-  onAutoContinueAccept: (scheduleId: string, scheduledAt: number) => void
-  onAutoContinueReschedule: (scheduleId: string, scheduledAt: number) => void
-  onAutoContinueCancel: (scheduleId: string) => void
-  onRetryFailedTurn?: (resultMessageId: string) => void | Promise<void>
-  tunnels?: Record<string, CloudflareTunnelRecord>
-  liveTunnelId?: string | null
-  onTunnelAccept?: (tunnelId: string) => void | Promise<void>
-  onTunnelStop?: (tunnelId: string) => void | Promise<void>
-  onTunnelRetry?: (tunnelId: string) => void | Promise<void>
-  subagentRuns?: Record<string, SubagentRunSnapshot>
-  onCancelSubagentRun?: (chatId: string, runId: string) => void
-  loopProgress?: LoopProgressSnapshot
-  workflowRuns?: WorkflowRunSummary[]
-  backgroundTasks?: ChatBackgroundTask[]
-  getWorkflowRunDetail?: (runId: string) => Promise<WorkflowRun | null>
-  getSubagentTranscript?: GetSubagentTranscript
   showScrollButton: boolean
   onIsAtEndChange: (isAtEnd: boolean) => void
   scrollToBottom: () => void
@@ -159,9 +123,7 @@ interface ChatTranscriptViewportProps {
   isEmptyStateTypingComplete: boolean
   isPageFileDragActive: boolean
   showEmptyState: boolean
-  editorPreset?: EditorPreset
-  editorCommandTemplate?: string
-  platform?: NodeJS.Platform
+  onOpenLocalLink: KannaState["handleOpenLocalLink"]
   headerOffsetPx?: number
   ports?: ChatTranscriptViewportPorts
 }
@@ -170,47 +132,10 @@ export const ChatTranscriptViewport = memo(({
   activeChatId,
   listRef,
   messages,
-  queuedMessages,
   transcriptPaddingBottom,
-  localPath,
-  latestToolIds,
   isHistoryLoading,
   hasOlderHistory,
-  isProcessing,
-  runtimeStatus,
-  isDraining,
-  commandError,
   loadOlderHistory,
-  onStopDraining,
-  onSteerQueuedMessage,
-  onRemoveQueuedMessage,
-  onOpenLocalLink,
-  onAskUserQuestionSubmit,
-  onExitPlanModeConfirm,
-  onToolRequestAnswer,
-  onSubagentAskUserQuestionSubmit,
-  onSubagentExitPlanModeSubmit,
-  schedules,
-  cronJobs = EMPTY_CRON_JOBS,
-  onCronPause,
-  onCronResume,
-  onCronRemove,
-  onAutoContinueAccept,
-  onAutoContinueReschedule,
-  onAutoContinueCancel,
-  onRetryFailedTurn,
-  tunnels,
-  liveTunnelId,
-  onTunnelAccept,
-  onTunnelStop,
-  onTunnelRetry,
-  subagentRuns,
-  onCancelSubagentRun,
-  loopProgress,
-  workflowRuns,
-  backgroundTasks,
-  getWorkflowRunDetail,
-  getSubagentTranscript,
   showScrollButton,
   onIsAtEndChange,
   scrollToBottom,
@@ -218,18 +143,52 @@ export const ChatTranscriptViewport = memo(({
   isEmptyStateTypingComplete,
   isPageFileDragActive,
   showEmptyState,
-  editorPreset = "cursor",
-  editorCommandTemplate,
-  platform = "darwin",
+  onOpenLocalLink,
   headerOffsetPx = CHAT_NAVBAR_OFFSET_PX,
   ports,
 }: ChatTranscriptViewportProps) => {
+  const {
+    localPath,
+    latestToolIds,
+    isProcessing,
+    queuedMessages,
+    runtimeStatus,
+    isDraining,
+    commandError,
+    onStopDraining,
+    onSteerQueuedMessage,
+    onRemoveQueuedMessage,
+    onAskUserQuestionSubmit,
+    onSubagentAskUserQuestionSubmit,
+    onSubagentExitPlanModeSubmit,
+    schedules,
+    cronJobs,
+    onCronPause,
+    onCronResume,
+    onCronRemove,
+    onAutoContinueAccept,
+    tunnels,
+    liveTunnelId,
+    onTunnelAccept,
+    onTunnelStop,
+    onTunnelRetry,
+    subagentRuns,
+    onCancelSubagentRun,
+    loopProgress,
+    workflowRuns,
+    backgroundTasks,
+    getWorkflowRunDetail,
+    getSubagentTranscript,
+    editorPreset,
+    editorCommandTemplate,
+    platform,
+  } = useTranscriptActions()
+
   const dom = ports?.dom ?? domAdapter
   const timer = ports?.timer ?? timerAdapter
   const previousRowCountRef = useRef(0)
   const localLinkMenuTriggerRef = useRef<HTMLSpanElement | null>(null)
   const toolGroupExpanded = ChatTabScopedStore.useScopedStore((s) => s.toolGroupExpanded)
-  const setToolGroupExpanded = ChatTabScopedStore.useScopedStore((s) => s.setToolGroupExpanded)
   const resetToolGroupExpanded = ChatTabScopedStore.useScopedStore((s) => s.resetToolGroupExpanded)
   const localLinkMenuTarget = useChatPageStore((s) => s.localLinkMenuTarget)
   const setLocalLinkMenuTarget = useChatPageStore((s) => s.setLocalLinkMenuTarget)
@@ -266,26 +225,24 @@ export const ChatTranscriptViewport = memo(({
     return () => timer.cancelAnimationFrame(frameId)
   }, [listRef, onIsAtEndChange, resolvedRows.length, timer])
 
-  const { runsByUserMessageId, childrenByParentRunId } = useMemo(() => {
-    const topByUser = new Map<string, SubagentRunSnapshot[]>()
+  const { runsByDelegateToolId, childrenByParentRunId } = useMemo(() => {
+    const delegateCalls = extractDelegateCalls(messages)
+    const topLevelRuns = Object.values(subagentRuns).filter((r) => r.parentRunId === null)
+    const { matched } = matchRunsToDelegateCalls(delegateCalls, topLevelRuns)
+
     const byParent = new Map<string, SubagentRunSnapshot[]>()
-    for (const run of Object.values(subagentRuns ?? {})) {
-      if (run.parentRunId === null) {
-        const list = topByUser.get(run.parentUserMessageId) ?? []
-        list.push(run)
-        topByUser.set(run.parentUserMessageId, list)
-      } else {
-        const list = byParent.get(run.parentRunId) ?? []
-        list.push(run)
-        byParent.set(run.parentRunId, list)
-      }
+    for (const run of Object.values(subagentRuns)) {
+      if (run.parentRunId === null) continue
+      const list = byParent.get(run.parentRunId) ?? []
+      list.push(run)
+      byParent.set(run.parentRunId, list)
     }
     const cmp = (a: SubagentRunSnapshot, b: SubagentRunSnapshot) =>
       a.startedAt - b.startedAt || a.runId.localeCompare(b.runId)
-    for (const list of topByUser.values()) list.sort(cmp)
     for (const list of byParent.values()) list.sort(cmp)
-    return { runsByUserMessageId: topByUser, childrenByParentRunId: byParent }
-  }, [subagentRuns])
+
+    return { runsByDelegateToolId: matched, childrenByParentRunId: byParent }
+  }, [messages, subagentRuns])
 
   // Any subagent run (top-level or nested) awaiting a user response. Surfaced
   // at the footer so a question never stays buried under its historical
@@ -296,34 +253,27 @@ export const ChatTranscriptViewport = memo(({
     [messages, latestToolIds],
   )
 
-  const renderRunTree = useCallback((run: SubagentRunSnapshot, depth: number): React.ReactNode => {
-    const children = childrenByParentRunId.get(run.runId) ?? []
-    return (
-      <React.Fragment key={run.runId}>
-        <SubagentMessage
-          run={run}
-          indentDepth={depth}
-          localPath={localPath ?? ""}
-          onSubagentAskUserQuestionSubmit={onSubagentAskUserQuestionSubmit}
-          onSubagentExitPlanModeSubmit={onSubagentExitPlanModeSubmit}
-          onCancelSubagentRun={onCancelSubagentRun}
-          suppressPendingTool
-        />
-        {children.map((child) => renderRunTree(child, depth + 1))}
-      </React.Fragment>
-    )
-  }, [childrenByParentRunId, localPath, onSubagentAskUserQuestionSubmit, onSubagentExitPlanModeSubmit, onCancelSubagentRun])
-
-  const handleToolGroupExpandedChange = useCallback((groupId: string, next: boolean) => {
-    setToolGroupExpanded((current) => (
-      current[groupId] === next
-        ? current
-        : {
-            ...current,
-            [groupId]: next,
-          }
-    ))
-  }, [setToolGroupExpanded])
+  const renderRunTree = useMemo(
+    () =>
+      function renderRun(run: SubagentRunSnapshot, depth: number): React.ReactNode {
+        const children = childrenByParentRunId.get(run.runId) ?? []
+        return (
+          <React.Fragment key={run.runId}>
+            <SubagentMessage
+              run={run}
+              indentDepth={depth}
+              localPath={localPath ?? ""}
+              onSubagentAskUserQuestionSubmit={onSubagentAskUserQuestionSubmit}
+              onSubagentExitPlanModeSubmit={onSubagentExitPlanModeSubmit}
+              onCancelSubagentRun={onCancelSubagentRun}
+              suppressPendingTool
+            />
+            {children.map((child) => renderRun(child, depth + 1))}
+          </React.Fragment>
+        )
+      },
+    [childrenByParentRunId, localPath, onSubagentAskUserQuestionSubmit, onSubagentExitPlanModeSubmit, onCancelSubagentRun],
+  )
 
   const handleScroll = useCallback((event?: AnyValue) => {
     const currentTarget = (
@@ -397,10 +347,12 @@ export const ChatTranscriptViewport = memo(({
   }, [dom, onOpenLocalLink, setLocalLinkMenuTarget, timer])
 
   const renderItem = useCallback(({ item }: { item: ResolvedTranscriptRow }) => {
-    const userMessageId = item.kind === "single" && item.message.kind === "user_prompt"
-      ? item.message.id
+    const delegateToolId = item.kind === "single"
+      && item.message.kind === "tool"
+      && item.message.toolName === DELEGATE_SUBAGENT_TOOL_NAME
+      ? item.message.toolId
       : null
-    const rowRuns = userMessageId ? runsByUserMessageId.get(userMessageId) ?? [] : []
+    const run = delegateToolId != null ? runsByDelegateToolId.get(delegateToolId) : null
     return (
       <div
         className={cn("mx-auto w-full max-w-[800px]", gapClassByRowId.get(item.id) ?? "pt-4")}
@@ -409,23 +361,11 @@ export const ChatTranscriptViewport = memo(({
         <KannaTranscriptRow
           row={item}
           toolGroupExpanded={item.kind === "tool-group" ? (toolGroupExpanded[item.id] ?? false) : undefined}
-          onToolGroupExpandedChange={handleToolGroupExpandedChange}
-          onAskUserQuestionSubmit={onAskUserQuestionSubmit}
-          onExitPlanModeConfirm={onExitPlanModeConfirm}
-          onToolRequestAnswer={onToolRequestAnswer}
-          schedules={schedules}
-          cronJobs={cronJobs}
-          onAutoContinueAccept={onAutoContinueAccept}
-          onAutoContinueReschedule={onAutoContinueReschedule}
-          onAutoContinueCancel={onAutoContinueCancel}
-          onRetryFailedTurn={onRetryFailedTurn}
-          onCronRemove={onCronRemove}
-          chatId={activeChatId ?? undefined}
         />
-        {rowRuns.map((run) => renderRunTree(run, 0))}
+        {run ? renderRunTree(run, 0) : null}
       </div>
     )
-  }, [handleToolGroupExpandedChange, onAskUserQuestionSubmit, onExitPlanModeConfirm, onToolRequestAnswer, schedules, cronJobs, onAutoContinueAccept, onAutoContinueReschedule, onAutoContinueCancel, onRetryFailedTurn, onCronRemove, toolGroupExpanded, runsByUserMessageId, renderRunTree, activeChatId, gapClassByRowId])
+  }, [toolGroupExpanded, runsByDelegateToolId, renderRunTree, gapClassByRowId])
 
   const listHeader = (
     <div className="mx-auto w-full max-w-[800px]" style={{ paddingTop: `${headerOffsetPx}px` }}>

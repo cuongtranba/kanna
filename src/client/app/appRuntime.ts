@@ -4,56 +4,13 @@ import type { DomPort } from "../ports/domPort"
 import type { TimerPort } from "../ports/timerPort"
 import type { SocketStatus } from "./socket"
 import type { UpdateSnapshot } from "../../shared/types"
+import { sameDiffs } from "../../shared/equality"
 
 // ---------------------------------------------------------------------------
 // Diff preservation (extracted from useAppGlobalState for testability)
 // ---------------------------------------------------------------------------
 
-export function sameDiffs(
-  left: ChatDiffSnapshot | null | undefined,
-  right: ChatDiffSnapshot | null | undefined,
-): boolean {
-  if (left === right) return true
-  if (!left || !right) return false
-  if (left.status !== right.status) return false
-  if (left.branchName !== right.branchName) return false
-  if (left.defaultBranchName !== right.defaultBranchName) return false
-  if (left.hasOriginRemote !== right.hasOriginRemote) return false
-  if (left.originRepoSlug !== right.originRepoSlug) return false
-  if (left.hasUpstream !== right.hasUpstream) return false
-  if (left.aheadCount !== right.aheadCount) return false
-  if (left.behindCount !== right.behindCount) return false
-  if (left.lastFetchedAt !== right.lastFetchedAt) return false
-  const leftHistory = left.branchHistory?.entries ?? []
-  const rightHistory = right.branchHistory?.entries ?? []
-  if (leftHistory.length !== rightHistory.length) return false
-  const sameBranchHistory = leftHistory.every((entry, index) => {
-    const other = rightHistory[index]
-    return Boolean(other)
-      && entry.sha === other.sha
-      && entry.summary === other.summary
-      && entry.description === other.description
-      && entry.authorName === other.authorName
-      && entry.authoredAt === other.authoredAt
-      && entry.githubUrl === other.githubUrl
-      && entry.tags.length === other.tags.length
-      && entry.tags.every((tag, tagIndex) => tag === other.tags[tagIndex])
-  })
-  if (!sameBranchHistory) return false
-  if (left.files.length !== right.files.length) return false
-  return left.files.every((file, index) => {
-    const other = right.files[index]
-    return Boolean(other)
-      && file.path === other.path
-      && file.changeType === other.changeType
-      && file.isUntracked === other.isUntracked
-      && file.additions === other.additions
-      && file.deletions === other.deletions
-      && file.patchDigest === other.patchDigest
-      && file.mimeType === other.mimeType
-      && file.size === other.size
-  })
-}
+export { sameDiffs }
 
 export function shouldPreserveExistingProjectDiffs(
   current: ChatDiffSnapshot | null | undefined,
