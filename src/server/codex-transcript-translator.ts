@@ -354,7 +354,7 @@ function parseUnifiedDiff(diff: string): { oldString: string; newString: string 
   }
 }
 
-function isUnifiedDiff(diff: string) {
+export function isUnifiedDiff(diff: string) {
   return diff.includes("@@")
     || diff.startsWith("---")
     || diff.startsWith("+++")
