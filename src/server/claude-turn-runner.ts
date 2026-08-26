@@ -132,57 +132,67 @@ export async function runTurn(deps: RunTurnDeps, active: ActiveTurn): Promise<vo
       // cancel() already removed us from activeTurns and notified the UI.
       if (active.cancelRequested) break
 
-      if (event.type === "session_token" && event.sessionToken) {
-        await deps.store.setSessionTokenForProvider(active.chatId, active.provider, event.sessionToken)
-        const chat = deps.store.getChat(active.chatId)
-        if (
-          chat?.pendingForkSessionToken
-          && event.sessionToken !== chat.pendingForkSessionToken.token
-        ) {
-          await deps.store.setPendingForkSessionToken(active.chatId, null)
+      switch (event.type) {
+        case "session_token": {
+          await deps.store.setSessionTokenForProvider(active.chatId, active.provider, event.sessionToken)
+          const chat = deps.store.getChat(active.chatId)
+          if (
+            chat?.pendingForkSessionToken
+            && event.sessionToken !== chat.pendingForkSessionToken.token
+          ) {
+            await deps.store.setPendingForkSessionToken(active.chatId, null)
+          }
+          deps.emitStateChange(active.chatId)
+          continue
         }
-        deps.emitStateChange(active.chatId)
-        continue
-      }
 
-      if (!event.entry) continue
+        case "rate_limit": break
 
-      // The whole point of a summarize turn is that its prose becomes the
-      // context, not another transcript message — so it is accumulated and
-      // written once as a `compact_summary` below. Codex emits one
-      // assistant_text per item, so transforming each in place would produce
-      // N summaries for one compaction.
-      if (isCodexSummary && event.entry.kind === "assistant_text") {
-        summaryParts.push(event.entry.text)
-        continue
-      }
+        case "transcript": {
+          // The whole point of a summarize turn is that its prose becomes the
+          // context, not another transcript message — so it is accumulated and
+          // written once as a `compact_summary` below. Codex emits one
+          // assistant_text per item, so transforming each in place would produce
+          // N summaries for one compaction.
+          if (isCodexSummary && event.entry.kind === "assistant_text") {
+            summaryParts.push(event.entry.text)
+            continue
+          }
 
-      await deps.store.appendMessage(active.chatId, event.entry)
+          await deps.store.appendMessage(active.chatId, event.entry)
 
-      if (event.entry.kind === "system_init") {
-        active.status = "running"
-      }
+          if (event.entry.kind === "system_init") {
+            active.status = "running"
+          }
 
-      if (event.entry.kind === "result") {
-        active.hasFinalResult = true
-        // Stashed before the terminal record, which is what fires the observer
-        // that records token spend — see ActiveTurn.usage.
-        active.usage = billedUsageOfResult(event.entry)
-        if (event.entry.isError) {
-          await deps.store.recordTurnFailed(active.chatId, event.entry.result || "Turn failed")
-        } else if (!active.cancelRequested) {
-          await deps.store.recordTurnFinished(active.chatId)
-          await finalizeCodexSummary(deps, active, summaryParts)
+          if (event.entry.kind === "result") {
+            active.hasFinalResult = true
+            // Stashed before the terminal record, which is what fires the observer
+            // that records token spend — see ActiveTurn.usage.
+            active.usage = billedUsageOfResult(event.entry)
+            if (event.entry.isError) {
+              await deps.store.recordTurnFailed(active.chatId, event.entry.result || "Turn failed")
+            } else if (!active.cancelRequested) {
+              await deps.store.recordTurnFinished(active.chatId)
+              await finalizeCodexSummary(deps, active, summaryParts)
+            }
+            // Remove from activeTurns as soon as the result arrives so the UI
+            // transitions to idle immediately. The stream may still be open
+            // (e.g. background tasks), but the user should be able to send
+            // new messages without having to hit stop first.
+            deps.activeTurns.delete(active.chatId)
+            deps.drainingStreams.set(active.chatId, { turn: active.turn })
+          }
+
+          deps.emitStateChange(active.chatId)
+          break
         }
-        // Remove from activeTurns as soon as the result arrives so the UI
-        // transitions to idle immediately. The stream may still be open
-        // (e.g. background tasks), but the user should be able to send
-        // new messages without having to hit stop first.
-        deps.activeTurns.delete(active.chatId)
-        deps.drainingStreams.set(active.chatId, { turn: active.turn })
-      }
 
-      deps.emitStateChange(active.chatId)
+        default: {
+          const _never: never = event
+          void _never
+        }
+      }
     }
   } catch (error) {
     if (!active.cancelRequested) {

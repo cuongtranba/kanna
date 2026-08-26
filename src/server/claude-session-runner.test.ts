@@ -1195,12 +1195,12 @@ describe("runClaudeSession — self-wake + out-of-turn parked requests", () => {
 
     let answered: unknown = null
     session.session.stream = (async function* () {
-      yield { type: "entry", entry: fakeToolCallEntry() }
+      yield { type: "transcript", entry: fakeToolCallEntry() }
       parkOutOfTurn(pendingTools, session.chatId, "toolu_q", (v) => { answered = v })
       const taken = pendingTools.take(session.chatId, "toolu_q")
       taken?.resolve({ answers: { q1: "brides" } })
-      yield { type: "entry", entry: fakeToolCallEntry() }
-      yield { type: "entry", entry: fakeResultEntry(false) }
+      yield { type: "transcript", entry: fakeToolCallEntry() }
+      yield { type: "transcript", entry: fakeResultEntry(false) }
     })() as AsyncIterable<HarnessEvent>
 
     await runClaudeSession(deps, session)
@@ -1220,9 +1220,9 @@ describe("runClaudeSession — self-wake + out-of-turn parked requests", () => {
 
     const deps = makeDeps(session, { pendingTools })
     session.session.stream = (async function* () {
-      yield { type: "entry", entry: fakeToolCallEntry() }
+      yield { type: "transcript", entry: fakeToolCallEntry() }
       parkOutOfTurn(pendingTools, session.chatId, "toolu_q", (v) => { resolved.push(v) })
-      yield { type: "entry", entry: fakeResultEntry(false) }
+      yield { type: "transcript", entry: fakeResultEntry(false) }
     })() as AsyncIterable<HarnessEvent>
 
     await runClaudeSession(deps, session)
@@ -1263,7 +1263,7 @@ describe("runClaudeSession — self-wake + out-of-turn parked requests", () => {
       pendingTools,
       activeTurns: new Map([[session.chatId, active]]),
     })
-    session.session.stream = fakeStream([{ type: "entry", entry: fakeResultEntry(false) }] as unknown as HarnessEvent[])
+    session.session.stream = fakeStream([{ type: "transcript", entry: fakeResultEntry(false) }])
 
     await runClaudeSession(deps, session)
 
@@ -1284,7 +1284,7 @@ describe("runClaudeSession — self-wake + out-of-turn parked requests", () => {
         recordTurnFinished: async (chatId) => { finishedFor.push(chatId) },
       },
     })
-    session.session.stream = fakeStream([{ type: "entry", entry: fakeResultEntry(false) }] as unknown as HarnessEvent[])
+    session.session.stream = fakeStream([{ type: "transcript", entry: fakeResultEntry(false) }])
 
     await runClaudeSession(deps, session)
 
@@ -1303,7 +1303,7 @@ describe("runClaudeSession — self-wake + out-of-turn parked requests", () => {
         recordTurnFinished: async (chatId) => { finishedFor.push(chatId) },
       },
     })
-    session.session.stream = fakeStream([{ type: "entry", entry: fakeResultEntry(false) }] as unknown as HarnessEvent[])
+    session.session.stream = fakeStream([{ type: "transcript", entry: fakeResultEntry(false) }])
 
     await runClaudeSession(deps, session)
 
@@ -1350,7 +1350,7 @@ describe("runClaudeSession — mermaid guard", () => {
       },
     })
     session.session.stream = fakeStream(
-      entries.map((entry) => ({ type: "entry", entry })) as unknown as HarnessEvent[],
+      entries.map((entry) => ({ type: "transcript" as const, entry })),
     )
     return { deps, session, calls, order }
   }

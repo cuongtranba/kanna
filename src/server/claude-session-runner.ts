@@ -190,51 +190,52 @@ export async function runClaudeSession(
   }
   try {
     let simulateLimit = deps.throwOnClaudeSessionStart
-    for await (const event of session.session.stream) {
+    loop: for await (const event of session.session.stream) {
       if (simulateLimit) {
         simulateLimit = false
         throw new Error("simulated rate limit")
       }
-      if (event.type === "session_token" && event.sessionToken) {
-        session.sessionToken = event.sessionToken
-        // Persist only when this session is still current, no cancel is in
-        // flight, and no /clear suppressed it. A cancelled spawn can emit
-        // its session_token AFTER the user interrupted — the CLI may never
-        // persist that conversation, so storing the token would poison the
-        // next `--resume` ("No conversation found with session ID"). A
-        // /clear (setup_loop, background delivery) mid-stream must likewise
-        // not be resurrected by the old conversation's next token event.
-        const isCurrentSession = deps.claudeSessions.get(session.chatId) === session
-        if (
-          isCurrentSession
-          && session.cancelledResultPending === 0
-          && !session.suppressSessionTokenPersist
-        ) {
-          await deps.store.setSessionTokenForProvider(session.chatId, "claude", event.sessionToken)
+      switch (event.type) {
+        case "session_token": {
+          session.sessionToken = event.sessionToken
+          // Persist only when this session is still current, no cancel is in
+          // flight, and no /clear suppressed it. A cancelled spawn can emit
+          // its session_token AFTER the user interrupted — the CLI may never
+          // persist that conversation, so storing the token would poison the
+          // next `--resume` ("No conversation found with session ID"). A
+          // /clear (setup_loop, background delivery) mid-stream must likewise
+          // not be resurrected by the old conversation's next token event.
+          const isCurrentSession = deps.claudeSessions.get(session.chatId) === session
+          if (
+            isCurrentSession
+            && session.cancelledResultPending === 0
+            && !session.suppressSessionTokenPersist
+          ) {
+            await deps.store.setSessionTokenForProvider(session.chatId, "claude", event.sessionToken)
+          }
+          deps.maybeRegisterSdkWorkflowsDir(session)
+          deps.emitStateChange(session.chatId)
+          continue
         }
-        deps.maybeRegisterSdkWorkflowsDir(session)
-        deps.emitStateChange(session.chatId)
-        continue
-      }
 
-      if (event.type === "rate_limit" && event.rateLimit) {
-        // Stale rate_limit events from a session that has already been
-        // rotated away must not trigger another rotation/continue.
-        if (deps.claudeSessions.get(session.chatId) !== session) continue
-        await deps.handleLimitDetection(session.chatId, {
-          chatId: session.chatId,
-          resetAt: event.rateLimit.resetAt,
-          tz: event.rateLimit.tz,
-          raw: event,
-        })
-        if (deps.claudeSessions.get(session.chatId) !== session) break
-        continue
-      }
+        case "rate_limit": {
+          // Stale rate_limit events from a session that has already been
+          // rotated away must not trigger another rotation/continue.
+          if (deps.claudeSessions.get(session.chatId) !== session) continue
+          await deps.handleLimitDetection(session.chatId, {
+            chatId: session.chatId,
+            resetAt: event.rateLimit.resetAt,
+            tz: event.rateLimit.tz,
+            raw: event,
+          })
+          if (deps.claudeSessions.get(session.chatId) !== session) break loop
+          continue
+        }
 
-      if (!event.entry) continue
-      firstEntrySeen = true
-      clearFirstEntryWatchdog()
-      if (deps.claudeSessions.get(session.chatId) !== session) break
+        case "transcript": {
+          firstEntrySeen = true
+          clearFirstEntryWatchdog()
+          if (deps.claudeSessions.get(session.chatId) !== session) break loop
       // Suppress the interrupt-induced tail `result` of a cancelled turn.
       // cancel() already removed the active turn, recorded the cancellation,
       // and appended the `interrupted` entry; the SDK then emits one error
@@ -590,9 +591,17 @@ export async function runClaudeSession(
         }
       }
 
-      if (event.entry.kind === "result") turnAssistantText = []
+          if (event.entry.kind === "result") turnAssistantText = []
 
-      deps.emitStateChange(session.chatId)
+          deps.emitStateChange(session.chatId)
+          break
+        }
+
+        default: {
+          const _never: never = event
+          void _never
+        }
+      }
     }
   } catch (error) {
     const active = deps.activeTurns.get(session.chatId)

@@ -276,7 +276,8 @@ describe("createJsonlEventParser", () => {
     })
     const events = parser.parse(resultLine)
     const ctx = events.find(
-      (e) => e.type === "transcript" && (e.entry as { kind?: string }).kind === "context_window_updated",
+      (e): e is Extract<HarnessEvent, { type: "transcript" }> =>
+        e.type === "transcript" && (e.entry as { kind?: string }).kind === "context_window_updated",
     )
     const usage = (ctx?.entry as { usage?: { maxTokens?: number } } | undefined)?.usage
     expect(usage?.maxTokens).toBe(1_000_000)
@@ -395,7 +396,8 @@ describe("createJsonlEventParser", () => {
     }
     function resultEntries(events: HarnessEvent[]) {
       return events.filter(
-        (e) => e.type === "transcript" && (e.entry as { kind?: string }).kind === "result",
+        (e): e is Extract<HarnessEvent, { type: "transcript" }> =>
+          e.type === "transcript" && (e.entry as { kind?: string }).kind === "result",
       )
     }
 
@@ -549,7 +551,8 @@ describe("createJsonlEventParser", () => {
     }
     function resultEntries(events: HarnessEvent[]) {
       return events.filter(
-        (e) => e.type === "transcript" && (e.entry as { kind?: string }).kind === "result",
+        (e): e is Extract<HarnessEvent, { type: "transcript" }> =>
+          e.type === "transcript" && (e.entry as { kind?: string }).kind === "result",
       )
     }
 
@@ -847,7 +850,8 @@ describe("createJsonlEventParser", () => {
     }
     function resultEntries(events: HarnessEvent[]) {
       return events.filter(
-        (e) => e.type === "transcript" && (e.entry as { kind?: string }).kind === "result",
+        (e): e is Extract<HarnessEvent, { type: "transcript" }> =>
+          e.type === "transcript" && (e.entry as { kind?: string }).kind === "result",
       )
     }
 

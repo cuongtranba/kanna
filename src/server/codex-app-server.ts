@@ -445,12 +445,22 @@ export class CodexAppServerManager {
       })
 
       for await (const event of turn.stream) {
-        if (event.type !== "transcript" || !event.entry) continue
-        if (event.entry.kind === "assistant_text") {
-          assistantText += assistantText ? `\n${event.entry.text}` : event.entry.text
-        }
-        if (event.entry.kind === "result" && !event.entry.isError && event.entry.result.trim()) {
-          resultText = event.entry.result
+        switch (event.type) {
+          case "session_token": break
+          case "rate_limit": break
+          case "transcript": {
+            if (event.entry.kind === "assistant_text") {
+              assistantText += assistantText ? `\n${event.entry.text}` : event.entry.text
+            }
+            if (event.entry.kind === "result" && !event.entry.isError && event.entry.result.trim()) {
+              resultText = event.entry.result
+            }
+            break
+          }
+          default: {
+            const _never: never = event
+            void _never
+          }
         }
       }
 
