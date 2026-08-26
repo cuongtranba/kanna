@@ -143,6 +143,12 @@ export interface StartCodexSessionArgs {
   serviceTier?: ServiceTier
   sessionToken: string | null
   pendingForkSessionToken?: string | null
+  /**
+   * Forwarded into `ThreadStartParams.developerInstructions` on `thread/start`.
+   * Empty / whitespace-only sends `null`. Mirrors the Claude `--append-system-prompt`
+   * channel. Setting this mid-chat requires a thread restart to take effect.
+   */
+  developerInstructions?: string
 }
 
 export interface StartCodexTurnArgs {
@@ -155,12 +161,6 @@ export interface StartCodexTurnArgs {
   planMode: boolean
   onToolRequest: (request: HarnessToolRequest) => Promise<unknown>
   onApprovalRequest?: PendingTurn["onApprovalRequest"]
-  /**
-   * Forwarded into `collaborationMode.settings.developer_instructions` on
-   * `turn/start`. Empty / whitespace-only sends `null` (Codex-native absent).
-   * Mirrors the Claude `--append-system-prompt` channel for global prompts.
-   */
-  developerInstructions?: string
 }
 
 export interface GenerateStructuredArgs {
@@ -290,6 +290,7 @@ export class CodexAppServerManager {
       sandbox: "danger-full-access",
       experimentalRawEvents: false,
       persistExtendedHistory: false,
+      developerInstructions: args.developerInstructions?.trim() || null,
     } satisfies ThreadStartParams
 
     let response: ThreadStartResponse | ThreadResumeResponse | ThreadForkResponse
@@ -375,16 +376,6 @@ export class CodexAppServerManager {
         model: args.model,
         effort: args.effort,
         serviceTier: args.serviceTier,
-        collaborationMode: {
-          mode: args.planMode ? "plan" : "default",
-          settings: {
-            model: args.model,
-            reasoning_effort: null,
-            developer_instructions: args.developerInstructions?.trim()
-              ? args.developerInstructions.trim()
-              : null,
-          },
-        },
       } satisfies TurnStartParams)
       if (context.pendingTurn) {
         context.pendingTurn.turnId = response.turn.id

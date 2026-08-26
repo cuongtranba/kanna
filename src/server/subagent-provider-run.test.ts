@@ -392,16 +392,17 @@ describe("buildSubagentProviderRun – Codex", () => {
     expect(calls).toEqual(["startSession", "startTurn", "stopSession:sub:run-xyz"])
   })
 
-  test("passes globalPromptAppend through as developer_instructions when set", async () => {
-    let captured: StartCodexTurnArgs | undefined
+  test("passes globalPromptAppend through as developerInstructions on startSession", async () => {
+    let captured: StartCodexSessionArgs | undefined
     const args = makeArgs({
       subagent: makeSubagent({ provider: "codex", model: "gpt-5.5" }),
       runId: "run-di",
       globalPromptAppend: "Be terse.",
       codexManager: {
-        startSession: async () => {},
-        startTurn: async (turnArgs: StartCodexTurnArgs) => {
-          captured = turnArgs
+        startSession: async (sessionArgs: StartCodexSessionArgs) => {
+          captured = sessionArgs
+        },
+        startTurn: async (_turnArgs: StartCodexTurnArgs) => {
           return makeHarnessTurn([makeTextEvent("ok")])
         },
         stopSession: () => {},
@@ -412,15 +413,16 @@ describe("buildSubagentProviderRun – Codex", () => {
     expect(captured?.developerInstructions).toBe("Be terse.")
   })
 
-  test("omits developer_instructions when globalPromptAppend missing", async () => {
-    let captured: StartCodexTurnArgs | undefined
+  test("omits developerInstructions on startSession when globalPromptAppend missing", async () => {
+    let captured: StartCodexSessionArgs | undefined
     const args = makeArgs({
       subagent: makeSubagent({ provider: "codex", model: "gpt-5.5" }),
       runId: "run-no-di",
       codexManager: {
-        startSession: async () => {},
-        startTurn: async (turnArgs: StartCodexTurnArgs) => {
-          captured = turnArgs
+        startSession: async (sessionArgs: StartCodexSessionArgs) => {
+          captured = sessionArgs
+        },
+        startTurn: async (_turnArgs: StartCodexTurnArgs) => {
           return makeHarnessTurn([makeTextEvent("ok")])
         },
         stopSession: () => {},

@@ -36,6 +36,7 @@ export interface ThreadStartParams {
   sandbox?: "read-only" | "workspace-write" | "danger-full-access" | null
   experimentalRawEvents: boolean
   persistExtendedHistory: boolean
+  developerInstructions?: string | null
 }
 
 export interface ThreadResumeParams {
@@ -85,7 +86,6 @@ export interface TurnStartParams {
   model?: string | null
   effort?: ReasoningEffort | null
   serviceTier?: ServiceTier | null
-  collaborationMode?: CollaborationMode | null
 }
 
 export interface TurnInterruptParams {
