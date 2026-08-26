@@ -143,8 +143,7 @@ describe("byte-aware tail growth", () => {
       // Drive the tail read DIRECTLY so chunkBytes actually varies — going
       // through getRecentChatHistory would ignore it and make this tautological.
       type Deps = Parameters<typeof getRecentMessagesPageTail>[0]
-      const deps = (store as unknown as { buildMessageReadDeps: () => Deps })
-        .buildMessageReadDeps()
+      const deps = (store as unknown as { msgReadDeps: Deps }).msgReadDeps
       const cache = (deps as unknown as { transcriptCache: { invalidateTail: (id: string) => void } })
         .transcriptCache
 
