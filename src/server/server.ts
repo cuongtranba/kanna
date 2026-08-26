@@ -697,7 +697,7 @@ async function shutdownServices(services: ApplicationServices, server: Server<Cl
   await observability.shutdown()
   clearInterval(staleEmptyChatPruneInterval)
   clearInterval(followedSessionTickInterval)
-  for (const chatId of [...agent.activeTurns.keys()]) {
+  for (const chatId of agent.getActiveTurnChatIds()) {
     await agent.cancel(chatId)
   }
   await agent.drainCronOutcomes()

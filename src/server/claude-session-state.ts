@@ -424,6 +424,25 @@ export class ClaudeSessionState {
     if (wasEmpty && this.backgroundTasks.size > 0) this.backgroundTaskWakeCount = 0
     this.backgroundTaskDeadlineAt = this.backgroundTasks.size > 0 ? now + maxMs : 0
   }
+
+  hasBackgroundTasks(): boolean {
+    return this.backgroundTasks.size > 0
+  }
+
+  getBackgroundTaskEntries(): Array<[string, SessionBackgroundTask]> {
+    return [...this.backgroundTasks.entries()]
+  }
+
+  getBackgroundTaskIds(): string[] {
+    return [...this.backgroundTasks.keys()]
+  }
+
+  abandonBackgroundTasks(): string[] {
+    const ids = [...this.backgroundTasks.keys()]
+    this.backgroundTasks.clear()
+    this.backgroundTaskDeadlineAt = 0
+    return ids
+  }
 }
 
 /**

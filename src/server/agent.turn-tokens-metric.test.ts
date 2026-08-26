@@ -61,7 +61,7 @@ describe("kanna.turn.tokens", () => {
     recorder = startMetricRecorder()
     const store: TerminalStore = { onTurnTerminal: null }
     const coordinator = buildCoordinator(store)
-    coordinator.activeTurns.set("chat-1", activeTurn({
+    coordinator.getActiveTurnMap().set("chat-1", activeTurn({
       usage: { inputTokens: 1_000, cachedInputTokens: 400, outputTokens: 250 },
     }))
 
@@ -87,7 +87,7 @@ describe("kanna.turn.tokens", () => {
     recorder = startMetricRecorder()
     const store: TerminalStore = { onTurnTerminal: null }
     const coordinator = buildCoordinator(store)
-    coordinator.activeTurns.set("chat-1", activeTurn({
+    coordinator.getActiveTurnMap().set("chat-1", activeTurn({
       usage: { inputTokens: 900, cachedInputTokens: 400, outputTokens: 100 },
     }))
 
@@ -101,7 +101,7 @@ describe("kanna.turn.tokens", () => {
     recorder = startMetricRecorder()
     const store: TerminalStore = { onTurnTerminal: null }
     const coordinator = buildCoordinator(store)
-    coordinator.activeTurns.set("chat-1", activeTurn({
+    coordinator.getActiveTurnMap().set("chat-1", activeTurn({
       usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.25 },
     }))
 
@@ -119,7 +119,7 @@ describe("kanna.turn.tokens", () => {
     recorder = startMetricRecorder()
     const store: TerminalStore = { onTurnTerminal: null }
     const coordinator = buildCoordinator(store)
-    coordinator.activeTurns.set("chat-1", activeTurn({
+    coordinator.getActiveTurnMap().set("chat-1", activeTurn({
       usage: { inputTokens: 10, outputTokens: 5 },
     }))
 
@@ -134,7 +134,7 @@ describe("kanna.turn.tokens", () => {
     recorder = startMetricRecorder()
     const store: TerminalStore = { onTurnTerminal: null }
     const coordinator = buildCoordinator(store)
-    coordinator.activeTurns.set("chat-1", activeTurn({}))
+    coordinator.getActiveTurnMap().set("chat-1", activeTurn({}))
 
     store.onTurnTerminal?.("chat-1", "cancelled")
 

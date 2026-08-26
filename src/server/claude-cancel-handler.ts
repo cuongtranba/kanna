@@ -208,7 +208,7 @@ export async function cancelChat(
       // Mark the session so that any task completing AFTER this Stop cannot
       // re-enter the model via a self-wake. The user must re-engage explicitly
       // (chat.send) before task-notification wakes are allowed again.
-      if (session.backgroundTasks.size > 0) {
+      if (session.hasBackgroundTasks()) {
         session.backgroundTaskWakeSuppressed = true
       }
       // The SDK answers interrupt() with a tail error result (subtype
@@ -267,7 +267,7 @@ export async function cancelChat(
   // resumes the model as if the user never pressed Stop (issue #819).
   if (active.provider === "claude") {
     const sessionForWakeGate = deps.claudeSessions.get(chatId)
-    if (sessionForWakeGate && sessionForWakeGate.backgroundTasks.size > 0) {
+    if (sessionForWakeGate && sessionForWakeGate.hasBackgroundTasks()) {
       sessionForWakeGate.backgroundTaskWakeSuppressed = true
     }
   }

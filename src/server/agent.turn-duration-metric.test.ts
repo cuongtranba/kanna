@@ -59,7 +59,7 @@ describe("kanna.turn.duration_ms", () => {
     recorder = startMetricRecorder()
     const store: TerminalStore = { onTurnTerminal: null }
     const coordinator = buildCoordinator(store)
-    coordinator.activeTurns.set("chat-1", activeTurn({ startedAt: Date.now() - 5_000 }))
+    coordinator.getActiveTurnMap().set("chat-1", activeTurn({ startedAt: Date.now() - 5_000 }))
 
     store.onTurnTerminal?.("chat-1", "finished")
 
@@ -79,9 +79,9 @@ describe("kanna.turn.duration_ms", () => {
     const store: TerminalStore = { onTurnTerminal: null }
     const coordinator = buildCoordinator(store)
 
-    coordinator.activeTurns.set("chat-1", activeTurn({ startedAt: Date.now() - 1_000 }))
+    coordinator.getActiveTurnMap().set("chat-1", activeTurn({ startedAt: Date.now() - 1_000 }))
     store.onTurnTerminal?.("chat-1", "finished")
-    coordinator.activeTurns.set("chat-2", activeTurn({ chatId: "chat-2", startedAt: Date.now() - 1_000 }))
+    coordinator.getActiveTurnMap().set("chat-2", activeTurn({ chatId: "chat-2", startedAt: Date.now() - 1_000 }))
     store.onTurnTerminal?.("chat-2", "failed")
 
     const outcomes = (await recorder.histogram(TURN_DURATION_MS))
