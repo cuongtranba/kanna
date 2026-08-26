@@ -28,6 +28,7 @@ import type { AutoContinueEvent } from "./auto-continue/events"
 import type { WorkflowRegistry } from "./workflow-registry"
 import { AsyncEventQueue } from "./test-helpers/async-event-queue"
 import { waitFor } from "./test-helpers/wait-for"
+import { ClaudeSessionState } from "./claude-session-state"
 
 /**
  * Minimal in-memory WorkflowRegistry whose `hasActiveRun` reflects a per-chat
@@ -2229,7 +2230,7 @@ describe("AgentCoordinator claude integration", () => {
 
     function put(chatId: string, lastUsedAt: number) {
       const events = new AsyncEventQueue<any>()
-      coordinator.claudeSessions.set(chatId, {
+      coordinator.claudeSessions.set(chatId, new ClaudeSessionState({
         id: `state-${chatId}`,
         chatId,
         session: {
@@ -2256,10 +2257,23 @@ describe("AgentCoordinator claude integration", () => {
         nextPromptSeq: 0,
         pendingPromptSeqs: [],
         activeTokenId: null,
+        oauthKeyMasked: null,
+        oauthLabel: null,
+        openrouterKeyMasked: null,
+        openrouterModel: null,
         lastUsedAt,
         backgroundTasks: new Map(),
         backgroundTaskDeadlineAt: 0,
-      } as any)
+        backgroundTaskWakeCount: 0,
+        backgroundTasksLevelSourced: false,
+        selfWakeActive: false,
+        recentToolDescriptions: new Map(),
+        backgroundLaunchToolIds: new Set(),
+        loopArmedAtSpawn: false,
+        cancelledResultPending: 0,
+        suppressSessionTokenPersist: false,
+        backgroundTaskWakeSuppressed: false,
+      }))
     }
 
     put("chat-old", 1)
@@ -2290,7 +2304,7 @@ describe("AgentCoordinator claude integration", () => {
 
     function put(chatId: string) {
       const events = new AsyncEventQueue<any>()
-      coordinator.claudeSessions.set(chatId, {
+      coordinator.claudeSessions.set(chatId, new ClaudeSessionState({
         id: `state-${chatId}`,
         chatId,
         session: {
@@ -2314,10 +2328,23 @@ describe("AgentCoordinator claude integration", () => {
         nextPromptSeq: 0,
         pendingPromptSeqs: [],
         activeTokenId: null,
+        oauthKeyMasked: null,
+        oauthLabel: null,
+        openrouterKeyMasked: null,
+        openrouterModel: null,
         lastUsedAt: 0,
         backgroundTasks: new Map(),
         backgroundTaskDeadlineAt: 0,
-      } as any)
+        backgroundTaskWakeCount: 0,
+        backgroundTasksLevelSourced: false,
+        selfWakeActive: false,
+        recentToolDescriptions: new Map(),
+        backgroundLaunchToolIds: new Set(),
+        loopArmedAtSpawn: false,
+        cancelledResultPending: 0,
+        suppressSessionTokenPersist: false,
+        backgroundTaskWakeSuppressed: false,
+      }))
     }
 
     put("chat-wf")
@@ -2352,7 +2379,7 @@ describe("AgentCoordinator claude integration", () => {
 
     function put(chatId: string, lastUsedAt: number) {
       const events = new AsyncEventQueue<any>()
-      coordinator.claudeSessions.set(chatId, {
+      coordinator.claudeSessions.set(chatId, new ClaudeSessionState({
         id: `state-${chatId}`,
         chatId,
         session: {
@@ -2376,10 +2403,23 @@ describe("AgentCoordinator claude integration", () => {
         nextPromptSeq: 0,
         pendingPromptSeqs: [],
         activeTokenId: null,
+        oauthKeyMasked: null,
+        oauthLabel: null,
+        openrouterKeyMasked: null,
+        openrouterModel: null,
         lastUsedAt,
         backgroundTasks: new Map(),
         backgroundTaskDeadlineAt: 0,
-      } as any)
+        backgroundTaskWakeCount: 0,
+        backgroundTasksLevelSourced: false,
+        selfWakeActive: false,
+        recentToolDescriptions: new Map(),
+        backgroundLaunchToolIds: new Set(),
+        loopArmedAtSpawn: false,
+        cancelledResultPending: 0,
+        suppressSessionTokenPersist: false,
+        backgroundTaskWakeSuppressed: false,
+      }))
     }
 
     // chat-old is the LRU candidate but hosts a running workflow, so the
@@ -2626,7 +2666,7 @@ describe("AgentCoordinator claude integration", () => {
 
     function put(chatId: string, lastUsedAt: number, bg?: { ids: string[]; deadlineAt: number }) {
       const events = new AsyncEventQueue<any>()
-      coordinator.claudeSessions.set(chatId, {
+      coordinator.claudeSessions.set(chatId, new ClaudeSessionState({
         id: `state-${chatId}`,
         chatId,
         session: {
@@ -2650,10 +2690,23 @@ describe("AgentCoordinator claude integration", () => {
         nextPromptSeq: 0,
         pendingPromptSeqs: [],
         activeTokenId: null,
+        oauthKeyMasked: null,
+        oauthLabel: null,
+        openrouterKeyMasked: null,
+        openrouterModel: null,
         lastUsedAt,
         backgroundTasks: new Map((bg?.ids ?? []).map((id) => [id, { taskType: null, description: null, startedAt: 0, outputPath: null }] as const)),
         backgroundTaskDeadlineAt: bg?.deadlineAt ?? 0,
-      } as any)
+        backgroundTaskWakeCount: 0,
+        backgroundTasksLevelSourced: false,
+        selfWakeActive: false,
+        recentToolDescriptions: new Map(),
+        backgroundLaunchToolIds: new Set(),
+        loopArmedAtSpawn: false,
+        cancelledResultPending: 0,
+        suppressSessionTokenPersist: false,
+        backgroundTaskWakeSuppressed: false,
+      }))
     }
 
     // chat-old is the LRU candidate but has a pending background task → the

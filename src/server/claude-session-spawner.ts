@@ -37,7 +37,8 @@ import { maskOauthKey } from "../shared/mask-oauth-key"
 import { log } from "../shared/log"
 import { OAuthPoolUnavailableError } from "./oauth-errors"
 import type { ClaudeSessionHandle, HarnessTurn, HarnessToolRequest } from "./harness-types"
-import type { ActiveTurn, ClaudeSessionState, SessionBackgroundTask } from "./claude-session-state"
+import { ClaudeSessionState } from "./claude-session-state"
+import type { ActiveTurn, SessionBackgroundTask } from "./claude-session-state"
 import type { KannaMcpDelegationContext, SetupLoopHandlerResult } from "./kanna-mcp"
 import type { LoopSetupInput } from "./loop-template"
 import type { BoardRegistry } from "./board-registry"
@@ -336,7 +337,7 @@ export async function spawnClaudeTurn(
       throw err
     }
 
-    session = {
+    session = new ClaudeSessionState({
       id: crypto.randomUUID(),
       chatId: args.chatId,
       session: started,
@@ -369,7 +370,7 @@ export async function spawnClaudeTurn(
       cancelledResultPending: 0,
       suppressSessionTokenPersist: false,
       backgroundTaskWakeSuppressed: false,
-    }
+    })
     deps.claudeSessions.set(args.chatId, session)
     deps.enforceClaudeSessionBudget(args.chatId)
     void deps.runClaudeSession(session)

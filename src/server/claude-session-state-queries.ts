@@ -243,10 +243,7 @@ export function getClaudeSessionStates(
  * See adr-20260801-background-task-wake-escalation.
  */
 export function hasPendingBackgroundTask(session: ClaudeSessionState, now: number): boolean {
-  if (session.backgroundTasks.size === 0) return false
-  // Level-sourced (SDK): membership IS the truth, so no clock may expire it.
-  if (session.backgroundTasksLevelSourced) return true
-  return now < session.backgroundTaskDeadlineAt
+  return session.isHoldingWork(now)
 }
 
 /**
@@ -254,16 +251,12 @@ export function hasPendingBackgroundTask(session: ClaudeSessionState, now: numbe
  * has lapsed. The sweep escalates this state to a visible wake (or, once the
  * wake budget is exhausted, a visible teardown) instead of a silent reap.
  *
- * NOT the complement of hasPendingBackgroundTask. The two used to partition
- * `size > 0`; since adr-20260808-background-task-level-signal-authoritative a
- * level-sourced session is BOTH pending and un-expired — the "held
- * indefinitely" state. Only a session with no level signal (PTY, old CLI, or
- * the window before the first snapshot) can reach the escalation ladder.
+ * Delegates to session.guardExpired(now). See ClaudeSessionState.guardExpired
+ * for the full invariant, including why this is NOT the complement of
+ * hasPendingBackgroundTask.
  */
 export function backgroundTaskGuardExpired(session: ClaudeSessionState, now: number): boolean {
-  if (session.backgroundTasks.size === 0) return false
-  if (session.backgroundTasksLevelSourced) return false
-  return now >= session.backgroundTaskDeadlineAt
+  return session.guardExpired(now)
 }
 
 // ---------------------------------------------------------------------------

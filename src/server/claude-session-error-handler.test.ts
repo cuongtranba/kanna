@@ -18,7 +18,7 @@ import {
   type SessionErrorHandlerDeps,
   type TokenRotationDedupeEntry,
 } from "./claude-session-error-handler"
-import type { ClaudeSessionState } from "./claude-session-state"
+import { ClaudeSessionState } from "./claude-session-state"
 import type { ActiveTurn } from "./claude-session-state"
 import type { AutoContinueEvent } from "./auto-continue/events"
 import type { LimitDetection, LimitDetector } from "./auto-continue/limit-detector"
@@ -43,8 +43,8 @@ function makeHandle() {
   }
 }
 
-function makeSession(overrides: Partial<ClaudeSessionState> = {}): ClaudeSessionState {
-  return {
+function makeSession(overrides: Partial<ConstructorParameters<typeof ClaudeSessionState>[0]> = {}): ClaudeSessionState {
+  return new ClaudeSessionState({
     id: "sess-1",
     chatId: "chat-1",
     session: makeHandle(),
@@ -74,7 +74,7 @@ function makeSession(overrides: Partial<ClaudeSessionState> = {}): ClaudeSession
     suppressSessionTokenPersist: false,
     backgroundTaskWakeSuppressed: false,
     ...overrides,
-  }
+  })
 }
 
 function makeActiveTurn(chatId = "chat-1"): ActiveTurn {

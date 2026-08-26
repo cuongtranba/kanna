@@ -13,7 +13,8 @@
 import { describe, test, expect } from "bun:test"
 import { runClaudeSession } from "./claude-session-runner"
 import type { RunClaudeSessionDeps } from "./claude-session-runner"
-import type { ClaudeSessionState, ActiveTurn, CompactionTurnKind } from "./claude-session-state"
+import { ClaudeSessionState } from "./claude-session-state"
+import type { ActiveTurn, CompactionTurnKind } from "./claude-session-state"
 import { PendingToolSlots, type ParkedTool } from "./pending-tool-slot"
 import type { HarnessEvent } from "./harness-types"
 import type { TranscriptEntry } from "../shared/types"
@@ -23,7 +24,7 @@ import type { TranscriptEntry } from "../shared/types"
 // ---------------------------------------------------------------------------
 
 /** Build a minimal ClaudeSessionState. Override individual fields as needed. */
-function makeSession(overrides: Partial<ClaudeSessionState> = {}): ClaudeSessionState {
+function makeSession(overrides: Partial<ConstructorParameters<typeof ClaudeSessionState>[0]> = {}): ClaudeSessionState {
   const fakeHandle = {
     provider: "claude" as const,
     stream: (async function* () {})() as AsyncIterable<HarnessEvent>,
@@ -35,7 +36,7 @@ function makeSession(overrides: Partial<ClaudeSessionState> = {}): ClaudeSession
     setPermissionMode: async () => {},
     getSupportedCommands: async () => [],
   }
-  return {
+  return new ClaudeSessionState({
     id: "sess-1",
     chatId: "chat-1",
     session: fakeHandle,
@@ -65,7 +66,7 @@ function makeSession(overrides: Partial<ClaudeSessionState> = {}): ClaudeSession
     suppressSessionTokenPersist: false,
     backgroundTaskWakeSuppressed: false,
     ...overrides,
-  }
+  })
 }
 
 /** Build a minimal ActiveTurn backed by a fake HarnessTurn. */

@@ -14,18 +14,31 @@ import {
 } from "./claude-session-state-queries"
 
 type SessionInUseDeps = Parameters<typeof isSessionInUse>[0]
-import type { ActiveTurn, ClaudeSessionState, StartingTurn } from "./claude-session-state"
+import { ClaudeSessionState } from "./claude-session-state"
+import type { ActiveTurn, StartingTurn } from "./claude-session-state"
 import { PendingToolSlots, type ParkedTool } from "./pending-tool-slot"
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function makeSession(overrides?: Partial<ClaudeSessionState>): ClaudeSessionState {
-  return {
+const STUB_HANDLE = {
+  provider: "claude" as const,
+  stream: (async function* () {})(),
+  interrupt: async () => {},
+  close: () => {},
+  closed: Promise.resolve(),
+  sendPrompt: async () => {},
+  setModel: async () => {},
+  setPermissionMode: async () => {},
+  getSupportedCommands: async () => [],
+}
+
+function makeSession(overrides?: Partial<ConstructorParameters<typeof ClaudeSessionState>[0]>): ClaudeSessionState {
+  return new ClaudeSessionState({
     id: "sess-1",
     chatId: "chat-1",
-    session: {} as ClaudeSessionState["session"],
+    session: STUB_HANDLE,
     localPath: "/tmp/test",
     additionalDirectories: [],
     model: "claude-opus-4-5",
@@ -43,13 +56,18 @@ function makeSession(overrides?: Partial<ClaudeSessionState>): ClaudeSessionStat
     backgroundTasks: new Map(),
     backgroundTaskDeadlineAt: 0,
     backgroundTaskWakeCount: 0,
-    // Explicit even though the cast below would tolerate `undefined`: a
-    // falsy-by-omission flag would make the level-sourced tests pass for the
-    // wrong reason.
+    // Explicit even though overrides could patch it: a falsy-by-omission flag
+    // would make the level-sourced tests pass for the wrong reason.
     backgroundTasksLevelSourced: false,
+    selfWakeActive: false,
+    recentToolDescriptions: new Map(),
+    backgroundLaunchToolIds: new Set(),
     loopArmedAtSpawn: false,
+    cancelledResultPending: 0,
+    suppressSessionTokenPersist: false,
+    backgroundTaskWakeSuppressed: false,
     ...overrides,
-  } as ClaudeSessionState
+  })
 }
 
 function makeActiveTurn(overrides?: Partial<ActiveTurn>): ActiveTurn {

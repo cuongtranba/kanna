@@ -7,7 +7,8 @@
 
 import { describe, test, expect, beforeEach } from "bun:test"
 import { cancelChat, type CancelHandlerDeps } from "./claude-cancel-handler"
-import type { ActiveTurn, ClaudeSessionState, StartingTurn } from "./claude-session-state"
+import { ClaudeSessionState } from "./claude-session-state"
+import type { ActiveTurn, StartingTurn } from "./claude-session-state"
 import { PendingToolSlots, type ParkedTool } from "./pending-tool-slot"
 import type { HarnessTurn, ClaudeSessionHandle } from "./harness-types"
 import type { TranscriptEntry } from "../shared/types"
@@ -61,8 +62,8 @@ function makeActiveTurn(overrides: Partial<ActiveTurn> = {}): ActiveTurn {
   }
 }
 
-function makeSession(overrides: Partial<ClaudeSessionState> = {}): ClaudeSessionState {
-  return {
+function makeSession(overrides: Partial<ConstructorParameters<typeof ClaudeSessionState>[0]> = {}): ClaudeSessionState {
+  return new ClaudeSessionState({
     id: "sess-1",
     chatId: "chat-1",
     session: makeFakeHandle(),
@@ -93,7 +94,7 @@ function makeSession(overrides: Partial<ClaudeSessionState> = {}): ClaudeSession
     suppressSessionTokenPersist: false,
     backgroundTaskWakeSuppressed: false,
     ...overrides,
-  }
+  })
 }
 
 function makeStartingTurn(overrides: Partial<StartingTurn> = {}): StartingTurn {
