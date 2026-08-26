@@ -108,7 +108,6 @@ function mergeOpenRouterModels(
       models: models.map((m) => ({
         id: m.id,
         label: m.label,
-        supportsEffort: false,
       })),
     }
   })

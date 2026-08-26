@@ -90,7 +90,7 @@ describe("migrateChatPreferencesState", () => {
       legacyComposerState: {
         provider: "claude",
         model: "claude-sonnet-4-6",
-        modelOptions: { reasoningEffort: "high", contextWindow: "1m" },
+        modelOptions: { reasoningEffort: "max", contextWindow: "1m" },
         planMode: false,
       },
     })
@@ -258,7 +258,6 @@ describe("chat preference store", () => {
       id: "sonnet-5",
       label: "Sonnet 5",
       provider: "claude",
-      supportsEffort: true,
       createdAt: 1,
       updatedAt: 1,
     }])

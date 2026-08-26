@@ -11,7 +11,7 @@ describe("selectCustomModels", () => {
 
   test("returns the settings.customModels array when present", () => {
     const models = [
-      { id: "claude-x", label: "X", provider: "claude" as const, supportsEffort: true, createdAt: 1, updatedAt: 1 },
+      { id: "claude-x", label: "X", provider: "claude" as const, createdAt: 1, updatedAt: 1 },
     ]
     const result = selectCustomModels({ settings: { customModels: models } } as never)
     expect(result).toBe(models)

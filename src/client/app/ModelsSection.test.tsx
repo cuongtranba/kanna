@@ -28,7 +28,6 @@ function model(over: Partial<CustomModelEntry>): CustomModelEntry {
     id: "claude-opus-4-8",
     label: "Opus 4.8",
     provider: "claude",
-    supportsEffort: true,
     createdAt: 0,
     updatedAt: 0,
     ...over,
@@ -91,7 +90,7 @@ describe("ModelsSection — list", () => {
     const { container, cleanup } = await mount({
       models: [
         model({ id: "claude-opus-4-8", label: "Opus 4.8", provider: "claude" }),
-        model({ id: "gpt-5.5", label: "GPT-5.5", provider: "codex", supportsEffort: false }),
+        model({ id: "gpt-5.5", label: "GPT-5.5", provider: "codex" }),
       ],
       handlers: noopHandlers,
     })
@@ -159,7 +158,7 @@ describe("ModelsSection — editor", () => {
     await clickText(container, "Add model")
 
     expect(created).toEqual([
-      { id: "claude-opus-4-9", label: "Opus 4.9", provider: "claude", supportsEffort: false },
+      { id: "claude-opus-4-9", label: "Opus 4.9", provider: "claude" },
     ])
     // onDone ran, so the list (both per-provider Add buttons) is back.
     expect(
@@ -194,7 +193,7 @@ describe("ModelsSection — editor", () => {
   test("edit submits a label patch against the existing id", async () => {
     const updates: Array<{ id: string; patch: unknown }> = []
     const { container, cleanup } = await mount({
-      models: [model({ id: "claude-opus-4-8", label: "Opus 4.8", supportsEffort: true })],
+      models: [model({ id: "claude-opus-4-8", label: "Opus 4.8", supportedEfforts: ["low", "medium", "high", "max"] })],
       handlers: { ...noopHandlers, onUpdate: async (id, patch) => { updates.push({ id, patch }) } },
     })
 
@@ -209,7 +208,7 @@ describe("ModelsSection — editor", () => {
     await clickText(container, "Save changes")
 
     expect(updates).toEqual([
-      { id: "claude-opus-4-8", patch: { label: "Opus 4.8 (fast)", supportsEffort: true } },
+      { id: "claude-opus-4-8", patch: { label: "Opus 4.8 (fast)", supportedEfforts: ["low", "medium", "high", "max"] } },
     ])
     await cleanup()
   })

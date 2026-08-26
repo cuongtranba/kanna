@@ -4,6 +4,7 @@ import {
   CLAUDE_CONTEXT_WINDOW_OPTIONS,
   CLAUDE_REASONING_OPTIONS,
   CODEX_REASONING_OPTIONS,
+  getClaudeModelEffortOptions,
   type AgentProvider,
   type ClaudeContextWindow,
   type ClaudeModelOptions,
@@ -12,7 +13,6 @@ import {
   type CodexReasoningEffort,
   type OpenRouterModelOptions,
   type ProviderCatalogEntry,
-  supportsClaudeMaxReasoningEffort,
 } from "../../../shared/types"
 import { useAppSettingsStore, selectCustomModels } from "../../stores/appSettingsStore"
 import { cn } from "../../lib/utils"
@@ -439,7 +439,7 @@ export function ChatPreferenceControls({
       >
         {(close) => (
           selectedProvider === "claude"
-            ? CLAUDE_REASONING_OPTIONS.map((effort) => (
+            ? getClaudeModelEffortOptions(model, customModels).map((effort) => (
               <PopoverMenuItem
                 key={effort.id}
                 onClick={() => {
@@ -449,7 +449,6 @@ export function ChatPreferenceControls({
                 selected={modelOptions.reasoningEffort === effort.id}
                 icon={<Brain className="h-4 w-4 text-muted-foreground" />}
                 label={effort.label}
-                disabled={effort.id === "max" && !supportsClaudeMaxReasoningEffort(model, customModels)}
               />
             ))
             : CODEX_REASONING_OPTIONS.map((effort) => (

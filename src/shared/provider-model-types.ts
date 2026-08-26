@@ -27,10 +27,9 @@ export interface OpenRouterModel {
 export interface ProviderModelOption {
   id: string
   label: string
-  supportsEffort: boolean
+  supportedEfforts?: readonly ClaudeReasoningEffort[]
   aliases?: readonly string[]
   contextWindowOptions?: readonly ProviderContextWindowOption[]
-  supportsMaxReasoningEffort?: boolean
 }
 
 export interface ProviderEffortOption {
@@ -47,6 +46,7 @@ export const CLAUDE_REASONING_OPTIONS = [
   { id: "low", label: "Low" },
   { id: "medium", label: "Medium" },
   { id: "high", label: "High" },
+  { id: "xhigh", label: "XHigh" },
   { id: "max", label: "Max" },
 ] as const satisfies readonly ProviderEffortOption[]
 
@@ -142,6 +142,8 @@ export interface ProviderCatalogEntry {
   efforts: ProviderEffortOption[]
 }
 
+const ALL_CLAUDE_EFFORTS: readonly ClaudeReasoningEffort[] = ["low", "medium", "high", "xhigh", "max"]
+
 export const PROVIDERS: ProviderCatalogEntry[] = [
   {
     id: "claude",
@@ -153,39 +155,50 @@ export const PROVIDERS: ProviderCatalogEntry[] = [
       {
         id: "claude-fable-5",
         label: "Fable 5",
-        supportsEffort: true,
+        supportedEfforts: ALL_CLAUDE_EFFORTS,
         aliases: ["fable"],
         contextWindowOptions: [...CLAUDE_CONTEXT_WINDOW_OPTIONS],
-        supportsMaxReasoningEffort: true,
+      },
+      {
+        id: "claude-opus-5",
+        label: "Opus 5",
+        supportedEfforts: ALL_CLAUDE_EFFORTS,
+        aliases: ["opus-5"],
+        contextWindowOptions: [...CLAUDE_CONTEXT_WINDOW_OPTIONS],
+      },
+      {
+        id: "claude-sonnet-5",
+        label: "Sonnet 5",
+        supportedEfforts: ALL_CLAUDE_EFFORTS,
+        aliases: ["sonnet-5"],
+        contextWindowOptions: [...CLAUDE_CONTEXT_WINDOW_OPTIONS],
+      },
+      {
+        id: "claude-opus-4-8",
+        label: "Opus 4.8",
+        supportedEfforts: ALL_CLAUDE_EFFORTS,
+        aliases: ["opus-4-8"],
+        contextWindowOptions: [...CLAUDE_CONTEXT_WINDOW_OPTIONS],
       },
       {
         id: "claude-opus-4-7",
         label: "Opus 4.7",
-        supportsEffort: true,
+        supportedEfforts: ALL_CLAUDE_EFFORTS,
         aliases: ["opus"],
         contextWindowOptions: [...CLAUDE_CONTEXT_WINDOW_OPTIONS],
-        supportsMaxReasoningEffort: true,
       },
       {
         id: "claude-sonnet-4-6",
         label: "Sonnet 4.6",
-        supportsEffort: true,
+        supportedEfforts: ["low", "medium", "high", "max"],
         aliases: ["sonnet"],
         contextWindowOptions: [...CLAUDE_CONTEXT_WINDOW_OPTIONS],
       },
       {
         id: "claude-haiku-4-5-20251001",
         label: "Haiku 4.5",
-        supportsEffort: true,
+        supportedEfforts: ["low", "medium", "high"],
         aliases: ["haiku"],
-      },
-      {
-        id: "claude-opus-4-8",
-        label: "Opus 4.8",
-        supportsEffort: true,
-        aliases: ["opus-4-8"],
-        contextWindowOptions: [...CLAUDE_CONTEXT_WINDOW_OPTIONS],
-        supportsMaxReasoningEffort: true,
       },
     ],
     efforts: [...CLAUDE_REASONING_OPTIONS],
@@ -196,10 +209,10 @@ export const PROVIDERS: ProviderCatalogEntry[] = [
     defaultModel: "gpt-5.5",
     supportsPlanMode: true,
     models: [
-      { id: "gpt-5.5", label: "GPT-5.5", supportsEffort: false },
-      { id: "gpt-5.4", label: "GPT-5.4", supportsEffort: false },
-      { id: "gpt-5.3-codex", label: "GPT-5.3 Codex", supportsEffort: false, aliases: ["gpt-5-codex"] },
-      { id: "gpt-5.3-codex-spark", label: "GPT-5.3 Codex Spark", supportsEffort: false },
+      { id: "gpt-5.5", label: "GPT-5.5" },
+      { id: "gpt-5.4", label: "GPT-5.4" },
+      { id: "gpt-5.3-codex", label: "GPT-5.3 Codex", aliases: ["gpt-5-codex"] },
+      { id: "gpt-5.3-codex-spark", label: "GPT-5.3 Codex Spark" },
     ],
     efforts: [],
   },
@@ -229,10 +242,9 @@ export interface CustomModelEntry {
   id: string
   label: string
   provider: "claude" | "codex"
-  supportsEffort: boolean
+  supportedEfforts?: readonly ClaudeReasoningEffort[]
   aliases?: readonly string[]
   contextWindowOptions?: readonly ProviderContextWindowOption[]
-  supportsMaxReasoningEffort?: boolean
   createdAt: number
   updatedAt: number
 }
@@ -241,18 +253,16 @@ export interface CustomModelInput {
   id: string
   label: string
   provider: "claude" | "codex"
-  supportsEffort: boolean
+  supportedEfforts?: readonly ClaudeReasoningEffort[]
   aliases?: readonly string[]
   contextWindowOptions?: readonly ProviderContextWindowOption[]
-  supportsMaxReasoningEffort?: boolean
 }
 
 export interface CustomModelPatch {
   label?: string
-  supportsEffort?: boolean
+  supportedEfforts?: readonly ClaudeReasoningEffort[] | null
   aliases?: readonly string[] | null
   contextWindowOptions?: readonly ProviderContextWindowOption[] | null
-  supportsMaxReasoningEffort?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -285,10 +295,9 @@ function customEntryToModelOption(entry: CustomModelEntry): ProviderModelOption 
   return {
     id: entry.id,
     label: entry.label,
-    supportsEffort: entry.supportsEffort,
+    ...(entry.supportedEfforts ? { supportedEfforts: entry.supportedEfforts } : {}),
     ...(entry.aliases ? { aliases: entry.aliases } : {}),
     ...(entry.contextWindowOptions ? { contextWindowOptions: entry.contextWindowOptions } : {}),
-    ...(entry.supportsMaxReasoningEffort !== undefined ? { supportsMaxReasoningEffort: entry.supportsMaxReasoningEffort } : {}),
   }
 }
 
@@ -347,10 +356,8 @@ function getProviderModelMatch(
   customModels?: readonly CustomModelEntry[],
 ): ProviderModelOption | undefined {
   if (!modelId) return undefined
-
-  return catalogModelsFor(provider, customModels).find((candidate) =>
-    candidate.id === modelId || candidate.aliases?.includes(modelId)
-  )
+  const models = catalogModelsFor(provider, customModels)
+  return models.find((c) => c.id === modelId) ?? models.find((c) => c.aliases?.includes(modelId))
 }
 
 export function normalizeProviderModelId(
@@ -400,7 +407,31 @@ export function supportsClaudeMaxReasoningEffort(
   modelId: string,
   customModels?: readonly CustomModelEntry[],
 ): boolean {
-  return Boolean(getClaudeModelOption(modelId, customModels)?.supportsMaxReasoningEffort)
+  return Boolean(getClaudeModelOption(modelId, customModels)?.supportedEfforts?.includes("max"))
+}
+
+export function getClaudeModelEffortOptions(
+  modelId: string,
+  customModels?: readonly CustomModelEntry[],
+): readonly (typeof CLAUDE_REASONING_OPTIONS)[number][] {
+  const supported = getClaudeModelOption(modelId, customModels)?.supportedEfforts
+  if (!supported || supported.length === 0) return []
+  return CLAUDE_REASONING_OPTIONS.filter((o) => supported.includes(o.id))
+}
+
+export function normalizeClaudeReasoningEffort(
+  modelId: string,
+  effort: ClaudeReasoningEffort,
+  customModels?: readonly CustomModelEntry[],
+): ClaudeReasoningEffort {
+  const supported = getClaudeModelOption(modelId, customModels)?.supportedEfforts
+  if (!supported || supported.length === 0) return effort
+  if (supported.includes(effort)) return effort
+  const priority: ClaudeReasoningEffort[] = ["max", "xhigh", "high", "medium", "low"]
+  for (const level of priority) {
+    if (supported.includes(level)) return level
+  }
+  return DEFAULT_CLAUDE_MODEL_OPTIONS.reasoningEffort
 }
 
 export function getClaudeContextWindowOptions(

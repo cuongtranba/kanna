@@ -1,4 +1,5 @@
 import { create } from "zustand"
+import type { ClaudeReasoningEffort } from "../../shared/types"
 
 export type ModelProvider = "claude" | "codex"
 
@@ -11,7 +12,7 @@ export interface ModelEditorFormState {
   id: string
   label: string
   modelProvider: ModelProvider
-  supportsEffort: boolean
+  supportedEfforts: readonly ClaudeReasoningEffort[]
   submitting: boolean
   error: string | null
 }
@@ -20,13 +21,13 @@ function createEditorFormFromInitial(
   id: string,
   label: string,
   modelProvider: ModelProvider,
-  supportsEffort: boolean,
+  supportedEfforts: readonly ClaudeReasoningEffort[],
 ): ModelEditorFormState {
   return {
     id,
     label,
     modelProvider,
-    supportsEffort,
+    supportedEfforts,
     submitting: false,
     error: null,
   }
@@ -44,20 +45,30 @@ interface ModelsSectionState {
     id: string,
     label: string,
     modelProvider: ModelProvider,
-    supportsEffort: boolean,
+    supportedEfforts: readonly ClaudeReasoningEffort[],
   ) => void
   patchEditorForm: (patch: Partial<ModelEditorFormState>) => void
+  toggleSupportedEffort: (effortId: ClaudeReasoningEffort) => void
 }
 
 export const useModelsSectionStore = create<ModelsSectionState>()((set) => ({
   editing: { kind: "list" },
-  editorForm: createEditorFormFromInitial("", "", "claude", false),
+  editorForm: createEditorFormFromInitial("", "", "claude", []),
 
   setEditing: (editing) => set({ editing }),
 
-  resetEditorForm: (id, label, modelProvider, supportsEffort) =>
-    set({ editorForm: createEditorFormFromInitial(id, label, modelProvider, supportsEffort) }),
+  resetEditorForm: (id, label, modelProvider, supportedEfforts) =>
+    set({ editorForm: createEditorFormFromInitial(id, label, modelProvider, supportedEfforts) }),
 
   patchEditorForm: (patch) =>
     set((state) => ({ editorForm: { ...state.editorForm, ...patch } })),
+
+  toggleSupportedEffort: (effortId) =>
+    set((state) => {
+      const current = state.editorForm.supportedEfforts
+      const next = current.includes(effortId)
+        ? current.filter((id) => id !== effortId)
+        : [...current, effortId]
+      return { editorForm: { ...state.editorForm, supportedEfforts: next } }
+    }),
 }))

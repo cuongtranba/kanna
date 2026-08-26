@@ -1421,7 +1421,7 @@ describe("customModels", () => {
     const filePath = await createTempFilePath()
     const manager = trackManager(new AppSettingsManager(filePath))
     await manager.initialize()
-    await manager.writePatch({ customModels: { create: { id: "claude-test", label: "Test", provider: "claude", supportsEffort: true } } })
+    await manager.writePatch({ customModels: { create: { id: "claude-test", label: "Test", provider: "claude" } } })
     expect(manager.getSnapshot().customModels.some((m) => m.id === "claude-test" && m.label === "Test")).toBe(true)
   })
 
@@ -1430,7 +1430,7 @@ describe("customModels", () => {
     const manager = trackManager(new AppSettingsManager(filePath))
     await manager.initialize()
     let err: unknown = null
-    try { await manager.writePatch({ customModels: { create: { id: "claude-bad", label: "  ", provider: "claude", supportsEffort: true } } }) } catch (e) { err = e }
+    try { await manager.writePatch({ customModels: { create: { id: "claude-bad", label: "  ", provider: "claude" } } }) } catch (e) { err = e }
     expect(err).not.toBeNull()
   })
 
@@ -1439,7 +1439,7 @@ describe("customModels", () => {
     const manager = trackManager(new AppSettingsManager(filePath))
     await manager.initialize()
     let err: unknown = null
-    try { await manager.writePatch({ customModels: { create: { id: "claude-opus-4-8", label: "Dup", provider: "claude", supportsEffort: true } } }) } catch (e) { err = e }
+    try { await manager.writePatch({ customModels: { create: { id: "claude-opus-4-8", label: "Dup", provider: "claude" } } }) } catch (e) { err = e }
     expect(err).not.toBeNull()
   })
 
@@ -1447,7 +1447,7 @@ describe("customModels", () => {
     const filePath = await createTempFilePath()
     const manager = trackManager(new AppSettingsManager(filePath))
     await manager.initialize()
-    await manager.writePatch({ customModels: { create: { id: "claude-edit", label: "Before", provider: "claude", supportsEffort: true } } })
+    await manager.writePatch({ customModels: { create: { id: "claude-edit", label: "Before", provider: "claude" } } })
     await manager.writePatch({ customModels: { update: { id: "claude-edit", patch: { label: "After" } } } })
     expect(manager.getSnapshot().customModels.find((m) => m.id === "claude-edit")!.label).toBe("After")
     await manager.writePatch({ customModels: { delete: { id: "claude-edit" } } })
@@ -1569,7 +1569,7 @@ describe("collection CRUD contracts", () => {
     const before = manager.getSnapshot()
     const modelsBefore = before.customModels.length
     const snippetsBefore = before.textSnippets.length
-    await manager.writePatch({ customModels: { create: { id: "claude-frozen", label: "Frozen", provider: "claude", supportsEffort: true } } })
+    await manager.writePatch({ customModels: { create: { id: "claude-frozen", label: "Frozen", provider: "claude" } } })
     await manager.writePatch({ textSnippets: { create: { shortcut: "frz", expansion: "frozen" } } })
     expect(before.customModels).toHaveLength(modelsBefore)
     expect(before.textSnippets).toHaveLength(snippetsBefore)
@@ -1588,7 +1588,7 @@ describe("collection CRUD contracts", () => {
 
   test("custom model update is unvalidated at the CRUD boundary; the normalizer drops the result", async () => {
     const manager = await freshManager()
-    await manager.writePatch({ customModels: { create: { id: "claude-doomed", label: "Doomed", provider: "claude", supportsEffort: true } } })
+    await manager.writePatch({ customModels: { create: { id: "claude-doomed", label: "Doomed", provider: "claude" } } })
     await manager.writePatch({ customModels: { update: { id: "claude-doomed", patch: { label: "   " } } } })
     expect(manager.getSnapshot().customModels.some((m) => m.id === "claude-doomed")).toBe(false)
   })
@@ -1629,7 +1629,7 @@ describe("collection CRUD contracts", () => {
 
   test("custom model create rejects a duplicate id with DUPLICATE_ID", async () => {
     const manager = await freshManager()
-    await expect(manager.writePatch({ customModels: { create: { id: "claude-opus-4-8", label: "Dup", provider: "claude", supportsEffort: true } } }))
+    await expect(manager.writePatch({ customModels: { create: { id: "claude-opus-4-8", label: "Dup", provider: "claude" } } }))
       .rejects.toMatchObject({ validationError: { code: "DUPLICATE_ID" } })
   })
 

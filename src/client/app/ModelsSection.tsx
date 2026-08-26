@@ -15,7 +15,12 @@ import {
   SettingsRowActions,
 } from "../components/settings/SettingsList"
 import { useAppSettingsStore, selectCustomModels } from "../stores/appSettingsStore"
-import type { CustomModelEntry, CustomModelInput, CustomModelPatch } from "../../shared/types"
+import {
+  CLAUDE_REASONING_OPTIONS,
+  type CustomModelEntry,
+  type CustomModelInput,
+  type CustomModelPatch,
+} from "../../shared/types"
 import type { KannaState } from "./useKannaState"
 import {
   useAppSettingsCrudHandlers,
@@ -60,11 +65,11 @@ export function ModelsSection({ models, handlers, dom = domAdapter }: ModelsSect
 
   function navigate(next: ModelsEditingState) {
     if (next.kind === "create") {
-      resetEditorForm("", "", next.provider, false)
+      resetEditorForm("", "", next.provider, [])
     } else if (next.kind === "edit") {
       const initial = models.find((m) => m.id === next.id) ?? null
       if (initial) {
-        resetEditorForm(initial.id, initial.label, initial.provider, initial.supportsEffort ?? false)
+        resetEditorForm(initial.id, initial.label, initial.provider, initial.supportedEfforts ?? [])
       }
     }
     setEditing(next)
@@ -140,10 +145,10 @@ function ModelRow({
         <span className="font-mono text-xs text-muted-foreground">{model.id}</span>
       </div>
       <div className="ml-auto flex items-center gap-2">
-        {model.supportsEffort && (
+        {(model.supportedEfforts?.length ?? 0) > 0 && (
           <span className="rounded bg-muted px-1.5 py-0.5 text-xs">effort</span>
         )}
-        {model.supportsMaxReasoningEffort && (
+        {model.supportedEfforts?.includes("max") && (
           <span className="rounded bg-muted px-1.5 py-0.5 text-xs">max</span>
         )}
         <SettingsRowActions label={model.label} onEdit={onEdit} onDelete={onDelete} />
@@ -167,13 +172,14 @@ function ModelEditor({
 }) {
   const editorForm = useModelsSectionStore((state) => state.editorForm)
   const patchEditorForm = useModelsSectionStore((state) => state.patchEditorForm)
+  const toggleSupportedEffort = useModelsSectionStore((state) => state.toggleSupportedEffort)
   // The guard is a TS type predicate narrowing string -> ModelProvider, so it
   // belongs at the boundary, not in the store.
   const handleProviderChange = useCallback((value: string) => {
     if (isModelProvider(value)) patchEditorForm({ modelProvider: value })
   }, [patchEditorForm])
 
-  const { id, label, modelProvider, supportsEffort, submitting, error } = editorForm
+  const { id, label, modelProvider, supportedEfforts, submitting, error } = editorForm
 
   const isEdit = initial !== null
 
@@ -191,13 +197,16 @@ function ModelEditor({
       patch: patchEditorForm,
       save: async () => {
         if (isEdit && initial) {
-          await handlers.onUpdate(initial.id, { label: label.trim(), supportsEffort })
+          await handlers.onUpdate(initial.id, {
+            label: label.trim(),
+            supportedEfforts: supportedEfforts.length > 0 ? supportedEfforts : null,
+          })
         } else {
           await handlers.onCreate({
             id: id.trim(),
             label: label.trim(),
             provider: modelProvider,
-            supportsEffort,
+            ...(supportedEfforts.length > 0 ? { supportedEfforts } : {}),
           })
         }
       },
@@ -251,14 +260,21 @@ function ModelEditor({
         />
       </label>
 
-      <label className="inline-flex cursor-pointer items-center gap-2 text-sm">
-        <input
-          type="checkbox"
-          checked={supportsEffort}
-          onChange={(e) => patchEditorForm({ supportsEffort: e.target.checked })}
-        />
-        <span>Supports reasoning effort</span>
-      </label>
+      {modelProvider === "claude" && (
+        <div className="flex flex-col gap-2">
+          <span className="text-sm font-medium">Supported effort levels</span>
+          {CLAUDE_REASONING_OPTIONS.map((effort) => (
+            <label key={effort.id} className="inline-flex cursor-pointer items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={supportedEfforts.includes(effort.id)}
+                onChange={() => toggleSupportedEffort(effort.id)}
+              />
+              <span>{effort.label}</span>
+            </label>
+          ))}
+        </div>
+      )}
 
       {error && <span className="text-xs text-red-600">{error}</span>}
 

@@ -145,7 +145,7 @@ test("SERVER_PROVIDERS mirrors PROVIDERS (no duplicate codex source)", () => {
 
 test("normalizeServerModel accepts a known custom model id", () => {
   const custom: CustomModelEntry[] = [
-    { id: "claude-experimental", label: "Exp", provider: "claude", supportsEffort: true, createdAt: 1, updatedAt: 1 },
+    { id: "claude-experimental", label: "Exp", provider: "claude", createdAt: 1, updatedAt: 1 },
   ]
   expect(normalizeServerModel("claude", "claude-experimental", custom)).toBe("claude-experimental")
 })

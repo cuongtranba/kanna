@@ -47,7 +47,8 @@ describe("shared model normalization", () => {
   test("uses declarative metadata for Claude max-effort support", () => {
     expect(supportsClaudeMaxReasoningEffort("claude-opus-4-7")).toBe(true)
     expect(supportsClaudeMaxReasoningEffort("opus")).toBe(true)
-    expect(supportsClaudeMaxReasoningEffort("claude-sonnet-4-6")).toBe(false)
+    expect(supportsClaudeMaxReasoningEffort("claude-sonnet-4-6")).toBe(true)
+    expect(supportsClaudeMaxReasoningEffort("claude-haiku-4-5-20251001")).toBe(false)
   })
 
   test("preserves a known custom model id instead of collapsing to default", () => {
@@ -55,7 +56,6 @@ describe("shared model normalization", () => {
       id: "sonnet-5",
       label: "Sonnet 5",
       provider: "claude",
-      supportsEffort: true,
       createdAt: 1,
       updatedAt: 1,
     }]
@@ -64,7 +64,6 @@ describe("shared model normalization", () => {
       id: "gpt-x",
       label: "GPT X",
       provider: "codex",
-      supportsEffort: false,
       createdAt: 1,
       updatedAt: 1,
     }])).toBe("gpt-x")
@@ -75,13 +74,12 @@ describe("shared model normalization", () => {
       id: "sonnet-5",
       label: "Sonnet 5",
       provider: "claude",
-      supportsEffort: true,
-      supportsMaxReasoningEffort: true,
+      supportedEfforts: ["low", "medium", "high", "max"],
       createdAt: 1,
       updatedAt: 1,
     }]
     expect(supportsClaudeMaxReasoningEffort("sonnet-5", custom)).toBe(true)
-    expect(supportsClaudeMaxReasoningEffort("sonnet-5")).toBe(false)
+    expect(supportsClaudeMaxReasoningEffort("claude-haiku-4-5-20251001")).toBe(false)
   })
 })
 
@@ -106,7 +104,6 @@ describe("mergeCustomModels", () => {
     id: "custom-x",
     label: "Custom X",
     provider: "claude",
-    supportsEffort: true,
     createdAt: 1,
     updatedAt: 1,
     ...over,
@@ -127,7 +124,7 @@ describe("mergeCustomModels", () => {
   })
 
   test("routes codex entries to the codex provider only", () => {
-    const merged = mergeCustomModels(base(), [entry({ id: "gpt-x", label: "GPT X", provider: "codex", supportsEffort: false })])
+    const merged = mergeCustomModels(base(), [entry({ id: "gpt-x", label: "GPT X", provider: "codex" })])
     expect(merged.find((p) => p.id === "codex")!.models.some((m) => m.id === "gpt-x")).toBe(true)
     expect(merged.find((p) => p.id === "claude")!.models.some((m) => m.id === "gpt-x")).toBe(false)
   })

@@ -368,7 +368,6 @@ describe("SubagentsSection — create form", () => {
       id: "claude-custom-preview",
       provider: "claude",
       label: "Claude Custom Preview",
-      supportsEffort: false,
       createdAt: 0,
       updatedAt: 0,
     }
