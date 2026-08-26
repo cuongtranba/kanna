@@ -1,4 +1,5 @@
 import { type AnyValue, isRecord } from "../shared/errors"
+import { log } from "../shared/log"
 import type {
   CollabAgentToolCallItem,
   CommandExecutionItem,
@@ -83,8 +84,18 @@ function stringOrNull(value: AnyValue): string | null {
   return typeof value === "string" ? value : null
 }
 
+function exitCodeOf(rawOutput: string): number | null {
+  const parsed = parseJsonRecord(rawOutput)
+  if (parsed === null) return null
+  const metadata = parsed.metadata
+  if (!isRecord(metadata)) return null
+  const code = metadata.exit_code
+  return typeof code === "number" && Number.isFinite(code) ? code : null
+}
+
 function commandExecutionCall(
   record: CodexToolCallRecord,
+  onRegexMiss?: () => void,
 ): { command: string; cwd: string | null } | null {
   if (record.family === "function") {
     const args = parseJsonRecord(record.input)
@@ -93,8 +104,12 @@ function commandExecutionCall(
     if (command === null) return null
     return { command, cwd: stringOrNull(args.workdir) }
   }
-  const command = matchJsStringField(record.input, EXEC_CMD_PATTERN) ?? record.input
-  return { command, cwd: matchJsStringField(record.input, EXEC_WORKDIR_PATTERN) }
+  const extracted = matchJsStringField(record.input, EXEC_CMD_PATTERN)
+  if (extracted === null) {
+    onRegexMiss?.()
+    return { command: record.input, cwd: matchJsStringField(record.input, EXEC_WORKDIR_PATTERN) }
+  }
+  return { command: extracted, cwd: matchJsStringField(record.input, EXEC_WORKDIR_PATTERN) }
 }
 
 const PATCH_BEGIN = "*** Begin Patch"
@@ -203,6 +218,17 @@ function dynamicCall(record: CodexToolCallRecord): DynamicToolCallItem {
   }
 }
 
+function dynamicOutput(callId: string, tool: string, rawOutput: string): DynamicToolCallItem {
+  return {
+    type: "dynamicToolCall",
+    id: callId,
+    tool,
+    status: "completed",
+    contentItems: [{ type: "inputText", text: rawOutput }],
+    success: true,
+  }
+}
+
 function collabAgentCall(record: CodexToolCallRecord): CollabAgentToolCallItem {
   const args = parseJsonRecord(record.input)
   const senderThreadId = stringOrNull(args?.sender_thread_id ?? null) ?? ""
@@ -222,118 +248,137 @@ function collabAgentCall(record: CodexToolCallRecord): CollabAgentToolCallItem {
   }
 }
 
-export function rolloutToolCallToThreadItem(
-  record: CodexToolCallRecord,
-): RolloutToolCallMapping {
-  if (EXEC_TOOL_NAMES.has(record.name)) {
-    const exec = commandExecutionCall(record)
-    if (exec !== null) {
+export interface RolloutMapper {
+  rolloutToolCallToThreadItem(record: CodexToolCallRecord): RolloutToolCallMapping
+  rolloutToolOutputToThreadItem(record: CodexToolOutputRecord, call: CodexToolCallRecord | null): ThreadItem
+  getMissCount(): number
+}
+
+export function createRolloutMapper(): RolloutMapper {
+  let missCount = 0
+
+  function onRegexMiss(): void {
+    missCount += 1
+    if (missCount === 1) {
+      log.warn(
+        "[kanna/codex] exec-snippet regex miss — falling back to raw snippet as command." +
+          " Codex may have changed the snippet shape.",
+      )
+    }
+  }
+
+  function mapToolCall(record: CodexToolCallRecord): RolloutToolCallMapping {
+    if (EXEC_TOOL_NAMES.has(record.name)) {
+      const exec = commandExecutionCall(record, onRegexMiss)
+      if (exec !== null) {
+        const item: CommandExecutionItem = {
+          type: "commandExecution",
+          id: record.callId,
+          command: exec.command,
+          status: "inProgress",
+          cwd: exec.cwd ?? undefined,
+        }
+        return { kind: "item", item }
+      }
+      return { kind: "item", item: dynamicCall(record) }
+    }
+
+    if (record.name === APPLY_PATCH_TOOL_NAME) {
+      const changes = parseApplyPatch(record.input)
+      if (changes !== null) {
+        const item: FileChangeItem = {
+          type: "fileChange",
+          id: record.callId,
+          changes,
+          status: "inProgress",
+        }
+        return { kind: "item", item }
+      }
+      return { kind: "item", item: dynamicCall(record) }
+    }
+
+    if (record.name === UPDATE_PLAN_TOOL_NAME) {
+      const plan = parsePlanSteps(record.input)
+      if (plan !== null) {
+        return {
+          kind: "plan",
+          callId: record.callId,
+          steps: plan.steps,
+          explanation: plan.explanation,
+        }
+      }
+      return { kind: "item", item: dynamicCall(record) }
+    }
+
+    if (COLLAB_AGENT_TOOL_NAMES.has(record.name)) {
+      return { kind: "item", item: collabAgentCall(record) }
+    }
+
+    return { kind: "item", item: dynamicCall(record) }
+  }
+
+  function mapToolOutput(
+    record: CodexToolOutputRecord,
+    call: CodexToolCallRecord | null,
+  ): ThreadItem {
+    if (call === null) return dynamicOutput(record.callId, "unknown", record.output)
+
+    if (EXEC_TOOL_NAMES.has(call.name)) {
+      const exitCode = exitCodeOf(record.output)
       const item: CommandExecutionItem = {
         type: "commandExecution",
         id: record.callId,
-        command: exec.command,
-        status: "inProgress",
-        cwd: exec.cwd ?? undefined,
+        command: commandExecutionCall(call, onRegexMiss)?.command ?? "",
+        status: exitCode !== null && exitCode !== 0 ? "failed" : "completed",
+        aggregatedOutput: record.output,
+        exitCode,
       }
-      return { kind: "item", item }
+      return item
     }
-    return { kind: "item", item: dynamicCall(record) }
-  }
 
-  if (record.name === APPLY_PATCH_TOOL_NAME) {
-    const changes = parseApplyPatch(record.input)
-    if (changes !== null) {
-      const item: FileChangeItem = {
-        type: "fileChange",
-        id: record.callId,
-        changes,
-        status: "inProgress",
+    if (call.name === APPLY_PATCH_TOOL_NAME) {
+      const changes = parseApplyPatch(call.input)
+      if (changes !== null) {
+        const item: FileChangeItem = {
+          type: "fileChange",
+          id: record.callId,
+          changes,
+          status: "completed",
+        }
+        return item
       }
-      return { kind: "item", item }
     }
-    return { kind: "item", item: dynamicCall(record) }
-  }
 
-  if (record.name === UPDATE_PLAN_TOOL_NAME) {
-    const plan = parsePlanSteps(record.input)
-    if (plan !== null) {
+    if (COLLAB_AGENT_TOOL_NAMES.has(call.name)) {
+      const base = collabAgentCall(call)
       return {
-        kind: "plan",
-        callId: record.callId,
-        steps: plan.steps,
-        explanation: plan.explanation,
+        ...base,
+        id: record.callId,
+        status: "completed",
       }
     }
-    return { kind: "item", item: dynamicCall(record) }
+
+    return dynamicOutput(record.callId, call.name, record.output)
   }
 
-  if (COLLAB_AGENT_TOOL_NAMES.has(record.name)) {
-    return { kind: "item", item: collabAgentCall(record) }
-  }
-
-  return { kind: "item", item: dynamicCall(record) }
-}
-
-function exitCodeOf(output: string): number | null {
-  const parsed = parseJsonRecord(output)
-  if (parsed === null) return null
-  const metadata = parsed.metadata
-  if (!isRecord(metadata)) return null
-  const code = metadata.exit_code
-  return typeof code === "number" && Number.isFinite(code) ? code : null
-}
-
-function dynamicOutput(callId: string, tool: string, output: string): DynamicToolCallItem {
   return {
-    type: "dynamicToolCall",
-    id: callId,
-    tool,
-    status: "completed",
-    contentItems: [{ type: "inputText", text: output }],
-    success: true,
+    rolloutToolCallToThreadItem: mapToolCall,
+    rolloutToolOutputToThreadItem: mapToolOutput,
+    getMissCount: () => missCount,
   }
+}
+
+const _defaultMapper = createRolloutMapper()
+
+export function rolloutToolCallToThreadItem(
+  record: CodexToolCallRecord,
+): RolloutToolCallMapping {
+  return _defaultMapper.rolloutToolCallToThreadItem(record)
 }
 
 export function rolloutToolOutputToThreadItem(
   record: CodexToolOutputRecord,
   call: CodexToolCallRecord | null,
 ): ThreadItem {
-  if (call === null) return dynamicOutput(record.callId, "unknown", record.output)
-
-  if (EXEC_TOOL_NAMES.has(call.name)) {
-    const exitCode = exitCodeOf(record.output)
-    const item: CommandExecutionItem = {
-      type: "commandExecution",
-      id: record.callId,
-      command: commandExecutionCall(call)?.command ?? "",
-      status: exitCode !== null && exitCode !== 0 ? "failed" : "completed",
-      aggregatedOutput: record.output,
-      exitCode,
-    }
-    return item
-  }
-
-  if (call.name === APPLY_PATCH_TOOL_NAME) {
-    const changes = parseApplyPatch(call.input)
-    if (changes !== null) {
-      const item: FileChangeItem = {
-        type: "fileChange",
-        id: record.callId,
-        changes,
-        status: "completed",
-      }
-      return item
-    }
-  }
-
-  if (COLLAB_AGENT_TOOL_NAMES.has(call.name)) {
-    const base = collabAgentCall(call)
-    return {
-      ...base,
-      id: record.callId,
-      status: "completed",
-    }
-  }
-
-  return dynamicOutput(record.callId, call.name, record.output)
+  return _defaultMapper.rolloutToolOutputToThreadItem(record, call)
 }
