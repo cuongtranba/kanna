@@ -70,7 +70,7 @@ import { SubagentsSettingsBranch } from "./SubagentsSection"
 import { McpServersSettingsBranch } from "./McpServersSection"
 import { ModelsSettingsBranch } from "./ModelsSection"
 import { TextSnippetsSettingsBranch } from "./TextSnippetsSection"
-import { useAppSettingsStore, selectCustomModels } from "../stores/appSettingsStore"
+import { useAppSettingsStore, selectCustomModels, selectScrollbackLines, selectMinColumnWidth, selectEditorPreset, selectEditorCommandTemplate, selectChatSoundPreference, selectChatSoundId } from "../stores/appSettingsStore"
 import {
   DEFAULT_TAB_MIN_WIDTH,
   MAX_TAB_WIDTH,
@@ -1006,7 +1006,7 @@ export function CloudflareTunnelSectionTitle() {
 }
 
 export function GlobalInstructionsSection({ state }: { state: KannaState }) {
-  const persisted = state.appSettings?.globalPromptAppend ?? ""
+  const persisted = useAppSettingsStore((s) => s.settings?.globalPromptAppend ?? "")
   const draft = useSettingsPageStore((s) => s.globalInstructionsDraft)
   const setDraft = useSettingsPageStore((s) => s.setGlobalInstructionsDraft)
   const persistedAtMount = useSettingsPageStore((s) => s.globalInstructionsPersistedAtMount)
@@ -1119,20 +1119,20 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
   const machineName = state.localProjects?.machine.displayName ?? "Unavailable"
   const projectCount = state.localProjects?.projects.length ?? 0
   const appVersion = SDK_CLIENT_APP.split("/")[1] ?? "unknown"
-  const scrollbackLines = useTerminalPreferencesStore((store) => store.scrollbackLines)
-  const minColumnWidth = useTerminalPreferencesStore((store) => store.minColumnWidth)
-  const editorPreset = useTerminalPreferencesStore((store) => store.editorPreset)
-  const editorCommandTemplate = useTerminalPreferencesStore((store) => store.editorCommandTemplate)
+  const scrollbackLines = useAppSettingsStore(selectScrollbackLines)
+  const minColumnWidth = useAppSettingsStore(selectMinColumnWidth)
+  const editorPreset = useAppSettingsStore(selectEditorPreset)
+  const editorCommandTemplate = useAppSettingsStore(selectEditorCommandTemplate)
   const setScrollbackLines = useTerminalPreferencesStore((store) => store.setScrollbackLines)
   const setMinColumnWidth = useTerminalPreferencesStore((store) => store.setMinColumnWidth)
   const setEditorPreset = useTerminalPreferencesStore((store) => store.setEditorPreset)
   const setEditorCommandTemplate = useTerminalPreferencesStore((store) => store.setEditorCommandTemplate)
-  const chatSoundPreference = useChatSoundPreferencesStore((store) => store.chatSoundPreference)
-  const chatSoundId = useChatSoundPreferencesStore((store) => store.chatSoundId)
+  const chatSoundPreference = useAppSettingsStore(selectChatSoundPreference)
+  const chatSoundId = useAppSettingsStore(selectChatSoundId)
   const setChatSoundPreference = useChatSoundPreferencesStore((store) => store.setChatSoundPreference)
   const setChatSoundId = useChatSoundPreferencesStore((store) => store.setChatSoundId)
   const keybindings = state.keybindings
-  const appSettings = state.appSettings
+  const appSettings = useAppSettingsStore((s) => s.settings)
   const llmProvider = state.llmProvider
   const autoResumeOnRateLimit = usePreferencesStore((state) => state.autoResumeOnRateLimit)
   const setAutoResumeOnRateLimit = usePreferencesStore((state) => state.setAutoResumeOnRateLimit)

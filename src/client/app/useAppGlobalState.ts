@@ -15,9 +15,7 @@ import type { AgentProvider, ChatDiffSnapshot, ChatSnapshot, CloudflareTunnelSet
 import { NEW_CHAT_COMPOSER_ID, useChatPreferencesStore } from "../stores/chatPreferencesStore"
 import { useRightSidebarStore } from "../stores/rightSidebarStore"
 import { useTerminalLayoutStore } from "../stores/terminalLayoutStore"
-import { useTerminalPreferencesStore } from "../stores/terminalPreferencesStore"
-import { useAppSettingsStore } from "../stores/appSettingsStore"
-import { useChatSoundPreferencesStore } from "../stores/chatSoundPreferencesStore"
+import { selectEditorCommandTemplate, selectEditorPreset, useAppSettingsStore } from "../stores/appSettingsStore"
 import { useAppDialog } from "../components/ui/app-dialog"
 import type { EditorOpenSettings, ImportSessionsByIdsResult, OpenExternalAction, PtyInstancesEvent } from "../../shared/protocol"
 import type { PtyInstancesSnapshot } from "../../shared/pty-instance"
@@ -150,24 +148,6 @@ function clearLegacyBrowserSettings(storage: StoragePort) {
   storage.removeItem(LEGACY_CHAT_SOUND_STORAGE_KEY)
   storage.removeItem(LEGACY_TERMINAL_STORAGE_KEY)
   storage.removeItem(LEGACY_CHAT_PREFERENCES_STORAGE_KEY)
-}
-
-function syncRuntimeStoresFromAppSettings(snapshot: AppSettingsSnapshot) {
-  useAppSettingsStore.getState().setFromServer(snapshot)
-  const terminalPreferences = useTerminalPreferencesStore.getState()
-  terminalPreferences.setScrollbackLines(snapshot.terminal.scrollbackLines)
-  terminalPreferences.setMinColumnWidth(snapshot.terminal.minColumnWidth)
-  terminalPreferences.setEditorPreset(snapshot.editor.preset)
-  terminalPreferences.setEditorCommandTemplate(snapshot.editor.commandTemplate)
-
-  const chatSoundPreferences = useChatSoundPreferencesStore.getState()
-  chatSoundPreferences.setChatSoundPreference(snapshot.chatSoundPreference)
-  chatSoundPreferences.setChatSoundId(snapshot.chatSoundId)
-
-  useChatPreferencesStore.getState().applyServerDefaults(
-    snapshot.defaultProvider,
-    snapshot.providerDefaults
-  )
 }
 
 
@@ -324,7 +304,6 @@ export interface AppGlobalState {
   localProjects: LocalProjectsSnapshot | null
   updateSnapshot: UpdateSnapshot | null
   keybindings: KeybindingsSnapshot | null
-  appSettings: AppSettingsSnapshot | null
   pushConfig: PushConfigSnapshot | null
   llmProvider: LlmProviderSnapshot | null
   connectionStatus: SocketStatus
@@ -413,7 +392,7 @@ export function useAppGlobalState(
   const updateSnapshot = useKannaStateStore((state) => state.updateSnapshot)
   const uiRestartPhase = useKannaStateStore((state) => state.uiRestartPhase)
   const keybindings = useKannaStateStore((state) => state.keybindings)
-  const appSettings = useKannaStateStore((state) => state.appSettings)
+  const appSettings = useAppSettingsStore((state) => state.settings)
   const pushConfig = useKannaStateStore((state) => state.pushConfig)
   const llmProvider = useKannaStateStore((state) => state.llmProvider)
   const connectionStatus = useKannaStateStore((state) => state.connectionStatus)
@@ -564,8 +543,8 @@ export function useAppGlobalState(
   useEffect(() => {
     return socket.subscribe<AppSettingsSnapshot>({ type: "app-settings" }, (snapshot) => {
       const store = useKannaStateStore.getState()
-      store.setAppSettings(snapshot)
-      syncRuntimeStoresFromAppSettings(snapshot)
+      useAppSettingsStore.getState().setFromServer(snapshot)
+      useChatPreferencesStore.getState().applyServerDefaults(snapshot.defaultProvider, snapshot.providerDefaults)
       store.setCommandError(null)
     })
   }, [socket])
@@ -712,8 +691,8 @@ export function useAppGlobalState(
       useAppSettingsStore.getState().setHydrationStatus("loading")
       const snapshot = await socket.command<AppSettingsSnapshot>({ type: "settings.readAppSettings" })
       const store = useKannaStateStore.getState()
-      store.setAppSettings(snapshot)
-      syncRuntimeStoresFromAppSettings(snapshot)
+      useAppSettingsStore.getState().setFromServer(snapshot)
+      useChatPreferencesStore.getState().applyServerDefaults(snapshot.defaultProvider, snapshot.providerDefaults)
       store.setCommandError(null)
     } catch (error) {
       useAppSettingsStore.getState().setHydrationStatus("error")
@@ -760,8 +739,8 @@ export function useAppGlobalState(
         patch,
       })
       const store = useKannaStateStore.getState()
-      store.setAppSettings(snapshot)
-      syncRuntimeStoresFromAppSettings(snapshot)
+      useAppSettingsStore.getState().setFromServer(snapshot)
+      useChatPreferencesStore.getState().applyServerDefaults(snapshot.defaultProvider, snapshot.providerDefaults)
       store.setCommandError(null)
     } catch (error) {
       useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
@@ -856,8 +835,8 @@ export function useAppGlobalState(
         patch,
       })
       const store = useKannaStateStore.getState()
-      store.setAppSettings(snapshot)
-      syncRuntimeStoresFromAppSettings(snapshot)
+      useAppSettingsStore.getState().setFromServer(snapshot)
+      useChatPreferencesStore.getState().applyServerDefaults(snapshot.defaultProvider, snapshot.providerDefaults)
       store.setCommandError(null)
     } catch (error) {
       useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
@@ -874,8 +853,8 @@ export function useAppGlobalState(
         patch,
       })
       const store = useKannaStateStore.getState()
-      store.setAppSettings(snapshot)
-      syncRuntimeStoresFromAppSettings(snapshot)
+      useAppSettingsStore.getState().setFromServer(snapshot)
+      useChatPreferencesStore.getState().applyServerDefaults(snapshot.defaultProvider, snapshot.providerDefaults)
       store.setCommandError(null)
     } catch (error) {
       useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
@@ -1301,15 +1280,15 @@ export function useAppGlobalState(
     column?: number
     editor?: EditorOpenSettings
   }) => {
-    const preferences = useTerminalPreferencesStore.getState()
+    const appSettingsState = useAppSettingsStore.getState()
     useKannaStateStore.getState().setCommandError(null)
     await socket.command({
       type: "system.openExternal",
       ...command,
       editor: command.action === "open_editor"
         ? command.editor ?? {
-            preset: preferences.editorPreset,
-            commandTemplate: preferences.editorCommandTemplate,
+            preset: selectEditorPreset(appSettingsState),
+            commandTemplate: selectEditorCommandTemplate(appSettingsState),
           }
         : undefined,
     })
@@ -1405,7 +1384,6 @@ export function useAppGlobalState(
     localProjects,
     updateSnapshot,
     keybindings,
-    appSettings,
     pushConfig,
     llmProvider,
     connectionStatus,

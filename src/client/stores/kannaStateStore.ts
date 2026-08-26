@@ -1,5 +1,5 @@
 import { create } from "zustand"
-import type { AppSettingsSnapshot, ChatDiffSnapshot, KeybindingsSnapshot, LlmProviderSnapshot, PushConfigSnapshot, UpdateSnapshot } from "../../shared/types"
+import type { ChatDiffSnapshot, KeybindingsSnapshot, LlmProviderSnapshot, PushConfigSnapshot, UpdateSnapshot } from "../../shared/types"
 import type { LocalProjectsSnapshot, SidebarData } from "../../shared/types"
 import { sessionStorageAdapter } from "../adapters/storage.adapter"
 import type { SocketStatus } from "../app/socket"
@@ -32,7 +32,6 @@ interface KannaStateStoreState {
    */
   diffSnapshotsByKey: Record<string, ChatDiffSnapshot | null>
   keybindings: KeybindingsSnapshot | null
-  appSettings: AppSettingsSnapshot | null
   pushConfig: PushConfigSnapshot | null
   llmProvider: LlmProviderSnapshot | null
   connectionStatus: SocketStatus
@@ -55,7 +54,6 @@ interface KannaStateStoreState {
   setUiRestartPhase: (value: string | null) => void
   setDiffSnapshotsByKey: (value: Record<string, ChatDiffSnapshot | null> | ((current: Record<string, ChatDiffSnapshot | null>) => Record<string, ChatDiffSnapshot | null>)) => void
   setKeybindings: (value: KeybindingsSnapshot | null) => void
-  setAppSettings: (value: AppSettingsSnapshot | null) => void
   setPushConfig: (value: PushConfigSnapshot | null) => void
   setLlmProvider: (value: LlmProviderSnapshot | null) => void
   setConnectionStatus: (value: SocketStatus) => void
@@ -91,7 +89,6 @@ export const useKannaStateStore = create<KannaStateStoreState>()((set) => ({
   uiRestartPhase: readInitialUiRestartPhase(),
   diffSnapshotsByKey: EMPTY_DIFF_SNAPSHOTS,
   keybindings: null,
-  appSettings: null,
   pushConfig: null,
   llmProvider: null,
   connectionStatus: "connecting",
@@ -120,7 +117,6 @@ export const useKannaStateStore = create<KannaStateStoreState>()((set) => ({
       diffSnapshotsByKey: typeof value === "function" ? value(state.diffSnapshotsByKey) : value,
     })),
   setKeybindings: (value) => set({ keybindings: value }),
-  setAppSettings: (value) => set({ appSettings: value }),
   setPushConfig: (value) => set({ pushConfig: value }),
   setLlmProvider: (value) => set({ llmProvider: value }),
   setConnectionStatus: (value) => set({ connectionStatus: value }),

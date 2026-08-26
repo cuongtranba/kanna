@@ -1,5 +1,7 @@
 import { create } from "zustand"
 import type { AppSettingsPatch, AppSettingsSnapshot, CustomModelEntry, McpServerConfig, TextSnippet } from "../../shared/types"
+import { DEFAULT_TERMINAL_SCROLLBACK } from "../../shared/terminal-scrollback"
+import type { ChatSoundId, ChatSoundPreference, EditorPreset } from "../../shared/core-types"
 
 type AppSettingsHydrationStatus = "idle" | "loading" | "ready" | "error"
 
@@ -127,3 +129,35 @@ const EMPTY_TEXT_SNIPPETS: readonly TextSnippet[] = []
 
 export const selectTextSnippets = (state: AppSettingsStoreState): readonly TextSnippet[] =>
   state.settings?.textSnippets ?? EMPTY_TEXT_SNIPPETS
+
+const DEFAULT_TERMINAL_MIN_COLUMN_WIDTH = 450
+const DEFAULT_EDITOR_PRESET: EditorPreset = "cursor"
+
+function defaultEditorCommandTemplate(preset: EditorPreset): string {
+  if (preset === "vscode") return "code {path}"
+  if (preset === "xcode") return "xed {path}"
+  if (preset === "windsurf") return "windsurf {path}"
+  return "cursor {path}"
+}
+
+export const selectScrollbackLines = (state: AppSettingsStoreState): number =>
+  state.settings?.terminal.scrollbackLines ?? DEFAULT_TERMINAL_SCROLLBACK
+
+export const selectMinColumnWidth = (state: AppSettingsStoreState): number =>
+  state.settings?.terminal.minColumnWidth ?? DEFAULT_TERMINAL_MIN_COLUMN_WIDTH
+
+export const selectEditorPreset = (state: AppSettingsStoreState): EditorPreset =>
+  state.settings?.editor.preset ?? DEFAULT_EDITOR_PRESET
+
+export const selectEditorCommandTemplate = (state: AppSettingsStoreState): string => {
+  const preset = state.settings?.editor.preset ?? DEFAULT_EDITOR_PRESET
+  const template = state.settings?.editor.commandTemplate
+  const trimmed = template?.trim()
+  return trimmed && trimmed.length > 0 ? trimmed : defaultEditorCommandTemplate(preset)
+}
+
+export const selectChatSoundPreference = (state: AppSettingsStoreState): ChatSoundPreference =>
+  state.settings?.chatSoundPreference ?? "always"
+
+export const selectChatSoundId = (state: AppSettingsStoreState): ChatSoundId =>
+  state.settings?.chatSoundId ?? "funk"
