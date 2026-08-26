@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.43.3](https://github.com/cuongtranba/kanna/compare/v1.43.2...v1.43.3) (2026-08-26)
+
+
+### Bug Fixes
+
+* **import:** warn on EACCES when scanning Codex sessions, not silently drop subtrees ([#903](https://github.com/cuongtranba/kanna/issues/903)) ([0890072](https://github.com/cuongtranba/kanna/commit/0890072caeeca14f52b13f1deceac1e256769b86)), closes [#879](https://github.com/cuongtranba/kanna/issues/879)
+
 ## [1.43.2](https://github.com/cuongtranba/kanna/compare/v1.43.1...v1.43.2) (2026-08-26)
 
 
