@@ -34,6 +34,9 @@ jobs:
       - name: Architecture budget (ratchet)
         run: bun run check:arch
 
+      - name: Complexity ceilings still tight
+        run: bun run lint:limits
+
       - name: Type check
         run: bun run typecheck
 

@@ -161,6 +161,27 @@ Two budgets, deliberately shaped differently:
   `issue` it regresses and a `rationale`, so a breach message says which filed
   issue this PR just made worse rather than printing a bare number.
 
+**ESLint owns the complexity measurement; the budget owns the direction.**
+`eslint.config.js` sets four production ceilings — `complexity` 141,
+`max-params` 12, `max-depth` 7, `max-nested-callbacks` 4 — at today's maxima, so
+they are unbreached but hard. `ESLINT_LIMIT_PINS` must **equal** each configured
+value: raising the ceiling fails `check:arch` as `limit_raised`, and lowering it
+without lowering the pin fails as `limit_slack`. The adapter reads the real
+`eslint.config.js` rather than a transcription, so pin and enforced value cannot
+agree on paper while disagreeing in fact. A pin whose rule ESLint no longer
+configures fails as `limit_unconfigured` rather than passing vacuously.
+
+The peaks are the audit's own findings, which is why these are defect counts and
+not style knobs: `complexity` 141 and `max-depth` 7 are both `runClaudeSession`'s
+570-line `for await` loop, and `max-params` 12 is `deriveChatSnapshot`.
+
+**`bun run lint:limits` proves a ceiling is still TIGHT.** A ceiling nothing
+reaches gates nothing — pinned at 141 while the worst function is 90 leaves 50
+points of free regression. The script runs ESLint once with every ceiling lowered
+by one and requires each rule to report at least one production violation. It is
+the analog of `pattern_shrank` for a measurement a regex cannot make, and it
+reuses `PRODUCTION_EXCLUDES` so "production" means one thing.
+
 **A budget graduates, it does not settle at a residue.** Once its issue lands and
 the type system or a lint rule enforces the property permanently, delete the entry
 rather than pinning whatever the regex still matches.
@@ -339,6 +360,20 @@ Two rule pairs in `rules/` (tsx + `-ts` typescript variants, tests in
   to the safe-list regex in both rule variants, in the same PR.
 - `no-unstable-selector-fallback` — a `use*Store` selector returning
   inline `?? []` / `?? {}` (or `|| []` / `|| {}`) without `useShallow`.
+
+A third pair bans a concurrency anti-pattern ESLint does not cover:
+
+- `no-await-in-promise-all` — an `await` inside a `Promise.all([...])` array.
+  Every awaited element settles before `Promise.all` ever sees a pending
+  promise, so the call parallelises nothing and the work runs sequentially.
+  Awaiting INSIDE an async callback passed to `.map()` is fine and stays valid.
+  Adopted from the ast-grep TypeScript catalog; zero violations at adoption, so
+  it is a true hard ban rather than a ratchet.
+
+The catalog's `no-console-except-error` was deliberately NOT adopted: ESLint
+already enforces `no-console` as an error with `src/shared/log.ts` as the
+sanctioned chokepoint (`eslint.config.js:211,346-349`), and a second rule
+stating the same decision is exactly the duplication this repo is removing.
 
 Two further rules keep state TRANSITIONS in the store (ADR
 `adr-20260802-ban-jsx-inline-state-logic`, `rule-zustand-store`). Both are

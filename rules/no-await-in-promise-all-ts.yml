@@ -1,0 +1,25 @@
+id: no-await-in-promise-all-ts
+language: typescript
+severity: error
+message: '`await` inside a Promise.all array serialises the very work Promise.all exists to run concurrently.'
+note: |
+  Promise.all receives already-settled values here, so each element is fetched
+  one after another and the call parallelises nothing.
+  Hand it unawaited promises instead:
+    await Promise.all([fetchA(), fetchB()])
+  Awaiting INSIDE an async callback passed to .map() is fine — that work still
+  runs concurrently.
+files:
+  - src/**
+rule:
+  pattern: await $A
+  inside:
+    stopBy:
+      not:
+        any:
+          - kind: array
+          - kind: arguments
+    kind: call_expression
+    has:
+      field: function
+      pattern: Promise.all
