@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.43.1](https://github.com/cuongtranba/kanna/compare/v1.43.0...v1.43.1) (2026-08-26)
+
+
+### Bug Fixes
+
+* **import:** skip synthetic Claude CLI openers during title derivation ([#884](https://github.com/cuongtranba/kanna/issues/884)) ([e1dd0ba](https://github.com/cuongtranba/kanna/commit/e1dd0ba402b83d0bcc227f95eaa8067a96ee98a2)), closes [#877](https://github.com/cuongtranba/kanna/issues/877)
+
 ## [1.43.0](https://github.com/cuongtranba/kanna/compare/v1.42.0...v1.43.0) (2026-08-26)
 
 
