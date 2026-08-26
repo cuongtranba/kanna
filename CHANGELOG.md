@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.43.2](https://github.com/cuongtranba/kanna/compare/v1.43.1...v1.43.2) (2026-08-26)
+
+
+### Bug Fixes
+
+* **import:** map collab-agent function_call names onto CollabAgentToolCallItem ([#887](https://github.com/cuongtranba/kanna/issues/887)) ([cd4176c](https://github.com/cuongtranba/kanna/commit/cd4176cd121e69eb4d058a4ce49d107b96a5d019)), closes [#878](https://github.com/cuongtranba/kanna/issues/878)
+
 ## [1.43.1](https://github.com/cuongtranba/kanna/compare/v1.43.0...v1.43.1) (2026-08-26)
 
 
