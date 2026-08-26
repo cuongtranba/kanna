@@ -132,10 +132,10 @@ export const PATTERN_BUDGETS: readonly PatternBudget[] = [
     id: "mcp-inline-tool-results",
     include: ["src/server/kanna-mcp.ts"],
     pattern: 'type: "text" as const',
-    max: 30,
+    max: 0,
     issue: 897,
     rationale:
-      "Hand-built MCP tool results. kanna-mcp-boards.ts already has ok()/fail() helpers for exactly this; the abstraction exists one file over and never moved up.",
+      "Hand-built MCP tool results. ok()/fail() helpers in kanna-mcp-tool.ts replace every hand-built content array; the pattern must not regress.",
   },
   {
     id: "escalation-memory-caps",

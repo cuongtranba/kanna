@@ -22,6 +22,7 @@ import type { BoardRegistry } from "./board-registry"
 import { BoardStoreError } from "./board-store"
 import { errorMessage, type AnyValue } from "../shared/errors"
 import type { CardActor } from "../shared/boards/types"
+import { ok, fail, type ToolResult } from "./kanna-mcp-tool"
 
 /** How many cards one `board_get` may return per column. */
 const CARD_WINDOW = 20
@@ -51,25 +52,6 @@ export interface BoardToolDeps {
   projectId: string | null
 }
 
-/**
- * The MCP result shape. The index signature is what the SDK's `tool()` expects
- * of a `CallToolResult`; without it this type is structurally incompatible and
- * every tool registration fails to infer.
- */
-interface ToolText {
-  content: { type: "text"; text: string }[]
-  isError?: true
-  [key: string]: AnyValue
-}
-
-function ok(text: string): ToolText {
-  return { content: [{ type: "text", text }] }
-}
-
-function fail(text: string): ToolText {
-  return { isError: true, content: [{ type: "text", text }] }
-}
-
 /** The schema already requires these; this is the runtime half of that promise. */
 function requireString(value: AnyValue, name: string): string {
   if (typeof value !== "string" || value.trim() === "") {
@@ -88,7 +70,7 @@ export type BoardToolFactory<TTool> = (
   name: string,
   description: string,
   schema: Record<string, z.ZodTypeAny>,
-  handler: (input: Record<string, AnyValue>) => Promise<ToolText>,
+  handler: (input: Record<string, AnyValue>) => Promise<ToolResult>,
 ) => TTool
 
 export function buildBoardToolList<TTool>(deps: BoardToolDeps, tool: BoardToolFactory<TTool>): TTool[] {
@@ -117,7 +99,7 @@ export function buildBoardToolList<TTool>(deps: BoardToolDeps, tool: BoardToolFa
     return card.card
   }
 
-  async function guarded(run: () => ToolText): Promise<ToolText> {
+  async function guarded(run: () => ToolResult): Promise<ToolResult> {
     try {
       return run()
     } catch (error) {
