@@ -301,6 +301,28 @@ export default tseslint.config(
     },
   },
   {
+    // Complexity ceilings, set at today's PRODUCTION maxima so nothing may get
+    // worse. These numbers are pinned by ESLINT_LIMIT_PINS in
+    // src/ops/architecture/budget.ts and may only ever be lowered — raising one
+    // fails the architecture budget with the issue it regresses.
+    // `bun run lint:limits` proves a ceiling is still tight rather than slack.
+    files: ["src/**/*.{ts,tsx}"],
+    ignores: [
+      "src/**/*.test.ts",
+      "src/**/*.test.tsx",
+      "src/**/__fixtures__/**",
+      "src/**/test-helpers/**",
+      "src/client/adapters/testing/**",
+      "src/client/lib/testing/**",
+    ],
+    rules: {
+      complexity: ["error", { max: 141 }],
+      "max-params": ["error", { max: 12 }],
+      "max-depth": ["error", { max: 7 }],
+      "max-nested-callbacks": ["error", { max: 4 }],
+    },
+  },
+  {
     files: ["src/server/**/*.{ts,tsx}"],
     ignores: [
       "src/server/**/*.test.ts",

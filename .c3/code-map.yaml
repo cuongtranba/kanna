@@ -320,5 +320,6 @@ c3-235:
 c3-236:
   - src/ops/architecture/budget.ts
   - src/ops/architecture/budget-scan.adapter.ts
+  - scripts/check-complexity-limits.ts
 c3-311:
   - src/shared/cron/**/*.ts

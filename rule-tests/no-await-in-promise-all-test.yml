@@ -1,0 +1,21 @@
+id: no-await-in-promise-all
+valid:
+  # the whole point of Promise.all: hand it unawaited promises
+  - 'const [a, b] = await Promise.all([fetchA(), fetchB()])'
+  # mapped promises, still unawaited inside the array
+  - 'const rows = await Promise.all(items.map((i) => load(i)))'
+  # an async callback awaiting INSIDE its own body is fine — that work is still concurrent
+  - 'const rows = await Promise.all(items.map(async (i) => { const r = await load(i); return r.value }))'
+  # await outside any Promise.all
+  - 'const a = await fetchA(); const b = await fetchB()'
+  # Promise.allSettled is a different call
+  - 'const r = await Promise.allSettled([fetchA(), fetchB()])'
+  # awaiting the Promise.all itself is required
+  - 'await Promise.all(tasks)'
+invalid:
+  # both awaits resolve sequentially before Promise.all ever sees a pending promise
+  - 'const [a, b] = await Promise.all([await fetchA(), await fetchB()])'
+  # one awaited element is enough to serialise that element
+  - 'const [a, b] = await Promise.all([await fetchA(), fetchB()])'
+  # spread-built array with an awaited element
+  - 'const r = await Promise.all([await first(), ...rest])'

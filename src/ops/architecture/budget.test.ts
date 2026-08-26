@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import path from "node:path"
-import { measureModules, measurePatterns } from "./budget-scan.adapter"
+import { measureModules, measurePatterns, readEslintLimits } from "./budget-scan.adapter"
 import {
   checkModuleBudget,
   coveredBy,
+  checkEslintLimits,
   checkPatternBudget,
+  ESLINT_LIMIT_PINS,
   formatBreach,
   MODULE_ALLOWANCES,
   MODULE_LINE_THRESHOLD,
@@ -102,6 +104,44 @@ describe("checkPatternBudget", () => {
   })
 })
 
+describe("checkEslintLimits", () => {
+  const pins = [
+    { rule: "complexity", max: 141, issue: 893, rationale: "r" },
+    { rule: "max-params", max: 12, issue: 892, rationale: "r" },
+  ]
+  const configured = (entries: Record<string, number>) => new Map(Object.entries(entries))
+
+  test("accepts ceilings sitting exactly on their pins", () => {
+    expect(checkEslintLimits(configured({ complexity: 141, "max-params": 12 }), pins)).toEqual([])
+  })
+
+  test("rejects a raised ceiling", () => {
+    expect(checkEslintLimits(configured({ complexity: 150, "max-params": 12 }), pins))
+      .toEqual([{ kind: "limit_raised", rule: "complexity", max: 141, actual: 150, issue: 893 }])
+  })
+
+  test("rejects a lowered ceiling whose pin was not lowered with it", () => {
+    expect(checkEslintLimits(configured({ complexity: 100, "max-params": 12 }), pins))
+      .toEqual([{ kind: "limit_slack", rule: "complexity", max: 141, actual: 100, issue: 893 }])
+  })
+
+  test("rejects a configured limit rule that nothing pins", () => {
+    expect(checkEslintLimits(configured({ complexity: 141, "max-params": 12, "max-lines": 500 }), pins))
+      .toEqual([{ kind: "limit_unpinned", rule: "max-lines", actual: 500 }])
+  })
+
+  test("rejects a pin whose rule eslint no longer configures, rather than passing vacuously", () => {
+    expect(checkEslintLimits(configured({ complexity: 141 }), pins))
+      .toEqual([{ kind: "limit_unconfigured", rule: "max-params" }])
+  })
+
+  test("the unconfigured message refuses a pin with no enforcement behind it", () => {
+    const message = formatBreach({ kind: "limit_unconfigured", rule: "max-params" })
+    expect(message).toContain("inert")
+    expect(message).toContain("Do NOT leave a pin with no enforcement")
+  })
+})
+
 describe("formatBreach", () => {
   test("a grown pattern names the issue it regresses", () => {
     const message = formatBreach({ kind: "pattern_grew", id: "alpha", max: 10, actual: 11, issue: 42 })
@@ -134,6 +174,12 @@ describe("the repository satisfies its architecture budget", () => {
 
   test("no defect population grew, and none shrank without its pin being lowered", () => {
     const breaches = checkPatternBudget(patterns)
+    expect(breaches.map(formatBreach).join("\n\n")).toBe("")
+  })
+
+  test("every ESLint ceiling equals its pin, so a raised limit is a build failure", async () => {
+    const configured = await readEslintLimits(root, ESLINT_LIMIT_PINS.map((p) => p.rule))
+    const breaches = checkEslintLimits(configured)
     expect(breaches.map(formatBreach).join("\n\n")).toBe("")
   })
 

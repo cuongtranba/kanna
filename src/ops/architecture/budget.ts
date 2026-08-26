@@ -172,6 +172,54 @@ export const PATTERN_BUDGETS: readonly PatternBudget[] = [
   },
 ]
 
+export interface EslintLimitPin {
+  readonly rule: string
+  readonly max: number
+  readonly issue: number
+  readonly rationale: string
+}
+
+/**
+ * ESLint measures per-function complexity far better than a regex can, so the
+ * budget does not re-implement it — it owns the DIRECTION instead. Each pin must
+ * EQUAL what eslint.config.js configures: raising the ceiling is a regression,
+ * and lowering it without lowering the pin would leave slack to creep back into.
+ *
+ * Ceilings sit at today's production maxima, so they are unbreached but hard.
+ * `bun run lint:limits` proves a ceiling is still TIGHT — a ceiling nothing
+ * reaches is a ceiling that gates nothing.
+ */
+export const ESLINT_LIMIT_PINS: readonly EslintLimitPin[] = [
+  {
+    rule: "complexity",
+    max: 141,
+    issue: 893,
+    rationale:
+      "Cyclomatic complexity per function. The peak is runClaudeSession's 570-line for-await loop, which interleaves token persist, background tasks, self-wake, compact finalize and result finalize in one body.",
+  },
+  {
+    rule: "max-params",
+    max: 12,
+    issue: 892,
+    rationale:
+      "The peak is deriveChatSnapshot's 12 positional parameters, six of them defaulted, so a caller wanting the last must spell out five it does not care about, and two adjacent Map parameters can be swapped with no type error.",
+  },
+  {
+    rule: "max-depth",
+    max: 7,
+    issue: 893,
+    rationale:
+      "Nested block depth. The peak is again runClaudeSession, where the event loop's branches nest seven deep and no single concern can be read in isolation.",
+  },
+  {
+    rule: "max-nested-callbacks",
+    max: 4,
+    issue: 897,
+    rationale:
+      "Nested callback depth in production code. The peak is in the MCP tool registration closures, where guard plus handler plus result mapping stack inside one factory.",
+  },
+]
+
 /** This module and its scanner quote every budget regex as a string literal, so a budget that scanned them would count itself. */
 export const SELF_EXCLUDED_PATHS: readonly string[] = [
   "src/ops/architecture/budget.ts",
@@ -206,6 +254,34 @@ export type BudgetBreach =
   | { readonly kind: "pattern_shrank"; readonly id: string; readonly max: number; readonly actual: number; readonly issue: number }
   | { readonly kind: "pattern_unknown"; readonly id: string }
   | { readonly kind: "pattern_unmeasured"; readonly id: string }
+  | { readonly kind: "limit_raised"; readonly rule: string; readonly max: number; readonly actual: number; readonly issue: number }
+  | { readonly kind: "limit_slack"; readonly rule: string; readonly max: number; readonly actual: number; readonly issue: number }
+  | { readonly kind: "limit_unpinned"; readonly rule: string; readonly actual: number }
+  | { readonly kind: "limit_unconfigured"; readonly rule: string }
+
+export function checkEslintLimits(
+  configured: ReadonlyMap<string, number>,
+  pins: readonly EslintLimitPin[] = ESLINT_LIMIT_PINS,
+): BudgetBreach[] {
+  const breaches: BudgetBreach[] = []
+  const byRule = new Map(pins.map((p) => [p.rule, p]))
+
+  for (const [rule, actual] of configured) {
+    const pin = byRule.get(rule)
+    if (!pin) {
+      breaches.push({ kind: "limit_unpinned", rule, actual })
+      continue
+    }
+    if (actual > pin.max) breaches.push({ kind: "limit_raised", rule, max: pin.max, actual, issue: pin.issue })
+    else if (actual < pin.max) breaches.push({ kind: "limit_slack", rule, max: pin.max, actual, issue: pin.issue })
+  }
+
+  for (const pin of pins) {
+    if (!configured.has(pin.rule)) breaches.push({ kind: "limit_unconfigured", rule: pin.rule })
+  }
+
+  return breaches
+}
 
 export function checkModuleBudget(
   measured: readonly ModuleMeasurement[],
@@ -277,6 +353,18 @@ export function formatBreach(breach: BudgetBreach): string {
         + `  Set max: ${breach.actual} in PATTERN_BUDGETS so the population cannot creep back up.`
     case "pattern_unknown":
       return `Measured "${breach.id}" has no PATTERN_BUDGETS entry.`
+    case "limit_raised":
+      return `eslint.config.js raised "${breach.rule}" to ${breach.actual} (pinned at ${breach.max}) — this PR regresses #${breach.issue}.\n`
+        + `  ${eslintRationaleOf(breach.rule)}`
+    case "limit_slack":
+      return `eslint.config.js sets "${breach.rule}" to ${breach.actual} but the pin is still ${breach.max} — lower the pin in this PR.\n`
+        + `  Set max: ${breach.actual} in ESLINT_LIMIT_PINS so the ceiling cannot drift back up.`
+    case "limit_unpinned":
+      return `eslint.config.js configures "${breach.rule}" at ${breach.actual} with no ESLINT_LIMIT_PINS entry.\n`
+        + `  Add one naming the issue it bounds, or the ceiling can be raised with nothing objecting.`
+    case "limit_unconfigured":
+      return `ESLINT_LIMIT_PINS pins "${breach.rule}" but eslint.config.js configures no such rule — this gate is currently inert.\n`
+        + `  Restore the rule, or drop the pin deliberately. Do NOT leave a pin with no enforcement behind it.`
     case "pattern_unmeasured":
       return `"${breach.id}" scanned no files — its include paths are stale, so this gate is currently inert.\n`
         + `  Repoint include in PATTERN_BUDGETS. Do NOT pin it at 0: a renamed target reads as a population\n`
@@ -286,4 +374,8 @@ export function formatBreach(breach: BudgetBreach): string {
 
 function rationaleOf(id: string): string {
   return PATTERN_BUDGETS.find((b) => b.id === id)?.rationale ?? ""
+}
+
+function eslintRationaleOf(rule: string): string {
+  return ESLINT_LIMIT_PINS.find((p) => p.rule === rule)?.rationale ?? ""
 }

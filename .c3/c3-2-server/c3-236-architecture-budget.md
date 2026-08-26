@@ -1,6 +1,6 @@
 ---
 id: c3-236
-c3-seal: db0ea74b6b9a9ce4b86e615c3d50602f3536c33355729dfadebf18fb29b92484
+c3-seal: 8a6738cbb9af961f05dae65d0f37b6e309412490f51ebcca0a21b540f1a48647
 title: architecture-budget
 type: component
 category: feature
@@ -46,6 +46,7 @@ Owns the machine-checkable record of how much structural debt the repository cur
 | checkModuleBudget and checkPatternBudget | OUT | Pure functions returning every BudgetBreach rather than stopping at the first, so one run reports the whole regression. | No IO. Measurements are supplied by the caller. | src/ops/architecture/budget.test.ts |
 | measureModules and measurePatterns | OUT | Module lines match wc -l as a newline count; pattern counts match grep -c as matching lines, so any pin is checkable by hand. | The only filesystem reader in the component. | src/ops/architecture/budget-scan.adapter.ts |
 | filesScanned | OUT | A budget whose include paths reach zero files reports pattern_unmeasured, never a shrink. | Prevents a renamed target from reading as a vanished population and being pinned at zero. | src/ops/architecture/budget.test.ts |
+| ESLINT_LIMIT_PINS | IN | Each pin must equal the ceiling eslint.config.js configures for that rule. Raising it is limit_raised; lowering the ceiling without lowering the pin is limit_slack; a pin whose rule eslint no longer configures is limit_unconfigured rather than a vacuous pass. | ESLint owns the per-function measurement a regex cannot make; the budget owns only the direction. | src/ops/architecture/budget.ts |
 
 ## Derived Materials
 
