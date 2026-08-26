@@ -12,6 +12,7 @@ import { AGENT_PROVIDERS, type AgentProvider } from "../shared/core-types"
 import type { TranscriptEntry } from "../shared/types"
 import { timestamped } from "./claude-message-normalizer"
 import type { ClaudeSessionState } from "./claude-session-state"
+import { isSessionInUse } from "./claude-session-state-queries"
 
 export interface ClearClaudeContextDeps {
   store: {
@@ -25,6 +26,12 @@ export interface ClearClaudeContextDeps {
   activeTurns: { has(chatId: string): boolean }
   /** Turns still spawning their provider session — see the teardown guard. */
   startingTurns: { has(chatId: string): boolean }
+  /** Parked AskUserQuestion / ExitPlanMode continuations — the worker is blocked inside canUseTool. */
+  pendingTools: { has(chatId: string): boolean }
+  /** Returns true when the chat has an in-flight Workflow. */
+  hasLiveWorkflow: (chatId: string) => boolean
+  /** Returns true when the session has a pending Claude-Code background task. */
+  hasPendingBackgroundTask: (session: ClaudeSessionState, now: number) => boolean
   closeClaudeSession(chatId: string, session: ClaudeSessionState): void
 }
 
@@ -61,7 +68,7 @@ export async function clearClaudeSessionContext(
   const session = deps.claudeSessions.get(chatId)
   if (!session) return
   session.suppressSessionTokenPersist = true
-  if (!deps.activeTurns.has(chatId) && !deps.startingTurns.has(chatId)) {
+  if (!isSessionInUse(deps, chatId, session, Date.now())) {
     deps.closeClaudeSession(chatId, session)
   }
 }

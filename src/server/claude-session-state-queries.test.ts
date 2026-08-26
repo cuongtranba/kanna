@@ -7,11 +7,13 @@ import {
   getDrainingChatIds,
   getClaudeSessionStates,
   isClaudeSessionIdle,
+  isSessionInUse,
+  hasPendingBackgroundTask,
   sweepIdleClaudeSessions,
   type SessionStateQueryDeps,
+  type SessionInUseDeps,
 } from "./claude-session-state-queries"
 import type { ActiveTurn, ClaudeSessionState, StartingTurn } from "./claude-session-state"
-import { hasPendingBackgroundTask } from "./claude-session-lifecycle"
 import { PendingToolSlots, type ParkedTool } from "./pending-tool-slot"
 
 // ---------------------------------------------------------------------------
@@ -415,6 +417,84 @@ describe("isClaudeSessionIdle", () => {
     const session = makeSession({ lastUsedAt: 0, pendingPromptSeqs: [] })
     const deps = makeDeps({ resolveClaudeIdleMs: () => 1 })
     expect(isClaudeSessionIdle(deps, "chat-1", session, Date.now())).toBe(true)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// isSessionInUse — table-driven for all 7 clauses
+// ---------------------------------------------------------------------------
+
+function makeInUseDeps(overrides?: Partial<SessionInUseDeps>): SessionInUseDeps {
+  return {
+    activeTurns: { has: () => false },
+    startingTurns: { has: () => false },
+    pendingTools: { has: () => false },
+    hasLiveWorkflow: () => false,
+    hasPendingBackgroundTask: () => false,
+    ...overrides,
+  }
+}
+
+describe("isSessionInUse", () => {
+  it("returns false when none of the 7 conditions is met", () => {
+    const deps = makeInUseDeps()
+    const session = makeSession({ selfWakeActive: false, pendingPromptSeqs: [] })
+    expect(isSessionInUse(deps, "chat-1", session, Date.now())).toBe(false)
+  })
+
+  it("clause 1: activeTurns present → in use", () => {
+    const deps = makeInUseDeps({ activeTurns: { has: () => true } })
+    const session = makeSession({ selfWakeActive: false, pendingPromptSeqs: [] })
+    expect(isSessionInUse(deps, "chat-1", session, Date.now())).toBe(true)
+  })
+
+  it("clause 2: startingTurns present → in use", () => {
+    const deps = makeInUseDeps({ startingTurns: { has: () => true } })
+    const session = makeSession({ selfWakeActive: false, pendingPromptSeqs: [] })
+    expect(isSessionInUse(deps, "chat-1", session, Date.now())).toBe(true)
+  })
+
+  it("clause 3: pendingTools present → in use", () => {
+    const deps = makeInUseDeps({ pendingTools: { has: () => true } })
+    const session = makeSession({ selfWakeActive: false, pendingPromptSeqs: [] })
+    expect(isSessionInUse(deps, "chat-1", session, Date.now())).toBe(true)
+  })
+
+  it("clause 4: pendingPromptSeqs non-empty → in use", () => {
+    const deps = makeInUseDeps()
+    const session = makeSession({ selfWakeActive: false, pendingPromptSeqs: [1] })
+    expect(isSessionInUse(deps, "chat-1", session, Date.now())).toBe(true)
+  })
+
+  it("clause 5: hasLiveWorkflow → in use", () => {
+    const deps = makeInUseDeps({ hasLiveWorkflow: () => true })
+    const session = makeSession({ selfWakeActive: false, pendingPromptSeqs: [] })
+    expect(isSessionInUse(deps, "chat-1", session, Date.now())).toBe(true)
+  })
+
+  it("clause 6: hasPendingBackgroundTask → in use", () => {
+    const deps = makeInUseDeps({ hasPendingBackgroundTask: () => true })
+    const session = makeSession({ selfWakeActive: false, pendingPromptSeqs: [] })
+    expect(isSessionInUse(deps, "chat-1", session, Date.now())).toBe(true)
+  })
+
+  it("clause 7: selfWakeActive → in use", () => {
+    const deps = makeInUseDeps()
+    const session = makeSession({ selfWakeActive: true, pendingPromptSeqs: [] })
+    expect(isSessionInUse(deps, "chat-1", session, Date.now())).toBe(true)
+  })
+
+  it("level-sourced session with non-empty task set is in use even past the deadline", () => {
+    const now = Date.now()
+    const session = makeSession({
+      selfWakeActive: false,
+      pendingPromptSeqs: [],
+      backgroundTasks: new Map([["t1", { taskType: "local_bash", description: null, startedAt: now - 60_000, outputPath: null }]]),
+      backgroundTaskDeadlineAt: now - 1,
+      backgroundTasksLevelSourced: true,
+    })
+    const deps = makeInUseDeps({ hasPendingBackgroundTask: (s, n) => hasPendingBackgroundTask(s, n) })
+    expect(isSessionInUse(deps, "chat-1", session, now)).toBe(true)
   })
 })
 

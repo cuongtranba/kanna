@@ -15,6 +15,14 @@ import type { ClaudeDriverPreference } from "../shared/types"
 import type { ClaudeSessionState, ActiveTurn } from "./claude-session-state"
 import type { TokenUnavailability } from "./oauth-pool/oauth-token-pool"
 import { computeWorkflowsDir } from "./claude-pty/jsonl-path.adapter"
+import {
+  hasPendingBackgroundTask,
+  backgroundTaskGuardExpired,
+  isSessionInUse,
+  type SessionInUseDeps,
+} from "./claude-session-state-queries"
+
+export { hasPendingBackgroundTask, backgroundTaskGuardExpired }
 
 // ---------------------------------------------------------------------------
 // Structural sub-interfaces — only the operations this module calls.
@@ -138,48 +146,6 @@ export function hasLiveWorkflow(deps: SessionLifecycleDeps, chatId: string): boo
 }
 
 /**
- * True while the session has at least one Claude-Code background task that has
- * not yet settled. Primary gate is set size > 0: settle events
- * (task_notification) and level snapshots remove their id from the set, so the
- * guard clears the moment the last task reports.
- *
- * The deadline is consulted ONLY for a session with no level signal. Once the
- * SDK has sent a `background_tasks_changed` snapshot the set is authoritative
- * and the clock is ignored — a healthy dev server is silent for hours, so any
- * timer reads it as dead. See
- * adr-20260808-background-task-level-signal-authoritative.
- *
- * PURE — an expired deadline does NOT clear the set here. The expired state is
- * escalation input for the sweep's wake path, which must still see which task
- * ids were pending. Clearing inside a predicate also let unrelated read paths
- * (the sidebar badge query) destroy the guard as a side effect.
- * See adr-20260801-background-task-wake-escalation.
- */
-export function hasPendingBackgroundTask(session: ClaudeSessionState, now: number): boolean {
-  if (session.backgroundTasks.size === 0) return false
-  // Level-sourced (SDK): membership IS the truth, so no clock may expire it.
-  if (session.backgroundTasksLevelSourced) return true
-  return now < session.backgroundTaskDeadlineAt
-}
-
-/**
- * True when background tasks are still pending but their keep-alive deadline
- * has lapsed. The sweep escalates this state to a visible wake (or, once the
- * wake budget is exhausted, a visible teardown) instead of a silent reap.
- *
- * NOT the complement of hasPendingBackgroundTask. The two used to partition
- * `size > 0`; since adr-20260808-background-task-level-signal-authoritative a
- * level-sourced session is BOTH pending and un-expired — the "held
- * indefinitely" state. Only a session with no level signal (PTY, old CLI, or
- * the window before the first snapshot) can reach the escalation ladder.
- */
-export function backgroundTaskGuardExpired(session: ClaudeSessionState, now: number): boolean {
-  if (session.backgroundTasks.size === 0) return false
-  if (session.backgroundTasksLevelSourced) return false
-  return now >= session.backgroundTaskDeadlineAt
-}
-
-/**
  * Tear down a Claude session and (by default) release the OAuth-pool
  * reservation owned by the chat.
  *
@@ -246,37 +212,19 @@ export function enforceClaudeSessionBudget(
   const max = resolveClaudeMaxResident(deps)
   if (max <= 0 || deps.claudeSessions.size <= max) return
 
+  const now = Date.now()
+  const inUseDeps: SessionInUseDeps = {
+    activeTurns: deps.activeTurns,
+    startingTurns: deps.startingTurns,
+    pendingTools: deps.pendingTools,
+    hasLiveWorkflow: (chatId) => hasLiveWorkflow(deps, chatId),
+    hasPendingBackgroundTask: (session, n) => hasPendingBackgroundTask(session, n),
+  }
+
   const candidates = [...deps.claudeSessions.entries()]
     .filter(([chatId, session]) => (
       chatId !== protectedChatId
-      && !deps.activeTurns.has(chatId)
-      // A booting turn is already using this session — it just has no
-      // ActiveTurn yet (registered only after the spawn resolves). Worse, a
-      // warm session reused for a follow-up still carries the PREVIOUS turn's
-      // lastUsedAt, so it sorts first in LRU: without this clause the prime
-      // eviction victim is the chat the user just came back to.
-      && !deps.startingTurns.has(chatId)
-      // A parked question blocks the worker inside canUseTool; evicting the
-      // session would orphan the continuation the user is about to answer.
-      && !deps.pendingTools.has(chatId)
-      && session.pendingPromptSeqs.length === 0
-      && !hasLiveWorkflow(deps, chatId)
-      // Any non-empty task set protects from eviction — including an
-      // expired guard mid wake-escalation. What bounds that protection
-      // depends on the signal (adr-20260808-...-level-signal-authoritative):
-      // a non-level-sourced set is bounded by the sweep's wake cap, while a
-      // level-sourced set is bounded only by the SDK's own REPLACE semantics
-      // (the id leaves the set when claude says so) and by the runner's
-      // `finally`, which deletes the session and releases the OAuth
-      // reservation the moment the transport dies — so a crashed CLI can
-      // never pin anything. A live stream whose upstream task list wedges
-      // DOES pin this session until server restart; that is the accepted
-      // cost of trusting the signal the SDK tells consumers to trust.
-      && session.backgroundTasks.size === 0
-      // A streaming self-wake turn is genuinely active work; evicting it
-      // kills the model mid-turn. The idle reaper still covers a wedged
-      // flag via lastUsedAt, so this cannot pin a session forever.
-      && !session.selfWakeActive
+      && !isSessionInUse(inUseDeps, chatId, session, now)
     ))
     .sort((a, b) => a[1].lastUsedAt - b[1].lastUsedAt)
 

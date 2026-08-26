@@ -105,6 +105,9 @@ function makeDeps(overrides: Partial<LoopCommandDeps> = {}): LoopCommandDeps {
     ...overrides,
     // These MUST follow the spread: Partial<...> widens each to T|undefined,
     // so re-assigning with a ?? fallback keeps TS7 seeing a concrete function.
+    pendingTools: overrides.pendingTools ?? { has: () => false },
+    hasLiveWorkflow: overrides.hasLiveWorkflow ?? (() => false),
+    hasPendingBackgroundTask: overrides.hasPendingBackgroundTask ?? (() => false),
     isLoopArmed: overrides.isLoopArmed ?? ((_chatId: string) => null),
     isChatBusy: overrides.isChatBusy ?? ((_chatId: string) => false),
     inspectTrackingFile:
@@ -247,6 +250,11 @@ describe("clearClaudeSessionContext", () => {
     const fakeSession = {
       chatId: "chat-1",
       suppressSessionTokenPersist: false,
+      pendingPromptSeqs: [],
+      selfWakeActive: false,
+      backgroundTasks: new Map(),
+      backgroundTasksLevelSourced: false,
+      backgroundTaskDeadlineAt: 0,
     } as unknown as ClaudeSessionState
     const claudeSessions = new Map<string, ClaudeSessionState>([["chat-1", fakeSession]])
     const activeTurns = new Map<string, unknown>() // no active turn
@@ -270,6 +278,11 @@ describe("clearClaudeSessionContext", () => {
     const fakeSession = {
       chatId: "chat-1",
       suppressSessionTokenPersist: false,
+      pendingPromptSeqs: [],
+      selfWakeActive: false,
+      backgroundTasks: new Map(),
+      backgroundTasksLevelSourced: false,
+      backgroundTaskDeadlineAt: 0,
     } as unknown as ClaudeSessionState
     const claudeSessions = new Map<string, ClaudeSessionState>([["chat-1", fakeSession]])
     const activeTurns = new Map<string, unknown>([["chat-1", {}]])

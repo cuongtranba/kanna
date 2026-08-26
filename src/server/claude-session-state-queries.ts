@@ -13,7 +13,6 @@
 import type { AgentProvider, ChatBackgroundTask, KannaStatus, PendingToolSnapshot } from "../shared/types"
 import type { ActiveTurn, ClaudeSessionState, StartingTurn } from "./claude-session-state"
 import type { PendingToolSlots } from "./pending-tool-slot"
-import { backgroundTaskGuardExpired } from "./claude-session-lifecycle"
 
 // ---------------------------------------------------------------------------
 // Deps interface
@@ -221,6 +220,98 @@ export function getClaudeSessionStates(
 }
 
 // ---------------------------------------------------------------------------
+// Background-task guard helpers (moved from claude-session-lifecycle so that
+// isSessionInUse can live here without creating a circular dependency)
+// ---------------------------------------------------------------------------
+
+/**
+ * True while the session has at least one Claude-Code background task that has
+ * not yet settled. Primary gate is set size > 0: settle events
+ * (task_notification) and level snapshots remove their id from the set, so the
+ * guard clears the moment the last task reports.
+ *
+ * The deadline is consulted ONLY for a session with no level signal. Once the
+ * SDK has sent a `background_tasks_changed` snapshot the set is authoritative
+ * and the clock is ignored — a healthy dev server is silent for hours, so any
+ * timer reads it as dead. See
+ * adr-20260808-background-task-level-signal-authoritative.
+ *
+ * PURE — an expired deadline does NOT clear the set here. The expired state is
+ * escalation input for the sweep's wake path, which must still see which task
+ * ids were pending. Clearing inside a predicate also let unrelated read paths
+ * (the sidebar badge query) destroy the guard as a side effect.
+ * See adr-20260801-background-task-wake-escalation.
+ */
+export function hasPendingBackgroundTask(session: ClaudeSessionState, now: number): boolean {
+  if (session.backgroundTasks.size === 0) return false
+  // Level-sourced (SDK): membership IS the truth, so no clock may expire it.
+  if (session.backgroundTasksLevelSourced) return true
+  return now < session.backgroundTaskDeadlineAt
+}
+
+/**
+ * True when background tasks are still pending but their keep-alive deadline
+ * has lapsed. The sweep escalates this state to a visible wake (or, once the
+ * wake budget is exhausted, a visible teardown) instead of a silent reap.
+ *
+ * NOT the complement of hasPendingBackgroundTask. The two used to partition
+ * `size > 0`; since adr-20260808-background-task-level-signal-authoritative a
+ * level-sourced session is BOTH pending and un-expired — the "held
+ * indefinitely" state. Only a session with no level signal (PTY, old CLI, or
+ * the window before the first snapshot) can reach the escalation ladder.
+ */
+export function backgroundTaskGuardExpired(session: ClaudeSessionState, now: number): boolean {
+  if (session.backgroundTasks.size === 0) return false
+  if (session.backgroundTasksLevelSourced) return false
+  return now >= session.backgroundTaskDeadlineAt
+}
+
+// ---------------------------------------------------------------------------
+// Unified session-in-use predicate
+// ---------------------------------------------------------------------------
+
+/**
+ * Structural slice of state needed to answer "is this session in use?" for
+ * all three teardown gates (idle reaper, budget enforcer, /clear context wipe).
+ */
+export interface SessionInUseDeps {
+  activeTurns: { has(chatId: string): boolean }
+  startingTurns: { has(chatId: string): boolean }
+  pendingTools: { has(chatId: string): boolean }
+  hasLiveWorkflow: (chatId: string) => boolean
+  hasPendingBackgroundTask: (session: ClaudeSessionState, now: number) => boolean
+}
+
+/**
+ * THE single predicate for "is this session in use?" — all three teardown
+ * gates (idle reaper, budget enforcer, /clear context wipe) must call this
+ * instead of maintaining their own diverged conjunctions. In use means any of:
+ *
+ * - a live Kanna turn (`activeTurns`)
+ * - a turn whose provider session is still booting (`startingTurns`)
+ * - a parked AskUserQuestion / ExitPlanMode awaiting the user (`pendingTools`)
+ * - a queued prompt not yet delivered to the provider (`pendingPromptSeqs`)
+ * - an in-flight Workflow running inside the warm session (`hasLiveWorkflow`)
+ * - a pending Claude-Code background task keeping the session warm
+ * - a task-notification self-wake turn streaming on the warm session
+ */
+export function isSessionInUse(
+  deps: SessionInUseDeps,
+  chatId: string,
+  session: ClaudeSessionState,
+  now: number,
+): boolean {
+  if (deps.activeTurns.has(chatId)) return true
+  if (deps.startingTurns.has(chatId)) return true
+  if (deps.pendingTools.has(chatId)) return true
+  if (session.pendingPromptSeqs.length > 0) return true
+  if (deps.hasLiveWorkflow(chatId)) return true
+  if (deps.hasPendingBackgroundTask(session, now)) return true
+  if (session.selfWakeActive) return true
+  return false
+}
+
+// ---------------------------------------------------------------------------
 // Idle-reaper helpers (private semantics preserved as package functions)
 // ---------------------------------------------------------------------------
 
@@ -236,21 +327,11 @@ export function isClaudeSessionIdle(
   session: ClaudeSessionState,
   now = Date.now(),
 ): boolean {
+  // An active SDK Claude turn drives the session directly — lastUsedAt does
+  // not capture its streaming activity, so we must check the provider type.
   const activeProv = deps.activeTurns.get(chatId)?.provider
   if (activeProv !== undefined && deps.isClaudeSdkProvider(activeProv)) return false
-  // A booting turn owns this session but has no ActiveTurn yet, and nothing
-  // streams while it boots — so lastUsedAt still reads from the PREVIOUS turn
-  // and a warm session reused for a follow-up looks maximally idle for
-  // exactly the window in which it is being spawned into.
-  if (deps.startingTurns.has(chatId)) return false
-  // A parked question means the provider worker is BLOCKED inside canUseTool
-  // — no entries stream, so lastUsedAt stales while the user reads the
-  // question. Reaping here would kill the very session holding the parked
-  // continuation.
-  if (deps.pendingTools.has(chatId)) return false
-  if (session.pendingPromptSeqs.length > 0) return false
-  if (deps.hasLiveWorkflow(chatId)) return false
-  if (deps.hasPendingBackgroundTask(session, now)) return false
+  if (isSessionInUse(deps, chatId, session, now)) return false
   return now - session.lastUsedAt >= deps.resolveClaudeIdleMs()
 }
 
