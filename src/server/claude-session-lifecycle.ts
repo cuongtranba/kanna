@@ -19,7 +19,6 @@ import {
   hasPendingBackgroundTask,
   backgroundTaskGuardExpired,
   isSessionInUse,
-  type SessionInUseDeps,
 } from "./claude-session-state-queries"
 
 export { hasPendingBackgroundTask, backgroundTaskGuardExpired }
@@ -213,18 +212,18 @@ export function enforceClaudeSessionBudget(
   if (max <= 0 || deps.claudeSessions.size <= max) return
 
   const now = Date.now()
-  const inUseDeps: SessionInUseDeps = {
+  const sessionInUseDeps = {
     activeTurns: deps.activeTurns,
     startingTurns: deps.startingTurns,
     pendingTools: deps.pendingTools,
-    hasLiveWorkflow: (chatId) => hasLiveWorkflow(deps, chatId),
-    hasPendingBackgroundTask: (session, n) => hasPendingBackgroundTask(session, n),
+    hasLiveWorkflow: (chatId: string) => hasLiveWorkflow(deps, chatId),
+    hasPendingBackgroundTask: (session: ClaudeSessionState, n: number) => hasPendingBackgroundTask(session, n),
   }
 
   const candidates = [...deps.claudeSessions.entries()]
     .filter(([chatId, session]) => (
       chatId !== protectedChatId
-      && !isSessionInUse(inUseDeps, chatId, session, now)
+      && !isSessionInUse(sessionInUseDeps, chatId, session, now)
     ))
     .sort((a, b) => a[1].lastUsedAt - b[1].lastUsedAt)
 

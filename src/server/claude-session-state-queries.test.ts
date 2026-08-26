@@ -11,8 +11,9 @@ import {
   hasPendingBackgroundTask,
   sweepIdleClaudeSessions,
   type SessionStateQueryDeps,
-  type SessionInUseDeps,
 } from "./claude-session-state-queries"
+
+type SessionInUseDeps = Parameters<typeof isSessionInUse>[0]
 import type { ActiveTurn, ClaudeSessionState, StartingTurn } from "./claude-session-state"
 import { PendingToolSlots, type ParkedTool } from "./pending-tool-slot"
 

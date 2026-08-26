@@ -271,18 +271,6 @@ export function backgroundTaskGuardExpired(session: ClaudeSessionState, now: num
 // ---------------------------------------------------------------------------
 
 /**
- * Structural slice of state needed to answer "is this session in use?" for
- * all three teardown gates (idle reaper, budget enforcer, /clear context wipe).
- */
-export interface SessionInUseDeps {
-  activeTurns: { has(chatId: string): boolean }
-  startingTurns: { has(chatId: string): boolean }
-  pendingTools: { has(chatId: string): boolean }
-  hasLiveWorkflow: (chatId: string) => boolean
-  hasPendingBackgroundTask: (session: ClaudeSessionState, now: number) => boolean
-}
-
-/**
  * THE single predicate for "is this session in use?" — all three teardown
  * gates (idle reaper, budget enforcer, /clear context wipe) must call this
  * instead of maintaining their own diverged conjunctions. In use means any of:
@@ -296,7 +284,13 @@ export interface SessionInUseDeps {
  * - a task-notification self-wake turn streaming on the warm session
  */
 export function isSessionInUse(
-  deps: SessionInUseDeps,
+  deps: {
+    activeTurns: { has(chatId: string): boolean }
+    startingTurns: { has(chatId: string): boolean }
+    pendingTools: { has(chatId: string): boolean }
+    hasLiveWorkflow: (chatId: string) => boolean
+    hasPendingBackgroundTask: (session: ClaudeSessionState, now: number) => boolean
+  },
   chatId: string,
   session: ClaudeSessionState,
   now: number,
