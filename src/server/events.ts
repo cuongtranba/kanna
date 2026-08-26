@@ -406,6 +406,88 @@ export type ToolRequestEvent =
 
 export type StoreEvent = ProjectEvent | ChatEvent | MessageEvent | QueuedMessageEvent | TurnEvent | StackEvent | AutoContinueEvent | SubagentRunEvent | ToolRequestEvent
 
+export type StoreEventKind =
+  | Exclude<StoreEvent, AutoContinueEvent>["type"]
+  | AutoContinueEvent["kind"]
+
+export type LogName =
+  | "projects"
+  | "chats"
+  | "messages"
+  | "queued-messages"
+  | "turns"
+  | "schedules"
+  | "stacks"
+  | "tool-requests"
+
+export const LOG_FILES = {
+  projects: "projects.jsonl",
+  chats: "chats.jsonl",
+  messages: "messages.jsonl",
+  "queued-messages": "queued-messages.jsonl",
+  turns: "turns.jsonl",
+  schedules: "schedules.jsonl",
+  stacks: "stacks.jsonl",
+  "tool-requests": "tool-requests.jsonl",
+} satisfies Record<LogName, string>
+
+export const LOG_OF_EVENT = {
+  project_opened: "projects",
+  project_removed: "projects",
+  sidebar_project_order_set: "projects",
+  project_star_set: "projects",
+  chat_created: "chats",
+  chat_renamed: "chats",
+  chat_deleted: "chats",
+  chat_archived: "chats",
+  chat_unarchived: "chats",
+  chat_provider_set: "chats",
+  chat_plan_mode_set: "chats",
+  chat_read_state_set: "chats",
+  chat_source_hash_set: "chats",
+  chat_policy_override_set: "chats",
+  chat_compact_failures_set: "chats",
+  message_appended: "messages",
+  queued_message_enqueued: "queued-messages",
+  queued_message_removed: "queued-messages",
+  turn_started: "turns",
+  turn_finished: "turns",
+  turn_failed: "turns",
+  turn_cancelled: "turns",
+  session_token_set: "turns",
+  pending_fork_session_token_set: "turns",
+  stack_added: "stacks",
+  stack_removed: "stacks",
+  stack_renamed: "stacks",
+  stack_project_added: "stacks",
+  stack_project_removed: "stacks",
+  subagent_run_started: "turns",
+  subagent_message_delta: "turns",
+  subagent_entry_appended: "turns",
+  subagent_run_completed: "turns",
+  subagent_run_failed: "turns",
+  subagent_run_cancelled: "turns",
+  subagent_tool_pending: "turns",
+  subagent_tool_resolved: "turns",
+  tool_request_put: "tool-requests",
+  tool_request_resolved: "tool-requests",
+  auto_continue_proposed: "schedules",
+  auto_continue_accepted: "schedules",
+  auto_continue_rescheduled: "schedules",
+  auto_continue_cancelled: "schedules",
+  auto_continue_fired: "schedules",
+  loop_armed: "schedules",
+  loop_run_outcome: "schedules",
+  loop_disarmed: "schedules",
+  cron_armed: "schedules",
+  cron_disarmed: "schedules",
+  cron_paused: "schedules",
+  cron_resumed: "schedules",
+  cron_run_started: "schedules",
+  cron_run_outcome: "schedules",
+  cron_run_skipped: "schedules",
+} satisfies Record<StoreEventKind, LogName>
+
 export interface StackRecord {
   id: string
   title: string
