@@ -854,67 +854,12 @@ function normalizeClaudeAuth<T>(value: T, warnings: string[]): ClaudeAuthSetting
   return { tokens, concurrencyDefault }
 }
 
-function toFilePayload(state: AppSettingsState) {
-  return {
-    analyticsEnabled: state.analyticsEnabled,
-    analyticsUserId: state.analyticsUserId,
-    browserSettingsMigrated: state.browserSettingsMigrated,
-    theme: state.theme,
-    typography: state.typography,
-    chatSoundPreference: state.chatSoundPreference,
-    chatSoundId: state.chatSoundId,
-    terminal: state.terminal,
-    panes: state.panes,
-    editor: state.editor,
-    defaultProvider: state.defaultProvider,
-    providerDefaults: state.providerDefaults,
-    cloudflareTunnel: state.cloudflareTunnel,
-    push: state.push,
-    telemetry: state.telemetry,
-    auth: state.auth,
-    claudeAuth: state.claudeAuth,
-    uploads: state.uploads,
-    subagents: state.subagents,
-    customMcpServers: state.customMcpServers,
-    customModels: state.customModels,
-    textSnippets: state.textSnippets,
-    claudeDriver: state.claudeDriver,
-    globalPromptAppend: state.globalPromptAppend,
-    shareDefaultTtlHours: state.shareDefaultTtlHours,
-    subagentRuntime: state.subagentRuntime,
-  }
+function toFilePayload({ warning: _warning, filePathDisplay: _filePathDisplay, ...rest }: AppSettingsState) {
+  return rest
 }
 
-function toSnapshot(state: AppSettingsState): AppSettingsSnapshot {
-  return {
-    analyticsEnabled: state.analyticsEnabled,
-    browserSettingsMigrated: state.browserSettingsMigrated,
-    theme: state.theme,
-    typography: state.typography,
-    chatSoundPreference: state.chatSoundPreference,
-    chatSoundId: state.chatSoundId,
-    terminal: state.terminal,
-    panes: state.panes,
-    editor: state.editor,
-    defaultProvider: state.defaultProvider,
-    providerDefaults: state.providerDefaults,
-    warning: state.warning,
-    filePathDisplay: state.filePathDisplay,
-    cloudflareTunnel: state.cloudflareTunnel,
-    push: state.push,
-    telemetry: state.telemetry,
-    auth: state.auth,
-    claudeAuth: state.claudeAuth,
-    uploads: state.uploads,
-    subagents: state.subagents,
-    customMcpServers: state.customMcpServers,
-    customModels: state.customModels,
-    textSnippets: state.textSnippets,
-    claudeDriver: state.claudeDriver,
-    globalPromptAppend: state.globalPromptAppend,
-    shareDefaultTtlHours: state.shareDefaultTtlHours,
-    subagentRuntime: state.subagentRuntime,
-  }
+function toSnapshot({ analyticsUserId: _analyticsUserId, ...snapshot }: AppSettingsState): AppSettingsSnapshot {
+  return snapshot
 }
 
 function normalizeAppSettings<T>(
@@ -1006,7 +951,10 @@ function normalizeAppSettings<T>(
     subagentRuntime,
   }
 
-  const shouldWrite = JSON.stringify(source ? toComparablePayload(source) : null) !== JSON.stringify(toFilePayload(state))
+  const filePayload = toFilePayload(state)
+  const shouldWrite = source === null || JSON.stringify(
+    Object.fromEntries(Object.keys(filePayload).map(k => [k, Reflect.get(source, k)]))
+  ) !== JSON.stringify(filePayload)
   state.warning = warnings.length > 0
     ? `Some settings were reset to defaults: ${warnings.join("; ")}`
     : null
@@ -1015,39 +963,6 @@ function normalizeAppSettings<T>(
     payload: state,
     warning: state.warning,
     shouldWrite,
-  }
-}
-
-function toComparablePayload(source: AppSettingsFile) {
-  return {
-    analyticsEnabled: source.analyticsEnabled,
-    analyticsUserId: typeof source.analyticsUserId === "string" ? source.analyticsUserId.trim() : source.analyticsUserId,
-    browserSettingsMigrated: source.browserSettingsMigrated,
-    theme: source.theme,
-    typography: source.typography,
-    chatSoundPreference: source.chatSoundPreference,
-    chatSoundId: source.chatSoundId,
-    terminal: source.terminal,
-    panes: source.panes,
-    editor: source.editor,
-    defaultProvider: source.defaultProvider,
-    providerDefaults: source.providerDefaults,
-    cloudflareTunnel: source.cloudflareTunnel,
-    push: source.push,
-    telemetry: source.telemetry,
-    auth: source.auth,
-    claudeAuth: source.claudeAuth,
-    uploads: source.uploads,
-    subagents: source.subagents,
-    customMcpServers: source.customMcpServers,
-    customModels: source.customModels,
-    textSnippets: source.textSnippets,
-    claudeDriver: source.claudeDriver,
-    globalPromptAppend: typeof source.globalPromptAppend === "string"
-      ? source.globalPromptAppend.replace(/\s+$/u, "")
-      : source.globalPromptAppend,
-    shareDefaultTtlHours: source.shareDefaultTtlHours,
-    subagentRuntime: source.subagentRuntime,
   }
 }
 
