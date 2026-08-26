@@ -48,7 +48,6 @@ export const MODULE_ALLOWANCES: Readonly<Record<string, number>> = {
   "src/server/app-settings.ts": 1897,
   "src/server/board-store.adapter.ts": 1364,
   "src/server/claude-pty/driver.ts": 1104,
-  "src/server/claude-session-runner.ts": 708,
   "src/server/codex-app-server.ts": 1023,
   "src/server/codex-transcript-translator.ts": 767,
   "src/server/event-store-messages.adapter.ts": 765,
