@@ -18,7 +18,7 @@ import {
   buildPoolUnavailableMessage,
   type SessionLifecycleDeps,
 } from "./claude-session-lifecycle"
-import type { ClaudeSessionState } from "./claude-session-state"
+import { ClaudeSessionState } from "./claude-session-state"
 import type { TokenUnavailability } from "./oauth-pool/oauth-token-pool"
 
 // ---------------------------------------------------------------------------
@@ -41,8 +41,8 @@ function makeFakeHandle() {
 }
 
 /** Build a minimal ClaudeSessionState. Override fields as needed. */
-function makeSession(overrides: Partial<ClaudeSessionState> = {}): ClaudeSessionState {
-  return {
+function makeSession(overrides: Partial<ConstructorParameters<typeof ClaudeSessionState>[0]> = {}): ClaudeSessionState {
+  return new ClaudeSessionState({
     id: "sess-1",
     chatId: "chat-1",
     session: makeFakeHandle(),
@@ -73,7 +73,7 @@ function makeSession(overrides: Partial<ClaudeSessionState> = {}): ClaudeSession
     suppressSessionTokenPersist: false,
     backgroundTaskWakeSuppressed: false,
     ...overrides,
-  }
+  })
 }
 
 /** Build a minimal SessionLifecycleDeps. Override fields as needed. */

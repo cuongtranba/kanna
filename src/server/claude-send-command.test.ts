@@ -18,7 +18,7 @@ import {
 } from "./claude-send-command"
 import type { QueuedChatMessage, ChatAttachment, CustomModelEntry, TranscriptEntry } from "../shared/types"
 import type { StartTurnForChatArgs } from "./claude-turn-starter"
-import type { CompactionTurnKind } from "./claude-session-state"
+import { ClaudeSessionState, type CompactionTurnKind } from "./claude-session-state"
 import { buildCodexCompactPrompt } from "../shared/builtin-commands"
 
 // ---------------------------------------------------------------------------
@@ -39,6 +39,53 @@ function makeQueuedMessage(overrides: Partial<QueuedChatMessage> = {}): QueuedCh
 
 const NO_ATTACHMENTS: ChatAttachment[] = []
 
+const STUB_HANDLE = {
+  provider: "claude" as const,
+  stream: { [Symbol.asyncIterator]: () => ({ next: async () => ({ value: undefined, done: true }) }) } as any,
+  getAccountInfo: async () => null,
+  interrupt: async () => {},
+  close: () => {},
+  sendPrompt: async () => {},
+  closed: Promise.resolve(),
+  setModel: async () => {},
+  setPermissionMode: async () => {},
+  getSupportedCommands: async () => [],
+}
+
+function makeTestSession(overrides: Partial<ConstructorParameters<typeof ClaudeSessionState>[0]> = {}): ClaudeSessionState {
+  return new ClaudeSessionState({
+    id: "test-session",
+    chatId: "chat-1",
+    session: STUB_HANDLE,
+    localPath: "/tmp/project",
+    additionalDirectories: [],
+    model: "claude-opus-4-1",
+    planMode: false,
+    sessionToken: null,
+    accountInfoLoaded: false,
+    nextPromptSeq: 0,
+    pendingPromptSeqs: [],
+    activeTokenId: null,
+    oauthKeyMasked: null,
+    oauthLabel: null,
+    openrouterKeyMasked: null,
+    openrouterModel: null,
+    lastUsedAt: 0,
+    backgroundTasks: new Map(),
+    backgroundTaskDeadlineAt: 0,
+    backgroundTaskWakeCount: 0,
+    backgroundTasksLevelSourced: false,
+    selfWakeActive: false,
+    recentToolDescriptions: new Map(),
+    backgroundLaunchToolIds: new Set(),
+    loopArmedAtSpawn: false,
+    cancelledResultPending: 0,
+    suppressSessionTokenPersist: false,
+    backgroundTaskWakeSuppressed: false,
+    ...overrides,
+  })
+}
+
 type DepsOptions = {
   activeChatIds?: string[]
   startingChatIds?: string[]
@@ -54,7 +101,7 @@ type DepsOptions = {
   removedMessages?: Array<{ chatId: string; id: string }>
   createdChats?: string[]
   analyticsEvents?: string[]
-  session?: { backgroundTasks: Map<string, { taskType: null; description: null; startedAt: number }>; backgroundTaskDeadlineAt: number; backgroundTaskWakeCount: number; selfWakeActive: boolean; backgroundTaskWakeSuppressed: boolean } | null
+  session?: ClaudeSessionState | null
   customModels?: readonly CustomModelEntry[]
   clearedChatIds?: string[]
   activeTurn?: { compactionTurn?: CompactionTurnKind }
@@ -543,13 +590,13 @@ describe("sendCommand", () => {
     // the idle reaper silently kill a healthy CI watch ~10 min after any user
     // message (adr-20260801-background-task-wake-escalation). Instead the
     // send refreshes the deadline and restores the wake budget.
-    const session = {
-      backgroundTasks: new Map([["task-1", { taskType: null, description: null, startedAt: 0 }]]),
+    const session = makeTestSession({
+      backgroundTasks: new Map([["task-1", { taskType: null, description: null, startedAt: 0, outputPath: null }]]),
       backgroundTaskDeadlineAt: 9999,
       backgroundTaskWakeCount: 2,
       selfWakeActive: false,
       backgroundTaskWakeSuppressed: false,
-    }
+    })
     const d = makeDeps({ session })
     const before = Date.now()
     await sendCommand(d, {
@@ -563,13 +610,7 @@ describe("sendCommand", () => {
   })
 
   test("clears backgroundTaskWakeSuppressed so a user re-engage after Stop unlocks self-wakes (issue #819)", async () => {
-    const session = {
-      backgroundTasks: new Map<string, { taskType: null; description: null; startedAt: number }>(),
-      backgroundTaskDeadlineAt: 0,
-      backgroundTaskWakeCount: 0,
-      selfWakeActive: false,
-      backgroundTaskWakeSuppressed: true,
-    }
+    const session = makeTestSession({ backgroundTaskWakeSuppressed: true })
     const d = makeDeps({ session })
     await sendCommand(d, {
       type: "chat.send",

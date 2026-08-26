@@ -12,7 +12,8 @@ import { describe, test, expect } from "bun:test"
 import { spawnClaudeTurn, type SpawnClaudeTurnArgs, type SpawnClaudeTurnDeps } from "./claude-session-spawner"
 import { OAuthPoolUnavailableError } from "./oauth-errors"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
-import type { ClaudeSessionState, ActiveTurn } from "./claude-session-state"
+import { ClaudeSessionState } from "./claude-session-state"
+import type { ActiveTurn } from "./claude-session-state"
 import type { ClaudeSessionHandle } from "./harness-types"
 import type { LlmProviderSnapshot } from "../shared/types"
 
@@ -51,8 +52,8 @@ function makeOpenRouterProvider(apiKey = "or-key"): LlmProviderSnapshot {
   }
 }
 
-function makeSession(overrides: Partial<ClaudeSessionState> = {}): ClaudeSessionState {
-  return {
+function makeSession(overrides: Partial<ConstructorParameters<typeof ClaudeSessionState>[0]> = {}): ClaudeSessionState {
+  return new ClaudeSessionState({
     id: "sess-1",
     chatId: "chat-1",
     session: makeFakeHandle(),
@@ -83,7 +84,7 @@ function makeSession(overrides: Partial<ClaudeSessionState> = {}): ClaudeSession
     suppressSessionTokenPersist: false,
     backgroundTaskWakeSuppressed: false,
     ...overrides,
-  }
+  })
 }
 
 function makeArgs(overrides: Partial<SpawnClaudeTurnArgs> = {}): SpawnClaudeTurnArgs {

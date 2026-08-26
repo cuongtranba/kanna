@@ -20,7 +20,6 @@ import {
   isPromptTooLongMessage,
   isNoConversationFoundMessage,
   backgroundTaskLaunchesFromToolResult,
-  mergeBackgroundTaskSnapshot,
   toolCallDescription,
 } from "./claude-prompt-helpers"
 import { timestamped } from "./claude-message-normalizer"
@@ -345,26 +344,11 @@ export async function runClaudeSession(
         if (isLaunchResult) {
           const launches = backgroundTaskLaunchesFromToolResult(event.entry.content)
           if (launches.length > 0) {
-            // empty→non-empty = a fresh watch epoch: restore the watchdog
-            // wake budget (adr-20260801-background-task-wake-escalation).
-            if (session.backgroundTasks.size === 0) session.backgroundTaskWakeCount = 0
             const launchDescription = session.recentToolDescriptions.get(event.entry.toolId) ?? null
-            for (const { id, outputPath } of launches) {
-              const existing = session.backgroundTasks.get(id)
-              if (!existing) {
-                session.backgroundTasks.set(id, {
-                  taskType: null,
-                  description: launchDescription,
-                  startedAt: Date.now(),
-                  outputPath,
-                })
-                deps.onBackgroundTaskLaunch?.(session.chatId, id, outputPath)
-              } else if (existing.outputPath === null && outputPath !== null) {
-                session.backgroundTasks.set(id, { ...existing, outputPath })
-                deps.onBackgroundTaskLaunch?.(session.chatId, id, outputPath)
-              }
+            const added = session.noteLaunch(launches, launchDescription, deps.resolveBackgroundTaskMaxMs(), Date.now())
+            for (const { id, outputPath } of added) {
+              deps.onBackgroundTaskLaunch?.(session.chatId, id, outputPath)
             }
-            session.backgroundTaskDeadlineAt = Date.now() + deps.resolveBackgroundTaskMaxMs()
             deps.emitStateChange(session.chatId)
           }
         }
@@ -376,28 +360,17 @@ export async function runClaudeSession(
         // an EMPTY snapshot proves the signal works just as well as a
         // non-empty one, so this is never reset — only a respawn clears it,
         // which is exactly the SDK's per-process rule.
-        session.backgroundTasksLevelSourced = true
-        const wasEmpty = session.backgroundTasks.size === 0
-        session.backgroundTasks = mergeBackgroundTaskSnapshot(
-          session.backgroundTasks,
+        session.applyLevelSnapshot(
           event.entry.backgroundTaskIdsSnapshot,
           event.entry.backgroundTasksSnapshot,
+          deps.resolveBackgroundTaskMaxMs(),
           Date.now(),
         )
-        if (wasEmpty && session.backgroundTasks.size > 0) session.backgroundTaskWakeCount = 0
-        session.backgroundTaskDeadlineAt = session.backgroundTasks.size > 0
-          ? Date.now() + deps.resolveBackgroundTaskMaxMs()
-          : 0
         deps.emitStateChange(session.chatId)
       } else if (event.entry.kind === "status" && event.entry.backgroundTaskId) {
         const settledId = event.entry.backgroundTaskId
-        session.backgroundTasks.delete(settledId)
+        session.noteSettle(settledId, deps.resolveBackgroundTaskMaxMs(), Date.now())
         deps.onBackgroundTaskSettle?.(session.chatId, settledId)
-        if (session.backgroundTasks.size > 0) {
-          session.backgroundTaskDeadlineAt = Date.now() + deps.resolveBackgroundTaskMaxMs()
-        } else {
-          session.backgroundTaskDeadlineAt = 0
-        }
         deps.emitStateChange(session.chatId)
       }
       const active = deps.activeTurns.get(session.chatId)

@@ -2250,26 +2250,25 @@ killed a mid-flight background Agent one second after its commit; see
 `adr-20260722-background-agent-keepalive` and, for the original Bash-only fix,
 `adr-20260604-pty-background-task-keepalive`).
 
-- **Guard.** `hasPendingBackgroundTask(session, now)` mirrors `hasLiveWorkflow`:
+- **Guard.** `session.isHoldingWork(now)` mirrors `hasLiveWorkflow`:
   consulted by both `isClaudeSessionIdle` and `enforceClaudeSessionBudget`, it
   holds the session warm while the task set is non-empty. Whether the deadline
   is consulted at all depends on the signal — see **Level-sourced** below.
 - **Level-sourced (SDK) — the deadline does not apply**
   (`adr-20260808-background-task-level-signal-authoritative`). The first
-  `background_tasks_changed` snapshot sets
-  `ClaudeSessionState.backgroundTasksLevelSourced`, after which SET MEMBERSHIP
-  is authoritative and no clock may expire the guard: `hasPendingBackgroundTask`
-  is true for any non-empty set and `backgroundTaskGuardExpired` is always
-  false, so the wake ladder is unreachable. This is what the SDK prescribes
-  (`sdk.d.ts` `SDKBackgroundTasksChangedMessage`: consumers needing "is
-  background work running" should replace their set with each payload). It is
-  required because *silence is not death*: a `vite dev` server prints its banner
-  and goes quiet for hours — in chat 1ed924dd the task's output file last grew
-  at 12:45:04 and the watchdog woke the user at 13:14:39, so an output-growth
-  probe would have fired too. The flag is sticky across an emptied set but
-  starts `false` at every spawn, matching the SDK's per-process reset rule. The
-  launch regex must NEVER set it — it is PTY's only signal. Note the two
-  predicates therefore no longer partition `size > 0`.
+  `background_tasks_changed` snapshot calls `session.applyLevelSnapshot(...)`,
+  which sets the sticky level-sourced flag. From that point SET MEMBERSHIP is
+  authoritative: `session.isHoldingWork(now)` is true for any non-empty set
+  and `session.guardExpired(now)` is always false, so the wake ladder is
+  unreachable. This is what the SDK prescribes (`sdk.d.ts`
+  `SDKBackgroundTasksChangedMessage`). Required because *silence is not death*:
+  a `vite dev` server prints its banner and goes quiet for hours — in chat
+  1ed924dd the task's output file last grew at 12:45:04 and the watchdog woke
+  the user at 13:14:39, so an output-growth probe would have fired too. The
+  flag is sticky across an emptied set but starts `false` at every spawn,
+  matching the SDK's per-process reset rule. The launch regex must NEVER call
+  `applyLevelSnapshot` — it is PTY's only signal. Note the two predicates
+  therefore no longer partition `size > 0`.
 - **Primary signal (SDK driver).** The SDK's `system/background_tasks_changed`
   LEVEL event — the full set of live background tasks after every membership
   change, REPLACE semantics (a missed edge bookend can never wedge a stale
@@ -2284,10 +2283,10 @@ killed a mid-flight background Agent one second after its commit; see
   `Async agent launched successfully… agentId: <id>` launch text (marker-gated
   so incidental "agentId:" strings never arm). This is the only launch signal
   on the PTY driver (CLI ≥ 2.1.x writes no system rows to the transcript
-  JSONL, so `backgroundTasksLevelSourced` is never set there and the guard
-  stays **deadline-based**) and a version-skew fallback on SDK. Duplicate arms
-  vs the level signal are harmless (Set). Arming through this path must never
-  promote a session to level-sourced.
+  JSONL, so `session.applyLevelSnapshot(...)` is never called there and the
+  guard stays **deadline-based**) and a version-skew fallback on SDK. Duplicate
+  arms vs the level signal are harmless (Set). Arming through this path must
+  never call `applyLevelSnapshot`.
 - **Stream activity bump.** The runner refreshes `session.lastUsedAt` on every
   appended transcript entry, so task-notification self-wake turns (which start
   no Kanna turn) never count as idle — mirrors claude-code's own invariant

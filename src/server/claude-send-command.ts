@@ -86,6 +86,7 @@ interface ClaudeSessionsMap {
     backgroundTaskWakeCount: number
     selfWakeActive: boolean
     backgroundTaskWakeSuppressed: boolean
+    noteUserSend(maxMs: number, now: number): void
   } | undefined
 }
 
@@ -452,13 +453,7 @@ export async function sendCommand(
   // remove them); the send just refreshes the deadline and restores the
   // watchdog wake budget.
   const existingClaudeSession = chatId ? deps.claudeSessions.get(chatId) : undefined
-  if (existingClaudeSession && existingClaudeSession.backgroundTasks.size > 0) {
-    existingClaudeSession.backgroundTaskDeadlineAt = Date.now() + deps.resolveBackgroundTaskMaxMs()
-    existingClaudeSession.backgroundTaskWakeCount = 0
-  }
-  if (existingClaudeSession) {
-    existingClaudeSession.backgroundTaskWakeSuppressed = false
-  }
+  existingClaudeSession?.noteUserSend(deps.resolveBackgroundTaskMaxMs(), Date.now())
 
   // A real user send is a takeover: disarm any armed loop so tools are
   // restored and the generic wake path resumes. Auto-continue / background
