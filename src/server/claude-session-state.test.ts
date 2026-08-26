@@ -343,3 +343,104 @@ describe("ClaudeSessionState.applyLevelSnapshot", () => {
     expect(s.backgroundTasks.get("t1")?.startedAt).toBe(123)
   })
 })
+
+// ---------------------------------------------------------------------------
+// hasBackgroundTasks
+// ---------------------------------------------------------------------------
+describe("ClaudeSessionState.hasBackgroundTasks", () => {
+  it("returns false when map is empty", () => {
+    const s = makeSession()
+    expect(s.hasBackgroundTasks()).toBe(false)
+  })
+
+  it("returns true when map has entries", () => {
+    const s = makeSession({
+      backgroundTasks: new Map([["t1", { taskType: null, description: null, startedAt: NOW, outputPath: null }]]),
+    })
+    expect(s.hasBackgroundTasks()).toBe(true)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// getBackgroundTaskEntries
+// ---------------------------------------------------------------------------
+describe("ClaudeSessionState.getBackgroundTaskEntries", () => {
+  it("returns empty array when no tasks", () => {
+    const s = makeSession()
+    expect(s.getBackgroundTaskEntries()).toEqual([])
+  })
+
+  it("returns [id, meta] pairs matching the map", () => {
+    const meta = { taskType: "bash" as const, description: "watch", startedAt: NOW, outputPath: "/out" }
+    const s = makeSession({ backgroundTasks: new Map([["t1", meta]]) })
+    const entries = s.getBackgroundTaskEntries()
+    expect(entries).toHaveLength(1)
+    expect(entries[0][0]).toBe("t1")
+    expect(entries[0][1]).toEqual(meta)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// getBackgroundTaskIds
+// ---------------------------------------------------------------------------
+describe("ClaudeSessionState.getBackgroundTaskIds", () => {
+  it("returns empty array when no tasks", () => {
+    const s = makeSession()
+    expect(s.getBackgroundTaskIds()).toEqual([])
+  })
+
+  it("returns all task ids", () => {
+    const s = makeSession({
+      backgroundTasks: new Map([
+        ["t1", { taskType: null, description: null, startedAt: NOW, outputPath: null }],
+        ["t2", { taskType: null, description: null, startedAt: NOW, outputPath: null }],
+      ]),
+    })
+    const ids = s.getBackgroundTaskIds()
+    expect(ids).toHaveLength(2)
+    expect(ids).toContain("t1")
+    expect(ids).toContain("t2")
+  })
+})
+
+// ---------------------------------------------------------------------------
+// abandonBackgroundTasks
+// ---------------------------------------------------------------------------
+describe("ClaudeSessionState.abandonBackgroundTasks", () => {
+  it("returns empty array when no tasks", () => {
+    const s = makeSession()
+    const ids = s.abandonBackgroundTasks()
+    expect(ids).toEqual([])
+  })
+
+  it("returns the ids of all tasks that were cleared", () => {
+    const s = makeSession({
+      backgroundTasks: new Map([
+        ["t1", { taskType: null, description: null, startedAt: NOW, outputPath: null }],
+        ["t2", { taskType: null, description: null, startedAt: NOW, outputPath: null }],
+      ]),
+      backgroundTaskDeadlineAt: NOW + 1000,
+    })
+    const ids = s.abandonBackgroundTasks()
+    expect(ids).toHaveLength(2)
+    expect(ids).toContain("t1")
+    expect(ids).toContain("t2")
+  })
+
+  it("clears the task map", () => {
+    const s = makeSession({
+      backgroundTasks: new Map([["t1", { taskType: null, description: null, startedAt: NOW, outputPath: null }]]),
+    })
+    s.abandonBackgroundTasks()
+    expect(s.backgroundTasks.size).toBe(0)
+  })
+
+  it("resets the deadline to 0", () => {
+    const s = makeSession({
+      backgroundTasks: new Map([["t1", { taskType: null, description: null, startedAt: NOW, outputPath: null }]]),
+      backgroundTaskDeadlineAt: NOW + 5000,
+    })
+    s.abandonBackgroundTasks()
+    expect(s.backgroundTaskDeadlineAt).toBe(0)
+  })
+})

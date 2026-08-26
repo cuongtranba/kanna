@@ -138,8 +138,8 @@ export function getBackgroundTasksByChatId(
 ): Map<string, ChatBackgroundTask[]> {
   const out = new Map<string, ChatBackgroundTask[]>()
   for (const [chatId, session] of deps.claudeSessions.entries()) {
-    if (session.backgroundTasks.size === 0) continue
-    const tasks: ChatBackgroundTask[] = [...session.backgroundTasks.entries()]
+    if (!session.hasBackgroundTasks()) continue
+    const tasks: ChatBackgroundTask[] = session.getBackgroundTaskEntries()
       .map(([id, meta]) => ({
         id,
         taskType: meta.taskType,
@@ -367,16 +367,14 @@ function escalateExpiredBackgroundTaskGuard(
     session.backgroundTaskDeadlineAt = now + deps.resolveBackgroundTaskMaxMs()
     deps.wakeBackgroundTaskSession(
       chatId,
-      [...session.backgroundTasks.keys()],
+      session.getBackgroundTaskIds(),
       session.backgroundTaskWakeCount,
       maxWakes,
     )
     return
   }
   if (now - session.lastUsedAt < deps.resolveClaudeIdleMs()) return
-  const abandonedIds = [...session.backgroundTasks.keys()]
-  session.backgroundTasks.clear()
-  session.backgroundTaskDeadlineAt = 0
+  const abandonedIds = session.abandonBackgroundTasks()
   deps.closeClaudeSession(chatId, session)
   deps.notifyBackgroundTasksAbandoned(chatId, abandonedIds)
   deps.emitStateChange(chatId)

@@ -44,7 +44,7 @@ export const MODULE_ALLOWANCES: Readonly<Record<string, number>> = {
   "src/client/components/chat-ui/ChatInput.tsx": 1369,
   "src/client/components/chat-ui/RightSidebar.tsx": 2071,
   "src/client/stores/chatPreferencesStore.ts": 810,
-  "src/server/agent-coordinator.ts": 1137,
+  "src/server/agent-coordinator.ts": 1483,
   "src/server/app-settings.ts": 1897,
   "src/server/board-store.adapter.ts": 1364,
   "src/server/claude-pty/driver.ts": 1104,
@@ -96,7 +96,7 @@ export const PATTERN_BUDGETS: readonly PatternBudget[] = [
     id: "coordinator-passthroughs",
     include: ["src/server/agent-coordinator.ts"],
     pattern: "Fn\\(this\\.build",
-    max: 55,
+    max: 0,
     issue: 893,
     rationale:
       "A method whose whole body is `return xFn(this.buildYDeps(), ...)` adds interface without adding implementation, and costs three hops through two files to reach one line of logic.",

@@ -2191,11 +2191,11 @@ describe("AgentCoordinator claude integration", () => {
     })
     await waitFor(() => store.turnFinishedCount === 1)
 
-    const session = coordinator.claudeSessions.get("chat-1") as any
+    const session = coordinator.getClaudeSessionMap().get("chat-1") as any
     session.lastUsedAt = 0
     ;(coordinator as any).sweepIdleClaudeSessions(100)
 
-    expect(coordinator.claudeSessions.has("chat-1")).toBe(false)
+    expect(coordinator.getClaudeSessionMap().has("chat-1")).toBe(false)
     expect(closeCount).toBe(1)
 
     await coordinator.send({
@@ -2230,7 +2230,7 @@ describe("AgentCoordinator claude integration", () => {
 
     function put(chatId: string, lastUsedAt: number) {
       const events = new AsyncEventQueue<any>()
-      coordinator.claudeSessions.set(chatId, new ClaudeSessionState({
+      coordinator.getClaudeSessionMap().set(chatId, new ClaudeSessionState({
         id: `state-${chatId}`,
         chatId,
         session: {
@@ -2283,7 +2283,7 @@ describe("AgentCoordinator claude integration", () => {
     ;(coordinator as any).enforceClaudeSessionBudget("chat-new")
 
     expect(closed).toEqual(["chat-old"])
-    expect([...coordinator.claudeSessions.keys()].sort()).toEqual(["chat-mid", "chat-new"])
+    expect([...coordinator.getClaudeSessionMap().keys()].sort()).toEqual(["chat-mid", "chat-new"])
 
     coordinator.dispose()
   })
@@ -2304,7 +2304,7 @@ describe("AgentCoordinator claude integration", () => {
 
     function put(chatId: string) {
       const events = new AsyncEventQueue<any>()
-      coordinator.claudeSessions.set(chatId, new ClaudeSessionState({
+      coordinator.getClaudeSessionMap().set(chatId, new ClaudeSessionState({
         id: `state-${chatId}`,
         chatId,
         session: {
@@ -2354,7 +2354,7 @@ describe("AgentCoordinator claude integration", () => {
 
     // chat-plain has no live workflow → reaped; chat-wf is protected.
     expect(closed).toEqual(["chat-plain"])
-    expect(coordinator.claudeSessions.has("chat-wf")).toBe(true)
+    expect(coordinator.getClaudeSessionMap().has("chat-wf")).toBe(true)
 
     // Once the run is no longer active, the next sweep reaps it.
     activeByChat.set("chat-wf", false)
@@ -2379,7 +2379,7 @@ describe("AgentCoordinator claude integration", () => {
 
     function put(chatId: string, lastUsedAt: number) {
       const events = new AsyncEventQueue<any>()
-      coordinator.claudeSessions.set(chatId, new ClaudeSessionState({
+      coordinator.getClaudeSessionMap().set(chatId, new ClaudeSessionState({
         id: `state-${chatId}`,
         chatId,
         session: {
@@ -2431,7 +2431,7 @@ describe("AgentCoordinator claude integration", () => {
     ;(coordinator as any).enforceClaudeSessionBudget("chat-new")
 
     expect(closed).toEqual(["chat-mid"])
-    expect([...coordinator.claudeSessions.keys()].sort()).toEqual(["chat-new", "chat-old"])
+    expect([...coordinator.getClaudeSessionMap().keys()].sort()).toEqual(["chat-new", "chat-old"])
 
     coordinator.dispose()
   })
@@ -2491,7 +2491,7 @@ describe("AgentCoordinator claude integration", () => {
     })
     await waitFor(() => store.turnFinishedCount === 1)
 
-    const session = coordinator.claudeSessions.get("chat-1") as any
+    const session = coordinator.getClaudeSessionMap().get("chat-1") as any
     expect(session.backgroundTasks.has("bgABC123")).toBe(true)
     // Armed by the launch regex only — no level snapshot arrived, so this
     // session keeps the deadline + wake ladder verified below. This is the
@@ -2505,14 +2505,14 @@ describe("AgentCoordinator claude integration", () => {
     // the reaper must NOT close it before the deadline.
     session.lastUsedAt = 0
     ;(coordinator as any).sweepIdleClaudeSessions(deadline - 1)
-    expect(coordinator.claudeSessions.has("chat-1")).toBe(true)
+    expect(coordinator.getClaudeSessionMap().has("chat-1")).toBe(true)
     expect(closeCount).toBe(0)
 
     // Past the deadline the guard does NOT silently release: the sweep fires
     // a watchdog wake (visible to the user) and re-arms the deadline
     // (adr-20260801-background-task-wake-escalation).
     ;(coordinator as any).sweepIdleClaudeSessions(deadline + 1)
-    expect(coordinator.claudeSessions.has("chat-1")).toBe(true)
+    expect(coordinator.getClaudeSessionMap().has("chat-1")).toBe(true)
     expect(closeCount).toBe(0)
     expect(session.backgroundTaskWakeCount).toBe(1)
     expect(session.backgroundTaskDeadlineAt).toBeGreaterThan(deadline)
@@ -2523,7 +2523,7 @@ describe("AgentCoordinator claude integration", () => {
     session.lastUsedAt = 0
     const finalDeadline = session.backgroundTaskDeadlineAt as number
     ;(coordinator as any).sweepIdleClaudeSessions(finalDeadline + 1)
-    expect(coordinator.claudeSessions.has("chat-1")).toBe(false)
+    expect(coordinator.getClaudeSessionMap().has("chat-1")).toBe(false)
     expect(closeCount).toBe(1)
     await waitFor(() => store.messages.some((m: any) =>
       typeof m.result === "string" && m.result.includes("bgABC123")))
@@ -2586,7 +2586,7 @@ describe("AgentCoordinator claude integration", () => {
     })
     await waitFor(() => store.turnFinishedCount === 1)
 
-    const session = coordinator.claudeSessions.get("chat-1") as any
+    const session = coordinator.getClaudeSessionMap().get("chat-1") as any
     expect(session.backgroundTasks.has("ba35e96q4")).toBe(true)
     expect(session.backgroundTasksLevelSourced).toBe(true)
 
@@ -2594,7 +2594,7 @@ describe("AgentCoordinator claude integration", () => {
     session.lastUsedAt = 0
     ;(coordinator as any).sweepIdleClaudeSessions(Date.now() + 2 * 60 * 60_000)
 
-    expect(coordinator.claudeSessions.has("chat-1")).toBe(true)
+    expect(coordinator.getClaudeSessionMap().has("chat-1")).toBe(true)
     expect(closeCount).toBe(0)
     expect(session.backgroundTaskWakeCount).toBe(0)
     expect(session.backgroundTasks.has("ba35e96q4")).toBe(true)
@@ -2645,11 +2645,11 @@ describe("AgentCoordinator claude integration", () => {
     })
     await waitFor(() => store.turnFinishedCount === 1)
 
-    const session = coordinator.claudeSessions.get("chat-1") as any
+    const session = coordinator.getClaudeSessionMap().get("chat-1") as any
     expect(session.backgroundTasks.size).toBe(0)
     session.lastUsedAt = 0
     ;(coordinator as any).sweepIdleClaudeSessions(100)
-    expect(coordinator.claudeSessions.has("chat-1")).toBe(false)
+    expect(coordinator.getClaudeSessionMap().has("chat-1")).toBe(false)
 
     coordinator.dispose()
   })
@@ -2666,7 +2666,7 @@ describe("AgentCoordinator claude integration", () => {
 
     function put(chatId: string, lastUsedAt: number, bg?: { ids: string[]; deadlineAt: number }) {
       const events = new AsyncEventQueue<any>()
-      coordinator.claudeSessions.set(chatId, new ClaudeSessionState({
+      coordinator.getClaudeSessionMap().set(chatId, new ClaudeSessionState({
         id: `state-${chatId}`,
         chatId,
         session: {
@@ -2718,7 +2718,7 @@ describe("AgentCoordinator claude integration", () => {
     ;(coordinator as any).enforceClaudeSessionBudget("chat-new")
 
     expect(closed).toEqual(["chat-mid"])
-    expect([...coordinator.claudeSessions.keys()].sort()).toEqual(["chat-new", "chat-old"])
+    expect([...coordinator.getClaudeSessionMap().keys()].sort()).toEqual(["chat-new", "chat-old"])
 
     coordinator.dispose()
   })
@@ -2760,7 +2760,7 @@ describe("AgentCoordinator claude integration", () => {
     })
     await waitFor(() => store.turnFinishedCount === 1)
 
-    const session = coordinator.claudeSessions.get("chat-1") as any
+    const session = coordinator.getClaudeSessionMap().get("chat-1") as any
     session.backgroundTasks = new Map([["bgPending", { taskType: null, description: null, startedAt: 0 }]])
     session.backgroundTaskDeadlineAt = Date.now() + 5_000
     session.backgroundTaskWakeCount = 2
@@ -2861,13 +2861,13 @@ describe("AgentCoordinator claude integration", () => {
     })
     await waitFor(() => store.turnFinishedCount === 1)
 
-    const session = coordinator.claudeSessions.get("chat-1") as any
+    const session = coordinator.getClaudeSessionMap().get("chat-1") as any
     expect(session.backgroundTasks.size).toBe(2)
     session.lastUsedAt = 0
 
     // Session not reapable while tasks pending.
     ;(coordinator as any).sweepIdleClaudeSessions(Date.now())
-    expect(coordinator.claudeSessions.has("chat-1")).toBe(true)
+    expect(coordinator.getClaudeSessionMap().has("chat-1")).toBe(true)
 
     // Push first settle — set shrinks to 1, still not reapable.
     sessionEvents.push({
@@ -2882,7 +2882,7 @@ describe("AgentCoordinator claude integration", () => {
     expect(session.backgroundTasks.has("bgTask1")).toBe(false)
     expect(session.backgroundTasks.has("bgTask2")).toBe(true)
     ;(coordinator as any).sweepIdleClaudeSessions(Date.now())
-    expect(coordinator.claudeSessions.has("chat-1")).toBe(true)
+    expect(coordinator.getClaudeSessionMap().has("chat-1")).toBe(true)
 
     // Push second settle — set empty, deadline cleared, session reaps immediately.
     sessionEvents.push({
@@ -2897,7 +2897,7 @@ describe("AgentCoordinator claude integration", () => {
     expect(session.backgroundTaskDeadlineAt).toBe(0)
     session.lastUsedAt = 0
     ;(coordinator as any).sweepIdleClaudeSessions(Date.now())
-    expect(coordinator.claudeSessions.has("chat-1")).toBe(false)
+    expect(coordinator.getClaudeSessionMap().has("chat-1")).toBe(false)
     expect(closeCount).toBe(1)
 
     coordinator.dispose()
@@ -6197,7 +6197,7 @@ describe("AgentCoordinator late tool request", () => {
     })
 
     await waitFor(() => store.turnFinishedCount === 1)
-    expect(coordinator.activeTurns.has("chat-1")).toBe(false)
+    expect(coordinator.getActiveTurnMap().has("chat-1")).toBe(false)
     expect(capturedOnToolRequest).not.toBeNull()
 
     const lateRequest = {
@@ -6241,9 +6241,9 @@ describe("AgentCoordinator late tool request", () => {
       rejected = true
     })
 
-    await waitFor(() => coordinator.pendingTools.get("chat-1")?.toolUseId === "t-late")
+    await waitFor(() => coordinator.getPendingToolSlots().get("chat-1")?.toolUseId === "t-late")
     expect(rejected).toBe(false)
-    expect(coordinator.activeTurns.has("chat-1")).toBe(false)
+    expect(coordinator.getActiveTurnMap().has("chat-1")).toBe(false)
     expect(coordinator.getPendingTool("chat-1")).toEqual({
       toolUseId: "t-late",
       toolKind: "ask_user_question",

@@ -101,6 +101,7 @@ import {
   isLoopArmed as isLoopArmedFn,
   stopLoop as stopLoopFn,
   listLiveSchedules as listLiveSchedulesFn,
+  toArmedLoopInfo,
   type LoopCommandDeps,
 } from "./claude-loop-commands"
 import {
@@ -140,7 +141,7 @@ import {
   maybeStartNextQueuedMessage as maybeStartNextQueuedMessageFn,
   type SendCommandDeps,
 } from "./claude-send-command"
-import { clearChatContext as clearChatContextFn } from "./claude-context-commands"
+import { clearChatContext as clearChatContextFn, type ClearChatContextDeps } from "./claude-context-commands"
 import {
   subagentPendingKey as subagentPendingKeyFn,
   rejectPendingResolversForChat as rejectPendingResolversForChatFn,
@@ -157,9 +158,27 @@ import {
   getClaudeSessionStates as getClaudeSessionStatesFn,
   getBackgroundTasksByChatId as getBackgroundTasksByChatIdFn,
   sweepIdleClaudeSessions as sweepIdleClaudeSessionsFn,
+  isChatBusy,
   type SessionStateQueryDeps,
 } from "./claude-session-state-queries"
-import * as agentDepsBuilders from "./agent-deps-builders"
+import { ensureFreshMcpToken } from "./mcp-oauth.adapter"
+import { realpathAdapter } from "./paths-fs.adapter"
+import {
+  ensureTrackingFile,
+  inspectTrackingFile,
+  isWorktreeOfSameRepo,
+  readOracleScript,
+} from "./loop-template-io.adapter"
+import { runVerifyCommand } from "./loop-verify-io.adapter"
+import { homedir } from "node:os"
+import { isClaudeSdkProvider } from "./provider-catalog"
+import { createMermaidGuard, type MermaidGuard } from "./mermaid-guard"
+import { createCronRepair, type CronRepair } from "./cron/repair"
+import { createCronConfirm, type CronConfirm } from "./cron/confirm"
+import { createModelEscalation, type ModelEscalation } from "./model-escalation"
+import { parseMermaid } from "./mermaid-parse.adapter"
+import { repairMermaidSource } from "../shared/mermaidRepair"
+import { resolveSpawnPaths } from "./claude-session-config"
 import {
   addCounter,
   recordHistogram,
@@ -218,10 +237,6 @@ function recordTurnSpend(active: ActiveTurn): void {
 // commandError that gets wiped by the next chat snapshot tick.
 // Moved to oauth-errors.ts to avoid a circular import with claude-turn-starter.ts.
 export class AgentCoordinator {
-  // Fields accessed by agent-deps-builders.ts are intentionally non-private
-  // (readonly instead of private readonly) to allow the external builder
-  // functions to read them without bypassing TypeScript's type system.
-  // `onStateChange` and `claudeSessionSweepTimer` are truly internal and stay private.
   readonly store: EventStore
   private readonly onStateChange: (chatId?: string, options?: { immediate?: boolean }) => void
   readonly analytics: AnalyticsReporter
@@ -230,17 +245,17 @@ export class AgentCoordinator {
   readonly startClaudeSessionFn: NonNullable<AgentCoordinatorArgs["startClaudeSession"]>
   readonly startClaudeSessionPTYFn: (args: StartClaudeSessionPtyArgs) => Promise<ClaudeSessionHandle>
   reportBackgroundError: ((message: string) => void) | null = null
-  readonly activeTurns = new Map<string, ActiveTurn>()
-  readonly pendingTools = new PendingToolSlots()
+  private readonly activeTurns = new Map<string, ActiveTurn>()
+  private readonly pendingTools = new PendingToolSlots()
   /**
    * Turns claimed by `startTurnForChat` whose provider session is still
    * booting — the window before an `ActiveTurn` exists. Cancel, send-queueing
    * and status derivation all consult this so the chat is never mistaken for
    * idle mid-spawn.
    */
-  readonly startingTurns = new Map<string, StartingTurn>()
-  readonly drainingStreams = new Map<string, { turn: HarnessTurn }>()
-  readonly claudeSessions = new Map<string, ClaudeSessionState>()
+  private readonly startingTurns = new Map<string, StartingTurn>()
+  private readonly drainingStreams = new Map<string, { turn: HarnessTurn }>()
+  private readonly claudeSessions = new Map<string, ClaudeSessionState>()
   readonly mentionedSubagentIdsByChat = new Map<string, string[]>()
   readonly claudeLimitDetector: LimitDetector
   readonly codexLimitDetector: LimitDetector
@@ -253,6 +268,9 @@ export class AgentCoordinator {
    */
   readonly cronSkipCoalescer = new CronSkipCoalescer()
   private readonly pendingCronOutcomes = new Set<Promise<unknown>>()
+  private readonly _cronRepair: CronRepair
+  private readonly _cronConfirm: CronConfirm
+  private readonly _mermaidGuard: MermaidGuard
   readonly getAutoResumePreference: () => boolean
   readonly getSubagents: () => Subagent[]
   readonly getAppSettingsSnapshot: NonNullable<AgentCoordinatorArgs["getAppSettingsSnapshot"]>
@@ -317,6 +335,31 @@ export class AgentCoordinator {
     this.claudeAuthErrorDetector = new ClaudeAuthErrorDetector()
     this.scheduleManager = args.scheduleManager ?? null
     this.cronScheduler = args.cronScheduler ?? null
+    this._cronRepair = createCronRepair({
+      escalation: this._buildModelEscalation({
+        name: "cron/repair",
+        enabled: process.env.KANNA_CRON_REPAIR !== "disabled",
+        drain: true,
+      }),
+    })
+    this._cronConfirm = createCronConfirm({
+      escalation: this._buildModelEscalation({
+        name: "cron/confirm",
+        enabled: process.env.KANNA_CRON_CONFIRM !== "disabled",
+        drain: true,
+      }),
+    })
+    this._mermaidGuard = createMermaidGuard({
+      escalation: this._buildModelEscalation({
+        name: "mermaid",
+        enabled: process.env.KANNA_MERMAID_GUARD !== "disabled",
+      }),
+      parse: parseMermaid,
+      repair: (source) => {
+        const result = repairMermaidSource(source)
+        return { source: result.source, repaired: result.repairs.length > 0 }
+      },
+    })
     // The store's turn-terminal observer is how a cron-fired turn's outcome
     // reaches its job, and how a turn's duration reaches telemetry: every
     // provider path funnels through recordTurn*, and the ActiveTurn still holds
@@ -336,7 +379,7 @@ export class AgentCoordinator {
       }
       const tag = active?.cronRun
       if (!tag) return
-      const p = recordCronTurnOutcomeFn(this.buildCronCommandDeps(), tag, outcome).catch((error) => {
+      const p = recordCronTurnOutcomeFn(this.cronCommandDeps(), tag, outcome).catch((error) => {
         log.error("[kanna/cron] failed to record run outcome:", String(error))
       })
       this.pendingCronOutcomes.add(p)
@@ -423,6 +466,39 @@ export class AgentCoordinator {
     this.localCatalog = args.localCatalog ?? null
   }
 
+  private _buildModelEscalation(opts: { name: string; enabled: boolean; drain?: boolean }): ModelEscalation {
+    return createModelEscalation({
+      name: opts.name,
+      enabled: opts.enabled,
+      hasQueuedMessage: (chatId) => this.store.getQueuedMessages(chatId).length > 0,
+      enqueueMessage: async (chatId, content, options) => {
+        await this.enqueueMessage(chatId, content, [], options)
+      },
+      drainQueue: opts.drain
+        ? async (chatId) => {
+            await this.maybeStartNextQueuedMessage(chatId)
+          }
+        : undefined,
+    })
+  }
+
+  getActiveTurnChatIds(): string[] {
+    return [...this.activeTurns.keys()]
+  }
+
+  // ---------------------------------------------------------------------------
+  // Test-inspection accessors — expose private maps for *.test.ts assertions
+  // without widening the production surface. These are the ONLY paths external
+  // test code is allowed to read (or seed) the internal maps through.
+  // ---------------------------------------------------------------------------
+
+  /** @testing Returns the live claude-session map. */
+  getClaudeSessionMap(): Map<string, ClaudeSessionState> { return this.claudeSessions }
+  /** @testing Returns the live active-turn map. */
+  getActiveTurnMap(): Map<string, ActiveTurn> { return this.activeTurns }
+  /** @testing Returns the live pending-tool slots object. */
+  getPendingToolSlots(): PendingToolSlots { return this.pendingTools }
+
   setBackgroundErrorReporter(report: ((message: string) => void) | null) {
     this.reportBackgroundError = report
   }
@@ -440,7 +516,7 @@ export class AgentCoordinator {
   }
 
   getActiveStatuses() {
-    return getActiveStatusesFn(this.buildSessionStateQueryDeps())
+    return getActiveStatusesFn(this.sessionStateQueryDeps())
   }
 
   /** Returns true when a Kanna turn is currently active on the given chat. */
@@ -449,15 +525,15 @@ export class AgentCoordinator {
   }
 
   getWaitStartedAtByChatId(): Map<string, number> {
-    return getWaitStartedAtByChatIdFn(this.buildSessionStateQueryDeps())
+    return getWaitStartedAtByChatIdFn(this.sessionStateQueryDeps())
   }
 
   getPendingTool(chatId: string): PendingToolSnapshot | null {
-    return getPendingToolFn(this.buildSessionStateQueryDeps(), chatId)
+    return getPendingToolFn(this.sessionStateQueryDeps(), chatId)
   }
 
   getDrainingChatIds(): Set<string> {
-    return getDrainingChatIdsFn(this.buildSessionStateQueryDeps())
+    return getDrainingChatIdsFn(this.sessionStateQueryDeps())
   }
 
   /**
@@ -465,7 +541,7 @@ export class AgentCoordinator {
    * sidebar badge selector. Chats not present are implicitly `cold`.
    */
   getClaudeSessionStates(): Map<string, "warming" | "active" | "idle"> {
-    return getClaudeSessionStatesFn(this.buildSessionStateQueryDeps())
+    return getClaudeSessionStatesFn(this.sessionStateQueryDeps())
   }
 
   /**
@@ -473,113 +549,270 @@ export class AgentCoordinator {
    * deriveChatSnapshot so the composer can list what is running.
    */
   getBackgroundTasksByChatId(): Map<string, ChatBackgroundTask[]> {
-    return getBackgroundTasksByChatIdFn(this.buildSessionStateQueryDeps())
+    return getBackgroundTasksByChatIdFn(this.sessionStateQueryDeps())
   }
 
   get toolCallbackService(): ToolCallbackService | null {
     return this.toolCallback
   }
 
-  /** @internal used by agent-deps-builders.ts */
   emitStateChange(chatId?: string, options?: { immediate?: boolean }) {
     this.onStateChange(chatId, options)
   }
 
   // ---------------------------------------------------------------------------
-  // Session config helpers deps builder
+  // Session config helpers deps
   // ---------------------------------------------------------------------------
 
-  private buildClaudeSessionConfigHelpersDeps(): ClaudeSessionConfigHelpersDeps {
-    return agentDepsBuilders.buildClaudeSessionConfigHelpersDeps(this)
+  private claudeSessionConfigDeps(): ClaudeSessionConfigHelpersDeps {
+    return {
+      getAppSettingsSnapshot: () => this.getAppSettingsSnapshot(),
+      chatPolicy: this.chatPolicy,
+      store: this.store,
+      ptyInstanceRegistry: this.ptyInstanceRegistry,
+      ensureFreshToken: (server, opts) => ensureFreshMcpToken(server, opts),
+      persistOAuthState: this.persistOAuthStateFn,
+      killProcessTree: async (pid) => {
+        const { killProcessTree } = await import("./claude-pty/pid-registry.adapter")
+        await killProcessTree(pid)
+      },
+    }
   }
 
-  /** @internal used by agent-deps-builders.ts */
   resolveClaudeDriverPreference(): ClaudeDriverPreference {
-    return resolveClaudeDriverPreferenceFn(this.buildClaudeSessionConfigHelpersDeps())
+    return resolveClaudeDriverPreferenceFn(this.claudeSessionConfigDeps())
   }
 
-  /** @internal used by agent-deps-builders.ts */
   getEnabledCustomMcpServers(): readonly McpServerConfig[] {
-    return getEnabledCustomMcpServersFn(this.buildClaudeSessionConfigHelpersDeps())
+    return getEnabledCustomMcpServersFn(this.claudeSessionConfigDeps())
   }
 
-  /** @internal used by agent-deps-builders.ts */
   async buildOAuthBearers(servers: readonly McpServerConfig[]): Promise<Map<string, string>> {
-    return buildOAuthBearersFn(this.buildClaudeSessionConfigHelpersDeps(), servers)
+    return buildOAuthBearersFn(this.claudeSessionConfigDeps(), servers)
   }
 
-  /** @internal used by agent-deps-builders.ts */
   resolveChatPolicy(chatId: string): ChatPermissionPolicy {
-    return resolveChatPolicyFn(this.buildClaudeSessionConfigHelpersDeps(), chatId)
+    return resolveChatPolicyFn(this.claudeSessionConfigDeps(), chatId)
   }
 
   // ---------------------------------------------------------------------------
-  // Session lifecycle deps builder — wires this.* refs into SessionLifecycleDeps
+  // Session lifecycle deps
   // ---------------------------------------------------------------------------
 
-  private buildSessionLifecycleDeps(): SessionLifecycleDeps {
-    return agentDepsBuilders.buildSessionLifecycleDeps(this)
+  private sessionLifecycleDeps(): SessionLifecycleDeps {
+    return {
+      getAppSettingsSnapshot: () => this.getAppSettingsSnapshot(),
+      defaultIdleMs: this.claudeSessionLifecycle.idleMs,
+      defaultMaxResidentSessions: this.claudeSessionLifecycle.maxResidentSessions,
+      claudeSessions: this.claudeSessions,
+      activeTurns: this.activeTurns,
+      startingTurns: this.startingTurns,
+      pendingTools: this.pendingTools,
+      oauthPool: this.oauthPool,
+      workflowRegistry: this.workflowRegistry,
+      resolveClaudeDriverPreference: () => this.resolveClaudeDriverPreference(),
+      emitStateChange: (chatId: string) => { this.emitStateChange(chatId) },
+      store: this.store,
+      homeDir: homedir(),
+    }
   }
 
-  private buildSessionErrorHandlerDeps(): SessionErrorHandlerDeps {
-    return agentDepsBuilders.buildSessionErrorHandlerDeps(this)
-  }
-
-  // ---------------------------------------------------------------------------
-  // Auto-continue command deps builder — wires this.* refs into AutoContinueCommandDeps
-  // ---------------------------------------------------------------------------
-
-  private buildAutoContinueCommandDeps(): AutoContinueCommandDeps {
-    return agentDepsBuilders.buildAutoContinueCommandDeps(this)
-  }
-
-  private buildLoopCommandDeps(): LoopCommandDeps {
-    return agentDepsBuilders.buildLoopCommandDeps(this)
-  }
-
-  private buildCronCommandDeps(): CronCommandDeps {
-    return agentDepsBuilders.buildCronCommandDeps(this)
-  }
-
-  private buildCronFireDeps(): CronFireDeps {
-    return agentDepsBuilders.buildCronFireDeps(this)
-  }
-
-  // ---------------------------------------------------------------------------
-  // Cancel handler deps builder — wires this.* refs into CancelHandlerDeps
-  // ---------------------------------------------------------------------------
-
-  private buildCancelHandlerDeps(): CancelHandlerDeps {
-    return agentDepsBuilders.buildCancelHandlerDeps(this)
+  private sessionErrorHandlerDeps(): SessionErrorHandlerDeps {
+    return {
+      tokenRotationDedupe: this.tokenRotationDedupe,
+      claudeSessions: this.claudeSessions,
+      activeTurns: this.activeTurns,
+      oauthPool: this.oauthPool,
+      store: this.store,
+      resolveAutoResumeFor: (chatId: string) => this.resolveAutoResumeFor(chatId),
+      emitAutoContinueEvent: (event) => this.emitAutoContinueEvent(event),
+      closeClaudeSession: (chatId, session, opts?) =>
+        this.closeClaudeSession(chatId, session, opts),
+    }
   }
 
   // ---------------------------------------------------------------------------
-  // Chat management deps builder — wires this.* refs into ChatManagementDeps
+  // Auto-continue command deps
   // ---------------------------------------------------------------------------
 
-  private buildChatManagementDeps(): ChatManagementDeps {
-    return agentDepsBuilders.buildChatManagementDeps(this)
+  private autoContinueDeps(): AutoContinueCommandDeps {
+    return {
+      autoResumeByChat: this.autoResumeByChat,
+      getAutoResumePreference: () => this.getAutoResumePreference(),
+      store: this.store,
+      scheduleManager: this.scheduleManager,
+      emitStateChange: (chatId: string) => { this.emitStateChange(chatId) },
+      enqueueMessage: (chatId, content, attachments, options) =>
+        this.enqueueMessage(chatId, content, attachments, options),
+      maybeStartNextQueuedMessage: (chatId) => this.maybeStartNextQueuedMessage(chatId),
+    }
+  }
+
+  private loopCommandDeps(): LoopCommandDeps {
+    return {
+      store: this.store,
+      claudeSessions: this.claudeSessions,
+      activeTurns: this.activeTurns,
+      startingTurns: this.startingTurns,
+      pendingTools: this.pendingTools,
+      hasLiveWorkflow: (chatId) => this.hasLiveWorkflow(chatId),
+      hasPendingBackgroundTask: (session, now) => this.hasPendingBackgroundTask(session, now),
+      getSubagents: () => this.getSubagents(),
+      getAppSettingsSnapshot: () => this.getAppSettingsSnapshot(),
+      closeClaudeSession: (chatId, session) => this.closeClaudeSession(chatId, session),
+      emitAutoContinueEvent: (event) => this.emitAutoContinueEvent(event),
+      ensureTrackingFile,
+      inspectTrackingFile,
+      isWorktreeOfSameRepo,
+      runVerifyCommand,
+      readOracleScript,
+      isLoopArmed: (chatId) => this.isLoopArmed(chatId),
+      isChatBusy: (chatId) => isChatBusy(this.sendCommandDeps(), chatId),
+    }
+  }
+
+  private cronCommandDeps(): CronCommandDeps {
+    return {
+      store: this.store,
+      cronScheduler: this.cronScheduler,
+      skipCoalescer: this.cronSkipCoalescer,
+      emitStateChange: (chatId) => this.emitStateChange(chatId),
+      pushCronJobsUpdate: () => this.onCronJobsChange?.(),
+      cronRepair: this._cronRepair,
+      cronConfirm: this._cronConfirm,
+      resolveChatCwd: (chatId) => {
+        const chat = this.store.getChat(chatId)
+        if (!chat) return undefined
+        const project = this.store.getProject(chat.projectId)
+        if (!project) return undefined
+        return resolveSpawnPaths(chat, project.localPath).cwd
+      },
+    }
+  }
+
+  private cronFireDeps(): CronFireDeps {
+    return {
+      ...this.cronCommandDeps(),
+      skipCoalescer: this.cronSkipCoalescer,
+      getChatRecord: (chatId) => this.store.getChat(chatId),
+      isChatBusy: (chatId) => isChatBusy(this.sendCommandDeps(), chatId),
+      clearChatContext: (chatId) => this.clearChatContext(chatId),
+      createChat: (projectId) => this.store.createChat(projectId),
+      enqueueMessage: (chatId, content, attachments, options) =>
+        this.enqueueMessage(chatId, content, attachments, options),
+      maybeStartNextQueuedMessage: async (chatId) => this.maybeStartNextQueuedMessage(chatId),
+      onChatSpawned: this.boardRegistry
+        ? (originChatId, spawnedChatId) => {
+            const registry = this.boardRegistry!
+            for (const card of registry.findCardsByLink("chat", originChatId)) {
+              registry.addCardLink(card.id, "chat", spawnedChatId)
+            }
+          }
+        : undefined,
+    }
   }
 
   // ---------------------------------------------------------------------------
-  // Send command deps builder — wires this.* refs into SendCommandDeps
+  // Cancel handler deps
   // ---------------------------------------------------------------------------
 
-  private buildSendCommandDeps(): SendCommandDeps {
-    return agentDepsBuilders.buildSendCommandDeps(this)
+  private cancelHandlerDeps(): CancelHandlerDeps {
+    return {
+      drainingStreams: this.drainingStreams,
+      rejectPendingResolversForChat: (chatId) => this.rejectPendingResolversForChat(chatId),
+      cancelChatInOrchestrator: (chatId) => this.getSubagentOrchestrator().cancelChat(chatId),
+      activeTurns: this.activeTurns,
+      pendingTools: this.pendingTools,
+      startingTurns: this.startingTurns,
+      store: this.store,
+      claudeSessions: this.claudeSessions,
+      emitStateChange: (chatId) => this.emitStateChange(chatId),
+      resolveClaudeDriverPreference: () => this.resolveClaudeDriverPreference(),
+      closeClaudeSession: (chatId, session) => this.closeClaudeSession(chatId, session),
+    }
   }
 
   // ---------------------------------------------------------------------------
-  // Subagent wiring deps builder — wires this.* refs into SubagentWiringDeps
+  // Chat management deps
   // ---------------------------------------------------------------------------
 
-  private buildSubagentWiringDeps(): SubagentWiringDeps {
-    return agentDepsBuilders.buildSubagentWiringDeps(this)
+  private chatManagementDeps(): ChatManagementDeps {
+    return {
+      activeTurns: this.activeTurns,
+      drainingStreams: this.drainingStreams,
+      claudeSessions: this.claudeSessions,
+      autoResumeByChat: this.autoResumeByChat,
+      store: this.store,
+      analytics: this.analytics,
+      cancel: (chatId, options) => this.cancel(chatId, options),
+      closeClaudeSession: (chatId, session, opts) => this.closeClaudeSession(chatId, session, opts),
+      emitStateChange: (chatId) => this.emitStateChange(chatId),
+      generateTitle: (messageContent, cwd) => this.generateTitle(messageContent, cwd),
+      reportBackgroundError: this.reportBackgroundError,
+      dequeueAndStartQueuedMessage: (chatId, queuedMessage, options) =>
+        this.dequeueAndStartQueuedMessage(chatId, queuedMessage, options),
+    }
   }
 
-  /** @internal used by agent-deps-builders.ts */
+  // ---------------------------------------------------------------------------
+  // Send command deps
+  // ---------------------------------------------------------------------------
+
+  private sendCommandDeps(): SendCommandDeps {
+    return {
+      store: this.store,
+      activeTurns: this.activeTurns,
+      startingTurns: this.startingTurns,
+      pendingTools: this.pendingTools,
+      claudeSessions: this.claudeSessions,
+      resolveBackgroundTaskMaxMs: () => this.resolveBackgroundTaskMaxMs(),
+      autoResumeByChat: this.autoResumeByChat,
+      analytics: this.analytics,
+      getAppSettingsSnapshot: () => this.getAppSettingsSnapshot(),
+      stopLoop: (chatId, reason) => this.stopLoop(chatId, reason),
+      emitStateChange: (chatId) => this.emitStateChange(chatId),
+      startTurnForChat: (args) => this.startTurnForChat(args),
+      clearChatContext: (chatId) => this.clearChatContext(chatId),
+      runCronCommand: (chatId, result, model) => this.runCronCommand(chatId, result, model),
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Subagent wiring deps
+  // ---------------------------------------------------------------------------
+
+  private subagentWiringDeps(): SubagentWiringDeps {
+    return {
+      store: this.store,
+      startClaudeSessionFn: this.startClaudeSessionFn,
+      startClaudeSessionPTYFn: this.startClaudeSessionPTYFn,
+      toolCallback: this.toolCallback,
+      tunnelGateway: this.tunnelGateway,
+      claudePtyRegistry: this.claudePtyRegistry,
+      ptyInstanceRegistry: this.ptyInstanceRegistry,
+      workflowRegistry: this.workflowRegistry,
+      subagentOrchestrator: this.getSubagentOrchestrator(),
+      codexManager: this.codexManager,
+      oauthPool: this.oauthPool,
+      subagentPendingResolvers: this.subagentPendingResolvers,
+      realpath: realpathAdapter,
+      resolveClaudeDriverPreference: () => this.resolveClaudeDriverPreference(),
+      getEnabledCustomMcpServers: () => this.getEnabledCustomMcpServers(),
+      buildOAuthBearers: (servers) => this.buildOAuthBearers(servers),
+      resolveChatPolicy: (chatId) => this.resolveChatPolicy(chatId),
+      emitStateChange: (chatId) => { this.emitStateChange(chatId) },
+      buildPoolUnavailableMessage: (reservedFor, scopeSuffix) =>
+        this.buildPoolUnavailableMessage(reservedFor, scopeSuffix),
+      getAppSettingsSnapshot: () => this.getAppSettingsSnapshot(),
+      readLlmProvider: () => this.readLlmProvider(),
+      subagentPendingKey: (chatId, runId, toolUseId) =>
+        this.subagentPendingKey(chatId, runId, toolUseId),
+      getArmedLoop: (chatId) => toArmedLoopInfo(this.isLoopArmed(chatId)),
+    }
+  }
+
   resolveClaudeIdleMs(): number {
-    return resolveClaudeIdleMsFn(this.buildSessionLifecycleDeps())
+    return resolveClaudeIdleMsFn(this.sessionLifecycleDeps())
   }
 
   /**
@@ -596,18 +829,15 @@ export class AgentCoordinator {
    * `subagents/workflows/wf_*` transcript dirs (written from second one) and
    * requires activity within one idle window so a stalled/crashed run still
    * eventually reaps.
-   * @internal used by agent-deps-builders.ts
    */
   hasLiveWorkflow(chatId: string): boolean {
-    return hasLiveWorkflowFn(this.buildSessionLifecycleDeps(), chatId)
+    return hasLiveWorkflowFn(this.sessionLifecycleDeps(), chatId)
   }
 
-  /** @internal used by agent-deps-builders.ts */
   resolveBackgroundTaskMaxMs(): number {
     return this.claudeSessionLifecycle.backgroundTaskMaxMs
   }
 
-  /** @internal used by agent-deps-builders.ts */
   resolveBackgroundTaskMaxWakes(): number {
     return this.claudeSessionLifecycle.backgroundTaskMaxWakes
   }
@@ -619,7 +849,6 @@ export class AgentCoordinator {
    * session is reused and the agent re-checks the task and reports to the
    * user. Fire-and-forget: failures are logged and reported, never thrown
    * into the sweep. See adr-20260801-background-task-wake-escalation.
-   * @internal used by agent-deps-builders.ts
    */
   wakeBackgroundTaskSession(
     chatId: string,
@@ -645,7 +874,6 @@ export class AgentCoordinator {
    * the session while background task(s) were still pending (the CLI kills
    * its child tasks on shutdown). The one invariant of the escalation design
    * is that this never happens silently.
-   * @internal used by agent-deps-builders.ts
    */
   notifyBackgroundTasksAbandoned(chatId: string, taskIds: string[]): void {
     log.warn("[kanna/agent] background task(s) abandoned at session close", { chatId, taskIds })
@@ -674,7 +902,6 @@ export class AgentCoordinator {
    * it fires when a settle notification is genuinely lost (SDK crash / dropped
    * message) and is reset on every launch and settle, so it never expires
    * during normal execution regardless of task duration.
-   * @internal used by agent-deps-builders.ts
    */
   hasPendingBackgroundTask(session: ClaudeSessionState, now: number): boolean {
     return hasPendingBackgroundTaskFn(session, now)
@@ -689,14 +916,13 @@ export class AgentCoordinator {
    * before calling close. Without this flag, `release(chatId)` would
    * scan reservedBy for `owner === chatId` and drop the *new* token the
    * rotation just claimed, leaking the rotation's reservation (audit #9d).
-   * @internal used by agent-deps-builders.ts
    */
   closeClaudeSession(
     chatId: string,
     session: ClaudeSessionState,
     opts?: { keepReservation?: boolean },
   ): void {
-    closeClaudeSessionFn(this.buildSessionLifecycleDeps(), chatId, session, opts)
+    closeClaudeSessionFn(this.sessionLifecycleDeps(), chatId, session, opts)
   }
 
   /**
@@ -704,19 +930,17 @@ export class AgentCoordinator {
    * token is known. No-op if the registry is absent, already registered, or
    * the driver preference is PTY (the PTY driver registers from its own
    * resolved transcript path in driver.ts cleanup and must not be double-fired).
-   * @internal used by agent-deps-builders.ts
    */
   maybeRegisterSdkWorkflowsDir(session: ClaudeSessionState): void {
-    maybeRegisterSdkWorkflowsDirFn(this.buildSessionLifecycleDeps(), session)
+    maybeRegisterSdkWorkflowsDirFn(this.sessionLifecycleDeps(), session)
   }
 
   private sweepIdleClaudeSessions(now = Date.now()): void {
-    sweepIdleClaudeSessionsFn(this.buildSessionStateQueryDeps(), now)
+    sweepIdleClaudeSessionsFn(this.sessionStateQueryDeps(), now)
   }
 
-  /** @internal used by agent-deps-builders.ts */
   enforceClaudeSessionBudget(protectedChatId?: string): void {
-    enforceClaudeSessionBudgetFn(this.buildSessionLifecycleDeps(), protectedChatId)
+    enforceClaudeSessionBudgetFn(this.sessionLifecycleDeps(), protectedChatId)
   }
 
   /**
@@ -725,30 +949,57 @@ export class AgentCoordinator {
    * chat to close or which token to add a quota to, instead of seeing the
    * generic "all tokens unavailable" line that doesn't say what's holding
    * them. `scopeSuffix` lets the subagent path tag its variant.
-   * @internal used by agent-deps-builders.ts
    */
   buildPoolUnavailableMessage(reservedFor: string, scopeSuffix: string): string {
-    return buildPoolUnavailableMessageFn(this.buildSessionLifecycleDeps(), reservedFor, scopeSuffix)
+    return buildPoolUnavailableMessageFn(this.sessionLifecycleDeps(), reservedFor, scopeSuffix)
   }
 
-  private buildSubagentToolResponseDeps(): SubagentToolResponseDeps {
-    return agentDepsBuilders.buildSubagentToolResponseDeps(this)
+  private subagentToolResponseDeps(): SubagentToolResponseDeps {
+    return {
+      subagentPendingResolvers: this.subagentPendingResolvers,
+      store: this.store,
+      subagentOrchestrator: this.getSubagentOrchestrator(),
+      emitStateChange: (chatId) => { this.emitStateChange(chatId) },
+    }
   }
 
-  private buildToolRespondDeps(): ToolRespondDeps {
-    return agentDepsBuilders.buildToolRespondDeps(this)
+  private toolRespondDeps(): ToolRespondDeps {
+    return {
+      activeTurns: this.activeTurns,
+      pendingTools: this.pendingTools,
+      store: this.store,
+      emitStateChange: (chatId) => { this.emitStateChange(chatId) },
+    }
   }
 
-  private buildSessionStateQueryDeps(): SessionStateQueryDeps {
-    return agentDepsBuilders.buildSessionStateQueryDeps(this)
+  private sessionStateQueryDeps(): SessionStateQueryDeps {
+    return {
+      activeTurns: this.activeTurns,
+      startingTurns: this.startingTurns,
+      pendingTools: this.pendingTools,
+      claudeSessions: this.claudeSessions,
+      drainingStreams: this.drainingStreams,
+      isClaudeSdkProvider: (provider) => isClaudeSdkProvider(provider),
+      hasPendingBackgroundTask: (session, now) => this.hasPendingBackgroundTask(session, now),
+      resolveClaudeIdleMs: () => this.resolveClaudeIdleMs(),
+      resolveBackgroundTaskMaxMs: () => this.resolveBackgroundTaskMaxMs(),
+      resolveBackgroundTaskMaxWakes: () => this.resolveBackgroundTaskMaxWakes(),
+      hasLiveWorkflow: (chatId) => this.hasLiveWorkflow(chatId),
+      closeClaudeSession: (chatId, session) => { this.closeClaudeSession(chatId, session) },
+      emitStateChange: (chatId) => { this.emitStateChange(chatId) },
+      wakeBackgroundTaskSession: (chatId, taskIds, wakeNumber, maxWakes) => {
+        this.wakeBackgroundTaskSession(chatId, taskIds, wakeNumber, maxWakes)
+      },
+      notifyBackgroundTasksAbandoned: (chatId, taskIds) => {
+        this.notifyBackgroundTasksAbandoned(chatId, taskIds)
+      },
+    }
   }
 
-  /** @internal used by agent-deps-builders.ts */
   subagentPendingKey(chatId: string, runId: string, toolUseId: string): string {
     return subagentPendingKeyFn(chatId, runId, toolUseId)
   }
 
-  /** @internal used by agent-deps-builders.ts */
   rejectPendingResolversForChat(chatId: string): void {
     rejectPendingResolversForChatFn({ subagentPendingResolvers: this.subagentPendingResolvers }, chatId)
   }
@@ -769,44 +1020,74 @@ export class AgentCoordinator {
     }
   }
 
-  /** @internal used by agent-deps-builders.ts */
   clearDrainingStream(chatId: string): void {
     this.drainingStreams.delete(chatId)
   }
 
   async stopDraining(chatId: string) {
-    return stopDrainingFn(this.buildChatManagementDeps(), chatId)
+    return stopDrainingFn(this.chatManagementDeps(), chatId)
   }
 
   async closeChat(chatId: string) {
-    return closeChatFn(this.buildChatManagementDeps(), chatId)
+    return closeChatFn(this.chatManagementDeps(), chatId)
   }
 
-  /** @internal Delegates to enqueueMessageFn — see claude-send-command.ts. */
   async enqueueMessage(chatId: string, content: string, attachments: ChatAttachment[], options?: SendMessageOptions) {
-    return enqueueMessageFn(this.buildSendCommandDeps(), chatId, content, attachments, options)
+    return enqueueMessageFn(this.sendCommandDeps(), chatId, content, attachments, options)
   }
 
-  /** @internal Delegates to dequeueAndStartQueuedMessageFn — see claude-send-command.ts. */
   async dequeueAndStartQueuedMessage(chatId: string, queuedMessage: QueuedChatMessage, options?: { steered?: boolean }) {
-    return dequeueAndStartQueuedMessageFn(this.buildSendCommandDeps(), chatId, queuedMessage, options)
+    return dequeueAndStartQueuedMessageFn(this.sendCommandDeps(), chatId, queuedMessage, options)
   }
 
-  /** @internal Delegates to maybeStartNextQueuedMessageFn — see claude-send-command.ts. */
   async maybeStartNextQueuedMessage(chatId: string, options?: { replay?: boolean }) {
-    return maybeStartNextQueuedMessageFn(this.buildSendCommandDeps(), chatId, options)
+    return maybeStartNextQueuedMessageFn(this.sendCommandDeps(), chatId, options)
   }
 
-  /** @internal Delegates to clearChatContextFn — see claude-context-commands.ts. */
   async clearChatContext(chatId: string) {
-    return clearChatContextFn(agentDepsBuilders.buildClearChatContextDeps(this), chatId)
+    return clearChatContextFn(this.clearChatContextDeps(), chatId)
   }
 
-  private buildStartTurnDeps(): StartTurnDeps {
-    return agentDepsBuilders.buildStartTurnDeps(this)
+  private clearChatContextDeps(): ClearChatContextDeps {
+    return {
+      store: this.store,
+      claudeSessions: this.claudeSessions,
+      activeTurns: this.activeTurns,
+      startingTurns: this.startingTurns,
+      pendingTools: this.pendingTools,
+      hasLiveWorkflow: (chatId) => this.hasLiveWorkflow(chatId),
+      hasPendingBackgroundTask: (session, now) => this.hasPendingBackgroundTask(session, now),
+      closeClaudeSession: (chatId, session) => this.closeClaudeSession(chatId, session),
+      stopCodexSession: (chatId) => this.codexManager.stopSession(chatId),
+      emitStateChange: (chatId) => this.emitStateChange(chatId),
+    }
   }
 
-  /** @internal used by agent-deps-builders.ts (via RunTurnDeps + SendCommandDeps). */
+  private startTurnDeps(): StartTurnDeps {
+    return {
+      activeTurns: this.activeTurns,
+      startingTurns: this.startingTurns,
+      claudeSessions: this.claudeSessions,
+      drainingStreams: this.drainingStreams,
+      mentionedSubagentIdsByChat: this.mentionedSubagentIdsByChat,
+      store: this.store,
+      codexManager: this.codexManager,
+      subagentOrchestrator: this.getSubagentOrchestrator(),
+      clearDrainingStream: (chatId) => this.clearDrainingStream(chatId),
+      emitStateChange: (chatId, opts) => this.emitStateChange(chatId, opts),
+      resolveClaudeDriverPreference: () => this.resolveClaudeDriverPreference(),
+      closeClaudeSession: (chatId, session) => this.closeClaudeSession(chatId, session),
+      getSubagents: () => this.getSubagents(),
+      getAppSettingsSnapshot: () => this.getAppSettingsSnapshot(),
+      generateTitleInBackground: (chatId, content, localPath, optimisticTitle) =>
+        this.generateTitleInBackground(chatId, content, localPath, optimisticTitle),
+      pendingTools: this.pendingTools,
+      startClaudeTurn: (args) => this.startClaudeTurn(args),
+      findLastUserMessageId: (chatId) => this.findLastUserMessageId(chatId),
+      runTurn: (active) => this.runTurn(active),
+    }
+  }
+
   async startTurnForChat(args: {
     chatId: string
     provider: AgentProvider
@@ -822,32 +1103,62 @@ export class AgentCoordinator {
     userClearedContext?: boolean
     profile?: SendToStartingProfile | null
   }) {
-    return startTurnForChatFn(this.buildStartTurnDeps(), args)
+    return startTurnForChatFn(this.startTurnDeps(), args)
   }
 
-
-  /** @internal used by agent-deps-builders.ts via buildStartTurnDeps */
   findLastUserMessageId(chatId: string): string | null {
     return this.store.getLastUserMessageId(chatId)
   }
 
-  private buildSpawnClaudeTurnDeps(): SpawnClaudeTurnDeps {
-    return agentDepsBuilders.buildSpawnClaudeTurnDeps(this)
+  private spawnClaudeTurnDeps(): SpawnClaudeTurnDeps {
+    return {
+      claudeSessions: this.claudeSessions,
+      activeTurns: this.activeTurns,
+      mentionedSubagentIdsByChat: this.mentionedSubagentIdsByChat,
+      oauthPool: this.oauthPool,
+      startClaudeSessionFn: this.startClaudeSessionFn,
+      startClaudeSessionPTYFn: this.startClaudeSessionPTYFn,
+      subagentOrchestrator: this.getSubagentOrchestrator(),
+      toolCallback: this.toolCallback,
+      tunnelGateway: this.tunnelGateway,
+      claudePtyRegistry: this.claudePtyRegistry,
+      ptyInstanceRegistry: this.ptyInstanceRegistry,
+      workflowRegistry: this.workflowRegistry,
+      subagentTranscriptRegistry: this.subagentTranscriptRegistry,
+      resolveClaudeDriverPreference: () => this.resolveClaudeDriverPreference(),
+      isLoopArmed: (chatId) => this.isLoopArmed(chatId),
+      boardRegistry: this.boardRegistry ?? undefined,
+      closeClaudeSession: (chatId, session) => this.closeClaudeSession(chatId, session),
+      enforceClaudeSessionBudget: (protectedChatId?) => this.enforceClaudeSessionBudget(protectedChatId),
+      readLlmProvider: () => this.readLlmProvider(),
+      buildPoolUnavailableMessage: (reservedFor, scopeSuffix) =>
+        this.buildPoolUnavailableMessage(reservedFor, scopeSuffix),
+      listOpenRouterModelsFn: this.listOpenRouterModelsFn,
+      getSubagents: () => this.getSubagents(),
+      getAppSettingsSnapshot: () => this.getAppSettingsSnapshot(),
+      getEnabledCustomMcpServers: () => this.getEnabledCustomMcpServers(),
+      buildOAuthBearers: (servers) => this.buildOAuthBearers(servers),
+      setupLoop: (chatId, input) => this.setupLoop({ chatId, input }),
+      armCron: (chatId, command) => this.armCron(chatId, command),
+      updateCron: (chatId, jobId, patch) => this.updateCron(chatId, jobId, patch),
+      stopLoop: (chatId, reason) => this.stopLoop(chatId, reason),
+      resolveChatPolicy: (chatId) => this.resolveChatPolicy(chatId),
+      runClaudeSession: (session) => { void this.runClaudeSession(session) },
+      emitStateChange: (chatId) => { this.emitStateChange(chatId) },
+    }
   }
 
-  /** @internal used by agent-deps-builders.ts via buildStartTurnDeps */
   startClaudeTurn(args: SpawnClaudeTurnArgs): Promise<HarnessTurn> {
-    return spawnClaudeTurn(this.buildSpawnClaudeTurnDeps(), args)
+    return spawnClaudeTurn(this.spawnClaudeTurnDeps(), args)
   }
 
   /** Delegates to sendCommandFn — see claude-send-command.ts. */
   async send(command: Extract<ClientCommand, { type: "chat.send" }>) {
-    return sendCommandFn(this.buildSendCommandDeps(), command)
+    return sendCommandFn(this.sendCommandDeps(), command)
   }
 
-  /** @internal used by agent-deps-builders.ts via buildLoopCommandDeps; Delegates to buildSubagentProviderRunForChatFn. */
   buildSubagentProviderRunForChat(args: BuildSubagentProviderRunForChatArgs): ProviderRunStart {
-    return buildSubagentProviderRunForChatFn(this.buildSubagentWiringDeps(), args)
+    return buildSubagentProviderRunForChatFn(this.subagentWiringDeps(), args)
   }
 
   async enqueue(command: Extract<ClientCommand, { type: "message.enqueue" }>) {
@@ -865,48 +1176,86 @@ export class AgentCoordinator {
   }
 
   async steer(command: Extract<ClientCommand, { type: "message.steer" }>) {
-    return steerFn(this.buildChatManagementDeps(), command)
+    return steerFn(this.chatManagementDeps(), command)
   }
 
   async dequeue(command: Extract<ClientCommand, { type: "message.dequeue" }>) {
-    return dequeueFn(this.buildChatManagementDeps(), command)
+    return dequeueFn(this.chatManagementDeps(), command)
   }
 
   async forkChat(chatId: string) {
-    return forkChatFn(this.buildChatManagementDeps(), chatId)
+    return forkChatFn(this.chatManagementDeps(), chatId)
   }
 
-  private buildRunClaudeSessionDeps(): RunClaudeSessionDeps {
-    return agentDepsBuilders.buildRunClaudeSessionDeps(this)
+  private runClaudeSessionDeps(): RunClaudeSessionDeps {
+    return {
+      openrouterFirstEntryTimeoutMs: this.openrouterFirstEntryTimeoutMs,
+      claudeSessions: this.claudeSessions,
+      activeTurns: this.activeTurns,
+      pendingTools: this.pendingTools,
+      oauthPool: this.oauthPool,
+      claudeLimitDetector: this.claudeLimitDetector,
+      claudeAuthErrorDetector: this.claudeAuthErrorDetector,
+      throwOnClaudeSessionStart: this.throwOnClaudeSessionStart,
+      store: this.store,
+      emitStateChange: (chatId?) => { this.emitStateChange(chatId) },
+      handleLimitDetection: (chatId, detection) => this.handleLimitDetection(chatId, detection),
+      maybeRegisterSdkWorkflowsDir: (session) => { this.maybeRegisterSdkWorkflowsDir(session) },
+      getSubagents: () => this.getSubagents(),
+      resolveBackgroundTaskMaxMs: () => this.resolveBackgroundTaskMaxMs(),
+      handleLimitError: (chatId, detector, error) => this.handleLimitError(chatId, detector, error),
+      handleAuthFailure: (session, detection) => this.handleAuthFailure(session, detection),
+      closeClaudeSession: (chatId, session) => { this.closeClaudeSession(chatId, session) },
+      maybeStartNextQueuedMessage: (chatId) => this.maybeStartNextQueuedMessage(chatId),
+      resolveClaudeDriverPreference: () => this.resolveClaudeDriverPreference(),
+      mermaidGuard: this._mermaidGuard,
+      onBackgroundTaskLaunch: this.backgroundTaskOutputRegistry
+        ? (chatId, taskId, outputPath) => {
+            this.backgroundTaskOutputRegistry!.trackTask(chatId, taskId, outputPath)
+          }
+        : undefined,
+      onBackgroundTaskSettle: this.backgroundTaskOutputRegistry
+        ? (chatId, taskId) => {
+            this.backgroundTaskOutputRegistry!.untrackTask(chatId, taskId)
+          }
+        : undefined,
+    }
   }
 
-  /** @internal used by agent-deps-builders.ts via buildSpawnClaudeTurnDeps */
   async runClaudeSession(session: ClaudeSessionState) {
-    return runClaudeSessionLoop(this.buildRunClaudeSessionDeps(), session)
+    return runClaudeSessionLoop(this.runClaudeSessionDeps(), session)
   }
 
-  /** @internal used by agent-deps-builders.ts via buildChatManagementDeps */
   async generateTitleInBackground(chatId: string, messageContent: string, cwd: string, expectedCurrentTitle: string) {
-    return generateTitleInBackgroundFn(this.buildChatManagementDeps(), chatId, messageContent, cwd, expectedCurrentTitle)
+    return generateTitleInBackgroundFn(this.chatManagementDeps(), chatId, messageContent, cwd, expectedCurrentTitle)
   }
 
-  private buildRunTurnDeps(): RunTurnDeps {
-    return agentDepsBuilders.buildRunTurnDeps(this)
+  private runTurnDeps(): RunTurnDeps {
+    return {
+      store: this.store,
+      activeTurns: this.activeTurns,
+      drainingStreams: this.drainingStreams,
+      oauthPool: this.oauthPool,
+      codexLimitDetector: this.codexLimitDetector,
+      handleLimitError: (chatId, detector, error) => this.handleLimitError(chatId, detector, error),
+      emitStateChange: (chatId) => { this.emitStateChange(chatId) },
+      clearDrainingStream: (chatId) => { this.clearDrainingStream(chatId) },
+      startTurnForChat: (args) => this.startTurnForChat(args),
+      maybeStartNextQueuedMessage: (chatId) => this.maybeStartNextQueuedMessage(chatId),
+      stopCodexSession: (chatId) => this.codexManager.stopSession(chatId),
+    }
   }
 
-  /** @internal used by agent-deps-builders.ts via buildStartTurnDeps; Delegates to runTurnFn. */
   async runTurn(active: ActiveTurn): Promise<void> {
-    return runTurnFn(this.buildRunTurnDeps(), active)
+    return runTurnFn(this.runTurnDeps(), active)
   }
 
-  /** @internal used by agent-deps-builders.ts via buildSessionErrorHandlerDeps; Delegates to resolveAutoResumeForFn. */
   resolveAutoResumeFor(chatId: string): boolean {
-    return resolveAutoResumeForFn(this.buildAutoContinueCommandDeps(), chatId)
+    return resolveAutoResumeForFn(this.autoContinueDeps(), chatId)
   }
 
-  /** @internal used by agent-deps-builders.ts via buildSessionErrorHandlerDeps + buildLoopCommandDeps; Delegates to emitAutoContinueEventFn. */
   async emitAutoContinueEvent(event: AutoContinueEvent): Promise<void> {
-    await emitAutoContinueEventFn(this.buildAutoContinueCommandDeps(), event)
+    await emitAutoContinueEventFn(this.autoContinueDeps(), event)
     // Arming, disarming and re-arming all land here, so one reconcile keeps
     // the watched tracking file in step with the loop the log now describes.
     if (this.loopTrackingRegistry) {
@@ -920,42 +1269,39 @@ export class AgentCoordinator {
     }
   }
 
-  /** @internal used by agent-deps-builders.ts via buildRunClaudeSessionDeps + buildRunTurnDeps; Delegates to handleLimitErrorFn. */
   async handleLimitError(chatId: string, detector: LimitDetector, error: AnyValue): Promise<boolean> {
-    return handleLimitErrorFn(this.buildSessionErrorHandlerDeps(), chatId, detector, error)
+    return handleLimitErrorFn(this.sessionErrorHandlerDeps(), chatId, detector, error)
   }
 
-  /** @internal used by agent-deps-builders.ts via buildRunClaudeSessionDeps; Delegates to handleLimitDetectionFn. */
   async handleLimitDetection(chatId: string, detection: LimitDetection): Promise<boolean> {
-    return handleLimitDetectionFn(this.buildSessionErrorHandlerDeps(), chatId, detection)
+    return handleLimitDetectionFn(this.sessionErrorHandlerDeps(), chatId, detection)
   }
 
-  /** @internal used by agent-deps-builders.ts via buildRunClaudeSessionDeps; Delegates to handleAuthFailureFn. */
   async handleAuthFailure(
     session: ClaudeSessionState,
     detection: AuthErrorDetection,
   ): Promise<boolean> {
-    return handleAuthFailureFn(this.buildSessionErrorHandlerDeps(), session, detection)
+    return handleAuthFailureFn(this.sessionErrorHandlerDeps(), session, detection)
   }
 
   /** Delegates to fireAutoContinueFn — see claude-autocontinue-commands.ts. */
   async fireAutoContinue(chatId: string, scheduleId: string) {
-    return fireAutoContinueFn(this.buildAutoContinueCommandDeps(), chatId, scheduleId)
+    return fireAutoContinueFn(this.autoContinueDeps(), chatId, scheduleId)
   }
 
   /** Delegates to acceptAutoContinueFn — see claude-autocontinue-commands.ts. */
   async acceptAutoContinue(chatId: string, scheduleId: string, scheduledAt: number): Promise<void> {
-    return acceptAutoContinueFn(this.buildAutoContinueCommandDeps(), chatId, scheduleId, scheduledAt)
+    return acceptAutoContinueFn(this.autoContinueDeps(), chatId, scheduleId, scheduledAt)
   }
 
   /** Delegates to rescheduleAutoContinueFn — see claude-autocontinue-commands.ts. */
   async rescheduleAutoContinue(chatId: string, scheduleId: string, scheduledAt: number): Promise<void> {
-    return rescheduleAutoContinueFn(this.buildAutoContinueCommandDeps(), chatId, scheduleId, scheduledAt)
+    return rescheduleAutoContinueFn(this.autoContinueDeps(), chatId, scheduleId, scheduledAt)
   }
 
   /** Delegates to cancelAutoContinueFn — see claude-autocontinue-commands.ts. */
   async cancelAutoContinue(chatId: string, scheduleId: string, reason: "user" | "chat_deleted"): Promise<void> {
-    return cancelAutoContinueFn(this.buildAutoContinueCommandDeps(), chatId, scheduleId, reason)
+    return cancelAutoContinueFn(this.autoContinueDeps(), chatId, scheduleId, reason)
   }
 
   /**
@@ -970,7 +1316,7 @@ export class AgentCoordinator {
     runId: string,
     outcome: BackgroundRunOutcome,
   ): Promise<void> {
-    return deliverSubagentToMainFn(this.buildLoopCommandDeps(), chatId, runId, outcome)
+    return deliverSubagentToMainFn(this.loopCommandDeps(), chatId, runId, outcome)
   }
 
   /**
@@ -979,7 +1325,7 @@ export class AgentCoordinator {
    * Delegates to recoverArmedLoopWakesFn — see claude-loop-commands.ts.
    */
   async recoverArmedLoopWakes(): Promise<string[]> {
-    return recoverArmedLoopWakesFn(this.buildLoopCommandDeps())
+    return recoverArmedLoopWakesFn(this.loopCommandDeps())
   }
 
   /**
@@ -993,12 +1339,12 @@ export class AgentCoordinator {
     chatId: string
     input: LoopSetupInput
   }): Promise<SetupLoopHandlerResult> {
-    return setupLoopFn(this.buildLoopCommandDeps(), args)
+    return setupLoopFn(this.loopCommandDeps(), args)
   }
 
   /** Current armed-loop state for a chat, or null. Delegates to isLoopArmedFn — see claude-loop-commands.ts. */
   isLoopArmed(chatId: string): LoopState | null {
-    return isLoopArmedFn(this.buildLoopCommandDeps(), chatId)
+    return isLoopArmedFn(this.loopCommandDeps(), chatId)
   }
 
   /**
@@ -1008,7 +1354,7 @@ export class AgentCoordinator {
    * stopLoopFn — see claude-loop-commands.ts.
    */
   async stopLoop(chatId: string, reason: "goal_met" | "user_send" | "chat_deleted"): Promise<void> {
-    return stopLoopFn(this.buildLoopCommandDeps(), chatId, reason)
+    return stopLoopFn(this.loopCommandDeps(), chatId, reason)
   }
 
   /**
@@ -1023,7 +1369,7 @@ export class AgentCoordinator {
     result: import("../shared/cron/types").CronParseResult,
     model?: string,
   ): Promise<string | null> {
-    return runCronCommandFn(this.buildCronCommandDeps(), chatId, result, model)
+    return runCronCommandFn(this.cronCommandDeps(), chatId, result, model)
   }
 
   /**
@@ -1042,7 +1388,7 @@ export class AgentCoordinator {
     }
     // arm_cron already instructs the model to call AskUserQuestion after arming,
     // so skip the host-escalated confirm turn to avoid double-confirming.
-    const deps = { ...this.buildCronCommandDeps(), cronConfirm: undefined }
+    const deps = { ...this.cronCommandDeps(), cronConfirm: undefined }
     const jobId = await runCronCommandFn(deps, chatId, parsed)
     if (!jobId) throw new Error(`arm_cron: no job id returned for command: ${command}`)
     return { jobId }
@@ -1057,7 +1403,7 @@ export class AgentCoordinator {
     jobId: string,
     patch: import("../shared/cron/types").CronJobPatch,
   ): Promise<void> {
-    await runCronCommandFn(this.buildCronCommandDeps(), chatId, {
+    await runCronCommandFn(this.cronCommandDeps(), chatId, {
       ok: true,
       command: { sub: "update", jobId, patch },
     })
@@ -1068,14 +1414,14 @@ export class AgentCoordinator {
    * Delegates to disarmCronJobsForChatFn — see cron/commands.ts.
    */
   async disarmCronJobsForChat(chatId: string): Promise<void> {
-    await disarmCronJobsForChatFn(this.buildCronCommandDeps(), chatId)
+    await disarmCronJobsForChatFn(this.cronCommandDeps(), chatId)
     this.cronScheduler?.clearChat(chatId)
     this.cronSkipCoalescer.clearChat(chatId)
   }
 
   /** One cron tick — the CronScheduler's fire callback. Delegates to fireCronJobFn — see cron/fire.ts. */
   async fireCronJob(chatId: string, jobId: string): Promise<void> {
-    return fireCronJobFn(this.buildCronFireDeps(), chatId, jobId)
+    return fireCronJobFn(this.cronFireDeps(), chatId, jobId)
   }
 
   /**
@@ -1089,7 +1435,7 @@ export class AgentCoordinator {
   ): Promise<void> {
     return reconcileCronRunsAtBootFn(
       {
-        ...this.buildCronCommandDeps(),
+        ...this.cronCommandDeps(),
         getQueuedMessages: (chatId) => this.store.getQueuedMessages(chatId),
       },
       missed,
@@ -1110,28 +1456,28 @@ export class AgentCoordinator {
 
   /** Delegates to listLiveSchedulesFn — see claude-loop-commands.ts. */
   listLiveSchedules(chatId: string): string[] {
-    return listLiveSchedulesFn(this.buildLoopCommandDeps(), chatId)
+    return listLiveSchedulesFn(this.loopCommandDeps(), chatId)
   }
 
   async killPtyInstance(chatId: string): Promise<void> {
-    return killPtyInstanceFn(this.buildClaudeSessionConfigHelpersDeps(), chatId)
+    return killPtyInstanceFn(this.claudeSessionConfigDeps(), chatId)
   }
 
   async cancel(chatId: string, options?: { hideInterrupted?: boolean }) {
-    return cancelChatFn(this.buildCancelHandlerDeps(), chatId, options)
+    return cancelChatFn(this.cancelHandlerDeps(), chatId, options)
   }
 
   async respondTool(command: Extract<ClientCommand, { type: "chat.respondTool" }>) {
-    return respondToolFn(this.buildToolRespondDeps(), command)
+    return respondToolFn(this.toolRespondDeps(), command)
   }
 
   async respondSubagentTool(command: Extract<ClientCommand, { type: "chat.respondSubagentTool" }>) {
-    return respondSubagentToolFn(this.buildSubagentToolResponseDeps(), command)
+    return respondSubagentToolFn(this.subagentToolResponseDeps(), command)
   }
 
   async cancelSubagentRun(
     command: Extract<ClientCommand, { type: "chat.cancelSubagentRun" }>,
   ) {
-    cancelSubagentRunFn(this.buildSubagentToolResponseDeps(), command)
+    cancelSubagentRunFn(this.subagentToolResponseDeps(), command)
   }
 }
