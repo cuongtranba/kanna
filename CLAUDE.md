@@ -56,6 +56,14 @@ c3-210's `compactionTurn` row carried that broken escape from a193638 (#649)
 until 36217ff, and lost 533 bytes mid-sentence on the way. If you see `\ |` in a
 `.c3/` table cell, it is damage — restore `\|`.
 
+A cell holding a glob pattern or any markdown-emphasis character inside backticks
+is also damaged: the backtick strip leaves `*` or `_` unguarded, and the NEXT
+serialization collapses them as markdown emphasis — silently discarding the
+character. Reproduced in #881: `` `mermaid-*.js`, `mermaid.core-*.js` `` →
+`mermaid-*.js, mermaid.core-*.js` → `mermaid-.js, mermaid.core-.js`. Any cell
+that held `` `glob-*.ext` `` and now shows `glob-.ext` (missing `*`) is damaged
+— restore the backticks and verify the glob characters are present.
+
 Both defects are fixed in `cuongtranba/c3-skill` (the `insert-after` seq shift
 and the table-row normalizer). Until a release ships with them, `change apply`
 also fails on any `insert` after a non-last table row
