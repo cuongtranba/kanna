@@ -45,10 +45,13 @@ import { handleSettingsCommand } from "./ws-router-settings"
 import { handleDiffCommand } from "./ws-router-diff"
 import { handleObservabilityCommand } from "./ws-router-observability"
 import { handleAgentCtrlCommand } from "./ws-router-agent-ctrl"
+import type { AgentCtrlCommandDeps } from "./ws-router-agent-ctrl"
 import { handlePushCommand } from "./ws-router-push"
 import { handleMiscCommand } from "./ws-router-misc"
+import type { MiscCommandDeps } from "./ws-router-misc"
 import { handleProjectCommand } from "./ws-router-project"
 import { handleChatCommand } from "./ws-router-chat"
+import type { ChatCommandDeps } from "./ws-router-chat"
 import {
   ensureSnapshotSignatures,
   isBenignStaleStateMessage,
@@ -212,6 +215,38 @@ export function createWsRouter({
 
   async function handleCommand(ws: ServerWebSocket<ClientState>, message: Extract<ClientEnvelope, { type: "command" }>) {
     const { command, id } = message
+    const chatDeps: ChatCommandDeps = {
+      store,
+      agent,
+      analytics: resolvedAnalytics,
+      setDraftProtection: (chatIds) => { ws.data.protectedDraftChatIds = new Set(chatIds) },
+      logSendProfilingFn: logSendToStartingProfile,
+      send: (envelope) => send(ws, envelope),
+      broadcastChatAndSidebar: (chatId) => broadcast.broadcastChatAndSidebar(chatId),
+      broadcastSidebar: () => broadcast.broadcastFilteredSnapshots({ includeSidebar: true }),
+      broadcastAll: () => broadcast.broadcastSnapshots(),
+      followedSessionRegistry,
+    }
+    const agentCtrlDeps: AgentCtrlCommandDeps = {
+      agent,
+      tunnelGateway,
+      killPtyInstance,
+      send: (envelope) => send(ws, envelope),
+      broadcastChatAndSidebar: (chatId) => broadcast.broadcastChatAndSidebar(chatId),
+    }
+    const miscDeps: MiscCommandDeps = {
+      store,
+      terminals,
+      agent,
+      sessionShare,
+      analytics: resolvedAnalytics,
+      listWorktrees,
+      getOriginHost: () => ws.data.originHost ?? "",
+      send: (envelope) => send(ws, envelope),
+      broadcastSidebar: () => broadcast.broadcastFilteredSnapshots({ includeSidebar: true }),
+      broadcastChatAndSidebar: (chatId) => broadcast.broadcastChatAndSidebar(chatId),
+      pushTerminalSnapshot: (terminalId) => broadcast.pushTerminalSnapshot(terminalId),
+    }
     try {
       switch (command.type) {
         case "settings.readKeybindings":
@@ -257,22 +292,7 @@ export function createWsRouter({
         case "chat.archive":
         case "chat.unarchive":
         case "chat.delete": {
-          await handleChatCommand(
-            {
-              store,
-              agent,
-              analytics: resolvedAnalytics,
-              setDraftProtection: (chatIds) => { ws.data.protectedDraftChatIds = new Set(chatIds) },
-              logSendProfilingFn: logSendToStartingProfile,
-              send: (envelope) => send(ws, envelope),
-              broadcastChatAndSidebar: (chatId) => broadcast.broadcastChatAndSidebar(chatId),
-              broadcastSidebar: () => broadcast.broadcastFilteredSnapshots({ includeSidebar: true }),
-              broadcastAll: () => broadcast.broadcastSnapshots(),
-              followedSessionRegistry,
-            },
-            command,
-            id,
-          )
+          await handleChatCommand(chatDeps, command, id)
           return
         }
         case "autoContinue.accept":
@@ -284,39 +304,14 @@ export function createWsRouter({
         case "tunnel.accept":
         case "tunnel.stop":
         case "tunnel.retry": {
-          await handleAgentCtrlCommand(
-            {
-              agent,
-              tunnelGateway,
-              killPtyInstance,
-              send: (envelope) => send(ws, envelope),
-              broadcastChatAndSidebar: (chatId) => broadcast.broadcastChatAndSidebar(chatId),
-            },
-            command,
-            id,
-          )
+          await handleAgentCtrlCommand(agentCtrlDeps, command, id)
           return
         }
         case "chat.markRead":
         case "chat.setPolicyOverride":
         case "chat.setDraftProtection":
         case "chat.send": {
-          await handleChatCommand(
-            {
-              store,
-              agent,
-              analytics: resolvedAnalytics,
-              setDraftProtection: (chatIds) => { ws.data.protectedDraftChatIds = new Set(chatIds) },
-              logSendProfilingFn: logSendToStartingProfile,
-              send: (envelope) => send(ws, envelope),
-              broadcastChatAndSidebar: (chatId) => broadcast.broadcastChatAndSidebar(chatId),
-              broadcastSidebar: () => broadcast.broadcastFilteredSnapshots({ includeSidebar: true }),
-              broadcastAll: () => broadcast.broadcastSnapshots(),
-              followedSessionRegistry,
-            },
-            command,
-            id,
-          )
+          await handleChatCommand(chatDeps, command, id)
           return
         }
         case "chat.refreshDiffs":
@@ -353,22 +348,7 @@ export function createWsRouter({
         case "chat.toolRequestAnswer":
         case "chat.respondSubagentTool":
         case "chat.cancelSubagentRun": {
-          await handleChatCommand(
-            {
-              store,
-              agent,
-              analytics: resolvedAnalytics,
-              setDraftProtection: (chatIds) => { ws.data.protectedDraftChatIds = new Set(chatIds) },
-              logSendProfilingFn: logSendToStartingProfile,
-              send: (envelope) => send(ws, envelope),
-              broadcastChatAndSidebar: (chatId) => broadcast.broadcastChatAndSidebar(chatId),
-              broadcastSidebar: () => broadcast.broadcastFilteredSnapshots({ includeSidebar: true }),
-              broadcastAll: () => broadcast.broadcastSnapshots(),
-              followedSessionRegistry,
-            },
-            command,
-            id,
-          )
+          await handleChatCommand(chatDeps, command, id)
           return
         }
         case "message.enqueue":
@@ -378,23 +358,7 @@ export function createWsRouter({
         case "terminal.input":
         case "terminal.resize":
         case "terminal.close": {
-          await handleMiscCommand(
-            {
-              store,
-              terminals,
-              agent,
-              sessionShare,
-              analytics: resolvedAnalytics,
-              listWorktrees,
-              getOriginHost: () => ws.data.originHost ?? "",
-              send: (envelope) => send(ws, envelope),
-              broadcastSidebar: () => broadcast.broadcastFilteredSnapshots({ includeSidebar: true }),
-              broadcastChatAndSidebar: (chatId) => broadcast.broadcastChatAndSidebar(chatId),
-              pushTerminalSnapshot: (terminalId) => broadcast.pushTerminalSnapshot(terminalId),
-            },
-            command,
-            id,
-          )
+          await handleMiscCommand(miscDeps, command, id)
           return
         }
         case "push.identifyDevice":
@@ -419,17 +383,7 @@ export function createWsRouter({
         }
         case "pty.cancel":
         case "pty.kill": {
-          await handleAgentCtrlCommand(
-            {
-              agent,
-              tunnelGateway,
-              killPtyInstance,
-              send: (envelope) => send(ws, envelope),
-              broadcastChatAndSidebar: (chatId) => broadcast.broadcastChatAndSidebar(chatId),
-            },
-            command,
-            id,
-          )
+          await handleAgentCtrlCommand(agentCtrlDeps, command, id)
           return
         }
         case "stack.create":
@@ -441,23 +395,7 @@ export function createWsRouter({
         case "share.mint":
         case "share.revoke":
         case "share.list": {
-          await handleMiscCommand(
-            {
-              store,
-              terminals,
-              agent,
-              sessionShare,
-              analytics: resolvedAnalytics,
-              listWorktrees,
-              getOriginHost: () => ws.data.originHost ?? "",
-              send: (envelope) => send(ws, envelope),
-              broadcastSidebar: () => broadcast.broadcastFilteredSnapshots({ includeSidebar: true }),
-              broadcastChatAndSidebar: (chatId) => broadcast.broadcastChatAndSidebar(chatId),
-              pushTerminalSnapshot: (terminalId) => broadcast.pushTerminalSnapshot(terminalId),
-            },
-            command,
-            id,
-          )
+          await handleMiscCommand(miscDeps, command, id)
           return
         }
         case "board.create":
