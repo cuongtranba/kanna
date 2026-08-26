@@ -22,9 +22,10 @@
 
 import { log } from "../shared/log"
 import { toError } from "../shared/errors"
-import { formatMermaidCorrection, type MermaidFailure } from "../shared/mermaid-report"
+import { formatMermaidCorrection } from "../shared/mermaid-report"
 import { validateMermaidFences } from "../shared/mermaid-validate"
 import type { MermaidParsePort } from "../shared/mermaid-validation"
+import type { ModelEscalation } from "./model-escalation"
 
 /** What the client's deterministic repair would do to a rejected source. */
 export interface MermaidRepairOutcome {
@@ -32,21 +33,10 @@ export interface MermaidRepairOutcome {
   repaired: boolean
 }
 
-export interface MermaidGuardEnqueueOptions {
-  autoContinue?: { scheduleId: string }
-}
-
 export interface MermaidGuardDeps {
-  enabled: boolean
+  escalation: ModelEscalation
   parse: MermaidParsePort
   repair: (source: string) => MermaidRepairOutcome
-  /** True while a user message waits — their turn outranks this housekeeping. */
-  hasQueuedMessage: (chatId: string) => boolean
-  enqueueMessage: (
-    chatId: string,
-    content: string,
-    options?: MermaidGuardEnqueueOptions,
-  ) => Promise<void>
 }
 
 export interface MermaidGuard {
@@ -54,63 +44,24 @@ export interface MermaidGuard {
   check: (chatId: string, assistantText: readonly string[]) => Promise<void>
 }
 
-/**
- * Diagrams remembered per chat. Small on purpose: it only has to outlive the
- * one correction turn, and forgetting early costs at most one extra ask.
- */
-const RETRY_MEMORY_PER_CHAT = 32
-
-function remember(seen: Set<string>, source: string): void {
-  seen.add(source)
-  while (seen.size > RETRY_MEMORY_PER_CHAT) {
-    const oldest = seen.values().next().value
-    if (oldest === undefined) break
-    seen.delete(oldest)
-  }
-}
-
 export function createMermaidGuard(deps: MermaidGuardDeps): MermaidGuard {
-  const askedByChat = new Map<string, Set<string>>()
-
-  async function collectFailures(text: string, asked: Set<string>): Promise<MermaidFailure[]> {
-    const failures: MermaidFailure[] = []
-    for (const { fence, result } of await validateMermaidFences(deps.parse, text)) {
-      if (result.ok) continue
-      if (asked.has(fence.source)) continue
-
-      const repair = deps.repair(fence.source)
-      if (repair.repaired && (await deps.parse(repair.source)).ok) continue
-
-      remember(asked, fence.source)
-      failures.push({ startLine: fence.startLine, defect: result.defect })
-    }
-    return failures
-  }
-
   return {
     check: async (chatId, assistantText) => {
-      if (!deps.enabled) return
-      if (deps.hasQueuedMessage(chatId)) return
-
       try {
-        const asked = askedByChat.get(chatId) ?? new Set<string>()
-        askedByChat.set(chatId, asked)
-
-        const failures: MermaidFailure[] = []
         for (const text of assistantText) {
-          failures.push(...(await collectFailures(text, asked)))
+          for (const { fence, result } of await validateMermaidFences(deps.parse, text)) {
+            if (result.ok) continue
+            const repair = deps.repair(fence.source)
+            if (repair.repaired && (await deps.parse(repair.source)).ok) continue
+            await deps.escalation.offer(
+              chatId,
+              fence.source,
+              formatMermaidCorrection([{ startLine: fence.startLine, defect: result.defect }]),
+              `mermaid-fix-${String(fence.startLine)}`,
+            )
+          }
         }
-        if (failures.length === 0) return
-
-        log.info("[kanna/mermaid] asking the model to fix its diagram", {
-          chatId,
-          diagrams: failures.length,
-        })
-        await deps.enqueueMessage(chatId, formatMermaidCorrection(failures), {
-          autoContinue: { scheduleId: `mermaid-fix-${String(failures.length)}` },
-        })
       } catch (error) {
-        // A diagram that renders is cosmetic; a turn that dies is not.
         log.warn("[kanna/mermaid] guard failed", { chatId, message: toError(error).message })
       }
     },

@@ -138,10 +138,10 @@ export const PATTERN_BUDGETS: readonly PatternBudget[] = [
     id: "escalation-memory-caps",
     include: ["src/server/"],
     pattern: "MEMORY_PER_CHAT\\s*=",
-    max: 3,
+    max: 1,
     issue: 896,
     rationale:
-      "mermaid-guard, cron/repair and cron/confirm each declare their own = 32 cap and a byte-identical remember() FIFO. CLAUDE.md carries a four-row table asserting the three stay equivalent — that table is the abstraction, written as prose.",
+      "The single cap lives in model-escalation.ts (DEFAULT_MEMORY_PER_CHAT). All three consumers (mermaid-guard, cron/repair, cron/confirm) delegate through ModelEscalation. A second declaration here means someone bypassed the abstraction.",
   },
   {
     id: "loop-prompt-tool-literals",

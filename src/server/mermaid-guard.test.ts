@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { createMermaidGuard, type MermaidGuardDeps } from "./mermaid-guard"
+import { createMermaidGuard } from "./mermaid-guard"
+import { createModelEscalation, type ModelEscalationConfig } from "./model-escalation"
 import type { MermaidParsePort } from "../shared/mermaid-validation"
 
 const BROKEN = 'flowchart TD\n  A --> B[/opt/app/current symlink]'
@@ -21,46 +22,52 @@ const fakeParse: MermaidParsePort = (source) => {
 }
 
 interface Harness {
-  deps: MermaidGuardDeps
   sent: { chatId: string; content: string; scheduleId: string | undefined }[]
+  guard: ReturnType<typeof createMermaidGuard>
 }
 
-function harness(over: Partial<MermaidGuardDeps> = {}): Harness {
+function harness(
+  escalationOver: Partial<ModelEscalationConfig> = {},
+  parse: MermaidParsePort = fakeParse,
+): Harness {
   const sent: Harness["sent"] = []
-  const deps: MermaidGuardDeps = {
+  const escalation = createModelEscalation({
+    name: "mermaid",
     enabled: true,
-    parse: fakeParse,
-    // Mirrors the client's link repair: `-.x` becomes `-.-x`, nothing else.
-    repair: (source) =>
-      source.includes("-.x")
-        ? { source: source.replaceAll("-.x", "-.-x"), repaired: true }
-        : { source, repaired: false },
     hasQueuedMessage: () => false,
     enqueueMessage: (chatId, content, options) => {
       sent.push({ chatId, content, scheduleId: options?.autoContinue?.scheduleId })
       return Promise.resolve()
     },
-    ...over,
-  }
-  return { deps, sent }
+    ...escalationOver,
+  })
+  const guard = createMermaidGuard({
+    escalation,
+    parse,
+    repair: (source) =>
+      source.includes("-.x")
+        ? { source: source.replaceAll("-.x", "-.-x"), repaired: true }
+        : { source, repaired: false },
+  })
+  return { sent, guard }
 }
 
 describe("createMermaidGuard", () => {
   test("says nothing when every diagram parses", async () => {
-    const { deps, sent } = harness()
-    await createMermaidGuard(deps).check("c1", [fence(FIXED)])
+    const { sent, guard } = harness()
+    await guard.check("c1", [fence(FIXED)])
     expect(sent).toEqual([])
   })
 
   test("says nothing when the message has no mermaid fence", async () => {
-    const { deps, sent } = harness()
-    await createMermaidGuard(deps).check("c1", ["prose\n```ts\nconst a = 1\n```"])
+    const { sent, guard } = harness()
+    await guard.check("c1", ["prose\n```ts\nconst a = 1\n```"])
     expect(sent).toEqual([])
   })
 
   test("asks the model to fix a diagram that will not render", async () => {
-    const { deps, sent } = harness()
-    await createMermaidGuard(deps).check("c1", [fence(BROKEN)])
+    const { sent, guard } = harness()
+    await guard.check("c1", [fence(BROKEN)])
 
     expect(sent).toHaveLength(1)
     expect(sent[0]?.chatId).toBe("c1")
@@ -73,26 +80,28 @@ describe("createMermaidGuard", () => {
   // correction banner, so the reader already has a diagram. Spending a whole
   // turn on it would be pure cost.
   test("spends no turn on a diagram the client's repair already saves", async () => {
-    const { deps, sent } = harness()
-    await createMermaidGuard(deps).check("c1", [fence(DOTTED)])
+    const { sent, guard } = harness()
+    await guard.check("c1", [fence(DOTTED)])
     expect(sent).toEqual([])
   })
 
-  test("puts every failing diagram from a turn in one message", async () => {
-    const { deps, sent } = harness()
-    await createMermaidGuard(deps).check("c1", [
+  // Each failing diagram is escalated separately so the escalation's per-key
+  // deduplication tracks each source independently.
+  test("escalates each failing diagram in a turn separately", async () => {
+    const { sent, guard } = harness()
+    await guard.check("c1", [
       fence(BROKEN),
       `${fence(FIXED)}\n${fence(BROKEN.replace("app", "other"))}`,
     ])
 
-    expect(sent).toHaveLength(1)
-    expect(sent[0]?.content).toContain("2 mermaid diagrams")
+    expect(sent).toHaveLength(2)
+    expect(sent[0]?.content).toContain("1 mermaid diagram")
+    expect(sent[1]?.content).toContain("1 mermaid diagram")
   })
 
   // A model that cannot fix its own diagram would otherwise be asked forever.
   test("retries a given diagram exactly once", async () => {
-    const { deps, sent } = harness()
-    const guard = createMermaidGuard(deps)
+    const { sent, guard } = harness()
 
     await guard.check("c1", [fence(BROKEN)])
     await guard.check("c1", [fence(BROKEN)])
@@ -101,8 +110,7 @@ describe("createMermaidGuard", () => {
   })
 
   test("remembers per chat, so another chat still gets its correction", async () => {
-    const { deps, sent } = harness()
-    const guard = createMermaidGuard(deps)
+    const { sent, guard } = harness()
 
     await guard.check("c1", [fence(BROKEN)])
     await guard.check("c2", [fence(BROKEN)])
@@ -112,26 +120,26 @@ describe("createMermaidGuard", () => {
 
   // The user's own message must not wait behind a housekeeping correction.
   test("stands aside when a user message is already queued", async () => {
-    const { deps, sent } = harness({ hasQueuedMessage: () => true })
-    await createMermaidGuard(deps).check("c1", [fence(BROKEN)])
+    const { sent, guard } = harness({ hasQueuedMessage: () => true })
+    await guard.check("c1", [fence(BROKEN)])
     expect(sent).toEqual([])
   })
 
   test("does nothing at all when disabled", async () => {
-    const { deps, sent } = harness({ enabled: false })
-    await createMermaidGuard(deps).check("c1", [fence(BROKEN)])
+    const { sent, guard } = harness({ enabled: false })
+    await guard.check("c1", [fence(BROKEN)])
     expect(sent).toEqual([])
   })
 
   // A cosmetic guard must never take a turn down with it.
   test("swallows a parser failure rather than failing the turn", async () => {
-    const { deps, sent } = harness({ parse: () => Promise.reject(new Error("boom")) })
-    await createMermaidGuard(deps).check("c1", [fence(BROKEN)])
+    const { sent, guard } = harness({}, () => Promise.reject(new Error("boom")))
+    await guard.check("c1", [fence(BROKEN)])
     expect(sent).toEqual([])
   })
 
   test("swallows an enqueue failure", async () => {
-    const { deps } = harness({ enqueueMessage: () => Promise.reject(new Error("boom")) })
-    await createMermaidGuard(deps).check("c1", [fence(BROKEN)])
+    const { guard } = harness({ enqueueMessage: () => Promise.reject(new Error("boom")) })
+    await guard.check("c1", [fence(BROKEN)])
   })
 })

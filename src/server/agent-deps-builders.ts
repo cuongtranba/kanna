@@ -48,6 +48,7 @@ import type { RunTurnDeps } from "./claude-turn-runner"
 import { createMermaidGuard, type MermaidGuard } from "./mermaid-guard"
 import { createCronRepair, type CronRepair } from "./cron/repair"
 import { createCronConfirm, type CronConfirm } from "./cron/confirm"
+import { createModelEscalation, type ModelEscalation } from "./model-escalation"
 import { parseMermaid } from "./mermaid-parse.adapter"
 import { repairMermaidSource } from "../shared/mermaidRepair"
 import { resolveSpawnPaths } from "./claude-session-config"
@@ -179,11 +180,33 @@ export function buildCronCommandDeps(agent: AgentCoordinator): CronCommandDeps {
 }
 
 /**
- * One repair per coordinator. Its "already asked about this line" memory has
- * to outlive a single command — a fresh one per dispatch would re-offer the
- * same unrepairable line every time the user retyped it, which is the exact
- * shape of the failure this exists to fix.
+ * Shared escalation infrastructure: hasQueuedMessage and enqueueMessage are
+ * identical across all three features; only name, enabled flag, and whether
+ * /cron's drain is needed differ.
+ *
+ * `drainQueue` is required for cron features (/cron starts no turn, so
+ * nothing else will ever pick up the queued message) but absent for mermaid
+ * (it runs at a turn boundary where the drain follows automatically).
  */
+function buildModelEscalation(
+  agent: AgentCoordinator,
+  opts: { name: string; enabled: boolean; drain?: boolean },
+): ModelEscalation {
+  return createModelEscalation({
+    name: opts.name,
+    enabled: opts.enabled,
+    hasQueuedMessage: (chatId) => agent.store.getQueuedMessages(chatId).length > 0,
+    enqueueMessage: async (chatId, content, options) => {
+      await agent.enqueueMessage(chatId, content, [], options)
+    },
+    drainQueue: opts.drain
+      ? async (chatId) => {
+          await agent.maybeStartNextQueuedMessage(chatId)
+        }
+      : undefined,
+  })
+}
+
 const cronRepairByAgent = new WeakMap<AgentCoordinator, CronRepair>()
 
 function buildCronRepair(agent: AgentCoordinator): CronRepair {
@@ -191,16 +214,11 @@ function buildCronRepair(agent: AgentCoordinator): CronRepair {
   if (existing) return existing
 
   const repair = createCronRepair({
-    enabled: process.env.KANNA_CRON_REPAIR !== "disabled",
-    hasQueuedMessage: (chatId) => agent.store.getQueuedMessages(chatId).length > 0,
-    enqueueMessage: async (chatId, content, options) => {
-      await agent.enqueueMessage(chatId, content, [], options)
-    },
-    // `/cron` starts no turn, so unlike the mermaid guard nothing else will
-    // come along and drain this.
-    drainQueue: async (chatId) => {
-      await agent.maybeStartNextQueuedMessage(chatId)
-    },
+    escalation: buildModelEscalation(agent, {
+      name: "cron/repair",
+      enabled: process.env.KANNA_CRON_REPAIR !== "disabled",
+      drain: true,
+    }),
   })
   cronRepairByAgent.set(agent, repair)
   return repair
@@ -213,14 +231,11 @@ function buildCronConfirm(agent: AgentCoordinator): CronConfirm {
   if (existing) return existing
 
   const confirm = createCronConfirm({
-    enabled: process.env.KANNA_CRON_CONFIRM !== "disabled",
-    hasQueuedMessage: (chatId) => agent.store.getQueuedMessages(chatId).length > 0,
-    enqueueMessage: async (chatId, content, options) => {
-      await agent.enqueueMessage(chatId, content, [], options)
-    },
-    drainQueue: async (chatId) => {
-      await agent.maybeStartNextQueuedMessage(chatId)
-    },
+    escalation: buildModelEscalation(agent, {
+      name: "cron/confirm",
+      enabled: process.env.KANNA_CRON_CONFIRM !== "disabled",
+      drain: true,
+    }),
   })
   cronConfirmByAgent.set(agent, confirm)
   return confirm
@@ -538,17 +553,14 @@ function buildMermaidGuard(agent: AgentCoordinator): MermaidGuard {
   if (existing) return existing
 
   const guard = createMermaidGuard({
-    enabled: process.env.KANNA_MERMAID_GUARD !== "disabled",
+    escalation: buildModelEscalation(agent, {
+      name: "mermaid",
+      enabled: process.env.KANNA_MERMAID_GUARD !== "disabled",
+    }),
     parse: parseMermaid,
-    // The same repair the renderer applies before it gives up, so the guard
-    // fires exactly when the reader would see an error rather than a diagram.
     repair: (source) => {
       const result = repairMermaidSource(source)
       return { source: result.source, repaired: result.repairs.length > 0 }
-    },
-    hasQueuedMessage: (chatId) => agent.store.getQueuedMessages(chatId).length > 0,
-    enqueueMessage: async (chatId, content, options) => {
-      await agent.enqueueMessage(chatId, content, [], options)
     },
   })
   mermaidGuardByAgent.set(agent, guard)
