@@ -91,7 +91,7 @@ describe("createModelEscalation", () => {
       name: "test",
       enabled: true,
       hasQueuedMessage: () => false,
-      enqueueMessage: (chatId, content) => {
+      enqueueMessage: (chatId, _content) => {
         sent.push(chatId)
         return Promise.resolve()
       },
