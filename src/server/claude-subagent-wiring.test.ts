@@ -183,6 +183,34 @@ describe("buildClaudeSubagentStarter", () => {
     const ptyArgs = capturedPtyArgs as Record<string, unknown>
     expect(ptyArgs.oneShot).toBe(true)
   })
+
+  test("PTY preference — forwards maxTurns to startClaudeSessionPTYFn", async () => {
+    let capturedPtyArgs: unknown = null
+    const deps = makeDeps({
+      resolveClaudeDriverPreference: () => "pty",
+      startClaudeSessionPTYFn: async (a) => {
+        capturedPtyArgs = a
+        return {} as never
+      },
+    })
+    const starter = buildClaudeSubagentStarter(deps)
+    await starter({
+      chatId: "chat-x",
+      projectId: "proj",
+      localPath: "/tmp/x",
+      model: "claude-opus-4-5",
+      effort: undefined,
+      planMode: false,
+      sessionToken: null,
+      forkSession: false,
+      oauthToken: null,
+      onToolRequest: async () => null,
+      maxTurns: 5,
+    } as never)
+
+    const ptyArgs = capturedPtyArgs as Record<string, unknown>
+    expect(ptyArgs.maxTurns).toBe(5)
+  })
 })
 
 // ---------------------------------------------------------------------------

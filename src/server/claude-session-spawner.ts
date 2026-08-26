@@ -67,10 +67,6 @@ interface SpawnOAuthPool {
   release(chatId: string): void
 }
 
-/** Subset of EventStore used by spawnClaudeTurn (only for slash-command load). */
-interface SpawnStore {
-}
-
 // ---------------------------------------------------------------------------
 // Exported arg types
 // ---------------------------------------------------------------------------
@@ -109,9 +105,6 @@ export interface SpawnClaudeTurnDeps {
 
   // OAuth pool (structural subset)
   oauthPool: SpawnOAuthPool | null
-
-  // Store (structural subset)
-  store: SpawnStore
 
   // Session-start function references (injected so tests can stub them)
   startClaudeSessionFn: typeof StartClaudeSessionFn

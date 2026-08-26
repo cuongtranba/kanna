@@ -449,7 +449,6 @@ export function buildSpawnClaudeTurnDeps(agent: AgentCoordinator): SpawnClaudeTu
     activeTurns: agent.activeTurns,
     mentionedSubagentIdsByChat: agent.mentionedSubagentIdsByChat,
     oauthPool: agent.oauthPool,
-    store: agent.store,
     startClaudeSessionFn: agent.startClaudeSessionFn,
     startClaudeSessionPTYFn: agent.startClaudeSessionPTYFn,
     subagentOrchestrator: agent.getSubagentOrchestrator(),
