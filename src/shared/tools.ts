@@ -19,6 +19,16 @@ export const KANNA_MCP_SERVER_NAME = "kanna"
 export const OFFER_DOWNLOAD_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__offer_download`
 export const PREVIEW_FILE_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__preview_file`
 export const EXPOSE_PORT_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__expose_port`
+export const QUERY_TRACKING_FILE_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__query_tracking_file`
+export const APPEND_TRACKING_ROW_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__append_tracking_row`
+export const REPLACE_TRACKING_SECTION_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__replace_tracking_section`
+export const DELEGATE_SUBAGENT_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__delegate_subagent`
+export const STOP_LOOP_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__stop_loop`
+export const SETUP_LOOP_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__setup_loop`
+export const ARM_CRON_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__arm_cron`
+export const VALIDATE_CRON_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__validate_cron`
+export const VALIDATE_MERMAID_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__validate_mermaid`
+export const RUN_VERIFY_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__run_verify`
 
 function asRecord<T>(value: T): (T & Record<string, unknown>) | null {
   return isRecord(value) ? value : null

@@ -151,7 +151,7 @@ export const PATTERN_BUDGETS: readonly PatternBudget[] = [
     id: "loop-prompt-tool-literals",
     include: ["src/server/loop-template.ts"],
     pattern: "mcp__kanna__",
-    max: 16,
+    max: 1,
     issue: 902,
     rationale:
       "MCP tool names written as bare strings inside the rendered loop prompt, with no link to their registration. A rename passes requiredSubstrings, ships a prompt instructing a nonexistent tool, and burns a background subagent per iteration.",

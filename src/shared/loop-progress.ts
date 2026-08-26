@@ -5,6 +5,71 @@ import type {
   LoopRowStatus,
   SubagentRunSnapshot,
 } from "./types"
+import {
+  APPEND_TRACKING_ROW_TOOL_NAME,
+  DELEGATE_SUBAGENT_TOOL_NAME,
+  QUERY_TRACKING_FILE_TOOL_NAME,
+  REPLACE_TRACKING_SECTION_TOOL_NAME,
+  STOP_LOOP_TOOL_NAME,
+} from "./tools"
+
+/**
+ * Canonical section headings for the loop tracking file. Single source of
+ * truth consumed by the prompt renderer, the tracking registry, and the
+ * chunk-label resolver — a rename here propagates everywhere and produces a
+ * compile error in any consumer that uses these as imported constants rather
+ * than bare strings.
+ */
+export const LOOP_SECTIONS = {
+  nextChunk: "Next chunk",
+  progress: "Progress",
+  failedApproaches: "Failed approaches",
+} as const
+
+/** The four decisions the orchestrator must make each iteration. */
+export type LoopOracleExit = 0 | "nonzero"
+export type LoopChunkState = "empty" | "has_work"
+export type LoopAction = "GOAL_MET" | "ORACLE_TOO_WEAK" | "DELEGATE" | "WRITE_CHUNK"
+
+/**
+ * Pure mapping of the two observable signals → the action the orchestrator
+ * must take. Lifted out of prose so the four cases are testable directly
+ * rather than through substring checks on a rendered string.
+ *
+ * | oracle | next chunk | action |
+ * |--------|-----------|--------|
+ * | 0      | empty     | GOAL_MET |
+ * | 0      | has_work  | ORACLE_TOO_WEAK |
+ * | nonzero| has_work  | DELEGATE |
+ * | nonzero| empty     | WRITE_CHUNK |
+ */
+export function decideLoopAction(oracleExit: LoopOracleExit, nextChunk: LoopChunkState): LoopAction {
+  if (oracleExit === 0) {
+    return nextChunk === "empty" ? "GOAL_MET" : "ORACLE_TOO_WEAK"
+  }
+  return nextChunk === "has_work" ? "DELEGATE" : "WRITE_CHUNK"
+}
+
+/**
+ * Static invariants per logical step of the loop prompt. `requiredSubstrings`
+ * in `validateLoopSetup` is derived from this table, so a clause added to a
+ * step without adding it here fails the structural check rather than silently
+ * passing — the same pattern as `LINK_RULES_FOR_PARITY` in the mermaid gate.
+ *
+ * Tool names and section names are constants: a rename produces a compile
+ * error here, which propagates to the structural check and then to the tests.
+ * The remaining prose phrases are load-bearing: if they disappear from the
+ * rendered prompt the guard fires.
+ */
+export const LOOP_STEP_INVARIANTS: readonly { readonly id: string; readonly requires: readonly string[] }[] = [
+  { id: "read-plan", requires: [QUERY_TRACKING_FILE_TOOL_NAME] },
+  { id: "decide", requires: ["BOTH", "GOAL MET", "ORACLE TOO WEAK", "TERMINAL CHECK", "EVERY section", "with NO sections filter"] },
+  { id: "delegate", requires: [DELEGATE_SUBAGENT_TOOL_NAME, "run_in_background: true", "[chunk:", "END THIS TURN"] },
+  { id: "stop", requires: [STOP_LOOP_TOOL_NAME] },
+  { id: "worker", requires: [APPEND_TRACKING_ROW_TOOL_NAME, REPLACE_TRACKING_SECTION_TOOL_NAME, "Before writing DONE"] },
+  { id: "hard-rules", requires: ["NEVER edit code yourself", "/clear"] },
+  { id: "retry", requires: ["AUTH_REQUIRED", "do NOT call stop_loop", LOOP_SECTIONS.failedApproaches] },
+]
 
 /**
  * Loop Progress — a per-chat, read-only view of an armed autonomous loop's

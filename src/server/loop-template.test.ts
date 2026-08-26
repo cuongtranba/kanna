@@ -3,7 +3,9 @@ import path from "node:path"
 import {
   assertTrackingFileSafe,
   auditOracle,
+  decideLoopAction,
   extractOracleScriptPath,
+  LOOP_SECTIONS,
   reconcileTrackingFile,
   validateLoopSetup,
   __testing,
@@ -727,5 +729,45 @@ describe("assertTrackingFileSafe", () => {
   test("a tracked file with no Goal section yet is allowed", () => {
     const result = assertTrackingFileSafe("# notes\n\nfree text\n", { goal: "g", gitTracked: true, force: false })
     expect(result.ok).toBe(true)
+  })
+})
+
+describe("decideLoopAction", () => {
+  test("oracle=0 + empty next chunk → GOAL_MET", () => {
+    expect(decideLoopAction(0, "empty")).toBe("GOAL_MET")
+  })
+
+  test("oracle=0 + has_work next chunk → ORACLE_TOO_WEAK", () => {
+    expect(decideLoopAction(0, "has_work")).toBe("ORACLE_TOO_WEAK")
+  })
+
+  test("oracle=nonzero + has_work next chunk → DELEGATE", () => {
+    expect(decideLoopAction("nonzero", "has_work")).toBe("DELEGATE")
+  })
+
+  test("oracle=nonzero + empty next chunk → WRITE_CHUNK", () => {
+    expect(decideLoopAction("nonzero", "empty")).toBe("WRITE_CHUNK")
+  })
+})
+
+describe("LOOP_SECTIONS constants", () => {
+  test("section names are stable string values consumed by the prompt", () => {
+    expect(LOOP_SECTIONS.nextChunk).toBe("Next chunk")
+    expect(LOOP_SECTIONS.progress).toBe("Progress")
+    expect(LOOP_SECTIONS.failedApproaches).toBe("Failed approaches")
+  })
+
+  test("rendered prompt contains LOOP_SECTIONS values, not independent literals", () => {
+    const prompt = __testing.renderLoopPrompt({
+      goal: "green build",
+      verifyCommand: "make check",
+      trackingFileRel: "PROGRESS.md",
+      subagentId: "sub-1",
+      parallelism: 1,
+      workdirRel: ".",
+    })
+    expect(prompt).toContain(LOOP_SECTIONS.nextChunk)
+    expect(prompt).toContain(LOOP_SECTIONS.progress)
+    expect(prompt).toContain(LOOP_SECTIONS.failedApproaches)
   })
 })

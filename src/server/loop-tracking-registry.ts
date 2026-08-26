@@ -12,7 +12,7 @@
  */
 
 import type { StructuredDoc } from "../shared/structured-doc/types"
-import type { LoopTrackingSnapshot } from "../shared/loop-progress"
+import { LOOP_SECTIONS, type LoopTrackingSnapshot } from "../shared/loop-progress"
 import { createWatchedRegistry } from "./watched-registry"
 
 const DEFAULT_MAX_DONE_ENTRIES = 200
@@ -45,10 +45,10 @@ function parse(
   doc: StructuredDoc,
   maxDoneEntries: number,
 ): LoopTrackingSnapshot {
-  const doneEntries = doc.listItems(content, "Progress")
+  const doneEntries = doc.listItems(content, LOOP_SECTIONS.progress)
   return {
     doneEntries: doneEntries.slice(0, maxDoneEntries),
-    nextChunkSection: doc.query(content, { sections: ["Next chunk"] }).content.trimEnd(),
+    nextChunkSection: doc.query(content, { sections: [LOOP_SECTIONS.nextChunk] }).content.trimEnd(),
   }
 }
 
