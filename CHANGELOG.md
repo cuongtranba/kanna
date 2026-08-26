@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.43.4](https://github.com/cuongtranba/kanna/compare/v1.43.3...v1.43.4) (2026-08-26)
+
+
+### Bug Fixes
+
+* **import:** count and log exec-snippet regex misses per session ([#905](https://github.com/cuongtranba/kanna/issues/905)) ([f4ccb43](https://github.com/cuongtranba/kanna/commit/f4ccb43275f8b2083b69e89ecbbcbc97a04521e3)), closes [#880](https://github.com/cuongtranba/kanna/issues/880)
+
 ## [1.43.3](https://github.com/cuongtranba/kanna/compare/v1.43.2...v1.43.3) (2026-08-26)
 
 
