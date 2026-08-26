@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.43.5](https://github.com/cuongtranba/kanna/compare/v1.43.4...v1.43.5) (2026-08-26)
+
+
+### Bug Fixes
+
+* **subagent:** forward maxTurns on PTY subagent path; remove SpawnStore dead code ([#909](https://github.com/cuongtranba/kanna/issues/909)) ([bd6bee2](https://github.com/cuongtranba/kanna/commit/bd6bee24bcd457fbde22c770d08a5fb7b0cf0610)), closes [#891](https://github.com/cuongtranba/kanna/issues/891)
+
 ## [1.43.4](https://github.com/cuongtranba/kanna/compare/v1.43.3...v1.43.4) (2026-08-26)
 
 
