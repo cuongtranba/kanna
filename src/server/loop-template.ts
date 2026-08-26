@@ -13,7 +13,11 @@
 
 import path from "node:path"
 
+import { APPEND_TRACKING_ROW_TOOL_NAME, DELEGATE_SUBAGENT_TOOL_NAME, QUERY_TRACKING_FILE_TOOL_NAME, REPLACE_TRACKING_SECTION_TOOL_NAME, STOP_LOOP_TOOL_NAME } from "../shared/tools"
+import { LOOP_SECTIONS, LOOP_STEP_INVARIANTS } from "../shared/loop-progress"
 import { confinePathToDir, shellCommandIsParseable } from "./input-validation"
+
+export { decideLoopAction, LOOP_SECTIONS, type LoopAction, type LoopChunkState, type LoopOracleExit } from "../shared/loop-progress"
 
 const DEFAULT_TRACKING_FILE = "PROGRESS.md"
 
@@ -163,24 +167,24 @@ function renderLoopPrompt(args: {
     // boilerplate row over and over instead of the chunk being worked.
     "[chunk: <one-line summary of the Next chunk you just read>]",
     `Do the next chunk in ${trackingFileRel}. All work happens in ${workdirPhrase}.`,
-    `To read the plan, call mcp__kanna__query_tracking_file({ ${f}, sections: [\\"Next chunk\\"] })`,
+    `To read the plan, call ${QUERY_TRACKING_FILE_TOOL_NAME}({ ${f}, sections: [\\"${LOOP_SECTIONS.nextChunk}\\"] })`,
     "— by section, never the whole file.",
     `Verify your work with \`${verifyCommand}\` before you report success.`,
     "On success: call",
-    `mcp__kanna__append_tracking_row({ ${f}, section: \\"Progress\\", entry: \\"- <date> <chunk> DONE\\", position: \\"top\\" })`,
+    `${APPEND_TRACKING_ROW_TOOL_NAME}({ ${f}, section: \\"${LOOP_SECTIONS.progress}\\", entry: \\"- <date> <chunk> DONE\\", position: \\"top\\" })`,
     "and then REPLACE the plan's next step with",
-    `mcp__kanna__replace_tracking_section({ ${f}, section: \\"Next chunk\\", body: \\"<the single next chunk, or DONE if the plan is finished>\\" })`,
+    `${REPLACE_TRACKING_SECTION_TOOL_NAME}({ ${f}, section: \\"${LOOP_SECTIONS.nextChunk}\\", body: \\"<the single next chunk, or DONE if the plan is finished>\\" })`,
     "— replace, never append, or completed chunks pile up and get redone.",
     // The pre-DONE re-read exists because a worker once wrote DONE while five
     // undone chunks sat in a section it had never been shown; the whole loop
     // then terminated on a green-but-weak oracle.
     "Before writing DONE, run the TERMINAL CHECK: call",
-    `mcp__kanna__query_tracking_file({ ${f} })`,
+    `${QUERY_TRACKING_FILE_TOOL_NAME}({ ${f} })`,
     "with NO sections filter — the one whole-file read you are allowed — and",
     "confirm no other section still lists undone work; if one does, write that",
-    "work into Next chunk instead of DONE.",
+    `work into ${LOOP_SECTIONS.nextChunk} instead of DONE.`,
     "On failure: call",
-    `mcp__kanna__append_tracking_row({ ${f}, section: \\"Failed approaches\\", entry: \\"- <what you tried and why it failed>\\" })`,
+    `${APPEND_TRACKING_ROW_TOOL_NAME}({ ${f}, section: \\"${LOOP_SECTIONS.failedApproaches}\\", entry: \\"- <what you tried and why it failed>\\" })`,
     "so the next iteration does not repeat it.",
     "Never Read or Edit the whole tracking file. Terminate when done.",
   ].join(" ")
@@ -190,36 +194,36 @@ function renderLoopPrompt(args: {
     "yourself — you delegate it. Follow these steps EXACTLY every turn:",
     "",
     `1. Read the current plan by SECTION — do NOT read the whole ${trackingFileRel}.`,
-    `   Call mcp__kanna__query_tracking_file({ ${f}, sections: ["Next chunk", "Progress"], list_limit: 5 })`,
+    `   Call ${QUERY_TRACKING_FILE_TOOL_NAME}({ ${f}, sections: ["${LOOP_SECTIONS.nextChunk}", "${LOOP_SECTIONS.progress}"], list_limit: 5 })`,
     "   This keeps the file off your context as it grows.",
     `2. Run the verify command (the ORACLE) with Bash, from ${workdirPhrase}:`,
     `   \`${verifyCommand}\`. Check its exit code.`,
     "3. Decide, using BOTH signals — the oracle is only a proxy, the plan is the",
     "   authority. Four cases:",
-    "   (a) oracle exited 0 AND \"Next chunk\" is empty / says DONE → run the",
+    `   (a) oracle exited 0 AND "${LOOP_SECTIONS.nextChunk}" is empty / says DONE → run the`,
     "       TERMINAL CHECK before declaring victory: call",
-    `       mcp__kanna__query_tracking_file({ ${f} })`,
+    `       ${QUERY_TRACKING_FILE_TOOL_NAME}({ ${f} })`,
     "       with NO sections filter — the one whole-file read you are allowed —",
     "       and scan EVERY section, including non-canonical ones (a \"## Chunks\"",
     "       or \"## Plan\" list), for undone work. Work found → treat as case (b).",
     `       Only if the whole plan is exhausted: print "GOAL MET: ${goal}",`,
-    "       call mcp__kanna__stop_loop({}) and END THIS TURN. Do NOT call",
+    `       call ${STOP_LOOP_TOOL_NAME}({}) and END THIS TURN. Do NOT call`,
     "       delegate_subagent.",
-    "   (b) oracle exited 0 BUT \"Next chunk\" still lists real work — or the",
+    `   (b) oracle exited 0 BUT "${LOOP_SECTIONS.nextChunk}" still lists real work — or the`,
     "       TERMINAL CHECK found undone work in any other section → the oracle",
     "       is too weak to define done. Print",
     "       \"ORACLE TOO WEAK: <what the plan still lists>\", call",
-    "       mcp__kanna__stop_loop({}) and END THIS TURN so a human can tighten",
+    `       ${STOP_LOOP_TOOL_NAME}({}) and END THIS TURN so a human can tighten`,
     "       it. Do NOT declare the goal met, and do NOT delegate.",
-    "   (c) oracle failed AND \"Next chunk\" has work → normal case, go to step 4.",
-    "   (d) oracle failed BUT \"Next chunk\" is empty → the plan ran out while the",
+    `   (c) oracle failed AND "${LOOP_SECTIONS.nextChunk}" has work → normal case, go to step 4.`,
+    `   (d) oracle failed BUT "${LOOP_SECTIONS.nextChunk}" is empty → the plan ran out while the`,
     "       goal is unmet. Write the next step yourself with",
-    `       mcp__kanna__replace_tracking_section({ ${f}, section: "Next chunk", body: "<one concrete chunk>" })`,
+    `       ${REPLACE_TRACKING_SECTION_TOOL_NAME}({ ${f}, section: "${LOOP_SECTIONS.nextChunk}", body: "<one concrete chunk>" })`,
     "       then go to step 4.",
-    "4. Delegate the \"Next chunk\" work with EXACTLY this call (the subagent is",
+    `4. Delegate the "${LOOP_SECTIONS.nextChunk}" work with EXACTLY this call (the subagent is`,
     "   fixed by configuration), making the ONE substitution marked below:",
     "",
-    "     mcp__kanna__delegate_subagent({",
+    `     ${DELEGATE_SUBAGENT_TOOL_NAME}({`,
     `       subagent_id: "${subagentId}",`,
     "       run_in_background: true,",
     `       prompt: "${workerPrompt}",`,
@@ -238,7 +242,7 @@ function renderLoopPrompt(args: {
     "     unchanged and do NOT call stop_loop — Kanna disarms the loop itself",
     "     after repeated failures, so stopping here just costs a human round-trip.",
     "   - WORK (the worker ran and could not finish): record it with",
-    `     mcp__kanna__append_tracking_row({ ${f}, section: "Failed approaches", entry: "- <reason>" })`,
+    `     ${APPEND_TRACKING_ROW_TOOL_NAME}({ ${f}, section: "${LOOP_SECTIONS.failedApproaches}", entry: "- <reason>" })`,
     "     then delegate a DIFFERENT approach to the same chunk.",
     "6. End your turn. Kanna will /clear your context and re-fire this exact",
     `   prompt after the worker completes. Your ONLY durable state is ${trackingFileRel}.`,
@@ -248,9 +252,9 @@ function renderLoopPrompt(args: {
     "  Write, MultiEdit, or the Task/Agent tool. Kanna blocks these tools in",
     "  loop turns; attempting them wastes the turn.",
     `- NEVER read the whole ${trackingFileRel} — EXCEPT the single TERMINAL CHECK`,
-    "  in step 3(a). Use mcp__kanna__query_tracking_file",
-    "  (read), mcp__kanna__append_tracking_row and",
-    "  mcp__kanna__replace_tracking_section (write) so the file stays off your",
+    `  in step 3(a). Use ${QUERY_TRACKING_FILE_TOOL_NAME}`,
+    `  (read), ${APPEND_TRACKING_ROW_TOOL_NAME} and`,
+    `  ${REPLACE_TRACKING_SECTION_TOOL_NAME} (write) so the file stays off your`,
     "  context no matter how large it grows.",
     ...renderDelegationRule(parallelism),
     "- All progress lives in the tracking file, never in your context.",
@@ -295,19 +299,19 @@ const CANONICAL_SECTIONS: readonly {
     canonicalBodyLines: (args) => ["```", args.verifyCommand, "```", ""],
   },
   {
-    heading: "## Progress (latest first)",
+    heading: `## ${LOOP_SECTIONS.progress} (latest first)`,
     serverOwned: false,
     matches: (h) => h.startsWith("progress"),
     canonicalBodyLines: () => ["", "_Subagent appends one row per completed chunk here._", ""],
   },
   {
-    heading: "## Failed approaches",
+    heading: `## ${LOOP_SECTIONS.failedApproaches}`,
     serverOwned: false,
     matches: (h) => h.startsWith("failed approaches"),
     canonicalBodyLines: () => ["", "_Subagent appends dead-ends here so future iterations don't repeat them._", ""],
   },
   {
-    heading: "## Next chunk",
+    heading: `## ${LOOP_SECTIONS.nextChunk}`,
     serverOwned: false,
     matches: (h) => h.startsWith("next chunk"),
     canonicalBodyLines: (args) => ["", args.chunkHint ?? "_Describe the first chunk the subagent should do._", ""],
@@ -627,39 +631,16 @@ export function validateLoopSetup(
     workdirRel,
   })
 
-  // Belt-and-suspenders structural check on the rendered prompt. Guards
-  // against future edits to `renderLoopPrompt` that would silently drop a
-  // required clause. Every entry MUST appear verbatim in the rendered text.
+  // Structural check on the rendered prompt. Derived from LOOP_STEP_INVARIANTS
+  // so adding a new required clause to a step automatically enters the guard —
+  // a hand-maintained list here was the bug this replaces (newly added clauses
+  // were never required, and the check could not distinguish present from coherent).
+  // Dynamic parts (file path, command, subagent id) are added separately.
   const requiredSubstrings: readonly string[] = [
     resolved.rel,
     verifyCommand,
     subagentId,
-    "delegate_subagent",
-    "run_in_background: true",
-    "stop_loop",
-    "query_tracking_file",
-    "append_tracking_row",
-    "replace_tracking_section",
-    "GOAL MET",
-    "ORACLE TOO WEAK",
-    // The terminal whole-plan check is what stops a green-but-weak oracle from
-    // ending the loop while undone work sits in a section nobody was shown.
-    "TERMINAL CHECK",
-    "EVERY section",
-    "with NO sections filter",
-    "Before writing DONE",
-    // The chunk marker is what makes each Progress row read as the chunk it
-    // worked on rather than the identical boilerplate prompt.
-    "[chunk:",
-    "END THIS TURN",
-    "/clear",
-    "NEVER edit code yourself",
-    // The plan-vs-oracle gate and the failure taxonomy are the two clauses
-    // that keep the loop from terminating early / dying on a transient error.
-    "BOTH",
-    "AUTH_REQUIRED",
-    "do NOT call stop_loop",
-    "Failed approaches",
+    ...LOOP_STEP_INVARIANTS.flatMap((step) => step.requires),
   ]
   const missing = requiredSubstrings.filter((s) => !prompt.includes(s))
   if (missing.length > 0) {

@@ -34,7 +34,7 @@ import type { SubagentOrchestrator } from "./subagent-orchestrator"
 import type { LoopSetupInput } from "./loop-template"
 import { confinePathToDir } from "./input-validation"
 import { resolveStructuredDoc } from "../shared/structured-doc/registry"
-import { chunkLabelFromSection } from "../shared/loop-progress"
+import { chunkLabelFromSection, LOOP_SECTIONS } from "../shared/loop-progress"
 import { readDoc, writeDoc } from "./structured-doc-io.adapter"
 import { computeWorkspaceDigest, runVerifyCommand } from "./loop-verify-io.adapter"
 import { getCachedVerify, setCachedVerify } from "./loop-verify-cache"
@@ -698,7 +698,7 @@ function buildLoopChunkLabelResolver(args: {
     if (!doc) return null
     const content = await readDoc(confined.abs)
     if (content === null) return null
-    const label = chunkLabelFromSection(doc.query(content, { sections: ["Next chunk"] }).content)
+    const label = chunkLabelFromSection(doc.query(content, { sections: [LOOP_SECTIONS.nextChunk] }).content)
     return label.length > 0 ? label : null
   }
 }
