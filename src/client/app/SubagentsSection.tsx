@@ -600,7 +600,7 @@ const FALLBACK_PROVIDER_PREFS: ChatProviderPreferences = {
 }
 
 export function SubagentsSettingsBranch(props: {
-  state: Pick<KannaState, "socket" | "appSettings" | "handleWriteAppSettings">
+  state: Pick<KannaState, "socket" | "handleWriteAppSettings">
 }) {
   const subagents = useAppSettingsStore(
     (store) => store.settings?.subagents ?? EMPTY_SUBAGENTS,

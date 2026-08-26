@@ -14,8 +14,8 @@ import { NoticeBanner } from "../components/ui/notice-banner"
 import { TooltipProvider } from "../components/ui/tooltip"
 import { Toaster } from "../components/ui/toaster"
 import { APP_NAME, SDK_CLIENT_APP } from "../../shared/branding"
-import { useChatSoundPreferencesStore } from "../stores/chatSoundPreferencesStore"
 import type { ChatSoundPreference } from "../stores/chatSoundPreferencesStore"
+import { selectChatSoundId, selectChatSoundPreference, useAppSettingsStore } from "../stores/appSettingsStore"
 import { playChatNotificationSound, shouldPlayChatSound } from "../lib/chatSounds"
 import { getChatSoundBurstCount, getNotificationTitleCount } from "./chatNotifications"
 import { cn } from "../lib/utils"
@@ -255,8 +255,9 @@ function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
   const params = useParams()
   const state = useKannaState(params.chatId ?? null)
   const dialog = useAppDialog()
-  const chatSoundPreference = useChatSoundPreferencesStore((store) => store.chatSoundPreference)
-  const chatSoundId = useChatSoundPreferencesStore((store) => store.chatSoundId)
+  const chatSoundPreference = useAppSettingsStore(selectChatSoundPreference)
+  const chatSoundId = useAppSettingsStore(selectChatSoundId)
+  const appSettings = useAppSettingsStore((s) => s.settings)
   const showMobileOpenButton = location.pathname === "/"
   const currentVersion = SDK_CLIENT_APP.split("/")[1] ?? "unknown"
   const viewportWidth = useViewportStore((viewport) => viewport.width)
@@ -493,12 +494,12 @@ function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
     previousSidebarDataRef.current = state.sidebarData
 
     if (burstCount <= 0) return
-    if (!shouldPlayChatNotificationSound(state.appSettings, chatSoundPreference)) return
+    if (!shouldPlayChatNotificationSound(appSettings, chatSoundPreference)) return
 
     void playChatNotificationSound(chatSoundId, burstCount).catch(() => undefined)
-  }, [chatSoundId, chatSoundPreference, state.appSettings, state.sidebarData])
+  }, [appSettings, chatSoundId, chatSoundPreference, state.sidebarData])
 
-  const ptyDriverActive = state.appSettings?.claudeDriver.preference === "pty"
+  const ptyDriverActive = appSettings?.claudeDriver.preference === "pty"
 
   if (state.uiRestartActive) {
     return <AppBootstrap label={state.uiRestartLabel} />

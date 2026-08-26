@@ -18,7 +18,7 @@ import {
   findTerminalOwner,
   useTerminalLayoutStore,
 } from "../../stores/terminalLayoutStore"
-import { useTerminalPreferencesStore } from "../../stores/terminalPreferencesStore"
+import { selectMinColumnWidth, selectScrollbackLines, useAppSettingsStore } from "../../stores/appSettingsStore"
 import { useChatPageStore } from "../../stores/chatPageStore"
 import type { KannaState } from "../useKannaState"
 import { useAppGlobalContext } from "../AppGlobalProvider"
@@ -151,8 +151,8 @@ export function WorkspacePage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
   const toggleVisibility = useTerminalLayoutStore((store) => store.toggleVisibility)
   const setTerminalSizes = useTerminalLayoutStore((store) => store.setTerminalSizes)
   const toggleRightSidebar = useRightSidebarStore((store) => store.toggleVisibility)
-  const scrollback = useTerminalPreferencesStore((store) => store.scrollbackLines)
-  const minColumnWidth = useTerminalPreferencesStore((store) => store.minColumnWidth)
+  const scrollback = useAppSettingsStore(selectScrollbackLines)
+  const minColumnWidth = useAppSettingsStore(selectMinColumnWidth)
   const resolvedKeybindings = useMemo(() => getResolvedKeybindings(state.keybindings), [state.keybindings])
 
   const hasTerminals = terminalLayout.terminals.length > 0

@@ -13,7 +13,7 @@ import {
   useRightSidebarStore,
 } from "../../stores/rightSidebarStore"
 import { DEFAULT_PROJECT_TERMINAL_LAYOUT, useTerminalLayoutStore } from "../../stores/terminalLayoutStore"
-import { useTerminalPreferencesStore } from "../../stores/terminalPreferencesStore"
+import { selectEditorCommandTemplate, selectEditorPreset, useAppSettingsStore } from "../../stores/appSettingsStore"
 import { TERMINAL_TOGGLE_ANIMATION_DURATION_MS } from "../terminalToggleAnimation"
 import { useStickyChatFocus } from "../useStickyChatFocus"
 import { usePushFocus } from "../usePushFocus"
@@ -213,8 +213,8 @@ export function ChatTabContent({
   const terminalLayout = projectTerminalLayout ?? DEFAULT_PROJECT_TERMINAL_LAYOUT
   const projectRightSidebarVisibility = useRightSidebarStore((store) => (projectId ? store.projects[projectId] : undefined))
   const rightSidebarVisibility = projectRightSidebarVisibility ?? DEFAULT_RIGHT_SIDEBAR_VISIBILITY_STATE
-  const editorPreset = useTerminalPreferencesStore((store) => store.editorPreset)
-  const editorCommandTemplate = useTerminalPreferencesStore((store) => store.editorCommandTemplate)
+  const editorPreset = useAppSettingsStore(selectEditorPreset)
+  const editorCommandTemplate = useAppSettingsStore(selectEditorCommandTemplate)
 
   const hasTerminals = terminalLayout.terminals.length > 0
   const showTerminalPane = Boolean(projectId && terminalLayout.isVisible && hasTerminals)
