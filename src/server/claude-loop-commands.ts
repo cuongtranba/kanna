@@ -76,6 +76,15 @@ export interface LoopCommandDeps {
    */
   startingTurns: Pick<Map<string, unknown>, "has">
 
+  /** Parked AskUserQuestion / ExitPlanMode continuations keyed by chatId. */
+  pendingTools: { has(chatId: string): boolean }
+
+  /** Returns true when the chat has an in-flight Workflow. */
+  hasLiveWorkflow: (chatId: string) => boolean
+
+  /** Returns true when the session has a pending Claude-Code background task. */
+  hasPendingBackgroundTask: (session: ClaudeSessionState, now: number) => boolean
+
   /** Returns all configured subagents. */
   getSubagents(): Subagent[]
 

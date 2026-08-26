@@ -1373,22 +1373,18 @@ the real `EventStore` in `event-store.test.ts`.
 
 A turn registers its `ActiveTurn` only **after** the provider session spawns
 (`claude-turn-starter.ts`), so for the whole boot window `startingTurns` is the
-only signal that a chat is live. Three teardown gates each hand-rolled a
-busy-subset and all three omitted it:
-
-| Gate | What it protects |
-| --- | --- |
-| `enforceClaudeSessionBudget` | LRU eviction once resident sessions exceed `maxConcurrent` (default **4**) |
-| `isClaudeSessionIdle` | the 60 s idle reaper |
-| `clearClaudeSessionContext` | `/clear` and every inline cron fire |
-
-All three now check `startingTurns` alongside `activeTurns`. The eviction case
+only signal that a chat is live. All three teardown gates — `enforceClaudeSessionBudget`
+(LRU eviction), `isClaudeSessionIdle` (idle reaper), and `clearClaudeSessionContext`
+(`/clear` and inline cron fire) — now delegate to **`isSessionInUse`**
+(`claude-session-state-queries.ts`), the single predicate that covers all seven
+in-use conditions (activeTurns, startingTurns, pendingTools, pendingPromptSeqs,
+hasLiveWorkflow, hasPendingBackgroundTask, selfWakeActive). The eviction case
 is the sharpest: a **warm** session reused for a follow-up still carries the
 *previous* turn's `lastUsedAt`, so it sorts **first** in LRU — without the
-guard the prime eviction victim is the chat the user has just come back to.
-`clearClaudeSessionContext` needs it because inline cron re-checks
-`isChatBusy` and then awaits twice before calling it, so a turn can legitimately
-start inside that window.
+`startingTurns` guard the prime eviction victim is the chat the user has just
+come back to. `clearClaudeSessionContext` needs it because inline cron
+re-checks `isChatBusy` and then awaits twice before calling it, so a turn can
+legitimately start inside that window.
 
 ## A turn is settled by the session that OWNS it, not the one that is resident
 

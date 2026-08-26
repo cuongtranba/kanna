@@ -23,6 +23,9 @@ function makeHarness(options?: {
   session?: Partial<ClaudeSessionState>
   hasActiveTurn?: boolean
   hasStartingTurn?: boolean
+  hasPendingTool?: boolean
+  hasLiveWorkflow?: boolean
+  hasPendingBackgroundTask?: boolean
 }): Harness {
   const tokenWrites: { provider: AgentProvider; token: string | null }[] = []
   const appended: TranscriptEntry[] = []
@@ -31,7 +34,12 @@ function makeHarness(options?: {
   const stateChanges: string[] = []
 
   const session = options?.session
-    ? ({ suppressSessionTokenPersist: false, ...options.session } as ClaudeSessionState)
+    ? ({
+        suppressSessionTokenPersist: false,
+        pendingPromptSeqs: [],
+        selfWakeActive: false,
+        ...options.session,
+      } as ClaudeSessionState)
     : undefined
 
   return {
@@ -51,6 +59,9 @@ function makeHarness(options?: {
       claudeSessions: { get: () => session },
       activeTurns: { has: () => options?.hasActiveTurn === true },
       startingTurns: { has: () => options?.hasStartingTurn === true },
+      pendingTools: { has: () => options?.hasPendingTool === true },
+      hasLiveWorkflow: () => options?.hasLiveWorkflow === true,
+      hasPendingBackgroundTask: () => options?.hasPendingBackgroundTask === true,
       closeClaudeSession: (chatId) => { closedChatIds.push(chatId) },
       stopCodexSession: (chatId) => { stoppedCodexChatIds.push(chatId) },
       emitStateChange: (chatId) => { stateChanges.push(chatId) },
@@ -156,6 +167,47 @@ describe("clearClaudeSessionContext", () => {
 
   test("is a no-op beyond the token write when no session is live", async () => {
     const h = makeHarness()
+
+    await clearClaudeSessionContext(h.deps, "chat-1")
+
+    expect(h.closedChatIds).toEqual([])
+  })
+
+  test("does not close when a pending tool is parked (canUseTool worker is blocked)", async () => {
+    const h = makeHarness({ session: {}, hasPendingTool: true })
+
+    await clearClaudeSessionContext(h.deps, "chat-1")
+
+    expect(h.closedChatIds).toEqual([])
+    expect(h.session?.suppressSessionTokenPersist).toBe(true)
+  })
+
+  test("does not close when the chat has a live workflow", async () => {
+    const h = makeHarness({ session: {}, hasLiveWorkflow: true })
+
+    await clearClaudeSessionContext(h.deps, "chat-1")
+
+    expect(h.closedChatIds).toEqual([])
+  })
+
+  test("does not close when a background task is pending", async () => {
+    const h = makeHarness({ session: {}, hasPendingBackgroundTask: true })
+
+    await clearClaudeSessionContext(h.deps, "chat-1")
+
+    expect(h.closedChatIds).toEqual([])
+  })
+
+  test("does not close when pendingPromptSeqs is non-empty", async () => {
+    const h = makeHarness({ session: { pendingPromptSeqs: [1] } as Partial<ClaudeSessionState> })
+
+    await clearClaudeSessionContext(h.deps, "chat-1")
+
+    expect(h.closedChatIds).toEqual([])
+  })
+
+  test("does not close when a self-wake turn is active", async () => {
+    const h = makeHarness({ session: { selfWakeActive: true } as Partial<ClaudeSessionState> })
 
     await clearClaudeSessionContext(h.deps, "chat-1")
 

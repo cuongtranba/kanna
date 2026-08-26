@@ -641,6 +641,30 @@ describe("enforceClaudeSessionBudget", () => {
     enforceClaudeSessionBudget(deps)
     expect(sessions.size).toBe(3)
   })
+
+  // The regression test for adr-20260808-...-level-signal-authoritative.
+  // A level-sourced session whose deadline has expired must be protected because
+  // the SDK's REPLACE semantics — not a deadline — governs when its task set
+  // clears. Using `backgroundTasks.size === 0` instead of `hasPendingBackgroundTask`
+  // would evict this session mid-run.
+  test("never evicts a level-sourced session with a non-empty task set even when deadline is past", () => {
+    const now = Date.now()
+    const levelSourced = makeSession({
+      chatId: "c1",
+      lastUsedAt: now - 10_000,
+      backgroundTasks: new Map([["t1", { taskType: "local_bash", description: null, startedAt: now - 1800_000, outputPath: null }]]),
+      backgroundTaskDeadlineAt: now - 1,
+      backgroundTasksLevelSourced: true,
+    })
+    const sessions = new Map<string, ClaudeSessionState>([
+      ["c1", levelSourced],
+      ["c2", makeSession({ chatId: "c2", lastUsedAt: now - 5_000 })],
+      ["c3", makeSession({ chatId: "c3", lastUsedAt: now })],
+    ])
+    const deps = makeBudgetDeps(sessions, 2)
+    enforceClaudeSessionBudget(deps)
+    expect(sessions.has("c1")).toBe(true)
+  })
 })
 
 // ---------------------------------------------------------------------------
