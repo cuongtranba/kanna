@@ -30,6 +30,7 @@ import { localStorageAdapter, sessionStorageAdapter } from "../adapters/storage.
 import { domAdapter } from "../adapters/dom.adapter"
 import { timerAdapter } from "../adapters/timer.adapter"
 import { getProjectIdForChat, type ProjectRequest } from "./useAppGlobalState"
+import { sameRuntime } from "../../shared/equality"
 import { useAppGlobalContext } from "./AppGlobalProvider"
 import type { ChatNavigatorPort } from "./chatNavigator"
 
@@ -46,49 +47,6 @@ export {
   resolveComposeIntent,
 } from "./useAppGlobalState"
 export type { UiRestartActivity, ProjectRequest, StartChatIntent } from "./useAppGlobalState"
-
-function shallowProviderTokenEquals(
-  a: Partial<Record<AgentProvider, string | null>>,
-  b: Partial<Record<AgentProvider, string | null>>,
-) {
-  const providers: AgentProvider[] = ["claude", "codex", "openrouter"]
-  for (const key of providers) {
-    if (a[key] !== b[key]) return false
-  }
-  return true
-}
-
-function sameBackgroundTasks(
-  left: ChatSnapshot["runtime"]["backgroundTasks"] | undefined,
-  right: ChatSnapshot["runtime"]["backgroundTasks"] | undefined,
-) {
-  const a = left ?? []
-  const b = right ?? []
-  if (a.length !== b.length) return false
-  return a.every((task, index) => {
-    const other = b[index]
-    return other !== undefined
-      && task.id === other.id
-      && task.taskType === other.taskType
-      && task.description === other.description
-      && task.startedAt === other.startedAt
-  })
-}
-
-function sameRuntime(left: ChatSnapshot["runtime"] | null | undefined, right: ChatSnapshot["runtime"] | null | undefined) {
-  if (left === right) return true
-  if (!left || !right) return false
-  return left.chatId === right.chatId
-    && left.projectId === right.projectId
-    && left.localPath === right.localPath
-    && left.title === right.title
-    && left.status === right.status
-    && left.isDraining === right.isDraining
-    && left.provider === right.provider
-    && left.planMode === right.planMode
-    && shallowProviderTokenEquals(left.sessionTokensByProvider, right.sessionTokensByProvider)
-    && sameBackgroundTasks(left.backgroundTasks, right.backgroundTasks)
-}
 
 function sameTranscriptEntries(left: ChatSnapshot["messages"] | null | undefined, right: ChatSnapshot["messages"] | null | undefined) {
   if (left === right) return true

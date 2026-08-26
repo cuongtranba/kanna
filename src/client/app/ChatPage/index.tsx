@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, type ComponentProps, type RefObject } from "react"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, type ComponentProps, type RefObject } from "react"
 import type { DomPort } from "../../ports/domPort"
 import type { TimerPort } from "../../ports/timerPort"
 import { domAdapter } from "../../adapters/dom.adapter"
@@ -85,17 +85,6 @@ export function shouldUseMobileRightSidebarOverlay(viewportWidth: number) {
   // 768 px boundary are not surprised.
   return isMobileViewport(viewportWidth)
 }
-
-type ChatSidebarContentProps = ComponentProps<typeof RightSidebar>
-
-const ChatSidebarContent = memo((props: ChatSidebarContentProps) => {
-  return (
-    <RightSidebar
-      {...props}
-      diffs={props.diffs ?? EMPTY_DIFF_SNAPSHOT}
-    />
-  )
-})
 
 export interface ChatPagePorts {
   dom?: DomPort
@@ -555,7 +544,7 @@ export function WorkspacePage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
 
   // ─── Content registry ────────────────────────────────────────────────────────
 
-  const rightSidebarContentProps = useMemo<ComponentProps<typeof ChatSidebarContent> | null>(() => {
+  const rightSidebarContentProps = useMemo<ComponentProps<typeof RightSidebar> | null>(() => {
     if (!projectId) return null
     return {
       projectId,
@@ -660,7 +649,7 @@ export function WorkspacePage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
     ),
     changes: () =>
       rightSidebarContentProps ? (
-        <ChatSidebarContent {...rightSidebarContentProps} />
+        <RightSidebar {...rightSidebarContentProps} />
       ) : null,
     // `isFocused` is the pane's, so a terminal takes keyboard focus exactly when
     // its pane does. TerminalPane treats 0 as "no request" and focuses on any

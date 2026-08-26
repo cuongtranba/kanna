@@ -1,29 +1,71 @@
 import { describe, expect, test } from "bun:test"
 import { renderToStaticMarkup } from "react-dom/server"
+import React from "react"
 import { CollapsedToolGroup } from "../components/messages/CollapsedToolGroup"
+import { SubagentMessage } from "../components/messages/SubagentMessage"
 import type { HydratedPreviewFileToolCall, HydratedTranscriptMessage, SubagentRunSnapshot } from "../../shared/types"
 import {
   buildResolvedTranscriptRows,
   computeStableResolvedTranscriptRows,
-  KannaTranscript,
+  KannaTranscriptRow,
   type StableResolvedTranscriptRowsState,
 } from "./KannaTranscript"
+import { TranscriptActionsProvider, type TranscriptActionsContextValue } from "./transcriptActionsContext"
+import {
+  extractDelegateCalls,
+  matchRunsToDelegateCalls,
+  DELEGATE_SUBAGENT_TOOL_NAME,
+} from "./subagent-run-placement"
 
 // Count rows by their stable identity attribute, not by their spacing classes:
 // these tests assert how many rows render, which is independent of how much air
 // sits between them.
 const ROW_WRAPPER_MARKER = "data-transcript-row-id="
 
+const NOOP = () => undefined
+
+const DEFAULT_ACTIONS: TranscriptActionsContextValue = {
+  onAskUserQuestionSubmit: NOOP,
+  onExitPlanModeConfirm: NOOP,
+  onToolRequestAnswer: NOOP,
+  onAutoContinueAccept: NOOP,
+  onAutoContinueReschedule: NOOP,
+  onAutoContinueCancel: NOOP,
+  onRetryFailedTurn: undefined,
+  onCronRemove: undefined,
+  schedules: {},
+  cronJobs: [],
+  chatId: undefined,
+  onToolGroupExpandedChange: NOOP,
+  subagentRuns: {},
+  editorPreset: "cursor",
+  editorCommandTemplate: undefined,
+  platform: "darwin",
+  queuedMessages: [],
+  runtimeStatus: null,
+  isDraining: false,
+  commandError: null,
+  onStopDraining: NOOP,
+  onSteerQueuedMessage: NOOP,
+  onRemoveQueuedMessage: NOOP,
+  localPath: undefined,
+  latestToolIds: {},
+  isProcessing: false,
+}
+
 function renderTranscript(messages: HydratedTranscriptMessage[]) {
+  const rows = buildResolvedTranscriptRows(messages, {
+    isLoading: false,
+    latestToolIds: { AskUserQuestion: null, ExitPlanMode: null, TodoWrite: null },
+  })
   return renderToStaticMarkup(
-    <KannaTranscript
-      messages={messages}
-      isLoading={false}
-      latestToolIds={{ AskUserQuestion: null, ExitPlanMode: null, TodoWrite: null }}
-      onOpenLocalLink={() => undefined}
-      onAskUserQuestionSubmit={() => undefined}
-      onExitPlanModeConfirm={() => undefined}
-    />
+    <TranscriptActionsProvider value={DEFAULT_ACTIONS}>
+      {rows.map((row) => (
+        <div key={row.id} data-transcript-row-id={row.id}>
+          <KannaTranscriptRow row={row} />
+        </div>
+      ))}
+    </TranscriptActionsProvider>
   )
 }
 
@@ -601,16 +643,15 @@ Please check the latest error first.`,
 
   test("reuses unchanged tool-group rows across grouped run growth elsewhere", () => {
     const latestToolIds = { AskUserQuestion: null, ExitPlanMode: null, TodoWrite: null }
-    const previousRows = buildResolvedTranscriptRows([
-      createToolMessage("tool-1"),
-      createToolMessage("tool-2"),
-      {
-        id: "assistant-1",
-        kind: "assistant_text",
-        text: "Done",
-        timestamp: new Date().toISOString(),
-      },
-    ], {
+    const toolMsg1 = createToolMessage("tool-1")
+    const toolMsg2 = createToolMessage("tool-2")
+    const assistantMsg = {
+      id: "assistant-1",
+      kind: "assistant_text" as const,
+      text: "Done",
+      timestamp: new Date().toISOString(),
+    }
+    const previousRows = buildResolvedTranscriptRows([toolMsg1, toolMsg2, assistantMsg], {
       isLoading: true,
       latestToolIds,
     })
@@ -618,17 +659,7 @@ Please check the latest error first.`,
       byId: new Map(previousRows.map((row) => [row.id, row])),
       result: previousRows,
     }
-    const nextRows = buildResolvedTranscriptRows([
-      createToolMessage("tool-1"),
-      createToolMessage("tool-2"),
-      {
-        id: "assistant-1",
-        kind: "assistant_text",
-        text: "Done",
-        timestamp: new Date().toISOString(),
-      },
-      createToolMessage("tool-3"),
-    ], {
+    const nextRows = buildResolvedTranscriptRows([toolMsg1, toolMsg2, assistantMsg, createToolMessage("tool-3")], {
       isLoading: true,
       latestToolIds,
     })
@@ -695,16 +726,50 @@ function renderTranscriptWithRuns(
   messages: HydratedTranscriptMessage[],
   subagentRuns: Record<string, SubagentRunSnapshot>,
 ) {
+  const delegateCalls = extractDelegateCalls(messages)
+  const topLevelRuns = Object.values(subagentRuns).filter((r) => r.parentRunId === null)
+  const { matched: runsByDelegateToolId } = matchRunsToDelegateCalls(delegateCalls, topLevelRuns)
+
+  const childrenByParentRunId = new Map<string, SubagentRunSnapshot[]>()
+  for (const run of Object.values(subagentRuns)) {
+    if (run.parentRunId === null) continue
+    const list = childrenByParentRunId.get(run.parentRunId) ?? []
+    list.push(run)
+    childrenByParentRunId.set(run.parentRunId, list)
+  }
+
+  function renderRunTree(run: SubagentRunSnapshot, depth: number): React.ReactNode {
+    const children = childrenByParentRunId.get(run.runId) ?? []
+    return (
+      <React.Fragment key={run.runId}>
+        <SubagentMessage run={run} indentDepth={depth} localPath="" suppressPendingTool />
+        {children.map((child) => renderRunTree(child, depth + 1))}
+      </React.Fragment>
+    )
+  }
+
+  const rows = buildResolvedTranscriptRows(messages, {
+    isLoading: false,
+    latestToolIds: { AskUserQuestion: null, ExitPlanMode: null, TodoWrite: null },
+  })
+
   return renderToStaticMarkup(
-    <KannaTranscript
-      messages={messages}
-      isLoading={false}
-      latestToolIds={{ AskUserQuestion: null, ExitPlanMode: null, TodoWrite: null }}
-      onOpenLocalLink={() => undefined}
-      onAskUserQuestionSubmit={() => undefined}
-      onExitPlanModeConfirm={() => undefined}
-      subagentRuns={subagentRuns}
-    />
+    <TranscriptActionsProvider value={DEFAULT_ACTIONS}>
+      {rows.map((row) => {
+        const delegateToolId = row.kind === "single"
+          && row.message.kind === "tool"
+          && row.message.toolName === DELEGATE_SUBAGENT_TOOL_NAME
+          ? row.message.toolId
+          : null
+        const run = delegateToolId != null ? runsByDelegateToolId.get(delegateToolId) : null
+        return (
+          <div key={row.id} data-transcript-row-id={row.id}>
+            <KannaTranscriptRow row={row} />
+            {run ? renderRunTree(run, 0) : null}
+          </div>
+        )
+      })}
+    </TranscriptActionsProvider>
   )
 }
 

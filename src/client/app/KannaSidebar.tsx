@@ -70,23 +70,23 @@ interface KannaSidebarProps {
   onClose: () => void
   onCollapse: () => void
   onExpand: () => void
-  onCreateChat: (projectId: string) => void
-  onForkChat: (chat: SidebarChatRow) => void
+  onCreateChat: (projectId: string) => void | Promise<void>
+  onForkChat: (chat: SidebarChatRow) => void | Promise<void>
   currentProjectId: string | null
   keybindings: KeybindingsSnapshot | null
-  onRenameChat: (chat: SidebarChatRow) => void
-  onArchiveChat: (chat: SidebarChatRow) => void
-  onOpenArchivedChat: (chatId: string) => void
-  onDeleteChat: (chat: SidebarChatRow) => void
+  onRenameChat: (chat: SidebarChatRow) => void | Promise<void>
+  onArchiveChat: (chat: SidebarChatRow) => void | Promise<void>
+  onOpenArchivedChat: (chatId: string) => void | Promise<void>
+  onDeleteChat: (chat: SidebarChatRow) => void | Promise<void>
   onEditChatPermissions?: (chatId: string) => void
-  onOpenAddProjectModal: () => void
+  onOpenAddProjectModal: () => void | Promise<void>
   onImportClaudeSessions?: () => Promise<void>
   onImportClaudeSessionIds?: (sessionIds: string[]) => Promise<void>
-  onCopyPath: (localPath: string) => void
-  onOpenExternalPath: (action: "open_finder" | "open_editor", localPath: string) => void
-  onHideProject: (projectId: string) => void
-  onToggleStar: (projectId: string, starred: boolean) => void
-  onReorderProjectGroups: (projectIds: string[]) => void
+  onCopyPath: (localPath: string) => void | Promise<void>
+  onOpenExternalPath: (action: "open_finder" | "open_editor", localPath: string) => void | Promise<void>
+  onHideProject: (projectId: string) => void | Promise<void>
+  onToggleStar: (projectId: string, starred: boolean) => void | Promise<void>
+  onReorderProjectGroups: (projectIds: string[]) => void | Promise<void>
   onCreateStack: (title: string, projectIds: string[]) => void
   onRenameStack: (stackId: string, title: string) => void
   onRemoveStack: (stackId: string) => void
