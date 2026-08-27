@@ -1749,6 +1749,11 @@ event (`applySubagentEvent`, `event-store-subagent.ts`); running runs are never
 evicted. The `entries[]` array inside each retained snapshot is capped at
 `MAX_SUBAGENT_ENTRIES_PER_RUN` (2000) — oldest entries are spliced out when the
 cap is exceeded, keeping the most recent interactions in memory.
+`seenMessageIdsByChatId` (dedup gate in `EventStore`) is capped at
+`MAX_SEEN_MESSAGE_IDS` (2000) per chat via FIFO eviction — oldest entries
+dropped first using Set insertion order. Safe because Claude API always generates
+fresh `messageId`s per response; historical ids that age out will never repeat.
+Without the cap, a long-running server accumulates one entry per message forever.
 `state.autoContinueEventsByChatId` is evicted only by whole-chat delete, but its
 dominant contributors are now bounded — see **Cron run-event retention** below.
 `compactLoopWakeEvents` (`auto-continue/compact-loop-wakes.ts`) also trims

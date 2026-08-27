@@ -4,7 +4,7 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { EventStore } from "./event-store"
 import type { TranscriptEntry } from "../shared/types"
-import { getRecentMessagesPageTail } from "./event-store-messages.adapter"
+import { getRecentMessagesPageTail, MAX_SEEN_MESSAGE_IDS } from "./event-store-messages.adapter"
 
 /**
  * The tail window is cached against the transcript's BYTE SIZE, which is only
@@ -169,6 +169,45 @@ describe("byte-aware tail growth", () => {
       const page = store.getRecentChatHistory(chatId, 200)
       expect(page.messages.length).toBe(40)
       expect(page.history.hasOlder).toBe(false)
+    })
+  })
+})
+
+describe("seenMessageIds Set is bounded", () => {
+  type StoreInternals = { seenMessageIdsByChatId: Map<string, Set<string>> }
+
+  function entryWithId(id: string, mid: string): TranscriptEntry {
+    return { _id: id, createdAt: Date.now(), kind: "assistant_text", text: "x", messageId: mid } as TranscriptEntry
+  }
+
+  test("seenMessageIds does not exceed MAX_SEEN_MESSAGE_IDS after many appends", async () => {
+    await withStore(async (store, chatId) => {
+      const overCap = MAX_SEEN_MESSAGE_IDS + 100
+      for (let i = 0; i < overCap; i += 1) {
+        await store.appendMessage(chatId, entryWithId(`e${i}`, `mid-${i}`))
+      }
+
+      const seen = (store as unknown as StoreInternals).seenMessageIdsByChatId.get(chatId)!
+      expect(seen.size).toBeLessThanOrEqual(MAX_SEEN_MESSAGE_IDS)
+      // Recent messageIds are retained for dedup
+      expect(seen.has(`mid-${overCap - 1}`)).toBe(true)
+      // Oldest messageIds are evicted
+      expect(seen.has("mid-0")).toBe(false)
+    })
+  })
+
+  test("dedup still prevents duplicate messageIds after eviction", async () => {
+    await withStore(async (store, chatId) => {
+      // Fill past the cap so eviction starts
+      for (let i = 0; i < MAX_SEEN_MESSAGE_IDS + 50; i += 1) {
+        await store.appendMessage(chatId, entryWithId(`e${i}`, `mid-${i}`))
+      }
+      // Re-append a RECENT messageId — must be deduped (not written again)
+      const recentMid = `mid-${MAX_SEEN_MESSAGE_IDS + 49}`
+      const countBefore = (store as unknown as StoreInternals).seenMessageIdsByChatId.get(chatId)!.size
+      await store.appendMessage(chatId, entryWithId("duplicate", recentMid))
+      const countAfter = (store as unknown as StoreInternals).seenMessageIdsByChatId.get(chatId)!.size
+      expect(countAfter).toBe(countBefore) // no new entry added
     })
   })
 })

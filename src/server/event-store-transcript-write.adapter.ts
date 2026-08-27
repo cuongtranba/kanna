@@ -27,6 +27,7 @@ import {
 } from "./event-store-write-ops"
 import { deleteToolRequestsForChat } from "./event-store-tool-requests"
 import { applyChatMessageMetadata } from "./event-store-chat-lifecycle"
+import { MAX_SEEN_MESSAGE_IDS } from "./event-store-messages.adapter"
 import type { TranscriptCache } from "./event-store-messages.adapter"
 import type { ChatOp } from "../shared/chat-ops"
 
@@ -269,6 +270,14 @@ export async function appendMessage(
           kind: entry.kind,
         })
         return
+      }
+      // Evict the oldest entry before adding when the cap is reached.
+      // Sets maintain insertion order, so the first value is the oldest.
+      // Active streaming uses fresh messageIds per Claude API response, so
+      // evicted historical ids will never repeat in new messages.
+      if (seen.size >= MAX_SEEN_MESSAGE_IDS) {
+        const oldest = seen.values().next().value
+        if (oldest !== undefined) seen.delete(oldest)
       }
       seen.add(mid)
     }
