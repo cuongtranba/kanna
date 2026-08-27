@@ -535,6 +535,7 @@ export function getLatestChatContextWindowUsage(
 
 // ─── Exported functions ────────────────────────────────────────────────────
 
+export const MAX_SEEN_MESSAGE_IDS = 2000
 /** Returns (or lazily creates) the seen-messageId dedup set for a chat. */
 export function getSeenMessageIds(deps: MessageReadDeps, chatId: string): Set<string> {
   let set = deps.seenMessageIdsByChatId.get(chatId)
