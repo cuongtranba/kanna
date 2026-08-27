@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.43.10](https://github.com/cuongtranba/kanna/compare/v1.43.9...v1.43.10) (2026-08-27)
+
+
+### Performance Improvements
+
+* **event-store:** cap seenMessageIdsByChatId at 2000 entries per chat ([#935](https://github.com/cuongtranba/kanna/issues/935)) ([e671288](https://github.com/cuongtranba/kanna/commit/e6712883413044730140d18adda748f5e64f6ccb)), closes [#934](https://github.com/cuongtranba/kanna/issues/934)
+
 ## [1.43.9](https://github.com/cuongtranba/kanna/compare/v1.43.8...v1.43.9) (2026-08-26)
 
 
