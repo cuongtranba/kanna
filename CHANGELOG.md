@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.43.11](https://github.com/cuongtranba/kanna/compare/v1.43.10...v1.43.11) (2026-08-28)
+
+
+### Bug Fixes
+
+* **client:** stop chat snapshots from rewinding scrollback to the bottom ([#938](https://github.com/cuongtranba/kanna/issues/938)) ([deb340f](https://github.com/cuongtranba/kanna/commit/deb340f0bf0774be5711de80462763247245ac23))
+
 ## [1.43.10](https://github.com/cuongtranba/kanna/compare/v1.43.9...v1.43.10) (2026-08-27)
 
 
