@@ -153,4 +153,68 @@ describe("chatStateStore", () => {
       expect(selectChatSlice(useChatStateStore.getState(), "chat-2").chatResyncNonce).toBe(before2)
     })
   })
+
+  // ─── adoptServerHistory: the scrollback bookmark ────────────────────────────
+  describe("adoptServerHistory", () => {
+    test("adopts the snapshot bookmark before the user has paged back", () => {
+      useChatStateStore.getState().adoptServerHistory("chat-1", {
+        olderCursor: "byte:14350553",
+        hasOlder: true,
+      })
+
+      const slice = selectChatSlice(useChatStateStore.getState(), "chat-1")
+      expect(slice.historyCursor).toBe("byte:14350553")
+      expect(slice.hasOlderHistory).toBe(true)
+    })
+
+    test("keeps the scrolled-back cursor when a later snapshot arrives", () => {
+      const store = useChatStateStore.getState()
+      // Cold open: adopt the newest page's bookmark.
+      store.adoptServerHistory("chat-1", { olderCursor: "byte:14350553", hasOlder: true })
+      // User scrolls up once: a page merges in and the bookmark advances backwards.
+      store.setOlderHistoryEntries("chat-1", [textEntry("older-1")])
+      store.setHistoryCursor("chat-1", "byte:13608529")
+
+      // A full snapshot push (ring gap / reconnect) re-ships the NEWEST page's
+      // bookmark — adopting it would rewind scrollback to the bottom.
+      store.adoptServerHistory("chat-1", { olderCursor: "byte:14350553", hasOlder: true })
+
+      const slice = selectChatSlice(useChatStateStore.getState(), "chat-1")
+      expect(slice.historyCursor).toBe("byte:13608529")
+    })
+
+    test("does not re-arm hasOlder after the user has paged to the beginning", () => {
+      const store = useChatStateStore.getState()
+      store.setOlderHistoryEntries("chat-1", [textEntry("older-1")])
+      store.setHistoryCursor("chat-1", null)
+      store.setHasOlderHistory("chat-1", false)
+
+      store.adoptServerHistory("chat-1", { olderCursor: "byte:14350553", hasOlder: true })
+
+      const slice = selectChatSlice(useChatStateStore.getState(), "chat-1")
+      expect(slice.hasOlderHistory).toBe(false)
+      expect(slice.historyCursor).toBeNull()
+    })
+
+    test("adopts again once the older entries are cleared (chat switch)", () => {
+      const store = useChatStateStore.getState()
+      store.setOlderHistoryEntries("chat-1", [textEntry("older-1")])
+      store.setHistoryCursor("chat-1", "byte:13608529")
+
+      store.setOlderHistoryEntries("chat-1", [])
+      store.adoptServerHistory("chat-1", { olderCursor: "byte:14350553", hasOlder: true })
+
+      expect(selectChatSlice(useChatStateStore.getState(), "chat-1").historyCursor).toBe("byte:14350553")
+    })
+
+    test("leaves the slice reference untouched when it declines to adopt", () => {
+      const store = useChatStateStore.getState()
+      store.setOlderHistoryEntries("chat-1", [textEntry("older-1")])
+      const before = selectChatSlice(useChatStateStore.getState(), "chat-1")
+
+      store.adoptServerHistory("chat-1", { olderCursor: "byte:14350553", hasOlder: true })
+
+      expect(selectChatSlice(useChatStateStore.getState(), "chat-1")).toBe(before)
+    })
+  })
 })

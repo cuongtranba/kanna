@@ -850,8 +850,10 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
         return current
       })
       const chatStore = useChatStateStore.getState()
-      chatStore.setHistoryCursor(activeChatId, snapshot?.history.olderCursor ?? null)
-      chatStore.setHasOlderHistory(activeChatId, snapshot?.history.hasOlder ?? false)
+      chatStore.adoptServerHistory(activeChatId, {
+        olderCursor: snapshot?.history.olderCursor ?? null,
+        hasOlder: snapshot?.history.hasOlder ?? false,
+      })
       chatStore.setChatReady(activeChatId, true)
       useKannaStateStore.getState().setCommandError(null)
     }, (event) => {
