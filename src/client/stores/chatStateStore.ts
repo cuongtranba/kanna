@@ -53,6 +53,21 @@ interface ChatStateStoreState {
   setIsHistoryLoading: (chatId: string, value: boolean) => void
   setHistoryCursor: (chatId: string, value: string | null) => void
   setHasOlderHistory: (chatId: string, value: boolean) => void
+  /**
+   * Takes the scrollback bookmark a chat snapshot ships, but only while the
+   * client is still sitting on the newest page.
+   *
+   * The server derives `history.olderCursor` from the NEWEST page alone — it
+   * has no idea how far this client has scrolled back — so once older pages
+   * have been merged in, the snapshot's bookmark points forward of them.
+   * Adopting it there rewinds scrollback to the bottom: the next load-older
+   * refetches a page already merged, `mergeTranscriptEntries` dedups it to
+   * zero new rows, and the transcript looks frozen while `hasOlder` still
+   * promises more. Snapshots are pushed on subscribe, on reconnect, and on a
+   * chat-op ring gap, so on a long busy chat that stranded everything past
+   * the first page or two.
+   */
+  adoptServerHistory: (chatId: string, history: { olderCursor: string | null; hasOlder: boolean }) => void
   setChatReady: (chatId: string, value: boolean) => void
   setChatResyncNonce: (chatId: string, value: number) => void
   bumpChatResyncNonce: (chatId: string) => void
@@ -103,6 +118,16 @@ export const useChatStateStore = create<ChatStateStoreState>()((set) => ({
 
   setHasOlderHistory: (chatId, value) =>
     set((state) => patchChat(state, chatId, { hasOlderHistory: value })),
+
+  adoptServerHistory: (chatId, history) =>
+    set((state) => {
+      const current = state.chats[chatId] ?? EMPTY_CHAT_SLICE
+      if (current.olderHistoryEntries.length > 0) return state
+      return patchChat(state, chatId, {
+        historyCursor: history.olderCursor,
+        hasOlderHistory: history.hasOlder,
+      })
+    }),
 
   setChatReady: (chatId, value) =>
     set((state) => patchChat(state, chatId, { chatReady: value })),
