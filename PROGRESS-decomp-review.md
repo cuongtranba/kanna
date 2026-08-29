@@ -16,6 +16,10 @@ Deliberately **not** `scripts/verify-decomp.sh` — that runs the full suite, an
 
 ## Progress (latest first)
 
+- 2026-08-29 Phase 2 DONE: event-store.stack-methods 30/0, ws-router.stack 9/0, ws-router-misc 22/0, ws-router-observability 12/0 (10 orig + 2 new backgroundTasks.getOutput), import-subagent-drill 1/0. Full suite 7285/2skip/1fail — 1 fail is env-only pty binary missing in branch node_modules (same code as baseline confirmed by git diff). Phase 2 complete; see Evidence index.
+
+- 2026-08-29 Phase 1 DONE (commit `807179c7`): bound `event-store-stacks.ts` into `.c3/eval/c3-206.yaml` + `.c3/code-map.yaml`; `c3x repair` ran, reverted unintended `structural.md` churn, kept only the two intended edits; `c3x lookup` resolves to c3-206; `c3x check` exit 0, exactly 1 warning (pre-existing c3-113); method-by-method diff of all 10 moved methods against baseline `366cbcf8` confirms behavior-preserving (all 4 nullable builders keep `if (event) await commit(event)`, param order matches every call site, no `this`-binding lost); removed the stray blank line in event-store.ts constructor; `bun run typecheck` / `bun run lint` / `bun run check:arch` all exit 0.
+
 - 2026-08-29 Phase 0 DONE. Branch `review/decomp-loc-restore` created off `366cbcf8`; refactor committed as `174140b5` (7 files). Tracking doc written. Next: Phase 1.
 
 ## Failed approaches
@@ -24,7 +28,7 @@ Deliberately **not** `scripts/verify-decomp.sh` — that runs the full suite, an
 
 ## Next chunk
 
-Phase 1 — c3 binding + static correctness review. See `## Phase plan`.
+Phase 3 — build, boot, browser evidence. See ## Phase plan.
 
 ## Ground truth (measured 2026-08-29 — do NOT re-derive)
 
@@ -58,6 +62,17 @@ Phase 1 — c3 binding + static correctness review. See `## Phase plan`.
 | Claim | Artifact | Command that produced it |
 |---|---|---|
 | _(populated by each phase)_ | | |
+- claim: c3-206 owns event-store-stacks.ts | artifact: `.c3/eval/c3-206.yaml`, `.c3/code-map.yaml` (commit `807179c7`) | command: `bash "$HOME/.claude/skills/c3/bin/c3x.sh" lookup src/server/event-store-stacks.ts` → matches c3-206
+- claim: c3x repair caused no collateral doc damage | artifact: `git status --short .c3/` post-repair showed only `structural.md` churn (reverted) plus the 2 intended files | command: `git checkout -- .c3/_index/structural.md`
+- claim: c3x check unaffected (still exactly 1 pre-existing warning) | artifact: stdout pasted in this turn | command: `bash "$HOME/.claude/skills/c3/bin/c3x.sh" check` → exit 0, 1 warning (c3-113)
+- claim: all 10 moved methods are behavior-preserving vs baseline `366cbcf8` | artifact: `/tmp/event-store-baseline.ts` (git show 366cbcf8:src/server/event-store.ts) diffed by hand against `src/server/event-store-stacks.ts` + the 10 delegating one-liners in `src/server/event-store.ts:295-304` | command: manual read, no automated diff tool used
+- claim: stray blank line removed | artifact: `src/server/event-store.ts` constructor, commit `807179c7` | command: `git show 174140b5 -- src/server/event-store.ts` (identified hunk) then Edit
+- claim: typecheck/lint/check:arch all green post-change | artifact: stdout pasted in this turn | command: `bun run typecheck && bun run lint && bun run check:arch` (run separately, each exit 0)
+- claim: event-store.stack-methods replay-determinism passes (30 tests) | artifact: stdout "30 pass 0 fail" | command: `bun test --conditions production src/server/event-store.stack-methods.test.ts`
+- claim: ws-router.stack, ws-router-misc, ws-router-observability, import-subagent-drill all pass | artifact: 9/0, 22/0, 12/0, 1/0 | command: each `bun test --conditions production src/server/<file>.test.ts`
+- claim: backgroundTasks.getOutput now has 2 new unit tests (snapshot envelope + undefined-registry fallback) | artifact: `src/server/ws-router-observability.test.ts` (committed), 12 pass up from 10 | command: `bun test --conditions production src/server/ws-router-observability.test.ts`
+- claim: pty 1-fail is environment-only (missing binary in branch node_modules, not a code regression) | artifact: baseline=298/0, branch=297/1; `git diff 366cbcf8..HEAD -- src/server/claude-pty/` returns empty; baseline node_modules has 247 MB binary, branch does not | command: `git diff 366cbcf8..HEAD -- src/server/claude-pty/ 2>&1 | wc -c` = 0
+- claim: full suite 7285/2skip/1fail, sole failure is the env-only pty test | artifact: stdout pasted | command: `bun test --conditions production 2>&1 | tail -5`
 
 ## Phase plan (do NOT skip ahead)
 

@@ -4,6 +4,8 @@ import { handleObservabilityCommand } from "./ws-router-observability"
 import type { ClientCommand } from "../shared/protocol"
 import type { ChatRecord, ProjectRecord } from "./events"
 import { encodeCwd } from "./claude-pty/jsonl-path.adapter"
+import { PROTOCOL_VERSION } from "../shared/types"
+import type { BackgroundTaskOutputRegistry } from "./background-task-output-registry"
 
 // encodeCwd() realpath()s the cwd, so the project fixture below must be a
 // path that actually exists on whatever machine runs the test.
@@ -17,12 +19,13 @@ function makeDeps(
   wfOverride?: ObservabilityCommandDeps["workflowRegistry"],
   saOverride?: ObservabilityCommandDeps["subagentTranscriptRegistry"],
   storeOverride?: ObservabilityCommandDeps["store"],
+  btorOverride?: ObservabilityCommandDeps["backgroundTaskOutputRegistry"],
 ): ObservabilityCommandDeps & { sent: unknown[] } {
   const sent: unknown[] = []
   return {
     workflowRegistry: wfOverride,
     subagentTranscriptRegistry: saOverride,
-    backgroundTaskOutputRegistry: undefined,
+    backgroundTaskOutputRegistry: btorOverride,
     store: storeOverride ?? { getChat: () => null, getProject: () => null },
     send: (envelope) => { sent.push(envelope) },
     sent,
@@ -220,5 +223,63 @@ describe("handleObservabilityCommand", () => {
     )
     expect(handled).toBe(true)
     expect(sa.register).not.toHaveBeenCalled()
+  })
+
+  // ---------------------------------------------------------------------------
+  // backgroundTasks.getOutput
+  // ---------------------------------------------------------------------------
+
+  test("backgroundTasks.getOutput — returns output from registry as snapshot envelope", async () => {
+    const registry: Pick<BackgroundTaskOutputRegistry, "getOutput"> = {
+      getOutput: mock(() => ({ content: "hello output", truncated: false })),
+    }
+    const deps = makeDeps(undefined, undefined, undefined, registry as BackgroundTaskOutputRegistry)
+    const handled = await handleObservabilityCommand(
+      deps,
+      { type: "backgroundTasks.getOutput", chatId: "c-1", taskId: "t-1" },
+      "r-bt1",
+    )
+    expect(handled).toBe(true)
+    expect(registry.getOutput).toHaveBeenCalledWith("c-1", "t-1")
+    expect(deps.sent).toHaveLength(1)
+    expect(deps.sent[0]).toEqual({
+      v: PROTOCOL_VERSION,
+      type: "snapshot",
+      id: "r-bt1",
+      snapshot: {
+        type: "background-task-output",
+        data: {
+          chatId: "c-1",
+          taskId: "t-1",
+          content: "hello output",
+          truncated: false,
+        },
+      },
+    })
+  })
+
+  test("backgroundTasks.getOutput — falls back to empty content when registry is absent", async () => {
+    const deps = makeDeps(undefined, undefined, undefined, undefined)
+    const handled = await handleObservabilityCommand(
+      deps,
+      { type: "backgroundTasks.getOutput", chatId: "c-1", taskId: "t-1" },
+      "r-bt2",
+    )
+    expect(handled).toBe(true)
+    expect(deps.sent).toHaveLength(1)
+    expect(deps.sent[0]).toEqual({
+      v: PROTOCOL_VERSION,
+      type: "snapshot",
+      id: "r-bt2",
+      snapshot: {
+        type: "background-task-output",
+        data: {
+          chatId: "c-1",
+          taskId: "t-1",
+          content: "",
+          truncated: false,
+        },
+      },
+    })
   })
 })
