@@ -52,32 +52,25 @@ import {
 } from "./event-store-init"
 import { writeSidebarOrderFile } from "./event-store-snapshot"
 import {
-  buildAddProjectToStackEvent,
   buildChatPolicyOverrideEvent,
   buildChatProviderEvent,
   buildChatReadStateEvent,
   buildChatSourceHashEvent,
   buildCompactFailuresEvent,
   buildCreateChatEvent,
-  buildCreateStackEvent,
   buildEnqueueMessageResult,
-  buildOpenProjectResult,
   buildPendingForkSessionTokenEvent,
   buildPlanModeEvent,
-  buildRemoveProjectEvent,
-  buildRemoveProjectFromStackEvent,
   buildRemoveQueuedMessageEvent,
-  buildRemoveStackEvent,
-  buildRenameStackEvent,
   buildRenameChatEvent,
   buildSessionTokenEvent,
-  buildSetProjectStarEvent,
   buildTurnCancelledEvent,
   buildTurnFailedEvent,
   buildTurnFinishedEvent,
   buildTurnStartedEvent,
   computeNewSidebarOrder,
 } from "./event-store-write-ops"
+import * as Stacks from "./event-store-stacks"
 
 const SIDEBAR_PROJECT_ORDER_FILE = "sidebar-order.json"
 
@@ -244,6 +237,7 @@ export class EventStore implements PushEventStore {
       applyEvent: (e) => { this.applyEvent(e) },
       enqueueDiskAppend: (fp, p) => { this.enqueueDiskAppend(fp, p) },
     }
+
   }
 
   async initialize() {
@@ -298,65 +292,16 @@ export class EventStore implements PushEventStore {
 
   private getSeenMessageIds(chatId: string): Set<string> { return MessageRead.getSeenMessageIds(this.msgReadDeps, chatId) }
 
-  async openProject(localPath: string, title?: string) {
-    const result = buildOpenProjectResult(
-      { projectsById: this.state.projectsById, projectIdsByPath: this.state.projectIdsByPath },
-      localPath,
-      title,
-    )
-    if (result.kind === "existing") return result.project
-    await this.commit(result.event)
-    return this.state.projectsById.get(result.event.projectId)!
-  }
-
-  async removeProject(projectId: string) {
-    await this.commit(buildRemoveProjectEvent(this.state.projectsById, projectId))
-  }
-
-  async setProjectStar(projectId: string, starred: boolean) {
-    await this.commit(buildSetProjectStarEvent(this.state.projectsById, projectId, starred))
-  }
-
-  async createStack(title: string, projectIds: string[]): Promise<StackRecord> {
-    const event = buildCreateStackEvent(
-      { projectsById: this.state.projectsById, stacksById: this.state.stacksById },
-      title,
-      projectIds,
-    )
-    await this.commit(event)
-    return this.state.stacksById.get(event.stackId)!
-  }
-
-  getStack(stackId: string): StackRecord | null {
-    const stack = this.state.stacksById.get(stackId)
-    return stack && !stack.deletedAt ? stack : null
-  }
-
-  listStacks(): StackRecord[] { return [...this.state.stacksById.values()].filter((s) => !s.deletedAt) }
-
-  async renameStack(stackId: string, title: string): Promise<void> {
-    const event = buildRenameStackEvent(this.state.stacksById, stackId, title)
-    if (event) await this.commit(event)
-  }
-
-  async removeStack(stackId: string): Promise<void> {
-    const event = buildRemoveStackEvent(this.state.stacksById, stackId)
-    if (event) await this.commit(event)
-  }
-
-  async addProjectToStack(stackId: string, projectId: string): Promise<void> {
-    const event = buildAddProjectToStackEvent(
-      { projectsById: this.state.projectsById, stacksById: this.state.stacksById },
-      stackId,
-      projectId,
-    )
-    if (event) await this.commit(event)
-  }
-
-  async removeProjectFromStack(stackId: string, projectId: string): Promise<void> {
-    const event = buildRemoveProjectFromStackEvent(this.state.stacksById, stackId, projectId)
-    if (event) await this.commit(event)
-  }
+  async openProject(localPath: string, title?: string) { return Stacks.openProject(this.state.projectsById, this.state.projectIdsByPath, (e) => this.commit(e), localPath, title) }
+  async removeProject(projectId: string) { return Stacks.removeProject(this.state.projectsById, (e) => this.commit(e), projectId) }
+  async setProjectStar(projectId: string, starred: boolean) { return Stacks.setProjectStar(this.state.projectsById, (e) => this.commit(e), projectId, starred) }
+  async createStack(title: string, projectIds: string[]): Promise<StackRecord> { return Stacks.createStack(this.state.projectsById, this.state.stacksById, (e) => this.commit(e), title, projectIds) }
+  getStack(stackId: string): StackRecord | null { return Stacks.getStack(this.state.stacksById, stackId) }
+  listStacks(): StackRecord[] { return Stacks.listStacks(this.state.stacksById) }
+  async renameStack(stackId: string, title: string): Promise<void> { return Stacks.renameStack(this.state.stacksById, (e) => this.commit(e), stackId, title) }
+  async removeStack(stackId: string): Promise<void> { return Stacks.removeStack(this.state.stacksById, (e) => this.commit(e), stackId) }
+  async addProjectToStack(stackId: string, projectId: string): Promise<void> { return Stacks.addProjectToStack(this.state.projectsById, this.state.stacksById, (e) => this.commit(e), stackId, projectId) }
+  async removeProjectFromStack(stackId: string, projectId: string): Promise<void> { return Stacks.removeProjectFromStack(this.state.stacksById, (e) => this.commit(e), stackId, projectId) }
 
   async setSidebarProjectOrder(projectIds: string[]) {
     const newOrder = computeNewSidebarOrder(

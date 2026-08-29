@@ -89,6 +89,7 @@ describe("subagent drill-in for imported chats (e2e)", () => {
         {
           workflowRegistry: undefined,
           subagentTranscriptRegistry: registry,
+          backgroundTaskOutputRegistry: undefined,
           store: { getChat: (id) => store.getChat(id), getProject: (id) => store.getProject(id) },
           send: (envelope) => { sent.push(envelope) },
         },

@@ -439,35 +439,19 @@ export function createWsRouter({
         }
         case "workflows.getRun":
         case "workflows.getAgentTranscript":
-        case "subagents.getRun": {
+        case "subagents.getRun":
+        case "backgroundTasks.getOutput": {
           await handleObservabilityCommand(
             {
               workflowRegistry,
               subagentTranscriptRegistry,
+              backgroundTaskOutputRegistry,
               store,
               send: (envelope) => send(ws, envelope),
             },
             command,
             id,
           )
-          return
-        }
-        case "backgroundTasks.getOutput": {
-          const output = backgroundTaskOutputRegistry?.getOutput(command.chatId, command.taskId)
-          send(ws, {
-            v: PROTOCOL_VERSION,
-            type: "snapshot",
-            id,
-            snapshot: {
-              type: "background-task-output",
-              data: {
-                chatId: command.chatId,
-                taskId: command.taskId,
-                content: output?.content ?? "",
-                truncated: output?.truncated ?? false,
-              },
-            },
-          })
           return
         }
         case "system.ping":

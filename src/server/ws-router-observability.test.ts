@@ -22,6 +22,7 @@ function makeDeps(
   return {
     workflowRegistry: wfOverride,
     subagentTranscriptRegistry: saOverride,
+    backgroundTaskOutputRegistry: undefined,
     store: storeOverride ?? { getChat: () => null, getProject: () => null },
     send: (envelope) => { sent.push(envelope) },
     sent,
