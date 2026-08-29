@@ -16,6 +16,8 @@ Deliberately **not** `scripts/verify-decomp.sh` — that runs the full suite, an
 
 ## Progress (latest first)
 
+- 2026-08-29 Phase 4 DONE: all gates green; final summary table written; task complete
+
 - 2026-08-29 Phase 3 DONE: 17 screenshots captured. project.create x2, stack.create, stack.rename, stack.remove, project.setStar, project.remove all browser-exercised. Replay-survival confirmed: star icon visible after kill+restart against same tmpHome (1 starred icon, 2 project sections survived). Screenshots at e2e/screenshots/review-PHASE3-*.png (untracked). Replay proves commit()→JSONL-append→boot-replay pipeline through the free functions in event-store-stacks.ts works end-to-end.
 
 - 2026-08-29 Phase 2 DONE: event-store.stack-methods 30/0, ws-router.stack 9/0, ws-router-misc 22/0, ws-router-observability 12/0 (10 orig + 2 new backgroundTasks.getOutput), import-subagent-drill 1/0. Full suite 7285/2skip/1fail — 1 fail is env-only pty binary missing in branch node_modules (same code as baseline confirmed by git diff). Phase 2 complete; see Evidence index.
@@ -30,7 +32,7 @@ Deliberately **not** `scripts/verify-decomp.sh` — that runs the full suite, an
 
 ## Next chunk
 
-Phase 4 — consolidation. See ## Phase plan.
+none — task complete
 
 ## Ground truth (measured 2026-08-29 — do NOT re-derive)
 
