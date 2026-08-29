@@ -1,5 +1,5 @@
 # C3 Structural Index
-<!-- hash: sha256:8fd2c75b1ab448e2914b03eaad6467129afbb2ae9207937e5ae17a5f67cfe2d2 -->
+<!-- hash: sha256:b75af1caa8bdca0e8ac97defa85dfa286a07f88276ae430454b94734cbe248f4 -->
 
 ## c3-0 — Kanna (system)
 
@@ -132,7 +132,7 @@ files: src/server/process-utils.adapter.ts, src/server/process-utils.test.ts
 container: c3-2 | context: c3-0
 refs: ref-colocated-bun-test, ref-event-sourcing, ref-provider-adapter, ref-tool-hydration, rule-colocated-bun-test
 reverse deps: adr-20260617-subagent-id-or-name-resolution, adr-20260617-subagent-trigger-mode
-files: src/server/agent.test.ts, src/server/agent.ts, src/server/claude-context-commands.test.ts, src/server/claude-context-commands.ts, src/server/claude-send-command.test.ts, src/server/claude-send-command.ts, src/server/claude-session-lifecycle.test.ts, src/server/claude-session-lifecycle.ts, src/server/claude-session-runner.test.ts, src/server/claude-session-runner.ts, src/server/claude-session-state-queries.test.ts, src/server/claude-session-state-queries.ts, src/server/claude-session-state.ts, src/server/claude-turn-starter.ts, src/server/history-primer.test.ts, src/server/history-primer.ts, src/server/mention-parser.test.ts, src/server/mention-parser.ts, src/server/proactive-compact.test.ts, src/server/proactive-compact.ts, src/server/subagent-entry-cap.test.ts, src/server/subagent-orchestrator.test.ts, src/server/subagent-orchestrator.ts, src/server/subagent-provider-run.test.ts, src/server/subagent-provider-run.ts
+files: src/server/agent.test.ts, src/server/agent.ts, src/server/claude-context-commands.test.ts, src/server/claude-context-commands.ts, src/server/claude-send-command.test.ts, src/server/claude-send-command.ts, src/server/claude-session-lifecycle.test.ts, src/server/claude-session-lifecycle.ts, src/server/claude-session-runner.test.ts, src/server/claude-session-runner.ts, src/server/claude-session-state-queries.test.ts, src/server/claude-session-state-queries.ts, src/server/claude-session-state.ts, src/server/claude-turn-starter.ts, src/server/history-primer.test.ts, src/server/history-primer.ts, src/server/loop-wake-recovery.test.ts, src/server/loop-wake-recovery.ts, src/server/mention-parser.test.ts, src/server/mention-parser.ts, src/server/proactive-compact.test.ts, src/server/proactive-compact.ts, src/server/subagent-entry-cap.test.ts, src/server/subagent-orchestrator.test.ts, src/server/subagent-orchestrator.ts, src/server/subagent-provider-run.test.ts, src/server/subagent-provider-run.ts
 
 ## c3-211 — codex-app-server (component)
 container: c3-2 | context: c3-0
@@ -260,7 +260,7 @@ files: .githooks/pre-commit, .github/workflows/gitleaks.yml, .gitleaks.toml, src
 ## c3-236 — architecture-budget (component)
 container: c3-2 | context: c3-0
 refs: ref-side-effect-adapter, ref-strong-typing, rule-colocated-bun-test
-files: src/ops/architecture/budget-scan.adapter.ts, src/ops/architecture/budget.ts
+files: scripts/check-complexity-limits.ts, src/ops/architecture/budget-scan.adapter.ts, src/ops/architecture/budget.ts
 
 ## c3-3 — Shared (container)
 context: c3-0
@@ -520,6 +520,8 @@ src/server/claude-session-state.ts → c3-210
 src/server/claude-turn-starter.ts → c3-210
 src/server/history-primer.test.ts → c3-210
 src/server/history-primer.ts → c3-210
+src/server/loop-wake-recovery.test.ts → c3-210
+src/server/loop-wake-recovery.ts → c3-210
 src/server/mention-parser.test.ts → c3-210
 src/server/mention-parser.ts → c3-210
 src/server/proactive-compact.test.ts → c3-210
@@ -620,6 +622,7 @@ src/server/ws-router-observability.ts → c3-234
 .github/workflows/gitleaks.yml → c3-235
 .gitleaks.toml → c3-235
 src/server/gitleaks-hook.test.ts → c3-235
+scripts/check-complexity-limits.ts → c3-236
 src/ops/architecture/budget-scan.adapter.ts → c3-236
 src/ops/architecture/budget.ts → c3-236
 src/shared/analytics.ts → c3-301

@@ -1478,8 +1478,44 @@ purpose: a chat whose wake survived to the queue is busy (or still queued) by
 then, so the armed-loop pass cannot double-fire it. The busy check goes
 through the injected `isChatBusy` (the single predicate), never ad-hoc maps.
 
-See `adr-20260813-queued-message-dequeue-on-commit` and
-`adr-20260814-armed-loop-wake-recovery`.
+**`handleFailedLoopTurn` covers the THIRD window — a wake lost while the server
+kept running.** Both passes now live in `src/server/loop-wake-recovery.ts` and
+share ONE re-arm (`rearmLoopWakeIfLost`), so what counts as a lost wake cannot
+drift between them. An orchestrator turn that dies BEFORE it calls
+`delegate_subagent` leaves no subagent to deliver, no queued message, and no
+active turn — and `deliverSubagentToMain` is unreachable by construction, so
+nothing re-armed. Observed twice in chat 108b8a13: an `api_error: ENOTFOUND`
+ended the wake turn on 2026-08-28 (stalled 16 h, released only by a server
+restart) and again on 2026-08-29 (stalled 55 min, until the user typed "resume",
+which disarms). A transport error matches neither `detectFromResultText` nor the
+auth detector, so `handleLimitDetection` — the only other path that re-arms a
+failed main turn — never fires.
+
+It hangs off `AgentCoordinator`'s `onTurnTerminal` on `outcome === "failed"`, the
+choke point every provider terminal path already funnels through. Four things
+about it are load-bearing:
+
+- **The re-arm is DEFERRED** (injectable `RearmScheduler`, default `setTimeout`).
+  `recordTurnFailed` fires the observer BEFORE `activeTurns.delete` and before
+  the queued-message drain, so an immediate re-arm reads a chat that is still
+  busy. Every guard is re-evaluated at fire time, which is what makes the exact
+  delay uncritical.
+- **It records `loop_run_outcome {ok: false}`** so a repeatedly-crashing
+  orchestrator feeds `MAX_CONSECUTIVE_LOOP_FAILURES` and gets disarmed with a
+  visible reason. Without it this fix trades a silent stall for a silent hot loop.
+- **The `running`-subagent guard is RUNTIME-ONLY.** A turn that failed after
+  delegating still has its wake held by that run. The boot pass must NOT consult
+  it: a run killed with the server never wrote a terminal event and replays as
+  `running` forever, so honouring it there re-breaks the c87ab0ad incident.
+- **It never throws.** It runs from the observer all turns pass through, so an
+  escape would break the terminal path of turns that have no loop at all.
+
+`cancelled` is deliberately excluded — a cancel is a human stop, and re-arming
+would fight the user.
+
+See `adr-20260813-queued-message-dequeue-on-commit`,
+`adr-20260814-armed-loop-wake-recovery`, and
+`adr-20260830-loop-runtime-wake-rearm`.
 
 # Observability (OTel traces + metrics, memlog, SIGUSR2 heap snapshot)
 

@@ -16,10 +16,14 @@ interface TerminalStore {
     | ((chatId: string, outcome: "finished" | "failed" | "cancelled", error?: string) => void)
     | null
   runningSubagentRuns?: () => never[]
+  // The observer also drives the armed-loop wake re-arm on a `failed` outcome,
+  // which replays this log. Empty = no loop armed, so that path no-ops here.
+  getAutoContinueEvents?: () => never[]
 }
 
 function buildCoordinator(store: TerminalStore) {
   store.runningSubagentRuns = () => []
+  store.getAutoContinueEvents = () => []
   return new AgentCoordinator({
     store: store as never,
     onStateChange: () => {},
