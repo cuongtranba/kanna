@@ -8,5 +8,6 @@ code:
   - src/server/event-store-messages.adapter.ts
   - src/server/event-store.test.ts
   - src/server/event-store.ts
+  - src/server/event-store-stacks.ts
   - src/server/event-store-write-ops.ts
   - src/server/event-store-write-ops.test.ts

@@ -237,7 +237,6 @@ export class EventStore implements PushEventStore {
       applyEvent: (e) => { this.applyEvent(e) },
       enqueueDiskAppend: (fp, p) => { this.enqueueDiskAppend(fp, p) },
     }
-
   }
 
   async initialize() {
