@@ -16,6 +16,8 @@ Deliberately **not** `scripts/verify-decomp.sh` — that runs the full suite, an
 
 ## Progress (latest first)
 
+- 2026-08-29 Phase 3 DONE: 17 screenshots captured. project.create x2, stack.create, stack.rename, stack.remove, project.setStar, project.remove all browser-exercised. Replay-survival confirmed: star icon visible after kill+restart against same tmpHome (1 starred icon, 2 project sections survived). Screenshots at e2e/screenshots/review-PHASE3-*.png (untracked). Replay proves commit()→JSONL-append→boot-replay pipeline through the free functions in event-store-stacks.ts works end-to-end.
+
 - 2026-08-29 Phase 2 DONE: event-store.stack-methods 30/0, ws-router.stack 9/0, ws-router-misc 22/0, ws-router-observability 12/0 (10 orig + 2 new backgroundTasks.getOutput), import-subagent-drill 1/0. Full suite 7285/2skip/1fail — 1 fail is env-only pty binary missing in branch node_modules (same code as baseline confirmed by git diff). Phase 2 complete; see Evidence index.
 
 - 2026-08-29 Phase 1 DONE (commit `807179c7`): bound `event-store-stacks.ts` into `.c3/eval/c3-206.yaml` + `.c3/code-map.yaml`; `c3x repair` ran, reverted unintended `structural.md` churn, kept only the two intended edits; `c3x lookup` resolves to c3-206; `c3x check` exit 0, exactly 1 warning (pre-existing c3-113); method-by-method diff of all 10 moved methods against baseline `366cbcf8` confirms behavior-preserving (all 4 nullable builders keep `if (event) await commit(event)`, param order matches every call site, no `this`-binding lost); removed the stray blank line in event-store.ts constructor; `bun run typecheck` / `bun run lint` / `bun run check:arch` all exit 0.
@@ -28,7 +30,7 @@ Deliberately **not** `scripts/verify-decomp.sh` — that runs the full suite, an
 
 ## Next chunk
 
-Phase 3 — build, boot, browser evidence. See ## Phase plan.
+Phase 4 — consolidation. See ## Phase plan.
 
 ## Ground truth (measured 2026-08-29 — do NOT re-derive)
 
@@ -73,6 +75,14 @@ Phase 3 — build, boot, browser evidence. See ## Phase plan.
 - claim: backgroundTasks.getOutput now has 2 new unit tests (snapshot envelope + undefined-registry fallback) | artifact: `src/server/ws-router-observability.test.ts` (committed), 12 pass up from 10 | command: `bun test --conditions production src/server/ws-router-observability.test.ts`
 - claim: pty 1-fail is environment-only (missing binary in branch node_modules, not a code regression) | artifact: baseline=298/0, branch=297/1; `git diff 366cbcf8..HEAD -- src/server/claude-pty/` returns empty; baseline node_modules has 247 MB binary, branch does not | command: `git diff 366cbcf8..HEAD -- src/server/claude-pty/ 2>&1 | wc -c` = 0
 - claim: full suite 7285/2skip/1fail, sole failure is the env-only pty test | artifact: stdout pasted | command: `bun test --conditions production 2>&1 | tail -5`
+- claim: Phase 3 build succeeds (dist/ present) | artifact: `dist/client/` (16.59s build) | command: `bun run build` exit 0
+- claim: project.create browser-exercised x2 | artifact: `e2e/screenshots/review-PHASE3-01-project1-created.png`, `review-PHASE3-02-project2-created.png` (untracked) | command: Playwright: click "Add Project" → fill "Project name" → click "Create"; WebSocket `project.create` dispatched by `event-store-stacks.ts:createProject`
+- claim: stack.create browser-exercised | artifact: `e2e/screenshots/review-PHASE3-05-stack-created.png` (untracked) | command: Playwright: click "New stack" → fill `aria-label="Stack name"` → select 2 project chips → click "Save"; WebSocket `stack.create` dispatched by `event-store-stacks.ts:createStack`
+- claim: stack.rename browser-exercised | artifact: `e2e/screenshots/review-PHASE3-08-stack-renamed.png` (untracked) | command: Playwright: click "Stack actions" → click "Rename" → fill new name → "Save"; WebSocket `stack.rename` dispatched by `event-store-stacks.ts:renameStack`
+- claim: stack.remove browser-exercised | artifact: `e2e/screenshots/review-PHASE3-10-stack-deleted.png` (untracked) | command: Playwright: click "Stack actions" → click "Delete MyRenamedStack"; WebSocket `stack.remove` dispatched by `event-store-stacks.ts:removeStack`
+- claim: project.setStar browser-exercised | artifact: `e2e/screenshots/review-PHASE3-12-project-starred.png` (untracked) | command: Playwright: `evaluate(el.click())` on `aria-label="Project options"` → click "Star project" from context menu; WebSocket `project.setStar` dispatched by `event-store-stacks.ts:setProjectStar`
+- claim: project.remove browser-exercised | artifact: `e2e/screenshots/review-PHASE3-14-project-hidden.png` (untracked) | command: Playwright: `evaluate(el.click())` on `aria-label="Project options"` → click "Hide" from context menu; WebSocket `project.remove` dispatched by `event-store-stacks.ts:removeProject`
+- claim: REPLAY SURVIVAL — star state persists after kill+restart against same tmpHome | artifact: `e2e/screenshots/review-PHASE3-16-replay-survival.png` (untracked); `Starred icons visible after replay: 1` (console output) | command: Playwright: bootServer(tmpHome) → star project → server.kill() → bootServer(same tmpHome) → count `[aria-label="Starred"]` = 1; proves commit()→JSONL→replay pipeline through free functions in event-store-stacks.ts
 
 ## Phase plan (do NOT skip ahead)
 
