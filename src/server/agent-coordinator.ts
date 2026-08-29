@@ -96,7 +96,6 @@ import {
 } from "./claude-autocontinue-commands"
 import {
   deliverSubagentToMain as deliverSubagentToMainFn,
-  recoverArmedLoopWakes as recoverArmedLoopWakesFn,
   setupLoop as setupLoopFn,
   isLoopArmed as isLoopArmedFn,
   stopLoop as stopLoopFn,
@@ -104,6 +103,7 @@ import {
   toArmedLoopInfo,
   type LoopCommandDeps,
 } from "./claude-loop-commands"
+import { handleFailedLoopTurn, recoverArmedLoopWakes as recoverArmedLoopWakesFn } from "./loop-wake-recovery"
 import {
   runCronCommand as runCronCommandFn,
   disarmCronJobsForChat as disarmCronJobsForChatFn,
@@ -360,11 +360,10 @@ export class AgentCoordinator {
         return { source: result.source, repaired: result.repairs.length > 0 }
       },
     })
-    // The store's turn-terminal observer is how a cron-fired turn's outcome
-    // reaches its job, and how a turn's duration reaches telemetry: every
-    // provider path funnels through recordTurn*, and the ActiveTurn still holds
-    // its CronRunTag and start time at that moment (turns are deleted from the
-    // map only after the terminal record persists).
+    // The store's turn-terminal observer: every provider path funnels through
+    // recordTurn*, and the ActiveTurn still holds its CronRunTag and start time
+    // here (turns leave the map only after the terminal record persists). Feeds
+    // turn telemetry, cron attribution, and the armed-loop wake invariant.
     this.store.onTurnTerminal = (chatId, outcome) => {
       const active = this.activeTurns.get(chatId)
       // A background-task self-wake streams entries with no ActiveTurn: it is
@@ -377,6 +376,7 @@ export class AgentCoordinator {
         })
         recordTurnSpend(active)
       }
+      if (outcome === "failed") void handleFailedLoopTurn(this.loopCommandDeps(), chatId)
       const tag = active?.cronRun
       if (!tag) return
       const p = recordCronTurnOutcomeFn(this.cronCommandDeps(), tag, outcome).catch((error) => {
