@@ -103,7 +103,7 @@ import {
   toArmedLoopInfo,
   type LoopCommandDeps,
 } from "./claude-loop-commands"
-import { handleFailedLoopTurn, recoverArmedLoopWakes as recoverArmedLoopWakesFn } from "./loop-wake-recovery"
+import { handleFailedLoopTurn, recoverArmedLoopWakes as recoverArmedLoopWakesFn, resumeLoop as resumeLoopFn, type ResumeLoopResult } from "./loop-wake-recovery"
 import {
   runCronCommand as runCronCommandFn,
   disarmCronJobsForChat as disarmCronJobsForChatFn,
@@ -1142,6 +1142,7 @@ export class AgentCoordinator {
       armCron: (chatId, command) => this.armCron(chatId, command),
       updateCron: (chatId, jobId, patch) => this.updateCron(chatId, jobId, patch),
       stopLoop: (chatId, reason) => this.stopLoop(chatId, reason),
+      resumeLoop: (chatId) => this.resumeLoop(chatId),
       resolveChatPolicy: (chatId) => this.resolveChatPolicy(chatId),
       runClaudeSession: (session) => { void this.runClaudeSession(session) },
       emitStateChange: (chatId) => { this.emitStateChange(chatId) },
@@ -1319,11 +1320,7 @@ export class AgentCoordinator {
     return deliverSubagentToMainFn(this.loopCommandDeps(), chatId, runId, outcome)
   }
 
-  /**
-   * Boot recovery: re-emit the wake for any ARMED loop left with nothing to
-   * wake it (no running subagent survives a restart, queue empty, chat idle).
-   * Delegates to recoverArmedLoopWakesFn — see claude-loop-commands.ts.
-   */
+  /** Boot half of the wake invariant: re-arm any ARMED loop left with no pending wake. */
   async recoverArmedLoopWakes(): Promise<string[]> {
     return recoverArmedLoopWakesFn(this.loopCommandDeps())
   }
@@ -1347,14 +1344,14 @@ export class AgentCoordinator {
     return isLoopArmedFn(this.loopCommandDeps(), chatId)
   }
 
-  /**
-   * Disarm an armed loop (restores tools + stops prompt re-injection). Backs
-   * the `stop_loop` MCP tool (called by the model on GOAL MET) and the
-   * user-send takeover path. No-op when no loop is armed. Delegates to
-   * stopLoopFn — see claude-loop-commands.ts.
-   */
+  /** Disarm an armed loop (`stop_loop`, user-send takeover). See claude-loop-commands.ts. */
   async stopLoop(chatId: string, reason: "goal_met" | "user_send" | "chat_deleted"): Promise<void> {
     return stopLoopFn(this.loopCommandDeps(), chatId, reason)
+  }
+
+  /** Re-arm the chat's most recent loop spec. Backs `resume_loop` — see loop-wake-recovery.ts. */
+  async resumeLoop(chatId: string): Promise<ResumeLoopResult> {
+    return resumeLoopFn(this.loopCommandDeps(), chatId)
   }
 
   /**

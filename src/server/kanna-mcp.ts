@@ -1,4 +1,5 @@
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk"
+import type { ResumeLoopResult } from "./loop-wake-recovery"
 import { buildBoardToolList } from "./kanna-mcp-boards"
 import { ok, fail } from "./kanna-mcp-tool"
 import type { BoardRegistry } from "./board-registry"
@@ -110,6 +111,12 @@ export interface KannaMcpArgs extends OfferDownloadArgs {
    * `setup_loop` (same main-chat gating). Omit to hide the tool.
    */
   stopLoop?: () => Promise<void>
+  /**
+   * Backs the `resume_loop` MCP tool. Re-arms the chat's most recent loop spec
+   * from the `loop_armed` tombstone. Registered alongside `setup_loop` (same
+   * main-chat gating). Omit to hide the tool.
+   */
+  resumeLoop?: () => Promise<ResumeLoopResult>
   /**
    * Current armed-loop state for this chat, looked up per CALL. Gives the
    * tracking-doc tools the loop's workdir (so a worktree loop resolves its
@@ -494,9 +501,19 @@ const STOP_LOOP_DESCRIPTION =
   + "loop is armed) and stops the loop prompt from being re-injected on future "
   + "turns. No-op if no loop is armed."
 
+const RESUME_LOOP_DESCRIPTION =
+  "Re-arm the loop this chat most recently ran, from the spec it was armed "
+  + "with (same subagent, oracle, workdir and tracking file). Use when a loop "
+  + "was disarmed and the user wants it going again — above all after a user "
+  + "message disarmed it as a takeover, which is what happens whenever they "
+  + "type something like \"resume\". Prefer this over re-running setup_loop: "
+  + "it needs no arguments and skips the arm-time refusals. No-op if a loop is "
+  + "already armed, and fails if this chat never armed one."
+
 function buildSetupLoopToolList(args: {
   setupLoop?: (input: LoopSetupInput) => Promise<SetupLoopHandlerResult>
   stopLoop?: () => Promise<void>
+  resumeLoop?: () => Promise<ResumeLoopResult>
   chatId: string | null
 }): KannaSdkToolList {
   const setupLoop = args.setupLoop
@@ -596,6 +613,27 @@ function buildSetupLoopToolList(args: {
         async () => {
           await stopLoop()
           return ok("Loop disarmed. Normal editing tools are restored; no further loop prompts will be re-injected.")
+        },
+      ),
+    )
+  }
+  const resumeLoop = args.resumeLoop
+  if (resumeLoop) {
+    tools.push(
+      tool(
+        "resume_loop",
+        RESUME_LOOP_DESCRIPTION,
+        {},
+        async () => {
+          const result = await resumeLoop()
+          if (result.resumed) {
+            const where = result.trackingFileRel
+              ? ` Tracking ${result.trackingFileRel}${result.workdirAbs ? ` in ${result.workdirAbs}` : ""}.`
+              : ""
+            return ok(`Loop re-armed from its previous spec.${where} The next wake replays the loop prompt.`)
+          }
+          if (result.reason === "already_armed") return ok("A loop is already armed on this chat; nothing to resume.")
+          return fail("This chat has no previous loop to resume. Use setup_loop to arm one.")
         },
       ),
     )
@@ -1077,7 +1115,7 @@ export function buildKannaMcpTools(args: KannaMcpArgs): KannaSdkToolList {
       cwd,
       getArmedLoop: args.getArmedLoop,
     }),
-    ...buildSetupLoopToolList({ setupLoop: args.setupLoop, stopLoop: args.stopLoop, chatId }),
+    ...buildSetupLoopToolList({ setupLoop: args.setupLoop, stopLoop: args.stopLoop, resumeLoop: args.resumeLoop, chatId }),
     ...buildTrackingDocToolList({ cwd, chatId, getArmedLoop: args.getArmedLoop }),
     // The board is the agent's work queue: read your column, advance your card.
     // Scoped to the chat's project and context-bounded — see the module header.

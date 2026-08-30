@@ -1513,9 +1513,40 @@ about it are load-bearing:
 `cancelled` is deliberately excluded — a cancel is a human stop, and re-arming
 would fight the user.
 
+**A disarm is visible and undoable.** Any user `chat.send` disarms an armed
+loop as a takeover (`claude-send-command.ts`) — correct, since an armed loop
+blocks Edit/Write/Task at spawn, but it used to be silent AND irreversible.
+
+- **`compactLoopWakeEvents` retains the last `loop_armed` + `loop_disarmed`
+  PAIR** as a tombstone. `loop_armed` is the sole carrier of `subagentId`, the
+  rendered prompt, `verifyCommand`, `workdirAbs` and `trackingFileRel`; dropping
+  it left nothing to re-arm from and nothing to name the loop's real plan with.
+  **Both halves or neither** — keeping the arm alone replays through
+  `deriveLoopState` as a still-ARMED loop, silently re-arming a loop the user
+  stopped (pinned by "deriveLoopState returns null after disarmed-loop
+  compaction").
+- **`deriveLastLoopSpec` is a SECOND projection, deliberately.**
+  `deriveLoopState` answers "is a loop running right now" and must keep
+  returning null after a disarm; `deriveLastLoopSpec` answers "what loop did
+  this chat last run" and survives it. Do not merge them.
+- **`loop_disarmed` is a transcript entry**, rendered by `LoopDisarmedMessage`
+  with the plan + worktree it recorded. Written for `goal_met`, `user_send` and
+  `repeated_failures`; skipped for `chat_deleted` (no transcript left to read
+  it in). The append is wrapped — the durable disarm already landed, so losing
+  the card costs visibility while throwing would fail the user's send.
+- **`resume_loop`** re-arms from the tombstone WITHOUT re-validating: the spec
+  already passed `setup_loop`'s gates, and re-running them would refuse a loop
+  whose oracle now passes — the very state a resume is for. Depth-0 only, like
+  `setup_loop`. `consecutiveFailures` resets, matching `deriveLoopState`.
+- **`rateLimit` is NOT gated on `loopState`.** A loop parked on a usage limit is
+  exactly when a user types "resume" — and that send nulled `loopState`, which
+  nulled `rateLimit`, which un-rendered the "Resume now" button. The attempt to
+  resume destroyed the resume affordance.
+
 See `adr-20260813-queued-message-dequeue-on-commit`,
-`adr-20260814-armed-loop-wake-recovery`, and
-`adr-20260830-loop-runtime-wake-rearm`.
+`adr-20260814-armed-loop-wake-recovery`,
+`adr-20260830-loop-runtime-wake-rearm`, and
+`adr-20260830-loop-disarm-visible-resumable`.
 
 # Observability (OTel traces + metrics, memlog, SIGUSR2 heap snapshot)
 

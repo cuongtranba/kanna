@@ -258,16 +258,37 @@ describe("compactLoopWakeEvents — superseded loop_armed trimming", () => {
     expect(compacted.find((e) => e.kind === "loop_run_outcome")?.scheduleId).toBe("lo-3")
   })
 
-  test("all loop-state events dropped when loop is currently disarmed", () => {
+  // The last `loop_armed` is RETAINED as a tombstone once disarmed. It is the
+  // sole carrier of subagentId / prompt / verifyCommand / workdirAbs /
+  // trackingFileRel, and dropping it made a disarm irreversible: `resume_loop`
+  // had nothing to re-arm from, and the un-armed delivery prompt had no way to
+  // name the loop's real tracking file. One retained event per chat is bounded;
+  // the waste this module exists to reclaim is the per-WAKE re-embedding.
+  test("retains the last loop_armed as a tombstone when the loop is disarmed", () => {
     const log: AutoContinueEvent[] = [
       loopArmed("la-1"),
       loopRunOutcome(true, "lo-1"),
       loopDisarmed("ld-1"),
     ]
     const compacted = compactLoopWakeEvents([...log])
-    expect(compacted.some((e) => e.kind === "loop_armed")).toBe(false)
-    expect(compacted.some((e) => e.kind === "loop_disarmed")).toBe(false)
+    expect(compacted.filter((e) => e.kind === "loop_armed")).toHaveLength(1)
+    expect(compacted.find((e) => e.kind === "loop_armed")?.scheduleId).toBe("la-1")
+    // The disarm half must survive too, or the tombstone replays as ARMED.
+    expect(compacted.filter((e) => e.kind === "loop_disarmed")).toHaveLength(1)
     expect(compacted.some((e) => e.kind === "loop_run_outcome")).toBe(false)
+  })
+
+  test("keeps only the newest tombstone across several arm/disarm cycles", () => {
+    const log: AutoContinueEvent[] = [
+      loopArmed("la-1"),
+      loopDisarmed("ld-1"),
+      loopArmed("la-2"),
+      loopRunOutcome(false, "lo-1"),
+      loopDisarmed("ld-2"),
+    ]
+    const compacted = compactLoopWakeEvents([...log])
+    expect(compacted.filter((e) => e.kind === "loop_armed")).toHaveLength(1)
+    expect(compacted.find((e) => e.kind === "loop_armed")?.scheduleId).toBe("la-2")
   })
 
   test("non-loop events preserved when loop is disarmed", () => {

@@ -24,6 +24,7 @@ import { PreviewFileMessage } from "../components/messages/PreviewFileMessage"
 import { ImageGenerationMessage } from "../components/messages/ImageGenerationMessage"
 import { ResultMessage } from "../components/messages/ResultMessage"
 import { InterruptedMessage } from "../components/messages/InterruptedMessage"
+import { LoopDisarmedMessage } from "../components/messages/LoopDisarmedMessage"
 import { CompactBoundaryMessage, ContextClearedMessage } from "../components/messages/CompactBoundaryMessage"
 import { MemoryLoadedMessage } from "../components/messages/MemoryLoadedMessage"
 import { CompactSummaryMessage } from "../components/messages/CompactSummaryMessage"
@@ -303,6 +304,12 @@ function sameMessage(left: HydratedTranscriptMessage, right: HydratedTranscriptM
       return right.kind === "context_window_updated" && left.usage === right.usage
     case "memory_loaded":
       return right.kind === "memory_loaded" && left.path === right.path
+    case "loop_disarmed":
+      return right.kind === "loop_disarmed"
+        && left.reason === right.reason
+        && left.resumable === right.resumable
+        && left.trackingFileRel === right.trackingFileRel
+        && left.workdirAbs === right.workdirAbs
     case "compact_boundary":
     case "context_cleared":
     case "interrupted":
@@ -600,6 +607,9 @@ const TranscriptSingleRow = memo(({
         break
       case "cron_job_change":
         rendered = <CronJobChangeMessage key={message.id} message={message} />
+        break
+      case "loop_disarmed":
+        rendered = <LoopDisarmedMessage key={message.id} message={message} />
         break
     }
   }

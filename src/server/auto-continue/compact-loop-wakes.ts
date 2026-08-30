@@ -24,8 +24,11 @@
  * (`loop_armed`, `loop_disarmed`, `loop_run_outcome`) are dead:
  *   - `deriveLoopState` resets `consecutiveFailures` on every `loop_armed`, so
  *     outcomes from a prior arm carry no weight in the current arm's count
- *   - A `loop_disarmed` with no subsequent `loop_armed` means the loop is off;
- *     no reader needs to replay those events
+ *   - A `loop_disarmed` with no subsequent `loop_armed` means the loop is off,
+ *     so its outcomes are dead — but the arm/disarm PAIR itself is retained as
+ *     a tombstone, because `loop_armed` is the only carrier of the loop spec
+ *     (`resume_loop` re-arms from it, and the un-armed delivery prompt names
+ *     the loop's real tracking file from it)
  *
  * Returns the input by reference when nothing was dropped — the common case
  * between iterations, so the append path allocates nothing until there is
@@ -45,6 +48,7 @@ export function compactLoopWakeEvents(events: AutoContinueEvent[]): AutoContinue
   // last loop_disarmed), every loop-state event can be dropped.
 
   let lastArmIndex = -1
+  let lastDisarmIndex = -1
   let loopCurrentlyArmed = false
 
   for (let i = 0; i < events.length; i += 1) {
@@ -54,16 +58,33 @@ export function compactLoopWakeEvents(events: AutoContinueEvent[]): AutoContinue
       lastArmIndex = i
       loopCurrentlyArmed = true
     } else if (event.kind === "loop_disarmed") {
+      lastDisarmIndex = i
       loopCurrentlyArmed = false
     }
   }
 
   if (lastArmIndex >= 0 && !loopCurrentlyArmed) {
-    // The loop was armed but is now disarmed — every loop-state event is dead.
+    // The loop was armed but is now disarmed — every loop-state event is dead
+    // EXCEPT the last `loop_armed` + `loop_disarmed` PAIR, retained as a
+    // tombstone. Both halves or neither: keeping the arm alone would replay
+    // through `deriveLoopState` as a still-ARMED loop, silently re-arming a
+    // loop the user stopped (pinned by "deriveLoopState returns null after
+    // disarmed-loop compaction").
+    //
+    // That event is the sole carrier of `subagentId`, the rendered `prompt`,
+    // `verifyCommand`, `workdirAbs` and `trackingFileRel`. Dropping it made a
+    // disarm irreversible AND unnameable: `resume_loop` had nothing to re-arm
+    // from, and the un-armed delivery prompt could not say which tracking file
+    // (or which worktree) the loop worked in, so it fell back to a hardcoded
+    // "PROGRESS.md" that resolved against the wrong checkout. Retaining ONE
+    // event per chat is bounded — the waste this module exists to reclaim is
+    // the same multi-KB prompt re-embedded on every WAKE, not one tombstone.
+    //
     // Guard on lastArmIndex >= 0: orphaned loop_run_outcome events with no
     // loop_armed in the log are already ignored by deriveLoopState (state===null
     // branch), so skipping them here avoids an allocation for nothing.
     for (let i = 0; i < events.length; i += 1) {
+      if (i === lastArmIndex || i === lastDisarmIndex) continue
       const event = events[i]
       if (event === undefined) continue
       if (

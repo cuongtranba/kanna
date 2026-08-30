@@ -111,6 +111,8 @@ export async function startClaudeSession(args: {
   updateCron?: (jobId: string, patch: import("../shared/cron/types").CronJobPatch) => Promise<void>
   /** Backs the `stop_loop` MCP tool. Omit to hide the tool. */
   stopLoop?: () => Promise<void>
+  /** Backs the `resume_loop` MCP tool. Main chats only (depth 0). */
+  resumeLoop?: () => Promise<import("./loop-wake-recovery").ResumeLoopResult>
   /** Live check: true while an autonomous loop is armed — blocks direct-edit native tools. */
   isLoopArmed?: () => boolean
   /**
@@ -191,6 +193,7 @@ export async function startClaudeSession(args: {
           armCron: args.armCron,
           updateCron: args.updateCron,
           stopLoop: args.stopLoop,
+          resumeLoop: args.resumeLoop,
           getArmedLoop: args.getArmedLoop,
           boardRegistry: args.boardRegistry,
         }),

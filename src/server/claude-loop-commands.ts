@@ -200,6 +200,7 @@ export async function disarmFailingLoop(
 ): Promise<void> {
   try {
     const now = Date.now()
+    const armed = isLoopArmed(deps, chatId)
     await deps.emitAutoContinueEvent({
       v: AUTO_CONTINUE_EVENT_VERSION,
       kind: "loop_disarmed",
@@ -208,6 +209,15 @@ export async function disarmFailingLoop(
       scheduleId: crypto.randomUUID(),
       reason: "repeated_failures",
     })
+    // Same visibility contract as `stopLoop`: a disarm is always readable in
+    // the transcript, not only inferable from the wake prompt below.
+    await deps.store.appendMessage(chatId, timestamped({
+      kind: "loop_disarmed",
+      reason: "repeated_failures",
+      resumable: true,
+      ...(armed?.trackingFileRel ? { trackingFileRel: armed.trackingFileRel } : {}),
+      ...(armed?.workdirAbs ? { workdirAbs: armed.workdirAbs } : {}),
+    }))
     await clearClaudeSessionContext(deps, chatId)
     await deps.store.appendMessage(chatId, timestamped({ kind: "context_cleared" }))
     await deps.emitAutoContinueEvent({
@@ -547,7 +557,8 @@ export async function stopLoop(
   chatId: string,
   reason: "goal_met" | "user_send" | "chat_deleted",
 ): Promise<void> {
-  if (!isLoopArmed(deps, chatId)) return
+  const armed = isLoopArmed(deps, chatId)
+  if (!armed) return
   await deps.emitAutoContinueEvent({
     v: AUTO_CONTINUE_EVENT_VERSION,
     kind: "loop_disarmed",
@@ -556,6 +567,27 @@ export async function stopLoop(
     scheduleId: crypto.randomUUID(),
     reason,
   })
+
+  // A disarm must never be silent. `user_send` was the worst case: a takeover
+  // wrote NOTHING to the transcript, so a user who typed one word to nudge a
+  // stalled loop saw only the "Loop running" pill disappear, which reads as the
+  // loop being between chunks. `chat_deleted` is skipped — there is no
+  // transcript left to read it in. The card names the plan and worktree so the
+  // loop stays identifiable after `deriveLoopState` stops reporting it.
+  if (reason === "chat_deleted") return
+  try {
+    await deps.store.appendMessage(chatId, timestamped({
+      kind: "loop_disarmed",
+      reason,
+      resumable: true,
+      ...(armed.trackingFileRel !== null ? { trackingFileRel: armed.trackingFileRel } : {}),
+      ...(armed.workdirAbs !== null ? { workdirAbs: armed.workdirAbs } : {}),
+    }))
+  } catch (err) {
+    // Non-fatal: the durable disarm already landed; losing the card only costs
+    // visibility, and throwing here would fail the user's send.
+    log.warn("[kanna] loop_disarmed card append failed", { chatId, err })
+  }
 }
 
 /** Returns live schedule IDs (proposed or scheduled) for the given chat. */

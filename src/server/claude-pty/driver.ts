@@ -121,6 +121,8 @@ export interface StartClaudeSessionPtyArgs {
   updateCron?: (jobId: string, patch: import("../../shared/cron/types").CronJobPatch) => Promise<void>
   /** Backs the `stop_loop` MCP tool. Omit to hide the tool from the model. */
   stopLoop?: () => Promise<void>
+  /** Backs the `resume_loop` MCP tool. Main chats only (depth 0). */
+  resumeLoop?: () => Promise<import("../loop-wake-recovery").ResumeLoopResult>
   /** Evaluated at spawn: when true, add LOOP_BLOCKED tools to --disallowedTools. */
   isLoopArmed?: () => boolean
   /**
@@ -135,13 +137,10 @@ export interface StartClaudeSessionPtyArgs {
   customMcpServers?: readonly McpServerConfig[]
   /** Pre-resolved oauth bearer tokens keyed by server id. */
   oauthBearers?: ReadonlyMap<string, string>
-  /** Optional override used by tests to inject a fake HTTP MCP starter. */
+  /** Test-injection seams: each replaces the real implementation with a fake. */
   startKannaMcpHttpServer?: typeof startKannaMcpHttpServer
-  /** Optional smoke-test gate override (used by tests to inject a fake gate). */
   smokeTestGate?: SmokeTestGate
-  /** Optional PTY spawn override (used by tests to inject a fake PTY). */
   spawnPtyProcess?: (args: SpawnPtyProcessArgs) => Promise<PtyProcess>
-  /** Optional transcript stream factory override (used by tests). */
   startTranscriptStreamFn?: typeof startTranscriptStream
   /**
    * One-shot semantics: after the first `result` entry, close stdin so

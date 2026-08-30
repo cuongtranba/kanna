@@ -14,7 +14,7 @@
  */
 
 import { AUTO_CONTINUE_EVENT_VERSION } from "./auto-continue/events"
-import { deriveChatSchedules } from "./auto-continue/read-model"
+import { deriveChatSchedules, deriveLastLoopSpec } from "./auto-continue/read-model"
 import { clearClaudeSessionContext } from "./claude-context-commands"
 import { timestamped } from "./claude-message-normalizer"
 import {
@@ -205,4 +205,57 @@ export async function handleFailedLoopTurn(
   } catch (err) {
     log.warn("[kanna] handleFailedLoopTurn failed", { chatId, err })
   }
+}
+
+/** Outcome of a `resume_loop` attempt. `reason` explains a refusal. */
+export type ResumeLoopResult =
+  | { resumed: true; trackingFileRel: string | null; workdirAbs: string | null }
+  | { resumed: false; reason: "already_armed" | "no_previous_loop" }
+
+/**
+ * Re-arm the loop a chat most recently ran. Backs the `resume_loop` MCP tool.
+ *
+ * Exists because a disarm used to be terminal: any user message disarms (a
+ * takeover), and re-arming meant re-stating goal, oracle, workdir and tracking
+ * file to `setup_loop` from scratch — through refusals that then need `force`.
+ * Someone typing "resume" to nudge a stalled loop got the opposite of what they
+ * asked for, with no way back.
+ *
+ * Re-arms from the `loop_armed` tombstone rather than re-validating: the spec
+ * already passed `setup_loop`'s gates when it was first armed, and re-running
+ * them would refuse a loop whose oracle now passes — the very state a resume is
+ * for. `consecutiveFailures` resets, because `deriveLoopState` restarts the
+ * count at every `loop_armed`; a resume is a deliberate human decision to try
+ * again, so the previous streak is spent.
+ *
+ * Idempotent: an already-armed chat is refused, not double-armed.
+ */
+export async function resumeLoop(
+  deps: LoopCommandDeps,
+  chatId: string,
+): Promise<ResumeLoopResult> {
+  if (deps.isLoopArmed(chatId)) return { resumed: false, reason: "already_armed" }
+
+  const spec = deriveLastLoopSpec(deps.store.getAutoContinueEvents(chatId), chatId)
+  if (!spec) return { resumed: false, reason: "no_previous_loop" }
+
+  await deps.emitAutoContinueEvent({
+    v: AUTO_CONTINUE_EVENT_VERSION,
+    kind: "loop_armed",
+    timestamp: Date.now(),
+    chatId,
+    scheduleId: crypto.randomUUID(),
+    subagentId: spec.subagentId,
+    prompt: spec.prompt,
+    ...(spec.verifyCommand !== null ? { verifyCommand: spec.verifyCommand } : {}),
+    ...(spec.workdirAbs !== null ? { workdirAbs: spec.workdirAbs } : {}),
+    ...(spec.trackingFileRel !== null ? { trackingFileRel: spec.trackingFileRel } : {}),
+  })
+
+  // Arming alone starts nothing — the loop is driven by wakes. Hand it the same
+  // re-arm every other lost-wake path uses, which no-ops if the chat is already
+  // busy (the resuming turn itself) and will then be covered by the failed-turn
+  // or boot pass.
+  await rearmLoopWakeIfLost(deps, chatId, "server_restart")
+  return { resumed: true, trackingFileRel: spec.trackingFileRel, workdirAbs: spec.workdirAbs }
 }

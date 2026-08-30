@@ -216,6 +216,29 @@ export interface InterruptedEntry extends TranscriptEntryBase {
 }
 
 /**
+ * An armed autonomous loop was disarmed. Rendered so a disarm is never silent:
+ * a user message is a takeover and used to stop the loop with no trace at all,
+ * which reads in the transcript as the loop simply going quiet.
+ *
+ * `resumable` reflects whether a `loop_armed` tombstone survived compaction, so
+ * the card can offer `resume_loop` only when there is actually a spec to re-arm.
+ */
+export interface LoopDisarmedEntry extends TranscriptEntryBase {
+  kind: "loop_disarmed"
+  reason: LoopDisarmReason
+  resumable: boolean
+  trackingFileRel?: string
+  workdirAbs?: string
+}
+
+/** Why an armed loop was disarmed. Mirrors the `loop_disarmed` event reason. */
+export type LoopDisarmReason =
+  | "goal_met"
+  | "user_send"
+  | "chat_deleted"
+  | "repeated_failures"
+
+/**
  * A Claude Code memory/rule file auto-loaded into context (CLAUDE.md, nested
  * CLAUDE.md, `.claude/rules/*.md`). PTY mode surfaces these from the
  * transcript's `type:"nested_memory"` lines. Path only — file content is
@@ -326,6 +349,7 @@ export type TranscriptEntry =
   | CompactSummaryEntry
   | ContextClearedEntry
   | InterruptedEntry
+  | LoopDisarmedEntry
   | MemoryLoadedEntry
   | AutoContinuePromptEntry
   | PendingToolRequestEntry
@@ -356,6 +380,7 @@ export type HydratedTranscriptMessage =
   | ({ kind: "compact_summary"; summary: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "context_cleared"; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "interrupted"; id: string; messageId?: string; timestamp: string; hidden?: boolean })
+  | ({ kind: "loop_disarmed"; reason: LoopDisarmReason; resumable: boolean; trackingFileRel?: string; workdirAbs?: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "memory_loaded"; path: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "unknown"; json: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "auto_continue_prompt"; scheduleId: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })

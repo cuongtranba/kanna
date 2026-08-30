@@ -233,7 +233,56 @@ describe("stopLoop", () => {
     await stopLoop(deps, "chat-1", "goal_met")
     expect(emitted.some((e) => e.kind === "loop_disarmed")).toBe(true)
   })
+
+  // A disarm used to write NOTHING to the transcript. `user_send` is the case
+  // that matters: a takeover looked identical to the loop going quiet, so a
+  // user who typed one word to nudge a stalled loop had no way to see they had
+  // killed it.
+  test("appends a visible card naming the plan and worktree", async () => {
+    const store = makeStore()
+    store.events.push(armedEvent())
+    const deps = makeDeps({ store })
+    await stopLoop(deps, "chat-1", "user_send")
+
+    const card = store.messages.find((m) => m.entry.kind === "loop_disarmed")?.entry
+    if (card?.kind !== "loop_disarmed") throw new Error("expected a loop_disarmed card")
+    expect(card.reason).toBe("user_send")
+    expect(card.resumable).toBe(true)
+    expect(card.trackingFileRel).toBe("PROGRESS.md")
+    expect(card.workdirAbs).toBe("/repo")
+  })
+
+  test("writes no card when there was no armed loop", async () => {
+    const store = makeStore()
+    const deps = makeDeps({ store })
+    await stopLoop(deps, "chat-1", "user_send")
+    expect(store.messages).toEqual([])
+  })
+
+  // A deleted chat has no transcript left to read the card in.
+  test("writes no card when the chat is being deleted", async () => {
+    const store = makeStore()
+    store.events.push(armedEvent())
+    const deps = makeDeps({ store })
+    await stopLoop(deps, "chat-1", "chat_deleted")
+    expect(store.messages.some((m) => m.entry.kind === "loop_disarmed")).toBe(false)
+  })
 })
+
+function armedEvent(): AutoContinueEvent {
+  return {
+    v: AUTO_CONTINUE_EVENT_VERSION,
+    kind: "loop_armed",
+    timestamp: 1,
+    chatId: "chat-1",
+    scheduleId: "la-1",
+    subagentId: "sub-1",
+    prompt: "ORCHESTRATOR loop prompt",
+    verifyCommand: "sh verify.sh",
+    workdirAbs: "/repo",
+    trackingFileRel: "PROGRESS.md",
+  }
+}
 
 
 // ---------------------------------------------------------------------------
