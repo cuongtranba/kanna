@@ -4448,7 +4448,9 @@ describe("AgentCoordinator.deliverSubagentToMain (notification-driven /clear)", 
       expect(ev.prompt).toContain("<task-id>run-bg</task-id>")
       expect(ev.prompt).toContain("<status>completed</status>")
       expect(ev.prompt).toContain("<result>the answer</result>")
-      expect(ev.prompt).toContain("PROGRESS.md")
+      // Ad-hoc delivery on a chat that never armed a loop: no tombstone, so the
+      // prompt names no tracking file rather than guessing "PROGRESS.md".
+      expect(ev.prompt).not.toContain("PROGRESS.md")
       expect(ev.prompt).toContain("context has been cleared")
     }
   })
@@ -4583,7 +4585,7 @@ describe("AgentCoordinator.deliverSubagentToMain (notification-driven /clear)", 
       expect(ev.source).toBe("subagent_background")
       expect(ev.prompt).toContain("TIMEOUT")
       expect(ev.prompt).toContain("exceeded deadline")
-      expect(ev.prompt).toContain("PROGRESS.md")
+      expect(ev.prompt).not.toContain("PROGRESS.md")
     }
   })
 

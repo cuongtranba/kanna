@@ -15,7 +15,7 @@
 import type { TranscriptEntry } from "../shared/types"
 import type { Subagent, AgentProvider } from "../shared/types"
 import { AUTO_CONTINUE_EVENT_VERSION, type AutoContinueEvent } from "./auto-continue/events"
-import { deriveChatSchedules, deriveLoopState, type LoopState } from "./auto-continue/read-model"
+import { deriveChatSchedules, deriveLastLoopSpec, deriveLoopState, type LoopSpec, type LoopState } from "./auto-continue/read-model"
 import { clearClaudeSessionContext } from "./claude-context-commands"
 import { timestamped } from "./claude-message-normalizer"
 import { buildTaskNotification } from "./claude-session-config"
@@ -269,6 +269,31 @@ export async function deliverSubagentToMain(
   )
 }
 
+/**
+ * Point a context-cleared main agent at the plan its last loop actually used.
+ *
+ * This branch used to say "Read PROGRESS.md if present". `PROGRESS.md` is
+ * `setup_loop`'s DEFAULT tracking filename, so it names as many plans as there
+ * are loops — 26 files with exactly that name on the install where this was
+ * found, across 54 `PROGRESS*.md` in sibling worktrees. Worse, nothing resolved
+ * it: once no loop is armed the tracking-doc tools rebase from the loop's
+ * `workdirAbs` to the chat cwd, so the sentence pointed at the MAIN checkout's
+ * `PROGRESS.md` — an unrelated, already-finished loop's plan. A post-loop review
+ * read it and graded the wrong feature.
+ *
+ * So name the real file, absolute, from the `loop_armed` tombstone; and when
+ * there is no tombstone, name nothing. A confident wrong filename is worse than
+ * silence — the model can still see the run's result in the notification.
+ */
+function describeLastPlan(spec: LoopSpec | null): string {
+  const file = spec?.trackingFileRel
+  if (!file) return ""
+  if (!spec.workdirAbs) return ` This chat's most recent loop tracked its plan in ${file}.`
+  return ` This chat's most recent loop tracked its plan at`
+    + ` ${spec.workdirAbs.replace(/\/+$/, "")}/${file} — read that exact path,`
+    + ` which may be a different checkout from this chat's working directory.`
+}
+
 async function deliverSubagentToMainInner(
   deps: LoopCommandDeps,
   chatId: string,
@@ -323,10 +348,14 @@ async function deliverSubagentToMainInner(
   let prompt: string
   if (armed) {
     prompt = `${notification}\n\n${armed.prompt}`
-  } else if (outcome.status === "completed") {
-    prompt = `${notification}\n\nYour Claude context has been cleared. Read PROGRESS.md if present, then decide the next action.`
   } else {
-    prompt = `${notification}\n\nYour Claude context has been cleared. Read PROGRESS.md if present; decide whether to retry, try another approach, or stop.`
+    const plan = describeLastPlan(
+      deriveLastLoopSpec(deps.store.getAutoContinueEvents(chatId), chatId),
+    )
+    const next = outcome.status === "completed"
+      ? "decide the next action."
+      : "decide whether to retry, try another approach, or stop."
+    prompt = `${notification}\n\nYour Claude context has been cleared.${plan} Then ${next}`
   }
 
   try {

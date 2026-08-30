@@ -177,7 +177,12 @@ describe("notification-driven loop orchestration — 50-iteration scenario", () 
         expect(ev.prompt).toContain(`<task-id>run-${i + 1}</task-id>`)
         expect(ev.prompt).toContain("<status>completed</status>")
         expect(ev.prompt).toContain(`<result>iteration ${i + 1} of the loop is done</result>`)
-        expect(ev.prompt).toContain("PROGRESS.md")
+        // No loop ever armed this chat, so there is no tombstone naming a plan
+        // — and the prompt must therefore name NO file. It used to assert
+        // "PROGRESS.md", which is setup_loop's DEFAULT filename and matched 26
+        // different plans on one install; resolved against the chat cwd it sent
+        // a post-loop review to an unrelated finished loop's plan.
+        expect(ev.prompt).not.toContain("PROGRESS.md")
         expect(ev.prompt).toContain("context has been cleared")
       }
     }
@@ -220,7 +225,8 @@ describe("notification-driven loop orchestration — 50-iteration scenario", () 
       expect(ev.source).toBe("subagent_background")
       expect(ev.prompt).toContain("TIMEOUT")
       expect(ev.prompt).toContain("deadline exceeded")
-      expect(ev.prompt).toContain("PROGRESS.md")
+      // See the success case: with no armed loop there is no plan to name.
+      expect(ev.prompt).not.toContain("PROGRESS.md")
     }
   })
 
