@@ -55,6 +55,11 @@ export const TRANSCRIPT_ROW_TONE_BY_MESSAGE_KIND: Record<
   auto_continue_prompt: "card",
   unknown: "card",
 
+  // A disarm is the one thing a dead loop leaves behind, and chrome's tighter
+  // gap would tuck it against the turn that killed it — exactly the "the chat
+  // just went quiet" reading this row exists to prevent.
+  loop_disarmed: "card",
+
   // Cron: cards for the substantial surfaces, chrome for one-line notices.
   cron_armed: "card",
   cron_command_error: "card",

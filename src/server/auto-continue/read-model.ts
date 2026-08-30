@@ -6,6 +6,9 @@ export interface ChatSchedulesProjection {
   liveScheduleId: string | null
 }
 
+/** The arm-time facts of a loop. Outlives the disarm via the `loop_armed` tombstone. */
+export type LoopSpec = Omit<LoopState, "consecutiveFailures">
+
 /** Armed-loop state for a chat, or null when no loop is currently armed. */
 export interface LoopState {
   subagentId: string
@@ -71,6 +74,37 @@ export function deriveLoopState(
     }
   }
   return state === null ? null : { ...state, consecutiveFailures: failures }
+}
+
+/**
+ * The most recent loop spec on a chat, ARMED OR NOT — what `resume_loop`
+ * re-arms from, and what names the loop's real tracking file once it is off.
+ *
+ * `deriveLoopState` deliberately returns null after a `loop_disarmed`, because
+ * every live reader asks "is a loop running right now". This asks the different
+ * question "what loop did this chat last run", which survives the disarm. It
+ * reads the `loop_armed` tombstone `compactLoopWakeEvents` retains; a chat that
+ * never armed a loop, or whose tombstone predates the retention change, yields
+ * null and callers must degrade rather than guess.
+ */
+export function deriveLastLoopSpec(
+  events: readonly AutoContinueEvent[],
+  chatId: string,
+): LoopSpec | null {
+  let spec: LoopSpec | null = null
+  for (const event of events) {
+    if (event.chatId !== chatId) continue
+    if (event.kind !== "loop_armed") continue
+    spec = {
+      subagentId: event.subagentId,
+      prompt: event.prompt,
+      armedAt: event.timestamp,
+      verifyCommand: event.verifyCommand ?? null,
+      workdirAbs: event.workdirAbs ?? null,
+      trackingFileRel: event.trackingFileRel ?? null,
+    }
+  }
+  return spec
 }
 
 const EMPTY: ChatSchedulesProjection = { schedules: {}, liveScheduleId: null }

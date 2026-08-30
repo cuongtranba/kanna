@@ -143,6 +143,8 @@ export interface SpawnClaudeTurnDeps {
   /** Backs the `update_cron` MCP tool — see AgentCoordinator.updateCron. */
   updateCron?: (chatId: string, jobId: string, patch: import("../shared/cron/types").CronJobPatch) => Promise<void>
   stopLoop: (chatId: string, reason: "goal_met" | "user_send" | "chat_deleted") => Promise<void>
+  /** Backs the `resume_loop` MCP tool — see AgentCoordinator.resumeLoop. */
+  resumeLoop: (chatId: string) => Promise<import("./loop-wake-recovery").ResumeLoopResult>
   resolveChatPolicy: (chatId: string) => ChatPermissionPolicy
   /** Fires the session event loop. Return value is discarded (fire-and-forget). */
   runClaudeSession: (session: ClaudeSessionState) => void
@@ -269,6 +271,9 @@ export async function spawnClaudeTurn(
             stopLoop: delegationContext.depth === 0
               ? () => deps.stopLoop(chatIdForCtx, "goal_met")
               : undefined,
+            resumeLoop: delegationContext.depth === 0
+              ? () => deps.resumeLoop(chatIdForCtx)
+              : undefined,
             isLoopArmed: delegationContext.depth === 0
               ? () => deps.isLoopArmed(chatIdForCtx) !== null
               : undefined,
@@ -315,6 +320,9 @@ export async function spawnClaudeTurn(
               : undefined,
             stopLoop: delegationContext.depth === 0
               ? () => deps.stopLoop(chatIdForCtx, "goal_met")
+              : undefined,
+            resumeLoop: delegationContext.depth === 0
+              ? () => deps.resumeLoop(chatIdForCtx)
               : undefined,
             isLoopArmed: delegationContext.depth === 0
               ? () => deps.isLoopArmed(chatIdForCtx) !== null

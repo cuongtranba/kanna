@@ -350,6 +350,16 @@ export function processTranscriptMessages(entries: TranscriptEntry[]): HydratedT
           change: entry.change,
         })
         break
+      case "loop_disarmed":
+        messages.push({
+          ...createBaseMessage(entry),
+          kind: "loop_disarmed",
+          reason: entry.reason,
+          resumable: entry.resumable,
+          ...(entry.trackingFileRel !== undefined ? { trackingFileRel: entry.trackingFileRel } : {}),
+          ...(entry.workdirAbs !== undefined ? { workdirAbs: entry.workdirAbs } : {}),
+        })
+        break
       default:
         messages.push({
           ...createBaseMessage(entry),

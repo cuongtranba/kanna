@@ -8,7 +8,7 @@ import { describe, test, expect } from "bun:test"
 import type { AutoContinueEvent } from "./auto-continue/events"
 import { AUTO_CONTINUE_EVENT_VERSION } from "./auto-continue/events"
 import { MAX_CONSECUTIVE_LOOP_FAILURES, type LoopCommandDeps } from "./claude-loop-commands"
-import { handleFailedLoopTurn, recoverArmedLoopWakes } from "./loop-wake-recovery"
+import { handleFailedLoopTurn, recoverArmedLoopWakes, resumeLoop } from "./loop-wake-recovery"
 import { armedLoop, makeDeps, makeStore } from "./test-helpers/loop-command-fakes"
 
 describe("recoverArmedLoopWakes", () => {
@@ -226,5 +226,81 @@ describe("handleFailedLoopTurn", () => {
     })
     await pending[0]!()
     expect(emitted.some((e) => e.kind === "auto_continue_accepted")).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// resumeLoop — undoing a disarm
+// ---------------------------------------------------------------------------
+
+describe("resumeLoop", () => {
+  function armEvent(): AutoContinueEvent {
+    return {
+      v: AUTO_CONTINUE_EVENT_VERSION,
+      kind: "loop_armed",
+      timestamp: 1,
+      chatId: "chat-1",
+      scheduleId: "la-1",
+      subagentId: "sub-1",
+      prompt: "ORCHESTRATOR loop prompt",
+      verifyCommand: "sh verify.sh",
+      workdirAbs: "/repo/worktree",
+      trackingFileRel: "PROGRESS-plugin.md",
+    }
+  }
+
+  test("re-arms from the tombstone the disarm left behind", async () => {
+    const store = makeStore()
+    store.events.push(armEvent(), {
+      v: AUTO_CONTINUE_EVENT_VERSION,
+      kind: "loop_disarmed",
+      timestamp: 2,
+      chatId: "chat-1",
+      scheduleId: "ld-1",
+      reason: "user_send",
+    })
+    const emitted: AutoContinueEvent[] = []
+    const deps = makeDeps({
+      store,
+      emitAutoContinueEvent: async (e) => { emitted.push(e); store.events.push(e) },
+      isLoopArmed: () => null,
+    })
+
+    const result = await resumeLoop(deps, "chat-1")
+
+    expect(result).toEqual({
+      resumed: true,
+      trackingFileRel: "PROGRESS-plugin.md",
+      workdirAbs: "/repo/worktree",
+    })
+    const armed = emitted.find((e) => e.kind === "loop_armed")
+    if (armed?.kind !== "loop_armed") throw new Error("expected loop_armed")
+    // The spec must round-trip verbatim: a resume that loses the workdir or the
+    // tracking file re-arms a loop pointed at the wrong checkout.
+    expect(armed.subagentId).toBe("sub-1")
+    expect(armed.prompt).toBe("ORCHESTRATOR loop prompt")
+    expect(armed.verifyCommand).toBe("sh verify.sh")
+    expect(armed.workdirAbs).toBe("/repo/worktree")
+    expect(armed.trackingFileRel).toBe("PROGRESS-plugin.md")
+  })
+
+  test("refuses when a loop is already armed", async () => {
+    const emitted: AutoContinueEvent[] = []
+    const deps = makeDeps({
+      emitAutoContinueEvent: async (e) => { emitted.push(e) },
+      isLoopArmed: () => armedLoop(),
+    })
+    expect(await resumeLoop(deps, "chat-1")).toEqual({ resumed: false, reason: "already_armed" })
+    expect(emitted).toEqual([])
+  })
+
+  test("refuses when the chat never armed a loop", async () => {
+    const emitted: AutoContinueEvent[] = []
+    const deps = makeDeps({
+      emitAutoContinueEvent: async (e) => { emitted.push(e) },
+      isLoopArmed: () => null,
+    })
+    expect(await resumeLoop(deps, "chat-1")).toEqual({ resumed: false, reason: "no_previous_loop" })
+    expect(emitted).toEqual([])
   })
 })

@@ -437,9 +437,13 @@ export function deriveChatSnapshot(
 
   const loopState = deriveLoopState(autoContinueEvents, chat.id)
   const liveSchedule = liveScheduleId ? schedules[liveScheduleId] : undefined
+  // NOT gated on `loopState`: a rate-limited loop is exactly when a user types
+  // "resume", and that message disarms the loop — which nulled `loopState`,
+  // which nulled this, which un-rendered the "Resume now" button. The attempt
+  // to resume destroyed the resume affordance. A live rate-limit schedule is
+  // worth surfacing whether or not a loop is still armed.
   const rateLimit: LoopRateLimitInfo | null =
-    loopState
-    && liveSchedule
+    liveSchedule
     && (liveSchedule.state === "proposed" || liveSchedule.state === "scheduled")
     && liveSchedule.resetAt != null
       ? {

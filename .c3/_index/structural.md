@@ -1,5 +1,5 @@
 # C3 Structural Index
-<!-- hash: sha256:b75af1caa8bdca0e8ac97defa85dfa286a07f88276ae430454b94734cbe248f4 -->
+<!-- hash: sha256:11329052cf04c5a42a9abf96792a1499a96d9576f27adcf1368dd6167603befd -->
 
 ## c3-0 — Kanna (system)
 
@@ -38,7 +38,7 @@ files: src/client/app/KannaSidebar.tsx, src/client/app/sidebarNumberJump.test.ts
 ## c3-112 — chat-page (component)
 container: c3-1 | context: c3-0
 refs: ref-cqrs-read-models, ref-ws-subscription
-files: src/client/app/BackgroundTasksSection.test.tsx, src/client/app/BackgroundTasksSection.tsx, src/client/app/ChatPage.test.ts, src/client/app/ChatPage/**/*.ts, src/client/app/ChatPage/**/*.tsx, src/client/app/LoopProgressSection.test.tsx, src/client/app/LoopProgressSection.tsx, src/client/app/chatNavigator.ts, src/client/app/useRightSidebarToggleAnimation.ts, src/client/app/useStickyChatFocus.ts, src/client/app/useTerminalToggleAnimation.ts
+files: src/client/app/BackgroundTasksSection.test.tsx, src/client/app/BackgroundTasksSection.tsx, src/client/app/ChatPage.test.ts, src/client/app/ChatPage/**/*.ts, src/client/app/ChatPage/**/*.tsx, src/client/app/LoopProgressSection.test.tsx, src/client/app/LoopProgressSection.tsx, src/client/app/chatNavigator.ts, src/client/app/useRightSidebarToggleAnimation.ts, src/client/app/useStickyChatFocus.ts, src/client/app/useTerminalToggleAnimation.ts, src/client/components/messages/LoopDisarmedMessage.test.tsx, src/client/components/messages/LoopDisarmedMessage.tsx
 
 ## c3-113 — transcript (component)
 container: c3-1 | context: c3-0
@@ -414,6 +414,8 @@ src/client/app/chatNavigator.ts → c3-112
 src/client/app/useRightSidebarToggleAnimation.ts → c3-112
 src/client/app/useStickyChatFocus.ts → c3-112
 src/client/app/useTerminalToggleAnimation.ts → c3-112
+src/client/components/messages/LoopDisarmedMessage.test.tsx → c3-112
+src/client/components/messages/LoopDisarmedMessage.tsx → c3-112
 src/client/app/KannaTranscript.store.ts → c3-113
 src/client/app/KannaTranscript.test.tsx → c3-113
 src/client/app/KannaTranscript.tsx → c3-113

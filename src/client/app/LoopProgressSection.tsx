@@ -22,8 +22,10 @@ interface Props {
 
 export function LoopProgressSection({ loopProgress, onResume }: Props) {
   const { armed, rows, rateLimit } = loopProgress
-  // Nothing to show once a loop was never armed and produced no rows.
-  if (!armed && rows.length === 0) return null
+  // Nothing to show once a loop was never armed and produced no rows. A live
+  // rate-limit keeps the panel up even then: it carries the "Resume now" action,
+  // which must outlive the disarm a user's own message causes.
+  if (!armed && rows.length === 0 && !rateLimit) return null
 
   return (
     <div className="w-full">

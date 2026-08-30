@@ -1,14 +1,16 @@
 fact: c3-112
 claim: "chat-page is implemented under src/client/app/ChatPage/ and related animation/layout hooks"
 code:
-  - src/client/app/BackgroundTasksSection.tsx
   - src/client/app/BackgroundTasksSection.test.tsx
+  - src/client/app/BackgroundTasksSection.tsx
   - src/client/app/ChatPage.test.ts
   - src/client/app/ChatPage/**/*.ts
   - src/client/app/ChatPage/**/*.tsx
-  - src/client/app/LoopProgressSection.tsx
   - src/client/app/LoopProgressSection.test.tsx
+  - src/client/app/LoopProgressSection.tsx
   - src/client/app/chatNavigator.ts
   - src/client/app/useRightSidebarToggleAnimation.ts
   - src/client/app/useStickyChatFocus.ts
   - src/client/app/useTerminalToggleAnimation.ts
+  - src/client/components/messages/LoopDisarmedMessage.test.tsx
+  - src/client/components/messages/LoopDisarmedMessage.tsx

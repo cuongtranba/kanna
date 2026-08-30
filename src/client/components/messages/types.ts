@@ -100,3 +100,8 @@ export type ProcessedCronJobChangeMessage = Extract<
   import("../../../shared/types").HydratedTranscriptMessage,
   { kind: "cron_job_change" }
 >
+
+export type ProcessedLoopDisarmedMessage = Extract<
+  import("../../../shared/types").HydratedTranscriptMessage,
+  { kind: "loop_disarmed" }
+>

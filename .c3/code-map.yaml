@@ -40,6 +40,8 @@ c3-112:
   - src/client/app/useRightSidebarToggleAnimation.ts
   - src/client/app/useStickyChatFocus.ts
   - src/client/app/useTerminalToggleAnimation.ts
+  - src/client/components/messages/LoopDisarmedMessage.test.tsx
+  - src/client/components/messages/LoopDisarmedMessage.tsx
 c3-113:
   - src/client/app/KannaTranscript.test.tsx
   - src/client/app/KannaTranscript.tsx
