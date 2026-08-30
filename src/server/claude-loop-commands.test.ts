@@ -285,6 +285,53 @@ function armedEvent(): AutoContinueEvent {
 }
 
 
+function disarmedEvent(): AutoContinueEvent {
+  return {
+    v: AUTO_CONTINUE_EVENT_VERSION,
+    kind: "loop_disarmed",
+    timestamp: 2,
+    chatId: "chat-1",
+    scheduleId: "ld-1",
+    reason: "user_send",
+  }
+}
+
+// The un-armed delivery prompt used to hardcode "Read PROGRESS.md if present".
+// That is setup_loop's DEFAULT filename, so it names many different plans on a
+// machine with several worktrees, and it resolved against the chat cwd rather
+// than the loop's workdir — which sent a post-loop review to an unrelated
+// FINISHED loop's plan in the wrong checkout.
+describe("deliverSubagentToMain — naming the plan when no loop is armed", () => {
+  async function deliver(events: AutoContinueEvent[]) {
+    const store = makeStore()
+    store.events.push(...events)
+    const emitted: AutoContinueEvent[] = []
+    const deps = makeDeps({
+      store,
+      emitAutoContinueEvent: async (e) => { emitted.push(e) },
+    })
+    const outcome: BackgroundRunOutcome = { status: "completed", runId: "run-1", text: "done" }
+    await deliverSubagentToMain(deps, "chat-1", "run-1", outcome)
+    const accepted = emitted.find((e) => e.kind === "auto_continue_accepted")
+    if (accepted?.kind !== "auto_continue_accepted") throw new Error("expected accepted event")
+    return accepted.prompt ?? ""
+  }
+
+  test("names the disarmed loop's real plan as an absolute path", async () => {
+    const prompt = await deliver([armedEvent(), disarmedEvent()])
+    expect(prompt).toContain("/repo/PROGRESS.md")
+    // The path must be absolute: the tracking-doc tools rebase to the chat cwd
+    // once no loop is armed, so a bare filename resolves in the wrong checkout.
+    expect(prompt).toContain("/repo")
+  })
+
+  test("names no file at all when the chat never ran a loop", async () => {
+    const prompt = await deliver([])
+    expect(prompt).not.toContain("PROGRESS.md")
+    expect(prompt).toContain("context has been cleared")
+  })
+})
+
 // ---------------------------------------------------------------------------
 // deliverSubagentToMain
 // ---------------------------------------------------------------------------

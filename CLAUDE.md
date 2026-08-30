@@ -1543,10 +1543,35 @@ blocks Edit/Write/Task at spawn, but it used to be silent AND irreversible.
   nulled `rateLimit`, which un-rendered the "Resume now" button. The attempt to
   resume destroyed the resume affordance.
 
+**The un-armed delivery prompt NAMES the plan, or names nothing.** When no loop
+is armed, `deliverSubagentToMain` used to tell the context-cleared main agent to
+"Read PROGRESS.md if present". That is `setup_loop`'s DEFAULT filename, so it
+identifies nothing — MEASURED on one install: 54 `PROGRESS*.md` across sibling
+worktrees, **26** named exactly `PROGRESS.md`. And nothing resolved it: the
+tracking-doc tools fall back to the chat cwd once no loop is armed
+(`getArmedLoop?.(chatId)?.workdirAbs ?? args.cwd`), so both the sentence and the
+tool pointed at the MAIN checkout while the loop had worked in a worktree. A
+post-loop review followed it, read an unrelated finished loop's plan, and graded
+the wrong feature.
+
+`describeLastPlan(deriveLastLoopSpec(...))` now builds that sentence from the
+`loop_armed` tombstone: the tracking file **absolute**
+(`${workdirAbs}/${trackingFileRel}`), because a bare filename is precisely what
+resolves against the wrong checkout. With no tombstone it names **nothing** — a
+confident wrong filename is worse than silence, and the run's `<result>` is
+still in the notification. This is the same defect class already fixed on the
+WRITE path (`renderLoopPrompt` embedding `file:` in every call it prescribes);
+the READ path was the half nobody had done.
+
+`kanna-mcp.ts`'s `baseDir()` is deliberately NOT widened to a disarmed loop's
+workdir — that is a confinement boundary, and an absolute path in the prompt
+solves the problem without relaxing where the tracking-doc tools may write.
+
 See `adr-20260813-queued-message-dequeue-on-commit`,
 `adr-20260814-armed-loop-wake-recovery`,
-`adr-20260830-loop-runtime-wake-rearm`, and
-`adr-20260830-loop-disarm-visible-resumable`.
+`adr-20260830-loop-runtime-wake-rearm`,
+`adr-20260830-loop-disarm-visible-resumable`, and
+`adr-20260830-unarmed-delivery-names-plan`.
 
 # Observability (OTel traces + metrics, memlog, SIGUSR2 heap snapshot)
 
