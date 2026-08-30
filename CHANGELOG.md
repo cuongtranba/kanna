@@ -8,6 +8,14 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.43.12](https://github.com/cuongtranba/kanna/compare/v1.43.11...v1.43.12) (2026-08-30)
+
+
+### Bug Fixes
+
+* **loop:** make disarming a loop visible and undoable ([#944](https://github.com/cuongtranba/kanna/issues/944)) ([6a64d25](https://github.com/cuongtranba/kanna/commit/6a64d25e81ff05e9b44af73c2ad8b4f8151b9805))
+* **loop:** re-arm an armed loop's wake when its orchestrator turn fails ([#942](https://github.com/cuongtranba/kanna/issues/942)) ([53d30d7](https://github.com/cuongtranba/kanna/commit/53d30d786aaddabc6dd48b3c81f199ed88403c64))
+
 ## [1.43.11](https://github.com/cuongtranba/kanna/compare/v1.43.10...v1.43.11) (2026-08-28)
 
 
