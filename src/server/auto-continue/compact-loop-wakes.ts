@@ -30,12 +30,24 @@
  *     (`resume_loop` re-arms from it, and the un-armed delivery prompt names
  *     the loop's real tracking file from it)
  *
+ * `loop_run_outcome` events in the CURRENT arm window are capped at
+ * `MAX_LIVE_LOOP_RUN_OUTCOMES`. `deriveLoopState` resets `consecutiveFailures`
+ * on any success, so only the trailing outcomes affect the count. A live loop
+ * is disarmed at three consecutive failures, so it can never have more than that
+ * number outstanding — keeping only the last three always yields the identical
+ * `deriveLoopState` result while bounding memory for long-running loops.
+ *
  * Returns the input by reference when nothing was dropped — the common case
  * between iterations, so the append path allocates nothing until there is
  * actually settled waste to reclaim. Never mutates the input.
  */
 
 import type { AutoContinueEvent } from "./events"
+
+// Must match MAX_CONSECUTIVE_LOOP_FAILURES in claude-loop-commands.ts: a live
+// armed loop is disarmed once it reaches that threshold, so it can never have
+// more consecutive failures than this number outstanding.
+const MAX_LIVE_LOOP_RUN_OUTCOMES = 3
 
 export function compactLoopWakeEvents(events: AutoContinueEvent[]): AutoContinueEvent[] {
   const dropped = new Set<number>()
@@ -107,6 +119,27 @@ export function compactLoopWakeEvents(events: AutoContinueEvent[]): AutoContinue
       ) {
         dropped.add(i)
       }
+    }
+  }
+
+  // ─── Live-arm outcome cap ─────────────────────────────────────────────────
+  //
+  // A long-running armed loop accumulates one `loop_run_outcome` per iteration.
+  // `deriveLoopState` resets `consecutiveFailures` on any success, so only the
+  // trailing outcomes matter. A live loop is disarmed at MAX_LIVE_LOOP_RUN_OUTCOMES
+  // consecutive failures, so the count can never exceed that threshold — keeping
+  // only the last MAX_LIVE_LOOP_RUN_OUTCOMES outcomes always yields the identical
+  // `deriveLoopState` result.
+  if (loopCurrentlyArmed && lastArmIndex >= 0) {
+    const outcomeIndices: number[] = []
+    for (let i = lastArmIndex + 1; i < events.length; i += 1) {
+      const event = events[i]
+      if (event === undefined || dropped.has(i)) continue
+      if (event.kind === "loop_run_outcome") outcomeIndices.push(i)
+    }
+    const excess = outcomeIndices.length - MAX_LIVE_LOOP_RUN_OUTCOMES
+    for (let j = 0; j < excess; j += 1) {
+      dropped.add(outcomeIndices[j]!)
     }
   }
 
