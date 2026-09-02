@@ -10,7 +10,13 @@ import { LocalFileLinkCard } from "../../messages/LocalFileLinkCard"
 // Types
 // ---------------------------------------------------------------------------
 
-export interface CreateLocalFileLinkNodeArgs {
+// A type alias, not an interface, and that is load-bearing. Lexical's
+// KlassConstructor types importJSON's parameter as
+// `SerializedLexicalNode & Record<string, unknown>`; an interface gets no
+// implicit index signature, so the spread below stops matching and the class
+// no longer satisfies LexicalNodeConfig. The other five nodes here already
+// spread type aliases for the same reason.
+export type CreateLocalFileLinkNodeArgs = {
   path: string
   line?: number
   column?: number
