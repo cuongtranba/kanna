@@ -1,6 +1,8 @@
 version: 2
 updates:
-  - package-ecosystem: "npm"
+  # This repo has only bun.lock (no npm lockfile). The former "npm" entries
+  # never touched it; "bun" is GA since Feb 2025 and rewrites bun.lock.
+  - package-ecosystem: "bun"
     directory: "/"
     schedule:
       interval: "daily"
@@ -11,8 +13,15 @@ updates:
         update-types:
           - "minor"
           - "patch"
+    ignore:
+      # typescript must stay <6.1.0: typescript-eslint's parser loads the
+      # legacy JS API via require('typescript'), peer range <6.1.0. TS7 is
+      # installed separately as the "typescript-7" alias. See CLAUDE.md
+      # "TypeScript (dual install)".
+      - dependency-name: "typescript"
+        versions: [">=6.1.0"]
 
-  - package-ecosystem: "npm"
+  - package-ecosystem: "bun"
     directory: "/wiki"
     schedule:
       interval: "daily"
