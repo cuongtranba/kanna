@@ -244,7 +244,7 @@ describe("PackageUpdateManager", () => {
   test("stop() clears timer", () => {
     let cleared = false
     const timer: TimerPort = {
-      setInterval(fn) { return 42 as unknown as ReturnType<typeof setInterval> },
+      setInterval(_fn) { return 42 as unknown as ReturnType<typeof setInterval> },
       clearInterval() { cleared = true },
     }
     const deps = makeDeps({ timer })

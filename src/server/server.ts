@@ -53,6 +53,7 @@ import { createSkillUpdateChecker } from "./skill-update-checker.adapter"
 import {
   createClaudePluginUpdateChecker,
   buildClaudePluginCheckerDeps,
+  findClaudeBinary,
 } from "./claude-plugin-update-checker.adapter"
 import {
   createCodexPluginUpdateChecker,
@@ -391,7 +392,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     checkers: [
       createSkillUpdateChecker({ fetchFn: fetch, token: null }),
       createClaudePluginUpdateChecker(
-        buildClaudePluginCheckerDeps(Bun.which("claude") ?? null),
+        buildClaudePluginCheckerDeps(findClaudeBinary()),
       ),
       createCodexPluginUpdateChecker(buildCodexPluginCheckerDepsForEnv()),
     ],
