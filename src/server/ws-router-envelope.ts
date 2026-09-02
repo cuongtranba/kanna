@@ -487,6 +487,7 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
             lastCheckedAt: null,
             error: null,
             applying: [],
+            autoApplyHistory: [],
           },
         },
       }
