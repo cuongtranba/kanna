@@ -10,6 +10,11 @@
  */
 
 import {
+  PACKAGE_APPLY_DURATION_MS,
+  PACKAGE_APPLY_FINISHED,
+  PACKAGE_CHECK_DURATION_MS,
+  PACKAGE_CHECK_FINISHED,
+  PACKAGE_UPDATE_RATE_LIMITED,
   PROCESS_RSS_BYTES,
   SUBAGENT_RUN_FINISHED,
   SUBAGENT_RUN_DURATION_MS,
@@ -48,6 +53,14 @@ export const EXPORTED_PROM_METRICS: readonly string[] = [
   `${promMetricName(TURN_COST_USD)}_total`,
   `${promMetricName(SUBAGENT_TOKENS)}_total`,
   ...[turnDuration, subagentDuration].flatMap((base) => [
+    `${base}_bucket`,
+    `${base}_count`,
+    `${base}_sum`,
+  ]),
+  `${promMetricName(PACKAGE_CHECK_FINISHED)}_total`,
+  `${promMetricName(PACKAGE_APPLY_FINISHED)}_total`,
+  `${promMetricName(PACKAGE_UPDATE_RATE_LIMITED)}_total`,
+  ...[promMetricName(PACKAGE_CHECK_DURATION_MS), promMetricName(PACKAGE_APPLY_DURATION_MS)].flatMap((base) => [
     `${base}_bucket`,
     `${base}_count`,
     `${base}_sum`,

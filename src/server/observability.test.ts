@@ -5,6 +5,7 @@ import {
   recordUpDown,
   recordHistogram,
   DURATION_BUCKETS_MS,
+  PACKAGE_APPLY_DURATION_MS,
   TURN_DURATION_MS,
 } from "./observability"
 import { startMetricRecorder, type MetricRecorder } from "./test-helpers/metric-recorder"
@@ -104,5 +105,19 @@ describe("recordHistogram against a real meter provider", () => {
   test("buckets reach beyond the longest plausible turn", () => {
     expect(Math.max(...DURATION_BUCKETS_MS)).toBeGreaterThanOrEqual(1_800_000)
     expect([...DURATION_BUCKETS_MS]).toEqual([...DURATION_BUCKETS_MS].sort((a, b) => a - b))
+  })
+
+  // Pins that a 45s package apply — a realistic slow skill install — lands in a
+  // distinct finite bucket rather than +Inf (which would make histogram_quantile
+  // useless for diagnosing slow applies).
+  test("45s package apply lands in a finite bucket", async () => {
+    recorder = startMetricRecorder({ buckets: { [PACKAGE_APPLY_DURATION_MS]: DURATION_BUCKETS_MS } })
+    recordHistogram(PACKAGE_APPLY_DURATION_MS, 45_000, { kind: "skill", ok: "true", trigger: "manual" })
+
+    const [point] = await recorder.histogram(PACKAGE_APPLY_DURATION_MS)
+    if (!point) throw new Error("no histogram recorded")
+
+    expect(point.count).toBe(1)
+    expect(point.counts.at(-1)).toBe(0) // not in +Inf
   })
 })

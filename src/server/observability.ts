@@ -70,6 +70,21 @@ export const TURN_COST_USD = "kanna.turn.cost_usd"
  */
 export const SUBAGENT_TOKENS = "kanna.subagent.tokens"
 
+/** One increment per finished package check run, keyed by `kind` and `outcome` (`ok` | `error`). */
+export const PACKAGE_CHECK_FINISHED = "kanna.packages.check_finished"
+
+/** One increment per applied package update, keyed by `kind`, `ok` (`true`|`false`), and `trigger` (`manual`|`auto`). */
+export const PACKAGE_APPLY_FINISHED = "kanna.packages.apply_finished"
+
+/** One increment each time a package checker returns `availability: "unknown"` due to a rate limit. */
+export const PACKAGE_UPDATE_RATE_LIMITED = "kanna.packages.update_rate_limited"
+
+/** Wall-clock duration of one full package check run, in ms, keyed by `kind`. */
+export const PACKAGE_CHECK_DURATION_MS = "kanna.packages.check_duration_ms"
+
+/** Wall-clock duration of one package apply call, in ms, keyed by `kind` and `ok`. */
+export const PACKAGE_APPLY_DURATION_MS = "kanna.packages.apply_duration_ms"
+
 /**
  * Explicit bucket boundaries for the duration histograms above, in ms.
  *
