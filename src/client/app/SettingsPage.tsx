@@ -17,6 +17,7 @@ import {
   Monitor,
   Moon,
   MessageSquareQuote,
+  Package,
   Plug,
   Search,
   Settings2,
@@ -114,6 +115,7 @@ import { usePreferencesStore } from "../stores/preferences"
 import { isFontScaleStep, resolveEffectiveScaleStep, type FontScaleStep } from "../../shared/design/typography"
 import type { KannaState } from "./useKannaState"
 import { PushNotificationsSection } from "../components/settings/PushNotificationsSection"
+import { PluginsSection } from "../components/settings/PluginsSection"
 import {
   clearStoredPushDeviceId,
   detectPushSupport,
@@ -137,6 +139,12 @@ const sidebarItems = [
     label: "Skills",
     icon: BookText,
     subtitle: "Manage globally installed agent skills from the active skill lock file.",
+  },
+  {
+    id: "plugins",
+    label: "Plugins",
+    icon: Package,
+    subtitle: "View and update globally installed Claude Code and Codex plugins.",
   },
   {
     id: "providers",
@@ -2649,12 +2657,13 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
                   </div>
                 )}
                 {selectedPage === "skills" && <SkillsSection state={state} />}
+                {selectedPage === "plugins" && <PluginsSection state={state} />}
                 {selectedPage === "subagents" && <SubagentsSettingsBranch state={state} />}
                 {selectedPage === "models" && <ModelsSettingsBranch state={state} />}
                 {selectedPage === "mcp-servers" && <McpServersSettingsBranch state={state} />}
                 {selectedPage === "snippets" && <TextSnippetsSettingsBranch state={state} />}
                 {selectedPage === "instructions" && <GlobalInstructionsSection state={state} />}
-                {!["general", "providers", "keybindings", "skills", "subagents", "models", "mcp-servers", "snippets", "instructions"].includes(selectedPage) && (
+                {!["general", "providers", "keybindings", "skills", "plugins", "subagents", "models", "mcp-servers", "snippets", "instructions"].includes(selectedPage) && (
                   <ChangelogSection
                     status={changelogStatus}
                     releases={releases}
