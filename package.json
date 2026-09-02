@@ -125,7 +125,7 @@
     "@tailwindcss/typography": "^0.5.19",
     "@types/bun": "latest",
     "@types/mdast": "^4.0.4",
-    "@types/node": "^24.10.1",
+    "@types/node": "^26.4.0",
     "@types/react": "19.2.7",
     "@types/react-dom": "19.2.3",
     "@types/shell-quote": "^1.7.5",
