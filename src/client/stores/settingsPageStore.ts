@@ -2,6 +2,7 @@ import { create } from "zustand"
 import { detectPushSupport, getStoredPushDeviceId, type PushPermissionState } from "../app/pushClient"
 import type { LlmProviderDraft } from "../app/llmProviderDraft"
 import type { GithubRelease, InstalledSkillSummary, SkillSearchResult } from "../../shared/types"
+import type { PackageUpdateSnapshot } from "../../shared/packages/types"
 
 export type { GithubRelease }
 
@@ -31,6 +32,7 @@ interface SettingsPageState {
   installingSkillId: string | null
   uninstallingSkillId: string | null
   installMessages: Record<string, string>
+  packageUpdateSnapshot: PackageUpdateSnapshot | null
 
   // GlobalInstructionsSection
   globalInstructionsDraft: string
@@ -88,6 +90,7 @@ interface SettingsPageState {
   setInstallMessage: (skillId: string, message: string) => void
   clearInstallMessage: (skillId: string) => void
   clearInstallMessagesForSkill: (skillName: string) => void
+  setPackageUpdateSnapshot: (snapshot: PackageUpdateSnapshot | null) => void
 
   // Actions — GlobalInstructionsSection
   setGlobalInstructionsDraft: (draft: string) => void
@@ -144,6 +147,7 @@ export const useSettingsPageStore = create<SettingsPageState>()((set, get) => ({
   installingSkillId: null,
   uninstallingSkillId: null,
   installMessages: EMPTY_INSTALL_MESSAGES,
+  packageUpdateSnapshot: null,
 
   // GlobalInstructionsSection initial state
   globalInstructionsDraft: "",
@@ -233,6 +237,7 @@ export const useSettingsPageStore = create<SettingsPageState>()((set, get) => ({
     }
     set({ installMessages: next })
   },
+  setPackageUpdateSnapshot: (snapshot) => set({ packageUpdateSnapshot: snapshot }),
 
   // Actions — GlobalInstructionsSection
   setGlobalInstructionsDraft: (draft) => set({ globalInstructionsDraft: draft }),

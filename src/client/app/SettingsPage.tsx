@@ -23,7 +23,6 @@ import {
   Sun,
   DownloadCloud,
   LogOut,
-  Trash2,
   Type,
   X,
 } from "lucide-react"
@@ -124,6 +123,7 @@ import {
 } from "./pushClient"
 import { createLlmProviderDraftForSelection } from "./llmProviderDraft"
 import { useSettingsPageStore, type GithubRelease, type ChangelogStatus } from "../stores/settingsPageStore"
+import { InstalledSkillCard } from "../components/settings/SkillCard"
 
 const sidebarItems = [
   {
@@ -609,49 +609,6 @@ function SkillErrorBlock({ message }: { message: string }) {
   )
 }
 
-function InstalledSkillCard({
-  skill,
-  uninstalling,
-  onUninstall,
-}: {
-  skill: InstalledSkillSummary
-  uninstalling: boolean
-  onUninstall: () => void
-}) {
-  const href = skill.source ? `https://skills.sh/${skill.source}/${skill.name}` : null
-
-  return (
-    <div className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-border bg-card/30 p-3">
-      <div className="min-w-0">
-        <div className="truncate text-sm font-medium text-foreground">{skill.name}</div>
-        <div className="truncate text-xs text-muted-foreground">{skill.source || "Unknown source"}</div>
-      </div>
-      <div className="flex shrink-0 items-center gap-2">
-        {href ? (
-          <a
-            href={href}
-            target="_blank"
-            rel="noreferrer"
-            aria-label={`View ${skill.name} on skills.sh`}
-            className="touch-manipulation inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          >
-            <ExternalLink className="h-4 w-4" />
-          </a>
-        ) : null}
-        <button
-          type="button"
-          aria-label={`Uninstall ${skill.name}`}
-          disabled={uninstalling}
-          onClick={onUninstall}
-          className="touch-manipulation inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:pointer-events-none disabled:opacity-50"
-        >
-          {uninstalling ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-        </button>
-      </div>
-    </div>
-  )
-}
-
 function SkillResultCard({
   skill,
   installing,
@@ -744,6 +701,30 @@ export function SkillsSection({
   const setInstallMessage = useSettingsPageStore((s) => s.setInstallMessage)
   const clearInstallMessage = useSettingsPageStore((s) => s.clearInstallMessage)
   const clearInstallMessagesForSkill = useSettingsPageStore((s) => s.clearInstallMessagesForSkill)
+  const packageUpdateSnapshot = useSettingsPageStore((s) => s.packageUpdateSnapshot)
+
+  const isChecking = packageUpdateSnapshot?.status === "checking"
+  const outdatedCount = packageUpdateSnapshot?.packages.filter(
+    (p) => p.kind === "skill" && (p.update.availability === "outdated" || p.update.availability === "partial"),
+  ).length ?? 0
+  const lastChecked = packageUpdateSnapshot?.lastCheckedAt
+    ? new Date(packageUpdateSnapshot.lastCheckedAt).toLocaleTimeString()
+    : null
+
+  function checkUpdates() {
+    void socket.command({ type: "packages.checkUpdates" })
+  }
+
+  function updateSkill(id: string) {
+    void socket.command({ type: "packages.update", id })
+  }
+
+  function updateAllSkills() {
+    const ids = packageUpdateSnapshot?.packages
+      .filter((p) => p.kind === "skill" && (p.update.availability === "outdated" || p.update.availability === "partial"))
+      .map((p) => p.id) ?? []
+    if (ids.length > 0) void socket.command({ type: "packages.updateAll", ids })
+  }
 
   const loadInstalledSkills = useCallback(async () => {
     if (connectionStatus !== "connected") {
@@ -877,8 +858,11 @@ export function SkillsSection({
           <InstalledSkillCard
             key={`${skill.source}/${skill.name}`}
             skill={skill}
+            packageEntry={packageUpdateSnapshot?.packages.find((p) => p.kind === "skill" && p.name === skill.name) ?? null}
             uninstalling={uninstallingSkillId === skill.name}
+            applying={packageUpdateSnapshot?.applying.includes(`skill:${skill.name}`) ?? false}
             onUninstall={() => { void uninstallSkill(skill) }}
+            onUpdate={() => { updateSkill(`skill:${skill.name}`) }}
           />
         ))}
       </div>
@@ -898,7 +882,16 @@ export function SkillsSection({
       <section className="flex flex-col gap-3">
         <div className="flex items-center justify-between gap-3">
           <div className="text-sm font-medium text-foreground">Installed</div>
-          {installedLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" /> : null}
+          <div className="flex items-center gap-2">
+            {lastChecked ? <span className="tabular-nums text-xs text-muted-foreground">Checked {lastChecked}</span> : null}
+            {outdatedCount > 0 ? (
+              <Button size="sm" variant="secondary" className="h-6 rounded-full px-2 text-xs" onClick={() => { updateAllSkills() }}>Update all ({outdatedCount})</Button>
+            ) : null}
+            <Button size="sm" variant="ghost" className="h-6 rounded-full px-2 text-xs" disabled={isChecking} onClick={checkUpdates}>
+              {isChecking ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}Check
+            </Button>
+            {installedLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" /> : null}
+          </div>
         </div>
         {installedError ? <div className="text-xs text-destructive">{installedError}</div> : null}
         {installedContent}

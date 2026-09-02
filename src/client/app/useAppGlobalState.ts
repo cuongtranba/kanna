@@ -21,10 +21,12 @@ import type { EditorOpenSettings, ImportSessionsByIdsResult, OpenExternalAction,
 import type { PtyInstancesSnapshot } from "../../shared/pty-instance"
 import type { FollowedSessionsSnapshot } from "../../shared/protocol"
 import type { CronJobsGlobalSnapshot } from "../../shared/cron/types"
+import type { PackageUpdateSnapshot } from "../../shared/packages/types"
 import type { ChatPermissionPolicyOverride } from "../../shared/permission-policy"
 import { usePtyInstancesStore } from "../stores/ptyInstancesStore"
 import { useFollowedSessionsStore } from "../stores/followedSessionsStore"
 import { useCronJobsStore } from "../stores/cronJobsStore"
+import { useSettingsPageStore } from "../stores/settingsPageStore"
 import { useOpenRouterModelsStore } from "../stores/openrouterModelsStore"
 import { gitSnapshotKey, useKannaStateStore } from "../stores/kannaStateStore"
 import { usePaneLayoutStore } from "../stores/paneLayoutStore"
@@ -582,6 +584,12 @@ export function useAppGlobalState(
   useEffect(() => {
     return socket.subscribe<CronJobsGlobalSnapshot>({ type: "cron-jobs" }, (snapshot) => {
       useCronJobsStore.getState().setRows(snapshot.rows)
+    })
+  }, [socket])
+
+  useEffect(() => {
+    return socket.subscribe<PackageUpdateSnapshot>({ type: "package-updates" }, (snapshot) => {
+      useSettingsPageStore.getState().setPackageUpdateSnapshot(snapshot)
     })
   }, [socket])
 

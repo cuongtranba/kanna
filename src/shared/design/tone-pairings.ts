@@ -22,4 +22,7 @@ export const STATUS_PILL_CLASS = {
   completed: "border-success/40 text-success-text bg-success/10",
   failed: "border-destructive/40 text-destructive-text bg-destructive/10",
   skipped: "border-border text-muted-foreground bg-muted/40",
+  outdated: "border-warning/40 text-warning-text bg-warning/10",
+  partial: "border-warning/40 text-warning-text bg-warning/10",
+  unknown: "border-border text-muted-foreground bg-muted/40",
 } as const
