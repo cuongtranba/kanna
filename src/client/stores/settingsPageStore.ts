@@ -2,7 +2,7 @@ import { create } from "zustand"
 import { detectPushSupport, getStoredPushDeviceId, type PushPermissionState } from "../app/pushClient"
 import type { LlmProviderDraft } from "../app/llmProviderDraft"
 import type { GithubRelease, InstalledSkillSummary, SkillSearchResult } from "../../shared/types"
-import type { PackageUpdateSnapshot } from "../../shared/packages/types"
+import type { PackageInventorySnapshot, PackageUpdateSnapshot } from "../../shared/packages/types"
 
 export type { GithubRelease }
 
@@ -33,6 +33,11 @@ interface SettingsPageState {
   uninstallingSkillId: string | null
   installMessages: Record<string, string>
   packageUpdateSnapshot: PackageUpdateSnapshot | null
+
+  // PluginsSection
+  pluginInventory: PackageInventorySnapshot | null
+  pluginInventoryLoading: boolean
+  pluginInventoryError: string | null
 
   // GlobalInstructionsSection
   globalInstructionsDraft: string
@@ -92,6 +97,11 @@ interface SettingsPageState {
   clearInstallMessagesForSkill: (skillName: string) => void
   setPackageUpdateSnapshot: (snapshot: PackageUpdateSnapshot | null) => void
 
+  // Actions — PluginsSection
+  setPluginInventory: (inventory: PackageInventorySnapshot | null) => void
+  setPluginInventoryLoading: (loading: boolean) => void
+  setPluginInventoryError: (error: string | null) => void
+
   // Actions — GlobalInstructionsSection
   setGlobalInstructionsDraft: (draft: string) => void
   setGlobalInstructionsPersistedAtMount: (value: string) => void
@@ -148,6 +158,11 @@ export const useSettingsPageStore = create<SettingsPageState>()((set, get) => ({
   uninstallingSkillId: null,
   installMessages: EMPTY_INSTALL_MESSAGES,
   packageUpdateSnapshot: null,
+
+  // PluginsSection initial state
+  pluginInventory: null,
+  pluginInventoryLoading: false,
+  pluginInventoryError: null,
 
   // GlobalInstructionsSection initial state
   globalInstructionsDraft: "",
@@ -238,6 +253,11 @@ export const useSettingsPageStore = create<SettingsPageState>()((set, get) => ({
     set({ installMessages: next })
   },
   setPackageUpdateSnapshot: (snapshot) => set({ packageUpdateSnapshot: snapshot }),
+
+  // Actions — PluginsSection
+  setPluginInventory: (inventory) => set({ pluginInventory: inventory }),
+  setPluginInventoryLoading: (loading) => set({ pluginInventoryLoading: loading }),
+  setPluginInventoryError: (error) => set({ pluginInventoryError: error }),
 
   // Actions — GlobalInstructionsSection
   setGlobalInstructionsDraft: (draft) => set({ globalInstructionsDraft: draft }),
