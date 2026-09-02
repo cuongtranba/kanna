@@ -343,3 +343,54 @@ describe("compactLoopWakeEvents — superseded loop_armed trimming", () => {
     expect(compacted).toBe(log)
   })
 })
+
+describe("compactLoopWakeEvents — live-arm outcome cap", () => {
+  test("outcomes beyond cap are dropped (oldest first)", () => {
+    // 10 iterations: only the last 3 outcomes should survive
+    const outcomes = Array.from({ length: 10 }, (_, i) =>
+      loopRunOutcome(true, `lo-${i + 1}`)
+    )
+    const log: AutoContinueEvent[] = [loopArmed("la-1"), ...outcomes]
+    const compacted = compactLoopWakeEvents([...log])
+    const kept = compacted.filter((e) => e.kind === "loop_run_outcome")
+    expect(kept).toHaveLength(3)
+    expect(kept[0]?.scheduleId).toBe("lo-8")
+    expect(kept[1]?.scheduleId).toBe("lo-9")
+    expect(kept[2]?.scheduleId).toBe("lo-10")
+  })
+
+  test("deriveLoopState consecutiveFailures unchanged after cap", () => {
+    // Many ok outcomes followed by 2 failures: cap should not change the count
+    const outcomes = [
+      ...Array.from({ length: 20 }, (_, i) => loopRunOutcome(true, `ok-${i}`)),
+      loopRunOutcome(false, "fail-1"),
+      loopRunOutcome(false, "fail-2"),
+    ]
+    const log: AutoContinueEvent[] = [loopArmed("la-1"), ...outcomes]
+    const compacted = compactLoopWakeEvents([...log])
+    expect(deriveLoopState(compacted, CHAT)?.consecutiveFailures).toBe(
+      deriveLoopState(log, CHAT)?.consecutiveFailures,
+    )
+    expect(deriveLoopState(compacted, CHAT)?.consecutiveFailures).toBe(2)
+  })
+
+  test("exactly-cap outcomes unchanged by reference", () => {
+    const log: AutoContinueEvent[] = [
+      loopArmed("la-1"),
+      loopRunOutcome(true, "lo-1"),
+      loopRunOutcome(true, "lo-2"),
+      loopRunOutcome(true, "lo-3"),
+    ]
+    const compacted = compactLoopWakeEvents(log)
+    expect(compacted).toBe(log)
+  })
+
+  test("cap does not apply to a disarmed loop (all outcomes already dropped)", () => {
+    const outcomes = Array.from({ length: 10 }, (_, i) =>
+      loopRunOutcome(true, `lo-${i + 1}`)
+    )
+    const log: AutoContinueEvent[] = [loopArmed("la-1"), ...outcomes, loopDisarmed("ld-1")]
+    const compacted = compactLoopWakeEvents([...log])
+    expect(compacted.filter((e) => e.kind === "loop_run_outcome")).toHaveLength(0)
+  })
+})
