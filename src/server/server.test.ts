@@ -5,6 +5,7 @@ import {
   CLAUDE_DRIVER_DEFAULTS,
   CLAUDE_PTY_LIFECYCLE_DEFAULTS,
   CLOUDFLARE_TUNNEL_DEFAULTS,
+  PACKAGE_UPDATE_SETTINGS_DEFAULTS,
   PUSH_DEFAULTS,
   TELEMETRY_DEFAULTS,
   TYPOGRAPHY_DEFAULTS,
@@ -60,6 +61,7 @@ function makeSnapshot(overrides: Partial<AppSettingsSnapshot> = {}): AppSettings
     globalPromptAppend: "",
     shareDefaultTtlHours: 24,
     subagentRuntime: { runTimeoutMs: 600_000, defaultLoopSubagentId: null },
+    packageUpdates: { ...PACKAGE_UPDATE_SETTINGS_DEFAULTS },
     ...overrides,
   }
 }

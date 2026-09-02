@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto"
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLAUDE_DRIVER_DEFAULTS, CLAUDE_PTY_LIFECYCLE_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, DEFAULT_OPENROUTER_SDK_MODEL, EMPTY_CHAT_ACTIVITY, PROTOCOL_VERSION, PUSH_DEFAULTS,
+import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLAUDE_DRIVER_DEFAULTS, CLAUDE_PTY_LIFECYCLE_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, DEFAULT_OPENROUTER_SDK_MODEL, EMPTY_CHAT_ACTIVITY, PACKAGE_UPDATE_SETTINGS_DEFAULTS, PROTOCOL_VERSION, PUSH_DEFAULTS,
   TELEMETRY_DEFAULTS, TYPOGRAPHY_DEFAULTS, UPLOAD_DEFAULTS } from "../shared/types"
 import { BUILTIN_SLASH_COMMANDS } from "../shared/builtin-commands"
 import type { AppSettingsSnapshot, ChatActivity, KeybindingsSnapshot, LlmProviderSnapshot, McpServerConfig, McpServerTestResult, OpenRouterModel, UpdateSnapshot } from "../shared/types"
@@ -139,6 +139,7 @@ const DEFAULT_APP_SETTINGS_SNAPSHOT: AppSettingsSnapshot = {
   globalPromptAppend: "",
   shareDefaultTtlHours: 24,
   subagentRuntime: { runTimeoutMs: 600_000, defaultLoopSubagentId: null },
+  packageUpdates: { ...PACKAGE_UPDATE_SETTINGS_DEFAULTS },
 }
 
 describe("isBenignStaleStateMessage", () => {

@@ -90,7 +90,13 @@ import {
   type SubagentRuntimeSettings,
   type SubagentValidationError,
   type UploadSettings,
+  type PackageUpdateSettings,
+  PACKAGE_UPDATE_CHECK_INTERVAL_MIN_MS,
+  PACKAGE_UPDATE_CHECK_INTERVAL_MAX_MS,
+  PACKAGE_UPDATE_SETTINGS_DEFAULTS,
 } from "../shared/types"
+import type { PackageKind } from "../shared/packages/types"
+import { assertSafeSkillAgents } from "../shared/skill-agents"
 
 type StatusPatch = Partial<Pick<OAuthTokenEntry,
   "status" | "limitedUntil" | "lastUsedAt" | "lastErrorAt" | "lastErrorMessage"
@@ -138,6 +144,7 @@ interface AppSettingsFile {
     runTimeoutMs?: number
     defaultLoopSubagentId?: string | null
   }
+  packageUpdates?: Record<string, unknown>
 }
 
 function isPlainObject<T>(value: T): value is T & Record<string, unknown> {
@@ -822,6 +829,73 @@ function normalizeSubagentRuntime<T>(
   return { runTimeoutMs, defaultLoopSubagentId }
 }
 
+const VALID_PACKAGE_KINDS = new Set<string>(["skill", "claude-plugin", "codex-plugin"])
+
+function isPackageKind(value: string): value is PackageKind {
+  return VALID_PACKAGE_KINDS.has(value)
+}
+
+function normalizePackageUpdateSettings<T>(value: T, warnings: string[]): PackageUpdateSettings {
+  if (value === undefined || value === null) return { ...PACKAGE_UPDATE_SETTINGS_DEFAULTS }
+  const src = isPlainObject(value) ? value : null
+  if (!src) {
+    warnings.push("packageUpdates must be an object")
+    return { ...PACKAGE_UPDATE_SETTINGS_DEFAULTS }
+  }
+
+  const checkEnabled = typeof src.checkEnabled === "boolean" ? src.checkEnabled : PACKAGE_UPDATE_SETTINGS_DEFAULTS.checkEnabled
+
+  let checkIntervalMs = PACKAGE_UPDATE_SETTINGS_DEFAULTS.checkIntervalMs
+  if (src.checkIntervalMs !== undefined) {
+    const raw = src.checkIntervalMs
+    if (typeof raw !== "number" || !Number.isInteger(raw) || raw <= 0) {
+      warnings.push("packageUpdates.checkIntervalMs must be a positive integer")
+    } else if (raw < PACKAGE_UPDATE_CHECK_INTERVAL_MIN_MS) {
+      warnings.push(`packageUpdates.checkIntervalMs ${raw} is below the 1h floor; clamped to ${PACKAGE_UPDATE_CHECK_INTERVAL_MIN_MS}`)
+      checkIntervalMs = PACKAGE_UPDATE_CHECK_INTERVAL_MIN_MS
+    } else if (raw > PACKAGE_UPDATE_CHECK_INTERVAL_MAX_MS) {
+      warnings.push(`packageUpdates.checkIntervalMs ${raw} exceeds the 30d ceiling; clamped to ${PACKAGE_UPDATE_CHECK_INTERVAL_MAX_MS}`)
+      checkIntervalMs = PACKAGE_UPDATE_CHECK_INTERVAL_MAX_MS
+    } else {
+      checkIntervalMs = raw
+    }
+  }
+
+  const autoApply = typeof src.autoApply === "boolean" ? src.autoApply : PACKAGE_UPDATE_SETTINGS_DEFAULTS.autoApply
+
+  let autoApplyKinds = PACKAGE_UPDATE_SETTINGS_DEFAULTS.autoApplyKinds
+  if (src.autoApplyKinds !== undefined) {
+    if (!Array.isArray(src.autoApplyKinds)) {
+      warnings.push("packageUpdates.autoApplyKinds must be an array")
+    } else {
+      const validKinds: PackageKind[] = []
+      for (const k of src.autoApplyKinds) {
+        if (typeof k === "string" && isPackageKind(k)) {
+          validKinds.push(k)
+        } else {
+          warnings.push(`packageUpdates.autoApplyKinds: unknown kind ${JSON.stringify(k)}; dropped`)
+        }
+      }
+      autoApplyKinds = validKinds
+    }
+  }
+
+  let skillAgents = PACKAGE_UPDATE_SETTINGS_DEFAULTS.skillAgents
+  if (src.skillAgents !== undefined) {
+    if (!Array.isArray(src.skillAgents)) {
+      warnings.push("packageUpdates.skillAgents must be an array")
+    } else {
+      try {
+        skillAgents = assertSafeSkillAgents(src.skillAgents.map(String))
+      } catch (err) {
+        warnings.push(`packageUpdates.skillAgents: ${err instanceof Error ? err.message : String(err)}; reset to defaults`)
+      }
+    }
+  }
+
+  return { checkEnabled, checkIntervalMs, autoApply, autoApplyKinds, skillAgents }
+}
+
 function normalizeClaudeAuth<T>(value: T, warnings: string[]): ClaudeAuthSettings {
   if (value === undefined) return { ...CLAUDE_AUTH_DEFAULTS }
   const src = isPlainObject(value) ? value : null
@@ -910,6 +984,7 @@ function normalizeAppSettings<T>(
   }
 
   const subagentRuntime = normalizeSubagentRuntime(source?.subagentRuntime, subagents, warnings)
+  const packageUpdates = normalizePackageUpdateSettings(source?.packageUpdates, warnings)
 
   const editorPreset = normalizeEditorPreset(source?.editor?.preset)
   const state: AppSettingsState = {
@@ -949,6 +1024,7 @@ function normalizeAppSettings<T>(
     globalPromptAppend,
     shareDefaultTtlHours,
     subagentRuntime,
+    packageUpdates,
   }
 
   const filePayload = toFilePayload(state)
@@ -1472,6 +1548,10 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
     }
   }
 
+  if (patch.packageUpdates?.skillAgents !== undefined) {
+    assertSafeSkillAgents(patch.packageUpdates.skillAgents.map(String))
+  }
+
   const mcpPatch = patch.customMcpServers
   const nextSubagents = applyCollectionPatch(state.subagents, patch.subagents, SUBAGENT_CRUD) ?? state.subagents
   const nextMcpServers = applyCollectionPatch(state.customMcpServers, mcpPatch, MCP_CRUD)
@@ -1565,6 +1645,10 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
       defaultLoopSubagentId: patch.subagentRuntime?.defaultLoopSubagentId !== undefined
         ? patch.subagentRuntime.defaultLoopSubagentId
         : state.subagentRuntime.defaultLoopSubagentId,
+    },
+    packageUpdates: {
+      ...state.packageUpdates,
+      ...patch.packageUpdates,
     },
   }, state.filePathDisplay).payload
 }

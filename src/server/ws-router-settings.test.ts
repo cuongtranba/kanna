@@ -10,6 +10,7 @@ import {
   CLAUDE_PTY_LIFECYCLE_DEFAULTS,
   CLOUDFLARE_TUNNEL_DEFAULTS,
   DEFAULT_OPENROUTER_SDK_MODEL,
+  PACKAGE_UPDATE_SETTINGS_DEFAULTS,
   PUSH_DEFAULTS,
   TELEMETRY_DEFAULTS,
   TYPOGRAPHY_DEFAULTS,
@@ -58,6 +59,7 @@ function makeSnapshot(): AppSettingsSnapshot {
     globalPromptAppend: "",
     shareDefaultTtlHours: 24,
     subagentRuntime: { runTimeoutMs: 600_000, defaultLoopSubagentId: null },
+    packageUpdates: { ...PACKAGE_UPDATE_SETTINGS_DEFAULTS },
   }
 }
 

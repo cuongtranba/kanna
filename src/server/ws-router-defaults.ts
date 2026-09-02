@@ -15,6 +15,7 @@ import {
   CLAUDE_PTY_LIFECYCLE_DEFAULTS,
   CLOUDFLARE_TUNNEL_DEFAULTS,
   DEFAULT_OPENROUTER_SDK_MODEL,
+  PACKAGE_UPDATE_SETTINGS_DEFAULTS,
   PUSH_DEFAULTS,
   TELEMETRY_DEFAULTS,
   TYPOGRAPHY_DEFAULTS,
@@ -162,6 +163,10 @@ export function mergeAppSettingsPatch(
         ? patch.subagentRuntime.defaultLoopSubagentId
         : snapshot.subagentRuntime.defaultLoopSubagentId,
     },
+    packageUpdates: {
+      ...snapshot.packageUpdates,
+      ...patch.packageUpdates,
+    },
   }
 }
 
@@ -228,6 +233,7 @@ export function buildInitialAppSettingsSnapshot(): AppSettingsSnapshot {
     globalPromptAppend: "",
     shareDefaultTtlHours: 24,
     subagentRuntime: { runTimeoutMs: 600_000, defaultLoopSubagentId: null },
+    packageUpdates: { ...PACKAGE_UPDATE_SETTINGS_DEFAULTS },
   }
 }
 
