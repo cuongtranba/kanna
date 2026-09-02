@@ -1,0 +1,42 @@
+{
+  "name": "circleci",
+  "version": "1.0.4",
+  "description": "Build, test, and deploy any application",
+  "author": {
+    "name": "CircleCI",
+    "url": "https://circleci.com"
+  },
+  "homepage": "https://circleci.com",
+  "repository": "https://github.com/circleci-public/skills",
+  "license": "MIT",
+  "keywords": [
+    "circleci",
+    "ci/cd",
+    "ci"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "CircleCI",
+    "shortDescription": "Build, test, and deploy any application",
+    "longDescription": "Bring testing, deployment, and CI best practices into Codex",
+    "developerName": "CircleCI",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "websiteURL": "https://circleci.com",
+    "privacyPolicyURL": "https://circleci.com/legal/privacy-policy",
+    "termsOfServiceURL": "https://circleci.com/legal/terms-of-service",
+    "defaultPrompt": [
+      "Review the CircleCI configuration for this project and suggest improvements",
+      "Diagnose and fix build failures for the current branch",
+      "Setup the Chunk cli for this project"
+    ],
+    "brandColor": "#049B4A",
+    "composerIcon": "./assets/composer-icon.svg",
+    "logo": "./assets/logo.png",
+    "logoDark": "./assets/logo-dark.png",
+    "screenshots": []
+  }
+}

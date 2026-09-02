@@ -1,18 +1,21 @@
 import { describe, test, expect } from "bun:test"
-import { parseCodexPluginList } from "./parse-codex-plugins"
+import { parseCodexPluginList, parseCodexPluginAvailable } from "./parse-codex-plugins"
 import fixture from "../../server/__fixtures__/codex-plugin-list.json"
 
 describe("parseCodexPluginList", () => {
-  test("parses valid codex plugin list", () => {
-    const { packages, error } = parseCodexPluginList([
-      {
-        id: "my-plugin",
-        name: "My Plugin",
-        version: "1.0.0",
-        installPath: "/home/user/.codex/plugins/my-plugin",
-        installedAt: "2026-01-10T00:00:00.000Z",
-      },
-    ])
+  test("parses installed plugins from real {installed, available} format", () => {
+    const { packages, error } = parseCodexPluginList({
+      installed: [
+        {
+          id: "my-plugin",
+          name: "My Plugin",
+          version: "1.0.0",
+          installPath: "/home/user/.codex/plugins/my-plugin",
+          installedAt: "2026-01-10T00:00:00.000Z",
+        },
+      ],
+      available: [],
+    })
     expect(error).toBeNull()
     expect(packages).toHaveLength(1)
     const pkg = packages[0]!
@@ -28,17 +31,26 @@ describe("parseCodexPluginList", () => {
   })
 
   test("excludes entries whose id starts with .system", () => {
-    const { packages } = parseCodexPluginList([
-      { id: ".system-core", version: "1.0.0" },
-      { id: ".system-extra", version: "1.0.0" },
-      { id: "user-plugin", version: "1.0.0" },
-    ])
+    const { packages } = parseCodexPluginList({
+      installed: [
+        { id: ".system-core", version: "1.0.0" },
+        { id: ".system-extra", version: "1.0.0" },
+        { id: "user-plugin", version: "1.0.0" },
+      ],
+      available: [],
+    })
     expect(packages).toHaveLength(1)
     expect(packages[0]!.name).toBe("user-plugin")
   })
 
-  test("returns error when input is not an array", () => {
-    const { packages, error } = parseCodexPluginList({ id: "plugin" })
+  test("returns error when input is not a record", () => {
+    const { packages, error } = parseCodexPluginList([{ id: "plugin" }])
+    expect(packages).toHaveLength(0)
+    expect(error).not.toBeNull()
+  })
+
+  test("returns error when installed is missing", () => {
+    const { packages, error } = parseCodexPluginList({ available: [] })
     expect(packages).toHaveLength(0)
     expect(error).not.toBeNull()
   })
@@ -49,17 +61,16 @@ describe("parseCodexPluginList", () => {
     expect(error).not.toBeNull()
   })
 
-  test("skips malformed entries without crashing", () => {
-    const { packages, error } = parseCodexPluginList([
-      null,
-      42,
-      { id: "good", version: "1.0.0" },
-    ])
+  test("skips malformed installed entries without crashing", () => {
+    const { packages, error } = parseCodexPluginList({
+      installed: [null, 42, { id: "good", version: "1.0.0" }],
+      available: [],
+    })
     expect(error).toBeNull()
     expect(packages).toHaveLength(1)
   })
 
-  test("fixture excludes .system entries and parses the rest", () => {
+  test("fixture parses 2 installed packages (excluding .system-builtin)", () => {
     const { packages, error } = parseCodexPluginList(fixture)
     expect(error).toBeNull()
     expect(packages).toHaveLength(2)
@@ -68,10 +79,11 @@ describe("parseCodexPluginList", () => {
     expect(packages.find((p) => p.name === "another-plugin")).toBeDefined()
   })
 
-  test("handles entries with missing optional fields gracefully", () => {
-    const { packages, error } = parseCodexPluginList([
-      { id: "minimal-plugin" },
-    ])
+  test("handles installed entries with missing optional fields gracefully", () => {
+    const { packages, error } = parseCodexPluginList({
+      installed: [{ id: "minimal-plugin" }],
+      available: [],
+    })
     expect(error).toBeNull()
     expect(packages).toHaveLength(1)
     const pkg = packages[0]!
@@ -79,5 +91,47 @@ describe("parseCodexPluginList", () => {
     expect(pkg.versionLabel).toBeNull()
     expect(pkg.installPath).toBeNull()
     expect(pkg.installedAt).toBeNull()
+  })
+})
+
+describe("parseCodexPluginAvailable", () => {
+  test("returns map of id → entry for available updates", () => {
+    const result = parseCodexPluginAvailable({
+      installed: [{ id: "my-plugin", version: "1.0.0" }],
+      available: [{ id: "my-plugin", version: "1.1.0" }],
+    })
+    expect(result.size).toBe(1)
+    const entry = result.get("my-plugin")!
+    expect(entry.id).toBe("my-plugin")
+    expect(entry.version).toBe("1.1.0")
+  })
+
+  test("excludes .system entries from available", () => {
+    const result = parseCodexPluginAvailable({
+      installed: [],
+      available: [
+        { id: ".system-core", version: "2.0.0" },
+        { id: "user-plugin", version: "1.5.0" },
+      ],
+    })
+    expect(result.has(".system-core")).toBe(false)
+    expect(result.has("user-plugin")).toBe(true)
+  })
+
+  test("returns empty map when available is empty", () => {
+    const result = parseCodexPluginAvailable({ installed: [], available: [] })
+    expect(result.size).toBe(0)
+  })
+
+  test("returns empty map on non-record input", () => {
+    expect(parseCodexPluginAvailable(null).size).toBe(0)
+    expect(parseCodexPluginAvailable([]).size).toBe(0)
+  })
+
+  test("fixture has one available update (another-plugin 0.6.0)", () => {
+    const result = parseCodexPluginAvailable(fixture)
+    expect(result.size).toBe(1)
+    const entry = result.get("another-plugin")!
+    expect(entry.version).toBe("0.6.0")
   })
 })

@@ -1,0 +1,8 @@
+{
+  "marketplaces": [
+    {
+      "name": "openai-api-curated",
+      "root": "/home/cuong/.codex/.tmp/plugins"
+    }
+  ]
+}
