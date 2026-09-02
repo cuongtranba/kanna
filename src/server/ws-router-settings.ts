@@ -36,6 +36,7 @@ import {
   uninstallSkill,
   listInstalledSkills,
 } from "./ws-router-skills"
+import { readPackageInventory } from "./package-inventory-io.adapter"
 
 // ---------------------------------------------------------------------------
 // Dep interfaces (duck-typed; avoids circular imports with ws-router.ts)
@@ -407,6 +408,11 @@ export async function handleSettingsCommand(
     }
     case "skills.listInstalled": {
       const result = await listInstalledSkills()
+      send({ v: PROTOCOL_VERSION, type: "ack", id, result })
+      return true
+    }
+    case "packages.listInstalled": {
+      const result = await readPackageInventory()
       send({ v: PROTOCOL_VERSION, type: "ack", id, result })
       return true
     }
