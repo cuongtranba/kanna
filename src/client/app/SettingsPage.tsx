@@ -712,18 +712,18 @@ export function SkillsSection({
     : null
 
   function checkUpdates() {
-    void socket.command<void>({ type: "packages.checkUpdates" })
+    void socket.command({ type: "packages.checkUpdates" })
   }
 
   function updateSkill(id: string) {
-    void socket.command<void>({ type: "packages.update", id })
+    void socket.command({ type: "packages.update", id })
   }
 
   function updateAllSkills() {
     const ids = packageUpdateSnapshot?.packages
       .filter((p) => p.kind === "skill" && (p.update.availability === "outdated" || p.update.availability === "partial"))
       .map((p) => p.id) ?? []
-    if (ids.length > 0) void socket.command<void>({ type: "packages.updateAll", ids })
+    if (ids.length > 0) void socket.command({ type: "packages.updateAll", ids })
   }
 
   const loadInstalledSkills = useCallback(async () => {
