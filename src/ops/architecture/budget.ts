@@ -114,7 +114,7 @@ export const PATTERN_BUDGETS: readonly PatternBudget[] = [
     id: "ws-router-dispatch-arms",
     include: ["src/server/ws-router.ts"],
     pattern: '^\\s*case "',
-    max: 129,
+    max: 106,
     issue: 899,
     rationale:
       "A flat switch that must be edited to add a command, with no exhaustiveness check — an unrouted variant falls through to broadcastSnapshots() silently. A route table makes the same omission a compile error.",
@@ -195,10 +195,10 @@ export interface EslintLimitPin {
 export const ESLINT_LIMIT_PINS: readonly EslintLimitPin[] = [
   {
     rule: "complexity",
-    max: 138,
+    max: 132,
     issue: 893,
     rationale:
-      "Cyclomatic complexity per function. The peak is handleCommand in ws-router.ts (138). runClaudeSession dropped from 141 → 132 after the ClaudeSessionState class refactor (#923).",
+      "Cyclomatic complexity per function. The peak is runClaudeSession in claude-session-runner.ts (132). handleCommand dropped from 138 → 116 after the settings pre-dispatch refactor (#951).",
   },
   {
     rule: "max-params",

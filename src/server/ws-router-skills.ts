@@ -38,7 +38,7 @@ export function getGlobalSkillLockPath() {
   if (xdgStateHome) {
     return path.join(xdgStateHome, "skills", ".skill-lock.json")
   }
-  return path.join(os.homedir(), ".agents", ".skill-lock.json")
+  return path.join(process.env.HOME ?? os.homedir(), ".agents", ".skill-lock.json")
 }
 
 function asString(value: AnyValue) {

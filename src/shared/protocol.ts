@@ -184,6 +184,7 @@ export type ClientCommand =
   | { type: "skills.install"; source: string; skillId: string }
   | { type: "skills.uninstall"; skillId: string }
   | { type: "skills.listInstalled" }
+  | { type: "packages.listInstalled" }
   | {
       type: "settings.writeLlmProvider"
       provider: LlmProviderSnapshot["provider"]

@@ -248,44 +248,22 @@ export function createWsRouter({
       pushTerminalSnapshot: (terminalId) => broadcast.pushTerminalSnapshot(terminalId),
     }
     try {
+      if (
+        await handleSettingsCommand(
+          {
+            keybindings,
+            resolvedAppSettings,
+            resolvedAnalytics,
+            resolvedLlmProvider,
+            listOpenRouterModels,
+            send: (envelope) => send(ws, envelope),
+          },
+          command,
+          id,
+        )
+      )
+        return
       switch (command.type) {
-        case "settings.readKeybindings":
-        case "settings.writeKeybindings":
-        case "settings.readAppSettings":
-        case "settings.writeAppSettings":
-        case "appSettings.setCloudflareTunnel":
-        case "appSettings.setClaudeAuth":
-        case "appSettings.testOAuthToken":
-        case "settings.writeAppSettingsPatch":
-        case "subagent.create":
-        case "subagent.update":
-        case "subagent.delete":
-        case "settings.testMcpServer":
-        case "settings.startMcpOAuth":
-        case "settings.completeMcpOAuth":
-        case "settings.readLlmProvider":
-        case "settings.listOpenRouterModels":
-        case "settings.getChangelog":
-        case "settings.writeLlmProvider":
-        case "settings.validateLlmProvider":
-        case "skills.search":
-        case "skills.install":
-        case "skills.uninstall":
-        case "skills.listInstalled": {
-          await handleSettingsCommand(
-            {
-              keybindings,
-              resolvedAppSettings,
-              resolvedAnalytics,
-              resolvedLlmProvider,
-              listOpenRouterModels,
-              send: (envelope) => send(ws, envelope),
-            },
-            command,
-            id,
-          )
-          return
-        }
         case "chat.create":
         case "chat.fork":
         case "chat.rename":

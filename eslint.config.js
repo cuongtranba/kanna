@@ -316,7 +316,7 @@ export default tseslint.config(
       "src/client/lib/testing/**",
     ],
     rules: {
-      complexity: ["error", { max: 138 }],
+      complexity: ["error", { max: 132 }],
       "max-params": ["error", { max: 12 }],
       "max-depth": ["error", { max: 7 }],
       "max-nested-callbacks": ["error", { max: 4 }],
