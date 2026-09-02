@@ -1,5 +1,5 @@
 import { LegendList, type LegendListRef } from "@legendapp/list/react"
-import { AlertTriangle, ArrowUp, Ban, Building2, Check, ChevronDown, ChevronUp, Code, Columns2, Copy, Download, Ellipsis, FileText, FolderOpen, GitBranch, GitBranchPlus, Github, GitMerge, GitPullRequest, Globe, LoaderCircle, Lock, Minus, PencilLine, PenLine, RefreshCw, Rows3, Search, Trash2, Upload, UserRound, WrapText } from "lucide-react"
+import { AlertTriangle, ArrowUp, Ban, Building2, Check, ChevronDown, ChevronUp, Code, Columns2, Copy, Download, Ellipsis, FileText, FolderOpen, GitBranch, GitBranchPlus, GitMerge, GitPullRequest, Globe, LoaderCircle, Lock, Minus, PencilLine, PenLine, RefreshCw, Rows3, Search, Trash2, Upload, UserRound, WrapText } from "lucide-react"
 import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, type ChangeEvent as ReactChangeEvent, type MouseEvent as ReactMouseEvent, type ReactNode, type RefObject } from "react"
 import type {
   ChatAttachment,
@@ -31,6 +31,7 @@ import { toPreviewSourceFromAttachment } from "../messages/file-preview/types"
 import { classifyAttachmentPreview } from "../messages/attachmentPreview"
 import { Button } from "../ui/button"
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from "../ui/context-menu"
+import { GithubMark } from "../ui/github-mark"
 import { Input } from "../ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover"
 import { SegmentedControl } from "../ui/segmented-control"
@@ -1724,14 +1725,9 @@ function RightSidebarImpl({
     scrollContainerRef.current = node instanceof HTMLElement ? node : null
   }, [viewMode, diffs.files.length])
 
-  let stageCheckboxLabel: string
-  if (someSelected) {
-    stageCheckboxLabel = "Select all files for commit"
-  } else if (allSelected) {
-    stageCheckboxLabel = "Unselect all files from commit"
-  } else {
-    stageCheckboxLabel = "Select all files for commit"
-  }
+  const stageCheckboxLabel = allSelected
+    ? "Unselect all files from commit"
+    : "Select all files for commit"
 
   let syncButtonArea: ReactNode
   if (diffs.status === "ready") {
@@ -1743,7 +1739,7 @@ function RightSidebarImpl({
           onClick={() => setIsGitHubPublishModalOpen(true)}
           className="h-7 gap-1.5 px-3 text-xs"
         >
-          <Github className="h-3.5 w-3.5" />
+          <GithubMark className="h-3.5 w-3.5" />
           <span>Push to GitHub</span>
         </Button>
       )
