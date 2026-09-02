@@ -279,25 +279,8 @@ export class AgentCoordinator {
   getSubagentOrchestrator(): SubagentOrchestrator {
     return this.subagentOrchestrator
   }
-
-  /** Returns true if any chat is currently busy (turn, boot, pending tool, or self-wake). */
   hasAnyChatBusy(): boolean {
-    const deps = {
-      activeTurns: this.activeTurns,
-      startingTurns: this.startingTurns,
-      pendingTools: this.pendingTools,
-      claudeSessions: this.claudeSessions,
-    }
-    const chatIds = new Set<string>([
-      ...this.activeTurns.keys(),
-      ...this.startingTurns.keys(),
-      ...this.pendingTools.chatIds(),
-      ...this.claudeSessions.keys(),
-    ])
-    for (const chatId of chatIds) {
-      if (isChatBusy(deps, chatId)) return true
-    }
-    return false
+    return this.activeTurns.size > 0 || this.startingTurns.size > 0 || !this.pendingTools.chatIds().next().done || [...this.claudeSessions.values()].some((s) => s.selfWakeActive)
   }
   readonly throwOnClaudeSessionStart: boolean
   readonly autoResumeByChat = new Map<string, boolean>()
