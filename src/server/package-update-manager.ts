@@ -1,5 +1,15 @@
 import type { PackageInventorySnapshot, PackageUpdateApplier, PackageUpdateChecker, PackageUpdateSnapshot, PackageUpdateStatus, PackageApplyResult, PackageId } from "../shared/packages/types"
 import type { PackageUpdateSettings } from "../shared/app-settings-types"
+import {
+  addCounter,
+  PACKAGE_APPLY_DURATION_MS,
+  PACKAGE_APPLY_FINISHED,
+  PACKAGE_CHECK_DURATION_MS,
+  PACKAGE_CHECK_FINISHED,
+  PACKAGE_UPDATE_RATE_LIMITED,
+  recordHistogram,
+  withSpan,
+} from "./observability"
 
 export interface TimerPort {
   setInterval(fn: () => void, ms: number): ReturnType<typeof setInterval>
@@ -122,7 +132,23 @@ export class PackageUpdateManager {
       checkers.map(async (checker) => {
         const kindPkgs = packages.filter((p) => p.kind === checker.kind)
         if (kindPkgs.length === 0) return []
-        return checker.check(kindPkgs, signal)
+        const start = this.deps.now()
+        try {
+          const results = await withSpan("kanna.packages.check", { kind: checker.kind }, () =>
+            checker.check(kindPkgs, signal)
+          )
+          const durationMs = this.deps.now() - start
+          const rateLimitedCount = results.filter((s) => s.availability === "unknown").length
+          if (rateLimitedCount > 0) addCounter(PACKAGE_UPDATE_RATE_LIMITED, rateLimitedCount, { kind: checker.kind })
+          addCounter(PACKAGE_CHECK_FINISHED, 1, { kind: checker.kind, outcome: "ok" })
+          recordHistogram(PACKAGE_CHECK_DURATION_MS, durationMs, { kind: checker.kind })
+          return results
+        } catch (err) {
+          const durationMs = this.deps.now() - start
+          addCounter(PACKAGE_CHECK_FINISHED, 1, { kind: checker.kind, outcome: "error" })
+          recordHistogram(PACKAGE_CHECK_DURATION_MS, durationMs, { kind: checker.kind })
+          throw err
+        }
       })
     )
 
@@ -168,7 +194,7 @@ export class PackageUpdateManager {
    * Rejects if an apply is already in progress.
    * Re-inventories after all applies complete to refresh disk state.
    */
-  async applyUpdates(ids: PackageId[], signal?: AbortSignal): Promise<PackageApplyResult[]> {
+  async applyUpdates(ids: PackageId[], signal?: AbortSignal, trigger: "manual" | "auto" = "manual"): Promise<PackageApplyResult[]> {
     if (this.snapshot.status === "applying") {
       throw new Error("An update apply is already in progress")
     }
@@ -211,7 +237,14 @@ export class PackageUpdateManager {
           })
           continue
         }
-        results.push(await applier.apply(entry, ctrl))
+        const start = this.deps.now()
+        const applyResult = await withSpan("kanna.packages.apply", { kind: entry.kind, trigger }, () =>
+          applier.apply(entry, ctrl)
+        )
+        const durationMs = this.deps.now() - start
+        addCounter(PACKAGE_APPLY_FINISHED, 1, { kind: entry.kind, ok: String(applyResult.ok), trigger })
+        recordHistogram(PACKAGE_APPLY_DURATION_MS, durationMs, { kind: entry.kind, ok: String(applyResult.ok), trigger })
+        results.push(applyResult)
       }
     } finally {
       this.markApplyDone()
