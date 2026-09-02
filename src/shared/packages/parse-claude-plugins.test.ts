@@ -93,7 +93,9 @@ describe("parseClaudePluginList", () => {
 })
 
 describe("parseClaudePluginsFile", () => {
-  test("parses installed_plugins.json (all entries treated as user-scoped)", () => {
+  // ─── v1 array format ─────────────────────────────────────────────────────
+
+  test("v1: parses installed_plugins.json array (all entries treated as user-scoped)", () => {
     const entries = [
       {
         id: "file-plugin",
@@ -109,13 +111,13 @@ describe("parseClaudePluginsFile", () => {
     expect(packages[0]!.version).toBe("2.0.0")
   })
 
-  test("returns error when input is not an array", () => {
+  test("v1: returns error when input is not an array or object", () => {
     const { packages, error } = parseClaudePluginsFile("not-an-array")
     expect(packages).toHaveLength(0)
     expect(error).not.toBeNull()
   })
 
-  test("deduplicates entries by id", () => {
+  test("v1: deduplicates entries by id", () => {
     const entries = [
       { id: "dup", version: "1.0.0" },
       { id: "dup", version: "2.0.0" },
@@ -123,5 +125,104 @@ describe("parseClaudePluginsFile", () => {
     const { packages } = parseClaudePluginsFile(entries)
     expect(packages).toHaveLength(1)
     expect(packages[0]!.version).toBe("1.0.0")
+  })
+
+  // ─── v2 dict format ───────────────────────────────────────────────────────
+
+  const V2_FIXTURE = {
+    "my-plugin@acme-marketplace": [
+      {
+        scope: "user",
+        version: "1.2.3",
+        gitCommitSha: "abc123def456abc123def456abc123def456abc1",
+        installPath: "/home/user/.claude/plugins/my-plugin",
+        installedAt: "2026-01-10T00:00:00.000Z",
+        lastUpdated: "2026-01-15T00:00:00.000Z",
+      },
+    ],
+  }
+
+  test("v2: parses dict-format installed_plugins.json", () => {
+    const { packages, error } = parseClaudePluginsFile(V2_FIXTURE)
+    expect(error).toBeNull()
+    expect(packages).toHaveLength(1)
+    const pkg = packages[0]!
+    expect(pkg.id).toBe("claude-plugin:my-plugin@acme-marketplace")
+    expect(pkg.kind).toBe("claude-plugin")
+    expect(pkg.name).toBe("my-plugin@acme-marketplace")
+    expect(pkg.version).toBe("1.2.3")
+    expect(pkg.source).toBe("acme-marketplace")
+    expect(pkg.revision).toBe("abc123def456abc123def456abc123def456abc1")
+    expect(pkg.installPath).toBe("/home/user/.claude/plugins/my-plugin")
+    expect(pkg.installedAt).toBe("2026-01-10T00:00:00.000Z")
+    expect(pkg.updatedAt).toBe("2026-01-15T00:00:00.000Z")
+    expect(pkg.versionLabel).toBe("1.2.3")
+    expect(pkg.agents).toEqual([])
+  })
+
+  test("v2: extracts marketplace name from source field", () => {
+    const { packages } = parseClaudePluginsFile(V2_FIXTURE)
+    expect(packages[0]!.source).toBe("acme-marketplace")
+  })
+
+  test("v2: stores gitCommitSha in revision field", () => {
+    const { packages } = parseClaudePluginsFile(V2_FIXTURE)
+    expect(packages[0]!.revision).toBe("abc123def456abc123def456abc123def456abc1")
+  })
+
+  test("v2: takes user-scoped entry, skips non-user scopes", () => {
+    const fixture = {
+      "plugin@mkt": [
+        { scope: "project", version: "0.0.1", gitCommitSha: "proj-sha" },
+        { scope: "user", version: "1.0.0", gitCommitSha: "user-sha", installedAt: "2026-01-01T00:00:00.000Z" },
+        { scope: "local", version: "0.9.0", gitCommitSha: "local-sha" },
+      ],
+    }
+    const { packages } = parseClaudePluginsFile(fixture)
+    expect(packages).toHaveLength(1)
+    expect(packages[0]!.revision).toBe("user-sha")
+    expect(packages[0]!.version).toBe("1.0.0")
+  })
+
+  test("v2: skips keys with no user-scoped entry", () => {
+    const fixture = {
+      "plugin-a@mkt": [{ scope: "project", version: "1.0.0" }],
+      "plugin-b@mkt": [{ scope: "user", version: "2.0.0", installedAt: "2026-01-01T00:00:00.000Z" }],
+    }
+    const { packages } = parseClaudePluginsFile(fixture)
+    expect(packages).toHaveLength(1)
+    expect(packages[0]!.name).toBe("plugin-b@mkt")
+  })
+
+  test("v2: multiple plugins produce one package each", () => {
+    const fixture = {
+      "plugin-a@mkt": [{ scope: "user", version: "1.0.0", gitCommitSha: "sha-a", installedAt: "2026-01-01T00:00:00.000Z" }],
+      "plugin-b@mkt": [{ scope: "user", version: "2.0.0", gitCommitSha: "sha-b", installedAt: "2026-01-01T00:00:00.000Z" }],
+    }
+    const { packages } = parseClaudePluginsFile(fixture)
+    expect(packages).toHaveLength(2)
+    const names = packages.map((p) => p.name).sort()
+    expect(names).toEqual(["plugin-a@mkt", "plugin-b@mkt"])
+  })
+
+  test("v2: plugin key without @ uses key as both name and source", () => {
+    const fixture = {
+      "standalone-plugin": [
+        { scope: "user", version: "1.0.0", installedAt: "2026-01-01T00:00:00.000Z" },
+      ],
+    }
+    const { packages } = parseClaudePluginsFile(fixture)
+    expect(packages).toHaveLength(1)
+    const pkg = packages[0]!
+    expect(pkg.name).toBe("standalone-plugin")
+    expect(pkg.source).toBe("standalone-plugin")
+  })
+
+  test("v2: null revision when gitCommitSha is absent", () => {
+    const fixture = {
+      "plugin@mkt": [{ scope: "user", version: "1.0.0", installedAt: "2026-01-01T00:00:00.000Z" }],
+    }
+    const { packages } = parseClaudePluginsFile(fixture)
+    expect(packages[0]!.revision).toBeNull()
   })
 })
