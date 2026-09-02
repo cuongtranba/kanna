@@ -17,7 +17,6 @@ import {
   Monitor,
   Moon,
   MessageSquareQuote,
-  Package,
   Plug,
   Search,
   Settings2,
@@ -143,7 +142,7 @@ const sidebarItems = [
   {
     id: "plugins",
     label: "Plugins",
-    icon: Package,
+    icon: Plug,
     subtitle: "View and update globally installed Claude Code and Codex plugins.",
   },
   {
@@ -493,7 +492,6 @@ export function ChangelogSection({
                   
                 </div>
               </div>
-
 
               <div className="flex flex-row items-center justify-end min-w-0 flex-1 gap-2 ">
                 {/* <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">

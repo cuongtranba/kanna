@@ -5,13 +5,17 @@ import { STATUS_PILL_CLASS } from "../../../shared/design/tone-pairings"
 import type { InstalledPackage, PackageInventorySnapshot, PackageKind, PackageUpdateEntry, UpdateAvailability } from "../../../shared/packages/types"
 import { cn } from "../../lib/utils"
 import { useSettingsPageStore } from "../../stores/settingsPageStore"
-import type { KannaState } from "../app/useKannaState"
+import type { KannaState } from "../../app/useKannaState"
 
 // Module-level stable empty refs
 const EMPTY_PACKAGES: InstalledPackage[] = []
 const EMPTY_ERRORS: Array<{ kind: PackageKind; message: string }> = []
 const EMPTY_UPDATE_ENTRIES: PackageUpdateEntry[] = []
 const EMPTY_APPLYING: string[] = []
+
+function isPackageInventorySnapshot<T>(v: T): v is T & PackageInventorySnapshot {
+  return typeof v === "object" && v !== null && "packages" in v && "errors" in v
+}
 
 const AVAILABILITY_LABEL: Record<UpdateAvailability, string> = {
   up_to_date: "Up to date",
@@ -224,7 +228,9 @@ export function PluginsSection({
     try {
       setPluginInventoryLoading(true)
       setPluginInventoryError(null)
-      const inv = await socket.command<PackageInventorySnapshot>({ type: "packages.listInstalled" })
+      const raw = await socket.command({ type: "packages.listInstalled" })
+      if (!isPackageInventorySnapshot(raw)) throw new Error("packages.listInstalled: unexpected response")
+      const inv = raw
       setPluginInventory(inv)
     } catch (err) {
       setPluginInventoryError(err instanceof Error ? err.message : "Unable to load plugins.")
