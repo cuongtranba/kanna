@@ -13,10 +13,14 @@ export default defineConfig({
         replacesTitle: false,
       },
       customCss: ['./src/styles/kanna-theme.css'],
-      // social format for Starlight 0.30.x: object map of icon -> URL
-      social: {
-        github: 'https://github.com/cuongtranba/kanna',
-      },
+      // social format for Starlight >=0.33: array of link items
+      social: [
+        {
+          icon: 'github',
+          label: 'GitHub',
+          href: 'https://github.com/cuongtranba/kanna',
+        },
+      ],
       sidebar: [
         {
           label: 'Getting Started',
@@ -40,9 +44,12 @@ export default defineConfig({
         {
           label: 'Guides',
           items: [
-            { label: 'User Guide', autogenerate: { directory: 'guides/user' } },
-            { label: 'Contributing', autogenerate: { directory: 'guides/contributing' } },
-            { label: 'Ops & Self-Host', autogenerate: { directory: 'guides/ops' } },
+            { label: 'User Guide', items: [{ autogenerate: { directory: 'guides/user' } }] },
+            {
+              label: 'Contributing',
+              items: [{ autogenerate: { directory: 'guides/contributing' } }],
+            },
+            { label: 'Ops & Self-Host', items: [{ autogenerate: { directory: 'guides/ops' } }] },
           ],
         },
         {
