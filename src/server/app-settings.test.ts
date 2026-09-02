@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLAUDE_DRIVER_DEFAULTS, CLAUDE_PTY_LIFECYCLE_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, DEFAULT_OPENROUTER_SDK_MODEL, GLOBAL_PROMPT_APPEND_MAX_CHARS, mergeCustomModels, PROVIDERS, PUSH_DEFAULTS,
+import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLAUDE_DRIVER_DEFAULTS, CLAUDE_PTY_LIFECYCLE_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, DEFAULT_OPENROUTER_SDK_MODEL, GLOBAL_PROMPT_APPEND_MAX_CHARS, mergeCustomModels, PACKAGE_UPDATE_CHECK_INTERVAL_MAX_MS, PACKAGE_UPDATE_CHECK_INTERVAL_MIN_MS, PACKAGE_UPDATE_SETTINGS_DEFAULTS, PROVIDERS, PUSH_DEFAULTS,
   TELEMETRY_DEFAULTS, TYPOGRAPHY_DEFAULTS, UPLOAD_DEFAULTS } from "../shared/types"
 import { AppSettingsManager, readAppSettingsSnapshot, seedCustomModelsFromBuiltins } from "./app-settings"
 import type { AppSettingsSnapshot, McpOAuthState, SubagentInput } from "../shared/types"
@@ -94,6 +94,7 @@ function expectedSettingsSnapshot(filePath: string, overrides: Partial<AppSettin
     globalPromptAppend: "",
     shareDefaultTtlHours: 24,
     subagentRuntime: { runTimeoutMs: 600_000, defaultLoopSubagentId: null },
+    packageUpdates: { ...PACKAGE_UPDATE_SETTINGS_DEFAULTS },
     ...overrides,
   }
 }
@@ -1716,5 +1717,104 @@ describe("typography settings", () => {
     const secondStat = await stat(filePath)
     expect(onDisk.analyticsUserId).toBe("test-uid")
     expect(secondStat.ino).not.toBe(firstStat.ino)
+  })
+})
+
+describe("packageUpdates settings", () => {
+  test("defaults are applied when packageUpdates is absent from file", async () => {
+    const filePath = await writeSettingsFile({})
+    const snapshot = await readAppSettingsSnapshot(filePath)
+    expect(snapshot.packageUpdates).toEqual(PACKAGE_UPDATE_SETTINGS_DEFAULTS)
+  })
+
+  test("persisted values round-trip", async () => {
+    const filePath = await writeSettingsFile({
+      packageUpdates: {
+        checkEnabled: false,
+        checkIntervalMs: 7_200_000,
+        autoApply: true,
+        autoApplyKinds: ["skill"],
+        skillAgents: ["universal", "codex"],
+      },
+    })
+    const snapshot = await readAppSettingsSnapshot(filePath)
+    expect(snapshot.packageUpdates).toEqual({
+      checkEnabled: false,
+      checkIntervalMs: 7_200_000,
+      autoApply: true,
+      autoApplyKinds: ["skill"],
+      skillAgents: ["universal", "codex"],
+    })
+    expect(snapshot.warning).toBeNull()
+  })
+
+  test("checkIntervalMs below floor is clamped with a warning", async () => {
+    const filePath = await writeSettingsFile({
+      packageUpdates: { checkIntervalMs: 1000 },
+    })
+    const snapshot = await readAppSettingsSnapshot(filePath)
+    expect(snapshot.packageUpdates.checkIntervalMs).toBe(PACKAGE_UPDATE_CHECK_INTERVAL_MIN_MS)
+    expect(snapshot.warning).toContain("1h floor")
+  })
+
+  test("checkIntervalMs above ceiling is clamped with a warning", async () => {
+    const filePath = await writeSettingsFile({
+      packageUpdates: { checkIntervalMs: PACKAGE_UPDATE_CHECK_INTERVAL_MAX_MS + 1 },
+    })
+    const snapshot = await readAppSettingsSnapshot(filePath)
+    expect(snapshot.packageUpdates.checkIntervalMs).toBe(PACKAGE_UPDATE_CHECK_INTERVAL_MAX_MS)
+    expect(snapshot.warning).toContain("30d ceiling")
+  })
+
+  test("unknown autoApplyKinds are dropped with a warning", async () => {
+    const filePath = await writeSettingsFile({
+      packageUpdates: { autoApplyKinds: ["skill", "unknown-kind"] },
+    })
+    const snapshot = await readAppSettingsSnapshot(filePath)
+    expect(snapshot.packageUpdates.autoApplyKinds).toEqual(["skill"])
+    expect(snapshot.warning).toContain("unknown kind")
+  })
+
+  test("invalid skillAgents resets to defaults with a warning", async () => {
+    const filePath = await writeSettingsFile({
+      packageUpdates: { skillAgents: ["not-a-real-agent"] },
+    })
+    const snapshot = await readAppSettingsSnapshot(filePath)
+    expect(snapshot.packageUpdates.skillAgents).toEqual(PACKAGE_UPDATE_SETTINGS_DEFAULTS.skillAgents)
+    expect(snapshot.warning).toContain("skillAgents")
+  })
+
+  test("applyPatch clamps checkIntervalMs below floor rather than rejecting", async () => {
+    const filePath = await createTempFilePath()
+    const manager = trackManager(new AppSettingsManager(filePath))
+    await manager.initialize()
+    const snapshot = await manager.writePatch({ packageUpdates: { checkIntervalMs: 999 } })
+    expect(snapshot.packageUpdates.checkIntervalMs).toBe(PACKAGE_UPDATE_CHECK_INTERVAL_MIN_MS)
+  })
+
+  test("applyPatch drops unknown autoApplyKinds rather than rejecting", async () => {
+    const filePath = await createTempFilePath()
+    const manager = trackManager(new AppSettingsManager(filePath))
+    await manager.initialize()
+    const snapshot = await manager.writePatch({ packageUpdates: { autoApplyKinds: ["bad-kind" as never, "skill"] } })
+    expect(snapshot.packageUpdates.autoApplyKinds).toEqual(["skill"])
+  })
+
+  test("applyPatch rejects unknown skillAgents", async () => {
+    const filePath = await createTempFilePath()
+    const manager = trackManager(new AppSettingsManager(filePath))
+    await manager.initialize()
+    await expect(manager.writePatch({ packageUpdates: { skillAgents: ["not-valid"] } })).rejects.toThrow(
+      "Unknown skill agent alias"
+    )
+  })
+
+  test("applyPatch merges partial packageUpdates onto existing snapshot", async () => {
+    const filePath = await createTempFilePath()
+    const manager = trackManager(new AppSettingsManager(filePath))
+    await manager.initialize()
+    const snapshot = await manager.writePatch({ packageUpdates: { checkEnabled: false } })
+    expect(snapshot.packageUpdates.checkEnabled).toBe(false)
+    expect(snapshot.packageUpdates.checkIntervalMs).toBe(PACKAGE_UPDATE_SETTINGS_DEFAULTS.checkIntervalMs)
   })
 })

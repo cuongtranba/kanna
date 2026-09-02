@@ -101,6 +101,10 @@ export function mergeAppSettingsPatch(
         ? patch.subagentRuntime.defaultLoopSubagentId
         : settings.subagentRuntime.defaultLoopSubagentId,
     },
+    packageUpdates: {
+      ...settings.packageUpdates,
+      ...patch.packageUpdates,
+    },
   }
 }
 

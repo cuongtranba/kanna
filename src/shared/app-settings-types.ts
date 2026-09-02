@@ -6,6 +6,7 @@ import type {
   DefaultProviderPreference,
   LlmProviderKind,
 } from "./core-types"
+import type { PackageKind } from "./packages/types"
 import type { AuthSettings } from "./settings/auth"
 import {
   AUTH_DEFAULTS,
@@ -320,6 +321,7 @@ export interface AppSettingsSnapshot {
   globalPromptAppend: string
   shareDefaultTtlHours: number
   subagentRuntime: SubagentRuntimeSettings
+  packageUpdates: PackageUpdateSettings
 }
 
 /**
@@ -332,6 +334,33 @@ export interface AppSettingsSnapshot {
 export interface SubagentRuntimeSettings {
   runTimeoutMs: number
   defaultLoopSubagentId: string | null
+}
+
+/**
+ * Persisted knobs for the background package update checker (#949).
+ * `checkEnabled` is the master switch for background checking; applying
+ * updates on click still works when off. `checkIntervalMs` is clamped
+ * to [1 h, 30 d]. `autoApply` defaults false (opt-in). `skillAgents`
+ * become spawn arguments for skill install/update.
+ */
+export interface PackageUpdateSettings {
+  checkEnabled: boolean
+  checkIntervalMs: number
+  autoApply: boolean
+  autoApplyKinds: PackageKind[]
+  skillAgents: string[]
+}
+
+export const PACKAGE_UPDATE_CHECK_INTERVAL_MIN_MS = 3_600_000 // 1 h
+export const PACKAGE_UPDATE_CHECK_INTERVAL_MAX_MS = 2_592_000_000 // 30 d
+export const PACKAGE_UPDATE_CHECK_INTERVAL_DEFAULT_MS = 86_400_000 // 24 h
+
+export const PACKAGE_UPDATE_SETTINGS_DEFAULTS: PackageUpdateSettings = {
+  checkEnabled: true,
+  checkIntervalMs: PACKAGE_UPDATE_CHECK_INTERVAL_DEFAULT_MS,
+  autoApply: false,
+  autoApplyKinds: [],
+  skillAgents: ["universal", "claude-code", "codex"],
 }
 
 export interface AppSettingsPatch {
@@ -386,6 +415,7 @@ export interface AppSettingsPatch {
   globalPromptAppend?: string
   shareDefaultTtlHours?: number
   subagentRuntime?: Partial<SubagentRuntimeSettings>
+  packageUpdates?: Partial<PackageUpdateSettings>
 }
 
 // ---------------------------------------------------------------------------
