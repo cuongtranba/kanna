@@ -400,7 +400,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     appliers: buildPackageUpdateAppliers(findClaudeBinary()),
     settings: () => appSettings.getSnapshot().packageUpdates,
     timer: { setInterval, clearInterval },
-    now: Date.now,
+    now: Date.now, hasAnyChatBusy: () => agent.hasAnyChatBusy(),
   })
   const tunnelManager = new TunnelManager({
     cloudflaredPath: resolveCloudflaredPath(appSettings.getSnapshot().cloudflareTunnel.cloudflaredPath),

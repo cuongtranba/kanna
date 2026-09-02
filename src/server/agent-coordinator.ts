@@ -279,6 +279,9 @@ export class AgentCoordinator {
   getSubagentOrchestrator(): SubagentOrchestrator {
     return this.subagentOrchestrator
   }
+  hasAnyChatBusy(): boolean {
+    return this.activeTurns.size > 0 || this.startingTurns.size > 0 || !this.pendingTools.chatIds().next().done || [...this.claudeSessions.values()].some((s) => s.selfWakeActive)
+  }
   readonly throwOnClaudeSessionStart: boolean
   readonly autoResumeByChat = new Map<string, boolean>()
   readonly openrouterFirstEntryTimeoutMs: number

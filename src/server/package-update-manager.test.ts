@@ -91,6 +91,7 @@ function makeDeps(overrides?: Partial<PackageUpdateManagerDeps>): PackageUpdateM
     appliers: [],
     settings: makeSettings(),
     now: () => 1_000,
+    hasAnyChatBusy: () => false,
     ...overrides,
     timer: (overrides?.timer ?? timer) as ReturnType<typeof makeTimer>,
   }
@@ -418,6 +419,256 @@ describe("PackageUpdateManager", () => {
       await mgr.checkUpdates()
       await mgr.applyUpdates(["skill:a", "skill:b"])
       expect(order).toEqual(["skill:a", "skill:b"])
+    })
+  })
+
+  describe("auto-apply", () => {
+    test("off by default — no apply calls when autoApply is false", async () => {
+      const pkg = makePkg("skill:foo")
+      const status = makeStatus("skill:foo", "outdated")
+      let applyCalled = false
+      const deps = makeDeps({
+        inventory: makeInventory([pkg]),
+        checkers: [makeChecker("skill", [status])],
+        appliers: [{
+          kind: "skill" as const,
+          apply: async (p) => {
+            applyCalled = true
+            return { id: p.id, ok: true, fromRevision: null, toRevision: null, command: [], stdout: "", stderr: "", error: null }
+          },
+        }],
+        // PACKAGE_UPDATE_SETTINGS_DEFAULTS has autoApply: false
+        settings: makeSettings(),
+      })
+      const mgr = new PackageUpdateManager(deps)
+      await mgr.checkUpdates()
+      expect(applyCalled).toBe(false)
+      expect(mgr.getSnapshot().autoApplyHistory).toHaveLength(0)
+    })
+
+    test("defers auto-apply when any chat is busy", async () => {
+      const pkg = makePkg("skill:foo")
+      const status = makeStatus("skill:foo", "outdated")
+      let applyCalled = false
+      const deps = makeDeps({
+        inventory: makeInventory([pkg]),
+        checkers: [makeChecker("skill", [status])],
+        appliers: [{
+          kind: "skill" as const,
+          apply: async (p) => {
+            applyCalled = true
+            return { id: p.id, ok: true, fromRevision: null, toRevision: null, command: [], stdout: "", stderr: "", error: null }
+          },
+        }],
+        settings: makeSettings({ autoApply: true, autoApplyKinds: ["skill"] }),
+        hasAnyChatBusy: () => true,
+      })
+      const mgr = new PackageUpdateManager(deps)
+      await mgr.checkUpdates()
+      expect(applyCalled).toBe(false)
+    })
+
+    test("applies when idle and autoApply is on with matching kind", async () => {
+      const pkg = makePkg("skill:foo")
+      const status = makeStatus("skill:foo", "outdated")
+      const deps = makeDeps({
+        inventory: makeInventory([pkg]),
+        checkers: [makeChecker("skill", [status])],
+        appliers: [makeApplier("skill")],
+        settings: makeSettings({ autoApply: true, autoApplyKinds: ["skill"] }),
+        hasAnyChatBusy: () => false,
+      })
+      const mgr = new PackageUpdateManager(deps)
+      await mgr.checkUpdates()
+      const snap = mgr.getSnapshot()
+      expect(snap.autoApplyHistory).toHaveLength(1)
+      expect(snap.autoApplyHistory[0].id).toBe("skill:foo")
+      expect(snap.autoApplyHistory[0].ok).toBe(true)
+    })
+
+    test("filters by autoApplyKinds — skips kinds not in list", async () => {
+      const skillPkg = makePkg("skill:foo", "skill")
+      const pluginPkg = makePkg("claude-plugin:bar", "claude-plugin")
+      const deps = makeDeps({
+        inventory: makeInventory([skillPkg, pluginPkg]),
+        checkers: [
+          makeChecker("skill", [makeStatus("skill:foo", "outdated")]),
+          makeChecker("claude-plugin", [makeStatus("claude-plugin:bar", "outdated")]),
+        ],
+        appliers: [makeApplier("skill"), makeApplier("claude-plugin")],
+        settings: makeSettings({ autoApply: true, autoApplyKinds: ["skill"] }),
+        hasAnyChatBusy: () => false,
+      })
+      const mgr = new PackageUpdateManager(deps)
+      await mgr.checkUpdates()
+      const history = mgr.getSnapshot().autoApplyHistory
+      expect(history.every((e) => e.kind === "skill")).toBe(true)
+      expect(history.some((e) => e.id === "claude-plugin:bar")).toBe(false)
+    })
+
+    test("round cap — applies at most 5 per check", async () => {
+      const pkgs = Array.from({ length: 10 }, (_, i) => makePkg(`skill:pkg${i}`))
+      const statuses = pkgs.map((p) => makeStatus(p.id, "outdated"))
+      const applied: string[] = []
+      const deps = makeDeps({
+        inventory: makeInventory(pkgs),
+        checkers: [makeChecker("skill", statuses)],
+        appliers: [{
+          kind: "skill" as const,
+          apply: async (p) => {
+            applied.push(p.id)
+            return { id: p.id, ok: true, fromRevision: null, toRevision: null, command: [], stdout: "", stderr: "", error: null }
+          },
+        }],
+        settings: makeSettings({ autoApply: true, autoApplyKinds: ["skill"] }),
+        hasAnyChatBusy: () => false,
+      })
+      const mgr = new PackageUpdateManager(deps)
+      await mgr.checkUpdates()
+      expect(applied).toHaveLength(5)
+    })
+
+    test("backoff — failed package skipped until retryAfter window elapses", async () => {
+      const pkg = makePkg("skill:foo")
+      const status = makeStatus("skill:foo", "outdated")
+      let tick = 1_000
+      const applied: string[] = []
+      const deps = makeDeps({
+        inventory: makeInventory([pkg]),
+        checkers: [makeChecker("skill", [status])],
+        appliers: [{
+          kind: "skill" as const,
+          apply: async (p) => {
+            applied.push(p.id)
+            return { id: p.id, ok: false, fromRevision: null, toRevision: null, command: [], stdout: "", stderr: "fail", error: "fail" }
+          },
+        }],
+        settings: makeSettings({ autoApply: true, autoApplyKinds: ["skill"] }),
+        hasAnyChatBusy: () => false,
+        now: () => tick,
+      })
+      const mgr = new PackageUpdateManager(deps)
+
+      // First check — applies (fails) → records backoff
+      await mgr.checkUpdates({ force: true })
+      expect(applied).toHaveLength(1)
+
+      // Second check immediately — backoff window not elapsed → skip
+      tick += 100
+      await mgr.checkUpdates({ force: true })
+      expect(applied).toHaveLength(1)
+
+      // Third check after > 10 min (600_000 ms) — window elapsed → retry
+      tick += 700_000
+      await mgr.checkUpdates({ force: true })
+      expect(applied).toHaveLength(2)
+    })
+
+    test("notify-only after AUTO_APPLY_MAX_FAILURES consecutive failures", async () => {
+      const pkg = makePkg("skill:foo")
+      const status = makeStatus("skill:foo", "outdated")
+      let tick = 1_000
+      let applyCalls = 0
+      const deps = makeDeps({
+        inventory: makeInventory([pkg]),
+        checkers: [makeChecker("skill", [status])],
+        appliers: [{
+          kind: "skill" as const,
+          apply: async (p) => {
+            applyCalls++
+            return { id: p.id, ok: false, fromRevision: null, toRevision: null, command: [], stdout: "", stderr: "fail", error: "fail" }
+          },
+        }],
+        settings: makeSettings({ autoApply: true, autoApplyKinds: ["skill"] }),
+        hasAnyChatBusy: () => false,
+        now: () => tick,
+      })
+      const mgr = new PackageUpdateManager(deps)
+
+      // Fail 3 times (MAX_FAILURES), each time skipping the backoff window
+      for (let i = 0; i < 3; i++) {
+        tick += 86_400_001 // past max backoff
+        await mgr.checkUpdates({ force: true })
+      }
+      expect(applyCalls).toBe(3)
+
+      // After 3 failures → permanently skipped (notify-only)
+      tick += 86_400_001
+      await mgr.checkUpdates({ force: true })
+      expect(applyCalls).toBe(3)
+    })
+
+    test("successful apply resets backoff for that package", async () => {
+      const pkg = makePkg("skill:foo")
+      const status = makeStatus("skill:foo", "outdated")
+      let tick = 1_000
+      let failNext = true
+      const applied: string[] = []
+      const deps = makeDeps({
+        inventory: makeInventory([pkg]),
+        checkers: [makeChecker("skill", [status])],
+        appliers: [{
+          kind: "skill" as const,
+          apply: async (p) => {
+            const ok = !failNext
+            applied.push(p.id)
+            return { id: p.id, ok, fromRevision: null, toRevision: null, command: [], stdout: "", stderr: ok ? "" : "fail", error: ok ? null : "fail" }
+          },
+        }],
+        settings: makeSettings({ autoApply: true, autoApplyKinds: ["skill"] }),
+        hasAnyChatBusy: () => false,
+        now: () => tick,
+      })
+      const mgr = new PackageUpdateManager(deps)
+
+      // First: fails, sets backoff
+      await mgr.checkUpdates({ force: true })
+      expect(applied).toHaveLength(1)
+
+      // Skip past backoff, this time succeed
+      failNext = false
+      tick += 700_000
+      await mgr.checkUpdates({ force: true })
+      expect(applied).toHaveLength(2)
+
+      // Immediately again — backoff cleared, so apply runs again
+      tick += 1
+      await mgr.checkUpdates({ force: true })
+      expect(applied).toHaveLength(3)
+    })
+
+    test("history records both successes and failures, newest first", async () => {
+      const pkgs = [makePkg("skill:a"), makePkg("skill:b")]
+      const statuses = pkgs.map((p) => makeStatus(p.id, "outdated"))
+      const deps = makeDeps({
+        inventory: makeInventory(pkgs),
+        checkers: [makeChecker("skill", statuses)],
+        appliers: [{
+          kind: "skill" as const,
+          apply: async (p) => ({
+            id: p.id,
+            ok: p.id === "skill:a",
+            fromRevision: null,
+            toRevision: p.id === "skill:a" ? "def" : null,
+            command: [],
+            stdout: "",
+            stderr: "",
+            error: p.id === "skill:a" ? null : "fail",
+          }),
+        }],
+        settings: makeSettings({ autoApply: true, autoApplyKinds: ["skill"] }),
+        hasAnyChatBusy: () => false,
+      })
+      const mgr = new PackageUpdateManager(deps)
+      await mgr.checkUpdates()
+      const history = mgr.getSnapshot().autoApplyHistory
+      expect(history).toHaveLength(2)
+      // Snapshot history carries both entries with correct ok flags
+      const aEntry = history.find((e) => e.id === "skill:a")
+      const bEntry = history.find((e) => e.id === "skill:b")
+      expect(aEntry?.ok).toBe(true)
+      expect(bEntry?.ok).toBe(false)
+      expect(bEntry?.error).toBe("fail")
     })
   })
 })

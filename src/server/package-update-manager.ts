@@ -1,4 +1,4 @@
-import type { PackageInventorySnapshot, PackageUpdateApplier, PackageUpdateChecker, PackageUpdateSnapshot, PackageUpdateStatus, PackageApplyResult, PackageId } from "../shared/packages/types"
+import type { PackageInventorySnapshot, PackageUpdateApplier, PackageUpdateChecker, PackageUpdateSnapshot, PackageUpdateStatus, PackageApplyResult, PackageId, PackageAutoApplyHistoryEntry } from "../shared/packages/types"
 import type { PackageUpdateSettings } from "../shared/app-settings-types"
 import {
   addCounter,
@@ -23,7 +23,15 @@ export interface PackageUpdateManagerDeps {
   settings: () => PackageUpdateSettings
   timer: TimerPort
   now: () => number
+  /** Returns true if any chat is currently busy. Auto-apply defers when true. */
+  hasAnyChatBusy: () => boolean
 }
+
+const AUTO_APPLY_ROUND_CAP = 5
+const AUTO_APPLY_MAX_FAILURES = 3
+const AUTO_APPLY_BACKOFF_BASE_MS = 600_000 // 10 min
+const AUTO_APPLY_MAX_BACKOFF_MS = 86_400_000 // 24 h ceiling
+const AUTO_APPLY_HISTORY_LIMIT = 50
 
 const IDLE_SNAPSHOT: PackageUpdateSnapshot = {
   status: "idle",
@@ -31,6 +39,7 @@ const IDLE_SNAPSHOT: PackageUpdateSnapshot = {
   lastCheckedAt: null,
   error: null,
   applying: [],
+  autoApplyHistory: [],
 }
 
 export class PackageUpdateManager {
@@ -39,6 +48,7 @@ export class PackageUpdateManager {
   private checkPromise: Promise<PackageUpdateSnapshot> | null = null
   private timerHandle: ReturnType<typeof setInterval> | null = null
   private abortController: AbortController | null = null
+  private readonly autoApplyBackoff = new Map<string, { failures: number; retryAfter: number }>()
 
   constructor(private readonly deps: PackageUpdateManagerDeps) {}
 
@@ -175,10 +185,70 @@ export class PackageUpdateManager {
       lastCheckedAt: now(),
       error: null,
       applying: this.snapshot.applying,
+      autoApplyHistory: this.snapshot.autoApplyHistory,
     }
 
     this.setSnapshot(next)
-    return next
+    await this.maybeAutoApply(signal)
+    return this.snapshot
+  }
+
+  private async maybeAutoApply(signal: AbortSignal): Promise<void> {
+    const settings = this.deps.settings()
+    if (!settings.autoApply || signal.aborted) return
+    if (this.deps.hasAnyChatBusy()) return
+
+    const now = this.deps.now()
+    const { autoApplyKinds } = settings
+
+    const candidates = this.snapshot.packages.filter((entry) => {
+      if (entry.update.availability !== "outdated") return false
+      if (!autoApplyKinds.includes(entry.kind)) return false
+      const backoff = this.autoApplyBackoff.get(entry.id)
+      if (!backoff) return true
+      if (backoff.failures >= AUTO_APPLY_MAX_FAILURES) return false
+      if (now < backoff.retryAfter) return false
+      return true
+    })
+
+    if (candidates.length === 0) return
+
+    const toApply = candidates.slice(0, AUTO_APPLY_ROUND_CAP).map((e) => e.id)
+    const pkgsById = new Map(this.snapshot.packages.map((e) => [e.id, e]))
+
+    let results: PackageApplyResult[]
+    try {
+      results = await this.applyUpdates(toApply, signal, "auto")
+    } catch {
+      return
+    }
+
+    const appliedAt = this.deps.now()
+    const newEntries: PackageAutoApplyHistoryEntry[] = []
+    for (const result of results) {
+      const entry = pkgsById.get(result.id)
+      if (!result.ok) {
+        const prev = this.autoApplyBackoff.get(result.id) ?? { failures: 0, retryAfter: 0 }
+        const failures = prev.failures + 1
+        const delay = Math.min(AUTO_APPLY_BACKOFF_BASE_MS * Math.pow(2, failures - 1), AUTO_APPLY_MAX_BACKOFF_MS)
+        this.autoApplyBackoff.set(result.id, { failures, retryAfter: this.deps.now() + delay })
+      } else {
+        this.autoApplyBackoff.delete(result.id)
+      }
+      newEntries.push({
+        id: result.id,
+        kind: entry?.kind ?? "skill",
+        name: entry?.name ?? result.id,
+        appliedAt,
+        ok: result.ok,
+        fromRevision: result.fromRevision,
+        toRevision: result.toRevision,
+        error: result.error,
+      })
+    }
+
+    const autoApplyHistory = [...newEntries, ...this.snapshot.autoApplyHistory].slice(0, AUTO_APPLY_HISTORY_LIMIT)
+    this.setSnapshot({ ...this.snapshot, autoApplyHistory })
   }
 
   markApplying(ids: PackageId[]): void {

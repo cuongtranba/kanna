@@ -44,12 +44,25 @@ export interface PackageUpdateEntry extends InstalledPackage {
   update: PackageUpdateStatus
 }
 
+export interface PackageAutoApplyHistoryEntry {
+  id: PackageId
+  kind: PackageKind
+  name: string
+  appliedAt: number
+  ok: boolean
+  fromRevision: string | null
+  toRevision: string | null
+  error: string | null
+}
+
 export interface PackageUpdateSnapshot {
   status: "idle" | "checking" | "applying"
   packages: PackageUpdateEntry[]
   lastCheckedAt: number | null
   error: string | null
   applying: PackageId[]
+  /** Most recent auto-apply results, newest first. Capped at 50 entries. */
+  autoApplyHistory: PackageAutoApplyHistoryEntry[]
 }
 
 export interface PackageApplyResult {
