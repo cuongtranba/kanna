@@ -8,6 +8,29 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.44.0](https://github.com/cuongtranba/kanna/compare/v1.43.12...v1.44.0) (2026-09-02)
+
+
+### Features
+
+* **packages:** add OTel spans and metrics for update checks and applies ([#962](https://github.com/cuongtranba/kanna/issues/962)) ([#991](https://github.com/cuongtranba/kanna/issues/991)) ([c80538a](https://github.com/cuongtranba/kanna/commit/c80538a665ebee3e0d4fc2c03ada50f06732c66a))
+* **packages:** apply updates for skills and both plugin ecosystems ([#956](https://github.com/cuongtranba/kanna/issues/956)) ([#989](https://github.com/cuongtranba/kanna/issues/989)) ([0c0f2b4](https://github.com/cuongtranba/kanna/commit/0c0f2b44fa38d5bb40f80ea93cb8ae88212dacce))
+* **packages:** detect outdated Claude Code plugins ([#953](https://github.com/cuongtranba/kanna/issues/953)) ([#985](https://github.com/cuongtranba/kanna/issues/985)) ([c5a8ed3](https://github.com/cuongtranba/kanna/commit/c5a8ed30e1037e46697ea5c8bef6ce7b1eded269))
+* **packages:** detect outdated Codex plugins ([#954](https://github.com/cuongtranba/kanna/issues/954)) ([#987](https://github.com/cuongtranba/kanna/issues/987)) ([cb831b7](https://github.com/cuongtranba/kanna/commit/cb831b7830ee4785416e726293b936ef0e389887))
+* **packages:** detect outdated skills via GitHub Trees API ([#952](https://github.com/cuongtranba/kanna/issues/952)) ([#984](https://github.com/cuongtranba/kanna/issues/984)) ([ddf84c5](https://github.com/cuongtranba/kanna/commit/ddf84c5111aa9faa56f7d0aac90416bf00749d4c))
+* **packages:** opt-in unattended auto-apply with safety rails ([#993](https://github.com/cuongtranba/kanna/issues/993)) ([b6716a8](https://github.com/cuongtranba/kanna/commit/b6716a8bde70b4432b0dad54d50420889795a4b2))
+* **packages:** PackageUpdateManager — timer, projection, WS push ([#988](https://github.com/cuongtranba/kanna/issues/988)) ([e83d301](https://github.com/cuongtranba/kanna/commit/e83d301c0eb91ad0f1a48acb9a6fdaa84ac1f561))
+* **packages:** typed inventory snapshot over skills, Claude Code plugins, and Codex plugins ([#951](https://github.com/cuongtranba/kanna/issues/951)) ([#983](https://github.com/cuongtranba/kanna/issues/983)) ([ec4ecdc](https://github.com/cuongtranba/kanna/commit/ec4ecdc44329e0113f4fee0a8ebf963f8343e099))
+* **settings:** add packageUpdates settings block ([#986](https://github.com/cuongtranba/kanna/issues/986)) ([bbe2b93](https://github.com/cuongtranba/kanna/commit/bbe2b931d2fc9a4e284ea80cd45c8240c4e726ca)), closes [#957](https://github.com/cuongtranba/kanna/issues/957)
+* **settings:** add Plugins section for Claude Code and Codex plugins ([#992](https://github.com/cuongtranba/kanna/issues/992)) ([4d8b1ee](https://github.com/cuongtranba/kanna/commit/4d8b1eeeab6caddbd3f7f6658d063195e8431dd3))
+* **settings:** show update state and one-click Update in Skills section ([#990](https://github.com/cuongtranba/kanna/issues/990)) ([eb4350e](https://github.com/cuongtranba/kanna/commit/eb4350ee84e47d9c0aa19fe92dce89dfb2b91432))
+
+
+### Bug Fixes
+
+* **auto-continue:** cap loop_run_outcome events per arm window ([#994](https://github.com/cuongtranba/kanna/issues/994)) ([58e0fa5](https://github.com/cuongtranba/kanna/commit/58e0fa5a9dee46ac98e41b244cede94514688230)), closes [#948](https://github.com/cuongtranba/kanna/issues/948)
+* **skills:** add codex to default agent targets and validate aliases ([#981](https://github.com/cuongtranba/kanna/issues/981)) ([8b7f628](https://github.com/cuongtranba/kanna/commit/8b7f6284ad7b5c6fb9634badd2642bce4bb18a18)), closes [#950](https://github.com/cuongtranba/kanna/issues/950)
+
 ## [1.43.12](https://github.com/cuongtranba/kanna/compare/v1.43.11...v1.43.12) (2026-08-30)
 
 
