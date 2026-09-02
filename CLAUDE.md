@@ -2667,3 +2667,44 @@ cd wiki && bun run scripts/extract-env-vars.ts
 Wiki is isolated from the main repo build — its own `package.json`, own
 `node_modules`. `bun run lint` and `bun test` at the repo root do NOT touch
 `wiki/`.
+
+# Package Auto-Update (c3-237 + c3-312)
+
+`PackageUpdateManager` (`src/server/package-update-manager.ts`) manages update
+detection and application for three package kinds: `skill`, `claude-plugin`,
+`codex-plugin`. Component facts: c3-237 (server), c3-312 (shared types/parsers),
+c3-116 (PluginsSection UI). ADR: `adr-20260902-package-auto-update`.
+
+**Four load-bearing invariants — do not violate silently:**
+
+1. **Applies are serialized.** `applyUpdates()` throws if `status === "applying"`.
+   The UI must disable the Apply button while applying. Concurrent CLI invocations
+   could corrupt lock files.
+
+2. **`unknown` is NOT `up_to_date`.** `UpdateAvailability` has four values:
+   `up_to_date`, `outdated`, `partial`, `unknown`. `unknown` means the check
+   failed (network error, GitHub rate-limit). Do not coerce it to `up_to_date`
+   or suppress it in the UI — render a distinct state so the user knows to retry.
+
+3. **Auto-apply defers when any chat is busy.** The `hasAnyChatBusy()` dep is
+   injected into `PackageUpdateManagerDeps`. Never remove it or bypass the check
+   in `maybeAutoApply` — a running CLI during an active turn can interfere with
+   conversation tools.
+
+4. **All state is in-memory; the upstream lock files are the source of truth.**
+   Kanna writes no sidecar. `PackageUpdateSnapshot` and `autoApplyHistory` (capped
+   at 50) are rebuilt from scratch on every check and lost on server restart.
+   Never introduce a Kanna-owned `~/.kanna/packages/` file without an ADR.
+
+**Adding a fourth package kind** requires:
+- New union member in `PackageKind` (`src/shared/packages/types.ts`)
+- New parser in `src/shared/packages/parse-*.ts`
+- New checker adapter in `src/server/*-update-checker.adapter.ts`
+- New applier adapter in `src/server/*-update-applier.adapter.ts`
+- Entry in `package-update-appliers-boot.adapter.ts`
+- UI changes in `PluginsSection.tsx`
+- Entries in `.c3/eval/c3-237.yaml`, `.c3/eval/c3-312.yaml`, and `.c3/code-map.yaml`
+
+**`CODEX_BINARY_PATH`** is the only env var for this feature. Defaults to
+`~/.local/bin/codex`. No other behavior is env-var gated — all configuration
+lives in Settings → Packages (`PackageUpdateSettings` in `settings.json`).

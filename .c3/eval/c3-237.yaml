@@ -1,0 +1,13 @@
+fact: c3-237
+claim: "the package-autoupdate component is a pure manager plus checker and applier adapters for three package kinds (skills, Claude plugins, Codex plugins), a boot wiring adapter, and a colocated inventory IO adapter"
+code:
+  - src/server/package-update-manager.ts
+  - src/server/package-update-manager.test.ts
+  - src/server/package-inventory-io.adapter.ts
+  - src/server/package-inventory-io.adapter.test.ts
+  - src/server/package-update-appliers-boot.adapter.ts
+  - src/server/skill-update-checker.adapter.ts
+  - src/server/skill-update-applier.adapter.ts
+  - src/server/claude-plugin-update-checker.adapter.ts
+  - src/server/codex-plugin-update-checker.adapter.ts
+  - src/server/codex-plugin-update-applier.adapter.ts
