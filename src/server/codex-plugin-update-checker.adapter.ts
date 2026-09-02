@@ -166,3 +166,8 @@ export function buildCodexPluginCheckerDepsForEnv(): CodexPluginCheckerDeps {
   const codexBinary = process.env.CODEX_BINARY_PATH ?? `${home}/.local/bin/codex`
   return buildCodexPluginCheckerDeps(codexBinary)
 }
+
+export function findCodexBinary(): string {
+  const home = process.env.HOME ?? os.homedir()
+  return process.env.CODEX_BINARY_PATH ?? `${home}/.local/bin/codex`
+}

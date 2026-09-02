@@ -59,6 +59,7 @@ import {
   createCodexPluginUpdateChecker,
   buildCodexPluginCheckerDepsForEnv,
 } from "./codex-plugin-update-checker.adapter"
+import { buildPackageUpdateAppliers } from "./package-update-appliers-boot.adapter"
 import { readPackageInventory } from "./package-inventory-io.adapter"
 import type { UpdateInstallAttemptResult } from "./cli-runtime"
 import { compareVersions } from "./cli-runtime"
@@ -396,6 +397,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
       ),
       createCodexPluginUpdateChecker(buildCodexPluginCheckerDepsForEnv()),
     ],
+    appliers: buildPackageUpdateAppliers(findClaudeBinary()),
     settings: () => appSettings.getSnapshot().packageUpdates,
     timer: { setInterval, clearInterval },
     now: Date.now,

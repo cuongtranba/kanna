@@ -51,3 +51,21 @@ export interface PackageUpdateSnapshot {
   error: string | null
   applying: PackageId[]
 }
+
+export interface PackageApplyResult {
+  id: PackageId
+  ok: boolean
+  /** Revision before the apply (from lock / installed_plugins.json). */
+  fromRevision: string | null
+  /** Revision after the apply (re-read from disk after the CLI exits). */
+  toRevision: string | null
+  command: string[]
+  stdout: string
+  stderr: string
+  error: string | null
+}
+
+export interface PackageUpdateApplier {
+  kind: PackageKind
+  apply(pkg: InstalledPackage, signal: AbortSignal): Promise<PackageApplyResult>
+}

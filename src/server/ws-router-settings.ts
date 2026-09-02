@@ -423,6 +423,18 @@ export async function handleSettingsCommand(
       send({ v: PROTOCOL_VERSION, type: "ack", id, result })
       return true
     }
+    case "packages.update": {
+      const results = await packageUpdateManager?.applyUpdates([command.id]) ?? []
+      send({ v: PROTOCOL_VERSION, type: "ack", id, result: results })
+      void packageUpdateManager?.checkUpdates({ force: true })
+      return true
+    }
+    case "packages.updateAll": {
+      const results = await packageUpdateManager?.applyUpdates(command.ids) ?? []
+      send({ v: PROTOCOL_VERSION, type: "ack", id, result: results })
+      void packageUpdateManager?.checkUpdates({ force: true })
+      return true
+    }
     default:
       return false
   }
