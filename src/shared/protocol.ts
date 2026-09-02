@@ -187,6 +187,8 @@ export type ClientCommand =
   | { type: "skills.listInstalled" }
   | { type: "packages.listInstalled" }
   | { type: "packages.checkUpdates" }
+  | { type: "packages.update"; id: string }
+  | { type: "packages.updateAll"; ids: string[] }
   | {
       type: "settings.writeLlmProvider"
       provider: LlmProviderSnapshot["provider"]

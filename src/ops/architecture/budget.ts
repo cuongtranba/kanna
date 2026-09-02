@@ -52,7 +52,7 @@ export const MODULE_ALLOWANCES: Readonly<Record<string, number>> = {
   "src/server/codex-transcript-translator.ts": 767,
   "src/server/event-store-messages.adapter.ts": 765,
   "src/server/kanna-mcp.ts": 1326,
-  "src/server/server.ts": 805,
+  "src/server/server.ts": 807,
   "src/server/subagent-orchestrator.ts": 1375,
 }
 

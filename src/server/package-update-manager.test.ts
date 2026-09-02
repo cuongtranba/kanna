@@ -1,7 +1,7 @@
 import { describe, test, expect } from "bun:test"
 import { PackageUpdateManager } from "./package-update-manager"
 import type { PackageUpdateManagerDeps, TimerPort } from "./package-update-manager"
-import type { PackageInventorySnapshot, PackageUpdateChecker, PackageUpdateStatus } from "../shared/packages/types"
+import type { PackageInventorySnapshot, PackageUpdateApplier, PackageUpdateChecker, PackageUpdateStatus, PackageApplyResult } from "../shared/packages/types"
 import type { PackageUpdateSettings } from "../shared/app-settings-types"
 import { PACKAGE_UPDATE_SETTINGS_DEFAULTS } from "../shared/app-settings-types"
 
@@ -64,11 +64,31 @@ function makeChecker(kind: "skill" | "claude-plugin" | "codex-plugin", statuses:
   }
 }
 
+function makeApplier(kind: "skill" | "claude-plugin" | "codex-plugin", result: Partial<PackageApplyResult> = {}): PackageUpdateApplier {
+  return {
+    kind,
+    async apply(pkg) {
+      return {
+        id: pkg.id,
+        ok: true,
+        fromRevision: pkg.revision,
+        toRevision: "def",
+        command: ["test"],
+        stdout: "",
+        stderr: "",
+        error: null,
+        ...result,
+      }
+    },
+  }
+}
+
 function makeDeps(overrides?: Partial<PackageUpdateManagerDeps>): PackageUpdateManagerDeps & { timer: ReturnType<typeof makeTimer> } {
   const timer = makeTimer()
   return {
     inventory: makeInventory([]),
     checkers: [],
+    appliers: [],
     settings: makeSettings(),
     now: () => 1_000,
     ...overrides,
@@ -295,5 +315,109 @@ describe("PackageUpdateManager", () => {
     const mgr = new PackageUpdateManager(deps)
     const snap = await mgr.checkUpdates()
     expect(snap.packages).toHaveLength(0)
+  })
+
+  describe("applyUpdates", () => {
+    test("applies a single package and returns result", async () => {
+      const pkg = makePkg("skill:foo")
+      const status = makeStatus("skill:foo", "outdated")
+      const deps = makeDeps({
+        inventory: makeInventory([pkg]),
+        checkers: [makeChecker("skill", [status])],
+        appliers: [makeApplier("skill")],
+      })
+      const mgr = new PackageUpdateManager(deps)
+      await mgr.checkUpdates()
+      const results = await mgr.applyUpdates(["skill:foo"])
+      expect(results).toHaveLength(1)
+      expect(results[0].ok).toBe(true)
+      expect(results[0].id).toBe("skill:foo")
+    })
+
+    test("transitions status to applying then back to idle", async () => {
+      const pkg = makePkg("skill:foo")
+      const status = makeStatus("skill:foo", "outdated")
+      const statuses: string[] = []
+      let resolveApply!: () => void
+      const deps = makeDeps({
+        inventory: makeInventory([pkg]),
+        checkers: [makeChecker("skill", [status])],
+        appliers: [{
+          kind: "skill" as const,
+          apply: () => new Promise<PackageApplyResult>((resolve) => {
+            resolveApply = () => resolve({ id: "skill:foo", ok: true, fromRevision: null, toRevision: null, command: [], stdout: "", stderr: "", error: null })
+          }),
+        }],
+      })
+      const mgr = new PackageUpdateManager(deps)
+      await mgr.checkUpdates()
+      mgr.onChange((s) => statuses.push(s.status))
+      const applyPromise = mgr.applyUpdates(["skill:foo"])
+      // yield so the applying state is set
+      await new Promise<void>((r) => setTimeout(r, 0))
+      expect(mgr.getSnapshot().status).toBe("applying")
+      resolveApply()
+      await applyPromise
+      expect(mgr.getSnapshot().status).toBe("idle")
+    })
+
+    test("rejects when an apply is already in progress", async () => {
+      const pkg = makePkg("skill:foo")
+      const status = makeStatus("skill:foo", "outdated")
+      const deps = makeDeps({
+        inventory: makeInventory([pkg]),
+        checkers: [makeChecker("skill", [status])],
+        appliers: [makeApplier("skill")],
+      })
+      const mgr = new PackageUpdateManager(deps)
+      await mgr.checkUpdates()
+      mgr.markApplying(["skill:bar"])
+      await expect(mgr.applyUpdates(["skill:foo"])).rejects.toThrow("already in progress")
+    })
+
+    test("reports error for unknown package id", async () => {
+      const deps = makeDeps({ inventory: makeInventory([]) })
+      const mgr = new PackageUpdateManager(deps)
+      const results = await mgr.applyUpdates(["skill:unknown"])
+      expect(results).toHaveLength(1)
+      expect(results[0].ok).toBe(false)
+      expect(results[0].error).toMatch(/not found/)
+    })
+
+    test("reports error when no applier for kind", async () => {
+      const pkg = makePkg("skill:foo")
+      const status = makeStatus("skill:foo", "outdated")
+      const deps = makeDeps({
+        inventory: makeInventory([pkg]),
+        checkers: [makeChecker("skill", [status])],
+        appliers: [], // no appliers registered
+      })
+      const mgr = new PackageUpdateManager(deps)
+      await mgr.checkUpdates()
+      const results = await mgr.applyUpdates(["skill:foo"])
+      expect(results[0].ok).toBe(false)
+      expect(results[0].error).toMatch(/No applier/)
+    })
+
+    test("applies packages serially (one at a time)", async () => {
+      const pkgs = [makePkg("skill:a"), makePkg("skill:b")]
+      const statuses = pkgs.map((p) => makeStatus(p.id, "outdated"))
+      const order: string[] = []
+      const deps = makeDeps({
+        inventory: makeInventory(pkgs),
+        checkers: [makeChecker("skill", statuses)],
+        appliers: [{
+          kind: "skill" as const,
+          apply: async (pkg) => {
+            order.push(pkg.id)
+            return { id: pkg.id, ok: true, fromRevision: null, toRevision: null, command: [], stdout: "", stderr: "", error: null }
+          },
+        }],
+      })
+      const mgr = new PackageUpdateManager(deps)
+      await mgr.checkUpdates()
+      await mgr.applyUpdates(["skill:a", "skill:b"])
+      expect(order).toEqual(["skill:a", "skill:b"])
+    })
   })
 })

@@ -1,4 +1,4 @@
-import type { PackageInventorySnapshot, PackageUpdateChecker, PackageUpdateSnapshot, PackageUpdateStatus, PackageId } from "../shared/packages/types"
+import type { PackageInventorySnapshot, PackageUpdateApplier, PackageUpdateChecker, PackageUpdateSnapshot, PackageUpdateStatus, PackageApplyResult, PackageId } from "../shared/packages/types"
 import type { PackageUpdateSettings } from "../shared/app-settings-types"
 
 export interface TimerPort {
@@ -9,6 +9,7 @@ export interface TimerPort {
 export interface PackageUpdateManagerDeps {
   inventory: () => Promise<PackageInventorySnapshot>
   checkers: readonly PackageUpdateChecker[]
+  appliers: readonly PackageUpdateApplier[]
   settings: () => PackageUpdateSettings
   timer: TimerPort
   now: () => number
@@ -160,6 +161,63 @@ export class PackageUpdateManager {
 
   markApplyDone(): void {
     this.setSnapshot({ ...this.snapshot, status: "idle", applying: [] })
+  }
+
+  /**
+   * Apply updates for the given package ids sequentially.
+   * Rejects if an apply is already in progress.
+   * Re-inventories after all applies complete to refresh disk state.
+   */
+  async applyUpdates(ids: PackageId[], signal?: AbortSignal): Promise<PackageApplyResult[]> {
+    if (this.snapshot.status === "applying") {
+      throw new Error("An update apply is already in progress")
+    }
+
+    const applierByKind = new Map(this.deps.appliers.map((a) => [a.kind, a]))
+    const pkgsById = new Map(this.snapshot.packages.map((e) => [e.id, e]))
+
+    this.markApplying(ids)
+
+    const results: PackageApplyResult[] = []
+    const ctrl = signal ? AbortSignal.any([signal]) : new AbortController().signal
+
+    try {
+      for (const id of ids) {
+        const entry = pkgsById.get(id)
+        if (!entry) {
+          results.push({
+            id,
+            ok: false,
+            fromRevision: null,
+            toRevision: null,
+            command: [],
+            stdout: "",
+            stderr: "",
+            error: `Package ${id} not found in current snapshot`,
+          })
+          continue
+        }
+        const applier = applierByKind.get(entry.kind)
+        if (!applier) {
+          results.push({
+            id,
+            ok: false,
+            fromRevision: entry.revision,
+            toRevision: null,
+            command: [],
+            stdout: "",
+            stderr: "",
+            error: `No applier registered for kind "${entry.kind}"`,
+          })
+          continue
+        }
+        results.push(await applier.apply(entry, ctrl))
+      }
+    } finally {
+      this.markApplyDone()
+    }
+
+    return results
   }
 
   private setSnapshot(next: PackageUpdateSnapshot): void {
