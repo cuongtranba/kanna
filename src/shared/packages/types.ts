@@ -39,3 +39,15 @@ export interface PackageUpdateStatus {
   checkedAt: number
   error: string | null // why `unknown`; rendered, never swallowed
 }
+
+export interface PackageUpdateEntry extends InstalledPackage {
+  update: PackageUpdateStatus
+}
+
+export interface PackageUpdateSnapshot {
+  status: "idle" | "checking" | "applying"
+  packages: PackageUpdateEntry[]
+  lastCheckedAt: number | null
+  error: string | null
+  applying: PackageId[]
+}

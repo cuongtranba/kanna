@@ -48,6 +48,18 @@ import { readOriginRepoSlug } from "./diff-store-git-branch.adapter"
 import { createGitHubIssuesProvider } from "./github-issues.adapter"
 import { readGitHubCliToken } from "./github-cli.adapter"
 import { UpdateManager } from "./update-manager"
+import { PackageUpdateManager } from "./package-update-manager"
+import { createSkillUpdateChecker } from "./skill-update-checker.adapter"
+import {
+  createClaudePluginUpdateChecker,
+  buildClaudePluginCheckerDeps,
+  findClaudeBinary,
+} from "./claude-plugin-update-checker.adapter"
+import {
+  createCodexPluginUpdateChecker,
+  buildCodexPluginCheckerDepsForEnv,
+} from "./codex-plugin-update-checker.adapter"
+import { readPackageInventory } from "./package-inventory-io.adapter"
 import type { UpdateInstallAttemptResult } from "./cli-runtime"
 import { compareVersions } from "./cli-runtime"
 import { createUpdateStrategy } from "./update-strategy"
@@ -180,6 +192,7 @@ interface ApplicationServices {
   analytics: KannaAnalyticsReporter
   terminals: TerminalManager
   updateManager: UpdateManager | null
+  packageUpdateManager: PackageUpdateManager
   agent: AgentCoordinator
   router: ReturnType<typeof createWsRouter>
   appSettings: AppSettingsManager
@@ -374,6 +387,19 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     })
     return manager
   })()
+  const packageUpdateManager = new PackageUpdateManager({
+    inventory: readPackageInventory,
+    checkers: [
+      createSkillUpdateChecker({ fetchFn: fetch, token: null }),
+      createClaudePluginUpdateChecker(
+        buildClaudePluginCheckerDeps(findClaudeBinary()),
+      ),
+      createCodexPluginUpdateChecker(buildCodexPluginCheckerDepsForEnv()),
+    ],
+    settings: () => appSettings.getSnapshot().packageUpdates,
+    timer: { setInterval, clearInterval },
+    now: Date.now,
+  })
   const tunnelManager = new TunnelManager({
     cloudflaredPath: resolveCloudflaredPath(appSettings.getSnapshot().cloudflareTunnel.cloudflaredPath),
     onEvent: async (event) => {
@@ -610,12 +636,14 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
       }
     },
     sessionShare: sessionShareService,
+    packageUpdateManager,
   })
 
   // Resolve deferred holders now that the router exists.
   broadcastChatState = (chatId: string) => { router.scheduleChatStateBroadcast(chatId) }
   pushFollowedSessions = () => { router.pushFollowedSessions() }
   agent.onCronJobsChange = () => { router.pushCronJobs() }
+  packageUpdateManager.start()
 
   const staleEmptyChatPruneInterval = setInterval(() => {
     void router.pruneStaleEmptyChats().then(() => router.broadcastSnapshots())
@@ -632,6 +660,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     analytics,
     terminals,
     updateManager,
+    packageUpdateManager,
     agent,
     router,
     appSettings,
@@ -686,8 +715,9 @@ function rehydrateScheduledWork(services: ApplicationServices): void {
 async function shutdownServices(services: ApplicationServices, server: Server<ClientState>): Promise<void> {
   const { store, agent, auth, appSettings, keybindings, scheduleManager, cronScheduler,
     tunnelGateway, snapshotSweepHandle, observability, staleEmptyChatPruneInterval,
-    followedSessionTickInterval, router, terminals } = services
+    followedSessionTickInterval, router, terminals, packageUpdateManager } = services
 
+  packageUpdateManager.stop()
   appSettings.dispose()
   keybindings.dispose()
   scheduleManager.shutdown()

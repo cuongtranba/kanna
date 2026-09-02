@@ -29,6 +29,7 @@ import type { BoardRegistry } from "./board-registry"
 import type { LoopTrackingRegistry } from "./loop-tracking-registry"
 import type { FollowedSessionRegistry } from "./followed-session-registry"
 import type { UpdateManager } from "./update-manager"
+import type { PackageUpdateManager } from "./package-update-manager"
 import type { PushManager } from "./push/push-manager"
 import type { DiffStore } from "./diff-store"
 import type { DiscoveredProject } from "./discovery.adapter"
@@ -98,6 +99,7 @@ export interface EnvelopeDeps {
   followedSessionRegistry?: FollowedSessionRegistry
   machineDisplayName: string
   updateManager: UpdateManager | null
+  packageUpdateManager?: PackageUpdateManager
   getDiscoveredProjects: () => DiscoveredProject[]
   terminals: TerminalManager
   pushManager: PushManager
@@ -208,6 +210,7 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
     followedSessionRegistry,
     machineDisplayName,
     updateManager,
+    packageUpdateManager,
     getDiscoveredProjects,
     terminals,
     pushManager,
@@ -467,6 +470,24 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
         snapshot: {
           type: "cron-jobs",
           data: { rows: buildCronJobsGlobalRows(store) },
+        },
+      }
+    }
+
+    if (topic.type === "package-updates") {
+      return {
+        v: PROTOCOL_VERSION,
+        type: "snapshot",
+        id,
+        snapshot: {
+          type: "package-updates",
+          data: packageUpdateManager?.getSnapshot() ?? {
+            status: "idle",
+            packages: [],
+            lastCheckedAt: null,
+            error: null,
+            applying: [],
+          },
         },
       }
     }

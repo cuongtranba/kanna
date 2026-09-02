@@ -244,6 +244,10 @@ export function createClaudePluginUpdateChecker(deps: ClaudePluginCheckerDeps): 
 
 // ─── Default deps builder ─────────────────────────────────────────────────────
 
+export function findClaudeBinary(): string | null {
+  return Bun.which("claude") ?? null
+}
+
 export function buildClaudePluginCheckerDeps(claudeBinary: string | null): ClaudePluginCheckerDeps {
   const home = process.env.HOME ?? os.homedir()
   return {

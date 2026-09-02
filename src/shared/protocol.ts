@@ -82,6 +82,7 @@ export type SubscriptionTopic =
   | { type: "followed-sessions" }
   | { type: "cron-jobs" }
   | { type: "background-task-output"; chatId: string; taskId: string }
+  | { type: "package-updates" }
 
 export interface TerminalSnapshot {
   terminalId: string
@@ -185,6 +186,7 @@ export type ClientCommand =
   | { type: "skills.uninstall"; skillId: string }
   | { type: "skills.listInstalled" }
   | { type: "packages.listInstalled" }
+  | { type: "packages.checkUpdates" }
   | {
       type: "settings.writeLlmProvider"
       provider: LlmProviderSnapshot["provider"]
@@ -466,6 +468,7 @@ export type ServerSnapshot =
   | { type: "followed-sessions"; data: FollowedSessionsSnapshot }
   | { type: "cron-jobs"; data: import("./cron/types").CronJobsGlobalSnapshot }
   | { type: "background-task-output"; data: BackgroundTaskOutputSnapshot }
+  | { type: "package-updates"; data: import("./packages/types").PackageUpdateSnapshot }
 
 export interface BoardsSnapshot {
   ownerKind: BoardOwnerKind
