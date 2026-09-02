@@ -13,7 +13,6 @@ export const TONE_PAIRINGS = [
   { name: "status/skipped", fg: "muted-foreground", bg: "muted", alpha: 0.4, base: "card" },
   { name: "error/api", fg: "destructive-text", bg: "destructive", alpha: 0.1, base: "background" },
   { name: "action/destructive-filled", fg: "destructive-filled-foreground", bg: "destructive-filled", alpha: 1, base: "background" },
-  { name: "package/partial", fg: "info-text", bg: "info", alpha: 0.1, base: "card" },
 ] as const satisfies readonly TonePairing[]
 
 export type TonePairingName = (typeof TONE_PAIRINGS)[number]["name"]
@@ -24,6 +23,6 @@ export const STATUS_PILL_CLASS = {
   failed: "border-destructive/40 text-destructive-text bg-destructive/10",
   skipped: "border-border text-muted-foreground bg-muted/40",
   outdated: "border-warning/40 text-warning-text bg-warning/10",
-  partial: "border-info/40 text-info-text bg-info/10",
+  partial: "border-warning/40 text-warning-text bg-warning/10",
   unknown: "border-border text-muted-foreground bg-muted/40",
 } as const
