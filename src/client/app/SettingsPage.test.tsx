@@ -146,6 +146,18 @@ describe("SkillsSection", () => {
     expect(html).toContain("Discover")
     expect(html).toContain("Search skills")
   })
+
+  test("renders Check button in the header", () => {
+    const html = renderToStaticMarkup(
+      <SkillsSection
+        state={{
+          connectionStatus: "connected",
+          socket: { command: async () => ({ skills: [] }) } as never,
+        }}
+      />
+    )
+    expect(html).toContain("Check")
+  })
 })
 
 describe("getKeybindingsSubtitle", () => {
