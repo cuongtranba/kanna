@@ -72,6 +72,7 @@ Typography scale is a root-font-size UI zoom: the row writes `typography.scale` 
 | Provider key form | IN/OUT | Reads/writes provider config via server | c3-203 | src/client/app/SettingsPage.tsx |
 | Share expiry row | IN/OUT | "Default share link expiry (hours)" input wired through settings.writeAppSettingsPatch | c3-228 | src/client/app/SettingsPage.tsx |
 | Typography Scale row | IN/OUT | Five-step UI zoom (sm/md/lg/xl/xxl). Shows the effective step, flags a device override, offers "Use account default". Writes the account default via settings.writeAppSettingsPatch ({ typography: { scale } }) | c3-102 | src/client/app/SettingsPage.tsx |
+| Plugins section | IN/OUT | Surfaces PackageUpdateSnapshot from c3-237; manual check + apply buttons; auto-update toggle + per-kind opt-in; last-50 auto-apply history | c3-237 | src/client/components/settings/PluginsSection.tsx |
 
 ## Change Safety
 

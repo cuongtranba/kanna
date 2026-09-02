@@ -1,0 +1,14 @@
+fact: c3-312
+claim: "the packages-shared component owns the canonical package-domain types plus pure lock-file parsers for all three package kinds and the update-availability classifier"
+code:
+  - src/shared/packages/types.ts
+  - src/shared/packages/parse-skill-lock.ts
+  - src/shared/packages/parse-skill-lock.test.ts
+  - src/shared/packages/parse-claude-plugins.ts
+  - src/shared/packages/parse-claude-plugins.test.ts
+  - src/shared/packages/parse-claude-plugin-marketplace.ts
+  - src/shared/packages/parse-claude-plugin-marketplace.test.ts
+  - src/shared/packages/parse-codex-plugins.ts
+  - src/shared/packages/parse-codex-plugins.test.ts
+  - src/shared/packages/skill-update-classifier.ts
+  - src/shared/packages/skill-update-classifier.test.ts

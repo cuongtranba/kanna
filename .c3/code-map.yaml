@@ -72,6 +72,8 @@ c3-116:
   - src/client/app/llmProviderDraft.ts
   - src/client/app/settingsEditorForm.ts
   - src/client/components/settings/SettingsList.tsx
+  - src/client/components/settings/PluginsSection.tsx
+  - src/client/components/settings/PluginsSection.test.tsx
 c3-117:
   - src/client/app/LocalProjectsPage.tsx
   - src/client/components/NewProjectModal.tsx
@@ -327,3 +329,16 @@ c3-236:
   - scripts/check-complexity-limits.ts
 c3-311:
   - src/shared/cron/**/*.ts
+c3-312:
+  - src/shared/packages/**/*.ts
+c3-237:
+  - src/server/package-update-manager.ts
+  - src/server/package-update-manager.test.ts
+  - src/server/package-inventory-io.adapter.ts
+  - src/server/package-inventory-io.adapter.test.ts
+  - src/server/package-update-appliers-boot.adapter.ts
+  - src/server/skill-update-checker.adapter.ts
+  - src/server/skill-update-applier.adapter.ts
+  - src/server/claude-plugin-update-checker.adapter.ts
+  - src/server/codex-plugin-update-checker.adapter.ts
+  - src/server/codex-plugin-update-applier.adapter.ts
