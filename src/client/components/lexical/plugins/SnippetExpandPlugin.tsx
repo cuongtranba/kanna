@@ -104,8 +104,7 @@ export function SnippetExpandPlugin({ snippets }: SnippetExpandPluginProps): nul
 
     return editor.registerCommand(
       KEY_TAB_COMMAND,
-      (event: KeyboardEvent | null) => {
-        if (!event) return false
+      (event: KeyboardEvent) => {
         const decision = decideTab(event, isTypeaheadMenuOpen(), snippets.length, lastPressExpanded)
         // Every new physical press resets the flag; only an expanding initial
         // keydown (below) re-arms it for that press's repeats.
