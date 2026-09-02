@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
+import { assertSafeSkillAgents } from "../shared/skill-agents"
 import {
   assertSafeSkillId,
   assertSafeSkillSource,
@@ -148,8 +149,38 @@ describe("ws-router-skills", () => {
     })
   })
 
+  describe("assertSafeSkillAgents", () => {
+    test("accepts a valid set of known agent aliases", () => {
+      expect(assertSafeSkillAgents(["universal", "claude-code", "codex"])).toEqual([
+        "universal",
+        "claude-code",
+        "codex",
+      ])
+      expect(assertSafeSkillAgents(["codex"])).toEqual(["codex"])
+    })
+
+    test("rejects an empty array", () => {
+      expect(() => assertSafeSkillAgents([])).toThrow("must not be empty")
+    })
+
+    test("rejects an unknown alias", () => {
+      expect(() => assertSafeSkillAgents(["claude-code", "unknown-agent"])).toThrow(
+        "Unknown skill agent alias",
+      )
+    })
+
+    test("rejects a shell-metacharacter injection attempt", () => {
+      expect(() => assertSafeSkillAgents(["claude-code; rm -rf /"])).toThrow("Unknown skill agent alias")
+      expect(() => assertSafeSkillAgents(["$(evil)"])).toThrow("Unknown skill agent alias")
+    })
+
+    test("rejects duplicate entries", () => {
+      expect(() => assertSafeSkillAgents(["universal", "universal"])).toThrow("Duplicate skill agent alias")
+    })
+  })
+
   describe("buildInstallSkillCommand", () => {
-    test("builds global install command for universal and claude-code aliases", () => {
+    test("builds global install command with default agents (universal, claude-code, codex)", () => {
       const cmd = buildInstallSkillCommand("owner/repo", "my-skill")
       // First element is the binary (platform-dependent), skip it
       expect(cmd.slice(1)).toEqual([
@@ -162,6 +193,22 @@ describe("ws-router-skills", () => {
         "--agent",
         "universal",
         "claude-code",
+        "codex",
+        "--yes",
+      ])
+    })
+
+    test("builds install command with a custom single-agent override", () => {
+      const cmd = buildInstallSkillCommand("owner/repo", "my-skill", ["codex"])
+      expect(cmd.slice(1)).toEqual([
+        "skills",
+        "add",
+        "owner/repo",
+        "--skill",
+        "my-skill",
+        "--global",
+        "--agent",
+        "codex",
         "--yes",
       ])
     })
@@ -170,10 +217,16 @@ describe("ws-router-skills", () => {
       expect(() => buildInstallSkillCommand("https://github.com/o/r", "skill")).toThrow()
       expect(() => buildInstallSkillCommand("owner/repo", "../bad")).toThrow()
     })
+
+    test("throws on unknown agent alias", () => {
+      expect(() => buildInstallSkillCommand("owner/repo", "skill", ["unknown-agent" as never])).toThrow(
+        "Unknown skill agent alias",
+      )
+    })
   })
 
   describe("buildUninstallSkillCommand", () => {
-    test("builds global uninstall command for universal and claude-code aliases", () => {
+    test("builds global uninstall command with default agents (universal, claude-code, codex)", () => {
       const cmd = buildUninstallSkillCommand("my-skill")
       expect(cmd.slice(1)).toEqual([
         "skills",
@@ -183,12 +236,32 @@ describe("ws-router-skills", () => {
         "--agent",
         "universal",
         "claude-code",
+        "codex",
+        "--yes",
+      ])
+    })
+
+    test("builds uninstall command with a custom single-agent override", () => {
+      const cmd = buildUninstallSkillCommand("my-skill", ["claude-code"])
+      expect(cmd.slice(1)).toEqual([
+        "skills",
+        "remove",
+        "my-skill",
+        "--global",
+        "--agent",
+        "claude-code",
         "--yes",
       ])
     })
 
     test("throws on invalid skillId", () => {
       expect(() => buildUninstallSkillCommand("../bad")).toThrow()
+    })
+
+    test("throws on unknown agent alias", () => {
+      expect(() => buildUninstallSkillCommand("skill", ["unknown-agent" as never])).toThrow(
+        "Unknown skill agent alias",
+      )
     })
   })
 })

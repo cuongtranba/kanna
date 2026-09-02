@@ -12,10 +12,10 @@ import os from "node:os"
 import path from "node:path"
 import type { AnyValue } from "../shared/errors"
 import { isRecord } from "../shared/errors"
+import { DEFAULT_SKILL_AGENTS, assertSafeSkillAgents } from "../shared/skill-agents"
+import type { SkillAgent } from "../shared/skill-agents"
 import { readTextFileOrThrow, spawnCommandCapture } from "./ws-router-io.adapter"
 import type { InstalledSkillsSnapshot, SkillInstallResult, SkillSearchSnapshot, SkillUninstallResult } from "../shared/types"
-
-const SKILL_AGENT_ALIASES = ["universal", "claude-code"] as const
 
 export function assertSafeSkillSource(source: string) {
   const normalized = source.trim()
@@ -136,7 +136,11 @@ export async function searchSkills(query: string, limit = 100): Promise<SkillSea
   }
 }
 
-export function buildInstallSkillCommand(source: string, skillId: string) {
+export function buildInstallSkillCommand(
+  source: string,
+  skillId: string,
+  agents: readonly SkillAgent[] = DEFAULT_SKILL_AGENTS,
+) {
   return [
     process.platform === "win32" ? "npx.cmd" : "npx",
     "skills",
@@ -146,12 +150,15 @@ export function buildInstallSkillCommand(source: string, skillId: string) {
     assertSafeSkillId(skillId),
     "--global",
     "--agent",
-    ...SKILL_AGENT_ALIASES,
+    ...assertSafeSkillAgents([...agents]),
     "--yes",
   ]
 }
 
-export function buildUninstallSkillCommand(skillId: string) {
+export function buildUninstallSkillCommand(
+  skillId: string,
+  agents: readonly SkillAgent[] = DEFAULT_SKILL_AGENTS,
+) {
   return [
     process.platform === "win32" ? "npx.cmd" : "npx",
     "skills",
@@ -159,7 +166,7 @@ export function buildUninstallSkillCommand(skillId: string) {
     assertSafeSkillId(skillId),
     "--global",
     "--agent",
-    ...SKILL_AGENT_ALIASES,
+    ...assertSafeSkillAgents([...agents]),
     "--yes",
   ]
 }
@@ -178,8 +185,12 @@ async function runSkillCommand(command: string[]) {
   return { cwd, stdout, stderr }
 }
 
-export async function installSkill(source: string, skillId: string): Promise<SkillInstallResult> {
-  const command = buildInstallSkillCommand(source, skillId)
+export async function installSkill(
+  source: string,
+  skillId: string,
+  agents: readonly SkillAgent[] = DEFAULT_SKILL_AGENTS,
+): Promise<SkillInstallResult> {
+  const command = buildInstallSkillCommand(source, skillId, agents)
   const { cwd, stdout, stderr } = await runSkillCommand(command)
   return {
     source: command[3],
@@ -191,8 +202,11 @@ export async function installSkill(source: string, skillId: string): Promise<Ski
   }
 }
 
-export async function uninstallSkill(skillId: string): Promise<SkillUninstallResult> {
-  const command = buildUninstallSkillCommand(skillId)
+export async function uninstallSkill(
+  skillId: string,
+  agents: readonly SkillAgent[] = DEFAULT_SKILL_AGENTS,
+): Promise<SkillUninstallResult> {
+  const command = buildUninstallSkillCommand(skillId, agents)
   const { cwd, stdout, stderr } = await runSkillCommand(command)
   return {
     skillId: command[3],
