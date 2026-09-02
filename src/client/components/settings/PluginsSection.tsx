@@ -99,7 +99,7 @@ function MarketplaceGroup({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between gap-2">
-        <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{source}</div>
+        <div className="text-xs font-medium tracking-wide text-muted-foreground">{source}</div>
         <Button
           size="sm"
           variant="ghost"
