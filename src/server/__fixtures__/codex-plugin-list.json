@@ -1,23 +1,32 @@
-[
-  {
-    "id": "mycodexplugin",
-    "name": "My Codex Plugin",
-    "version": "1.2.3",
-    "installPath": "/home/testuser/.codex/plugins/mycodexplugin",
-    "installedAt": "2026-01-15T10:00:00.000Z"
-  },
-  {
-    "id": "another-plugin",
-    "name": "Another Plugin",
-    "version": "0.5.0",
-    "installPath": "/home/testuser/.codex/plugins/another-plugin",
-    "installedAt": "2026-01-20T12:00:00.000Z"
-  },
-  {
-    "id": ".system-builtin",
-    "name": "System Builtin",
-    "version": "1.0.0",
-    "installPath": "/home/testuser/.codex/plugins/.system-builtin",
-    "installedAt": "2026-01-01T00:00:00.000Z"
-  }
-]
+{
+  "installed": [
+    {
+      "id": "mycodexplugin",
+      "name": "My Codex Plugin",
+      "version": "1.2.3",
+      "installPath": "/home/testuser/.codex/plugins/mycodexplugin",
+      "installedAt": "2026-01-15T10:00:00.000Z"
+    },
+    {
+      "id": "another-plugin",
+      "name": "Another Plugin",
+      "version": "0.5.0",
+      "installPath": "/home/testuser/.codex/plugins/another-plugin",
+      "installedAt": "2026-01-20T12:00:00.000Z"
+    },
+    {
+      "id": ".system-builtin",
+      "name": "System Builtin",
+      "version": "1.0.0",
+      "installPath": "/home/testuser/.codex/plugins/.system-builtin",
+      "installedAt": "2026-01-01T00:00:00.000Z"
+    }
+  ],
+  "available": [
+    {
+      "id": "another-plugin",
+      "name": "Another Plugin",
+      "version": "0.6.0"
+    }
+  ]
+}
