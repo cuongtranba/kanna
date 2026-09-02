@@ -37,6 +37,7 @@ import {
   listInstalledSkills,
 } from "./ws-router-skills"
 import { readPackageInventory } from "./package-inventory-io.adapter"
+import type { PackageUpdateManager } from "./package-update-manager"
 
 // ---------------------------------------------------------------------------
 // Dep interfaces (duck-typed; avoids circular imports with ws-router.ts)
@@ -65,6 +66,7 @@ export interface SettingsCommandDeps {
   resolvedAnalytics: Pick<AnalyticsReporter, "track">
   resolvedLlmProvider: ResolvedLlmProvider
   listOpenRouterModels: (() => Promise<OpenRouterModel[]>) | undefined
+  packageUpdateManager?: PackageUpdateManager
   /** Pre-bound to the current WebSocket; called to ack the command. */
   send: (envelope: ServerEnvelope) => void
 }
@@ -170,7 +172,7 @@ export async function handleSettingsCommand(
   command: ClientCommand,
   id: string,
 ): Promise<boolean> {
-  const { keybindings, resolvedAppSettings, resolvedAnalytics, resolvedLlmProvider, listOpenRouterModels, send } = deps
+  const { keybindings, resolvedAppSettings, resolvedAnalytics, resolvedLlmProvider, listOpenRouterModels, packageUpdateManager, send } = deps
 
   switch (command.type) {
     case "settings.readKeybindings": {
@@ -413,6 +415,11 @@ export async function handleSettingsCommand(
     }
     case "packages.listInstalled": {
       const result = await readPackageInventory()
+      send({ v: PROTOCOL_VERSION, type: "ack", id, result })
+      return true
+    }
+    case "packages.checkUpdates": {
+      const result = await packageUpdateManager?.checkUpdates({ force: true }) ?? null
       send({ v: PROTOCOL_VERSION, type: "ack", id, result })
       return true
     }

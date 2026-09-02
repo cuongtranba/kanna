@@ -22,6 +22,7 @@ import type { AgentCoordinator } from "./agent"
 import type { TerminalManager } from "./terminal-manager"
 import type { KeybindingsManager } from "./keybindings"
 import type { UpdateManager } from "./update-manager"
+import type { PackageUpdateManager } from "./package-update-manager"
 import type { ServerEnvelope } from "../shared/protocol"
 import type { ResolvedAppSettings } from "./ws-router-defaults"
 import type { EnvelopeBuilder } from "./ws-router-envelope"
@@ -48,6 +49,7 @@ export interface BroadcastManagerDeps {
   keybindings: KeybindingsManager
   resolvedAppSettings: ResolvedAppSettings
   updateManager: UpdateManager | null
+  packageUpdateManager?: PackageUpdateManager
   ptyInstances?: PtyInstanceRegistry
   workflowRegistry?: WorkflowRegistry
   boardRegistry?: BoardRegistry
@@ -75,6 +77,7 @@ export class BroadcastManager {
   private readonly disposeBoards: () => void
   private readonly disposeLoopTracking: () => void
   private readonly disposeBackgroundTaskOutput: () => void
+  private readonly disposePackageUpdateEvents: () => void
 
   constructor(private readonly deps: BroadcastManagerDeps) {
     const {
@@ -83,6 +86,7 @@ export class BroadcastManager {
       keybindings,
       resolvedAppSettings,
       updateManager,
+      packageUpdateManager,
       ptyInstances,
       workflowRegistry,
       boardRegistry,
@@ -212,6 +216,22 @@ export class BroadcastManager {
         const snapshotSignatures = ensureSnapshotSignatures(ws)
         for (const [id, topic] of ws.data.subscriptions.entries()) {
           if (topic.type !== "background-task-output" || topic.chatId !== chatId || topic.taskId !== taskId) continue
+          const envelope = deps.envelopeBuilder.createEnvelope(id, topic, undefined, ws)
+          if (envelope.type !== "snapshot") continue
+          const signature = JSON.stringify(envelope.snapshot)
+          if (snapshotSignatures.get(id) === signature) continue
+          snapshotSignatures.set(id, signature)
+          send(ws, envelope)
+        }
+      }
+    }) ?? (() => {})
+
+    // Package update snapshot push on change
+    this.disposePackageUpdateEvents = packageUpdateManager?.onChange(() => {
+      for (const ws of this.sockets) {
+        const snapshotSignatures = ensureSnapshotSignatures(ws)
+        for (const [id, topic] of ws.data.subscriptions.entries()) {
+          if (topic.type !== "package-updates") continue
           const envelope = deps.envelopeBuilder.createEnvelope(id, topic, undefined, ws)
           if (envelope.type !== "snapshot") continue
           const signature = JSON.stringify(envelope.snapshot)
@@ -631,5 +651,6 @@ export class BroadcastManager {
     this.disposeBoards()
     this.disposeLoopTracking()
     this.disposeBackgroundTaskOutput()
+    this.disposePackageUpdateEvents()
   }
 }

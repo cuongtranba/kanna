@@ -62,6 +62,7 @@ import type { ClientState } from "./ws-router-utils"
 import { createEnvelopeBuilder } from "./ws-router-envelope"
 import { BroadcastManager } from "./ws-router-broadcast"
 import type { RepoSuggestion } from "../shared/boards/sync-types"
+import type { PackageUpdateManager } from "./package-update-manager"
 
 // Re-export skill utilities so existing callers (tests, server.ts, etc.) keep working.
 export {
@@ -121,6 +122,7 @@ interface CreateWsRouterArgs {
   subagentTranscriptRegistry?: SubagentTranscriptRegistry
   followedSessionRegistry?: FollowedSessionRegistry
   sessionShare?: SessionShareService
+  packageUpdateManager?: PackageUpdateManager
 }
 
 export function createWsRouter({
@@ -154,6 +156,7 @@ export function createWsRouter({
   subagentTranscriptRegistry,
   followedSessionRegistry,
   sessionShare,
+  packageUpdateManager,
 }: CreateWsRouterArgs) {
   const resolvedDiffStore = diffStore ?? buildFallbackDiffStore()
   const resolvedLlmProvider = llmProvider ?? buildFallbackLlmProvider()
@@ -174,6 +177,7 @@ export function createWsRouter({
     followedSessionRegistry,
     machineDisplayName,
     updateManager,
+    packageUpdateManager,
     getDiscoveredProjects,
     terminals,
     pushManager,
@@ -186,6 +190,7 @@ export function createWsRouter({
     keybindings,
     resolvedAppSettings,
     updateManager,
+    packageUpdateManager,
     ptyInstances,
     workflowRegistry,
     boardRegistry,
@@ -256,6 +261,7 @@ export function createWsRouter({
             resolvedAnalytics,
             resolvedLlmProvider,
             listOpenRouterModels,
+            packageUpdateManager,
             send: (envelope) => send(ws, envelope),
           },
           command,
