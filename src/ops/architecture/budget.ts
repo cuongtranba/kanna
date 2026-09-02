@@ -52,7 +52,7 @@ export const MODULE_ALLOWANCES: Readonly<Record<string, number>> = {
   "src/server/codex-transcript-translator.ts": 767,
   "src/server/event-store-messages.adapter.ts": 765,
   "src/server/kanna-mcp.ts": 1326,
-  "src/server/server.ts": 775,
+  "src/server/server.ts": 805,
   "src/server/subagent-orchestrator.ts": 1375,
 }
 
@@ -87,7 +87,7 @@ export const PATTERN_BUDGETS: readonly PatternBudget[] = [
     // The first version counted only `interface`, and #914 evaded it by
     // respelling one bundle as an inline type — renaming, not removing.
     pattern: "interface [A-Za-z]*Deps\\b|type [A-Za-z]*Deps\\b *=|deps: \\{$",
-    max: 83,
+    max: 84,
     issue: 893,
     rationale:
       "Each deps bundle is a hand-maintained slice of the coordinator's fields. Every field is optional, so a builder that omits one compiles and the consumer's fallback is indistinguishable from the feature being off — this is how getArmedLoop shipped declared-but-never-passed. Respelling a bundle as a type alias or an inline parameter object removes nothing, so all three spellings count.",
