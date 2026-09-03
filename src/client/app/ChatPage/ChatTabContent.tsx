@@ -328,18 +328,8 @@ export function ChatTabContent({
     void state.socket.command({ type: "autoContinue.reschedule", chatId, scheduleId, scheduledAt }).catch(() => {})
   }, [state.activeChatId, state.socket])
 
-  const handleCronPause = useCallback((jobId: string) => {
-    const chatId = state.activeChatId
-    if (!chatId) return
-    void state.socket.command({ type: "cron.pause", chatId, jobId }).catch(() => {})
-  }, [state.activeChatId, state.socket])
-
-  const handleCronResume = useCallback((jobId: string) => {
-    const chatId = state.activeChatId
-    if (!chatId) return
-    void state.socket.command({ type: "cron.resume", chatId, jobId }).catch(() => {})
-  }, [state.activeChatId, state.socket])
-
+  // Pause / resume / edit live on `CronJobRow`, which owns the socket itself.
+  // Remove stays here because the transcript's `cron_armed` card offers it too.
   const handleCronRemove = useCallback((jobId: string) => {
     const chatId = state.activeChatId
     if (!chatId) return
@@ -431,8 +421,6 @@ export function ChatTabContent({
     workflowRuns: workflowRuns.length > 0 ? workflowRuns : undefined,
     backgroundTasks: state.runtime?.backgroundTasks,
     getWorkflowRunDetail: handleGetWorkflowRunDetail,
-    onCronPause: handleCronPause,
-    onCronResume: handleCronResume,
     localPath: state.runtime?.localPath,
     latestToolIds: state.latestToolIds,
     isProcessing: state.isProcessing,
@@ -473,8 +461,6 @@ export function ChatTabContent({
     workflowRuns,
     state.runtime?.backgroundTasks,
     handleGetWorkflowRunDetail,
-    handleCronPause,
-    handleCronResume,
     state.runtime?.localPath,
     state.latestToolIds,
     state.isProcessing,

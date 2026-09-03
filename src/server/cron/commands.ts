@@ -7,7 +7,7 @@
  */
 
 import type { TranscriptEntry } from "../../shared/types"
-import type { CronArmSummary, CronParseError, CronParseResult } from "../../shared/cron/types"
+import { hasActiveRun, type CronArmSummary, type CronParseError, type CronParseResult } from "../../shared/cron/types"
 import type { CronRepair } from "./repair"
 import type { CronConfirm } from "./confirm"
 import { cronModeConsequence } from "../../shared/cron/arm-summary"
@@ -15,7 +15,7 @@ import { humanizeSchedule } from "../../shared/cron/humanize"
 import { nextFireAt } from "./next-fire"
 import type { AutoContinueEvent } from "../auto-continue/events"
 import { AUTO_CONTINUE_EVENT_VERSION } from "../auto-continue/events"
-import { deriveCronJobs, hasActiveRun } from "./read-model"
+import { deriveCronJobs } from "./read-model"
 import { timestamped } from "../claude-message-normalizer"
 
 export interface CronCommandStore {

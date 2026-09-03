@@ -163,6 +163,23 @@ export interface CronJobSnapshot {
 
 export const MAX_RECENT_CRON_RUNS = 20
 
+/**
+ * The job's most recent real run is still in flight (overlap guard).
+ *
+ * Shared rather than server-only because the client needs the same answer: the
+ * `update` handler refuses while a run is live, and it reports that refusal as
+ * a `cron_command_error` in the ARMING chat — invisible from the global cron
+ * page. The edit affordance is disabled from this predicate so the click
+ * cannot fail somewhere the user is not looking.
+ */
+export function hasActiveRun(job: CronJobSnapshot): boolean {
+  for (const run of job.recentRuns) {
+    if (run.status === "skipped") continue
+    return run.status === "running"
+  }
+  return false
+}
+
 /** One row of the global cron management page — a job joined to its chat + project. */
 export interface CronJobsGlobalRow {
   projectId: string

@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { AUTO_CONTINUE_EVENT_VERSION, type AutoContinueEvent } from "../auto-continue/events"
-import { deriveCronJobs, findRunningCronRuns, hasActiveRun, hasUnpausedCronJob } from "./read-model"
+import { deriveCronJobs, findRunningCronRuns, hasUnpausedCronJob } from "./read-model"
 import { parseSchedule } from "../../shared/cron/parse-schedule"
-import { MAX_RECENT_CRON_RUNS, type CronSchedule } from "../../shared/cron/types"
+import { hasActiveRun, MAX_RECENT_CRON_RUNS, type CronSchedule } from "../../shared/cron/types"
 
 const CHAT = "chat-1"
 
