@@ -322,6 +322,73 @@ export const ChatTranscriptViewport = memo(({
     }
   }, [activeChatId, handleScroll, listRef, resolvedRows.length, timer])
 
+  // LegendList's maintainVisibleContentPosition corrects scroll position by
+  // calling scrollBy() whenever an off-screen row's measured height differs
+  // from its estimate. On a long chat that fires every frame of a drag, and
+  // a programmatic scrollBy mid-gesture aborts native touch momentum on iOS/
+  // Android — making long chats impossible to scroll by touch (desktop wheel
+  // unaffected). Suppress only those corrections while a finger gesture and
+  // its inertia own the scroll; MVCP stays fully enabled for non-touch updates.
+  useEffect(() => {
+    let cleanup: (() => void) | undefined
+    const frameId = timer.requestAnimationFrame(() => {
+      const scrollNode = listRef.current?.getScrollableNode?.()
+      if (!(scrollNode instanceof HTMLElement)) return
+
+      const nativeScrollBy = scrollNode.scrollBy
+      if (typeof nativeScrollBy !== "function") return
+
+      let gestureActive = false
+      let settleTimer: number | undefined
+
+      const armSettle = () => {
+        if (settleTimer !== undefined) timer.clearTimeout(settleTimer)
+        settleTimer = timer.setTimeout(() => {
+          settleTimer = undefined
+          gestureActive = false
+        }, 120)
+      }
+
+      function guardedScrollBy(options?: ScrollToOptions): void
+      function guardedScrollBy(x: number, y: number): void
+      function guardedScrollBy(...args: [ScrollToOptions?] | [number, number]): void {
+        if (!gestureActive) Reflect.apply(nativeScrollBy, scrollNode, args)
+      }
+      scrollNode.scrollBy = guardedScrollBy
+
+      const onTouchStart = () => {
+        if (settleTimer !== undefined) {
+          timer.clearTimeout(settleTimer)
+          settleTimer = undefined
+        }
+        gestureActive = true
+      }
+      const onTouchEnd = () => { armSettle() }
+      const onScrollWhileGesturing = () => { if (gestureActive) armSettle() }
+
+      scrollNode.addEventListener("touchstart", onTouchStart, { passive: true })
+      scrollNode.addEventListener("touchend", onTouchEnd, { passive: true })
+      scrollNode.addEventListener("touchcancel", onTouchEnd, { passive: true })
+      scrollNode.addEventListener("scroll", onScrollWhileGesturing, { passive: true })
+
+      cleanup = () => {
+        if (settleTimer !== undefined) timer.clearTimeout(settleTimer)
+        scrollNode.removeEventListener("touchstart", onTouchStart)
+        scrollNode.removeEventListener("touchend", onTouchEnd)
+        scrollNode.removeEventListener("touchcancel", onTouchEnd)
+        scrollNode.removeEventListener("scroll", onScrollWhileGesturing)
+        if (scrollNode.scrollBy === guardedScrollBy) {
+          Reflect.deleteProperty(scrollNode, "scrollBy")
+        }
+      }
+    })
+
+    return () => {
+      timer.cancelAnimationFrame(frameId)
+      cleanup?.()
+    }
+  }, [activeChatId, listRef, timer])
+
   const handleStartReached = useCallback(() => {
     if (isHistoryLoading || !hasOlderHistory) {
       return
@@ -517,7 +584,7 @@ export const ChatTranscriptViewport = memo(({
           onScroll={handleScroll}
           onStartReached={handleStartReached}
           onStartReachedThreshold={0.1}
-          className="h-full flex-1 overflow-x-hidden overscroll-y-contain px-3 scroll-pt-[72px] [scrollbar-gutter:auto]"
+          className="h-full flex-1 overflow-x-hidden overscroll-y-contain touch-pan-y px-3 scroll-pt-[72px] [scrollbar-gutter:auto]"
           // Rows now pad above rather than below, so the last row contributes no
           // trailing air of its own; make up the difference here.
           contentContainerStyle={{ paddingBottom: transcriptPaddingBottom + 30 }}
