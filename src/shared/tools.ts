@@ -29,6 +29,12 @@ export const ARM_CRON_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__arm_cron`
 export const VALIDATE_CRON_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__validate_cron`
 export const VALIDATE_MERMAID_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__validate_mermaid`
 export const RUN_VERIFY_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__run_verify`
+export const PLUGIN_LIST_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__plugin_list`
+export const PLUGIN_VALIDATE_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__plugin_validate`
+export const PLUGIN_LOGS_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__plugin_logs`
+export const PLUGIN_SCAFFOLD_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__plugin_scaffold`
+export const PLUGIN_INSTALL_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__plugin_install`
+export const PLUGIN_RELOAD_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__plugin_reload`
 
 function asRecord<T>(value: T): (T & Record<string, unknown>) | null {
   return isRecord(value) ? value : null

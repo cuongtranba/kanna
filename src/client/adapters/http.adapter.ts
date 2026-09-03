@@ -7,6 +7,7 @@
  * Architecture: .c3/adr/adr-20260715-client-state-effect-architecture.md
  */
 
+import type { AnyValue } from "../../shared/errors"
 import type { HttpPort, HttpRequestOptions, HttpResponse } from "../ports/httpPort"
 
 function extractHeaders(headers: Headers): Record<string, string> {
@@ -48,6 +49,31 @@ export const httpAdapter: HttpPort = {
   async postJson<T>(
     url: string,
     body: Record<string, string | number | boolean | null | undefined>,
+    options: Omit<HttpRequestOptions, "method" | "body"> = {},
+  ): Promise<HttpResponse<T>> {
+    const response = await fetch(url, {
+      method: "POST",
+      signal: options.signal,
+      cache: options.cache,
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        ...options.headers,
+      },
+      body: JSON.stringify(body),
+    })
+    const data: T = await parseJsonText(response)
+    return {
+      ok: response.ok,
+      status: response.status,
+      data,
+      headers: extractHeaders(response.headers),
+    }
+  },
+
+  async postJsonBody<T>(
+    url: string,
+    body: AnyValue,
     options: Omit<HttpRequestOptions, "method" | "body"> = {},
   ): Promise<HttpResponse<T>> {
     const response = await fetch(url, {

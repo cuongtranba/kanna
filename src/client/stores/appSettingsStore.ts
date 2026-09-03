@@ -2,6 +2,7 @@ import { create } from "zustand"
 import type { AppSettingsPatch, AppSettingsSnapshot, CustomModelEntry, McpServerConfig, TextSnippet } from "../../shared/types"
 import { DEFAULT_TERMINAL_SCROLLBACK } from "../../shared/terminal-scrollback"
 import type { ChatSoundId, ChatSoundPreference, EditorPreset } from "../../shared/core-types"
+import type { InstalledPluginConfig } from "../../shared/plugins/settings"
 
 type AppSettingsHydrationStatus = "idle" | "loading" | "ready" | "error"
 
@@ -87,6 +88,11 @@ export function mergeAppSettingsPatch(
     customMcpServers: settings.customMcpServers,
     customModels: settings.customModels,
     textSnippets: settings.textSnippets,
+    plugins: {
+      ...settings.plugins,
+      ...patch.plugins,
+    },
+    installedPlugins: settings.installedPlugins,
     claudeDriver: {
       preference: patch.claudeDriver?.preference ?? settings.claudeDriver.preference,
       lifecycle: {
@@ -133,6 +139,19 @@ const EMPTY_TEXT_SNIPPETS: readonly TextSnippet[] = []
 
 export const selectTextSnippets = (state: AppSettingsStoreState): readonly TextSnippet[] =>
   state.settings?.textSnippets ?? EMPTY_TEXT_SNIPPETS
+
+const EMPTY_INSTALLED_PLUGINS: readonly InstalledPluginConfig[] = []
+
+/**
+ * The Kanna plugin system's global switch. Off by default and off while the
+ * settings snapshot is still hydrating, so a surface gated on this never
+ * flashes into view before the server has spoken.
+ */
+export const selectPluginsEnabled = (state: AppSettingsStoreState): boolean =>
+  state.settings?.plugins.enabled ?? false
+
+export const selectInstalledPlugins = (state: AppSettingsStoreState): readonly InstalledPluginConfig[] =>
+  state.settings?.installedPlugins ?? EMPTY_INSTALLED_PLUGINS
 
 const DEFAULT_TERMINAL_MIN_COLUMN_WIDTH = 450
 const DEFAULT_EDITOR_PRESET: EditorPreset = "cursor"

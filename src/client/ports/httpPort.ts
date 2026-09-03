@@ -8,6 +8,8 @@
  * Architecture: .c3/adr/adr-20260715-client-state-effect-architecture.md
  */
 
+import type { AnyValue } from "../../shared/errors"
+
 export interface HttpRequestOptions {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD"
   headers?: Record<string, string>
@@ -33,6 +35,18 @@ export interface HttpPort {
    * Perform a POST request with a JSON body and parse the response as JSON.
    */
   postJson<T>(url: string, body: Record<string, string | number | boolean | null | undefined>, options?: Omit<HttpRequestOptions, "method" | "body">): Promise<HttpResponse<T>>
+
+  /**
+   * Perform a POST request with an arbitrary JSON-serialisable body.
+   *
+   * `postJson` types its body as a FLAT record of primitives, which is the
+   * right shape for the form-like posts it was written for but cannot carry a
+   * nested payload — a plugin RPC input (`POST /api/plugins/:id/rpc`, body
+   * `{method, params}`) has a `params` that is itself arbitrary JSON. This is
+   * the same call with the body constraint lifted; it does not replace
+   * `postJson`, whose narrower type still guards its own call sites.
+   */
+  postJsonBody<T>(url: string, body: AnyValue, options?: Omit<HttpRequestOptions, "method" | "body">): Promise<HttpResponse<T>>
 
   /**
    * Perform a HEAD request (probe — no body returned).
