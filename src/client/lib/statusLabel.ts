@@ -24,23 +24,23 @@ export function statusTone(status: KannaStatus): StatusTone {
   }
 }
 
+/**
+ * Tone colours, drawn only from the design tokens.
+ *
+ * These were `emerald-500` and `amber-500` — raw Tailwind palette values that
+ * appear nowhere in DESIGN.md's warm rose system, so every status in the app was
+ * painted off-palette. They are also no longer load-bearing: state is carried by
+ * the mark's shape (see `stateMark.ts`), and colour is only allowed to agree.
+ * `active` is therefore full ink rather than a hue — a live session is the one
+ * thing on screen that should read at full strength.
+ */
 export function statusToneClass(tone: StatusTone): string {
   switch (tone) {
-    case "active": return "text-emerald-500 dark:text-emerald-400"
-    case "attention": return "text-amber-500 dark:text-amber-400"
-    case "destructive": return "text-destructive"
+    case "active": return "text-foreground"
+    case "attention": return "text-warning-text"
+    case "destructive": return "text-destructive-text"
     case "muted":
     default: return "text-muted-foreground"
-  }
-}
-
-export function statusToneDotClass(tone: StatusTone): string {
-  switch (tone) {
-    case "active": return "bg-emerald-500 dark:bg-emerald-400"
-    case "attention": return "bg-amber-500 dark:bg-amber-400"
-    case "destructive": return "bg-destructive"
-    case "muted":
-    default: return "bg-muted-foreground"
   }
 }
 

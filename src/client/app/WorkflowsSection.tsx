@@ -3,7 +3,8 @@ import { WorkflowsSectionDetailStore } from "./WorkflowsSection.store"
 import { Activity, FileText } from "lucide-react"
 import { cn } from "../lib/utils"
 import { formatCompactDuration } from "../lib/formatDuration"
-import { statusToneClass, statusToneDotClass, workflowStatusTone, type StatusTone } from "../lib/statusLabel"
+import { statusToneClass, workflowStatusTone, type StatusTone } from "../lib/statusLabel"
+import { StateMark } from "../components/ui/state-mark"
 import { WorkflowStatusPill } from "../components/ui/status-pill"
 import { groupWorkflowAgentsByPhase } from "../lib/workflowGrouping"
 import type { WorkflowAgentProgress, WorkflowRun, WorkflowRunSummary } from "../../shared/workflow-types"
@@ -199,14 +200,7 @@ function WorkflowAgentRow({
       data-testid={`workflow-agent:${agent.agentId ?? agent.index}`}
       className="group flex items-start gap-2 rounded-md px-2 py-1.5 transition-colors hover:bg-muted/50"
     >
-      <span
-        aria-hidden
-        className={cn(
-          "mt-1.5 inline-block size-1.5 shrink-0 rounded-full",
-          statusToneDotClass(stateTone),
-          live && "animate-pulse",
-        )}
-      />
+      <StateMark tone={stateTone} className={cn("mt-0.5", statusToneClass(stateTone))} />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <div className="flex items-center gap-2">
           <span className={cn("truncate text-sm text-foreground", live && "font-medium")}>{agent.label}</span>

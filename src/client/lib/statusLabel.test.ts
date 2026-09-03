@@ -3,7 +3,6 @@ import {
   statusLabel,
   statusTone,
   statusToneClass,
-  statusToneDotClass,
   workflowStatusLabel,
   workflowStatusTone,
 } from "./statusLabel"
@@ -24,11 +23,27 @@ describe("statusTone", () => {
   test("failed → destructive", () => expect(statusTone("failed")).toBe("destructive"))
 })
 
-describe("statusToneDotClass", () => {
-  test("active → emerald dot", () => expect(statusToneDotClass("active")).toBe("bg-emerald-500 dark:bg-emerald-400"))
-  test("attention → amber dot", () => expect(statusToneDotClass("attention")).toBe("bg-amber-500 dark:bg-amber-400"))
-  test("destructive → destructive dot", () => expect(statusToneDotClass("destructive")).toBe("bg-destructive"))
-  test("muted → muted dot", () => expect(statusToneDotClass("muted")).toBe("bg-muted-foreground"))
+const ALL_TONES = ["muted", "active", "attention", "destructive"] as const
+
+describe("statusToneClass draws only from the design tokens", () => {
+  // These returned `emerald-500` and `amber-500`, which are nowhere in
+  // DESIGN.md's warm rose palette. State is carried by the mark's shape now, so
+  // colour only has to agree — and it has to agree in the project's own inks.
+  const OFF_PALETTE = /emerald|amber-\d|sky|violet|slate|zinc|gray|green-\d|red-\d/
+
+  test("no tone returns a raw Tailwind palette colour", () => {
+    for (const tone of ALL_TONES) {
+      expect(statusToneClass(tone)).not.toMatch(OFF_PALETTE)
+    }
+  })
+
+  test("a live session reads at full ink", () => {
+    expect(statusToneClass("active")).toBe("text-foreground")
+  })
+
+  test("failure uses the AA-checked destructive text token, not the logo coral", () => {
+    expect(statusToneClass("destructive")).toBe("text-destructive-text")
+  })
 })
 
 describe("workflowStatusLabel", () => {
@@ -45,8 +60,7 @@ describe("workflowStatusTone", () => {
   test("killed → attention", () => expect(workflowStatusTone("killed")).toBe("attention"))
   test("completed → muted", () => expect(workflowStatusTone("completed")).toBe("muted"))
   test("unknown → muted", () => expect(workflowStatusTone("unknown")).toBe("muted"))
-  test("killed keeps the amber classes the old warning tone rendered", () => {
-    expect(statusToneClass(workflowStatusTone("killed"))).toBe("text-amber-500 dark:text-amber-400")
-    expect(statusToneDotClass(workflowStatusTone("killed"))).toBe("bg-amber-500 dark:bg-amber-400")
+  test("killed still reads as the warning tone, in the project's amber token", () => {
+    expect(statusToneClass(workflowStatusTone("killed"))).toBe("text-warning-text")
   })
 })

@@ -1,31 +1,23 @@
-import { cn } from "../../lib/utils"
-import {
-  statusToneClass,
-  statusToneDotClass,
-  workflowStatusLabel,
-  workflowStatusTone,
-  type StatusTone,
-} from "../../lib/statusLabel"
+import { StateMarkLabel } from "./state-mark"
+import { workflowStatusLabel, workflowStatusTone, type StatusTone } from "../../lib/statusLabel"
 import type { WorkflowStatus } from "../../../shared/workflow-types"
 
+/**
+ * A status is a mark and its word — no dot, no box.
+ *
+ * The bordered pill spent a whole card's worth of chrome saying what one stroke
+ * says, and the dot inside it carried its state in hue alone. The mark's shape
+ * is the signal now, so this reads the same in greyscale and at a glance.
+ *
+ * The name and props are unchanged so every existing call site inherits the new
+ * treatment without edits.
+ */
 export function StatusPill({ tone, label }: { tone: StatusTone; label: string; pulse?: boolean }) {
-  return (
-    <span className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-xs font-medium">
-      <span
-        aria-hidden
-        className={cn("inline-block size-1.5 rounded-full", statusToneDotClass(tone))}
-      />
-      <span className={statusToneClass(tone)}>{label}</span>
-    </span>
-  )
+  return <StateMarkLabel tone={tone} label={label} />
 }
 
-export function WorkflowStatusPill({ status, pulse = false }: { status: WorkflowStatus; pulse?: boolean }) {
+export function WorkflowStatusPill({ status }: { status: WorkflowStatus; pulse?: boolean }) {
   return (
-    <StatusPill
-      tone={workflowStatusTone(status)}
-      label={workflowStatusLabel(status)}
-      pulse={pulse && status === "running"}
-    />
+    <StatusPill tone={workflowStatusTone(status)} label={workflowStatusLabel(status)} />
   )
 }

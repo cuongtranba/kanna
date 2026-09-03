@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, type DragEvent } from "react"
+import { turnDurationsFromMessages } from "../../lib/reduction"
 import type { DomPort } from "../../ports/domPort"
 import type { TimerPort } from "../../ports/timerPort"
 import { type LegendListRef } from "@legendapp/list/react"
@@ -241,6 +242,12 @@ export function ChatTabContent({
       Object.values(state.chatSnapshot?.subagentRuns ?? {}),
     ),
     [state.chatSnapshot?.messages, state.chatSnapshot?.subagentRuns],
+  )
+
+  // The session sigil reads the same measured durations the transcript shows.
+  const turnDurationsMs = useMemo(
+    () => turnDurationsFromMessages(state.messages),
+    [state.messages],
   )
 
   const showEmptyState = state.messages.length === 0 && state.runtime?.title === "New Chat"
@@ -610,6 +617,7 @@ export function ChatTabContent({
     >
       <CardContent className="flex flex-1 min-h-0 flex-col overflow-hidden p-0 relative">
         <ChatNavbar
+          turnDurationsMs={turnDurationsMs}
           sidebarCollapsed={state.sidebarCollapsed}
           onOpenSidebar={state.openSidebar}
           onExpandSidebar={state.expandSidebar}
