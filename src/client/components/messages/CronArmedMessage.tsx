@@ -33,7 +33,7 @@ function CronArmedMessageInner({ message, onRemove }: Props) {
   const fires = message.upcomingFires ?? (message.nextFireAt !== null ? [message.nextFireAt] : [])
 
   return (
-    <div className="rounded-lg border border-border bg-card px-4 py-3">
+    <div className="px-0.5">
       <div className="flex items-start gap-2">
         <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         <div className="min-w-0 flex-1">

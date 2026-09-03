@@ -1,0 +1,731 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Kanna — Plate &amp; Reduction (prototype)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,800&family=Hanken+Grotesk:wght@400;500;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ───────────────────────────────────────────────────────────────
+   PLATE & REDUCTION — a prototype reskin for Kanna
+   Four inks. State is mark-form, not hue. No cards; only plates.
+   Everything registers to one off-centre rail.
+   ─────────────────────────────────────────────────────────────── */
+
+:root {
+  /* THE FOUR INKS — the whole surface is printed from these */
+  --paper:   oklch(98.6% 0.005 78);    /* warm rag stock */
+  --ink:     oklch(19% 0.014 30);      /* press black, warm */
+  --margin:  oklch(52% 0.016 40);      /* the caption gray */
+  --coral:   oklch(58% 0.17 20);       /* the one spot colour */
+
+  /* VERBATIM INKS — the exception, and the only one.
+     The four inks govern the chrome. Verbatim material — diffs,
+     terminal output, anything the agent actually produced — is the
+     preserved photograph and keeps its own truth. Additions and
+     deletions are read by shape AND hue because that is how they
+     are read everywhere else; flattening them would be style
+     winning an argument against the work. */
+  --add: oklch(37% 0.10 155);
+  --del: oklch(56% 0.18 13);
+
+  /* derived, never new inks — mixes of the four */
+  --rule:      color-mix(in oklch, var(--ink) 14%, var(--paper));
+  --rule-firm: color-mix(in oklch, var(--ink) 26%, var(--paper));
+  --wash:      color-mix(in oklch, var(--ink) 4%,  var(--paper));
+  --wash-deep: color-mix(in oklch, var(--ink) 8%,  var(--paper));
+
+  --rail: 268px;          /* the one off-centre rail everything hangs from */
+  --gutter: 40px;
+  --leading: 1.55;
+
+  --sans: "Hanken Grotesk", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --mono: "Roboto Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --display: "Bricolage Grotesque", var(--sans);
+
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+[data-theme="dark"] {
+  --paper:   oklch(17.5% 0.012 40);    /* ink-soaked board */
+  --ink:     oklch(94% 0.008 78);
+  --margin:  oklch(66% 0.016 45);
+  --coral:   oklch(72% 0.16 22);
+
+  --add: oklch(76% 0.14 155);
+  --del: oklch(78% 0.18 13);
+
+  --rule:      color-mix(in oklch, var(--ink) 15%, var(--paper));
+  --rule-firm: color-mix(in oklch, var(--ink) 28%, var(--paper));
+  --wash:      color-mix(in oklch, var(--ink) 5%,  var(--paper));
+  --wash-deep: color-mix(in oklch, var(--ink) 9%,  var(--paper));
+}
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: var(--leading);
+  font-feature-settings: "kern" 1;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The grain sits on the ground only, generated from real pixels at run time.
+   Never over text surfaces — paper is a ground, not a filter. */
+#grain {
+  position: fixed; inset: 0; z-index: 0;
+  pointer-events: none; opacity: .028;
+  background-repeat: repeat;
+}
+[data-theme="dark"] #grain { opacity: .05; }
+
+/* ── Browser surfaces carry the design too ──────────────────── */
+::selection { background: color-mix(in oklch, var(--coral) 22%, var(--paper)); color: var(--ink); }
+::-webkit-scrollbar { width: 11px; height: 11px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--rule-firm);
+  border: 4px solid var(--paper);
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--margin); }
+* { scrollbar-width: thin; scrollbar-color: var(--rule-firm) transparent; }
+
+:focus-visible {
+  outline: 2px solid var(--coral);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+a { color: inherit; text-underline-offset: 3px; text-decoration-thickness: 1px; }
+
+/* ═══ THE CAPTION SYSTEM ═════════════════════════════════════
+   Every object wears its printed label, and every label carries a
+   live fact. A caption that states no fact is deleted, not styled. */
+.caption {
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.2;
+  letter-spacing: .06em;
+  color: var(--margin);
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  white-space: nowrap;
+}
+.caption .n { color: var(--ink); font-weight: 500; }
+.caption .sep { color: var(--rule-firm); }
+.caption .fact { margin-left: auto; padding-left: 16px; }
+
+/* ═══ THE FOUR MARKS ═════════════════════════════════════════
+   State is carried in mark FORM — doubling, height, strike —
+   never in hue. Colour may agree; it never decides.
+   Every mark ships with its word. */
+.mark { display: inline-block; width: 9px; height: 13px; flex: none; vertical-align: -2px; }
+.mark line, .mark path { stroke: currentColor; stroke-width: 1.5; stroke-linecap: butt; }
+.state { display: inline-flex; align-items: center; gap: 7px; font-family: var(--mono);
+         font-size: 12px; letter-spacing: .05em; color: var(--margin); font-variant-numeric: tabular-nums; }
+.state.is-live   { color: var(--ink); }
+.state.is-failed { color: var(--coral); }
+
+/* ═══ PLATES — the replacement for cards ══════════════════════
+   A plate is space + one hairline + a caption. There is no box,
+   no radius, no shadow, and no nesting. */
+.plate { padding: 0 0 34px; margin: 0 0 34px; border-bottom: 1px solid var(--rule); }
+.plate:last-child { border-bottom: 0; }
+.plate > .caption { margin-bottom: 14px; }
+
+.plate-body { font-size: 14px; line-height: var(--leading); max-width: min(68ch, 100%); }
+.plate-body p { margin: 0 0 .85em; }
+.plate-body p:last-child { margin-bottom: 0; }
+
+/* ═══ SHELL ══════════════════════════════════════════════════ */
+.sheet { position: relative; z-index: 1; min-height: 100vh; display: flex; flex-direction: column; }
+
+/* Running head — a book's, not an app bar's */
+.runninghead {
+  display: flex; align-items: baseline; gap: 16px;
+  padding: 16px var(--gutter) 15px;
+  border-bottom: 1px solid var(--rule);
+}
+.wordmark {
+  font-family: var(--display); font-weight: 800; font-size: 19px;
+  letter-spacing: -.03em; line-height: 1; color: var(--ink);
+}
+.wordmark .dot { color: var(--coral); }
+.runninghead .caption { flex: 1; }
+
+.controls { display: flex; gap: 6px; margin-left: auto; }
+button.ctl {
+  font-family: var(--mono); font-size: 12px; letter-spacing: .05em;
+  color: var(--margin); background: none; border: 0;
+  padding: 6px 10px; cursor: pointer; border-radius: 3px;
+  transition: color .15s var(--ease), background .15s var(--ease);
+}
+button.ctl:hover { color: var(--ink); background: var(--wash); }
+button.ctl[aria-pressed="true"] { color: var(--ink); background: var(--wash-deep); }
+
+.body { display: grid; grid-template-columns: var(--rail) minmax(0,1fr) 268px; flex: 1; }
+
+/* ── LEFT: the index ─────────────────────────────────────────── */
+.index { border-right: 1px solid var(--rule); padding: 26px 0 40px; }
+/* The row fill spans the full column and the CONTENT registers to the
+   rail. A fill that starts a few pixels left of the text is the thing
+   that breaks the one-rail rule, and a left stripe is banned outright:
+   a selected row is a full-width tonal field. */
+.index-sec { margin-bottom: 30px; }
+.index-sec > .caption { padding: 0 20px 0 var(--gutter); margin-bottom: 14px; }
+
+.chatrow {
+  display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 11px;
+  padding: 9px 20px 9px var(--gutter);
+  cursor: pointer;
+  transition: background .15s var(--ease);
+}
+/* Without this the 1fr track refuses to shrink under its content and
+   the row overruns the rail instead of ellipsing. */
+.chatrow > * { min-width: 0; }
+.chatrow:hover { background: var(--wash); }
+.chatrow[aria-current="true"] { background: var(--wash-deep); }
+.chatrow[aria-current="true"] .ct { font-weight: 600; }
+
+/* THE REDUCTION — a session's whole transcript compressed to one
+   printer's device. Exact geometry, deterministic, drawn from the
+   session's own turn data. Never ornament: the ticks are turns,
+   their height is duration, the doubled tick is where it stands now. */
+.reduction { width: 26px; height: 26px; margin-top: 1px; opacity: .85; }
+.reduction line { stroke: var(--margin); stroke-width: 1.4; }
+.reduction .now { stroke: var(--coral); stroke-width: 1.4; }
+.reduction .base { stroke: var(--rule-firm); stroke-width: 1; }
+.chatrow[aria-current="true"] .reduction { opacity: 1; }
+.chatrow[aria-current="true"] .reduction line { stroke: var(--ink); }
+.chatrow[aria-current="true"] .reduction .now { stroke: var(--coral); }
+
+.ct { font-size: 13.5px; line-height: 1.35; margin-bottom: 4px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cm { font-family: var(--mono); font-size: 11.5px; letter-spacing: .04em;
+      color: var(--margin); font-variant-numeric: tabular-nums;
+      display: flex; align-items: center; gap: 7px; }
+
+/* ── CENTRE: the plates ──────────────────────────────────────── */
+.main { padding: 30px var(--gutter) 0; min-width: 0; display: flex; flex-direction: column; }
+.doc-head { margin-bottom: 34px; }
+.doc-title { font-size: 21px; font-weight: 500; letter-spacing: -.015em; line-height: 1.25; margin: 0 0 9px; }
+.doc-meta { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+
+.stream { flex: 1; }
+
+/* Speaker is set in the margin, like a manuscript gloss — not a bubble. */
+.turn { display: grid; grid-template-columns: 74px minmax(0,1fr); gap: 22px; }
+.turn > .who {
+  font-family: var(--mono); font-size: 12px; letter-spacing: .06em;
+  color: var(--margin); padding-top: 2px; text-align: right;
+}
+.turn.you > .who { color: var(--ink); }
+
+/* Verbatim material — transcript, terminal, diff — is preserved
+   faithfully. It is the photograph; it is never restyled. */
+.verbatim {
+  font-family: var(--mono); font-size: 12.5px; line-height: 1.7;
+  background: var(--wash); border-left: 1px solid var(--rule-firm);
+  padding: 12px 16px; overflow-x: auto; white-space: pre;
+  color: var(--ink); border-radius: 0 3px 3px 0;
+}
+/* Additions and deletions are read by SHAPE (the leading +/−, and the
+   gutter tint) as well as hue, so the pair survives greyscale and
+   colour-blindness while still reading instantly to a developer. */
+.verbatim .add { color: var(--add); background: color-mix(in oklch, var(--add) 9%, transparent);
+                 box-shadow: -16px 0 0 color-mix(in oklch, var(--add) 9%, transparent); }
+.verbatim .del { color: var(--del); background: color-mix(in oklch, var(--del) 9%, transparent);
+                 box-shadow: -16px 0 0 color-mix(in oklch, var(--del) 9%, transparent); }
+.verbatim .dim { color: var(--margin); }
+
+.tally { font-family: var(--mono); font-variant-numeric: tabular-nums; letter-spacing: .02em; }
+.tally .p { color: var(--add); }
+.tally .m { color: var(--del); }
+
+.toolline { display: flex; align-items: baseline; gap: 12px; font-family: var(--mono);
+            font-size: 12.5px; color: var(--ink); flex-wrap: wrap; }
+.toolline .arg { color: var(--margin); }
+.toolline .dur { margin-left: auto; color: var(--margin); font-variant-numeric: tabular-nums; }
+
+/* ── RIGHT: the colophon ─────────────────────────────────────── */
+.colophon { border-left: 1px solid var(--rule); padding: 26px 32px 40px 26px; }
+.colophon section { margin-bottom: 32px; }
+.colophon section > .caption { margin-bottom: 13px; }
+
+/* The context meter is a printed rule, not a progress bar. */
+.meter { height: 3px; background: var(--rule); position: relative; margin: 10px 0 8px; }
+.meter i { position: absolute; inset: 0 auto 0 0; background: var(--ink); }
+.meter b { position: absolute; top: -4px; bottom: -4px; width: 1px; background: var(--coral); }
+.meter-legend { display: flex; justify-content: space-between; font-family: var(--mono);
+                font-size: 11.5px; color: var(--margin); font-variant-numeric: tabular-nums; }
+
+.taskrow { display: flex; align-items: baseline; gap: 9px; padding: 7px 0;
+           border-bottom: 1px solid var(--rule); font-size: 13px; }
+.taskrow:last-child { border-bottom: 0; }
+.taskrow .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.taskrow .e { font-family: var(--mono); font-size: 11.5px; color: var(--margin); font-variant-numeric: tabular-nums; }
+
+/* ── COMPOSER ────────────────────────────────────────────────── */
+.composer { border-top: 1px solid var(--rule); padding: 16px 0 26px; margin-top: 20px; position: sticky; bottom: 0;
+            background: var(--paper); }
+.composer .field {
+  display: grid; grid-template-columns: 74px minmax(0,1fr) auto; gap: 22px; align-items: baseline;
+}
+.composer .who { font-family: var(--mono); font-size: 12px; letter-spacing: .06em; color: var(--ink); text-align: right; }
+.composer input {
+  font: inherit; font-size: 14px; color: var(--ink); background: none;
+  border: 0; padding: 4px 0; width: 100%;
+}
+.composer input::placeholder { color: var(--margin); }
+.composer input:focus { outline: none; }
+.composer .field:focus-within { box-shadow: -6px 0 0 -5px var(--coral); }
+.send {
+  font-family: var(--mono); font-size: 12px; letter-spacing: .05em;
+  background: var(--ink); color: var(--paper); border: 0;
+  padding: 7px 15px; border-radius: 3px; cursor: pointer;
+  transition: opacity .15s var(--ease);
+}
+.send:hover { opacity: .84; }
+.composer-meta { display: flex; gap: 16px; margin: 12px 0 0 96px; }
+
+/* ── SPECIMEN SHEET ──────────────────────────────────────────── */
+.specimen { border-top: 1px solid var(--rule-firm); padding: 46px var(--gutter) 70px; }
+.spec-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(238px, 1fr)); gap: 40px; margin-top: 26px; }
+.spec-h { font-size: 17px; font-weight: 500; letter-spacing: -.01em; margin: 0 0 6px; }
+.spec-note { color: var(--margin); font-size: 13px; max-width: 62ch; margin: 0; }
+
+.ink-chip { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--rule); }
+.ink-chip i { width: 34px; height: 34px; flex: none; border: 1px solid var(--rule-firm); }
+.ink-chip .nm { font-size: 13px; }
+.ink-chip .vl { font-family: var(--mono); font-size: 11.5px; color: var(--margin); margin-left: auto; }
+
+.mark-row { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--rule); }
+.mark-row .def { font-size: 13px; color: var(--margin); margin-left: auto; }
+
+/* ── EMPTY STATE — where the negative space actually sings ───── */
+.empty { padding: 96px var(--gutter) 110px; border-top: 1px solid var(--rule-firm); text-align: left; }
+.empty-mark { width: 56px; height: 56px; margin-bottom: 30px; }
+.empty-mark line { stroke: var(--rule-firm); stroke-width: 1.25; }
+.empty-mark .now { stroke: var(--coral); stroke-width: 1.5; }
+.empty h3 { font-size: 19px; font-weight: 500; letter-spacing: -.015em; margin: 0 0 10px; }
+.empty p { color: var(--margin); max-width: 46ch; margin: 0 0 24px; font-size: 14px; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+
+/* ── RESPONSIVE ──────────────────────────────────────────────── */
+@media (max-width: 1180px) {
+  .body { grid-template-columns: var(--rail) minmax(0,1fr); }
+  .colophon { display: none; }
+}
+@media (max-width: 760px) {
+  :root { --gutter: 20px; --rail: 0px; }
+  .body { grid-template-columns: minmax(0,1fr); }
+  .index { display: none; }
+  .turn { grid-template-columns: minmax(0,1fr); gap: 7px; }
+  .turn > .who { text-align: left; padding-top: 0; }
+  .composer .field { grid-template-columns: minmax(0,1fr) auto; gap: 12px; }
+  .composer .who { display: none; }
+  .composer-meta { margin-left: 0; }
+  .composer input { font-size: 16px; }  /* iOS zoom floor */
+  .runninghead { flex-wrap: wrap; gap: 10px; }
+  .runninghead .caption { order: 3; width: 100%; }
+
+  /* A caption is a running head, not a rule: on a narrow measure it
+     wraps rather than pushing the page sideways. */
+  .caption { white-space: normal; flex-wrap: wrap; row-gap: 3px; }
+  .caption .fact { margin-left: 0; padding-left: 0; width: 100%; }
+  .doc-meta { gap: 8px 14px; }
+  .turn > * { min-width: 0; }
+  .main, .stream, .plate { min-width: 0; }
+  .verbatim { font-size: 12px; padding: 10px 12px; }
+  .specimen, .empty { padding-left: var(--gutter); padding-right: var(--gutter); }
+  .spec-grid { grid-template-columns: minmax(0,1fr); gap: 34px; }
+}
+</style>
+</head>
+<body>
+<div id="grain" aria-hidden="true"></div>
+
+<!-- marks, defined once -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <g id="m-live"><line x1="2.5" y1="1" x2="2.5" y2="12"/><line x1="6.5" y1="1" x2="6.5" y2="12"/></g>
+  <g id="m-done"><line x1="4.5" y1="1" x2="4.5" y2="10"/><line x1="1" y1="11.5" x2="8" y2="11.5"/></g>
+  <g id="m-failed"><line x1="4.5" y1="1" x2="4.5" y2="12"/><line x1="0.5" y1="9.5" x2="8.5" y2="3.5"/></g>
+  <g id="m-idle"><line x1="4.5" y1="5" x2="4.5" y2="12"/></g>
+</defs></svg>
+
+<div class="sheet">
+
+  <!-- ═══ RUNNING HEAD ═══ -->
+  <header class="runninghead">
+    <span class="wordmark">kanna<span class="dot">.</span></span>
+    <span class="caption">
+      <span class="sep">/</span>
+      <span>Vol.&nbsp;1.44.1</span>
+      <span class="sep">·</span>
+      <span>kanna</span>
+      <span class="sep">·</span>
+      <span>3 sessions live</span>
+    </span>
+    <div class="controls">
+      <button class="ctl" id="themeBtn" aria-pressed="false">Dark</button>
+      <button class="ctl">Boards</button>
+      <button class="ctl">Settings</button>
+    </div>
+  </header>
+
+  <div class="body">
+
+    <!-- ═══ LEFT — THE INDEX ═══ -->
+    <nav class="index" aria-label="Sessions">
+      <div class="index-sec">
+        <div class="caption"><span class="n">kanna</span><span class="sep">·</span><span>5 chats</span></div>
+
+        <div class="chatrow" aria-current="true">
+          <svg class="reduction" viewBox="0 0 26 26" aria-hidden="true">
+            <line class="base" x1="1" y1="22.5" x2="25" y2="22.5"/>
+            <line x1="3" y1="22" x2="3" y2="14"/><line x1="6" y1="22" x2="6" y2="9"/>
+            <line x1="9" y1="22" x2="9" y2="17"/><line x1="12" y1="22" x2="12" y2="6"/>
+            <line x1="15" y1="22" x2="15" y2="12"/><line x1="18" y1="22" x2="18" y2="16"/>
+            <line class="now" x1="21" y1="22" x2="21" y2="3"/><line class="now" x1="23" y1="22" x2="23" y2="3"/>
+          </svg>
+          <div>
+            <div class="ct">Reskin the transcript surface</div>
+            <div class="cm">
+              <span class="state is-live"><svg class="mark" viewBox="0 0 9 13"><use href="#m-live"/></svg>Running</span>
+              <span>4m 12s</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="chatrow">
+          <svg class="reduction" viewBox="0 0 26 26" aria-hidden="true">
+            <line class="base" x1="1" y1="22.5" x2="25" y2="22.5"/>
+            <line x1="4" y1="22" x2="4" y2="11"/><line x1="8" y1="22" x2="8" y2="18"/>
+            <line x1="12" y1="22" x2="12" y2="7"/><line x1="16" y1="22" x2="16" y2="15"/>
+            <line x1="20" y1="22" x2="20" y2="19"/>
+          </svg>
+          <div>
+            <div class="ct">Cron seconds parser — 6-field</div>
+            <div class="cm">
+              <span class="state"><svg class="mark" viewBox="0 0 9 13"><use href="#m-done"/></svg>Done</span>
+              <span>2h ago</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="chatrow">
+          <svg class="reduction" viewBox="0 0 26 26" aria-hidden="true">
+            <line class="base" x1="1" y1="22.5" x2="25" y2="22.5"/>
+            <line x1="5" y1="22" x2="5" y2="13"/><line x1="10" y1="22" x2="10" y2="8"/>
+            <line x1="15" y1="22" x2="15" y2="20"/>
+          </svg>
+          <div>
+            <div class="ct">Transcript memory budget</div>
+            <div class="cm">
+              <span class="state is-failed"><svg class="mark" viewBox="0 0 9 13"><use href="#m-failed"/></svg>Failed</span>
+              <span>5h ago</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="chatrow">
+          <svg class="reduction" viewBox="0 0 26 26" aria-hidden="true">
+            <line class="base" x1="1" y1="22.5" x2="25" y2="22.5"/>
+            <line x1="6" y1="22" x2="6" y2="17"/><line x1="13" y1="22" x2="13" y2="19"/>
+          </svg>
+          <div>
+            <div class="ct">Perf alert ticket scope</div>
+            <div class="cm">
+              <span class="state"><svg class="mark" viewBox="0 0 9 13"><use href="#m-idle"/></svg>Queued</span>
+              <span>1d ago</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="index-sec">
+        <div class="caption"><span class="n">wiki</span><span class="sep">·</span><span>1 chat</span></div>
+        <div class="chatrow">
+          <svg class="reduction" viewBox="0 0 26 26" aria-hidden="true">
+            <line class="base" x1="1" y1="22.5" x2="25" y2="22.5"/>
+            <line x1="4" y1="22" x2="4" y2="16"/><line x1="9" y1="22" x2="9" y2="10"/>
+            <line x1="14" y1="22" x2="14" y2="14"/><line x1="19" y1="22" x2="19" y2="18"/>
+          </svg>
+          <div>
+            <div class="ct">Env-var reference table</div>
+            <div class="cm">
+              <span class="state"><svg class="mark" viewBox="0 0 9 13"><use href="#m-done"/></svg>Done</span>
+              <span>3d ago</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <!-- ═══ CENTRE — THE PLATES ═══ -->
+    <main class="main">
+      <div class="doc-head">
+        <h1 class="doc-title">Reskin the transcript surface</h1>
+        <div class="doc-meta">
+          <span class="state is-live"><svg class="mark" viewBox="0 0 9 13"><use href="#m-live"/></svg>Running · 4m 12s</span>
+          <span class="caption"><span>claude-opus-5</span><span class="sep">·</span><span>~/repo/kanna</span></span>
+        </div>
+      </div>
+
+      <div class="stream">
+
+        <div class="plate">
+          <div class="caption"><span class="n">Plate 01</span><span class="sep">·</span><span>Prompt</span>
+            <span class="fact">14:02:11 · 38 words</span></div>
+          <div class="turn you">
+            <div class="who">You</div>
+            <div class="plate-body">
+              <p>Take the card containers out of the transcript. I want the entries separated by space
+              and a hairline, the way figures are separated in a printed monograph — no boxes, no
+              radius, no shadow.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="plate">
+          <div class="caption"><span class="n">Plate 02</span><span class="sep">·</span><span>Reply</span>
+            <span class="fact">6 tool calls · 11.4s</span></div>
+          <div class="turn">
+            <div class="who">Kanna</div>
+            <div class="plate-body">
+              <p>The card shell appears in nine transcript components. They all inherit one wrapper,
+              so the change lands in a single file — the rest only lose their padding overrides.</p>
+              <p style="margin-top:18px">
+                <span class="toolline"><strong>Read</strong>
+                  <span class="arg">src/client/components/messages/TranscriptCard.tsx</span>
+                  <span class="dur">0.2s</span></span>
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="plate">
+          <div class="caption"><span class="n">Plate 03</span><span class="sep">·</span><span>Diff</span>
+            <span class="fact">TranscriptCard.tsx · +4 −7</span></div>
+          <div class="turn">
+            <div class="who">Edit</div>
+            <div>
+              <div class="verbatim"><span class="dim">@@ -18,11 +18,8 @@ export function TranscriptCard(</span>
+<span class="del">-    &lt;div className="rounded-lg border border-border bg-card p-4 shadow-sm"&gt;</span>
+<span class="del">-      &lt;div className="mb-2 flex items-center gap-2"&gt;</span>
+<span class="del">-        &lt;Icon className="size-4 text-muted-foreground" /&gt;</span>
+<span class="add">+    &lt;section className="border-b border-rule pb-8 mb-8"&gt;</span>
+<span class="add">+      &lt;Caption plate={index} kind={kind} fact={fact} /&gt;</span>
+       {children}
+<span class="del">-    &lt;/div&gt;</span>
+<span class="add">+    &lt;/section&gt;</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="plate">
+          <div class="caption"><span class="n">Plate 04</span><span class="sep">·</span><span>Check</span>
+            <span class="fact">bun run check · 48.6s</span></div>
+          <div class="turn">
+            <div class="who">Bash</div>
+            <div>
+              <div class="verbatim"><span class="dim">$</span> bun run check
+<span class="dim">›</span> typecheck        <span class="dim">ok</span>
+<span class="dim">›</span> lint             <span class="dim">ok   0 warnings (cap 0)</span>
+<span class="dim">›</span> build:client     <span class="dim">ok   318,402 gzip bytes</span>
+<span class="dim">›</span> check:bundle     <span class="dim">ok   under 350,000</span></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ═══ COMPOSER ═══ -->
+      <div class="composer">
+        <div class="field">
+          <span class="who">You</span>
+          <input type="text" placeholder="Write, or press / for a command" aria-label="Message" />
+          <button class="send">Send</button>
+        </div>
+        <div class="composer-meta">
+          <span class="caption"><span>claude-opus-5</span></span>
+          <span class="caption"><span>Plan mode off</span></span>
+          <span class="caption"><span>⌘↵ to send</span></span>
+        </div>
+      </div>
+    </main>
+
+    <!-- ═══ RIGHT — THE COLOPHON ═══ -->
+    <aside class="colophon" aria-label="Session detail">
+      <section>
+        <div class="caption"><span class="n">Context</span></div>
+        <div class="meter"><i style="width:62%"></i><b style="left:80%"></b></div>
+        <div class="meter-legend"><span>124,000 / 200,000</span><span>62%</span></div>
+        <p style="font-size:12.5px;color:var(--margin);margin:10px 0 0;line-height:1.5">
+          Compaction is armed at the coral rule.</p>
+      </section>
+
+      <section>
+        <div class="caption"><span class="n">Background</span><span class="sep">·</span><span>2 held</span></div>
+        <div class="taskrow">
+          <span class="state is-live"><svg class="mark" viewBox="0 0 9 13"><use href="#m-live"/></svg></span>
+          <span class="t">vite dev server</span><span class="e">28m 04s</span>
+        </div>
+        <div class="taskrow">
+          <span class="state is-live"><svg class="mark" viewBox="0 0 9 13"><use href="#m-live"/></svg></span>
+          <span class="t">agent · bundle audit</span><span class="e">3m 41s</span>
+        </div>
+      </section>
+
+      <section>
+        <div class="caption"><span class="n">Worktree</span></div>
+        <div class="taskrow"><span class="t">design/editorial-reskin</span></div>
+        <div class="taskrow"><span class="t">4 files changed</span>
+          <span class="e tally"><span class="p">+118</span> <span class="m">−204</span></span></div>
+      </section>
+
+      <section>
+        <div class="caption"><span class="n">Spend</span><span class="sep">·</span><span>this turn</span></div>
+        <div class="taskrow"><span class="t">Input</span><span class="e">18,204</span></div>
+        <div class="taskrow"><span class="t">Cache read</span><span class="e">102,880</span></div>
+        <div class="taskrow"><span class="t">Output</span><span class="e">2,916</span></div>
+        <div class="taskrow"><span class="t">Cost</span><span class="e">$0.41</span></div>
+      </section>
+    </aside>
+  </div>
+
+  <!-- ═══ EMPTY STATE ═══ -->
+  <div class="empty">
+    <svg class="empty-mark" viewBox="0 0 26 26" aria-hidden="true">
+      <line class="base" x1="1" y1="22.5" x2="25" y2="22.5" stroke="currentColor" opacity=".2"/>
+      <line class="now" x1="13" y1="22" x2="13" y2="9"/>
+    </svg>
+    <h3>Nothing running in wiki</h3>
+    <p>The last session closed three days ago. Start one and it takes the rail.</p>
+    <button class="send">New session</button>
+  </div>
+
+  <!-- ═══ SPECIMEN SHEET ═══ -->
+  <div class="specimen">
+    <div class="caption"><span class="n">Specimen</span><span class="sep">·</span><span>the system, with the content removed</span></div>
+
+    <div class="spec-grid">
+      <div>
+        <h2 class="spec-h">Four inks</h2>
+        <p class="spec-note">The whole surface prints from these. Every other value is a mix of
+        two of them, so nothing can drift into a fifth colour.</p>
+        <div style="margin-top:16px">
+          <div class="ink-chip"><i style="background:var(--paper)"></i><span class="nm">Paper</span><span class="vl">ground</span></div>
+          <div class="ink-chip"><i style="background:var(--ink)"></i><span class="nm">Ink</span><span class="vl">text, marks</span></div>
+          <div class="ink-chip"><i style="background:var(--margin)"></i><span class="nm">Margin</span><span class="vl">captions</span></div>
+          <div class="ink-chip"><i style="background:var(--coral)"></i><span class="nm">Coral</span><span class="vl">the one spot</span></div>
+        </div>
+      </div>
+
+      <div>
+        <h2 class="spec-h">Four marks</h2>
+        <p class="spec-note">State is carried in the mark's form (doubling, height, strike), so it
+        survives greyscale, colour-blindness, and a glance from across the desk. Colour may agree
+        with the mark; it never decides.</p>
+        <div style="margin-top:16px">
+          <div class="mark-row"><span class="state is-live"><svg class="mark" viewBox="0 0 9 13"><use href="#m-live"/></svg>Running</span><span class="def">doubled, full height</span></div>
+          <div class="mark-row"><span class="state"><svg class="mark" viewBox="0 0 9 13"><use href="#m-done"/></svg>Done</span><span class="def">single, on a base rule</span></div>
+          <div class="mark-row"><span class="state is-failed"><svg class="mark" viewBox="0 0 9 13"><use href="#m-failed"/></svg>Failed</span><span class="def">struck</span></div>
+          <div class="mark-row"><span class="state"><svg class="mark" viewBox="0 0 9 13"><use href="#m-idle"/></svg>Queued</span><span class="def">half height</span></div>
+        </div>
+      </div>
+
+      <div>
+        <h2 class="spec-h">The reduction</h2>
+        <p class="spec-note">A session's whole transcript compressed to one printer's device. Each
+        tick is a turn and its height is that turn's duration; the doubled coral tick is where the
+        session stands now. Deterministic, drawn from real data, never ornament.</p>
+        <div style="display:flex;gap:20px;margin-top:20px;align-items:flex-end">
+          <svg class="reduction" style="width:56px;height:56px" viewBox="0 0 26 26">
+            <line class="base" x1="1" y1="22.5" x2="25" y2="22.5"/>
+            <line x1="3" y1="22" x2="3" y2="14"/><line x1="6" y1="22" x2="6" y2="9"/>
+            <line x1="9" y1="22" x2="9" y2="17"/><line x1="12" y1="22" x2="12" y2="6"/>
+            <line x1="15" y1="22" x2="15" y2="12"/><line x1="18" y1="22" x2="18" y2="16"/>
+            <line class="now" x1="21" y1="22" x2="21" y2="3"/><line class="now" x1="23" y1="22" x2="23" y2="3"/>
+          </svg>
+          <div class="caption" style="white-space:normal;display:block;line-height:1.6">
+            8 turns<br>longest 2m 40s<br>running
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <h2 class="spec-h">Plates, not cards</h2>
+        <p class="spec-note">A transcript entry is space, one hairline, and a caption that states a
+        fact. No box, no radius, no shadow, no nesting. The saved chrome is what pays for the
+        white, and it is where the brief's negative space actually comes from.</p>
+        <div style="margin-top:16px">
+          <div class="caption"><span class="n">Plate 07</span><span class="sep">·</span><span>Diff</span>
+            <span class="fact tally"><span class="p">+4</span> <span class="m">−7</span></span></div>
+          <div style="border-bottom:1px solid var(--rule);padding-bottom:16px;margin-top:12px;color:var(--margin);font-size:13px">
+            Every caption carries a live fact. A caption with nothing to state is deleted, not styled.
+          </div>
+        </div>
+
+        <div>
+          <h2 class="spec-h">The verbatim exception</h2>
+          <p class="spec-note">The four inks govern the chrome. They do not govern what the agent
+          actually produced. A diff, a terminal buffer, a stack trace is the preserved photograph.
+          It keeps its own truth, and additions and deletions keep their colour, because that is
+          how every developer already reads them. Both still carry their leading sign and a tinted
+          gutter, so the pair survives greyscale.</p>
+          <div class="verbatim" style="margin-top:16px"><span class="add">+      &lt;Caption plate={index} fact={fact} /&gt;</span>
+<span class="del">-      &lt;Icon className="size-4 text-muted-foreground" /&gt;</span></div>
+          <div style="margin-top:14px" class="caption">
+            <span class="n">Additions</span><span class="sep">·</span><span>sage</span>
+            <span class="sep">·</span><span class="n">Deletions</span><span class="sep">·</span><span>coral</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// Grain from real pixels — a tileable noise patch, generated once.
+// Not feTurbulence: this is an exact, specified texture on the ground only.
+(function () {
+  var S = 128, c = document.createElement('canvas');
+  c.width = c.height = S;
+  var x = c.getContext('2d'), d = x.createImageData(S, S), p = d.data;
+  for (var i = 0; i < p.length; i += 4) {
+    var v = (Math.random() * 255) | 0;
+    p[i] = p[i + 1] = p[i + 2] = v; p[i + 3] = 255;
+  }
+  x.putImageData(d, 0, 0);
+  document.getElementById('grain').style.backgroundImage = 'url(' + c.toDataURL() + ')';
+})();
+
+// Theme
+(function () {
+  var b = document.getElementById('themeBtn'), h = document.documentElement;
+  b.addEventListener('click', function () {
+    var dark = h.dataset.theme === 'dark';
+    h.dataset.theme = dark ? 'light' : 'dark';
+    b.textContent = dark ? 'Dark' : 'Light';
+    b.setAttribute('aria-pressed', String(!dark));
+  });
+})();
+</script>
+</body>
+</html>

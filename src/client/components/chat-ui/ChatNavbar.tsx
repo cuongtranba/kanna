@@ -12,6 +12,8 @@ import { HotkeyTooltip, HotkeyTooltipContent, HotkeyTooltipTrigger, Tooltip, Too
 import { cn } from "../../lib/utils"
 import { formatCompactDuration, formatLiveDuration } from "../../lib/formatDuration"
 import { statusLabel, statusTone, statusToneClass } from "../../lib/statusLabel"
+import { StateMark } from "../ui/state-mark"
+import { Reduction } from "../ui/reduction"
 import { branchLabel as computeBranchLabel } from "../../lib/branchLabel"
 import { OpenExternalSelect } from "../open-external-menu"
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "../ui/context-menu"
@@ -130,9 +132,12 @@ interface Props {
   silent?: boolean
   onToggleSilent?: () => void
   dom?: DomPort
+  /** Measured turn durations for this chat, oldest first. Drives the session sigil. */
+  turnDurationsMs?: readonly number[]
 }
 
 export function ChatNavbar({
+  turnDurationsMs,
   sidebarCollapsed,
   onOpenSidebar,
   onExpandSidebar,
@@ -229,7 +234,7 @@ export function ChatNavbar({
                 <div className="flex items-center gap-2 cursor-default min-w-0">
                   {/* Mobile: state pill + live duration only */}
                   <span className="flex md:hidden items-center gap-1">
-                    <span className={cn("text-xs font-medium", statusToneClass(statusTone(status)))}>●</span>
+                    <StateMark tone={statusTone(status)} className={statusToneClass(statusTone(status))} />
                     <span className="text-xs font-medium text-foreground">{statusLabel(status)}</span>
                     <span className="hidden min-[430px]:inline text-xs font-mono tabular-nums text-foreground/80">
                       {formatLiveDuration(timings.derivedAtMs - timings.stateEnteredAt)}
@@ -238,12 +243,19 @@ export function ChatNavbar({
                   {/* Desktop: full row */}
                   <span className="hidden md:flex items-center gap-2">
                     <span className="flex items-center gap-1">
-                      <span className={cn("text-xs", statusToneClass(statusTone(status)))}>●</span>
+                      <StateMark tone={statusTone(status)} className={statusToneClass(statusTone(status))} />
                       <span className="text-xs font-medium text-foreground">{statusLabel(status)}</span>
                     </span>
                     <span className="text-xs font-mono tabular-nums text-foreground/80">
                       {formatLiveDuration(timings.derivedAtMs - timings.stateEnteredAt)}
                     </span>
+                    {turnDurationsMs && turnDurationsMs.length > 0 ? (
+                      <Reduction
+                        durationsMs={turnDurationsMs}
+                        live={status === "running"}
+                        label={`Session shape: ${turnDurationsMs.length} ${turnDurationsMs.length === 1 ? "turn" : "turns"}`}
+                      />
+                    ) : null}
                     <span className="h-3 w-px bg-border/60" aria-hidden />
                     <span className="text-xs tabular-nums text-muted-foreground">
                       {formatCompactDuration(timings.derivedAtMs - timings.activeSessionStartedAt)}
