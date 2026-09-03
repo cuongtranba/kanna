@@ -67,7 +67,7 @@ declare module "@kanna/plugin" {
 }
 
 declare module "@kanna/plugin/server" {
-  import type { ZodTypeAny } from "zod"
+  import type { ZodType } from "zod"
 
   /**
    * Data only, no behaviour — the host's `defineRpc` is the identity function.
@@ -75,9 +75,11 @@ declare module "@kanna/plugin/server" {
    */
   export interface PluginRpcContract {
     readonly name: string
-    readonly input: ZodTypeAny
-    readonly output: ZodTypeAny
+    readonly input: ZodType
+    readonly output: ZodType
   }
 
-  export function defineRpc(contract: PluginRpcContract): PluginRpcContract
+  // Generic to preserve the concrete schema type at the call site so that
+  // output<typeof contract.input> resolves to the actual inferred type, not unknown
+  export function defineRpc<T extends PluginRpcContract>(contract: T): T
 }

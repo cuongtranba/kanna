@@ -1,4 +1,4 @@
-import type { ZodTypeAny } from "zod"
+import type { ZodType } from "zod"
 import { isRecord, type AnyValue } from "../../shared/errors"
 
 /**
@@ -12,11 +12,14 @@ import { isRecord, type AnyValue } from "../../shared/errors"
  */
 export interface PluginRpcContract {
   readonly name: string
-  readonly input: ZodTypeAny
-  readonly output: ZodTypeAny
+  readonly input: ZodType
+  readonly output: ZodType
 }
 
-export function defineRpc(contract: PluginRpcContract): PluginRpcContract {
+// Generic so the caller gets back the concrete schema types, not the erased
+// PluginRpcContract. output<T> on the concrete ZodObject produces the right
+// inferred type; output<ZodType> (ZodType<unknown,unknown>) resolves to unknown.
+export function defineRpc<T extends PluginRpcContract>(contract: T): T {
   return contract
 }
 
