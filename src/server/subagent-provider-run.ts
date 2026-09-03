@@ -60,6 +60,7 @@ export interface BuildSubagentProviderRunArgs {
     sessionToken: string | null
     forkSession: boolean
     oauthToken: string | null
+    openrouterApiKey?: string | null
     additionalDirectories?: string[]
     chatId?: string
     onToolRequest: (request: HarnessToolRequest) => Promise<unknown>
@@ -96,6 +97,8 @@ export interface BuildSubagentProviderRunArgs {
   authReady: (provider: AgentProvider) => Promise<boolean>
   /** Picks an oauth token for Claude runs, or null. Subagents share the primary pool. */
   pickOauthToken: () => string | null
+  /** Resolves the OpenRouter API key for OpenRouter subagent runs. Omitted for non-OpenRouter providers. */
+  readOpenRouterKey?: () => Promise<string | null>
   projectId: string
   /**
    * Optional user-authored global instructions (from app settings).
@@ -129,9 +132,13 @@ export function buildSubagentProviderRun(args: BuildSubagentProviderRunArgs): Pr
     authReady: async () => args.authReady(args.subagent.provider),
     async start(onChunk, onEntry, opts) {
       const initialPrompt = composeInitialPrompt(args.subagent, args.primer, args.userInstruction)
+      // keepAlive sessions require the Claude SDK channel — not supported for OpenRouter.
       const keepAlive = Boolean(opts?.keepAlive) && args.subagent.provider === "claude"
-      if (args.subagent.provider === "claude") {
-        return runClaudeSubagent({ args, initialPrompt, onChunk, onEntry, keepAlive })
+      if (args.subagent.provider === "claude" || args.subagent.provider === "openrouter") {
+        const openrouterApiKey = args.subagent.provider === "openrouter"
+          ? (await args.readOpenRouterKey?.() ?? null)
+          : null
+        return runClaudeSubagent({ args, initialPrompt, onChunk, onEntry, keepAlive, openrouterApiKey })
       }
       return runCodexSubagent({ args, initialPrompt, onChunk, onEntry })
     },
@@ -178,8 +185,9 @@ async function runClaudeSubagent(opts: {
   onChunk: (chunk: string) => void
   onEntry: (entry: TranscriptEntry) => void
   keepAlive: boolean
+  openrouterApiKey: string | null
 }): Promise<{ text: string; usage?: ProviderUsage; live?: LiveTurnSource }> {
-  const { args, initialPrompt, onChunk, onEntry, keepAlive } = opts
+  const { args, initialPrompt, onChunk, onEntry, keepAlive, openrouterApiKey } = opts
   // Fresh Claude session per subagent (sessionToken: null, forkSession: false)
   // — main-agent context never leaks in. Combined with the main-agent /clear
   // that fires on every subagent_background delivery in
@@ -195,7 +203,8 @@ async function runClaudeSubagent(opts: {
     planMode: false,
     sessionToken: null,
     forkSession: false,
-    oauthToken: args.pickOauthToken(),
+    oauthToken: openrouterApiKey ? null : args.pickOauthToken(),
+    openrouterApiKey,
     chatId: args.chatId,
     onToolRequest: args.onToolRequest,
     systemPromptOverride: composeSubagentSystemPrompt(args.subagent.systemPrompt, args.globalPromptAppend, args.stackProjects),

@@ -63,6 +63,7 @@ import {
   type ClaudePtyLifecycleSettings,
   type CloudflareTunnelSettings,
   type CodexModelOptions,
+  type OpenRouterModelOptions,
   type ClaudeReasoningEffort,
   type CustomModelEntry,
   type CustomModelInput,
@@ -1342,9 +1343,9 @@ function normalizeCustomModels<T>(value: T, warnings: string[]): CustomModelEntr
 }
 
 function mergeSubagentModelOptions(
-  existing: ClaudeModelOptions | CodexModelOptions,
-  patch: Partial<ClaudeModelOptions> | Partial<CodexModelOptions> | undefined,
-): ClaudeModelOptions | CodexModelOptions {
+  existing: ClaudeModelOptions | CodexModelOptions | OpenRouterModelOptions,
+  patch: Partial<ClaudeModelOptions> | Partial<CodexModelOptions> | OpenRouterModelOptions | undefined,
+): ClaudeModelOptions | CodexModelOptions | OpenRouterModelOptions {
   if (!patch) return existing
   if ("contextWindow" in existing) {
     const claudePatch = "contextWindow" in patch ? patch : undefined
@@ -1353,11 +1354,14 @@ function mergeSubagentModelOptions(
       contextWindow: claudePatch?.contextWindow ?? existing.contextWindow,
     }
   }
-  const codexPatch = "fastMode" in patch ? patch : undefined
-  return {
-    reasoningEffort: codexPatch?.reasoningEffort ?? existing.reasoningEffort,
-    fastMode: codexPatch?.fastMode ?? existing.fastMode,
+  if ("fastMode" in existing) {
+    const codexPatch = "fastMode" in patch ? patch : undefined
+    return {
+      reasoningEffort: codexPatch?.reasoningEffort ?? existing.reasoningEffort,
+      fastMode: codexPatch?.fastMode ?? existing.fastMode,
+    }
   }
+  return existing
 }
 
 interface CollectionPatch<CreateInput, EntryPatch> {

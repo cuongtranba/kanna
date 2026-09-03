@@ -3,7 +3,7 @@
 // All external consumers importing from "../shared/types" continue to work unchanged.
 
 import type { AgentProvider } from "./core-types"
-import type { ClaudeModelOptions, CodexModelOptions } from "./provider-model-types"
+import type { ClaudeModelOptions, CodexModelOptions, OpenRouterModelOptions } from "./provider-model-types"
 import type { TranscriptEntry } from "./transcript-types"
 
 export type SubagentContextScope = "previous-assistant-reply" | "full-transcript"
@@ -21,7 +21,7 @@ export interface Subagent {
   description?: string
   provider: AgentProvider
   model: string
-  modelOptions: ClaudeModelOptions | CodexModelOptions
+  modelOptions: ClaudeModelOptions | CodexModelOptions | OpenRouterModelOptions
   systemPrompt: string
   contextScope: SubagentContextScope
   triggerMode: SubagentTriggerMode
@@ -41,7 +41,7 @@ export interface SubagentInput {
   description?: string
   provider: AgentProvider
   model: string
-  modelOptions: ClaudeModelOptions | CodexModelOptions
+  modelOptions: ClaudeModelOptions | CodexModelOptions | OpenRouterModelOptions
   systemPrompt: string
   contextScope: SubagentContextScope
   triggerMode?: SubagentTriggerMode
@@ -55,7 +55,7 @@ export interface SubagentPatch {
   description?: string | null
   provider?: AgentProvider
   model?: string
-  modelOptions?: Partial<ClaudeModelOptions> | Partial<CodexModelOptions>
+  modelOptions?: Partial<ClaudeModelOptions> | Partial<CodexModelOptions> | OpenRouterModelOptions
   systemPrompt?: string
   contextScope?: SubagentContextScope
   triggerMode?: SubagentTriggerMode

@@ -321,5 +321,9 @@ export function buildSubagentProviderRunForChat(
       if (picked) deps.oauthPool!.markUsed(picked.id)
       return picked?.token ?? null
     },
+    readOpenRouterKey: async () => {
+      const provider = await deps.readLlmProvider()
+      return provider.apiKey || null
+    },
   })
 }
