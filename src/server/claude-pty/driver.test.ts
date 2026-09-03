@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { mkdtemp, readdir, readFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { startClaudeSessionPTY, buildPtyEnv, buildPtyCliArgs, resolveSpawnSessionId, OutputRing, PTY_STDERR_RING_BYTES, PTY_DISALLOWED_NATIVE_TOOLS, deriveAccountInfoFromOauth, PLAN_MODE_EXIT_UNSUPPORTED, SHIFT_TAB_KEY, buildChannelPromptFraming } from "./driver"
+import { startClaudeSessionPTY, buildPtyCliArgs, resolveSpawnSessionId, OutputRing, PTY_STDERR_RING_BYTES, PTY_DISALLOWED_NATIVE_TOOLS, deriveAccountInfoFromOauth, PLAN_MODE_EXIT_UNSUPPORTED, SHIFT_TAB_KEY, buildChannelPromptFraming } from "./driver"
 import type { TranscriptStream } from "./tui-source.adapter"
 import type { PtyProcess, SpawnPtyProcessArgs } from "./pty-process.adapter"
 import { KANNA_SYSTEM_PROMPT_APPEND } from "../../shared/kanna-system-prompt"
@@ -193,45 +193,8 @@ describe("startClaudeSessionPTY smoke-test gate", () => {
   })
 })
 
-describe("buildPtyEnv", () => {
-  test("sets CLAUDE_CODE_OAUTH_TOKEN when oauthToken present", () => {
-    const env = buildPtyEnv({
-      baseEnv: {},
-      homeDir: "/tmp/home",
-      oauthToken: "sk-ant-oat-test",
-    })
-    expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBe("sk-ant-oat-test")
-    expect(env.HOME).toBe("/tmp/home")
-    expect(env.DISABLE_AUTOUPDATER).toBe("1")
-  })
-
-  test("omits CLAUDE_CODE_OAUTH_TOKEN when oauthToken null", () => {
-    const env = buildPtyEnv({
-      baseEnv: {},
-      homeDir: "/tmp/home",
-      oauthToken: null,
-    })
-    expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBeUndefined()
-  })
-
-  test("omits CLAUDE_CODE_OAUTH_TOKEN when oauthToken empty string", () => {
-    const env = buildPtyEnv({
-      baseEnv: {},
-      homeDir: "/tmp/home",
-      oauthToken: "",
-    })
-    expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBeUndefined()
-  })
-
-  test("strips ANTHROPIC_API_KEY defensively", () => {
-    const env = buildPtyEnv({
-      baseEnv: { ANTHROPIC_API_KEY: "should-be-removed" },
-      homeDir: "/tmp/home",
-      oauthToken: null,
-    })
-    expect(env.ANTHROPIC_API_KEY).toBeUndefined()
-  })
-})
+// `buildPtyEnv` moved to ./env alongside the multi-root memory switch both
+// drivers share; its cases live in env.test.ts.
 
 describe("buildPtyCliArgs TUI mode", () => {
   test("does NOT include --print", () => {
@@ -580,9 +543,10 @@ describe("SHIFT_TAB_KEY constant", () => {
 
 // ── F1: setPermissionMode — plan mode exit via Shift+Tab ────────────────────
 
-async function makeTestHandle(opts?: { planMode?: boolean }) {
+async function makeTestHandle(opts?: { planMode?: boolean; additionalDirectories?: string[] }) {
   const homeDir = await mkdtemp(path.join(tmpdir(), "kanna-pm-"))
   const sentInputs: string[] = []
+  const spawnEnvs: NodeJS.ProcessEnv[] = []
   let exitResolve!: (code: number) => void
   const exited = new Promise<number>((r) => { exitResolve = r })
 
@@ -596,6 +560,7 @@ async function makeTestHandle(opts?: { planMode?: boolean }) {
   }
 
   const fakeSpawn = async (spawnArgs: SpawnPtyProcessArgs): Promise<PtyProcess> => {
+    spawnEnvs.push(spawnArgs.env)
     spawnArgs.onOutput?.("❯ ")
     return fakePty
   }
@@ -623,6 +588,7 @@ async function makeTestHandle(opts?: { planMode?: boolean }) {
     sessionToken: null,
     onToolRequest: async () => null,
     homeDir,
+    ...(opts?.additionalDirectories ? { additionalDirectories: opts.additionalDirectories } : {}),
     env: {
       HOME: homeDir,
       CLAUDE_CODE_OAUTH_TOKEN: "test-token",
@@ -638,6 +604,7 @@ async function makeTestHandle(opts?: { planMode?: boolean }) {
   return {
     handle,
     sentInputs,
+    spawnEnvs,
     async cleanup() {
       exitResolve(0)
       handle.close()
@@ -645,6 +612,30 @@ async function makeTestHandle(opts?: { planMode?: boolean }) {
     },
   }
 }
+
+// The PTY driver passes one --add-dir per additional root, which grants write
+// access; without this switch the CLI never reads those roots' CLAUDE.md.
+describe("multi-root memory switch on the PTY spawn", () => {
+  test("set when the spawn has additional roots", async () => {
+    if (process.platform === "win32") return
+    const { spawnEnvs, cleanup } = await makeTestHandle({ additionalDirectories: ["/repo-b"] })
+    try {
+      expect(spawnEnvs[0]?.CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD).toBe("1")
+    } finally {
+      await cleanup()
+    }
+  })
+
+  test("absent on a solo spawn", async () => {
+    if (process.platform === "win32") return
+    const { spawnEnvs, cleanup } = await makeTestHandle()
+    try {
+      expect(spawnEnvs[0]?.CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD).toBeUndefined()
+    } finally {
+      await cleanup()
+    }
+  })
+})
 
 describe("setPermissionMode (F1 — plan mode exit)", () => {
   test("setPermissionMode(true) sends /plan\\r and tracks state", async () => {

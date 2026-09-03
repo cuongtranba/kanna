@@ -49,6 +49,52 @@ export function renderStackProjectsBlock(stackProjects: ResolvedStackBinding[]):
   ].join("\n")
 }
 
+/**
+ * What Codex can actually reach, stated once.
+ *
+ * Kanna starts every Codex thread with `approvalPolicy: "never"` and
+ * `sandbox: "danger-full-access"` (`codex-app-server.ts`), so the peer roots
+ * are readable and writable — the session simply declares ONE working
+ * directory. The gap this closes is knowledge, not permission, and the wording
+ * must not promise a multi-root workspace Codex does not have.
+ *
+ * (The `grantRoot` field on `FileChangeRequestApprovalParams` is part of an
+ * approval RESPONSE, not a session grant; with approvals disabled it is never
+ * exercised. The old comment in `claude-turn-starter.ts` had this backwards.)
+ */
+const CODEX_STACK_REACH_NOTE =
+  "Your working directory is the primary project above. The other roots are outside it, so reach them by absolute path rather than by a relative path from your cwd."
+
+/**
+ * Compose Codex's `developer_instructions` from the same pieces the Claude
+ * system prompt is built from, so switching a chat's provider does not
+ * silently drop the stack.
+ *
+ * Returns `undefined` when there is nothing to say — the caller passes that
+ * straight through to `thread/start`, which treats it as absent.
+ */
+export function buildCodexDeveloperInstructions(args: {
+  globalPromptAppend?: string
+  stackProjects?: ResolvedStackBinding[]
+}): string | undefined {
+  const instructions = args.globalPromptAppend?.trim() ?? ""
+  const stackProjects = args.stackProjects ?? []
+
+  const sections: string[] = []
+  if (instructions) sections.push(instructions)
+
+  const stackBlock = renderStackProjectsBlock(stackProjects)
+  if (stackBlock) {
+    // A lone primary is not a cross-root situation; the caveat would be noise.
+    sections.push(stackProjects.length > 1
+      ? `${stackBlock}\n\n${CODEX_STACK_REACH_NOTE}`
+      : stackBlock)
+  }
+
+  if (sections.length === 0) return undefined
+  return sections.join("\n\n")
+}
+
 const DELEGATION_GUIDANCE =
   "Delegate via `mcp__kanna__delegate_subagent({ subagent_id, prompt })`. The tool blocks until the subagent finishes and returns its final text. Brief the subagent like a smart colleague who just walked in: state the goal, what was tried, what to check, and any constraints. Don't delegate understanding — synthesize the subagent's reply yourself before responding to the user. When the user writes `@agent/<name>` treat it as a suggestion, not a command: confirm the subagent fits the actual ask, or redirect to a better one."
 

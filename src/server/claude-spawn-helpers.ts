@@ -170,6 +170,38 @@ export function buildCanUseTool(
   }
 }
 
+/**
+ * Claude Code's own switch for loading memory files from `--add-dir` roots.
+ * Without it a root is writable but its `CLAUDE.md`, `.claude/CLAUDE.md`,
+ * `.claude/rules/*.md` and `CLAUDE.local.md` are never read.
+ */
+export const ADDITIONAL_DIRECTORY_MEMORY_ENV = "CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD"
+
+/**
+ * Load every bound root's conventions when a spawn can write every bound root.
+ *
+ * A stack chat gets one `--add-dir` per additional project, which grants full
+ * write access; without this variable it has that access while knowing none of
+ * those projects' rules. The cost is real — every added root's memory files
+ * are spent from every turn's context — which is why this is gated on there
+ * BEING additional roots: a solo chat's context is byte-for-byte unchanged.
+ *
+ * `KANNA_STACK_MEMORY=disabled` opts out. It is read from the passed
+ * environment rather than the global so this stays pure and injectable; both
+ * call sites hand in an environment derived from `process.env`.
+ *
+ * Applied by both drivers — SDK at `claude-session-start.ts`, PTY at
+ * `claude-pty/driver.ts` — so the two cannot drift.
+ */
+export function withAdditionalDirectoryMemory(
+  env: NodeJS.ProcessEnv,
+  additionalDirectories: readonly string[] | undefined,
+): NodeJS.ProcessEnv {
+  if (!additionalDirectories || additionalDirectories.length === 0) return env
+  if (env.KANNA_STACK_MEMORY === "disabled") return env
+  return { ...env, [ADDITIONAL_DIRECTORY_MEMORY_ENV]: "1" }
+}
+
 export function buildClaudeEnv(
   baseEnv: NodeJS.ProcessEnv,
   oauthToken: string | null,

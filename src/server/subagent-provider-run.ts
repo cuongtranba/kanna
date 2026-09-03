@@ -7,7 +7,7 @@ import type {
   Subagent,
   TranscriptEntry,
 } from "../shared/types"
-import { renderStackProjectsBlock } from "../shared/kanna-system-prompt"
+import { buildCodexDeveloperInstructions, renderStackProjectsBlock } from "../shared/kanna-system-prompt"
 import type { ClaudeSessionHandle } from "./agent"
 import type { LiveTurnSource, ProviderRunStart } from "./subagent-orchestrator"
 import type { SubagentOrchestrator } from "./subagent-orchestrator"
@@ -276,7 +276,13 @@ async function runCodexSubagent(opts: {
     model: args.subagent.model,
     serviceTier: undefined,
     sessionToken: null,
-    developerInstructions: args.globalPromptAppend,
+    // Same composition as the Claude subagent path above: a Codex subagent
+    // that can write project B needs B named as much as its Claude twin does.
+    // `stackProjects` is already suppressed upstream for a path-restricted run.
+    developerInstructions: buildCodexDeveloperInstructions({
+      globalPromptAppend: args.globalPromptAppend,
+      stackProjects: args.stackProjects,
+    }),
   })
   try {
     const turn = await args.codexManager.startTurn({

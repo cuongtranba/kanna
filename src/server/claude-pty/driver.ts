@@ -6,6 +6,8 @@ import { log } from "../../shared/log"
 import { randomUUID } from "node:crypto"
 import { createRuntimeDir, writeRuntimeFile, removeRuntimeDir } from "./runtime-dir.adapter"
 import { verifyPtyAuth } from "./auth"
+import { buildPtyEnv } from "./env"
+import { withAdditionalDirectoryMemory } from "../claude-spawn-helpers"
 import { startKannaMcpHttpServer, buildMcpConfigJson, type KannaMcpHttpHandle } from "../kanna-mcp-http"
 import { KANNA_MCP_SERVER_NAME } from "../../shared/tools"
 import type { ArmedLoopInfo, KannaMcpDelegationContext, SetupLoopHandlerResult } from "../kanna-mcp"
@@ -395,21 +397,6 @@ export function resolveSpawnSessionId(
   return args.sessionToken ?? newId()
 }
 
-export function buildPtyEnv(args: {
-  baseEnv: NodeJS.ProcessEnv
-  homeDir: string
-  oauthToken: string | null
-}): NodeJS.ProcessEnv {
-  const spawnEnv: NodeJS.ProcessEnv = { ...args.baseEnv }
-  delete spawnEnv.ANTHROPIC_API_KEY
-  spawnEnv.HOME = args.homeDir
-  spawnEnv.DISABLE_AUTOUPDATER = "1"
-  if (args.oauthToken && args.oauthToken.length > 0) {
-    spawnEnv.CLAUDE_CODE_OAUTH_TOKEN = args.oauthToken
-  }
-  return spawnEnv
-}
-
 export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Promise<ClaudeSessionHandle> {
   const home = args.homeDir ?? homedir()
   const env = args.env ?? process.env
@@ -478,11 +465,16 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     throw new Error(`PTY smoke-test refused spawn: ${smoke.reason}`)
   }
 
-  const spawnEnv = buildPtyEnv({
-    baseEnv: env,
-    homeDir: home,
-    oauthToken: args.oauthToken,
-  })
+  // A stack spawn gets one --add-dir per additional root, so it must also read
+  // those roots' memory files — see `withAdditionalDirectoryMemory`.
+  const spawnEnv = withAdditionalDirectoryMemory(
+    buildPtyEnv({
+      baseEnv: env,
+      homeDir: home,
+      oauthToken: args.oauthToken,
+    }),
+    args.additionalDirectories,
+  )
 
   const sessionId = resolveSpawnSessionId({
     sessionToken: args.sessionToken,

@@ -64,28 +64,76 @@ to pass.
 
 ## Next chunk
 
-**Phase 1a — arm the loop in the chat's own tree.** In `setupLoop`
-(`src/server/claude-loop-commands.ts:394-428`), pass
-`resolveSpawnPaths(chat, project.localPath).cwd` into `validateLoopSetup`
-instead of `project.localPath`; keep the `isWorktreeOfSameRepo` guard against
-`project.localPath`. Widen the `LoopCommandDeps.store.getChat` return type to
-carry `stackBindings` rather than casting. Update the `setup_loop` `workdir`
-description at `src/server/kanna-mcp.ts:563` ("Defaults to the project cwd" →
-"Defaults to this chat's working directory").
+**Phase 2 — `instructions` on project + stack.** Write the ADR first
+(`c3x add adr`), then implement in the dependency order in
+`PLAN-stack-multi-project.md` §5: types → events → builders → apply/reducer →
+store methods → protocol + router → read models → prompt composition
+(`## Project instructions` → `## Workspace instructions` rename) → both
+providers → subagent parity → sidebar UI.
 
-Write the failing test first: a chat with a primary binding at
-`/repo/.worktrees/feat` and no explicit `workdir` must arm with
-`workdirAbs === "/repo/.worktrees/feat"` and call `runVerifyCommand` with that
-`cwd`. Also cover: skeleton written under the worktree; a solo chat unchanged;
-an explicit out-of-repo `workdir` still refused; an already-armed loop's
-persisted absolute `workdirAbs` unaffected on replay.
+Note for the prompt step: a SOLO chat has no `stackBindings`, so the resolver
+must synthesize a single-entry list from `chat.projectId` or the feature only
+works inside stacks. Decide it once and test both shapes.
 
-Acceptance: Start work on a board card, arm a loop with no `workdir`,
-`PROGRESS.md` appears in the card's worktree and the oracle runs there.
-
-See `PLAN-stack-multi-project.md` §4.1a for the full detail.
+New client handlers go in their own module — `useAppGlobalState.ts` still has
+zero headroom.
 
 ## Progress (latest first)
+
+- 2026-09-04 **Phase 1 complete (1a + 1b + 1c).** Gates run on the worktree:
+  `bun run check` (typecheck+lint+build+bundle), `bun run test` (7782 pass /
+  0 fail), `bun run lint:usestate`, `bunx ast-grep test` (19 passed),
+  `bun run check:arch`, `bun run lint:limits` ("All 4 ESLint ceilings are
+  tight"), gitleaks v8.30.1 via docker ("no leaks found"). `driver.ts` pin
+  lowered 1104 → 1095 after the `buildPtyEnv` extraction; no pin raised.
+  - **1a** `setupLoop` now resolves `resolveSpawnPaths(chat, project.localPath).cwd`
+    and validates against it; `LoopCommandStore.getChat` widened to
+    `Pick<ChatRecord, "id"|"projectId"|"stackBindings">` (no cast). The
+    same-repo guard now fires only when the workdir differs from the CHAT cwd —
+    Kanna created that worktree, so it needs no git round-trip; a
+    model-supplied workdir is still checked against `project.localPath`.
+    5 tests in `claude-loop-commands.test.ts`. `setup_loop`'s `workdir`
+    description updated.
+  - **1b** `withAdditionalDirectoryMemory` added beside `buildClaudeEnv` in
+    `claude-spawn-helpers.ts` (NOT in `claude-pty/env.ts` as the plan
+    sketched — the SDK path must not import from `claude-pty/`).
+    `buildPtyEnv` extracted to `claude-pty/env.ts` with its own suite.
+    Applied at both spawn sites. `KANNA_STACK_MEMORY=disabled` is read off the
+    PASSED env, so the helper is pure and needs no threading from
+    `agent-coordinator`.
+  - **1c** `buildCodexDeveloperInstructions` added to `kanna-system-prompt.ts`,
+    wired at `claude-turn-starter.ts` (main turn) and `subagent-provider-run.ts`
+    (Codex subagent).
+
+- 2026-09-04 **Unverified claim #1 — RESOLVED (statically, not by `/context`).**
+  `CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD` is a registered env var in the
+  CLI bundle the Agent SDK path runs: it appears in the typed env-var schema in
+  `node_modules/@anthropic-ai/claude-agent-sdk/bridge.mjs` (declared `u.str()`),
+  which is the same CLI the SDK spawns. So the SDK path does honour it.
+  **The end-to-end `/context` smoke the plan asks for was NOT performed** — it
+  needs a live two-project stack chat on both drivers, which cannot be driven
+  from a headless session. Whoever runs the branch should do it and replace
+  this entry.
+
+- 2026-09-04 **Unverified claim #2 — RESOLVED, and it contradicts the plan.**
+  What a Codex turn does with a peer root: Kanna starts EVERY Codex thread
+  (`thread/start`, `thread/resume`, `thread/fork` alike) with
+  `approvalPolicy: "never"` and `sandbox: "danger-full-access"`
+  (`codex-app-server.ts:289,303,314`). So peer roots are **readable and
+  writable** — Codex's gap was knowledge, not permission. Two consequences:
+  - The comment at `claude-turn-starter.ts:488` ("Cross-root writes use
+    grantRoot") was wrong twice over. `grantRoot` is a field on
+    `FileChangeRequestApprovalParams` — an approval RESPONSE — and with
+    approvals disabled no approval is ever requested. Comment replaced.
+  - The Codex block therefore says only that the cwd is the primary and peer
+    roots are reached by absolute path. It does NOT claim they are unavailable.
+  - **The plan's provider-picker hint was dropped deliberately.** Its proposed
+    wording — "Codex works in <primary> only; the other roots are not
+    available" — is false given the above. Shipping a UI warning that is
+    demonstrably wrong is worse than shipping none, which is the plan's own
+    rule about the prompt block. If a signal is still wanted it must say
+    "one working directory", not "no access", and that is a much weaker claim
+    than a warning pill deserves.
 
 - 2026-09-03 Review + plan written; no code changed. Findings: loop workdir uses
   `project.localPath` not the chat cwd (affects every board-started chat);
@@ -103,14 +151,14 @@ _Append dead-ends here so a later iteration does not repeat them._
 
 Detail for each item is in `PLAN-stack-multi-project.md`.
 
-- [ ] **1a** Loop arms in the chat's cwd (§4.1a) — bug fix, affects every
+- [x] **1a** Loop arms in the chat's cwd (§4.1a) — bug fix, affects every
       board-started chat
-- [ ] **1b** `CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD` on multi-root
+- [x] **1b** `CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD` on multi-root
       spawns, both drivers, `KANNA_STACK_MEMORY` opt-out; extract
       `buildPtyEnv` out of `driver.ts` for the headroom (§4.1b)
-- [ ] **1c** Codex gets the stack block via a shared
-      `buildCodexDeveloperInstructions`; provider-picker hint on a
-      multi-binding chat (§4.1c)
+- [x] **1c** Codex gets the stack block via a shared
+      `buildCodexDeveloperInstructions`. The provider-picker hint is
+      deliberately NOT shipped — see the Codex finding under Progress.
 - [ ] **2** `instructions` on project + stack: events, store, protocol, read
       models, prompt composition (`## Workspace instructions` rename), Codex
       parity, subagent parity, sidebar UI (§5) — needs an ADR

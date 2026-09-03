@@ -202,4 +202,32 @@ describe("startClaudeSession", () => {
     const args = capturedQueryArgs as { options: { permissionMode: string } }
     expect(args.options.permissionMode).toBe("acceptEdits")
   })
+
+  // ── 9. SDK options — multi-root memory switch ─────────────────────────
+  // A stack spawn can WRITE every additional root, so it must also read every
+  // additional root's CLAUDE.md. The SDK spawns the same CLI the PTY driver
+  // does, so both paths apply the identical helper.
+  function envOfSpawn(): NodeJS.ProcessEnv {
+    return (capturedQueryArgs as { options: { env: NodeJS.ProcessEnv } }).options.env
+  }
+
+  const isolatedEnvDeps = (): StartClaudeSessionDeps => ({
+    ...makeFakeDeps(),
+    // A copy, so the assertion cannot be satisfied (or defeated) by whatever
+    // the real process.env happens to carry.
+    buildClaudeEnv: (env) => ({ ...env, CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: undefined }),
+  })
+
+  test("a multi-root spawn carries CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD", async () => {
+    await startClaudeSession(
+      { ...BASE_ARGS, additionalDirectories: ["/projects/api"] },
+      isolatedEnvDeps(),
+    )
+    expect(envOfSpawn().CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD).toBe("1")
+  })
+
+  test("a solo spawn does not", async () => {
+    await startClaudeSession(BASE_ARGS, isolatedEnvDeps())
+    expect(envOfSpawn().CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD).toBeUndefined()
+  })
 })

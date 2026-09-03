@@ -3,6 +3,7 @@ import {
   KANNA_SUBAGENT_ROSTER_LIMIT,
   KANNA_SYSTEM_PROMPT_APPEND,
   KANNA_SYSTEM_PROMPT_BASE,
+  buildCodexDeveloperInstructions,
   buildKannaSystemPromptAppend,
 } from "./kanna-system-prompt"
 import type { ResolvedStackBinding, Subagent } from "./types"
@@ -229,5 +230,69 @@ describe("buildKannaSystemPromptAppend", () => {
       expect(out).not.toContain("## Available subagents")
       expect(out).toContain("## Manual subagents")
     })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// buildCodexDeveloperInstructions
+// ---------------------------------------------------------------------------
+
+/**
+ * Codex used to receive `globalPromptAppend` and nothing else, so switching a
+ * stack chat's provider silently downgraded it to a single-project chat — no
+ * refusal, no UI signal, and the model simply unaware the peer roots existed.
+ */
+describe("buildCodexDeveloperInstructions", () => {
+  test("returns undefined when there is nothing to say", () => {
+    expect(buildCodexDeveloperInstructions({})).toBeUndefined()
+    expect(buildCodexDeveloperInstructions({ globalPromptAppend: "   ", stackProjects: [] }))
+      .toBeUndefined()
+  })
+
+  test("passes the global prompt through unchanged when there is no stack", () => {
+    expect(buildCodexDeveloperInstructions({ globalPromptAppend: "Always TDD." }))
+      .toBe("Always TDD.")
+  })
+
+  test("carries the same stack block the Claude prompt uses", () => {
+    const out = buildCodexDeveloperInstructions({
+      stackProjects: [
+        fakeBinding({ projectTitle: "Backend API", role: "primary", worktreePath: "/work/be" }),
+        fakeBinding({ projectId: "p2", projectTitle: "Web Client", role: "additional", worktreePath: "/work/fe" }),
+      ],
+    })
+    expect(out).toContain("## Stack projects")
+    expect(out).toContain("- Backend API [primary]: /work/be")
+    expect(out).toContain("- Web Client [additional]: /work/fe")
+  })
+
+  test("the global prompt comes first, then the stack block", () => {
+    const out = buildCodexDeveloperInstructions({
+      globalPromptAppend: "Always TDD.",
+      stackProjects: [fakeBinding()],
+    }) ?? ""
+    expect(out.indexOf("Always TDD.")).toBeLessThan(out.indexOf("## Stack projects"))
+  })
+
+  // Kanna starts every Codex thread with `approvalPolicy: "never"` and
+  // `sandbox: "danger-full-access"` (codex-app-server.ts), so a peer root IS
+  // reachable — what Codex lacked was knowledge of it, not permission. The
+  // note must say that and not promise a workspace it does not have.
+  test("tells Codex its cwd is the primary but peer roots are reachable", () => {
+    const out = buildCodexDeveloperInstructions({
+      stackProjects: [
+        fakeBinding({ projectTitle: "Backend API", role: "primary" }),
+        fakeBinding({ projectId: "p2", role: "additional", worktreePath: "/work/fe" }),
+      ],
+    }) ?? ""
+    expect(out).toContain("absolute path")
+    expect(out).not.toContain("grantRoot")
+  })
+
+  // A lone primary is not a cross-root situation, so the caveat would be noise.
+  test("omits the reach note when there is only one root", () => {
+    const out = buildCodexDeveloperInstructions({ stackProjects: [fakeBinding()] }) ?? ""
+    expect(out).toContain("## Stack projects")
+    expect(out).not.toContain("absolute path")
   })
 })

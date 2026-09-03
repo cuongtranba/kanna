@@ -560,7 +560,7 @@ function buildSetupLoopToolList(args: {
           .string()
           .optional()
           .describe(
-            "Absolute directory the loop works in — where the verify command runs and where tracking_file is rooted. Defaults to the project cwd. Use this when the work lives in a git worktree so the plan sits beside the branch it describes. Must be the project checkout or a worktree of the same repo.",
+            "Absolute directory the loop works in — where the verify command runs and where tracking_file is rooted. Defaults to this chat's working directory, which is already the card's worktree on a chat started from a board. Pass it only to point the loop at a DIFFERENT tree; it must be the project checkout or a worktree of the same repo.",
           ),
         parallelism: z
           .number()

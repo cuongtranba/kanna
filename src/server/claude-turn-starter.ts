@@ -33,6 +33,7 @@ import { buildHistoryPrimer, shouldInjectPrimer } from "./history-primer"
 import { fallbackTitleFromMessage } from "./generate-title"
 import { parseMentions, type ParsedMention } from "./mention-parser"
 import { resolveSpawnPaths, resolveStackProjects } from "./claude-session-config"
+import { buildCodexDeveloperInstructions } from "../shared/kanna-system-prompt"
 import { timestamped } from "./claude-message-normalizer"
 import {
   logClaudeSteer,
@@ -485,7 +486,11 @@ async function startTurnAfterTurnStarted(
       provider: args.provider,
       model: args.model,
     })
-    // Codex single-cwd: peer worktrees not passed to startSession. Cross-root writes use grantRoot.
+    // Codex declares a single cwd, so the peer roots are not part of its
+    // workspace — but the thread runs `sandbox: "danger-full-access"` with
+    // approvals off, so they are still reachable by absolute path. Naming them
+    // in developer_instructions is what stops a provider switch from silently
+    // turning a stack chat into a single-project one.
     const sessionToken = await deps.codexManager.startSession({
       chatId: args.chatId,
       cwd: resolveSpawnPaths(chat, project.localPath).cwd,
@@ -494,7 +499,10 @@ async function startTurnAfterTurnStarted(
       serviceTier: args.serviceTier,
       sessionToken: existingToken,
       pendingForkSessionToken: pendingForkToken,
-      developerInstructions: deps.getAppSettingsSnapshot().globalPromptAppend,
+      developerInstructions: buildCodexDeveloperInstructions({
+        globalPromptAppend: deps.getAppSettingsSnapshot().globalPromptAppend,
+        stackProjects: resolveStackProjects(chat, (id) => deps.store.getProject(id)?.title),
+      }),
     })
     if (pendingForkToken && sessionToken) {
       await deps.store.setPendingForkSessionToken(args.chatId, null)
