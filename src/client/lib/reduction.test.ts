@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import {
   buildReduction,
   turnDurationsFromMessages,
+  MAX_TICKS,
   REDUCTION_BASELINE_Y,
   REDUCTION_SIZE,
 } from "./reduction"
@@ -31,10 +32,39 @@ describe("buildReduction", () => {
     )
   })
 
-  test("only the newest tick is live, and only when the session is", () => {
+  test("the running turn gets its OWN tick, never a completed one re-marked", () => {
+    // Regression: the newest COMPLETED turn used to be drawn as live, so a
+    // finished turn wore the running mark for the whole of the next turn.
     const live = buildReduction([1, 2, 3], { live: true })
-    expect(live.ticks.map((t) => t.live)).toEqual([false, false, true])
+    expect(live.ticks).toHaveLength(4)
+    expect(live.ticks.map((t) => t.live)).toEqual([false, false, false, true])
     expect(buildReduction([1, 2, 3]).ticks.every((t) => !t.live)).toBe(true)
+  })
+
+  test("a first-ever live turn still draws a sigil", () => {
+    // Regression: with no completed results yet, the sigil was empty during
+    // the very first turn of a session — exactly when it is most wanted.
+    const { ticks } = buildReduction([], { live: true })
+    expect(ticks).toHaveLength(1)
+    expect(ticks[0]!.live).toBe(true)
+  })
+
+  test("the live tick does not renormalise the completed ones", () => {
+    // It is drawn at full height rather than scaled, so a still-growing
+    // duration cannot make every other tick twitch each frame.
+    const completed = [100, 200]
+    const withoutLive = buildReduction(completed)
+    const withLive = buildReduction(completed, { live: true })
+    expect(withLive.ticks.slice(0, 2).map((t) => t.topY)).toEqual(
+      withoutLive.ticks.map((t) => t.topY),
+    )
+  })
+
+  test("the live tick takes a slot in the window rather than overflowing it", () => {
+    const { ticks } = buildReduction(Array.from({ length: 40 }, (_, i) => i + 1), { live: true })
+    expect(ticks).toHaveLength(8)
+    expect(ticks.at(-1)!.live).toBe(true)
+    for (const tick of ticks) expect(tick.x).toBeLessThan(REDUCTION_SIZE)
   })
 
   test("drops the oldest turns past the window rather than crowding the field", () => {
@@ -77,5 +107,18 @@ describe("turnDurationsFromMessages", () => {
 
   test("a transcript with no results yields no sigil", () => {
     expect(turnDurationsFromMessages([text()])).toEqual([])
+  })
+})
+
+describe("turnDurationsFromMessages is bounded", () => {
+  const result = (durationMs: number) =>
+    ({ kind: "result", success: true, result: "", durationMs, id: "r", timestamp: "" }) as never
+
+  test("reads at most the window, and keeps the NEWEST turns in order", () => {
+    const many = Array.from({ length: 50 }, (_, i) => result(i + 1))
+    const out = turnDurationsFromMessages(many)
+    expect(out).toHaveLength(MAX_TICKS)
+    expect(out.at(-1)).toBe(50)
+    expect(out).toEqual([...out].sort((a, b) => a - b))
   })
 })

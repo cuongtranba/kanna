@@ -14,6 +14,33 @@ import { formatCompactDuration, formatLiveDuration } from "../../lib/formatDurat
 import { statusLabel, statusTone, statusToneClass } from "../../lib/statusLabel"
 import { StateMark } from "../ui/state-mark"
 import { Reduction } from "../ui/reduction"
+
+const EMPTY_DURATIONS: readonly number[] = []
+
+/**
+ * The session sigil, shown once a session has any turn to show — including a
+ * first turn that is still running, which draws only the live tick.
+ */
+function SessionSigil({
+  durationsMs,
+  status,
+}: {
+  durationsMs?: readonly number[]
+  status?: KannaStatus
+}) {
+  const completed = durationsMs ?? EMPTY_DURATIONS
+  const live = status === "running"
+  if (completed.length === 0 && !live) return null
+  const shown = completed.length + (live ? 1 : 0)
+  return (
+    <Reduction
+      durationsMs={completed}
+      live={live}
+      label={`Session shape: ${String(shown)} ${shown === 1 ? "turn" : "turns"}${live ? ", running" : ""}`}
+    />
+  )
+}
+
 import { branchLabel as computeBranchLabel } from "../../lib/branchLabel"
 import { OpenExternalSelect } from "../open-external-menu"
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "../ui/context-menu"
@@ -249,13 +276,7 @@ export function ChatNavbar({
                     <span className="text-xs font-mono tabular-nums text-foreground/80">
                       {formatLiveDuration(timings.derivedAtMs - timings.stateEnteredAt)}
                     </span>
-                    {turnDurationsMs && turnDurationsMs.length > 0 ? (
-                      <Reduction
-                        durationsMs={turnDurationsMs}
-                        live={status === "running"}
-                        label={`Session shape: ${turnDurationsMs.length} ${turnDurationsMs.length === 1 ? "turn" : "turns"}`}
-                      />
-                    ) : null}
+                    <SessionSigil durationsMs={turnDurationsMs} status={status} />
                     <span className="h-3 w-px bg-border/60" aria-hidden />
                     <span className="text-xs tabular-nums text-muted-foreground">
                       {formatCompactDuration(timings.derivedAtMs - timings.activeSessionStartedAt)}
