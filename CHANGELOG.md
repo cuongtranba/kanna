@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.44.1](https://github.com/cuongtranba/kanna/compare/v1.44.0...v1.44.1) (2026-09-03)
+
+
+### Bug Fixes
+
+* **client:** resolve react-use-websocket's default export across CJS interops ([#997](https://github.com/cuongtranba/kanna/issues/997)) ([72988d3](https://github.com/cuongtranba/kanna/commit/72988d37c9882d6317a6a71b710fca64929afbbb))
+
 ## [1.44.0](https://github.com/cuongtranba/kanna/compare/v1.43.12...v1.44.0) (2026-09-02)
 
 
