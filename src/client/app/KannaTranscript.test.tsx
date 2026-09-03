@@ -192,9 +192,15 @@ describe("KannaTranscript", () => {
       },
     ])
 
-    expect(html).toContain("justify-end gap-3")
-    expect(html).toContain("justify-end gap-2")
-    expect(html).toContain("Please review these.")
+    // Ordering is the claim: images, then files, then the prompt body. Asserted
+    // by position rather than by a layout class, so the next alignment change
+    // cannot fail a test that is not about alignment.
+    const imageAt = html.indexOf("mock.png")
+    const fileAt = html.indexOf("spec.pdf")
+    const bodyAt = html.indexOf("Please review these.")
+    expect(imageAt).toBeGreaterThan(-1)
+    expect(imageAt).toBeLessThan(fileAt)
+    expect(fileAt).toBeLessThan(bodyAt)
   })
 
   test("hides steer system-message text and renders a steer icon left of the user bubble", () => {
