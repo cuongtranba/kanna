@@ -3,26 +3,27 @@ import { useModelsSectionStore } from "./modelsSectionStore"
 
 beforeEach(() => {
   useModelsSectionStore.getState().setEditing({ kind: "list" })
-  useModelsSectionStore.getState().resetEditorForm("", "", "claude", [])
+  useModelsSectionStore.getState().resetEditorForm({ id: "", label: "", modelProvider: "claude", supportedEfforts: [], offersOneMillionContext: false })
 })
 
 describe("modelsSectionStore", () => {
   test("resetEditorForm seeds the draft and clears submit state", () => {
     useModelsSectionStore.getState().patchEditorForm({ submitting: true, error: "stale" })
-    useModelsSectionStore.getState().resetEditorForm("gpt-5.5", "GPT-5.5", "codex", [])
+    useModelsSectionStore.getState().resetEditorForm({ id: "gpt-5.5", label: "GPT-5.5", modelProvider: "codex", supportedEfforts: [], offersOneMillionContext: false })
 
     expect(useModelsSectionStore.getState().editorForm).toEqual({
       id: "gpt-5.5",
       label: "GPT-5.5",
       modelProvider: "codex",
       supportedEfforts: [],
+      offersOneMillionContext: false,
       submitting: false,
       error: null,
     })
   })
 
   test("patchEditorForm merges without disturbing untouched fields", () => {
-    useModelsSectionStore.getState().resetEditorForm("gpt-5.5", "GPT-5.5", "codex", [])
+    useModelsSectionStore.getState().resetEditorForm({ id: "gpt-5.5", label: "GPT-5.5", modelProvider: "codex", supportedEfforts: [], offersOneMillionContext: false })
     useModelsSectionStore.getState().patchEditorForm({ label: "GPT-5.5 Turbo" })
 
     const form = useModelsSectionStore.getState().editorForm
@@ -49,11 +50,27 @@ describe("modelsSectionStore", () => {
   })
 
   test("toggleSupportedEffort adds and removes effort levels from the store", () => {
-    useModelsSectionStore.getState().resetEditorForm("claude-x", "X", "claude", [])
+    useModelsSectionStore.getState().resetEditorForm({ id: "claude-x", label: "X", modelProvider: "claude", supportedEfforts: [], offersOneMillionContext: false })
     useModelsSectionStore.getState().toggleSupportedEffort("high")
     useModelsSectionStore.getState().toggleSupportedEffort("max")
     expect(useModelsSectionStore.getState().editorForm.supportedEfforts).toEqual(["high", "max"])
     useModelsSectionStore.getState().toggleSupportedEffort("high")
     expect(useModelsSectionStore.getState().editorForm.supportedEfforts).toEqual(["max"])
+  })
+
+  test("toggleOneMillionContext flips the context-window choice", () => {
+    expect(useModelsSectionStore.getState().editorForm.offersOneMillionContext).toBe(false)
+    useModelsSectionStore.getState().toggleOneMillionContext()
+    expect(useModelsSectionStore.getState().editorForm.offersOneMillionContext).toBe(true)
+    useModelsSectionStore.getState().toggleOneMillionContext()
+    expect(useModelsSectionStore.getState().editorForm.offersOneMillionContext).toBe(false)
+  })
+
+  test("resetEditorForm carries the context-window choice in", () => {
+    useModelsSectionStore.getState().resetEditorForm({
+      id: "claude-opus-5", label: "Opus 5", modelProvider: "claude",
+      supportedEfforts: ["high"], offersOneMillionContext: true,
+    })
+    expect(useModelsSectionStore.getState().editorForm.offersOneMillionContext).toBe(true)
   })
 })

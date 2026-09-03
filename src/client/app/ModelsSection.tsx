@@ -16,10 +16,13 @@ import {
 } from "../components/settings/SettingsList"
 import { useAppSettingsStore, selectCustomModels } from "../stores/appSettingsStore"
 import {
+  CLAUDE_CONTEXT_WINDOW_OPTIONS,
   CLAUDE_REASONING_OPTIONS,
+  effectiveContextWindowOptions,
   type CustomModelEntry,
   type CustomModelInput,
   type CustomModelPatch,
+  type ProviderContextWindowOption,
 } from "../../shared/types"
 import type { KannaState } from "./useKannaState"
 import {
@@ -65,11 +68,30 @@ export function ModelsSection({ models, handlers, dom = domAdapter }: ModelsSect
 
   function navigate(next: ModelsEditingState) {
     if (next.kind === "create") {
-      resetEditorForm("", "", next.provider, [])
+      resetEditorForm({
+        id: "",
+        label: "",
+        modelProvider: next.provider,
+        supportedEfforts: [],
+        offersOneMillionContext: false,
+      })
     } else if (next.kind === "edit") {
       const initial = models.find((m) => m.id === next.id) ?? null
       if (initial) {
-        resetEditorForm(initial.id, initial.label, initial.provider, initial.supportedEfforts ?? [])
+        resetEditorForm({
+          id: initial.id,
+          label: initial.label,
+          modelProvider: initial.provider,
+          supportedEfforts: initial.supportedEfforts ?? [],
+          // Read the EFFECTIVE options, not the declared ones: an entry that
+          // inherits 1M from the built-in must open with the box already
+          // ticked, or saving would write the inheritance away.
+          offersOneMillionContext: effectiveContextWindowOptions(
+            initial.provider,
+            initial.id,
+            initial.contextWindowOptions,
+          ).some((option) => option.id === "1m"),
+        })
       }
     }
     setEditing(next)
@@ -173,13 +195,20 @@ function ModelEditor({
   const editorForm = useModelsSectionStore((state) => state.editorForm)
   const patchEditorForm = useModelsSectionStore((state) => state.patchEditorForm)
   const toggleSupportedEffort = useModelsSectionStore((state) => state.toggleSupportedEffort)
+  const toggleOneMillionContext = useModelsSectionStore((state) => state.toggleOneMillionContext)
   // The guard is a TS type predicate narrowing string -> ModelProvider, so it
   // belongs at the boundary, not in the store.
   const handleProviderChange = useCallback((value: string) => {
     if (isModelProvider(value)) patchEditorForm({ modelProvider: value })
   }, [patchEditorForm])
 
-  const { id, label, modelProvider, supportedEfforts, submitting, error } = editorForm
+  const { id, label, modelProvider, supportedEfforts, offersOneMillionContext, submitting, error } = editorForm
+
+  // Always explicit, both ways — `[200k]` says "no 1M" where omitting the field
+  // would mean "inherit whatever the built-in offers".
+  const contextWindowOptions: readonly ProviderContextWindowOption[] = offersOneMillionContext
+    ? CLAUDE_CONTEXT_WINDOW_OPTIONS
+    : CLAUDE_CONTEXT_WINDOW_OPTIONS.filter((option) => option.id === "200k")
 
   const isEdit = initial !== null
 
@@ -200,6 +229,7 @@ function ModelEditor({
           await handlers.onUpdate(initial.id, {
             label: label.trim(),
             supportedEfforts: supportedEfforts.length > 0 ? supportedEfforts : null,
+            ...(modelProvider === "claude" ? { contextWindowOptions } : {}),
           })
         } else {
           await handlers.onCreate({
@@ -207,6 +237,7 @@ function ModelEditor({
             label: label.trim(),
             provider: modelProvider,
             ...(supportedEfforts.length > 0 ? { supportedEfforts } : {}),
+            ...(modelProvider === "claude" ? { contextWindowOptions } : {}),
           })
         }
       },
@@ -261,19 +292,36 @@ function ModelEditor({
       </label>
 
       {modelProvider === "claude" && (
-        <div className="flex flex-col gap-2">
-          <span className="text-sm font-medium">Supported effort levels</span>
-          {CLAUDE_REASONING_OPTIONS.map((effort) => (
-            <label key={effort.id} className="inline-flex cursor-pointer items-center gap-2 text-sm">
+        <>
+          <div className="flex flex-col gap-2">
+            <span className="text-sm font-medium">Supported effort levels</span>
+            {CLAUDE_REASONING_OPTIONS.map((effort) => (
+              <label key={effort.id} className="inline-flex cursor-pointer items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={supportedEfforts.includes(effort.id)}
+                  onChange={() => toggleSupportedEffort(effort.id)}
+                />
+                <span>{effort.label}</span>
+              </label>
+            ))}
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <span className="text-sm font-medium">Context window</span>
+            <label className="inline-flex cursor-pointer items-center gap-2 text-sm">
               <input
                 type="checkbox"
-                checked={supportedEfforts.includes(effort.id)}
-                onChange={() => toggleSupportedEffort(effort.id)}
+                checked={offersOneMillionContext}
+                onChange={toggleOneMillionContext}
               />
-              <span>{effort.label}</span>
+              <span>Offer the 1M context window</span>
             </label>
-          ))}
-        </div>
+            <span className="text-xs text-muted-foreground">
+              Off means every turn on this model runs on the 200k window.
+            </span>
+          </div>
+        </>
       )}
 
       {error && <span className="text-xs text-red-600">{error}</span>}

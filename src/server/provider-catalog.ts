@@ -18,6 +18,7 @@ import {
   isCodexReasoningEffort,
   mergeCustomModels,
 } from "../shared/types"
+import { log } from "../shared/log"
 
 export const SERVER_PROVIDERS: ProviderCatalogEntry[] = [...PROVIDERS]
 
@@ -62,10 +63,20 @@ export function normalizeClaudeModelOptions(
   } else {
     resolvedEffort = DEFAULT_CLAUDE_MODEL_OPTIONS.reasoningEffort
   }
-  return {
-    reasoningEffort: resolvedEffort,
-    contextWindow: normalizeClaudeContextWindow(model, modelOptions?.claude?.contextWindow, customModels),
+  const requestedWindow = modelOptions?.claude?.contextWindow
+  const contextWindow = normalizeClaudeContextWindow(model, requestedWindow, customModels)
+  // A downgrade shrinks the usable context 5x and shows up only as a missing
+  // `[1m]` suffix in the turn's runConfig, so it must never pass in silence.
+  // The usual cause is a `customModels` entry that shadows a built-in without
+  // redeclaring its `contextWindowOptions`.
+  if (requestedWindow !== undefined && requestedWindow !== contextWindow) {
+    log.warn("[kanna/provider] requested Claude context window is unavailable for this model", {
+      model,
+      requested: requestedWindow,
+      resolved: contextWindow,
+    })
   }
+  return { reasoningEffort: resolvedEffort, contextWindow }
 }
 
 export function normalizeCodexModelOptions(modelOptions?: ModelOptions, legacyEffort?: string): CodexModelOptions {

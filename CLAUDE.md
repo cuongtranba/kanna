@@ -971,6 +971,29 @@ effective catalog at read time.
   folds each `CustomModelEntry` over its provider's model list: same `id`
   **overrides** the built-in in place, a new `id` is **appended**. `base`
   built-ins always remain as a fallback, so the catalog is never empty.
+  **An override MERGES per field, it does not replace the object.** It used to
+  replace, and since the Settings form collects only id/label/efforts, a
+  hand-added entry for an id that already ships silently stripped every
+  capability it had no way to declare. A user's hand-added `claude-opus-5`
+  (createdAt 2026-07-25) shadowed the built-in's
+  `contextWindowOptions: ["200k","1m"]`; `getClaudeContextWindowOptions` then
+  returned `[]`, `ChatPreferenceControls` hid the 1M toggle (`length > 1`), and
+  `normalizeClaudeContextWindow` pinned every turn to 200k — visible only as a
+  `runConfig.model` with no `[1m]` suffix, and as auto-compaction at ~168k on a
+  chat the user believed was running on 1M. There is no "explicitly none" to
+  preserve: `applyCustomModelPatch` collapses a cleared field to `undefined`,
+  indistinguishable from never-set.
+- **A downgraded context window is logged, never silent.**
+  `normalizeClaudeModelOptions` warns when the requested window is not the
+  resolved one. The window is a 5x difference in usable context and nothing else
+  in the system reports the substitution.
+- **The Models editor always records the context-window choice explicitly.**
+  `ModelsSection` pre-fills its "Offer the 1M context window" checkbox from
+  `effectiveContextWindowOptions` — the entry's own options, else the built-in's,
+  the same fallback the merge applies — and writes `["200k","1m"]` or `["200k"]`
+  on save. Pre-filling from the DECLARED options instead would tick the box off
+  for an entry that was inheriting, and the save would write the inheritance
+  away.
 - **Seed + revert-to-default.** `normalizeCustomModels` (`app-settings.ts`)
   seeds `customModels` from built-ins (deterministic `createdAt/updatedAt = 0`)
   when the persisted value is absent, making every built-in an editable copy in

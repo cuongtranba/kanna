@@ -8,29 +8,34 @@ export type ModelsEditingState =
   | { kind: "create"; provider: ModelProvider }
   | { kind: "edit"; id: string }
 
-export interface ModelEditorFormState {
+export interface ModelEditorDraft {
   id: string
   label: string
   modelProvider: ModelProvider
   supportedEfforts: readonly ClaudeReasoningEffort[]
+  /**
+   * Whether this model offers the 1M context window. The form always records
+   * the answer explicitly on save, so an entry edited here never falls back to
+   * the built-in's options and never silently loses the 1M it was offering.
+   */
+  offersOneMillionContext: boolean
+}
+
+export interface ModelEditorFormState extends ModelEditorDraft {
   submitting: boolean
   error: string | null
 }
 
-function createEditorFormFromInitial(
-  id: string,
-  label: string,
-  modelProvider: ModelProvider,
-  supportedEfforts: readonly ClaudeReasoningEffort[],
-): ModelEditorFormState {
-  return {
-    id,
-    label,
-    modelProvider,
-    supportedEfforts,
-    submitting: false,
-    error: null,
-  }
+const EMPTY_DRAFT: ModelEditorDraft = {
+  id: "",
+  label: "",
+  modelProvider: "claude",
+  supportedEfforts: [],
+  offersOneMillionContext: false,
+}
+
+function createEditorFormFromInitial(draft: ModelEditorDraft): ModelEditorFormState {
+  return { ...draft, submitting: false, error: null }
 }
 
 interface ModelsSectionState {
@@ -41,24 +46,19 @@ interface ModelsSectionState {
   setEditing: (editing: ModelsEditingState) => void
 
   // Actions — editor form
-  resetEditorForm: (
-    id: string,
-    label: string,
-    modelProvider: ModelProvider,
-    supportedEfforts: readonly ClaudeReasoningEffort[],
-  ) => void
+  resetEditorForm: (draft: ModelEditorDraft) => void
   patchEditorForm: (patch: Partial<ModelEditorFormState>) => void
   toggleSupportedEffort: (effortId: ClaudeReasoningEffort) => void
+  toggleOneMillionContext: () => void
 }
 
 export const useModelsSectionStore = create<ModelsSectionState>()((set) => ({
   editing: { kind: "list" },
-  editorForm: createEditorFormFromInitial("", "", "claude", []),
+  editorForm: createEditorFormFromInitial(EMPTY_DRAFT),
 
   setEditing: (editing) => set({ editing }),
 
-  resetEditorForm: (id, label, modelProvider, supportedEfforts) =>
-    set({ editorForm: createEditorFormFromInitial(id, label, modelProvider, supportedEfforts) }),
+  resetEditorForm: (draft) => set({ editorForm: createEditorFormFromInitial(draft) }),
 
   patchEditorForm: (patch) =>
     set((state) => ({ editorForm: { ...state.editorForm, ...patch } })),
@@ -71,4 +71,12 @@ export const useModelsSectionStore = create<ModelsSectionState>()((set) => ({
         : [...current, effortId]
       return { editorForm: { ...state.editorForm, supportedEfforts: next } }
     }),
+
+  toggleOneMillionContext: () =>
+    set((state) => ({
+      editorForm: {
+        ...state.editorForm,
+        offersOneMillionContext: !state.editorForm.offersOneMillionContext,
+      },
+    })),
 }))

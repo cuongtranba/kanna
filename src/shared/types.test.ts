@@ -11,6 +11,7 @@ import {
   OPENROUTER_MODELS_URL,
   DEFAULT_OPENROUTER_SDK_MODEL,
   mergeCustomModels,
+  effectiveContextWindowOptions,
   type CustomModelEntry,
 } from "./types"
 
@@ -121,6 +122,54 @@ describe("mergeCustomModels", () => {
     const opus = claude.models.filter((m) => m.id === "claude-opus-4-8")
     expect(opus).toHaveLength(1)
     expect(opus[0]!.label).toBe("Renamed Opus")
+  })
+
+  // A hand-added entry carries only the fields the Settings form collects, so a
+  // whole-object replace silently strips capabilities the built-in declared —
+  // which is how `claude-opus-5` lost its 1M option and every turn was forced
+  // back to the 200k window with no warning anywhere.
+  test("an override inherits optional fields the custom entry omits", () => {
+    const builtin = PROVIDERS.find((p) => p.id === "claude")!.models.find((m) => m.id === "claude-opus-5")!
+    expect(builtin.contextWindowOptions?.some((o) => o.id === "1m")).toBe(true)
+
+    const merged = mergeCustomModels(base(), [entry({ id: "claude-opus-5", label: "Opus 5" })])
+    const opus = merged.find((p) => p.id === "claude")!.models.find((m) => m.id === "claude-opus-5")!
+    expect(opus.label).toBe("Opus 5")
+    expect(opus.contextWindowOptions).toEqual(builtin.contextWindowOptions)
+    expect(opus.supportedEfforts).toEqual(builtin.supportedEfforts)
+  })
+
+  test("an override still wins for the fields it does declare", () => {
+    const merged = mergeCustomModels(base(), [
+      entry({ id: "claude-opus-5", label: "Opus 5", contextWindowOptions: [{ id: "200k", label: "200k" }] }),
+    ])
+    const opus = merged.find((p) => p.id === "claude")!.models.find((m) => m.id === "claude-opus-5")!
+    expect(opus.contextWindowOptions).toEqual([{ id: "200k", label: "200k" }])
+  })
+
+  test("a brand-new model inherits nothing", () => {
+    const merged = mergeCustomModels(base(), [entry({ id: "claude-unheard-of", label: "Unheard Of" })])
+    const model = merged.find((p) => p.id === "claude")!.models.find((m) => m.id === "claude-unheard-of")!
+    expect(model.contextWindowOptions).toBeUndefined()
+    expect(model.supportedEfforts).toBeUndefined()
+  })
+
+  // The Settings editor pre-fills its context-window checkbox from this, so it
+  // has to agree with the merge or opening and saving an entry would write the
+  // inherited 1M away.
+  test("effectiveContextWindowOptions agrees with what mergeCustomModels resolves", () => {
+    for (const id of ["claude-opus-5", "claude-haiku-4-5-20251001"]) {
+      const merged = mergeCustomModels(base(), [entry({ id, label: "Renamed" })])
+      const resolved = merged.find((p) => p.id === "claude")!.models.find((m) => m.id === id)!
+      expect(effectiveContextWindowOptions("claude", id, undefined))
+        .toEqual(resolved.contextWindowOptions ?? [])
+    }
+  })
+
+  test("effectiveContextWindowOptions prefers what the entry declares", () => {
+    expect(effectiveContextWindowOptions("claude", "claude-opus-5", [{ id: "200k", label: "200k" }]))
+      .toEqual([{ id: "200k", label: "200k" }])
+    expect(effectiveContextWindowOptions("claude", "not-a-real-model", undefined)).toEqual([])
   })
 
   test("routes codex entries to the codex provider only", () => {
