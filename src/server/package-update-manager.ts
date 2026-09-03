@@ -67,8 +67,9 @@ export class PackageUpdateManager {
   start(): void {
     if (this.timerHandle !== null) return
     const { timer, settings } = this.deps
+    if (!settings().checkEnabled) return
     this.timerHandle = timer.setInterval(() => {
-      void this.checkUpdates()
+      if (this.deps.settings().checkEnabled) void this.checkUpdates()
     }, settings().checkIntervalMs)
   }
 
@@ -88,8 +89,9 @@ export class PackageUpdateManager {
     if (this.snapshot.status === "applying") return this.snapshot
     if (this.checkPromise) return this.checkPromise
 
+    const settings = this.deps.settings()
+    if (!options.force && !settings.checkEnabled) return this.snapshot
     if (!options.force && this.snapshot.lastCheckedAt !== null) {
-      const settings = this.deps.settings()
       if (now() - this.snapshot.lastCheckedAt < settings.checkIntervalMs) {
         return this.snapshot
       }
