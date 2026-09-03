@@ -71,9 +71,9 @@ function UserMessageInner({ content, attachments = [], steered = false, autoCont
 
   return (
     <>
-      <div className="flex flex-col items-end gap-2">
+      <div className="flex flex-col items-start gap-2">
         {imageAttachments.length > 0 ? (
-          <div className="flex max-w-[85%] sm:max-w-[80%] flex-wrap justify-end gap-3">
+          <div className="flex max-w-[85%] flex-wrap gap-3 sm:max-w-[80%]">
             {imageAttachments.map((attachment) => (
               <AttachmentImageCard
                 key={attachment.id}
@@ -84,7 +84,7 @@ function UserMessageInner({ content, attachments = [], steered = false, autoCont
           </div>
         ) : null}
         {fileAttachments.length > 0 ? (
-          <div className="flex max-w-[85%] sm:max-w-[80%] flex-wrap justify-end gap-2">
+          <div className="flex max-w-[85%] flex-wrap gap-2 sm:max-w-[80%]">
             {fileAttachments.map((attachment) => (
               <AttachmentFileCard
                 key={attachment.id}
@@ -95,16 +95,25 @@ function UserMessageInner({ content, attachments = [], steered = false, autoCont
           </div>
         ) : null}
         {(parsedContent.body || (!parsedContent.body && attachments.length === 0 && content && !parsedContent.systemMessage)) ? (
-          <div className="flex max-w-[85%] items-center gap-2 sm:max-w-[80%]">
+          <div className="flex w-full flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-3">
+            {/* The speaker is set in the margin, as a manuscript gloss. The
+                bubble it replaces was the last card on this surface: a box,
+                a radius, a fill, and a right-hand alignment all its own, so
+                the user's own words were the one thing that did not sit on
+                the rail everything else is measured from. */}
+            <span
+              aria-hidden
+              className="shrink-0 select-none font-mono text-xs tracking-wide text-muted-foreground sm:w-12 sm:pt-0.5 sm:text-right"
+            >
+              You
+            </span>
             {steered ? (
               <Zap
                 aria-label="Sent mid-turn"
-                className="size-3.5 shrink-0 text-muted-foreground"
+                className="mt-1 size-3.5 shrink-0 text-muted-foreground"
               />
             ) : null}
-            {/* rounded-tr-sm clips one corner so the bubble reads as a speech
-                tail — the only orientation cue, since there is no avatar. */}
-            <div className="min-w-0 flex-1 rounded-[20px] rounded-tr-sm border border-border bg-muted px-3.5 py-1.5 text-primary prose prose-sm prose-invert [&_p]:whitespace-pre-line">
+            <div className="min-w-0 flex-1 text-foreground prose prose-sm dark:prose-invert [&_p]:whitespace-pre-line">
               {renderMarkdownToReact(parsedContent.body)}
             </div>
           </div>
