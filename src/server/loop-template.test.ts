@@ -54,6 +54,10 @@ describe("validateLoopSetup — happy path", () => {
     expect(result.resolved.prompt).toContain("sub-1")
     expect(result.resolved.prompt).toContain("stop_loop")
     expect(result.resolved.prompt).toContain("NEVER edit code yourself")
+    // Per-chunk commit instruction (gap 1 from issue #1013)
+    expect(result.resolved.prompt).toContain("git add -A")
+    // Loop-end summary instruction (gap 2 from issue #1013)
+    expect(result.resolved.prompt).toContain("loop-end summary")
     // Skeleton includes goal + verify command
     expect(result.resolved.skeleton).toContain("eslint --max-warnings=0 passes")
     expect(result.resolved.skeleton).toContain("bun run lint")
