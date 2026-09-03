@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { join } from "node:path"
 import { contrastBetween, compositeOver, oklchLuminance } from "../../shared/design/contrast"
 import { parseTokens } from "../../shared/design/tokens"
-import { TONE_PAIRINGS } from "../../shared/design/tone-pairings"
+import { STATUS_PILL_CLASS, TONE_PAIRINGS } from "../../shared/design/tone-pairings"
 
 const CSS_PATH = join(import.meta.dir, "../../..", "src/index.css")
 const css = await Bun.file(CSS_PATH).text()
@@ -67,5 +67,31 @@ describe("contrast engine sanity", () => {
     const brokenPairing = { fg: "warning-foreground", bg: "warning", alpha: 0.1, base: "card" }
     const darkRatio = measuredContrast(brokenPairing, "dark")
     expect(darkRatio).toBeLessThan(WCAG_AA)
+  })
+})
+
+describe("the catalog measures what is drawn", () => {
+  test("no pairing survives whose consumer was deleted", () => {
+    // The four `status/*` tinted pills were the only consumers of those
+    // pairings. Keeping them after the pills became marks would leave this
+    // suite proving contrast for a surface nothing renders — a check that
+    // gates nothing, which is exactly the failure mode this repo removes.
+    const names = TONE_PAIRINGS.map((p) => p.name)
+    expect(names).not.toContain("status/running")
+    expect(names).not.toContain("status/completed")
+    expect(names).not.toContain("status/failed")
+    expect(names).not.toContain("status/skipped")
+  })
+
+  test("every mark colour is measured on the plain surface it actually sits on", () => {
+    const marks = TONE_PAIRINGS.filter((p) => p.name.startsWith("mark/"))
+    expect(marks.length).toBe(4)
+    // A mark is drawn on the card/background itself, never over a tint, so a
+    // pairing claiming otherwise would be measuring the wrong composite.
+    for (const mark of marks) expect(mark.alpha).toBe(1)
+  })
+
+  test("the pill map covers exactly the availabilities that draw one", () => {
+    expect(Object.keys(STATUS_PILL_CLASS).sort()).toEqual(["outdated", "partial", "unknown"])
   })
 })
