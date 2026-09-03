@@ -12,6 +12,7 @@ import {
   type ClaudeAuthPoolProbe,
 } from "./provider-catalog"
 import { resolveClaudeApiModelId, PROVIDERS } from "../shared/types"
+import { log } from "../shared/log"
 import type { LlmProviderSnapshot, CustomModelEntry } from "../shared/types"
 
 describe("provider catalog normalization", () => {
@@ -41,6 +42,71 @@ describe("provider catalog normalization", () => {
     })).toMatchObject({
       reasoningEffort: "medium",
     })
+  })
+
+  // Reproduces the reported defect: a user adds `claude-opus-5` by hand in
+  // Settings → Models (the form collects no context-window field), the entry
+  // shadows the built-in, the 1M toggle disappears, and every turn silently
+  // runs on 200k — visible only as `model: "claude-opus-5"` with no `[1m]`
+  // suffix in the turn's runConfig.
+  test("a hand-added override does not strip the built-in's 1m option", () => {
+    const handAdded: CustomModelEntry = {
+      id: "claude-opus-5",
+      label: "Opus 5",
+      provider: "claude",
+      createdAt: 1_784_949_650_837,
+      updatedAt: 1_784_949_650_837,
+    }
+
+    expect(normalizeClaudeModelOptions(
+      "claude-opus-5",
+      { claude: { reasoningEffort: "high", contextWindow: "1m" } },
+      undefined,
+      [handAdded],
+    )).toEqual({ reasoningEffort: "high", contextWindow: "1m" })
+
+    expect(resolveClaudeApiModelId(
+      "claude-opus-5",
+      normalizeClaudeModelOptions(
+        "claude-opus-5",
+        { claude: { reasoningEffort: "high", contextWindow: "1m" } },
+        undefined,
+        [handAdded],
+      ).contextWindow,
+    )).toBe("claude-opus-5[1m]")
+  })
+
+  test("a model with no context-window options anywhere still pins to 200k, and says so", () => {
+    const warnings: unknown[][] = []
+    const original = log.warn
+    log.warn = (...args: never[]) => { warnings.push(args) }
+    try {
+      expect(normalizeClaudeModelOptions(
+        "claude-haiku-4-5-20251001",
+        { claude: { reasoningEffort: "medium", contextWindow: "1m" } },
+      ).contextWindow).toBe("200k")
+    } finally {
+      log.warn = original
+    }
+    expect(warnings).toHaveLength(1)
+    expect(warnings[0]?.[1]).toMatchObject({
+      model: "claude-haiku-4-5-20251001",
+      requested: "1m",
+      resolved: "200k",
+    })
+  })
+
+  test("an honoured context window logs nothing", () => {
+    const warnings: unknown[][] = []
+    const original = log.warn
+    log.warn = (...args: never[]) => { warnings.push(args) }
+    try {
+      normalizeClaudeModelOptions("claude-opus-5", { claude: { reasoningEffort: "high", contextWindow: "1m" } })
+      normalizeClaudeModelOptions("claude-opus-5", undefined, "high")
+    } finally {
+      log.warn = original
+    }
+    expect(warnings).toEqual([])
   })
 
   test("normalizes Codex model options and fast mode defaults", () => {

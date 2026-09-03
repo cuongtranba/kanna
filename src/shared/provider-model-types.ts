@@ -313,7 +313,14 @@ export function mergeCustomModels(
     for (const custom of forProvider) {
       const option = customEntryToModelOption(custom)
       const idx = models.findIndex((m) => m.id === option.id)
-      if (idx >= 0) models[idx] = option
+      // An override MERGES over the built-in rather than replacing it, because
+      // the Settings form collects only id/label/efforts — so a hand-added
+      // entry for an id that already ships would otherwise strip capabilities
+      // it never had a way to declare. `customEntryToModelOption` omits absent
+      // optionals, so a field the user did set still wins. There is no
+      // "explicitly none" to preserve: `applyCustomModelPatch` collapses a
+      // cleared field to `undefined`, indistinguishable from never-set.
+      if (idx >= 0) models[idx] = { ...models[idx], ...option }
       else models.push(option)
     }
     return { ...entry, models }
@@ -451,6 +458,23 @@ export function normalizeClaudeContextWindow(
   return isClaudeContextWindow(contextWindow) && options.some((option) => option.id === contextWindow)
     ? contextWindow
     : DEFAULT_CLAUDE_MODEL_OPTIONS.contextWindow
+}
+
+/**
+ * The context-window options a custom entry effectively offers: its own when it
+ * declares them, else the built-in's — the same fallback `mergeCustomModels`
+ * applies. The Settings editor reads this so that saving an entry which was
+ * inheriting 1M does not silently write the inheritance away.
+ */
+export function effectiveContextWindowOptions(
+  provider: "claude" | "codex",
+  modelId: string,
+  declared?: readonly ProviderContextWindowOption[],
+): readonly ProviderContextWindowOption[] {
+  if (declared) return declared
+  return PROVIDERS
+    .find((p) => p.id === provider)?.models
+    .find((m) => m.id === modelId)?.contextWindowOptions ?? []
 }
 
 export function resolveClaudeApiModelId(modelId: string, contextWindow?: ClaudeContextWindow): string {

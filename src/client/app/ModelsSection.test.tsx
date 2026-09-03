@@ -76,6 +76,13 @@ function labelInput(container: HTMLElement) {
   return container.querySelector<HTMLInputElement>('input[placeholder="Opus 4.9"]')!
 }
 
+function oneMillionCheckbox(container: HTMLElement) {
+  const label = [...container.querySelectorAll("label")]
+    .find((l) => l.textContent?.includes("Offer the 1M context window"))
+  expect(label).toBeDefined()
+  return label!.querySelector<HTMLInputElement>('input[type="checkbox"]')!
+}
+
 describe("ModelsSection — empty state", () => {
   test("shows per-provider empty placeholders", async () => {
     const { container, cleanup } = await mount({ models: [], handlers: noopHandlers })
@@ -157,8 +164,15 @@ describe("ModelsSection — editor", () => {
 
     await clickText(container, "Add model")
 
+    // A create always records the context-window choice explicitly, so a new
+    // Claude model can never be left inheriting — or silently pinned to 200k.
     expect(created).toEqual([
-      { id: "claude-opus-4-9", label: "Opus 4.9", provider: "claude" },
+      {
+        id: "claude-opus-4-9",
+        label: "Opus 4.9",
+        provider: "claude",
+        contextWindowOptions: [{ id: "200k", label: "200k" }],
+      },
     ])
     // onDone ran, so the list (both per-provider Add buttons) is back.
     expect(
@@ -207,9 +221,61 @@ describe("ModelsSection — editor", () => {
     })
     await clickText(container, "Save changes")
 
+    // `claude-opus-4-8` is a built-in that offers 1M, and this entry declares no
+    // options of its own — so the editor opens with the box already ticked and
+    // the save preserves what the entry was effectively offering.
     expect(updates).toEqual([
-      { id: "claude-opus-4-8", patch: { label: "Opus 4.8 (fast)", supportedEfforts: ["low", "medium", "high", "max"] } },
+      {
+        id: "claude-opus-4-8",
+        patch: {
+          label: "Opus 4.8 (fast)",
+          supportedEfforts: ["low", "medium", "high", "max"],
+          contextWindowOptions: [{ id: "200k", label: "200k" }, { id: "1m", label: "1M" }],
+        },
+      },
     ])
+    await cleanup()
+  })
+
+  // The reported defect: a hand-added `claude-opus-5` shadowed the built-in,
+  // the 1M toggle vanished from the composer, and every turn ran on 200k.
+  test("editing an entry that inherits 1M opens with the box ticked and keeps it", async () => {
+    const updates: Array<{ id: string; patch: unknown }> = []
+    const { container, cleanup } = await mount({
+      models: [model({ id: "claude-opus-5", label: "Opus 5" })],
+      handlers: { ...noopHandlers, onUpdate: async (id, patch) => { updates.push({ id, patch }) } },
+    })
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[aria-label="Edit Opus 5"]')!.click()
+    })
+    expect(oneMillionCheckbox(container).checked).toBe(true)
+
+    await clickText(container, "Save changes")
+    expect(updates[0]?.patch).toMatchObject({
+      contextWindowOptions: [{ id: "200k", label: "200k" }, { id: "1m", label: "1M" }],
+    })
+    await cleanup()
+  })
+
+  test("unticking the box records 200k explicitly rather than inheriting", async () => {
+    const updates: Array<{ id: string; patch: unknown }> = []
+    const { container, cleanup } = await mount({
+      models: [model({ id: "claude-opus-5", label: "Opus 5" })],
+      handlers: { ...noopHandlers, onUpdate: async (id, patch) => { updates.push({ id, patch }) } },
+    })
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[aria-label="Edit Opus 5"]')!.click()
+    })
+    await act(async () => {
+      oneMillionCheckbox(container).click()
+    })
+
+    await clickText(container, "Save changes")
+    expect(updates[0]?.patch).toMatchObject({
+      contextWindowOptions: [{ id: "200k", label: "200k" }],
+    })
     await cleanup()
   })
 
