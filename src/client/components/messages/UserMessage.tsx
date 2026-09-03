@@ -95,25 +95,17 @@ function UserMessageInner({ content, attachments = [], steered = false, autoCont
           </div>
         ) : null}
         {(parsedContent.body || (!parsedContent.body && attachments.length === 0 && content && !parsedContent.systemMessage)) ? (
-          <div className="flex w-full flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-3">
-            {/* The speaker is set in the margin, as a manuscript gloss. The
-                bubble it replaces was the last card on this surface: a box,
-                a radius, a fill, and a right-hand alignment all its own, so
-                the user's own words were the one thing that did not sit on
-                the rail everything else is measured from. */}
-            <span
-              aria-hidden
-              className="shrink-0 select-none font-mono text-xs tracking-wide text-muted-foreground sm:w-12 sm:pt-0.5 sm:text-right"
-            >
-              You
+          <div className="flex w-full flex-col gap-0.5">
+            {/* The speaker is set above the prompt, as a manuscript gloss, so
+                the words themselves start on the rail every other transcript
+                row is measured from. A side gutter reads well but is paid for
+                out of the measure: 48px of label plus a gap indented the one
+                entry this plate exists to bring back onto the rail. */}
+            <span className="flex items-center gap-1.5 select-none font-mono text-xs tracking-wide text-muted-foreground">
+              <span aria-hidden>You</span>
+              {steered ? <Zap aria-label="Sent mid-turn" className="size-3.5 shrink-0" /> : null}
             </span>
-            {steered ? (
-              <Zap
-                aria-label="Sent mid-turn"
-                className="mt-1 size-3.5 shrink-0 text-muted-foreground"
-              />
-            ) : null}
-            <div className="min-w-0 flex-1 text-foreground prose prose-sm dark:prose-invert [&_p]:whitespace-pre-line">
+            <div className="min-w-0 text-foreground prose prose-sm dark:prose-invert [&_p]:whitespace-pre-line">
               {renderMarkdownToReact(parsedContent.body)}
             </div>
           </div>
