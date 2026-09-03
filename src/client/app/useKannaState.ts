@@ -612,6 +612,7 @@ export interface KannaState {
   handleArchiveChat: (chat: SidebarChatRow) => Promise<void>
   handleOpenArchivedChat: (chatId: string) => Promise<void>
   handleDeleteChat: (chat: SidebarChatRow) => Promise<void>
+  handleDeleteBulkChats: (chatIds: string[]) => Promise<void>
   handleHideProject: (projectId: string) => Promise<void>
   handleToggleProjectStar: (projectId: string, starred: boolean) => Promise<void>
   handleReorderProjectGroups: (projectIds: string[]) => Promise<void>

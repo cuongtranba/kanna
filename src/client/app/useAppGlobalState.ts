@@ -349,6 +349,7 @@ export interface AppGlobalState {
   handleArchiveChat: (chat: SidebarChatRow) => Promise<void>
   handleOpenArchivedChat: (chatId: string) => Promise<void>
   handleDeleteChat: (chat: SidebarChatRow) => Promise<void>
+  handleDeleteBulkChats: (chatIds: string[]) => Promise<void>
   handleHideProject: (projectId: string) => Promise<void>
   handleToggleProjectStar: (projectId: string, starred: boolean) => Promise<void>
   handleReorderProjectGroups: (projectIds: string[]) => Promise<void>
@@ -1119,6 +1120,18 @@ export function useAppGlobalState(
     }
   }, [activeChatId, chatNavigator, dialog, sidebarProjectGroups, socket])
 
+  const handleDeleteBulkChats = useCallback(async (chatIds: string[]) => {
+    if (!chatIds.length) return
+    const n = chatIds.length
+    const ok = await dialog.confirm({ title: "Delete Chats", description: `Delete ${n} chat${n === 1 ? "" : "s"}? This cannot be undone.`, confirmLabel: "Delete", confirmVariant: "destructive" })
+    if (!ok) return
+    const deletingActive = activeChatId != null && chatIds.includes(activeChatId)
+    try {
+      for (const chatId of chatIds) await socket.command({ type: "chat.delete", chatId })
+      if (deletingActive) { const next = getNewestRemainingChatId(sidebarProjectGroups, activeChatId); if (next) chatNavigator.openChat(next); else chatNavigator.closeChat() }
+    } catch (err) { useKannaStateStore.getState().setCommandError(err instanceof Error ? err.message : String(err)) }
+  }, [activeChatId, chatNavigator, dialog, sidebarProjectGroups, socket])
+
   const handleArchiveChat = useCallback(async (chat: SidebarChatRow) => {
     try {
       await socket.command({ type: "chat.archive", chatId: chat.chatId })
@@ -1435,6 +1448,7 @@ export function useAppGlobalState(
     handleArchiveChat,
     handleOpenArchivedChat,
     handleDeleteChat,
+    handleDeleteBulkChats,
     handleHideProject,
     handleToggleProjectStar,
     handleReorderProjectGroups,

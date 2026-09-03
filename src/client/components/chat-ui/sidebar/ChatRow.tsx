@@ -1,5 +1,5 @@
-import { memo } from "react"
-import { Archive, BellOff, ShieldAlert, Split } from "lucide-react"
+import { type ReactNode, memo } from "react"
+import { Archive, BellOff, Check, ShieldAlert, Split } from "lucide-react"
 import type { SidebarChatRow } from "../../../../shared/types"
 import { Button } from "../../ui/button"
 import { Kbd } from "../../ui/kbd"
@@ -29,6 +29,8 @@ interface Props {
   onDeleteChat: (chatId: string) => void
   onEditPermissions?: (chatId: string) => void
   silent?: boolean
+  isSelected?: boolean
+  onToggleSelect?: () => void
 }
 
 function ChatRowImpl({
@@ -45,6 +47,8 @@ function ChatRowImpl({
   onDeleteChat,
   onEditPermissions,
   silent = false,
+  isSelected = false,
+  onToggleSelect,
 }: Props) {
   const isLiveState = (chat.status === "running" || chat.status === "waiting_for_user") && chat.stateEnteredAt != null
   const stampLabel = isLiveState && chat.stateEnteredAt != null
@@ -59,7 +63,33 @@ function ChatRowImpl({
   const tone = chatStatusIndicator(chat)?.tone ?? null
   const minSlotWidth = chat.canFork ? "min-w-12" : "min-w-6"
 
-  let trailingLabelContent: React.ReactNode = null
+  let rowBgClass: string
+  if (onToggleSelect) {
+    rowBgClass = isSelected ? "bg-muted/60" : "hover:bg-muted/40"
+  } else {
+    rowBgClass = isActive ? "bg-muted" : "hover:bg-muted/40"
+  }
+
+  let leadingIndicator: ReactNode
+  if (onToggleSelect) {
+    const checkboxBorderBg = isSelected
+      ? "border-foreground bg-foreground"
+      : "border-muted-foreground/50 bg-transparent"
+    leadingIndicator = (
+      <span className={cn(
+        "flex h-3.5 w-3.5 rounded-sm border items-center justify-center transition-colors duration-100",
+        checkboxBorderBg
+      )}>
+        {isSelected && <Check className="h-2.5 w-2.5 text-background" strokeWidth={3} />}
+      </span>
+    )
+  } else {
+    leadingIndicator = tone
+      ? <span className={cn("h-2 w-2 rounded-full", chatDotBgClass(tone))} />
+      : null
+  }
+
+  let trailingLabelContent: ReactNode = null
   if (trailingLabel) {
     if (showShortcutKeycap) {
       trailingLabelContent = (
@@ -87,10 +117,11 @@ function ChatRowImpl({
     <button
       type="button"
       className="flex min-w-0 flex-1 items-center gap-2 py-1.5 pl-2 text-left"
-      onClick={() => onSelectChat(chat.chatId)}
+      onClick={() => onToggleSelect ? onToggleSelect() : onSelectChat(chat.chatId)}
+      aria-pressed={onToggleSelect ? isSelected : undefined}
     >
       <span className="relative flex h-3.5 w-3.5 shrink-0 items-center justify-center" aria-hidden>
-        {tone ? <span className={cn("h-2 w-2 rounded-full", chatDotBgClass(tone))} /> : null}
+        {leadingIndicator}
       </span>
       {(() => {
         const badge = sessionStateBadge(chat.sessionState)
@@ -125,23 +156,26 @@ function ChatRowImpl({
       data-chat-id={normalizedChatId}
       className={cn(
         "group flex items-center rounded-md pr-1 transition-colors duration-150",
-        isActive
-          ? "bg-muted"
-          : "hover:bg-muted/40"
+        rowBgClass
       )}
     >
-      <ChatRowMenu
-        canFork={chat.canFork}
-        onRename={() => onRenameChat(chat.chatId)}
-        onOpenInFinder={() => onOpenInFinder(chat.localPath)}
-        onFork={() => onForkChat(chat.chatId)}
-        onArchive={() => onArchiveChat(chat.chatId)}
-        onDelete={() => onDeleteChat(chat.chatId)}
-        onEditPermissions={onEditPermissions ? () => onEditPermissions(chat.chatId) : undefined}
-      >
-        {mainAction}
-      </ChatRowMenu>
-      <div className={cn("flex h-8 shrink-0 items-center justify-end gap-0", minSlotWidth)}>
+      {onToggleSelect ? (
+        mainAction
+      ) : (
+        <ChatRowMenu
+          canFork={chat.canFork}
+          onRename={() => onRenameChat(chat.chatId)}
+          onOpenInFinder={() => onOpenInFinder(chat.localPath)}
+          onFork={() => onForkChat(chat.chatId)}
+          onArchive={() => onArchiveChat(chat.chatId)}
+          onDelete={() => onDeleteChat(chat.chatId)}
+          onEditPermissions={onEditPermissions ? () => onEditPermissions(chat.chatId) : undefined}
+        >
+          {mainAction}
+        </ChatRowMenu>
+      )}
+      {!onToggleSelect && (
+        <div className={cn("flex h-8 shrink-0 items-center justify-end gap-0", minSlotWidth)}>
           {chat.canFork ? (
             <Button
               variant="ghost"
@@ -168,7 +202,8 @@ function ChatRowImpl({
           >
             <Archive className="size-3.5" />
           </Button>
-      </div>
+        </div>
+      )}
     </div>
   )
 
