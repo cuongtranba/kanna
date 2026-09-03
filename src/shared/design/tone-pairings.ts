@@ -7,22 +7,34 @@ export interface TonePairing {
 }
 
 export const TONE_PAIRINGS = [
-  { name: "status/running", fg: "warning-text", bg: "warning", alpha: 0.1, base: "card" },
-  { name: "status/completed", fg: "success-text", bg: "success", alpha: 0.1, base: "card" },
-  { name: "status/failed", fg: "destructive-text", bg: "destructive", alpha: 0.1, base: "card" },
-  { name: "status/skipped", fg: "muted-foreground", bg: "muted", alpha: 0.4, base: "card" },
+  // Marks sit on the PLAIN surface, not on a tint. The four `status/*` tinted
+  // pills these replaced were the only consumers of those pairings, so keeping
+  // them would have left the contrast test proving something nothing renders —
+  // a check that gates nothing. These measure what is actually drawn.
+  { name: "mark/live", fg: "foreground", bg: "card", alpha: 1, base: "card" },
+  { name: "mark/idle", fg: "muted-foreground", bg: "card", alpha: 1, base: "card" },
+  { name: "mark/attention", fg: "warning-text", bg: "card", alpha: 1, base: "card" },
+  { name: "mark/failed", fg: "destructive-text", bg: "card", alpha: 1, base: "card" },
   { name: "error/api", fg: "destructive-text", bg: "destructive", alpha: 0.1, base: "background" },
   { name: "action/destructive-filled", fg: "destructive-filled-foreground", bg: "destructive-filled", alpha: 1, base: "background" },
 ] as const satisfies readonly TonePairing[]
 
 export type TonePairingName = (typeof TONE_PAIRINGS)[number]["name"]
 
-export const STATUS_PILL_CLASS = {
-  running: "border-warning/40 text-warning-text bg-warning/10",
-  completed: "border-success/40 text-success-text bg-success/10",
-  failed: "border-destructive/40 text-destructive-text bg-destructive/10",
-  skipped: "border-border text-muted-foreground bg-muted/40",
+/**
+ * Tinted pill classes, for the one context that still wants a pill: package
+ * update availability in Settings.
+ *
+ * That is not a run state — a turn's lifecycle is drawn as a mark now (see
+ * `stateMark.ts`) — and Settings is a low-density surface where a pill reads
+ * well. The four run-state keys that used to live here went with the pills
+ * they painted.
+ *
+ * Typed against the availability values that actually render, so `up_to_date`
+ * (which draws no pill) cannot be indexed and a new value cannot be forgotten.
+ */
+export const STATUS_PILL_CLASS: Record<"outdated" | "partial" | "unknown", string> = {
   outdated: "border-warning/40 text-warning-text bg-warning/10",
   partial: "border-warning/40 text-warning-text bg-warning/10",
   unknown: "border-border text-muted-foreground bg-muted/40",
-} as const
+}

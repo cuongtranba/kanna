@@ -1,5 +1,6 @@
 import type { KannaStatus } from "../../shared/types"
 import type { WorkflowStatus } from "../../shared/workflow-types"
+import type { CronRunStatus } from "../../shared/cron/types"
 
 export function statusLabel(status: KannaStatus): string {
   switch (status) {
@@ -62,5 +63,30 @@ export function workflowStatusTone(status: WorkflowStatus): StatusTone {
     case "completed":
     case "unknown":
     default: return "muted"
+  }
+}
+
+/**
+ * Cron run status, in the same label + tone pair the other two enums use.
+ *
+ * `skipped` takes the half-height mark rather than the completed one: a run
+ * that never happened is less than a turn, and reading it as "done" would be
+ * a lie the shape tells.
+ */
+export function cronRunLabel(status: CronRunStatus): string {
+  switch (status) {
+    case "running": return "Running"
+    case "completed": return "Completed"
+    case "failed": return "Failed"
+    case "skipped": return "Skipped"
+  }
+}
+
+export function cronRunTone(status: CronRunStatus): StatusTone {
+  switch (status) {
+    case "running": return "active"
+    case "failed": return "destructive"
+    case "skipped": return "attention"
+    case "completed": return "muted"
   }
 }

@@ -1,9 +1,9 @@
 import { CalendarClock, ExternalLink } from "lucide-react"
 import { Link } from "react-router-dom"
 import type { CronJobSnapshot, CronRunStatus } from "../../../shared/cron/types"
-import { STATUS_PILL_CLASS } from "../../../shared/design/tone-pairings"
 import { formatStartedClock } from "../../lib/formatters"
-import { cn } from "../../lib/utils"
+import { cronRunLabel, cronRunTone } from "../../lib/statusLabel"
+import { StateMarkLabel } from "../ui/state-mark"
 import type { ProcessedCronRunMessage } from "./types"
 
 interface Props {
@@ -50,33 +50,16 @@ export function CronRunMessage({ message, cronJobs }: Props) {
   )
 }
 
-const STATUS_LABEL: Record<CronRunStatus, string> = {
-  running: "Running",
-  completed: "Completed",
-  failed: "Failed",
-  skipped: "Skipped",
-}
-
-const STATUS_DOT_CLASS: Record<CronRunStatus, string> = {
-  running: "bg-warning",
-  completed: "bg-success",
-  failed: "bg-destructive",
-  skipped: "bg-muted-foreground",
-}
-
-/** Status always pairs color with a label — color alone never communicates. */
+/**
+ * The run's status as a mark and its word.
+ *
+ * This was a pill: a rounded border, a tinted fill, AND a coloured dot inside
+ * it — three devices saying one thing, two of them carrying it in hue alone.
+ * The mark's shape is the signal now, so it survives greyscale, and the tinted
+ * surface it no longer needs is one fewer entry riding the contrast catalog.
+ */
 export function CronRunStatusPill({ status }: { status: CronRunStatus }) {
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium",
-        STATUS_PILL_CLASS[status],
-      )}
-    >
-      <span className={cn("h-1.5 w-1.5 rounded-full", STATUS_DOT_CLASS[status])} />
-      {STATUS_LABEL[status]}
-    </span>
-  )
+  return <StateMarkLabel tone={cronRunTone(status)} label={cronRunLabel(status)} />
 }
 
 /** Schedule-lifecycle indicator — distinct from run execution status. */
