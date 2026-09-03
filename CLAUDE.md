@@ -1943,3 +1943,75 @@ c3-116 (PluginsSection UI). ADR: `adr-20260902-package-auto-update`.
 **`CODEX_BINARY_PATH`** is the only env var for this feature. Defaults to
 `~/.local/bin/codex`. No other behavior is env-var gated — all configuration
 lives in Settings → Packages (`PackageUpdateSettings` in `settings.json`).
+
+# Plugin System (Paseo-parity)
+
+Third-party plugins that compile to two bundles (a browser one and a server
+one), run their server half as a **subprocess** speaking typed RPC over a unix
+socket, and contribute UI to the sidebar, the chat footer and a Settings page.
+Design: `PLUGIN-SYSTEM-PLAN.md`. Plan/progress: `PROGRESS-plugin-system.md`.
+
+**Plugins are OFF by default** (`plugins.enabled`, `PLUGIN_SETTINGS_DEFAULTS`).
+Every surface — HTTP routes, MCP tools, client host registry — stays dark until
+a user opts in.
+
+**One `PluginService` per process, via `plugins/plugin-service-host.ts`.** The
+CLI, the HTTP routes and the MCP tools all drive `getPluginService()`. A second
+instance would keep a second registry, so a plugin installed over HTTP would be
+invisible to `plugin_list` and `reload` would restart a child no other surface
+could see. Tests swap it with `setPluginServiceForTest` and MUST restore `null`.
+
+**`install` writes BOTH bundles.** It used to build `built.client` and discard
+it, which made `GET /api/plugins/:id/client.js` unserveable no matter what the
+route did. `client.js` is served `no-store`: the bundle is rebuilt in place at
+the same url, so a cached copy silently defeats `plugin reload` — which is the
+entire point of that command.
+
+**A failed RPC is `200 {ok:false}`, not a 4xx.** The transport succeeded and the
+caller needs the plugin's own message; only a malformed REQUEST is a 4xx. A
+well-formed id that is not installed is `404`, and a **disabled** surface is
+`404` everywhere — never `403`, which would advertise that plugins exist.
+
+**The id is validated before any path join.** It becomes a directory name
+downstream, so a traversal-shaped id is rejected at the routing layer.
+
+**Mounting cost three extractions, not three raised allowances.** Three modules
+sat EXACTLY on their architecture-budget ceilings, so each got the remedy the
+budget message prescribes: `SettingsPage.tsx` 2787 → 2449 (`SkillsSection.tsx`,
+which `PLUGIN-SYSTEM-PLAN.md` itself prescribed), `KannaSidebar.tsx` 1007 → 964
+(`SidebarUtilityNav.tsx` — also the natural home for plugin nav entries, which
+are navigation destinations exactly like Workflows/Cron/Settings), and
+`ChatTranscriptViewport.tsx`, which was two lines under the 700 threshold and so
+mounts the footer panel through `PluginsFooterSlot` to keep the call site to one
+import and one element.
+
+**`usePluginContributions` is the whole wiring.** It turns the global switch into
+loaded contributions in `pluginContributionsStore`. Without it every mounted
+surface renders permanently empty — which is precisely the state the feature was
+in for a whole phase: components written, mounted nowhere, nothing feeding them.
+
+**Testing a component that reads a zustand store needs `renderClientMarkup`,
+not `renderToStaticMarkup`.** zustand v5 serves `getInitialState()` as the
+`useSyncExternalStore` SERVER snapshot, so a static render never observes a
+`setState` and a working panel looks broken. That helper exists for this and
+documents it.
+
+**KNOWN GAP — an install does not survive a restart.** `createPluginService()`
+starts with an empty in-memory registry and nothing repopulates it: `server.ts`
+holds no reference to the service, and no install path writes
+`settings.installedPlugins`. So a CLI install is invisible to the running
+server, and every surface reports nothing after a reboot. `settings.json`
+already models this (`InstalledPluginConfig` + full CRUD + normalization in
+`plugins/plugin-settings.ts`); it is simply not connected. Tracked as P11 in
+`PROGRESS-plugin-system.md`, together with the e2e spec that would assert it.
+
+**Not built, and deliberately not guessed:** plugin-contributed slash commands.
+`local-catalog-io.adapter.ts`'s existing `scope: "plugin"` is for **Claude Code**
+plugins (marketplace `skills/`, `commands/`, `SKILL.md`) — a different, older
+feature — so reusing it would collide in the `/` picker, and a Kanna plugin
+contributes at runtime while that catalog is scanned from disk.
+
+**Deferred by the plan, so not gaps:** `addTheme`,
+`addTimelineTransformer/Renderer`, `addComposerPill`, `addAttachmentSource` —
+the surfaces where a bad plugin degrades the core product rather than occupying
+its own page.
