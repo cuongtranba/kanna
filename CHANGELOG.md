@@ -8,6 +8,25 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.45.0](https://github.com/cuongtranba/kanna/compare/v1.44.1...v1.45.0) (2026-09-03)
+
+
+### Features
+
+* **design:** plates instead of cards, and state as mark rather than hue ([#1012](https://github.com/cuongtranba/kanna/issues/1012)) ([eda7e7e](https://github.com/cuongtranba/kanna/commit/eda7e7e6b9e954cc06e378b21961649a816bcf2c))
+* **plugins:** Paseo-parity plugin system — P0–P9 modules (WIP, P10 outstanding) ([#1009](https://github.com/cuongtranba/kanna/issues/1009)) ([6304bfb](https://github.com/cuongtranba/kanna/commit/6304bfb655d02148d5eab504d4c4caeaaa2f59e7))
+* **sidebar:** add bulk chat selection and delete ([#1016](https://github.com/cuongtranba/kanna/issues/1016)) ([f7129b2](https://github.com/cuongtranba/kanna/commit/f7129b2a80422c0a4ad13866fe1f39b8e2fa1bc3))
+* **subagents:** add OpenRouter provider and model selection ([#1006](https://github.com/cuongtranba/kanna/issues/1006)) ([608b5a5](https://github.com/cuongtranba/kanna/commit/608b5a5842592c3eb0b630b26aea5020f4781530))
+
+
+### Bug Fixes
+
+* **design:** the running turn gets its own tick in the session sigil ([#1015](https://github.com/cuongtranba/kanna/issues/1015)) ([d0db053](https://github.com/cuongtranba/kanna/commit/d0db053df2145702422b32576a89e17e278ebe30))
+* **loop:** add per-chunk git commit and end-of-loop summary to worker prompt ([#1017](https://github.com/cuongtranba/kanna/issues/1017)) ([477d0f3](https://github.com/cuongtranba/kanna/commit/477d0f3a16c034215c120a72bf57ef7c96c0dca5))
+* **packages:** honour checkEnabled master switch in start() and checkUpdates() ([#1000](https://github.com/cuongtranba/kanna/issues/1000)) ([e45a747](https://github.com/cuongtranba/kanna/commit/e45a747fbe601c5f8d3c6da090b73cf25426713e)), closes [#999](https://github.com/cuongtranba/kanna/issues/999)
+* **transcript:** lower estimatedItemSize from 96 to 48 to prevent over-scroll on long chats ([#1018](https://github.com/cuongtranba/kanna/issues/1018)) ([2de1dd6](https://github.com/cuongtranba/kanna/commit/2de1dd6fcf2889ec5258e792afe5fdd62c999c90)), closes [#1014](https://github.com/cuongtranba/kanna/issues/1014)
+* **transcript:** suppress MVCP scrollBy during touch gestures on mobile ([#1002](https://github.com/cuongtranba/kanna/issues/1002)) ([8b0ee05](https://github.com/cuongtranba/kanna/commit/8b0ee054e98e241d29d6f9912b5190fe30013ec5))
+
 ## [1.44.1](https://github.com/cuongtranba/kanna/compare/v1.44.0...v1.44.1) (2026-09-03)
 
 
