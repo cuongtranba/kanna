@@ -19,7 +19,11 @@
  */
 
 import { useEffect, useMemo } from "react"
-import useWebSocket from "react-use-websocket"
+// NOT `import useWebSocket from "react-use-websocket"` — that package is transpiled
+// CommonJS, and rolldown (Vite 8+) binds its default export to `module.exports` rather
+// than `exports.default`, so calling it throws "(0, X.default) is not a function" and
+// white-screens the app. ../lib/useWebSocket owns that interop; see its header.
+import { useWebSocket } from "../lib/useWebSocket"
 import { domAdapter } from "../adapters/dom.adapter"
 import type { DomPort } from "../ports/domPort"
 import { useSocketStore } from "../stores/socketStore"
