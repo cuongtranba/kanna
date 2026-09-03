@@ -18,6 +18,9 @@ const DESCRIPTIONS: Record<string, { default: string; description: string }> = {
   KANNA_SERVER_SECRET: { default: '(random per process)', description: 'Stabilises HMAC tool-request ids across process restarts.' },
   KANNA_CRON_REPAIR: { default: 'enabled', description: 'Set to "disabled" to stop handing an invalid /cron line to the agent for repair. It only ever fires where Kanna has no corrected command of its own; the validate_cron / arm_cron tools stay registered either way.' },
   KANNA_CRON_CONFIRM: { default: 'enabled', description: 'Set to "disabled" to stop the host from escalating a typed /cron arm to a model review turn. When enabled, the model presents the full job config and asks the user to confirm, change, or disarm. Only fires on the typed path — arm_cron already confirms in-turn.' },
+  KANNA_PTY_SANDBOX: { default: '(unset)', description: 'Set to "off" to disable the PTY driver\'s OS-level sandbox. On by default on macOS, and on Linux when bubblewrap (bwrap) is on PATH. Turning it off loses defense-in-depth against the CLI\'s built-in credential reads; it also silences the warning logged when bwrap is missing.' },
+  KANNA_STACK_MEMORY: { default: 'enabled', description: 'Set to "disabled" to stop a multi-root (stack) spawn from loading each additional project\'s CLAUDE.md / .claude/rules. Enabled, Kanna sets CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD on any spawn that has additional roots, so a chat that can WRITE a bound project also reads its conventions — at the cost of those memory files in every turn\'s context. A single-project chat is unaffected either way.' },
+  KANNA_UPDATE_COMMAND: { default: '(auto-detected)', description: 'Overrides the command Kanna runs to install a self-update. Set it when npm, bun, pnpm and yarn are all absent or the wrong one is picked.' },
   KANNA_SYSTEM_PROMPT_APPEND: { default: '(unset)', description: 'Appended to the system prompt for every agent spawn (both SDK and PTY drivers).' },
   KANNA_SUBAGENT_MAX_LIVE: { default: '5', description: 'Max concurrent keep-alive (warm) subagent processes per chat. Over cap, delegate_subagent({keep_alive:true}) fails CAP_EXCEEDED.' },
   KANNA_SUBAGENT_IDLE_TIMEOUT_MS: { default: '300000', description: 'Idle window after which a keep-alive subagent session is auto-closed. Reset on each turn.' },
@@ -39,7 +42,9 @@ const glob = new Glob('**/*.ts')
 
 for await (const file of glob.scan({ cwd: SRC })) {
   const content = await Bun.file(path.join(SRC, file)).text()
-  const matches = content.matchAll(/process\.env\.(KANNA_[A-Z0-9_]+)/g)
+  // `process.env.X` and `env.X` alike: a var read off an INJECTED environment
+  // (the side-effect seal's preferred shape) is still a var the user sets.
+  const matches = content.matchAll(/\benv\.(KANNA_[A-Z0-9_]+)/g)
   for (const m of matches) seen.add(m[1])
 }
 

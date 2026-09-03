@@ -19,6 +19,7 @@ import type {
   ProviderCatalogEntry,
 } from "./provider-model-types"
 import type { TranscriptEntry } from "./transcript-types"
+import type { StackActivity } from "./stack-activity"
 import type {
   ClaudeSessionLifecycleStatus,
   CloudflareTunnelRecord,
@@ -196,6 +197,11 @@ export interface StackSummary {
   createdAt: number
   updatedAt: number
   instructions?: string
+  /**
+   * Rolled up from this stack's member chats. Absent when nothing is running,
+   * so the sidebar row renders no indicator rather than a row of zeroes.
+   */
+  activity?: StackActivity
 }
 
 export interface StackBinding {

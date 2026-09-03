@@ -5,6 +5,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../../ui/tooltip"
 import { cn } from "../../../lib/utils"
 import { StackActionsPopover, StackSectionMenu } from "./Menus"
 import type { StackSummary, SidebarChatRow } from "../../../../shared/types"
+import { formatStackActivity } from "../../../../shared/stack-activity"
 
 interface StacksSectionProps {
   stacks: StackSummary[]
@@ -87,6 +88,7 @@ export function StacksSection({
           {stacks.map((stack, index) => {
             const isExpanded = expandedStackIds.has(stack.id)
             const memberProjects = projects.filter((p) => stack.projectIds.includes(p.id))
+            const activityLabel = stack.activity ? formatStackActivity(stack.activity) : null
 
             const headerRow = (
               <div className="group/section pl-2 pr-2 py-1 flex items-center gap-1 select-none">
@@ -106,6 +108,14 @@ export function StacksSection({
                   <span className="truncate min-w-0 text-13 font-semibold text-foreground/80">
                     {stack.title}
                   </span>
+                  {/* What is running across the whole stack — the member chats
+                      may sit under several collapsed project groups, so this
+                      row is the only place the question can be answered. */}
+                  {activityLabel ? (
+                    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                      {activityLabel}
+                    </span>
+                  ) : null}
                 </div>
                 <span className="text-xs tabular-nums text-muted-foreground px-1.5 py-0.5 rounded bg-muted/60 shrink-0">
                   {stack.memberCount}

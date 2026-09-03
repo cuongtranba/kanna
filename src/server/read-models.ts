@@ -23,6 +23,7 @@ import { buildLoopProgress } from "../shared/loop-progress"
 import type { ChatRecord, ChatTimingState, StoreState } from "./events"
 import { resolveLocalPath } from "./paths"
 import { resolveSpawnPaths, resolveStackProjects } from "./claude-session-config"
+import { aggregateStackActivity } from "../shared/stack-activity"
 import { SERVER_PROVIDERS } from "./provider-catalog"
 import { deriveChatSchedules, deriveLoopState } from "./auto-continue/read-model"
 import { deriveCronJobs } from "./cron/read-model"
@@ -251,7 +252,23 @@ export function deriveSidebarData(
     })
   const projectGroups = allGroups.filter((g) => g.starredAt == null)
 
-  return { starredProjectGroups, projectGroups, stacks: stackSummaries(state) }
+  // Rolled up from the rows just built, so the stack row and the chat rows
+  // under it can never disagree about what is running.
+  const activityByStackId = new Map<string, ChatActivity[]>()
+  for (const group of allGroups) {
+    for (const chat of group.chats) {
+      if (!chat.stackId) continue
+      const bucket = activityByStackId.get(chat.stackId)
+      if (bucket) bucket.push(chat.activity)
+      else activityByStackId.set(chat.stackId, [chat.activity])
+    }
+  }
+
+  return {
+    starredProjectGroups,
+    projectGroups,
+    stacks: stackSummaries(state, activityByStackId),
+  }
 }
 
 export function deriveLocalProjectsSnapshot(
@@ -482,16 +499,24 @@ export function deriveChatSnapshot(
   }
 }
 
-export function stackSummaries(state: StoreState): StackSummary[] {
+export function stackSummaries(
+  state: StoreState,
+  activityByStackId: ReadonlyMap<string, ChatActivity[]> = new Map(),
+): StackSummary[] {
   return [...state.stacksById.values()]
     .filter((s) => !s.deletedAt)
-    .map((s) => ({
-      id: s.id,
-      title: s.title,
-      projectIds: [...s.projectIds],
-      memberCount: s.projectIds.length,
-      createdAt: s.createdAt,
-      updatedAt: s.updatedAt,
-      ...(s.instructions ? { instructions: s.instructions } : {}),
-    }))
+    .map((s) => {
+      const activity = aggregateStackActivity(activityByStackId.get(s.id) ?? [])
+      return {
+        id: s.id,
+        title: s.title,
+        projectIds: [...s.projectIds],
+        memberCount: s.projectIds.length,
+        createdAt: s.createdAt,
+        updatedAt: s.updatedAt,
+        ...(s.instructions ? { instructions: s.instructions } : {}),
+        // Omitted when idle, so the row renders no indicator at all.
+        ...(activity.activeChats > 0 ? { activity } : {}),
+      }
+    })
 }

@@ -9,7 +9,10 @@ chunks pile up and get redone).
 
 ## Handoff
 
-**Nothing is implemented.** This branch carries the plan and this tracker only.
+**Phases 1, 2 and 4 are implemented; Phase 3 has its ADR and its rollup but no
+Option A/B code.** Read the Progress log below before the plan — several plan
+details were superseded by what the implementation found, and each deviation is
+recorded there with its reason.
 
 **Start here:**
 
@@ -64,21 +67,72 @@ to pass.
 
 ## Next chunk
 
-**Phase 2 — `instructions` on project + stack.** Write the ADR first
-(`c3x add adr`), then implement in the dependency order in
-`PLAN-stack-multi-project.md` §5: types → events → builders → apply/reducer →
-store methods → protocol + router → read models → prompt composition
-(`## Project instructions` → `## Workspace instructions` rename) → both
-providers → subagent parity → sidebar UI.
+**Two blockers, then Phase 3 Option A.**
 
-Note for the prompt step: a SOLO chat has no `stackBindings`, so the resolver
-must synthesize a single-entry list from `chat.projectId` or the feature only
-works inside stacks. Decide it once and test both shapes.
+1. **Get `adr-20260904-cross-project-orchestration` accepted or rejected.** It
+   is `proposed`. No Option A code may be written until it is `accepted` — the
+   plan's own rule, and adr-20260802's lesson. If accepted, ship it in three
+   slices: the `blockedBy` edge plus its cycle check, then the Start-work gate,
+   then the drawer copy.
 
-New client handlers go in their own module — `useAppGlobalState.ts` still has
-zero headroom.
+2. **Unblock the C3 toolchain, which is deadlocked on damage that predates this
+   branch.** `c3x check` reports BROKEN_SEAL on `c3-116-settings-page.md`,
+   `c3-237-package-autoupdate.md` and `c3-312-packages-shared.md`; `c3x repair`
+   cannot reseal because its own check fails with 8 errors in c3-237 / c3-312
+   (missing `## Contract` and `## Derived Materials`, an invalid Governance
+   `Type` enum, a blank Notes cell). Every other c3x command needs the cache
+   rebuild that the broken seal blocks, so `c3x lookup` answers nothing for ANY
+   file right now — not just stack files.
+
+   **This is why the stacks C3 component fact (PLAN §7.1) is NOT in this
+   branch.** Hand-authoring it would add a fourth unsealed fact and make the
+   deadlock worse; adding only the `.c3/eval/c3-NNN.yaml` binding would leave a
+   reference to a fact that does not exist, which is the exact c3-235 defect
+   `CLAUDE.md` already lists as open. Fix c3-237/c3-312 first (they belong to
+   the package-auto-update feature, not to stacks), then author the fact with
+   `c3x add component` and confirm with `c3x lookup` on three `Stack*` files.
 
 ## Progress (latest first)
+
+- 2026-09-04 **Phase 4 + Phase 3 ADR + the rollup.**
+  - **Wiki:** `wiki/src/content/docs/features/stacks.md` — what a stack is, the
+    primary/additional roles, what each provider can reach, where instructions
+    come from, loop scoping, and the two known limitations. Env table
+    regenerated. The generator's scrape was widened from `process.env.KANNA_*`
+    to `env.KANNA_*`, because a var read off an INJECTED env (the side-effect
+    seal's preferred shape) was invisible to it — that surfaced
+    `KANNA_PTY_SANDBOX` and `KANNA_UPDATE_COMMAND` as well, both now described.
+  - **Resolver dedup (§7.3) landed with Phase 2.** Worth recording what it
+    exposed: the two resolvers DISAGREED on a deleted project — the read model
+    kept the title with `projectStatus: "missing"`, the prompt path said
+    `(missing)`. The shared resolver takes an explicit `{title, active}` lookup
+    and keeps the last known title, which is strictly more information.
+  - **Phase 3 ADR** `adr-20260904-cross-project-orchestration` (`proposed`):
+    Option A (board card `blockedBy`) is the design; **Option B (stack-scoped
+    loop) is NOT adopted** — it needs four new contracts (which tree holds the
+    tracking file, what "the oracle" means across N trees, what a partial pass
+    means for the GOAL MET terminal check, what `run_verify` fingerprints) to
+    serve one feature. No Option A code written: the ADR is not accepted.
+  - **Stack activity rollup shipped** (`src/shared/stack-activity.ts`), a pure
+    fold over the per-chat `ChatActivity` already computed, surfaced on the
+    stack sidebar row. No new events, no new state, independent of A/B.
+  - **NOT done: the stacks C3 component fact.** See Next chunk — the C3
+    toolchain is deadlocked on pre-existing damage and authoring the fact by
+    hand would make it worse.
+  - **NOT done: filing the `/`-catalog issue** (PLAN §7.4). Opening a GitHub
+    issue is an outward-facing action nobody authorized on this task; the gap is
+    documented under "Known limitations" in the new wiki page instead.
+
+- 2026-09-04 **Suite flakiness — read test results on this tree with care.**
+  The repo-wide suite is nondeterministic on this machine INDEPENDENT of this
+  branch. Measured: `main` @ dce10f77 failed 3 of 4 full runs (once with 50
+  cascading failures across unrelated files, once `initObservability > SIGUSR2`,
+  once `EventStore subagent runs`); this branch passed 4 of 6, its only failure
+  being `waitForTuiReadyDismissingDialogs` hitting a 2000 ms wall-clock cap,
+  which passes 3/3 in isolation and 300/300 for the whole `claude-pty/`
+  directory. Different test each time, none in code this branch touches. Do not
+  read a single red run here as a regression — re-run, and compare against a
+  `main` run taken at the same time.
 
 - 2026-09-04 **Phase 2 complete.** ADR
   `.c3/adr/adr-20260904-project-stack-instructions.md` written first (status
@@ -194,9 +248,11 @@ Detail for each item is in `PLAN-stack-multi-project.md`.
       models, prompt composition (`## Workspace instructions` rename), Codex
       parity, subagent parity, sidebar UI (§5) — ADR
       `adr-20260904-project-stack-instructions`
-- [ ] **3** Cross-project orchestration — ADR first, then Option A (card
-      dependencies) and/or Option B (stack-scoped loop); the stack activity
-      rollup is independently shippable (§6)
-- [ ] **4** Housekeeping: C3 component fact + eval binding, wiki
-      `features/stacks.md`, deduplicate the two binding resolvers, file an
-      issue for the primary-only `/` catalog (§7)
+- [~] **3** Cross-project orchestration — ADR written
+      (`adr-20260904-cross-project-orchestration`, **proposed**, Option A
+      recommended, Option B rejected with reasons). Stack activity rollup
+      SHIPPED. No Option A/B code: the ADR is not accepted.
+- [~] **4** Housekeeping: wiki `features/stacks.md` DONE, env table
+      regenerated DONE, binding resolvers deduplicated DONE (with Phase 2).
+      C3 component fact BLOCKED on pre-existing broken seals; `/`-catalog issue
+      NOT filed (documented in the wiki instead).
