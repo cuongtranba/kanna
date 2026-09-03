@@ -63,10 +63,10 @@ export function decideLoopAction(oracleExit: LoopOracleExit, nextChunk: LoopChun
  */
 export const LOOP_STEP_INVARIANTS: readonly { readonly id: string; readonly requires: readonly string[] }[] = [
   { id: "read-plan", requires: [QUERY_TRACKING_FILE_TOOL_NAME] },
-  { id: "decide", requires: ["BOTH", "GOAL MET", "ORACLE TOO WEAK", "TERMINAL CHECK", "EVERY section", "with NO sections filter"] },
+  { id: "decide", requires: ["BOTH", "GOAL MET", "ORACLE TOO WEAK", "TERMINAL CHECK", "EVERY section", "with NO sections filter", "loop-end summary"] },
   { id: "delegate", requires: [DELEGATE_SUBAGENT_TOOL_NAME, "run_in_background: true", "[chunk:", "END THIS TURN"] },
   { id: "stop", requires: [STOP_LOOP_TOOL_NAME] },
-  { id: "worker", requires: [APPEND_TRACKING_ROW_TOOL_NAME, REPLACE_TRACKING_SECTION_TOOL_NAME, "Before writing DONE"] },
+  { id: "worker", requires: [APPEND_TRACKING_ROW_TOOL_NAME, REPLACE_TRACKING_SECTION_TOOL_NAME, "Before writing DONE", "git add -A"] },
   { id: "hard-rules", requires: ["NEVER edit code yourself", "/clear"] },
   { id: "retry", requires: ["AUTH_REQUIRED", "do NOT call stop_loop", LOOP_SECTIONS.failedApproaches] },
 ]
