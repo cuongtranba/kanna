@@ -7,6 +7,7 @@
  * Architecture: .c3/adr/adr-20260715-client-state-effect-architecture.md
  */
 
+import type { AnyValue } from "../../../shared/errors"
 import type { HttpPort, HttpRequestOptions, HttpResponse } from "../../ports/httpPort"
 import type { StoragePort } from "../../ports/storagePort"
 import type { TimerPort } from "../../ports/timerPort"
@@ -77,6 +78,17 @@ export function makeFakeHttpPort(): FakeHttpPort {
     async postJson<T>(
       url: string,
       _body: Record<string, string | number | boolean | null | undefined>,
+      _options?: Omit<HttpRequestOptions, "method" | "body">,
+    ): Promise<HttpResponse<T>> {
+      calls.push({ method: "POST", url })
+      const route = matchRoute(routes, "POST", url)
+      if (!route) throw new Error(`[FakeHttpPort] No POST route registered for ${url}`)
+      return buildFakeResponse<T>(route)
+    },
+
+    async postJsonBody<T>(
+      url: string,
+      _body: AnyValue,
       _options?: Omit<HttpRequestOptions, "method" | "body">,
     ): Promise<HttpResponse<T>> {
       calls.push({ method: "POST", url })

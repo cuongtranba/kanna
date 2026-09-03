@@ -44,6 +44,7 @@ import type { DomPort } from "../../ports/domPort"
 import type { TimerPort } from "../../ports/timerPort"
 import { LoopProgressSection } from "../LoopProgressSection"
 import { BackgroundTasksSection } from "../BackgroundTasksSection"
+import { PluginsFooterSlot } from "../PluginsFooterSlot"
 import {
   extractDelegateCalls,
   matchRunsToDelegateCalls,
@@ -456,6 +457,7 @@ export const ChatTranscriptViewport = memo(({
   const listFooter = (
     // pt-4 replaces the trailing air the last row used to provide via pb-5.
     <div className="mx-auto w-full max-w-[800px] pt-4">
+      <PluginsFooterSlot />
       {loopProgress && (loopProgress.armed || loopProgress.rows.length > 0) ? (
         <div className="pb-4">
           <LoopProgressSection

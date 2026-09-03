@@ -16,6 +16,7 @@ import { Toaster } from "../components/ui/toaster"
 import { APP_NAME, SDK_CLIENT_APP } from "../../shared/branding"
 import type { ChatSoundPreference } from "../stores/chatSoundPreferencesStore"
 import { selectChatSoundId, selectChatSoundPreference, useAppSettingsStore } from "../stores/appSettingsStore"
+import { usePluginContributions } from "../plugins/usePluginContributions"
 import { playChatNotificationSound, shouldPlayChatSound } from "../lib/chatSounds"
 import { getChatSoundBurstCount, getNotificationTitleCount } from "./chatNotifications"
 import { cn } from "../lib/utils"
@@ -255,6 +256,10 @@ function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
   const params = useParams()
   const state = useKannaState(params.chatId ?? null)
   const dialog = useAppDialog()
+  // Turns the global plugins switch into loaded contributions for the sidebar
+  // and the chat footer. Mounted at the app root so a plugin surface survives
+  // route changes rather than reloading on every navigation.
+  usePluginContributions()
   const chatSoundPreference = useAppSettingsStore(selectChatSoundPreference)
   const chatSoundId = useAppSettingsStore(selectChatSoundId)
   const appSettings = useAppSettingsStore((s) => s.settings)

@@ -45,9 +45,19 @@ export interface PluginSidebarItem extends PluginSidebarItemInput {
   readonly pluginId: string
 }
 
+/** One registered surface, flattened back out of the keyed map. The host needs
+ * this to mount surfaces a plugin contributed WITHOUT a sidebar item — reading
+ * `getSurface` per sidebar item would silently drop those. */
+export interface PluginSurfaceEntry {
+  readonly pluginId: string
+  readonly surfaceId: string
+  readonly Component: PluginSurfaceComponent
+}
+
 export interface PluginContributionRegistry {
   getSidebarItems(): PluginSidebarItem[]
   getSurface(pluginId: string, surfaceId: string): PluginSurfaceComponent | undefined
+  getSurfaceEntries(): PluginSurfaceEntry[]
   registerSidebarItem(pluginId: string, item: PluginSidebarItemInput): void
   registerSurface(pluginId: string, surfaceId: string, component: PluginSurfaceComponent): void
 }
@@ -59,6 +69,7 @@ function surfaceKey(pluginId: string, surfaceId: string): string {
 export function createPluginContributionRegistry(): PluginContributionRegistry {
   const sidebarItems: PluginSidebarItem[] = []
   const surfaces = new Map<string, PluginSurfaceComponent>()
+  const surfaceEntries: PluginSurfaceEntry[] = []
 
   return {
     getSidebarItems() {
@@ -67,11 +78,22 @@ export function createPluginContributionRegistry(): PluginContributionRegistry {
     getSurface(pluginId, surfaceId) {
       return surfaces.get(surfaceKey(pluginId, surfaceId))
     },
+    getSurfaceEntries() {
+      return [...surfaceEntries]
+    },
     registerSidebarItem(pluginId, item) {
       sidebarItems.push({ pluginId, ...item })
     },
     registerSurface(pluginId, surfaceId, component) {
       surfaces.set(surfaceKey(pluginId, surfaceId), component)
+      // Re-registering the same id replaces in place rather than appending, so
+      // the flattened list can never disagree with the keyed map.
+      const entry: PluginSurfaceEntry = { pluginId, surfaceId, Component: component }
+      const index = surfaceEntries.findIndex(
+        (existing) => existing.pluginId === pluginId && existing.surfaceId === surfaceId,
+      )
+      if (index >= 0) surfaceEntries[index] = entry
+      else surfaceEntries.push(entry)
     },
   }
 }

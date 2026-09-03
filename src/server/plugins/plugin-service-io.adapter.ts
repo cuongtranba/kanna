@@ -28,6 +28,17 @@ export async function writePluginServerBundle(bundlePath: string, code: string):
   await Bun.write(bundlePath, code)
 }
 
+/** Compiled browser bundle, written beside `server.js` so `GET /api/plugins/:id/client.js` can serve it. */
+export async function writePluginClientBundle(bundlePath: string, code: string): Promise<void> {
+  await Bun.write(bundlePath, code)
+}
+
+/** Null when the plugin was never installed on this machine, or its build dir was removed. */
+export async function readPluginClientBundle(bundlePath: string): Promise<string | null> {
+  const file = Bun.file(bundlePath)
+  return (await file.exists()) ? file.text() : null
+}
+
 /**
  * MEASURED (`../../shared/plugins/paths.ts`): a build-dir-rooted socket path
  * overflows macOS's 104-byte `sun_path` cap for a long plugin id, so the

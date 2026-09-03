@@ -15,6 +15,7 @@ import {
 } from "./http-api-routes"
 import { serveStatic } from "./http-static"
 import { handlePluginRequest } from "./plugin-http-routes"
+import { getPluginService } from "./plugins/plugin-service-host"
 
 export interface HttpDispatcherDeps {
   store: EventStore
@@ -110,6 +111,7 @@ export function createHttpDispatcher(
     if (url.pathname.startsWith("/api/plugins")) {
       const pluginResponse = await handlePluginRequest(req, url, {
         globallyEnabled: appSettings.getSnapshot().plugins.enabled,
+        service: getPluginService(),
       })
       if (pluginResponse) return pluginResponse
     }

@@ -6,6 +6,7 @@ import type { ShareMode } from "../shared/share"
 import { assertNoHostOverride, getShareCliFlag, isShareEnabled, isTokenShareMode } from "../shared/share"
 import type { UpdateInstallErrorCode } from "../shared/types"
 import { PROD_SERVER_PORT } from "../shared/ports"
+import { runPluginCli } from "./plugin-cli-dispatch"
 import { CLI_SUPPRESS_OPEN_ONCE_ENV_VAR } from "./restart"
 import { logShareDetails, renderTerminalQr, startShareTunnel, type StartedShareTunnel } from "./share"
 
@@ -71,6 +72,7 @@ type ParsedArgs =
   | { kind: "run"; options: CliOptions }
   | { kind: "help" }
   | { kind: "version" }
+  | { kind: "plugin"; args: string[] }
 
 const MINIMUM_BUN_VERSION = "1.3.5"
 
@@ -83,6 +85,15 @@ function printHelp() {
 
 Usage:
   ${CLI_COMMAND} [options]
+  ${CLI_COMMAND} <command> [args]
+
+Commands:
+  plugin install <sourceDir>
+                       Compile and install a plugin from a directory
+  plugin ls            List installed plugins
+  plugin reload <id>   Restart a plugin, picking up a rebuilt bundle
+  plugin logs <id> [--tail <n>]
+                       Print a plugin's most recent log lines
 
 Options:
   --port <number>      Port to listen on (default: ${PROD_SERVER_PORT})
@@ -99,6 +110,13 @@ Options:
 }
 
 export function parseArgs(argv: string[]): ParsedArgs {
+  // The first subcommand this flag-only CLI has. It must be matched BEFORE the
+  // flag loop, which throws on any positional argument — so `plugin` and its
+  // own arguments never reach it.
+  if (argv[0] === "plugin") {
+    return { kind: "plugin", args: argv.slice(1) }
+  }
+
   let port = PROD_SERVER_PORT
   let host = "127.0.0.1"
   let openBrowser = true
@@ -257,6 +275,13 @@ export async function runCli(argv: string[], deps: CliRuntimeDeps): Promise<CliR
   if (parsedArgs.kind === "help") {
     printHelp()
     return { kind: "exited", code: 0 }
+  }
+  if (parsedArgs.kind === "plugin") {
+    // Short-circuits ahead of the Bun-version gate and the self-update check:
+    // both exist to protect the long-lived server this command never starts,
+    // and silently restarting the process mid-`plugin ls` would be worse than
+    // running it on an old Bun.
+    return { kind: "exited", code: await runPluginCli(parsedArgs.args, { log: deps.log, warn: deps.warn }) }
   }
 
   if (compareVersions(deps.bunVersion, MINIMUM_BUN_VERSION) < 0) {

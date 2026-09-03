@@ -20,6 +20,7 @@
  */
 import { describe, expect, test } from "bun:test"
 import type { PluginSurfaceComponent, PluginSurfaceProps } from "../client/plugins/contributionRegistry"
+import type { PluginService } from "./plugins/plugin-service"
 import { join } from "node:path"
 
 const FIXTURES = join(import.meta.dir, "__fixtures__", "plugins")
@@ -181,23 +182,117 @@ describe("P2 — server runtime, RPC, logs", () => {
 // ------------------------------------------------------------- P3 HTTP surface
 
 describe("P3 — HTTP surface inherits the auth gate", () => {
-  test("every plugin route is 404 while plugins are globally disabled", async () => {
+  // A fake rather than a real service: these assert ROUTING (status codes,
+  // method/path matching, the disabled gate), and a real one would spawn
+  // plugin child processes for every case.
+  function fakeService(over: Partial<PluginService> = {}): PluginService {
+    const base: PluginService = {
+      install: async () => {},
+      list: () => [{ id: "hello", sourceDir: "/src/hello", enabled: true, state: "running" }],
+      reload: async () => {},
+      clientBundle: async (id) => (id === "hello" ? "export default 1" : null),
+      recordClientError: () => {},
+      setEnabled: () => {},
+      start: async () => {},
+      status: (id) => (id === "hello" ? { state: "running" } : undefined),
+      call: async () => ({ ok: true, output: null }),
+      stop: async () => {},
+      logs: () => [{ stream: "out", text: "hi", at: 1 }],
+    }
+    return { ...base, ...over }
+  }
+
+  function request(method: string, path: string, body?: unknown) {
+    const url = new URL(`http://localhost${path}`)
+    const init: RequestInit = body === undefined
+      ? { method }
+      : { method, body: JSON.stringify(body), headers: { "content-type": "application/json" } }
+    return { req: new Request(url, init), url }
+  }
+
+  async function call(method: string, path: string, opts: { enabled?: boolean; body?: unknown; service?: PluginService } = {}) {
     const { handlePluginRequest } = await import("./plugin-http-routes")
-    const res = await handlePluginRequest(
-      new Request("http://localhost/api/plugins/hello/client.js"),
-      new URL("http://localhost/api/plugins/hello/client.js"),
-      { globallyEnabled: false },
-    )
+    const { req, url } = request(method, path, opts.body)
+    return handlePluginRequest(req, url, {
+      globallyEnabled: opts.enabled ?? true,
+      service: opts.service ?? fakeService(),
+    })
+  }
+
+  test("every plugin route is 404 while plugins are globally disabled", async () => {
     // 404, not 403: a disabled surface must not advertise that it exists.
-    expect(res?.status).toBe(404)
+    expect((await call("GET", "/api/plugins/hello/client.js", { enabled: false }))?.status).toBe(404)
+    expect((await call("GET", "/api/plugins", { enabled: false }))?.status).toBe(404)
   })
 
   test("an invalid plugin id is rejected before any path join", async () => {
-    const { handlePluginRequest } = await import("./plugin-http-routes")
-    const url = new URL("http://localhost/api/plugins/..%2F..%2Fetc/client.js")
-    const res = await handlePluginRequest(new Request(url), url, { globallyEnabled: true })
+    const res = await call("GET", "/api/plugins/..%2F..%2Fetc/client.js")
     expect(res?.status).toBeGreaterThanOrEqual(400)
     expect(res?.status).toBeLessThan(500)
+  })
+
+  test("GET /api/plugins lists what the service reports", async () => {
+    const res = await call("GET", "/api/plugins")
+    expect(res?.status).toBe(200)
+    expect(await res?.json()).toEqual({
+      plugins: [{ id: "hello", sourceDir: "/src/hello", enabled: true, state: "running" }],
+    })
+  })
+
+  test("GET :id/client.js serves the compiled bundle uncached", async () => {
+    const res = await call("GET", "/api/plugins/hello/client.js")
+    expect(res?.status).toBe(200)
+    // no-store is load-bearing: the bundle is rebuilt in place at the same url,
+    // so a cached copy silently defeats `reload`.
+    expect(res?.headers.get("cache-control")).toBe("no-store")
+    expect(await res?.text()).toContain("export default")
+  })
+
+  test("an installed-shaped id that is not installed is 404, not 500", async () => {
+    expect((await call("GET", "/api/plugins/ghost/client.js"))?.status).toBe(404)
+    expect((await call("GET", "/api/plugins/ghost/logs"))?.status).toBe(404)
+    expect((await call("POST", "/api/plugins/ghost/reload"))?.status).toBe(404)
+  })
+
+  test("GET :id/logs honours tail", async () => {
+    const many = Array.from({ length: 5 }, (_, i) => ({ stream: "out" as const, text: `l${i}`, at: i }))
+    const res = await call("GET", "/api/plugins/hello/logs?tail=2", { service: fakeService({ logs: () => many }) })
+    expect(res?.status).toBe(200)
+    const body = await res?.json() as { logs: { text: string }[] }
+    expect(body.logs.map((l) => l.text)).toEqual(["l3", "l4"])
+  })
+
+  test("POST :id/rpc returns a FAILED call as 200 with ok:false", async () => {
+    // The transport succeeded; the caller needs the plugin's own message. Only
+    // a malformed REQUEST is a 4xx.
+    const svc = fakeService({ call: async () => ({ ok: false, error: "boom" }) })
+    const res = await call("POST", "/api/plugins/hello/rpc", { body: { method: "greeting.create" }, service: svc })
+    expect(res?.status).toBe(200)
+    expect(await res?.json()).toEqual({ ok: false, error: "boom" })
+  })
+
+  test("POST :id/rpc without a method is a 400", async () => {
+    expect((await call("POST", "/api/plugins/hello/rpc", { body: {} }))?.status).toBe(400)
+  })
+
+  test("POST :id/client-error records against the plugin's log ring", async () => {
+    const recorded: string[] = []
+    const svc = fakeService({ recordClientError: (_id, text) => { recorded.push(text) } })
+    const res = await call("POST", "/api/plugins/hello/client-error", { body: { message: "render failed" }, service: svc })
+    expect(res?.status).toBe(204)
+    expect(recorded).toEqual(["render failed"])
+  })
+
+  test("POST :id/reload drives the service and answers 204", async () => {
+    const reloaded: string[] = []
+    const svc = fakeService({ reload: async (id) => { reloaded.push(id) } })
+    expect((await call("POST", "/api/plugins/hello/reload", { service: svc }))?.status).toBe(204)
+    expect(reloaded).toEqual(["hello"])
+  })
+
+  test("an unknown sub-path is 404", async () => {
+    expect((await call("GET", "/api/plugins/hello/nope"))?.status).toBe(404)
+    expect((await call("POST", "/api/plugins"))?.status).toBe(404)
   })
 })
 
@@ -426,4 +521,47 @@ describe("P7 — CLI", () => {
     expect(parsePluginCommand(["frobnicate"])).toMatchObject({ kind: "error" })
     expect(parsePluginCommand(["install"])).toMatchObject({ kind: "error" })
   })
+})
+
+// ------------------------------------------- P10 service reads the CLI/MCP/HTTP share
+
+// `list`, `reload`, `clientBundle` and `recordClientError` were added so the
+// CLI, HTTP and MCP surfaces could stop being stubs. These run the REAL service
+// against the real fixture, rooted at a temp home so nothing touches ~/.kanna.
+describe("P10 — the shared service reads every surface drives", () => {
+  test("install makes the plugin listable and serves a real compiled client bundle", async () => {
+    const { mkdtemp, rm } = await import("node:fs/promises")
+    const { tmpdir } = await import("node:os")
+    const { createPluginService } = await import("./plugins/plugin-service")
+
+    const homeDir = await mkdtemp(join(tmpdir(), "kanna-plugin-acceptance-"))
+    try {
+      const service = createPluginService({ homeDir })
+      expect(service.list()).toEqual([])
+
+      await service.install({ sourceDir: HELLO })
+
+      expect(service.list()).toEqual([
+        { id: "hello", sourceDir: HELLO, enabled: false, state: "stopped" },
+      ])
+
+      // The browser bundle must be PERSISTED at install, not rebuilt on demand:
+      // GET /api/plugins/:id/client.js serves exactly these bytes.
+      const bundle = await service.clientBundle("hello")
+      expect(bundle).toBeTruthy()
+      expect(bundle).toContain("hello-plugin-surface")
+      expect(await service.clientBundle("not-installed")).toBeNull()
+
+      // A browser-side failure lands in the SAME log ring as the child's stdout,
+      // so `plugin logs <id>` answers "what went wrong" for either side.
+      service.recordClientError("hello", "surface threw")
+      expect(service.logs("hello").map((l) => l.text)).toContain("surface threw")
+
+      // reload on a DISABLED plugin leaves it stopped — only setEnabled starts it.
+      await service.reload("hello")
+      expect(service.status("hello")?.state).toBe("stopped")
+    } finally {
+      await rm(homeDir, { recursive: true, force: true })
+    }
+  }, 120_000)
 })

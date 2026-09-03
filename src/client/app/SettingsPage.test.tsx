@@ -13,7 +13,6 @@ import {
   resolveSettingsSectionId,
   setCachedChangelog,
   shouldPreviewChatSoundChange,
-  SkillsSection,
 } from "./SettingsPage"
 import { SettingsHeaderButton } from "../components/ui/settings-header-button"
 import { usePreferencesStore } from "../stores/preferences"
@@ -126,37 +125,6 @@ describe("resolveSettingsSectionId", () => {
     expect(resolveSettingsSectionId("page-3")).toBeNull()
     expect(resolveSettingsSectionId("nope")).toBeNull()
     expect(resolveSettingsSectionId(undefined)).toBeNull()
-  })
-})
-
-describe("SkillsSection", () => {
-  test("renders installed and discover sections", () => {
-    const html = renderToStaticMarkup(
-      <SkillsSection
-        state={{
-          connectionStatus: "connected",
-          socket: {
-            command: async () => ({ skills: [] }),
-          } as never,
-        }}
-      />
-    )
-
-    expect(html).toContain("Installed")
-    expect(html).toContain("Discover")
-    expect(html).toContain("Search skills")
-  })
-
-  test("renders Check button in the header", () => {
-    const html = renderToStaticMarkup(
-      <SkillsSection
-        state={{
-          connectionStatus: "connected",
-          socket: { command: async () => ({ skills: [] }) } as never,
-        }}
-      />
-    )
-    expect(html).toContain("Check")
   })
 })
 

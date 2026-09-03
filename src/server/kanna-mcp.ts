@@ -1,6 +1,8 @@
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk"
 import type { ResumeLoopResult } from "./loop-wake-recovery"
 import { buildBoardToolList } from "./kanna-mcp-boards"
+import { buildPluginToolList } from "./kanna-mcp-plugins"
+import { getPluginService } from "./plugins/plugin-service-host"
 import { ok, fail } from "./kanna-mcp-tool"
 import type { BoardRegistry } from "./board-registry"
 import { z } from "zod"
@@ -1120,6 +1122,10 @@ export function buildKannaMcpTools(args: KannaMcpArgs): KannaSdkToolList {
     // The board is the agent's work queue: read your column, advance your card.
     // Scoped to the chat's project and context-bounded — see the module header.
     ...buildBoardToolList({ boardRegistry: args.boardRegistry, chatId, projectId: args.projectId ?? null }, tool),
+    // Plugin authoring. `getPluginService()` is the ONE service the CLI and the
+    // HTTP surface also drive — a second one would keep a second registry.
+    // Mutating tools (scaffold/install/reload) are withheld at depth > 0.
+    ...buildPluginToolList(getPluginService(), chatId, args.delegationContext?.depth ?? 0, tool),
     ...buildRunVerifyToolList({ chatId, cwd, getArmedLoop: args.getArmedLoop }),
     ...buildValidateMermaidToolList({ chatId, parse: args.parseMermaid ?? parseMermaid }),
     ...buildCronToolList({ chatId, armCron: args.armCron, updateCron: args.updateCron }),

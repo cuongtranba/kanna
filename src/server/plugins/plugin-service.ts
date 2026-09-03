@@ -26,12 +26,15 @@ import {
   readPluginManifestText,
   spawnPluginChild,
   writePluginServerBundle,
+  writePluginClientBundle,
+  readPluginClientBundle,
   type PluginHostConnection,
   type SpawnedPluginChild,
 } from "./plugin-service-io.adapter"
 import type { PluginChildMessage } from "./plugin-rpc-protocol"
 
 const SERVER_BUNDLE_FILENAME = "server.js"
+const CLIENT_BUNDLE_FILENAME = "client.js"
 const START_TIMEOUT_MS = 30_000
 const CALL_TIMEOUT_MS = 30_000
 const STOP_GRACE_MS = 5_000
@@ -48,6 +51,7 @@ interface PluginRuntimeRecord {
   readonly id: string
   readonly sourceDir: string
   readonly bundlePath: string
+  readonly clientBundlePath: string
   readonly logRing: ReturnType<typeof createPluginLogRing>
   readonly pendingCalls: Map<string, PendingCall>
   enabled: boolean
@@ -57,8 +61,24 @@ interface PluginRuntimeRecord {
   nextCallId: number
 }
 
+/** One installed plugin as every read surface (CLI `ls`, `GET /api/plugins`, `plugin_list`) reports it. */
+export interface PluginSummary {
+  readonly id: string
+  readonly sourceDir: string
+  readonly enabled: boolean
+  readonly state: PluginRuntimeState
+}
+
 export interface PluginService {
   install(args: { readonly sourceDir: string }): Promise<void>
+  /** Every installed plugin. The single read the CLI, HTTP and MCP surfaces share. */
+  list(): readonly PluginSummary[]
+  /** Compiled browser bundle, or null when the plugin is unknown or its build dir is gone. */
+  clientBundle(id: string): Promise<string | null>
+  /** Record a browser-side failure against the plugin's log ring (`POST /api/plugins/:id/client-error`). */
+  recordClientError(id: string, text: string): void
+  /** Stop then start, so a rebuilt bundle is picked up. No-op start when disabled. */
+  reload(id: string): Promise<void>
   setEnabled(id: string, enabled: boolean): void
   start(id: string): Promise<void>
   status(id: string): { readonly state: PluginRuntimeState } | undefined
@@ -113,14 +133,18 @@ export function createPluginService(deps: { readonly homeDir?: string } = {}): P
     if (!built.ok) {
       throw new Error(`plugin "${id}" failed to compile: ${built.errors.join("; ")}`)
     }
-    const bundlePath = join(getPluginBuildDir(homeDir, id), SERVER_BUNDLE_FILENAME)
+    const buildDir = getPluginBuildDir(homeDir, id)
+    const bundlePath = join(buildDir, SERVER_BUNDLE_FILENAME)
+    const clientBundlePath = join(buildDir, CLIENT_BUNDLE_FILENAME)
     await writePluginServerBundle(bundlePath, built.server)
+    await writePluginClientBundle(clientBundlePath, built.client)
 
     const existing = registry.get(id)
     registry.set(id, {
       id,
       sourceDir,
       bundlePath,
+      clientBundlePath,
       logRing: existing?.logRing ?? createPluginLogRing(),
       pendingCalls: new Map(),
       enabled: existing?.enabled ?? false,
@@ -239,5 +263,34 @@ export function createPluginService(deps: { readonly homeDir?: string } = {}): P
     return registry.get(id)?.logRing.tail() ?? []
   }
 
-  return { install, setEnabled, start, status, call, stop, logs }
+  function list(): readonly PluginSummary[] {
+    return [...registry.values()].map((record) => ({
+      id: record.id,
+      sourceDir: record.sourceDir,
+      enabled: record.enabled,
+      state: record.state,
+    }))
+  }
+
+  async function reload(id: string): Promise<void> {
+    requireRecord(id)
+    await stop(id)
+    // A disabled plugin reloads to "installed but not running" rather than
+    // being silently re-enabled — `setEnabled` is the only thing that flips it.
+    if (requireRecord(id).enabled) await start(id)
+  }
+
+  function recordClientError(id: string, text: string): void {
+    // Client errors share the plugin's ONE log ring rather than a separate
+    // buffer: `plugin logs <id>` is meant to answer "what went wrong with this
+    // plugin", and a browser-side throw is the same question as a server-side one.
+    registry.get(id)?.logRing.append({ stream: "err", text, at: Date.now() })
+  }
+
+  async function clientBundle(id: string): Promise<string | null> {
+    const record = registry.get(id)
+    return record ? readPluginClientBundle(record.clientBundlePath) : null
+  }
+
+  return { install, list, reload, clientBundle, recordClientError, setEnabled, start, status, call, stop, logs }
 }

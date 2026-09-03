@@ -5,11 +5,13 @@ import { FocusScope } from "@radix-ui/react-focus-scope"
 function cssVars(vars: Record<`--${string}`, string>): CSSProperties {
   return Object.assign({} satisfies CSSProperties, vars)
 }
-import { CalendarClock, Download, Flower, FoldVertical, PanelLeft, UnfoldVertical, X, Menu, Plus, Settings, Workflow } from "lucide-react"
+import { Download, Flower, FoldVertical, PanelLeft, UnfoldVertical, X, Menu, Plus } from "lucide-react"
 import { useLocation, useNavigate } from "react-router-dom"
 import { APP_NAME } from "../../shared/branding"
 import { Button } from "../components/ui/button"
 import { HoverHint } from "../components/ui/truncated-text"
+import { SidebarUtilityNav } from "./SidebarUtilityNav"
+import { usePluginContributionsStore, selectPluginSidebarItems } from "../stores/pluginContributionsStore"
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../components/ui/dialog"
 import { ImportSessionsDialog } from "../components/ImportSessionsDialog"
 import { formatSidebarAgeLabel, getPathBasename } from "../lib/formatters"
@@ -163,6 +165,8 @@ function KannaSidebarImpl({
   const expandedGroups = useKannaSidebarStore((s) => s.expandedGroups)
   const nowMs = useKannaSidebarStore((s) => s.nowMs)
   const showNumberJumpHints = useKannaSidebarStore((s) => s.showNumberJumpHints)
+  // Module-level selector, not an inline `?? []` — see pluginContributionsStore.
+  const pluginSidebarItems = usePluginContributionsStore(selectPluginSidebarItems)
   const requestedSidebarWidth = useKannaSidebarStore((s) => s.sidebarWidth)
   const viewportWidth = useViewportStore((s) => s.width)
   const mobileModalOpen = open && isMobileViewport(viewportWidth)
@@ -879,64 +883,17 @@ function KannaSidebarImpl({
           </div>
         </div>
 
-        <div className="border-t border-border">
-          <HoverHint label={activeChatId ? "Open workflows" : "Open a chat to view workflows"} side="right">
-            <button
-              type="button"
-              aria-disabled={!activeChatId}
-              aria-label={activeChatId ? "Workflows" : "Workflows — open a chat to view"}
-              onClick={() => {
-                if (!activeChatId) return
-                navigate(`/workflows/${activeChatId}`)
-                onClose()
-              }}
-              className={cn(
-                "w-full flex items-center gap-2 px-3 py-2.5 text-left transition-colors duration-150 rounded-none",
-                workflowsButtonClass
-              )}
-            >
-              <Workflow className="h-4 w-4 shrink-0 text-muted-foreground" />
-              <span className="text-sm flex-1">Workflows</span>
-            </button>
-          </HoverHint>
-          <button
-            type="button"
-            onClick={() => {
-              navigate("/cron")
-              onClose()
-            }}
-            className={cn(
-              "w-full flex items-center gap-2 px-3 py-2.5 text-left transition-colors duration-150 rounded-none",
-              isCronJobsActive ? "bg-muted" : "hover:bg-muted/50"
-            )}
-          >
-            <CalendarClock className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <span className="text-sm flex-1">Cron jobs</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              navigate("/settings/general")
-              onClose()
-            }}
-            className={cn(
-              "w-full flex items-center gap-2 px-3 py-2.5 text-left transition-colors duration-150 rounded-none",
-              isSettingsActive
-                ? "bg-muted"
-                : "hover:bg-muted/50"
-            )}
-          >
-            <Settings className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <span className="text-sm flex-1">Settings</span>
-          </button>
-          <div className="flex items-center gap-2 px-3 pb-2.5 pt-0.5">
-            <span
-              className={cn("h-1.5 w-1.5 rounded-full shrink-0", statusDotClass)}
-              aria-hidden
-            />
-            <span className="text-xs text-muted-foreground tabular-nums">{statusLabel}</span>
-          </div>
-        </div>
+        <SidebarUtilityNav
+          activeChatId={activeChatId}
+          navigate={navigate}
+          onClose={onClose}
+          workflowsButtonClass={workflowsButtonClass}
+          isCronJobsActive={isCronJobsActive}
+          isSettingsActive={isSettingsActive}
+          statusDotClass={statusDotClass}
+          statusLabel={statusLabel}
+          pluginItems={pluginSidebarItems}
+        />
 
         <div
           role="separator"
