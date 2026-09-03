@@ -17,7 +17,7 @@ const TICK_GAP = 3
 const MIN_HEIGHT = 2
 const MAX_HEIGHT = 19
 /** Past this the ticks stop being separable at 26px, so the oldest are dropped. */
-const MAX_TICKS = 8
+export const MAX_TICKS = 8
 
 export interface ReductionTick {
   readonly x: number
@@ -40,18 +40,33 @@ export function buildReduction(
   durationsMs: readonly number[],
   options: { readonly live?: boolean } = {},
 ): ReductionGeometry {
-  const recent = durationsMs.slice(-MAX_TICKS)
-  const longest = recent.reduce((max, ms) => (ms > max ? ms : max), 0)
+  const live = options.live === true
+  // The running turn owns its OWN tick. Marking the newest completed turn live
+  // instead drew the finished turn as the running one, and a first-ever live
+  // turn (no results yet) drew nothing at all.
+  const completed = durationsMs.slice(live ? -(MAX_TICKS - 1) : -MAX_TICKS)
+  const longest = completed.reduce((max, ms) => (ms > max ? ms : max), 0)
 
-  const ticks = recent.map((ms, index) => {
+  const ticks: ReductionTick[] = completed.map((ms, index) => {
     const scale = longest > 0 ? ms / longest : 0
     const height = MIN_HEIGHT + scale * (MAX_HEIGHT - MIN_HEIGHT)
     return {
       x: FIRST_X + index * TICK_GAP,
       topY: round(REDUCTION_BASELINE_Y - height),
-      live: options.live === true && index === recent.length - 1,
+      live: false,
     }
   })
+
+  if (live) {
+    // Full height rather than duration-scaled: the running turn has no final
+    // duration, and scaling a still-growing number would renormalise every
+    // other tick on each frame — the sigil would twitch for the whole turn.
+    ticks.push({
+      x: FIRST_X + completed.length * TICK_GAP,
+      topY: round(REDUCTION_BASELINE_Y - MAX_HEIGHT),
+      live: true,
+    })
+  }
 
   return { ticks, baselineY: REDUCTION_BASELINE_Y, size: REDUCTION_SIZE }
 }
@@ -70,11 +85,16 @@ function round(value: number): number {
 export function turnDurationsFromMessages(
   messages: readonly HydratedTranscriptMessage[],
 ): number[] {
-  const durations: number[] = []
-  for (const message of messages) {
+  // Scanned BACKWARDS and stopped at the window size. This runs on every
+  // streamed chunk, and a forward scan is O(transcript) each time — which on a
+  // long session is O(n^2) of work to draw eight ticks. Only the newest
+  // MAX_TICKS can ever reach the sigil, so the rest are never worth reading.
+  const newestFirst: number[] = []
+  for (let i = messages.length - 1; i >= 0 && newestFirst.length < MAX_TICKS; i -= 1) {
+    const message = messages[i]!
     if (message.kind === "result" && message.hidden !== true) {
-      durations.push(message.durationMs)
+      newestFirst.push(message.durationMs)
     }
   }
-  return durations
+  return newestFirst.reverse()
 }
