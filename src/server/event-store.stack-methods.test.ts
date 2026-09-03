@@ -296,3 +296,72 @@ test("Replay preserves chat stackId and stackBindings", async () => {
   expect(replayed?.stackId).toBe(stack.id)
   expect(replayed?.stackBindings).toEqual(chat.stackBindings)
 })
+
+// ---------------------------------------------------------------------------
+// Instructions (adr-20260904)
+// ---------------------------------------------------------------------------
+
+/**
+ * An event that applies live but not on replay is the classic failure here, so
+ * every case below is asserted through a second store reading the same log.
+ */
+describe("project + stack instructions", () => {
+  test("round-trips through a real store and survives replay", async () => {
+    const dir = await createTempDataDir()
+    const store1 = createTestEventStore(dir)
+    await store1.initialize()
+    const pa = await store1.openProject("/tmp/a", "A")
+    const pb = await store1.openProject("/tmp/b", "B")
+    const stack = await store1.createStack("X", [pa.id, pb.id])
+
+    await store1.setProjectInstructions(pa.id, "  never edit generated/  ")
+    await store1.setStackInstructions(stack.id, "api is upstream of web")
+
+    // Live: trimmed on the way in.
+    expect(store1.getProject(pa.id)?.instructions).toBe("never edit generated/")
+    expect(store1.getStack(stack.id)?.instructions).toBe("api is upstream of web")
+
+    const store2 = createTestEventStore(dir)
+    await store2.initialize()
+    expect(store2.getProject(pa.id)?.instructions).toBe("never edit generated/")
+    expect(store2.getStack(stack.id)?.instructions).toBe("api is upstream of web")
+  })
+
+  test("clearing removes the value, and the clear also replays", async () => {
+    const dir = await createTempDataDir()
+    const store1 = createTestEventStore(dir)
+    await store1.initialize()
+    const pa = await store1.openProject("/tmp/a", "A")
+    const pb = await store1.openProject("/tmp/b", "B")
+    const stack = await store1.createStack("X", [pa.id, pb.id])
+
+    await store1.setProjectInstructions(pa.id, "temporary")
+    await store1.setStackInstructions(stack.id, "temporary")
+    await store1.setProjectInstructions(pa.id, "")
+    await store1.setStackInstructions(stack.id, "   ")
+
+    const store2 = createTestEventStore(dir)
+    await store2.initialize()
+    expect(store2.getProject(pa.id)?.instructions).toBeUndefined()
+    expect(store2.getStack(stack.id)?.instructions).toBeUndefined()
+  })
+
+  test("an unchanged write appends no event", async () => {
+    const dir = await createTempDataDir()
+    const store = createTestEventStore(dir)
+    await store.initialize()
+    const pa = await store.openProject("/tmp/a", "A")
+    await store.setProjectInstructions(pa.id, "same")
+    const before = store.getProject(pa.id)?.updatedAt
+    await new Promise((r) => setTimeout(r, 2))
+    await store.setProjectInstructions(pa.id, "  same  ")
+    expect(store.getProject(pa.id)?.updatedAt).toBe(before)
+  })
+
+  test("a deleted stack refuses the write", async () => {
+    const { store, projectIds: [p1, p2] } = await buildStoreWithProjects(["/tmp/p1", "/tmp/p2"])
+    const stack = await store.createStack("Doomed", [p1, p2])
+    await store.removeStack(stack.id)
+    await expect(store.setStackInstructions(stack.id, "x")).rejects.toThrow(/Stack not found/u)
+  })
+})

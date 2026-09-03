@@ -7,7 +7,12 @@ import type {
   Subagent,
   TranscriptEntry,
 } from "../shared/types"
-import { buildCodexDeveloperInstructions, renderStackProjectsBlock } from "../shared/kanna-system-prompt"
+import {
+  buildCodexDeveloperInstructions,
+  renderInstructionSections,
+  renderStackProjectsBlock,
+  type KannaSystemPromptOptions,
+} from "../shared/kanna-system-prompt"
 import type { ClaudeSessionHandle } from "./agent"
 import type { LiveTurnSource, ProviderRunStart } from "./subagent-orchestrator"
 import type { SubagentOrchestrator } from "./subagent-orchestrator"
@@ -116,6 +121,21 @@ export interface BuildSubagentProviderRunArgs {
    * path-restricted runs (where listing all roots would mislead).
    */
   stackProjects?: ResolvedStackBinding[]
+  /**
+   * Stack + per-project instruction blocks for the parent chat. Suppressed
+   * alongside `stackProjects` for a path-restricted run, which cannot reach
+   * every root and so must not be told every root's rules.
+   */
+  instructions?: Omit<KannaSystemPromptOptions, "stackProjects" | "globalPromptAppend">
+}
+
+/** The full prompt-options bundle for a subagent run, assembled in one place. */
+function subagentPromptOptions(args: BuildSubagentProviderRunArgs): KannaSystemPromptOptions {
+  return {
+    globalPromptAppend: args.globalPromptAppend,
+    ...args.instructions,
+    stackProjects: args.stackProjects,
+  }
 }
 
 export function buildSubagentProviderRun(args: BuildSubagentProviderRunArgs): ProviderRunStart {
@@ -153,13 +173,15 @@ export function buildSubagentProviderRun(args: BuildSubagentProviderRunArgs): Pr
  */
 export function composeSubagentSystemPrompt(
   subagentSystemPrompt: string,
-  globalPromptAppend?: string,
-  stackProjects: ResolvedStackBinding[] = [],
+  options: KannaSystemPromptOptions = {},
 ): string {
-  const extra = globalPromptAppend?.trim() ?? ""
-  const stackBlock = renderStackProjectsBlock(stackProjects)
+  const stackBlock = renderStackProjectsBlock(options.stackProjects ?? [])
+  // Same helper the main-turn suffix and the Codex instructions use, so a
+  // subagent that can write project B is told B's rules in the same words the
+  // main agent gets them in.
+  const instructionSections = renderInstructionSections(options)
   const sections = [subagentSystemPrompt.trimEnd()]
-  if (extra) sections.push(`## Project instructions\n\n${extra}`)
+  if (instructionSections.length > 0) sections.push(instructionSections.join("\n"))
   if (stackBlock) sections.push(stackBlock)
   return sections.filter((s) => s !== "").join("\n\n")
 }
@@ -207,7 +229,7 @@ async function runClaudeSubagent(opts: {
     openrouterApiKey,
     chatId: args.chatId,
     onToolRequest: args.onToolRequest,
-    systemPromptOverride: composeSubagentSystemPrompt(args.subagent.systemPrompt, args.globalPromptAppend, args.stackProjects),
+    systemPromptOverride: composeSubagentSystemPrompt(args.subagent.systemPrompt, subagentPromptOptions(args)),
     initialPrompt,
     subagentOrchestrator: args.subagentOrchestrator,
     delegationContext: args.delegationContext,
@@ -279,10 +301,7 @@ async function runCodexSubagent(opts: {
     // Same composition as the Claude subagent path above: a Codex subagent
     // that can write project B needs B named as much as its Claude twin does.
     // `stackProjects` is already suppressed upstream for a path-restricted run.
-    developerInstructions: buildCodexDeveloperInstructions({
-      globalPromptAppend: args.globalPromptAppend,
-      stackProjects: args.stackProjects,
-    }),
+    developerInstructions: buildCodexDeveloperInstructions(subagentPromptOptions(args)),
   })
   try {
     const turn = await args.codexManager.startTurn({

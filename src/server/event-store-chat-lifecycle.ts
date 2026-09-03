@@ -73,6 +73,18 @@ export function applyProjectEvent(state: ProjectLifecycleState, event: ProjectEv
       project.updatedAt = event.timestamp
       break
     }
+    case "project_instructions_set": {
+      const project = state.projectsById.get(event.projectId)
+      if (!project) break
+      // Empty clears: absent and blank are the same state (adr-20260904 D4).
+      if (event.instructions === "") {
+        delete project.instructions
+      } else {
+        project.instructions = event.instructions
+      }
+      project.updatedAt = event.timestamp
+      break
+    }
   }
 }
 
@@ -120,6 +132,17 @@ export function applyStackEvent(stacksById: Map<string, StackRecord>, event: Sta
       const stack = stacksById.get(event.stackId)
       if (!stack || stack.deletedAt) break
       stack.projectIds = stack.projectIds.filter((id) => id !== event.projectId)
+      stack.updatedAt = event.timestamp
+      break
+    }
+    case "stack_instructions_set": {
+      const stack = stacksById.get(event.stackId)
+      if (!stack || stack.deletedAt) break
+      if (event.instructions === "") {
+        delete stack.instructions
+      } else {
+        stack.instructions = event.instructions
+      }
       stack.updatedAt = event.timestamp
       break
     }

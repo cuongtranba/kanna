@@ -170,6 +170,12 @@ export interface ProjectSummary {
   title: string
   createdAt: number
   updatedAt: number
+  /**
+   * This project's own conventions, rendered as a
+   * `## Project instructions — <title>` block for any chat that can write it.
+   * Absent and empty are the same thing (adr-20260904).
+   */
+  instructions?: string
 }
 
 export interface Stack {
@@ -178,6 +184,8 @@ export interface Stack {
   projectIds: string[]   // insertion order; drives sidebar order within the stack
   createdAt: number
   updatedAt: number
+  /** How this stack's projects relate — rendered as `## Stack instructions`. */
+  instructions?: string
 }
 
 export interface StackSummary {
@@ -187,6 +195,7 @@ export interface StackSummary {
   memberCount: number
   createdAt: number
   updatedAt: number
+  instructions?: string
 }
 
 export interface StackBinding {
@@ -245,6 +254,8 @@ export interface SidebarProjectGroup {
   defaultCollapsed: boolean
   starredAt?: number
   sourceProvider?: AgentProvider | null
+  /** Seeds the "Edit instructions" dialog without a second round-trip. */
+  instructions?: string
 }
 
 export interface SidebarData {
@@ -415,6 +426,19 @@ export interface ResolvedStackBinding {
   worktreePath: string
   role: "primary" | "additional"
   projectStatus: "active" | "missing"
+}
+
+/**
+ * One `## Project instructions — <title>` block. Kept separate from
+ * {@link ResolvedStackBinding} because the two answer different questions:
+ * a binding is a ROOT this chat can reach, whereas a block is a project whose
+ * rules apply — and a solo chat has the second without having the first
+ * (adr-20260904 D5).
+ */
+export interface ProjectInstructionBlock {
+  projectId: string
+  projectTitle: string
+  instructions: string
 }
 
 export interface ChatSnapshot {

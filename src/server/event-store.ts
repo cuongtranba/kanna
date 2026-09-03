@@ -69,6 +69,8 @@ import {
   buildRemoveQueuedMessageEvent,
   buildRemoveStackEvent,
   buildRenameStackEvent,
+  buildSetProjectInstructionsEvent,
+  buildSetStackInstructionsEvent,
   buildRenameChatEvent,
   buildSessionTokenEvent,
   buildSetProjectStarEvent,
@@ -336,6 +338,16 @@ export class EventStore implements PushEventStore {
 
   async renameStack(stackId: string, title: string): Promise<void> {
     const event = buildRenameStackEvent(this.state.stacksById, stackId, title)
+    if (event) await this.commit(event)
+  }
+
+  async setProjectInstructions(projectId: string, instructions: string): Promise<void> {
+    const event = buildSetProjectInstructionsEvent(this.state.projectsById, projectId, instructions)
+    if (event) await this.commit(event)
+  }
+
+  async setStackInstructions(stackId: string, instructions: string): Promise<void> {
+    const event = buildSetStackInstructionsEvent(this.state.stacksById, stackId, instructions)
     if (event) await this.commit(event)
   }
 

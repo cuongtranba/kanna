@@ -151,11 +151,13 @@ export type ClientCommand =
   | { type: "sessions.importClaudeSession"; sessionIds: string[] }
   | { type: "project.remove"; projectId: string }
   | { type: "project.setStar"; projectId: string; starred: boolean }
+  | { type: "project.setInstructions"; projectId: string; instructions: string }
   | { type: "sidebar.reorderProjectGroups"; projectIds: string[] }
   /** `chatId` names the tree to read from — a chat's worktree has its own contents. */
   | { type: "project.readDiffPatch"; projectId: string; path: string; chatId?: string }
-  | { type: "stack.create"; title: string; projectIds: string[] }
+  | { type: "stack.create"; title: string; projectIds: string[]; instructions?: string }
   | { type: "stack.rename"; stackId: string; title: string }
+  | { type: "stack.setInstructions"; stackId: string; instructions: string }
   | { type: "stack.remove"; stackId: string }
   | { type: "stack.addProject"; stackId: string; projectId: string }
   | { type: "stack.removeProject"; stackId: string; projectId: string }

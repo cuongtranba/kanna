@@ -31,6 +31,7 @@ export interface ProjectStoreDep {
   openProject(localPath: string, title?: string): Promise<{ id: string }>
   removeProject(projectId: string): Promise<void>
   setProjectStar(projectId: string, starred: boolean): Promise<void>
+  setProjectInstructions(projectId: string, instructions: string): Promise<void>
   setSidebarProjectOrder(projectIds: string[]): Promise<void>
   state: { projectIdsByPath: ReadonlyMap<string, string> }
 }
@@ -221,6 +222,13 @@ export async function handleProjectCommand(
     case "project.setStar": {
       await store.setProjectStar(command.projectId, command.starred)
       send({ v: PROTOCOL_VERSION, type: "ack", id })
+      await broadcastSidebar()
+      return true
+    }
+    case "project.setInstructions": {
+      await store.setProjectInstructions(command.projectId, command.instructions)
+      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      analytics.track("project_instructions_set")
       await broadcastSidebar()
       return true
     }

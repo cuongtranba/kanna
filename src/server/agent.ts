@@ -31,6 +31,7 @@ export {
   buildTaskNotification,
   resolveSpawnPaths,
   resolveStackProjects,
+  resolveProjectInstructions,
   CLAUDE_TOOLSET,
 } from "./claude-session-config"
 

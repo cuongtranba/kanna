@@ -24,7 +24,7 @@ import { ChatRow } from "../components/chat-ui/sidebar/ChatRow"
 import { SidebarBulkActionBar } from "../components/chat-ui/sidebar/SidebarBulkActionBar"
 import { LocalProjectsSection } from "../components/chat-ui/sidebar/LocalProjectsSection"
 import { StacksSection } from "../components/chat-ui/sidebar/StacksSection"
-import { StackCreatePanel } from "../components/chat-ui/sidebar/StackCreatePanel"
+import { StackEditPanels } from "../components/chat-ui/sidebar/StackEditPanels"
 import { StackChatCreateRow } from "../components/chat-ui/sidebar/StackChatCreateRow"
 import { getResolvedKeybindings } from "../lib/keybindings"
 import type { GitWorktree, KeybindingsSnapshot, SidebarData, SidebarChatRow, SidebarProjectGroup, StackBinding, UpdateSnapshot } from "../../shared/types"
@@ -92,9 +92,11 @@ interface KannaSidebarProps {
   onOpenExternalPath: (action: "open_finder" | "open_editor", localPath: string) => void | Promise<void>
   onHideProject: (projectId: string) => void | Promise<void>
   onToggleStar: (projectId: string, starred: boolean) => void | Promise<void>
+  onSetProjectInstructions: (projectId: string, instructions: string) => void | Promise<void>
   onReorderProjectGroups: (projectIds: string[]) => void | Promise<void>
-  onCreateStack: (title: string, projectIds: string[]) => void
+  onCreateStack: (title: string, projectIds: string[], instructions?: string) => void
   onRenameStack: (stackId: string, title: string) => void
+  onSetStackInstructions: (stackId: string, instructions: string) => void
   onRemoveStack: (stackId: string) => void
   onCreateStackChat: (primaryProjectId: string, stackId: string, stackBindings: StackBinding[]) => void
   onListStackWorktrees: (projectId: string) => Promise<GitWorktree[]>
@@ -131,9 +133,11 @@ function KannaSidebarImpl({
   onOpenExternalPath,
   onHideProject,
   onToggleStar,
+  onSetProjectInstructions,
   onReorderProjectGroups,
   onCreateStack,
   onRenameStack,
+  onSetStackInstructions,
   onRemoveStack,
   onCreateStackChat,
   onListStackWorktrees,
@@ -311,14 +315,17 @@ function KannaSidebarImpl({
     closeStackChatCreate()
   }, [onCreateStackChat, closeStackChatCreate])
 
-  const handleStackPanelSubmit = useCallback(async (title: string, projectIds: string[]) => {
+  const handleStackPanelSubmit = useCallback(async (title: string, projectIds: string[], instructions: string) => {
     if (stackEditId) {
       onRenameStack(stackEditId, title)
+      onSetStackInstructions(stackEditId, instructions)
     } else {
-      onCreateStack(title, projectIds)
+      onCreateStack(title, projectIds, instructions)
     }
     closeStackPanel()
-  }, [stackEditId, onRenameStack, onCreateStack, closeStackPanel])
+  }, [stackEditId, onRenameStack, onSetStackInstructions, onCreateStack, closeStackPanel])
+
+  const clearStackDeleteConfirm = useCallback(() => setStackDeleteConfirmId(null), [setStackDeleteConfirmId])
 
   const handleConfirmDeleteStack = useCallback((stackId: string) => {
     onRemoveStack(stackId)
@@ -821,42 +828,17 @@ function KannaSidebarImpl({
               chats={stackChats}
             />
 
-            {stackCreatePanelOpen && (
-              <StackCreatePanel
-                mode={stackEditId ? "edit" : "create"}
-                projects={stackProjects}
-                initialProjectIds={stackEditId ? (data.stacks.find(s => s.id === stackEditId)?.projectIds ?? []) : []}
-                initialTitle={stackEditId ? (data.stacks.find(s => s.id === stackEditId)?.title ?? "") : ""}
-                onSubmit={handleStackPanelSubmit}
-                onCancel={closeStackPanel}
-              />
-            )}
-
-            {stackDeleteConfirmId && (() => {
-              const stack = data.stacks.find(s => s.id === stackDeleteConfirmId)
-              if (!stack) return null
-              return (
-                <div className="px-2.5 py-2 border border-destructive/50 rounded-lg bg-background mx-2 my-1">
-                  <p className="text-xs text-destructive mb-2">Delete "{stack.title}"?</p>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      className="text-xs px-2 py-1 rounded bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                      onClick={() => handleConfirmDeleteStack(stackDeleteConfirmId)}
-                    >
-                      Delete
-                    </button>
-                    <button
-                      type="button"
-                      className="text-xs px-2 py-1 rounded border border-border hover:bg-muted"
-                      onClick={() => setStackDeleteConfirmId(null)}
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              )
-            })()}
+            <StackEditPanels
+              stacks={data.stacks}
+              projects={stackProjects}
+              createPanelOpen={stackCreatePanelOpen}
+              editId={stackEditId}
+              deleteConfirmId={stackDeleteConfirmId}
+              onSubmit={handleStackPanelSubmit}
+              onCancel={closeStackPanel}
+              onConfirmDelete={handleConfirmDeleteStack}
+              onCancelDelete={clearStackDeleteConfirm}
+            />
 
             {starredProjectGroupsWithoutStackChats.length > 0 && (
               <>
@@ -881,6 +863,7 @@ function KannaSidebarImpl({
                   onHideProject={onHideProject}
                   onOpenBoards={handleOpenBoards}
                   onToggleStar={onToggleStar}
+                  onSetInstructions={onSetProjectInstructions}
                   isConnected={connectionStatus === "connected"}
                 />
               </>
@@ -908,6 +891,7 @@ function KannaSidebarImpl({
               onHideProject={onHideProject}
               onOpenBoards={handleOpenBoards}
               onToggleStar={onToggleStar}
+              onSetInstructions={onSetProjectInstructions}
               isConnected={connectionStatus === "connected"}
             />
           </div>

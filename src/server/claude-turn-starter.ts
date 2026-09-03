@@ -32,8 +32,8 @@ import { buildPromptText } from "./claude-prompt-helpers"
 import { buildHistoryPrimer, shouldInjectPrimer } from "./history-primer"
 import { fallbackTitleFromMessage } from "./generate-title"
 import { parseMentions, type ParsedMention } from "./mention-parser"
-import { resolveSpawnPaths, resolveStackProjects } from "./claude-session-config"
-import { buildCodexDeveloperInstructions } from "../shared/kanna-system-prompt"
+import { resolveProjectInstructions, resolveSpawnPaths, resolveStackProjects } from "./claude-session-config"
+import { buildCodexDeveloperInstructions, type KannaSystemPromptOptions } from "../shared/kanna-system-prompt"
 import { timestamped } from "./claude-message-normalizer"
 import {
   logClaudeSteer,
@@ -57,6 +57,8 @@ export interface StartClaudeTurnArgs {
   localPath: string
   additionalDirectories?: string[]
   stackProjects?: ResolvedStackBinding[]
+  /** Workspace / stack / per-project instruction blocks for this turn. */
+  instructions?: Omit<KannaSystemPromptOptions, "stackProjects">
   model: string
   effort?: string
   planMode: boolean
@@ -453,6 +455,22 @@ async function startTurnAfterTurnStarted(
     : null
   const promptContent = primer ?? userPromptText
 
+  // Which instructions apply to this turn, resolved once so the Claude and
+  // Codex branches below cannot disagree about them.
+  const lookupProject = (id: string) => {
+    const p = deps.store.getProject(id)
+    return p ? { title: p.title, instructions: p.instructions } : undefined
+  }
+  const instructionOptions = {
+    globalPromptAppend: deps.getAppSettingsSnapshot().globalPromptAppend,
+    stackInstructions: chat.stackId ? deps.store.getStack(chat.stackId)?.instructions : undefined,
+    projectInstructions: resolveProjectInstructions(chat, lookupProject),
+  }
+  const stackProjects = resolveStackProjects(chat, (id) => {
+    const p = lookupProject(id)
+    return p ? { title: p.title, active: true } : undefined
+  })
+
   let turn: HarnessTurn
   if (isClaudeSdkProvider(args.provider)) {
     logSendToStartingProfile(args.profile, "start_turn.provider_boot.begin", {
@@ -466,7 +484,8 @@ async function startTurnAfterTurnStarted(
       projectId: project.id,
       localPath: spawn.cwd,
       additionalDirectories: spawn.additionalDirectories,
-      stackProjects: resolveStackProjects(chat, (id) => deps.store.getProject(id)?.title),
+      stackProjects,
+      instructions: instructionOptions,
       model: args.model,
       effort: args.effort,
       planMode: args.planMode,
@@ -499,10 +518,7 @@ async function startTurnAfterTurnStarted(
       serviceTier: args.serviceTier,
       sessionToken: existingToken,
       pendingForkSessionToken: pendingForkToken,
-      developerInstructions: buildCodexDeveloperInstructions({
-        globalPromptAppend: deps.getAppSettingsSnapshot().globalPromptAppend,
-        stackProjects: resolveStackProjects(chat, (id) => deps.store.getProject(id)?.title),
-      }),
+      developerInstructions: buildCodexDeveloperInstructions({ ...instructionOptions, stackProjects }),
     })
     if (pendingForkToken && sessionToken) {
       await deps.store.setPendingForkSessionToken(args.chatId, null)

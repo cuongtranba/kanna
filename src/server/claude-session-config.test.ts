@@ -165,7 +165,7 @@ describe("resolveStackProjects", () => {
         { role: "primary" as const, worktreePath: "/wt/main", projectId: "p1" },
       ],
     }
-    const result = resolveStackProjects(chat, (id) => (id === "p1" ? "My Project" : undefined))
+    const result = resolveStackProjects(chat, (id) => (id === "p1" ? { title: "My Project", active: true } : undefined))
     expect(result).toEqual([
       { projectId: "p1", projectTitle: "My Project", worktreePath: "/wt/main", role: "primary", projectStatus: "active" },
     ])

@@ -22,7 +22,7 @@ import type { LoopTrackingSnapshot } from "../shared/loop-progress"
 import { buildLoopProgress } from "../shared/loop-progress"
 import type { ChatRecord, ChatTimingState, StoreState } from "./events"
 import { resolveLocalPath } from "./paths"
-import { resolveSpawnPaths } from "./claude-session-config"
+import { resolveSpawnPaths, resolveStackProjects } from "./claude-session-config"
 import { SERVER_PROVIDERS } from "./provider-catalog"
 import { deriveChatSchedules, deriveLoopState } from "./auto-continue/read-model"
 import { deriveCronJobs } from "./cron/read-model"
@@ -238,6 +238,7 @@ export function deriveSidebarData(
       defaultCollapsed: chats.every((chat) => !isSidebarChatRecent(chat, nowMs)),
       ...(project.starredAt != null ? { starredAt: project.starredAt } : {}),
       ...(sourceProvider != null ? { sourceProvider } : {}),
+      ...(project.instructions ? { instructions: project.instructions } : {}),
     }
   })
 
@@ -410,17 +411,14 @@ export function deriveChatSnapshot(
   const { schedules, liveScheduleId } = deriveChatSchedules(autoContinueEvents, chat.id)
   const { tunnels, liveTunnelId } = deriveChatTunnels(getTunnelEvents(chat.id), chat.id)
 
+  // One resolver, shared with the spawn path (`claude-session-config.ts`).
+  // The inline copy that used to live here agreed with it only because
+  // `store.getProject` filters `deletedAt` — a drift risk, so the two are now
+  // literally the same function.
   const resolvedBindings = chat.stackBindings && chat.stackBindings.length > 0
-    ? chat.stackBindings.map((binding) => {
-        const bindingProject = state.projectsById.get(binding.projectId)
-        const projectStatus: "active" | "missing" = bindingProject && !bindingProject.deletedAt ? "active" : "missing"
-        return {
-          projectId: binding.projectId,
-          projectTitle: bindingProject?.title ?? "(missing)",
-          worktreePath: binding.worktreePath,
-          role: binding.role,
-          projectStatus,
-        }
+    ? resolveStackProjects(chat, (id) => {
+        const project = state.projectsById.get(id)
+        return project ? { title: project.title, active: !project.deletedAt } : undefined
       })
     : undefined
 
@@ -494,5 +492,6 @@ export function stackSummaries(state: StoreState): StackSummary[] {
       memberCount: s.projectIds.length,
       createdAt: s.createdAt,
       updatedAt: s.updatedAt,
+      ...(s.instructions ? { instructions: s.instructions } : {}),
     }))
 }

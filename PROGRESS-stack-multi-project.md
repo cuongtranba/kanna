@@ -80,6 +80,37 @@ zero headroom.
 
 ## Progress (latest first)
 
+- 2026-09-04 **Phase 2 complete.** ADR
+  `.c3/adr/adr-20260904-project-stack-instructions.md` written first (status
+  `proposed`). `bun run check`, `bun run test` (7818 pass / 0 fail),
+  `bun run lint`, `bun run lint:usestate`, `bunx ast-grep test`,
+  `bun run check:arch`, `bun run lint:limits`, gitleaks — all pass.
+  - Two events (`project_instructions_set`, `stack_instructions_set`), both at
+    replay priority 0, round-tripped AND replayed in
+    `event-store.stack-methods.test.ts`.
+  - Prompt order is BASE → `## Workspace instructions` → `## Stack
+    instructions` → `## Project instructions — <title>` → `## Stack projects`
+    → roster, rendered by ONE `renderInstructionSections` shared by the Claude
+    suffix, the Codex developer instructions and the subagent prompt.
+  - **The global block is renamed `## Workspace instructions`.** Anything
+    asserting the old heading for the GLOBAL block was updated; the per-project
+    blocks now own the words "Project instructions".
+  - **Deviation from the plan: `ResolvedStackBinding.instructions` was NOT
+    added.** A binding answers "which roots can this chat reach" and a solo
+    chat reaches its project without having one, so the two questions got two
+    types: `resolveStackProjects` (roots) and `resolveProjectInstructions`
+    (blocks, and the single owner of the solo-chat rule).
+  - **Deviation: `stack.create` carries `instructions`** rather than the client
+    firing a second `stack.setInstructions`. The client has no stack id before
+    the ack, and a second `socket.command<T>` would have regressed the
+    `untyped-command-results` budget.
+  - Budget: no pin raised. Two LOWERED after extractions —
+    `useAppGlobalState.ts` 1472 → 1421 (`useStackCommands.ts`),
+    `KannaSidebar.tsx` 1007 → 987 (`StackEditPanels.tsx`).
+  - `useState` is banned in `src/client`: the dialog's draft is a
+    `createScopedStore`, and its openness is `instructionsProjectId` on
+    `kannaSidebarStore` (one project at a time, mirroring the stack panels).
+
 - 2026-09-04 **Phase 1 complete (1a + 1b + 1c).** Gates run on the worktree:
   `bun run check` (typecheck+lint+build+bundle), `bun run test` (7782 pass /
   0 fail), `bun run lint:usestate`, `bunx ast-grep test` (19 passed),
@@ -159,9 +190,10 @@ Detail for each item is in `PLAN-stack-multi-project.md`.
 - [x] **1c** Codex gets the stack block via a shared
       `buildCodexDeveloperInstructions`. The provider-picker hint is
       deliberately NOT shipped — see the Codex finding under Progress.
-- [ ] **2** `instructions` on project + stack: events, store, protocol, read
+- [x] **2** `instructions` on project + stack: events, store, protocol, read
       models, prompt composition (`## Workspace instructions` rename), Codex
-      parity, subagent parity, sidebar UI (§5) — needs an ADR
+      parity, subagent parity, sidebar UI (§5) — ADR
+      `adr-20260904-project-stack-instructions`
 - [ ] **3** Cross-project orchestration — ADR first, then Option A (card
       dependencies) and/or Option B (stack-scoped loop); the stack activity
       rollup is independently shippable (§6)

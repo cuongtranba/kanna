@@ -96,9 +96,9 @@ describe("buildKannaSystemPromptAppend", () => {
   })
 
   describe("globalPromptAppend option", () => {
-    test("omits the project-instructions block when option missing", () => {
+    test("omits the workspace-instructions block when option missing", () => {
       const out = buildKannaSystemPromptAppend([])
-      expect(out).not.toContain("## Project instructions")
+      expect(out).not.toContain("## Workspace instructions")
     })
 
     test("omits the block when value is whitespace only", () => {
@@ -113,16 +113,24 @@ describe("buildKannaSystemPromptAppend", () => {
       expect(withOption).toBe(without)
     })
 
-    test("splices Project instructions block after BASE and before roster", () => {
+    test("splices Workspace instructions block after BASE and before roster", () => {
       const out = buildKannaSystemPromptAppend([fakeSubagent({ name: "rev" })], {
         globalPromptAppend: "Always TDD.",
       })
       const baseEnd = KANNA_SYSTEM_PROMPT_BASE.length
-      const headerIdx = out.indexOf("## Project instructions")
+      const headerIdx = out.indexOf("## Workspace instructions")
       const rosterIdx = out.indexOf("## Available subagents")
       expect(headerIdx).toBeGreaterThanOrEqual(baseEnd)
       expect(rosterIdx).toBeGreaterThan(headerIdx)
       expect(out).toContain("Always TDD.")
+    })
+
+    // The global setting is workspace-wide. Leaving it called "Project
+    // instructions" while a per-project block exists under the same words is
+    // the comprehension hazard adr-20260802 was written about.
+    test("the global block is NOT headed 'Project instructions'", () => {
+      const out = buildKannaSystemPromptAppend([], { globalPromptAppend: "Always TDD." })
+      expect(out).not.toContain("## Project instructions")
     })
 
     test("BASE remains the first paragraph even when option set", () => {
@@ -133,9 +141,66 @@ describe("buildKannaSystemPromptAppend", () => {
 
     test("emits the block with no subagents present", () => {
       const out = buildKannaSystemPromptAppend([], { globalPromptAppend: "Prefer pumped-go." })
-      expect(out).toContain("## Project instructions")
+      expect(out).toContain("## Workspace instructions")
       expect(out).toContain("Prefer pumped-go.")
       expect(out).not.toContain("## Available subagents")
+    })
+  })
+
+  describe("stackInstructions option", () => {
+    test("omitted when absent or blank", () => {
+      expect(buildKannaSystemPromptAppend([], { stackInstructions: "  " }))
+        .toBe(KANNA_SYSTEM_PROMPT_BASE)
+    })
+
+    test("renders under its own heading", () => {
+      const out = buildKannaSystemPromptAppend([], { stackInstructions: "api is upstream of web" })
+      expect(out).toContain("## Stack instructions")
+      expect(out).toContain("api is upstream of web")
+    })
+  })
+
+  describe("projectInstructions option", () => {
+    test("omitted when the list is empty", () => {
+      expect(buildKannaSystemPromptAppend([], { projectInstructions: [] }))
+        .toBe(KANNA_SYSTEM_PROMPT_BASE)
+    })
+
+    test("renders one titled block per entry, in order", () => {
+      const out = buildKannaSystemPromptAppend([], {
+        projectInstructions: [
+          { projectId: "p1", projectTitle: "Backend API", instructions: "never edit generated/" },
+          { projectId: "p2", projectTitle: "Web Client", instructions: "run pnpm gen" },
+        ],
+      })
+      expect(out).toContain("## Project instructions \u2014 Backend API")
+      expect(out).toContain("never edit generated/")
+      expect(out).toContain("## Project instructions \u2014 Web Client")
+      expect(out).toContain("run pnpm gen")
+      expect(out.indexOf("Backend API")).toBeLessThan(out.indexOf("Web Client"))
+    })
+
+    // Broad to narrow: workspace rules, then how the projects relate, then
+    // each project's own rules, then the paths those names map to.
+    test("ordering is BASE, workspace, stack, per-project, roots, roster", () => {
+      const out = buildKannaSystemPromptAppend([fakeSubagent({ name: "rev" })], {
+        globalPromptAppend: "Always TDD.",
+        stackInstructions: "api is upstream",
+        projectInstructions: [
+          { projectId: "p1", projectTitle: "Backend API", instructions: "never edit generated/" },
+        ],
+        stackProjects: [fakeBinding()],
+      })
+      const order = [
+        "## Workspace instructions",
+        "## Stack instructions",
+        "## Project instructions \u2014 Backend API",
+        "## Stack projects",
+        "## Available subagents",
+      ].map((h) => out.indexOf(h))
+      expect(order.every((i) => i > -1)).toBe(true)
+      expect([...order].sort((a, b) => a - b)).toEqual(order)
+      expect(out.startsWith(KANNA_SYSTEM_PROMPT_BASE)).toBe(true)
     })
   })
 
@@ -187,12 +252,12 @@ describe("buildKannaSystemPromptAppend", () => {
       expect(out).toContain("- (missing) [primary]: /work/gone (missing)")
     })
 
-    test("places the block after Project instructions and before the subagent roster", () => {
+    test("places the block after Workspace instructions and before the subagent roster", () => {
       const out = buildKannaSystemPromptAppend([fakeSubagent({ name: "rev" })], {
         globalPromptAppend: "Always TDD.",
         stackProjects: [fakeBinding()],
       })
-      const instrIdx = out.indexOf("## Project instructions")
+      const instrIdx = out.indexOf("## Workspace instructions")
       const stackIdx = out.indexOf("## Stack projects")
       const rosterIdx = out.indexOf("## Available subagents")
       expect(instrIdx).toBeGreaterThan(-1)
@@ -249,9 +314,25 @@ describe("buildCodexDeveloperInstructions", () => {
       .toBeUndefined()
   })
 
-  test("passes the global prompt through unchanged when there is no stack", () => {
+  // Headed, not raw: with workspace / stack / per-project instructions all
+  // possible, an unlabelled blob next to labelled blocks would be ambiguous
+  // about which scope it came from. Same headings as the Claude suffix.
+  test("heads the global prompt as Workspace instructions", () => {
     expect(buildCodexDeveloperInstructions({ globalPromptAppend: "Always TDD." }))
-      .toBe("Always TDD.")
+      .toBe("## Workspace instructions\n\nAlways TDD.")
+  })
+
+  test("carries the stack and per-project blocks too", () => {
+    const out = buildCodexDeveloperInstructions({
+      stackInstructions: "api is upstream of web",
+      projectInstructions: [
+        { projectId: "p1", projectTitle: "Backend API", instructions: "never edit generated/" },
+      ],
+    }) ?? ""
+    expect(out).toContain("## Stack instructions")
+    expect(out).toContain("api is upstream of web")
+    expect(out).toContain("## Project instructions — Backend API")
+    expect(out).toContain("never edit generated/")
   })
 
   test("carries the same stack block the Claude prompt uses", () => {

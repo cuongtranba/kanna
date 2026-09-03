@@ -34,11 +34,11 @@ export const MODULE_LINE_THRESHOLD = 700
 export const MODULE_ALLOWANCES: Readonly<Record<string, number>> = {
   "src/client/app/ChatPage/index.tsx": 738,
   "src/client/app/ChatPage/useChatPageSidebarActions.ts": 701,
-  "src/client/app/KannaSidebar.tsx": 1007,
+  "src/client/app/KannaSidebar.tsx": 987,
   "src/client/app/KannaTranscript.tsx": 1053,
   "src/client/app/SettingsPage.tsx": 2787,
   "src/client/app/SubagentsSection.tsx": 939,
-  "src/client/app/useAppGlobalState.ts": 1472,
+  "src/client/app/useAppGlobalState.ts": 1421,
   "src/client/app/useKannaState.ts": 1447,
   "src/client/components/boards/CardDrawer.tsx": 830,
   "src/client/components/chat-ui/ChatInput.tsx": 1369,

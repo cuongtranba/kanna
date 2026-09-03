@@ -46,7 +46,8 @@ export function applyStoreEvent(
     case "project_opened":
     case "project_removed":
     case "sidebar_project_order_set":
-    case "project_star_set": {
+    case "project_star_set":
+    case "project_instructions_set": {
       applyProjectEvent(state, e)
       break
     }
@@ -86,7 +87,8 @@ export function applyStoreEvent(
     case "stack_removed":
     case "stack_renamed":
     case "stack_project_added":
-    case "stack_project_removed": {
+    case "stack_project_removed":
+    case "stack_instructions_set": {
       applyStackEvent(state.stacksById, e)
       break
     }

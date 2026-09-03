@@ -40,6 +40,7 @@ import type { TimerPort } from "../ports/timerPort"
 import type { ClipboardPort } from "../ports/clipboardPort"
 import { postAuthLogout, fetchAuthStatus } from "../api/auth"
 import type { KannaSocket, SocketStatus } from "./socket"
+import { useStackCommands, type StackCommands } from "./useStackCommands"
 import { sameDiffs, shouldPreserveExistingProjectDiffs, UpdateRestartRuntime } from "./appRuntime"
 import type { OpenLocalLinkTarget } from "../components/messages/shared"
 
@@ -291,7 +292,7 @@ export function resolveComposeIntent(params: {
 // Return type
 // ---------------------------------------------------------------------------
 
-export interface AppGlobalState {
+export interface AppGlobalState extends StackCommands {
   socket: KannaSocket
   /**
    * The chatId in the URL, from the provider's single useParams() call.
@@ -353,12 +354,7 @@ export interface AppGlobalState {
   handleHideProject: (projectId: string) => Promise<void>
   handleToggleProjectStar: (projectId: string, starred: boolean) => Promise<void>
   handleReorderProjectGroups: (projectIds: string[]) => Promise<void>
-  handleCreateStack: (title: string, projectIds: string[]) => Promise<void>
-  handleRenameStack: (stackId: string, title: string) => Promise<void>
-  handleRemoveStack: (stackId: string) => Promise<void>
-  handleAddProjectToStack: (stackId: string, projectId: string) => Promise<void>
-  handleRemoveProjectFromStack: (stackId: string, projectId: string) => Promise<void>
-  handleCreateStackChat: (primaryProjectId: string, stackId: string, stackBindings: Array<{ projectId: string; worktreePath: string; role: "primary" | "additional" }>) => Promise<void>
+  handleCreateStackChat:(primaryProjectId: string, stackId: string, stackBindings: Array<{ projectId: string; worktreePath: string; role: "primary" | "additional" }>) => Promise<void>
   handleListStackWorktrees: (projectId: string) => Promise<GitWorktree[]>
   importClaudeSessions: () => Promise<{ imported: number; updated: number; skipped: number; failed: number; newProjects: number }>
   importClaudeSession: (sessionIds: string[]) => Promise<ImportSessionsByIdsResult>
@@ -1195,52 +1191,9 @@ export function useAppGlobalState(
     }
   }, [socket])
 
-  // ---- stack handlers ---------------------------------------------------
+  // ---- stack handlers (own module — see useStackCommands) ----------------
 
-  const handleCreateStack = useCallback(async (title: string, projectIds: string[]) => {
-    try {
-      await socket.command({ type: "stack.create", title, projectIds })
-      useKannaStateStore.getState().setCommandError(null)
-    } catch (error) {
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
-    }
-  }, [socket])
-
-  const handleRenameStack = useCallback(async (stackId: string, title: string) => {
-    try {
-      await socket.command({ type: "stack.rename", stackId, title })
-      useKannaStateStore.getState().setCommandError(null)
-    } catch (error) {
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
-    }
-  }, [socket])
-
-  const handleRemoveStack = useCallback(async (stackId: string) => {
-    try {
-      await socket.command({ type: "stack.remove", stackId })
-      useKannaStateStore.getState().setCommandError(null)
-    } catch (error) {
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
-    }
-  }, [socket])
-
-  const handleAddProjectToStack = useCallback(async (stackId: string, projectId: string) => {
-    try {
-      await socket.command({ type: "stack.addProject", stackId, projectId })
-      useKannaStateStore.getState().setCommandError(null)
-    } catch (error) {
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
-    }
-  }, [socket])
-
-  const handleRemoveProjectFromStack = useCallback(async (stackId: string, projectId: string) => {
-    try {
-      await socket.command({ type: "stack.removeProject", stackId, projectId })
-      useKannaStateStore.getState().setCommandError(null)
-    } catch (error) {
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
-    }
-  }, [socket])
+  const stackCommands = useStackCommands(socket)
 
   const handleCreateStackChat = useCallback(async (
     primaryProjectId: string,
@@ -1452,11 +1405,7 @@ export function useAppGlobalState(
     handleHideProject,
     handleToggleProjectStar,
     handleReorderProjectGroups,
-    handleCreateStack,
-    handleRenameStack,
-    handleRemoveStack,
-    handleAddProjectToStack,
-    handleRemoveProjectFromStack,
+    ...stackCommands,
     handleCreateStackChat,
     handleListStackWorktrees,
     importClaudeSessions,

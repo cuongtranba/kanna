@@ -27,6 +27,7 @@ export interface MiscStoreDep {
   getProject(id: string): { localPath: string } | undefined | null
   createStack(title: string, projectIds: string[]): Promise<{ id: string }>
   renameStack(stackId: string, title: string): Promise<void>
+  setStackInstructions(stackId: string, instructions: string): Promise<void>
   removeStack(stackId: string): Promise<void>
   addProjectToStack(stackId: string, projectId: string): Promise<void>
   removeProjectFromStack(stackId: string, projectId: string): Promise<void>
@@ -179,6 +180,12 @@ export async function handleMiscCommand(
     // ------------------------------------------------------------------
     case "stack.create": {
       const stack = await store.createStack(command.title, command.projectIds)
+      // Carried on the create rather than sent as a follow-up command: the
+      // client has no stack id until this ack, and a second round-trip could
+      // leave a created stack with its instructions silently dropped.
+      if (command.instructions?.trim()) {
+        await store.setStackInstructions(stack.id, command.instructions)
+      }
       send({ v: PROTOCOL_VERSION, type: "ack", id, result: { stackId: stack.id } })
       analytics.track("stack_created")
       await broadcastSidebar()
@@ -187,6 +194,13 @@ export async function handleMiscCommand(
     case "stack.rename": {
       await store.renameStack(command.stackId, command.title)
       send({ v: PROTOCOL_VERSION, type: "ack", id })
+      await broadcastSidebar()
+      return true
+    }
+    case "stack.setInstructions": {
+      await store.setStackInstructions(command.stackId, command.instructions)
+      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      analytics.track("stack_instructions_set")
       await broadcastSidebar()
       return true
     }

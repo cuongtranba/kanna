@@ -12,6 +12,7 @@
 import path from "node:path"
 import type { AgentProvider, QueuedChatMessage, StackBinding } from "../shared/types"
 import { STORE_VERSION } from "../shared/types"
+import { GLOBAL_PROMPT_APPEND_MAX_CHARS } from "../shared/app-settings-types"
 import type { ChatPermissionPolicyOverride, ToolRequest, ToolRequestDecision, ToolRequestStatus } from "../shared/permission-policy"
 import type {
   ChatEvent,
@@ -135,6 +136,59 @@ export function buildRenameStackEvent(
   if (trimmed === "") throw new Error("Stack title cannot be empty")
   if (trimmed === stack.title) return null
   return { v: STORE_VERSION, type: "stack_renamed", timestamp: Date.now(), stackId, title: trimmed }
+}
+
+/**
+ * Normalize an instructions edit against its current value.
+ *
+ * Returns `null` for a no-op write (unchanged, or clearing what is already
+ * absent) so a builder can pass that straight through, mirroring
+ * `buildRenameStackEvent`. Throws over the cap rather than truncating: silently
+ * dropping the tail of someone's conventions is worse than refusing the edit.
+ *
+ * The cap is the global prompt's, deliberately — every block is spent from the
+ * same context window, so a second number would only be a second thing to get
+ * wrong (adr-20260904 D3).
+ */
+function normalizeInstructionsEdit(current: string | undefined, next: string): string | null {
+  const trimmed = next.trim()
+  if (trimmed.length > GLOBAL_PROMPT_APPEND_MAX_CHARS) {
+    throw new Error(`instructions must be ${GLOBAL_PROMPT_APPEND_MAX_CHARS} characters or fewer`)
+  }
+  if (trimmed === (current ?? "")) return null
+  return trimmed
+}
+
+/**
+ * Builds `project_instructions_set`, or `null` when nothing changes. Throws if
+ * the project is missing, deleted, or the text is over the cap.
+ */
+export function buildSetProjectInstructionsEvent(
+  projectsById: Map<string, ProjectRecord>,
+  projectId: string,
+  instructions: string,
+): ProjectEvent | null {
+  const project = projectsById.get(projectId)
+  if (!project || project.deletedAt) throw new Error("Project not found")
+  const next = normalizeInstructionsEdit(project.instructions, instructions)
+  if (next === null) return null
+  return { v: STORE_VERSION, type: "project_instructions_set", timestamp: Date.now(), projectId, instructions: next }
+}
+
+/**
+ * Builds `stack_instructions_set`, or `null` when nothing changes. Throws if
+ * the stack is missing, deleted, or the text is over the cap.
+ */
+export function buildSetStackInstructionsEvent(
+  stacksById: Map<string, StackRecord>,
+  stackId: string,
+  instructions: string,
+): StackEvent | null {
+  const stack = stacksById.get(stackId)
+  if (!stack || stack.deletedAt) throw new Error("Stack not found")
+  const next = normalizeInstructionsEdit(stack.instructions, instructions)
+  if (next === null) return null
+  return { v: STORE_VERSION, type: "stack_instructions_set", timestamp: Date.now(), stackId, instructions: next }
 }
 
 /** Builds the `stack_removed` event, or `null` if already deleted. Throws if not found. */

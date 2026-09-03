@@ -143,25 +143,29 @@ describe("composeSubagentSystemPrompt", () => {
   })
 
   test("returns the subagent prompt unchanged when global text is whitespace", () => {
-    expect(composeSubagentSystemPrompt("You are alpha.", "   \n  ")).toBe("You are alpha.")
+    expect(composeSubagentSystemPrompt("You are alpha.", { globalPromptAppend: "   \n  " }))
+      .toBe("You are alpha.")
   })
 
-  test("appends a Project instructions block after the subagent prompt", () => {
-    const out = composeSubagentSystemPrompt("You are alpha.", "Always TDD.")
-    expect(out).toBe("You are alpha.\n\n## Project instructions\n\nAlways TDD.")
+  test("appends a Workspace instructions block after the subagent prompt", () => {
+    const out = composeSubagentSystemPrompt("You are alpha.", { globalPromptAppend: "Always TDD." })
+    expect(out).toBe("You are alpha.\n\n## Workspace instructions\n\nAlways TDD.")
   })
 
-  test("emits only the project block when subagent prompt is empty", () => {
-    const out = composeSubagentSystemPrompt("", "Always TDD.")
-    expect(out).toBe("## Project instructions\n\nAlways TDD.")
+  test("emits only the workspace block when subagent prompt is empty", () => {
+    const out = composeSubagentSystemPrompt("", { globalPromptAppend: "Always TDD." })
+    expect(out).toBe("## Workspace instructions\n\nAlways TDD.")
   })
 
-  test("appends a Stack projects block after Project instructions", () => {
-    const out = composeSubagentSystemPrompt("You are alpha.", "Always TDD.", [
-      { projectId: "p1", projectTitle: "Backend API", worktreePath: "/be", role: "primary", projectStatus: "active" },
-      { projectId: "p2", projectTitle: "Web Client", worktreePath: "/fe", role: "additional", projectStatus: "active" },
-    ])
-    const instrIdx = out.indexOf("## Project instructions")
+  test("appends a Stack projects block after the instruction blocks", () => {
+    const out = composeSubagentSystemPrompt("You are alpha.", {
+      globalPromptAppend: "Always TDD.",
+      stackProjects: [
+        { projectId: "p1", projectTitle: "Backend API", worktreePath: "/be", role: "primary", projectStatus: "active" },
+        { projectId: "p2", projectTitle: "Web Client", worktreePath: "/fe", role: "additional", projectStatus: "active" },
+      ],
+    })
+    const instrIdx = out.indexOf("## Workspace instructions")
     const stackIdx = out.indexOf("## Stack projects")
     expect(out.startsWith("You are alpha.")).toBe(true)
     expect(stackIdx).toBeGreaterThan(instrIdx)
@@ -170,9 +174,24 @@ describe("composeSubagentSystemPrompt", () => {
   })
 
   test("omits the Stack projects block when stackProjects empty", () => {
-    const out = composeSubagentSystemPrompt("You are alpha.", undefined, [])
+    const out = composeSubagentSystemPrompt("You are alpha.", { stackProjects: [] })
     expect(out).toBe("You are alpha.")
     expect(out).not.toContain("## Stack projects")
+  })
+
+  // A subagent that can write project B needs B's rules as much as the main
+  // agent does — this is the parity the feature would be missing without it.
+  test("carries the stack and per-project instruction blocks", () => {
+    const out = composeSubagentSystemPrompt("You are alpha.", {
+      stackInstructions: "api is upstream of web",
+      projectInstructions: [
+        { projectId: "p1", projectTitle: "Backend API", instructions: "never edit generated/" },
+      ],
+    })
+    expect(out).toContain("## Stack instructions")
+    expect(out).toContain("api is upstream of web")
+    expect(out).toContain("## Project instructions \u2014 Backend API")
+    expect(out).toContain("never edit generated/")
   })
 })
 
@@ -242,7 +261,7 @@ describe("buildSubagentProviderRun – Claude", () => {
     })
     const run = buildSubagentProviderRun(args)
     await run.start(() => {}, () => {})
-    expect(captured?.systemPromptOverride).toBe("You are alpha.\n\n## Project instructions\n\nAlways TDD.")
+    expect(captured?.systemPromptOverride).toBe("You are alpha.\n\n## Workspace instructions\n\nAlways TDD.")
   })
 
   test("leaves systemPromptOverride untouched when no globalPromptAppend", async () => {
@@ -410,7 +429,7 @@ describe("buildSubagentProviderRun – Codex", () => {
     })
     const run = buildSubagentProviderRun(args)
     await run.start(() => {}, () => {})
-    expect(captured?.developerInstructions).toBe("Be terse.")
+    expect(captured?.developerInstructions).toBe("## Workspace instructions\n\nBe terse.")
   })
 
   test("omits developerInstructions on startSession when globalPromptAppend missing", async () => {

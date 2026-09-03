@@ -4,7 +4,7 @@
  * Extracted from agent.ts — no dependency on AgentCoordinator or agent.ts.
  */
 
-import type { McpServerConfig, ResolvedStackBinding } from "../shared/types"
+import type { McpServerConfig, ProjectInstructionBlock, ResolvedStackBinding } from "../shared/types"
 import { KANNA_MCP_SERVER_NAME } from "../shared/tools"
 import type { ChatRecord } from "./events"
 import type { BackgroundRunOutcome } from "./subagent-orchestrator"
@@ -70,27 +70,69 @@ export function resolveSpawnPaths(
 }
 
 /**
- * Resolve a chat's stack bindings into named entries for the system prompt.
- * Mirrors the read-model resolver in `read-models.ts` — looks each binding's
- * project title up via `lookupProjectTitle`, falling back to `(missing)` /
- * `projectStatus: "missing"` when the project no longer exists. Solo chats
- * (no `stackBindings`) resolve to an empty list (no prompt block).
+ * Resolve a chat's stack bindings into named entries.
+ *
+ * The ONE resolver: both the spawn path (system prompt) and the read model
+ * (`deriveChatSnapshot`'s `resolvedBindings`, which the client renders) call
+ * this. `read-models.ts` used to carry an inline copy that agreed with it only
+ * because `store.getProject` filters `deletedAt`; the two are now the same
+ * function, so a caller cannot see a different set of roots than the model does.
+ *
+ * `lookupProject` reports `active: false` for a project that still has a record
+ * but is deleted — the title is kept, because the last known name plus a
+ * "missing" status is more use than `(missing)` twice. Returning undefined
+ * means no record at all, which is the only case that loses the name.
+ *
+ * Solo chats (no `stackBindings`) resolve to an empty list — for the
+ * instruction blocks a solo chat DOES get, see `resolveProjectInstructions`.
  */
 export function resolveStackProjects(
   chat: Pick<ChatRecord, "stackBindings">,
-  lookupProjectTitle: (projectId: string) => string | undefined,
+  lookupProject: (projectId: string) => { title: string; active: boolean } | undefined,
 ): ResolvedStackBinding[] {
   if (!chat.stackBindings || chat.stackBindings.length === 0) return []
   return chat.stackBindings.map((b) => {
-    const title = lookupProjectTitle(b.projectId)
+    const project = lookupProject(b.projectId)
     return {
       projectId: b.projectId,
-      projectTitle: title ?? "(missing)",
+      projectTitle: project?.title ?? "(missing)",
       worktreePath: b.worktreePath,
       role: b.role,
-      projectStatus: title !== undefined ? "active" : "missing",
+      projectStatus: project?.active === true ? "active" : "missing",
     }
   })
+}
+
+/**
+ * Which projects' instructions apply to this chat's turns.
+ *
+ * NOT derivable from `resolveStackProjects`: that answers "which roots can
+ * this chat reach", and a SOLO chat reaches its project without having a
+ * binding for it. Sourcing the blocks from bindings alone would ship a field
+ * that is edited from the ordinary project menu but only takes effect inside a
+ * stack — so the solo case is synthesized here, once, rather than at each of
+ * the three prompt call sites (adr-20260904 D5).
+ *
+ * `lookupProject` returns undefined for a missing or deleted project, which
+ * contributes no block: there is no title to head it with and no rules to
+ * state. Projects with no instructions are omitted for the same reason.
+ */
+export function resolveProjectInstructions(
+  chat: Pick<ChatRecord, "projectId" | "stackBindings">,
+  lookupProject: (projectId: string) => { title: string; instructions?: string } | undefined,
+): ProjectInstructionBlock[] {
+  const projectIds = chat.stackBindings && chat.stackBindings.length > 0
+    ? chat.stackBindings.map((b) => b.projectId)
+    : [chat.projectId]
+
+  const blocks: ProjectInstructionBlock[] = []
+  for (const projectId of projectIds) {
+    const project = lookupProject(projectId)
+    const instructions = project?.instructions?.trim()
+    if (!project || !instructions) continue
+    blocks.push({ projectId, projectTitle: project.title, instructions })
+  }
+  return blocks
 }
 
 // ---------------------------------------------------------------------------

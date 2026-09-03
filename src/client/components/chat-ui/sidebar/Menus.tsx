@@ -1,5 +1,5 @@
 import { type ReactNode } from "react"
-import { Archive, Code, Copy, EyeOff, FolderOpen, Pencil, ShieldAlert, Split, SquareKanban, Star, StarOff, Trash2, Users } from "lucide-react"
+import { Archive, Code, Copy, EyeOff, FolderOpen, Pencil, ScrollText, ShieldAlert, Split, SquareKanban, Star, StarOff, Trash2, Users } from "lucide-react"
 import {
   ContextMenu,
   ContextMenuContent,
@@ -32,6 +32,7 @@ export function ProjectSectionMenu({
   onOpenInFinder,
   onOpenInEditor,
   onToggleStar,
+  onEditInstructions,
   onHide,
   children,
 }: {
@@ -43,6 +44,8 @@ export function ProjectSectionMenu({
   onOpenInFinder: () => void
   onOpenInEditor: () => void
   onToggleStar: () => void
+  /** Omitted where the host has no dialog to open (e.g. a read-only surface). */
+  onEditInstructions?: () => void
   onHide: () => void
   children: ReactNode
 }) {
@@ -79,6 +82,17 @@ export function ProjectSectionMenu({
           {starred ? <StarOff className="h-3.5 w-3.5" /> : <Star className="h-3.5 w-3.5" />}
           <span className="text-xs font-medium">{starred ? "Unstar project" : "Star project"}</span>
         </ContextMenuItem>
+        {onEditInstructions ? (
+          <ContextMenuItem
+            onSelect={(event) => {
+              event.stopPropagation()
+              onEditInstructions()
+            }}
+          >
+            <ScrollText className="h-3.5 w-3.5" />
+            <span className="text-xs font-medium">Edit instructions</span>
+          </ContextMenuItem>
+        ) : null}
         <ContextMenuItem
           onSelect={(event) => {
             event.stopPropagation()

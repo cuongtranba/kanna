@@ -244,11 +244,11 @@ describe("startTurnForChat", () => {
       expect(instructions).toContain("/work/fe")
     })
 
-    test("a solo chat's instructions are unchanged", async () => {
+    test("a solo chat gets the workspace block and no stack block", async () => {
       const deps = depsForBindings()
       deps.getAppSettingsSnapshot = mock(() => ({ globalPromptAppend: "Always TDD." })) as never
       await startTurnForChat(deps, makeArgs({ provider: "codex" }))
-      expect(instructionsOfSession(deps)).toBe("Always TDD.")
+      expect(instructionsOfSession(deps)).toBe("## Workspace instructions\n\nAlways TDD.")
     })
   })
 

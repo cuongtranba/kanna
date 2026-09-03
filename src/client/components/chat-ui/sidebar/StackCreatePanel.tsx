@@ -7,20 +7,24 @@ interface StackCreatePanelProps {
   mode: "create" | "edit"
   initialTitle?: string
   initialProjectIds?: string[]
+  initialInstructions?: string
   projects: Array<{ id: string; title: string }>
-  onSubmit: (title: string, projectIds: string[]) => Promise<void>
+  onSubmit: (title: string, projectIds: string[], instructions: string) => Promise<void>
   onCancel: () => void
 }
 
 interface StackCreatePanelInit {
   initialTitle: string
+  initialInstructions: string
   initialSelectedIds: Set<string>
 }
 
 interface StackCreatePanelState {
   title: string
+  instructions: string
   selectedIds: Set<string>
   setTitle: (title: string) => void
+  setInstructions: (instructions: string) => void
   setSelectedIds: (updater: (prev: Set<string>) => Set<string>) => void
 }
 
@@ -29,8 +33,10 @@ const stackCreatePanelStore = createScopedStore<
   StackCreatePanelState
 >("StackCreatePanel", (init) => (set) => ({
   title: init.initialTitle,
+  instructions: init.initialInstructions,
   selectedIds: init.initialSelectedIds,
   setTitle: (title) => set({ title }),
+  setInstructions: (instructions) => set({ instructions }),
   setSelectedIds: (updater) =>
     set((state) => ({ selectedIds: updater(state.selectedIds) })),
 }))
@@ -44,8 +50,10 @@ function StackCreatePanelInner({
   const chipContainerRef = useRef<HTMLDivElement>(null)
 
   const title = stackCreatePanelStore.useScopedStore((s) => s.title)
+  const instructions = stackCreatePanelStore.useScopedStore((s) => s.instructions)
   const selectedIds = stackCreatePanelStore.useScopedStore((s) => s.selectedIds)
   const setTitle = stackCreatePanelStore.useScopedStore((s) => s.setTitle)
+  const setInstructions = stackCreatePanelStore.useScopedStore((s) => s.setInstructions)
   const setSelectedIds = stackCreatePanelStore.useScopedStore((s) => s.setSelectedIds)
 
   const hasEnoughProjects = projects.length >= 2
@@ -68,8 +76,8 @@ function StackCreatePanelInner({
   const handleFormSubmit = useCallback(async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (isSaveDisabled) return
-    await onSubmit(title.trim(), Array.from(selectedIds))
-  }, [isSaveDisabled, onSubmit, title, selectedIds])
+    await onSubmit(title.trim(), Array.from(selectedIds), instructions.trim())
+  }, [isSaveDisabled, onSubmit, title, instructions, selectedIds])
 
   // Fix 2: only handle Escape on the form wrapper (no double-fire with input)
   const handleEscapeKey = useCallback(
@@ -97,7 +105,7 @@ function StackCreatePanelInner({
     (e: KeyboardEvent<HTMLButtonElement>, index: number) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
         if (!isSaveDisabled) {
-          void onSubmit(title.trim(), Array.from(selectedIds))
+          void onSubmit(title.trim(), Array.from(selectedIds), instructions.trim())
         }
       } else if (e.key === "ArrowRight") {
         const chips = chipContainerRef.current?.querySelectorAll("button")
@@ -111,7 +119,7 @@ function StackCreatePanelInner({
         }
       }
     },
-    [isSaveDisabled, onSubmit, title, selectedIds]
+    [isSaveDisabled, onSubmit, title, instructions, selectedIds]
   )
 
   return (
@@ -157,6 +165,17 @@ function StackCreatePanelInner({
         })}
       </div>
 
+      {/* Stack instructions — how these projects relate. Rendered as its own
+          prompt block for every chat bound to the stack. */}
+      <textarea
+        value={instructions}
+        onChange={(e) => setInstructions(e.target.value)}
+        placeholder="How these projects relate (optional) — e.g. api is upstream of web; regenerate the client after a schema change"
+        aria-label="Stack instructions"
+        rows={3}
+        className="w-full text-sm px-2 py-1 rounded border border-border bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+      />
+
       {/* Single-project disabled banner */}
       {!hasEnoughProjects && (
         <p className="text-xs text-muted-foreground">
@@ -189,6 +208,7 @@ function StackCreatePanelInner({
 export function StackCreatePanel({
   mode,
   initialTitle,
+  initialInstructions,
   initialProjectIds,
   projects,
   onSubmit,
@@ -198,12 +218,14 @@ export function StackCreatePanel({
     <stackCreatePanelStore.Provider
       init={{
         initialTitle: initialTitle ?? "",
+        initialInstructions: initialInstructions ?? "",
         initialSelectedIds: new Set(initialProjectIds ?? []),
       }}
     >
       <StackCreatePanelInner
         mode={mode}
         initialTitle={initialTitle}
+        initialInstructions={initialInstructions}
         initialProjectIds={initialProjectIds}
         projects={projects}
         onSubmit={onSubmit}
