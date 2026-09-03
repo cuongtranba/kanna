@@ -14,6 +14,7 @@ import { $createSlashCommandNode } from "../nodes/SlashCommandNode"
 import { cn } from "../../../lib/utils"
 import { clampCommandDescription } from "../../../lib/formatters"
 import { ChatTabScopedStore } from "../../../stores/chatTabScopedStore"
+import { useTypeaheadHoverHighlight } from "./typeahead-hover-highlight"
 
 // ---------------------------------------------------------------------------
 // Custom trigger: slash at the start of the input OR after whitespace.
@@ -106,6 +107,8 @@ export function SlashCommandTypeaheadPlugin({
 
   const triggerFn = useSlashTrigger()
 
+  const highlightOnPointerMove = useTypeaheadHoverHighlight()
+
   const options = useMemo<SlashCommandMenuOption[]>(() => {
     const available = commandsForProvider(slashCommands, provider)
     const filtered = filterCommands(available, query ?? "")
@@ -180,6 +183,17 @@ export function SlashCommandTypeaheadPlugin({
         selectOptionAndCleanUp(option)
       }
 
+      // Hover follows the POINTER, not the hit test — see
+      // useTypeaheadHoverHighlight. `mouseenter` here made every arrow key
+      // press hand the highlight straight back to the row the scroll had just
+      // moved under a resting cursor (#1019).
+      const handleOptionMouseMove = (
+        event: ReactMouseEvent<HTMLLIElement>,
+        index: number,
+      ) => {
+        highlightOnPointerMove(event, index, setHighlightedIndex)
+      }
+
       return (
         <ul
           role="listbox"
@@ -197,7 +211,7 @@ export function SlashCommandTypeaheadPlugin({
                 role="option"
                 aria-selected={isActive}
                 onMouseDown={(e) => handleOptionMouseDown(e, option)}
-                onMouseEnter={() => setHighlightedIndex(i)}
+                onMouseMove={(e) => handleOptionMouseMove(e, i)}
                 className={cn(
                   "flex flex-col gap-0.5 px-3 py-1.5 cursor-pointer text-sm sm:flex-row sm:items-center sm:gap-3",
                   isActive && "bg-accent text-accent-foreground",
@@ -229,7 +243,7 @@ export function SlashCommandTypeaheadPlugin({
         </ul>
       )
     },
-    [],
+    [highlightOnPointerMove],
   )
 
   return (

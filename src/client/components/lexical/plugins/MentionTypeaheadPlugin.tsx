@@ -15,6 +15,7 @@ import type { ProjectPath } from "../../../hooks/useMentionSuggestions"
 import { $createMentionNode } from "../nodes/MentionNode"
 import { cn } from "../../../lib/utils"
 import { ChatTabScopedStore } from "../../../stores/chatTabScopedStore"
+import { useTypeaheadHoverHighlight } from "./typeahead-hover-highlight"
 
 // ---------------------------------------------------------------------------
 // Custom trigger: matches `@` at start of text or after whitespace, allows
@@ -115,6 +116,8 @@ export function MentionTypeaheadPlugin({
     return [...agentOpts, ...pathOpts]
   }, [subagentState.items, mentionState.items])
 
+  const highlightOnPointerMove = useTypeaheadHoverHighlight()
+
   const onQueryChange = useCallback((matchingString: string | null) => {
     setQuery(matchingString)
   }, [setQuery])
@@ -189,6 +192,17 @@ export function MentionTypeaheadPlugin({
         selectOptionAndCleanUp(option)
       }
 
+      // Hover follows the POINTER, not the hit test — see
+      // useTypeaheadHoverHighlight. `mouseenter` here made every arrow key
+      // press hand the highlight straight back to the row the scroll had just
+      // moved under a resting cursor (#1019).
+      const handleOptionMouseMove = (
+        event: ReactMouseEvent<HTMLLIElement>,
+        index: number,
+      ) => {
+        highlightOnPointerMove(event, index, setHighlightedIndex)
+      }
+
       return (
         <ul
           role="listbox"
@@ -244,7 +258,7 @@ export function MentionTypeaheadPlugin({
                     role="option"
                     aria-selected={isActive}
                     onMouseDown={(e) => handleOptionMouseDown(e, option)}
-                    onMouseEnter={() => setHighlightedIndex(i)}
+                    onMouseMove={(e) => handleOptionMouseMove(e, i)}
                     className={cn(
                       "flex items-center gap-2 px-3 py-1.5 cursor-pointer text-sm",
                       isActive && "bg-accent text-accent-foreground",
@@ -258,7 +272,7 @@ export function MentionTypeaheadPlugin({
         </ul>
       )
     },
-    [mentionState.loading],
+    [mentionState.loading, highlightOnPointerMove],
   )
 
   return (
