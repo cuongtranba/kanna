@@ -209,6 +209,12 @@ gh label list --repo <owner>/<repo>
 - `references/bug-report.md` — bug template, section-by-section rationale, annotated example (#806)
 - `references/feature-request.md` — feature template, rationale, annotated example (#851)
 
+`.github/ISSUE_TEMPLATE/` is the same structure for the web path — a human filing
+from the browser answers those sections as form fields. `gh issue create` bypasses
+the forms entirely, so this skill stays the authority for an agent-filed body; the
+two are kept in step by hand, and a change to either belongs in the same PR as the
+change to the other.
+
 Two issues worth reading in full as the standard to aim at:
 
 ```bash

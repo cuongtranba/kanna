@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Troubleshooting & FAQ
+    url: https://kanna-wiki.lowbit.link/guides/user/troubleshooting/
+    about: Check here first — install, auth, provider and session problems with known answers.
+  - name: Contributing guide
+    url: https://kanna-wiki.lowbit.link/guides/contributing/overview/
+    about: Architecture, CI gates, dev workflow and PR rules for anyone sending a change.
+  - name: Security vulnerability (do not open a public issue)
+    url: https://github.com/cuongtranba/kanna/security/advisories/new
+    about: Report privately. If a credential leaked, rotate it before reporting — a rotated credential is inert.
