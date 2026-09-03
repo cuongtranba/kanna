@@ -5,6 +5,7 @@ description: How to contribute to Kanna.
 
 Kanna is a community fork. PRs are welcome — see the guides below for the rules of the road.
 
+- [Filing Issues](/guides/contributing/issues/) — the bug and feature forms, and what makes an issue implementable
 - [Architecture](/guides/contributing/architecture/) — C3 docs, component model
 - [Pull Requests](/guides/contributing/pull-requests/) — where to open, how to target
 - [Lint & Tests](/guides/contributing/lint-and-tests/) — CI gates

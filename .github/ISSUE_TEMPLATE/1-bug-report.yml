@@ -1,0 +1,240 @@
+name: Bug report
+description: Something in Kanna is broken. File it so a coding agent can reproduce and fix it without asking you follow-up questions.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A report that a coding agent can pick up answers three questions on its own:
+        **how do I reproduce it**, **how will I know it is fixed**, and **where do I look first**.
+        A gap in any of the three costs a round-trip with you, so the fields below are shaped around them.
+
+        - Title convention: `<area>: <observable symptom>` — e.g. `chat: transcript scrolls past the last message on long chats`.
+        - Search [existing issues](https://github.com/cuongtranba/kanna/issues?q=is%3Aissue) first, and reproduce on the latest release (`bun install -g @cuongtran001/kanna@latest`).
+        - **Redact secrets.** Never paste OAuth tokens, API keys, or raw `~/.kanna` files. Logs and transcripts contain them.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: One paragraph — what breaks, and what it costs the user. Write the effect, not the theory; the hypothesis has its own field below.
+      placeholder: |
+        Sending a second message while a turn is running queues it, but the queue never drains after the turn
+        finishes. The chat stays "running" with no way back except a server restart.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: >-
+        Best guess is fine — it decides which C3 component doc the implementer loads first
+        (`/c3 query <id>`). Pick "Not sure" rather than guessing wildly.
+      options:
+        - "Chat & transcript (c3-112, c3-113, c3-114)"
+        - "Composer, editor & chat chrome (c3-115)"
+        - "Sidebar, projects & topics (c3-111, c3-117)"
+        - "Settings page (c3-116)"
+        - "Boards / kanban (c3-119, c3-232, c3-310)"
+        - "Cron & scheduled jobs (c3-120, c3-233, c3-311)"
+        - "Terminal workspace (c3-118, c3-216)"
+        - "Sessions, turns & agent coordinator (c3-210)"
+        - "Claude driver — SDK or PTY (c3-210, src/server/claude-pty)"
+        - "Codex provider (c3-211)"
+        - "OpenRouter, provider catalog & models (c3-212, c3-230)"
+        - "Subagents, loops & workflows (c3-210, src/server/loop-template.ts)"
+        - "Kanna MCP tools (c3-226, c3-303)"
+        - "WebSocket protocol, events & read models (c3-205, c3-206, c3-207, c3-208, c3-302)"
+        - "Auth, OAuth token pool & session sharing (c3-203, c3-224, c3-218, c3-228)"
+        - "CLI, install, self-update & release (c3-201, c3-219, c3-237)"
+        - "Telemetry, performance & memory (OTel, perf-alert)"
+        - "Design system / theming (DESIGN.md, src/index.css)"
+        - "Docs & wiki"
+        - "Not sure"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - "Blocker — data loss, wedged chat/session, or Kanna will not start"
+        - "Major — a core flow is unusable, no workaround"
+        - "Minor — works with a workaround, or a cosmetic/UI defect"
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Kanna version
+      description: Output of `kanna --version`.
+      placeholder: "1.45.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: regression
+    attributes:
+      label: Is this a regression?
+      description: If it used to work, name the last good version in "Environment" — bisecting from it is the cheapest path to the cause.
+      options:
+        - "Yes — it worked in an earlier version"
+        - "No — it has never worked"
+        - "Unknown"
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Anything the bug might depend on. Delete the lines that do not apply.
+      placeholder: |
+        - OS: macOS 15.6 (arm64) / Ubuntu 24.04
+        - Bun: 1.3.11
+        - Install: bun install -g @cuongtran001/kanna  (or: Docker, source checkout, PM2, systemd)
+        - Provider & model: claude / sonnet-5
+        - KANNA_CLAUDE_DRIVER: sdk (or pty)
+        - Other KANNA_* env vars set: none
+        - Browser: Chrome 141 (n/a for server-only bugs)
+        - Last known good version: 1.44.1
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: >-
+        Numbered, from a fresh `kanna` start, with the exact input you typed. If it needs a specific
+        project, provider, or setting, say so — an implementer who cannot reproduce it cannot prove a fix.
+      placeholder: |
+        1. Start `kanna` in any project directory.
+        2. Open a chat and send "write a haiku".
+        3. While the turn is still running, send a second message.
+        4. Wait for the first turn to finish.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: frequency
+    attributes:
+      label: How often does it reproduce?
+      options:
+        - "Every time"
+        - "Intermittently — more than half the time"
+        - "Rarely — seen once or twice"
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected_actual
+    attributes:
+      label: Expected vs actual
+      description: Both, explicitly. "Expected" is what the fix has to make true, so an agent turns this line straight into a test assertion.
+      placeholder: |
+        Expected: the queued message starts as a new turn as soon as the running turn finishes.
+        Actual: nothing starts. The chat stays "running" and the composer stays disabled until the server restarts.
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: >-
+        The chat/session id is the single most useful thing here — it lets a maintainer replay the whole
+        transcript and event log. Add screenshots, browser console errors, or a screen recording for UI bugs.
+      placeholder: |
+        - Chat / session id: 8a73bdcd-0929-4222-a3cf-c7fe3cd23b0a
+        - Transcript entries: 741-756
+        - Browser console: "Warning: Maximum update depth exceeded" on every keystroke
+        - Screenshot: (drag and drop here)
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Server output
+      description: Relevant lines from the terminal running `kanna`, plus any stack trace. Redact tokens and keys.
+      render: shell
+
+  - type: textarea
+    id: defect
+    attributes:
+      label: Suspected defect and downstream effects
+      description: >-
+        Optional, and worth the minute it takes — it turns "reproduce and investigate" into "go here and
+        fix it". A `file.ts:line` plus the smallest excerpt that shows the problem beats a paragraph.
+        List what else misbehaves because of it. Say plainly if you are guessing, and say what you ruled out.
+      placeholder: |
+        src/server/claude-session-runner.ts:412 — `maybeStartNextQueuedMessage` is called only from the
+        turn-result finalize path, so a turn ending via the cancel path never drains the queue.
+        Downstream: the composer stays disabled (ChatFooter reads isChatBusy), and an armed loop loses its wake.
+        Guess — not verified. Ruled out: the send gate, which reads isChatBusy correctly.
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Definition of fixed
+      description: The observable conditions that make this issue closeable. Behaviour a user or a test can check — not implementation steps.
+      placeholder: |
+        - [ ] A message queued during a running turn starts automatically when that turn ends, including when the turn was cancelled.
+        - [ ] The composer re-enables without a server restart.
+        - [ ] No change to the behaviour of a message queued while a tool approval is pending.
+    validations:
+      required: true
+
+  - type: textarea
+    id: test_plan
+    attributes:
+      label: Regression test
+      description: >-
+        Optional — the implementer writes one either way, since this repo is test-driven. If you can name
+        the assertion that fails before the fix and passes after, write it; it is the cheapest part to get right.
+      placeholder: |
+        src/server/claude-session-runner.test.ts — cancel a turn that has a queued message, assert the
+        queued message starts. Existing coverage of the normal finalize path must stay green.
+
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Not in scope / already correct
+      description: >-
+        Optional, and the highest value per line in this form. What looks affected but is not, and what an
+        implementer might "fix" that is already right. Three lines here prevent a whole class of over-reach.
+      placeholder: |
+        The SDK driver is unaffected — it takes the level-snapshot path and drains correctly. Do not "fix" both.
+        No new env var: KANNA_CLAUDE_DRIVER already selects the path.
+
+  - type: checkboxes
+    id: gates
+    attributes:
+      label: Implementation gates (for whoever picks this up)
+      description: >-
+        Left unchecked on purpose — the implementer ticks these off. They are the repo's merge
+        conditions, not extra work you need to do. Full rules in
+        [CLAUDE.md](https://github.com/cuongtranba/kanna/blob/main/CLAUDE.md).
+      options:
+        - label: "`/c3 query <area>` run before coding; `/c3 change` run after if component boundaries, refs, or contracts moved"
+        - label: "Failing test written first, then the fix — `bun run test src/<path>.test.ts` (never bare `bun test`)"
+        - label: "`bun run typecheck` (TS7), `bun run lint` (`--max-warnings=0`), `bunx ast-grep test`, `bun run lint:usestate` all green"
+        - label: "`bun run check:arch` and `bun run lint:limits` green — the architecture budget is a ratchet, not a suggestion"
+        - label: "`bun run test` green — full suite, not just the new case"
+        - label: "UI changes follow `DESIGN.md` (token classes only, no hex, no backdrop-blur, project Tooltip over native `title`)"
+        - label: "Docs updated where behaviour changed — wiki page, `CLAUDE.md`, or `.c3/` docs in the same PR"
+        - label: "PR title is a conventional commit (`fix: …`) — release-please derives the changelog from it"
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and this is not a duplicate.
+          required: true
+        - label: I reproduced this on the latest released version.
+          required: true
+        - label: I removed tokens, API keys, and other secrets from everything I pasted above.
+          required: true

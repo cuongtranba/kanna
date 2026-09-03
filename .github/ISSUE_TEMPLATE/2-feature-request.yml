@@ -1,0 +1,241 @@
+name: Feature request
+description: Propose new behaviour, in enough detail that a coding agent can implement it without re-deciding the design.
+title: "feat: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A feature request an agent can implement leaves **no open design decisions**. Say what the user
+        should be able to do, what the boundaries are, and how anyone can tell it works. Where you do not
+        want to decide something, say so explicitly — an unmarked gap gets filled by a guess.
+
+        - Title convention: `feat: <what a user can now do>`, or `feat(<scope>): …` — e.g. `feat(topics): add bulk selection and delete action`.
+        - Search [existing issues](https://github.com/cuongtranba/kanna/issues?q=is%3Aissue) first — this may already be proposed.
+        - Kanna is opinionated. A request that cuts across the architecture in [CLAUDE.md](https://github.com/cuongtranba/kanna/blob/main/CLAUDE.md) or the design system in [DESIGN.md](https://github.com/cuongtranba/kanna/blob/main/DESIGN.md) needs to argue for that, not around it.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: >-
+        The situation that makes this worth building — who hits it, when, and what it costs them today.
+        Write the problem, not the solution; the solution has its own field.
+      placeholder: |
+        Long-running chats accumulate dozens of turns. Finding the message where a decision was made means
+        scrolling the whole transcript, and there is no way to mark it — so the same passage gets hunted
+        for repeatedly across a session.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: >-
+        Best guess is fine — it decides which C3 component doc the implementer loads first
+        (`/c3 query <id>`). Pick "Not sure" rather than guessing wildly.
+      options:
+        - "Chat & transcript (c3-112, c3-113, c3-114)"
+        - "Composer, editor & chat chrome (c3-115)"
+        - "Sidebar, projects & topics (c3-111, c3-117)"
+        - "Settings page (c3-116)"
+        - "Boards / kanban (c3-119, c3-232, c3-310)"
+        - "Cron & scheduled jobs (c3-120, c3-233, c3-311)"
+        - "Terminal workspace (c3-118, c3-216)"
+        - "Sessions, turns & agent coordinator (c3-210)"
+        - "Claude driver — SDK or PTY (c3-210, src/server/claude-pty)"
+        - "Codex provider (c3-211)"
+        - "OpenRouter, provider catalog & models (c3-212, c3-230)"
+        - "Subagents, loops & workflows (c3-210, src/server/loop-template.ts)"
+        - "Kanna MCP tools (c3-226, c3-303)"
+        - "WebSocket protocol, events & read models (c3-205, c3-206, c3-207, c3-208, c3-302)"
+        - "Auth, OAuth token pool & session sharing (c3-203, c3-224, c3-218, c3-228)"
+        - "CLI, install, self-update & release (c3-201, c3-219, c3-237)"
+        - "Telemetry, performance & memory (OTel, perf-alert)"
+        - "Design system / theming (DESIGN.md, src/index.css)"
+        - "Docs & wiki"
+        - "Not sure"
+    validations:
+      required: true
+
+  - type: textarea
+    id: current_behaviour
+    attributes:
+      label: What happens today
+      description: >-
+        The closest thing Kanna already does, and why it falls short. This is the field that prevents a
+        rebuild of something that exists under another name — name the feature or setting you tried.
+      placeholder: |
+        Browser find (⌘F) only searches rendered DOM, so it misses collapsed tool calls and virtualised
+        rows. Session share links address a whole session, never a single message.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behaviour
+      description: >-
+        What the user does and what they see, step by step. Be concrete about entry points — which screen,
+        which control, what state it has. Vagueness here is where implementations diverge from intent.
+      placeholder: |
+        1. Each assistant message gets a pin action in its hover toolbar.
+        2. Pinning adds the message to a per-chat pinned list; the icon fills to show pinned state.
+        3. A "Pinned" panel opens from the chat header, lists pinned messages newest-first with a two-line
+           excerpt, and clicking one scrolls the transcript to it and highlights it briefly.
+        4. Pins survive reload and server restart, and are scoped per chat.
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: In scope / deliberately not doing
+      description: >-
+        Explicit non-goals are the highest-value lines in this form — they stop a feature from growing a
+        second feature during implementation. Name the adjacent, more automatic thing someone will propose,
+        and why it is wrong.
+      placeholder: |
+        In scope: pinning assistant and user messages, per-chat pinned panel, persistence across restart.
+        Out of scope: cross-chat pin search, pin sharing via session share links, exporting pins.
+        Deliberately NOT doing: auto-pinning messages that contain code blocks. The user decides what
+        mattered; a heuristic would fill the panel with noise and make it worthless.
+    validations:
+      required: true
+
+  - type: textarea
+    id: placement
+    attributes:
+      label: Where it goes, and what you rejected
+      description: >-
+        Optional, and what makes a feature implementable rather than merely agreed. Name the file,
+        component, or layer — and the places it does NOT go, with reasons. Each rejection is a review
+        comment that now never has to be written.
+      placeholder: |
+        Chat header control cluster (src/client/components/chat-ui/ChatNavbar.tsx) — that group already
+        holds every session-scoped affordance.
+        - Rejected — chat footer: those controls are per-turn model options, not durable chat state.
+        - Rejected — Settings page: wrong altitude, and two navigations from the moment the user wants it.
+
+  - type: textarea
+    id: contract
+    attributes:
+      label: Spec — interfaces and data
+      description: >-
+        Optional but decisive — anything that crosses a boundary and therefore cannot be decided silently:
+        new event kinds, WS messages, settings, env vars, MCP tools, persisted shape, migration of existing data.
+      placeholder: |
+        - New event kind `message_pinned` / `message_unpinned` in c3-205, appended to the chat's event log.
+        - Read model: `pinnedMessages(chatId)` in c3-207, derived — no new table.
+        - WS: extend the existing chat subscription payload rather than adding a channel.
+        - No new env var. No migration needed: absent events read as "no pins".
+
+  - type: textarea
+    id: ui
+    attributes:
+      label: UI and design notes
+      description: >-
+        For anything user-visible. Mockups, screenshots, or references to existing Kanna surfaces to match.
+        `DESIGN.md` is mandatory for `src/client/**` — token classes only, no raw hex, no glassmorphism,
+        project Tooltip instead of a native `title`.
+      placeholder: |
+        Reuse the hover toolbar from the copy action. Pin icon uses `text-muted-foreground`, filled to
+        `text-foreground` when pinned. Panel matches the diff panel's surface and width. No new colour.
+
+  - type: textarea
+    id: trap
+    attributes:
+      label: The case a naive implementation gets wrong
+      description: >-
+        Optional, and usually the most valuable thing an investigation turns up: the interaction that makes
+        the obvious implementation fail at exactly the case that motivated the feature. If you found one,
+        name it and point at the code.
+      placeholder: |
+        Virtualised rows: a pinned message that is not currently mounted has no DOM node to scroll to, so
+        an anchor-based jump silently does nothing on precisely the long chats this feature is for.
+        `@legendapp/list` exposes an index-based scroll that solves it.
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: >-
+        Observable, checkable statements that are true when this is done. These become the tests, so write
+        behaviour and not implementation. Include the edge cases you care about.
+      placeholder: |
+        - [ ] Pinning a message adds it to the pinned panel without a reload.
+        - [ ] Unpinning removes it, and the pin icon returns to its unfilled state.
+        - [ ] Pins survive a page reload and a server restart.
+        - [ ] Clicking a pinned entry scrolls the transcript to that message even when it is far off-screen.
+        - [ ] A chat with no pins shows an empty-state, not an empty panel.
+        - [ ] Deleting a chat drops its pins.
+    validations:
+      required: true
+
+  - type: textarea
+    id: test_plan
+    attributes:
+      label: Test plan
+      description: >-
+        This repo is test-driven. Which suites should cover it — server domain, client store, or an e2e
+        flow in `e2e/`? Name what cannot be covered automatically and how it should be checked by hand.
+      placeholder: |
+        Server: event append + read-model derivation in src/server/<...>.test.ts, including restart replay.
+        Client: store action tests, plus renderForLoopCheck on the panel (it mounts with effects).
+        Manual: scroll-to-message behaviour on a 500-turn chat.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: size
+    attributes:
+      label: Rough size
+      description: A guess is fine — it only affects whether this gets split before anyone starts.
+      options:
+        - "Small — one surface, no new persisted data"
+        - "Medium — a few files across client and server"
+        - "Large — new component, new persisted data, or a migration"
+        - "No idea"
+    validations:
+      required: true
+
+  - type: textarea
+    id: risks
+    attributes:
+      label: Risks, compatibility and rollout
+      description: >-
+        Optional. Backwards compatibility, data migration, performance on large chats, security or secret
+        handling, and whether this should ship behind a `KANNA_*` flag while it settles.
+      placeholder: |
+        Reading pins on every transcript render could cost on 1000-turn chats — derive once per chat load.
+        Old clients ignore unknown event kinds, so no flag is needed.
+
+  - type: checkboxes
+    id: gates
+    attributes:
+      label: Implementation gates (for whoever picks this up)
+      description: >-
+        Left unchecked on purpose — the implementer ticks these off. They are the repo's merge
+        conditions, not extra work you need to do. Full rules in
+        [CLAUDE.md](https://github.com/cuongtranba/kanna/blob/main/CLAUDE.md).
+      options:
+        - label: "`/c3 query <area>` run before coding; `/c3 change` run after if component boundaries, refs, or contracts moved"
+        - label: "Tests written before the implementation, covering every acceptance criterion above"
+        - label: "`bun run typecheck` (TS7), `bun run lint` (`--max-warnings=0`), `bunx ast-grep test`, `bun run lint:usestate` all green"
+        - label: "`bun run check:arch` and `bun run lint:limits` green — the architecture budget is a ratchet, not a suggestion"
+        - label: "`bun run test` green — full suite, not just the new cases (never bare `bun test`)"
+        - label: "Side-effect seal respected — new IO lives in a `*.adapter.ts` or behind a port, never inline in domain code"
+        - label: "UI follows `DESIGN.md` (token classes only, no hex, no backdrop-blur, project Tooltip over native `title`); new store selectors return stable references"
+        - label: "Docs updated in the same PR — wiki page, `CLAUDE.md`, `DESIGN.md`, or `.c3/` docs as applicable"
+        - label: "PR title is a conventional commit (`feat: …`) — release-please derives the changelog from it"
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and this is not a duplicate.
+          required: true
+        - label: This is one feature, not several — separate requests are easier to implement and review.
+          required: true
