@@ -298,13 +298,13 @@ function BoardColumnView({
         <span
           className={cn(
             "ml-auto font-mono text-xs tabular-nums",
-            overLimit ? "text-warning" : "text-muted-foreground",
+            overLimit ? "text-warning-text" : "text-muted-foreground",
           )}
         >
           {isStart && newCount > 0 ? (
             <>
               {total}
-              <span className="text-info"> · {newCount} new</span>
+              <span className="text-info-text"> · {newCount} new</span>
             </>
           ) : (
             total
@@ -435,7 +435,7 @@ function BoardCard({
               {card.title}
             </span>
             {isNew ? (
-              <span className="mt-1 flex items-center gap-1 text-xs text-info">
+              <span className="mt-1 flex items-center gap-1 text-xs text-info-text">
                 <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-info" />
                 <span>New</span>
               </span>

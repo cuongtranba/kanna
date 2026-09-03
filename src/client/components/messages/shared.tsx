@@ -229,7 +229,7 @@ function MetaCodeBlockInner({
           )}
           onClick={handleCopy}
         >
-          {copied ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-4 w-4" />}
+          {copied ? <Check className="h-3.5 w-3.5 text-success-text" /> : <Copy className="h-4 w-4" />}
         </Button>
       </div>
     </div>
@@ -336,7 +336,7 @@ function PreBlockInner({
         )}
         onClick={handleCopy}
       >
-        {copied ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
+        {copied ? <Check className="h-4 w-4 text-success-text" /> : <Copy className="h-4 w-4" />}
       </Button>
     </div>
   )

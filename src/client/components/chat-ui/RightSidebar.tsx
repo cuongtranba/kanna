@@ -383,7 +383,7 @@ function GitHubPublishModal({
               className={cn(
                 "flex size-6 items-center justify-center rounded-md",
                 availability.available
-                  ? "text-success"
+                  ? "text-success-text"
                   : "text-destructive"
               )}
             >
@@ -746,9 +746,9 @@ function MergeBranchModal({
   let previewStatusIcon: ReactNode
   if (preview) {
     if (preview.status === "up_to_date") {
-      previewStatusIcon = <Check className="mt-1 size-3.5 shrink-0 text-success" />
+      previewStatusIcon = <Check className="mt-1 size-3.5 shrink-0 text-success-text" />
     } else if (preview.status === "conflicts") {
-      previewStatusIcon = <AlertTriangle className="mt-1 size-3.5 shrink-0 text-warning" />
+      previewStatusIcon = <AlertTriangle className="mt-1 size-3.5 shrink-0 text-warning-text" />
     } else if (preview.status === "mergeable") {
       previewStatusIcon = <GitBranchPlus className="mt-1 size-3.5 shrink-0 text-muted-foreground" />
     } else {
@@ -1298,7 +1298,7 @@ function DiffFileCard({
             </div>
             <div className="flex shrink-0 items-center gap-2 select-none">
               <span className="whitespace-nowrap text-xs font-mono">
-                {file.additions > 0 ? <span className="text-success">+{file.additions}</span> : null}
+                {file.additions > 0 ? <span className="text-success-text">+{file.additions}</span> : null}
                 {file.deletions > 0 ? (
                   <span className={file.additions > 0 ? "ml-2 text-destructive" : "text-destructive"}>
                     -{file.deletions}
