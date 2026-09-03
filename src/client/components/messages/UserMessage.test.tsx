@@ -40,11 +40,14 @@ describe("UserMessage plate", () => {
     expect(html).toContain('aria-hidden="true"')
   })
 
-  test("stacks the speaker above the text on a narrow measure", () => {
-    // A fixed 48px gutter is a large fraction of a 390px viewport.
+  test("stacks the speaker above the text, so the prompt starts on the rail", () => {
+    // The gloss belongs in the margin. Spending a 48px gutter plus a gap on it
+    // inside the measure pushed the prompt 60px right of the rail every other
+    // transcript row is measured from — the one thing this plate exists to fix.
     const html = render("hi")
     expect(html).toContain("flex-col")
-    expect(html).toContain("sm:flex-row")
+    expect(html).not.toContain("sm:flex-row")
+    expect(html).not.toContain("sm:w-12")
   })
 
   test("uses token colours, never a literal one", () => {

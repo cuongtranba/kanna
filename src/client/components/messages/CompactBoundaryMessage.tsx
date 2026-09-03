@@ -1,30 +1,51 @@
-function ZigZagLine({ size = 4 }: { size?: number }) {
+import { useId } from "react"
+
+/**
+ * One chevron of the rule, in CSS pixels. The tile is drawn 1:1 in user units
+ * with no viewBox: the previous rule squashed a `0 0 100 4` box across the full
+ * measure with `preserveAspectRatio="none"`, which scaled x by ~8 and y by 1
+ * and collapsed its 0.5 stroke to well under one device pixel. It was in the
+ * DOM the entire time and could not be seen.
+ */
+const TILE_WIDTH = 8
+const TILE_HEIGHT = 6
+
+function ZigZagLine() {
+  // A transcript holds many boundaries and each draws two rules, so a shared
+  // id would make every rect resolve to whichever pattern is first in the
+  // document rather than its own.
+  const patternId = `zigzag-${useId().replace(/[^a-zA-Z0-9]/g, "")}`
   return (
-    <svg className="flex-1" viewBox={`0 0 100 ${size}`} preserveAspectRatio="none" style={{ height: `${size}px` }}>
-      <pattern id="zigzag" width={size} height={size} patternUnits="userSpaceOnUse">
-        <path d={`M0 ${size} L${size / 2} 0 L${size} ${size}`} fill="none" stroke="currentColor" strokeWidth="0.5" className="text-muted-foreground/30" style={{ stroke: 'currentColor' }} />
+    <svg aria-hidden className="flex-1 text-border" height={TILE_HEIGHT}>
+      <pattern id={patternId} width={TILE_WIDTH} height={TILE_HEIGHT} patternUnits="userSpaceOnUse">
+        <path
+          d={`M0 ${TILE_HEIGHT - 1} L${TILE_WIDTH / 2} 1 L${TILE_WIDTH} ${TILE_HEIGHT - 1}`}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
       </pattern>
-      <rect width="100%" height={size} fill="url(#zigzag)" className="text-muted-foreground/30" />
+      <rect width="100%" height={TILE_HEIGHT} fill={`url(#${patternId})`} />
     </svg>
   )
 }
 
-export function CompactBoundaryMessage() {
+function BoundaryRule({ label }: { label: string }) {
   return (
     <div className="flex items-center gap-3">
       <ZigZagLine />
-      <span className="text-xs tracking-widest text-muted-foreground flex-shrink-0">Compacted</span>
+      <span className="text-xs tracking-widest text-muted-foreground flex-shrink-0">{label}</span>
       <ZigZagLine />
     </div>
   )
 }
 
+export function CompactBoundaryMessage() {
+  return <BoundaryRule label="Compacted" />
+}
+
 export function ContextClearedMessage() {
-  return (
-    <div className="flex items-center gap-3">
-      <ZigZagLine />
-      <span className="text-xs tracking-widest text-muted-foreground flex-shrink-0">Context Cleared</span>
-      <ZigZagLine />
-    </div>
-  )
+  return <BoundaryRule label="Context Cleared" />
 }
