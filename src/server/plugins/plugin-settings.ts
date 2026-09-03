@@ -132,3 +132,38 @@ export function normalizePluginSettings<T>(value: T, warnings: string[]): Plugin
   }
   return { enabled: value.enabled === true }
 }
+
+/**
+ * The plugin slice of `AppSettingsSnapshot`, normalized in one call.
+ *
+ * Exists so `app-settings.ts` spends two lines on this feature instead of
+ * eight. That file is a listed oversized module sitting EXACTLY on its
+ * architecture-budget ceiling, so every line a feature adds there has to be
+ * paid for by shrinking something else — the plugin system owns its own
+ * settings shape, so it owns the normalization and the patch merge too.
+ */
+export function normalizePluginState<T>(
+  source: T,
+  warnings: string[],
+): { plugins: PluginSettings; installedPlugins: InstalledPluginConfig[] } {
+  // Generic + `isRecord` rather than an `unknown`-typed parameter: this repo
+  // bans the `unknown` keyword outside `toError`.
+  const src = isRecord(source) ? source : undefined
+  return {
+    plugins: normalizePluginSettings(src?.plugins, warnings),
+    installedPlugins: normalizeInstalledPlugins(src?.installedPlugins, warnings),
+  }
+}
+
+/** Fold an `AppSettingsPatch`'s plugin arms over current state. Counterpart of `normalizePluginState`. */
+export function mergePluginPatch(
+  state: { plugins: PluginSettings; installedPlugins: readonly InstalledPluginConfig[] },
+  patch: { plugins?: Partial<PluginSettings>; installedPlugins?: InstalledPluginsPatch },
+): { plugins: PluginSettings; installedPlugins: InstalledPluginConfig[] } {
+  return {
+    plugins: { ...state.plugins, ...patch.plugins },
+    installedPlugins: patch.installedPlugins
+      ? applyAppSettingsPatchForTest(state.installedPlugins, patch.installedPlugins)
+      : [...state.installedPlugins],
+  }
+}
