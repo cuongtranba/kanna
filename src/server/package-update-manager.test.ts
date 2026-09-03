@@ -422,6 +422,77 @@ describe("PackageUpdateManager", () => {
     })
   })
 
+  describe("checkEnabled master switch", () => {
+    test("start() does not register timer when checkEnabled is false", () => {
+      const timer = makeTimer()
+      const deps = makeDeps({
+        timer,
+        settings: makeSettings({ checkEnabled: false }),
+      })
+      const mgr = new PackageUpdateManager(deps)
+      mgr.start()
+      expect(timer.ticks).toHaveLength(0)
+    })
+
+    test("timer tick is skipped when checkEnabled is false at tick time", async () => {
+      let enabled = true
+      let callCount = 0
+      const timer = makeTimer()
+      const deps = makeDeps({
+        timer,
+        settings: () => ({ ...PACKAGE_UPDATE_SETTINGS_DEFAULTS, checkEnabled: enabled }),
+        inventory: async () => {
+          callCount++
+          return { packages: [], errors: [], readAt: 100 }
+        },
+      })
+      const mgr = new PackageUpdateManager(deps)
+      mgr.start()
+      expect(timer.ticks).toHaveLength(1)
+
+      // tick while enabled — should check
+      timer.ticks[0]()
+      await new Promise<void>((r) => setTimeout(r, 0))
+      expect(callCount).toBe(1)
+
+      // disable and tick again — should skip
+      enabled = false
+      timer.ticks[0]()
+      await new Promise<void>((r) => setTimeout(r, 0))
+      expect(callCount).toBe(1)
+    })
+
+    test("checkUpdates() returns idle snapshot without running check when checkEnabled is false", async () => {
+      let callCount = 0
+      const deps = makeDeps({
+        settings: makeSettings({ checkEnabled: false }),
+        inventory: async () => {
+          callCount++
+          return { packages: [], errors: [], readAt: 100 }
+        },
+      })
+      const mgr = new PackageUpdateManager(deps)
+      const snap = await mgr.checkUpdates()
+      expect(callCount).toBe(0)
+      expect(snap.status).toBe("idle")
+      expect(snap.lastCheckedAt).toBeNull()
+    })
+
+    test("checkUpdates({ force: true }) runs even when checkEnabled is false", async () => {
+      let callCount = 0
+      const deps = makeDeps({
+        settings: makeSettings({ checkEnabled: false }),
+        inventory: async () => {
+          callCount++
+          return { packages: [], errors: [], readAt: 100 }
+        },
+      })
+      const mgr = new PackageUpdateManager(deps)
+      await mgr.checkUpdates({ force: true })
+      expect(callCount).toBe(1)
+    })
+  })
+
   describe("auto-apply", () => {
     test("off by default — no apply calls when autoApply is false", async () => {
       const pkg = makePkg("skill:foo")
