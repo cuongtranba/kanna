@@ -47,8 +47,6 @@ export interface TranscriptActionsContextValue {
   workflowRuns?: WorkflowRunSummary[]
   backgroundTasks?: ChatBackgroundTask[]
   getWorkflowRunDetail?: (runId: string) => Promise<WorkflowRun | null>
-  onCronPause?: (jobId: string) => void
-  onCronResume?: (jobId: string) => void
   localPath: string | null | undefined
   latestToolIds: KannaState["latestToolIds"]
   isProcessing: boolean

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { renderToStaticMarkup } from "react-dom/server"
-import type { CronJobSnapshot } from "../../shared/cron/types"
+import type { CronJobSnapshot, CronRunSnapshot } from "../../shared/cron/types"
 import { CronJobsSection } from "./CronJobsSection"
 
 function job(overrides: Partial<CronJobSnapshot> = {}): CronJobSnapshot {
@@ -19,31 +19,24 @@ function job(overrides: Partial<CronJobSnapshot> = {}): CronJobSnapshot {
   }
 }
 
-const noop = () => {}
+/** `lastRun` drives the pills; `recentRuns` drives the in-flight predicate. */
+function withRun(run: CronRunSnapshot, overrides: Partial<CronJobSnapshot> = {}): CronJobSnapshot {
+  return job({ lastRun: run, recentRuns: [run], ...overrides })
+}
+
+function render(jobs: readonly CronJobSnapshot[]): string {
+  return renderToStaticMarkup(<CronJobsSection jobs={jobs} chatId="chat-1" />)
+}
 
 describe("CronJobsSection — schedule vs. run status display model", () => {
   test("active job with lastRun running shows Running badge", () => {
-    const html = renderToStaticMarkup(
-      <CronJobsSection
-        jobs={[job({ lastRun: { runId: "r1", firedAt: 2_000, status: "running" } })]}
-        onPause={noop}
-        onResume={noop}
-        onRemove={noop}
-      />,
-    )
+    const html = render([withRun({ runId: "r1", firedAt: 2_000, status: "running" })])
     expect(html).toContain("Running")
     expect(html).not.toContain("Paused")
   })
 
   test("paused job shows Paused as primary indicator before any run status", () => {
-    const html = renderToStaticMarkup(
-      <CronJobsSection
-        jobs={[job({ paused: true, lastRun: { runId: "r1", firedAt: 2_000, status: "running" } })]}
-        onPause={noop}
-        onResume={noop}
-        onRemove={noop}
-      />,
-    )
+    const html = render([withRun({ runId: "r1", firedAt: 2_000, status: "running" }, { paused: true })])
     expect(html).toContain("Paused")
     const pausedIdx = html.indexOf("Paused")
     const runningIdx = html.indexOf("Running")
@@ -52,117 +45,86 @@ describe("CronJobsSection — schedule vs. run status display model", () => {
   })
 
   test("paused job does not say 'running for'", () => {
-    const html = renderToStaticMarkup(
-      <CronJobsSection
-        jobs={[job({ paused: true })]}
-        onPause={noop}
-        onResume={noop}
-        onRemove={noop}
-      />,
-    )
-    expect(html).not.toContain("running for")
+    expect(render([job({ paused: true })])).not.toContain("running for")
   })
 
   test("active job with no lastRun does not say 'running for'", () => {
-    const html = renderToStaticMarkup(
-      <CronJobsSection
-        jobs={[job({ paused: false, lastRun: null })]}
-        onPause={noop}
-        onResume={noop}
-        onRemove={noop}
-      />,
-    )
-    expect(html).not.toContain("running for")
+    expect(render([job({ paused: false, lastRun: null })])).not.toContain("running for")
   })
 
   test("active job with lastRun skipped does not say 'running for'", () => {
-    const html = renderToStaticMarkup(
-      <CronJobsSection
-        jobs={[job({ paused: false, lastRun: { runId: "r1", firedAt: 2_000, status: "skipped" } })]}
-        onPause={noop}
-        onResume={noop}
-        onRemove={noop}
-      />,
-    )
+    const html = render([withRun({ runId: "r1", firedAt: 2_000, status: "skipped" })])
     expect(html).not.toContain("running for")
   })
 
   test("active job with lastRun completed does not say 'running for'", () => {
-    const html = renderToStaticMarkup(
-      <CronJobsSection
-        jobs={[job({ paused: false, lastRun: { runId: "r1", firedAt: 2_000, status: "completed" } })]}
-        onPause={noop}
-        onResume={noop}
-        onRemove={noop}
-      />,
-    )
+    const html = render([withRun({ runId: "r1", firedAt: 2_000, status: "completed" })])
     expect(html).not.toContain("running for")
   })
 
   test("active job with lastRun failed does not say 'running for'", () => {
-    const html = renderToStaticMarkup(
-      <CronJobsSection
-        jobs={[job({ paused: false, lastRun: { runId: "r1", firedAt: 2_000, status: "failed" } })]}
-        onPause={noop}
-        onResume={noop}
-        onRemove={noop}
-      />,
-    )
+    const html = render([withRun({ runId: "r1", firedAt: 2_000, status: "failed" })])
     expect(html).not.toContain("running for")
   })
 
   test("active job with lastRun running shows 'running for' derived from firedAt not armedAt", () => {
-    // armedAt=1_000, firedAt=5_000, now=65_000
-    // elapsed from armedAt = 64_000 ms ≈ 1m 4s
-    // elapsed from firedAt = 60_000 ms = 1m 0s
-    // These two values differ, so we can verify which one is rendered
-    const html = renderToStaticMarkup(
-      <CronJobsSection
-        jobs={[
-          job({
-            paused: false,
-            armedAt: 1_000,
-            lastRun: { runId: "r1", firedAt: 5_000, status: "running" },
-          }),
-        ]}
-        onPause={noop}
-        onResume={noop}
-        onRemove={noop}
-      />,
-    )
+    // armedAt=1_000, firedAt=5_000: the two elapsed values differ, so the
+    // presence of "running for" pins which one the row is measuring from.
+    const html = render([
+      withRun({ runId: "r1", firedAt: 5_000, status: "running" }, { paused: false, armedAt: 1_000 }),
+    ])
     expect(html).toContain("running for")
-    // armedAt-based value would be different from firedAt-based value
-    // The test runs at a fixed "now" from renderToStaticMarkup with the real clock,
-    // so we can only assert presence and that "running for" appears in the output.
-    // The key invariant: when armedAt !== firedAt, the two elapsed values differ.
-    // Verify the component renders SOME "running for" value (it does only for running status).
-    const runningForIdx = html.indexOf("running for")
-    expect(runningForIdx).toBeGreaterThanOrEqual(0)
   })
 
   test("paused job with running lastRun labels the run status separately", () => {
-    const html = renderToStaticMarkup(
-      <CronJobsSection
-        jobs={[job({ paused: true, lastRun: { runId: "r1", firedAt: 2_000, status: "running" } })]}
-        onPause={noop}
-        onResume={noop}
-        onRemove={noop}
-      />,
-    )
+    const html = render([withRun({ runId: "r1", firedAt: 2_000, status: "running" }, { paused: true })])
     expect(html).toContain("Last run:")
     expect(html).toContain("Running")
   })
 
   test("resumed (active) job with completed lastRun shows Completed badge, no Paused", () => {
-    const html = renderToStaticMarkup(
-      <CronJobsSection
-        jobs={[job({ paused: false, lastRun: { runId: "r1", firedAt: 2_000, status: "completed" } })]}
-        onPause={noop}
-        onResume={noop}
-        onRemove={noop}
-      />,
-    )
+    const html = render([withRun({ runId: "r1", firedAt: 2_000, status: "completed" })])
     expect(html).toContain("Completed")
     expect(html).not.toContain("Paused")
+  })
+})
+
+describe("CronJobsSection — edit affordance", () => {
+  test("every row offers an edit control", () => {
+    expect(render([job()])).toContain('aria-label="Edit cron job cron-abc"')
+  })
+
+  test("edit is marked unavailable while a run is in flight, and says why", () => {
+    // The server refuses `update` mid-run and reports it as a
+    // cron_command_error in the arming chat, which the /cron page never shows.
+    // The reason has to ride the accessible NAME: Radix mounts tooltip content
+    // only while open, so a hover-only explanation reaches no screen reader.
+    const html = render([withRun({ runId: "r1", firedAt: 2_000, status: "running" })])
+    expect(html).toContain('aria-disabled="true"')
+    expect(html).toContain("cannot edit while a run is in flight")
+  })
+
+  test("a settled run leaves edit available", () => {
+    const html = render([withRun({ runId: "r1", firedAt: 2_000, status: "completed" })])
+    expect(html).toContain('aria-disabled="false"')
+    expect(html).not.toContain("cannot edit while a run is in flight")
+  })
+
+  test("a skipped run is looked past — the job is not actually running", () => {
+    const html = renderToStaticMarkup(
+      <CronJobsSection
+        jobs={[
+          job({
+            lastRun: { runId: "r2", firedAt: 3_000, status: "skipped" },
+            recentRuns: [
+              { runId: "r2", firedAt: 3_000, status: "skipped" },
+              { runId: "r1", firedAt: 2_000, status: "completed" },
+            ],
+          }),
+        ]}
+        chatId="chat-1"
+      />,
+    )
+    expect(html).toContain('aria-disabled="false"')
   })
 })

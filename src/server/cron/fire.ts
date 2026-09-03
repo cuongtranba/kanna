@@ -23,10 +23,10 @@
  */
 
 import type { ChatAttachment } from "../../shared/types"
-import type { CronJobSnapshot, CronRunSnapshot, CronRunTag } from "../../shared/cron/types"
+import { hasActiveRun, type CronJobSnapshot, type CronRunSnapshot, type CronRunTag } from "../../shared/cron/types"
 import type { SendMessageOptions } from "../claude-steer-log"
 import { AUTO_CONTINUE_EVENT_VERSION } from "../auto-continue/events"
-import { deriveCronJobs, findRunningCronRuns, hasActiveRun } from "./read-model"
+import { deriveCronJobs, findRunningCronRuns } from "./read-model"
 import { emitCronEvent, appendCronEntry, type CronCommandDeps } from "./commands"
 import type { CoalescedSkipReason, CronSkipCoalescerPort } from "./skip-coalescer"
 

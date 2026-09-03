@@ -164,9 +164,6 @@ export const ChatTranscriptViewport = memo(({
     onSubagentExitPlanModeSubmit,
     schedules,
     cronJobs,
-    onCronPause,
-    onCronResume,
-    onCronRemove,
     onAutoContinueAccept,
     tunnels,
     liveTunnelId,
@@ -466,14 +463,9 @@ export const ChatTranscriptViewport = memo(({
           />
         </div>
       ) : null}
-      {cronJobs.length > 0 && onCronPause && onCronResume && onCronRemove ? (
+      {activeChatId && cronJobs.length > 0 ? (
         <div className="pb-4">
-          <CronJobsSection
-            jobs={cronJobs}
-            onPause={onCronPause}
-            onResume={onCronResume}
-            onRemove={onCronRemove}
-          />
+          <CronJobsSection jobs={cronJobs} chatId={activeChatId} />
         </div>
       ) : null}
       {workflowRuns && workflowRuns.length > 0 && getWorkflowRunDetail ? (

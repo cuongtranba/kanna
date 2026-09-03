@@ -299,6 +299,10 @@ c3-310:
 c3-120:
   - src/client/app/CronJobsPage.tsx
   - src/client/app/CronJobsSection.tsx
+  - src/client/app/CronJobRow.tsx
+  - src/client/app/CronJobRow.store.ts
+  - src/client/app/CronJobEditDialog.tsx
+  - src/client/app/CronJobEditDialog.store.ts
   - src/client/components/messages/CronArmedMessage.tsx
   - src/client/components/messages/CronCommandErrorMessage.tsx
   - src/client/components/messages/CronJobChangeMessage.tsx

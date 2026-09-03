@@ -154,15 +154,6 @@ export function hasUnpausedCronJob(events: readonly AutoContinueEvent[], chatId:
   return false
 }
 
-/** The job's most recent real run is still in flight (overlap guard). */
-export function hasActiveRun(job: CronJobSnapshot): boolean {
-  for (const run of job.recentRuns) {
-    if (run.status === "skipped") continue
-    return run.status === "running"
-  }
-  return false
-}
-
 /**
  * Scans the full, unbounded event log and returns every run that has a
  * `cron_run_started` but no `cron_run_outcome`. Used by boot reconciliation
