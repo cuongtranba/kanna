@@ -578,7 +578,7 @@ export const ChatTranscriptViewport = memo(({
           extraData={{ toolGroupExpanded, schedules, tunnels, liveTunnelId }}
           keyExtractor={keyExtractor}
           renderItem={renderItem}
-          estimatedItemSize={96}
+          estimatedItemSize={48}
           initialScrollAtEnd
           maintainScrollAtEnd
           maintainScrollAtEndThreshold={0.1}
