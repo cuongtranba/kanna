@@ -11,6 +11,7 @@ import {
   CLOUDFLARE_TUNNEL_DEFAULTS,
   DEFAULT_OPENROUTER_SDK_MODEL,
   PACKAGE_UPDATE_SETTINGS_DEFAULTS,
+  PLUGIN_SETTINGS_DEFAULTS,
   PUSH_DEFAULTS,
   TELEMETRY_DEFAULTS,
   TYPOGRAPHY_DEFAULTS,
@@ -60,6 +61,8 @@ function makeSnapshot(): AppSettingsSnapshot {
     shareDefaultTtlHours: 24,
     subagentRuntime: { runTimeoutMs: 600_000, defaultLoopSubagentId: null },
     packageUpdates: { ...PACKAGE_UPDATE_SETTINGS_DEFAULTS },
+    plugins: PLUGIN_SETTINGS_DEFAULTS,
+    installedPlugins: [],
   }
 }
 

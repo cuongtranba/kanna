@@ -32,12 +32,16 @@ import {
   UPLOAD_MAX_FILE_SIZE_MB_MAX,
   UPLOAD_MAX_FILE_SIZE_MB_MIN,
 } from "./settings/uploads"
+import type { InstalledPluginConfig, PluginSettings } from "./plugins/settings"
+import { PLUGIN_SETTINGS_DEFAULTS } from "./plugins/settings"
 export type {
   AuthSettings,
   CloudflareTunnelMode,
   CloudflareTunnelRecord,
   CloudflareTunnelSettings,
   CloudflareTunnelState,
+  InstalledPluginConfig,
+  PluginSettings,
   PushSettings,
   TelemetrySettings,
   TypographySettings,
@@ -48,6 +52,7 @@ export {
   AUTH_SESSION_MAX_AGE_DAYS_MAX,
   AUTH_SESSION_MAX_AGE_DAYS_MIN,
   CLOUDFLARE_TUNNEL_DEFAULTS,
+  PLUGIN_SETTINGS_DEFAULTS,
   PUSH_DEFAULTS,
   TELEMETRY_DEFAULTS,
   TYPOGRAPHY_DEFAULTS,
@@ -322,6 +327,8 @@ export interface AppSettingsSnapshot {
   shareDefaultTtlHours: number
   subagentRuntime: SubagentRuntimeSettings
   packageUpdates: PackageUpdateSettings
+  plugins: PluginSettings
+  installedPlugins: InstalledPluginConfig[]
 }
 
 /**
@@ -416,6 +423,12 @@ export interface AppSettingsPatch {
   shareDefaultTtlHours?: number
   subagentRuntime?: Partial<SubagentRuntimeSettings>
   packageUpdates?: Partial<PackageUpdateSettings>
+  plugins?: Partial<PluginSettings>
+  installedPlugins?: {
+    create?: { sourceDir: string; id: string }
+    update?: { id: string; patch: { enabled?: boolean } }
+    delete?: { id: string }
+  }
 }
 
 // ---------------------------------------------------------------------------

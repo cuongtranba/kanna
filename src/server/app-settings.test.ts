@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLAUDE_DRIVER_DEFAULTS, CLAUDE_PTY_LIFECYCLE_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, DEFAULT_OPENROUTER_SDK_MODEL, GLOBAL_PROMPT_APPEND_MAX_CHARS, mergeCustomModels, PACKAGE_UPDATE_CHECK_INTERVAL_MAX_MS, PACKAGE_UPDATE_CHECK_INTERVAL_MIN_MS, PACKAGE_UPDATE_SETTINGS_DEFAULTS, PROVIDERS, PUSH_DEFAULTS,
+import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLAUDE_DRIVER_DEFAULTS, CLAUDE_PTY_LIFECYCLE_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, DEFAULT_OPENROUTER_SDK_MODEL, GLOBAL_PROMPT_APPEND_MAX_CHARS, mergeCustomModels, PACKAGE_UPDATE_CHECK_INTERVAL_MAX_MS, PACKAGE_UPDATE_CHECK_INTERVAL_MIN_MS, PACKAGE_UPDATE_SETTINGS_DEFAULTS, PLUGIN_SETTINGS_DEFAULTS, PROVIDERS, PUSH_DEFAULTS,
   TELEMETRY_DEFAULTS, TYPOGRAPHY_DEFAULTS, UPLOAD_DEFAULTS } from "../shared/types"
 import { AppSettingsManager, readAppSettingsSnapshot, seedCustomModelsFromBuiltins } from "./app-settings"
 import type { AppSettingsSnapshot, McpOAuthState, SubagentInput } from "../shared/types"
@@ -95,6 +95,8 @@ function expectedSettingsSnapshot(filePath: string, overrides: Partial<AppSettin
     shareDefaultTtlHours: 24,
     subagentRuntime: { runTimeoutMs: 600_000, defaultLoopSubagentId: null },
     packageUpdates: { ...PACKAGE_UPDATE_SETTINGS_DEFAULTS },
+    plugins: PLUGIN_SETTINGS_DEFAULTS,
+    installedPlugins: [],
     ...overrides,
   }
 }

@@ -87,6 +87,11 @@ export function mergeAppSettingsPatch(
     customMcpServers: settings.customMcpServers,
     customModels: settings.customModels,
     textSnippets: settings.textSnippets,
+    plugins: {
+      ...settings.plugins,
+      ...patch.plugins,
+    },
+    installedPlugins: settings.installedPlugins,
     claudeDriver: {
       preference: patch.claudeDriver?.preference ?? settings.claudeDriver.preference,
       lifecycle: {

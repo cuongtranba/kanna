@@ -108,7 +108,8 @@
     "shell-quote": "^1.8.3",
     "sonner": "^2.0.7",
     "uqr": "^0.1.3",
-    "web-push": "^3.6.7"
+    "web-push": "^3.6.7",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@ast-grep/cli": "0.45.2",

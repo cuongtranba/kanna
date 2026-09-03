@@ -16,6 +16,7 @@ import {
   CLOUDFLARE_TUNNEL_DEFAULTS,
   DEFAULT_OPENROUTER_SDK_MODEL,
   PACKAGE_UPDATE_SETTINGS_DEFAULTS,
+  PLUGIN_SETTINGS_DEFAULTS,
   PUSH_DEFAULTS,
   TELEMETRY_DEFAULTS,
   TYPOGRAPHY_DEFAULTS,
@@ -150,6 +151,16 @@ export function mergeAppSettingsPatch(
     customMcpServers: snapshot.customMcpServers,
     customModels: snapshot.customModels,
     textSnippets: snapshot.textSnippets,
+    plugins: {
+      ...snapshot.plugins,
+      ...patch.plugins,
+    },
+    // Not applied here (CRUD-shaped, like subagents would need but customMcpServers/
+    // customModels/textSnippets above deliberately don't get either): this is the
+    // no-AppSettingsManager fallback path, and AppSettingsManager.applyPatch is the
+    // real writer. Keeping the previous value avoids assigning the patch's
+    // create/update/delete shape onto the snapshot's array field.
+    installedPlugins: snapshot.installedPlugins,
     claudeDriver: {
       preference: patch.claudeDriver?.preference ?? snapshot.claudeDriver.preference,
       lifecycle: {
@@ -234,6 +245,8 @@ export function buildInitialAppSettingsSnapshot(): AppSettingsSnapshot {
     shareDefaultTtlHours: 24,
     subagentRuntime: { runTimeoutMs: 600_000, defaultLoopSubagentId: null },
     packageUpdates: { ...PACKAGE_UPDATE_SETTINGS_DEFAULTS },
+    plugins: PLUGIN_SETTINGS_DEFAULTS,
+    installedPlugins: [],
   }
 }
 

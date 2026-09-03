@@ -11,6 +11,11 @@ import {
 import { getSettingsFilePath } from "../shared/branding"
 import { clampTabMinWidth } from "../shared/pane-tab-width"
 import {
+  applyAppSettingsPatchForTest as applyInstalledPluginsPatch,
+  normalizeInstalledPlugins,
+  normalizePluginSettings,
+} from "./plugins/plugin-settings"
+import {
   normalizeAuthSettings,
   normalizeCloudflareTunnelSettings,
   normalizePushSettings,
@@ -146,6 +151,8 @@ interface AppSettingsFile {
     defaultLoopSubagentId?: string | null
   }
   packageUpdates?: Record<string, unknown>
+  plugins?: Record<string, unknown>
+  installedPlugins?: readonly unknown[]
 }
 
 function isPlainObject<T>(value: T): value is T & Record<string, unknown> {
@@ -966,6 +973,8 @@ function normalizeAppSettings<T>(
   const push = normalizePushSettings(source?.push, warnings)
   const telemetry = normalizeTelemetrySettings(source?.telemetry, warnings)
   const auth = normalizeAuthSettings(source?.auth, warnings)
+  const plugins = normalizePluginSettings(source?.plugins, warnings)
+  const installedPlugins = normalizeInstalledPlugins(source?.installedPlugins, warnings)
   const claudeAuth = normalizeClaudeAuth(source?.claudeAuth, warnings)
   const uploads = normalizeUploadSettings(source?.uploads, warnings)
   const customModels = normalizeCustomModels(source?.customModels, warnings)
@@ -1026,6 +1035,8 @@ function normalizeAppSettings<T>(
     shareDefaultTtlHours,
     subagentRuntime,
     packageUpdates,
+    plugins,
+    installedPlugins,
   }
 
   const filePayload = toFilePayload(state)
@@ -1564,6 +1575,9 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
     ?? state.customModels
   const nextTextSnippets = applyCollectionPatch(state.textSnippets, patch.textSnippets, TEXT_SNIPPET_CRUD)
     ?? state.textSnippets
+  const nextInstalledPlugins = patch.installedPlugins
+    ? applyInstalledPluginsPatch(state.installedPlugins, patch.installedPlugins)
+    : state.installedPlugins
 
   return normalizeAppSettings({
     ...toFilePayload(state),
@@ -1635,6 +1649,11 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
     customMcpServers: nextMcpServers,
     customModels: nextCustomModels,
     textSnippets: nextTextSnippets,
+    plugins: {
+      ...state.plugins,
+      ...patch.plugins,
+    },
+    installedPlugins: nextInstalledPlugins,
     claudeDriver: {
       preference: patch.claudeDriver?.preference ?? state.claudeDriver.preference,
       lifecycle: {

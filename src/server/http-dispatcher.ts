@@ -14,6 +14,7 @@ import {
   handleProjectUploadDelete,
 } from "./http-api-routes"
 import { serveStatic } from "./http-static"
+import { handlePluginRequest } from "./plugin-http-routes"
 
 export interface HttpDispatcherDeps {
   store: EventStore
@@ -47,6 +48,8 @@ function deriveOriginFromUpgrade(req: Request, url: URL): string {
  * - /api/projects/:id/files/* — project file content
  * - /api/local-file — local filesystem read
  * - /api/projects/:id/paths — fuzzy path list
+ * - /api/plugins/* — plugin system HTTP surface (inherits the /api/ auth
+ *   gate above; 404s whole when plugins are globally disabled)
  * - /* — static SPA shell + hashed assets
  */
 export function createHttpDispatcher(
@@ -102,6 +105,13 @@ export function createHttpDispatcher(
 
     if (url.pathname === "/health") {
       return Response.json({ ok: true, port: server.port })
+    }
+
+    if (url.pathname.startsWith("/api/plugins")) {
+      const pluginResponse = await handlePluginRequest(req, url, {
+        globallyEnabled: appSettings.getSnapshot().plugins.enabled,
+      })
+      if (pluginResponse) return pluginResponse
     }
 
     const uploadResponse = await handleProjectUpload(req, url, store, appSettings)
