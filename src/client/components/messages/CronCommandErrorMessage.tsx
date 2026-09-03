@@ -40,7 +40,7 @@ function CronCommandErrorMessageInner({ message }: Props) {
   }, [suggestion, setCopied])
 
   return (
-    <div className="rounded-lg border border-destructive/30 bg-card px-4 py-3">
+    <div className="bg-destructive/10 px-4 py-3">
       <div className="flex items-center gap-2">
         <CalendarX2 className="h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
         <span className="text-sm font-medium text-foreground">Invalid /cron command</span>

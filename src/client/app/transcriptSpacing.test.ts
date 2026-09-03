@@ -4,8 +4,10 @@ import { buildResolvedTranscriptRows } from "./KannaTranscript"
 import {
   TRANSCRIPT_GAP_CLASS,
   TRANSCRIPT_ROW_TONE_BY_MESSAGE_KIND,
+  TRANSCRIPT_RULE_CLASS,
   buildTranscriptGapClassMap,
   getTranscriptGapAboveForTones,
+  transcriptGapHasRule,
   type TranscriptRowTone,
 } from "./transcriptSpacing"
 
@@ -30,9 +32,9 @@ describe("getTranscriptGapAboveForTones", () => {
   })
 
   test("a new user turn gets full separation from what came before", () => {
-    expect(getTranscriptGapAboveForTones("assistant", "user")).toBe(16)
-    expect(getTranscriptGapAboveForTones("tool", "user")).toBe(16)
-    expect(getTranscriptGapAboveForTones("user", "tool")).toBe(16)
+    expect(getTranscriptGapAboveForTones("assistant", "user")).toBe(32)
+    expect(getTranscriptGapAboveForTones("tool", "user")).toBe(32)
+    expect(getTranscriptGapAboveForTones("user", "tool")).toBe(32)
   })
 
   test("stacked user messages stay tight", () => {
@@ -57,12 +59,12 @@ describe("getTranscriptGapAboveForTones", () => {
   })
 
   test("cards fall back to the default rhythm", () => {
-    expect(getTranscriptGapAboveForTones("card", "card")).toBe(16)
-    expect(getTranscriptGapAboveForTones("assistant", "card")).toBe(16)
+    expect(getTranscriptGapAboveForTones("card", "card")).toBe(32)
+    expect(getTranscriptGapAboveForTones("assistant", "card")).toBe(32)
   })
 
   test("every tone pair resolves to a value on the design spacing scale", () => {
-    const allowed = new Set([0, 4, 8, 12, 16, 24])
+    const allowed = new Set([0, 4, 8, 12, 16, 24, 32])
     for (const above of [...ALL_TONES, null]) {
       for (const below of ALL_TONES) {
         expect(allowed.has(getTranscriptGapAboveForTones(above, below))).toBe(true)
@@ -127,6 +129,24 @@ describe("buildTranscriptGapClassMap over real resolved rows", () => {
     return rows.map((row) => gapById.get(row.id))
   }
 
+  test("the plate rule never introduces a gap below", () => {
+    // A bottom border or bottom padding changes the height of a row that is
+    // already painted, forcing a re-measure mid-stream. The whole rhythm is
+    // expressed above each row precisely to avoid that, and the rule must obey
+    // the same constraint it was added under.
+    expect(TRANSCRIPT_RULE_CLASS).not.toMatch(/\bborder-b\b/)
+    expect(TRANSCRIPT_RULE_CLASS).not.toMatch(/\bpb-/)
+    expect(TRANSCRIPT_RULE_CLASS).not.toMatch(/\bmb-/)
+    for (const gapClass of Object.values(TRANSCRIPT_GAP_CLASS)) {
+      expect(gapClass).toMatch(/^pt-/)
+    }
+  })
+
+  test("only a turn boundary carries the rule", () => {
+    const ruled = ([0, 4, 8, 12, 16, 24, 32] as const).filter(transcriptGapHasRule)
+    expect(ruled).toEqual([32])
+  })
+
   test("the first row never carries a gap", () => {
     expect(gapsFor([userPrompt("u1")])[0]).toBe("pt-0")
   })
@@ -142,13 +162,17 @@ describe("buildTranscriptGapClassMap over real resolved rows", () => {
     // u1 first, a1 opens the turn, then the tool run hugs the prose. The three
     // bash calls fold into one tool-group row, so only one gap remains for them.
     expect(gaps[0]).toBe("pt-0")
-    expect(gaps[1]).toBe("pt-4")
+    expect(gaps[1]).toContain("pt-8")
     expect(gaps[2]).toBe("pt-1")
+    // The turn opens with a plate rule; the tool run inside it does not.
+    expect(gaps[1]).toContain("before:bg-border")
+    expect(gaps[2]).not.toContain("before:bg-border")
   })
 
   test("a second user turn is fully separated from the tools above it", () => {
     const gaps = gapsFor([userPrompt("u1"), bashTool("t1"), userPrompt("u2")])
-    expect(gaps.at(-1)).toBe("pt-4")
+    expect(gaps.at(-1)).toContain("pt-8")
+    expect(gaps.at(-1)).toContain("before:bg-border")
   })
 
   test("every row receives a gap class", () => {

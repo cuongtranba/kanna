@@ -16,7 +16,7 @@ import type { ResolvedTranscriptRow } from "./KannaTranscript"
  * streaming, which is exactly when it is least welcome. With gap-above, an
  * appended row only sets its own padding and every measured row stays immutable.
  */
-export type TranscriptGapPx = 0 | 4 | 8 | 12 | 16 | 24
+export type TranscriptGapPx = 0 | 4 | 8 | 12 | 16 | 24 | 32
 
 /** Coarse role of a row, which is all the rhythm rules need to know. */
 export type TranscriptRowTone = "user" | "assistant" | "tool" | "chrome" | "card"
@@ -102,7 +102,18 @@ export function getTranscriptGapAboveForTones(
   // Separate assistant blocks within a turn.
   if (above === "assistant" && below === "assistant") return 12
 
-  return 16
+  // A turn boundary. This is the widest gap and the only one that carries the
+  // plate rule, so it is what separates one plate from the next.
+  return 32
+}
+
+/**
+ * A turn boundary is the only join that gets a hairline. Derived from the gap
+ * rather than stored beside it, so the rule and the air it sits in can never
+ * disagree about where a plate ends.
+ */
+export function transcriptGapHasRule(gap: TranscriptGapPx): boolean {
+  return gap === 32
 }
 
 export function getTranscriptRowGapAbove(
@@ -126,7 +137,22 @@ export const TRANSCRIPT_GAP_CLASS: Record<TranscriptGapPx, string> = {
   12: "pt-3",
   16: "pt-4",
   24: "pt-6",
+  32: "pt-8",
 }
+
+/**
+ * The plate rule: one hairline centred in the row's top padding.
+ *
+ * Drawn as a pseudo-element rather than a `border-t` because a border sits
+ * above the padding, which would hug the previous row's last line instead of
+ * floating between the two. It cannot live on the row above at all — a bottom
+ * border is gap-below, and this file exists because gap-below re-measures an
+ * already-painted row mid-stream.
+ *
+ * Written as a literal so Tailwind's scanner can see every class.
+ */
+export const TRANSCRIPT_RULE_CLASS =
+  "relative before:absolute before:inset-x-0 before:top-4 before:h-px before:bg-border before:content-['']"
 
 /**
  * Gap class per row id, for a whole transcript.
@@ -143,7 +169,9 @@ export function buildTranscriptGapClassMap(
   let previous: ResolvedTranscriptRow | null = null
 
   for (const row of rows) {
-    gapById.set(row.id, TRANSCRIPT_GAP_CLASS[getTranscriptRowGapAbove(previous, row)])
+    const gap = getTranscriptRowGapAbove(previous, row)
+    const gapClass = TRANSCRIPT_GAP_CLASS[gap]
+    gapById.set(row.id, transcriptGapHasRule(gap) ? `${gapClass} ${TRANSCRIPT_RULE_CLASS}` : gapClass)
     previous = row
   }
 
