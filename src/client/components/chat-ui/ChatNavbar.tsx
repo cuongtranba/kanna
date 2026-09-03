@@ -210,8 +210,12 @@ export function ChatNavbar({
   return (
     <CardHeader
       className={cn(
-        "absolute top-0 left-0 right-0 z-10 md:pt-3 px-3 border-border/0 md:pb-0 flex items-center justify-center",
-        " bg-gradient-to-b from-background/70"
+        // A solid ground, not a translucent wash. The gradient let prompt text
+        // render THROUGH the toolbar on mobile, where `md:pt-3` reserved no
+        // height for it — the first thing a phone reader saw was the first
+        // paragraph struck across the status row.
+        "absolute top-0 left-0 right-0 z-10 pt-2 md:pt-3 px-3 border-border/0 md:pb-0 flex items-center justify-center",
+        "bg-background"
       )}
     >
       <div className="relative flex items-center gap-2 w-full">

@@ -1,3 +1,4 @@
+import { StateMark } from "../components/ui/state-mark"
 import { Check, CircleDashed, Clock, ListChecks, Loader2, TriangleAlert } from "lucide-react"
 import type { LoopProgressSnapshot, LoopRowStatus } from "../../shared/types"
 import { formatLocal } from "../lib/autoContinueTime"
@@ -35,7 +36,7 @@ export function LoopProgressSection({ loopProgress, onResume }: Props) {
           Progress
           {armed ? (
             <span className="ml-auto inline-flex items-center gap-1.5 text-xs font-normal text-muted-foreground">
-              <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
+              <StateMark tone="active" className="text-foreground" />
               Loop running
             </span>
           ) : null}
