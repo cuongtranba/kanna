@@ -104,7 +104,7 @@ describe("describeTab", () => {
     const active = describeTab(target, {
       chatStatuses: { c1: { status: "idle", unread: false, sessionState: "active" } },
     })
-    expect(active.sessionBadge?.glyph).toBe("●")
+    expect(active.sessionBadge?.kind).toBe("filled")
     expect(active.sessionBadge?.toneClass).toBe("text-success")
 
     const cold = describeTab(target, {

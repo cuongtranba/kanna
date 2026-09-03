@@ -1,4 +1,5 @@
 import { useDraggable } from "@dnd-kit/core"
+import { SessionMark } from "../ui/session-mark"
 import { Columns2, Rows2, X } from "lucide-react"
 import { useCallback, useEffect, useRef } from "react"
 import type { PaneLeaf, SplitPosition } from "../../lib/paneTree"
@@ -314,16 +315,16 @@ function PaneTab({
 
       {/*
         Session lifecycle is secondary to turn status, so it yields first: an
-        icon-only tab shows the dot and drops the glyph rather than stacking two
-        marks into a 40px tab.
+        icon-only tab shows the dot and drops the session mark rather than
+        stacking two marks into a 40px tab.
       */}
       {sessionBadge && showLabel ? (
         <span
           aria-hidden
           data-tab-session-badge
-          className={cn("shrink-0 text-xs leading-none", sessionBadge.toneClass)}
+          className={cn("flex shrink-0 items-center", sessionBadge.toneClass)}
         >
-          {sessionBadge.glyph}
+          <SessionMark kind={sessionBadge.kind} />
         </span>
       ) : null}
 

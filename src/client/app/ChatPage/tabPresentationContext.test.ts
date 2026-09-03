@@ -164,7 +164,7 @@ describe("buildTabPresentationContext", () => {
     const tab = describeTab({ kind: "chat", chatId: "chat-1" }, context)
     expect(tab.indicator?.tone).toBe("warning")
     expect(tab.pinned).toBe(true)
-    expect(tab.sessionBadge?.glyph).toBe("●")
+    expect(tab.sessionBadge?.kind).toBe("filled")
   })
 
   test("titles terminals from every project, not only the active one", () => {

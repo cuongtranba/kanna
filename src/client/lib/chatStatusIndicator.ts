@@ -73,9 +73,23 @@ export function chatDotTextClass(tone: ChatDotTone | null): string {
   }
 }
 
+/**
+ * The session's warmth, as a drawn mark rather than a Unicode glyph.
+ *
+ * These were the literal characters ●◐○◌ set as text. A typeface's idea of a
+ * filled circle is not this design system's — the four sat at four different
+ * optical sizes and weights, and none matched the stroke of any real icon
+ * beside them. They are SVG now, at one stroke weight.
+ *
+ * The vocabulary is deliberately FILL-based, where run state (see stateMark.ts)
+ * is stroke-based: a session's warmth and a turn's status are different
+ * questions, and a reader should not have to check which one a mark answers.
+ */
+export type SessionMarkKind = "filled" | "half" | "ring" | "dashed"
+
 export interface SessionStateBadge {
   /** Shape carries the state too, so the badge survives a colour-blind read. */
-  glyph: string
+  kind: SessionMarkKind
   toneClass: string
   title: string
 }
@@ -89,10 +103,10 @@ export function sessionStateBadge(
   state: ClaudeSessionLifecycleStatus | undefined,
 ): SessionStateBadge | null {
   switch (state) {
-    case "active": return { glyph: "●", toneClass: "text-success", title: "Claude PTY session active" }
-    case "warming": return { glyph: "◐", toneClass: "text-warning", title: "Claude PTY session warming" }
-    case "idle": return { glyph: "○", toneClass: "text-muted-foreground", title: "Claude PTY session idle" }
-    case "cooling": return { glyph: "◌", toneClass: "text-muted-foreground", title: "Claude PTY session cooling down" }
+    case "active": return { kind: "filled", toneClass: "text-success", title: "Claude PTY session active" }
+    case "warming": return { kind: "half", toneClass: "text-warning", title: "Claude PTY session warming" }
+    case "idle": return { kind: "ring", toneClass: "text-muted-foreground", title: "Claude PTY session idle" }
+    case "cooling": return { kind: "dashed", toneClass: "text-muted-foreground", title: "Claude PTY session cooling down" }
     case "cold":
     default:
       return null
