@@ -65,6 +65,14 @@ jobs:
           GIT_TERMINAL_PROMPT: "0"
           HANG_AFTER: "170"
 
+      - name: Install Playwright browsers
+        run: bunx playwright install chrome --with-deps
+
+      - name: Page-level smoke test (production bundle)
+        run: bun run test:smoke
+        env:
+          KANNA_OTEL: disabled
+
       - uses: actions/setup-node@v7
         with:
           node-version: "24"
