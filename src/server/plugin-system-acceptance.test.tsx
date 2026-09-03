@@ -19,6 +19,7 @@
  * Internals are the implementer's choice; these names are the contract.
  */
 import { describe, expect, test } from "bun:test"
+import type { PluginSurfaceComponent, PluginSurfaceProps } from "../client/plugins/contributionRegistry"
 import { join } from "node:path"
 
 const FIXTURES = join(import.meta.dir, "__fixtures__", "plugins")
@@ -216,19 +217,19 @@ describe("P5/P6 — client runtime renders a contributed surface", () => {
     const registry = createPluginHostRegistry()
     const mod = await evaluatePluginModule({ code: built.client, registry, pluginId: "hello" })
 
-    const surfaces: Array<{ id: string; Component: React.ComponentType<never> }> = []
+    const surfaces: Array<{ id: string; Component: PluginSurfaceComponent }> = []
     mod.default({
-      addSurface: (id: string, Component: React.ComponentType<never>) => surfaces.push({ id, Component }),
+      addSurface: (id: string, Component: PluginSurfaceComponent) => surfaces.push({ id, Component }),
       addSidebarItem: () => {},
       handle: () => {},
     })
 
     expect(surfaces).toHaveLength(1)
     const { Component } = surfaces[0]
-    const theme = { colors: { foreground: "var(--foreground)" } }
+    const theme: PluginSurfaceProps["theme"] = { colors: { foreground: "var(--foreground)" } }
     // Rendering proves React identity is shared: a second React copy throws
     // "Invalid hook call" from the fixture's useState.
-    const html = renderToStaticMarkup(<Component {...({ theme } as never)} />)
+    const html = renderToStaticMarkup(<Component theme={theme} />)
     expect(html).toContain("hello-plugin-surface")
   }, 60_000)
 
@@ -302,7 +303,7 @@ describe("P9a — chat-footer panel mirrors the WorkflowsSection/SubagentsSectio
     expect(Component).toBeDefined()
     if (!Component) return
 
-    const theme = { colors: { foreground: "var(--foreground)" } }
+    const theme: PluginSurfaceProps["theme"] = { colors: { foreground: "var(--foreground)" } }
     const html = renderToStaticMarkup(
       <PluginsFooterSection panels={[{ pluginId: "hello", surfaceId: "main", Component }]} theme={theme} />,
     )
@@ -337,14 +338,14 @@ describe("P9a — a throwing plugin panel is isolated by PluginBoundary", () => 
     expect(Component).toBeDefined()
     if (!Component) return
 
-    const theme = { colors: { foreground: "var(--foreground)" } }
+    const theme: PluginSurfaceProps["theme"] = { colors: { foreground: "var(--foreground)" } }
     let html = ""
     expect(() => {
       html = renderToStaticMarkup(
         <div>
           <span>sibling content survives</span>
           <PluginBoundary pluginId="throwing">
-            <Component {...({ theme } as never)} />
+            <Component theme={theme} />
           </PluginBoundary>
         </div>,
       )
