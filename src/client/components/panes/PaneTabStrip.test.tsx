@@ -130,10 +130,13 @@ describe("PaneTabStrip chat status", () => {
     expect(html).toContain("Running")
   })
 
-  test("the PTY session badge rides along with the same glyph as the sidebar", () => {
+  test("the PTY session badge rides along with the same drawn mark as the sidebar", () => {
     const html = render(createPane("p", [chat]), true, 800, running)
     expect(html).toContain("data-tab-session-badge")
-    expect(html).toContain("●")
+    // Drawn, not a text glyph: both surfaces render the same SVG family, so
+    // the sidebar and the tab strip cannot drift into two vocabularies.
+    expect(html).toContain("<svg")
+    expect(html).not.toMatch(/[●◐○◌]/)
   })
 
   // The dot lives in the icon's slot precisely so a strip squeezed to

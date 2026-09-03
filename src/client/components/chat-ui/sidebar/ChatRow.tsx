@@ -4,6 +4,7 @@ import type { SidebarChatRow } from "../../../../shared/types"
 import { Button } from "../../ui/button"
 import { Kbd } from "../../ui/kbd"
 import { HoverHint } from "../../ui/truncated-text"
+import { SessionMark } from "../../ui/session-mark"
 import { cn, normalizeChatId } from "../../../lib/utils"
 import { formatCompactDuration, formatLiveDuration } from "../../../lib/formatDuration"
 import { statusLabel } from "../../../lib/statusLabel"
@@ -127,8 +128,8 @@ function ChatRowImpl({
         const badge = sessionStateBadge(chat.sessionState)
         return badge ? (
           <HoverHint label={badge.title}>
-            <span className={cn("shrink-0 text-xs leading-none", badge.toneClass)} aria-label={badge.title}>
-              {badge.glyph}
+            <span className={cn("flex shrink-0 items-center", badge.toneClass)} aria-label={badge.title}>
+              <SessionMark kind={badge.kind} />
             </span>
           </HoverHint>
         ) : null

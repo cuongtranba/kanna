@@ -61,12 +61,16 @@ describe("dot classes", () => {
 })
 
 describe("sessionStateBadge", () => {
-  test("gives each live lifecycle state a distinct glyph", () => {
-    const glyphs = (["active", "warming", "idle", "cooling"] as const).map(
-      (state) => sessionStateBadge(state)?.glyph,
+  test("gives each live lifecycle state a distinct drawn mark", () => {
+    // These were the literal characters ●◐○◌ set as text — a typeface's idea of
+    // a filled circle, at four different optical weights, next to real icons
+    // drawn at one. They are SVG now; the state must still be readable from
+    // shape alone, so the four kinds stay distinct.
+    const kinds = (["active", "warming", "idle", "cooling"] as const).map(
+      (state) => sessionStateBadge(state)?.kind,
     )
-    expect(glyphs).toEqual(["●", "◐", "○", "◌"])
-    expect(new Set(glyphs).size).toBe(4)
+    expect(kinds).toEqual(["filled", "half", "ring", "dashed"])
+    expect(new Set(kinds).size).toBe(4)
   })
 
   test("tints active sage and warming amber", () => {

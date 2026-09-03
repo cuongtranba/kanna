@@ -52,7 +52,7 @@ export interface TabPresentation {
   closable: boolean
   /** Status dot mirroring the sidebar row; null for a quiet chat and for every non-chat tab. */
   indicator: ChatStatusIndicator | null
-  /** Claude PTY session lifecycle glyph, same vocabulary as the sidebar row. */
+  /** Claude PTY session lifecycle mark, same vocabulary as the sidebar row. */
   sessionBadge: SessionStateBadge | null
 }
 
