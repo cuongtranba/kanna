@@ -174,10 +174,15 @@ function registerToolOnMcpServer(
     def.name,
     {
       description: def.description,
-      inputSchema: def.inputSchema,
+      // zod v4 changed ZodRawShape to Readonly<...>; MCP SDK expects mutable
+      // ZodRawShapeCompat. never is assignable to AnySchema, so
+      // Record<string,never> satisfies ZodRawShapeCompat at the type level.
+      inputSchema: <Record<string, never>>(<unknown>def.inputSchema),
     },
     async (input: AnyValue, extra: AnyValue) => {
-      return await def.handler(<Record<string, AnyValue>>input, extra)
+      // AnyZodRawShape = ZodRawShape | ZodRawShape_2 produces an impossible
+      // intersection for InferShape; cast through never to satisfy the handler
+      return await def.handler(<never>input, extra)
     },
   )
 }
