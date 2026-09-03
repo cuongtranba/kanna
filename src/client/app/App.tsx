@@ -282,6 +282,7 @@ function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
     handleOpenArchivedChat: stateHandleOpenArchivedChat,
     openAddProjectModal,
     handleDeleteChat,
+    handleDeleteBulkChats,
     handleCopyPath,
     handleOpenExternalPath,
     handleHideProject,
@@ -370,6 +371,7 @@ function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
       onArchiveChat={handleArchiveChat}
       onOpenArchivedChat={stateHandleOpenArchivedChat}
       onDeleteChat={handleDeleteChat}
+      onDeleteBulkChats={handleDeleteBulkChats}
       onEditChatPermissions={handleSidebarEditPermissions}
       onOpenAddProjectModal={openAddProjectModal}
       onImportClaudeSessions={handleImportClaudeSessions}
@@ -395,6 +397,7 @@ function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
     handleCreateChat,
     handleArchiveChat,
     handleDeleteChat,
+    handleDeleteBulkChats,
     stateHandleOpenArchivedChat,
     handleForkChat,
     handleOpenExternalPath,

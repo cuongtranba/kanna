@@ -1,11 +1,13 @@
 import { memo, useCallback, useEffect, useMemo, useRef, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react"
+import { useShallow } from "zustand/react/shallow"
+import { useSidebarSelectionStore } from "../stores/sidebarSelectionStore"
 import { FocusScope } from "@radix-ui/react-focus-scope"
 
 /** Returns CSS custom properties as a React-compatible style object via Object.assign. */
 function cssVars(vars: Record<`--${string}`, string>): CSSProperties {
   return Object.assign({} satisfies CSSProperties, vars)
 }
-import { Download, Flower, FoldVertical, PanelLeft, UnfoldVertical, X, Menu, Plus } from "lucide-react"
+import { Download, Flower, FoldVertical, PanelLeft, UnfoldVertical, X, Menu, Plus, CheckSquare } from "lucide-react"
 import { useLocation, useNavigate } from "react-router-dom"
 import { APP_NAME } from "../../shared/branding"
 import { Button } from "../components/ui/button"
@@ -19,6 +21,7 @@ import { getSidebarChatTimestamp } from "../lib/sidebarChats"
 import { cn } from "../lib/utils"
 import { SHELL_TOP_BAND_CLASS } from "../lib/shellChrome"
 import { ChatRow } from "../components/chat-ui/sidebar/ChatRow"
+import { SidebarBulkActionBar } from "../components/chat-ui/sidebar/SidebarBulkActionBar"
 import { LocalProjectsSection } from "../components/chat-ui/sidebar/LocalProjectsSection"
 import { StacksSection } from "../components/chat-ui/sidebar/StacksSection"
 import { StackCreatePanel } from "../components/chat-ui/sidebar/StackCreatePanel"
@@ -80,6 +83,7 @@ interface KannaSidebarProps {
   onArchiveChat: (chat: SidebarChatRow) => void | Promise<void>
   onOpenArchivedChat: (chatId: string) => void | Promise<void>
   onDeleteChat: (chat: SidebarChatRow) => void | Promise<void>
+  onDeleteBulkChats: (chatIds: string[]) => void | Promise<void>
   onEditChatPermissions?: (chatId: string) => void
   onOpenAddProjectModal: () => void | Promise<void>
   onImportClaudeSessions?: () => Promise<void>
@@ -118,6 +122,7 @@ function KannaSidebarImpl({
   onArchiveChat,
   onOpenArchivedChat,
   onDeleteChat,
+  onDeleteBulkChats,
   onEditChatPermissions,
   onOpenAddProjectModal,
   onImportClaudeSessions,
@@ -138,6 +143,8 @@ function KannaSidebarImpl({
 }: KannaSidebarProps) {
   const dom = ports.dom ?? domAdapter
   const timer = ports.timer ?? timerAdapter
+
+  const { isSelecting, selectedChatIds, startSelecting, stopSelecting, toggle: toggleSelect, selectAll, clearAll } = useSidebarSelectionStore(useShallow((s) => s))
 
   const location = useLocation()
   const navigate = useNavigate()
@@ -381,6 +388,18 @@ function KannaSidebarImpl({
     toggleAllSectionsCollapsed(allSidebarGroupKeys)
   }, [allSidebarGroupKeys, toggleAllSectionsCollapsed])
 
+  const handleBulkDelete = useCallback(() => {
+    if (!selectedChatIds.size) return
+    void onDeleteBulkChats([...selectedChatIds])
+    stopSelecting()
+  }, [selectedChatIds, onDeleteBulkChats, stopSelecting])
+
+  const handleSelectAll = useCallback(() => {
+    const allIds = visibleChats.map((e) => e.chat.chatId)
+    if (selectedChatIds.size === allIds.length) clearAll()
+    else selectAll(allIds)
+  }, [clearAll, selectAll, selectedChatIds, visibleChats])
+
   const renderChatRow = useCallback((chat: SidebarChatRow) => {
     const visibleIndex = visibleIndexByChatId.get(chat.chatId)
 
@@ -403,9 +422,11 @@ function KannaSidebarImpl({
         onDeleteChat={() => onDeleteChat(chat)}
         onEditPermissions={onEditChatPermissions}
         silent={mutedChatIds.includes(chat.chatId)}
+        isSelected={isSelecting ? selectedChatIds.has(chat.chatId) : undefined}
+        onToggleSelect={isSelecting ? () => toggleSelect(chat.chatId) : undefined}
       />
     )
-  }, [activeChatId, mutedChatIds, navigate, nowMs, onArchiveChat, onClose, onDeleteChat, onEditChatPermissions, onForkChat, onOpenExternalPath, onRenameChat, resolvedKeybindings, showNumberJumpHints, visibleIndexByChatId])
+  }, [activeChatId, isSelecting, mutedChatIds, navigate, nowMs, onArchiveChat, onClose, onDeleteChat, onEditChatPermissions, onForkChat, onOpenExternalPath, onRenameChat, resolvedKeybindings, selectedChatIds, showNumberJumpHints, toggleSelect, visibleIndexByChatId])
 
   useEffect(() => {
     const intervalId = timer.setInterval(() => {
@@ -725,7 +746,16 @@ function KannaSidebarImpl({
         </div>
 
         {allSidebarGroupKeys.length > 0 && (
-          <div className="flex items-center justify-end pl-2 pr-2 pt-1.5 pb-1 shrink-0">
+          <div className="flex items-center justify-between pl-2 pr-2 pt-1.5 pb-1 shrink-0">
+            <button
+              type="button"
+              onClick={isSelecting ? stopSelecting : startSelecting}
+              aria-pressed={isSelecting}
+              className="inline-flex items-center gap-1.5 rounded-full border border-border/50 bg-transparent px-2.5 py-1 text-xs font-medium tracking-[0.005em] text-muted-foreground hover:border-border hover:bg-muted/50 hover:text-foreground aria-pressed:border-border aria-pressed:bg-muted/40 aria-pressed:text-foreground transition-colors duration-150 motion-reduce:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
+              <CheckSquare className="size-3.5" aria-hidden />
+              {isSelecting ? "Cancel" : "Select"}
+            </button>
             <button
               type="button"
               onClick={toggleAllSections}
@@ -882,6 +912,15 @@ function KannaSidebarImpl({
             />
           </div>
         </div>
+
+        {isSelecting && (
+          <SidebarBulkActionBar
+            selectedCount={selectedChatIds.size}
+            visibleChatCount={visibleChats.length}
+            onSelectAll={handleSelectAll}
+            onDelete={handleBulkDelete}
+          />
+        )}
 
         <SidebarUtilityNav
           activeChatId={activeChatId}

@@ -48,6 +48,7 @@ function renderSidebar(data: SidebarData) {
         onArchiveChat: () => undefined,
         onOpenArchivedChat: () => undefined,
         onDeleteChat: () => undefined,
+        onDeleteBulkChats: () => undefined,
         onOpenAddProjectModal: () => undefined,
         onCopyPath: () => undefined,
         onOpenExternalPath: () => undefined,
