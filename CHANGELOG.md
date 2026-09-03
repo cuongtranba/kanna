@@ -8,6 +8,24 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.46.0](https://github.com/cuongtranba/kanna/compare/v1.45.0...v1.46.0) (2026-09-03)
+
+
+### Features
+
+* **cron:** edit an armed cron job from the cron view ([#1021](https://github.com/cuongtranba/kanna/issues/1021)) ([a57bd7d](https://github.com/cuongtranba/kanna/commit/a57bd7d12da07b8006ab2b1a1c7a184958d54130))
+* **design:** sidebar sections get a running head that states a fact ([#1030](https://github.com/cuongtranba/kanna/issues/1030)) ([56f96cf](https://github.com/cuongtranba/kanna/commit/56f96cf2629ab9c488b28af5394baaac22519b77))
+* **design:** the cron run pill becomes a mark, and the contrast catalog follows it ([#1028](https://github.com/cuongtranba/kanna/issues/1028)) ([4191087](https://github.com/cuongtranba/kanna/commit/4191087f77fc572be67a06576c3e7de4e7926ba5))
+* **design:** the session badge is drawn, not four Unicode characters ([#1027](https://github.com/cuongtranba/kanna/issues/1027)) ([f692c73](https://github.com/cuongtranba/kanna/commit/f692c730d8c8871881aeeba0021623dc40c8b22c))
+* **design:** the user prompt is a plate on the rail, not a bubble ([#1023](https://github.com/cuongtranba/kanna/issues/1023)) ([79cd13d](https://github.com/cuongtranba/kanna/commit/79cd13db26e74faf70f4a85827eb09ef49e4ed71))
+
+
+### Bug Fixes
+
+* **composer:** keyboard navigation of the / and @ pickers ([#1026](https://github.com/cuongtranba/kanna/issues/1026)) ([2974641](https://github.com/cuongtranba/kanna/commit/2974641ae8cdbe15e2d714edaa19d4dc6ff338a8)), closes [#1019](https://github.com/cuongtranba/kanna/issues/1019)
+* **deps:** zod v4 type compatibility fixes ([#1031](https://github.com/cuongtranba/kanna/issues/1031)) ([8045ea2](https://github.com/cuongtranba/kanna/commit/8045ea2280dafafba4c561f38de3e044a6b92e79))
+* **models:** a custom model override must not strip the built-in's 1M window ([#1032](https://github.com/cuongtranba/kanna/issues/1032)) ([6fc297f](https://github.com/cuongtranba/kanna/commit/6fc297f83f17580cac07b6521767d0f13d85b0ab))
+
 ## [1.45.0](https://github.com/cuongtranba/kanna/compare/v1.44.1...v1.45.0) (2026-09-03)
 
 
