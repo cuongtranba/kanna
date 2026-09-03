@@ -15,6 +15,11 @@ export const TONE_PAIRINGS = [
   { name: "mark/idle", fg: "muted-foreground", bg: "card", alpha: 1, base: "card" },
   { name: "mark/attention", fg: "warning-text", bg: "card", alpha: 1, base: "card" },
   { name: "mark/failed", fg: "destructive-text", bg: "card", alpha: 1, base: "card" },
+  // The other two semantic inks, now that status text and icons draw in them
+  // rather than in the raw tokens. Verified on the plain surface for the same
+  // reason as the marks: nothing composites them over a tint any more.
+  { name: "ink/success", fg: "success-text", bg: "card", alpha: 1, base: "card" },
+  { name: "ink/info", fg: "info-text", bg: "card", alpha: 1, base: "card" },
   { name: "error/api", fg: "destructive-text", bg: "destructive", alpha: 0.1, base: "background" },
   { name: "action/destructive-filled", fg: "destructive-filled-foreground", bg: "destructive-filled", alpha: 1, base: "background" },
 ] as const satisfies readonly TonePairing[]

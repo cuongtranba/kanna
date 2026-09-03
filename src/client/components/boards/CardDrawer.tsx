@@ -661,7 +661,7 @@ function InlineFieldValue({ field, value, onCommit }: CardFieldProps) {
           href={display}
           target="_blank"
           rel="noreferrer"
-          className="inline-flex min-w-0 items-center gap-1 truncate text-info hover:underline"
+          className="inline-flex min-w-0 items-center gap-1 truncate text-info-text hover:underline"
         >
           <span className="truncate">{display.replace(/^https:\/\//, "")}</span>
           <ExternalLink aria-hidden className="size-3 shrink-0" />

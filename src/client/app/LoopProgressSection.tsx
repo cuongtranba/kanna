@@ -8,7 +8,7 @@ const ROW_STATUS_CONFIG: Record<
   LoopRowStatus,
   { Icon: typeof Check; iconClass: string; textClass: string }
 > = {
-  done: { Icon: Check, iconClass: "text-success", textClass: "text-muted-foreground" },
+  done: { Icon: Check, iconClass: "text-success-text", textClass: "text-muted-foreground" },
   running: { Icon: Loader2, iconClass: "text-foreground animate-spin", textClass: "text-foreground font-medium" },
   pending: { Icon: CircleDashed, iconClass: "text-muted-foreground", textClass: "text-muted-foreground" },
   failed: { Icon: TriangleAlert, iconClass: "text-destructive", textClass: "text-muted-foreground line-through decoration-destructive/40" },

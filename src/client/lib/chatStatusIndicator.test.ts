@@ -44,12 +44,24 @@ describe("chatStatusIndicator", () => {
 })
 
 describe("dot classes", () => {
-  test("each tone resolves to a theme token, never a raw colour", () => {
+  // A FILL uses the raw token: those values are chosen to be legible as
+  // backgrounds, which is exactly what a dot is.
+  test("a fill resolves to the raw theme token", () => {
     expect(chatDotBgClass("warning")).toBe("bg-warning")
     expect(chatDotBgClass("info")).toBe("bg-info")
     expect(chatDotBgClass("success")).toBe("bg-success")
     expect(chatDotBgClass("destructive")).toBe("bg-destructive")
-    expect(chatDotTextClass("warning")).toBe("text-warning")
+  })
+
+  // INK is the opposite problem. The raw tokens fail WCAG AA as text, so the
+  // `-text` variants exist and are contrast-checked in tone-pairings.test.ts.
+  // This test's predecessor was named "never a raw colour" while asserting a
+  // raw colour; the claim is now the assertion.
+  test("ink resolves to the AA-checked variant, never the raw token", () => {
+    for (const tone of ["warning", "info", "success", "destructive"] as const) {
+      expect(chatDotTextClass(tone)).toBe(`text-${tone}-text`)
+      expect(chatDotTextClass(tone)).not.toBe(`text-${tone}`)
+    }
   })
 
   // No tone means no dot, so the background class must contribute nothing —
@@ -73,9 +85,9 @@ describe("sessionStateBadge", () => {
     expect(new Set(kinds).size).toBe(4)
   })
 
-  test("tints active sage and warming amber", () => {
-    expect(sessionStateBadge("active")?.toneClass).toBe("text-success")
-    expect(sessionStateBadge("warming")?.toneClass).toBe("text-warning")
+  test("tints active sage and warming amber, in the AA-checked inks", () => {
+    expect(sessionStateBadge("active")?.toneClass).toBe("text-success-text")
+    expect(sessionStateBadge("warming")?.toneClass).toBe("text-warning-text")
   })
 
   // A cold session is the resting state of every chat; drawing it would put a

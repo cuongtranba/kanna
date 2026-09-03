@@ -166,7 +166,7 @@ function ChatPolicyDialogContent({ open, chatTitle, baseline, onApply, onCancel 
               Auto-allow disables tool-call prompts. The model can run shell commands, write files, and edit code without
               asking. Read/write deny lists still apply.
             </p>
-            <p className="text-warning">Use a worktree for risky tasks.</p>
+            <p className="text-warning-text">Use a worktree for risky tasks.</p>
           </DialogBody>
           <DialogFooter className="justify-end gap-2">
             <Button variant="ghost" onClick={() => { storeApi.getState().setConfirmUnsafeOpen(false); storeApi.getState().setPendingDefaultAction(null) }}>
