@@ -380,6 +380,24 @@ a tinted dark surface.
   (`src/shared/design/contrast.ts`, `tokens.ts`). Adding a new semantic tint
   context means adding an entry to `TONE_PAIRINGS` and confirming the test
   passes before touching any component.
+- `bun run test src/server/design/raw-ink-guard.test.ts`: **a raw semantic
+  token is a background, never ink.** `--warning`/`--info`/`--success` are
+  chosen to be legible as fills and fail AA as text; the `-text` variants
+  exist for that. `bg-warning` on a dot is correct, `text-warning` on a label
+  is a bug. The guard scans `src/client` + `src/shared` and fails on any
+  `text-{semantic}` outside ONE documented exception — a diff's own body in
+  `FileContentView`, which is verbatim material. The tally beside it is not
+  exempt. It also asserts every exemption is still NEEDED, so a stale one
+  cannot be reused to smuggle a new violation in.
+
+**The catalog measures what is drawn.** Status is a mark on a plain surface
+now (`src/client/lib/stateMark.ts`), so the four `status/*` tinted-pill
+pairings were replaced by `mark/*` + `ink/*` entries at `alpha: 1`. When a
+pairing's last consumer is deleted the pairing goes with it — otherwise the
+suite proves contrast for a surface nothing renders, which is a check that
+gates nothing. `STATUS_PILL_CLASS` is now
+`Record<"outdated"|"partial"|"unknown", string>`: package update availability
+is the one context that still wants a tinted pill.
 
 **Guidance-only (NOT linted — semantic, would false-positive).** Follow by
 hand:
