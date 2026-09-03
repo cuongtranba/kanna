@@ -42,6 +42,9 @@ jobs:
 
       - run: bun run build
 
+      - name: Bundle size + CJS interop check
+        run: bun run check:bundle
+
       - name: Run tests
         run: timeout --foreground --signal=SIGTERM --kill-after=10 420 bash scripts/ci-test-with-hang-diagnostics.sh
         env:
