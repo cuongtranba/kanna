@@ -36,6 +36,8 @@ import {
   type ClaudeReasoningEffort,
   type CodexModelOptions,
   type CodexReasoningEffort,
+  type OpenRouterModel,
+  type OpenRouterModelOptions,
   type ProviderCatalogEntry,
   type Subagent,
   type SubagentInput,
@@ -45,11 +47,13 @@ import {
 import { isRecord } from "../../shared/errors"
 import type { SubagentCommandResult } from "../../shared/protocol"
 import { useSubagentsSectionStore } from "../stores/subagentsSectionStore"
+import { useOpenRouterModelsStore } from "../stores/openrouterModelsStore"
+import { useShallow } from "zustand/react/shallow"
 
-function isClaudeModelOptions(opts: ClaudeModelOptions | CodexModelOptions): opts is ClaudeModelOptions {
+function isClaudeModelOptions(opts: ClaudeModelOptions | CodexModelOptions | OpenRouterModelOptions): opts is ClaudeModelOptions {
   return "contextWindow" in opts
 }
-function isCodexModelOptions(opts: ClaudeModelOptions | CodexModelOptions): opts is CodexModelOptions {
+function isCodexModelOptions(opts: ClaudeModelOptions | CodexModelOptions | OpenRouterModelOptions): opts is CodexModelOptions {
   return "fastMode" in opts
 }
 
@@ -225,7 +229,19 @@ interface SubagentFormProps {
 const PROVIDER_OPTIONS = [
   { value: "claude" as const, label: "Claude" },
   { value: "codex" as const, label: "Codex" },
+  { value: "openrouter" as const, label: "OpenRouter" },
 ]
+
+function mergeOpenRouterModelsIntoProviders(
+  providers: ProviderCatalogEntry[],
+  models: OpenRouterModel[],
+): ProviderCatalogEntry[] {
+  if (models.length === 0) return providers
+  return providers.map((entry) => {
+    if (entry.id !== "openrouter") return entry
+    return { ...entry, models: models.map((m) => ({ id: m.id, label: m.label })) }
+  })
+}
 
 const CONTEXT_SCOPE_OPTIONS = [
   { value: "previous-assistant-reply" as const, label: "Last reply" },
@@ -609,9 +625,10 @@ export function SubagentsSettingsBranch(props: {
     (store) => store.settings?.providerDefaults ?? FALLBACK_PROVIDER_PREFS,
   )
   const customModels = useAppSettingsStore(selectCustomModels)
+  const openrouterModels = useOpenRouterModelsStore(useShallow((s) => s.models))
   const availableProviders = useMemo(
-    () => mergeCustomModels([...PROVIDERS], customModels),
-    [customModels],
+    () => mergeOpenRouterModelsIntoProviders(mergeCustomModels([...PROVIDERS], customModels), openrouterModels),
+    [customModels, openrouterModels],
   )
 
   const editing = useSubagentsSectionStore((state) => state.editing)
@@ -823,6 +840,22 @@ export function createDefaultSubagentDraft(
       triggerMode: "auto",
     }
   }
+  if (provider === "openrouter") {
+    const preference = providerDefaults?.openrouter
+    const model =
+      preference?.model
+      ?? availableProviders?.find((entry) => entry.id === "openrouter")?.defaultModel
+      ?? getProviderCatalog("openrouter").defaultModel
+    return {
+      name: "",
+      provider,
+      model,
+      modelOptions: {},
+      systemPrompt: "",
+      contextScope: "previous-assistant-reply",
+      triggerMode: "auto",
+    }
+  }
   const preference = providerDefaults?.codex
   const model =
     preference?.model
@@ -880,8 +913,8 @@ export function isSubagentDraftDirty(draft: SubagentInput, baseline: SubagentInp
 }
 
 function shallowEqualModelOptions(
-  a: ClaudeModelOptions | CodexModelOptions,
-  b: ClaudeModelOptions | CodexModelOptions,
+  a: ClaudeModelOptions | CodexModelOptions | OpenRouterModelOptions,
+  b: ClaudeModelOptions | CodexModelOptions | OpenRouterModelOptions,
 ): boolean {
   if (!isRecord(a) || !isRecord(b)) return false
   const keys = new Set([...Object.keys(a), ...Object.keys(b)])
