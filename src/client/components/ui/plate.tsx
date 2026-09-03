@@ -63,3 +63,35 @@ export function PlateCaption({ index, kind, fact, className }: PlateCaptionProps
 export function formatPlateIndex(index: number): string {
   return index < 10 ? `0${index}` : String(index)
 }
+
+/**
+ * A panel's running head: what the section is, and one fact about it.
+ *
+ * The same discipline `PlateCaption` enforces for a transcript entry, at the
+ * scale of a sidebar section. `fact` is optional here — unlike a plate, a
+ * section can legitimately have nothing countable to say (a single-value
+ * panel), and inventing a number to satisfy the rule would be worse than
+ * omitting it. When there IS a count, showing it is free and saves the reader
+ * a scan.
+ */
+export function SectionCaption({
+  label,
+  fact,
+  className,
+}: {
+  readonly label: string
+  readonly fact?: string
+  readonly className?: string
+}) {
+  return (
+    <div
+      className={cn(
+        "flex items-baseline gap-2 px-1 py-1 font-mono text-xs tracking-wide tabular-nums text-muted-foreground",
+        className,
+      )}
+    >
+      <span>{label}</span>
+      {fact === undefined ? null : <span className="ml-auto pl-3 truncate">{fact}</span>}
+    </div>
+  )
+}

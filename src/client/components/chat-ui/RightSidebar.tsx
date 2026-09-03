@@ -30,6 +30,7 @@ import { FilePreviewSheet } from "../messages/file-preview/FilePreviewSheet"
 import { toPreviewSourceFromAttachment } from "../messages/file-preview/types"
 import { classifyAttachmentPreview } from "../messages/attachmentPreview"
 import { Button } from "../ui/button"
+import { SectionCaption } from "../ui/plate"
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from "../ui/context-menu"
 import { GithubMark } from "../ui/github-mark"
 import { Input } from "../ui/input"
@@ -581,12 +582,11 @@ function BranchListSection({
 
   return (
     <div className="space-y-1">
-      <div className={cn(
-        "px-1 py-1 text-xs font-medium tracking-[0.08em] text-muted-foreground",
-        stickyTitle && "sticky top-0 z-10 bg-background"
-      )}>
-        {title}
-      </div>
+      <SectionCaption
+        label={title}
+        fact={entries.length > 0 ? String(entries.length) : undefined}
+        className={cn(stickyTitle && "sticky top-0 z-10 bg-background")}
+      />
       {entries.length === 0 ? (
         <div className="px-1 py-1 text-xs text-muted-foreground">{emptyLabel}</div>
       ) : (
