@@ -13,6 +13,9 @@ task that matches none of them cleanly still lands somewhere.
 | `kanna-telemetry` | Adding spans/metrics, and operating the otel-lgtm collector |
 | `kanna-react-style` | React + TypeScript conventions for `src/client/**` |
 | `kanna-test` | Running tests; the lint, ast-grep, and design gates |
+| `kanna-loop` | Autonomous loops: `setup_loop`, the oracle, the tracking file, wake recovery |
+| `kanna-subagents` | `delegate_subagent`, the spawn gate, keep-alive and background runs |
+| `kanna-pty` | The PTY driver — TUI spawn, transcript follower, `KANNA_PTY_*` |
 | `release` | Version bump + npm publish |
 | `review-pr` | Security-focused PR review via the GitHub API |
 | `github-issue` | Writing bug reports and feature requests detailed enough to implement from |
@@ -23,6 +26,57 @@ These files have two consumers — Claude Code auto-triggers on the frontmatter
 must stay on one line: a folded `>-` block silently becomes an empty description
 in the picker. `user-invocable: false` hides a skill from the picker while leaving
 auto-triggering intact.
+
+# Commands
+
+```bash
+bun install
+bun run dev              # vite client on :5174 + server on :5175 (client port + 1)
+bun run start            # single-process server, production shape
+bun run install:dev      # build, then install this tree globally as the `kanna` CLI
+```
+
+Verification — `bun run check` is typecheck → lint → build:client → check:bundle:
+
+```bash
+bun run check
+bun run test                                   # NEVER bare `bun test` (see TypeScript / Tests)
+bun run test src/server/agent.test.ts          # one suite
+bun run typecheck                              # TS7 by explicit path, not bare `tsc`
+```
+
+Gates that block a merge, each covering something the others do not:
+
+```bash
+bun run lint             # eslint --max-warnings=0: side-effect seal + design gate
+bun run lint:usestate    # ast-grep: React #185 rules + inline tint pairing
+bun run lint:limits      # proves the complexity ceilings are still TIGHT
+bun run check:arch       # architecture budget ratchet
+bunx ast-grep test       # rule-tests/ for the rules in rules/
+bun run scan:secrets     # gitleaks over the working tree
+bun run setup:hooks      # one-time: wire .githooks (pre-commit secret scan)
+```
+
+`bun run test:e2e` (Playwright, real Chrome) is deliberately off the CI critical
+path — see Wiki. `bun run verify:client-arch` chains ast-grep + lint + typecheck
++ test for client work.
+
+# Repo layout
+
+```
+src/server/      event-sourced server; *.adapter.ts are the only IO leaves
+src/client/      React client (see kanna-react-style)
+src/shared/      contracts both sides import — a type lives here ONCE
+src/ops/         architecture budget + alerting specs (outside the IO seal)
+rules/           ast-grep rules; rule-tests/ holds their fixtures
+scripts/         dev, bundle check, complexity limits, Grafana alert applier
+e2e/             Playwright specs (*.pw.ts)
+wiki/            Astro Starlight docs site, its own package.json and node_modules
+.c3/             architecture facts, ADRs, eval bindings — query before coding
+```
+
+`c3x lookup <file>` maps a file to its owning component; `/c3 query <topic>`
+loads the context. Do that before editing rather than inferring from the tree.
 
 # Architecture
 
@@ -503,201 +557,20 @@ because `recoverOnStartup()` fail-closes all pending records on boot.
 Periodic `tickTimeouts` driver fires every 5s; default request timeout is
 600s. Pending requests time out as `{kind:"deny", reason:"timeout"}`.
 
-# Claude Driver Flag (KANNA_CLAUDE_DRIVER)
+# Claude driver flag (`KANNA_CLAUDE_DRIVER`)
 
-Setting `KANNA_CLAUDE_DRIVER=pty` launches the `claude` CLI **interactively**
-under a Bun.Terminal pseudo-terminal (Shannon-style) and tails the on-disk
-transcript JSONL at `~/.claude/projects/<encoded-cwd>/<session-uuid>.jsonl`
-as the sole event source. Input is sent as raw text + `\r` (no JSONL
-envelopes). PTY mode preserves Pro/Max subscription billing; SDK mode
-bills at API rates.
+`sdk` (the default) runs the Claude Agent SDK and bills at API rates. `pty`
+launches the `claude` CLI **interactively** under a Bun.Terminal pseudo-terminal,
+tails the on-disk transcript JSONL as its sole event source, and preserves
+Pro/Max subscription billing. PTY is macOS/Linux only and OAuth-only —
+`buildPtyEnv` unconditionally strips `ANTHROPIC_API_KEY`, and the token comes
+from the OAuth pool via `CLAUDE_CODE_OAUTH_TOKEN`.
 
-Default is `sdk` (no behaviour change). Authentication requires an OAuth-pool
-token configured in Kanna settings; the token is injected via
-`CLAUDE_CODE_OAUTH_TOKEN`. The local `claude /login` keychain path is not
-supported in this deployment. PTY mode is OAuth-only and NEVER uses an API
-key: `buildPtyEnv` unconditionally strips `ANTHROPIC_API_KEY` from the
-spawned child env. `verifyPtyAuth` only requires the OAuth-pool token.
-
-Platform support: macOS / Linux only.
-
-**Encoded cwd path:** Claude resolves the cwd to its real path
-(`fs.realpathSync` — macOS `/var` → `/private/var`), then replaces both
-`/` and `.` with `-`. `src/server/claude-pty/jsonl-path.ts`
-(`encodeCwd`, `computeJsonlPath`, `computeProjectDir`) matches this
-behaviour exactly. Mismatch = transcript file never found.
-
-**Trust dialog:** TUI claude prompts "Quick safety check: Is this a project
-you created or one you trust?" on every previously-unseen cwd. The driver
-detects the marker in the PTY output ring buffer and sends `\r` to accept
-"Yes, I trust this folder" (the default-highlighted option). Trust persists
-across spawns in the same cwd, so the dismiss cost amortises. Set
-`KANNA_PTY_TRUST_DISMISS=disabled` to bypass detection (escape hatch if
-Anthropic changes the dialog wording).
-
-**TUI ready signal:** Driver polls the output ring for the input-box marker
-`❯ ` before sending the first prompt. Hard cap defaults to 3000 ms
-(`KANNA_PTY_TUI_BOOT_MS`). **Follow-up turns gate too
-(adr-20260607-pty-followup-tui-ready-gate):** `sendPrompt` (the interactive
-follow-up handler) waits for the same `❯ ` marker + ring-quiet settle before
-pasting — after a long previous turn the REPL may still be rendering
-(stop-hook summary / turn_duration / context compaction) and silently swallow
-a paste, hanging the turn forever with no transcript line (observed: an "Ok"
-follow-up that never reached claude). Cap defaults to `KANNA_PTY_TUI_BOOT_MS`,
-overridable via `KANNA_PTY_FOLLOWUP_READY_MS`. Best-effort: on cap timeout the
-driver warns and pastes anyway, so it is never worse than the prior zero-gate
-path. Channel-push delivery (one-shot / keep-alive subagents) is unaffected —
-it has its own `channelClientReady` readiness.
-
-**Transcript watch:** `tui-source.adapter.ts` follows the transcript with a
-single 50 ms tail-poll (`stat`-size diff read on the append-only JSONL). There
-is no `fs.watch` — under Bun it backs to kqueue (macOS) / inotify (Linux), which
-coalesced rapid turn-end appends (final `assistant` + `system/turn_duration`
-rows) and silently stalled the stream, so it was removed in favour of the
-loss-proof poll. See `adr-20260607-pty-transcript-pure-poll`.
-
-**oneShot subagent close:** After the first `result` transcript entry on a
-one-shot run (Claude subagent), the driver sends `/exit\r` to gracefully
-close the REPL, awaits `pty.exited` with 5 s grace, then escalates SIGTERM →
-SIGKILL on hang. Matches the SDK driver's prompt-queue close semantics.
-
-**Smoke test (replaces preflight P3b):** Every spawn passes through a
-single TUI probe that verifies `--disallowedTools Bash` is honored.
-Cached 24 h per (binarySha256, model) under
-`${HOME}/.kanna/cache/smoke-test/`. PASS unlocks spawn; FAIL refuses
-with a clear reason that surfaces through the existing spawn-error
-path. The 8-probe preflight gate is removed (`KANNA_PTY_PREFLIGHT_MODEL`
-no longer consulted). The probe prompt explicitly forbids tool
-alternatives ("reply BASH_UNAVAILABLE … do not use any other tool") —
-an open-ended ask lets capable models burn the whole
-`waitForResultEntry` budget hunting for Bash substitutes
-(ToolSearch / Agent / Glob), which reads as a probe timeout → FAIL.
-
-**PTY turn-end detection (CLI ≥ 2.1.x format change):** Claude CLI
-≥ 2.1.x stopped writing `type:"system"` rows (`turn_duration`, `init`,
-`compact_boundary`) into the on-disk transcript JSONL. The turn-end
-signal is now the final assistant message's `message.stop_reason` —
-every persisted row of that message (one row per content block, same
-id) carries the same terminal value (`end_turn` / `stop_sequence` /
-`max_tokens` / `refusal`; `tool_use` and `pause_turn` mean the turn
-continues). `createJsonlEventParser` (`jsonl-to-event.ts`) arms a
-pending turn-end on a terminal-stop_reason row and flushes one
-synthesized `kind:"result"` on the next line that isn't part of the
-same message (claude writes `last-prompt` / `ai-title` / `mode` /
-`permission-mode` checkpoint rows right after, so the flush is
-prompt). A real `result` / `system/turn_duration` row (SDK fixtures,
-older CLIs) supersedes the pending flush, and a duplicate arriving
-just after a flush is swallowed — a turn never finalizes twice.
-`waitForResultEntry` (`tui-source.adapter.ts`) recognizes the same
-three markers. Sidechain rows never count (they end only the
-subagent's turn) but DO trigger a pending flush. Known degradations
-under the new format: `pendingWorkflowCount` (rode on
-`turn_duration`) is no longer available — the pending-workflow wake
-hint never arms from PTY transcripts (the `WorkflowRegistry` disk
-watch remains the live-run authority); `getSupportedCommands()` never
-sees a `system_init` row and stays on its static fallback list.
-
-**AskUserQuestion / ExitPlanMode (issue #215 — CLOSED):** Driver disallows
-the native built-ins (`--disallowedTools AskUserQuestion ExitPlanMode`)
-and force-registers the `mcp__kanna__ask_user_question` /
-`mcp__kanna__exit_plan_mode` shims, which route through the durable
-approval protocol to the UI — active regardless of `KANNA_MCP_TOOL_CALLBACKS`.
-See the Tool Callback Feature Flag section for full wiring.
-
-**setPermissionMode:** Asymmetric.
-- ENTER plan (`planMode === true`) sends `/plan\r` and sets an internal
-  `localPlanModeActive = true` flag.
-- EXIT plan (`planMode === false`) sends `SHIFT_TAB_KEY` (`\x1b[Z`, one
-  Shift+Tab press) and clears the flag **when `localPlanModeActive` is
-  true** — covers the common case where the driver entered plan mode.
-  If the flag is false (plan mode toggled externally via Shift+Tab in the
-  UI), a warning is logged and no keypress is sent. Restart the session
-  to return to acceptEdits from an unknown state. Tracked:
-  anthropics/claude-code#59891.
-
-**setModel:** Sends `/model <name>\r` via the slash command (no stream-json
-control_request envelope in TUI mode).
-
-**interrupt:** Sends `Ctrl+C` (0x03) via PTY stdin — TUI claude treats this
-as an interactive interrupt, cancelling the current turn.
-
-**getSupportedCommands():** Returns the live slash-command list from the
-spawned claude's `system_init` JSONL entry once a session is active.
-Falls back to a static four-command list (`model`, `exit`, `clear`, `help`)
-before first spawn (cold-start gap). CLI ≥ 2.1.x writes no `system` rows
-to the transcript, so on current CLIs the static fallback is permanent.
-
-**SDK ↔ PTY equivalence (Phase 6):** `src/server/claude-pty/parity-matrix.test.ts`
-drives both `createClaudeHarnessStream` (SDK) and `createJsonlEventParser`
-fed via `startTranscriptStream` (PTY) with the same SDK-message fixtures and
-asserts identical `HarnessEvent` sequences. Covers the original 7 cases
-unchanged.
-
-**Subagent + prompt + account parity (Phase 5):** unchanged from prior
-phases — `buildClaudeSubagentStarter` adapts the SDK-shaped starter to
-`StartClaudeSessionPtyArgs` with `oneShot: true`; both drivers append
-the shared `KANNA_SYSTEM_PROMPT_APPEND`; PTY derives `AccountInfo` from
-the picked OAuth-pool token label + masked key.
-
-**Failure handling:** Every PTY spawn captures terminal output into a 256 KB
-ring buffer (`OutputRing` in `output-ring.ts`). Failure synthesis on silent
-exit, auth detection (`401`, "Please run /login", "Not logged in"), and
-trust-dialog detection all read from this ring. Synthesised error events
-feed the same `detectFromResultText` / OAuth-pool rotation path in
-`agent.ts` the SDK driver uses.
-
-**Architecture note:** PTY mode parses the on-disk transcript JSONL file
-as the sole event source — `src/server/claude-pty/tui-source.ts`
-(`startTranscriptStream`) watches `~/.claude/projects/<encoded-cwd>/`
-for the file claude creates on first user prompt, then follows it via a
-50 ms tail-poll (`stat`-size diff on the append-only JSONL; no `fs.watch`).
-`driver.ts` is a thin coordinator: spawn (via `pty-process.ts`
-`spawnPtyProcess` + Bun.Terminal) → trust dismiss → first-prompt send →
-pipe transcript lines into `createJsonlEventParser` → emit HarnessEvents.
-Nothing reads the PTY stdout for events; the output ring only powers
-trust detection + failure synth. Spawn-time `--mcp-config` still wires
-the kanna-mcp loopback HTTP server (Phase 2) unchanged.
-
-**OAuth pool rotation (P5):** PTY mode honors the same multi-token rotation
-the SDK driver uses. `AgentCoordinator` picks an active token from
-`OAuthTokenPool` per chat and the PTY driver injects it via the
-`CLAUDE_CODE_OAUTH_TOKEN` env var. Auth failures (401 detected in the
-output ring) synthesise an `oauth_invalid_token` result event that feeds
-the same rotation/retry path the SDK driver uses on thrown stream errors.
-
-**Env vars (PTY-specific):**
-- `KANNA_CLAUDE_DRIVER=sdk|pty` — driver selector (default `sdk`).
-- `KANNA_MCP_TOOL_CALLBACKS=1` — route built-in shims through durable approval.
-- `KANNA_PTY_TRUST_DISMISS=enabled|disabled` — trust-dialog dismiss (default `enabled`).
-- `KANNA_PTY_TUI_BOOT_MS=3000` — hard cap on TUI-ready wait (default `3000`).
-- `KANNA_PTY_FOLLOWUP_READY_MS` — hard cap on the follow-up-turn TUI-ready
-  gate in `sendPrompt` (default = `KANNA_PTY_TUI_BOOT_MS` / 3000). On timeout
-  the driver warns and pastes anyway.
-- `KANNA_PTY_SESSION_END_GRACE_MS=5000` — grace period (ms) between `/exit`
-  and SIGTERM during session close (default `5000`). The SessionEnd hook fires
-  in this window; increase if your SessionEnd hook takes longer. Sessions whose
-  Claude process exits before the deadline skip SIGTERM entirely. Supervisord
-  users should set `stopwaitsecs` ≥ this value + 10 so Kanna can shut down
-  gracefully without being SIGKILL'd by supervisord.
-- `CLAUDE_CODE_OAUTH_TOKEN` — set by driver from pool, NOT a user env var.
-- `KANNA_PTY_CHANNEL_DELIVERY=enabled|disabled` — for one-shot (subagent) PTY
-  spawns, deliver the prompt via a `notifications/claude/channel` push instead
-  of typing it into the TUI (default `enabled`). Avoids the multi-line
-  bracketed-paste collapse that silently truncated subagent prompts. Requires
-  the account's channel feature enabled. Fail-fast: if the channel client is
-  not ready within `KANNA_PTY_CHANNEL_READY_TIMEOUT_MS` the spawn fails with a
-  clear error — there is NO silent paste fallback. Set `disabled` to revert
-  subagent spawns to the legacy paste path. Adds
-  `--dangerously-load-development-channels server:kanna` to subagent spawns and
-  appends channel framing to the subagent system prompt.
-- `KANNA_PTY_CHANNEL_READY_TIMEOUT_MS=15000` — channel client-ready timeout
-  before a subagent spawn fails fast (default `15000`).
-
-Removed in this version (no longer consulted):
-- `KANNA_PTY_PREFLIGHT_MODEL` — preflight gone, replaced by smoke-test.
-- `KANNA_PTY_SANDBOX` — sandbox already removed in a prior change; flag now inert.
-- `KANNA_PTY_TRANSCRIPT_WATCH` — `fs.watch` removed; the follower always polls
-  (`adr-20260607-pty-transcript-pure-poll`).
+**`.claude/skills/kanna-pty/SKILL.md`** holds the detail: the encoded-cwd path,
+the trust dialog, the TUI-ready gates on both first and follow-up turns, the
+50 ms tail-poll transcript follower (and why there is no `fs.watch`), turn-end
+detection under CLI ≥ 2.1.x, the spawn smoke test, `setPermissionMode` /
+`setModel` / `interrupt`, OAuth-pool rotation, and every `KANNA_PTY_*` env var.
 
 # Builtin slash commands — `/clear` and `/compact [instructions]`
 
@@ -1177,185 +1050,20 @@ error (`claude-turn-runner.ts` catch branch); a `turn/completed` failure never
 reaches it, which is why c3-227's documented precondition ("a Claude or Codex
 turn emits a result event with subtype: error") is still only half true.
 
-# Subagent Delegation (Anthropic Task-tool pattern)
+# Subagent delegation
 
 The main agent is always in the loop. `@agent/<name>` in chat input is a
-**hint**, not server-side routing — it no longer short-circuits the main
-turn. The main model decides whether to delegate and calls
-`mcp__kanna__delegate_subagent({ subagent_id, prompt })`. The tool blocks
-until the run finishes and returns the subagent's final reply as text;
-the main model then synthesizes it into its own response.
+**hint**, not server-side routing; the model delegates by calling
+`mcp__kanna__delegate_subagent`. Runs are bounded by a permit pool, a
+cycle/depth check (`LOOP_DETECTED` / `DEPTH_EXCEEDED`), and a per-subagent
+`maxTurns`.
 
-- **Roster injection:** `buildKannaSystemPromptAppend(subagents)` in
-  `src/shared/kanna-system-prompt.ts` builds a dynamic system-prompt
-  suffix listing every configured subagent's `name`, `id`, and
-  `description`. Computed per-spawn in `agent.ts` and passed to both
-  drivers (SDK via `systemPrompt.append`, PTY via
-  `--append-system-prompt`). Truncated at 20 entries by `updatedAt`
-  descending; remainder surfaced as "(N more subagents omitted ...)".
-- **MCP tool:** registered in `kanna-mcp.ts` only when the spawn
-  supplies both `subagentOrchestrator` AND `delegationContext`. Main
-  spawns supply `depth: 0`, `ancestorSubagentIds: []`, `parentRunId:
-  null`. Subagent spawns (sub-spawn-sub) supply the caller's own
-  context so cycle / depth checks apply — `LOOP_DETECTED` when the
-  target appears in the ancestor chain, `DEPTH_EXCEEDED` when
-  `depth > maxChainDepth` (default 1, configurable on the orchestrator).
-- **`SubagentOrchestrator.delegateRun(args)`:** public async API that
-  awaits a single run and returns `DelegationOutcome` —
-  `{status:"completed", text}` or `{status:"failed", errorCode, errorMessage}`.
-  Used by the MCP tool; also exposed via
-  `AgentCoordinator.getSubagentOrchestrator()` for tests.
-- **Cancellation:** `cancelChat` / `cancelRun` cascade through delegated
-  runs as before. Each `delegateRun` registers a `RunState` and obeys
-  the same permit / timeout / abort wiring as the legacy
-  mention-triggered path.
-- **Backwards compat:** `parseMentions` still runs inside the normal
-  `appendUserPrompt` path so `subagentMentions` metadata stays on
-  `user_prompt` entries for UI badges and analytics. The assistant-text
-  mention scan and the `chat_send` / dequeue short-circuits are removed.
-
-## Subagent spawn gate — parity with the main chat (adr-20260805-subagent-spawn-gate-parity)
-
-`SubagentOrchestrator` fails a run `AUTH_REQUIRED` when `ProviderRunStart.authReady()`
-returns false. For claude that predicate is `claudeAuthReady(pool, chatId)`
-(`provider-catalog.ts`), and it is the **single definition of the Claude spawn
-gate**:
-
-```ts
-if (!pool || !pool.hasAnyToken()) return true  // local claude CLI credentials
-return pool.hasUsable(reservedFor)
-```
-
-**An OAuth-pool token is required only once the user has configured one.** With
-`claudeAuth.tokens: []` the driver falls through to the local `claude` CLI
-credentials, exactly as `claude-session-spawner.ts` / `quick-response.ts` do
-(their `hasAnyToken() && !picked` refusal is the same condition, kept in that
-form because they also need the picked token — TOCTOU-closed per c3-224). A
-subagent must never be refused where a main-chat turn would spawn: that
-asymmetry gave a working main chat and `AUTH_REQUIRED` on every delegation,
-which presents as "the loop won't set up" because the orchestrator disarms after
-the failed `delegate_subagent`.
-
-`reservedFor` is the **parent** chat id, so a token already reserved by the
-parent counts as usable — subagent runs are sequential under the parent's paused
-turn (see `oauth-token-pool` `isEligible`).
-
-**There is no `claudeAuth.authenticated` setting.** `ClaudeAuthSettings` is
-`{tokens, concurrencyDefault}`; the flag never existed and was never written, so
-a gate that consulted it read every user as unauthenticated. `AppSettingsSnapshot`
-deliberately omits `claudeAuth` so re-reading it is a compile error — do not
-re-add it.
-
-## Keep-Alive Multi-Turn Subagents (claude SDK + PTY)
-
-`delegate_subagent({ subagent_id, prompt, keep_alive: true })` keeps the
-subagent's claude session open after the first `result` instead of tearing it
-down. The main agent then drives further turns into the SAME warm session — no
-re-spawn, no re-trust, warm cache. Star topology preserved: the main agent is
-always the one calling these tools.
-
-- **SDK transport (adr-20260616-sdk-pty-feature-parity):** the SDK driver uses
-  its native streaming-input prompt queue — `startClaudeSession({ keepAlive })`
-  leaves the `AsyncMessageQueue` open after the initial prompt and exposes the
-  handle's `pushChannelPrompt` field backed by a queue push (shared with
-  `sendPrompt` via `enqueueUserPrompt`). No channel/dev-channels flag is needed.
-- **PTY transport:** as below — a kanna channel push.
-
-- **Transport:** each turn is a kanna channel push (`pushChannelPrompt`, the
-  same MCP-notification transport shipped in PR #333) followed by draining
-  the persistent `HarnessEvent` stream until the next synthesized
-  `kind:"result"` event. Interactive TUI claude never writes a
-  `type:"result"` row; the turn-end signal depends on CLI version (see
-  **PTY turn-end detection** below). `createJsonlEventParser`
-  (`jsonl-to-event.ts`) synthesizes one `kind:"result"` per turn either
-  way, so a per-turn drain (`drainOneTurn` in `subagent-provider-run.ts`)
-  returns once per turn and leaves the iterator open.
-- **Auto-wake filter exemption (do NOT remove):** a channel push lands in the
-  transcript as a `user isMeta:true` line at a turn boundary, which the
-  `jsonl-to-event.ts` auto-wake filter (added in 216392b to drop CC's own
-  `<task-notification>` background wakes) would otherwise eat — dropping the
-  synthesized `result` and hanging `drainOneTurn` forever. The parser detects
-  the `<channel source="kanna">` tag (`userMessageContainsKannaChannel`) and
-  treats those lines as real turns. Genuine `<task-notification>` wakes stay
-  filtered. Unit fakes emit `kind:"result"` directly and bypass this path, so
-  this invariant is only covered by the parser tests + the real-OAuth e2e.
-- **Driver:** `StartClaudeSessionPtyArgs.keepAlive` suppresses
-  `oneShotClose()` on the first result and exposes
-  `pushChannelPrompt` on the handle (`claude-pty/driver.ts`). Keep-alive
-  REQUIRES channel delivery — a keep-alive run with no `pushChannelPrompt`
-  fails closed. The subagent system prompt gets the plural channel framing
-  (`buildChannelPromptFraming(true)`) so the model expects multiple channel
-  messages over the session and does not treat turn 2+ as a suspicious
-  interrupt.
-- **Provider run:** `runClaudeSubagent` drains turn 1, then returns a
-  `LiveTurnSource` (`runTurn(prompt, onChunk, onEntry)` + `close()`) via the
-  widened `ProviderRunStart.start(onChunk, onEntry, { keepAlive })`. Codex is
-  out of scope — keep-alive is claude-PTY only; the MCP layer rejects
-  `keep_alive` for non-claude subagents.
-- **Orchestrator:** a `liveSessions` registry (keyed by `runId`) holds each
-  warm session. Turn 1 runs through the normal `spawnRun` plumbing (permit,
-  RunState, timeout, abort, events) but on completion registers a
-  `LiveSession` instead of cleaning up; the RunState stays registered so
-  cancel can reach it. Follow-up turns: `sendToLiveRun(runId, prompt)`.
-  Teardown: `closeLiveRun(chatId, runId, reason)`.
-- **Permit model:** an idle live session holds NO parallel permit. Each
-  active turn (`spawnRun` turn 1, and each `sendToLiveRun`) acquires a permit
-  for its drain and releases it after. Two orthogonal limits — permits =
-  concurrent active turns; `KANNA_SUBAGENT_MAX_LIVE` = live processes.
-- **Lifecycle bounds:** idle sessions are auto-closed after
-  `KANNA_SUBAGENT_IDLE_TIMEOUT_MS` (default 300000), reset on each turn. Live
-  process count is capped per chat by `KANNA_SUBAGENT_MAX_LIVE` (default 5) —
-  over cap, `delegate_subagent({keep_alive:true})` fails `CAP_EXCEEDED`
-  (no LRU eviction; an LRU session might be in use). `cancelChat` /
-  `cancelRun` cascade-close all live sessions for the chat/run.
-- **MCP tools** (registered under the same `subagentOrchestrator &&
-  delegationContext` guard as `delegate_subagent`):
-  - `delegate_subagent({ ..., keep_alive })` — turn 1; on completion appends
-    `[run_id: ...]` to the reply so the model learns the handle.
-  - `send_subagent_message({ run_id, prompt })` — drives a follow-up turn;
-    blocks until that turn finishes; `NO_LIVE_SESSION` if unknown.
-  - `close_subagent({ run_id })` — tears down + frees the process.
-- **Env vars:** `KANNA_SUBAGENT_MAX_LIVE` (default 5),
-  `KANNA_SUBAGENT_IDLE_TIMEOUT_MS` (default 300000) — both wired into the
-  orchestrator deps at `AgentCoordinator` construction (`agent.ts`); the
-  orchestrator itself reads only its deps (side-effect seal).
-
-# Background Subagents (delegate_subagent run_in_background)
-
-`delegate_subagent({ subagent_id, prompt, run_in_background: true })` launches a
-subagent WITHOUT blocking the main turn. The MCP tool returns immediately with
-`{status:"async_launched", run_id}`; the subagent's final reply is delivered
-back into the main chat as a fresh turn when it finishes. Mutually exclusive
-with `keep_alive` (the MCP host rejects both set). Works for any provider
-(Claude + Codex) — delivery is provider-agnostic. See
-adr-20260616-subagent-run-in-background.
-
-- **Orchestrator:** `delegateRun({background:true})` runs the subagent through
-  the normal `spawnRun` plumbing (permit, RunState, timeout, abort,
-  event-sourcing) but does NOT await it — it generates the runId up front,
-  returns `{status:"async_launched", runId}`, and on terminal fires the
-  `onBackgroundRunComplete(chatId, runId, BackgroundRunOutcome)` dep. The active
-  background run holds a permit while in flight, so concurrency is bounded by
-  the existing permit pool (default 4) + run timeout. No live-session registry
-  (background runs are one-shot, not keep-alive).
-- **Re-entry (driver-agnostic, always /clears main).** `AgentCoordinator.deliverSubagentToMain`
-  is wired as `onBackgroundRunComplete`. On every delivery it (1) wipes the
-  chat's Claude `session_token` (main /clear equivalent — same machinery
-  `exit_plan_mode`'s clearContext branch uses), (2) appends a `context_cleared`
-  transcript entry, (3) emits `auto_continue_accepted { source:
-  "subagent_background", delayMs: 0 }` whose prompt is the structured
-  `<task-notification>` XML (`buildTaskNotification` in `agent.ts` — same
-  format Claude Code's LocalAgentTask uses, so the model parses task
-  identity/status natively). Un-armed ad-hoc deliveries include the subagent's
-  `<result>` body (truncated at 4k chars) — the /clear per delivery means the
-  result rides exactly one fresh prompt, context never accumulates. ARMED loop
-  deliveries omit `<result>` (PROGRESS.md stays the loop's only durability
-  contract) and append the full loop discipline prompt after the notification.
-  `fireAutoContinue` → `enqueueMessage` delivers to both drivers; because
-  session_token is null, the next main turn is a FRESH Claude spawn.
-- **No wake cap.** Concurrency is bounded by the subagent permit pool + run
-  timeout. Every delivery is a real event, never a self-poll — no runaway
-  budget is meaningful here.
+**`.claude/skills/kanna-subagents/SKILL.md`** holds the detail: roster
+injection into the system prompt, the spawn gate (`claudeAuthReady` — the single
+definition of it, and why a subagent must never be refused where a main-chat
+turn would spawn), keep-alive multi-turn sessions and their permit model, and
+background runs plus the `deliverSubagentToMain` re-entry that /clears main on
+every delivery.
 
 # A queued message carries the whole dispatch, and the builder must not enumerate it
 
@@ -1464,114 +1172,14 @@ Residual window (accepted): a crash between `recordTurnStarted` and the spawn
 still loses the wake. That is two adjacent store writes, down from the whole
 spawn — which on a slow MCP boot was seconds.
 
-**`recoverArmedLoopWakes` covers the OTHER lost-wake window** — the wake that
-never reached the queue because the loop's background subagent (or its
-delivery in `deliverSubagentToMain`, whose four writes are not atomic) died
-WITH the server. Observed twice: chat c87ab0ad (OOM killed run fc17bee6 seven
-minutes in) and chat 5cea83a7 (OOM landed 118 ms after `loop_run_outcome`,
-before `auto_continue_accepted`). The invariant it restores: an ARMED loop
-always holds exactly one pending wake — a running subagent, a queued message,
-or an active turn. At boot no subagent survives the dead process, so
-armed + idle + empty queue proves the wake is lost, and the recovery re-emits
-it from the durable `LoopState.prompt`. Runs AFTER `recoverQueuedMessages` on
-purpose: a chat whose wake survived to the queue is busy (or still queued) by
-then, so the armed-loop pass cannot double-fire it. The busy check goes
-through the injected `isChatBusy` (the single predicate), never ad-hoc maps.
+The loop-specific half of this story — `recoverArmedLoopWakes` (the wake that
+died WITH the server), `handleFailedLoopTurn` (the wake lost while the server
+kept running), the `loop_armed`/`loop_disarmed` tombstone that makes a disarm
+visible and `resume_loop` possible, and the un-armed delivery prompt that names
+the plan absolutely or names nothing — is in
+`.claude/skills/kanna-loop/SKILL.md`.
 
-**`handleFailedLoopTurn` covers the THIRD window — a wake lost while the server
-kept running.** Both passes now live in `src/server/loop-wake-recovery.ts` and
-share ONE re-arm (`rearmLoopWakeIfLost`), so what counts as a lost wake cannot
-drift between them. An orchestrator turn that dies BEFORE it calls
-`delegate_subagent` leaves no subagent to deliver, no queued message, and no
-active turn — and `deliverSubagentToMain` is unreachable by construction, so
-nothing re-armed. Observed twice in chat 108b8a13: an `api_error: ENOTFOUND`
-ended the wake turn on 2026-08-28 (stalled 16 h, released only by a server
-restart) and again on 2026-08-29 (stalled 55 min, until the user typed "resume",
-which disarms). A transport error matches neither `detectFromResultText` nor the
-auth detector, so `handleLimitDetection` — the only other path that re-arms a
-failed main turn — never fires.
-
-It hangs off `AgentCoordinator`'s `onTurnTerminal` on `outcome === "failed"`, the
-choke point every provider terminal path already funnels through. Four things
-about it are load-bearing:
-
-- **The re-arm is DEFERRED** (injectable `RearmScheduler`, default `setTimeout`).
-  `recordTurnFailed` fires the observer BEFORE `activeTurns.delete` and before
-  the queued-message drain, so an immediate re-arm reads a chat that is still
-  busy. Every guard is re-evaluated at fire time, which is what makes the exact
-  delay uncritical.
-- **It records `loop_run_outcome {ok: false}`** so a repeatedly-crashing
-  orchestrator feeds `MAX_CONSECUTIVE_LOOP_FAILURES` and gets disarmed with a
-  visible reason. Without it this fix trades a silent stall for a silent hot loop.
-- **The `running`-subagent guard is RUNTIME-ONLY.** A turn that failed after
-  delegating still has its wake held by that run. The boot pass must NOT consult
-  it: a run killed with the server never wrote a terminal event and replays as
-  `running` forever, so honouring it there re-breaks the c87ab0ad incident.
-- **It never throws.** It runs from the observer all turns pass through, so an
-  escape would break the terminal path of turns that have no loop at all.
-
-`cancelled` is deliberately excluded — a cancel is a human stop, and re-arming
-would fight the user.
-
-**A disarm is visible and undoable.** Any user `chat.send` disarms an armed
-loop as a takeover (`claude-send-command.ts`) — correct, since an armed loop
-blocks Edit/Write/Task at spawn, but it used to be silent AND irreversible.
-
-- **`compactLoopWakeEvents` retains the last `loop_armed` + `loop_disarmed`
-  PAIR** as a tombstone. `loop_armed` is the sole carrier of `subagentId`, the
-  rendered prompt, `verifyCommand`, `workdirAbs` and `trackingFileRel`; dropping
-  it left nothing to re-arm from and nothing to name the loop's real plan with.
-  **Both halves or neither** — keeping the arm alone replays through
-  `deriveLoopState` as a still-ARMED loop, silently re-arming a loop the user
-  stopped (pinned by "deriveLoopState returns null after disarmed-loop
-  compaction").
-- **`deriveLastLoopSpec` is a SECOND projection, deliberately.**
-  `deriveLoopState` answers "is a loop running right now" and must keep
-  returning null after a disarm; `deriveLastLoopSpec` answers "what loop did
-  this chat last run" and survives it. Do not merge them.
-- **`loop_disarmed` is a transcript entry**, rendered by `LoopDisarmedMessage`
-  with the plan + worktree it recorded. Written for `goal_met`, `user_send` and
-  `repeated_failures`; skipped for `chat_deleted` (no transcript left to read
-  it in). The append is wrapped — the durable disarm already landed, so losing
-  the card costs visibility while throwing would fail the user's send.
-- **`resume_loop`** re-arms from the tombstone WITHOUT re-validating: the spec
-  already passed `setup_loop`'s gates, and re-running them would refuse a loop
-  whose oracle now passes — the very state a resume is for. Depth-0 only, like
-  `setup_loop`. `consecutiveFailures` resets, matching `deriveLoopState`.
-- **`rateLimit` is NOT gated on `loopState`.** A loop parked on a usage limit is
-  exactly when a user types "resume" — and that send nulled `loopState`, which
-  nulled `rateLimit`, which un-rendered the "Resume now" button. The attempt to
-  resume destroyed the resume affordance.
-
-**The un-armed delivery prompt NAMES the plan, or names nothing.** When no loop
-is armed, `deliverSubagentToMain` used to tell the context-cleared main agent to
-"Read PROGRESS.md if present". That is `setup_loop`'s DEFAULT filename, so it
-identifies nothing — MEASURED on one install: 54 `PROGRESS*.md` across sibling
-worktrees, **26** named exactly `PROGRESS.md`. And nothing resolved it: the
-tracking-doc tools fall back to the chat cwd once no loop is armed
-(`getArmedLoop?.(chatId)?.workdirAbs ?? args.cwd`), so both the sentence and the
-tool pointed at the MAIN checkout while the loop had worked in a worktree. A
-post-loop review followed it, read an unrelated finished loop's plan, and graded
-the wrong feature.
-
-`describeLastPlan(deriveLastLoopSpec(...))` now builds that sentence from the
-`loop_armed` tombstone: the tracking file **absolute**
-(`${workdirAbs}/${trackingFileRel}`), because a bare filename is precisely what
-resolves against the wrong checkout. With no tombstone it names **nothing** — a
-confident wrong filename is worse than silence, and the run's `<result>` is
-still in the notification. This is the same defect class already fixed on the
-WRITE path (`renderLoopPrompt` embedding `file:` in every call it prescribes);
-the READ path was the half nobody had done.
-
-`kanna-mcp.ts`'s `baseDir()` is deliberately NOT widened to a disarmed loop's
-workdir — that is a confinement boundary, and an absolute path in the prompt
-solves the problem without relaxing where the tracking-doc tools may write.
-
-See `adr-20260813-queued-message-dequeue-on-commit`,
-`adr-20260814-armed-loop-wake-recovery`,
-`adr-20260830-loop-runtime-wake-rearm`,
-`adr-20260830-loop-disarm-visible-resumable`, and
-`adr-20260830-unarmed-delivery-names-plan`.
+See `adr-20260813-queued-message-dequeue-on-commit`.
 
 # Observability (OTel traces + metrics, memlog, SIGUSR2 heap snapshot)
 
@@ -1945,398 +1553,23 @@ as `store as never`: a required member typechecks and then fails at runtime,
 which is the regression `adr-20260813-transcript-memory-budget` records as
 "tried and reverted". See `adr-20260819-context-window-usage-tail-read`.
 
-# Notification-Driven Loop Orchestration (supersedes Agent Self-Scheduled Wake)
+# Autonomous loops — `/loop`, `setup_loop`, the oracle, the tracking file
 
-Long-horizon autonomous loops (eslint burn-downs, migration sweeps, multi-hour
-codemods) run under a notification-driven pattern with per-iteration `/clear`
-on the main agent's Claude session. There is no timer-based `schedule_wakeup`
-anymore (removed in adr-20260711-notification-driven-loop-orchestration —
-which supersedes `adr-20260603-agent-self-scheduled-wake`).
+Long-horizon autonomous loops run notification-driven, with a per-iteration
+`/clear` on the main agent and the tracking file (`PROGRESS.md` by default) as
+the ONLY durability contract. Main context is intentionally ephemeral; there is
+no timer-based `schedule_wakeup` (removed — it superseded
+`adr-20260603-agent-self-scheduled-wake`).
 
-**Roles:**
-- **Main agent = orchestrator; stateless-in-context, stateful-in-file.**
-  Every subagent completion delivery /clears the main-agent Claude session
-  (wipes `session_token`, appends `context_cleared` transcript entry). The
-  next main turn is a FRESH Claude spawn that re-reads PROGRESS.md.
-- **Subagent = worker per iteration.** Fresh Claude spawn per delegation
-  (`sessionToken: null, forkSession: false` — enforced at
-  `subagent-provider-run.ts:170-171`). Subagent does one chunk of work and
-  writes PROGRESS.md before terminating.
-- **PROGRESS.md** (or whatever tracking file the user configures) is the
-  ONLY durability contract. Main context is intentionally ephemeral.
+**`.claude/skills/kanna-loop/SKILL.md`** holds the design: the
+orchestrator/worker split and the wake path, `setup_loop` and its five arm-time
+refusals, the four-case oracle table and the TERMINAL CHECK, `run_verify`
+memoization, the structured tracking-doc MCP tools, loop-armed tool blocking,
+Progress-panel rows and chunk labels, per-subagent `maxTurns`, the three
+lost-wake recovery passes, and the disarm/resume tombstone.
 
-**Wake path:** the model calls
-`mcp__kanna__delegate_subagent({run_in_background: true, prompt: ...})` and
-ends the main turn. `SubagentOrchestrator` runs the subagent through the
-existing permit pool + timeout + event-source plumbing; on terminal, its
-`onBackgroundRunComplete` hook fires `AgentCoordinator.deliverSubagentToMain`,
-which /clears the main session and emits an `auto_continue_accepted` event
-with `source: "subagent_background"` and a minimal `"Read PROGRESS.md, decide
-next action."` prompt. `fireAutoContinue` → `enqueueMessage` delivers on both
-drivers.
-
-**Loop termination:** absence of delegation. When the model reads PROGRESS.md
-and sees the goal is met, it does not delegate. The main goes idle. No timer
-to disarm, no wake cap to worry about.
-
-**Removed (hard break, per adr-20260711-notification-driven-loop-orchestration):**
-- `mcp__kanna__schedule_wakeup` MCP tool.
-- `AgentCoordinator.scheduleAgentWakeup` method.
-- `maybeArmPendingWorkflowWake` (pending-workflow poll harvest) — workflow
-  status stays visible via the disk-watch panel; model can `delegate_subagent`
-  to a status-check subagent for event-driven workflow wake.
-- `AutoContinueSource` variants `agent_wakeup` and `pending_workflow`.
-- Env vars `KANNA_MAX_AGENT_WAKES` and `KANNA_PENDING_WORKFLOW_POLL_MS`.
-
-**PTY behaviour:** native `ScheduleWakeup` stays disallowed
-(`PTY_DISALLOWED_NATIVE_TOOLS` still includes it) — the CLI cron is a
-dead-letter under Kanna's spawn model and there is no Kanna replacement.
-Native `/loop` slash command inside PTY-mode chats will not have a way to
-schedule (its `ScheduleWakeup` calls hit the disallowed list); use
-`delegate_subagent({run_in_background: true})` instead.
-
-**Example PROGRESS.md skeleton:**
-```markdown
-## Goal
-eslint --max-warnings=0 exits 0
-
-## Progress (latest first)
-- 2026-07-11 W3 no-empty-function chunk 4/8 DONE (subagent run-abc123)
-
-## Failed approaches
-- Generic `noop` helper → typecheck fail (variance mismatch)
-
-## Next chunk
-W3 no-empty-function chunk 5/8: files X, Y, Z. Approach: shared typed noop.
-```
-
-**Example `/loop` recurring prompt:**
-```
-Read PROGRESS.md. If Goal met → PushNotification + STOP (do not delegate).
-Else: delegate_subagent({run_in_background: true, prompt: "<Next chunk from
-PROGRESS.md>; verify oracle; update PROGRESS.md with result then terminate"}).
-End this turn.
-```
-
-## setup_loop MCP tool (validated template)
-
-Instead of writing the recurring prompt by hand, the user can say "set up a
-/loop with goal X, verify command Y" and the model calls
-`mcp__kanna__setup_loop({ goal, verify_command, tracking_file?, chunk_hint? })`.
-The server owns the template so the prompt is deterministic. See
-`adr-20260711-setup-loop-template`.
-
-- **Pure validator** (`src/server/loop-template.ts`): rejects blank goal /
-  unparseable verify command (unbalanced quotes) / `trackingFile` outside cwd
-  / NUL byte. Returns a flat error list (does not fail-fast); the tool
-  surfaces the list as `isError`. (There is intentionally NO length cap on
-  `goal` / `chunkHint` — those were removed.)
-- **Deterministic tracking-file reconcile** (`reconcileTrackingFile`, pure,
-  same module): when the tracking file already EXISTS, it is reconciled
-  against the canonical schema instead of being silently trusted — a pure
-  string transform, no model judgement. Server-owned sections (`## Goal`,
-  `## Verify command`) are rewritten in place when they differ from the
-  setup_loop inputs; loop-owned sections (`## Progress`, `## Failed
-  approaches`, `## Next chunk`) are preserved verbatim when present and
-  inserted from the skeleton when missing (history never destroyed);
-  preamble + unknown sections preserved. A conformant file round-trips
-  byte-identical. The skeleton and the reconcile derive from one
-  `CANONICAL_SECTIONS` table so they cannot drift. The tool result reports
-  `created skeleton` / `reconciled: <actions>` / `already conforms`.
-- **IO adapter** (`src/server/loop-template-io.adapter.ts`): creates the
-  tracking file with a skeleton if absent; otherwise applies the injected
-  pure reconcile and rewrites only when it reports a change. Parent dirs
-  auto-created.
-- **Coordinator entry** (`AgentCoordinator.setupLoop`): after validation +
-  file ensure, wipes the chat's Claude `session_token`, appends
-  `context_cleared`, and emits `auto_continue_accepted` with the templated
-  prompt (source `subagent_background` — reuses the notification-driven
-  path). Codex untouched.
-- **Registration guard**: only registered on MAIN chats (`delegationContext.depth === 0`)
-  — subagent spawns lose the no-op tool.
-- **Rendered prompt invariants** (asserted structurally in `validateLoopSetup`):
-  the recurring prompt MUST contain the tracking-file path, the verify
-  command, `delegate_subagent`, `run_in_background: true`, `GOAL MET`,
-  `ORACLE TOO WEAK`, `TERMINAL CHECK`, `EVERY section`,
-  `with NO sections filter`, `Before writing DONE`, `END THIS TURN`, `/clear`,
-  `query_tracking_file`, `append_tracking_row`, `replace_tracking_section`,
-  `BOTH`, `AUTH_REQUIRED`, `do NOT call stop_loop`, and `Failed approaches`.
-  Future edits to the template that drop any of these fail validation.
-
-## Loop oracle + arm-time gates (adr-20260805-loop-oracle-hardening)
-
-**The oracle is a proxy; the plan is the authority.** A loop once declared
-GOAL MET at stage 4 of a 12-stage plan because its verify command — two greps
-plus the standing gate — flipped green early. Step 3 of the rendered prompt is
-therefore four cases over TWO signals, not one:
-
-| verify | `## Next chunk` | orchestrator does |
-| --- | --- | --- |
-| exit 0 | empty / DONE | TERMINAL CHECK (below) → `GOAL MET` → `stop_loop` |
-| exit 0 | still lists work | `ORACLE TOO WEAK` → `stop_loop`, hand to a human |
-| non-zero | has work | delegate (normal case) |
-| non-zero | empty | write the next chunk itself, then delegate |
-
-The oracle-green-but-plan-full case deliberately STOPS rather than continuing:
-the loop cannot tell a stale plan from a weak oracle, and only a human can
-retighten the definition of done.
-
-**TERMINAL CHECK (adr-20260806-loop-oracle-audit).** `## Next chunk` alone is
-not enough to declare victory: a worker once wrote `DONE` there while five
-undone chunks sat in a non-canonical `## Chunks` section that the
-section-scoped read discipline meant nobody was ever shown — a grep-shaped
-oracle was green, and the loop declared GOAL MET over an unfinished feature.
-Before GOAL MET the orchestrator must call `query_tracking_file` with NO
-sections filter — the ONE whole-file read the loop permits — and scan EVERY
-section (canonical or not) for undone work; work found is case (b). The worker
-brief carries the mirror rule: before replacing `Next chunk` with `DONE`, run
-the same check and write any remaining work into `Next chunk` instead. Bounded
-by construction: at most one full read per loop, on the terminal iteration.
-
-**`setup_loop` refuses at arm time**, before the context wipe — every one of
-these used to surface an iteration later, or not at all:
-
-- worker is manual-trigger (`triggerMode` is carried in
-  `LoopSetupContext.roster`; dropping it at the call site is the original bug —
-  `MANUAL_ONLY` then fired only at the first delegation);
-- the verify command **already exits 0** (the loop would declare GOAL MET
-  having done nothing — either the goal is met or the oracle is too weak);
-- the tracking file is **git-tracked and records a different goal**
-  (`assertTrackingFileSafe`) — reconciling it would rewrite a finished loop's
-  committed record;
-- `workdir` is not the project checkout or a worktree of the same repo;
-- `parallelism` outside 1..`MAX_PARALLELISM` (4).
-
-`force: true` overrides the already-passing-oracle and tracked-file refusals.
-
-**`workdir`.** The loop's working directory — where the verify command runs and
-where `trackingFile` is rooted. Defaults to the project cwd; point it at a
-sibling git worktree so the plan sits beside the branch it describes. Bounded
-by `isWorktreeOfSameRepo` (compares `git rev-parse --git-common-dir`, which
-makes worktrees of one repo compare equal while an unrelated repo does not).
-The tracking-doc MCP tools resolve their base dir from the armed loop **per
-call**, not per spawn — tools are built at spawn and `setup_loop` arms mid-turn.
-
-**`parallelism`** (default 1) renders a fan-out rule, but only for chunks the
-plan explicitly marks `[parallel]`, each naming its OWN worktree. Independence
-is never inferred — two workers in one checkout corrupt each other's edits.
-
-**Host-owned failure backstop.** A `loop_run_outcome` auto-continue event
-records each iteration; `deriveLoopState` folds it into `consecutiveFailures`
-(reset by `loop_armed` and by any success). At
-`MAX_CONSECUTIVE_LOOP_FAILURES` (3) the host emits `loop_disarmed` with reason
-`repeated_failures`. This is what lets the prompt safely tell the model to
-RETRY infra failures (`AUTH_REQUIRED`, `CAP_EXCEEDED`, timeouts) instead of
-calling `stop_loop` — previously one transient auth error parked the run until
-a human noticed.
-
-**`run_verify` (oracle memoization).** The gate ran twice per productive
-iteration (orchestrator, then worker) at ~65s each, and again on iterations
-where nothing could have changed. `mcp__kanna__run_verify` runs the armed
-loop's command and caches the result on a workspace digest (`git rev-parse
-HEAD` + `status --porcelain` + size/mtime of every dirty path, sha256'd,
-`loop-verify-io.adapter.ts`). Unchanged tree → the previous result instantly.
-
-**A null digest is NEVER cached** (`loop-verify-cache.ts`): a non-git or
-unfingerprintable tree must re-run, because serving a remembered pass for an
-unknown tree is the same stale-green failure this whole section exists to
-prevent. Timed-out runs are not cached either — a timeout says nothing about
-the tree. Cache is in-memory, process-scoped, bounded at 64 entries; a restart
-re-runs the oracle, which is the safe direction to be wrong in.
-
-Loops armed before this landed replay with `verifyCommand`/`workdirAbs` null on
-`LoopState`; `run_verify` then refuses and asks for a re-arm rather than
-guessing a command to execute.
-
-**Oracle guidance.** Prefer a test in the repo over a grep in a shell script:
-a `renderToStaticMarkup` assertion cannot be satisfied by an import line,
-whereas `grep -q SplitContainer` can. Scope the oracle to the TERMINAL state
-of the plan, not the current stage.
-
-**Arm-time oracle audit (adr-20260806-loop-oracle-audit).** `setup_loop` now
-says the above at the moment it matters: pure `auditOracle` +
-`extractOracleScriptPath` (`loop-template.ts`) statically inspect the verify
-command and the `.sh`/`.bash` it references (read via `readOracleScript` in
-`loop-template-io.adapter.ts`, confined to the loop workdir). Weak markers
-(`test -f`, `[ -f`, `grep -q|-c|-L`, `ls … /dev/null`) with no test-runner
-invocation, three-plus markers gating a real test run, or an unreadable
-referenced script each produce one warning on the required
-`SetupLoopHandlerResult.oracleWarnings`, rendered as an `Oracle audit:` block
-appended to the setup_loop reply. NON-FATAL by design — heuristics misfire and
-the operator owns the oracle; the audit never blocks arming. Pattern tables
-live beside `auditOracle`; extend them with a unit fixture in the same PR.
-
-**`getArmedLoop` must be SUPPLIED at every spawn site.** `ArmedLoopInfo`
-(`{verifyCommand, workdirAbs, trackingFileRel}`) backs `run_verify`, the
-tracking-doc tools' base dir, and the chunk-label fallback below. It shipped
-declared-but-never-passed, which silently hid `run_verify` entirely and made
-every worktree loop resolve its tracking file against the chat cwd. It is now
-wired from `toArmedLoopInfo(isLoopArmed(chatId))` (the single `LoopState` →
-`ArmedLoopInfo` adapter, `claude-loop-commands.ts`) through BOTH drivers, on
-BOTH the main-turn path (`claude-session-spawner.ts`) and the subagent path
-(`agent-deps-builders.ts` → `claude-subagent-wiring.ts` →
-`subagent-provider-run.ts`). **Do NOT copy `isLoopArmed`'s
-`delegationContext.depth === 0` gate onto it.** That gate is right for
-tool-blocking (only the orchestrator is blocked) and wrong here: the
-tracking-doc tools are registered for subagents too, and a worker without the
-loop's `workdirAbs` writes its progress into the wrong checkout.
-
-## Loop Progress row labels (adr-20260805-loop-chunk-label)
-
-A run's Progress row reads `SubagentRunSnapshot.label`, which
-`deriveChunkLabel(prompt)` derives from the spawn prompt's first line. That is
-right for an ad-hoc delegation (model-authored prompt) and useless for a loop:
-`renderLoopPrompt` joins the worker brief into ONE line starting `Do the next
-chunk in <file>. All work happens in <workdir>.` and asks for it verbatim, so
-every row rendered the same 80-char boilerplate. Two channels now carry chunk
-identity, first-match-wins:
-
-1. **`[chunk: …]` marker** — the worker prompt opens with
-   `[chunk: <one-line summary of the Next chunk you just read>]`, the ONE
-   substitution step 4 asks the orchestrator to make. `parseChunkMarker`
-   (shared, pure) returns null for an unsubstituted `<…>` body so template
-   noise never reaches the UI. Pinned by `"[chunk:"` in the template's
-   `requiredSubstrings`.
-2. **The plan** — absent a usable marker, `buildLoopChunkLabelResolver`
-   (`kanna-mcp.ts`) reads the armed loop's tracking file and takes the first
-   line of `## Next chunk` (`chunkLabelFromSection`). At delegate time that
-   section IS the chunk (the worker rewrites it only after finishing), so this
-   needs no model cooperation — it is what makes the label a guarantee.
-
-The marker wins because it is per-delegation: under `parallelism > 1` one turn
-delegates several chunks and a single shared plan section cannot tell them
-apart. The label rides `delegateRun({label})` → `spawnRun`, which falls back to
-`deriveChunkLabel`. The file read lives in `kanna-mcp.ts` (already an adapter
-importer), so no IO enters `subagent-orchestrator.ts`. A resolver failure is
-swallowed — a label is cosmetic and must never fail a delegation.
-
-## Loop Progress panel — file-sourced steps (adr-20260806-loop-progress-file-sourced-steps)
-
-The chat footer's Progress card lists the loop's WHOLE checklist, read from the
-armed loop's tracking file. It used to show only the delegations *this server
-process* started since the current `loop_armed` — usually one row, with work
-finished before the arm invisible and `LoopRowStatus: "pending"` unreachable.
-
-- **Step source = the plan.** `LoopTrackingRegistry`
-  (`src/server/loop-tracking-registry.ts`) watches the armed loop's tracking
-  file and caches `{doneEntries, nextChunkSection}` — `## Progress` items via
-  the new `StructuredDoc.listItems(content, section)` port method (mdast, so a
-  continuation line or nested sub-list stays part of ITS item), and the
-  `## Next chunk` source. IO is injected from
-  `loop-tracking-io.adapter.ts`; `readTrackingFile` is **sync** because
-  `snapshot()` is called from the pure, sync `deriveChatSnapshot`.
-- **`watchTrackingFile` watches the PARENT DIR**, filtered by basename
-  (`watchWorkflowDir`'s new `filterBasename`) — an inode-bound watcher is
-  orphaned by a rename-based write, and a loop can arm before its skeleton
-  lands. An event reporting no filename still fires.
-- **One reconcile, two hooks.** `syncLoopTracking`
-  (`src/server/loop-tracking-sync.ts`) derives the watch from `deriveLoopState`
-  and is called from `AgentCoordinator.emitAutoContinueEvent` (the single
-  append path for `loop_armed` / `loop_disarmed`) plus `rehydrateLoopTracking`
-  at boot in `server.ts`. `register` is a no-op on an unchanged path — it runs
-  on EVERY auto-continue event, and rate-limit churn would otherwise thrash the
-  watcher.
-- **Rows are oldest-first on BOTH paths** (`LoopProgressSnapshot.rows`
-  docstring flipped). `buildLoopProgress` with `tracking` emits: plan-recorded
-  chunks (`done`, synthetic ids `progress:<i>`) → a count-based top-up for a
-  completion the worker never recorded → errored runs → the current step (live
-  `running` runs, else one `pending` row from `## Next chunk` when armed). A
-  completed run the plan already records is DROPPED, not label-matched — the
-  plan is the authority and fuzzy matching flickers. `tracking == null`
-  reproduces the old run-only behaviour exactly.
-- **Known trade-off:** errored runs sort after every plan row, because a
-  `## Progress` row carries no machine-readable timestamp. `maxDoneEntries`
-  (200) caps the broadcast payload only; the file still grows on disk.
-- **Transport:** no new WS topic. `BroadcastManager` subscribes to the registry
-  and re-pushes the CHAT topic via `scheduleChatStateBroadcast`.
-
-## Structured tracking-file access (mdast — bounds loop context growth)
-
-Both the main orchestrator and its subagents are FRESH Claude spawns every
-loop iteration, so nothing accumulates ACROSS iterations. The one thing that
-persists and grows is the tracking file (PROGRESS.md) — and reading it whole
-each iteration made per-turn context scale O(file size). The fix bounds it at
-the READ + APPEND boundary via structured, section-scoped access instead of
-capping the file.
-
-- **Pure engine** (`src/shared/structured-doc/`): a format-agnostic port
-  (`StructuredDoc`: `sections` / `query` / `listItems` / `append` / `replace`) + an extension registry
-  (`resolveStructuredDoc(ext)` — `.md` → the mdast adapter today; add a
-  format = one adapter + one registry row). The markdown adapter uses mdast
-  (`mdast-util-from-markdown` + `micromark-extension-gfm`) purely as a PARSER
-  to locate section + list-item boundaries by source `position` offset; every
-  slice is taken from the ORIGINAL string, so queries/appends are
-  byte-faithful (no reserialization of untouched content). NO IO — allowed in
-  `src/shared/**` under the side-effect seal.
-- **IO leaf** (`src/server/structured-doc-io.adapter.ts`): `readDoc` /
-  `writeDoc` byte IO only.
-- **MCP tools** (`kanna-mcp.ts`, `buildTrackingDocToolList`): registered
-  whenever a `chatId` is present — so BOTH the main orchestrator AND subagents
-  get them (no `depth === 0` gate, unlike setup_loop). Self-contained: they
-  confine the path to the ARMED LOOP's workdir when one is armed, else the chat
-  cwd (`confinePathToDir`), dispatch by extension through the registry, and
-  call the IO leaf — no coordinator/spawner threading.
-  - `query_tracking_file({ file?, sections?, list_limit? })` — returns only
-    the requested sections (default file `PROGRESS.md`); `list_limit` keeps
-    the first N items of a section's first list (e.g. latest N Progress rows)
-    with a one-line elision marker. The whole file never enters context.
-  - `append_tracking_row({ file?, section, entry, position? })` — inserts one
-    entry under a section (`position: "top"` for newest-first logs) without a
-    read-before-edit of the whole file. For true LOGS only (Progress, Failed
-    approaches).
-  - `replace_tracking_section({ file?, section, body })` — replaces a section's
-    entire body. For sections holding CURRENT state, above all `Next chunk`,
-    which must describe exactly one next step. Appending there instead makes
-    completed chunks pile up until a later iteration re-reads a finished chunk
-    and redoes the work — an observed bug, not a hypothetical.
-  - **Always pass `file:`.** It defaults to `PROGRESS.md`, and the rendered
-    worker prompt used to omit it — so a loop tracking `PROGRESS-panes.md` wrote
-    its progress row into the committed `PROGRESS.md` of an unrelated finished
-    loop. `renderLoopPrompt` now embeds `file:` in every call it prescribes.
-- **Loop prompt wiring** (`renderLoopPrompt`): the orchestrator step 1 and the
-  delegated-subagent prompt both instruct `query_tracking_file` (read) +
-  `append_tracking_row` (write) and forbid reading/editing the whole file. The
-  two tool names are asserted in the structural invariant.
-- **Trade-off:** the file still grows unbounded ON DISK — that is intentional
-  (history preserved); only context is bounded. `reconcileTrackingFile` stays
-  line-based (byte-exact round-trip contract) and is untouched — the engine is
-  additive, used only by the query/append path.
-
-## Loop-armed state + hard tool-block (adr-20260712-loop-orchestration-hardening)
-
-`setup_loop` durably arms the loop (`loop_armed` auto-continue event carrying
-the resolved `subagentId` + rendered prompt; replayed by `deriveLoopState`).
-`mcp__kanna__stop_loop` (model, on GOAL MET) and a real user `chat.send`
-(takeover — awaited before the turn starts) emit `loop_disarmed`. While armed:
-
-- **Filter-at-spawn (Claude Code's `filterToolsForAgent` pattern), both
-  drivers.** `LOOP_BLOCKED_NATIVE_TOOLS` (Edit/Write/MultiEdit/NotebookEdit/
-  Task) are removed at spawn — PTY via `--disallowedTools` CLI args, SDK via
-  `options.disallowedTools` — so the model never sees them. The SDK
-  `canUseTool` deny stays as mid-turn belt-and-suspenders.
-- **Respawn on armed flip.** Spawn args are immutable per process, so
-  `ClaudeSessionState.loopArmedAtSpawn` is compared against the live
-  `isLoopArmed()` in `startClaudeTurn`'s reuse condition — any flip (arm or
-  disarm) forces a fresh session at the next turn boundary.
-- **Armed wakes re-inject the full loop prompt** (see Re-entry above), never
-  the generic "decide next action" string.
-
-## Per-subagent maxTurns (Claude Code frontmatter analog)
-
-`Subagent.maxTurns` (Settings → Subagents editor; optional, unset = unbounded,
-positive int) caps agentic turns per run — the analog of Claude Code's
-per-agent-definition frontmatter `maxTurns` (NOT a global setting there
-either; CC hardcodes 200 only for its fork agent). Enforcement:
-
-- **Claude SDK runs:** threaded natively into `query()` `options.maxTurns` —
-  the SDK stops gracefully at the limit and the accumulated output is kept
-  (CC's `max_turns_reached` semantics).
-- **PTY claude + Codex runs:** no native bound — `SubagentOrchestrator`
-  applies a host-side backstop (`ProviderRunStart.maxTurns` +
-  `nativeMaxTurns: false`): the run is aborted with error code `MAX_TURNS`
-  once its `tool_call` entry count exceeds the bound. Harder semantics than
-  native (abort, not graceful); the `nativeMaxTurns` flag prevents the
-  backstop from clobbering the SDK's graceful stop.
+Read it before editing the rendered loop prompt — `validateLoopSetup` asserts a
+list of exact substrings, so an edit that drops one fails validation.
 
 # Background Task Keep-Alive (Bash + Agent + Workflow — KANNA_PTY_BACKGROUND_TASK_MAX_MS)
 
@@ -2346,7 +1579,8 @@ the idle reaper (`isClaudeSessionIdle`) fires while one is in flight, the
 child dies with the process — silently, since a reap is not an error (this
 killed a mid-flight background Agent one second after its commit; see
 `adr-20260722-background-agent-keepalive` and, for the original Bash-only fix,
-`adr-20260604-pty-background-task-keepalive`).
+`adr-20260604-adr-20260604-pty-background-task-keepalive` — the doubled prefix
+is the real filename, a `c3x add adr` defect, not a typo here).
 
 - **Guard.** `session.isHoldingWork(now)` mirrors `hasLiveWorkflow`:
   consulted by both `isClaudeSessionIdle` and `enforceClaudeSessionBudget`, it
@@ -2433,11 +1667,11 @@ killed a mid-flight background Agent one second after its commit; see
 Surfaces Claude Code's native `Workflow` tool (dynamic multi-agent
 orchestration) in the UI: a per-chat panel listing every run with live status +
 drill-in progress, plus an inline transcript card on the launch. **Read-only,
-both drivers.** After adr-20260711-notification-driven-loop-orchestration the model handles workflow harvest via
-`delegate_subagent({run_in_background: true})` status-check spawns; this
-panel *displays* the workflow.
+both drivers.** Since the move to notification-driven loop orchestration the
+model handles workflow harvest via `delegate_subagent({run_in_background: true})`
+status-check spawns; this panel *displays* the workflow.
 
-**SDK driver registration (adr-20260616-sdk-pty-feature-parity).** Claude writes
+**SDK driver registration (`adr-20260616-adr-20260616-sdk-pty-feature-parity`).** Claude writes
 the `wf_*.json` sidecars regardless of driver, so the SDK reuses the same
 disk-watch read-model. `AgentCoordinator.maybeRegisterSdkWorkflowsDir` derives
 `<projectDir>/<session-uuid>/workflows` (via `computeWorkflowsDir`) from the
@@ -2468,7 +1702,8 @@ subagent files). See `adr-20260603-workflow-disk-watch-read-model`.
   (one defensive choke-point `parseWorkflowRunFile`) + `snapshot()` (light,
   heavy fields stripped) + `getRun()` (full) + `subscribe()`. Mirrors
   `PtyInstanceRegistry`. IO injected (side-effect seal). **Re-run masking
-  (adr-20260604-workflow-rerun-masking):** Claude embeds the `runId` in the
+  (no ADR — the decision is recorded only here and in `workflow-registry.ts`):**
+  Claude embeds the `runId` in the
   persisted workflow script filename, so a fix-and-relaunch via `scriptPath`
   reuses the same `runId` (new `taskId`) and pours agents into the same live
   dir WITHOUT rewriting the prior sidecar. A no-op **crash sidecar**

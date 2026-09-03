@@ -23,6 +23,9 @@ to the repo root, so `Read` works even if the skill does not auto-trigger.
 | Metrics, spans, traces, Grafana, "no telemetry arriving", the OTel collector, "why is it slow", memory growth, RSS, an OOM kill | `.claude/skills/kanna-telemetry/SKILL.md` |
 | Editing `.tsx`/`.ts` under `src/client/**` — components, hooks, formatting helpers, layout, tooltips | `.claude/skills/kanna-react-style/SKILL.md` |
 | Running tests, a green-locally-red-on-CI failure, lint / ast-grep / design-gate errors, "how do I verify this" | `.claude/skills/kanna-test/SKILL.md` |
+| `/loop`, `setup_loop`, `run_verify`, an armed loop, a loop that stalled or declared GOAL MET too early, `PROGRESS.md` and the tracking-doc tools | `.claude/skills/kanna-loop/SKILL.md` |
+| `delegate_subagent`, `keep_alive` / `run_in_background`, a run that failed `AUTH_REQUIRED` / `CAP_EXCEEDED` / `MAX_TURNS`, the permit pool | `.claude/skills/kanna-subagents/SKILL.md` |
+| `KANNA_CLAUDE_DRIVER=pty`, anything under `src/server/claude-pty/**`, a swallowed paste, turn-end detection, the trust dialog, a `KANNA_PTY_*` var | `.claude/skills/kanna-pty/SKILL.md` |
 | Publishing a version, changelog, npm release | `.claude/skills/release/SKILL.md` |
 | Reviewing a pull request for safety or correctness | `.claude/skills/review-pr/SKILL.md` |
 | Filing a bug or feature request, writing up a defect found mid-task, handing a finding to another agent | `.claude/skills/github-issue/SKILL.md` |
