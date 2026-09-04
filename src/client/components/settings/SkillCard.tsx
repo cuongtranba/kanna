@@ -1,6 +1,7 @@
 import { ExternalLink, Loader2, Trash2 } from "lucide-react"
 import { Button } from "../ui/button"
 import { STATUS_PILL_CLASS } from "../../../shared/design/tone-pairings"
+import { repinTarget } from "../../../shared/packages/skill-update-classifier"
 import type { UpdateAvailability } from "../../../shared/packages/types"
 import type { PackageUpdateEntry } from "../../../shared/packages/types"
 import type { InstalledSkillSummary } from "../../../shared/types"
@@ -11,6 +12,24 @@ const AVAILABILITY_LABEL: Record<UpdateAvailability, string> = {
   outdated: "Outdated",
   partial: "Partial",
   unknown: "Unknown",
+}
+
+/**
+ * The label for the card's action button, or null when there is no action that
+ * would work.
+ *
+ * A pinned skill cannot be moved by `skills update` — the CLI resolves upstream
+ * AT the pin and exits 0 unchanged — so a pinned card offers a re-pin or
+ * nothing at all. An "Update" button on a pinned skill is a button that
+ * provably does nothing.
+ */
+function actionLabel(entry: PackageUpdateEntry | null): string | null {
+  if (!entry) return null
+  const repinTo = repinTarget(entry, entry.update)
+  if (repinTo) return `Re-pin to ${repinTo}`
+  if (entry.pinnedRef) return null
+  const avail = entry.update.availability
+  return avail === "outdated" || avail === "partial" ? "Update" : null
 }
 
 export function InstalledSkillCard({
@@ -32,6 +51,8 @@ export function InstalledSkillCard({
   const avail = packageEntry?.update.availability
   const version = packageEntry?.versionLabel ?? packageEntry?.revision?.slice(0, 7) ?? packageEntry?.updatedAt ?? null
   const pillClass = avail && avail !== "up_to_date" ? STATUS_PILL_CLASS[avail] : null
+  const pinnedRef = packageEntry?.pinnedRef ?? null
+  const action = actionLabel(packageEntry)
 
   return (
     <div className="flex min-w-0 items-start justify-between gap-3 rounded-lg border border-border bg-card/30 p-3">
@@ -39,6 +60,9 @@ export function InstalledSkillCard({
         <div className="truncate text-sm font-medium text-foreground">{skill.name}</div>
         <div className="truncate text-xs text-muted-foreground">{skill.source || "Unknown source"}</div>
         {version ? <div className="font-mono tabular-nums text-xs text-muted-foreground/70">{version}</div> : null}
+        {pinnedRef ? (
+          <div className="truncate font-mono tabular-nums text-xs text-muted-foreground/70">Pinned {pinnedRef}</div>
+        ) : null}
       </div>
       <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
         {pillClass ? (
@@ -46,9 +70,9 @@ export function InstalledSkillCard({
             {AVAILABILITY_LABEL[avail!]}
           </span>
         ) : null}
-        {avail === "outdated" || avail === "partial" ? (
+        {action ? (
           <Button type="button" size="sm" variant="secondary" disabled={applying} onClick={onUpdate} className="h-6 rounded-full px-2 text-xs">
-            {applying ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}Update
+            {applying ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}{action}
           </Button>
         ) : null}
         {href ? (

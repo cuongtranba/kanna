@@ -135,9 +135,14 @@ export function SkillsSection({
   const packageUpdateSnapshot = useSettingsPageStore((s) => s.packageUpdateSnapshot)
 
   const isChecking = packageUpdateSnapshot?.status === "checking"
-  const outdatedCount = packageUpdateSnapshot?.packages.filter(
-    (p) => p.kind === "skill" && (p.update.availability === "outdated" || p.update.availability === "partial"),
-  ).length ?? 0
+  // "Update all" covers only what a plain `skills update` can actually move. A
+  // pinned skill needs its pin REPLACED, which is a per-card decision the user
+  // makes by name — a bulk button must never do it silently.
+  const bulkUpdatableIds = packageUpdateSnapshot?.packages
+    .filter((p) => p.kind === "skill" && !p.pinnedRef)
+    .filter((p) => p.update.availability === "outdated" || p.update.availability === "partial")
+    .map((p) => p.id) ?? []
+  const outdatedCount = bulkUpdatableIds.length
   const lastChecked = packageUpdateSnapshot?.lastCheckedAt
     ? new Date(packageUpdateSnapshot.lastCheckedAt).toLocaleTimeString()
     : null
@@ -151,10 +156,9 @@ export function SkillsSection({
   }
 
   function updateAllSkills() {
-    const ids = packageUpdateSnapshot?.packages
-      .filter((p) => p.kind === "skill" && (p.update.availability === "outdated" || p.update.availability === "partial"))
-      .map((p) => p.id) ?? []
-    if (ids.length > 0) void socket.command({ type: "packages.updateAll", ids })
+    if (bulkUpdatableIds.length > 0) {
+      void socket.command({ type: "packages.updateAll", ids: bulkUpdatableIds })
+    }
   }
 
   const loadInstalledSkills = useCallback(async () => {

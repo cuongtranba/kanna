@@ -1951,7 +1951,7 @@ detection and application for three package kinds: `skill`, `claude-plugin`,
 `codex-plugin`. Component facts: c3-237 (server), c3-312 (shared types/parsers),
 c3-116 (PluginsSection UI). ADR: `adr-20260902-package-auto-update`.
 
-**Four load-bearing invariants — do not violate silently:**
+**Six load-bearing invariants — do not violate silently:**
 
 1. **Applies are serialized.** `applyUpdates()` throws if `status === "applying"`.
    The UI must disable the Apply button while applying. Concurrent CLI invocations
@@ -1971,6 +1971,35 @@ c3-116 (PluginsSection UI). ADR: `adr-20260902-package-auto-update`.
    Kanna writes no sidecar. `PackageUpdateSnapshot` and `autoApplyHistory` (capped
    at 50) are rebuilt from scratch on every check and lost on server restart.
    Never introduce a Kanna-owned `~/.kanna/packages/` file without an ADR.
+
+5. **A skill is located upstream by its `skillPath`, never by folder base name.**
+   `classifySkillUpdate` resolves the lock's `skillPath` through
+   `UpstreamTreeIndex.byPath`; `byName` is a fallback for lock entries that
+   record no path. A repo may vendor one skill into many agent directories —
+   `pbakaus/impeccable` ships 18 copies, all at depth 3 — so a base-name index
+   picks whichever tied first and compares the installed hash against a SIBLING
+   copy. That reads as `outdated` forever and no update can clear it. When
+   `skillPath` is present and a complete tree lacks it, the folder is gone
+   upstream: do **not** fall back to a same-named folder elsewhere.
+
+6. **A pinned skill is never offered a plain update, and never auto-applied.**
+   `skills update` resolves upstream AT the lock's `ref` and exits 0 having
+   changed nothing, so `InstalledPackage.pinnedRef` decides the affordance:
+   `repinTarget()` (the single source read by the card, the applier, and the
+   manager) names the tag to move to, and the applier issues
+   `skills add <repo>/<folder>#<tag>` instead. `maybeAutoApply` and "Update all"
+   both skip pinned packages — satisfying a pin means REPLACING it, which is an
+   explicit choice about which version to run. The applier re-reads the lock
+   after the CLI exits and fails a pinned apply whose revision did not move;
+   exit 0 alone cannot distinguish an update from a no-op.
+
+**Re-pin targets are resolved by version, never by list position.**
+`resolveLatestTag` tries `releases/latest` first, then the highest semver tag via
+`pickLatestSemverTag` (`src/shared/packages/tag-order.ts`). GitHub returns tags
+in lexicographic-descending order, so `v20260102-production-cleanup` precedes
+`v11.13.4` — reading position is what left a pinned skill with no resolvable
+target. Resolution runs only for pinned packages that are behind, so it costs
+nothing on an ordinary check.
 
 **Adding a fourth package kind** requires:
 - New union member in `PackageKind` (`src/shared/packages/types.ts`)

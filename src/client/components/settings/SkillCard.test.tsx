@@ -27,6 +27,7 @@ function makeEntry(overrides: Partial<PackageUpdateEntry> = {}): PackageUpdateEn
     installPath: null,
     versionLabel: null,
     agents: [],
+    pinnedRef: null,
     update: {
       id: "skill:my-skill",
       availability: "up_to_date",
@@ -98,5 +99,49 @@ describe("InstalledSkillCard", () => {
     )
     expect(html).not.toContain("Up to date")
     expect(html).not.toContain(">Update<")
+  })
+
+  test("names the pin so a pinned card explains its own version", () => {
+    const entry = makeEntry({ pinnedRef: "v11.12.0" })
+    const html = renderToStaticMarkup(
+      <InstalledSkillCard skill={SKILL} packageEntry={entry} uninstalling={false} applying={false} onUninstall={noop} onUpdate={noop} />
+    )
+    expect(html).toContain("Pinned v11.12.0")
+  })
+
+  // `skills update` resolves upstream AT the pin, so offering "Update" on a
+  // pinned card offers a button that provably cannot move it.
+  test("offers Re-pin, not Update, when a pinned skill is behind", () => {
+    const entry = makeEntry({
+      pinnedRef: "v11.12.0",
+      update: { ...makeEntry().update, availability: "outdated", latestVersion: "v11.13.4" },
+    })
+    const html = renderToStaticMarkup(
+      <InstalledSkillCard skill={SKILL} packageEntry={entry} uninstalling={false} applying={false} onUninstall={noop} onUpdate={noop} />
+    )
+    expect(html).toContain("Re-pin to v11.13.4")
+    expect(html).not.toContain(">Update<")
+  })
+
+  test("explains instead of offering a dead button when no tag resolved", () => {
+    const entry = makeEntry({
+      pinnedRef: "v11.12.0",
+      update: { ...makeEntry().update, availability: "outdated", latestVersion: null },
+    })
+    const html = renderToStaticMarkup(
+      <InstalledSkillCard skill={SKILL} packageEntry={entry} uninstalling={false} applying={false} onUninstall={noop} onUpdate={noop} />
+    )
+    expect(html).toContain("Outdated")
+    expect(html).not.toContain(">Update<")
+    expect(html).toContain("Pinned v11.12.0")
+  })
+
+  test("an unpinned outdated skill still offers a plain Update", () => {
+    const entry = makeEntry({ update: { ...makeEntry().update, availability: "outdated" } })
+    const html = renderToStaticMarkup(
+      <InstalledSkillCard skill={SKILL} packageEntry={entry} uninstalling={false} applying={false} onUninstall={noop} onUpdate={noop} />
+    )
+    expect(html).toContain("Update")
+    expect(html).not.toContain("Re-pin")
   })
 })

@@ -36,6 +36,36 @@ describe("parseSkillLock", () => {
     expect(pkg.installPath).toBe("/home/user/.agents/skills/my-skill")
     expect(pkg.version).toBeNull()
     expect(pkg.agents).toEqual([])
+    expect(pkg.pinnedRef).toBeNull()
+  })
+
+  test("carries the lock's `ref` through as pinnedRef", () => {
+    const raw = {
+      version: 3,
+      skills: {
+        c3: {
+          source: "cuongtranba/c3-skill",
+          sourceType: "github",
+          sourceUrl: "https://github.com/cuongtranba/c3-skill.git",
+          ref: "v11.12.0",
+          skillPath: "skills/c3/SKILL.md",
+          skillFolderHash: "6f32934e7571897c3859e21eda9d26ffa89cee84",
+        },
+      },
+    }
+    const { packages } = parseSkillLock(raw, EMPTY_MAP)
+    expect(packages[0]!.pinnedRef).toBe("v11.12.0")
+  })
+
+  test("treats an empty `ref` as unpinned", () => {
+    const raw = {
+      version: 3,
+      skills: {
+        "my-skill": { source: "owner/repo", ref: "", skillFolderHash: "abc" },
+      },
+    }
+    const { packages } = parseSkillLock(raw, EMPTY_MAP)
+    expect(packages[0]!.pinnedRef).toBeNull()
   })
 
   test("returns error for v1 lock file", () => {
