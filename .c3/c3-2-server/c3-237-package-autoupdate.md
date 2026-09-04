@@ -1,5 +1,6 @@
 ---
 id: c3-237
+c3-seal: e7ee3f39440f12400a7dc05a851d5080572725a9795efc3afc527f0b06c57d3d
 title: package-autoupdate
 type: component
 category: feature
@@ -7,8 +8,6 @@ parent: c3-2
 goal: Detect when installed packages (skills, Claude Code plugins, Codex plugins) are behind upstream and apply updates on a configurable schedule, notifying the user and optionally auto-applying per kind.
 uses:
     - ref-side-effect-adapter
-    - ref-strong-typing
-    - rule-colocated-bun-test
 ---
 
 # package-autoupdate
@@ -45,17 +44,36 @@ Surfaces update availability for the three package kinds Kanna manages — Kanna
 | Aspect | Detail | Reference |
 | --- | --- | --- |
 | Outcome | User sees update availability; opted-in packages update automatically | c3-116 |
-| Primary path | Timer fires → runCheck() → checkers → snapshot → maybeAutoApply() | |
-| Alternate — manual | User triggers applyUpdates() from UI; same apply path, no busy-gate | |
-| Failure — check error | Stored in snapshot.error; availability marked "unknown" for affected pkgs | |
-| Failure — apply error | Exponential backoff (base 10 min, max 24 h); max 3 failures per package | |
+| Primary path | Timer fires → runCheck() → checkers → snapshot → maybeAutoApply() |  |
+| Alternate — manual | User triggers applyUpdates() from UI; same apply path, no busy-gate |  |
+| Failure — check error | Stored in snapshot.error; availability marked "unknown" for affected pkgs |  |
+| Failure — apply error | Exponential backoff (base 10 min, max 24 h); max 3 failures per package |  |
 
 ## Governance
 
 | Reference | Type | Governs | Precedence | Notes |
 | --- | --- | --- | --- | --- |
-| ref-side-effect-adapter | rule | IO in *.adapter.ts only | mandatory | package-inventory-io.adapter.ts, skill-update-applier.adapter.ts, etc. |
-| adr-20260902-package-auto-update | decision | applies serialized; no sidecar; unknown != up_to_date | mandatory | |
+| ref-side-effect-adapter | ref | IO in *.adapter.ts only | must follow | package-inventory-io.adapter.ts, skill-update-applier.adapter.ts and the four checker/applier adapters are the only files that spawn a CLI or read a lock file |
+| adr-20260902-package-auto-update | adr | Applies are serialized; no Kanna-owned sidecar; unknown is not up_to_date | must follow | The four invariants below are that ADR's decisions, restated where an implementer will meet them |
+
+## Contract
+
+| Surface | Direction | Contract | Boundary | Evidence |
+| --- | --- | --- | --- | --- |
+| PackageUpdateManager | IN/OUT | start / stop drive the timer; runCheck rebuilds the whole snapshot from the lock files; applyUpdates throws while status is "applying", so a caller must gate on it rather than queue | c3-202 | src/server/package-update-manager.ts |
+| PackageUpdateManagerDeps | IN | Every effect injected — inventory reader, per-kind checkers and appliers, clock, and hasAnyChatBusy; the busy gate is required, not optional, so an unwired host cannot auto-apply during a live turn | c3-207 | src/server/package-update-manager.ts |
+| PackageUpdateSnapshot | OUT | Whole-state push, never a delta: status, per-package availability, autoApplyHistory capped at 50, and error when a check failed | c3-208 | src/server/ws-router-settings.ts |
+| Inventory + checkers + appliers | OUT | One checker and one applier adapter per PackageKind, wired at boot; a kind with no applier reports availability and applies nothing | c3-204 | src/server/package-update-appliers-boot.adapter.ts |
+| PackageUpdateSettings | IN | checkEnabled is a master switch honoured by both start() and checkUpdates(); auto-apply is opt-in per kind | c3-202 | src/server/app-settings.ts |
+
+## Derived Materials
+
+| Material | Must derive from | Allowed variance | Evidence |
+| --- | --- | --- | --- |
+| src/server/package-update-manager.ts | c3-237 Contract | Internal helper shape | src/server/package-update-manager.ts |
+| src/server/*-update-checker.adapter.ts | c3-237 Contract | CLI and API call detail | src/server/skill-update-checker.adapter.ts |
+| src/server/*-update-applier.adapter.ts | c3-237 Contract | CLI invocation detail | src/server/codex-plugin-update-applier.adapter.ts |
+| src/client/app/PluginsSection.tsx | c3-237 Contract | Layout and copy | src/client/app/PluginsSection.tsx |
 
 ## Key Invariants
 

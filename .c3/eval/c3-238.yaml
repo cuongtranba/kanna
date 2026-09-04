@@ -1,0 +1,7 @@
+fact: c3-238
+claim: "stack records, bindings, and the resolvers that turn them into a spawn configuration and prompt blocks live on the server"
+code:
+  - src/server/claude-session-config.ts
+  - src/server/event-store.stack-methods.test.ts
+  - src/server/ws-router.stack.test.ts
+  - src/server/agent.stack-spawn.test.ts

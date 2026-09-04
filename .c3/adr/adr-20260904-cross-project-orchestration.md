@@ -1,5 +1,6 @@
 ---
 id: adr-20260904-cross-project-orchestration
+c3-seal: 59e3ec0dea39ebb6efa924050d09c4257c14a019a1c393c8b9850c25c21f740c
 title: cross-project-orchestration
 type: adr
 goal: Decide how work spanning several projects in a stack is sequenced, and record why the board-dependency design is preferred over relaxing the loop's single-repository contract.

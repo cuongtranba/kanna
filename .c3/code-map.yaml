@@ -296,6 +296,19 @@ c3-307:
   - src/shared/token-pricing.ts
 c3-310:
   - src/shared/boards/**/*.ts
+c3-313:
+  - src/shared/stack-activity.ts
+  - src/shared/stack-activity.test.ts
+c3-238:
+  - src/server/claude-session-config.ts
+  - src/server/event-store.stack-methods.test.ts
+  - src/server/ws-router.stack.test.ts
+  - src/server/agent.stack-spawn.test.ts
+c3-121:
+  - src/client/components/chat-ui/sidebar/Stack*.tsx
+  - src/client/components/chat-ui/sidebar/StackChatCreateRow.store.ts
+  - src/client/app/useStackCommands.ts
+  - src/client/app/StackBoardsRoutePage.tsx
 c3-120:
   - src/client/app/CronJobsPage.tsx
   - src/client/app/CronJobsSection.tsx

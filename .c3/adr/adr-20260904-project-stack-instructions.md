@@ -1,5 +1,6 @@
 ---
 id: adr-20260904-project-stack-instructions
+c3-seal: 5a40d5eb768b5c6007b2a6a313e998761b84460616e98e67fbf1a4d8dcdc7427
 title: project-stack-instructions
 type: adr
 goal: Record why per-project and per-stack instructions are two new event types on the existing logs rather than a settings field, and how they compose into the system prompt on every provider.
@@ -35,7 +36,7 @@ Both events replay at priority **0**, beside their siblings. A missing case in `
 
 `applyStoreEvent` has no `default` case, so a binary predating these events treats them as no-ops rather than crashing. That is what makes the pair safe to ship without a log migration: an older build reading a newer log loses the instructions and nothing else. Pinned by a replay test.
 
-### D3 — The instruction cap is `GLOBAL_PROMPT_APPEND_MAX_CHARS`, exported rather than duplicated
+### D3 — The instruction cap is GLOBAL_PROMPT_APPEND_MAX_CHARS, exported rather than duplicated
 
 Every instruction block is spent from the same context window as the global one, so a second, differently-chosen number would only be a second thing to get wrong. The existing constant is exported from `app-settings.ts` and reused by both builders.
 
@@ -51,7 +52,7 @@ This is the decision most likely to be got wrong by reading only the prompt code
 
 The resolver therefore synthesizes a single-entry list from `chat.projectId` when there are no bindings. One consequence is deliberate: a solo chat now renders a `## Project instructions — <title>` block where before it rendered none. The `## Stack projects` block is still gated on real bindings, so a solo chat does not grow a roots listing.
 
-### D6 — The global block is renamed `## Workspace instructions`
+### D6 — The global block is renamed ## Workspace instructions
 
 Leaving two different things both called "Project instructions" is the comprehension hazard adr-20260802 was written about. The global setting becomes `## Workspace instructions`; `## Project instructions — <title>` is per project. The rename is user-visible in the Settings copy and is made in the same commit as the tests that pin it.
 

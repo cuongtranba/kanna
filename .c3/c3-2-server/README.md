@@ -1,7 +1,7 @@
 ---
 id: c3-2
 c3-version: 4
-c3-seal: 5e618e910bcb47ff145435318e58d667a2a48116fa799e972c37e4c5a5b776cb
+c3-seal: 7f56fd525445d23c0cc5b9fd69dc7380034836c0ccd3711cd5523dca7ab59d9b
 title: Server
 type: container
 boundary: service
@@ -64,3 +64,5 @@ Run the local Bun backend: serve HTTP+WebSocket on localhost, coordinate Claude 
 | c3-234 | observability |  | active | Own the server's process- and turn-level observability: the pure instrument facade domain code calls, the single adapter that exports it, and the alert rules that turn the exported fleet data into a GitHub ticket. |
 | c3-235 | secret-scanning | feature | active | Block a credential from reaching the repository, at the commit and again at the merge, using one pinned scanner and one shared configuration so the local and CI verdicts cannot disagree. |
 | c3-236 | architecture-budget | feature | active | Hold every structural-defect population in the codebase at or below a recorded pin, so a pull request that makes a filed architecture issue worse fails CI instead of merging unobserved. |
+| c3-237 | package-autoupdate | feature | active | Detect when installed packages (skills, Claude Code plugins, Codex plugins) are behind upstream and apply updates on a configurable schedule, notifying the user and optionally auto-applying per kind. |
+| c3-238 | stacks | feature | active | Bind several project checkouts into one chat, and resolve those bindings into the roots a turn may reach and the instruction blocks its prompt must carry. |

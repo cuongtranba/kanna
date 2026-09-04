@@ -80,9 +80,34 @@ and the verify command runs against the tree the agent is editing. Pass
 `workdir` to `setup_loop` only to point a loop at a *different* tree; it must
 still be the project's checkout or a worktree of it.
 
+## Sequencing work across projects
+
+A stack board holds cards from several repos, and a card can be told to wait on
+another: open a card, and under **Blocked by** pick the card it depends on.
+"Regenerate the client only after the API schema lands" becomes a property of
+the board rather than something you hold in your head.
+
+While a blocker is unfinished, **Start work** on the waiting card is disabled
+and says which card it is waiting on. A blocker stops holding the card as soon
+as it reaches the column marked `done`, or is archived. On a board that marks no
+`done` column nothing is ever blocked — as everywhere else on a board, behaviour
+comes from a column's semantic, never from what the column is called.
+
+Two rules are enforced when the edge is written, so neither can be discovered
+later as a board that no longer works:
+
+- **No cycles.** An edge that would make the work circular is refused, and the
+  refusal names the cards in the loop.
+- **Same board.** A card can only wait on another card on the same board.
+
+Dependencies are Kanna's own: they are never pushed to a connected tracker, and
+an agent cannot author them — ordering is yours to decide.
+
 ## Known limitations
 
 - The `/` command and skill picker is scoped to the primary project, so skills
   committed in an additional project do not appear in a stack chat.
 - A loop is still scoped to one repository, so a single loop cannot drive a
   goal spanning several member projects.
+- The **Blocked by** picker offers the cards the board has loaded. On a column
+  with more cards than one page, scroll it into view first.

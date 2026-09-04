@@ -1,7 +1,7 @@
 ---
 id: c3-1
 c3-version: 4
-c3-seal: 75c276c9cceefa997eba411307b380bc8a0f19c287fede326d25ec0c6019d64f
+c3-seal: 5cea20b7385694eff233155046e9d4e16700013e0626c75bac147de5ae1c0140
 title: Client
 type: container
 boundary: app
@@ -42,3 +42,4 @@ Render the chat experience: hydrate transcripts, accept input, drive sidebar/set
 | c3-104 | pane-layout | foundation | active | Own the user-editable pane tree: the split/close/move/focus algebra, its per-project persistence, and the resizable renderer the chat route composes. |
 | c3-119 | boards-ui | feature | active | Render a project's boards as a live workspace tab — drag cards, edit a card in a drawer, edit the card schema, drive a sync binding, and start work on a card. |
 | c3-120 | cron-ui | feature | active | Render the cron feature in the client: six transcript cards for cron entries, |
+| c3-121 | stacks-ui | feature | active | Render stacks in the sidebar: create one, edit its projects and instructions, start a chat on it, and read what is running across it. |

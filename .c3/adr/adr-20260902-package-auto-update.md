@@ -1,5 +1,6 @@
 ---
 id: adr-20260902-package-auto-update
+c3-seal: 8152f77ca057d92b66f76ea376871b7fe828688caa05fd92e430b4fd0d8c6996
 title: package-auto-update
 type: adr
 goal: Record the contested design decisions for the package auto-update feature so that future changes are grounded in the original constraints.
@@ -18,6 +19,7 @@ Record the contested design decisions for the package auto-update feature so tha
 Kanna manages three kinds of user-installed packages: Kanna skills (`.claude/skills/` dirs with a `.skill-lock.json` lock), Claude Code plugins (`~/.claude/plugins/installed_plugins.json`), and Codex skills (`~/.codex/skills/`). Before this feature, update availability was invisible and updates were applied by hand.
 
 The feature needed to:
+
 1. Detect when installed packages are behind upstream.
 2. Notify the user without forcing any action.
 3. Optionally apply updates automatically when the user opts in.
@@ -45,7 +47,7 @@ Update checks run on a configurable interval (`checkIntervalMs`, clamped to [1 h
 
 The source of truth for what is installed lives in the upstream lock files (`~/.agents/.skill-lock.json`, `installed_plugins.json`, `~/.codex/skills/`). Kanna's `PackageUpdateSnapshot` is an in-memory view rebuilt on every check. `autoApplyHistory` (last 50 entries) is also in-memory only and is lost on restart — intentionally, because it is a convenience audit trail, not a billing or compliance record.
 
-### D6 — `unknown` is not `up_to_date`
+### D6 — unknown is not up_to_date
 
 `UpdateAvailability` has four values: `up_to_date`, `outdated`, `partial`, `unknown`. `unknown` means the check failed (GitHub rate-limited, network error, etc.) and must be treated as "we don't know" rather than "all good." The UI renders a distinct state for `unknown` so the user can see that the check failed rather than silently assuming currency.
 
@@ -53,7 +55,7 @@ The source of truth for what is installed lives in the upstream lock files (`~/.
 
 A package that fails to apply enters an exponential backoff (base 10 min, max 24 h). After 3 consecutive failures it is removed from the candidate set entirely (`AUTO_APPLY_MAX_FAILURES = 3`). The user can always trigger a manual apply, which bypasses the backoff.
 
-### D8 — `CODEX_BINARY_PATH` is the only new env var
+### D8 — CODEX_BINARY_PATH is the only new env var
 
 The Codex applier calls the `codex` CLI. Its path defaults to `~/.local/bin/codex` and can be overridden via `CODEX_BINARY_PATH`. No other env var was added for this feature; all other behavior is configured through the settings UI.
 
