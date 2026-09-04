@@ -317,6 +317,7 @@ describe("P5/P6 — client runtime renders a contributed surface", () => {
     mod.default({
       addSurface: (id: string, Component: PluginSurfaceComponent) => surfaces.push({ id, Component }),
       addSidebarItem: () => {},
+      addCommandCenterItem: () => {},
       handle: () => {},
     })
 
@@ -371,6 +372,38 @@ describe("P9a — sidebar item surfaces installed plugins", () => {
 
     const html = renderToStaticMarkup(<PluginSidebarItems items={items} />)
     expect(html).toContain("Hello")
+  }, 60_000)
+})
+
+describe("P12 — a contributed command reaches the `/` picker as inserted prompt text", () => {
+  test("the real build → evaluate → merge path produces a namespaced picker entry", async () => {
+    const { buildPluginBundles } = await import("./plugins/plugin-build.adapter")
+    const built = await buildPluginBundles({ sourceDir: HELLO, entry: "index.ts" })
+    expect(built.ok).toBe(true)
+    if (!built.ok) return
+
+    const { createPluginHostRegistry } = await import("../client/plugins/hostModuleRegistry")
+    const { evaluatePluginModule } = await import("../client/plugins/evaluatePlugin")
+    const { createPluginContributionRegistry, createPluginContext } = await import(
+      "../client/plugins/contributionRegistry"
+    )
+    const { mergePluginCommands } = await import("../client/lib/plugin-slash-commands")
+
+    const hostRegistry = createPluginHostRegistry()
+    const mod = await evaluatePluginModule({ code: built.client, registry: hostRegistry, pluginId: "hello" })
+
+    const contributions = createPluginContributionRegistry()
+    mod.default(createPluginContext("hello", contributions))
+
+    const catalog = [{ name: "compact", description: "", argumentHint: "", scope: "builtin" as const }]
+    const merged = mergePluginCommands(catalog, contributions.getCommandCenterItems())
+
+    // Namespaced by plugin id, at plugin scope, appended after the builtin.
+    expect(merged.commands.map((c) => c.name)).toEqual(["compact", "hello:greet"])
+    expect(merged.commands[1].scope).toBe("plugin")
+    // And what selecting it inserts is the item's prompt TEXT — a Kanna plugin
+    // command has no file on disk, so `/hello:greet` would not resolve.
+    expect(merged.promptByName.get("hello:greet")).toBe("Greet the user warmly.")
   }, 60_000)
 })
 

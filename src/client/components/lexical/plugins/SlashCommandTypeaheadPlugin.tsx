@@ -9,6 +9,11 @@ import {
 import type { MenuTextMatch, TriggerFn } from "@lexical/react/LexicalTypeaheadMenuPlugin"
 import { useSlashCommands } from "../../../hooks/useSlashCommands"
 import { commandsForProvider, filterCommands, normalizeCommandName } from "../../../lib/slash-commands"
+import { mergePluginCommands } from "../../../lib/plugin-slash-commands"
+import {
+  selectPluginCommandCenterItems,
+  usePluginContributionsStore,
+} from "../../../stores/pluginContributionsStore"
 import type { AgentProvider, SlashCommand } from "../../../../shared/types"
 import { $createSlashCommandNode } from "../nodes/SlashCommandNode"
 import { cn } from "../../../lib/utils"
@@ -76,6 +81,75 @@ export function dedupeCommandsByName(commands: SlashCommand[]): SlashCommand[] {
 }
 
 // ---------------------------------------------------------------------------
+// Selection
+// ---------------------------------------------------------------------------
+
+export interface ApplySlashCommandSelectionArgs {
+  readonly command: SlashCommand
+  /** From `mergePluginCommands`. A name present here belongs to a Kanna plugin
+   * and expands to text; anything else becomes a `SlashCommandNode`. */
+  readonly promptByName: ReadonlyMap<string, string>
+  readonly textNodeContainingQuery: TextNode | null
+}
+
+/**
+ * Writes the picked command into the editor. Runs inside a Lexical update (the
+ * typeahead calls `onSelectOption` within one); exported so both branches can
+ * be driven from a headless editor.
+ *
+ * The two branches are NOT interchangeable, and that is the whole plugin
+ * command-center decision:
+ *
+ *   - A CATALOG entry becomes a `SlashCommandNode`, whose text content is
+ *     `/name`. Something downstream resolves that name — `runBuiltinCommand`,
+ *     or the claude CLI reading the command's file off disk.
+ *   - A KANNA PLUGIN entry becomes plain TEXT: the item's own `prompt`. It was
+ *     contributed at runtime by a browser bundle, so there is no file to
+ *     resolve and no builtin arm to intercept it; `/name` would reach the CLI
+ *     as a command it rejects. See `../../../lib/plugin-slash-commands.ts` for
+ *     the alternatives considered.
+ *
+ * `promptByName` carries only entries the merge ACCEPTED, so a hit here can
+ * never be a catalog command that a dropped plugin entry happened to shadow.
+ */
+export function $applySlashCommandSelection({
+  command,
+  promptByName,
+  textNodeContainingQuery,
+}: ApplySlashCommandSelectionArgs): void {
+  const pluginPrompt = promptByName.get(normalizeCommandName(command.name))
+  if (pluginPrompt !== undefined) {
+    const promptNode = $createTextNode(pluginPrompt)
+    if (textNodeContainingQuery !== null) textNodeContainingQuery.replace(promptNode)
+    else $insertNodes([promptNode])
+    // Caret at the end of the inserted text: the user reads and edits it before
+    // sending, which is the point of inserting prose rather than a command.
+    promptNode.select(pluginPrompt.length, pluginPrompt.length)
+    return
+  }
+
+  // Replace the trigger text (`/query`) with the slash-command node.
+  // `.replace()` preserves the caret position (a prior `.remove()` +
+  // `$insertNodes` corrupted the selection and submitted raw text).
+  const commandNode = $createSlashCommandNode({
+    commandName: normalizeCommandName(command.name),
+    hasArgument: Boolean(command.argumentHint),
+  })
+
+  if (textNodeContainingQuery !== null) {
+    textNodeContainingQuery.replace(commandNode)
+  } else {
+    $insertNodes([commandNode])
+  }
+
+  // Inline decorator node can't hold the caret; drop a trailing space text node
+  // after it and place the caret there so the user can type the argument.
+  const trailingSpace = $createTextNode(" ")
+  commandNode.insertAfter(trailingSpace)
+  trailingSpace.select()
+}
+
+// ---------------------------------------------------------------------------
 // Plugin props
 // ---------------------------------------------------------------------------
 
@@ -104,16 +178,29 @@ export function SlashCommandTypeaheadPlugin({
   const setQuery = ChatTabScopedStore.useScopedStore((state) => state.setSlashQuery)
 
   const slashCommands = useSlashCommands(projectId)
+  const pluginCommandItems = usePluginContributionsStore(selectPluginCommandCenterItems)
 
   const triggerFn = useSlashTrigger()
 
   const highlightOnPointerMove = useTypeaheadHoverHighlight()
 
+  // Merged AFTER `commandsForProvider`, deliberately. That filter drops the
+  // disk-scanned Claude Code entries on codex because only a provider running
+  // the claude CLI can resolve them from disk. A Kanna plugin entry is resolved
+  // by neither: selecting it inserts the item's own prompt TEXT into the
+  // composer (see `plugin-slash-commands.ts` for why that is the only coherent
+  // option — there is no file on disk for `/name` to name), so it works on
+  // every provider exactly as a builtin does, and filtering it out here would
+  // hide a working entry.
+  const merged = useMemo(
+    () => mergePluginCommands(commandsForProvider(slashCommands, provider), pluginCommandItems),
+    [provider, slashCommands, pluginCommandItems],
+  )
+
   const options = useMemo<SlashCommandMenuOption[]>(() => {
-    const available = commandsForProvider(slashCommands, provider)
-    const filtered = filterCommands(available, query ?? "")
+    const filtered = filterCommands(merged.commands, query ?? "")
     return dedupeCommandsByName(filtered).map((cmd) => new SlashCommandMenuOption(cmd))
-  }, [provider, slashCommands, query])
+  }, [merged, query])
 
   const onQueryChange = useCallback((matchingString: string | null) => {
     setQuery(matchingString)
@@ -125,31 +212,14 @@ export function SlashCommandTypeaheadPlugin({
       textNodeContainingQuery: TextNode | null,
       closeMenu: () => void,
     ) => {
-      // Replace the trigger text (`/query`) with the slash-command node.
-      // `.replace()` preserves the caret position (a prior `.remove()` +
-      // `$insertNodes` corrupted the selection and submitted raw text).
-      const cmd = option.command
-      const commandNode = $createSlashCommandNode({
-        commandName: normalizeCommandName(cmd.name),
-        hasArgument: Boolean(cmd.argumentHint),
+      $applySlashCommandSelection({
+        command: option.command,
+        promptByName: merged.promptByName,
+        textNodeContainingQuery,
       })
-
-      if (textNodeContainingQuery !== null) {
-        textNodeContainingQuery.replace(commandNode)
-      } else {
-        $insertNodes([commandNode])
-      }
-
-      // Inline decorator node can't hold the caret; drop a trailing space
-      // text node after it and place the caret there so the user can type
-      // the command argument.
-      const trailingSpace = $createTextNode(" ")
-      commandNode.insertAfter(trailingSpace)
-      trailingSpace.select()
-
       closeMenu()
     },
-    [],
+    [merged],
   )
 
   const menuRenderFn = useCallback(

@@ -1,0 +1,12 @@
+fact: c3-238
+claim: "the plugin runtime, its surfaces, and the RPC protocol live under src/server/plugins/ plus the three driving modules"
+code:
+  - src/server/plugins/**/*.ts
+  - src/server/plugin-http-routes.ts
+  - src/server/plugin-cli.ts
+  - src/server/plugin-cli-dispatch.ts
+  - src/server/plugin-cli-dispatch.test.ts
+  - src/server/kanna-mcp-plugins.ts
+  - src/server/kanna-mcp-plugins.test.ts
+  - src/server/plugin-system-acceptance.test.tsx
+  - src/server/__fixtures__/plugins/**

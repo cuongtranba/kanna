@@ -2055,11 +2055,45 @@ the default constructs a real `AppSettingsManager`, so a test driving
 `setPluginServiceForTest` must pass a no-op or the real wiring silently replaces
 its fake — which is exactly the regression that caught it.
 
-**Not built, and deliberately not guessed:** plugin-contributed slash commands.
-`local-catalog-io.adapter.ts`'s existing `scope: "plugin"` is for **Claude Code**
-plugins (marketplace `skills/`, `commands/`, `SKILL.md`) — a different, older
-feature — so reusing it would collide in the `/` picker, and a Kanna plugin
-contributes at runtime while that catalog is scanned from disk.
+## `addCommandCenterItem` — a plugin entry in the `/` picker
+
+Merged **client-side**, in `src/client/lib/plugin-slash-commands.ts`. It cannot
+go through `local-catalog-io.adapter.ts`: that catalog is DISK-scanned on the
+server and its `scope: "plugin"` means **Claude Code** marketplace plugins
+(`skills/`, `commands/`, `SKILL.md`) — a different, older feature — while a
+Kanna plugin contributes at RUNTIME from an evaluated browser bundle.
+
+**Selecting a plugin command inserts the item's `prompt` TEXT, never `/name`.**
+Every other picker entry becomes a `SlashCommandNode`, whose text content is
+`` `/${name}` ``, and survives because something downstream resolves that name:
+`runBuiltinCommand` intercepts a builtin, and the claude CLI reads a
+project/personal/Claude-Code-plugin command off DISK. A Kanna plugin command has
+neither, so `/my-plugin:greet` would reach the CLI as a command it rejects — a
+picker entry broken by construction. `prompt` is therefore a REQUIRED field on
+`PluginCommandCenterItemInput`, and the expansion resolves entirely in the
+browser before anything is sent. `$applySlashCommandSelection`
+(`SlashCommandTypeaheadPlugin.tsx`) owns the two branches.
+
+**Namespaced `<pluginId>:<name>`, and a taken name is DROPPED, not replaced** —
+so a plugin can add to the picker but never shadow a builtin. The dedupe is not
+belt-and-braces: `local-catalog-io.adapter.ts` already names Claude Code plugin
+commands `<pluginName>:<command>`, the same shape, so the collision is real. The
+prompt map is returned FROM `mergePluginCommands` rather than derived from the
+item list at the call site, so a dropped item can never still answer a lookup and
+hijack the catalog entry that beat it.
+
+**Merged AFTER `commandsForProvider`, deliberately.** That filter drops the
+disk-scanned entries on codex because only a claude-CLI provider can resolve
+them. A plugin entry is prompt text Kanna inserts locally, so it works on every
+provider exactly as a builtin does.
+
+**Every client `add*` needs a no-op twin in
+`src/server/plugins/plugin-child-entry.adapter.ts`.** Both bundles compile from
+the same entry and the server child runs it whole, so a method missing from that
+mirror is not an inert call — it is a TypeError inside `contribute`, after which
+the child never reports ready and the plugin dies at startup on a timeout that
+names nothing. Adding `addCommandCenterItem` to the `hello` fixture is what
+surfaced it.
 
 **Deferred by the plan, so not gaps:** `addTheme`,
 `addTimelineTransformer/Renderer`, `addComposerPill`, `addAttachmentSource` —

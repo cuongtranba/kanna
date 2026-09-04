@@ -1,7 +1,7 @@
 ---
 id: c3-116
 c3-version: 4
-c3-seal: 486c57eb291a58e60b9c12f694ee2c7cfb810b77ed0c2964628604a2f3146267
+c3-seal: 173858394cc1e1e19f2f517a7900cb07035864f4f1c630c587a32a5e1dbade65
 title: settings-page
 type: component
 category: feature

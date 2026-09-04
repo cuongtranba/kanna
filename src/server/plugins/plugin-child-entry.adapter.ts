@@ -50,8 +50,15 @@ interface PluginContext {
   // See PLUGIN-SYSTEM-PLAN.md "Registration stripping without Babel": both
   // bundles compile from the same entry, and the OTHER side's calls are
   // meant to be harmless here, not reachable.
+  //
+  // EVERY client-side `add*` must appear here. The entry runs whole in the
+  // child, so a method missing from this mirror is not an inert call — it is a
+  // TypeError inside `contribute`, and the child then never reports ready. A
+  // plugin that contributes UI *and* an RPC handler dies at startup with a
+  // timeout that names nothing.
   addSurface(): void
   addSidebarItem(): void
+  addCommandCenterItem(): void
 }
 
 function createPluginContext(handlers: Map<string, RegisteredRpc>): PluginContext {
@@ -61,6 +68,7 @@ function createPluginContext(handlers: Map<string, RegisteredRpc>): PluginContex
     },
     addSurface() {},
     addSidebarItem() {},
+    addCommandCenterItem() {},
   }
 }
 

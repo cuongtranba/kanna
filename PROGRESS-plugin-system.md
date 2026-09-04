@@ -118,13 +118,16 @@ Done, per the plan's own phase table:
   exactly the persistence P11 has not built yet. Writing a spec that passes by avoiding
   the gap would be worse than naming it. Chromium is available locally; the spec belongs
   with P11.
-- **Phase 4** (MCP authoring tools + slash commands) — the six MCP tools are done. The
-  **slash-command contribution is not**, and it needs a decision rather than an
-  invention: `local-catalog-io.adapter.ts`'s existing `scope: "plugin"` is for **Claude
-  Code** plugins (marketplace `skills/`, `commands/`, `SKILL.md`), a different, older
-  feature. Reusing that scope for Kanna plugins would collide in the picker; a Kanna
-  plugin also contributes at RUNTIME (`addCommandCenterItem`) while that catalog is
-  scanned from disk. Recorded rather than guessed.
+- **Phase 4** (MCP authoring tools + slash commands) — done. The six MCP tools shipped
+  first; `addCommandCenterItem` closed it. The decision it was waiting on: the entry is
+  merged CLIENT-side (a Kanna plugin contributes at runtime, while
+  `local-catalog-io.adapter.ts` is scanned from disk on the server), it is namespaced
+  `<pluginId>:<name>` and dropped if that name is already taken — which matters
+  concretely, because that adapter already names **Claude Code** marketplace plugin
+  commands `<pluginName>:<command>` at `scope: "plugin"`, the same shape — and
+  **selecting it inserts the item's `prompt` TEXT, not `/name`**, because a Kanna plugin
+  command has no file on disk and no builtin arm, so `/name` would reach the CLI as a
+  command it rejects. See `src/client/lib/plugin-slash-commands.ts`.
 
 Deferred BY THE PLAN, so not gaps: `addTheme`, `addTimelineTransformer/Renderer`,
 `addComposerPill`, `addAttachmentSource` — deliberately, because those are the surfaces

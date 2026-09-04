@@ -1,7 +1,7 @@
 ---
 id: c3-2
 c3-version: 4
-c3-seal: 5e618e910bcb47ff145435318e58d667a2a48116fa799e972c37e4c5a5b776cb
+c3-seal: 985c0d683f97cb83a33eecae4078def10d194c23fc6a79cfbf03fe703a5af6c3
 title: Server
 type: container
 boundary: service
@@ -64,3 +64,5 @@ Run the local Bun backend: serve HTTP+WebSocket on localhost, coordinate Claude 
 | c3-234 | observability |  | active | Own the server's process- and turn-level observability: the pure instrument facade domain code calls, the single adapter that exports it, and the alert rules that turn the exported fleet data into a GitHub ticket. |
 | c3-235 | secret-scanning | feature | active | Block a credential from reaching the repository, at the commit and again at the merge, using one pinned scanner and one shared configuration so the local and CI verdicts cannot disagree. |
 | c3-236 | architecture-budget | feature | active | Hold every structural-defect population in the codebase at or below a recorded pin, so a pull request that makes a filed architecture issue worse fails CI instead of merging unobserved. |
+| c3-237 | package-autoupdate | feature | active | Detect and apply updates for the three package kinds Kanna installs (skill, claude-plugin, codex-plugin), serialized and deferred while any chat is busy. |
+| c3-238 | plugin-system | feature | active | Run third-party plugins for Kanna: compile a plugin directory to two bundles, run its server half as a subprocess speaking typed RPC over a unix socket, keep a bounded log ring per plugin, and expose one service that the HTTP routes, the CLI and the MCP authoring tools all drive. |

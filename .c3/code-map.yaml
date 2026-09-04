@@ -346,3 +346,24 @@ c3-237:
   - src/server/claude-plugin-update-checker.adapter.ts
   - src/server/codex-plugin-update-checker.adapter.ts
   - src/server/codex-plugin-update-applier.adapter.ts
+c3-121:
+  - src/client/app/KannaPluginsSettingsBranch.tsx
+  - src/client/app/PluginSidebarItems.tsx
+  - src/client/app/PluginsFooterSection.tsx
+  - src/client/app/PluginsFooterSlot.test.tsx
+  - src/client/app/PluginsFooterSlot.tsx
+  - src/client/app/PluginsSection.tsx
+  - src/client/plugins/**
+  - src/client/stores/pluginContributionsStore.ts
+c3-238:
+  - src/server/__fixtures__/plugins/**
+  - src/server/kanna-mcp-plugins.test.ts
+  - src/server/kanna-mcp-plugins.ts
+  - src/server/plugin-cli-dispatch.test.ts
+  - src/server/plugin-cli-dispatch.ts
+  - src/server/plugin-cli.ts
+  - src/server/plugin-http-routes.ts
+  - src/server/plugin-system-acceptance.test.tsx
+  - src/server/plugins/**
+c3-313:
+  - src/shared/plugins/**

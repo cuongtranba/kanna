@@ -36,9 +36,11 @@ describe("PluginsFooterSlot", () => {
   })
 
   test("renders a contributed panel from the store", async () => {
-    usePluginContributionsStore.getState().setContributions([], [
-      { pluginId: "hello", surfaceId: "main", Component: () => <span>panel-body</span> },
-    ])
+    usePluginContributionsStore.getState().setContributions({
+      sidebarItems: [],
+      panels: [{ pluginId: "hello", surfaceId: "main", Component: () => <span>panel-body</span> }],
+      commandCenterItems: [],
+    })
 
     const html = await render()
 
