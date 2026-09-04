@@ -1,6 +1,5 @@
-import type { AnyValue } from "../../../../shared/errors"
 import type { DomPort } from "../../../ports/domPort"
-import type { EditorConfig, LexicalEditor, SerializedLexicalNode, Spread } from "lexical"
+import type { EditorConfig, LexicalEditor, LexicalNode, SerializedLexicalNode, Spread } from "lexical"
 import type { ReactNode } from "react"
 import { DecoratorNode, $applyNodeReplacement } from "lexical"
 import { domAdapter } from "../../../adapters/dom.adapter"
@@ -136,6 +135,6 @@ export function $createLocalFileLinkNode(
   )
 }
 
-export function $isLocalFileLinkNode(node: AnyValue): node is LocalFileLinkNode {
+export function $isLocalFileLinkNode(node: LexicalNode | null | undefined): node is LocalFileLinkNode {
   return node instanceof LocalFileLinkNode
 }

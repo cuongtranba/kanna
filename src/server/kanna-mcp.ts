@@ -8,7 +8,7 @@ import type { BoardRegistry } from "./board-registry"
 import { z } from "zod"
 import path from "node:path"
 import { randomUUID } from "node:crypto"
-import type { AnyValue } from "../shared/errors"
+import type { JsonObject } from "../shared/json"
 import { isRecord } from "../shared/errors"
 import { statPathOrNull } from "./fs-stat.adapter"
 import { KANNA_MCP_SERVER_NAME } from "../shared/tools"
@@ -363,8 +363,8 @@ Args:
  * supply a `progressToken` or the MCP runtime did not expose
  * `sendNotification`.
  */
-export function buildDelegateProgressEmitter(
-  extra: AnyValue,
+export function buildDelegateProgressEmitter<TExtra>(
+  extra: TExtra,
 ): ((entry: TranscriptEntry) => void) | undefined {
   if (!isRecord(extra)) return undefined
   const metaRaw = extra._meta
@@ -373,7 +373,7 @@ export function buildDelegateProgressEmitter(
   if (progressToken === undefined) return undefined
   if (typeof extra.sendNotification !== "function") return undefined
   const rawSendNotification = extra.sendNotification
-  function sendNotification(notification: { method: string; params: Record<string, AnyValue> }): void {
+  function sendNotification(notification: { method: string; params: JsonObject }): void {
     void rawSendNotification(notification)
   }
   let progress = 0
@@ -1215,10 +1215,17 @@ export function buildKannaMcpTools(args: KannaMcpArgs): KannaSdkToolList {
     const webfetchTool = createWebFetchTool({ toolCallback: args.toolCallback })
     const websearchTool = createWebSearchTool({ toolCallback: args.toolCallback })
 
-    function registerShim<I>(shim: {
+    /**
+     * The shim's own zod schema is the decoder. It used to be `<I>input` — an
+     * assertion that the MCP SDK had already validated the payload — which is
+     * both banned and unprovable here. `safeParse` turns the same claim into a
+     * runtime check, and a payload that fails it becomes an error result rather
+     * than a crash inside the handler.
+     */
+    function registerShim<TSchema extends z.ZodObject<z.ZodRawShape>>(shim: {
       name: string
-      schema: { shape: Record<string, z.ZodTypeAny> }
-      handler: (input: I, ctx: import("./kanna-mcp-tools/tool-callback-shim").ToolHandlerContext) => Promise<import("./kanna-mcp-tools/tool-callback-shim").ToolHandlerResult>
+      schema: TSchema
+      handler: (input: z.infer<TSchema>, ctx: import("./kanna-mcp-tools/tool-callback-shim").ToolHandlerContext) => Promise<import("./kanna-mcp-tools/tool-callback-shim").ToolHandlerResult>
     }) {
       tools.push(
         tool(
@@ -1228,8 +1235,11 @@ export function buildKannaMcpTools(args: KannaMcpArgs): KannaSdkToolList {
           async (input, extra) => {
             const requestId = isRecord(extra) && (typeof extra.requestId === "string" || typeof extra.requestId === "number") ? extra.requestId : undefined
             const toolUseId = requestId != null ? String(requestId) : randomUUID()
-            const typedInput = <I>input
-            return await shim.handler(typedInput, {
+            const parsed = shim.schema.safeParse(input)
+            if (!parsed.success) {
+              return fail(`Invalid arguments for ${shim.name}: ${parsed.error.message}`)
+            }
+            return await shim.handler(parsed.data, {
               chatId: chatId ?? "",
               sessionId,
               toolUseId,

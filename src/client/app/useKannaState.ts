@@ -22,7 +22,8 @@ import { gitSnapshotKey, useKannaStateStore } from "../stores/kannaStateStore"
 import { useChatStateStore, selectChatSlice } from "../stores/chatStateStore"
 import type { EditorOpenSettings, ImportSessionsByIdsResult, OpenExternalAction, WorkflowsSnapshot } from "../../shared/protocol"
 import { log } from "../../shared/log"
-import type { AnyValue } from "../../shared/errors"
+import type { JsonObject, JsonValue } from "../../shared/json"
+import { encodeAskUserQuestionResult } from "../lib/askUserQuestionJson"
 import type { StoragePort } from "../ports/storagePort"
 import type { DomPort } from "../ports/domPort"
 import type { TimerPort } from "../ports/timerPort"
@@ -331,7 +332,7 @@ export function shouldMarkActiveChatRead(dom?: Pick<DomPort, "getVisibilityState
 }
 
 
-function logKannaState(message: string, details?: AnyValue) {
+function logKannaState(message: string, details?: JsonValue) {
   void message
   void details
 }
@@ -460,7 +461,7 @@ function elapsedTraceMs(startedAt: number) {
 function logSendToStartingTrace(
   trace: SendToStartingTrace | null | undefined,
   stage: string,
-  details?: Record<string, unknown>,
+  details?: JsonObject,
   session: StoragePort = sessionStorageAdapter,
   local: StoragePort = localStorageAdapter,
 ) {
@@ -1286,7 +1287,7 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
         type: "chat.respondTool",
         chatId: activeChatId,
         toolUseId,
-        result: { questions, answers },
+        result: encodeAskUserQuestionResult(questions, answers),
       })
     } catch (error) {
       useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
@@ -1331,7 +1332,7 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
         chatId: activeChatId,
         runId,
         toolUseId,
-        result: { questions, answers },
+        result: encodeAskUserQuestionResult(questions, answers),
       })
     } catch (error) {
       useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))

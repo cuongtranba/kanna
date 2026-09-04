@@ -6,7 +6,7 @@ import { BoardSyncPanel, type BoardSyncPanelSocket } from "./BoardSyncPanel"
 import { useBoardSyncPanelStore } from "./BoardSyncPanel.store"
 import type { BoardSyncStatus } from "../../../shared/boards/sync-types"
 import type { SyncBinding, SyncConflict } from "../../../shared/boards/types"
-import type { AnyValue } from "../../../shared/errors"
+import type { ClientCommand } from "../../../shared/protocol"
 
 const BINDING: SyncBinding = {
   id: "bind-1",
@@ -43,14 +43,14 @@ function status(overrides: Partial<BoardSyncStatus> = {}): BoardSyncStatus {
 
 interface Harness {
   container: HTMLDivElement
-  commands: AnyValue[]
+  commands: ClientCommand[]
   unmount: () => void
 }
 
 async function mount(value: BoardSyncStatus): Promise<Harness> {
-  const commands: AnyValue[] = []
+  const commands: ClientCommand[] = []
   const socket: BoardSyncPanelSocket = {
-    command: <TResult,>(command: AnyValue) => {
+    command: <TResult,>(command: ClientCommand) => {
       commands.push(command)
       const type = (command as { type: string }).type
       if (type === "board.sync.status") return Promise.resolve(value as TResult)

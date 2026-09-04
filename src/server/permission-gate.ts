@@ -7,12 +7,12 @@ import path from "node:path"
 import { homedir } from "node:os"
 import { minimatch } from "minimatch"
 import { log } from "../shared/log"
-import type { AnyValue } from "../shared/errors"
 import { isRecord } from "../shared/errors"
+import type { JsonObject } from "../shared/json"
 
 export interface EvaluateArgs {
   toolName: string
-  args: Record<string, unknown>
+  args: JsonObject
   chatPolicy: ChatPermissionPolicy
   cwd: string
   /**
@@ -38,12 +38,12 @@ export interface EvaluateResult {
   reason?: string
 }
 
-function argsToText(args: Record<string, unknown>): string {
+function argsToText(args: JsonObject): string {
   return typeof args.command === "string" ? args.command : JSON.stringify(args)
 }
 
 interface ShellOp { op: string }
-function isShellOp(token: AnyValue): token is ShellOp {
+function isShellOp<T>(token: T): token is T & ShellOp {
   return isRecord(token) && typeof token.op === "string"
 }
 
@@ -113,7 +113,7 @@ const WRITE_PATH_TOOLS = new Set([
   "mcp__kanna__edit",
 ])
 
-function getPathArg(args: Record<string, unknown>): string | null {
+function getPathArg(args: JsonObject): string | null {
   if (typeof args.path === "string") return args.path
   return null
 }

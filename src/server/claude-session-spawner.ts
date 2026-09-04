@@ -20,7 +20,7 @@
  * SpawnClaudeTurnDeps so the module remains testable without real drivers.
  */
 
-import type { AnyValue } from "../shared/errors"
+import type { JsonValue } from "../shared/json"
 import type {
   AgentProvider,
   ClaudeDriverPreference,
@@ -90,7 +90,7 @@ export interface SpawnClaudeTurnArgs {
   planMode: boolean
   sessionToken: string | null
   forkSession: boolean
-  onToolRequest: (request: HarnessToolRequest) => Promise<AnyValue>
+  onToolRequest: (request: HarnessToolRequest) => Promise<JsonValue>
   provider: AgentProvider
 }
 

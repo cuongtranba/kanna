@@ -1,13 +1,10 @@
 import { createHash } from "node:crypto"
 import { readFileSync, statSync } from "node:fs"
-import type { AnyValue } from "../shared/errors"
-import { safeJsonParse } from "../shared/safe-json"
+import { isJsonObject, safeJsonParse, type JsonValue } from "../shared/json"
 import type { ClaudeSessionRecord, ParsedClaudeSession } from "./claude-session-types"
 
-function isClaudeSessionRecord(v: AnyValue): v is ClaudeSessionRecord {
-  if (typeof v !== "object" || v === null || Array.isArray(v)) return false
-  const rec = <Record<string, AnyValue>>v
-  return typeof rec.type === "string"
+function isClaudeSessionRecord(v: JsonValue): v is JsonValue & ClaudeSessionRecord {
+  return isJsonObject(v) && typeof v.type === "string"
 }
 
 function tryParse(line: string): ClaudeSessionRecord | null {

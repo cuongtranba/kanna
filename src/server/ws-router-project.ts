@@ -18,6 +18,7 @@ import type { ChatRecord } from "./events"
 import type { UpdateInstallResult, UpdateSnapshot } from "../shared/types"
 import type { ClientCommand, ImportSessionsByIdsResult, ServerEnvelope } from "../shared/protocol"
 import type { ImportClaudeSessionsResult } from "./claude-session-importer.adapter"
+import type { DiscoveredProject } from "./discovery.adapter"
 
 // ---------------------------------------------------------------------------
 // Dep interfaces (duck-typed; avoids circular imports with ws-router.ts)
@@ -45,7 +46,7 @@ export interface ProjectUpdateManagerDep {
 
 /** The subset of DiffStore consumed by project.readDiffPatch. */
 export interface ProjectDiffStoreDep {
-  readPatch(args: { projectPath: string; path: string }): Promise<unknown>
+  readPatch(args: { projectPath: string; path: string }): Promise<{ patch: string }>
 }
 
 /** Analytics reporter subset. */
@@ -68,7 +69,7 @@ export interface ProjectCommandDeps {
   /** Analytics reporter. */
   analytics: ProjectAnalyticsDep
   /** Re-scans the workspace for new/removed projects. */
-  refreshDiscovery: () => Promise<unknown>
+  refreshDiscovery: () => Promise<DiscoveredProject[]>
   /** Ensures the target directory exists (creates it if needed). */
   ensureProjectDirectory: (path: string) => Promise<void>
   /** Normalizes / resolves a local path string. */

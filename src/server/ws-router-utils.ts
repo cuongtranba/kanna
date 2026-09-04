@@ -1,3 +1,4 @@
+import type { JsonObject } from "../shared/json"
 /**
  * Pure utilities for ws-router — no closure over createWsRouter state.
  * Extracted from ws-router.ts to reduce its size.
@@ -54,7 +55,7 @@ export function logSendToStartingProfile(
   traceId: string | null | undefined,
   startedAt: number | null | undefined,
   stage: string,
-  details?: Record<string, unknown>
+  details?: JsonObject
 ): void {
   if (!traceId || startedAt === undefined || startedAt === null || !isSendToStartingProfilingEnabled()) {
     return

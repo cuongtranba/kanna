@@ -1,6 +1,7 @@
 import { OPENROUTER_MODELS_URL } from "../shared/types"
+import type { JsonValue } from "../shared/json"
 
-export async function fetchOpenRouterModelsRaw(): Promise<unknown> {
+export async function fetchOpenRouterModelsRaw(): Promise<JsonValue> {
   const res = await fetch(OPENROUTER_MODELS_URL, { headers: { accept: "application/json" } })
   if (!res.ok) throw new Error(`OpenRouter models fetch failed: ${res.status}`)
   return res.json()

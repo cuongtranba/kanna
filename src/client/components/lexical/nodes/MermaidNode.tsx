@@ -1,5 +1,4 @@
-import type { AnyValue } from "../../../../shared/errors"
-import type { EditorConfig, LexicalEditor, SerializedLexicalNode, Spread } from "lexical"
+import type { EditorConfig, LexicalEditor, LexicalNode, SerializedLexicalNode, Spread } from "lexical"
 import type { ReactNode } from "react"
 import { DecoratorNode, $applyNodeReplacement } from "lexical"
 import type { DomPort } from "../../../ports/domPort"
@@ -88,6 +87,6 @@ export function $createMermaidNode(source: string): MermaidNode {
   return $applyNodeReplacement(new MermaidNode(source))
 }
 
-export function $isMermaidNode(node: AnyValue): node is MermaidNode {
+export function $isMermaidNode(node: LexicalNode | null | undefined): node is MermaidNode {
   return node instanceof MermaidNode
 }

@@ -4,7 +4,7 @@ import { StreamableHTTPClientTransport, StreamableHTTPError } from "@modelcontex
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
 import { WebSocketClientTransport } from "@modelcontextprotocol/sdk/client/websocket.js"
 import type { McpServerConfig, McpServerTestResult } from "../shared/types"
-import type { AnyValue } from "../shared/errors"
+import { toError } from "../shared/errors"
 
 const DEFAULT_TIMEOUT_MS = 10_000
 
@@ -53,7 +53,7 @@ export async function validateMcpServer(
     return {
       status: "error",
       testedAt: new Date().toISOString(),
-      message: formatError(err, timeoutMs, config, timedOut),
+      message: formatError(toError(err), timeoutMs, config, timedOut),
     }
   } finally {
     if (timer) clearTimeout(timer)
@@ -90,14 +90,14 @@ function buildTransport(config: McpServerConfig, bearer?: string) {
 }
 
 function formatError(
-  err: AnyValue,
+  err: Error,
   timeoutMs: number,
   config: McpServerConfig,
   timedOut: boolean,
 ): string {
   if (timedOut) return `connection timed out after ${Math.round(timeoutMs / 1000)}s`
 
-  const raw = err instanceof Error ? err.message : String(err)
+  const raw = err.message
 
   if (raw.toLowerCase().includes("timed out")) {
     return `connection timed out after ${Math.round(timeoutMs / 1000)}s`

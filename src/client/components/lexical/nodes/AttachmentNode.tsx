@@ -1,8 +1,8 @@
-import type { AnyValue } from "../../../../shared/errors"
 import { type ReactNode } from "react"
 import {
   type EditorConfig,
   type LexicalEditor,
+  type LexicalNode,
   type NodeKey,
   type SerializedLexicalNode,
   type Spread,
@@ -125,7 +125,7 @@ export function $createAttachmentNode(attachment: ChatAttachment): AttachmentNod
 }
 
 export function $isAttachmentNode(
-  node: AnyValue,
+  node: LexicalNode | null | undefined,
 ): node is AttachmentNode {
   return node instanceof AttachmentNode
 }

@@ -40,19 +40,19 @@ export const MODULE_ALLOWANCES: Readonly<Record<string, number>> = {
   "src/client/app/SubagentsSection.tsx": 939,
   "src/client/app/useAppGlobalState.ts": 1421,
   "src/client/app/useKannaState.ts": 1447,
-  "src/client/components/boards/CardDrawer.tsx": 797,
+  "src/client/components/boards/CardDrawer.tsx": 799,
   "src/client/components/chat-ui/ChatInput.tsx": 1369,
-  "src/client/components/chat-ui/RightSidebar.tsx": 2071,
+  "src/client/components/chat-ui/RightSidebar.tsx": 2075,
   "src/client/stores/chatPreferencesStore.ts": 810,
-  "src/server/agent-coordinator.ts": 1483,
+  "src/server/agent-coordinator.ts": 1484,
   "src/server/app-settings.ts": 1900,
-  "src/server/board-store.adapter.ts": 1364,
+  "src/server/board-store.adapter.ts": 1366,
   "src/server/claude-pty/driver.ts": 1095,
   "src/server/codex-app-server.ts": 1023,
   "src/server/codex-transcript-translator.ts": 767,
   "src/server/event-store-messages.adapter.ts": 765,
   "src/server/kanna-mcp.ts": 1326,
-  "src/server/server.ts": 807,
+  "src/server/server.ts": 808,
   "src/server/subagent-orchestrator.ts": 1375,
 }
 
@@ -195,10 +195,10 @@ export interface EslintLimitPin {
 export const ESLINT_LIMIT_PINS: readonly EslintLimitPin[] = [
   {
     rule: "complexity",
-    max: 132,
+    max: 131,
     issue: 893,
     rationale:
-      "Cyclomatic complexity per function. The peak is runClaudeSession in claude-session-runner.ts (132). handleCommand dropped from 138 → 116 after the settings pre-dispatch refactor (#951).",
+      "Cyclomatic complexity per function. The peak is runClaudeSession in claude-session-runner.ts (131) — down from 132 when the untyped-value migration removed a narrowing branch there. handleCommand dropped from 138 → 116 after the settings pre-dispatch refactor (#951).",
   },
   {
     rule: "max-params",

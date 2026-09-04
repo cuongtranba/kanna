@@ -265,6 +265,9 @@ c3-232:
   - src/server/ws-router-boards.ts
 c3-301:
   - src/shared/analytics.ts
+  - src/shared/dynamic-module.ts
+  - src/shared/json.ts
+  - src/shared/json.test.ts
   - src/shared/kanna-system-prompt.test.ts
   - src/shared/kanna-system-prompt.ts
   - src/shared/mask-oauth-key.test.ts

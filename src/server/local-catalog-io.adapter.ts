@@ -1,8 +1,7 @@
 import { closeSync, existsSync, openSync, readFileSync, readSync, readdirSync, statSync } from "node:fs"
 import { homedir } from "node:os"
 import path from "node:path"
-import type { AnyValue } from "../shared/errors"
-import { isRecord } from "../shared/errors"
+import { isJsonObject, safeJsonParse, type JsonValue } from "../shared/json"
 
 export type CatalogKind = "skill" | "command"
 export type CatalogScope = "project" | "personal" | "plugin"
@@ -258,10 +257,10 @@ function scanCommandsDir(args: {
 // declare `source: "./"` — emitting `/name`s the CLI rejects.
 // ---------------------------------------------------------------------------
 
-function readJsonFile(filePath: string): AnyValue | null {
+function readJsonFile(filePath: string): JsonValue | null {
   if (!existsSync(filePath)) return null
   try {
-    return JSON.parse(readFileSync(filePath, "utf8"))
+    return safeJsonParse(readFileSync(filePath, "utf8"))
   } catch {
     return null
   }
@@ -281,7 +280,7 @@ function readEnabledPluginKeys(args: { cwd: string; homeDir: string }): Set<stri
   ]
   for (const source of sources) {
     const parsed = readJsonFile(source)
-    if (!isRecord(parsed) || !isRecord(parsed.enabledPlugins)) continue
+    if (parsed === null || !isJsonObject(parsed) || !isJsonObject(parsed.enabledPlugins)) continue
     for (const [key, value] of Object.entries(parsed.enabledPlugins)) {
       if (value === true) enabled.add(key)
       else if (value === false) enabled.delete(key)
@@ -298,13 +297,13 @@ function readEnabledPluginKeys(args: { cwd: string; homeDir: string }): Set<stri
 function readInstalledPluginPaths(homeDir: string): Map<string, string> {
   const parsed = readJsonFile(path.join(homeDir, ".claude", "plugins", "installed_plugins.json"))
   const out = new Map<string, string>()
-  if (!isRecord(parsed) || !isRecord(parsed.plugins)) return out
+  if (parsed === null || !isJsonObject(parsed) || !isJsonObject(parsed.plugins)) return out
   for (const [key, installs] of Object.entries(parsed.plugins)) {
     if (!Array.isArray(installs)) continue
     let fallback: string | null = null
     let preferred: string | null = null
     for (const install of installs) {
-      if (!isRecord(install)) continue
+      if (!isJsonObject(install)) continue
       const installPath = install.installPath
       if (typeof installPath !== "string" || installPath.length === 0) continue
       fallback ??= installPath
@@ -330,10 +329,10 @@ function readDeclaredSkillDirs(args: {
   const parsed = readJsonFile(
     path.join(args.homeDir, ".claude", "plugins", "marketplaces", args.marketplace, ".claude-plugin", "marketplace.json"),
   )
-  if (!isRecord(parsed) || !Array.isArray(parsed.plugins)) return null
+  if (parsed === null || !isJsonObject(parsed) || !Array.isArray(parsed.plugins)) return null
   for (const raw of parsed.plugins) {
-    if (!isRecord(raw) || raw.name !== args.pluginName) continue
-    const declared: AnyValue[] = raw.skills
+    if (!isJsonObject(raw) || raw.name !== args.pluginName) continue
+    const declared: JsonValue = raw.skills
     if (!Array.isArray(declared)) return null
     return declared
       .filter((entry): entry is string => typeof entry === "string" && entry.length > 0)

@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client"
 import { act } from "react"
 import { CardDependencies, type BlockerCandidate } from "./CardDependencies"
 import type { CardBlocker } from "../../../shared/boards/dependencies"
-import type { AnyValue } from "../../../shared/errors"
+import type { ClientCommand } from "../../../shared/protocol"
 
 const CANDIDATES: readonly BlockerCandidate[] = [
   { id: "card-1", title: "Regenerate the client" },
@@ -13,7 +13,7 @@ const CANDIDATES: readonly BlockerCandidate[] = [
 
 interface Harness {
   container: HTMLDivElement
-  commands: AnyValue[]
+  commands: ClientCommand[]
   errors: string[]
   /** Mutable so the harness can be read after the click that increments it. */
   changes: { count: number }
@@ -24,11 +24,11 @@ async function mount(
   blockers: readonly CardBlocker[],
   options: { reject?: string } = {},
 ): Promise<Harness> {
-  const commands: AnyValue[] = []
+  const commands: ClientCommand[] = []
   const errors: string[] = []
   const changes = { count: 0 }
   const socket = {
-    command: <TResult,>(command: AnyValue): Promise<TResult> => {
+    command: <TResult,>(command: ClientCommand): Promise<TResult> => {
       commands.push(command)
       if (options.reject !== undefined) return Promise.reject(new Error(options.reject))
       return Promise.resolve(undefined as TResult)

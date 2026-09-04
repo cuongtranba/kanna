@@ -9,7 +9,7 @@
 
 import path from "node:path"
 import { LOG_PREFIX } from "../shared/branding"
-import type { AnyValue } from "../shared/errors"
+import type { JsonValue } from "../shared/json"
 import { log } from "../shared/log"
 import type { AgentProvider, TranscriptEntry } from "../shared/types"
 import { STORE_VERSION } from "../shared/types"
@@ -420,7 +420,7 @@ export async function readSidebarOrderFromProjectsLog(
     const line = lines[index].trim()
     if (!line) continue
     try {
-      const event: { v?: number; type?: string; projectIds?: AnyValue } = JSON.parse(line)
+      const event: { v?: number; type?: string; projectIds?: JsonValue } = JSON.parse(line)
       if (event.v !== STORE_VERSION || event.type !== "sidebar_project_order_set") {
         continue
       }

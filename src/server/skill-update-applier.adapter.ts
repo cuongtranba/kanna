@@ -1,7 +1,7 @@
 import os from "node:os"
 import { assertSafeSkillId, getGlobalSkillLockPath } from "./ws-router-skills"
 import { readTextFileOrThrow } from "./ws-router-io.adapter"
-import { isRecord, type AnyValue } from "../shared/errors"
+import { isJsonObject, type JsonValue } from "../shared/json"
 import { deriveSkillFolder, repinTarget } from "../shared/packages/skill-update-classifier"
 import type { PackageUpdateApplier, PackageApplyResult, PackageUpdateEntry } from "../shared/packages/types"
 
@@ -63,10 +63,10 @@ export function buildRepinSkillCommand(source: string, installPath: string | nul
  */
 async function readLockRevision(skillName: string): Promise<string | null> {
   try {
-    const raw: AnyValue = JSON.parse(await readTextFileOrThrow(getGlobalSkillLockPath()))
-    if (!isRecord(raw) || !isRecord(raw.skills)) return null
+    const raw: JsonValue = JSON.parse(await readTextFileOrThrow(getGlobalSkillLockPath()))
+    if (!isJsonObject(raw) || !isJsonObject(raw.skills)) return null
     const entry = raw.skills[skillName]
-    if (!isRecord(entry)) return null
+    if (!isJsonObject(entry)) return null
     return typeof entry.skillFolderHash === "string" && entry.skillFolderHash ? entry.skillFolderHash : null
   } catch {
     return null

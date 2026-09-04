@@ -11,7 +11,7 @@ import type { TimerPort } from "../../ports/timerPort"
 import { domAdapter } from "../../adapters/dom.adapter"
 import { timerAdapter } from "../../adapters/timer.adapter"
 import { resolveEffectiveScaleStep, resolveFontScale } from "../../../shared/design/typography"
-import type { AnyValue } from "../../../shared/errors"
+import type { JsonValue } from "../../../shared/json"
 import { useAppSettingsStore } from "../../stores/appSettingsStore"
 import { usePreferencesStore } from "../../stores/preferences"
 
@@ -163,7 +163,7 @@ const TERMINAL_BASE_FONT_SIZE = 13
  * pushed in explicitly. Rounded to the nearest pixel (canvas glyph metrics are
  * integral).
  */
-export function getTerminalFontSize(step: AnyValue): number {
+export function getTerminalFontSize(step: JsonValue | undefined): number {
   return Math.round(TERMINAL_BASE_FONT_SIZE * resolveFontScale(step))
 }
 

@@ -1,5 +1,4 @@
 import type { AgentProvider, TranscriptEntry } from "../shared/types"
-import { isRecord, type AnyValue } from "../shared/errors"
 
 // Policy: renderEntry handles message-shaped TranscriptEntry kinds only
 // (user_prompt, assistant_text, tool_call). All other kinds — slash-command
@@ -125,8 +124,9 @@ export function extractPreviousAssistantReply(entries: readonly TranscriptEntry[
     const entry = entries[i]
     if (entry.kind !== "tool_call") continue
     const tool = entry.tool
-    const inputRaw: Record<string, AnyValue> | null = isRecord(tool.input) ? <Record<string, AnyValue>>tool.input : null
-    const cmd = inputRaw && typeof inputRaw.command === "string" ? inputRaw.command : ""
+    // Only a Bash call carries a command worth naming; the union's other
+    // members have no `command` member at all, so this is a narrow, not a probe.
+    const cmd = tool.toolKind === "bash" ? tool.input.command : ""
     const suffix = cmd ? `: ${cmd}` : ""
     return `${tool.toolName}${suffix}`.trim()
   }

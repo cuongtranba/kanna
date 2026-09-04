@@ -1,8 +1,8 @@
 import { homedir } from "node:os"
 import path from "node:path"
 import OpenAI from "openai"
-import type { AnyValue } from "../shared/errors"
 import { isRecord } from "../shared/errors"
+import { isJsonObject, type JsonValue } from "../shared/json"
 import { getLlmProviderFilePath } from "../shared/branding"
 import {
   DEFAULT_OPENAI_SDK_MODEL,
@@ -31,14 +31,14 @@ function formatDisplayPath(filePath: string) {
   return filePath
 }
 
-function resolveProvider(value: AnyValue) {
+function resolveProvider(value: JsonValue | undefined) {
   if (value === "openai" || value === "openrouter" || value === "custom") {
     return value
   }
   return null
 }
 
-function normalizeString(value: AnyValue) {
+function normalizeString(value: JsonValue | undefined) {
   return typeof value === "string" ? value.trim() : ""
 }
 
@@ -55,10 +55,10 @@ export function resolveLlmProviderDefaultModel(provider: LlmProviderKind) {
 }
 
 export function normalizeLlmProviderSnapshot(
-  value: AnyValue,
+  value: JsonValue | undefined,
   filePath = getLlmProviderFilePath(homedir())
 ): LlmProviderSnapshot {
-  const source = isRecord(value) && !Array.isArray(value) ? value : null
+  const source = value !== undefined && isJsonObject(value) ? value : null
   const warnings: string[] = []
 
   if (!source) {
@@ -119,14 +119,14 @@ export function createDefaultSnapshot(filePath: string, warning: string | null =
   }
 }
 
-function toSerializableValue(value: AnyValue): AnyValue {
-  if (value === null || value === undefined) return value ?? null
+function toSerializableValue<T>(value: T): JsonValue {
+  if (value === null || value === undefined) return null
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return value
   if (Array.isArray(value)) {
-    return value.map((entry: AnyValue) => toSerializableValue(entry))
+    return value.map((entry) => toSerializableValue(entry))
   }
   if (value instanceof Error) {
-    const errRecord: Record<string, AnyValue> = Object.fromEntries(
+    const errRecord: Record<string, JsonValue> = Object.fromEntries(
       Object.getOwnPropertyNames(value).map((key) => [key, Object.getOwnPropertyDescriptor(value, key)?.value])
     )
     return toSerializableValue(errRecord)

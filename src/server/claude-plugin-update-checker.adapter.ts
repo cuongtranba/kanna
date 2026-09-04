@@ -1,6 +1,7 @@
 import os from "node:os"
 import path from "node:path"
-import { errorMessage, type AnyValue } from "../shared/errors"
+import { errorMessage } from "../shared/errors"
+import { safeJsonParse } from "../shared/json"
 import type { InstalledPackage, PackageUpdateChecker, PackageUpdateStatus } from "../shared/packages/types"
 import {
   parseKnownMarketplaces,
@@ -102,7 +103,8 @@ export function createClaudePluginUpdateChecker(deps: ClaudePluginCheckerDeps): 
     try {
       const text = await deps.readFileFn(filePath)
       if (!text) return new Map()
-      const raw: AnyValue = JSON.parse(text)
+      const raw = safeJsonParse(text)
+      if (raw === null) return new Map()
       return parseKnownMarketplaces(raw)
     } catch {
       return new Map()

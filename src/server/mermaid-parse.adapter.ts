@@ -17,16 +17,20 @@
  * nothing downstream can sniff `window` and take a browser code path.
  */
 
-import { isRecord, type AnyValue } from "../shared/errors"
+import { type HostBag, type LoadedModule } from "../shared/dynamic-module"
+import { isRecord } from "../shared/errors"
 import { createLazyLoader } from "../shared/lazyModule"
 import type { MermaidParsePort, MermaidParseResult } from "../shared/mermaid-validation"
 
 interface MermaidModule {
   initialize: (config: { startOnLoad: boolean; securityLevel: "strict" }) => void
-  parse: (text: string) => Promise<unknown>
+  // Declared `Promise<void>` because `parseMermaid` only cares whether it
+  // THROWS — mermaid's own diagram result is discarded. Awaiting a
+  // `Promise<void>` still awaits the real promise.
+  parse: (text: string) => Promise<void>
 }
 
-type GlobalBag = Record<string, unknown>
+type GlobalBag = HostBag
 
 function stubElement(): GlobalBag {
   return {
@@ -80,7 +84,7 @@ export function installDomShim(target: GlobalBag): () => void {
   if (target.document !== undefined) return () => undefined
 
   const values = shimValues(target)
-  const previous = new Map<string, { present: boolean; value: AnyValue }>()
+  const previous = new Map<string, { present: boolean; value: LoadedModule }>()
 
   for (const [key, value] of Object.entries(values)) {
     previous.set(key, { present: key in target, value: target[key] })
@@ -95,7 +99,7 @@ export function installDomShim(target: GlobalBag): () => void {
   }
 }
 
-function isMermaidModule(value: AnyValue): value is MermaidModule {
+function isMermaidModule(value: LoadedModule): value is MermaidModule {
   if (!isRecord(value)) return false
   return typeof value.initialize === "function" && typeof value.parse === "function"
 }

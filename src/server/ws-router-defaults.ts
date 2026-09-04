@@ -8,6 +8,7 @@
  * Extracted from ws-router.ts.
  */
 import { randomUUID } from "node:crypto"
+import { isClaudeReasoningEffort, isCodexReasoningEffort } from "../shared/provider-model-types"
 import {
   AUTH_DEFAULTS,
   CLAUDE_AUTH_DEFAULTS,
@@ -28,6 +29,7 @@ import type {
   LlmProviderSnapshot,
   LlmProviderValidationResult,
   Subagent,
+  SubagentPatch,
 } from "../shared/types"
 import { DEFAULT_TAB_MIN_WIDTH } from "../shared/pane-tab-width"
 import type { AppSettingsManager } from "./app-settings"
@@ -40,6 +42,41 @@ import type { AppSettingsManager } from "./app-settings"
  * Apply an `AppSettingsPatch` onto an existing `AppSettingsSnapshot`.
  * Pure function — does not mutate the input snapshot.
  */
+/**
+ * Merge a partial model-options patch over a subagent's existing options.
+ *
+ * The union member is decided by what the subagent ALREADY has: a settings
+ * patch cannot switch providers on its own, and a blind spread across members
+ * yields an object that belongs to none of them. Discriminating on the current
+ * shape is what makes the result PROVABLY a union member — the
+ * `<Subagent["modelOptions"]>` assertion this replaces claimed the same thing
+ * without checking anything, so a patch carrying a foreign field was silently
+ * accepted.
+ */
+function mergeSubagentModelOptions(
+  current: Subagent["modelOptions"],
+  patch: SubagentPatch["modelOptions"],
+): Subagent["modelOptions"] {
+  if (!patch) return current
+  const patchedEffort = "reasoningEffort" in patch ? patch.reasoningEffort : undefined
+  if ("contextWindow" in current) {
+    return {
+      reasoningEffort: isClaudeReasoningEffort(patchedEffort) ? patchedEffort : current.reasoningEffort,
+      contextWindow: "contextWindow" in patch && patch.contextWindow !== undefined
+        ? patch.contextWindow
+        : current.contextWindow,
+    }
+  }
+  if ("fastMode" in current) {
+    return {
+      reasoningEffort: isCodexReasoningEffort(patchedEffort) ? patchedEffort : current.reasoningEffort,
+      fastMode: "fastMode" in patch && patch.fastMode !== undefined ? patch.fastMode : current.fastMode,
+    }
+  }
+  // OpenRouterModelOptions is `Record<string, never>` — nothing to merge.
+  return current
+}
+
 export function mergeAppSettingsPatch(
   snapshot: AppSettingsSnapshot,
   patch: AppSettingsPatch,
@@ -64,7 +101,7 @@ export function mergeAppSettingsPatch(
           description: patch.subagents.update.patch.description === null
             ? undefined
             : patch.subagents.update.patch.description ?? subagent.description,
-          modelOptions: <Subagent["modelOptions"]>{ ...subagent.modelOptions, ...(patch.subagents.update.patch.modelOptions ?? {}) },
+          modelOptions: mergeSubagentModelOptions(subagent.modelOptions, patch.subagents.update.patch.modelOptions),
           workingDir: patch.subagents.update.patch.workingDir === null
             ? undefined
             : patch.subagents.update.patch.workingDir ?? subagent.workingDir,

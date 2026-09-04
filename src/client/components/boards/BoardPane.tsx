@@ -13,8 +13,9 @@ import type { BoardChatFacts } from "../../lib/boards/boardChatFacts"
 import { KannaBoard, type CardMoveRequest } from "./KannaBoard"
 import { moveCardInView, moveColumnInView } from "../../lib/boards/optimistic"
 import type { ColumnSettingsValue } from "./ColumnSettings"
-import type { BoardSnapshot } from "../../../shared/protocol"
-import { errorMessage, type AnyValue } from "../../../shared/errors"
+import type { BoardSnapshot, ClientCommand, SubscriptionTopic } from "../../../shared/protocol"
+import { onRejected } from "../../../shared/errors"
+import type { JsonValue } from "../../../shared/json"
 
 /**
  * One board, live.
@@ -26,8 +27,8 @@ import { errorMessage, type AnyValue } from "../../../shared/errors"
  */
 
 export interface BoardPaneSocket {
-  subscribe<TSnapshot>(topic: AnyValue, onSnapshot: (snapshot: TSnapshot) => void): () => void
-  command<TResult = AnyValue>(command: AnyValue): Promise<TResult>
+  subscribe(topic: SubscriptionTopic, onSnapshot: (snapshot: BoardSnapshot) => void): () => void
+  command<TResult = JsonValue>(command: ClientCommand): Promise<TResult>
 }
 
 const EMPTY_CANDIDATES: readonly BlockerCandidate[] = []
@@ -59,7 +60,7 @@ export function BoardPane({ boardId, socket, chatFacts, onOpenCard, onOpenBoards
   // every board broadcast from this topic, so each push carries a complete
   // prefix of each column and nothing has to be merged.
   useEffect(() => {
-    return socket.subscribe<BoardSnapshot>({ type: "board", boardId, pageSize }, (snapshot) => {
+    return socket.subscribe({ type: "board", boardId, pageSize }, (snapshot) => {
       useBoardsStore.getState().setBoardView(snapshot.boardId, snapshot.view)
     })
   }, [boardId, pageSize, socket])
@@ -147,9 +148,9 @@ export function BoardPane({ boardId, socket, chatFacts, onOpenCard, onOpenBoards
       })
       // The reason is shown inline on the header, not as a toast: the user may
       // not be looking when a sync fails.
-      .catch((cause: AnyValue) => {
-        sync.finishSync(boardId, errorMessage(cause))
-      })
+      .catch(onRejected((error) => {
+        sync.finishSync(boardId, error.message)
+      }))
   }, [boardId, socket])
 
   /**
@@ -180,9 +181,9 @@ export function BoardPane({ boardId, socket, chatFacts, onOpenCard, onOpenBoards
           colorToken: patch.colorToken,
           wipLimit: patch.wipLimit,
         })
-        .catch((cause: AnyValue) => {
-          useBoardSyncStore.getState().finishSync(boardId, errorMessage(cause))
-        })
+        .catch(onRejected((error) => {
+          useBoardSyncStore.getState().finishSync(boardId, error.message)
+        }))
     },
     [boardId, socket],
   )
@@ -190,9 +191,9 @@ export function BoardPane({ boardId, socket, chatFacts, onOpenCard, onOpenBoards
   const handleColumnDelete = useCallback(
     (columnId: string) => {
       // The store refuses while cards remain; surfacing its reason is the point.
-      void socket.command({ type: "board.column.delete", columnId }).catch((cause: AnyValue) => {
-        useBoardSyncStore.getState().finishSync(boardId, errorMessage(cause))
-      })
+      void socket.command({ type: "board.column.delete", columnId }).catch(onRejected((error) => {
+        useBoardSyncStore.getState().finishSync(boardId, error.message)
+      }))
     },
     [boardId, socket],
   )
@@ -201,9 +202,9 @@ export function BoardPane({ boardId, socket, chatFacts, onOpenCard, onOpenBoards
     (title: string) => {
       const current = useBoardsStore.getState().viewByBoard[boardId]
       const afterColumnId = current?.columns.at(-1)?.id ?? null
-      void socket.command({ type: "board.column.create", boardId, title, afterColumnId }).catch((cause: AnyValue) => {
-        useBoardSyncStore.getState().finishSync(boardId, errorMessage(cause))
-      })
+      void socket.command({ type: "board.column.create", boardId, title, afterColumnId }).catch(onRejected((error) => {
+        useBoardSyncStore.getState().finishSync(boardId, error.message)
+      }))
     },
     [boardId, socket],
   )
@@ -239,9 +240,9 @@ export function BoardPane({ boardId, socket, chatFacts, onOpenCard, onOpenBoards
       const afterCardId = current?.cards[columnId]?.at(-1)?.id ?? null
       void socket
         .command({ type: "board.card.create", boardId, columnId, title, afterCardId })
-        .catch((cause: AnyValue) => {
-          useBoardSyncStore.getState().finishSync(boardId, errorMessage(cause))
-        })
+        .catch(onRejected((error) => {
+          useBoardSyncStore.getState().finishSync(boardId, error.message)
+        }))
     },
     [boardId, socket],
   )
@@ -268,9 +269,9 @@ export function BoardPane({ boardId, socket, chatFacts, onOpenCard, onOpenBoards
     useBoardSyncStore.getState().stopRenameBoard()
     const title = draft.trim()
     if (title === "" || title === current?.board.title) return
-    void socket.command({ type: "board.update", boardId, title }).catch((cause: AnyValue) => {
-      useBoardSyncStore.getState().finishSync(boardId, errorMessage(cause))
-    })
+    void socket.command({ type: "board.update", boardId, title }).catch(onRejected((error) => {
+      useBoardSyncStore.getState().finishSync(boardId, error.message)
+    }))
   }, [boardId, socket])
 
   const handleTitleKey = useCallback(

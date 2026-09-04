@@ -14,7 +14,7 @@
 
 import type { AgentProvider, TranscriptEntry } from "../shared/types"
 import { billedUsageOfResult } from "../shared/token-pricing"
-import type { AnyValue } from "../shared/errors"
+import { errorMessage, toError } from "../shared/errors"
 import type { HarnessTurn } from "./harness-types"
 import type { ActiveTurn } from "./claude-session-state"
 import type { LimitDetector } from "./auto-continue/limit-detector"
@@ -69,7 +69,7 @@ export interface RunTurnDeps {
   /** Detector for codex-side rate-limit / limit errors. */
   codexLimitDetector: LimitDetector
   /** Delegate to the coordinator's handleLimitError (already has detector bound via args). */
-  handleLimitError: (chatId: string, detector: LimitDetector, error: AnyValue) => Promise<boolean>
+  handleLimitError: (chatId: string, detector: LimitDetector, error: Error) => Promise<boolean>
   /** Notify the WebSocket layer that UI state changed. */
   emitStateChange: (chatId: string) => void
   /** Remove the draining-stream entry for a chat (coordinator keeps the map). */
@@ -194,11 +194,12 @@ export async function runTurn(deps: RunTurnDeps, active: ActiveTurn): Promise<vo
         }
       }
     }
-  } catch (error) {
+  } catch (caught) {
+    const error = toError(caught)
     if (!active.cancelRequested) {
       const handled = await deps.handleLimitError(active.chatId, deps.codexLimitDetector, error)
       if (!handled) {
-        const message = error instanceof Error ? error.message : String(error)
+        const message = error.message
         await deps.store.appendMessage(
           active.chatId,
           timestamped({
@@ -251,7 +252,7 @@ export async function runTurn(deps: RunTurnDeps, active: ActiveTurn): Promise<vo
           appendUserPrompt: false,
         })
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
+        const message = errorMessage(error)
         await deps.store.appendMessage(
           active.chatId,
           timestamped({
@@ -269,7 +270,7 @@ export async function runTurn(deps: RunTurnDeps, active: ActiveTurn): Promise<vo
       try {
         await deps.maybeStartNextQueuedMessage(active.chatId)
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
+        const message = errorMessage(error)
         await deps.store.appendMessage(
           active.chatId,
           timestamped({

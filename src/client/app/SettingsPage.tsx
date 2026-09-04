@@ -87,6 +87,7 @@ import {
 import { useTheme, type ThemePreference } from "../hooks/useTheme"
 import { KEYBINDING_ACTION_LABELS, formatKeybindingInput, getResolvedKeybindings, parseKeybindingInput } from "../lib/keybindings"
 import { playChatNotificationSound } from "../lib/chatSounds"
+import { asJsonValue } from "../lib/asJsonValue"
 import { cn } from "../lib/utils"
 import {
   DEFAULT_TERMINAL_MIN_COLUMN_WIDTH,
@@ -1327,7 +1328,7 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
     } catch (error) {
       const fallbackError = error instanceof Error
         ? { name: error.name, message: error.message }
-        : error
+        : asJsonValue(error)
       setLlmValidationStatus("invalid")
       setLlmValidationError(fallbackError)
       setLlmProviderError(error instanceof Error ? error.message : "Unable to save quick response provider settings.")

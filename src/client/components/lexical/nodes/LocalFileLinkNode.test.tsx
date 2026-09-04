@@ -1,12 +1,18 @@
 import { describe, expect, it } from "bun:test"
 import { createHeadlessEditor } from "@lexical/headless"
-import { $getRoot, $createParagraphNode } from "lexical"
+import { $getRoot, $createParagraphNode, type LexicalNode } from "lexical"
 import {
   LocalFileLinkNode,
   $createLocalFileLinkNode,
   $isLocalFileLinkNode,
   type SerializedLocalFileLinkNode,
 } from "./LocalFileLinkNode"
+
+/** The guards narrow a real Lexical node; this reaches the runtime branch a
+  * caller could only hit with a value the type system already rejects. */
+function notALexicalNode(value: unknown): LexicalNode {
+  return value as LexicalNode
+}
 
 function buildEditor() {
   return createHeadlessEditor({
@@ -90,7 +96,7 @@ describe("LocalFileLinkNode", () => {
   it("$isLocalFileLinkNode returns false for non-LocalFileLinkNode", () => {
     expect($isLocalFileLinkNode(null)).toBe(false)
     expect($isLocalFileLinkNode(undefined)).toBe(false)
-    expect($isLocalFileLinkNode("not a node")).toBe(false)
+    expect($isLocalFileLinkNode(notALexicalNode("not a node"))).toBe(false)
   })
 
   it("exportJSON / importJSON round-trip: path only", async () => {

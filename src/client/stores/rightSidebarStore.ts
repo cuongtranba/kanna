@@ -1,6 +1,7 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
-import type { AnyValue } from "../../shared/errors"
+import { isJsonObject, type JsonObject, type JsonValue } from "../../shared/json"
+import { asJsonValue } from "../lib/asJsonValue"
 
 export interface ProjectRightSidebarVisibilityState {
   isVisible: boolean
@@ -61,34 +62,61 @@ function getProjectVisibilityState(
   return projects[projectId] ?? createDefaultProjectVisibilityState()
 }
 
-type PersistedRightSidebarState = {
-  size?: number
-  projects?: Record<string, Partial<{ isVisible: boolean; size: number }>>
-  projectUi?: Record<string, ProjectRightSidebarUiState>
+/**
+ * The persisted blob is a JSON boundary — written by an older build, possibly
+ * hand-edited — so every field is read through a guard rather than asserted
+ * into the current shape.
+ */
+function firstFiniteProjectSize(projects: JsonObject): number | null {
+  for (const layout of Object.values(projects)) {
+    if (isJsonObject(layout) && typeof layout.size === "number" && Number.isFinite(layout.size)) {
+      return layout.size
+    }
+  }
+  return null
 }
 
-export function migrateRightSidebarStore(persistedState: AnyValue) {
-  if (!persistedState || typeof persistedState !== "object") {
+function readProjectUiState(value: JsonValue): ProjectRightSidebarUiState | null {
+  if (!isJsonObject(value)) return null
+  const collapsedPaths: Record<string, boolean> = {}
+  if (isJsonObject(value.collapsedPaths)) {
+    for (const [path, collapsed] of Object.entries(value.collapsedPaths)) {
+      if (typeof collapsed === "boolean") collapsedPaths[path] = collapsed
+    }
+  }
+  return {
+    viewMode: value.viewMode === "changes" ? "changes" : "history",
+    collapsedPaths,
+    summary: typeof value.summary === "string" ? value.summary : "",
+    description: typeof value.description === "string" ? value.description : "",
+  }
+}
+
+export function migrateRightSidebarStore(persistedState: JsonValue) {
+  if (!isJsonObject(persistedState)) {
     return { size: DEFAULT_RIGHT_SIDEBAR_SIZE, projects: {}, projectUi: {} }
   }
 
-  const state = <PersistedRightSidebarState>persistedState
-  const globalSize = Number.isFinite(state.size)
-    ? clampSize(state.size ?? DEFAULT_RIGHT_SIDEBAR_SIZE)
-    : clampSize(
-        Object.values(state.projects ?? {}).find((layout) => Number.isFinite(layout.size))?.size
-        ?? DEFAULT_RIGHT_SIDEBAR_SIZE
-      )
-  const projects = Object.fromEntries(
-    Object.entries(state.projects ?? {}).map(([projectId, layout]) => [
-      projectId,
-      {
-        isVisible: layout.isVisible ?? false,
-      },
-    ])
-  )
+  const persistedProjects = isJsonObject(persistedState.projects) ? persistedState.projects : {}
+  const rootSize = persistedState.size
+  const globalSize = typeof rootSize === "number" && Number.isFinite(rootSize)
+    ? clampSize(rootSize)
+    : clampSize(firstFiniteProjectSize(persistedProjects) ?? DEFAULT_RIGHT_SIDEBAR_SIZE)
 
-  return { size: globalSize, projects, projectUi: state.projectUi ?? {} }
+  const projects: Record<string, ProjectRightSidebarVisibilityState> = {}
+  for (const [projectId, layout] of Object.entries(persistedProjects)) {
+    projects[projectId] = { isVisible: isJsonObject(layout) && layout.isVisible === true }
+  }
+
+  const projectUi: Record<string, ProjectRightSidebarUiState> = {}
+  if (isJsonObject(persistedState.projectUi)) {
+    for (const [projectId, ui] of Object.entries(persistedState.projectUi)) {
+      const parsed = readProjectUiState(ui)
+      if (parsed) projectUi[projectId] = parsed
+    }
+  }
+
+  return { size: globalSize, projects, projectUi }
 }
 
 export const useRightSidebarStore = create<RightSidebarState>()(
@@ -207,7 +235,7 @@ export const useRightSidebarStore = create<RightSidebarState>()(
     {
       name: "right-sidebar-layouts",
       version: 4,
-      migrate: migrateRightSidebarStore,
+      migrate: (persistedState) => migrateRightSidebarStore(asJsonValue(persistedState)),
     }
   )
 )

@@ -1,3 +1,4 @@
+import type { JsonObject } from "../shared/json"
 /**
  * ws-router-chat.ts
  *
@@ -46,7 +47,7 @@ export interface ChatToolCallbackServiceDep {
 /** Subset of AgentCoordinator methods consumed by chat WS commands. */
 export interface ChatAgentDep {
   send(command: Extract<ClientCommand, { type: "chat.send" }>): Promise<{ chatId?: string | null }>
-  forkChat(chatId: string): Promise<unknown>
+  forkChat(chatId: string): Promise<{ chatId: string }>
   cancel(chatId: string): Promise<void>
   cancelAutoContinue(chatId: string, scheduleId: string, reason: string): Promise<void>
   listLiveSchedules(chatId: string): Iterable<string>
@@ -89,7 +90,7 @@ export interface ChatCommandDeps {
     traceId: string | null | undefined,
     startedAt: number | null | undefined,
     stage: string,
-    details?: Record<string, unknown>,
+    details?: JsonObject,
   ) => void
   /** Pre-bound to the current WebSocket; returns the byte count sent. */
   send: (envelope: ServerEnvelope) => number

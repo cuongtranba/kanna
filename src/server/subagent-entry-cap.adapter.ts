@@ -2,7 +2,6 @@ import { createHash } from "node:crypto"
 import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 import type { TranscriptEntry, ToolResultEntry } from "../shared/types"
-import type { AnyValue } from "../shared/errors"
 import { isRecord } from "../shared/errors"
 
 // Bytes (UTF-8), not chars. Matches claude-code's 50K char default in
@@ -26,7 +25,7 @@ interface ContentSizeInfo {
   serialized: string
 }
 
-function measureContent(content: AnyValue): ContentSizeInfo | null {
+function measureContent(content: ToolResultEntry["content"]): ContentSizeInfo | null {
   // Measure the BYTES we actually write to disk + ship through the
   // JSONL event log. Char length under-counts multibyte content, and
   // counting only text-block lengths while serializing the full array

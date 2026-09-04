@@ -1,5 +1,4 @@
-import type { AnyValue } from "../errors"
-import { isRecord } from "../errors"
+import { isJsonObject, type JsonValue } from "../json"
 
 export const CHAT_SNAPSHOT_VERSION = 1 as const
 
@@ -14,8 +13,8 @@ export type ChatSnapshotMessage =
   | { kind: "user_prompt"; id: string; createdAt: number; text: string }
   | { kind: "assistant_text"; id: string; createdAt: number; text: string }
   | { kind: "assistant_thinking"; id: string; createdAt: number; text: string }
-  | { kind: "tool_call"; id: string; createdAt: number; name: string; input: AnyValue }
-  | { kind: "tool_result"; id: string; createdAt: number; toolCallId: string; output: AnyValue; isError: boolean }
+  | { kind: "tool_call"; id: string; createdAt: number; name: string; input: JsonValue }
+  | { kind: "tool_result"; id: string; createdAt: number; toolCallId: string; output: JsonValue; isError: boolean }
   | { kind: "diff"; id: string; createdAt: number; path: string; patch: string }
   | { kind: "terminal_chunk"; id: string; createdAt: number; chunk: string }
   | { kind: "omitted"; id: string; createdAt: number; reason: "too_large" }
@@ -52,8 +51,8 @@ const SHARE_ERROR_KINDS = new Set<string>([
   "snapshot_read_failed",
 ])
 
-export function isShareError(value: AnyValue): value is ShareError {
-  if (!isRecord(value)) return false
+export function isShareError(value: JsonValue): value is ShareError {
+  if (!isJsonObject(value)) return false
   const kind = value.kind
   return typeof kind === "string" && SHARE_ERROR_KINDS.has(kind)
 }

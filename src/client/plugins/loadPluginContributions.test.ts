@@ -9,18 +9,18 @@
 import { describe, expect, test } from "bun:test"
 import { loadPluginContributions, type PluginListEntry } from "./loadPluginContributions"
 import type { PluginModule } from "./evaluatePlugin"
-import { isRecord, type AnyValue } from "../../shared/errors"
+import { isRecord } from "../../shared/errors"
 import type { PluginContext } from "./contributionRegistry"
 
 function listing(...entries: PluginListEntry[]) {
   return async () => entries
 }
 
-/** Narrows the loader's `AnyValue` context back to the shape it actually
+/** Narrows the loader's untyped context back to the shape it actually
  * passes, without an `as` cast: the loader hands over its own
  * `createPluginContext` result, so this is a check that cannot fail in
  * practice and a loud failure if the loader ever stops doing that. */
-function isPluginContext(value: AnyValue): value is PluginContext {
+function isPluginContext(value: unknown): value is PluginContext {
   return (
     isRecord(value) &&
     typeof value.addSurface === "function" &&
@@ -30,7 +30,7 @@ function isPluginContext(value: AnyValue): value is PluginContext {
   )
 }
 
-function asPluginContext(value: AnyValue): PluginContext {
+function asPluginContext(value: unknown): PluginContext {
   if (!isPluginContext(value)) throw new Error("loader did not pass a PluginContext")
   return value
 }

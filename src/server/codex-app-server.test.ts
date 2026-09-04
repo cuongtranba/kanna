@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import type { JsonValue } from "../shared/json"
 import { EventEmitter } from "node:events"
 import { PassThrough } from "node:stream"
 import { mkdtempSync, rmSync, writeFileSync, existsSync, readFileSync } from "node:fs"
@@ -1610,7 +1611,7 @@ describe("CodexAppServerManager", () => {
       model: "gpt-5.4",
       content: "ask me",
       planMode: false,
-      onToolRequest: async ({ tool }) => {
+      onToolRequest: async ({ tool }): Promise<JsonValue> => {
         expect(tool.toolKind).toBe("ask_user_question")
         if (tool.toolKind !== "ask_user_question") {
           return {}
@@ -1768,7 +1769,7 @@ describe("CodexAppServerManager", () => {
   })
 
   test("interrupt clears a pending exit-plan wait so a new turn can start immediately", async () => {
-    let resolveToolRequest!: (value: unknown) => void
+    let resolveToolRequest!: (value: JsonValue) => void
 
     const process = new FakeCodexProcess((message, child) => {
       if (message.method === "initialize") {

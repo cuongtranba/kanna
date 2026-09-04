@@ -1,4 +1,4 @@
-import type { AnyValue } from "./errors"
+import type { JsonObject, JsonValue } from "./json"
 
 export type ToolRequestStatus =
   | "pending"
@@ -67,7 +67,7 @@ export function mergePolicyOverride(
 
 export interface ToolRequestDecision {
   kind: "allow" | "deny" | "answer"
-  payload?: AnyValue
+  payload?: JsonValue
   reason?: string
 }
 
@@ -77,7 +77,7 @@ export interface ToolRequest {
   sessionId: string
   toolUseId: string
   toolName: string
-  arguments: Record<string, unknown>  // MCP tool arguments — arbitrary MCP tool args, unknown shape by design
+  arguments: JsonObject  // MCP tool arguments — arbitrary MCP tool args, unknown shape by design
   canonicalArgsHash: string
   policyVerdict: PolicyVerdict
   status: ToolRequestStatus

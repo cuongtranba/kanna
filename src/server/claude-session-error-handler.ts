@@ -16,7 +16,6 @@ import type { LimitDetection, LimitDetector } from "./auto-continue/limit-detect
 import type { AuthErrorDetection } from "./auto-continue/auth-error-detector"
 import { deriveChatSchedules, deriveLoopState } from "./auto-continue/read-model"
 import { log } from "../shared/log"
-import { type AnyValue } from "../shared/errors"
 import type { OAuthTokenEntry } from "../shared/types"
 import type { ActiveTurn, ClaudeSessionState } from "./claude-session-state"
 import { timestamped } from "./claude-message-normalizer"
@@ -146,7 +145,7 @@ export async function handleLimitError(
   deps: SessionErrorHandlerDeps,
   chatId: string,
   detector: LimitDetector,
-  error: AnyValue,
+  error: Error,
 ): Promise<boolean> {
   const detection = detector.detect(chatId, error)
   if (!detection) return false

@@ -1,3 +1,4 @@
+import type { JsonObject } from "../shared/json"
 /**
  * Standalone chat management functions for AgentCoordinator.
  *
@@ -60,7 +61,7 @@ interface ChatManagementStore {
 
 /** Minimal analytics interface used by chat management. */
 interface AnalyticsSubset {
-  track(eventName: string, properties?: Record<string, unknown>): void
+  track(eventName: string, properties?: JsonObject): void
 }
 
 // ---------------------------------------------------------------------------

@@ -94,17 +94,22 @@ export function getBindingsForAction(
   return snapshot?.bindings[action] ?? DEFAULT_KEYBINDINGS[action]
 }
 
+function isKeybindingAction(key: string): key is KeybindingAction {
+  return Object.hasOwn(DEFAULT_KEYBINDINGS, key)
+}
+
 function keybindingActionKeys(): KeybindingAction[] {
-  return <KeybindingAction[]>Object.keys(DEFAULT_KEYBINDINGS)
+  return Object.keys(DEFAULT_KEYBINDINGS).filter(isKeybindingAction)
 }
 
 export function getResolvedKeybindings(snapshot: KeybindingsSnapshot | null): KeybindingsSnapshot {
-  const bindings = <Record<KeybindingAction, string[]>>Object.fromEntries(
-    keybindingActionKeys().map((action) => [
-      action,
-      snapshot?.bindings[action] ?? DEFAULT_KEYBINDINGS[action],
-    ])
-  )
+  // Seeded from the defaults so the record is complete by construction —
+  // `Object.fromEntries` returns a plain index signature that only a cast
+  // could claim covers every action.
+  const bindings: Record<KeybindingAction, string[]> = { ...DEFAULT_KEYBINDINGS }
+  for (const action of keybindingActionKeys()) {
+    bindings[action] = snapshot?.bindings[action] ?? DEFAULT_KEYBINDINGS[action]
+  }
   return {
     bindings,
     warning: snapshot?.warning ?? null,

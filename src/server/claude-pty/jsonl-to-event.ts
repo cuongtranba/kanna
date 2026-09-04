@@ -13,6 +13,7 @@ import {
 import { ClaudeLimitDetector } from "./../auto-continue/limit-detector"
 import { KANNA_MCP_SERVER_NAME } from "../../shared/tools"
 import { isRecord } from "../../shared/errors"
+import type { JsonObject } from "../../shared/json"
 
 // Keep-alive subagent turns are delivered via a kanna channel push, which
 // claude records as a `user isMeta:true` line tagged with this marker. Such a
@@ -23,7 +24,7 @@ const KANNA_CHANNEL_TAG = `<channel source="${KANNA_MCP_SERVER_NAME}"`
 // attachment, sessionId camelCase) that are not in the SDK's ClaudeRawSdkMessage
 // interface. Using an intersection gives us both typed SDK fields and index
 // access for JSONL-specific fields without casts.
-type JsonlMessage = ClaudeRawSdkMessage & Record<string, unknown>
+type JsonlMessage = ClaudeRawSdkMessage & JsonObject
 
 // Real on-disk transcript lines carry the session id as camelCase `sessionId`;
 // SDK stream-json messages use snake_case `session_id`. Accept either so PTY
@@ -295,7 +296,7 @@ export function createJsonlEventParser(opts: CreateJsonlEventParserOptions = {})
       if (message.type === "rate_limit_event") {
         const detection = detector.detectFromSdkRateLimitInfo(
           "",
-          message.rate_limit_info,
+          message.rate_limit_info ?? null,
         )
         if (detection) {
           events.push({ type: "rate_limit", rateLimit: { resetAt: detection.resetAt, tz: detection.tz } })

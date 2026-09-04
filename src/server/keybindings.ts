@@ -2,7 +2,7 @@ import { homedir } from "node:os"
 import path from "node:path"
 import { getKeybindingsFilePath, LOG_PREFIX } from "../shared/branding"
 import { log } from "../shared/log"
-import type { AnyValue } from "../shared/errors"
+import type { JsonValue } from "../shared/json"
 import { DEFAULT_KEYBINDINGS, KEYBINDING_ACTIONS, type KeybindingAction, type KeybindingsSnapshot } from "../shared/types"
 import {
   ensureKeybindingsFile,
@@ -12,7 +12,7 @@ import {
   type KeybindingsWatcher,
 } from "./keybindings-store.adapter"
 
-type KeybindingsFile = Partial<Record<KeybindingAction, AnyValue>>
+type KeybindingsFile = Partial<Record<KeybindingAction, JsonValue>>
 
 export class KeybindingsManager {
   readonly filePath: string
@@ -100,6 +100,24 @@ export async function readKeybindingsSnapshot(filePath: string) {
   }
 }
 
+/**
+ * Build a complete action -> shortcuts record.
+ *
+ * Seeding from `DEFAULT_KEYBINDINGS` — itself a full
+ * `Record<KeybindingAction, string[]>` — is what makes the result TOTAL, so no
+ * assertion is needed. `Object.fromEntries` cannot express that: it types every
+ * key as `string`, and the `<Record<KeybindingAction, string[]>>` bridge that
+ * used to close the gap would have gone on claiming totality even if an action
+ * were dropped from `KEYBINDING_ACTIONS`.
+ */
+function buildBindings(pick: (action: KeybindingAction) => string[]): Record<KeybindingAction, string[]> {
+  const bindings: Record<KeybindingAction, string[]> = { ...DEFAULT_KEYBINDINGS }
+  for (const action of KEYBINDING_ACTIONS) {
+    bindings[action] = pick(action)
+  }
+  return bindings
+}
+
 export function normalizeKeybindings(value: KeybindingsFile | null | undefined, filePath = getKeybindingsFilePath(homedir())): KeybindingsSnapshot {
   const warnings: string[] = []
   const source = value && typeof value === "object" && !Array.isArray(value)
@@ -110,13 +128,13 @@ export function normalizeKeybindings(value: KeybindingsFile | null | undefined, 
     return createDefaultSnapshot(filePath, "Keybindings file must contain a JSON object. Using defaults.")
   }
 
-  const bindingsEntries = KEYBINDING_ACTIONS.map((action): [KeybindingAction, string[]] => {
+  const bindings = buildBindings((action) => {
     const rawValue = source[action]
     if (!Array.isArray(rawValue)) {
       if (rawValue !== undefined) {
         warnings.push(`${action} must be an array of shortcut strings`)
       }
-      return [action, [...DEFAULT_KEYBINDINGS[action]]]
+      return [...DEFAULT_KEYBINDINGS[action]]
     }
 
     const normalized = rawValue
@@ -129,12 +147,11 @@ export function normalizeKeybindings(value: KeybindingsFile | null | undefined, 
       if (rawValue.length > 0 || source[action] !== undefined) {
         warnings.push(`${action} did not contain any valid shortcut strings`)
       }
-      return [action, [...DEFAULT_KEYBINDINGS[action]]]
+      return [...DEFAULT_KEYBINDINGS[action]]
     }
 
-    return [action, normalized]
+    return normalized
   })
-  const bindings = <Record<KeybindingAction, string[]>>Object.fromEntries(bindingsEntries)
   return {
     bindings,
     warning: warnings.length > 0 ? `Some keybindings were reset to defaults: ${warnings.join("; ")}` : null,
@@ -143,12 +160,7 @@ export function normalizeKeybindings(value: KeybindingsFile | null | undefined, 
 }
 
 function createDefaultSnapshot(filePath: string, warning: string | null = null): KeybindingsSnapshot {
-  const bindings = <Record<KeybindingAction, string[]>>Object.fromEntries(
-    KEYBINDING_ACTIONS.map((action): [KeybindingAction, string[]] => [
-      action,
-      [...DEFAULT_KEYBINDINGS[action]],
-    ])
-  )
+  const bindings = buildBindings((action) => [...DEFAULT_KEYBINDINGS[action]])
   return {
     bindings,
     warning,

@@ -1,14 +1,12 @@
 import type { CronJobPatch } from "./cron/types"
 import type { ShareClientCommand } from "./session-share/protocol"
-import type { AnyValue } from "./errors"
-import { isRecord } from "./errors"
+import { isJsonObject, type JsonObject, type JsonPrimitive, type JsonValue } from "./json"
 import type {
   AppSettingsSnapshot,
   AppSettingsPatch,
   AgentProvider,
   ChatAttachment,
   ChatDiffSnapshot,
-  ChatHistoryPage,
   ChatSnapshot,
   ClaudeAuthSettings,
   CloudflareTunnelSettings,
@@ -312,14 +310,14 @@ export type ClientCommand =
   | { type: "chat.cancel"; chatId: string }
   | { type: "chat.stopDraining"; chatId: string }
   | { type: "chat.loadHistory"; chatId: string; beforeCursor: string; limit: number }
-  | { type: "chat.respondTool"; chatId: string; toolUseId: string; result: AnyValue }
+  | { type: "chat.respondTool"; chatId: string; toolUseId: string; result: JsonValue }
   | {
       type: "chat.toolRequestAnswer"
       chatId: string
       toolRequestId: string
       decision: ToolRequestDecision
     }
-  | { type: "chat.respondSubagentTool"; chatId: string; runId: string; toolUseId: string; result: Record<string, unknown> }
+  | { type: "chat.respondSubagentTool"; chatId: string; runId: string; toolUseId: string; result: JsonObject }
   | {
       type: "chat.cancelSubagentRun"
       chatId: string
@@ -333,7 +331,7 @@ export type ClientCommand =
    * carries its content that way: it is decoded against the domain's own rules
    * server-side, and a wire type would only be a second place to state them.
    */
-  | { type: "board.update"; boardId: string; title?: string; description?: string | null; cardFields?: AnyValue }
+  | { type: "board.update"; boardId: string; title?: string; description?: string | null; cardFields?: JsonValue }
   | { type: "board.duplicate"; boardId: string; title: string }
   | { type: "board.saveAsTemplate"; boardId: string; name: string }
   | {
@@ -398,7 +396,7 @@ export type ClientCommand =
    * it did not name. Untyped on the wire because the schema it has to satisfy
    * is the board's, which only the server can read — see `decodeContentForFields`.
    */
-  | { type: "board.card.update"; cardId: string; title?: string; content?: AnyValue }
+  | { type: "board.card.update"; cardId: string; title?: string; content?: JsonValue }
   /** Card → worktree → branch → chat. Idempotent: a card already working opens what it has. */
   | { type: "board.card.startWork"; cardId: string }
   /** Answer the question a card asks on reaching `done`. */
@@ -495,13 +493,39 @@ export interface BoardSnapshot {
   view: BoardViewSnapshot | null
 }
 
+/**
+ * The payload of a command ack.
+ *
+ * This is the one value in the codebase that the untyped-value migration could
+ * not give a meaningful type, and it is deliberately NOT a general-purpose
+ * alias like the `AnyValue` that migration deleted.
+ *
+ * Nothing relates an ack's payload to the command that produced it, so its 51
+ * concrete result types — `Board`, `AppSettingsSnapshot`, `ChatSyncResult`, … —
+ * have no common supertype to name, and they live in server modules that
+ * `src/shared/**` must not import. `JsonValue` cannot serve either: a
+ * TypeScript `interface` never satisfies an index-signature type, so it would
+ * reject all 51 even though the values genuinely are JSON on the wire.
+ *
+ * Written as `JsonPrimitive | object` rather than `unknown` so the ban needs no
+ * exemption for this file. That is a weak constraint — it still admits a
+ * function — but it is not nothing: it excludes `undefined`, which matters
+ * because the field is optional and "absent" must stay distinct from "present
+ * and undefined".
+ *
+ * The real fix is to relate result to command, which is issue #899
+ * (`untyped-command-results` in the architecture budget, pinned at 60). This
+ * type names that gap instead of hiding it.
+ */
+export type CommandAckResult = JsonPrimitive | object
+
 export type ServerEnvelope =
   | { v: 1; type: "snapshot"; id: string; snapshot: ServerSnapshot }
   | { v: 1; type: "event"; id: string; event: WsEvent }
-  | { v: 1; type: "ack"; id: string; result?: AnyValue | ChatHistoryPage }
+  | { v: 1; type: "ack"; id: string; result?: CommandAckResult }
   | { v: 1; type: "error"; id?: string; message: string }
 
-export function isClientEnvelope(value: AnyValue): value is ClientEnvelope {
-  if (!isRecord(value)) return false
+export function isClientEnvelope(value: JsonValue): value is JsonValue & ClientEnvelope {
+  if (!isJsonObject(value)) return false
   return value.v === 1 && typeof value.type === "string"
 }

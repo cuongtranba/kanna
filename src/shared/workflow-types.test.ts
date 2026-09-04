@@ -1,7 +1,8 @@
+import type { JsonValue } from "./json"
 import { describe, expect, test } from "bun:test"
 import { parseWorkflowRunFile, toRunSummary } from "./workflow-types"
 
-const RAW = {
+const RAW: JsonValue = {
   runId: "wf_abc",
   taskId: "tsk1",
   workflowName: "sonar-fix",

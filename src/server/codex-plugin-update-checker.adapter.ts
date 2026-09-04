@@ -1,5 +1,6 @@
 import os from "node:os"
-import { errorMessage, type AnyValue } from "../shared/errors"
+import { errorMessage } from "../shared/errors"
+import { safeJsonParse, type JsonValue } from "../shared/json"
 import type { InstalledPackage, PackageUpdateChecker, PackageUpdateStatus } from "../shared/packages/types"
 import { parseCodexPluginAvailable } from "../shared/packages/parse-codex-plugins"
 
@@ -101,10 +102,8 @@ export function createCodexPluginUpdateChecker(deps: CodexPluginCheckerDeps): Pa
         return codexPkgs.map((pkg) => unknownStatus(pkg, checkedAt, msg))
       }
 
-      let parsed: AnyValue
-      try {
-        parsed = JSON.parse(rawOutput)
-      } catch {
+      const parsed: JsonValue | null = safeJsonParse(rawOutput)
+      if (parsed === null) {
         return codexPkgs.map((pkg) => unknownStatus(pkg, checkedAt, "codex plugin list: invalid JSON"))
       }
 

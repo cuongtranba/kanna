@@ -1,14 +1,8 @@
 import { spawn, spawnSync } from "node:child_process"
-import type { AnyValue } from "../shared/errors"
+import { isErrnoException, toError } from "../shared/errors"
 
-function formatSpawnError(command: string, error: AnyValue) {
-  if (!(error instanceof Error)) {
-    return new Error(`Failed to start ${command}`)
-  }
-
-  const errnoError: Error & { code?: AnyValue } = error
-  const code = typeof errnoError.code === "string" ? errnoError.code : undefined
-  if (code === "ENOENT") {
+function formatSpawnError(command: string, error: Error): Error {
+  if (isErrnoException(error) && error.code === "ENOENT") {
     return new Error(`Command not found: ${command}`)
   }
 
@@ -21,7 +15,7 @@ export function spawnDetached(command: string, args: string[]) {
     try {
       child = spawn(command, args, { stdio: "ignore", detached: true })
     } catch (error) {
-      reject(formatSpawnError(command, error))
+      reject(formatSpawnError(command, toError(error)))
       return
     }
 

@@ -1,16 +1,15 @@
-import { isRecord } from "../errors"
-import type { AnyValue } from "../errors"
+import { isJsonObject, type JsonObject, type JsonValue } from "../json"
 import type { InstalledPackage } from "./types"
 
-function asStringOrNull(value: AnyValue): string | null {
+function asStringOrNull(value: JsonValue): string | null {
   return typeof value === "string" && value ? value : null
 }
 
-function asString(value: AnyValue): string {
+function asString(value: JsonValue): string {
   return typeof value === "string" ? value : ""
 }
 
-function buildClaudePluginPackage(entry: Record<string, AnyValue>): InstalledPackage | null {
+function buildClaudePluginPackage(entry: JsonObject): InstalledPackage | null {
   const id = asString(entry.id)
   if (!id) return null
 
@@ -41,7 +40,7 @@ function buildClaudePluginPackage(entry: Record<string, AnyValue>): InstalledPac
  * Only user-scoped entries are included; duplicates (same id) are deduplicated
  * by taking the first occurrence.
  */
-export function parseClaudePluginList(raw: AnyValue): { packages: InstalledPackage[]; error: string | null } {
+export function parseClaudePluginList(raw: JsonValue): { packages: InstalledPackage[]; error: string | null } {
   if (!Array.isArray(raw)) {
     return { packages: [], error: "claude plugin list: expected a JSON array" }
   }
@@ -50,7 +49,7 @@ export function parseClaudePluginList(raw: AnyValue): { packages: InstalledPacka
   const packages: InstalledPackage[] = []
 
   for (const item of raw) {
-    if (!isRecord(item)) continue
+    if (!isJsonObject(item)) continue
     if (asString(item.scope) !== "user") continue
 
     const id = asString(item.id)
@@ -74,8 +73,8 @@ export function parseClaudePluginList(raw: AnyValue): { packages: InstalledPacka
  * v1 format (array): each item is a flat entry; treated as user-scoped. Kept
  * as a fallback for older installations.
  */
-export function parseClaudePluginsFile(raw: AnyValue): { packages: InstalledPackage[]; error: string | null } {
-  if (isRecord(raw)) {
+export function parseClaudePluginsFile(raw: JsonValue): { packages: InstalledPackage[]; error: string | null } {
+  if (isJsonObject(raw)) {
     return parseClaudePluginsFileV2(raw)
   }
   if (Array.isArray(raw)) {
@@ -84,7 +83,7 @@ export function parseClaudePluginsFile(raw: AnyValue): { packages: InstalledPack
   return { packages: [], error: "installed_plugins.json: expected an object or array" }
 }
 
-function parseClaudePluginsFileV2(raw: Record<string, AnyValue>): {
+function parseClaudePluginsFileV2(raw: JsonObject): {
   packages: InstalledPackage[]
   error: string | null
 } {
@@ -103,9 +102,9 @@ function parseClaudePluginsFileV2(raw: Record<string, AnyValue>): {
     seen.add(pluginKey)
 
     // Take the first user-scoped entry for this plugin.
-    let userEntry: Record<string, AnyValue> | null = null
+    let userEntry: JsonObject | null = null
     for (const entry of scopedEntries) {
-      if (isRecord(entry) && asString(entry.scope) === "user") {
+      if (isJsonObject(entry) && asString(entry.scope) === "user") {
         userEntry = entry
         break
       }
@@ -138,12 +137,12 @@ function parseClaudePluginsFileV2(raw: Record<string, AnyValue>): {
   return { packages, error: null }
 }
 
-function parseClaudePluginsFileV1(raw: AnyValue[]): { packages: InstalledPackage[]; error: string | null } {
+function parseClaudePluginsFileV1(raw: JsonValue[]): { packages: InstalledPackage[]; error: string | null } {
   const seen = new Set<string>()
   const packages: InstalledPackage[] = []
 
   for (const item of raw) {
-    if (!isRecord(item)) continue
+    if (!isJsonObject(item)) continue
 
     const id = asString(item.id)
     if (!id || seen.has(id)) continue

@@ -22,7 +22,7 @@
  * settled as failed(`orphaned`) instead of skipping forever.
  */
 
-import type { ChatAttachment } from "../../shared/types"
+import type { ChatAttachment, QueuedChatMessage } from "../../shared/types"
 import { hasActiveRun, type CronJobSnapshot, type CronRunSnapshot, type CronRunTag } from "../../shared/cron/types"
 import type { SendMessageOptions } from "../claude-steer-log"
 import { AUTO_CONTINUE_EVENT_VERSION } from "../auto-continue/events"
@@ -42,7 +42,7 @@ export interface CronFireDeps extends CronCommandDeps {
     content: string,
     attachments: ChatAttachment[],
     options?: SendMessageOptions,
-  ): Promise<unknown>
+  ): Promise<QueuedChatMessage>
   maybeStartNextQueuedMessage(chatId: string): Promise<boolean>
   /**
    * Called after a spawn run creates its chat. The callee links the new chat

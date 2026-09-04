@@ -21,7 +21,8 @@
  */
 import { isValidPluginId } from "../shared/plugins/manifest"
 import type { PluginService } from "./plugins/plugin-service"
-import { errorMessage, isRecord, type AnyValue } from "../shared/errors"
+import { errorMessage } from "../shared/errors"
+import { isJsonObject, type JsonObject, type JsonValue } from "../shared/json"
 
 /** `/api/plugins`, or `/api/plugins/:id[/:rest]`. `id`/`rest` are RAW path
  * segments — not decoded, not validated — decoding happens nowhere in this
@@ -40,11 +41,10 @@ function notInstalled(): Response {
   return jsonError(404, "Not found")
 }
 
-/** `AnyValue` rather than the `unknown` keyword, which this repo bans outside `toError`. */
-async function readJsonBody(request: Request): Promise<Record<string, AnyValue> | null> {
+async function readJsonBody(request: Request): Promise<JsonObject | null> {
   try {
-    const body: AnyValue = await request.json()
-    return isRecord(body) ? body : null
+    const body: JsonValue = await request.json()
+    return isJsonObject(body) ? body : null
   } catch {
     return null
   }

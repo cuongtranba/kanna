@@ -21,6 +21,7 @@ import {
   type SplitPosition,
 } from "../lib/paneTree"
 import { isRecord } from "../../shared/errors"
+import { asJsonValue } from "../lib/asJsonValue"
 import { buildLayoutFromLegacy, type LegacyProjectLayout } from "./paneLayoutMigration"
 
 /**
@@ -219,7 +220,7 @@ export const usePaneLayoutStore = create<PaneLayoutState>()(
       merge: (persisted, current) => {
         if (!isRecord(persisted)) return current
 
-        const normalized = normalizeLayout(persisted.layout)
+        const normalized = normalizeLayout(asJsonValue(persisted.layout))
         // A tree with no tabs carries no information; keep the default so a
         // stale empty entry cannot suppress the legacy seed.
         const layout = hasAnyTab(normalized) ? normalized : current.layout

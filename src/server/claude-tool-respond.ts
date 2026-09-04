@@ -11,8 +11,7 @@
  */
 
 import type { AgentProvider, TranscriptEntry } from "../shared/types"
-import type { AnyValue } from "../shared/errors"
-import { isRecord } from "../shared/errors"
+import { isJsonObject, type JsonObject, type JsonValue } from "../shared/json"
 import type { ActiveTurn } from "./claude-session-state"
 import type { PendingToolSlots } from "./pending-tool-slot"
 import { timestamped, normalizeToolContent } from "./claude-message-normalizer"
@@ -45,7 +44,7 @@ export interface RespondToolCommand {
   type: "chat.respondTool"
   chatId: string
   toolUseId: string
-  result: AnyValue
+  result: JsonValue
 }
 
 // ---------------------------------------------------------------------------
@@ -112,7 +111,7 @@ export async function respondTool(
   }
 
   if (pending.tool.toolKind === "exit_plan_mode") {
-    const resultRec: Record<string, unknown> = isRecord(command.result)
+    const resultRec: JsonObject = isJsonObject(command.result)
       ? command.result
       : {}
     const confirmed = Boolean(resultRec.confirmed)

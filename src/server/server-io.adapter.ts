@@ -1,6 +1,6 @@
 import { stat } from "node:fs/promises"
 import type { Stats } from "node:fs"
-import type { AnyValue } from "../shared/errors"
+import type { JsonValue } from "../shared/json"
 import type { BunFile, Server } from "bun"
 
 export type ServerFile = BunFile
@@ -14,6 +14,6 @@ export function statFile(p: string): Promise<Stats> {
   return stat(p)
 }
 
-export function serveHttp<T = AnyValue>(opts: Bun.Serve.Options<T>): Server<T> {
+export function serveHttp<T = JsonValue>(opts: Bun.Serve.Options<T>): Server<T> {
   return Bun.serve(opts)
 }

@@ -16,17 +16,19 @@ import type { InstalledPluginConfig } from "../../shared/plugins/settings"
 import type { InstalledPluginStore } from "./plugin-service"
 
 /** The slice of `AppSettingsManager` this needs — injected so it stays testable. */
-export interface InstalledPluginSettings {
+export interface InstalledPluginSettings<TWriteResult> {
   getSnapshot(): { installedPlugins?: readonly InstalledPluginConfig[] }
   writePatch(patch: {
     installedPlugins: {
       create?: { sourceDir: string; id: string }
       update?: { id: string; patch: { enabled?: boolean } }
     }
-  }): Promise<unknown>
+  }): Promise<TWriteResult>
 }
 
-export function createInstalledPluginStore(settings: InstalledPluginSettings): InstalledPluginStore {
+export function createInstalledPluginStore<TWriteResult>(
+  settings: InstalledPluginSettings<TWriteResult>,
+): InstalledPluginStore {
   return {
     list() {
       return settings.getSnapshot().installedPlugins ?? []

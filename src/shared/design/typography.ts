@@ -1,10 +1,10 @@
 // Pure font-scale core (per docs/tribe/planning/typography-scale-preference-spec.md §2.1).
 // Everything here is pure: no DOM, no storage, no clock, no store reads. All inputs arrive
-// as arguments (~/.claude/rules/pure-core.md). `AnyValue` (an alias for `unknown`, see
+// as arguments (~/.claude/rules/pure-core.md). `JsonValue` (an alias for `unknown`, see
 // src/shared/errors.ts) is used instead of the banned bare `unknown` keyword to accept
 // literally arbitrary/untrusted input while staying total.
 
-import type { AnyValue } from "../errors"
+import type { JsonValue } from "../json"
 
 export type FontScaleStep = "sm" | "md" | "lg" | "xl" | "xxl"
 
@@ -24,14 +24,25 @@ export interface TypographyPreference {
   scale: FontScaleStep
 }
 
-/** Type guard: is `value` one of the five documented font-scale steps? */
-export function isFontScaleStep(value: AnyValue): value is FontScaleStep {
+/**
+ * Type guard: is `value` one of the five documented font-scale steps?
+ *
+ * Generic over the input so it composes with the `isPlainObject<T>` idiom the
+ * settings normalizers use, as well as with a plain `JsonValue` off disk.
+ */
+export function isFontScaleStep<T>(value: T): value is T & FontScaleStep {
   return typeof value === "string" && Object.hasOwn(FONT_SCALE_MULTIPLIERS, value)
 }
 
 /** Total function: any unknown/garbage/out-of-range input resolves to 1 (md). */
-export function resolveFontScale(step: AnyValue): number {
-  return isFontScaleStep(step) ? FONT_SCALE_MULTIPLIERS[step] : FONT_SCALE_MULTIPLIERS[DEFAULT_FONT_SCALE_STEP]
+export function resolveFontScale(step: JsonValue | undefined): number {
+  // Narrow to `string` first: `JsonValue & FontScaleStep` is an intersection TS
+  // will not reduce, so it cannot index the multiplier map, while
+  // `string & FontScaleStep` reduces to the union and can.
+  if (typeof step !== "string" || !isFontScaleStep(step)) {
+    return FONT_SCALE_MULTIPLIERS[DEFAULT_FONT_SCALE_STEP]
+  }
+  return FONT_SCALE_MULTIPLIERS[step]
 }
 
 /**
@@ -39,7 +50,7 @@ export function resolveFontScale(step: AnyValue): number {
  * values must arrive as arguments. Garbage input at either position is treated as
  * absent, not as a valid override/default.
  */
-export function resolveEffectiveScaleStep(deviceOverride: AnyValue, serverDefault: AnyValue): FontScaleStep {
+export function resolveEffectiveScaleStep(deviceOverride: JsonValue | undefined, serverDefault: JsonValue | undefined): FontScaleStep {
   if (isFontScaleStep(deviceOverride)) return deviceOverride
   if (isFontScaleStep(serverDefault)) return serverDefault
   return DEFAULT_FONT_SCALE_STEP

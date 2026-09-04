@@ -1,6 +1,8 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
 import { isFontScaleStep, type FontScaleStep } from "../../shared/design/typography"
+import { isJsonObject, type JsonObject, type JsonValue } from "../../shared/json"
+import { asJsonValue } from "../lib/asJsonValue"
 
 interface PreferencesState {
   autoResumeOnRateLimit: boolean
@@ -14,24 +16,28 @@ interface PreferencesState {
   cacheTypographyServerDefault: (step: FontScaleStep) => void
 }
 
-interface PersistedPreferencesState {
-  autoResumeOnRateLimit?: boolean
-  typographyOverride?: FontScaleStep
-  typographyServerDefaultCache?: FontScaleStep
+/**
+ * `persistedState` is whatever a previous version of this app left in
+ * localStorage, so it is read as JSON and every field is re-checked. A v1
+ * writer's field names are all this knows; nothing enforces that a v1 writer
+ * actually kept to them.
+ */
+export function migratePreferencesState(
+  persistedState: JsonValue,
+): Pick<PreferencesState, "autoResumeOnRateLimit" | "typographyOverride" | "typographyServerDefaultCache"> {
+  const persisted: JsonObject | null = isJsonObject(persistedState) ? persistedState : null
+  const typographyOverride = stepOrUndefined(persisted?.typographyOverride)
+  const typographyServerDefaultCache = stepOrUndefined(persisted?.typographyServerDefaultCache)
+  return {
+    autoResumeOnRateLimit: Boolean(persisted?.autoResumeOnRateLimit),
+    typographyOverride,
+    typographyServerDefaultCache,
+  }
 }
 
-export function migratePreferencesState(
-  persistedState: Partial<PersistedPreferencesState> | undefined,
-): Pick<PreferencesState, "autoResumeOnRateLimit" | "typographyOverride" | "typographyServerDefaultCache"> {
-  return {
-    autoResumeOnRateLimit: Boolean(persistedState?.autoResumeOnRateLimit),
-    typographyOverride: isFontScaleStep(persistedState?.typographyOverride)
-      ? persistedState.typographyOverride
-      : undefined,
-    typographyServerDefaultCache: isFontScaleStep(persistedState?.typographyServerDefaultCache)
-      ? persistedState.typographyServerDefaultCache
-      : undefined,
-  }
+function stepOrUndefined(value: JsonValue | undefined): FontScaleStep | undefined {
+  if (typeof value !== "string") return undefined
+  return isFontScaleStep(value) ? value : undefined
 }
 
 export const usePreferencesStore = create<PreferencesState>()(
@@ -48,9 +54,7 @@ export const usePreferencesStore = create<PreferencesState>()(
     {
       name: "kanna-preferences",
       version: 2,
-      migrate: (persistedState) => migratePreferencesState(
-        <Partial<PersistedPreferencesState> | undefined>persistedState,
-      ),
+      migrate: (persistedState) => migratePreferencesState(asJsonValue(persistedState)),
     },
   ),
 )

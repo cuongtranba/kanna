@@ -1,4 +1,5 @@
-import { type AnyValue, isRecord } from "../shared/errors"
+import { isRecord } from "../shared/errors"
+import { isJsonObject, safeJsonParse, type JsonObject } from "../shared/json"
 import { log } from "../shared/log"
 import type {
   CollabAgentToolCallItem,
@@ -71,16 +72,16 @@ function matchJsStringField(snippet: string, pattern: RegExp): string | null {
   return body === undefined ? null : unescapeJsString(body)
 }
 
-function parseJsonRecord(raw: string): Record<string, unknown> | null {
+function parseJsonRecord(raw: string): JsonObject | null {
   try {
-    const parsed: AnyValue = JSON.parse(raw)
-    return isRecord(parsed) ? parsed : null
+    const parsed = safeJsonParse(raw)
+    return parsed !== null && isJsonObject(parsed) ? parsed : null
   } catch {
     return null
   }
 }
 
-function stringOrNull(value: AnyValue): string | null {
+function stringOrNull<T>(value: T): string | null {
   return typeof value === "string" ? value : null
 }
 
@@ -176,7 +177,7 @@ export function parseApplyPatch(input: string): PatchChanges | null {
   return changes.length > 0 ? changes : null
 }
 
-function planStatus(raw: AnyValue): TurnPlanStep["status"] {
+function planStatus<T>(raw: T): TurnPlanStep["status"] {
   if (raw === "completed") return "completed"
   if (raw === "in_progress" || raw === "inProgress") return "inProgress"
   return "pending"

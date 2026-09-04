@@ -1,12 +1,11 @@
-import { isRecord } from "../errors"
-import type { AnyValue } from "../errors"
+import { isJsonObject, type JsonValue } from "../json"
 import type { InstalledPackage } from "./types"
 
-function asStringOrNull(value: AnyValue): string | null {
+function asStringOrNull(value: JsonValue): string | null {
   return typeof value === "string" && value ? value : null
 }
 
-function asString(value: AnyValue): string {
+function asString(value: JsonValue): string {
   return typeof value === "string" ? value : ""
 }
 
@@ -17,12 +16,12 @@ export interface CodexPluginAvailableEntry {
 }
 
 function parseInstalledArray(
-  arr: AnyValue[],
+  arr: JsonValue[],
 ): InstalledPackage[] {
   const packages: InstalledPackage[] = []
 
   for (const item of arr) {
-    if (!isRecord(item)) continue
+    if (!isJsonObject(item)) continue
 
     const id = asString(item.id)
     if (!id) continue
@@ -59,8 +58,8 @@ function parseInstalledArray(
  * The real CLI output is `{ installed: [...], available: [...] }`. Entries
  * whose `id` starts with `.system` are Codex built-ins and are excluded.
  */
-export function parseCodexPluginList(raw: AnyValue): { packages: InstalledPackage[]; error: string | null } {
-  if (!isRecord(raw)) {
+export function parseCodexPluginList(raw: JsonValue): { packages: InstalledPackage[]; error: string | null } {
+  if (!isJsonObject(raw)) {
     return { packages: [], error: "codex plugin list: expected a JSON object" }
   }
 
@@ -78,15 +77,15 @@ export function parseCodexPluginList(raw: AnyValue): { packages: InstalledPackag
  * Returns a map of plugin id → latest available version. An entry in
  * `available` means the plugin has an update relative to what is installed.
  */
-export function parseCodexPluginAvailable(raw: AnyValue): Map<string, CodexPluginAvailableEntry> {
+export function parseCodexPluginAvailable(raw: JsonValue): Map<string, CodexPluginAvailableEntry> {
   const result = new Map<string, CodexPluginAvailableEntry>()
-  if (!isRecord(raw)) return result
+  if (!isJsonObject(raw)) return result
 
   const available = raw.available
   if (!Array.isArray(available)) return result
 
   for (const item of available) {
-    if (!isRecord(item)) continue
+    if (!isJsonObject(item)) continue
     const id = asString(item.id)
     if (!id) continue
     if (id.startsWith(".system")) continue

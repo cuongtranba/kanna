@@ -1,4 +1,4 @@
-import type { AnyValue } from "../../../shared/errors"
+
 import type { ReactNode } from "react"
 import type { HydratedTranscriptMessage } from "../../../shared/types"
 import { toLocalFileUrl } from "../../lib/pathUtils"
@@ -19,7 +19,9 @@ function formatBytes(n: number): string {
   return `${(n / 1024 / 1024).toFixed(2)} MB`
 }
 
-function asString(v: AnyValue): string {
+type RawToolResult = NonNullable<Extract<HydratedTranscriptMessage, { kind: "tool" }>["rawResult"]>
+
+function asString(v: RawToolResult): string {
   return typeof v === "string" ? v : JSON.stringify(v, null, 2)
 }
 

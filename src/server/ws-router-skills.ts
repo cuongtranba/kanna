@@ -10,8 +10,7 @@
  */
 import os from "node:os"
 import path from "node:path"
-import type { AnyValue } from "../shared/errors"
-import { isRecord } from "../shared/errors"
+import { isJsonObject, safeJsonParse, type JsonObject, type JsonValue } from "../shared/json"
 import { DEFAULT_SKILL_AGENTS, assertSafeSkillAgents } from "../shared/skill-agents"
 import type { SkillAgent } from "../shared/skill-agents"
 import { readTextFileOrThrow, spawnCommandCapture } from "./ws-router-io.adapter"
@@ -41,20 +40,18 @@ export function getGlobalSkillLockPath() {
   return path.join(process.env.HOME ?? os.homedir(), ".agents", ".skill-lock.json")
 }
 
-function asString(value: AnyValue) {
+function asString(value: JsonValue | undefined) {
   return typeof value === "string" ? value : ""
 }
 
-export function parseInstalledSkillsLock(parsed: AnyValue, lockFilePath: string): InstalledSkillsSnapshot {
-  const skillsRaw = isRecord(parsed) && isRecord(parsed.skills) && !Array.isArray(parsed.skills)
-    ? parsed.skills
-    : null
-  const skillsRecord: Record<string, AnyValue> = skillsRaw ?? {}
+export function parseInstalledSkillsLock(parsed: JsonValue, lockFilePath: string): InstalledSkillsSnapshot {
+  const skillsRaw = isJsonObject(parsed) && isJsonObject(parsed.skills) ? parsed.skills : null
+  const skillsRecord: JsonObject = skillsRaw ?? {}
 
   const skills = Object.entries(skillsRecord)
     .filter(([, entry]) => entry && typeof entry === "object" && !Array.isArray(entry))
     .map(([name, entry]) => {
-      const record: Record<string, AnyValue> = isRecord(entry) ? entry : {}
+      const record: JsonObject = isJsonObject(entry) ? entry : {}
       return {
         name,
         source: asString(record.source),
@@ -76,7 +73,7 @@ export function parseInstalledSkillsLock(parsed: AnyValue, lockFilePath: string)
 
 export async function listInstalledSkills(lockFilePath = getGlobalSkillLockPath()): Promise<InstalledSkillsSnapshot> {
   try {
-    return parseInstalledSkillsLock(JSON.parse(await readTextFileOrThrow(lockFilePath)), lockFilePath)
+    return parseInstalledSkillsLock(safeJsonParse(await readTextFileOrThrow(lockFilePath)) ?? null, lockFilePath)
   } catch {
     return {
       lockFilePath,

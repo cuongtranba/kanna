@@ -52,18 +52,17 @@ export interface WorkflowRunSummary {
   agents: WorkflowAgentSummary[]
 }
 
-import type { AnyValue } from "./errors"
-import { isRecord } from "./errors"
+import { isJsonObject, type JsonObject, type JsonValue } from "./json"
 
 const KNOWN_STATUS: ReadonlySet<string> = new Set(["running", "completed", "failed", "killed"])
 
-function rec(v: AnyValue): Record<string, AnyValue> | null {
-  return isRecord(v) && !Array.isArray(v) ? v : null
+function rec(v: JsonValue): JsonObject | null {
+  return isJsonObject(v) && !Array.isArray(v) ? v : null
 }
-function str(v: AnyValue): string | undefined { return typeof v === "string" ? v : undefined }
-function num(v: AnyValue): number | undefined { return typeof v === "number" ? v : undefined }
+function str(v: JsonValue): string | undefined { return typeof v === "string" ? v : undefined }
+function num(v: JsonValue): number | undefined { return typeof v === "number" ? v : undefined }
 
-function parseAgents(progress: AnyValue): WorkflowAgentProgress[] {
+function parseAgents(progress: JsonValue): WorkflowAgentProgress[] {
   if (!Array.isArray(progress)) return []
   const out: WorkflowAgentProgress[] = []
   for (const item of progress) {
@@ -91,7 +90,7 @@ function parseAgents(progress: AnyValue): WorkflowAgentProgress[] {
   return out
 }
 
-function parsePhases(phases: AnyValue): WorkflowPhase[] {
+function parsePhases(phases: JsonValue): WorkflowPhase[] {
   if (!Array.isArray(phases)) return []
   const out: WorkflowPhase[] = []
   for (const item of phases) {
@@ -104,7 +103,7 @@ function parsePhases(phases: AnyValue): WorkflowPhase[] {
   return out
 }
 
-export function parseWorkflowRunFile(raw: AnyValue): WorkflowRun | null {
+export function parseWorkflowRunFile(raw: JsonValue): WorkflowRun | null {
   const r = rec(raw)
   if (!r) return null
   const runId = str(r.runId)

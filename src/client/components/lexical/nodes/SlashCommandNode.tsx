@@ -1,5 +1,4 @@
-import type { AnyValue } from "../../../../shared/errors"
-import type { EditorConfig, LexicalEditor, SerializedLexicalNode, Spread } from "lexical"
+import type { EditorConfig, LexicalEditor, LexicalNode, SerializedLexicalNode, Spread } from "lexical"
 import type { ReactNode } from "react"
 import { DecoratorNode, $applyNodeReplacement } from "lexical"
 import type { DomPort } from "../../../ports/domPort"
@@ -128,6 +127,6 @@ export function $createSlashCommandNode(args: CreateSlashCommandNodeArgs): Slash
   return $applyNodeReplacement(new SlashCommandNode(args.commandName, args.hasArgument))
 }
 
-export function $isSlashCommandNode(node: AnyValue): node is SlashCommandNode {
+export function $isSlashCommandNode(node: LexicalNode | null | undefined): node is SlashCommandNode {
   return node instanceof SlashCommandNode
 }

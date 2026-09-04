@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { join } from "node:path"
 import { resolveEffectiveScaleStep, resolveTypographyVars } from "../../shared/design/typography"
+import type { JsonValue } from "../../shared/json"
 
 // Pins the SHIPPED pre-paint snippet in index.html to the pure oracle
 // (resolveEffectiveScaleStep + resolveTypographyVars). This test executes the
@@ -73,7 +74,7 @@ function runPrePaintScript(storedValue: string | null): Record<string, string> {
   return style.props
 }
 
-function oracle(deviceOverride: unknown, serverDefault: unknown): Record<string, string> {
+function oracle(deviceOverride: JsonValue | undefined, serverDefault: JsonValue | undefined): Record<string, string> {
   return resolveTypographyVars({ scale: resolveEffectiveScaleStep(deviceOverride, serverDefault) })
 }
 
@@ -136,7 +137,7 @@ describe("index.html pre-paint script — --kanna-font-scale (P6)", () => {
   // in the input space (like the invalid-override/valid-cache case above) can
   // silently drift again. Expectations always come from the oracle — never a
   // hand-written table — so the assertion cannot itself encode the bug.
-  const INPUT_CLASSES: readonly [label: string, value: unknown][] = [
+  const INPUT_CLASSES: readonly [label: string, value: JsonValue | undefined][] = [
     ["valid step", "lg"],
     ["invalid non-empty string", "not-a-real-step"],
     ["empty string", ""],
@@ -151,11 +152,11 @@ describe("index.html pre-paint script — --kanna-font-scale (P6)", () => {
     ["array whose String() is a valid step", ["xxl"]],
   ]
 
-  const MATRIX: readonly [title: string, override: unknown, cache: unknown][] = INPUT_CLASSES.flatMap(
+  const MATRIX: readonly [title: string, override: JsonValue | undefined, cache: JsonValue | undefined][] = INPUT_CLASSES.flatMap(
     ([overrideLabel, override]) =>
       INPUT_CLASSES.map(
         ([cacheLabel, cache]) =>
-          [`override=${overrideLabel}, cache=${cacheLabel}`, override, cache] as [string, unknown, unknown],
+          [`override=${overrideLabel}, cache=${cacheLabel}`, override, cache] as [string, JsonValue | undefined, JsonValue | undefined],
       ),
   )
 

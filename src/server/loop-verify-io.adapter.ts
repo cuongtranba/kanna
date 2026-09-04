@@ -277,7 +277,7 @@ async function runGit(args: string[], cwd: string): Promise<GitCapture | null> {
 }
 
 /** Resolve when `promise` settles, or after `ms`, whichever comes first. */
-function settleWithin(promise: Promise<unknown>, ms: number): Promise<void> {
+function settleWithin<T>(promise: Promise<T>, ms: number): Promise<void> {
   return new Promise<void>((resolve) => {
     const timer = setTimeout(resolve, ms)
     const finish = () => {

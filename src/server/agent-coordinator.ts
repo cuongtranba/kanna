@@ -48,7 +48,8 @@ import {
   resolveChatPolicy as resolveChatPolicyFn,
   killPtyInstance as killPtyInstanceFn,
 } from "./claude-session-config-helpers"
-import { toError, type AnyValue } from "../shared/errors"
+import { toError } from "../shared/errors"
+import type { JsonValue } from "../shared/json"
 import {
   positiveIntegerFromEnv,
   buildBackgroundTaskWakePrompt,
@@ -267,7 +268,7 @@ export class AgentCoordinator {
    * per dispatch the way the stateless cron deps are.
    */
   readonly cronSkipCoalescer = new CronSkipCoalescer()
-  private readonly pendingCronOutcomes = new Set<Promise<unknown>>()
+  private readonly pendingCronOutcomes = new Set<Promise<void>>()
   private readonly _cronRepair: CronRepair
   private readonly _cronConfirm: CronConfirm
   private readonly _mermaidGuard: MermaidGuard
@@ -322,7 +323,7 @@ export class AgentCoordinator {
   readonly persistOAuthStateFn: ((id: string, oauth: McpOAuthState) => void) | null
   readonly subagentPendingResolvers = new Map<
     string,
-    { resolve: (v: AnyValue) => void; reject: (e: Error) => void }
+    { resolve: (v: JsonValue) => void; reject: (e: Error) => void }
   >()
 
   constructor(args: AgentCoordinatorArgs) {
@@ -1273,7 +1274,7 @@ export class AgentCoordinator {
     }
   }
 
-  async handleLimitError(chatId: string, detector: LimitDetector, error: AnyValue): Promise<boolean> {
+  async handleLimitError(chatId: string, detector: LimitDetector, error: Error): Promise<boolean> {
     return handleLimitErrorFn(this.sessionErrorHandlerDeps(), chatId, detector, error)
   }
 

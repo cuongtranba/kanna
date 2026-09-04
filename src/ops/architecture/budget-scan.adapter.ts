@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs"
 import path from "node:path"
-import { isRecord, type AnyValue } from "../../shared/errors"
+import { type LoadedModule } from "../../shared/dynamic-module"
+import { isRecord } from "../../shared/errors"
 import {
   coveredBy,
   PATTERN_BUDGETS,
@@ -75,9 +76,9 @@ export function measurePatterns(
   return budgets.map((budget) => measurePattern(root, sources, budget))
 }
 
-const limitOf = (setting: AnyValue): number | null => {
+const limitOf = (setting: LoadedModule): number | null => {
   if (!Array.isArray(setting) || setting.length < 2) return null
-  const option: AnyValue = setting[1]
+  const option: LoadedModule = setting[1]
   if (typeof option === "number") return option
   if (isRecord(option) && typeof option.max === "number") return option.max
   return null
@@ -92,14 +93,14 @@ export async function readEslintLimits(
   root: string,
   rules: readonly string[],
 ): Promise<ReadonlyMap<string, number>> {
-  const imported: AnyValue = await import(path.join(root, "eslint.config.js"))
-  const config: AnyValue = isRecord(imported) ? imported.default : null
+  const imported: LoadedModule = await import(path.join(root, "eslint.config.js"))
+  const config: LoadedModule = isRecord(imported) ? imported.default : null
   const found = new Map<string, number>()
   if (!Array.isArray(config)) return found
 
   for (const block of config) {
     if (!isRecord(block)) continue
-    const blockRules: AnyValue = block.rules
+    const blockRules: LoadedModule = block.rules
     if (!isRecord(blockRules)) continue
     for (const rule of rules) {
       const max = limitOf(blockRules[rule])

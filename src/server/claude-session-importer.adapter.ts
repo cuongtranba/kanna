@@ -8,7 +8,6 @@ import { scanClaudeSessions, locateClaudeSessionFile } from "./claude-session-sc
 import { parseClaudeSessionFile } from "./claude-session-parser.adapter"
 import { extractSessionId } from "../shared/claude-session-id"
 import type { ImportSessionsByIdsResult, SingleImportResultRow } from "../shared/protocol"
-import type { AnyValue } from "../shared/errors"
 import { isRecord } from "../shared/errors"
 import type {
   ClaudeSessionCustomTitleRecord,
@@ -43,7 +42,7 @@ function cwdExists(cwd: string): boolean {
   }
 }
 
-function extractUserText(content: AnyValue): string | null {
+function extractUserText<T>(content: T): string | null {
   if (typeof content === "string") {
     const trimmed = content.trim()
     return trimmed ? trimmed : null

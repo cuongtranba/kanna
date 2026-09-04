@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises"
 import { join, relative, resolve } from "node:path"
-import type { AnyValue } from "../../shared/errors"
+import { toError } from "../../shared/errors"
 import { errorMessage } from "../../shared/errors"
 import {
   CLIENT_HOST_MODULES,
@@ -149,7 +149,7 @@ async function buildTarget(args: TargetBuildArgs): Promise<TargetBuildResult> {
     const inputPaths = result.metafile ? Object.keys(result.metafile.inputs) : []
     return { ok: true, code: await output.text(), inputPaths }
   } catch (error) {
-    return { ok: false, errors: describeThrownBuildError(error) }
+    return { ok: false, errors: describeThrownBuildError(toError(error)) }
   }
 }
 
@@ -160,7 +160,7 @@ async function buildTarget(args: TargetBuildArgs): Promise<TargetBuildResult> {
  * without unwrapping this, every plugin-thrown refusal surfaced as the
  * useless literal string "Bundle failed" instead of the documented message.
  */
-function describeThrownBuildError(error: AnyValue): string[] {
+function describeThrownBuildError(error: Error): string[] {
   if (error instanceof AggregateError && error.errors.length > 0) {
     return error.errors.map((sub) => errorMessage(sub))
   }

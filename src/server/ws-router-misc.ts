@@ -1,3 +1,4 @@
+import type { JsonObject } from "../shared/json"
 /**
  * ws-router-misc.ts
  *
@@ -56,7 +57,7 @@ export interface MiscAgentDep {
 
 /** The subset of AnalyticsReporter consumed by misc WS commands. */
 export interface MiscAnalyticsDep {
-  track(event: string, props?: Record<string, unknown>): void
+  track(event: string, props?: JsonObject): void
 }
 
 /** Shared result wrapper used by SessionShareService methods. */

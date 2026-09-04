@@ -34,7 +34,7 @@ import {
 } from "./provider-catalog"
 import { buildSteeredMessageContent } from "./claude-prompt-helpers"
 import { isChatBusy } from "./claude-session-state-queries"
-import type { CompactionTurnKind } from "./claude-session-state"
+import type { CompactionTurnKind, SessionBackgroundTask } from "./claude-session-state"
 import {
   buildCodexCompactPrompt,
   parseBuiltinCommand,
@@ -81,7 +81,7 @@ interface StartingTurnsMap {
 /** Subset of the claudeSessions map used by the send command handler. */
 interface ClaudeSessionsMap {
   get(chatId: string): {
-    backgroundTasks: ReadonlyMap<string, unknown>
+    backgroundTasks: ReadonlyMap<string, SessionBackgroundTask>
     backgroundTaskDeadlineAt: number
     backgroundTaskWakeCount: number
     selfWakeActive: boolean

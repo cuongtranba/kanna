@@ -45,7 +45,7 @@ export async function* createClaudeHarnessStream(
     }
 
     if (sdkMessage?.type === "rate_limit_event") {
-      const detection = detector.detectFromSdkRateLimitInfo("", sdkMessage.rate_limit_info)
+      const detection = detector.detectFromSdkRateLimitInfo("", sdkMessage.rate_limit_info ?? null)
       if (detection) {
         yield { type: "rate_limit", rateLimit: { resetAt: detection.resetAt, tz: detection.tz } }
       }

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { ClaudeAuthErrorDetector } from "./auth-error-detector"
+import { toError } from "../../shared/errors"
 
 describe("ClaudeAuthErrorDetector.detect", () => {
   const detector = new ClaudeAuthErrorDetector()
@@ -10,7 +11,7 @@ describe("ClaudeAuthErrorDetector.detect", () => {
   })
 
   test("matches api_error_status: 401 on the error object", () => {
-    const result = detector.detect("c1", { api_error_status: 401, message: "x" })
+    const result = detector.detect("c1", Object.assign(new Error("x"), { api_error_status: 401 }))
     expect(result).not.toBe(null)
   })
 
@@ -37,8 +38,10 @@ describe("ClaudeAuthErrorDetector.detect", () => {
 
   test("returns null for generic errors", () => {
     expect(detector.detect("c1", new Error("unrelated"))).toBe(null)
-    expect(detector.detect("c1", null)).toBe(null)
-    expect(detector.detect("c1", undefined)).toBe(null)
+    // Production reaches the detector through `toError`, so a non-Error
+    // throwable arrives as a plain Error carrying its stringified form.
+    expect(detector.detect("c1", toError(null))).toBe(null)
+    expect(detector.detect("c1", toError(undefined))).toBe(null)
   })
 })
 

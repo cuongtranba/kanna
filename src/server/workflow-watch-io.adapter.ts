@@ -1,9 +1,8 @@
 import { existsSync, readdirSync, readFileSync, statSync, watch } from "node:fs"
 import { join, dirname, basename } from "node:path"
-import type { AnyValue } from "../shared/errors"
-import { isRecord } from "../shared/errors"
+import { isJsonObject, safeJsonParse, type JsonValue } from "../shared/json"
 
-export interface WorkflowRawFile { runId: string; raw: AnyValue }
+export interface WorkflowRawFile { runId: string; raw: JsonValue }
 
 /** Liveness probe for an in-flight run, derived from its live transcript dir. */
 export interface WorkflowRunDirInfo { runId: string; newestMtimeMs: number }
@@ -59,7 +58,8 @@ export function readWorkflowDir(dir: string): WorkflowRawFile[] {
   for (const name of names) {
     if (!isWfFile(name)) continue
     try {
-      const raw: AnyValue = JSON.parse(readFileSync(join(dir, name), "utf8"))
+      const raw = safeJsonParse(readFileSync(join(dir, name), "utf8"))
+      if (raw === null) continue
       out.push({ runId: name.slice(0, -".json".length), raw })
     } catch {
       // partial write / corrupt file — skip this tick; next write re-fires the watch
@@ -119,7 +119,7 @@ const KNOWN_JOURNAL_KINDS: ReadonlySet<string> = new Set(["started", "result"])
 // Normalize a count-ish field: a bare number stays as-is, an array collapses to
 // its length (the workflow returns `fixed: [1941]`, we surface `1`). Anything
 // else is absent.
-function countOf(v: AnyValue): number | undefined {
+function countOf(v: JsonValue | undefined): number | undefined {
   if (typeof v === "number") return v
   if (Array.isArray(v)) return v.length
   return undefined
@@ -127,9 +127,8 @@ function countOf(v: AnyValue): number | undefined {
 
 function parseJournalLine(line: string): WorkflowJournalEntry | null {
   if (!line) return null
-  let raw: AnyValue
-  try { raw = JSON.parse(line) } catch { return null }
-  if (!isRecord(raw)) return null
+  const raw = safeJsonParse(line)
+  if (raw === null || !isJsonObject(raw)) return null
   const r = raw
   const type = r.type
   const agentId = r.agentId
@@ -138,7 +137,7 @@ function parseJournalLine(line: string): WorkflowJournalEntry | null {
   const journalType: "started" | "result" = type === "started" ? "started" : "result"
   const out: WorkflowJournalEntry = { type: journalType, agentId }
   if (typeof r.key === "string") out.key = r.key
-  if (isRecord(r.result) && !Array.isArray(r.result)) {
+  if (isJsonObject(r.result)) {
     const rr = r.result
     const res: WorkflowJournalEntry["result"] = {}
     if (typeof rr.dir === "string") res.dir = rr.dir

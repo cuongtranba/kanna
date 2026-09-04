@@ -11,7 +11,7 @@
 
 import { log } from "../shared/log"
 import { billedUsageOfResult } from "../shared/token-pricing"
-import type { AnyValue } from "../shared/errors"
+import { toError } from "../shared/errors"
 import type { AgentProvider, Subagent, TranscriptEntry } from "../shared/types"
 import type { LimitDetector, LimitDetection } from "./auto-continue/limit-detector"
 import type { AuthErrorDetection } from "./auto-continue/auth-error-detector"
@@ -49,7 +49,7 @@ const SELF_WAKE_ARMING_KINDS: ReadonlySet<TranscriptEntry["kind"]> = new Set([
 // ---------------------------------------------------------------------------
 
 interface AuthErrorDetectable {
-  detect(chatId: string, error: AnyValue): AuthErrorDetection | null
+  detect(chatId: string, error: Error): AuthErrorDetection | null
   detectFromResultText(chatId: string, text: string): AuthErrorDetection | null
 }
 
@@ -98,7 +98,7 @@ export interface RunClaudeSessionDeps {
   maybeRegisterSdkWorkflowsDir(session: ClaudeSessionState): void
   getSubagents(): Subagent[]
   resolveBackgroundTaskMaxMs(): number
-  handleLimitError(chatId: string, detector: LimitDetector, error: AnyValue): Promise<boolean>
+  handleLimitError(chatId: string, detector: LimitDetector, error: Error): Promise<boolean>
   handleAuthFailure(session: ClaudeSessionState, detection: AuthErrorDetection): Promise<boolean>
   closeClaudeSession(chatId: string, session: ClaudeSessionState): void
   maybeStartNextQueuedMessage(chatId: string): Promise<boolean | void>
@@ -576,7 +576,8 @@ export async function runClaudeSession(
         }
       }
     }
-  } catch (error) {
+  } catch (caught) {
+    const error = toError(caught)
     const active = deps.activeTurns.get(session.chatId)
     if (active && !active.cancelRequested) {
       const limitHandled = await deps.handleLimitError(session.chatId, deps.claudeLimitDetector, error)
@@ -588,7 +589,7 @@ export async function runClaudeSession(
         : false
       const handled = limitHandled || authHandled
       if (!handled) {
-        const message = error instanceof Error ? error.message : String(error)
+        const message = error.message
         await deps.store.appendMessage(
           session.chatId,
           timestamped({

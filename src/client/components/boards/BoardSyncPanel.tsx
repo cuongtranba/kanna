@@ -7,7 +7,9 @@ import { bindingSlug, useBoardSyncPanelStore } from "./BoardSyncPanel.store"
 import { parseRepoSlug } from "../../../shared/boards/repo-slug"
 import type { BoardSyncStatus, RepoSuggestion, SyncColumnRouting } from "../../../shared/boards/sync-types"
 import type { SyncBinding, SyncConflict, SyncDirection } from "../../../shared/boards/types"
-import { errorMessage, type AnyValue } from "../../../shared/errors"
+import { onRejected } from "../../../shared/errors"
+import type { JsonValue } from "../../../shared/json"
+import type { ClientCommand } from "../../../shared/protocol"
 
 /**
  * Where a board's cards come from.
@@ -23,7 +25,7 @@ import { errorMessage, type AnyValue } from "../../../shared/errors"
  */
 
 export interface BoardSyncPanelSocket {
-  command<TResult = AnyValue>(command: AnyValue): Promise<TResult>
+  command<TResult = JsonValue>(command: ClientCommand): Promise<TResult>
 }
 
 export interface BoardSyncPanelProps {
@@ -205,9 +207,9 @@ export function BoardSyncPanel({ boardId, socket, onClose }: BoardSyncPanelProps
     void socket
       .command<BoardSyncStatus>({ type: "board.sync.status", boardId })
       .then(setStatus)
-      .catch((cause: AnyValue) => {
-        setError(errorMessage(cause))
-      })
+      .catch(onRejected((error) => {
+        setError(error.message)
+      }))
   }, [boardId, setError, setStatus, socket])
 
   useEffect(() => {
@@ -256,10 +258,10 @@ export function BoardSyncPanel({ boardId, socket, onClose }: BoardSyncPanelProps
         useBoardSyncPanelStore.getState().endSave()
         load()
       })
-      .catch((cause: AnyValue) => {
+      .catch(onRejected((error) => {
         useBoardSyncPanelStore.getState().endSave()
-        setError(errorMessage(cause))
-      })
+        setError(error.message)
+      }))
   }, [boardId, load, setError, socket])
 
   const handleDisconnect = useCallback(
@@ -269,9 +271,9 @@ export function BoardSyncPanel({ boardId, socket, onClose }: BoardSyncPanelProps
       void socket
         .command({ type: "board.sync.unbind", boardId, bindingId })
         .then(load)
-        .catch((cause: AnyValue) => {
-          setError(errorMessage(cause))
-        })
+        .catch(onRejected((error) => {
+          setError(error.message)
+        }))
     },
     [boardId, load, setError, socket],
   )
@@ -302,10 +304,10 @@ export function BoardSyncPanel({ boardId, socket, onClose }: BoardSyncPanelProps
           useBoardSyncPanelStore.getState().setSavingRow(null)
           load()
         })
-        .catch((cause: AnyValue) => {
+        .catch(onRejected((error) => {
           useBoardSyncPanelStore.getState().setSavingRow(null)
-          setError(errorMessage(cause))
-        })
+          setError(error.message)
+        }))
     },
     [boardId, load, setError, socket],
   )
@@ -337,10 +339,10 @@ export function BoardSyncPanel({ boardId, socket, onClose }: BoardSyncPanelProps
         useBoardSyncPanelStore.getState().endSave()
         load()
       })
-      .catch((cause: AnyValue) => {
+      .catch(onRejected((error) => {
         useBoardSyncPanelStore.getState().endSave()
-        setError(errorMessage(cause))
-      })
+        setError(error.message)
+      }))
   }, [boardId, load, setError, socket])
 
   const handleSetRowDirection = useCallback((projectId: string, dir: SyncDirection) => {

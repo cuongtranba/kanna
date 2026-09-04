@@ -1,20 +1,19 @@
-import { isRecord } from "../errors"
-import type { AnyValue } from "../errors"
+import { isJsonObject, type JsonValue } from "../json"
 import type { InstalledPackage } from "./types"
 
-function asStringOrNull(value: AnyValue): string | null {
+function asStringOrNull(value: JsonValue): string | null {
   return typeof value === "string" && value ? value : null
 }
 
-function asString(value: AnyValue): string {
+function asString(value: JsonValue): string {
   return typeof value === "string" ? value : ""
 }
 
 export function parseSkillLock(
-  raw: AnyValue,
+  raw: JsonValue,
   agentPresenceMap: ReadonlyMap<string, string[]>,
 ): { packages: InstalledPackage[]; error: string | null } {
-  if (!isRecord(raw)) {
+  if (!isJsonObject(raw)) {
     return { packages: [], error: "skill lock: not an object" }
   }
 
@@ -26,14 +25,14 @@ export function parseSkillLock(
     return { packages: [], error: `skill lock: unknown version ${String(version)}` }
   }
 
-  const skillsRaw = isRecord(raw.skills) && !Array.isArray(raw.skills) ? raw.skills : null
+  const skillsRaw = isJsonObject(raw.skills) && !Array.isArray(raw.skills) ? raw.skills : null
   if (!skillsRaw) {
     return { packages: [], error: null }
   }
 
   const packages: InstalledPackage[] = []
   for (const [name, entry] of Object.entries(skillsRaw)) {
-    if (!isRecord(entry)) continue
+    if (!isJsonObject(entry)) continue
 
     const source = asString(entry.source)
     const sourceUrl = asStringOrNull(entry.sourceUrl)

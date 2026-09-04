@@ -27,7 +27,9 @@
 import { createConnection } from "node:net"
 import { createInterface } from "node:readline"
 import * as zod from "zod"
-import { errorMessage, isRecord, type AnyValue } from "../../shared/errors"
+import { type LoadedModule } from "../../shared/dynamic-module"
+import { errorMessage, isRecord } from "../../shared/errors"
+import { type JsonValue } from "../../shared/json"
 import {
   defineRpc,
   encodePluginLine,
@@ -37,7 +39,7 @@ import {
   type PluginRpcContract,
 } from "./plugin-rpc-protocol"
 
-type PluginRpcHandler = (input: AnyValue) => AnyValue | Promise<AnyValue>
+type PluginRpcHandler = (input: JsonValue) => JsonValue | Promise<JsonValue>
 
 interface RegisteredRpc {
   readonly contract: PluginRpcContract
@@ -75,7 +77,7 @@ function createPluginContext(handlers: Map<string, RegisteredRpc>): PluginContex
 function installHostModuleRequire(): void {
   Object.assign(globalThis, {
     __KANNA_PLUGIN_HOST__: {
-      require(name: string): AnyValue {
+      require(name: string): LoadedModule {
         if (name === "zod") return zod
         if (name === "@kanna/plugin/server") return { defineRpc }
         throw new Error(`plugin-child-entry: host module "${name}" is not available in server code`)
@@ -84,12 +86,12 @@ function installHostModuleRequire(): void {
   })
 }
 
-function isContributeExport(value: AnyValue): value is { default: (context: PluginContext) => void } {
+function isContributeExport(value: LoadedModule): value is { default: (context: PluginContext) => void } {
   return isRecord(value) && typeof value.default === "function"
 }
 
 async function loadContribute(bundlePath: string): Promise<(context: PluginContext) => void> {
-  const loaded: AnyValue = await import(bundlePath)
+  const loaded: LoadedModule = await import(bundlePath)
   if (!isContributeExport(loaded)) {
     throw new Error(`plugin-child-entry: ${bundlePath} has no default export`)
   }
@@ -111,7 +113,7 @@ async function handleCall(
     send({ type: "result", id: call.id, ok: false, error: `input schema rejected: ${parsedInput.error.message}` })
     return
   }
-  let output: AnyValue
+  let output: JsonValue
   try {
     output = await registered.handler(parsedInput.data)
   } catch (error) {

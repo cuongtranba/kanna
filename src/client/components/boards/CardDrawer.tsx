@@ -37,7 +37,9 @@ import {
   type CleanupDecision,
 } from "../../../shared/boards/worktree-cleanup"
 import type { CardBlocker } from "../../../shared/boards/dependencies"
-import { errorMessage, type AnyValue } from "../../../shared/errors"
+import { onRejected } from "../../../shared/errors"
+import type { JsonValue } from "../../../shared/json"
+import type { ClientCommand } from "../../../shared/protocol"
 
 /**
  * Card detail, as a drawer INSIDE the board pane.
@@ -49,7 +51,7 @@ import { errorMessage, type AnyValue } from "../../../shared/errors"
  */
 
 export interface CardDrawerSocket {
-  command<TResult = AnyValue>(command: AnyValue): Promise<TResult>
+  command<TResult = JsonValue>(command: ClientCommand): Promise<TResult>
 }
 
 export interface CardDrawerProps {
@@ -138,9 +140,9 @@ export function CardDrawer({
     void socket
       .command<CardDetailView | null>({ type: "board.card.detail", cardId })
       .then(setDetail)
-      .catch((cause: AnyValue) => {
-        setError(errorMessage(cause))
-      })
+      .catch(onRejected((error) => {
+        setError(error.message)
+      }))
   }, [cardId, setDetail, setError, socket])
 
   useEffect(() => {
@@ -158,9 +160,9 @@ export function CardDrawer({
         load()
         onChanged?.()
       })
-      .catch((cause: AnyValue) => {
-        setError(errorMessage(cause))
-      })
+      .catch(onRejected((error) => {
+        setError(error.message)
+      }))
   }, [cardId, load, onChanged, setDraft, setError, socket])
 
   const handleDependencyChanged = useCallback(() => {
@@ -175,9 +177,9 @@ export function CardDrawer({
         onChanged?.()
         onClose()
       })
-      .catch((cause: AnyValue) => {
-        setError(errorMessage(cause))
-      })
+      .catch(onRejected((error) => {
+        setError(error.message)
+      }))
   }, [cardId, onChanged, onClose, setError, socket])
 
   /**
@@ -195,10 +197,10 @@ export function CardDrawer({
         load()
         onChanged?.()
       })
-      .catch((cause: AnyValue) => {
+      .catch(onRejected((error) => {
         useCardDrawerStore.getState().endStartWork(null)
-        setError(errorMessage(cause))
-      })
+        setError(error.message)
+      }))
   }, [cardId, load, onChanged, setError, socket])
 
   const handleCleanup = useCallback(
@@ -211,10 +213,10 @@ export function CardDrawer({
           load()
           onChanged?.()
         })
-        .catch((cause: AnyValue) => {
+        .catch(onRejected((error) => {
           useCardDrawerStore.getState().endCleanup()
-          setError(errorMessage(cause))
-        })
+          setError(error.message)
+        }))
     },
     [cardId, load, onChanged, setError, socket],
   )
@@ -254,9 +256,9 @@ export function CardDrawer({
           load()
           onChanged?.()
         })
-        .catch((cause: AnyValue) => {
-          setError(errorMessage(cause))
-        })
+        .catch(onRejected((error) => {
+          setError(error.message)
+        }))
     },
     [cardId, load, onChanged, setError, socket],
   )

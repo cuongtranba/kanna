@@ -1,6 +1,5 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
-import type { AnyValue } from "../../shared/errors"
 import {
   DEFAULT_CLAUDE_MODEL_OPTIONS,
   DEFAULT_CODEX_MODEL_OPTIONS,
@@ -21,6 +20,7 @@ import {
   type ProviderModelOptionsByProvider,
 } from "../../shared/types"
 import { useAppSettingsStore } from "./appSettingsStore"
+import { claudeOptionsPatch, codexOptionsPatch, normalizeDefaultProvider } from "./providerOptionsPatch"
 import { log } from "../../shared/log"
 
 function currentCustomModels(): readonly CustomModelEntry[] {
@@ -120,11 +120,6 @@ type PersistedComposerState =
 type PersistedChatPreferencesState = LegacyPersistedChatPreferencesState & {
   chatStates?: Record<string, PersistedComposerState>
   legacyComposerState?: PersistedComposerState
-}
-
-export function normalizeDefaultProvider(value?: string): DefaultProviderPreference {
-  if (value === "claude" || value === "codex" || value === "openrouter") return value
-  return "last_used"
 }
 
 export function normalizeClaudePreference(value?: {
@@ -287,7 +282,8 @@ function providerDefaultsEqual(a: ChatProviderPreferences, b: ChatProviderPrefer
   )
 }
 
-function logChatPreferences(message: string, details?: AnyValue) {
+/** Debug payloads are domain objects, not JSON — `log` takes them as-is. */
+function logChatPreferences(message: string, details?: object) {
   if (details === undefined) {
     log.info(`[chat-preferences] ${message}`)
     return
@@ -602,7 +598,7 @@ export const useChatPreferencesStore = create<ChatPreferencesState>()(
         set((state) => {
           const customModels = currentCustomModels()
           if (provider === "claude") {
-            const claudeOptions = <Partial<ClaudeModelOptions>>modelOptions
+            const claudeOptions = claudeOptionsPatch(modelOptions)
             return {
               providerDefaults: {
                 ...state.providerDefaults,
@@ -624,7 +620,7 @@ export const useChatPreferencesStore = create<ChatPreferencesState>()(
               },
             }
           }
-          const codexOptions = <Partial<CodexModelOptions>>modelOptions
+          const codexOptions = codexOptionsPatch(modelOptions)
           return {
             providerDefaults: {
               ...state.providerDefaults,
@@ -744,7 +740,7 @@ export const useChatPreferencesStore = create<ChatPreferencesState>()(
         set((state) => withChatComposerState(state, chatId, (composerState) => {
           const customModels = currentCustomModels()
           if (composerState.provider === "claude") {
-            const claudeOptions = <Partial<ClaudeModelOptions>>modelOptions
+            const claudeOptions = claudeOptionsPatch(modelOptions)
             return {
               provider: "claude",
               model: composerState.model,
@@ -766,7 +762,7 @@ export const useChatPreferencesStore = create<ChatPreferencesState>()(
               planMode: composerState.planMode,
             }
           }
-          const codexOptions = <Partial<CodexModelOptions>>modelOptions
+          const codexOptions = codexOptionsPatch(modelOptions)
           return {
             provider: "codex",
             model: composerState.model,

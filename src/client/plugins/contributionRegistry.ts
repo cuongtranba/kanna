@@ -17,7 +17,7 @@
  * evaluation.
  */
 import type { ComponentType } from "react"
-import { type AnyValue } from "../../shared/errors"
+import type { JsonValue } from "../../shared/json"
 
 /** Matches the fixture plugins' `PluginSurfaceProps` shape (`{ theme }`) —
  * defined locally rather than imported from `@kanna/plugin` so the host
@@ -142,7 +142,7 @@ export interface PluginContext {
    * the plugin's SERVER bundle and calls its own `handle`). The client
    * context accepts the call as a no-op purely so `plugin.handle(...)`
    * inside shared plugin code does not throw when evaluated in the browser. */
-  handle(...args: AnyValue[]): void
+  handle(...args: JsonValue[]): void
 }
 
 export function createPluginContext(pluginId: string, registry: PluginContributionRegistry): PluginContext {

@@ -9,7 +9,7 @@ import { useBoardsStore } from "../stores/boardsStore"
 import { collectPanes, createDefaultLayout } from "../lib/paneTree"
 import type { KannaState } from "./useKannaState"
 import type { SidebarChatRow, SidebarProjectGroup } from "../../shared/types"
-import type { AnyValue } from "../../shared/errors"
+import type { JsonValue } from "../../shared/json"
 
 /**
  * Looking at a board is not a conversation, so it must not start one.
@@ -59,14 +59,14 @@ async function mount(chats: SidebarChatRow[], entry = "/boards/proj-1"): Promise
 
   const state = {
     socket: {
-      subscribe: <TSnapshot,>(topic: AnyValue, onSnapshot: (snapshot: TSnapshot) => void) => {
+      subscribe: <TSnapshot,>(topic: JsonValue, onSnapshot: (snapshot: TSnapshot) => void) => {
         const type = (topic as { type: string }).type
         if (type === "boards") {
           onSnapshot({ ownerKind: "project", ownerId: "proj-1", boards: [BOARD] } as TSnapshot)
         }
         return () => undefined
       },
-      command: (command: AnyValue) =>
+      command: (command: JsonValue) =>
         Promise.resolve((command as { type: string }).type === "board.templates.list" ? [] : undefined),
     },
     sidebarData: { starredProjectGroups: [], projectGroups: [group(chats)] },
@@ -117,7 +117,7 @@ function byText(container: HTMLElement, text: string): HTMLElement {
   return found
 }
 
-function openTabTargets(): AnyValue[] {
+function openTabTargets(): JsonValue[] {
   const layout = usePaneLayoutStore.getState().getLayout()
   return collectPanes(layout.root).flatMap((pane) => pane.tabs.map((tab) => tab.target))
 }

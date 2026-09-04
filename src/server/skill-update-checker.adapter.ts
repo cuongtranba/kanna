@@ -1,4 +1,5 @@
-import { errorMessage, isRecord, type AnyValue } from "../shared/errors"
+import { errorMessage } from "../shared/errors"
+import { isJsonObject, type JsonValue } from "../shared/json"
 import type { InstalledPackage, PackageUpdateChecker, PackageUpdateStatus } from "../shared/packages/types"
 import {
   resolveGitHubRepo,
@@ -10,15 +11,15 @@ import { pickLatestSemverTag } from "../shared/packages/tag-order"
 
 // ─── Parsing helpers (type-guard based, no `as T` assertions) ───────────────
 
-function isGitEntryType(t: AnyValue): t is GitTreeEntry["type"] {
+function isGitEntryType(t: JsonValue): t is GitTreeEntry["type"] {
   return t === "tree" || t === "blob" || t === "commit"
 }
 
-function parseTreeEntries(raw: AnyValue): GitTreeEntry[] | null {
-  if (!isRecord(raw) || !Array.isArray(raw.tree)) return null
+function parseTreeEntries(raw: JsonValue): GitTreeEntry[] | null {
+  if (!isJsonObject(raw) || !Array.isArray(raw.tree)) return null
   const results: GitTreeEntry[] = []
   for (const e of raw.tree) {
-    if (!isRecord(e)) continue
+    if (!isJsonObject(e)) continue
     const { path, type, sha } = e
     if (typeof path !== "string" || !isGitEntryType(type) || typeof sha !== "string") continue
     results.push({ path, type, sha })
@@ -26,24 +27,24 @@ function parseTreeEntries(raw: AnyValue): GitTreeEntry[] | null {
   return results
 }
 
-function parseTreeResponse(raw: AnyValue): { entries: GitTreeEntry[]; truncated: boolean } | null {
+function parseTreeResponse(raw: JsonValue): { entries: GitTreeEntry[]; truncated: boolean } | null {
   const entries = parseTreeEntries(raw)
   if (!entries) return null
-  return { entries, truncated: isRecord(raw) && raw.truncated === true }
+  return { entries, truncated: isJsonObject(raw) && raw.truncated === true }
 }
 
-function parseTagNames(raw: AnyValue): string[] {
+function parseTagNames(raw: JsonValue): string[] {
   if (!Array.isArray(raw)) return []
   const results: string[] = []
   for (const t of raw) {
-    if (!isRecord(t) || typeof t.name !== "string") continue
+    if (!isJsonObject(t) || typeof t.name !== "string") continue
     results.push(t.name)
   }
   return results
 }
 
-function parseReleaseTagName(raw: AnyValue): string | null {
-  if (!isRecord(raw)) return null
+function parseReleaseTagName(raw: JsonValue): string | null {
+  if (!isJsonObject(raw)) return null
   return typeof raw.tag_name === "string" && raw.tag_name ? raw.tag_name : null
 }
 
@@ -150,7 +151,7 @@ export function createSkillUpdateChecker(deps: SkillCheckerDeps): PackageUpdateC
       }
     }
 
-    const raw: AnyValue = await resp.json()
+    const raw: JsonValue = await resp.json()
     const parsed = parseTreeResponse(raw)
     if (!parsed) {
       return { entries: [], truncated: false, rateLimitExhausted: false, error: "invalid tree response" }
@@ -169,7 +170,7 @@ export function createSkillUpdateChecker(deps: SkillCheckerDeps): PackageUpdateC
     }
   }
 
-  async function fetchJson(url: string, signal: AbortSignal): Promise<AnyValue | null> {
+  async function fetchJson(url: string, signal: AbortSignal): Promise<JsonValue | null> {
     try {
       const resp = await fetchFn(url, { headers: buildGitHubHeaders(token, null), signal })
       if (!resp.ok) return null

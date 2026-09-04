@@ -95,6 +95,8 @@ import {
   type UploadSettings,
 } from "../shared/types"
 import { assertSafeSkillAgents } from "../shared/skill-agents"
+import { isPlainObject } from "../shared/settings/plain-object"
+import type { JsonArray, JsonObject, JsonValue } from "../shared/json"
 
 type StatusPatch = Partial<Pick<OAuthTokenEntry,
   "status" | "limitedUntil" | "lastUsedAt" | "lastErrorAt" | "lastErrorMessage"
@@ -125,30 +127,26 @@ interface AppSettingsFile {
     codex?: Partial<ProviderPreference<Partial<CodexModelOptions>>> & { effort?: string }
     openrouter?: Partial<ProviderPreference<Record<string, never>>>
   }
-  cloudflareTunnel?: Record<string, unknown>
-  push?: Record<string, unknown>
-  telemetry?: Record<string, unknown>
-  auth?: Record<string, unknown>
-  claudeAuth?: Record<string, unknown>
-  uploads?: Record<string, unknown>
-  subagents?: readonly unknown[]
-  customMcpServers?: readonly unknown[]
-  customModels?: readonly unknown[]
-  textSnippets?: readonly unknown[]
-  claudeDriver?: Record<string, unknown>
+  cloudflareTunnel?: JsonObject
+  push?: JsonObject
+  telemetry?: JsonObject
+  auth?: JsonObject
+  claudeAuth?: JsonObject
+  uploads?: JsonObject
+  subagents?: JsonArray
+  customMcpServers?: JsonArray
+  customModels?: JsonArray
+  textSnippets?: JsonArray
+  claudeDriver?: JsonObject
   globalPromptAppend?: string
   shareDefaultTtlHours?: number
   subagentRuntime?: {
     runTimeoutMs?: number
     defaultLoopSubagentId?: string | null
   }
-  packageUpdates?: Record<string, unknown>
-  plugins?: Record<string, unknown>
-  installedPlugins?: readonly unknown[]
-}
-
-function isPlainObject<T>(value: T): value is T & Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
+  packageUpdates?: JsonObject
+  plugins?: JsonObject
+  installedPlugins?: JsonArray
 }
 
 function isAppSettingsFile<T>(value: T): value is T & AppSettingsFile {
@@ -346,7 +344,7 @@ function normalizeEditorCommandTemplate<T>(value: T, preset: EditorPreset) {
 function normalizeClaudePreference(value?: {
   model?: string
   effort?: string
-  modelOptions?: Partial<Record<keyof ClaudeModelOptions, unknown>>
+  modelOptions?: Partial<Record<keyof ClaudeModelOptions, JsonValue>>
   planMode?: boolean
 }, customModels?: readonly CustomModelEntry[]): ProviderPreference<ClaudeModelOptions> {
   const model = normalizeClaudeModelId(typeof value?.model === "string" ? value.model : undefined, undefined, customModels)
@@ -376,7 +374,7 @@ function normalizeClaudePreference(value?: {
 function normalizeCodexPreference(value?: {
   model?: string
   effort?: string
-  modelOptions?: Partial<Record<keyof CodexModelOptions, unknown>>
+  modelOptions?: Partial<Record<keyof CodexModelOptions, JsonValue>>
   planMode?: boolean
 }, customModels?: readonly CustomModelEntry[]): ProviderPreference<CodexModelOptions> {
   const rawCodexEffort = value?.modelOptions?.reasoningEffort
@@ -1234,7 +1232,7 @@ export function seedCustomModelsFromBuiltins(): CustomModelEntry[] {
   return out
 }
 
-function migrateToSupportedEfforts(raw: Record<string, unknown>): Pick<CustomModelEntry, "supportedEfforts"> {
+function migrateToSupportedEfforts(raw: JsonObject): Pick<CustomModelEntry, "supportedEfforts"> {
   if (Array.isArray(raw.supportedEfforts)) {
     const filtered = raw.supportedEfforts.filter(
       (v): v is ClaudeReasoningEffort => typeof v === "string" && isClaudeReasoningEffort(v),

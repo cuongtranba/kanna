@@ -29,7 +29,8 @@
  * answering `SERVICE_UNAVAILABLE` instead of throwing.
  */
 import { z } from "zod"
-import { errorMessage, isRecord, type AnyValue } from "../shared/errors"
+import { errorMessage, isRecord } from "../shared/errors"
+import type { JsonValue } from "../shared/json"
 import type { PluginLogEntry } from "../shared/plugins/log-ring"
 import {
   isValidPluginId,
@@ -42,7 +43,7 @@ import { buildPluginScaffoldFiles } from "./plugins/plugin-scaffold"
 import { pluginDirHasManifest, writePluginScaffold } from "./plugins/plugin-scaffold.adapter"
 import { readPluginManifestText } from "./plugins/plugin-service-io.adapter"
 import type { PluginService, PluginSummary } from "./plugins/plugin-service"
-import { fail, ok, type ToolResult } from "./kanna-mcp-tool"
+import { fail, ok, type ToolArgs, type ToolResult } from "./kanna-mcp-tool"
 
 const PLUGIN_LIST_DESCRIPTION = "List installed Kanna plugins and their runtime state."
 
@@ -70,8 +71,8 @@ const SERVICE_UNAVAILABLE = "The plugin runtime is not available in this session
 export type PluginToolFactory<TTool> = (
   name: string,
   description: string,
-  schema: Record<string, z.ZodTypeAny>,
-  handler: (input: Record<string, AnyValue>) => Promise<ToolResult>,
+  schema: Record<string, z.ZodType<JsonValue | undefined>>,
+  handler: (input: ToolArgs) => Promise<ToolResult>,
 ) => TTool
 
 /** Exactly the `PluginService` surface these six tools reach — nothing wider. */
@@ -86,14 +87,14 @@ function isPluginToolService(value: object): value is PluginToolService {
 }
 
 /** The schema already requires these; this is the runtime half of that promise. */
-function requireString(value: AnyValue, name: string): string {
+function requireString(value: JsonValue | undefined, name: string): string {
   if (typeof value !== "string" || value.trim() === "") {
     throw new Error(`${name} is required`)
   }
   return value
 }
 
-function optionalPositiveInt(value: AnyValue, fallback: number): number {
+function optionalPositiveInt(value: JsonValue | undefined, fallback: number): number {
   if (typeof value !== "number" || !Number.isInteger(value) || value < 0) return fallback
   return value
 }

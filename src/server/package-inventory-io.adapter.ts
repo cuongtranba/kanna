@@ -7,7 +7,8 @@ import { parseSkillLock } from "../shared/packages/parse-skill-lock"
 import { parseClaudePluginList, parseClaudePluginsFile } from "../shared/packages/parse-claude-plugins"
 import { parseCodexPluginList } from "../shared/packages/parse-codex-plugins"
 import { getGlobalSkillLockPath } from "./ws-router-skills"
-import { errorMessage, isRecord, type AnyValue } from "../shared/errors"
+import { errorMessage } from "../shared/errors"
+import { isJsonObject, safeJsonParse, type JsonValue } from "../shared/json"
 
 interface SourceResult {
   packages: InstalledPackage[]
@@ -54,9 +55,11 @@ function resolvedHome(): string {
 
 async function readSkillPackages(): Promise<SourceResult> {
   const lockPath = getGlobalSkillLockPath()
-  let raw: AnyValue
+  let raw: JsonValue
   try {
-    raw = JSON.parse(await readTextFileOrThrow(lockPath))
+    const parsed = safeJsonParse(await readTextFileOrThrow(lockPath))
+    if (parsed === null) return { packages: [], error: null }
+    raw = parsed
   } catch {
     return { packages: [], error: null }
   }
@@ -68,10 +71,10 @@ async function readSkillPackages(): Promise<SourceResult> {
   return parseSkillLock(raw, presenceMap)
 }
 
-function extractSkillNamesFromLock(raw: AnyValue): string[] {
-  if (!isRecord(raw)) return []
+function extractSkillNamesFromLock(raw: JsonValue): string[] {
+  if (!isJsonObject(raw)) return []
   const skills = raw.skills
-  if (!isRecord(skills)) return []
+  if (!isJsonObject(skills)) return []
   return Object.keys(skills)
 }
 
@@ -84,8 +87,8 @@ async function readClaudePluginPackages(): Promise<SourceResult> {
       process.env,
     )
     if (exitCode === 0) {
-      const raw: AnyValue = JSON.parse(stdout)
-      return parseClaudePluginList(raw)
+      const raw = safeJsonParse(stdout)
+      if (raw !== null) return parseClaudePluginList(raw)
     }
   } catch {
     // CLI unavailable — fall through to the file fallback.
@@ -94,7 +97,8 @@ async function readClaudePluginPackages(): Promise<SourceResult> {
   // Fallback: read the installed_plugins.json file.
   const fallbackPath = path.join(resolvedHome(), ".claude", "plugins", "installed_plugins.json")
   try {
-    const raw: AnyValue = JSON.parse(await readTextFileOrThrow(fallbackPath))
+    const raw = safeJsonParse(await readTextFileOrThrow(fallbackPath))
+    if (raw === null) return { packages: [], error: null }
     return parseClaudePluginsFile(raw)
   } catch {
     return { packages: [], error: null }
@@ -110,8 +114,8 @@ async function readCodexPluginPackages(): Promise<SourceResult> {
       process.env,
     )
     if (exitCode === 0) {
-      const raw: AnyValue = JSON.parse(stdout)
-      return parseCodexPluginList(raw)
+      const raw = safeJsonParse(stdout)
+      if (raw !== null) return parseCodexPluginList(raw)
     }
     return { packages: [], error: null }
   } catch {
@@ -123,15 +127,15 @@ export async function readPackageInventory(): Promise<PackageInventorySnapshot> 
   const errors: Array<{ kind: PackageKind; message: string }> = []
 
   const [skillResult, claudeResult, codexResult] = await Promise.all([
-    readSkillPackages().catch((e: AnyValue): SourceResult => {
+    readSkillPackages().catch((e: Error): SourceResult => {
       errors.push({ kind: "skill", message: errorMessage(e) })
       return { packages: [], error: null }
     }),
-    readClaudePluginPackages().catch((e: AnyValue): SourceResult => {
+    readClaudePluginPackages().catch((e: Error): SourceResult => {
       errors.push({ kind: "claude-plugin", message: errorMessage(e) })
       return { packages: [], error: null }
     }),
-    readCodexPluginPackages().catch((e: AnyValue): SourceResult => {
+    readCodexPluginPackages().catch((e: Error): SourceResult => {
       errors.push({ kind: "codex-plugin", message: errorMessage(e) })
       return { packages: [], error: null }
     }),

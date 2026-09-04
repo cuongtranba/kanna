@@ -28,7 +28,7 @@ import type { SubagentOrchestrator } from "./subagent-orchestrator"
 import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import type { StartClaudeSessionPtyArgs } from "./claude-pty/driver"
-import type { AnyValue } from "../shared/errors"
+import type { JsonValue } from "../shared/json"
 import type { ModelPrice } from "../shared/token-pricing"
 
 /** App settings snapshot returned by `getAppSettingsSnapshot`. */
@@ -88,7 +88,7 @@ export interface AgentCoordinatorArgs {
     additionalDirectories?: string[]
     chatId?: string
     tunnelGateway?: TunnelGateway | null
-    onToolRequest: (request: HarnessToolRequest) => Promise<AnyValue>
+    onToolRequest: (request: HarnessToolRequest) => Promise<JsonValue>
     /** Append text for the claude_code preset's `systemPrompt.append`. */
     systemPromptAppend?: string
     /** When set, redirect the SDK to OpenRouter instead of Anthropic. */
