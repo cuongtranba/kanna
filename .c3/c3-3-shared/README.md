@@ -1,7 +1,7 @@
 ---
 id: c3-3
 c3-version: 4
-c3-seal: 5fb30892b2c3b8936b76ba4c9e2e74b7b6c145004b881413892cce771b36b23f
+c3-seal: d706c048a87f59f2eb49eff40cef080543a79608a783075884be0bbecc2a519a
 title: Shared
 type: container
 boundary: library
@@ -36,3 +36,5 @@ Publish the wire protocol, core domain types, tool-call normalization, port and 
 | c3-307 | token-pricing | foundation | active | Pure USD token-cost math + model-price resolution |
 | c3-310 | boards-domain | feature | active | Define the board domain — boards, columns, cards, fields, ranks — and the pure decisions about it that the server and the client must not be able to disagree on. |
 | c3-311 | cron-domain | feature | active | Own the pure /cron command domain: grammar parsing with field-level |
+| c3-312 | packages-shared | feature | active | Own the PackageKind union and the pure lock-file parsers both the server updater and the settings UI read, so the two cannot disagree about what is installed. |
+| c3-313 | plugins-shared | feature | active | Own the pure plugin vocabulary both halves of Kanna must agree on: the manifest shape and its id rules, the installed-plugin settings record, the on-disk path layout, the bounded log ring, and the ambient declarations a plugin author codes against. |

@@ -18,7 +18,8 @@
  *
  * These shapes MIRROR the host's real runtime counterparts and must keep
  * doing so — they are the same contract seen from the author's side:
- *   - `PluginContext` / `PluginSurfaceProps` / `PluginSidebarItemInput`
+ *   - `PluginContext` / `PluginSurfaceProps` / `PluginSidebarItemInput` /
+ *     `PluginCommandCenterItemInput`
  *     ← `src/client/plugins/contributionRegistry.ts`
  *   - `defineRpc` / the contract it returns
  *     ← `src/server/plugins/plugin-rpc-protocol.ts`
@@ -49,10 +50,31 @@ declare module "@kanna/plugin" {
     readonly surface: string
   }
 
+  /**
+   * One entry contributed to the composer's `/` picker.
+   *
+   * `prompt` is required and is the whole contract: a plugin command has no
+   * file on disk for the CLI to resolve, so picking the entry inserts this
+   * text into the composer rather than `/name`.
+   */
+  export interface PluginCommandCenterItemInput {
+    /** Bare name. The host namespaces it as `<pluginId>:<name>`. */
+    readonly name: string
+    readonly description: string
+    /** Inserted into the composer verbatim when the user picks this entry. */
+    readonly prompt: string
+  }
+
   /** What a plugin's `default` export is called with. */
   export interface PluginContext {
     addSurface(id: string, component: PluginSurfaceComponent): void
     addSidebarItem(item: PluginSidebarItemInput): void
+    /**
+     * Contribute an entry to the composer's `/` picker. The host namespaces the
+     * name by plugin id and drops the entry if that name is already taken, so a
+     * plugin can add to the picker but never shadow a builtin.
+     */
+    addCommandCenterItem(item: PluginCommandCenterItemInput): void
     /**
      * Wire an RPC contract to its implementation. Server-side concern: the
      * CLIENT context accepts the call as a no-op so shared plugin code calling

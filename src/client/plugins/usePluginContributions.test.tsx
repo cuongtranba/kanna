@@ -46,6 +46,7 @@ describe("usePluginContributions", () => {
     await mountWith(async () => ({
       sidebarItems: [{ pluginId: "hello", id: "main", title: "Hello", icon: "Blocks", surface: "main" }],
       panels: [],
+      commandCenterItems: [],
       failures: [],
     }))
 
@@ -57,7 +58,7 @@ describe("usePluginContributions", () => {
     let called = 0
     await mountWith(async () => {
       called += 1
-      return { sidebarItems: [], panels: [], failures: [] }
+      return { sidebarItems: [], panels: [], commandCenterItems: [], failures: [] }
     })
 
     expect(called).toBe(0)
@@ -78,9 +79,51 @@ describe("usePluginContributions", () => {
     await mountWith(async () => ({
       sidebarItems: [{ pluginId: "ok", id: "main", title: "OK", icon: "Blocks", surface: "main" }],
       panels: [],
+      commandCenterItems: [],
       failures: [{ pluginId: "bad", message: "threw on register" }],
     }))
 
     expect(usePluginContributionsStore.getState().sidebarItems).toHaveLength(1)
+  })
+
+  // The `/` picker reads this off the store, so a load that drops it leaves
+  // every contributed command invisible with nothing to notice it by.
+  test("command-center items reach the store", async () => {
+    setPluginsEnabled(true)
+    await mountWith(async () => ({
+      sidebarItems: [],
+      panels: [],
+      commandCenterItems: [
+        { pluginId: "hello", name: "greet", description: "Say hello", prompt: "Say hello." },
+      ],
+      failures: [],
+    }))
+
+    expect(usePluginContributionsStore.getState().commandCenterItems).toEqual([
+      { pluginId: "hello", name: "greet", description: "Say hello", prompt: "Say hello." },
+    ])
+  })
+
+  test("disabling plugins clears the command-center items too", async () => {
+    setPluginsEnabled(true)
+    await mountWith(async () => ({
+      sidebarItems: [],
+      panels: [],
+      commandCenterItems: [
+        { pluginId: "hello", name: "greet", description: "", prompt: "Say hello." },
+      ],
+      failures: [],
+    }))
+    expect(usePluginContributionsStore.getState().commandCenterItems).toHaveLength(1)
+
+    setPluginsEnabled(false)
+    await mountWith(async () => ({
+      sidebarItems: [],
+      panels: [],
+      commandCenterItems: [],
+      failures: [],
+    }))
+
+    expect(usePluginContributionsStore.getState().commandCenterItems).toHaveLength(0)
   })
 })

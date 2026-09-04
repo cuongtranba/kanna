@@ -22,6 +22,15 @@ export default defineConfig({
   timeout: 90_000,
   outputDir: "./.output/test-results",
   fullyParallel: false,
+  // `fullyParallel: false` only serialises tests WITHIN a file — Playwright still
+  // hands separate files to separate workers. Every spec here boots through
+  // `bootKanna`, which binds one fixed port (TEST_PORT 3299) on purpose, so two
+  // files running at once means the second one hits `assertPortFree` and dies
+  // with "Port 3299 is already in use". Observed the moment a third spec file
+  // was added: smoke and plugins raced and both failed. One worker is the whole
+  // fix; a per-worker port would trade a 3-line config for a port-allocation
+  // scheme this harness (a handful of specs, run on demand) does not need.
+  workers: 1,
   reporter: [["html", { outputFolder: "./.output/html-report", open: "never" }]],
   use: {
     // Drives the machine's installed Google Chrome directly — no Playwright

@@ -1,5 +1,6 @@
 ---
 id: c3-237
+c3-seal: 640ca553a898d66fb148a66aa5f96a603f688eae55d376341e64cb6aa5427d02
 title: package-autoupdate
 type: component
 category: feature
@@ -7,8 +8,6 @@ parent: c3-2
 goal: Detect when installed packages (skills, Claude Code plugins, Codex plugins) are behind upstream and apply updates on a configurable schedule, notifying the user and optionally auto-applying per kind.
 uses:
     - ref-side-effect-adapter
-    - ref-strong-typing
-    - rule-colocated-bun-test
 ---
 
 # package-autoupdate
@@ -45,17 +44,37 @@ Surfaces update availability for the three package kinds Kanna manages — Kanna
 | Aspect | Detail | Reference |
 | --- | --- | --- |
 | Outcome | User sees update availability; opted-in packages update automatically | c3-116 |
-| Primary path | Timer fires → runCheck() → checkers → snapshot → maybeAutoApply() | |
-| Alternate — manual | User triggers applyUpdates() from UI; same apply path, no busy-gate | |
-| Failure — check error | Stored in snapshot.error; availability marked "unknown" for affected pkgs | |
-| Failure — apply error | Exponential backoff (base 10 min, max 24 h); max 3 failures per package | |
+| Primary path | Timer fires → runCheck() → checkers → snapshot → maybeAutoApply() |  |
+| Alternate — manual | User triggers applyUpdates() from UI; same apply path, no busy-gate |  |
+| Failure — check error | Stored in snapshot.error; availability marked "unknown" for affected pkgs |  |
+| Failure — apply error | Exponential backoff (base 10 min, max 24 h); max 3 failures per package |  |
 
 ## Governance
 
 | Reference | Type | Governs | Precedence | Notes |
 | --- | --- | --- | --- | --- |
 | ref-side-effect-adapter | rule | IO in *.adapter.ts only | mandatory | package-inventory-io.adapter.ts, skill-update-applier.adapter.ts, etc. |
-| adr-20260902-package-auto-update | decision | applies serialized; no sidecar; unknown != up_to_date | mandatory | |
+| adr-20260902-package-auto-update | adr | applies serialized; no sidecar; unknown != up_to_date | mandatory | the four invariants below are this ADR's, not defensive choices |
+
+## Contract
+
+| Surface | Direction | Contract | Boundary | Evidence |
+| --- | --- | --- | --- | --- |
+| Update snapshot | OUT | PackageUpdateSnapshot per package kind (skill, claude-plugin, codex-plugin), rebuilt on every check and never persisted | c3-207 | src/server/package-update-manager.ts |
+| Check request | IN | checkForUpdates() reads each kind's upstream lock file through its checker adapter | c3-312 | src/server/skill-update-checker.adapter.ts, src/server/claude-plugin-update-checker.adapter.ts, src/server/codex-plugin-update-checker.adapter.ts |
+| Apply request | IN | applyUpdates() shells out to the owning CLI per kind; throws when already applying, so the caller must gate its own UI | c3-116 | src/server/package-update-manager.ts, src/server/package-update-appliers-boot.adapter.ts |
+| Busy-chat veto | IN | hasAnyChatBusy() is injected and consulted before any auto-apply; a running CLI during an active turn can interfere with conversation tools | c3-210 | src/server/package-update-manager.ts |
+| Settings | IN | PackageUpdateSettings in settings.json is the only configuration surface; CODEX_BINARY_PATH is the one env var | c3-206 | src/server/app-settings-package-updates.ts |
+
+## Derived Materials
+
+| Material | Must derive from | Allowed variance | Evidence |
+| --- | --- | --- | --- |
+| src/server/package-update-manager.ts | Contract (check/apply/snapshot surface) and Key Invariants | Scheduling detail | src/server/package-update-manager.ts |
+| src/server/skill-update-checker.adapter.ts | Contract (check request) | Upstream lock-file format | src/server/skill-update-checker.adapter.ts |
+| src/server/claude-plugin-update-checker.adapter.ts | Contract (check request) | Upstream lock-file format | src/server/claude-plugin-update-checker.adapter.ts |
+| src/server/codex-plugin-update-checker.adapter.ts | Contract (check request) | Upstream lock-file format | src/server/codex-plugin-update-checker.adapter.ts |
+| src/server/package-update-appliers-boot.adapter.ts | Contract (apply request) | Per-kind CLI invocation | src/server/package-update-appliers-boot.adapter.ts |
 
 ## Key Invariants
 

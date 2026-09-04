@@ -7,5 +7,10 @@ export default function contribute(plugin: PluginContext) {
   plugin.handle(greeting, createGreeting)
   plugin.addSurface("main", HelloPanel)
   plugin.addSidebarItem({ id: "main", title: "Hello", icon: "Blocks", surface: "main" })
+  plugin.addCommandCenterItem({
+    name: "greet",
+    description: "Ask for a greeting",
+    prompt: "Greet the user warmly.",
+  })
   return () => {}
 }

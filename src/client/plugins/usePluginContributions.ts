@@ -38,7 +38,7 @@ export function usePluginContributions(reloadToken: string = ""): void {
     void loadPluginContributionsFromServer(reloadToken)
       .then((loaded) => {
         if (cancelled) return
-        setContributions(loaded.sidebarItems, loaded.panels)
+        setContributions(loaded)
         for (const failure of loaded.failures) {
           // One plugin failing is contained, not fatal — surface it without
           // taking down the load of the others.

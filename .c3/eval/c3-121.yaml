@@ -1,0 +1,12 @@
+fact: c3-121
+claim: "plugin client runtime and its mounted surfaces live under src/client/plugins/ plus the app-level mount points"
+code:
+  - src/client/plugins/**/*.ts
+  - src/client/plugins/**/*.tsx
+  - src/client/stores/pluginContributionsStore.ts
+  - src/client/app/PluginSidebarItems.tsx
+  - src/client/app/PluginsFooterSection.tsx
+  - src/client/app/PluginsFooterSlot.tsx
+  - src/client/app/PluginsFooterSlot.test.tsx
+  - src/client/app/PluginsSection.tsx
+  - src/client/app/KannaPluginsSettingsBranch.tsx
