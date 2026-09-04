@@ -1,5 +1,5 @@
 # C3 Structural Index
-<!-- hash: sha256:3f77d8d0db828637ce66b8f18c7976e2e866a4c47653d25ca1f075e3fa3b45a7 -->
+<!-- hash: sha256:1a5f9142fa5828ac61b5050a5b52e62013896c69b36a23f7c49a96d22bbd2dc1 -->
 
 ## c3-0 — Kanna (system)
 
@@ -270,7 +270,7 @@ files: scripts/check-complexity-limits.ts, src/ops/architecture/budget-scan.adap
 ## c3-237 — package-autoupdate (component)
 container: c3-2 | context: c3-0
 refs: ref-side-effect-adapter
-files: src/server/claude-plugin-update-checker.adapter.ts, src/server/codex-plugin-update-applier.adapter.ts, src/server/codex-plugin-update-checker.adapter.ts, src/server/package-inventory-io.adapter.test.ts, src/server/package-inventory-io.adapter.ts, src/server/package-update-appliers-boot.adapter.ts, src/server/package-update-manager.test.ts, src/server/package-update-manager.ts, src/server/skill-update-applier.adapter.ts, src/server/skill-update-checker.adapter.ts
+files: src/server/claude-plugin-update-checker.adapter.ts, src/server/codex-plugin-update-applier.adapter.ts, src/server/codex-plugin-update-checker.adapter.ts, src/server/package-inventory-io.adapter.test.ts, src/server/package-inventory-io.adapter.ts, src/server/package-update-appliers-boot.adapter.ts, src/server/package-update-manager.test.ts, src/server/package-update-manager.ts, src/server/skill-update-applier.adapter.test.ts, src/server/skill-update-applier.adapter.ts, src/server/skill-update-checker.adapter.test.ts, src/server/skill-update-checker.adapter.ts
 
 ## c3-238 — plugin-system (component)
 container: c3-2 | context: c3-0
@@ -328,7 +328,7 @@ files: src/shared/cron/**/*.ts
 ## c3-312 — packages-shared (component)
 container: c3-3 | context: c3-0
 refs: ref-side-effect-adapter, ref-strong-typing, rule-colocated-bun-test
-files: src/shared/packages/parse-claude-plugin-marketplace.test.ts, src/shared/packages/parse-claude-plugin-marketplace.ts, src/shared/packages/parse-claude-plugins.test.ts, src/shared/packages/parse-claude-plugins.ts, src/shared/packages/parse-codex-plugins.test.ts, src/shared/packages/parse-codex-plugins.ts, src/shared/packages/parse-skill-lock.test.ts, src/shared/packages/parse-skill-lock.ts, src/shared/packages/skill-update-classifier.test.ts, src/shared/packages/skill-update-classifier.ts, src/shared/packages/types.ts
+files: src/shared/packages/parse-claude-plugin-marketplace.test.ts, src/shared/packages/parse-claude-plugin-marketplace.ts, src/shared/packages/parse-claude-plugins.test.ts, src/shared/packages/parse-claude-plugins.ts, src/shared/packages/parse-codex-plugins.test.ts, src/shared/packages/parse-codex-plugins.ts, src/shared/packages/parse-skill-lock.test.ts, src/shared/packages/parse-skill-lock.ts, src/shared/packages/skill-update-classifier.test.ts, src/shared/packages/skill-update-classifier.ts, src/shared/packages/tag-order.test.ts, src/shared/packages/tag-order.ts, src/shared/packages/types.ts
 
 ## c3-313 — plugins-shared (component)
 container: c3-3 | context: c3-0
@@ -672,7 +672,9 @@ src/server/package-inventory-io.adapter.ts → c3-237
 src/server/package-update-appliers-boot.adapter.ts → c3-237
 src/server/package-update-manager.test.ts → c3-237
 src/server/package-update-manager.ts → c3-237
+src/server/skill-update-applier.adapter.test.ts → c3-237
 src/server/skill-update-applier.adapter.ts → c3-237
+src/server/skill-update-checker.adapter.test.ts → c3-237
 src/server/skill-update-checker.adapter.ts → c3-237
 src/server/__fixtures__/plugins/** → c3-238
 src/server/kanna-mcp-plugins.test.ts → c3-238
@@ -719,6 +721,8 @@ src/shared/packages/parse-skill-lock.test.ts → c3-312
 src/shared/packages/parse-skill-lock.ts → c3-312
 src/shared/packages/skill-update-classifier.test.ts → c3-312
 src/shared/packages/skill-update-classifier.ts → c3-312
+src/shared/packages/tag-order.test.ts → c3-312
+src/shared/packages/tag-order.ts → c3-312
 src/shared/packages/types.ts → c3-312
 src/shared/plugins/**/*.ts → c3-313
 src/shared/plugins/kanna-plugin.d.ts → c3-313
