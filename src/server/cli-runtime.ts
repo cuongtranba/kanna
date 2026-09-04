@@ -7,6 +7,9 @@ import { assertNoHostOverride, getShareCliFlag, isShareEnabled, isTokenShareMode
 import type { UpdateInstallErrorCode } from "../shared/types"
 import { PROD_SERVER_PORT } from "../shared/ports"
 import { runPluginCli } from "./plugin-cli-dispatch"
+import { configurePluginService } from "./plugins/plugin-service-host"
+import { createInstalledPluginStore } from "./plugins/installed-plugin-store"
+import { AppSettingsManager } from "./app-settings"
 import { CLI_SUPPRESS_OPEN_ONCE_ENV_VAR } from "./restart"
 import { logShareDetails, renderTerminalQr, startShareTunnel, type StartedShareTunnel } from "./share"
 
@@ -57,6 +60,14 @@ export interface CliRuntimeDeps {
   openUrl: (url: string) => void
   log: (message: string) => void
   warn: (message: string) => void
+  /**
+   * Boot step for the `plugin` subcommand: the CLI is its own process, so it
+   * must build the same settings-backed record store the server does, or
+   * `plugin install` writes bundles nothing remembers. Injectable because the
+   * default touches the real `settings.json` — a test drives the service it
+   * installed with `setPluginServiceForTest` and passes a no-op here.
+   */
+  preparePluginService?: () => Promise<void>
   renderShareQr?: (url: string) => Promise<string>
   startShareTunnel?: (localUrl: string, shareMode: Exclude<ShareMode, false>) => Promise<StartedShareTunnel>
 }
@@ -266,6 +277,13 @@ async function maybeSelfUpdate(_argv: string[], deps: CliRuntimeDeps) {
   return "startup_update"
 }
 
+/** Default `preparePluginService`: the real settings-backed wiring. */
+async function preparePluginServiceFromSettings(): Promise<void> {
+  const settings = new AppSettingsManager()
+  await settings.initialize()
+  configurePluginService(createInstalledPluginStore(settings))
+}
+
 export async function runCli(argv: string[], deps: CliRuntimeDeps): Promise<CliRunResult> {
   const parsedArgs = parseArgs(argv)
   if (parsedArgs.kind === "version") {
@@ -281,6 +299,7 @@ export async function runCli(argv: string[], deps: CliRuntimeDeps): Promise<CliR
     // both exist to protect the long-lived server this command never starts,
     // and silently restarting the process mid-`plugin ls` would be worse than
     // running it on an old Bun.
+    await (deps.preparePluginService ?? preparePluginServiceFromSettings)()
     return { kind: "exited", code: await runPluginCli(parsedArgs.args, { log: deps.log, warn: deps.warn }) }
   }
 

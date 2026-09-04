@@ -192,7 +192,8 @@ describe("P3 — HTTP surface inherits the auth gate", () => {
       reload: async () => {},
       clientBundle: async (id) => (id === "hello" ? "export default 1" : null),
       recordClientError: () => {},
-      setEnabled: () => {},
+      setEnabled: async () => {},
+      restore: () => {},
       start: async () => {},
       status: (id) => (id === "hello" ? { state: "running" } : undefined),
       call: async () => ({ ok: true, output: null }),
@@ -560,6 +561,68 @@ describe("P10 — the shared service reads every surface drives", () => {
       // reload on a DISABLED plugin leaves it stopped — only setEnabled starts it.
       await service.reload("hello")
       expect(service.status("hello")?.state).toBe("stopped")
+    } finally {
+      await rm(homeDir, { recursive: true, force: true })
+    }
+  }, 120_000)
+})
+
+// ------------------------------------------------- P11 an install survives a restart
+
+// The gap this closes: `createPluginService()` starts with an EMPTY in-memory
+// registry, so before the settings wire an install vanished on restart and a
+// CLI install was invisible to the running server — while its bundles sat on
+// disk the whole time.
+describe("P11 — installs persist across a restart", () => {
+  test("a second service restores what the first installed, without recompiling", async () => {
+    const { mkdtemp, rm } = await import("node:fs/promises")
+    const { tmpdir } = await import("node:os")
+    const { createPluginService } = await import("./plugins/plugin-service")
+    const { createInstalledPluginStore } = await import("./plugins/installed-plugin-store")
+
+    const homeDir = await mkdtemp(join(tmpdir(), "kanna-plugin-p11-"))
+    try {
+      // Stands in for settings.json across the "restart": the same rows outlive
+      // both service instances, which is exactly what settings does.
+      const rows: { id: string; sourceDir: string; enabled: boolean }[] = []
+      const settings = {
+        getSnapshot: () => ({ installedPlugins: rows }),
+        writePatch: async (patch: {
+          installedPlugins: { create?: { sourceDir: string; id: string }; update?: { id: string; patch: { enabled?: boolean } } }
+        }) => {
+          const { create, update } = patch.installedPlugins
+          if (create) rows.push({ id: create.id, sourceDir: create.sourceDir, enabled: false })
+          if (update) {
+            const row = rows.find((r) => r.id === update.id)
+            if (row && update.patch.enabled !== undefined) row.enabled = update.patch.enabled
+          }
+          return undefined
+        },
+      }
+      const installed = createInstalledPluginStore(settings)
+
+      const first = createPluginService({ homeDir, installed })
+      await first.install({ sourceDir: HELLO })
+      await first.setEnabled("hello", true)
+
+      expect(rows).toEqual([{ id: "hello", sourceDir: HELLO, enabled: true }])
+
+      // "Restart": a brand-new service with an empty registry.
+      const second = createPluginService({ homeDir, installed })
+      expect(second.list()).toEqual([])
+
+      second.restore()
+
+      expect(second.list()).toEqual([
+        { id: "hello", sourceDir: HELLO, enabled: true, state: "stopped" },
+      ])
+      // Restored WITHOUT recompiling: the build output the first install wrote
+      // is still on disk and is served as-is.
+      expect(await second.clientBundle("hello")).toContain("hello-plugin-surface")
+
+      // Restore is idempotent — a second call must not clobber a live record.
+      second.restore()
+      expect(second.list()).toHaveLength(1)
     } finally {
       await rm(homeDir, { recursive: true, force: true })
     }
