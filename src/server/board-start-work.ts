@@ -21,8 +21,10 @@ import {
   resolveStartWorkProjectId,
   type CardAdvance,
   type StartWorkResult,
+  type StartWorkStatus,
   type StartWorkView,
 } from "../shared/boards/start-work"
+import { describeBlockedReason } from "../shared/boards/dependencies"
 import { findActiveColumn, type BoardColumn, type Card, type CardActor } from "../shared/boards/types"
 import type { GitWorktree, StackBinding } from "../shared/types"
 import { resolveDefaultWorktreePath, type AddWorktreeOpts } from "./worktree-store.adapter"
@@ -83,14 +85,17 @@ async function resolve(deps: StartWorkDeps, cardId: string): Promise<ResolvedSta
 
   const detail = registry.cardDetail(cardId)
   if (!detail) throw new BoardStoreError("not_found", `card ${cardId} does not exist`)
-  const { card, links, externalRef } = detail
+  const { card, links, blockers, externalRef } = detail
 
   const board = registry.getBoard(card.boardId)
   if (!board) throw new BoardStoreError("not_found", `board ${card.boardId} does not exist`)
 
   const branch = cardBranchName(card.id, card.title, externalRef)
-  const blocked = (blockedReason: string): ResolvedStartWork => ({
-    view: { status: { kind: "idle" }, branch, blockedReason },
+  const blocked = (
+    blockedReason: string,
+    status: StartWorkStatus = { kind: "idle" },
+  ): ResolvedStartWork => ({
+    view: { status, branch, blockedReason },
     ready: false,
   })
 
@@ -105,12 +110,23 @@ async function resolve(deps: StartWorkDeps, cardId: string): Promise<ResolvedSta
     links.filter((link) => link.kind === "chat" && deps.chatExists(link.targetId)).map((link) => link.targetId),
   )
 
+  const status = deriveStartWorkStatus({ links, liveChatIds, existingWorktreePaths })
+
+  // Checked after the status is known, and only when work has not already
+  // begun. Blocking DEFERS starting; it must never take away the way back into
+  // a chat that is already running, which is what a blocker added mid-flight
+  // would otherwise do. A leftover worktree is not work under way — resuming it
+  // starts the work — so that case still defers, and reports the worktree it
+  // found rather than reading as though it had vanished.
+  if (status.kind !== "chat") {
+    const reason = describeBlockedReason(
+      blockers.filter((blocker) => !blocker.cleared).map((blocker) => blocker.title),
+    )
+    if (reason) return blocked(reason, status)
+  }
+
   return {
-    view: {
-      status: deriveStartWorkStatus({ links, liveChatIds, existingWorktreePaths }),
-      branch,
-      blockedReason: null,
-    },
+    view: { status, branch, blockedReason: null },
     ready: true,
     card,
     project,

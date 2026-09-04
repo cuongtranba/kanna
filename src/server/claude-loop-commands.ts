@@ -18,7 +18,7 @@ import { AUTO_CONTINUE_EVENT_VERSION, type AutoContinueEvent } from "./auto-cont
 import { deriveChatSchedules, deriveLastLoopSpec, deriveLoopState, type LoopSpec, type LoopState } from "./auto-continue/read-model"
 import { clearClaudeSessionContext } from "./claude-context-commands"
 import { timestamped } from "./claude-message-normalizer"
-import { buildTaskNotification } from "./claude-session-config"
+import { buildTaskNotification, resolveSpawnPaths } from "./claude-session-config"
 import {
   assertTrackingFileSafe,
   auditOracle,
@@ -36,6 +36,7 @@ import type { RunVerifyArgs, RunVerifyResult } from "./loop-verify-io.adapter"
 import type { BackgroundRunOutcome } from "./subagent-orchestrator"
 import type { ClaudeSessionState } from "./claude-session-state"
 import type { ArmedLoopInfo, SetupLoopHandlerResult } from "./kanna-mcp"
+import type { ChatRecord } from "./events"
 import { log } from "../shared/log"
 import { withSpan } from "./observability"
 
@@ -45,7 +46,12 @@ import { withSpan } from "./observability"
 
 /** Subset of EventStore used by these handlers. */
 interface LoopCommandStore {
-  getChat(chatId: string): { id: string; projectId: string } | null
+  /**
+   * `stackBindings` is carried because `setupLoop` resolves the chat's real
+   * working directory through `resolveSpawnPaths`. Narrowing it back out means
+   * the loop arms in the project checkout while the agent edits a worktree.
+   */
+  getChat(chatId: string): Pick<ChatRecord, "id" | "projectId" | "stackBindings"> | null
   getProject(projectId: string): { localPath: string; id: string } | null
   getAutoContinueEvents(chatId: string): AutoContinueEvent[]
   setSessionTokenForProvider(chatId: string, provider: AgentProvider, token: string | null): Promise<void>
@@ -403,7 +409,15 @@ export async function setupLoop(
   const project = deps.store.getProject(chat.projectId)
   if (!project) return { ok: false, errors: [`project ${chat.projectId} not found`] }
 
-  const validation = validateLoopSetup(args.input, project.localPath, {
+  // The tree this chat actually edits, not the project's registered path.
+  // `board-start-work.ts` gives every card-started chat a primary binding
+  // pointing at a fresh worktree, so defaulting to `project.localPath` ran the
+  // oracle and wrote the tracking-file skeleton in the main checkout — a
+  // different tree from the one the agent works in. Cron (`resolveChatCwd`)
+  // and the tracking-doc MCP tools already resolve it this way.
+  const chatCwd = resolveSpawnPaths(chat, project.localPath).cwd
+
+  const validation = validateLoopSetup(args.input, chatCwd, {
     // triggerMode MUST be carried: dropping it here is what let a
     // manual-trigger subagent arm a loop that could never delegate.
     roster: deps.getSubagents().map((s) => ({ id: s.id, name: s.name, triggerMode: s.triggerMode })),
@@ -413,9 +427,11 @@ export async function setupLoop(
 
   const resolved = validation.resolved
 
-  // A workdir outside the project must still be the SAME repository — a
-  // sibling worktree is the supported case, an arbitrary directory is not.
-  if (resolved.workdirAbs !== project.localPath) {
+  // A workdir the caller CHOSE must still be the same repository — a sibling
+  // worktree is the supported case, an arbitrary directory is not. The chat's
+  // own cwd needs no check: Kanna created that worktree itself. The comparison
+  // stays against `project.localPath` because that is the repository identity.
+  if (resolved.workdirAbs !== chatCwd) {
     const sameRepo = await deps.isWorktreeOfSameRepo(project.localPath, resolved.workdirAbs)
     if (!sameRepo) {
       return {

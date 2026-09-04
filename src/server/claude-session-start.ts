@@ -22,6 +22,7 @@ import {
   SDK_RESTRICTED_FS_NATIVE_TOOLS,
 } from "./claude-session-config"
 import { toSdkEffort } from "./claude-prompt-helpers"
+import { withAdditionalDirectoryMemory } from "./claude-spawn-helpers"
 import { AsyncMessageQueue, toClaudeMessageStream } from "./claude-sdk-queue"
 import { createClaudeHarnessStream } from "./claude-harness-stream"
 import { parseConfiguredContextWindowFromModelId } from "./claude-usage-math"
@@ -208,7 +209,13 @@ export async function startClaudeSession(args: {
           },
       settingSources: ["user", "project", "local"],
       pathToClaudeCodeExecutable: process.env.CLAUDE_EXECUTABLE?.replace(/^~(?=\/|$)/, homedir()) || undefined,
-      env: _deps.buildClaudeEnv(process.env, args.oauthToken, args.openrouterApiKey ? { apiKey: args.openrouterApiKey } : null),
+      // A stack spawn passes `additionalDirectories` to the SDK, which grants
+      // write access to each root; the memory switch is what makes it also
+      // READ each root's conventions. See `withAdditionalDirectoryMemory`.
+      env: withAdditionalDirectoryMemory(
+        _deps.buildClaudeEnv(process.env, args.oauthToken, args.openrouterApiKey ? { apiKey: args.openrouterApiKey } : null),
+        args.additionalDirectories,
+      ),
     },
   })
 

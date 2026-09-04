@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { ToolRequest } from "../shared/permission-policy"
+import { GLOBAL_PROMPT_APPEND_MAX_CHARS } from "../shared/app-settings-types"
 import type { ChatRecord, ProjectRecord, StackRecord } from "./events"
 import {
   buildAddProjectToStackEvent,
@@ -22,7 +23,9 @@ import {
   buildRenameStackEvent,
   buildRenameChatEvent,
   buildResolveToolRequestEvent,
+  buildSetProjectInstructionsEvent,
   buildSetProjectStarEvent,
+  buildSetStackInstructionsEvent,
   buildTurnCancelledEvent,
   buildTurnFailedEvent,
   buildTurnFinishedEvent,
@@ -252,6 +255,78 @@ describe("buildRenameStackEvent", () => {
     if (event?.type === "stack_renamed") {
       expect(event.title).toBe("New Name")
     }
+  })
+})
+
+// Two builders, one contract (adr-20260904): trim, treat blank as a clear,
+// return null when unchanged, throw when the entity is missing or deleted,
+// and cap at the same budget the global prompt uses.
+describe("buildSetProjectInstructionsEvent", () => {
+  test("returns the event with trimmed instructions", () => {
+    const projectsById = makeProjectsById()
+    const event = buildSetProjectInstructionsEvent(projectsById, "proj-1", "  never edit generated/  ")
+    expect(event?.type).toBe("project_instructions_set")
+    if (event?.type === "project_instructions_set") {
+      expect(event.instructions).toBe("never edit generated/")
+    }
+  })
+
+  test("returns null when unchanged", () => {
+    const projectsById = new Map([["proj-1", { ...makeProject("proj-1"), instructions: "keep" }]])
+    expect(buildSetProjectInstructionsEvent(projectsById, "proj-1", " keep ")).toBeNull()
+  })
+
+  test("returns null when clearing an already-absent value", () => {
+    expect(buildSetProjectInstructionsEvent(makeProjectsById(), "proj-1", "   ")).toBeNull()
+  })
+
+  test("clears with an empty string when a value is present", () => {
+    const projectsById = new Map([["proj-1", { ...makeProject("proj-1"), instructions: "old" }]])
+    const event = buildSetProjectInstructionsEvent(projectsById, "proj-1", "  ")
+    expect(event?.type).toBe("project_instructions_set")
+    if (event?.type === "project_instructions_set") expect(event.instructions).toBe("")
+  })
+
+  test("throws when the project is missing or deleted", () => {
+    expect(() => buildSetProjectInstructionsEvent(makeProjectsById(), "nope", "x")).toThrow()
+    const deleted = new Map([["proj-1", { ...makeProject("proj-1"), deletedAt: TS }]])
+    expect(() => buildSetProjectInstructionsEvent(deleted, "proj-1", "x")).toThrow()
+  })
+
+  test("throws when over the shared prompt cap", () => {
+    const projectsById = makeProjectsById()
+    const tooLong = "x".repeat(GLOBAL_PROMPT_APPEND_MAX_CHARS + 1)
+    expect(() => buildSetProjectInstructionsEvent(projectsById, "proj-1", tooLong)).toThrow()
+    const atCap = "x".repeat(GLOBAL_PROMPT_APPEND_MAX_CHARS)
+    expect(buildSetProjectInstructionsEvent(projectsById, "proj-1", atCap)).not.toBeNull()
+  })
+})
+
+describe("buildSetStackInstructionsEvent", () => {
+  test("returns the event with trimmed instructions", () => {
+    const stacksById = new Map([["stack-1", makeStack()]])
+    const event = buildSetStackInstructionsEvent(stacksById, "stack-1", "  api is upstream of web  ")
+    expect(event?.type).toBe("stack_instructions_set")
+    if (event?.type === "stack_instructions_set") {
+      expect(event.instructions).toBe("api is upstream of web")
+    }
+  })
+
+  test("returns null when unchanged", () => {
+    const stacksById = new Map([["stack-1", makeStack({ instructions: "same" })]])
+    expect(buildSetStackInstructionsEvent(stacksById, "stack-1", "same")).toBeNull()
+  })
+
+  test("throws when the stack is missing or deleted", () => {
+    const stacksById = new Map([["stack-1", makeStack({ deletedAt: TS })]])
+    expect(() => buildSetStackInstructionsEvent(stacksById, "stack-1", "x")).toThrow()
+    expect(() => buildSetStackInstructionsEvent(new Map(), "stack-1", "x")).toThrow()
+  })
+
+  test("throws when over the shared prompt cap", () => {
+    const stacksById = new Map([["stack-1", makeStack()]])
+    const tooLong = "x".repeat(GLOBAL_PROMPT_APPEND_MAX_CHARS + 1)
+    expect(() => buildSetStackInstructionsEvent(stacksById, "stack-1", tooLong)).toThrow()
   })
 })
 

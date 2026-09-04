@@ -1,7 +1,7 @@
 ---
 id: c3-3
 c3-version: 4
-c3-seal: d706c048a87f59f2eb49eff40cef080543a79608a783075884be0bbecc2a519a
+c3-seal: 2b2f50a7552377ce6296b904d9258c412937731d012e6601721181fefd67482c
 title: Shared
 type: container
 boundary: library
@@ -38,3 +38,4 @@ Publish the wire protocol, core domain types, tool-call normalization, port and 
 | c3-311 | cron-domain | feature | active | Own the pure /cron command domain: grammar parsing with field-level |
 | c3-312 | packages-shared | feature | active | Own the PackageKind union and the pure lock-file parsers both the server updater and the settings UI read, so the two cannot disagree about what is installed. |
 | c3-313 | plugins-shared | feature | active | Own the pure plugin vocabulary both halves of Kanna must agree on: the manifest shape and its id rules, the installed-plugin settings record, the on-disk path layout, the bounded log ring, and the ambient declarations a plugin author codes against. |
+| c3-314 | stacks-domain | feature | active | Own the pure stack-domain shapes and the activity fold that answers what is running across a stack right now. |

@@ -30,7 +30,7 @@ import type {
   ResolvedStackBinding,
   Subagent,
 } from "../shared/types"
-import { buildKannaSystemPromptAppend } from "../shared/kanna-system-prompt"
+import { buildKannaSystemPromptAppend, type KannaSystemPromptOptions } from "../shared/kanna-system-prompt"
 import { resolveModelPrice, stripModelVariantSuffix } from "../shared/token-pricing"
 import type { ModelPrice } from "../shared/token-pricing"
 import { maskOauthKey } from "../shared/mask-oauth-key"
@@ -79,6 +79,12 @@ export interface SpawnClaudeTurnArgs {
   localPath: string
   additionalDirectories?: string[]
   stackProjects?: ResolvedStackBinding[]
+  /**
+   * Workspace / stack / per-project instruction blocks for this turn, resolved
+   * by the caller so the Claude and Codex branches cannot disagree about them.
+   * Omitted, the workspace block is still read from settings as before.
+   */
+  instructions?: Omit<KannaSystemPromptOptions, "stackProjects">
   model: string
   effort?: string
   planMode: boolean
@@ -226,6 +232,7 @@ export async function spawnClaudeTurn(
     const usePty = driverIsPty
     const systemPromptAppend = buildKannaSystemPromptAppend(deps.getSubagents(), {
       globalPromptAppend: deps.getAppSettingsSnapshot().globalPromptAppend,
+      ...args.instructions,
       stackProjects: args.stackProjects,
     })
     const chatIdForCtx = args.chatId

@@ -217,6 +217,41 @@ describe("startTurnForChat", () => {
     expect(deps.startClaudeTurn as ReturnType<typeof mock>).not.toHaveBeenCalled()
   })
 
+  // Switching a stack chat to Codex used to drop the stack silently — same
+  // full filesystem reach, but no idea the peer roots existed.
+  describe("9b. Codex developer_instructions carry the stack", () => {
+    function depsForBindings(stackBindings?: unknown) {
+      const deps = makeDeps()
+      const chat = makeFakeChatRecord(stackBindings ? { stackBindings } : {})
+      deps.store.requireChat = mock(() => chat) as never
+      return deps
+    }
+
+    function instructionsOfSession(deps: StartTurnDeps): string | undefined {
+      const call = (deps.codexManager.startSession as ReturnType<typeof mock>).mock.calls[0]
+      return (call?.[0] as { developerInstructions?: string }).developerInstructions
+    }
+
+    test("names each bound project for a stack chat", async () => {
+      const deps = depsForBindings([
+        { projectId: "proj-1", worktreePath: "/work/be", role: "primary" },
+        { projectId: "proj-1b", worktreePath: "/work/fe", role: "additional" },
+      ])
+      await startTurnForChat(deps, makeArgs({ provider: "codex" }))
+      const instructions = instructionsOfSession(deps) ?? ""
+      expect(instructions).toContain("## Stack projects")
+      expect(instructions).toContain("/work/be")
+      expect(instructions).toContain("/work/fe")
+    })
+
+    test("a solo chat gets the workspace block and no stack block", async () => {
+      const deps = depsForBindings()
+      deps.getAppSettingsSnapshot = mock(() => ({ globalPromptAppend: "Always TDD." })) as never
+      await startTurnForChat(deps, makeArgs({ provider: "codex" }))
+      expect(instructionsOfSession(deps)).toBe("## Workspace instructions\n\nAlways TDD.")
+    })
+  })
+
   test("10. routes to startClaudeTurn for claude provider", async () => {
     const deps = makeDeps()
     const fakeTurn = makeFakeTurn()

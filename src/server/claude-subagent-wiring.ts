@@ -24,7 +24,7 @@ import type {
 import type { HarnessToolRequest } from "./harness-types"
 import type { ClaudeSessionHandle } from "./harness-types"
 import type { ArmedLoopInfo, KannaMcpDelegationContext } from "./kanna-mcp"
-import type { ChatRecord, ProjectRecord, SubagentRunEvent } from "./events"
+import type { ChatRecord, ProjectRecord, StackRecord, SubagentRunEvent } from "./events"
 import type { ProviderRunStart, SubagentOrchestrator } from "./subagent-orchestrator"
 import type { BuildSubagentProviderRunArgs } from "./subagent-provider-run"
 import { buildSubagentProviderRun } from "./subagent-provider-run"
@@ -38,7 +38,7 @@ import type { WorkflowRegistry } from "./workflow-registry"
 import type { CodexAppServerManager } from "./codex-app-server"
 import type { RealpathFn } from "./paths"
 import { resolveSubagentRoots } from "./paths"
-import { resolveSpawnPaths, resolveStackProjects } from "./claude-session-config"
+import { resolveProjectInstructions, resolveSpawnPaths, resolveStackProjects } from "./claude-session-config"
 import { openrouterAuthReady, claudeAuthReady } from "./provider-catalog"
 import { OAuthPoolUnavailableError } from "./oauth-errors"
 // Type-only import — no IO is pulled in from the SDK session start module.
@@ -52,6 +52,7 @@ import type { startClaudeSession as StartClaudeSessionFn } from "./claude-sessio
 interface SubagentWiringStore {
   requireChat(chatId: string): ChatRecord
   getProject(id: string): ProjectRecord | null | undefined
+  getStack(stackId: string): StackRecord | null | undefined
   appendSubagentEvent(event: SubagentRunEvent): Promise<void>
 }
 
@@ -274,9 +275,20 @@ export function buildSubagentProviderRunForChat(
     additionalDirectories: spawn.additionalDirectories,
     // Only label stack projects for unrestricted runs — a path-restricted
     // subagent cannot reach every root, so listing them all would mislead.
+    // The instruction blocks are suppressed for the same reason.
     stackProjects: restriction
       ? []
-      : resolveStackProjects(chat, (id) => deps.store.getProject(id)?.title),
+      : resolveStackProjects(chat, (id) => {
+          const p = deps.store.getProject(id)
+          return p ? { title: p.title, active: true } : undefined
+        }),
+    instructions: restriction ? undefined : {
+      stackInstructions: chat.stackId ? deps.store.getStack(chat.stackId)?.instructions : undefined,
+      projectInstructions: resolveProjectInstructions(chat, (id) => {
+        const p = deps.store.getProject(id)
+        return p ? { title: p.title, instructions: p.instructions } : undefined
+      }),
+    },
     allowedPaths: restriction?.allowedPaths,
     projectId: project.id,
     startClaudeSession: buildClaudeSubagentStarter(deps),

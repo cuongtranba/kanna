@@ -137,6 +137,7 @@ export function getReplayEventPriority(event: StoreEvent): number {
     case "project_removed":
     case "sidebar_project_order_set":
     case "project_star_set":
+    case "project_instructions_set":
       return 0
     case "chat_created":
       return 1
@@ -190,6 +191,7 @@ export function getReplayEventPriority(event: StoreEvent): number {
     case "stack_renamed":
     case "stack_project_added":
     case "stack_project_removed":
+    case "stack_instructions_set":
       return 0
     case "subagent_run_started":
     case "subagent_message_delta":

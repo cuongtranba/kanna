@@ -22,7 +22,8 @@ import type { LoopTrackingSnapshot } from "../shared/loop-progress"
 import { buildLoopProgress } from "../shared/loop-progress"
 import type { ChatRecord, ChatTimingState, StoreState } from "./events"
 import { resolveLocalPath } from "./paths"
-import { resolveSpawnPaths } from "./claude-session-config"
+import { resolveSpawnPaths, resolveStackProjects } from "./claude-session-config"
+import { aggregateStackActivity } from "../shared/stack-activity"
 import { SERVER_PROVIDERS } from "./provider-catalog"
 import { deriveChatSchedules, deriveLoopState } from "./auto-continue/read-model"
 import { deriveCronJobs } from "./cron/read-model"
@@ -238,6 +239,7 @@ export function deriveSidebarData(
       defaultCollapsed: chats.every((chat) => !isSidebarChatRecent(chat, nowMs)),
       ...(project.starredAt != null ? { starredAt: project.starredAt } : {}),
       ...(sourceProvider != null ? { sourceProvider } : {}),
+      ...(project.instructions ? { instructions: project.instructions } : {}),
     }
   })
 
@@ -250,7 +252,23 @@ export function deriveSidebarData(
     })
   const projectGroups = allGroups.filter((g) => g.starredAt == null)
 
-  return { starredProjectGroups, projectGroups, stacks: stackSummaries(state) }
+  // Rolled up from the rows just built, so the stack row and the chat rows
+  // under it can never disagree about what is running.
+  const activityByStackId = new Map<string, ChatActivity[]>()
+  for (const group of allGroups) {
+    for (const chat of group.chats) {
+      if (!chat.stackId) continue
+      const bucket = activityByStackId.get(chat.stackId)
+      if (bucket) bucket.push(chat.activity)
+      else activityByStackId.set(chat.stackId, [chat.activity])
+    }
+  }
+
+  return {
+    starredProjectGroups,
+    projectGroups,
+    stacks: stackSummaries(state, activityByStackId),
+  }
 }
 
 export function deriveLocalProjectsSnapshot(
@@ -410,17 +428,14 @@ export function deriveChatSnapshot(
   const { schedules, liveScheduleId } = deriveChatSchedules(autoContinueEvents, chat.id)
   const { tunnels, liveTunnelId } = deriveChatTunnels(getTunnelEvents(chat.id), chat.id)
 
+  // One resolver, shared with the spawn path (`claude-session-config.ts`).
+  // The inline copy that used to live here agreed with it only because
+  // `store.getProject` filters `deletedAt` — a drift risk, so the two are now
+  // literally the same function.
   const resolvedBindings = chat.stackBindings && chat.stackBindings.length > 0
-    ? chat.stackBindings.map((binding) => {
-        const bindingProject = state.projectsById.get(binding.projectId)
-        const projectStatus: "active" | "missing" = bindingProject && !bindingProject.deletedAt ? "active" : "missing"
-        return {
-          projectId: binding.projectId,
-          projectTitle: bindingProject?.title ?? "(missing)",
-          worktreePath: binding.worktreePath,
-          role: binding.role,
-          projectStatus,
-        }
+    ? resolveStackProjects(chat, (id) => {
+        const project = state.projectsById.get(id)
+        return project ? { title: project.title, active: !project.deletedAt } : undefined
       })
     : undefined
 
@@ -484,15 +499,24 @@ export function deriveChatSnapshot(
   }
 }
 
-export function stackSummaries(state: StoreState): StackSummary[] {
+export function stackSummaries(
+  state: StoreState,
+  activityByStackId: ReadonlyMap<string, ChatActivity[]> = new Map(),
+): StackSummary[] {
   return [...state.stacksById.values()]
     .filter((s) => !s.deletedAt)
-    .map((s) => ({
-      id: s.id,
-      title: s.title,
-      projectIds: [...s.projectIds],
-      memberCount: s.projectIds.length,
-      createdAt: s.createdAt,
-      updatedAt: s.updatedAt,
-    }))
+    .map((s) => {
+      const activity = aggregateStackActivity(activityByStackId.get(s.id) ?? [])
+      return {
+        id: s.id,
+        title: s.title,
+        projectIds: [...s.projectIds],
+        memberCount: s.projectIds.length,
+        createdAt: s.createdAt,
+        updatedAt: s.updatedAt,
+        ...(s.instructions ? { instructions: s.instructions } : {}),
+        // Omitted when idle, so the row renders no indicator at all.
+        ...(activity.activeChats > 0 ? { activity } : {}),
+      }
+    })
 }

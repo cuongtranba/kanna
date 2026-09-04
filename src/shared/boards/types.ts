@@ -6,6 +6,8 @@
  * this module is legal everywhere under the side-effect seal.
  */
 
+import type { CardBlocker } from "./dependencies"
+
 // ── Boards ────────────────────────────────────────────────────────────────────
 
 /**
@@ -154,8 +156,12 @@ export interface Card {
  * user was asked what to do with that worktree and said "leave it". It lives
  * here because it is exactly a (card, worktree) pair, which is what this table
  * stores.
+ *
+ * `blocked_by` is an ordering edge — the card waits on `targetId` — and is the
+ * one kind the store VALIDATES rather than merely records: see
+ * `./dependencies` and the DAG check in `board-registry.ts`.
  */
-export type CardLinkKind = "chat" | "worktree" | "pr" | "card" | "cleanup_declined"
+export type CardLinkKind = "chat" | "worktree" | "pr" | "card" | "cleanup_declined" | "blocked_by"
 
 export interface CardLink {
   cardId: string
@@ -318,7 +324,14 @@ const SYNC_DIRECTIONS: readonly SyncDirection[] = ["pull", "push", "both"]
 const REMOTE_KINDS: readonly RemoteKind[] = ["state", "label", "projectField"]
 const OUTBOX_OPS: readonly OutboxOp[] = ["create", "update", "move", "close"]
 const BOARD_OWNER_KINDS: readonly BoardOwnerKind[] = ["project", "stack"]
-const CARD_LINK_KINDS: readonly CardLinkKind[] = ["chat", "worktree", "pr", "card", "cleanup_declined"]
+const CARD_LINK_KINDS: readonly CardLinkKind[] = [
+  "chat",
+  "worktree",
+  "pr",
+  "card",
+  "cleanup_declined",
+  "blocked_by",
+]
 
 export function isColumnSemantic(value: string): value is ColumnSemantic {
   return COLUMN_SEMANTICS.some((entry) => entry === value)
@@ -431,6 +444,13 @@ export interface CardDetail {
   card: Card
   links: CardLink[]
   comments: CardComment[]
+  /**
+   * The cards this one waits on, resolved to titles and to whether each still
+   * holds. Carried here rather than re-derived per caller for the same reason
+   * `externalRef` is: `links` names only ids, and a drawer that had to fetch
+   * each blocker to name it would fan out one request per edge.
+   */
+  blockers: readonly CardBlocker[]
   /**
    * The tracker's own reference for this card — a GitHub issue number — or null
    * when the card came from nowhere.

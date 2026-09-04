@@ -48,5 +48,8 @@ scripts/pm2.config.cjs
 # pm2 local secrets (cloudflared token, password) — sourced by deploy.sh
 scripts/pm2.env
 .c3/c3.db
+# SQLite's WAL sidecars for that cache — same file, so the same reasons apply.
+.c3/c3.db-shm
+.c3/c3.db-wal
 # Per-machine c3x command log — local noise, like the cache above.
 .c3/activity.jsonl

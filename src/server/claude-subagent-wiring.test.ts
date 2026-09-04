@@ -55,6 +55,7 @@ function makeDeps(overrides: Partial<SubagentWiringDeps> = {}): SubagentWiringDe
         createdAt: 0,
         updatedAt: 0,
       } as never),
+      getStack: () => null,
       appendSubagentEvent: async () => {},
     },
     startClaudeSessionFn: async (_a) => fakeSession as never,
@@ -228,6 +229,7 @@ describe("buildSubagentProviderRunForChat", () => {
       store: {
         requireChat: (_chatId) => ({ id: _chatId, projectId: "proj-missing" } as never),
         getProject: (_id) => undefined,
+        getStack: () => null,
         appendSubagentEvent: async () => {},
       },
     })
@@ -260,6 +262,7 @@ describe("buildSubagentProviderRunForChat", () => {
           ({ id: _chatId, projectId: "proj-1", stackProjectIds: [] } as never),
         getProject: (_id) =>
           ({ id: "proj-1", localPath: "/tmp/test-project", title: "Test" } as never),
+        getStack: () => null,
         appendSubagentEvent: async () => {},
       },
     })

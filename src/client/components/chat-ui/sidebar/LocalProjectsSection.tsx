@@ -1,4 +1,4 @@
-import { memo, type MouseEvent as ReactMouseEvent, type ReactNode, useMemo } from "react"
+import { memo, type MouseEvent as ReactMouseEvent, type ReactNode, useCallback, useMemo } from "react"
 import { ChevronRight, GripVertical, Loader2, MoreHorizontal, SquarePen, Star } from "lucide-react"
 import {
   DndContext,
@@ -28,6 +28,8 @@ import { APP_NAME } from "../../../../shared/branding"
 import { getPathBasename } from "../../../lib/formatters"
 import { cn } from "../../../lib/utils"
 import { ProjectSectionMenu } from "./Menus"
+import { InstructionsDialog } from "./InstructionsDialog"
+import { useKannaSidebarStore } from "../../../stores/kannaSidebarStore"
 import type { DomPort } from "../../../ports/domPort"
 import { domAdapter } from "../../../adapters/dom.adapter"
 
@@ -52,6 +54,7 @@ interface Props {
   onHideProject?: (projectId: string) => void
   onOpenBoards?: (projectId: string) => void
   onToggleStar?: (projectId: string, starred: boolean) => void
+  onSetInstructions?: (projectId: string, instructions: string) => void
   onReorderGroups?: (newOrder: string[]) => void
   isConnected?: boolean
   startingLocalPath?: string | null
@@ -73,6 +76,7 @@ interface SortableProjectGroupProps {
   onHideProject?: (projectId: string) => void
   onOpenBoards?: (projectId: string) => void
   onToggleStar?: (projectId: string, starred: boolean) => void
+  onSetInstructions?: (projectId: string, instructions: string) => void
   isConnected?: boolean
   startingLocalPath?: string | null
   dom: DomPort
@@ -190,6 +194,7 @@ const SortableProjectGroup = memo(({
   onHideProject,
   onOpenBoards,
   onToggleStar,
+  onSetInstructions,
   isConnected,
   startingLocalPath,
   dom,
@@ -199,6 +204,19 @@ const SortableProjectGroup = memo(({
   const isEmptyProject = group.chats.length === 0
   const hasMore = group.olderChats.length > 0
   const hasProjectMenu = Boolean(onHideProject && onCopyPath && onOpenExternalPath)
+  // Dialog openness lives in the sidebar store, one project at a time — the
+  // same shape as the stack panels, and `useState` is banned in src/client.
+  const instructionsOpen = useKannaSidebarStore((s) => s.instructionsProjectId === groupKey)
+  const setInstructionsProjectId = useKannaSidebarStore((s) => s.setInstructionsProjectId)
+
+  const handleInstructionsOpenChange = useCallback(
+    (open: boolean) => setInstructionsProjectId(open ? groupKey : null),
+    [groupKey, setInstructionsProjectId],
+  )
+  const handleSaveInstructions = useCallback(
+    (instructions: string) => onSetInstructions?.(groupKey, instructions),
+    [groupKey, onSetInstructions],
+  )
 
   const {
     attributes,
@@ -274,6 +292,7 @@ const SortableProjectGroup = memo(({
                   onOpenInFinder={() => onOpenExternalPath?.("open_finder", localPath)}
                   onOpenInEditor={() => onOpenExternalPath?.("open_editor", localPath)}
                   onToggleStar={() => onToggleStar?.(groupKey, group.starredAt === undefined)}
+                  onEditInstructions={onSetInstructions ? () => setInstructionsProjectId(groupKey) : undefined}
                   onHide={() => onHideProject?.(groupKey)}
                   onOpenBoards={onOpenBoards ? () => onOpenBoards(groupKey) : undefined}
                 >
@@ -337,6 +356,17 @@ const SortableProjectGroup = memo(({
       )}
     >
       {header}
+
+      {onSetInstructions ? (
+        <InstructionsDialog
+          open={instructionsOpen}
+          onOpenChange={handleInstructionsOpenChange}
+          title={getPathBasename(localPath)}
+          description="Conventions for this project. Every chat that can write it — including a stack chat rooted elsewhere — is told these."
+          initialValue={group.instructions ?? ""}
+          onSave={handleSaveInstructions}
+        />
+      ) : null}
 
       {!collapsedSections.has(groupKey) && (isEmptyProject ? Boolean(onNewLocalChat) : group.previewChats.length > 0 || hasMore) && (
         <div className="flex flex-col gap-px pl-1">
@@ -404,6 +434,7 @@ const LocalProjectsSectionImpl = function LocalProjectsSection({
   onHideProject,
   onOpenBoards,
   onToggleStar,
+  onSetInstructions,
   onReorderGroups,
   isConnected,
   startingLocalPath,
@@ -491,6 +522,7 @@ const LocalProjectsSectionImpl = function LocalProjectsSection({
               onHideProject={onHideProject}
               onOpenBoards={onOpenBoards}
               onToggleStar={onToggleStar}
+              onSetInstructions={onSetInstructions}
               isConnected={isConnected}
               startingLocalPath={startingLocalPath}
               dom={dom}

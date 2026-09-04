@@ -3,6 +3,8 @@ import {
   LOOP_BLOCKED_NATIVE_TOOLS,
   buildCanUseTool,
   buildClaudeEnv,
+  withAdditionalDirectoryMemory,
+  ADDITIONAL_DIRECTORY_MEMORY_ENV,
   type BuildCanUseToolArgs,
 } from "./claude-spawn-helpers"
 import type { ToolCallbackService } from "./tool-callback"
@@ -217,5 +219,45 @@ describe("buildClaudeEnv", () => {
     const base: NodeJS.ProcessEnv = { CLAUDE_CODE_OAUTH_TOKEN: "existing" }
     const result = buildClaudeEnv(base, null)
     expect(result.CLAUDE_CODE_OAUTH_TOKEN).toBe("existing")
+  })
+})
+
+// ── withAdditionalDirectoryMemory ────────────────────────────────────────────
+
+/**
+ * Claude Code does not load a `--add-dir` root's CLAUDE.md unless this is set,
+ * so before it a stack chat could WRITE project B while knowing none of B's
+ * conventions.
+ */
+describe("withAdditionalDirectoryMemory", () => {
+  test("sets the switch when the spawn has additional roots", () => {
+    const env = withAdditionalDirectoryMemory({}, ["/repo-b"])
+    expect(env[ADDITIONAL_DIRECTORY_MEMORY_ENV]).toBe("1")
+  })
+
+  // A solo chat's context must be byte-for-byte what it was before this
+  // feature: extra memory files are only worth their tokens when there are
+  // extra roots to be correct about.
+  test("leaves a single-root spawn untouched", () => {
+    expect(withAdditionalDirectoryMemory({}, [])[ADDITIONAL_DIRECTORY_MEMORY_ENV]).toBeUndefined()
+    expect(withAdditionalDirectoryMemory({}, undefined)[ADDITIONAL_DIRECTORY_MEMORY_ENV])
+      .toBeUndefined()
+  })
+
+  test("KANNA_STACK_MEMORY=disabled opts out even with additional roots", () => {
+    const env = withAdditionalDirectoryMemory({ KANNA_STACK_MEMORY: "disabled" }, ["/repo-b"])
+    expect(env[ADDITIONAL_DIRECTORY_MEMORY_ENV]).toBeUndefined()
+  })
+
+  test("any other KANNA_STACK_MEMORY value stays enabled", () => {
+    const env = withAdditionalDirectoryMemory({ KANNA_STACK_MEMORY: "enabled" }, ["/repo-b"])
+    expect(env[ADDITIONAL_DIRECTORY_MEMORY_ENV]).toBe("1")
+  })
+
+  test("preserves the rest of the environment and does not mutate the input", () => {
+    const base: NodeJS.ProcessEnv = { PATH: "/usr/bin" }
+    const env = withAdditionalDirectoryMemory(base, ["/repo-b"])
+    expect(env.PATH).toBe("/usr/bin")
+    expect(base[ADDITIONAL_DIRECTORY_MEMORY_ENV]).toBeUndefined()
   })
 })

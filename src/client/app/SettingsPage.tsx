@@ -716,7 +716,7 @@ export function GlobalInstructionsSection({ state }: { state: KannaState }) {
     <div className="border-b border-border">
       <SettingsRow
         title="Global Instructions"
-        description="Appended to every Claude and Codex turn — including subagent turns. Kanna does not read CLAUDE.md or AGENTS.md from disk; paste your global instructions here. Leave blank to disable."
+        description="Appended to every Claude and Codex turn — including subagent turns — as “Workspace instructions”. Kanna does not read CLAUDE.md or AGENTS.md from disk; paste your global instructions here. For rules that apply to one project only, use “Edit instructions” in that project's sidebar menu. Leave blank to disable."
         bordered={false}
         alignStart
       >

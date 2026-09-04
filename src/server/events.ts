@@ -106,6 +106,13 @@ export type ProjectEvent = {
   timestamp: number
   projectId: string
   starredAt: number | null
+} | {
+  v: 3
+  type: "project_instructions_set"
+  timestamp: number
+  projectId: string
+  /** Trimmed; empty string clears. See adr-20260904. */
+  instructions: string
 }
 
 export type ChatEvent =
@@ -306,6 +313,14 @@ export type StackEvent =
       stackId: string
       projectId: string
     }
+  | {
+      v: 3
+      type: "stack_instructions_set"
+      timestamp: number
+      stackId: string
+      /** Trimmed; empty string clears. See adr-20260904. */
+      instructions: string
+    }
 
 export type SubagentRunEvent =
   | {
@@ -436,6 +451,7 @@ export const LOG_OF_EVENT = {
   project_removed: "projects",
   sidebar_project_order_set: "projects",
   project_star_set: "projects",
+  project_instructions_set: "projects",
   chat_created: "chats",
   chat_renamed: "chats",
   chat_deleted: "chats",
@@ -461,6 +477,7 @@ export const LOG_OF_EVENT = {
   stack_renamed: "stacks",
   stack_project_added: "stacks",
   stack_project_removed: "stacks",
+  stack_instructions_set: "stacks",
   subagent_run_started: "turns",
   subagent_message_delta: "turns",
   subagent_entry_appended: "turns",
@@ -495,6 +512,8 @@ export interface StackRecord {
   createdAt: number
   updatedAt: number
   deletedAt?: number
+  /** How this stack's projects relate; rendered as `## Stack instructions`. */
+  instructions?: string
 }
 
 export function createEmptyState(): StoreState {

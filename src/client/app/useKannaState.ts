@@ -617,11 +617,13 @@ export interface KannaState {
   handleToggleProjectStar: (projectId: string, starred: boolean) => Promise<void>
   handleReorderProjectGroups: (projectIds: string[]) => Promise<void>
   stacks: StackSummary[]
+  handleSetProjectInstructions: (projectId: string, instructions: string) => Promise<void>
   handleCreateStack: (title: string, projectIds: string[]) => Promise<void>
   handleRenameStack: (stackId: string, title: string) => Promise<void>
   handleRemoveStack: (stackId: string) => Promise<void>
   handleAddProjectToStack: (stackId: string, projectId: string) => Promise<void>
   handleRemoveProjectFromStack: (stackId: string, projectId: string) => Promise<void>
+  handleSetStackInstructions: (stackId: string, instructions: string) => Promise<void>
   handleCreateStackChat: (primaryProjectId: string, stackId: string, stackBindings: Array<{ projectId: string; worktreePath: string; role: "primary" | "additional" }>) => Promise<void>
   handleListStackWorktrees: (projectId: string) => Promise<GitWorktree[]>
   importClaudeSessions: () => Promise<{ imported: number; updated: number; skipped: number; failed: number; newProjects: number }>

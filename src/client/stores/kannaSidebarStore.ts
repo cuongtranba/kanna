@@ -99,6 +99,8 @@ interface KannaSidebarState {
   stackCreatePanelOpen: boolean
   stackEditId: string | null
   stackDeleteConfirmId: string | null
+  /** Project whose instructions dialog is open. One at a time, like the stack panels. */
+  instructionsProjectId: string | null
   stackChatCreateId: string | null
   stackChatWorktrees: Map<string, GitWorktree[]>
   stackChatLoading: boolean
@@ -128,6 +130,7 @@ interface KannaSidebarState {
   openStackEditPanel: (stackId: string) => void
   closeStackPanel: () => void
   setStackDeleteConfirmId: (id: string | null) => void
+  setInstructionsProjectId: (projectId: string | null) => void
 
   // ─── Stack chat creation ──────────────────────────────────────────────────
   beginStackChatCreate: (stackId: string) => void
@@ -157,6 +160,7 @@ export const useKannaSidebarStore = create<KannaSidebarState>()((set) => ({
   stackCreatePanelOpen: false,
   stackEditId: null,
   stackDeleteConfirmId: null,
+  instructionsProjectId: null,
   stackChatCreateId: null,
   stackChatWorktrees: EMPTY_STACK_CHAT_WORKTREES,
   stackChatLoading: false,
@@ -254,6 +258,8 @@ export const useKannaSidebarStore = create<KannaSidebarState>()((set) => ({
     ),
 
   setStackDeleteConfirmId: (id) => set({ stackDeleteConfirmId: id }),
+
+  setInstructionsProjectId: (projectId) => set({ instructionsProjectId: projectId }),
 
   beginStackChatCreate: (stackId) =>
     set({ stackChatCreateId: stackId, stackChatLoading: true }),

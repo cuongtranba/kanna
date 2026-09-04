@@ -15,6 +15,7 @@ import {
   listLiveSchedules,
   clearClaudeSessionContext,
   deliverSubagentToMain,
+  setupLoop,
   stopLoop,
 } from "./claude-loop-commands"
 
@@ -194,6 +195,132 @@ describe("clearClaudeSessionContext", () => {
     await clearClaudeSessionContext(deps, "chat-1")
     expect(fakeSession.suppressSessionTokenPersist).toBe(true)
     expect(closed).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// setupLoop — which tree the loop arms in
+// ---------------------------------------------------------------------------
+
+/**
+ * `board-start-work.ts` gives EVERY card-started chat a primary stack binding
+ * pointing at a fresh worktree, so "the project's registered path" and "the
+ * tree this chat edits" are routinely different directories. Arming against
+ * the former ran the oracle and wrote the tracking-file skeleton in the main
+ * checkout while the agent worked in the worktree.
+ */
+describe("setupLoop — arms in the chat's own tree", () => {
+  const validInput = {
+    goal: "eslint --max-warnings=0 passes",
+    verifyCommand: "bun run lint",
+    subagentId: "sub-1",
+  }
+
+  function depsForChat(chat: { id: string; projectId: string; stackBindings?: unknown }) {
+    const store = makeStore()
+    store.chats.set(chat.id, chat as never)
+    const verifyCalls: { cwd: string }[] = []
+    const ensured: { absPath: string }[] = []
+    const emitted: AutoContinueEvent[] = []
+    const deps = makeDeps({
+      store,
+      getSubagents: () => [{ id: "sub-1", name: "Worker", triggerMode: "auto" } as never],
+      // The shared fake's default closes over its OWN store, so an injected
+      // store never sees the events. Capture them here instead.
+      emitAutoContinueEvent: async (event) => {
+        emitted.push(event)
+        store.events.push(event)
+      },
+      runVerifyCommand: async (args) => {
+        verifyCalls.push({ cwd: args.cwd })
+        return { exitCode: 1, output: "not done", timedOut: false, durationMs: 1 }
+      },
+      ensureTrackingFile: async (args) => {
+        ensured.push({ absPath: args.absPath })
+        return { created: true, reconciled: false, actions: [], absPath: args.absPath }
+      },
+    })
+    return { deps, store, emitted, verifyCalls, ensured }
+  }
+
+  const worktreeChat = {
+    id: "chat-1",
+    projectId: "proj-1",
+    stackBindings: [
+      { projectId: "proj-1", worktreePath: "/repo/.worktrees/feat", role: "primary" },
+    ],
+  }
+
+  test("a chat bound to a worktree arms there, not in the project checkout", async () => {
+    const { deps, emitted, verifyCalls } = depsForChat(worktreeChat)
+    const result = await setupLoop(deps, { chatId: "chat-1", input: validInput })
+
+    expect(result.ok).toBe(true)
+    const armed = emitted.find((e) => e.kind === "loop_armed")
+    expect(armed).toBeDefined()
+    expect((armed as { workdirAbs?: string }).workdirAbs).toBe("/repo/.worktrees/feat")
+    // The arm-time oracle must run where the agent works, or it grades the
+    // wrong tree and the already-green refusal fires on the wrong evidence.
+    expect(verifyCalls).toEqual([{ cwd: "/repo/.worktrees/feat" }])
+  })
+
+  test("the tracking-file skeleton is written under the worktree", async () => {
+    const { deps, ensured } = depsForChat(worktreeChat)
+    await setupLoop(deps, { chatId: "chat-1", input: validInput })
+    expect(ensured).toEqual([{ absPath: "/repo/.worktrees/feat/PROGRESS.md" }])
+  })
+
+  test("a solo chat with no bindings is unchanged", async () => {
+    const { deps, emitted, verifyCalls, ensured } = depsForChat({ id: "chat-1", projectId: "proj-1" })
+    const result = await setupLoop(deps, { chatId: "chat-1", input: validInput })
+
+    expect(result.ok).toBe(true)
+    const armed = emitted.find((e) => e.kind === "loop_armed")
+    expect((armed as { workdirAbs?: string }).workdirAbs).toBe("/repo")
+    expect(verifyCalls).toEqual([{ cwd: "/repo" }])
+    expect(ensured).toEqual([{ absPath: "/repo/PROGRESS.md" }])
+  })
+
+  // The same-repo guard still compares against the PROJECT path — that is the
+  // repository identity check, and widening it to the chat cwd would let a
+  // loop be pointed at any directory a binding happens to name.
+  test("an explicit workdir outside the repo is still refused", async () => {
+    const { deps } = depsForChat(worktreeChat)
+    deps.isWorktreeOfSameRepo = async () => false
+    const result = await setupLoop(deps, {
+      chatId: "chat-1",
+      input: { ...validInput, workdir: "/somewhere/else" },
+    })
+    expect(result.ok).toBe(false)
+    expect(result.ok === false && result.errors[0]).toContain("not this project's checkout")
+  })
+
+  // The chat's own cwd is host-derived (board-start-work created the worktree),
+  // so it needs no git round-trip. A MODEL-supplied workdir is not trusted and
+  // is still checked against the project checkout — the repository identity.
+  test("the chat's own cwd is trusted without a git round-trip", async () => {
+    const { deps } = depsForChat(worktreeChat)
+    const asked: { projectCwd: string; workdir: string }[] = []
+    deps.isWorktreeOfSameRepo = async (projectCwd, workdir) => {
+      asked.push({ projectCwd, workdir })
+      return true
+    }
+    await setupLoop(deps, { chatId: "chat-1", input: validInput })
+    expect(asked).toEqual([])
+  })
+
+  test("an explicit workdir is checked against the project checkout", async () => {
+    const { deps } = depsForChat(worktreeChat)
+    const asked: { projectCwd: string; workdir: string }[] = []
+    deps.isWorktreeOfSameRepo = async (projectCwd, workdir) => {
+      asked.push({ projectCwd, workdir })
+      return true
+    }
+    await setupLoop(deps, {
+      chatId: "chat-1",
+      input: { ...validInput, workdir: "/repo/.worktrees/other" },
+    })
+    expect(asked).toEqual([{ projectCwd: "/repo", workdir: "/repo/.worktrees/other" }])
   })
 })
 

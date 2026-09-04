@@ -172,3 +172,30 @@ describe("StacksSection", () => {
     expect(() => renderSection(stacks, projects, { onDeleteStack: () => undefined })).not.toThrow()
   })
 })
+
+// The member chats of a stack can sit under several collapsed project groups,
+// so the stack row is the only place "what is running here" can be answered.
+describe("StacksSection — activity rollup", () => {
+  test("renders the rollup label when the stack is busy", () => {
+    const stack: StackSummary = {
+      ...makeStack("s1", "API + Web", 2),
+      activity: {
+        activeChats: 2,
+        agents: 3,
+        loops: 1,
+        workflows: 0,
+        backgroundTasks: 0,
+        awaitingAnswer: 0,
+        failing: 0,
+      },
+    }
+    const html = renderSection([stack], [])
+    expect(html).toContain("3 agents, 1 loop")
+  })
+
+  test("renders no indicator when the stack is idle", () => {
+    const html = renderSection([makeStack("s1", "API + Web", 2)], [])
+    expect(html).toContain("API + Web")
+    expect(html).not.toContain("agent")
+  })
+})

@@ -98,3 +98,29 @@ export function mergeBlockedReason(view: WorktreeCleanupView): string | null {
   if (view.unmergedCommitCount === 0) return "That branch is already on the project's branch."
   return null
 }
+
+/**
+ * What the worktree is holding, so the choice is made with the numbers in view.
+ *
+ * Beside {@link discardBlockedReason} and {@link mergeBlockedReason} rather than
+ * in the drawer: all three read the same view to answer the same question, and
+ * a count the refusal disagreed with would be worse than no count at all.
+ */
+export function describeWorktreeContents(view: WorktreeCleanupView): string {
+  const parts: string[] = []
+  if (view.unmergedCommitCount > 0) {
+    parts.push(
+      view.unmergedCommitCount === 1
+        ? "1 commit to merge"
+        : `${view.unmergedCommitCount.toString()} commits to merge`,
+    )
+  }
+  if (view.dirtyFileCount > 0) {
+    parts.push(
+      view.dirtyFileCount === 1
+        ? "1 uncommitted file"
+        : `${view.dirtyFileCount.toString()} uncommitted files`,
+    )
+  }
+  return parts.length === 0 ? "Nothing left in it." : parts.join(" · ")
+}

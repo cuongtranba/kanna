@@ -469,3 +469,97 @@ describe("one repo, one board", () => {
     expect(changes.map((c) => c.boardId)).toContain(stack.id)
   })
 })
+
+describe("blocked_by edges are validated as a DAG at write time", () => {
+  function twoCards() {
+    const board = registry.createBoard({
+      owner: { kind: "project", id: "project-1" },
+      title: "Sprint",
+      definition: DEFINITION,
+    })
+    const columns = store.listColumns(board.id)
+    const api = registry.createCard({
+      boardId: board.id,
+      columnId: columns[0]!.id,
+      title: "Ship the API",
+      actor: USER,
+    })
+    const client = registry.createCard({
+      boardId: board.id,
+      columnId: columns[0]!.id,
+      title: "Regenerate the client",
+      actor: USER,
+    })
+    changes.length = 0
+    return { board, columns, api, client }
+  }
+
+  test("a plain edge is stored and broadcast", () => {
+    const { api, client } = twoCards()
+    const link = registry.addCardLink(client.id, "blocked_by", api.id)
+    expect(link).toMatchObject({ cardId: client.id, kind: "blocked_by", targetId: api.id })
+    expect(changes.length).toBe(1)
+    expect(store.listCardLinks(client.id).map((entry) => entry.targetId)).toEqual([api.id])
+  })
+
+  test("a card cannot block itself", () => {
+    const { client } = twoCards()
+    expect(() => registry.addCardLink(client.id, "blocked_by", client.id)).toThrow(BoardStoreError)
+  })
+
+  test("a cycle is refused and the refusal names the cards, not the ids", () => {
+    const { api, client } = twoCards()
+    registry.addCardLink(client.id, "blocked_by", api.id)
+    let message = ""
+    try {
+      registry.addCardLink(api.id, "blocked_by", client.id)
+    } catch (error) {
+      message = (error as Error).message
+    }
+    expect(message).toContain("Ship the API")
+    expect(message).toContain("Regenerate the client")
+    // Refused means NOT written — a rejected edge that persisted would be worse
+    // than one that was never checked.
+    expect(store.listCardLinks(api.id)).toEqual([])
+  })
+
+  test("a blocker on another board is refused", () => {
+    const { client } = twoCards()
+    const other = registry.createBoard({
+      owner: { kind: "project", id: "project-2" },
+      title: "Other",
+      definition: DEFINITION,
+    })
+    const foreign = registry.createCard({
+      boardId: other.id,
+      columnId: store.listColumns(other.id)[0]!.id,
+      title: "Elsewhere",
+      actor: USER,
+    })
+    expect(() => registry.addCardLink(client.id, "blocked_by", foreign.id)).toThrow(BoardStoreError)
+  })
+
+  test("a blocker that does not exist is refused", () => {
+    const { client } = twoCards()
+    expect(() => registry.addCardLink(client.id, "blocked_by", "id-missing")).toThrow(BoardStoreError)
+  })
+
+  test("a diamond is legal — the check rejects cycles, not shared blockers", () => {
+    const { board, columns, api, client } = twoCards()
+    const docs = registry.createCard({
+      boardId: board.id,
+      columnId: columns[0]!.id,
+      title: "Update the docs",
+      actor: USER,
+    })
+    registry.addCardLink(client.id, "blocked_by", api.id)
+    registry.addCardLink(docs.id, "blocked_by", api.id)
+    expect(() => registry.addCardLink(docs.id, "blocked_by", client.id)).not.toThrow()
+  })
+
+  test("other link kinds are untouched by the check", () => {
+    const { client } = twoCards()
+    // A chat link may point anywhere; only blocked_by is a graph.
+    expect(() => registry.addCardLink(client.id, "chat", client.id)).not.toThrow()
+  })
+})

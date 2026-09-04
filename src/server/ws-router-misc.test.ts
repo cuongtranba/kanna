@@ -25,6 +25,7 @@ function makeStore(overrides: Partial<MiscStoreDep> = {}): MiscStoreDep {
     getProject: mock(() => null),
     createStack: mock(async () => ({ id: "stack-1" })),
     renameStack: mock(async () => {}),
+    setStackInstructions: mock(async () => {}),
     removeStack: mock(async () => {}),
     addProjectToStack: mock(async () => {}),
     removeProjectFromStack: mock(async () => {}),

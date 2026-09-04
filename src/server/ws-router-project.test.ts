@@ -28,6 +28,7 @@ function makeStore(overrides: Partial<ProjectStoreDep> = {}): ProjectStoreDep {
     getProject: mock(() => ({ id: "proj-1", localPath: "/tmp/proj" })),
     getChat: mock(() => null),
     setProjectStar: mock(async () => {}),
+    setProjectInstructions: mock(async () => {}),
     setSidebarProjectOrder: mock(async () => {}),
     ...overrides,
   }

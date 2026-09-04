@@ -132,3 +132,15 @@ describe("StackCreatePanel", () => {
     expect(p2ChipTag).toContain('aria-pressed="false"')
   })
 })
+
+describe("StackCreatePanel — stack instructions", () => {
+  test("renders the instructions field", () => {
+    const html = renderPanel()
+    expect(html).toContain('aria-label="Stack instructions"')
+  })
+
+  test("seeds the field from the stack being edited", () => {
+    const html = renderPanel({ mode: "edit", initialInstructions: "api is upstream of web" })
+    expect(html).toContain("api is upstream of web")
+  })
+})

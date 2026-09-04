@@ -151,11 +151,13 @@ export type ClientCommand =
   | { type: "sessions.importClaudeSession"; sessionIds: string[] }
   | { type: "project.remove"; projectId: string }
   | { type: "project.setStar"; projectId: string; starred: boolean }
+  | { type: "project.setInstructions"; projectId: string; instructions: string }
   | { type: "sidebar.reorderProjectGroups"; projectIds: string[] }
   /** `chatId` names the tree to read from — a chat's worktree has its own contents. */
   | { type: "project.readDiffPatch"; projectId: string; path: string; chatId?: string }
-  | { type: "stack.create"; title: string; projectIds: string[] }
+  | { type: "stack.create"; title: string; projectIds: string[]; instructions?: string }
   | { type: "stack.rename"; stackId: string; title: string }
+  | { type: "stack.setInstructions"; stackId: string; instructions: string }
   | { type: "stack.remove"; stackId: string }
   | { type: "stack.addProject"; stackId: string; projectId: string }
   | { type: "stack.removeProject"; stackId: string; projectId: string }
@@ -381,6 +383,15 @@ export type ClientCommand =
   | { type: "board.card.archive"; cardId: string }
   | { type: "board.card.detail"; cardId: string }
   | { type: "board.card.comment"; cardId: string; body: string }
+  /**
+   * Order two cards: `cardId` waits on `blockedByCardId`.
+   *
+   * Refused when it would make the work circular, when the two are on different
+   * boards, or when either does not exist — the check is the server's, because a
+   * cycle is only diagnosable while the offending edge is still known.
+   */
+  | { type: "board.card.block"; cardId: string; blockedByCardId: string }
+  | { type: "board.card.unblock"; cardId: string; blockedByCardId: string }
   /**
    * `content` is the card's WHOLE content, not just the field that changed: the
    * store replaces rather than merges, so a partial map would erase every field

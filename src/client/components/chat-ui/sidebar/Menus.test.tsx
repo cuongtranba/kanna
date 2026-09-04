@@ -59,3 +59,27 @@ describe("ProjectSectionMenu", () => {
     expect(html).toContain("project trigger")
   })
 })
+
+describe("ProjectSectionMenu — Edit instructions", () => {
+  // Hidden rather than disabled where the host has no dialog: a menu item that
+  // does nothing is worse than one that is not offered.
+  test("renders without throwing when the handler is supplied", () => {
+    expect(() =>
+      renderToStaticMarkup(
+        <ProjectSectionMenu {...defaultProps({ onEditInstructions: () => undefined })}>
+          <button>trigger</button>
+        </ProjectSectionMenu>
+      )
+    ).not.toThrow()
+  })
+
+  test("renders without throwing when the handler is omitted", () => {
+    expect(() =>
+      renderToStaticMarkup(
+        <ProjectSectionMenu {...defaultProps()}>
+          <button>trigger</button>
+        </ProjectSectionMenu>
+      )
+    ).not.toThrow()
+  })
+})

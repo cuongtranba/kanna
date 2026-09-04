@@ -1,4 +1,4 @@
-import type { ResolvedStackBinding, Subagent } from "./types"
+import type { ProjectInstructionBlock, ResolvedStackBinding, Subagent } from "./types"
 
 /**
  * The Kanna system-prompt suffix appended to Claude's `claude_code` preset.
@@ -49,21 +49,111 @@ export function renderStackProjectsBlock(stackProjects: ResolvedStackBinding[]):
   ].join("\n")
 }
 
+/**
+ * What Codex can actually reach, stated once.
+ *
+ * Kanna starts every Codex thread with `approvalPolicy: "never"` and
+ * `sandbox: "danger-full-access"` (`codex-app-server.ts`), so the peer roots
+ * are readable and writable — the session simply declares ONE working
+ * directory. The gap this closes is knowledge, not permission, and the wording
+ * must not promise a multi-root workspace Codex does not have.
+ *
+ * (The `grantRoot` field on `FileChangeRequestApprovalParams` is part of an
+ * approval RESPONSE, not a session grant; with approvals disabled it is never
+ * exercised. The old comment in `claude-turn-starter.ts` had this backwards.)
+ */
+const CODEX_STACK_REACH_NOTE =
+  "Your working directory is the primary project above. The other roots are outside it, so reach them by absolute path rather than by a relative path from your cwd."
+
+/**
+ * Compose Codex's `developer_instructions` from the same pieces the Claude
+ * system prompt is built from, so switching a chat's provider does not
+ * silently drop the stack.
+ *
+ * Returns `undefined` when there is nothing to say — the caller passes that
+ * straight through to `thread/start`, which treats it as absent.
+ */
+export function buildCodexDeveloperInstructions(
+  args: KannaSystemPromptOptions,
+): string | undefined {
+  const stackProjects = args.stackProjects ?? []
+
+  const sections: string[] = []
+  const instructionSections = renderInstructionSections(args)
+  if (instructionSections.length > 0) sections.push(instructionSections.join("\n"))
+
+  const stackBlock = renderStackProjectsBlock(stackProjects)
+  if (stackBlock) {
+    // A lone primary is not a cross-root situation; the caveat would be noise.
+    sections.push(stackProjects.length > 1
+      ? `${stackBlock}\n\n${CODEX_STACK_REACH_NOTE}`
+      : stackBlock)
+  }
+
+  if (sections.length === 0) return undefined
+  return sections.join("\n\n")
+}
+
 const DELEGATION_GUIDANCE =
   "Delegate via `mcp__kanna__delegate_subagent({ subagent_id, prompt })`. The tool blocks until the subagent finishes and returns its final text. Brief the subagent like a smart colleague who just walked in: state the goal, what was tried, what to check, and any constraints. Don't delegate understanding — synthesize the subagent's reply yourself before responding to the user. When the user writes `@agent/<name>` treat it as a suggestion, not a command: confirm the subagent fits the actual ask, or redirect to a better one."
+
+/**
+ * Render every instruction block in the order
+ * BASE → workspace → stack → per-project. Broad to narrow: the workspace's
+ * rules, then how the projects relate, then each project's own rules.
+ *
+ * Shared by the Claude suffix and the Codex developer instructions so a
+ * provider switch cannot change which rules the model is told about.
+ */
+export function renderInstructionSections(options: KannaSystemPromptOptions): string[] {
+  const sections: string[] = []
+
+  const workspace = options.globalPromptAppend?.trim() ?? ""
+  if (workspace) sections.push("## Workspace instructions", "", workspace)
+
+  const stack = options.stackInstructions?.trim() ?? ""
+  if (stack) {
+    if (sections.length > 0) sections.push("")
+    sections.push("## Stack instructions", "", stack)
+  }
+
+  for (const block of options.projectInstructions ?? []) {
+    const text = block.instructions.trim()
+    if (!text) continue
+    if (sections.length > 0) sections.push("")
+    sections.push(`## Project instructions — ${block.projectTitle}`, "", text)
+  }
+
+  return sections
+}
 
 /** Optional inputs for {@link buildKannaSystemPromptAppend}. */
 export interface KannaSystemPromptOptions {
   /**
-   * User-authored global prompt from settings. When non-empty (after trim)
-   * it is spliced into the suffix as a `## Project instructions` block
-   * placed after {@link KANNA_SYSTEM_PROMPT_BASE} and before the subagent
-   * roster. Whitespace-only values are treated as absent.
+   * User-authored global prompt from settings, rendered as
+   * `## Workspace instructions`. Whitespace-only values are treated as absent.
+   *
+   * It is WORKSPACE-wide, not per project — the heading said "Project
+   * instructions" until adr-20260904, which is the name the per-project blocks
+   * below now carry.
    *
    * Surfaces the same content to Claude (`systemPrompt.append` /
    * `--append-system-prompt`) and Codex (`developer_instructions`).
    */
   globalPromptAppend?: string
+
+  /**
+   * The stack's own instructions — how its projects relate. Absent for a solo
+   * chat and for a stack that has none.
+   */
+  stackInstructions?: string
+
+  /**
+   * One block per project whose rules apply to this turn, in binding order.
+   * Built by `resolveProjectInstructions`, which is also what decides that a
+   * SOLO chat gets its own project's block despite having no bindings.
+   */
+  projectInstructions?: ProjectInstructionBlock[]
 
   /**
    * Resolved stack bindings for a multi-project ("stack") chat. When present
@@ -94,17 +184,17 @@ export function buildKannaSystemPromptAppend(
   subagents: Subagent[],
   options: KannaSystemPromptOptions = {},
 ): string {
-  const projectInstructions = options.globalPromptAppend?.trim() ?? ""
   const stackProjects = options.stackProjects ?? []
+  const instructionSections = renderInstructionSections(options)
 
-  if (subagents.length === 0 && !projectInstructions && stackProjects.length === 0) {
+  if (subagents.length === 0 && instructionSections.length === 0 && stackProjects.length === 0) {
     return KANNA_SYSTEM_PROMPT_BASE
   }
 
   const sections: string[] = [KANNA_SYSTEM_PROMPT_BASE]
 
-  if (projectInstructions) {
-    sections.push("", "## Project instructions", "", projectInstructions)
+  if (instructionSections.length > 0) {
+    sections.push("", ...instructionSections)
   }
 
   const stackBlock = renderStackProjectsBlock(stackProjects)
