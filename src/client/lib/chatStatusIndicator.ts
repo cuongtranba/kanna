@@ -62,12 +62,21 @@ export function chatDotBgClass(tone: ChatDotTone | null): string {
   }
 }
 
+/**
+ * Tone as TEXT, which is a different contrast problem from tone as a fill.
+ *
+ * These returned the raw `--warning` / `--info` / `--success` / `--destructive`
+ * tokens. Those are chosen to be legible as BACKGROUNDS, and DESIGN.md is
+ * explicit that they fail WCAG AA when used as ink — the `-text` variants exist
+ * for exactly this and are machine-checked in tone-pairings.test.ts. The fill
+ * helper above still uses the raw tokens, correctly: it paints surfaces.
+ */
 export function chatDotTextClass(tone: ChatDotTone | null): string {
   switch (tone) {
-    case "warning": return "text-warning"
-    case "info": return "text-info"
-    case "success": return "text-success"
-    case "destructive": return "text-destructive"
+    case "warning": return "text-warning-text"
+    case "info": return "text-info-text"
+    case "success": return "text-success-text"
+    case "destructive": return "text-destructive-text"
     case "muted":
     default: return "text-muted-foreground"
   }
@@ -103,8 +112,8 @@ export function sessionStateBadge(
   state: ClaudeSessionLifecycleStatus | undefined,
 ): SessionStateBadge | null {
   switch (state) {
-    case "active": return { kind: "filled", toneClass: "text-success", title: "Claude PTY session active" }
-    case "warming": return { kind: "half", toneClass: "text-warning", title: "Claude PTY session warming" }
+    case "active": return { kind: "filled", toneClass: "text-success-text", title: "Claude PTY session active" }
+    case "warming": return { kind: "half", toneClass: "text-warning-text", title: "Claude PTY session warming" }
     case "idle": return { kind: "ring", toneClass: "text-muted-foreground", title: "Claude PTY session idle" }
     case "cooling": return { kind: "dashed", toneClass: "text-muted-foreground", title: "Claude PTY session cooling down" }
     case "cold":

@@ -18,6 +18,7 @@ function makeSkill(overrides: Partial<InstalledPackage> = {}): InstalledPackage 
     installPath: null,
     versionLabel: null,
     agents: [],
+    pinnedRef: null,
     ...overrides,
     // id is always derived from the resolved name, applied last to avoid spread override
     id: `skill:${name}`,
@@ -48,6 +49,13 @@ function fakeTreeResponse(
 function fakeTagsResponse(tags: Array<{ name: string; commitSha: string }>): Response {
   const body = JSON.stringify(tags.map((t) => ({ name: t.name, commit: { sha: t.commitSha } })))
   return new Response(body, { status: 200, headers: { "Content-Type": "application/json" } })
+}
+
+function fakeReleaseResponse(tagName: string): Response {
+  return new Response(JSON.stringify({ tag_name: tagName }), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  })
 }
 
 function notModifiedResponse(rateRemaining = 100): Response {
@@ -252,20 +260,17 @@ describe("createSkillUpdateChecker", () => {
     expect(typeof createSkillUpdateChecker).toBe("function")
   })
 
-  describe("tag resolution", () => {
-    test("resolves latestVersion tag when token provided and match found", async () => {
-      const skill = makeSkill({ revision: "aaa111" })
+  describe("re-pin target resolution", () => {
+    // `skills update` resolves upstream AT the pin, so a pinned skill needs a
+    // TAG to move to. Everything else is fixed by a plain update and needs none.
+    test("resolves the latest release tag for a pinned, outdated skill", async () => {
+      const skill = makeSkill({ revision: "aaa111", pinnedRef: "v11.12.0" })
       const fetchFn = async (url: string | URL | Request): Promise<Response> => {
         const urlStr = String(url)
         if (urlStr.includes("/git/trees/HEAD")) {
           return fakeTreeResponse([{ path: "my-skill", type: "tree", sha: "bbb222" }])
         }
-        if (urlStr.includes("/tags")) {
-          return fakeTagsResponse([{ name: "v1.2.0", commitSha: "commit-sha-1" }])
-        }
-        if (urlStr.includes("/git/trees/commit-sha-1")) {
-          return fakeTreeResponse([{ path: "my-skill", type: "tree", sha: "bbb222" }])
-        }
+        if (urlStr.includes("/releases/latest")) return fakeReleaseResponse("v11.13.4")
         return errorResponse(404)
       }
 
@@ -273,27 +278,26 @@ describe("createSkillUpdateChecker", () => {
       const results = await checker.check([skill], neverSignal)
 
       expect(results[0].availability).toBe("outdated")
-      expect(results[0].latestVersion).toBe("v1.2.0")
+      expect(results[0].currentVersion).toBe("v11.12.0")
+      expect(results[0].latestVersion).toBe("v11.13.4")
     })
 
-    test("returns newest matching tag when multiple candidates", async () => {
-      const skill = makeSkill({ revision: "aaa111" })
+    // GitHub orders tags lexicographically, so `v20260102-…` precedes `v11.13.4`.
+    // Reading position instead of version is what left a pin unresolvable.
+    test("falls back to the highest semver tag when the repo has no releases", async () => {
+      const skill = makeSkill({ revision: "aaa111", pinnedRef: "v11.12.0" })
       const fetchFn = async (url: string | URL | Request): Promise<Response> => {
         const urlStr = String(url)
         if (urlStr.includes("/git/trees/HEAD")) {
-          return fakeTreeResponse([{ path: "my-skill", type: "tree", sha: "latest-sha" }])
+          return fakeTreeResponse([{ path: "my-skill", type: "tree", sha: "bbb222" }])
         }
+        if (urlStr.includes("/releases/latest")) return errorResponse(404)
         if (urlStr.includes("/tags")) {
           return fakeTagsResponse([
-            { name: "v2.0.0", commitSha: "commit-v2" },
-            { name: "v1.0.0", commitSha: "commit-v1" },
+            { name: "v20260102-production-cleanup", commitSha: "c1" },
+            { name: "v11.13.4", commitSha: "c2" },
+            { name: "v11.12.0", commitSha: "c3" },
           ])
-        }
-        if (urlStr.includes("commit-v2")) {
-          return fakeTreeResponse([{ path: "my-skill", type: "tree", sha: "latest-sha" }])
-        }
-        if (urlStr.includes("commit-v1")) {
-          return fakeTreeResponse([{ path: "my-skill", type: "tree", sha: "latest-sha" }])
         }
         return errorResponse(404)
       }
@@ -301,23 +305,19 @@ describe("createSkillUpdateChecker", () => {
       const checker = createSkillUpdateChecker({ fetchFn, token: "gh-token" })
       const results = await checker.check([skill], neverSignal)
 
-      // v2.0.0 is first (newest), so that's what should be returned
-      expect(results[0].latestVersion).toBe("v2.0.0")
+      expect(results[0].latestVersion).toBe("v11.13.4")
     })
 
-    test("latestVersion is null when no tag matches", async () => {
-      const skill = makeSkill({ revision: "aaa111" })
+    test("latestVersion is null when neither a release nor a semver tag exists", async () => {
+      const skill = makeSkill({ revision: "aaa111", pinnedRef: "v11.12.0" })
       const fetchFn = async (url: string | URL | Request): Promise<Response> => {
         const urlStr = String(url)
         if (urlStr.includes("/git/trees/HEAD")) {
           return fakeTreeResponse([{ path: "my-skill", type: "tree", sha: "bbb222" }])
         }
+        if (urlStr.includes("/releases/latest")) return errorResponse(404)
         if (urlStr.includes("/tags")) {
-          return fakeTagsResponse([{ name: "v1.0.0", commitSha: "commit-v1" }])
-        }
-        if (urlStr.includes("commit-v1")) {
-          // Different sha in this tag
-          return fakeTreeResponse([{ path: "my-skill", type: "tree", sha: "other-sha" }])
+          return fakeTagsResponse([{ name: "nightly", commitSha: "c1" }])
         }
         return errorResponse(404)
       }
@@ -328,69 +328,104 @@ describe("createSkillUpdateChecker", () => {
       expect(results[0].latestVersion).toBeNull()
     })
 
-    test("tag cache hit avoids second tag fetch", async () => {
-      const skill = makeSkill({ revision: "aaa111" })
-      let tagFetchCount = 0
+    test("an UNPINNED outdated skill resolves no tag and makes no extra call", async () => {
+      const skill = makeSkill({ revision: "aaa111", pinnedRef: null })
+      let extraCalls = 0
 
       const fetchFn = async (url: string | URL | Request): Promise<Response> => {
         const urlStr = String(url)
         if (urlStr.includes("/git/trees/HEAD")) {
           return fakeTreeResponse([{ path: "my-skill", type: "tree", sha: "bbb222" }])
         }
-        if (urlStr.includes("/tags")) {
-          tagFetchCount++
-          return fakeTagsResponse([{ name: "v1.0.0", commitSha: "commit-v1" }])
-        }
-        if (urlStr.includes("commit-v1")) {
+        extraCalls++
+        return errorResponse(404)
+      }
+
+      const checker = createSkillUpdateChecker({ fetchFn, token: "gh-token" })
+      const results = await checker.check([skill], neverSignal)
+
+      expect(results[0].availability).toBe("outdated")
+      expect(results[0].latestVersion).toBeNull()
+      expect(extraCalls).toBe(0)
+    })
+
+    test("an up-to-date pinned skill resolves no tag", async () => {
+      const skill = makeSkill({ revision: "bbb222", pinnedRef: "v11.12.0" })
+      let extraCalls = 0
+
+      const fetchFn = async (url: string | URL | Request): Promise<Response> => {
+        const urlStr = String(url)
+        if (urlStr.includes("/git/trees/HEAD")) {
           return fakeTreeResponse([{ path: "my-skill", type: "tree", sha: "bbb222" }])
+        }
+        extraCalls++
+        return errorResponse(404)
+      }
+
+      const checker = createSkillUpdateChecker({ fetchFn, token: "gh-token" })
+      const results = await checker.check([skill], neverSignal)
+
+      expect(results[0].availability).toBe("up_to_date")
+      expect(extraCalls).toBe(0)
+    })
+
+    test("resolves once per repo and caches across checks", async () => {
+      const skill = makeSkill({ revision: "aaa111", pinnedRef: "v11.12.0" })
+      let releaseFetches = 0
+
+      const fetchFn = async (url: string | URL | Request): Promise<Response> => {
+        const urlStr = String(url)
+        if (urlStr.includes("/git/trees/HEAD")) {
+          return fakeTreeResponse([{ path: "my-skill", type: "tree", sha: "bbb222" }])
+        }
+        if (urlStr.includes("/releases/latest")) {
+          releaseFetches++
+          return fakeReleaseResponse("v11.13.4")
         }
         return errorResponse(404)
       }
 
       const checker = createSkillUpdateChecker({ fetchFn, token: "gh-token" })
-
-      // First check - populates cache
       await checker.check([skill], neverSignal)
-      // Second check - should use cached tag result
       const results = await checker.check([skill], neverSignal)
 
-      expect(results[0].latestVersion).toBe("v1.0.0")
-      // Tags endpoint should only be called once (cache hit on second run)
-      expect(tagFetchCount).toBe(1)
+      expect(results[0].latestVersion).toBe("v11.13.4")
+      expect(releaseFetches).toBe(1)
     })
 
-    test("tag resolution is skipped when token is null", async () => {
-      const skill = makeSkill({ revision: "aaa111" })
-      let tagsFetched = false
-
+    // Resolution needs no credentials: the tree fetch already runs unauthenticated.
+    test("resolves without a token", async () => {
+      const skill = makeSkill({ revision: "aaa111", pinnedRef: "v11.12.0" })
       const fetchFn = async (url: string | URL | Request): Promise<Response> => {
         const urlStr = String(url)
-        if (urlStr.includes("/tags")) tagsFetched = true
-        return fakeTreeResponse([{ path: "my-skill", type: "tree", sha: "bbb222" }])
+        if (urlStr.includes("/git/trees/HEAD")) {
+          return fakeTreeResponse([{ path: "my-skill", type: "tree", sha: "bbb222" }])
+        }
+        if (urlStr.includes("/releases/latest")) return fakeReleaseResponse("v11.13.4")
+        return errorResponse(404)
       }
 
       const checker = createSkillUpdateChecker({ fetchFn, token: null })
       const results = await checker.check([skill], neverSignal)
 
-      expect(results[0].latestVersion).toBeNull()
-      expect(tagsFetched).toBe(false)
+      expect(results[0].latestVersion).toBe("v11.13.4")
     })
 
-    test("unknown status skips tag resolution", async () => {
-      const skill = makeSkill({ revision: null }) // no revision → unknown
-      let tagsFetched = false
+    test("unknown status resolves no tag", async () => {
+      const skill = makeSkill({ revision: null, pinnedRef: "v1.0.0" })
+      let extraCalls = 0
 
       const fetchFn = async (url: string | URL | Request): Promise<Response> => {
-        const urlStr = String(url)
-        if (urlStr.includes("/tags")) tagsFetched = true
-        return fakeTreeResponse([])
+        if (String(url).includes("/git/trees/HEAD")) return fakeTreeResponse([])
+        extraCalls++
+        return errorResponse(404)
       }
 
       const checker = createSkillUpdateChecker({ fetchFn, token: "gh-token" })
       const results = await checker.check([skill], neverSignal)
 
       expect(results[0].availability).toBe("unknown")
-      expect(tagsFetched).toBe(false)
+      expect(extraCalls).toBe(0)
     })
   })
 })

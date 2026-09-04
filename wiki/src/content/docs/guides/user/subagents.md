@@ -23,9 +23,21 @@ A subagent is a named, prompt-shaped specialist (`description`, `systemPrompt`) 
 2. Fill in `name`, `description` (this is what the main agent reads to decide when to delegate), and `systemPrompt`
 3. Save
 
-## Cycle detection
+## When a run fails
 
-`LOOP_DETECTED` is returned when a subagent tries to delegate to itself or to an ancestor in the chain. `DEPTH_EXCEEDED` when `depth > maxChainDepth` (default 1).
+Runs fail with a machine-readable code, so the reason is never guesswork:
+
+| Code | Meaning |
+| --- | --- |
+| `LOOP_DETECTED` | The subagent tried to delegate to itself, or to an ancestor in its chain |
+| `DEPTH_EXCEEDED` | The chain went deeper than `maxChainDepth` (default **1** — a subagent may not itself delegate) |
+| `CAP_EXCEEDED` | Too many live keep-alive sessions for this chat (`KANNA_SUBAGENT_MAX_LIVE`, default 5) |
+| `MAX_TURNS` | The run used more tool calls than the subagent's own limit |
+| `AUTH_REQUIRED` | The subagent's provider has no usable credentials |
+| `NO_LIVE_SESSION` | A follow-up was sent to a `run_id` whose session is gone (idle-closed, cancelled, or already closed) |
+
+`DEPTH_EXCEEDED` at the default depth of 1 is the common surprise: subagents do
+the work, they do not sub-delegate.
 
 ## Delegation modes
 

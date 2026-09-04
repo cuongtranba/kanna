@@ -151,6 +151,20 @@ Tinted pill surfaces (`bg-{color}/10`) require pairing with a **`-text`** token,
 
 The complete catalog lives in `src/shared/design/tone-pairings.ts` (`TONE_PAIRINGS`, `STATUS_PILL_CLASS`). Every entry is machine-checked in `src/server/design/tone-pairings.test.ts` — WCAG AA (4.5:1) in both themes, compositing `bg-{color}/{alpha}` over the real base surface.
 
+**The catalog measures what is drawn, not what once was.** Status is a mark on a plain surface now, so the four `status/*` tinted-pill pairings were replaced by `mark/*` and `ink/*` entries at `alpha: 1` over the real card. Keeping the old ones would have left the suite proving contrast for a surface nothing renders — a check that gates nothing. When a pairing's last consumer is deleted, the pairing goes with it.
+
+**`STATUS_PILL_CLASS` is `Record<"outdated" | "partial" | "unknown", string>`** — package update availability in Settings is the one context that still wants a tinted pill, because it is not a run state and Settings is low-density. The narrow type means `up_to_date` (which draws nothing) cannot be indexed.
+
+### The Ink Rule
+
+**A raw semantic token is a background. It is never ink.**
+
+`--warning`, `--info`, and `--success` are chosen to be legible as fills. As text they fail WCAG AA, which is what the `-text` variants are for. `bg-warning` on a dot is correct; `text-warning` on a label is a bug.
+
+Enforced by `src/server/design/raw-ink-guard.test.ts`, which scans `src/client` + `src/shared` and fails on any `text-{semantic}` outside a single documented exception. The guard also asserts every exemption is still needed, so a stale one cannot be reused to smuggle a new violation in.
+
+**The one exception:** a diff's own **body** (`FileContentView`) is verbatim material and keeps the colour every developer already reads it in. The tally beside it is ordinary ink and is not exempt.
+
 **Contrast gate (enforced, two layers):**
 1. `bun run lint:usestate` (ast-grep, `rules/no-inline-tint-pairing.yml`): bans inline `text-{color}[-foreground]` + `bg-{color}/` class pairs in `src/client/**`. Use `STATUS_PILL_CLASS[status]` from the catalog instead.
 2. `bun run test src/server/design/tone-pairings.test.ts`: asserts ≥4.5:1 for every `TONE_PAIRINGS` entry × {light, dark}.
@@ -182,6 +196,8 @@ Adding a new semantic tint context requires: (a) adding an entry to `TONE_PAIRIN
 **The One-Voice Rule.** Kanna Coral is the only brand color and is used on ≤10% of any given screen. Its rarity is the point. Decorative use prohibited.
 
 **The Color-Plus Rule.** Color alone never carries meaning. Status, errors, and live states always pair color with shape (icon), text, or weight, so the interface remains legible to users with reduced color vision and to anyone glancing past a screen.
+
+**The Shape-First Rule.** Stronger than Color-Plus, and it supersedes it wherever state is shown: the *shape* carries the state and colour is only permitted to agree. A status whose tones differ solely in hue is a bug even when a label sits beside it — see the four marks under Status Indicators. This is why two live states may legitimately share an ink: the marks already separate them.
 
 ## 3. Typography
 
@@ -272,11 +288,40 @@ Shadows appear only as a response to *state*: focus rings, dialog overlays, and 
 
 - **Row anatomy:** two-line by default — Title-scale primary line + Label-scale meta line. Mono used for command names and timestamps; sans for descriptive labels.
 - **Hover:** background tints to Surface Secondary, no transform, no scale.
-- **Selected:** subtle Surface Secondary fill plus 1px-left visual is **prohibited** (anti-pattern). Use full-row tonal fill or a leading marker dot instead.
+- **Selected:** subtle Surface Secondary fill plus 1px-left visual is **prohibited** (anti-pattern). Use a full-row tonal fill instead — and the fill spans the **whole column**, with content registering to the rail. A fill that starts a few pixels left of the text is what breaks the one-rail reading.
+- **A `1fr` track needs `minmax(0, 1fr)`.** It defaults to `min-width: auto` and refuses to shrink under its content, so `text-overflow: ellipsis` never fires and the row overruns its column instead of truncating.
+
+### Plates (the transcript)
+
+A transcript entry is **space, one hairline, and a caption**. No box, no radius, no shadow, no nesting — the chrome a card spends on its own edges is exactly the white this surface is made of.
+
+- **The transcript has no per-entry caption, and that is a decision.** The prototype gave every entry a numbered "Plate 04 · Diff · +4 −7" running head. In a dense working transcript that reads as noise: the speaker gloss, the turn rule, and each row's own header (a tool row already states its file or command) carry it without a second label. The `Plate`/`PlateCaption` primitives were written and then deleted unused — recorded here so nobody rebuilds them. The rule survives where it earns its place: `SectionCaption` on panel headers, where `fact` is optional because a single-value panel has nothing countable and inventing a number would be worse than omitting it.
+- **The rule and the air sit ABOVE a row, never below.** A bottom margin changes the height of an already-painted row, forcing the virtualized list to re-measure while scroll position is held — visible as jitter during streaming. `src/client/app/transcriptSpacing.ts` owns the rhythm; a turn boundary is the widest gap and the only join that carries a hairline.
+- **The rule is a pseudo-element centred in that padding, not a `border-t`.** A border sits above the padding and would hug the previous row's last line instead of floating between two plates.
+- **The speaker is a gloss above the text**, `aria-hidden` — the transcript already exposes authorship structurally, so announcing it before every entry is screen-reader noise. It never holds a side gutter: the gutter is paid for out of the measure, and 48px of label plus a gap indented the user's own prompt off the rail every other row is measured from — the one thing the plate exists to fix. The transcript column is `overflow-x-hidden`, so hanging the gloss outside it would be clipped rather than merely tight.
+- **A boundary is named between two rules** (`compact_boundary`, `context_cleared`). The rules stroke at 1px in Soft Edge, like every other divider, and their chevron tile is drawn 1:1 in CSS pixels. Stretching a tile with `preserveAspectRatio="none"` scales the stroke with the box: at full measure a 0.5 stroke collapsed under one device pixel, so the boundary was in the DOM and invisible for every release that shipped it.
+
+### The verbatim exception
+
+The four inks govern the chrome. They do not govern what the agent produced. A diff, a terminal buffer, a stack trace is the preserved photograph: it keeps its own truth, and additions and deletions keep their colour because that is how every developer already reads them. Both still carry a leading sign and a tinted gutter, so the pair survives greyscale.
 
 ### Status Indicators
 
-- **Dots:** 6–8px solid circle, paired with a label or context (chat title, list row). Amber = running, Sage = completed/idle, Coral = failed/needs attention, Muted = neutral. **Static; no pulse, no glow.** A pulsing dot reads as anxiety.
+State is carried by the **shape of a drawn mark**, not by hue. A dot that changes colour is unreadable in greyscale, at a glance from across the desk, and to a reader with reduced colour vision — the three ways this UI is actually read during a long session.
+
+- **The four marks** (`src/client/lib/stateMark.ts`, rendered by `ui/state-mark.tsx`), each with its own silhouette in a 9×13 field:
+
+  | tone | mark | reads as |
+  | --- | --- | --- |
+  | active | doubled full-height stroke | running |
+  | muted | single stroke on a base rule | done, resting |
+  | destructive | stroke struck through | failed |
+  | attention | half-height stroke | queued, skipped, partial |
+
+- **Geometry is data, not drawing.** The strokes live in `stateMarkStrokes` so the four silhouettes cannot drift apart across components. A component that hand-rolls its own path is a mark that will diverge.
+- **A mark never ships without its word.** `StateMarkLabel` pairs shape with a label; colour is allowed to agree and never to decide.
+- **Static; no pulse, no glow.** A pulsing indicator reads as anxiety.
+- **A session's whole transcript reduces to one sigil** (`ui/reduction.tsx`): a tick per turn, height from that turn's duration, the running turn doubled and coral. Deterministic and drawn from real turn data — never ornament, and never drawn from anything but measured durations.
 
 ### Terminal pane (signature component)
 

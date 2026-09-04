@@ -20,6 +20,7 @@ import type { PluginFooterPanel } from "../app/PluginsFooterSection"
 import {
   createPluginContext,
   createPluginContributionRegistry,
+  type PluginCommandCenterItem,
   type PluginSidebarItem,
 } from "./contributionRegistry"
 import { evaluatePluginModuleFromUrl, type PluginModule } from "./evaluatePlugin"
@@ -41,12 +42,14 @@ export interface PluginLoadFailure {
 export interface LoadedPluginContributions {
   readonly sidebarItems: readonly PluginSidebarItem[]
   readonly panels: readonly PluginFooterPanel[]
+  readonly commandCenterItems: readonly PluginCommandCenterItem[]
   readonly failures: readonly PluginLoadFailure[]
 }
 
 const NO_CONTRIBUTIONS: LoadedPluginContributions = {
   sidebarItems: [],
   panels: [],
+  commandCenterItems: [],
   failures: [],
 }
 
@@ -91,7 +94,12 @@ export async function loadPluginContributions(
       Component: surface.Component,
     }))
 
-  return { sidebarItems: contributions.getSidebarItems(), panels, failures }
+  return {
+    sidebarItems: contributions.getSidebarItems(),
+    panels,
+    commandCenterItems: contributions.getCommandCenterItems(),
+    failures,
+  }
 }
 
 interface PluginListResponse {

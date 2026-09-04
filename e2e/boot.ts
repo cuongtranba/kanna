@@ -32,8 +32,34 @@ const distClientDir = join(repoRoot, "dist", "client")
 export interface KannaBoot {
   /** Base URL of the booted production server, e.g. http://localhost:3299 */
   baseUrl: string
+  /**
+   * The temp directory this boot uses as `HOME`. Kanna's own data root is
+   * `<kannaHome>/.kanna` (see `getDataRootDir` in src/shared/branding.ts), so a
+   * spec that needs to inspect what the server persisted — settings.json, an
+   * installed plugin's build output — reads it from under here.
+   */
+  kannaHome: string
   /** Kills the `bun run start` process tree and removes the seeded temp KANNA_HOME. */
   stop: () => Promise<void>
+}
+
+export interface BootKannaOptions {
+  /**
+   * Runs against the freshly created temp `HOME` AFTER it exists and BEFORE the
+   * server process is spawned.
+   *
+   * This hook exists because `AppSettingsManager` does not watch `settings.json`
+   * (see CLAUDE.md's note on the CLI preferring a running daemon): a spec that
+   * writes settings while the server is up has that write clobbered by the
+   * daemon's next write, and `plugins.enabled` is read from the in-memory
+   * snapshot the daemon loaded at boot. Any state a spec needs the server to
+   * come up WITH therefore has to be laid down before the spawn, not after it.
+   *
+   * A throw here is not swallowed: the temp home is removed and the error is
+   * rethrown, so a broken seed fails the spec instead of quietly booting an
+   * unseeded server that then fails its assertions for the wrong reason.
+   */
+  seed?: (kannaHome: string) => Promise<void>
 }
 
 /** A rolling tail of a child process's combined stdout+stderr, kept for failure diagnostics. */
@@ -182,12 +208,15 @@ async function killChildTree(child: ChildProcess): Promise<void> {
  * the server, it never builds, so calling it against a missing/stale build fails loudly instead
  * of silently serving nothing.
  *
+ * `options.seed` runs against the temp home before the spawn, for state the server must boot WITH
+ * rather than be told about afterwards — see `BootKannaOptions.seed`.
+ *
  * Both the child process tree and the temp home are guaranteed to be cleaned up: if readiness
  * polling fails (timeout, or the child exiting early), `stop()` runs before the error is
  * rethrown, with the child's captured stdout+stderr tail attached for diagnostics; on success,
  * the caller owns calling `stop()` (e.g. from `test.afterAll`).
  */
-export async function bootKanna(): Promise<KannaBoot> {
+export async function bootKanna(options: BootKannaOptions = {}): Promise<KannaBoot> {
   if (!existsSync(distClientDir)) {
     throw new Error(
       `${distClientDir} does not exist — the e2e harness boots the PRODUCTION server, which requires a ` +
@@ -198,6 +227,16 @@ export async function bootKanna(): Promise<KannaBoot> {
   await assertPortFree(TEST_PORT)
 
   const kannaHome = await mkdtemp(join(tmpdir(), "kanna-e2e-home-"))
+
+  if (options.seed) {
+    try {
+      await options.seed(kannaHome)
+    } catch (error) {
+      await rm(kannaHome, { recursive: true, force: true })
+      throw error
+    }
+  }
+
   const outputTail = new OutputTail()
 
   // `detached: true` makes `child` the leader of its own process group, so `killChildTree` can
@@ -251,5 +290,5 @@ export async function bootKanna(): Promise<KannaBoot> {
     )
   }
 
-  return { baseUrl, stop }
+  return { baseUrl, kannaHome, stop }
 }

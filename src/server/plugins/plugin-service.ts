@@ -16,6 +16,7 @@
 import { homedir } from "node:os"
 import { join } from "node:path"
 import { errorMessage, type AnyValue } from "../../shared/errors"
+import type { InstalledPluginConfig } from "../../shared/plugins/settings"
 import { createPluginLogRing, type PluginLogEntry } from "../../shared/plugins/log-ring"
 import { parseKannaPluginManifest, resolvePluginEntry } from "../../shared/plugins/manifest"
 import { getPluginBuildDir } from "../../shared/plugins/paths"
@@ -69,6 +70,21 @@ export interface PluginSummary {
   readonly state: PluginRuntimeState
 }
 
+/**
+ * Where installed-plugin records live ACROSS restarts.
+ *
+ * The service's registry is in-memory, so without this a `kanna plugin install`
+ * is invisible to the running server and every surface reports nothing after a
+ * reboot — the bundles are still on disk, but nothing remembers they exist.
+ * `settings.json` already models the record (`InstalledPluginConfig`), so this
+ * port is deliberately thin: the service owns runtime state, settings own the
+ * durable fact that a plugin is installed.
+ */
+export interface InstalledPluginStore {
+  list(): readonly InstalledPluginConfig[]
+  upsert(entry: InstalledPluginConfig): Promise<void>
+}
+
 export interface PluginService {
   install(args: { readonly sourceDir: string }): Promise<void>
   /** Every installed plugin. The single read the CLI, HTTP and MCP surfaces share. */
@@ -79,7 +95,14 @@ export interface PluginService {
   recordClientError(id: string, text: string): void
   /** Stop then start, so a rebuilt bundle is picked up. No-op start when disabled. */
   reload(id: string): Promise<void>
-  setEnabled(id: string, enabled: boolean): void
+  setEnabled(id: string, enabled: boolean): Promise<void>
+  /**
+   * Re-register every plugin the store records, WITHOUT recompiling: the build
+   * output is already on disk from the install that produced the record. Called
+   * once at boot; safe to call again (an id already registered keeps its
+   * runtime state, so a restore never restarts a healthy child).
+   */
+  restore(): void
   start(id: string): Promise<void>
   status(id: string): { readonly state: PluginRuntimeState } | undefined
   call(id: string, method: string, params: AnyValue): Promise<PluginCallResult>
@@ -112,8 +135,11 @@ function settlePendingCalls(record: PluginRuntimeRecord, result: PluginCallResul
   record.pendingCalls.clear()
 }
 
-export function createPluginService(deps: { readonly homeDir?: string } = {}): PluginService {
+export function createPluginService(
+  deps: { readonly homeDir?: string; readonly installed?: InstalledPluginStore } = {},
+): PluginService {
   const homeDir = deps.homeDir ?? homedir()
+  const installed = deps.installed
   const registry = new Map<string, PluginRuntimeRecord>()
 
   function requireRecord(id: string): PluginRuntimeRecord {
@@ -153,10 +179,42 @@ export function createPluginService(deps: { readonly homeDir?: string } = {}): P
       connection: null,
       nextCallId: 1,
     })
+    await installed?.upsert({ id, sourceDir, enabled: existing?.enabled ?? false })
   }
 
-  function setEnabled(id: string, enabled: boolean): void {
-    requireRecord(id).enabled = enabled
+  /** Build paths are derived, never stored: they are a pure function of homeDir + id. */
+  function buildPaths(id: string): { bundlePath: string; clientBundlePath: string } {
+    const buildDir = getPluginBuildDir(homeDir, id)
+    return {
+      bundlePath: join(buildDir, SERVER_BUNDLE_FILENAME),
+      clientBundlePath: join(buildDir, CLIENT_BUNDLE_FILENAME),
+    }
+  }
+
+  function restore(): void {
+    for (const entry of installed?.list() ?? []) {
+      // Never clobber a live record: a second restore must not drop a running
+      // child's process/connection handles on the floor.
+      if (registry.has(entry.id)) continue
+      registry.set(entry.id, {
+        id: entry.id,
+        sourceDir: entry.sourceDir,
+        ...buildPaths(entry.id),
+        logRing: createPluginLogRing(),
+        pendingCalls: new Map(),
+        enabled: entry.enabled,
+        state: "stopped",
+        process: null,
+        connection: null,
+        nextCallId: 1,
+      })
+    }
+  }
+
+  async function setEnabled(id: string, enabled: boolean): Promise<void> {
+    const record = requireRecord(id)
+    record.enabled = enabled
+    await installed?.upsert({ id, sourceDir: record.sourceDir, enabled })
   }
 
   function handleChildDisconnect(record: PluginRuntimeRecord): void {
@@ -292,5 +350,5 @@ export function createPluginService(deps: { readonly homeDir?: string } = {}): P
     return record ? readPluginClientBundle(record.clientBundlePath) : null
   }
 
-  return { install, list, reload, clientBundle, recordClientError, setEnabled, start, status, call, stop, logs }
+  return { install, list, reload, restore, clientBundle, recordClientError, setEnabled, start, status, call, stop, logs }
 }

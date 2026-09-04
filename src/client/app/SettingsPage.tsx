@@ -1375,7 +1375,7 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
   const llmValidationErrorText = llmValidationError ? JSON.stringify(llmValidationError, null, 2) : ""
   let llmStatusClassName: string
   if (llmValidationStatus === "valid") {
-    llmStatusClassName = "text-success"
+    llmStatusClassName = "text-success-text"
   } else if (llmValidationStatus === "invalid") {
     llmStatusClassName = "text-destructive"
   } else {

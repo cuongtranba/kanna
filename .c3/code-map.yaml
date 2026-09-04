@@ -296,15 +296,15 @@ c3-307:
   - src/shared/token-pricing.ts
 c3-310:
   - src/shared/boards/**/*.ts
-c3-313:
+c3-314:
   - src/shared/stack-activity.ts
   - src/shared/stack-activity.test.ts
-c3-238:
+c3-239:
   - src/server/claude-session-config.ts
   - src/server/event-store.stack-methods.test.ts
   - src/server/ws-router.stack.test.ts
   - src/server/agent.stack-spawn.test.ts
-c3-121:
+c3-122:
   - src/client/components/chat-ui/sidebar/Stack*.tsx
   - src/client/components/chat-ui/sidebar/StackChatCreateRow.store.ts
   - src/client/app/useStackCommands.ts
@@ -355,7 +355,30 @@ c3-237:
   - src/server/package-inventory-io.adapter.test.ts
   - src/server/package-update-appliers-boot.adapter.ts
   - src/server/skill-update-checker.adapter.ts
+  - src/server/skill-update-checker.adapter.test.ts
   - src/server/skill-update-applier.adapter.ts
+  - src/server/skill-update-applier.adapter.test.ts
   - src/server/claude-plugin-update-checker.adapter.ts
   - src/server/codex-plugin-update-checker.adapter.ts
   - src/server/codex-plugin-update-applier.adapter.ts
+c3-121:
+  - src/client/app/KannaPluginsSettingsBranch.tsx
+  - src/client/app/PluginSidebarItems.tsx
+  - src/client/app/PluginsFooterSection.tsx
+  - src/client/app/PluginsFooterSlot.test.tsx
+  - src/client/app/PluginsFooterSlot.tsx
+  - src/client/app/PluginsSection.tsx
+  - src/client/plugins/**
+  - src/client/stores/pluginContributionsStore.ts
+c3-238:
+  - src/server/__fixtures__/plugins/**
+  - src/server/kanna-mcp-plugins.test.ts
+  - src/server/kanna-mcp-plugins.ts
+  - src/server/plugin-cli-dispatch.test.ts
+  - src/server/plugin-cli-dispatch.ts
+  - src/server/plugin-cli.ts
+  - src/server/plugin-http-routes.ts
+  - src/server/plugin-system-acceptance.test.tsx
+  - src/server/plugins/**
+c3-313:
+  - src/shared/plugins/**

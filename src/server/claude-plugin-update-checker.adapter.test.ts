@@ -26,6 +26,7 @@ function makePlugin(overrides: Partial<InstalledPackage> = {}): InstalledPackage
     installPath: "/home/user/.claude/plugins/my-plugin",
     versionLabel: "1.0.0",
     agents: [],
+    pinnedRef: null,
     ...overrides,
   }
 }
@@ -76,6 +77,7 @@ describe("createClaudePluginUpdateChecker", () => {
       installPath: null,
       versionLabel: null,
       agents: [],
+      pinnedRef: null,
     }
     const results = await checker.check([skill], makeAbortSignal())
     expect(results).toHaveLength(0)

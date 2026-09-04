@@ -14,6 +14,8 @@ bun test --conditions production src/shared/plugins/ src/server/plugin-system-ac
 
 ## Progress (latest first)
 
+- 2026-09-03 P11 DONE — an install now SURVIVES a restart, and a CLI install is visible to the server. `PluginService` gained an injected `InstalledPluginStore` port plus `restore()`; `install`/`setEnabled` persist through it, and `restore()` re-registers from the record WITHOUT recompiling (the build output is already on disk). `installed-plugin-store.ts` binds that port to `settings.installedPlugins`, the normalized CRUD collection that already existed and was simply never connected. Wired at the two boot points that own settings: `createHttpDispatcher` for the server (runs once, already holds `appSettings`, and avoids touching `server.ts`, which sits exactly on its 807-line ceiling) and `cli-runtime.ts`'s plugin arm for the CLI process. That boot step is INJECTABLE (`preparePluginService`) because the default builds a real `AppSettingsManager` — a test driving `setPluginServiceForTest` passes a no-op, which is the regression that caught it. `setEnabled` is now async; only tests called it. Suite 7667 pass / 0 fail.
+
 - 2026-09-03 P10 DONE — every surface wired, feature reachable. `PluginService` gained `list`/`reload`/`clientBundle`/`recordClientError`; `install` now PERSISTS the client bundle (it was building and discarding it, so `client.js` could never have been served). `plugin-service-host.ts` owns the one process-wide instance so CLI/HTTP/MCP share a registry. HTTP: all six routes real (a failed RPC is 200 `{ok:false}` — transport succeeded; `client.js` is `no-store` because the bundle is rebuilt in place at the same url and a cached copy defeats `reload`). MCP: six tools registered in `kanna-mcp.ts`, names in `shared/tools.ts`, mutating tools still withheld at depth>0. CLI: `kanna plugin install|ls|reload|logs`. Client: Settings->Plugins, sidebar items and chat-footer panel all mounted, fed by the new `usePluginContributions` hook. Three modules sat EXACTLY on their budget ceilings and got the extraction the budget prescribes rather than a raised allowance: `SettingsPage.tsx` 2787->2449 (SkillsSection, as the plan itself prescribed), `KannaSidebar.tsx` 1007->964 (`SidebarUtilityNav`, also the natural home for plugin nav entries), and `ChatTranscriptViewport.tsx` mounts via `PluginsFooterSlot` to stay at 700. Suite 7660 pass / 0 fail; full oracle chain exits 0.
 
 - 2026-08-29 P9b — the four P5/P6 UI surfaces DONE: `src/client/plugins/contributionRegistry.ts` (`createPluginContributionRegistry`/`createPluginContext` — the runtime counterpart of `@kanna/plugin`'s `PluginContext` type; the host constructs this object itself and hands it to `mod.default(...)`, so it never imports `@kanna/plugin` at runtime, only mirrors its shape locally), `src/client/app/PluginSidebarItems.tsx` (renders `addSidebarItem` contributions, small `Record<string, LucideIcon>` name lookup mirroring `toolIcons` in `components/messages/shared.tsx`), `src/client/app/PluginsFooterSection.tsx` (mirrors `LoopProgressSection`'s card/header/row shape, not `WorkflowsSection`'s heavier run-detail-dialog one — closer analog for a flat panel), `src/client/plugins/PluginBoundary.tsx`, `src/client/app/PluginsSection.tsx` (`PluginsSection` + `buildPluginsSectionHandlers`, DI'd POST-JSON fn mirroring `api/auth.ts`'s `HttpPort` injection shape, narrowed to one primitive). Settings-page routing (mounting `PluginsSection` into `SettingsPage.tsx`) is deliberately NOT wired — no WS command surface exists for it yet beyond the generic settings patch, and the chunk brief's own "after this chunk" note reserves CLI+MCP wiring, not settings routing, for next. PluginBoundary was the hard part: `getDerivedStateFromError` alone does NOT satisfy the acceptance test — MEASURED via a standalone probe that React 19's legacy `renderToStaticMarkup`/`renderToString` never invoke it at all; any render-phase throw aborts the whole call as fatal regardless of an ancestor boundary (confirmed with both `getDerivedStateFromError` and `componentDidCatch` defined together, still aborts). A manual `child.type(child.props)` invocation to catch synchronously was tried and FAILED (see Failed approaches) — breaks hooks. Fix: keep `getDerivedStateFromError` for real browser (Fiber) rendering, PLUS a synchronous trial render of the same children through a throwaway, self-contained `renderToStaticMarkup` call first (output discarded, only whether it threw matters) — this is itself a full render pass so the child's hooks run normally inside it (MEASURED via a probe: a `useState` counter stayed fully interactive across mount + click through this exact boundary shape, both when wrapped in the trial and in real CSR). Acceptance suite: 68/68 (up from 64/68). typecheck exits 1 with the same pre-existing error set minus the 7 that referenced the now-existing modules (diffed via `git stash push -u -- <the 5 new files>`: baseline 16 errors → 9 after, all 9 a strict subset of baseline; zero new lines). lint/lint:usestate/check:arch/build/check:bundle all exit 0 (check:bundle 342564/350000 gzip bytes — these 5 files are not yet imported from the real app entry graph, so bundle size is unaffected by this chunk; a future chunk wiring them in should re-check headroom, especially `PluginBoundary`'s `react-dom/server` import).
@@ -99,26 +101,10 @@ bun test --conditions production src/shared/plugins/ src/server/plugin-system-ac
 
 ## Next chunk
 
-P11 — make an installed plugin SURVIVE, which is the one thing still missing before
-the feature is usable rather than merely reachable.
-
-`createPluginService()` starts with an EMPTY in-memory registry and nothing ever
-repopulates it. Verified: `server.ts` holds no reference to the service, and none of the
-three install paths writes `settings.installedPlugins`. Two consequences, both fatal to
-real use:
-
-1. **An install does not survive a restart.** The bundles are on disk under
-   `<dataRoot>/plugins/<id>/build/`, but the registry that knows about them is gone, so
-   `plugin ls`, `GET /api/plugins` and `plugin_list` all report nothing after a reboot.
-2. **A CLI install is invisible to the running server.** `kanna plugin install` runs in
-   its own process with its own service instance, so the server never learns about it.
-
-`settings.json` already models this: `installedPlugins` is a persisted collection with
-full CRUD (`InstalledPluginConfig` = `{id, sourceDir, enabled}`) and normalization in
-`plugins/plugin-settings.ts`. It is simply not connected. The chunk is to connect it —
-record on install, rehydrate at boot — and to decide deliberately whether the source of
-truth is that settings collection or a scan of the plugins dir. Note `sourceDir` is not
-recoverable from the build output alone, which argues for the settings collection.
+DONE — no further chunk. Every phase PLUGIN-SYSTEM-PLAN.md scopes is implemented and
+reachable, and installs persist. What remains is listed under the terminal check below
+as scope the plan either defers or leaves undecided; none of it is a half-finished
+chunk, and two of the three need a human decision rather than more code.
 
 ## Terminal check against PLUGIN-SYSTEM-PLAN.md
 
@@ -132,13 +118,16 @@ Done, per the plan's own phase table:
   exactly the persistence P11 has not built yet. Writing a spec that passes by avoiding
   the gap would be worse than naming it. Chromium is available locally; the spec belongs
   with P11.
-- **Phase 4** (MCP authoring tools + slash commands) — the six MCP tools are done. The
-  **slash-command contribution is not**, and it needs a decision rather than an
-  invention: `local-catalog-io.adapter.ts`'s existing `scope: "plugin"` is for **Claude
-  Code** plugins (marketplace `skills/`, `commands/`, `SKILL.md`), a different, older
-  feature. Reusing that scope for Kanna plugins would collide in the picker; a Kanna
-  plugin also contributes at RUNTIME (`addCommandCenterItem`) while that catalog is
-  scanned from disk. Recorded rather than guessed.
+- **Phase 4** (MCP authoring tools + slash commands) — done. The six MCP tools shipped
+  first; `addCommandCenterItem` closed it. The decision it was waiting on: the entry is
+  merged CLIENT-side (a Kanna plugin contributes at runtime, while
+  `local-catalog-io.adapter.ts` is scanned from disk on the server), it is namespaced
+  `<pluginId>:<name>` and dropped if that name is already taken — which matters
+  concretely, because that adapter already names **Claude Code** marketplace plugin
+  commands `<pluginName>:<command>` at `scope: "plugin"`, the same shape — and
+  **selecting it inserts the item's `prompt` TEXT, not `/name`**, because a Kanna plugin
+  command has no file on disk and no builtin arm, so `/name` would reach the CLI as a
+  command it rejects. See `src/client/lib/plugin-slash-commands.ts`.
 
 Deferred BY THE PLAN, so not gaps: `addTheme`, `addTimelineTransformer/Renderer`,
 `addComposerPill`, `addAttachmentSource` — deliberately, because those are the surfaces

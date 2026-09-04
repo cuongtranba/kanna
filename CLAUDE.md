@@ -380,6 +380,24 @@ a tinted dark surface.
   (`src/shared/design/contrast.ts`, `tokens.ts`). Adding a new semantic tint
   context means adding an entry to `TONE_PAIRINGS` and confirming the test
   passes before touching any component.
+- `bun run test src/server/design/raw-ink-guard.test.ts`: **a raw semantic
+  token is a background, never ink.** `--warning`/`--info`/`--success` are
+  chosen to be legible as fills and fail AA as text; the `-text` variants
+  exist for that. `bg-warning` on a dot is correct, `text-warning` on a label
+  is a bug. The guard scans `src/client` + `src/shared` and fails on any
+  `text-{semantic}` outside ONE documented exception — a diff's own body in
+  `FileContentView`, which is verbatim material. The tally beside it is not
+  exempt. It also asserts every exemption is still NEEDED, so a stale one
+  cannot be reused to smuggle a new violation in.
+
+**The catalog measures what is drawn.** Status is a mark on a plain surface
+now (`src/client/lib/stateMark.ts`), so the four `status/*` tinted-pill
+pairings were replaced by `mark/*` + `ink/*` entries at `alpha: 1`. When a
+pairing's last consumer is deleted the pairing goes with it — otherwise the
+suite proves contrast for a surface nothing renders, which is a check that
+gates nothing. `STATUS_PILL_CLASS` is now
+`Record<"outdated"|"partial"|"unknown", string>`: package update availability
+is the one context that still wants a tinted pill.
 
 **Guidance-only (NOT linted — semantic, would false-positive).** Follow by
 hand:
@@ -1933,7 +1951,7 @@ detection and application for three package kinds: `skill`, `claude-plugin`,
 `codex-plugin`. Component facts: c3-237 (server), c3-312 (shared types/parsers),
 c3-116 (PluginsSection UI). ADR: `adr-20260902-package-auto-update`.
 
-**Four load-bearing invariants — do not violate silently:**
+**Six load-bearing invariants — do not violate silently:**
 
 1. **Applies are serialized.** `applyUpdates()` throws if `status === "applying"`.
    The UI must disable the Apply button while applying. Concurrent CLI invocations
@@ -1953,6 +1971,35 @@ c3-116 (PluginsSection UI). ADR: `adr-20260902-package-auto-update`.
    Kanna writes no sidecar. `PackageUpdateSnapshot` and `autoApplyHistory` (capped
    at 50) are rebuilt from scratch on every check and lost on server restart.
    Never introduce a Kanna-owned `~/.kanna/packages/` file without an ADR.
+
+5. **A skill is located upstream by its `skillPath`, never by folder base name.**
+   `classifySkillUpdate` resolves the lock's `skillPath` through
+   `UpstreamTreeIndex.byPath`; `byName` is a fallback for lock entries that
+   record no path. A repo may vendor one skill into many agent directories —
+   `pbakaus/impeccable` ships 18 copies, all at depth 3 — so a base-name index
+   picks whichever tied first and compares the installed hash against a SIBLING
+   copy. That reads as `outdated` forever and no update can clear it. When
+   `skillPath` is present and a complete tree lacks it, the folder is gone
+   upstream: do **not** fall back to a same-named folder elsewhere.
+
+6. **A pinned skill is never offered a plain update, and never auto-applied.**
+   `skills update` resolves upstream AT the lock's `ref` and exits 0 having
+   changed nothing, so `InstalledPackage.pinnedRef` decides the affordance:
+   `repinTarget()` (the single source read by the card, the applier, and the
+   manager) names the tag to move to, and the applier issues
+   `skills add <repo>/<folder>#<tag>` instead. `maybeAutoApply` and "Update all"
+   both skip pinned packages — satisfying a pin means REPLACING it, which is an
+   explicit choice about which version to run. The applier re-reads the lock
+   after the CLI exits and fails a pinned apply whose revision did not move;
+   exit 0 alone cannot distinguish an update from a no-op.
+
+**Re-pin targets are resolved by version, never by list position.**
+`resolveLatestTag` tries `releases/latest` first, then the highest semver tag via
+`pickLatestSemverTag` (`src/shared/packages/tag-order.ts`). GitHub returns tags
+in lexicographic-descending order, so `v20260102-production-cleanup` precedes
+`v11.13.4` — reading position is what left a pinned skill with no resolvable
+target. Resolution runs only for pinned packages that are behind, so it costs
+nothing on an ordinary check.
 
 **Adding a fourth package kind** requires:
 - New union member in `PackageKind` (`src/shared/packages/types.ts`)
@@ -2019,20 +2066,63 @@ not `renderToStaticMarkup`.** zustand v5 serves `getInitialState()` as the
 `setState` and a working panel looks broken. That helper exists for this and
 documents it.
 
-**KNOWN GAP — an install does not survive a restart.** `createPluginService()`
-starts with an empty in-memory registry and nothing repopulates it: `server.ts`
-holds no reference to the service, and no install path writes
-`settings.installedPlugins`. So a CLI install is invisible to the running
-server, and every surface reports nothing after a reboot. `settings.json`
-already models this (`InstalledPluginConfig` + full CRUD + normalization in
-`plugins/plugin-settings.ts`); it is simply not connected. Tracked as P11 in
-`PROGRESS-plugin-system.md`, together with the e2e spec that would assert it.
+**Installs persist through `settings.installedPlugins`, not through the
+service.** `PluginService`'s registry is in-memory, so it takes an injected
+`InstalledPluginStore` port: `install`/`setEnabled` write through it, and
+`restore()` re-registers from the record WITHOUT recompiling, because the build
+output the install produced is already on disk. `installed-plugin-store.ts`
+binds that port to the normalized CRUD collection settings already had. Without
+this a CLI install was invisible to the running server and every surface
+reported nothing after a reboot, while the bundles sat on disk the whole time.
 
-**Not built, and deliberately not guessed:** plugin-contributed slash commands.
-`local-catalog-io.adapter.ts`'s existing `scope: "plugin"` is for **Claude Code**
-plugins (marketplace `skills/`, `commands/`, `SKILL.md`) — a different, older
-feature — so reusing it would collide in the `/` picker, and a Kanna plugin
-contributes at runtime while that catalog is scanned from disk.
+**Two boot points configure it, and both are deliberate.** The server wires it
+in `createHttpDispatcher` — that factory runs once, already holds `appSettings`,
+and using it avoids touching `server.ts`, which sits EXACTLY on its 807-line
+budget ceiling. The CLI wires it in its own `plugin` arm, because it is a
+separate process. That CLI boot step is **injectable** (`preparePluginService`):
+the default constructs a real `AppSettingsManager`, so a test driving
+`setPluginServiceForTest` must pass a no-op or the real wiring silently replaces
+its fake — which is exactly the regression that caught it.
+
+## `addCommandCenterItem` — a plugin entry in the `/` picker
+
+Merged **client-side**, in `src/client/lib/plugin-slash-commands.ts`. It cannot
+go through `local-catalog-io.adapter.ts`: that catalog is DISK-scanned on the
+server and its `scope: "plugin"` means **Claude Code** marketplace plugins
+(`skills/`, `commands/`, `SKILL.md`) — a different, older feature — while a
+Kanna plugin contributes at RUNTIME from an evaluated browser bundle.
+
+**Selecting a plugin command inserts the item's `prompt` TEXT, never `/name`.**
+Every other picker entry becomes a `SlashCommandNode`, whose text content is
+`` `/${name}` ``, and survives because something downstream resolves that name:
+`runBuiltinCommand` intercepts a builtin, and the claude CLI reads a
+project/personal/Claude-Code-plugin command off DISK. A Kanna plugin command has
+neither, so `/my-plugin:greet` would reach the CLI as a command it rejects — a
+picker entry broken by construction. `prompt` is therefore a REQUIRED field on
+`PluginCommandCenterItemInput`, and the expansion resolves entirely in the
+browser before anything is sent. `$applySlashCommandSelection`
+(`SlashCommandTypeaheadPlugin.tsx`) owns the two branches.
+
+**Namespaced `<pluginId>:<name>`, and a taken name is DROPPED, not replaced** —
+so a plugin can add to the picker but never shadow a builtin. The dedupe is not
+belt-and-braces: `local-catalog-io.adapter.ts` already names Claude Code plugin
+commands `<pluginName>:<command>`, the same shape, so the collision is real. The
+prompt map is returned FROM `mergePluginCommands` rather than derived from the
+item list at the call site, so a dropped item can never still answer a lookup and
+hijack the catalog entry that beat it.
+
+**Merged AFTER `commandsForProvider`, deliberately.** That filter drops the
+disk-scanned entries on codex because only a claude-CLI provider can resolve
+them. A plugin entry is prompt text Kanna inserts locally, so it works on every
+provider exactly as a builtin does.
+
+**Every client `add*` needs a no-op twin in
+`src/server/plugins/plugin-child-entry.adapter.ts`.** Both bundles compile from
+the same entry and the server child runs it whole, so a method missing from that
+mirror is not an inert call — it is a TypeError inside `contribute`, after which
+the child never reports ready and the plugin dies at startup on a timeout that
+names nothing. Adding `addCommandCenterItem` to the `hello` fixture is what
+surfaced it.
 
 **Deferred by the plan, so not gaps:** `addTheme`,
 `addTimelineTransformer/Renderer`, `addComposerPill`, `addAttachmentSource` —

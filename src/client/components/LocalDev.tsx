@@ -61,7 +61,7 @@ function CopyButtonInner({ text, ports = {} }: { text: string; ports?: CopyPorts
       className="text-muted-foreground hover:text-foreground"
       onClick={() => void handleCopy()}
     >
-      {copied ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
+      {copied ? <Check className="h-4 w-4 text-success-text" /> : <Copy className="h-4 w-4" />}
     </Button>
   )
 }

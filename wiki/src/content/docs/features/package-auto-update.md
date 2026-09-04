@@ -17,7 +17,9 @@ Three kinds of packages are tracked:
 
 ## How update checks work
 
-Kanna checks for updates on a configurable interval (default: every few hours; configurable in Settings → Packages, clamped between 1 hour and 30 days). For each installed package it compares the local revision (lock file hash or installed version) against the latest available from the package's source repository.
+Background checking runs **every 24 hours** by default, and the interval is clamped to between 1 hour and 30 days. For each installed package Kanna compares the local revision (lock file hash or installed version) against the latest available from the package's source repository.
+
+Turning background checking off does **not** disable updates — **Check for updates** still works on click.
 
 ### Update availability states
 
@@ -32,11 +34,11 @@ Kanna checks for updates on a configurable interval (default: every few hours; c
 
 ## Enabling auto-update
 
-By default, Kanna only notifies you of available updates. To enable automatic application:
+By default Kanna only *tells* you an update exists — auto-apply is opt-in, and starts with no package kinds selected.
 
-1. Open **Settings → Packages**.
-2. Enable **Auto-update**.
-3. Choose which **package kinds** to auto-apply (you can auto-update skills while reviewing Claude plugin updates manually).
+1. Open **Settings → Plugins** (skills also appear under **Settings → Skills**).
+2. Enable auto-update.
+3. Choose which **package kinds** to auto-apply — you can auto-update skills while reviewing Claude plugin updates by hand.
 
 Auto-apply defers when any chat is active — Kanna will not run update CLIs while a conversation is in flight, since that could interfere with running tools.
 
@@ -46,7 +48,7 @@ Updates are applied **one at a time**, in sequence. While an apply is in progres
 
 For auto-apply, packages that fail to apply enter an exponential backoff (starting at 10 minutes, capped at 24 hours). After 3 consecutive failures a package is skipped from auto-apply until the next manual trigger.
 
-The last 50 auto-apply results are shown in Settings → Packages under **Recent auto-updates**. This history is in-memory only and resets on server restart.
+The last 50 auto-apply results are shown in **Settings → Plugins**. This history is in-memory only and resets on server restart.
 
 ## Codex binary path
 

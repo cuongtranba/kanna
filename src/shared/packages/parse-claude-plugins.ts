@@ -32,6 +32,7 @@ function buildClaudePluginPackage(entry: Record<string, AnyValue>): InstalledPac
     installPath,
     versionLabel: version && version !== "unknown" ? version.slice(0, 12) : null,
     agents: [],
+    pinnedRef: null,
   }
 }
 
@@ -130,6 +131,7 @@ function parseClaudePluginsFileV2(raw: Record<string, AnyValue>): {
       installPath,
       versionLabel: version && version !== "unknown" ? version.slice(0, 12) : null,
       agents: [],
+      pinnedRef: null,
     })
   }
 

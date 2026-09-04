@@ -1,6 +1,6 @@
 ---
-id: c3-238
-c3-seal: 0d5ac81fbb153d4531376e69bf2bab577e27023e4fbb666e80de1c76d8b81212
+id: c3-239
+c3-seal: 94efa2cb53b98024bafef6b7afb0e30b4c2638c431ea8fe7aff796d72c8f46eb
 title: stacks
 type: component
 category: feature
@@ -21,7 +21,7 @@ Bind several project checkouts into one chat, and resolve those bindings into th
 | --- | --- |
 | Container | c3-2 Server |
 | Runtime | Pure resolution on the spawn path; stack records live on the event log |
-| Consumers | c3-121 (stack sidebar UI), c3-313 (activity rollup), c3-226 (prompt composition), c3-232 (stack-owned boards) |
+| Consumers | c3-122 (stack sidebar UI), c3-314 (activity rollup), c3-226 (prompt composition), c3-232 (stack-owned boards) |
 | Boundary | Owns stack records, bindings, and their resolution; the worktrees themselves belong to c3-210, and prompt wording to c3-226 |
 
 ## Purpose
@@ -52,9 +52,9 @@ Owns what a stack IS on the server: the record, its member projects, its per-sta
 
 | Material | Must derive from | Allowed variance | Evidence |
 | --- | --- | --- | --- |
-| src/server/claude-session-config.ts | c3-238 Contract | Internal helper shape | src/server/claude-session-config.ts |
-| src/server/read-models.ts | c3-238 Contract | Snapshot assembly order | src/server/read-models.ts |
-| src/shared/kanna-system-prompt.ts | c3-238 Contract | Block wording | src/shared/kanna-system-prompt.ts |
+| src/server/claude-session-config.ts | c3-239 Contract | Internal helper shape | src/server/claude-session-config.ts |
+| src/server/read-models.ts | c3-239 Contract | Snapshot assembly order | src/server/read-models.ts |
+| src/shared/kanna-system-prompt.ts | c3-239 Contract | Block wording | src/shared/kanna-system-prompt.ts |
 
 ## Foundational Flow
 
@@ -70,7 +70,7 @@ Owns what a stack IS on the server: the record, its member projects, its per-sta
 
 | Aspect | Detail | Reference |
 | --- | --- | --- |
-| Outcome | One chat edits several repos, obeying each one's rules | c3-121 |
+| Outcome | One chat edits several repos, obeying each one's rules | c3-122 |
 | Primary path | Bindings resolve to roots and blocks at every turn start |  |
 | Alternate — solo | No bindings: cwd is the project checkout, and instructions come from chat.projectId |  |
 | Alternate — Codex | One working directory, so peer roots are reached by absolute path and the block says so rather than claiming they are unavailable |  |

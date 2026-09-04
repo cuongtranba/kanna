@@ -1,6 +1,6 @@
 ---
-id: c3-121
-c3-seal: aefed5af5080f9f9c1f3b3b637dcec1a12943ab549eac0f0f2f16b296f47fd69
+id: c3-122
+c3-seal: acfa3d3c7e2eb05c24d8548baa353fd2c379c3797c5417ac5790e928a11ff901
 title: stacks-ui
 type: component
 category: feature
@@ -23,7 +23,7 @@ Render stacks in the sidebar: create one, edit its projects and instructions, st
 | Container | c3-1 Client |
 | Runtime | React under the sidebar, plus a stack-scoped boards route |
 | Consumers | c3-111 (sidebar shell), c3-119 (boards UI, for a stack-owned board) |
-| Boundary | Renders and commands only; every stack decision is c3-238's, and the shapes are c3-313's |
+| Boundary | Renders and commands only; every stack decision is c3-239's, and the shapes are c3-314's |
 
 ## Purpose
 
@@ -35,7 +35,7 @@ Owns the stack surface a user actually touches — the sidebar section and its r
 | --- | --- | --- | --- | --- |
 | rule-zustand-store | rule | Panel and draft state lives in a store, never in useState | must follow | useState is banned under src/client; StackChatCreateRow.store.ts is the pattern |
 | rule-colocated-bun-test | rule | Each panel has a colocated test | must follow | StacksSection.test.tsx, StackCreatePanel.test.tsx, Menus.stack.test.tsx |
-| rule-strong-typing | rule | Stack shapes are imported from c3-313, never redeclared | must follow | A second declaration is a second thing to keep in step |
+| rule-strong-typing | rule | Stack shapes are imported from c3-314, never redeclared | must follow | A second declaration is a second thing to keep in step |
 | adr-20260904-project-stack-instructions | adr | stack.create carries instructions rather than firing a second command | must follow | The client has no stack id before the ack |
 
 ## Contract
@@ -51,6 +51,6 @@ Owns the stack surface a user actually touches — the sidebar section and its r
 
 | Material | Must derive from | Allowed variance | Evidence |
 | --- | --- | --- | --- |
-| src/client/components/chat-ui/sidebar/Stack*.tsx | c3-121 Contract | Layout and copy | src/client/components/chat-ui/sidebar/StacksSection.tsx |
-| src/client/app/useStackCommands.ts | c3-121 Contract | Internal helper shape | src/client/app/useStackCommands.ts |
-| src/client/app/StackBoardsRoutePage.tsx | c3-121 Contract | Layout and copy | src/client/app/StackBoardsRoutePage.tsx |
+| src/client/components/chat-ui/sidebar/Stack*.tsx | c3-122 Contract | Layout and copy | src/client/components/chat-ui/sidebar/StacksSection.tsx |
+| src/client/app/useStackCommands.ts | c3-122 Contract | Internal helper shape | src/client/app/useStackCommands.ts |
+| src/client/app/StackBoardsRoutePage.tsx | c3-122 Contract | Layout and copy | src/client/app/StackBoardsRoutePage.tsx |

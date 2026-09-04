@@ -1,3 +1,4 @@
+import { StateMark } from "../components/ui/state-mark"
 import { Check, CircleDashed, Clock, ListChecks, Loader2, TriangleAlert } from "lucide-react"
 import type { LoopProgressSnapshot, LoopRowStatus } from "../../shared/types"
 import { formatLocal } from "../lib/autoContinueTime"
@@ -8,7 +9,7 @@ const ROW_STATUS_CONFIG: Record<
   LoopRowStatus,
   { Icon: typeof Check; iconClass: string; textClass: string }
 > = {
-  done: { Icon: Check, iconClass: "text-success", textClass: "text-muted-foreground" },
+  done: { Icon: Check, iconClass: "text-success-text", textClass: "text-muted-foreground" },
   running: { Icon: Loader2, iconClass: "text-foreground animate-spin", textClass: "text-foreground font-medium" },
   pending: { Icon: CircleDashed, iconClass: "text-muted-foreground", textClass: "text-muted-foreground" },
   failed: { Icon: TriangleAlert, iconClass: "text-destructive", textClass: "text-muted-foreground line-through decoration-destructive/40" },
@@ -35,7 +36,7 @@ export function LoopProgressSection({ loopProgress, onResume }: Props) {
           Progress
           {armed ? (
             <span className="ml-auto inline-flex items-center gap-1.5 text-xs font-normal text-muted-foreground">
-              <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
+              <StateMark tone="active" className="text-foreground" />
               Loop running
             </span>
           ) : null}

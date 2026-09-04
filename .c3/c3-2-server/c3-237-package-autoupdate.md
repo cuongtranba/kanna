@@ -1,6 +1,6 @@
 ---
 id: c3-237
-c3-seal: e7ee3f39440f12400a7dc05a851d5080572725a9795efc3afc527f0b06c57d3d
+c3-seal: 640ca553a898d66fb148a66aa5f96a603f688eae55d376341e64cb6aa5427d02
 title: package-autoupdate
 type: component
 category: feature
@@ -53,27 +53,28 @@ Surfaces update availability for the three package kinds Kanna manages — Kanna
 
 | Reference | Type | Governs | Precedence | Notes |
 | --- | --- | --- | --- | --- |
-| ref-side-effect-adapter | ref | IO in *.adapter.ts only | must follow | package-inventory-io.adapter.ts, skill-update-applier.adapter.ts and the four checker/applier adapters are the only files that spawn a CLI or read a lock file |
-| adr-20260902-package-auto-update | adr | Applies are serialized; no Kanna-owned sidecar; unknown is not up_to_date | must follow | The four invariants below are that ADR's decisions, restated where an implementer will meet them |
+| ref-side-effect-adapter | rule | IO in *.adapter.ts only | mandatory | package-inventory-io.adapter.ts, skill-update-applier.adapter.ts, etc. |
+| adr-20260902-package-auto-update | adr | applies serialized; no sidecar; unknown != up_to_date | mandatory | the four invariants below are this ADR's, not defensive choices |
 
 ## Contract
 
 | Surface | Direction | Contract | Boundary | Evidence |
 | --- | --- | --- | --- | --- |
-| PackageUpdateManager | IN/OUT | start / stop drive the timer; runCheck rebuilds the whole snapshot from the lock files; applyUpdates throws while status is "applying", so a caller must gate on it rather than queue | c3-202 | src/server/package-update-manager.ts |
-| PackageUpdateManagerDeps | IN | Every effect injected — inventory reader, per-kind checkers and appliers, clock, and hasAnyChatBusy; the busy gate is required, not optional, so an unwired host cannot auto-apply during a live turn | c3-207 | src/server/package-update-manager.ts |
-| PackageUpdateSnapshot | OUT | Whole-state push, never a delta: status, per-package availability, autoApplyHistory capped at 50, and error when a check failed | c3-208 | src/server/ws-router-settings.ts |
-| Inventory + checkers + appliers | OUT | One checker and one applier adapter per PackageKind, wired at boot; a kind with no applier reports availability and applies nothing | c3-204 | src/server/package-update-appliers-boot.adapter.ts |
-| PackageUpdateSettings | IN | checkEnabled is a master switch honoured by both start() and checkUpdates(); auto-apply is opt-in per kind | c3-202 | src/server/app-settings.ts |
+| Update snapshot | OUT | PackageUpdateSnapshot per package kind (skill, claude-plugin, codex-plugin), rebuilt on every check and never persisted | c3-207 | src/server/package-update-manager.ts |
+| Check request | IN | checkForUpdates() reads each kind's upstream lock file through its checker adapter | c3-312 | src/server/skill-update-checker.adapter.ts, src/server/claude-plugin-update-checker.adapter.ts, src/server/codex-plugin-update-checker.adapter.ts |
+| Apply request | IN | applyUpdates() shells out to the owning CLI per kind; throws when already applying, so the caller must gate its own UI | c3-116 | src/server/package-update-manager.ts, src/server/package-update-appliers-boot.adapter.ts |
+| Busy-chat veto | IN | hasAnyChatBusy() is injected and consulted before any auto-apply; a running CLI during an active turn can interfere with conversation tools | c3-210 | src/server/package-update-manager.ts |
+| Settings | IN | PackageUpdateSettings in settings.json is the only configuration surface; CODEX_BINARY_PATH is the one env var | c3-206 | src/server/app-settings-package-updates.ts |
 
 ## Derived Materials
 
 | Material | Must derive from | Allowed variance | Evidence |
 | --- | --- | --- | --- |
-| src/server/package-update-manager.ts | c3-237 Contract | Internal helper shape | src/server/package-update-manager.ts |
-| src/server/*-update-checker.adapter.ts | c3-237 Contract | CLI and API call detail | src/server/skill-update-checker.adapter.ts |
-| src/server/*-update-applier.adapter.ts | c3-237 Contract | CLI invocation detail | src/server/codex-plugin-update-applier.adapter.ts |
-| src/client/app/PluginsSection.tsx | c3-237 Contract | Layout and copy | src/client/app/PluginsSection.tsx |
+| src/server/package-update-manager.ts | Contract (check/apply/snapshot surface) and Key Invariants | Scheduling detail | src/server/package-update-manager.ts |
+| src/server/skill-update-checker.adapter.ts | Contract (check request) | Upstream lock-file format | src/server/skill-update-checker.adapter.ts |
+| src/server/claude-plugin-update-checker.adapter.ts | Contract (check request) | Upstream lock-file format | src/server/claude-plugin-update-checker.adapter.ts |
+| src/server/codex-plugin-update-checker.adapter.ts | Contract (check request) | Upstream lock-file format | src/server/codex-plugin-update-checker.adapter.ts |
+| src/server/package-update-appliers-boot.adapter.ts | Contract (apply request) | Per-kind CLI invocation | src/server/package-update-appliers-boot.adapter.ts |
 
 ## Key Invariants
 

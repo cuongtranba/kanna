@@ -14,9 +14,13 @@
  */
 import { describe, expect, it } from "bun:test"
 import { createHeadlessEditor } from "@lexical/headless"
-import { $createParagraphNode, $getRoot } from "lexical"
+import { $createParagraphNode, $createTextNode, $getRoot } from "lexical"
 import { $createSlashCommandNode, SlashCommandNode } from "../nodes/SlashCommandNode"
-import { SlashCommandMenuOption, dedupeCommandsByName } from "./SlashCommandTypeaheadPlugin"
+import {
+  $applySlashCommandSelection,
+  SlashCommandMenuOption,
+  dedupeCommandsByName,
+} from "./SlashCommandTypeaheadPlugin"
 import { filterCommands, normalizeCommandName } from "../../../lib/slash-commands"
 import type { SlashCommand } from "../../../../shared/types"
 
@@ -284,5 +288,97 @@ describe("filterCommands (used by the plugin to derive options)", () => {
 
     expect(Boolean(optWithArg.command.argumentHint)).toBe(true)
     expect(Boolean(optNoArg.command.argumentHint)).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// $applySlashCommandSelection — the plugin command-center decision
+//
+// A catalog entry becomes a SlashCommandNode (`/name`, resolved downstream by
+// a builtin arm or by a file on disk). A Kanna plugin entry has neither, so it
+// becomes plain TEXT: the item's own prompt. These cases pin that split — the
+// whole point of the feature is that the two are NOT interchangeable.
+// ---------------------------------------------------------------------------
+
+const NO_PROMPTS: ReadonlyMap<string, string> = new Map()
+
+function applySelectionOverQuery(
+  command: SlashCommand,
+  promptByName: ReadonlyMap<string, string>,
+): string {
+  const editor = buildEditor()
+  let text = ""
+  editor.update(
+    () => {
+      const root = $getRoot()
+      root.clear()
+      const para = $createParagraphNode()
+      // What the typeahead hands `onSelectOption`: the text node holding the
+      // `/query` the user typed.
+      const queryNode = $createTextNode(`/${normalizeCommandName(command.name)}`)
+      para.append(queryNode)
+      root.append(para)
+      $applySlashCommandSelection({
+        command,
+        promptByName,
+        textNodeContainingQuery: queryNode,
+      })
+    },
+    { discrete: true },
+  )
+  editor.getEditorState().read(() => {
+    text = $getRoot().getTextContent()
+  })
+  return text
+}
+
+describe("$applySlashCommandSelection", () => {
+  it("inserts /name for a catalog command", () => {
+    expect(applySelectionOverQuery(makeCmd("clear"), NO_PROMPTS)).toBe("/clear ")
+  })
+
+  it("inserts the plugin item's prompt TEXT, never /name", () => {
+    const command = makeCmd("my-plugin:greet", { scope: "plugin" })
+    const prompts = new Map([["my-plugin:greet", "Greet the user warmly."]])
+
+    const text = applySelectionOverQuery(command, prompts)
+
+    expect(text).toBe("Greet the user warmly.")
+    // The regression this guards: `/my-plugin:greet` has no file on disk and no
+    // builtin arm, so sending it would reach the CLI as an unresolvable command.
+    expect(text).not.toContain("/my-plugin:greet")
+  })
+
+  it("leaves a catalog command alone when some OTHER name carries a prompt", () => {
+    const prompts = new Map([["my-plugin:greet", "Greet the user warmly."]])
+    expect(applySelectionOverQuery(makeCmd("clear"), prompts)).toBe("/clear ")
+  })
+
+  it("produces no SlashCommandNode for a plugin entry", () => {
+    const editor = buildEditor()
+    let nodeCount = 0
+    editor.update(
+      () => {
+        const root = $getRoot()
+        root.clear()
+        const para = $createParagraphNode()
+        const queryNode = $createTextNode("/my-plugin:greet")
+        para.append(queryNode)
+        root.append(para)
+        $applySlashCommandSelection({
+          command: makeCmd("my-plugin:greet", { scope: "plugin" }),
+          promptByName: new Map([["my-plugin:greet", "Greet warmly."]]),
+          textNodeContainingQuery: queryNode,
+        })
+      },
+      { discrete: true },
+    )
+    editor.getEditorState().read(() => {
+      nodeCount = $getRoot().getAllTextNodes().length
+    })
+    // No decorator node at all, and no trailing-space node either: the entry is
+    // prose the user edits, not a command with an argument to type after it.
+    expect(JSON.stringify(editor.getEditorState().toJSON())).not.toContain("kanna-slash-command")
+    expect(nodeCount).toBe(1)
   })
 })

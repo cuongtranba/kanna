@@ -504,7 +504,7 @@ export function ChatPreferenceControls({
               <span>{codexModelOptions?.fastMode ? "Fast Mode" : "Standard"}</span>
             </>
           )}
-          triggerClassName={codexModelOptions?.fastMode ? "text-success" : undefined}
+          triggerClassName={codexModelOptions?.fastMode ? "text-success-text" : undefined}
         >
           {(close) => (
             <>
@@ -539,7 +539,7 @@ export function ChatPreferenceControls({
               <span>{planMode ? "Plan Mode" : "Full Access"}</span>
             </>
           )}
-          triggerClassName={planMode ? "text-info" : undefined}
+          triggerClassName={planMode ? "text-info-text" : undefined}
         >
           {(close) => (
             <>

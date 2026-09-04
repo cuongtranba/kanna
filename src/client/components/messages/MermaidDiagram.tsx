@@ -297,7 +297,7 @@ function MermaidControls({
         )}
         onClick={onCopy}
       >
-        {copied ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
+        {copied ? <Check className="h-4 w-4 text-success-text" /> : <Copy className="h-4 w-4" />}
       </Button>
     </div>
   )

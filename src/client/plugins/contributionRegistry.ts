@@ -45,6 +45,27 @@ export interface PluginSidebarItem extends PluginSidebarItemInput {
   readonly pluginId: string
 }
 
+/**
+ * One entry a plugin contributes to the composer's `/` picker.
+ *
+ * `prompt` is REQUIRED and is the whole contract: a Kanna plugin command has no
+ * file on disk for the CLI to resolve, so what the picker inserts is this text,
+ * not `/name`. See `src/client/lib/plugin-slash-commands.ts` for the full
+ * reasoning — it is the module that performs the merge.
+ */
+export interface PluginCommandCenterItemInput {
+  /** Bare name; the host namespaces it as `<pluginId>:<name>` before it can
+   * reach the picker, so one plugin can never claim `/compact`. */
+  readonly name: string
+  readonly description: string
+  /** Inserted into the composer verbatim when the user picks this entry. */
+  readonly prompt: string
+}
+
+export interface PluginCommandCenterItem extends PluginCommandCenterItemInput {
+  readonly pluginId: string
+}
+
 /** One registered surface, flattened back out of the keyed map. The host needs
  * this to mount surfaces a plugin contributed WITHOUT a sidebar item — reading
  * `getSurface` per sidebar item would silently drop those. */
@@ -55,9 +76,11 @@ export interface PluginSurfaceEntry {
 }
 
 export interface PluginContributionRegistry {
+  getCommandCenterItems(): PluginCommandCenterItem[]
   getSidebarItems(): PluginSidebarItem[]
   getSurface(pluginId: string, surfaceId: string): PluginSurfaceComponent | undefined
   getSurfaceEntries(): PluginSurfaceEntry[]
+  registerCommandCenterItem(pluginId: string, item: PluginCommandCenterItemInput): void
   registerSidebarItem(pluginId: string, item: PluginSidebarItemInput): void
   registerSurface(pluginId: string, surfaceId: string, component: PluginSurfaceComponent): void
 }
@@ -68,10 +91,14 @@ function surfaceKey(pluginId: string, surfaceId: string): string {
 
 export function createPluginContributionRegistry(): PluginContributionRegistry {
   const sidebarItems: PluginSidebarItem[] = []
+  const commandCenterItems: PluginCommandCenterItem[] = []
   const surfaces = new Map<string, PluginSurfaceComponent>()
   const surfaceEntries: PluginSurfaceEntry[] = []
 
   return {
+    getCommandCenterItems() {
+      return [...commandCenterItems]
+    },
     getSidebarItems() {
       return [...sidebarItems]
     },
@@ -80,6 +107,9 @@ export function createPluginContributionRegistry(): PluginContributionRegistry {
     },
     getSurfaceEntries() {
       return [...surfaceEntries]
+    },
+    registerCommandCenterItem(pluginId, item) {
+      commandCenterItems.push({ pluginId, ...item })
     },
     registerSidebarItem(pluginId, item) {
       sidebarItems.push({ pluginId, ...item })
@@ -104,6 +134,10 @@ export function createPluginContributionRegistry(): PluginContributionRegistry {
 export interface PluginContext {
   addSurface(id: string, component: PluginSurfaceComponent): void
   addSidebarItem(item: PluginSidebarItemInput): void
+  /** Contribute an entry to the composer's `/` picker. The host namespaces the
+   * name by plugin id and drops it if that name is already taken, so this can
+   * add to the picker but never shadow what is already in it. */
+  addCommandCenterItem(item: PluginCommandCenterItemInput): void
   /** RPC handler wiring is a server-side concern (`plugin-service.ts` loads
    * the plugin's SERVER bundle and calls its own `handle`). The client
    * context accepts the call as a no-op purely so `plugin.handle(...)`
@@ -118,6 +152,9 @@ export function createPluginContext(pluginId: string, registry: PluginContributi
     },
     addSidebarItem(item) {
       registry.registerSidebarItem(pluginId, item)
+    },
+    addCommandCenterItem(item) {
+      registry.registerCommandCenterItem(pluginId, item)
     },
     handle() {},
   }

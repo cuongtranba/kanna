@@ -1,7 +1,12 @@
 fact: c3-121
-claim: "the stack sidebar panels, the stack command hook, and the stack boards route are the client's stack surface"
+claim: "plugin client runtime and its mounted surfaces live under src/client/plugins/ plus the app-level mount points"
 code:
-  - src/client/components/chat-ui/sidebar/Stack*.tsx
-  - src/client/components/chat-ui/sidebar/StackChatCreateRow.store.ts
-  - src/client/app/useStackCommands.ts
-  - src/client/app/StackBoardsRoutePage.tsx
+  - src/client/plugins/**/*.ts
+  - src/client/plugins/**/*.tsx
+  - src/client/stores/pluginContributionsStore.ts
+  - src/client/app/PluginSidebarItems.tsx
+  - src/client/app/PluginsFooterSection.tsx
+  - src/client/app/PluginsFooterSlot.tsx
+  - src/client/app/PluginsFooterSlot.test.tsx
+  - src/client/app/PluginsSection.tsx
+  - src/client/app/KannaPluginsSettingsBranch.tsx

@@ -1,7 +1,7 @@
 ---
 id: c3-2
 c3-version: 4
-c3-seal: 7f56fd525445d23c0cc5b9fd69dc7380034836c0ccd3711cd5523dca7ab59d9b
+c3-seal: f251ea7e4ef765c3a45051a8a78b5879cd3d35ef3a93f1a5de0b50a2a95c6dda
 title: Server
 type: container
 boundary: service
@@ -64,5 +64,6 @@ Run the local Bun backend: serve HTTP+WebSocket on localhost, coordinate Claude 
 | c3-234 | observability |  | active | Own the server's process- and turn-level observability: the pure instrument facade domain code calls, the single adapter that exports it, and the alert rules that turn the exported fleet data into a GitHub ticket. |
 | c3-235 | secret-scanning | feature | active | Block a credential from reaching the repository, at the commit and again at the merge, using one pinned scanner and one shared configuration so the local and CI verdicts cannot disagree. |
 | c3-236 | architecture-budget | feature | active | Hold every structural-defect population in the codebase at or below a recorded pin, so a pull request that makes a filed architecture issue worse fails CI instead of merging unobserved. |
-| c3-237 | package-autoupdate | feature | active | Detect when installed packages (skills, Claude Code plugins, Codex plugins) are behind upstream and apply updates on a configurable schedule, notifying the user and optionally auto-applying per kind. |
-| c3-238 | stacks | feature | active | Bind several project checkouts into one chat, and resolve those bindings into the roots a turn may reach and the instruction blocks its prompt must carry. |
+| c3-237 | package-autoupdate | feature | active | Detect and apply updates for the three package kinds Kanna installs (skill, claude-plugin, codex-plugin), serialized and deferred while any chat is busy. |
+| c3-238 | plugin-system | feature | active | Run third-party plugins for Kanna: compile a plugin directory to two bundles, run its server half as a subprocess speaking typed RPC over a unix socket, keep a bounded log ring per plugin, and expose one service that the HTTP routes, the CLI and the MCP authoring tools all drive. |
+| c3-239 | stacks | feature | active | Bind several project checkouts into one chat, and resolve those bindings into the roots a turn may reach and the instruction blocks its prompt must carry. |

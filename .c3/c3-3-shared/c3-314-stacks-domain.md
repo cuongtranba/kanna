@@ -1,6 +1,6 @@
 ---
-id: c3-313
-c3-seal: 8d734e2b71fb3a3145360f3a7874635678047260e6bc4f3afdab252edb30ea6f
+id: c3-314
+c3-seal: 87ce921ecbf79e9b3d8a6424810a8719dea9976c64dd57e537182906c6cd84ed
 title: stacks-domain
 type: component
 category: feature
@@ -21,8 +21,8 @@ Own the pure stack-domain shapes and the activity fold that answers what is runn
 | --- | --- |
 | Container | c3-3 Shared |
 | Runtime | Pure; no IO, no state. Called on the read-model path and rendered by the client |
-| Consumers | c3-238 (server resolution), c3-121 (stack sidebar UI) |
-| Boundary | Types and folds only; resolving a binding against real projects belongs to c3-238 |
+| Consumers | c3-239 (server resolution), c3-122 (stack sidebar UI) |
+| Boundary | Types and folds only; resolving a binding against real projects belongs to c3-239 |
 
 ## Purpose
 
@@ -47,5 +47,5 @@ Houses the stack shapes both sides import once — `Stack`, `StackBinding`, `Res
 
 | Material | Must derive from | Allowed variance | Evidence |
 | --- | --- | --- | --- |
-| src/server/read-models.ts | c3-313 Contract | Snapshot assembly order | src/server/read-models.ts |
-| src/client/components/chat-ui/sidebar/StacksSection.tsx | c3-313 Contract | Layout and copy | src/client/components/chat-ui/sidebar/StacksSection.tsx |
+| src/server/read-models.ts | c3-314 Contract | Snapshot assembly order | src/server/read-models.ts |
+| src/client/components/chat-ui/sidebar/StacksSection.tsx | c3-314 Contract | Layout and copy | src/client/components/chat-ui/sidebar/StacksSection.tsx |

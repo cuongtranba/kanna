@@ -1,5 +1,5 @@
 fact: c3-313
-claim: "the pure stack activity fold lives in src/shared/stack-activity.ts"
+claim: "the pure plugin vocabulary both halves share lives under src/shared/plugins/"
 code:
-  - src/shared/stack-activity.ts
-  - src/shared/stack-activity.test.ts
+  - src/shared/plugins/**/*.ts
+  - src/shared/plugins/kanna-plugin.d.ts

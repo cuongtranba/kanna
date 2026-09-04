@@ -14,6 +14,16 @@ export interface InstalledPackage {
   installPath: string | null
   versionLabel: string | null
   agents: string[]
+  /**
+   * The git ref this package is pinned to (skill lock `ref`), or null when it
+   * tracks the default branch.
+   *
+   * Load-bearing: `skills update` resolves upstream AT THIS REF, so a pinned
+   * package can never be moved by an update — it exits 0 having changed
+   * nothing. Anything offering an update affordance must consult this, or it
+   * offers a button that provably cannot work.
+   */
+  pinnedRef: string | null
 }
 
 export interface PackageInventorySnapshot {
@@ -34,8 +44,8 @@ export interface PackageUpdateStatus {
   availability: UpdateAvailability
   currentRevision: string | null // lock's skillFolderHash
   latestRevision: string | null // upstream tree sha
-  currentVersion: string | null // null for skills
-  latestVersion: string | null
+  currentVersion: string | null // for skills: the pinned ref, else null
+  latestVersion: string | null // for skills: the tag to re-pin to, else null
   checkedAt: number
   error: string | null // why `unknown`; rendered, never swallowed
 }
@@ -80,5 +90,12 @@ export interface PackageApplyResult {
 
 export interface PackageUpdateApplier {
   kind: PackageKind
-  apply(pkg: InstalledPackage, signal: AbortSignal): Promise<PackageApplyResult>
+  /**
+   * Takes the whole entry, not just the InstalledPackage, so an applier can
+   * read the check result that selected it — the skill applier needs
+   * `update.latestVersion` to build a re-pin command. The manager already had
+   * the entry in hand; widening the type here avoids threading a second
+   * argument through every call site for one applier's benefit.
+   */
+  apply(pkg: PackageUpdateEntry, signal: AbortSignal): Promise<PackageApplyResult>
 }

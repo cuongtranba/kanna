@@ -23,9 +23,11 @@ Reorder project groups in the sidebar — order persists across restarts.
 
 Kanna auto-discovers projects from both Claude (`~/.claude/projects/`) and Codex local history. New projects appear in the sidebar without manual import.
 
-## Bulk import Claude Code sessions
+## Import Claude Code sessions
 
-One-click import of existing `~/.claude/projects/` sessions with full transcript. Seamless resume via the Claude Agent SDK.
+From the sidebar, **Import Claude sessions** pulls existing `~/.claude/projects/` sessions in with their full transcript — **Import all**, or paste specific session ids. Imported chats resume like any other.
+
+A session that is *still being written to* by Claude Code keeps catching up: Kanna follows the source file and imports the delta as it grows. Following arms only when the source was modified recently (within 10 minutes by default) and stops after it goes quiet for the same window, so importing an old session does not leave a poller running. Tune with `KANNA_IMPORT_FOLLOW_*` ([env vars](/reference/env-vars/)).
 
 <Screenshot
   light="/screenshots/light/sidebar-projects.png"
@@ -35,7 +37,15 @@ One-click import of existing `~/.claude/projects/` sessions with full transcript
 
 ## Git worktree isolation
 
-Run a chat in an isolated worktree without disturbing your working tree. Right-click a chat → **Run in worktree** → Kanna creates a worktree at `.claude/worktrees/<chat-id>/` and runs the chat from there.
+A chat gets its own checkout by starting work from a **[board card](/features/boards/)**. Kanna cuts a branch for the card, creates a worktree for it, and opens a chat already rooted there — so two agents on two cards cannot touch each other's files.
+
+Worktrees live *beside* the repo, at `../.kanna-worktrees/<repo-name>/<branch>`, not inside it. A nested worktree would be an untracked directory to the parent and would dirty every `git status`, including the Changes pane.
+
+You can also point Kanna at a worktree you made yourself: add it as a project, or bind it to a [multi-repo stack chat](/features/multi-repo-stacks/).
+
+:::note
+There is no per-chat "Run in worktree" action. A chat's working directory comes from its project (or its stack bindings); the card flow above is what creates one for you.
+:::
 
 ## Session resumption
 
@@ -47,4 +57,8 @@ Chat titles generated in the background via Claude Haiku 4.5 after the first tur
 
 ## Star projects
 
-Star projects to pin them to the top of the sidebar. See [User Guide → Project Management](/guides/user/workflows/).
+Star projects to pin them to the top of the sidebar.
+
+## Grouping projects into a stack
+
+Two or more projects can be grouped into a **stack**, so one chat can work across several repositories at once — see [Multi-repo stacks](/features/multi-repo-stacks/).

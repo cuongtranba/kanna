@@ -93,7 +93,7 @@ function CronArmedMessageInner({ message, onRemove }: Props) {
           onClick={handleCopyEdit}
         >
           {copied
-            ? <Check className="h-3.5 w-3.5 text-success" aria-hidden="true" />
+            ? <Check className="h-3.5 w-3.5 text-success-text" aria-hidden="true" />
             : <Copy className="h-3.5 w-3.5" aria-hidden="true" />}
           {copied ? "Copied" : "Edit"}
         </button>

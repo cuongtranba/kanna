@@ -1,23 +1,29 @@
 ---
 title: OAuth Pool Setup
-description: Add Claude OAuth tokens for subscription billing.
+description: Add Claude OAuth tokens so Kanna runs on your Claude plan.
 ---
 
 import Screenshot from '../../../components/Screenshot.astro'
 
-Kanna's OAuth pool lets you register one or more Claude OAuth tokens. Kanna rotates across them per chat and falls over on rate limits.
+Kanna's OAuth pool holds one or more Claude OAuth tokens. Kanna picks one per
+chat, spreads load across them, and falls over automatically when one hits a
+rate limit.
 
-## Why OAuth pool
+## Why a pool
 
-- **Subscription billing** — Pro/Max plans charged instead of API rates (via PTY driver)
-- **Rate-limit fallover** — automatic switch to a different token when one hits limits
-- **Per-token labels** — tag tokens (e.g., `personal`, `work-1`, `work-2`)
+- **Runs on your Claude plan** — Kanna passes your OAuth token to the Claude
+  Agent SDK rather than an API key.
+- **Rate-limit fallover** — a limited token is set aside with its reset time and
+  the next turn picks another.
+- **Per-token labels and concurrency** — tag tokens (`personal`, `work-1`) and
+  set how many chats each may serve at once.
 
 ## Add a token
 
-1. Open **Settings → OAuth Pool**
-2. Click **Add Token**
-3. Paste a Claude OAuth token (from `claude /login` on a machine where the CLI is interactive)
+1. Open **Settings → Providers**
+2. Under **Claude OAuth tokens**, click **Add**
+3. Paste a Claude OAuth token (from `claude /login` on a machine where the CLI
+   is interactive)
 4. Give it a label
 5. Save
 
@@ -27,15 +33,21 @@ Kanna's OAuth pool lets you register one or more Claude OAuth tokens. Kanna rota
   alt="OAuth pool admin modal"
 />
 
-## Enable PTY driver
+That is the whole setup — there is no driver flag or env var to set afterwards.
 
-To actually use subscription billing, set `KANNA_CLAUDE_DRIVER=pty` in your shell before running Kanna:
+## More than one token
 
-```bash
-export KANNA_CLAUDE_DRIVER=pty
-kanna
-```
+Adding a second token is worth it once you regularly run several chats at once,
+or hit limits mid-session. Kanna always picks the eligible token with the fewest
+current holders, so load spreads before it stacks.
 
-PTY mode is OAuth-only — `ANTHROPIC_API_KEY` is stripped from the spawned child env regardless of what's in your shell.
+Each token has an optional **max concurrent chats** (default 1). Raise it when
+you have more concurrent chats than tokens and rate limits are not what is
+stopping you.
 
-See [Features → Security & Sandboxing](/features/security-sandboxing/) for the sandbox profile applied to PTY spawns.
+## Where tokens are stored
+
+In `~/.kanna/data/settings.json`, mode `0600`, alongside the rest of your
+settings. Treat that file as a secret in any backup. See
+[OAuth Pool Admin](/guides/ops/oauth-pool-admin/) for the on-disk shape, the
+status values, and what to do when a token stops being picked.

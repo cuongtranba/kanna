@@ -1,5 +1,5 @@
 # C3 Structural Index
-<!-- hash: sha256:d4e879fc780098296e640b785906be390d1979da4bd71454ce3bc25c093b6e59 -->
+<!-- hash: sha256:a1be99d1f4b0bcaf07c541bebcdd962200ceb179032ce0c9548f8dc28c27a562 -->
 
 ## c3-0 — Kanna (system)
 
@@ -43,7 +43,7 @@ files: src/client/app/BackgroundTasksSection.test.tsx, src/client/app/Background
 ## c3-113 — transcript (component)
 container: c3-1 | context: c3-0
 refs: ref-provider-adapter, ref-tool-hydration
-files: src/client/app/KannaTranscript.store.ts, src/client/app/KannaTranscript.test.tsx, src/client/app/KannaTranscript.tsx, src/client/app/subagent-run-placement.test.ts, src/client/app/subagent-run-placement.ts, src/client/app/transcriptSpacing.test.ts, src/client/app/transcriptSpacing.ts
+files: src/client/app/KannaTranscript.test.tsx, src/client/app/KannaTranscript.tsx, src/client/app/subagent-run-placement.test.ts, src/client/app/subagent-run-placement.ts, src/client/app/transcriptSpacing.test.ts, src/client/app/transcriptSpacing.ts
 
 ## c3-114 — messages-renderer (component)
 container: c3-1 | context: c3-0
@@ -80,7 +80,12 @@ container: c3-1 | context: c3-0
 refs: rule-colocated-bun-test, rule-strong-typing, rule-zustand-store
 files: src/client/app/CronJobEditDialog.store.ts, src/client/app/CronJobEditDialog.tsx, src/client/app/CronJobRow.store.ts, src/client/app/CronJobRow.tsx, src/client/app/CronJobsPage.tsx, src/client/app/CronJobsSection.tsx, src/client/components/messages/CronArmedMessage.tsx, src/client/components/messages/CronCommandErrorMessage.tsx, src/client/components/messages/CronJobChangeMessage.tsx, src/client/components/messages/CronListMessage.tsx, src/client/components/messages/CronMessages.test.tsx, src/client/components/messages/CronRunMessage.tsx, src/client/components/messages/CronRunSkippedMessage.tsx, src/client/stores/cronJobsStore.ts
 
-## c3-121 — stacks-ui (component)
+## c3-121 — plugins-ui (component)
+container: c3-1 | context: c3-0
+refs: ref-strong-typing, rule-colocated-bun-test, rule-zustand-store
+files: src/client/app/KannaPluginsSettingsBranch.tsx, src/client/app/PluginSidebarItems.tsx, src/client/app/PluginsFooterSection.tsx, src/client/app/PluginsFooterSlot.test.tsx, src/client/app/PluginsFooterSlot.tsx, src/client/app/PluginsSection.tsx, src/client/plugins/**/*.ts, src/client/plugins/**/*.tsx, src/client/stores/pluginContributionsStore.ts
+
+## c3-122 — stacks-ui (component)
 container: c3-1 | context: c3-0
 refs: rule-colocated-bun-test, rule-strong-typing, rule-zustand-store
 files: src/client/app/StackBoardsRoutePage.tsx, src/client/app/useStackCommands.ts, src/client/components/chat-ui/sidebar/Stack*.tsx, src/client/components/chat-ui/sidebar/StackChatCreateRow.store.ts
@@ -270,9 +275,14 @@ files: scripts/check-complexity-limits.ts, src/ops/architecture/budget-scan.adap
 ## c3-237 — package-autoupdate (component)
 container: c3-2 | context: c3-0
 refs: ref-side-effect-adapter
-files: src/server/claude-plugin-update-checker.adapter.ts, src/server/codex-plugin-update-applier.adapter.ts, src/server/codex-plugin-update-checker.adapter.ts, src/server/package-inventory-io.adapter.test.ts, src/server/package-inventory-io.adapter.ts, src/server/package-update-appliers-boot.adapter.ts, src/server/package-update-manager.test.ts, src/server/package-update-manager.ts, src/server/skill-update-applier.adapter.ts, src/server/skill-update-checker.adapter.ts
+files: src/server/claude-plugin-update-checker.adapter.ts, src/server/codex-plugin-update-applier.adapter.ts, src/server/codex-plugin-update-checker.adapter.ts, src/server/package-inventory-io.adapter.test.ts, src/server/package-inventory-io.adapter.ts, src/server/package-update-appliers-boot.adapter.ts, src/server/package-update-manager.test.ts, src/server/package-update-manager.ts, src/server/skill-update-applier.adapter.test.ts, src/server/skill-update-applier.adapter.ts, src/server/skill-update-checker.adapter.test.ts, src/server/skill-update-checker.adapter.ts
 
-## c3-238 — stacks (component)
+## c3-238 — plugin-system (component)
+container: c3-2 | context: c3-0
+refs: ref-event-sourcing, ref-side-effect-adapter, ref-strong-typing, rule-colocated-bun-test
+files: src/server/__fixtures__/plugins/**, src/server/kanna-mcp-plugins.test.ts, src/server/kanna-mcp-plugins.ts, src/server/plugin-cli-dispatch.test.ts, src/server/plugin-cli-dispatch.ts, src/server/plugin-cli.ts, src/server/plugin-http-routes.ts, src/server/plugin-system-acceptance.test.tsx, src/server/plugins/**/*.ts
+
+## c3-239 — stacks (component)
 container: c3-2 | context: c3-0
 refs: ref-strong-typing, rule-colocated-bun-test
 files: src/server/agent.stack-spawn.test.ts, src/server/claude-session-config.ts, src/server/event-store.stack-methods.test.ts, src/server/ws-router.stack.test.ts
@@ -327,10 +337,15 @@ files: src/shared/cron/**/*.ts
 
 ## c3-312 — packages-shared (component)
 container: c3-3 | context: c3-0
-refs: rule-colocated-bun-test, rule-strong-typing
-files: src/shared/packages/parse-claude-plugin-marketplace.test.ts, src/shared/packages/parse-claude-plugin-marketplace.ts, src/shared/packages/parse-claude-plugins.test.ts, src/shared/packages/parse-claude-plugins.ts, src/shared/packages/parse-codex-plugins.test.ts, src/shared/packages/parse-codex-plugins.ts, src/shared/packages/parse-skill-lock.test.ts, src/shared/packages/parse-skill-lock.ts, src/shared/packages/skill-update-classifier.test.ts, src/shared/packages/skill-update-classifier.ts, src/shared/packages/types.ts
+refs: ref-side-effect-adapter, ref-strong-typing, rule-colocated-bun-test
+files: src/shared/packages/parse-claude-plugin-marketplace.test.ts, src/shared/packages/parse-claude-plugin-marketplace.ts, src/shared/packages/parse-claude-plugins.test.ts, src/shared/packages/parse-claude-plugins.ts, src/shared/packages/parse-codex-plugins.test.ts, src/shared/packages/parse-codex-plugins.ts, src/shared/packages/parse-skill-lock.test.ts, src/shared/packages/parse-skill-lock.ts, src/shared/packages/skill-update-classifier.test.ts, src/shared/packages/skill-update-classifier.ts, src/shared/packages/tag-order.test.ts, src/shared/packages/tag-order.ts, src/shared/packages/types.ts
 
-## c3-313 — stacks-domain (component)
+## c3-313 — plugins-shared (component)
+container: c3-3 | context: c3-0
+refs: ref-side-effect-adapter, ref-strong-typing, rule-colocated-bun-test
+files: src/shared/plugins/**/*.ts, src/shared/plugins/kanna-plugin.d.ts
+
+## c3-314 — stacks-domain (component)
 container: c3-3 | context: c3-0
 refs: rule-colocated-bun-test, rule-strong-typing
 files: src/shared/stack-activity.test.ts, src/shared/stack-activity.ts
@@ -344,8 +359,8 @@ reverse deps: c3-110, c3-111, c3-112, c3-207, c3-208, c3-219, c3-223, c3-227, c3
 citers: c3-110, c3-111, c3-112, c3-207, c3-208, c3-219, c3-223, c3-227, c3-228, c3-229, c3-230, c3-232, c3-233
 
 ## ref-event-sourcing — Event Sourcing (ref)
-reverse deps: c3-205, c3-206, c3-210, c3-225, c3-227, c3-228, c3-229, c3-233
-citers: c3-205, c3-206, c3-210, c3-225, c3-227, c3-228, c3-229, c3-233
+reverse deps: c3-205, c3-206, c3-210, c3-225, c3-227, c3-228, c3-229, c3-233, c3-238
+citers: c3-205, c3-206, c3-210, c3-225, c3-227, c3-228, c3-229, c3-233, c3-238
 
 ## ref-local-first-data — Local-First Data (ref)
 reverse deps: c3-116, c3-117, c3-201, c3-202, c3-203, c3-204, c3-206, c3-214, c3-217, c3-218, c3-221, c3-222, c3-224, c3-226, c3-228, c3-231, c3-232, c3-234, c3-235, c3-305
@@ -356,12 +371,12 @@ reverse deps: c3-113, c3-115, c3-210, c3-211, c3-212, c3-213, c3-225, c3-229
 citers: c3-113, c3-115, c3-210, c3-211, c3-212, c3-213, c3-225, c3-229
 
 ## ref-side-effect-adapter — side-effect-adapter (ref)
-reverse deps: c3-228, c3-229, c3-230, c3-231, c3-232, c3-236, c3-237
-citers: c3-228, c3-229, c3-230, c3-231, c3-232, c3-236, c3-237
+reverse deps: c3-228, c3-229, c3-230, c3-231, c3-232, c3-236, c3-237, c3-238, c3-312, c3-313
+citers: c3-228, c3-229, c3-230, c3-231, c3-232, c3-236, c3-237, c3-238, c3-312, c3-313
 
 ## ref-strong-typing — Strong Typing Policy (ref)
-reverse deps: c3-101, c3-102, c3-103, c3-104, c3-114, c3-119, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-226, c3-227, c3-228, c3-229, c3-230, c3-232, c3-236, c3-238, c3-301, c3-302, c3-303, c3-304, c3-306, c3-307, c3-310
-citers: c3-101, c3-102, c3-103, c3-104, c3-114, c3-119, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-226, c3-227, c3-228, c3-229, c3-230, c3-232, c3-236, c3-238, c3-301, c3-302, c3-303, c3-304, c3-306, c3-307, c3-310
+reverse deps: c3-101, c3-102, c3-103, c3-104, c3-114, c3-119, c3-121, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-226, c3-227, c3-228, c3-229, c3-230, c3-232, c3-236, c3-238, c3-239, c3-301, c3-302, c3-303, c3-304, c3-306, c3-307, c3-310, c3-312, c3-313
+citers: c3-101, c3-102, c3-103, c3-104, c3-114, c3-119, c3-121, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-226, c3-227, c3-228, c3-229, c3-230, c3-232, c3-236, c3-238, c3-239, c3-301, c3-302, c3-303, c3-304, c3-306, c3-307, c3-310, c3-312, c3-313
 
 ## ref-tool-hydration — Tool Call Hydration (ref)
 reverse deps: c3-113, c3-114, c3-210, c3-215, c3-226, c3-229, c3-303
@@ -376,20 +391,20 @@ reverse deps: c3-102, c3-104, c3-111, c3-115, c3-116, c3-118, c3-119, c3-229
 citers: c3-102, c3-104, c3-111, c3-115, c3-116, c3-118, c3-119, c3-229
 
 ## rule-colocated-bun-test — colocated-bun-test (rule)
-reverse deps: c3-102, c3-119, c3-120, c3-121, c3-206, c3-208, c3-210, c3-224, c3-225, c3-226, c3-227, c3-229, c3-230, c3-232, c3-233, c3-234, c3-236, c3-238, c3-303, c3-310, c3-311, c3-312, c3-313
-citers: c3-102, c3-119, c3-120, c3-121, c3-206, c3-208, c3-210, c3-224, c3-225, c3-226, c3-227, c3-229, c3-230, c3-232, c3-233, c3-234, c3-236, c3-238, c3-303, c3-310, c3-311, c3-312, c3-313
+reverse deps: c3-102, c3-119, c3-120, c3-121, c3-122, c3-206, c3-208, c3-210, c3-224, c3-225, c3-226, c3-227, c3-229, c3-230, c3-232, c3-233, c3-234, c3-236, c3-238, c3-239, c3-303, c3-310, c3-311, c3-312, c3-313, c3-314
+citers: c3-102, c3-119, c3-120, c3-121, c3-122, c3-206, c3-208, c3-210, c3-224, c3-225, c3-226, c3-227, c3-229, c3-230, c3-232, c3-233, c3-234, c3-236, c3-238, c3-239, c3-303, c3-310, c3-311, c3-312, c3-313, c3-314
 
 ## rule-mcp-name-reserved — mcp-name-reserved (rule)
 reverse deps: c3-232
 citers: c3-232
 
 ## rule-strong-typing — strong-typing (rule)
-reverse deps: c3-101, c3-102, c3-103, c3-114, c3-120, c3-121, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-225, c3-226, c3-227, c3-229, c3-233, c3-301, c3-302, c3-303, c3-304, c3-306, c3-310, c3-311, c3-312, c3-313
-citers: c3-101, c3-102, c3-103, c3-114, c3-120, c3-121, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-225, c3-226, c3-227, c3-229, c3-233, c3-301, c3-302, c3-303, c3-304, c3-306, c3-310, c3-311, c3-312, c3-313
+reverse deps: c3-101, c3-102, c3-103, c3-114, c3-120, c3-122, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-225, c3-226, c3-227, c3-229, c3-233, c3-301, c3-302, c3-303, c3-304, c3-306, c3-310, c3-311, c3-314
+citers: c3-101, c3-102, c3-103, c3-114, c3-120, c3-122, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-225, c3-226, c3-227, c3-229, c3-233, c3-301, c3-302, c3-303, c3-304, c3-306, c3-310, c3-311, c3-314
 
 ## rule-zustand-store — zustand-store (rule)
-reverse deps: c3-102, c3-111, c3-115, c3-116, c3-118, c3-119, c3-120, c3-121, c3-229
-citers: c3-102, c3-111, c3-115, c3-116, c3-118, c3-119, c3-120, c3-121, c3-229
+reverse deps: c3-102, c3-111, c3-115, c3-116, c3-118, c3-119, c3-120, c3-121, c3-122, c3-229
+citers: c3-102, c3-111, c3-115, c3-116, c3-118, c3-119, c3-120, c3-121, c3-122, c3-229
 
 ## File Map
 src/client/app/KannaSocketProvider.tsx → c3-101
@@ -441,7 +456,6 @@ src/client/app/useStickyChatFocus.ts → c3-112
 src/client/app/useTerminalToggleAnimation.ts → c3-112
 src/client/components/messages/LoopDisarmedMessage.test.tsx → c3-112
 src/client/components/messages/LoopDisarmedMessage.tsx → c3-112
-src/client/app/KannaTranscript.store.ts → c3-113
 src/client/app/KannaTranscript.test.tsx → c3-113
 src/client/app/KannaTranscript.tsx → c3-113
 src/client/app/subagent-run-placement.test.ts → c3-113
@@ -499,10 +513,19 @@ src/client/components/messages/CronMessages.test.tsx → c3-120
 src/client/components/messages/CronRunMessage.tsx → c3-120
 src/client/components/messages/CronRunSkippedMessage.tsx → c3-120
 src/client/stores/cronJobsStore.ts → c3-120
-src/client/app/StackBoardsRoutePage.tsx → c3-121
-src/client/app/useStackCommands.ts → c3-121
-src/client/components/chat-ui/sidebar/Stack*.tsx → c3-121
-src/client/components/chat-ui/sidebar/StackChatCreateRow.store.ts → c3-121
+src/client/app/KannaPluginsSettingsBranch.tsx → c3-121
+src/client/app/PluginSidebarItems.tsx → c3-121
+src/client/app/PluginsFooterSection.tsx → c3-121
+src/client/app/PluginsFooterSlot.test.tsx → c3-121
+src/client/app/PluginsFooterSlot.tsx → c3-121
+src/client/app/PluginsSection.tsx → c3-121
+src/client/plugins/**/*.ts → c3-121
+src/client/plugins/**/*.tsx → c3-121
+src/client/stores/pluginContributionsStore.ts → c3-121
+src/client/app/StackBoardsRoutePage.tsx → c3-122
+src/client/app/useStackCommands.ts → c3-122
+src/client/components/chat-ui/sidebar/Stack*.tsx → c3-122
+src/client/components/chat-ui/sidebar/StackChatCreateRow.store.ts → c3-122
 src/server/cli-bootstrap.adapter.ts → c3-201
 src/server/cli-runtime.test.ts → c3-201
 src/server/cli-runtime.ts → c3-201
@@ -668,12 +691,23 @@ src/server/package-inventory-io.adapter.ts → c3-237
 src/server/package-update-appliers-boot.adapter.ts → c3-237
 src/server/package-update-manager.test.ts → c3-237
 src/server/package-update-manager.ts → c3-237
+src/server/skill-update-applier.adapter.test.ts → c3-237
 src/server/skill-update-applier.adapter.ts → c3-237
+src/server/skill-update-checker.adapter.test.ts → c3-237
 src/server/skill-update-checker.adapter.ts → c3-237
-src/server/agent.stack-spawn.test.ts → c3-238
-src/server/claude-session-config.ts → c3-238
-src/server/event-store.stack-methods.test.ts → c3-238
-src/server/ws-router.stack.test.ts → c3-238
+src/server/__fixtures__/plugins/** → c3-238
+src/server/kanna-mcp-plugins.test.ts → c3-238
+src/server/kanna-mcp-plugins.ts → c3-238
+src/server/plugin-cli-dispatch.test.ts → c3-238
+src/server/plugin-cli-dispatch.ts → c3-238
+src/server/plugin-cli.ts → c3-238
+src/server/plugin-http-routes.ts → c3-238
+src/server/plugin-system-acceptance.test.tsx → c3-238
+src/server/plugins/**/*.ts → c3-238
+src/server/agent.stack-spawn.test.ts → c3-239
+src/server/claude-session-config.ts → c3-239
+src/server/event-store.stack-methods.test.ts → c3-239
+src/server/ws-router.stack.test.ts → c3-239
 src/shared/analytics.ts → c3-301
 src/shared/kanna-system-prompt.test.ts → c3-301
 src/shared/kanna-system-prompt.ts → c3-301
@@ -710,6 +744,10 @@ src/shared/packages/parse-skill-lock.test.ts → c3-312
 src/shared/packages/parse-skill-lock.ts → c3-312
 src/shared/packages/skill-update-classifier.test.ts → c3-312
 src/shared/packages/skill-update-classifier.ts → c3-312
+src/shared/packages/tag-order.test.ts → c3-312
+src/shared/packages/tag-order.ts → c3-312
 src/shared/packages/types.ts → c3-312
-src/shared/stack-activity.test.ts → c3-313
-src/shared/stack-activity.ts → c3-313
+src/shared/plugins/**/*.ts → c3-313
+src/shared/plugins/kanna-plugin.d.ts → c3-313
+src/shared/stack-activity.test.ts → c3-314
+src/shared/stack-activity.ts → c3-314

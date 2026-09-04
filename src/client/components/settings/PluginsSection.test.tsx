@@ -19,6 +19,7 @@ function makePackage(overrides: Partial<InstalledPackage> = {}): InstalledPackag
     installPath: null,
     versionLabel: null,
     agents: [],
+    pinnedRef: null,
     ...overrides,
   }
 }
