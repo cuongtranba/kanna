@@ -32,6 +32,7 @@ import type {
   SyncConflict,
 } from "../shared/boards/types"
 import type { RepoBoardOwner } from "../shared/boards/sync-types"
+import { BLOCKED_BY, buildBlockerGraph, describeBlockedByCycle, findBlockerCycle } from "../shared/boards/dependencies"
 import {
   BoardStoreError,
   type BoardOwnerRef,
@@ -228,6 +229,37 @@ export function createBoardRegistry(options: CreateBoardRegistryOptions): BoardR
     return card.boardId
   }
 
+  /**
+   * Refuse a dependency edge that could not be diagnosed once stored
+   * (adr-20260904-cross-project-orchestration, D2).
+   *
+   * This sits in the generic `addCardLink` rather than in a method of its own
+   * because every production write to a card link already comes through this
+   * registry — start-work, worktree cleanup, the agent coordinator — and none
+   * reaches {@link BoardStore} directly. Validating the one arm means no
+   * caller, present or future, can author a `blocked_by` edge that skipped the
+   * check.
+   *
+   * Cross-board is refused for the same reason a cycle is: the start-work gate
+   * resolves blockers through the card's OWN board, so an edge pointing off it
+   * would read as permanently unmet and wedge the card with nothing on screen
+   * to explain why.
+   */
+  function requireAcyclicBlocker(cardId: string, blockerId: string): void {
+    const card = store.getCard(cardId)
+    if (!card) throw new BoardStoreError("not_found", `card ${cardId} does not exist`)
+    const blocker = store.getCard(blockerId)
+    if (!blocker) throw new BoardStoreError("not_found", `card ${blockerId} does not exist`)
+    if (blocker.boardId !== card.boardId) {
+      throw new BoardStoreError("invalid_input", "a card can only wait on another card on the same board")
+    }
+    const graph = buildBlockerGraph(store.listCardLinksForBoard(card.boardId, BLOCKED_BY))
+    const cycle = findBlockerCycle(graph, cardId, blockerId)
+    if (!cycle) return
+    const described = describeBlockedByCycle(cycle, (id) => store.getCard(id)?.title ?? null)
+    throw new BoardStoreError("invalid_input", `that would make the work circular: ${described}`)
+  }
+
   return {
     listBoards(owner: BoardOwnerRef): BoardSummary[] {
       return store.listBoards(owner).map((board) => {
@@ -318,7 +350,13 @@ export function createBoardRegistry(options: CreateBoardRegistryOptions): BoardR
     archiveCard: (cardId, actor) => mutate(() => boardIdOfCard(cardId), () => store.archiveCard(cardId, actor)),
 
     addCardLink: (cardId, kind, targetId) =>
-      mutate(() => boardIdOfCard(cardId), () => store.addCardLink(cardId, kind, targetId)),
+      mutate(
+        () => boardIdOfCard(cardId),
+        () => {
+          if (kind === BLOCKED_BY) requireAcyclicBlocker(cardId, targetId)
+          return store.addCardLink(cardId, kind, targetId)
+        },
+      ),
     removeCardLink: (cardId, kind, targetId) =>
       mutate(() => boardIdOfCard(cardId), () => store.removeCardLink(cardId, kind, targetId)),
     addComment: (cardId, author, body) =>

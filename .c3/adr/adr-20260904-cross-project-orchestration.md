@@ -3,7 +3,7 @@ id: adr-20260904-cross-project-orchestration
 title: cross-project-orchestration
 type: adr
 goal: Decide how work spanning several projects in a stack is sequenced, and record why the board-dependency design is preferred over relaxing the loop's single-repository contract.
-status: proposed
+status: accepted
 date: "2026-09-04"
 ---
 
@@ -61,4 +61,13 @@ It is listed here because the plan grouped it under Phase 3, not because it is c
 - Cross-project ordering becomes a property of the board, so it is visible where the work already is, and a stack with no board is unaffected.
 - A card gains an edge set that must be validated, migrated and rendered — three slices, shippable independently: the edge and its cycle check, then the Start-work gate, then the drawer copy.
 - A stack-wide autonomous loop remains unavailable. That is a real gap and is stated as such in the wiki's Stacks page rather than left to be discovered.
-- **No Option A code is written under this ADR.** It is `proposed`; the plan's own rule is that implementation waits for `accepted`.
+
+## Implementation notes
+
+Accepted 2026-09-04 and implemented in the three slices D1 prescribes. What the implementation settled that the decisions above left open:
+
+- **The edge is a `card_link` row of kind `blocked_by`, not a new table.** `card_link` is already `(card_id, kind, target_id)` with a primary key on all three, `ON DELETE CASCADE` from `card`, and an index on `(kind, target_id)` — so de-duplication, cleanup on card delete, and the reverse lookup all come for free, and the schema needs no migration. `cardId` is blocked by `targetId`.
+- **`board-registry.ts` is where D2's validation lives**, inside `addCardLink`, because every production write to a card link already goes through the registry (`board-start-work.ts`, `board-worktree-cleanup.ts`, `agent-coordinator.ts`) and nothing reaches `BoardStore` directly. Validating in one arm of the generic method means a caller cannot add a `blocked_by` edge without the DAG check — including a future one.
+- **Three refusals, not one:** a self-edge, a cross-board edge, and a cycle. Cross-board matters because the start-work gate resolves blockers through the card's own board; an edge pointing off-board would read as permanently unmet and wedge the card with no visible cause.
+- **A blocker clears when it is `done` OR archived OR gone.** Archived is deliberate: an archived card can never reach a `done` column, so treating it as still-blocking would wedge its dependents forever with no gesture available to free them.
+- **The user's gesture is a "Blocked by" section in the card drawer** (`CardDependencies.tsx` — a new module, since `CardDrawer.tsx` sits at its exact architecture-budget pin). Without a gesture this repeats `orchestration-core`'s unreachability, which is the failure this ADR's Context is written against. It is deliberately NOT exposed as an MCP tool: an agent that can author its own ordering constraints can defer its own work, and no user gesture asks for that.

@@ -154,8 +154,12 @@ export interface Card {
  * user was asked what to do with that worktree and said "leave it". It lives
  * here because it is exactly a (card, worktree) pair, which is what this table
  * stores.
+ *
+ * `blocked_by` is an ordering edge — the card waits on `targetId` — and is the
+ * one kind the store VALIDATES rather than merely records: see
+ * `./dependencies` and the DAG check in `board-registry.ts`.
  */
-export type CardLinkKind = "chat" | "worktree" | "pr" | "card" | "cleanup_declined"
+export type CardLinkKind = "chat" | "worktree" | "pr" | "card" | "cleanup_declined" | "blocked_by"
 
 export interface CardLink {
   cardId: string
@@ -318,7 +322,14 @@ const SYNC_DIRECTIONS: readonly SyncDirection[] = ["pull", "push", "both"]
 const REMOTE_KINDS: readonly RemoteKind[] = ["state", "label", "projectField"]
 const OUTBOX_OPS: readonly OutboxOp[] = ["create", "update", "move", "close"]
 const BOARD_OWNER_KINDS: readonly BoardOwnerKind[] = ["project", "stack"]
-const CARD_LINK_KINDS: readonly CardLinkKind[] = ["chat", "worktree", "pr", "card", "cleanup_declined"]
+const CARD_LINK_KINDS: readonly CardLinkKind[] = [
+  "chat",
+  "worktree",
+  "pr",
+  "card",
+  "cleanup_declined",
+  "blocked_by",
+]
 
 export function isColumnSemantic(value: string): value is ColumnSemantic {
   return COLUMN_SEMANTICS.some((entry) => entry === value)
