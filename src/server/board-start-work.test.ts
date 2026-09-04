@@ -377,3 +377,93 @@ describe("startWork", () => {
     expect(registry.cardDetail(card.id)!.links.map((link) => link.kind)).toEqual(["worktree"])
   })
 })
+
+describe("a card waits on its blockers", () => {
+  /** Two cards on one board, the second waiting on the first. */
+  function blockedPair(definition = DEFINITION) {
+    const { board, columns, card } = seed(definition)
+    const blocker = registry.createCard({
+      boardId: board.id,
+      columnId: columns[0]!.id,
+      title: "Ship the API schema",
+      actor: { kind: "user" },
+    })
+    registry.addCardLink(card.id, "blocked_by", blocker.id)
+    return { board, columns, card, blocker }
+  }
+
+  test("names the blocker rather than reporting a bare refusal", async () => {
+    const { card } = blockedPair()
+    const view = await startWorkView(makeDeps(), card.id)
+    expect(view.blockedReason).toBe('Waiting on "Ship the API schema".')
+  })
+
+  test("startWork refuses, and creates neither worktree nor chat", async () => {
+    const { card } = blockedPair()
+    await expect(startWork(makeDeps(), card.id)).rejects.toThrow(/Ship the API schema/u)
+    expect(recorder.added).toEqual([])
+    expect(recorder.chats).toEqual([])
+  })
+
+  test("moving the blocker to done releases the card", async () => {
+    const { columns, card, blocker } = blockedPair()
+    registry.moveCard({
+      cardId: blocker.id,
+      toColumnId: columns[2]!.id,
+      aboveCardId: null,
+      belowCardId: null,
+      actor: { kind: "user" },
+    })
+    const view = await startWorkView(makeDeps(), card.id)
+    expect(view.blockedReason).toBeNull()
+  })
+
+  test("archiving the blocker releases the card", async () => {
+    const { card, blocker } = blockedPair()
+    registry.archiveCard(blocker.id, { kind: "user" })
+    expect((await startWorkView(makeDeps(), card.id)).blockedReason).toBeNull()
+  })
+
+  test("a board that marks no done column blocks nothing", async () => {
+    const { card } = blockedPair(NO_SEMANTICS)
+    expect((await startWorkView(makeDeps(), card.id)).blockedReason).toBeNull()
+  })
+
+  test("an unblocked card is unaffected", async () => {
+    const { blocker } = blockedPair()
+    expect((await startWorkView(makeDeps(), blocker.id)).blockedReason).toBeNull()
+  })
+
+  /**
+   * Blocking defers STARTING work, never reaching work already under way. A
+   * blocker added after the fact must not strip the user's way back into a
+   * live chat.
+   */
+  test("a card whose chat is already live still opens it", async () => {
+    const { card } = blockedPair()
+    const deps = makeDeps({ chatExists: () => true })
+    registry.addCardLink(card.id, "chat", "chat-live")
+
+    const view = await startWorkView(deps, card.id)
+    expect(view.blockedReason).toBeNull()
+    expect(view.status).toEqual({ kind: "chat", chatId: "chat-live", worktreePath: null })
+
+    const result = await startWork(deps, card.id)
+    expect(result).toMatchObject({ chatId: "chat-live", reused: true })
+  })
+
+  /** A worktree from an earlier attempt is not work under way; resuming STARTS it. */
+  test("a blocked card with a leftover worktree still defers, and says so", async () => {
+    const { card } = blockedPair()
+    const path = "/repo/.kanna-worktrees/kanna/card"
+    registry.addCardLink(card.id, "worktree", path)
+    const view = await startWorkView(
+      makeDeps({ listWorktrees: () => Promise.resolve([worktree(REPO, "main"), worktree(path, "card/x")]) }),
+      card.id,
+    )
+    expect(view.blockedReason).toBe('Waiting on "Ship the API schema".')
+    // The status still reports what exists — a blocked card must not read as
+    // though its worktree had vanished.
+    expect(view.status).toEqual({ kind: "worktree", worktreePath: path })
+  })
+})

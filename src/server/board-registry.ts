@@ -90,6 +90,11 @@ export interface BoardRegistry {
   boardView(boardId: string, pageSize?: number): BoardViewSnapshot | null
   cardPage(query: CardPageQuery): CardPage
   cardDetail(cardId: string): CardDetail | null
+  /**
+   * One card, archived ones included — a blocker that was archived is still the
+   * row that explains why a dependency cleared.
+   */
+  getCard(cardId: string): Card | null
   listTemplates(): BoardTemplate[]
   getTemplate(templateId: string): BoardTemplate | null
   findCardsByLink(kind: CardLinkKind, targetId: string): Card[]
@@ -324,6 +329,7 @@ export function createBoardRegistry(options: CreateBoardRegistryOptions): BoardR
       }
     },
 
+    getCard: (cardId: string) => store.getCard(cardId),
     listTemplates: () => store.listTemplates(),
     getTemplate: (templateId: string) => store.getTemplate(templateId),
     findCardsByLink: (kind: CardLinkKind, targetId: string) => store.findCardsByLink(kind, targetId),

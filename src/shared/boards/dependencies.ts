@@ -39,6 +39,57 @@ export function blockersOf(graph: BlockerGraph, cardId: string): readonly string
 }
 
 /**
+ * The cards one card waits on, read straight off its own links.
+ *
+ * A caller holding a single card's links — the drawer, the start-work resolver —
+ * does not need the board's whole graph to answer this, and building one would
+ * cost a board-wide query per card.
+ */
+export function blockerIdsOf(links: readonly CardLink[]): string[] {
+  return links.filter((entry) => entry.kind === BLOCKED_BY).map((entry) => entry.targetId)
+}
+
+/** Enough of a blocker to decide whether it still holds, and to name it if it does. */
+export interface BlockerCard {
+  id: string
+  title: string
+  columnId: string
+  archivedAt: number | null
+}
+
+/**
+ * The blockers that still hold a card back.
+ *
+ * A blocker clears three ways, and the two beyond "reached `done`" are
+ * deliberate rather than defensive. An ARCHIVED blocker can never reach a done
+ * column, so treating it as still-blocking would wedge every dependent card
+ * with no gesture left that could free them; a blocker that no longer exists is
+ * the same case with the row already gone.
+ *
+ * `doneColumnId` null means the board has not marked where work finishes, and
+ * the gate then stands down entirely. That is the same rule the rest of the
+ * board feature runs on — behaviour comes from {@link ColumnSemantic}, never
+ * from what a column is called — and the alternative is a board on which every
+ * dependency is permanently unmet.
+ */
+export function unmetBlockers(
+  blockerIds: readonly string[],
+  lookup: (cardId: string) => BlockerCard | null,
+  doneColumnId: string | null,
+): BlockerCard[] {
+  if (doneColumnId === null) return []
+  const unmet: BlockerCard[] = []
+  for (const blockerId of blockerIds) {
+    const blocker = lookup(blockerId)
+    if (!blocker) continue
+    if (blocker.archivedAt !== null) continue
+    if (blocker.columnId === doneColumnId) continue
+    unmet.push(blocker)
+  }
+  return unmet
+}
+
+/**
  * The cycle that adding "`cardId` waits on `blockerId`" would close, as the
  * path `cardId → blockerId → … → cardId`, or null when the edge is safe.
  *
