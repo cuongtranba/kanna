@@ -1,5 +1,7 @@
 // src/server/claude-session-types.ts
 
+import type { JsonArray, JsonObject } from "../shared/json"
+
 export interface ClaudeSessionRecordBase {
   type: string
   uuid?: string
@@ -16,7 +18,7 @@ export interface ClaudeSessionUserRecord extends ClaudeSessionRecordBase {
     role: "user"
     content: string | Array<
       | { type: "text"; text: string }
-      | { type: "tool_result"; tool_use_id: string; content?: string | Array<Record<string, unknown>>; is_error?: boolean }
+      | { type: "tool_result"; tool_use_id: string; content?: string | JsonArray; is_error?: boolean }
     >
   }
   /**
@@ -26,7 +28,7 @@ export interface ClaudeSessionUserRecord extends ClaudeSessionRecordBase {
    * ToolResultEntry.debugRaw by src/client/lib/parseTranscript.ts's
    * getSubagentTaskResultFromDebug, which powers subagent drill-in.
    */
-  toolUseResult?: Record<string, unknown>
+  toolUseResult?: JsonObject
 }
 
 export interface ClaudeSessionAssistantRecord extends ClaudeSessionRecordBase {
@@ -36,7 +38,7 @@ export interface ClaudeSessionAssistantRecord extends ClaudeSessionRecordBase {
     id?: string
     content: Array<
       | { type: "text"; text: string }
-      | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> }
+      | { type: "tool_use"; id: string; name: string; input: JsonObject }
     >
   }
 }

@@ -27,6 +27,7 @@ import { KeybindingsManager } from "./keybindings"
 import { readLlmProviderSnapshot, validateLlmProviderCredentials, writeLlmProviderSnapshot } from "./llm-provider"
 import { OpenRouterModelCache } from "./openrouter-models"
 import { fetchOpenRouterModelsRaw } from "./openrouter-models-io.adapter"
+import { toJsonValue } from "./json-boundary"
 import { getMachineDisplayName } from "./machine-name.adapter"
 import { TerminalManager } from "./terminal-manager"
 import { TerminalPidRegistry } from "./terminal-pid-registry.adapter"
@@ -322,7 +323,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
             out.push({ kind: "assistant_thinking", id: entry._id, createdAt: entry.createdAt, text: entry.text })
             break
           case "tool_call":
-            out.push({ kind: "tool_call", id: entry._id, createdAt: entry.createdAt, name: entry.tool.toolName, input: entry.tool.input })
+            out.push({ kind: "tool_call", id: entry._id, createdAt: entry.createdAt, name: entry.tool.toolName, input: toJsonValue(entry.tool.input) })
             break
           case "tool_result":
             out.push({ kind: "tool_result", id: entry._id, createdAt: entry.createdAt, toolCallId: entry.toolId, output: entry.content, isError: entry.isError ?? false })

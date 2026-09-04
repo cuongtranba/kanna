@@ -33,7 +33,7 @@ import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
 import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import type { ModelPrice } from "../shared/token-pricing"
-import type { AnyValue } from "../shared/errors"
+import type { JsonValue } from "../shared/json"
 
 /**
  * Injectable collaborators for startClaudeSession.
@@ -86,7 +86,7 @@ export async function startClaudeSession(args: {
   additionalDirectories?: string[]
   chatId?: string
   tunnelGateway?: TunnelGateway | null
-  onToolRequest: (request: HarnessToolRequest) => Promise<AnyValue>
+  onToolRequest: (request: HarnessToolRequest) => Promise<JsonValue>
   systemPromptAppend?: string
   systemPromptOverride?: string
   initialPrompt?: string

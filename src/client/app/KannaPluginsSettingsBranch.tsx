@@ -15,12 +15,12 @@
  * shape `SubagentsSettingsBranch` / `ModelsSettingsBranch` already use), not
  * inline in the page.
  */
-import type { AnyValue } from "../../shared/errors"
+import type { JsonValue } from "../../shared/json"
 import { httpAdapter } from "../adapters/http.adapter"
 import { selectInstalledPlugins, useAppSettingsStore } from "../stores/appSettingsStore"
 import { buildPluginsSectionHandlers, PluginsSection } from "./PluginsSection"
 
-async function postPluginJson(url: string, body: AnyValue): Promise<{ readonly ok: boolean }> {
+async function postPluginJson(url: string, body: JsonValue): Promise<{ readonly ok: boolean }> {
   const response = await httpAdapter.postJsonBody<null>(url, body)
   return { ok: response.ok }
 }

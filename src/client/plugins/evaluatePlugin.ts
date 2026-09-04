@@ -19,12 +19,13 @@
  * `finally`) because this runs inside the long-lived SPA process alongside
  * unrelated code that must never observe the mutation.
  */
-import { isRecord, type AnyValue } from "../../shared/errors"
+import { type HostBag, type LoadedModule } from "../../shared/dynamic-module"
+import { isRecord } from "../../shared/errors"
 import type { createPluginHostRegistry } from "./hostModuleRegistry"
 
 const HOST_GLOBAL_KEY = "__KANNA_PLUGIN_HOST__"
 
-type HostGlobal = Record<string, AnyValue>
+type HostGlobal = HostBag
 
 export interface EvaluatePluginModuleArgs {
   readonly code: string
@@ -33,10 +34,10 @@ export interface EvaluatePluginModuleArgs {
 }
 
 export interface PluginModule {
-  readonly default: (context: AnyValue) => AnyValue
+  readonly default: (context: LoadedModule) => LoadedModule
 }
 
-function isPluginModule(value: AnyValue): value is PluginModule {
+function isPluginModule(value: LoadedModule): value is PluginModule {
   return isRecord(value) && typeof value.default === "function"
 }
 
@@ -51,7 +52,7 @@ async function importWithHostRegistry(
   host[HOST_GLOBAL_KEY] = registry
 
   try {
-    const loaded: AnyValue = await import(/* @vite-ignore */ url)
+    const loaded: LoadedModule = await import(/* @vite-ignore */ url)
     if (!isPluginModule(loaded)) {
       throw new Error(`plugin "${pluginId}" compiled to a module with no default export`)
     }

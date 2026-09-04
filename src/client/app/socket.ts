@@ -2,13 +2,15 @@ import type {
   ClientCommand,
   ClientEnvelope,
   ServerEnvelope,
+  ServerSnapshot,
   SubscriptionTopic,
   TerminalEvent,
   TerminalSnapshot,
+  WsEvent,
 } from "../../shared/protocol"
 import { LOG_PREFIX } from "../../shared/branding"
 import { log } from "../../shared/log"
-import type { AnyValue } from "../../shared/errors"
+import type { JsonValue } from "../../shared/json"
 import { generateUUID } from "../lib/utils"
 import { getStoredPushDeviceId } from "./pushClient"
 import type { DomPort } from "../ports/domPort"
@@ -38,10 +40,20 @@ const HEARTBEAT_INTERVAL_MS = 15_000
 const PING_TIMEOUT_MS = 4_000
 const SEND_TO_STARTING_PROFILE_STORAGE_KEY = "kanna:profile-send-to-starting"
 
+/**
+ * Every payload a snapshot push can carry. `subscribe` is generic over the one
+ * the caller expects, so the stored callback is erased to the whole union —
+ * the method-shorthand declaration is what lets a narrower listener bind.
+ */
+type SnapshotData = ServerSnapshot["data"]
+
+/** What a command ack resolves to, straight off the wire. */
+type CommandResult = Extract<ServerEnvelope, { type: "ack" }>["result"]
+
 interface InternalSubscriptionEntry {
   topic: SubscriptionTopic
-  listener(v: AnyValue): void
-  eventListener?(v: AnyValue): void
+  listener(v: SnapshotData): void
+  eventListener?(v: WsEvent): void
 }
 
 export class KannaSocket {
@@ -51,7 +63,7 @@ export class KannaSocket {
   private reconnectTimer: number | null = null
   private reconnectDelayMs = 750
   private readonly subscriptions = new Map<string, InternalSubscriptionEntry>()
-  private readonly pending = new Map<string, { resolve: (value: AnyValue) => void; reject: (reason?: AnyValue) => void }>()
+  private readonly pending = new Map<string, { resolve: (value: CommandResult) => void; reject: (reason: Error) => void }>()
   private readonly outboundQueue: ClientEnvelope[] = []
   private readonly statusListeners = new Set<StatusListener>()
   private heartbeatTimer: number | null = null
@@ -140,7 +152,7 @@ export class KannaSocket {
     }
   }
 
-  subscribe<TSnapshot, TEvent = never>(
+  subscribe<TSnapshot extends SnapshotData, TEvent extends WsEvent = never>(
     topic: SubscriptionTopic,
     listener: SnapshotListener<TSnapshot>,
     eventListener?: EventListener<TEvent>
@@ -181,11 +193,11 @@ export class KannaSocket {
     }
   }
 
-  command<TResult = AnyValue>(command: ClientCommand): Promise<TResult>
-  command(command: ClientCommand): Promise<AnyValue> {
+  command<TResult = JsonValue>(command: ClientCommand): Promise<TResult>
+  command(command: ClientCommand): Promise<CommandResult> {
     const id = generateUUID()
     const envelope: ClientEnvelope = { v: 1, type: "command", id, command }
-    return new Promise<AnyValue>((resolve, reject) => {
+    return new Promise<CommandResult>((resolve, reject) => {
       this.pending.set(id, { resolve, reject })
       this.enqueue(envelope)
     })

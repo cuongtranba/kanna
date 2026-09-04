@@ -2,7 +2,8 @@ import { afterAll, describe, expect, test } from "bun:test"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import type { AnyValue } from "../shared/errors"
+import type { ZodTypeAny } from "zod"
+import type { JsonObject } from "../shared/json"
 import { KANNA_PLUGIN_MANIFEST_FILENAME } from "../shared/plugins/manifest"
 import { buildPluginToolList, type PluginToolFactory } from "./kanna-mcp-plugins"
 import type { ToolResult } from "./kanna-mcp-tool"
@@ -13,8 +14,8 @@ import type { PluginSummary } from "./plugins/plugin-service"
 
 interface CapturedTool {
   readonly name: string
-  readonly schema: Record<string, AnyValue>
-  run(input: Record<string, AnyValue>): Promise<ToolResult>
+  readonly schema: Record<string, ZodTypeAny>
+  run(input: JsonObject): Promise<ToolResult>
 }
 
 const capture: PluginToolFactory<CapturedTool> = (name, _description, schema, handler) => ({

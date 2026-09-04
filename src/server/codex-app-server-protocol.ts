@@ -3,12 +3,11 @@
 
 import type { CodexReasoningEffort, ServiceTier } from "../shared/types"
 import type { CodexErrorInfo } from "../shared/codex-error-classification"
-import type { AnyValue } from "../shared/errors"
-import { isRecord } from "../shared/errors"
+import { isJsonObject, type JsonArray, type JsonObject, type JsonValue } from "../shared/json"
 
 export type CodexRequestId = string | number
 
-export interface JsonRpcResponse<TResult = unknown> {
+export interface JsonRpcResponse<TResult = JsonValue> {
   id: CodexRequestId
   result?: TResult
   error?: {
@@ -213,7 +212,13 @@ export interface ToolRequestUserInputParams {
   questions: ToolRequestUserInputQuestion[]
 }
 
-export interface ToolRequestUserInputResponse {
+/**
+ * A type ALIAS, not an interface, deliberately: this value is written straight
+ * back onto the JSON-RPC wire, and TypeScript grants an implicit index
+ * signature to an alias but never to an interface — so an interface here would
+ * be unassignable to `JsonValue` with no cast available to bridge it.
+ */
+export type ToolRequestUserInputResponse = {
   answers: Record<string, { answers: string[] }>
 }
 
@@ -266,7 +271,7 @@ export interface DynamicToolCallParams {
   turnId: string
   callId: string
   tool: string
-  arguments: Record<string, unknown> | unknown[] | string | number | boolean | null
+  arguments: JsonValue
 }
 
 export interface DynamicToolCallOutputContentItem {
@@ -317,8 +322,8 @@ export interface UserMessageItem {
 export interface ReasoningItem {
   type: "reasoning"
   id: string
-  summary: unknown[]
-  content: unknown[]
+  summary: JsonArray
+  content: JsonArray
 }
 
 export interface AgentMessageItem {
@@ -351,10 +356,10 @@ export interface McpToolCallItem {
   id: string
   server: string
   tool: string
-  arguments?: Record<string, unknown> | null
+  arguments?: JsonObject | null
   result?: {
-    content?: AnyValue[]
-    structuredContent?: AnyValue
+    content?: JsonValue[]
+    structuredContent?: JsonValue
   } | null
   error?: {
     message?: string
@@ -366,7 +371,7 @@ export interface DynamicToolCallItem {
   type: "dynamicToolCall"
   id: string
   tool: string
-  arguments?: Record<string, unknown> | unknown[] | string | number | boolean | null
+  arguments?: JsonValue
   status: "inProgress" | "completed" | "failed"
   contentItems?: DynamicToolCallOutputContentItem[] | null
   success?: boolean | null
@@ -484,15 +489,15 @@ export type ServerNotification =
   | { method: "thread/compacted"; params: ContextCompactedNotification }
   | { method: "error"; params: ErrorNotification }
 
-export function isJsonRpcResponse(value: AnyValue): value is JsonRpcResponse {
-  if (!isRecord(value)) return false
+export function isJsonRpcResponse(value: JsonValue): value is JsonValue & JsonRpcResponse {
+  if (!isJsonObject(value)) return false
   return "id" in value
     && ("result" in value || "error" in value)
     && !("method" in value)
 }
 
-export function isServerRequest(value: AnyValue): value is ServerRequest {
-  if (!isRecord(value)) return false
+export function isServerRequest(value: JsonValue): value is JsonValue & ServerRequest {
+  if (!isJsonObject(value)) return false
   if (typeof value.method !== "string" || !("id" in value)) return false
   return value.method === "item/tool/requestUserInput"
     || value.method === "item/tool/call"
@@ -500,8 +505,8 @@ export function isServerRequest(value: AnyValue): value is ServerRequest {
     || value.method === "item/fileChange/requestApproval"
 }
 
-export function isServerNotification(value: AnyValue): value is ServerNotification {
-  if (!isRecord(value)) return false
+export function isServerNotification(value: JsonValue): value is JsonValue & ServerNotification {
+  if (!isJsonObject(value)) return false
   if (typeof value.method !== "string" || "id" in value) return false
   return value.method === "thread/started"
     || value.method === "thread/tokenUsage/updated"

@@ -3,6 +3,7 @@ import { detectPushSupport, getStoredPushDeviceId, type PushPermissionState } fr
 import type { LlmProviderDraft } from "../app/llmProviderDraft"
 import type { GithubRelease, InstalledSkillSummary, SkillSearchResult } from "../../shared/types"
 import type { PackageInventorySnapshot, PackageUpdateSnapshot } from "../../shared/packages/types"
+import type { JsonValue } from "../../shared/json"
 
 export type { GithubRelease }
 
@@ -71,7 +72,7 @@ interface SettingsPageState {
   llmProviderDraft: LlmProviderDraft
   llmProviderError: string | null
   llmValidationStatus: "idle" | "valid" | "invalid"
-  llmValidationError: unknown | null
+  llmValidationError: JsonValue | null
   llmValidationDialogOpen: boolean
 
   // Actions — ChangelogSection
@@ -136,7 +137,7 @@ interface SettingsPageState {
   setLlmProviderDraft: (draft: LlmProviderDraft) => void
   setLlmProviderError: (error: string | null) => void
   setLlmValidationStatus: (status: "idle" | "valid" | "invalid") => void
-  setLlmValidationError: (error: unknown | null) => void
+  setLlmValidationError: (error: JsonValue | null) => void
   setLlmValidationDialogOpen: (open: boolean) => void
 }
 

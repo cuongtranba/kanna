@@ -1,3 +1,4 @@
+import { type JsonObject, type JsonArray, type JsonValue } from "./json"
 /**
  * Tool call shapes (raw + hydrated) — extracted from shared/types.ts.
  * Completely self-contained: no imports from types.ts.
@@ -40,7 +41,7 @@ interface ToolCallBase<TKind extends string, TInput> {
   toolName: string
   toolId: string
   input: TInput
-  rawInput?: Record<string, unknown>
+  rawInput?: JsonObject
 }
 
 export interface AskUserQuestionToolCall
@@ -83,7 +84,7 @@ export interface SubagentTaskToolCall
   extends ToolCallBase<"subagent_task", { subagentType?: string }> { }
 
 export interface McpGenericToolCall
-  extends ToolCallBase<"mcp_generic", { server: string; tool: string; payload: Record<string, unknown> }> { }
+  extends ToolCallBase<"mcp_generic", { server: string; tool: string; payload: JsonObject }> { }
 
 export interface OfferDownloadToolCall
   extends ToolCallBase<"offer_download", { path: string; label?: string }> { }
@@ -121,7 +122,7 @@ export interface ImageGenerationToolResult {
 }
 
 export interface UnknownToolCall
-  extends ToolCallBase<"unknown_tool", { payload: Record<string, unknown> }> { }
+  extends ToolCallBase<"unknown_tool", { payload: JsonObject }> { }
 
 export interface WorkflowToolCall
   extends ToolCallBase<"workflow", { name?: string; description?: string; scriptPath?: string }> { }
@@ -161,7 +162,7 @@ export interface HydratedToolCallBase<TKind extends string, TInput, TResult> {
   toolId: string
   input: TInput
   result?: TResult
-  rawResult?: string | Record<string, unknown> | readonly unknown[] | null
+  rawResult?: string | JsonObject | JsonArray | null
   isError?: boolean
   /**
    * Set when the underlying tool_result entry was persisted to disk
@@ -196,22 +197,22 @@ export type HydratedExitPlanModeToolCall =
   HydratedToolCallBase<"exit_plan_mode", ExitPlanModeToolCall["input"], ExitPlanModeToolResult>
 
 export type HydratedTodoWriteToolCall =
-  HydratedToolCallBase<"todo_write", TodoWriteToolCall["input"], unknown>
+  HydratedToolCallBase<"todo_write", TodoWriteToolCall["input"], JsonValue>
 
 export type HydratedSkillToolCall =
-  HydratedToolCallBase<"skill", SkillToolCall["input"], unknown>
+  HydratedToolCallBase<"skill", SkillToolCall["input"], JsonValue>
 
 export type HydratedGlobToolCall =
-  HydratedToolCallBase<"glob", GlobToolCall["input"], unknown>
+  HydratedToolCallBase<"glob", GlobToolCall["input"], JsonValue>
 
 export type HydratedGrepToolCall =
-  HydratedToolCallBase<"grep", GrepToolCall["input"], unknown>
+  HydratedToolCallBase<"grep", GrepToolCall["input"], JsonValue>
 
 export type HydratedBashToolCall =
-  HydratedToolCallBase<"bash", BashToolCall["input"], unknown>
+  HydratedToolCallBase<"bash", BashToolCall["input"], JsonValue>
 
 export type HydratedWebSearchToolCall =
-  HydratedToolCallBase<"web_search", WebSearchToolCall["input"], unknown>
+  HydratedToolCallBase<"web_search", WebSearchToolCall["input"], JsonValue>
 
 export interface ReadFileTextBlock {
   type: "text"
@@ -233,13 +234,13 @@ export type HydratedReadFileToolCall =
   HydratedToolCallBase<"read_file", ReadFileToolCall["input"], ReadFileToolResult | string>
 
 export type HydratedWriteFileToolCall =
-  HydratedToolCallBase<"write_file", WriteFileToolCall["input"], unknown>
+  HydratedToolCallBase<"write_file", WriteFileToolCall["input"], JsonValue>
 
 export type HydratedEditFileToolCall =
-  HydratedToolCallBase<"edit_file", EditFileToolCall["input"], unknown>
+  HydratedToolCallBase<"edit_file", EditFileToolCall["input"], JsonValue>
 
 export type HydratedDeleteFileToolCall =
-  HydratedToolCallBase<"delete_file", DeleteFileToolCall["input"], unknown>
+  HydratedToolCallBase<"delete_file", DeleteFileToolCall["input"], JsonValue>
 
 export interface SubagentToolStats {
   readCount?: number
@@ -270,7 +271,7 @@ export type HydratedSubagentTaskToolCall =
   HydratedToolCallBase<"subagent_task", SubagentTaskToolCall["input"], SubagentTaskResult>
 
 export type HydratedMcpGenericToolCall =
-  HydratedToolCallBase<"mcp_generic", McpGenericToolCall["input"], unknown>
+  HydratedToolCallBase<"mcp_generic", McpGenericToolCall["input"], JsonValue>
 
 export type HydratedOfferDownloadToolCall =
   HydratedToolCallBase<"offer_download", OfferDownloadToolCall["input"], OfferDownloadToolResult>
@@ -290,7 +291,7 @@ export type HydratedWorkflowToolCall =
   HydratedToolCallBase<"workflow", WorkflowToolCall["input"], WorkflowToolResult>
 
 export type HydratedUnknownToolCall =
-  HydratedToolCallBase<"unknown_tool", UnknownToolCall["input"], unknown>
+  HydratedToolCallBase<"unknown_tool", UnknownToolCall["input"], JsonValue>
 
 export type HydratedToolCall =
   | HydratedAskUserQuestionToolCall

@@ -1,8 +1,7 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 import process from "node:process"
-import type { AnyValue } from "../../shared/errors"
-import { isRecord } from "../../shared/errors"
+import { isJsonArray, isJsonObject, safeJsonParse, type JsonValue } from "../../shared/json"
 
 /**
  * On-disk registry of claude PTY children so a non-graceful server crash
@@ -101,13 +100,9 @@ export class ClaudePtyRegistry {
     } catch {
       return []
     }
-    try {
-      const parsed: Partial<RegistryFile> = JSON.parse(raw)
-      if (!parsed || !Array.isArray(parsed.entries)) return []
-      return parsed.entries.filter(isValidEntry)
-    } catch {
-      return []
-    }
+    const parsed = safeJsonParse(raw)
+    if (parsed === null || !isJsonObject(parsed) || !isJsonArray(parsed.entries)) return []
+    return parsed.entries.filter(isValidEntry)
   }
 
   private async persist() {
@@ -123,8 +118,8 @@ export class ClaudePtyRegistry {
   }
 }
 
-function isValidEntry(value: AnyValue): value is ClaudePtyEntry {
-  if (!isRecord(value)) return false
+function isValidEntry(value: JsonValue): value is JsonValue & ClaudePtyEntry {
+  if (!isJsonObject(value)) return false
   return (
     typeof value.chatId === "string"
     && typeof value.sessionId === "string"

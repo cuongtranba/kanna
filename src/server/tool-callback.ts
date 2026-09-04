@@ -10,6 +10,7 @@ import { policy } from "./permission-gate"
 import { canonicalArgsHash } from "./canonical-args"
 import type { EventStore } from "./event-store"
 import { log } from "../shared/log"
+import type { JsonObject } from "../shared/json"
 
 export interface ToolCallbackServiceArgs {
   store: EventStore
@@ -30,7 +31,7 @@ export interface ToolCallbackSubmitArgs {
   sessionId: string
   toolUseId: string
   toolName: string
-  args: Record<string, unknown>
+  args: JsonObject
   chatPolicy: ChatPermissionPolicy
   cwd: string
   /** Folder-restricted subagent: per-run absolute path-root allowlist. Forwarded to policy.evaluate. */

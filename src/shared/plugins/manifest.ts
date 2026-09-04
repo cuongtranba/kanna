@@ -1,5 +1,4 @@
-import type { AnyValue } from "../errors"
-import { isRecord } from "../errors"
+import { isJsonObject, type JsonObject, type JsonValue } from "../json"
 
 /**
  * The Kanna plugin manifest.
@@ -60,7 +59,7 @@ export function resolvePluginEntry(entry: string | null): string {
   return entry ?? "index.ts"
 }
 
-function readString(source: Record<string, AnyValue>, key: string): string | null {
+function readString(source: JsonObject, key: string): string | null {
   const value = source[key]
   return typeof value === "string" ? value : null
 }
@@ -89,7 +88,7 @@ function fail(code: PluginManifestErrorCode, message: string): PluginManifestRes
  * the author it "is not valid JSON" sends them to inspect their syntax instead
  * of their content.
  */
-function parseJsonBody(raw: string): { readonly ok: true; readonly value: AnyValue } | { readonly ok: false } {
+function parseJsonBody(raw: string): { readonly ok: true; readonly value: JsonValue } | { readonly ok: false } {
   try {
     return { ok: true, value: JSON.parse(raw) }
   } catch {
@@ -110,7 +109,7 @@ export function parseKannaPluginManifest(raw: string): PluginManifestResult {
     return fail("invalid_json", `${KANNA_PLUGIN_MANIFEST_FILENAME} is not valid JSON.`)
   }
   const parsed = body.value
-  if (!isRecord(parsed) || Array.isArray(parsed)) {
+  if (!isJsonObject(parsed) || Array.isArray(parsed)) {
     return fail("not_an_object", `${KANNA_PLUGIN_MANIFEST_FILENAME} must contain a JSON object.`)
   }
 

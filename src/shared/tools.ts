@@ -13,7 +13,7 @@ import type {
   TodoItem,
   WorkflowToolResult,
 } from "./types"
-import { type AnyValue, isRecord } from "./errors"
+import { isJsonObject, type JsonObject, type JsonValue } from "./json"
 
 export const KANNA_MCP_SERVER_NAME = "kanna"
 export const OFFER_DOWNLOAD_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__offer_download`
@@ -36,8 +36,8 @@ export const PLUGIN_SCAFFOLD_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__plugin_
 export const PLUGIN_INSTALL_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__plugin_install`
 export const PLUGIN_RELOAD_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__plugin_reload`
 
-function asRecord<T>(value: T): (T & Record<string, unknown>) | null {
-  return isRecord(value) ? value : null
+function asRecord(value: JsonValue | undefined): JsonObject | null {
+  return value !== undefined && isJsonObject(value) ? value : null
 }
 
 function parseWorkflowMeta(script: string): { name?: string; description?: string } {
@@ -49,7 +49,7 @@ function parseWorkflowMeta(script: string): { name?: string; description?: strin
 export function normalizeToolCall(args: {
   toolName: string
   toolId: string
-  input: Record<string, unknown>
+  input: JsonObject
 }): NormalizedToolCall {
   const { toolName, toolId, input } = args
 
@@ -62,7 +62,7 @@ export function normalizeToolCall(args: {
         toolId,
         input: {
           questions: Array.isArray(input.questions)
-            ? input.questions.filter((q): q is AskUserQuestionItem => isRecord(q) && typeof q.question === "string")
+            ? input.questions.filter((q): q is AskUserQuestionItem => isJsonObject(q) && typeof q.question === "string")
             : [],
         },
         rawInput: input,
@@ -73,9 +73,9 @@ export function normalizeToolCall(args: {
       // key generation work identically regardless of which path fired.
       const questions: AskUserQuestionItem[] = Array.isArray(input.questions)
         ? input.questions.flatMap((q) => {
-            if (!isRecord(q)) return []
+            if (!isJsonObject(q)) return []
             const options: AskUserQuestionOption[] | undefined = Array.isArray(q.options)
-              ? q.options.filter((o: AnyValue): o is AskUserQuestionOption => isRecord(o) && typeof o.label === "string")
+              ? q.options.filter((o: JsonValue): o is JsonValue & AskUserQuestionOption => isJsonObject(o) && typeof o.label === "string")
               : undefined
             return [{
               question: typeof q.text === "string" ? q.text : String(q.text ?? ""),
@@ -117,7 +117,7 @@ export function normalizeToolCall(args: {
           todos: Array.isArray(input.todos)
             ? input.todos.filter(
                 (t): t is TodoItem =>
-                  isRecord(t) &&
+                  isJsonObject(t) &&
                   typeof t.content === "string" &&
                   typeof t.status === "string" &&
                   typeof t.activeForm === "string",
@@ -308,7 +308,7 @@ export function normalizeToolCall(args: {
   }
 }
 
-function parseJsonValue(value: AnyValue): AnyValue {
+function parseJsonValue(value: JsonValue): JsonValue {
   if (typeof value !== "string") return value
   try {
     return JSON.parse(value)
@@ -328,9 +328,9 @@ type ReadStructuredImageBlock = {
   mimeType?: string
 }
 
-function normalizeReadBlocks(value: AnyValue): Array<ReadStructuredTextBlock | ReadStructuredImageBlock> {
-  let blocks: unknown[]
-  if (isRecord(value) && "content" in value && Array.isArray(value.content)) {
+function normalizeReadBlocks(value: JsonValue): Array<ReadStructuredTextBlock | ReadStructuredImageBlock> {
+  let blocks: readonly JsonValue[]
+  if (isJsonObject(value) && "content" in value && Array.isArray(value.content)) {
     blocks = value.content
   } else if (Array.isArray(value)) {
     blocks = value
@@ -381,9 +381,9 @@ function normalizeReadBlocks(value: AnyValue): Array<ReadStructuredTextBlock | R
   return normalized
 }
 
-function extractMcpTextContent(value: AnyValue): string | null {
-  let blocks: unknown[] | null
-  if (isRecord(value) && "content" in value && Array.isArray(value.content)) {
+function extractMcpTextContent(value: JsonValue): string | null {
+  let blocks: readonly JsonValue[] | null
+  if (isJsonObject(value) && "content" in value && Array.isArray(value.content)) {
     blocks = value.content
   } else if (Array.isArray(value)) {
     blocks = value
@@ -402,7 +402,7 @@ function extractMcpTextContent(value: AnyValue): string | null {
   return parts.length > 0 ? parts.join("") : null
 }
 
-export function hydrateToolResult(tool: NormalizedToolCall, raw: AnyValue): HydratedToolCall["result"] {
+export function hydrateToolResult(tool: NormalizedToolCall, raw: JsonValue): HydratedToolCall["result"] {
   const parsed = parseJsonValue(raw)
 
   switch (tool.toolKind) {
@@ -417,7 +417,7 @@ export function hydrateToolResult(tool: NormalizedToolCall, raw: AnyValue): Hydr
       for (const [key, value] of Object.entries(answers)) {
         if (Array.isArray(value)) {
           answersMap[key] = value.map((entry) => String(entry))
-        } else if (isRecord(value) && Array.isArray(value.answers)) {
+        } else if (isJsonObject(value) && Array.isArray(value.answers)) {
           answersMap[key] = value.answers.map((entry) => String(entry))
         } else if (value == null || value === "") {
           answersMap[key] = []

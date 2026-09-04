@@ -8,7 +8,8 @@ import {
   type BuildCanUseToolArgs,
 } from "./claude-spawn-helpers"
 import type { ToolCallbackService } from "./tool-callback"
-import type { AnyValue } from "../shared/errors"
+import type { JsonValue } from "../shared/json"
+import type { HarnessToolRequest } from "./harness-types"
 
 // ── Minimal stubs ────────────────────────────────────────────────────────────
 
@@ -73,7 +74,7 @@ describe("buildCanUseTool", () => {
   })
 
   test("routes AskUserQuestion through legacy onToolRequest path and returns allow", async () => {
-    const onToolRequest = mock(async (_req: { tool: AnyValue }) => ({
+    const onToolRequest = mock(async (_req: HarnessToolRequest): Promise<JsonValue> => ({
       answers: { q1: "yes" },
     }))
     const canUseTool = buildCanUseTool(makeArgs({ onToolRequest }))

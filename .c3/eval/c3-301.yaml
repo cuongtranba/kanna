@@ -2,6 +2,9 @@ fact: c3-301
 claim: "shared protocol types and system-prompt are at src/shared/types.ts and related"
 code:
   - src/shared/analytics.ts
+  - src/shared/dynamic-module.ts
+  - src/shared/json.ts
+  - src/shared/json.test.ts
   - src/shared/kanna-system-prompt.test.ts
   - src/shared/kanna-system-prompt.ts
   - src/shared/mask-oauth-key.test.ts

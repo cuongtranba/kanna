@@ -14,7 +14,7 @@
  *    item updated in the same second.
  */
 
-import { isRecord, type AnyValue } from "../shared/errors"
+import { isJsonObject, type JsonValue } from "../shared/json"
 import type {
   BoardSyncProvider,
   ProviderAuth,
@@ -61,18 +61,18 @@ function readRateLimit(response: Response): RateLimit | null {
   return { remaining, resetAt: reset * 1000 }
 }
 
-function decodeLabels(value: AnyValue): string[] {
+function decodeLabels(value: JsonValue): string[] {
   if (!Array.isArray(value)) return []
   const labels: string[] = []
   for (const entry of value) {
     if (typeof entry === "string") labels.push(entry)
-    else if (isRecord(entry) && typeof entry.name === "string") labels.push(entry.name)
+    else if (isJsonObject(entry) && typeof entry.name === "string") labels.push(entry.name)
   }
   return labels
 }
 
-function decodeIssue(value: AnyValue): RemoteItem | null {
-  if (!isRecord(value)) return null
+function decodeIssue(value: JsonValue): RemoteItem | null {
+  if (!isJsonObject(value)) return null
   // A pull request is served by the issues endpoint and must not become a card.
   if ("pull_request" in value) return null
   const { number, title, html_url: htmlUrl, state, updated_at: updatedAt } = value
@@ -81,7 +81,8 @@ function decodeIssue(value: AnyValue): RemoteItem | null {
   const parsed = Date.parse(updatedAt)
   if (!Number.isFinite(parsed)) return null
 
-  const assignee = isRecord(value.assignee) && typeof value.assignee.login === "string" ? value.assignee.login : null
+  const rawAssignee = value.assignee
+  const assignee = isJsonObject(rawAssignee) && typeof rawAssignee.login === "string" ? rawAssignee.login : null
 
   return {
     externalId: String(number),
@@ -105,11 +106,11 @@ export function createGitHubIssuesProvider(options: GitHubFetchOptions = {}): Bo
     async discoverSources(auth: ProviderAuth): Promise<readonly RemoteSource[]> {
       const response = await doFetch(`${API}/user/repos?per_page=100&sort=updated`, { headers: headers(auth) })
       if (!response.ok) return []
-      const body: AnyValue = await response.json()
+      const body: JsonValue = await response.json()
       if (!Array.isArray(body)) return []
       const sources: RemoteSource[] = []
       for (const entry of body) {
-        if (!isRecord(entry)) continue
+        if (!isJsonObject(entry)) continue
         const fullName = entry.full_name
         if (typeof fullName !== "string") continue
         const [owner, repo] = fullName.split("/")
@@ -153,7 +154,7 @@ export function createGitHubIssuesProvider(options: GitHubFetchOptions = {}): Bo
           throw new Error(`GitHub pull failed: ${String(response.status)} ${response.statusText}`)
         }
 
-        const body: AnyValue = await response.json()
+        const body: JsonValue = await response.json()
         if (!Array.isArray(body) || body.length === 0) break
 
         // The cursor advances on EVERY entry the page returned, including the
@@ -161,7 +162,7 @@ export function createGitHubIssuesProvider(options: GitHubFetchOptions = {}): Bo
         // forever on a page with no issues in it.
         let newestSeen = 0
         for (const entry of body) {
-          if (isRecord(entry) && typeof entry.updated_at === "string") {
+          if (isJsonObject(entry) && typeof entry.updated_at === "string") {
             const seen = Date.parse(entry.updated_at)
             if (Number.isFinite(seen)) newestSeen = Math.max(newestSeen, seen)
           }
@@ -213,7 +214,7 @@ export function createGitHubIssuesProvider(options: GitHubFetchOptions = {}): Bo
           continue
         }
 
-        const body: AnyValue = await response.json()
+        const body: JsonValue = await response.json()
         const item = decodeIssue(body)
         if (!item) {
           outcomes.push({ ok: false, retryable: false, message: "GitHub returned an unreadable issue" })

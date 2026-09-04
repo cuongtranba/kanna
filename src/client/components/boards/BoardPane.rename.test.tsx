@@ -5,7 +5,8 @@ import "../../lib/testing/setupHappyDom"
 import { BoardPane, type BoardPaneSocket } from "./BoardPane"
 import { useBoardSyncStore } from "./BoardPane.store"
 import { useBoardsStore } from "../../stores/boardsStore"
-import type { AnyValue } from "../../../shared/errors"
+import type { BoardSnapshot, ClientCommand, SubscriptionTopic } from "../../../shared/protocol"
+import type { BoardViewSnapshot } from "../../../shared/boards/types"
 
 /**
  * The board's name is edited where it is READ — in the header, by clicking it.
@@ -14,7 +15,7 @@ import type { AnyValue } from "../../../shared/errors"
  * not change it.
  */
 
-const VIEW = {
+const VIEW: BoardViewSnapshot = {
   board: {
     id: "board-1",
     ownerKind: "project",
@@ -31,16 +32,18 @@ const VIEW = {
   counts: {},
   cards: {},
   cursors: {},
+  chatLinksByCard: {},
+  newSince: null,
 }
 
-async function mount(): Promise<{ container: HTMLDivElement; commands: AnyValue[]; unmount: () => void }> {
-  const commands: AnyValue[] = []
+async function mount(): Promise<{ container: HTMLDivElement; commands: ClientCommand[]; unmount: () => void }> {
+  const commands: ClientCommand[] = []
   const socket: BoardPaneSocket = {
-    subscribe: <TSnapshot,>(_topic: AnyValue, onSnapshot: (snapshot: TSnapshot) => void) => {
-      onSnapshot({ boardId: "board-1", view: VIEW } as TSnapshot)
+    subscribe: (_topic: SubscriptionTopic, onSnapshot: (snapshot: BoardSnapshot) => void) => {
+      onSnapshot({ boardId: "board-1", view: VIEW })
       return () => undefined
     },
-    command: <TResult,>(command: AnyValue) => {
+    command: <TResult,>(command: ClientCommand) => {
       commands.push(command)
       return Promise.resolve(undefined as TResult)
     },
@@ -91,7 +94,7 @@ function press(input: HTMLInputElement, key: string) {
   })
 }
 
-function boardUpdates(commands: AnyValue[]) {
+function boardUpdates(commands: ClientCommand[]) {
   return commands.filter((c) => (c as { type: string }).type === "board.update")
 }
 

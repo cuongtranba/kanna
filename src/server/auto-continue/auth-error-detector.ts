@@ -1,16 +1,21 @@
-import type { AnyValue } from "../../shared/errors"
-import { isRecord } from "../../shared/errors"
+import type { JsonValue } from "../../shared/json"
 
 export interface AuthErrorDetection {
   chatId: string
   reason: string
-  raw: AnyValue
+  /** Diagnostic only: the throwable, or the result text it was read from. */
+  raw: Error | JsonValue
 }
 
+/**
+ * The auth-failure fields an SDK/CLI error may carry beyond `Error`'s own.
+ * `Error` is assignable to this (every member is optional and `message`
+ * overlaps), so widening needs no cast.
+ */
 interface ErrorLike {
-  message?: string
-  status?: number
-  api_error_status?: number
+  readonly message?: string
+  readonly status?: JsonValue
+  readonly api_error_status?: JsonValue
 }
 
 // Strings the Claude CLI / Anthropic API emit when an OAuth token is
@@ -37,9 +42,8 @@ export class ClaudeAuthErrorDetector {
    * spawn has been rejected by the API — caller should mark the token as
    * errored and rotate.
    */
-  detect(chatId: string, error: AnyValue): AuthErrorDetection | null {
-    if (!error) return null
-    const e: ErrorLike = isRecord(error) ? error : {}
+  detect(chatId: string, error: Error): AuthErrorDetection | null {
+    const e: ErrorLike = error
     if (e.status === 401 || e.api_error_status === 401) {
       return { chatId, reason: this.summarize(e.message), raw: error }
     }

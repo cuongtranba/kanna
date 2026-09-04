@@ -81,13 +81,13 @@ export interface LoopCommandDeps {
   claudeSessions: Pick<Map<string, ClaudeSessionState>, "get">
 
   /** Active turns map — `.has()` to check existence. */
-  activeTurns: Pick<Map<string, unknown>, "has">
+  activeTurns: { has(chatId: string): boolean }
 
   /**
    * Turns whose provider session is still booting. A booting turn owns its
    * session as much as a registered one, so both block a context teardown.
    */
-  startingTurns: Pick<Map<string, unknown>, "has">
+  startingTurns: { has(chatId: string): boolean }
 
   /** Parked AskUserQuestion / ExitPlanMode continuations keyed by chatId. */
   pendingTools: { has(chatId: string): boolean }

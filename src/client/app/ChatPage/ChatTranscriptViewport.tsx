@@ -1,5 +1,4 @@
 import { LegendList, type LegendListRef } from "@legendapp/list/react"
-import type { AnyValue } from "../../../shared/errors"
 import { memo, useCallback, useEffect, useMemo, useRef } from "react"
 import { useChatPageStore } from "../../stores/chatPageStore"
 import { ChatTabScopedStore } from "../../stores/chatTabScopedStore"
@@ -61,6 +60,15 @@ export type PendingQuestionRun = SubagentRunSnapshot & {
 }
 
 export type PendingMainQuestion = Extract<ProcessedToolCall, { toolKind: "ask_user_question" }>
+
+/** The one field the scroll handler reads — LegendList's DOM event and the
+ * synthetic `{currentTarget}` the resize effect fabricates both satisfy it. */
+interface ScrollEventLike {
+  /** Present on the DOM event LegendList actually forwards on web. */
+  readonly currentTarget?: EventTarget | null
+  /** Declared only so LegendList's React-Native-shaped event type matches. */
+  readonly nativeEvent?: object
+}
 
 /** Stable option objects — the render-context memo keys on reference identity. */
 const FOOTER_SURFACE_OPTIONS = { askUserQuestionSurface: "footer" } as const
@@ -273,13 +281,8 @@ export const ChatTranscriptViewport = memo(({
     [childrenByParentRunId, localPath, onSubagentAskUserQuestionSubmit, onSubagentExitPlanModeSubmit, onCancelSubagentRun],
   )
 
-  const handleScroll = useCallback((event?: AnyValue) => {
-    const currentTarget = (
-      typeof event === "object"
-      && event !== null
-      && "currentTarget" in event
-      && event.currentTarget instanceof HTMLElement
-    )
+  const handleScroll = useCallback((event?: ScrollEventLike) => {
+    const currentTarget = event?.currentTarget instanceof HTMLElement
       ? event.currentTarget
       : listRef.current?.getScrollableNode?.()
 

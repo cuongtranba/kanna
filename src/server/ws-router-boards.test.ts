@@ -1,3 +1,4 @@
+import type { JsonValue } from "../shared/json"
 import { describe, expect, test } from "bun:test"
 import { handleBoardCommand, isBoardCommand, type BoardCommandDeps } from "./ws-router-boards"
 import { createBoardRegistry } from "./board-registry"
@@ -224,7 +225,7 @@ describe("board.update cardFields", () => {
   })
 
   test("answers with an error rather than persisting a schema it cannot read", async () => {
-    const refusals: unknown[] = [
+    const refusals: JsonValue[] = [
       [{ id: "a", label: "A", kind: "text", options: null, required: false }, { id: "a", label: "B", kind: "text", options: null, required: false }],
       [{ id: "a", label: "A", kind: "currency", options: null, required: false }],
       [{ id: "a", label: "A", kind: "select", required: false, options: [{ id: "x", label: "X", colorToken: "chartreuse" }] }],

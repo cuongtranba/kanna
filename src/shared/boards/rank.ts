@@ -28,7 +28,7 @@
  */
 
 import { generateKeyBetween, generateNKeysBetween } from "fractional-indexing"
-import { errorMessage, type AnyValue } from "../errors"
+import { errorMessage, toError } from "../errors"
 
 /**
  * Length past which a column should be rebalanced.
@@ -67,7 +67,7 @@ function assertValidRank(rank: string | null, label: string): void {
   }
 }
 
-function wrapRankError(error: AnyValue, context: string): never {
+function wrapRankError(error: Error, context: string): never {
   throw new InvalidRankError(`${context}: ${errorMessage(error)}`)
 }
 
@@ -94,7 +94,7 @@ export function rankBetween(above: string | null, below: string | null): string 
   try {
     return generateKeyBetween(above, below)
   } catch (error) {
-    return wrapRankError(error, "failed to generate a rank")
+    return wrapRankError(toError(error), "failed to generate a rank")
   }
 }
 
@@ -126,7 +126,7 @@ export function ranksBetween(above: string | null, below: string | null, count: 
   try {
     return generateNKeysBetween(above, below, count)
   } catch (error) {
-    return wrapRankError(error, `failed to generate ${count} ranks`)
+    return wrapRankError(toError(error), `failed to generate ${count} ranks`)
   }
 }
 

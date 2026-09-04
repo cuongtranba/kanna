@@ -20,9 +20,10 @@
 import { z } from "zod"
 import type { BoardRegistry } from "./board-registry"
 import { BoardStoreError } from "./board-store"
-import { errorMessage, type AnyValue } from "../shared/errors"
+import { errorMessage } from "../shared/errors"
+import type { JsonValue } from "../shared/json"
 import type { CardActor } from "../shared/boards/types"
-import { ok, fail, type ToolResult } from "./kanna-mcp-tool"
+import { ok, fail, type ToolArgs, type ToolResult } from "./kanna-mcp-tool"
 
 /** How many cards one `board_get` may return per column. */
 const CARD_WINDOW = 20
@@ -53,7 +54,7 @@ export interface BoardToolDeps {
 }
 
 /** The schema already requires these; this is the runtime half of that promise. */
-function requireString(value: AnyValue, name: string): string {
+function requireString(value: JsonValue | undefined, name: string): string {
   if (typeof value !== "string" || value.trim() === "") {
     throw new BoardStoreError("invalid_input", `${name} is required`)
   }
@@ -69,8 +70,8 @@ function requireString(value: AnyValue, name: string): string {
 export type BoardToolFactory<TTool> = (
   name: string,
   description: string,
-  schema: Record<string, z.ZodTypeAny>,
-  handler: (input: Record<string, AnyValue>) => Promise<ToolResult>,
+  schema: Record<string, z.ZodType<JsonValue | undefined>>,
+  handler: (input: ToolArgs) => Promise<ToolResult>,
 ) => TTool
 
 export function buildBoardToolList<TTool>(deps: BoardToolDeps, tool: BoardToolFactory<TTool>): TTool[] {

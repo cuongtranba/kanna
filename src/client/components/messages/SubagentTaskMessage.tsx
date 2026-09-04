@@ -6,7 +6,7 @@ import { type StatusTone } from "../../lib/statusLabel"
 import { StatusPill } from "../ui/status-pill"
 import { formatContextWindowTokens } from "../../lib/contextWindow"
 import { processTranscriptMessages } from "../../lib/parseTranscript"
-import type { AnyValue } from "../../../shared/errors"
+import { onRejected } from "../../../shared/errors"
 import type { SubagentTaskResult, SubagentToolStats } from "../../../shared/types"
 import { SubagentEntryRow } from "./SubagentEntryRow"
 import { useSubagentTranscriptFetch } from "./subagent-fetch-context"
@@ -73,7 +73,7 @@ function SubagentTaskMessageInner({ subagentType, result, isError, localPath }: 
           setChildren(processTranscriptMessages(entries))
           setLoaded(true)
         })
-        .catch((err: AnyValue) => setError(err instanceof Error ? err.message : "Failed to load subagent transcript"))
+        .catch(onRejected((error) => setError(error.message)))
         .finally(() => setLoading(false))
     }
   }, [fetchTranscript, agentId, expanded, loaded, loading, setExpanded, setLoading, setError, setChildren, setLoaded])

@@ -12,6 +12,7 @@ import type {
 } from "../shared/types"
 import type { AutoContinueEvent } from "./auto-continue/events"
 import type { ChatPermissionPolicyOverride, ToolRequest, ToolRequestDecision, ToolRequestStatus } from "../shared/permission-policy"
+import type { JsonArray, JsonObject } from "../shared/json"
 
 export interface ProjectRecord extends ProjectSummary {
   deletedAt?: number
@@ -388,7 +389,7 @@ export type SubagentRunEvent =
       runId: string
       toolUseId: string
       toolKind: "ask_user_question" | "exit_plan_mode"
-      input: Record<string, unknown>
+      input: JsonObject
     }
   | {
       v: 3
@@ -397,7 +398,7 @@ export type SubagentRunEvent =
       chatId: string
       runId: string
       toolUseId: string
-      result: string | Record<string, unknown> | readonly unknown[] | null
+      result: string | JsonObject | JsonArray | null
       resolution: "user" | "auto_deny" | "interrupted"
     }
 

@@ -9,7 +9,9 @@ import type {
   TranscriptEntry,
 } from "../shared/types"
 import { log } from "../shared/log"
-import { type AnyValue, isRecord } from "../shared/errors"
+import { isRecord } from "../shared/errors"
+import { toJsonArray, toJsonObject } from "./json-boundary"
+import { isJsonObject, type JsonArray, type JsonObject, type JsonValue } from "../shared/json"
 import { codexErrorInfoTag } from "../shared/codex-error-classification"
 import type {
   CollabAgentToolCallItem,
@@ -19,9 +21,9 @@ import type {
   ThreadTokenUsageUpdatedNotification,
   ToolRequestUserInputParams,
   ToolRequestUserInputQuestion,
-  ToolRequestUserInputResponse,
   TurnPlanStep,
 } from "./codex-app-server-protocol"
+import { createTranscriptEntry, dynamicToolPayload, genericDynamicToolCall } from "./codex-tool-payloads"
 
 export interface TranslationContext {
   projectId: string | null
@@ -29,25 +31,20 @@ export interface TranslationContext {
   relocate(externalPath: string): string
 }
 
-export function createTranscriptEntry<T extends Omit<TranscriptEntry, "_id" | "createdAt">>(
-  entry: T,
-  createdAt = Date.now()
-): T & { _id: string; createdAt: number } {
-  return {
-    _id: randomUUID(),
-    createdAt,
-    ...entry,
-  }
-}
-
 const timestamped = createTranscriptEntry
 
-export function asRecord(value: AnyValue): Record<string, unknown> | null {
+/**
+ * Narrow through the sanctioned `isRecord` chokepoint. The return type is
+ * inferred rather than written — callers pass generated protocol shapes as
+ * often as parsed JSON, and `JsonObject` would be a claim about the former
+ * that nothing checks. Use `toJsonObject` where a `JsonObject` is required.
+ */
+export function asRecord<T>(value: T) {
   if (!isRecord(value)) return null
   return value
 }
 
-function asNumber(value: AnyValue): number | undefined {
+function asNumber<T>(value: T): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined
 }
 
@@ -160,38 +157,17 @@ function dynamicContentToText(contentItems: DynamicToolCallOutputContentItem[] |
     .join("\n")
 }
 
-export function dynamicToolPayload(value: Record<string, unknown> | unknown[] | string | number | boolean | null | undefined): Record<string, unknown> {
-  const record = asRecord(value)
-  if (record) return record
-  return { value }
-}
-
-export function genericDynamicToolCall(toolId: string, toolName: string, input: Record<string, unknown>): TranscriptEntry {
-  return timestamped({
-    kind: "tool_call",
-    tool: {
-      kind: "tool",
-      toolKind: "unknown_tool",
-      toolName,
-      toolId,
-      input: {
-        payload: input,
-      },
-      rawInput: input,
-    },
-  })
-}
-
 export const IMAGE_GENERATION_TOOL_NAME = "ImageGeneration"
 
 export const DEFERRED_DYNAMIC_TOOLS: ReadonlySet<string> = new Set([IMAGE_GENERATION_TOOL_NAME])
 
-function normalizeImageGenerationStatus(raw: AnyValue): ImageGenerationStatus {
-  if (raw === "completed" || raw === "failed") return raw
+function normalizeImageGenerationStatus<T>(raw: T): ImageGenerationStatus {
+  if (raw === "completed") return "completed"
+  if (raw === "failed") return "failed"
   return "in_progress"
 }
 
-function imageGenerationInputFromArgs(args: AnyValue): { revisedPrompt: string | null; status: ImageGenerationStatus } {
+function imageGenerationInputFromArgs<T>(args: T): { revisedPrompt: string | null; status: ImageGenerationStatus } {
   const record = asRecord(args)
   return {
     revisedPrompt: typeof record?.revisedPrompt === "string" ? record.revisedPrompt : null,
@@ -272,7 +248,7 @@ function collabToolCall(item: CollabAgentToolCallItem): TranscriptEntry {
       input: {
         subagentType: item.tool,
       },
-      rawInput: isRecord(item) ? item : {},
+      rawInput: toJsonObject(item),
     },
   })
 }
@@ -289,7 +265,7 @@ export function todoToolCall(toolId: string, steps: TurnPlanStep[]): TranscriptE
         todos: planStepsToTodos(steps),
       },
       rawInput: {
-        plan: steps,
+        plan: toJsonArray(steps),
       },
     },
   })
@@ -317,9 +293,8 @@ function fileChangeToolId(itemId: string, index: number, totalChanges: number): 
 function fileChangePayload(
   item: Extract<ThreadItem, { type: "fileChange" }>,
   change: Extract<ThreadItem, { type: "fileChange" }>["changes"][number]
-): Record<string, unknown> {
-  const payload = { ...item, changes: [change] }
-  return isRecord(payload) ? payload : {}
+): JsonObject {
+  return toJsonObject({ ...item, changes: [change] })
 }
 
 function parseUnifiedDiff(diff: string): { oldString: string; newString: string } {
@@ -512,7 +487,7 @@ export function translateItemToToolCalls(item: ThreadItem, _projectId: string | 
           input: {
             command: item.command,
           },
-          rawInput: Object.fromEntries(Object.entries(item)),
+          rawInput: toJsonObject(item),
         },
       })]
     case "webSearch":
@@ -526,7 +501,7 @@ export function translateItemToToolCalls(item: ThreadItem, _projectId: string | 
           input: {
             query: webSearchQuery(item),
           },
-          rawInput: Object.fromEntries(Object.entries(item)),
+          rawInput: toJsonObject(item),
         },
       })]
     case "mcpToolCall":
@@ -558,9 +533,9 @@ export function translateItemToToolCalls(item: ThreadItem, _projectId: string | 
           toolName: "Error",
           toolId: item.id,
           input: {
-            payload: isRecord(item) ? item : {},
+            payload: toJsonObject(item),
           },
-          rawInput: isRecord(item) ? item : {},
+          rawInput: toJsonObject(item),
         },
       })]
     case "imageGeneration":
@@ -576,12 +551,12 @@ export function translateItemToToolCalls(item: ThreadItem, _projectId: string | 
           input: {
             payload: { path: item.path },
           },
-          rawInput: isRecord(item) ? item : {},
+          rawInput: toJsonObject(item),
         },
       })]
     default: {
       warnUnknownItemType(item)
-      const record: Record<string, unknown> = isRecord(item) ? item : {}
+      const record: JsonObject = toJsonObject(item)
       const id = typeof record.id === "string" ? record.id : `unknown-${randomUUID()}`
       return [timestamped({
         kind: "tool_call",
@@ -616,28 +591,28 @@ export function translateItemToToolResults(item: ThreadItem, ctx: TranslationCon
       return [timestamped({
         kind: "tool_result",
         toolId: item.id,
-        content: dynamicContentToText(item.contentItems) || Object.fromEntries(Object.entries(item)),
+        content: dynamicContentToText(item.contentItems) || toJsonObject(item),
         isError: item.status === "failed" || item.success === false,
       })]
     case "collabAgentToolCall":
       return [timestamped({
         kind: "tool_result",
         toolId: item.id,
-        content: Object.fromEntries(Object.entries(item)),
+        content: toJsonObject(item),
         isError: item.status === "failed",
       })]
     case "commandExecution":
       return [timestamped({
         kind: "tool_result",
         toolId: item.id,
-        content: item.aggregatedOutput ?? Object.fromEntries(Object.entries(item)),
+        content: item.aggregatedOutput ?? toJsonObject(item),
         isError: (typeof item.exitCode === "number" && item.exitCode !== 0) || item.status === "failed" || item.status === "declined",
       })]
     case "webSearch":
       return [timestamped({
         kind: "tool_result",
         toolId: item.id,
-        content: Object.fromEntries(Object.entries(item)),
+        content: toJsonObject(item),
       })]
     case "mcpToolCall": {
       const mcpContent = contentFromMcpResult(item)
@@ -672,7 +647,7 @@ export function translateItemToToolResults(item: ThreadItem, ctx: TranslationCon
         content: item.path,
       })]
     default: {
-      const record: Record<string, unknown> = isRecord(item) ? item : {}
+      const record: JsonObject = toJsonObject(item)
       const id = typeof record.id === "string" ? record.id : `unknown-${randomUUID()}`
       return [timestamped({
         kind: "tool_result",
@@ -703,36 +678,14 @@ export function toAskUserQuestionItems(params: ToolRequestUserInputParams): AskU
   }))
 }
 
-export function toToolRequestUserInputResponse(raw: AnyValue, questions: ToolRequestUserInputParams["questions"]): ToolRequestUserInputResponse {
-  const record = isRecord(raw) ? raw : {}
-  const answersValue = record.answers
-  const value = isRecord(answersValue) ? answersValue : record
-  const answers = Object.fromEntries(
-    questions.map((question) => {
-      const rawAnswer = value[question.id] ?? value[question.question]
-      if (Array.isArray(rawAnswer)) {
-        return [question.id, { answers: rawAnswer.map((entry) => String(entry)) }]
-      }
-      if (typeof rawAnswer === "string") {
-        return [question.id, { answers: [rawAnswer] }]
-      }
-      if (isRecord(rawAnswer) && Array.isArray(rawAnswer.answers)) {
-        return [question.id, { answers: rawAnswer.answers.map((entry) => String(entry)) }]
-      }
-      return [question.id, { answers: [] }]
-    })
-  )
-  return { answers }
-}
-
-function normalizeMcpContent(v: AnyValue): string | Record<string, AnyValue> | AnyValue[] | null {
+function normalizeMcpContent(v: JsonValue): string | JsonObject | JsonArray | null {
   if (typeof v === "string") return v
-  if (isRecord(v)) return v
   if (Array.isArray(v)) return v
+  if (isJsonObject(v)) return v
   return null
 }
 
-function contentFromMcpResult(item: McpToolCallItem): AnyValue {
+function contentFromMcpResult(item: McpToolCallItem): JsonValue {
   if (item.error?.message) {
     return { error: item.error.message }
   }

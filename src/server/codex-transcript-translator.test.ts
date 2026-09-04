@@ -4,7 +4,6 @@ import {
   translateItemToToolResults,
   normalizeCodexTokenUsage,
   toAskUserQuestionItems,
-  toToolRequestUserInputResponse,
   renderPlanMarkdownFromSteps,
   planStepsToTodos,
   todoToolCall,
@@ -14,6 +13,7 @@ import {
   buildResultEntry,
   type TranslationContext,
 } from "./codex-transcript-translator"
+import { toToolRequestUserInputResponse } from "./codex-tool-payloads"
 import type { ThreadItem, TurnPlanStep } from "./codex-app-server-protocol"
 
 const CTX: TranslationContext = {

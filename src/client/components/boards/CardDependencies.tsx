@@ -3,7 +3,9 @@ import { Check, X } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select"
 import { cn } from "../../lib/utils"
 import type { CardBlocker } from "../../../shared/boards/dependencies"
-import { errorMessage, type AnyValue } from "../../../shared/errors"
+import { onRejected } from "../../../shared/errors"
+import type { JsonValue } from "../../../shared/json"
+import type { ClientCommand } from "../../../shared/protocol"
 
 /**
  * "Blocked by" — the card's ordering edges, and the gesture that authors them.
@@ -20,7 +22,7 @@ import { errorMessage, type AnyValue } from "../../../shared/errors"
  */
 
 export interface CardDependenciesSocket {
-  command<TResult = AnyValue>(command: AnyValue): Promise<TResult>
+  command<TResult = JsonValue>(command: ClientCommand): Promise<TResult>
 }
 
 /** A card that may be waited on: everything the picker needs and nothing more. */
@@ -80,11 +82,11 @@ export function CardDependencies({
       void socket
         .command({ type: "board.card.block", cardId, blockedByCardId: chosen.slice(2) })
         .then(onChanged)
-        .catch((cause: AnyValue) => {
+        .catch(onRejected((error) => {
           // The server refuses a cycle by naming the cards in it, so this is
           // the whole explanation the user needs.
-          onError(errorMessage(cause))
-        })
+          onError(error.message)
+        }))
     },
     [cardId, onChanged, onError, socket],
   )
@@ -94,9 +96,9 @@ export function CardDependencies({
       void socket
         .command({ type: "board.card.unblock", cardId, blockedByCardId })
         .then(onChanged)
-        .catch((cause: AnyValue) => {
-          onError(errorMessage(cause))
-        })
+        .catch(onRejected((error) => {
+          onError(error.message)
+        }))
     },
     [cardId, onChanged, onError, socket],
   )

@@ -54,11 +54,19 @@ function makeDeps(opts: { busyChatIds?: string[]; now?: number } = {}) {
     },
     enqueueMessage: async (chatId, content, _attachments: ChatAttachment[], options) => {
       enqueued.push({ chatId, content, options })
+      const queued: QueuedChatMessage = {
+        id: `qm-${(queuedByChatId.get(chatId) ?? []).length}`,
+        content,
+        attachments: [],
+        createdAt: clock.now,
+        ...(options?.cronRun ? { cronRun: options.cronRun } : {}),
+      }
       if (options?.cronRun) {
         const list = queuedByChatId.get(chatId) ?? []
-        list.push({ id: `qm-${list.length}`, content, attachments: [], createdAt: clock.now, cronRun: options.cronRun })
+        list.push(queued)
         queuedByChatId.set(chatId, list)
       }
+      return queued
     },
     maybeStartNextQueuedMessage: async (chatId) => {
       drained.push(chatId)

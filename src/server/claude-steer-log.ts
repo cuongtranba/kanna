@@ -1,3 +1,4 @@
+import type { JsonObject } from "../shared/json"
 import { log } from "../shared/log"
 import type { AgentProvider, ModelOptions } from "../shared/types"
 
@@ -15,7 +16,7 @@ export function isClaudeSteerLoggingEnabled() {
   return process.env.KANNA_LOG_CLAUDE_STEER === "1"
 }
 
-export function logClaudeSteer(stage: string, details?: Record<string, unknown>) {
+export function logClaudeSteer(stage: string, details?: JsonObject) {
   if (!isClaudeSteerLoggingEnabled()) return
   log.info("[kanna/claude-steer]", JSON.stringify({
     stage,
@@ -44,7 +45,7 @@ export function elapsedProfileMs(startedAt: number) {
 export function logSendToStartingProfile(
   profile: SendToStartingProfile | null | undefined,
   stage: string,
-  details?: Record<string, unknown>
+  details?: JsonObject
 ) {
   if (!profile || !isSendToStartingProfilingEnabled()) {
     return

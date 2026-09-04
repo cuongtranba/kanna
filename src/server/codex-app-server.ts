@@ -28,43 +28,38 @@ import {
   type ServerNotification,
   type ServerRequest,
   type ThreadResumeParams,
-  type ThreadResumeResponse,
   type ThreadForkParams,
-  type ThreadForkResponse,
   type ThreadStartParams,
-  type ThreadStartResponse,
   type ThreadTokenUsageUpdatedNotification,
   type TurnPlanStep,
   type TurnPlanUpdatedNotification,
   type TurnCompletedNotification,
   type TurnInterruptParams,
   type TurnStartParams,
-  type TurnStartResponse,
   isJsonRpcResponse,
   isServerNotification,
   isServerRequest,
 } from "./codex-app-server-protocol"
-import { safeJsonParse } from "../shared/safe-json"
-import { type AnyValue, errorMessage as sharedErrorMessage } from "../shared/errors"
+import { safeJsonParse } from "../shared/json"
+import { errorMessage as sharedErrorMessage, toError } from "../shared/errors"
+import type { JsonObject, JsonValue } from "../shared/json"
 import { type CodexErrorInfo } from "../shared/codex-error-classification"
 import {
   type TranslationContext,
   asRecord,
   buildResultEntry,
   codexSystemInitEntry,
-  createTranscriptEntry,
-  dynamicToolPayload,
-  genericDynamicToolCall,
   normalizeCodexTokenUsage,
   renderPlanMarkdownFromSteps,
   todoToolCall,
   toAskUserQuestionItems,
-  toToolRequestUserInputResponse,
   translateItemToToolCalls,
   translateItemToToolResults,
   webSearchQuery,
   DEFERRED_DYNAMIC_TOOLS,
 } from "./codex-transcript-translator"
+import { createTranscriptEntry, dynamicToolPayload, genericDynamicToolCall, toAskUserQuestionRawInput, toToolRequestUserInputResponse } from "./codex-tool-payloads"
+import { decodeThreadId, decodeTurnId, type CodexRequestParams, type OutgoingCodexMessage } from "./codex-app-server-decode"
 export { normalizeCodexTokenUsage } from "./codex-transcript-translator"
 
 export interface CodexAppServerProcess {
@@ -103,7 +98,7 @@ interface PendingTurn {
   resolved: boolean
   /** Most recent token usage snapshot for the turn; stashed to enrich the result entry. */
   lastUsageSnapshot?: ContextWindowUsageSnapshot
-  onToolRequest: (request: HarnessToolRequest) => Promise<unknown>
+  onToolRequest: (request: HarnessToolRequest) => Promise<JsonValue>
   onApprovalRequest?: (
     request:
       | {
@@ -125,7 +120,7 @@ interface SessionContext {
   cwd: string
   projectId: string | null
   child: CodexAppServerProcess
-  pendingRequests: Map<CodexRequestId, PendingRequest<AnyValue>>
+  pendingRequests: Map<CodexRequestId, PendingRequest<JsonValue>>
   pendingTurn: PendingTurn | null
   sessionToken: string | null
   stderrLines: string[]
@@ -159,7 +154,7 @@ export interface StartCodexTurnArgs {
   serviceTier?: ServiceTier
   content: string
   planMode: boolean
-  onToolRequest: (request: HarnessToolRequest) => Promise<unknown>
+  onToolRequest: (request: HarnessToolRequest) => Promise<JsonValue>
   onApprovalRequest?: PendingTurn["onApprovalRequest"]
 }
 
@@ -171,7 +166,7 @@ export interface GenerateStructuredArgs {
   serviceTier?: ServiceTier
 }
 
-function isRecoverableResumeError(error: AnyValue): boolean {
+function isRecoverableResumeError(error: Error): boolean {
   const message = sharedErrorMessage(error).toLowerCase()
   if (!message.includes("thread/resume")) return false
   return ["not found", "missing thread", "no such thread", "unknown thread", "does not exist"].some((snippet) =>
@@ -293,9 +288,9 @@ export class CodexAppServerManager {
       developerInstructions: args.developerInstructions?.trim() || null,
     } satisfies ThreadStartParams
 
-    let response: ThreadStartResponse | ThreadResumeResponse | ThreadForkResponse
+    let threadId: string
     if (args.pendingForkSessionToken) {
-      response = await this.sendRequest<ThreadForkResponse>(context, "thread/fork", {
+      threadId = decodeThreadId("thread/fork", await this.sendRequest(context, "thread/fork", {
         threadId: args.pendingForkSessionToken,
         model: args.model,
         cwd: args.cwd,
@@ -303,10 +298,10 @@ export class CodexAppServerManager {
         approvalPolicy: "never",
         sandbox: "danger-full-access",
         persistExtendedHistory: false,
-      } satisfies ThreadForkParams)
+      } satisfies ThreadForkParams))
     } else if (args.sessionToken) {
       try {
-        response = await this.sendRequest<ThreadResumeResponse>(context, "thread/resume", {
+        threadId = decodeThreadId("thread/resume", await this.sendRequest(context, "thread/resume", {
           threadId: args.sessionToken,
           model: args.model,
           cwd: args.cwd,
@@ -314,19 +309,19 @@ export class CodexAppServerManager {
           approvalPolicy: "never",
           sandbox: "danger-full-access",
           persistExtendedHistory: false,
-        } satisfies ThreadResumeParams)
+        } satisfies ThreadResumeParams))
       } catch (error) {
-        if (!isRecoverableResumeError(error)) {
+        if (!isRecoverableResumeError(toError(error))) {
           this.stopSession(args.chatId, scope)
           throw error
         }
-        response = await this.sendRequest<ThreadStartResponse>(context, "thread/start", threadParams)
+        threadId = decodeThreadId("thread/start", await this.sendRequest(context, "thread/start", threadParams))
       }
     } else {
-      response = await this.sendRequest<ThreadStartResponse>(context, "thread/start", threadParams)
+      threadId = decodeThreadId("thread/start", await this.sendRequest(context, "thread/start", threadParams))
     }
 
-    context.sessionToken = response.thread.id
+    context.sessionToken = threadId
     return context.sessionToken
   }
 
@@ -363,7 +358,7 @@ export class CodexAppServerManager {
     context.pendingTurn = pendingTurn
 
     try {
-      const response = await this.sendRequest<TurnStartResponse>(context, "turn/start", {
+      const turnId = decodeTurnId("turn/start", await this.sendRequest(context, "turn/start", {
         threadId: context.sessionToken ?? "",
         input: [
           {
@@ -376,11 +371,11 @@ export class CodexAppServerManager {
         model: args.model,
         effort: args.effort,
         serviceTier: args.serviceTier,
-      } satisfies TurnStartParams)
+      } satisfies TurnStartParams))
       if (context.pendingTurn) {
-        context.pendingTurn.turnId = response.turn.id
+        context.pendingTurn.turnId = turnId
       } else {
-        pendingTurn.turnId = response.turn.id
+        pendingTurn.turnId = turnId
       }
     } catch (error) {
       context.pendingTurn = null
@@ -564,7 +559,7 @@ export class CodexAppServerManager {
       pending.reject(new Error(`${pending.method} failed: ${response.error.message ?? "Unknown error"}`))
       return
     }
-    pending.resolve(response.result)
+    pending.resolve(response.result ?? null)
   }
 
   private async handleServerRequest(context: SessionContext, request: ServerRequest) {
@@ -589,9 +584,7 @@ export class CodexAppServerManager {
           toolName: "AskUserQuestion",
           toolId,
           input: { questions },
-          rawInput: {
-            questions: request.params.questions,
-          },
+          rawInput: toAskUserQuestionRawInput(request.params.questions),
         },
       }
       pendingTurn.queue.push({
@@ -617,7 +610,7 @@ export class CodexAppServerManager {
         const plan = Array.isArray(args?.plan) ? args.plan : []
         const steps: TurnPlanStep[] = plan
           .map((entry) => asRecord(entry))
-          .filter((entry): entry is Record<string, unknown> => Boolean(entry))
+          .filter((entry) => entry !== null)
           .map((entry) => {
             let status: TurnPlanStep["status"]
             if (entry.status === "completed") {
@@ -927,6 +920,10 @@ export class CodexAppServerManager {
 
       if (planText) {
         pendingTurn.turnId = null
+        const planSummary = pendingTurn.latestPlanExplanation ?? undefined
+        const planRawInput: JsonObject = planSummary === undefined
+          ? { plan: planText }
+          : { plan: planText, summary: planSummary }
         const tool = {
           kind: "tool" as const,
           toolKind: "exit_plan_mode" as const,
@@ -934,12 +931,9 @@ export class CodexAppServerManager {
           toolId: `${notification.turn.id}:exit-plan`,
           input: {
             plan: planText,
-            summary: pendingTurn.latestPlanExplanation ?? undefined,
+            summary: planSummary,
           },
-          rawInput: {
-            plan: planText,
-            summary: pendingTurn.latestPlanExplanation ?? undefined,
-          },
+          rawInput: planRawInput,
         }
         pendingTurn.queue.push({
           type: "transcript",
@@ -991,12 +985,25 @@ export class CodexAppServerManager {
     context.closed = true
   }
 
-  private async sendRequest<TResult>(context: SessionContext, method: string, params: AnyValue): Promise<TResult> {
+  /**
+   * Send one JSON-RPC request and resolve with the reply EXACTLY as the wire
+   * describes it: a `JsonValue`.
+   *
+   * It used to be `sendRequest<TResult>`, where `TResult` was the caller's
+   * claim about one method's reply shape and two angle-bracket assertions
+   * bridged it to the `JsonValue` the transport actually stores — the single
+   * unchecked step in this transport, and unfixable in place, because no type
+   * guard can be written generically over `TResult`. The claim now lives where
+   * it can be CHECKED: each caller decodes the reply into the fields it reads
+   * (`decodeThreadId`, `decodeTurnId`), so a protocol change surfaces as a
+   * thrown error naming the method instead of an `undefined` two frames later.
+   */
+  private async sendRequest(context: SessionContext, method: string, params: CodexRequestParams): Promise<JsonValue> {
     const id = randomUUID()
-    const promise = new Promise<TResult>((resolve, reject) => {
-      context.pendingRequests.set(id, <PendingRequest<AnyValue>>{
+    const promise = new Promise<JsonValue>((resolve, reject) => {
+      context.pendingRequests.set(id, {
         method,
-        resolve: <(value: AnyValue) => void>resolve,
+        resolve,
         reject,
       })
     })
@@ -1008,7 +1015,7 @@ export class CodexAppServerManager {
     return await promise
   }
 
-  private writeMessage(context: SessionContext, message: Record<string, unknown>) {
+  private writeMessage(context: SessionContext, message: OutgoingCodexMessage) {
     context.child.stdin.write(`${JSON.stringify(message)}\n`)
   }
 }

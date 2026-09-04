@@ -13,7 +13,7 @@
  * which keeps it the leaf module the side-effect seal expects.
  */
 
-import { isRecord, type AnyValue } from "../errors"
+import { isJsonObject, type JsonValue } from "../json"
 import {
   isColumnColorToken,
   isColumnSemantic,
@@ -29,7 +29,7 @@ import {
   type FieldValue,
 } from "./types"
 
-function decodeStringArray(value: AnyValue): string[] {
+function decodeStringArray(value: JsonValue): string[] {
   if (!Array.isArray(value)) return []
   const values: string[] = []
   for (const entry of value) {
@@ -38,18 +38,18 @@ function decodeStringArray(value: AnyValue): string[] {
   return values
 }
 
-function decodeOptionalString(value: AnyValue): string | null {
+function decodeOptionalString(value: JsonValue): string | null {
   return typeof value === "string" ? value : null
 }
 
-function decodeOptionalNumber(value: AnyValue): number | null {
+function decodeOptionalNumber(value: JsonValue): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null
 }
 
 // ── Field schema ──────────────────────────────────────────────────────────────
 
-export function decodeFieldOption(value: AnyValue): FieldOption | null {
-  if (!isRecord(value)) return null
+export function decodeFieldOption(value: JsonValue): FieldOption | null {
+  if (!isJsonObject(value)) return null
   const { id, label } = value
   if (typeof id !== "string" || typeof label !== "string") return null
   const colorToken = typeof value.colorToken === "string" && isColumnColorToken(value.colorToken)
@@ -58,8 +58,8 @@ export function decodeFieldOption(value: AnyValue): FieldOption | null {
   return { id, label, colorToken }
 }
 
-export function decodeFieldDef(value: AnyValue): FieldDef | null {
-  if (!isRecord(value)) return null
+export function decodeFieldDef(value: JsonValue): FieldDef | null {
+  if (!isJsonObject(value)) return null
   const { id, label, kind } = value
   if (typeof id !== "string" || typeof label !== "string") return null
   if (typeof kind !== "string" || !isFieldKind(kind)) return null
@@ -75,7 +75,7 @@ export function decodeFieldDef(value: AnyValue): FieldDef | null {
   return { id, label, kind, options, required: value.required === true }
 }
 
-export function decodeFieldDefs(value: AnyValue): FieldDef[] {
+export function decodeFieldDefs(value: JsonValue): FieldDef[] {
   if (!Array.isArray(value)) return []
   const fields: FieldDef[] = []
   for (const entry of value) {
@@ -109,7 +109,7 @@ export function decodeFieldDefs(value: AnyValue): FieldDef[] {
  * on purpose: a stored hex is a colour correct in exactly one of the two
  * themes, and an open set brings back the rainbow-column look.
  */
-export function decodeFieldDefsForWrite(value: AnyValue): FieldDef[] | null {
+export function decodeFieldDefsForWrite(value: JsonValue): FieldDef[] | null {
   if (!Array.isArray(value)) return null
   const fields: FieldDef[] = []
   const ids = new Set<string>()
@@ -122,8 +122,8 @@ export function decodeFieldDefsForWrite(value: AnyValue): FieldDef[] | null {
   return fields
 }
 
-function decodeFieldDefForWrite(value: AnyValue): FieldDef | null {
-  if (!isRecord(value)) return null
+function decodeFieldDefForWrite(value: JsonValue): FieldDef | null {
+  if (!isJsonObject(value)) return null
   const { id, label, kind } = value
   if (typeof id !== "string" || id === "") return null
   if (typeof label !== "string" || label.trim() === "") return null
@@ -151,8 +151,8 @@ function decodeFieldDefForWrite(value: AnyValue): FieldDef | null {
   return { id, label, kind, options, required: value.required === true }
 }
 
-function decodeFieldOptionForWrite(value: AnyValue): FieldOption | null {
-  if (!isRecord(value)) return null
+function decodeFieldOptionForWrite(value: JsonValue): FieldOption | null {
+  if (!isJsonObject(value)) return null
   const { id, label } = value
   if (typeof id !== "string" || id === "") return null
   if (typeof label !== "string" || label.trim() === "") return null
@@ -163,8 +163,8 @@ function decodeFieldOptionForWrite(value: AnyValue): FieldOption | null {
 
 // ── Card content ──────────────────────────────────────────────────────────────
 
-export function decodeFieldValue(value: AnyValue): FieldValue | null {
-  if (!isRecord(value)) return null
+export function decodeFieldValue(value: JsonValue): FieldValue | null {
+  if (!isJsonObject(value)) return null
   const kind = value.kind
   if (typeof kind !== "string") return null
 
@@ -196,8 +196,8 @@ export function decodeFieldValue(value: AnyValue): FieldValue | null {
   }
 }
 
-export function decodeCardContent(value: AnyValue): CardContent {
-  if (!isRecord(value)) return {}
+export function decodeCardContent(value: JsonValue): CardContent {
+  if (!isJsonObject(value)) return {}
   const content: Record<string, FieldValue> = {}
   for (const [fieldId, raw] of Object.entries(value)) {
     const decoded = decodeFieldValue(raw)
@@ -230,9 +230,9 @@ export function decodeCardContent(value: AnyValue): CardContent {
  */
 export function decodeContentForFields(
   fields: readonly FieldDef[],
-  value: AnyValue,
+  value: JsonValue,
 ): CardContent | null {
-  if (!isRecord(value)) return null
+  if (!isJsonObject(value)) return null
   const byId = new Map(fields.map((field) => [field.id, field]))
   const content: Record<string, FieldValue> = {}
   for (const [fieldId, raw] of Object.entries(value)) {
@@ -246,8 +246,8 @@ export function decodeContentForFields(
 }
 
 /** One value, checked against the definition it claims to belong to. */
-export function decodeValueForField(field: FieldDef, value: AnyValue): FieldValue | null {
-  if (!isRecord(value)) return null
+export function decodeValueForField(field: FieldDef, value: JsonValue): FieldValue | null {
+  if (!isJsonObject(value)) return null
   if (value.kind !== field.kind) return null
 
   switch (field.kind) {
@@ -292,7 +292,7 @@ function offersOption(field: FieldDef, optionId: string): boolean {
 }
 
 /** Refuses a ragged array rather than silencing its bad entries. */
-function decodeStrictStringArray(value: AnyValue): string[] | null {
+function decodeStrictStringArray(value: JsonValue): string[] | null {
   if (!Array.isArray(value)) return null
   const values: string[] = []
   for (const entry of value) {
@@ -309,8 +309,8 @@ function decodeStrictStringArray(value: AnyValue): string[] | null {
  * make a card unreadable, and "a person did it" is the conservative default —
  * it never grants an agent-origin write the push it would otherwise be held for.
  */
-export function decodeActor(value: AnyValue): CardActor {
-  if (!isRecord(value)) return { kind: "user" }
+export function decodeActor(value: JsonValue): CardActor {
+  if (!isJsonObject(value)) return { kind: "user" }
   if (value.kind === "agent" && typeof value.chatId === "string") {
     return { kind: "agent", chatId: value.chatId }
   }
@@ -322,8 +322,8 @@ export function decodeActor(value: AnyValue): CardActor {
 
 // ── Templates ─────────────────────────────────────────────────────────────────
 
-export function decodeTemplateColumn(value: AnyValue): BoardTemplateColumn | null {
-  if (!isRecord(value)) return null
+export function decodeTemplateColumn(value: JsonValue): BoardTemplateColumn | null {
+  if (!isJsonObject(value)) return null
   const { title } = value
   if (typeof title !== "string") return null
   const semantic = typeof value.semantic === "string" && isColumnSemantic(value.semantic) ? value.semantic : null
@@ -333,16 +333,16 @@ export function decodeTemplateColumn(value: AnyValue): BoardTemplateColumn | nul
   return { title, semantic, colorToken, wipLimit: decodeOptionalNumber(value.wipLimit) }
 }
 
-export function decodeTemplateMapping(value: AnyValue): BoardTemplateMapping | null {
-  if (!isRecord(value)) return null
+export function decodeTemplateMapping(value: JsonValue): BoardTemplateMapping | null {
+  if (!isJsonObject(value)) return null
   const { columnTitle, remoteKind, remoteValue } = value
   if (typeof columnTitle !== "string" || typeof remoteValue !== "string") return null
   if (typeof remoteKind !== "string" || !isRemoteKind(remoteKind)) return null
   return { columnTitle, remoteKind, remoteValue }
 }
 
-export function decodeTemplateDefinition(value: AnyValue): BoardTemplateDefinition {
-  if (!isRecord(value)) return { columns: [], cardFields: [], mappingDefaults: [] }
+export function decodeTemplateDefinition(value: JsonValue): BoardTemplateDefinition {
+  if (!isJsonObject(value)) return { columns: [], cardFields: [], mappingDefaults: [] }
 
   const columns: BoardTemplateColumn[] = []
   if (Array.isArray(value.columns)) {

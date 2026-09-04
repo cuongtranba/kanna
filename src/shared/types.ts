@@ -1,3 +1,4 @@
+import type { JsonValue } from "./json"
 import type { ChatPermissionPolicyOverride } from "./permission-policy"
 
 // Re-export domain-specific type modules — extracted to keep this barrel lean.
@@ -308,7 +309,7 @@ export interface LlmProviderSnapshot {
 
 export interface LlmProviderValidationResult {
   ok: boolean
-  error: unknown | null
+  error: JsonValue | null
 }
 
 export type UpdateStatus =

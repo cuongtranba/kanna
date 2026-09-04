@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react"
-import type { AnyValue } from "../../../../../shared/errors"
+import { onRejected } from "../../../../../shared/errors"
 import {
   TABLE_PREVIEW_COLUMN_LIMIT,
   TEXT_PREVIEW_LIMIT_BYTES,
@@ -42,12 +42,12 @@ function TableBodyInner({ source }: { source: PreviewSource }) {
         cache.set(myKey, next)
         setState(next)
       })
-      .catch((err: AnyValue) => {
+      .catch(onRejected((error) => {
         if (cancelled || currentKeyRef.current !== myKey) return
-        const next: TableBodyState = { status: "error", message: err instanceof Error ? err.message : "Unable to load preview." }
+        const next: TableBodyState = { status: "error", message: error.message }
         cache.set(myKey, next)
         setState(next)
-      })
+      }))
     return () => { cancelled = true }
   }, [cached, cacheKey, source.contentUrl, source.mimeType, setState])
 

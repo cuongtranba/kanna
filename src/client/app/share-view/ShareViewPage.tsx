@@ -1,5 +1,5 @@
 import { Flower } from "lucide-react"
-import type { AnyValue } from "../../../shared/errors"
+import type { JsonValue } from "../../../shared/json"
 import type { ChatSnapshot, ChatSnapshotMessage } from "../../../shared/session-share/types"
 import { renderMarkdownToReact } from "../../components/lexical/markdown/lexicalToReact"
 import { HighlightedCode } from "../../components/messages/HighlightedCode"
@@ -10,7 +10,7 @@ export interface ShareViewPageProps {
   snapshot: ChatSnapshot
 }
 
-function stringifyInput(input: AnyValue): string {
+function stringifyInput(input: JsonValue): string {
   if (typeof input === "string") return input
   try {
     return JSON.stringify(input, null, 2)
@@ -19,7 +19,7 @@ function stringifyInput(input: AnyValue): string {
   }
 }
 
-function stringifyOutput(output: AnyValue): string {
+function stringifyOutput(output: JsonValue): string {
   if (typeof output === "string") return output
   if (output === null || output === undefined) return ""
   try {

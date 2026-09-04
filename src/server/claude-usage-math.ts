@@ -13,7 +13,13 @@ import { isRecord } from "../shared/errors"
 // Private narrowing helpers
 // ---------------------------------------------------------------------------
 
-function asRecord<T>(value: T): Record<string, unknown> | null {
+/**
+ * Narrow through the sanctioned `isRecord` chokepoint. The return type is
+ * inferred (`(T & Record<string, unknown>) | null`) rather than written: the
+ * SDK usage object is not a JSON-parse boundary, so `JsonObject` would be a
+ * claim about it that nothing checks.
+ */
+function asRecord<T>(value: T) {
   return isRecord(value) ? value : null
 }
 

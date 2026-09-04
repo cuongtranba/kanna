@@ -1,12 +1,18 @@
 import { describe, expect, it } from "bun:test"
 import { createHeadlessEditor } from "@lexical/headless"
-import { $getRoot, $createParagraphNode } from "lexical"
+import { $getRoot, $createParagraphNode, type LexicalNode } from "lexical"
 import {
   ThinkingNode,
   $createThinkingNode,
   $isThinkingNode,
   type SerializedThinkingNode,
 } from "./ThinkingNode"
+
+/** The guards narrow a real Lexical node; this reaches the runtime branch a
+  * caller could only hit with a value the type system already rejects. */
+function notALexicalNode(value: unknown): LexicalNode {
+  return value as LexicalNode
+}
 
 function buildEditor() {
   return createHeadlessEditor({
@@ -90,7 +96,7 @@ describe("ThinkingNode", () => {
   it("$isThinkingNode returns false for non-ThinkingNode", () => {
     expect($isThinkingNode(null)).toBe(false)
     expect($isThinkingNode(undefined)).toBe(false)
-    expect($isThinkingNode("not a node")).toBe(false)
+    expect($isThinkingNode(notALexicalNode("not a node"))).toBe(false)
   })
 
   it("exportJSON / importJSON round-trip preserves content", async () => {

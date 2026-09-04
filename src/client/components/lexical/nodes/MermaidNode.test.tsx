@@ -1,12 +1,18 @@
 import { describe, expect, it } from "bun:test"
 import { createHeadlessEditor } from "@lexical/headless"
-import { $getRoot, $createParagraphNode } from "lexical"
+import { $getRoot, $createParagraphNode, type LexicalNode } from "lexical"
 import {
   MermaidNode,
   $createMermaidNode,
   $isMermaidNode,
   type SerializedMermaidNode,
 } from "./MermaidNode"
+
+/** The guards narrow a real Lexical node; this reaches the runtime branch a
+  * caller could only hit with a value the type system already rejects. */
+function notALexicalNode(value: unknown): LexicalNode {
+  return value as LexicalNode
+}
 
 function buildEditor() {
   return createHeadlessEditor({
@@ -90,7 +96,7 @@ describe("MermaidNode", () => {
   it("$isMermaidNode returns false for non-MermaidNode", () => {
     expect($isMermaidNode(null)).toBe(false)
     expect($isMermaidNode(undefined)).toBe(false)
-    expect($isMermaidNode("not a node")).toBe(false)
+    expect($isMermaidNode(notALexicalNode("not a node"))).toBe(false)
   })
 
   it("exportJSON / importJSON round-trip preserves source", async () => {

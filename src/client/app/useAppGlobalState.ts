@@ -32,8 +32,8 @@ import { gitSnapshotKey, useKannaStateStore } from "../stores/kannaStateStore"
 import { usePaneLayoutStore } from "../stores/paneLayoutStore"
 import { collectPanes } from "../lib/paneTree"
 import { useSlashCommandsStore } from "../stores/slashCommandsStore"
-import { isRecord } from "../../shared/errors"
-import type { AnyValue } from "../../shared/errors"
+import { onRejected } from "../../shared/errors"
+import { decodeLegacyProviderDefaults, readPersistedZustandState } from "./legacyProviderDefaults"
 import type { StoragePort } from "../ports/storagePort"
 import type { DomPort } from "../ports/domPort"
 import type { TimerPort } from "../ports/timerPort"
@@ -52,21 +52,6 @@ const LEGACY_THEME_STORAGE_KEY = "lever-theme"
 const LEGACY_CHAT_SOUND_STORAGE_KEY = "chat-sound-preferences"
 const LEGACY_TERMINAL_STORAGE_KEY = "terminal-preferences"
 const LEGACY_CHAT_PREFERENCES_STORAGE_KEY = "chat-preferences"
-
-// ---------------------------------------------------------------------------
-// Private helpers
-// ---------------------------------------------------------------------------
-
-function readPersistedZustandState(key: string, storage: StoragePort): Record<string, unknown> | null {
-  const raw = storage.getItem(key)
-  if (!raw) return null
-  try {
-    const parsed: { state?: AnyValue } = JSON.parse(raw)
-    return isRecord(parsed.state) ? parsed.state : null
-  } catch {
-    return null
-  }
-}
 
 // ---------------------------------------------------------------------------
 // project-git / project-commands subscription helpers
@@ -136,9 +121,10 @@ function readLegacyBrowserSettingsPatch(storage: StoragePort): AppSettingsPatch 
   if (chatPreferencesState?.defaultProvider === "last_used" || chatPreferencesState?.defaultProvider === "claude" || chatPreferencesState?.defaultProvider === "codex") {
     patch.defaultProvider = chatPreferencesState.defaultProvider
   }
-  if (isRecord(chatPreferencesState?.providerDefaults)) {
-    // Legacy migration: providerDefaults stored as opaque Record; checked via isRecord above
-    const legacyProviderDefaults: AppSettingsPatch["providerDefaults"] = chatPreferencesState.providerDefaults
+  const legacyProviderDefaults = chatPreferencesState
+    ? decodeLegacyProviderDefaults(chatPreferencesState.providerDefaults)
+    : null
+  if (legacyProviderDefaults) {
     patch.providerDefaults = legacyProviderDefaults
   }
 
@@ -730,10 +716,10 @@ export function useAppGlobalState(
       .then((models) => {
         useOpenRouterModelsStore.getState().setModels(models)
       })
-      .catch((error: AnyValue) => {
-        const message = error instanceof Error ? error.message : String(error)
+      .catch(onRejected((error) => {
+        const message = error.message
         useOpenRouterModelsStore.getState().setError(message)
-      })
+      }))
   }, [connectionStatus, socket])
 
   const handleWriteAppSettings = useCallback(async (patch: AppSettingsPatch) => {

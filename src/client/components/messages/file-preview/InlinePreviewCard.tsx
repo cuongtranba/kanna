@@ -4,6 +4,16 @@ import { AttachmentFileCard, formatAttachmentSize } from "../AttachmentCard"
 import { classifyAttachmentIcon, friendlyMimeLabel, fetchTextPreview } from "../attachmentPreview"
 import { useViewportFetch } from "./useViewportFetch"
 import type { PreviewSource } from "./types"
+import type { JsonValue } from "../../../../shared/json"
+
+/**
+ * The snippet cache is shared by every `useViewportFetch` caller, so an entry
+ * comes back as JSON. This card only ever writes a string into it; module
+ * scope keeps the reference stable for the hook's effect deps.
+ */
+function cachedSnippet(value: JsonValue): string | undefined {
+  return typeof value === "string" ? value : undefined
+}
 
 interface Props {
   source: PreviewSource
@@ -103,6 +113,7 @@ const SnippetCard = function SnippetCardImpl({
     enabled: true,
     cacheKey: `snippet:${source.id}|${source.contentUrl}|${source.size ?? 0}`,
     fetcher,
+    fromCache: cachedSnippet,
   })
   const snippet = result.state === "ready" && typeof result.data === "string" ? result.data : ""
   return (

@@ -1,17 +1,30 @@
+import { registerSdkToolOnMcpServer } from "./mcp-zod-compat.adapter"
 import { randomBytes, randomUUID } from "node:crypto"
 import { closeHttpServer, createHttpServer, listen, type HttpIncomingMessage } from "./http-server.adapter"
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js"
 import type { ServerNotification } from "@modelcontextprotocol/sdk/types.js"
-import type { SdkMcpToolDefinition } from "@anthropic-ai/claude-agent-sdk"
 import { KANNA_MCP_SERVER_NAME } from "../shared/tools"
 import { buildKannaMcpTools, type KannaMcpArgs } from "./kanna-mcp"
 import type { McpServerConfig } from "../shared/types"
-import type { AnyValue } from "../shared/errors"
+import type { JsonObject } from "../shared/json"
+
+/**
+ * `notifications/claude/channel` is a Claude-CLI extension: the MCP SDK's
+ * `ServerNotification` union does not name it, and the SDK exposes no way to
+ * widen that union without re-declaring the whole server generic. This
+ * predicate is the ONE place the bridge is claimed, and it claims only what is
+ * structurally true — the payload is a `{method, params}` notification.
+ */
+function isServerNotification(
+  value: ChannelNotification,
+): value is ChannelNotification & ServerNotification {
+  return typeof value.method === "string"
+}
 
 export interface ChannelNotification {
   method: "notifications/claude/channel"
-  params: { content: string; meta: Record<string, AnyValue>; _meta?: Record<string, AnyValue> }
+  params: { content: string; meta: JsonObject; _meta?: JsonObject }
 }
 
 /**
@@ -20,7 +33,7 @@ export interface ChannelNotification {
  */
 export function buildChannelNotification(
   content: string,
-  meta: Record<string, unknown> = {},
+  meta: JsonObject = {},
 ): ChannelNotification {
   return {
     method: "notifications/claude/channel",
@@ -38,7 +51,7 @@ export interface KannaMcpHttpHandle {
   /** Resolves once the claude MCP client completes the initialize handshake. */
   channelClientReady: Promise<void>
   /** Push a prompt into the live claude session via the channel capability. */
-  pushChannelPrompt: (content: string, meta?: Record<string, unknown>) => Promise<void>
+  pushChannelPrompt: (content: string, meta?: JsonObject) => Promise<void>
 }
 
 export interface StartKannaMcpHttpServerOptions {
@@ -79,7 +92,7 @@ export async function startKannaMcpHttpServer(
 
   const tools = buildKannaMcpTools(opts.args)
   for (const def of tools) {
-    registerToolOnMcpServer(mcp, def)
+    registerSdkToolOnMcpServer(mcp, def)
   }
 
   const transport = new StreamableHTTPServerTransport({
@@ -97,11 +110,13 @@ export async function startKannaMcpHttpServer(
 
   const pushChannelPrompt = async (
     content: string,
-    meta: Record<string, unknown> = {},
+    meta: JsonObject = {},
   ): Promise<void> => {
     const notification = buildChannelNotification(content, meta)
     try {
-      await mcp.server.notification(<ServerNotification><unknown>notification)
+      if (isServerNotification(notification)) {
+        await mcp.server.notification(notification)
+      }
     } catch (err) {
       // Before a client connects there is no peer; swallow that case.
       if (mcp.isConnected()) throw err
@@ -166,26 +181,6 @@ function constantTimeEqual(a: string, b: string): boolean {
   return mismatch === 0
 }
 
-function registerToolOnMcpServer(
-  mcp: McpServer,
-  def: SdkMcpToolDefinition,
-): void {
-  mcp.registerTool(
-    def.name,
-    {
-      description: def.description,
-      // zod v4 changed ZodRawShape to Readonly<...>; MCP SDK expects mutable
-      // ZodRawShapeCompat. never is assignable to AnySchema, so
-      // Record<string,never> satisfies ZodRawShapeCompat at the type level.
-      inputSchema: <Record<string, never>>(<unknown>def.inputSchema),
-    },
-    async (input: AnyValue, extra: AnyValue) => {
-      // AnyZodRawShape = ZodRawShape | ZodRawShape_2 produces an impossible
-      // intersection for InferShape; cast through never to satisfy the handler
-      return await def.handler(<never>input, extra)
-    },
-  )
-}
 
 /**
  * Builds the --mcp-config JSON string the PTY driver passes to the claude
@@ -201,7 +196,7 @@ export function buildMcpConfigJson(
   userServers: readonly McpServerConfig[] = [],
   oauthBearers: ReadonlyMap<string, string> = new Map(),
 ): string {
-  const mcpServers: Record<string, unknown> = {
+  const mcpServers: Record<string, JsonObject> = {
     [KANNA_MCP_SERVER_NAME]: {
       type: "http",
       url: handle.url,
@@ -218,7 +213,7 @@ export function buildMcpConfigJson(
   return JSON.stringify({ mcpServers })
 }
 
-function toClaudeCliMcpEntry(s: McpServerConfig, oauthBearer?: string): Record<string, unknown> {
+function toClaudeCliMcpEntry(s: McpServerConfig, oauthBearer?: string): JsonObject {
   if (s.transport === "stdio") {
     return {
       type: "stdio",

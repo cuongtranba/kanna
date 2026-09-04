@@ -2,7 +2,7 @@ import { useCallback, useEffect } from "react"
 import { ArrowLeft, Loader2, RefreshCw } from "lucide-react"
 import type { TranscriptEntry } from "../../shared/types"
 import { processTranscriptMessages } from "../lib/parseTranscript"
-import type { AnyValue } from "../../shared/errors"
+import { onRejected } from "../../shared/errors"
 import { SubagentEntryRow } from "../components/messages/SubagentEntryRow"
 import { SubagentTranscriptFetchProvider } from "../components/messages/subagent-fetch-context"
 import { WorkflowAgentTranscriptStore } from "./WorkflowAgentTranscriptPanel.store"
@@ -59,10 +59,10 @@ function WorkflowAgentTranscriptPanelInner({
         if (stale) return
         setLoaded(processTranscriptMessages(entries))
       })
-      .catch((err: AnyValue) => {
+      .catch(onRejected((error) => {
         if (stale) return
-        setStoreError(err instanceof Error ? err.message : "Failed to load agent transcript")
-      })
+        setStoreError(error.message)
+      }))
     return () => { stale = true }
   }, [runId, agentId, getTranscript, reloadNonce, setLoaded, setStoreError])
 

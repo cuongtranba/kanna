@@ -9,7 +9,7 @@ import { useBoardsStore } from "../stores/boardsStore"
 import { collectPanes, createDefaultLayout } from "../lib/paneTree"
 import type { KannaState } from "./useKannaState"
 import type { StackSummary } from "../../shared/types"
-import type { AnyValue } from "../../shared/errors"
+import type { JsonValue } from "../../shared/json"
 
 /**
  * Mirrors `BoardsRoutePage.test.tsx`, one owner kind over: a Stack board has
@@ -47,14 +47,14 @@ async function mount(stacks: StackSummary[], entry = "/boards/stack/stack-1"): P
 
   const state = {
     socket: {
-      subscribe: <TSnapshot,>(topic: AnyValue, onSnapshot: (snapshot: TSnapshot) => void) => {
+      subscribe: <TSnapshot,>(topic: JsonValue, onSnapshot: (snapshot: TSnapshot) => void) => {
         const type = (topic as { type: string }).type
         if (type === "boards") {
           onSnapshot({ ownerKind: "stack", ownerId: "stack-1", boards: [BOARD] } as TSnapshot)
         }
         return () => undefined
       },
-      command: (command: AnyValue) =>
+      command: (command: JsonValue) =>
         Promise.resolve((command as { type: string }).type === "board.templates.list" ? [] : undefined),
     },
     sidebarData: { stacks, starredProjectGroups: [], projectGroups: [] },
@@ -98,7 +98,7 @@ function byText(container: HTMLElement, text: string): HTMLElement {
   return found
 }
 
-function openTabTargets(): AnyValue[] {
+function openTabTargets(): JsonValue[] {
   const layout = usePaneLayoutStore.getState().getLayout()
   return collectPanes(layout.root).flatMap((pane) => pane.tabs.map((tab) => tab.target))
 }

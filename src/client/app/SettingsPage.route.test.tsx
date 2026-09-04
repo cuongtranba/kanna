@@ -8,7 +8,7 @@ import { ThemeProvider } from "../hooks/useTheme"
 import { useAppSettingsStore } from "../stores/appSettingsStore"
 import { usePreferencesStore } from "../stores/preferences"
 import type { KannaState } from "./useKannaState"
-import type { AnyValue } from "../../shared/errors"
+import type { AppSettingsPatch } from "../../shared/types"
 
 /**
  * P7 regression guard: `scripts/verify-session-tabs.sh` exists because a
@@ -49,7 +49,7 @@ function fakeState(overrides: Partial<KannaState> = {}): KannaState {
     handleTestOAuthToken: async () => ({ ok: true, error: null }),
     handleReadLlmProvider: async () => undefined,
     handleWriteLlmProvider: async () => undefined,
-    handleValidateLlmProvider: async () => ({ ok: true }) as AnyValue,
+    handleValidateLlmProvider: async () => ({ ok: true }),
     handleSignOut: async () => undefined,
     ...overrides,
   } as unknown as KannaState
@@ -126,7 +126,7 @@ describe("SettingsPage typography row (real router)", () => {
     const writes: unknown[] = []
     const harness = await mount(
       fakeState({
-        handleWriteAppSettings: async (patch: AnyValue) => {
+        handleWriteAppSettings: async (patch: AppSettingsPatch) => {
           writes.push(patch)
         },
       }),

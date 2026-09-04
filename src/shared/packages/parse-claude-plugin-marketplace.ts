@@ -1,5 +1,4 @@
-import { isRecord } from "../errors"
-import type { AnyValue } from "../errors"
+import { isJsonObject, type JsonValue } from "../json"
 
 // ─── known_marketplaces.json ─────────────────────────────────────────────────
 
@@ -13,12 +12,12 @@ export interface MarketplaceEntry {
  * Parse `~/.claude/plugins/known_marketplaces.json`.
  * Returns a map from marketplace name to entry.
  */
-export function parseKnownMarketplaces(raw: AnyValue): Map<string, MarketplaceEntry> {
+export function parseKnownMarketplaces(raw: JsonValue): Map<string, MarketplaceEntry> {
   const result = new Map<string, MarketplaceEntry>()
-  if (!isRecord(raw)) return result
+  if (!isJsonObject(raw)) return result
 
   for (const [name, value] of Object.entries(raw)) {
-    if (!name || !isRecord(value)) continue
+    if (!name || !isJsonObject(value)) continue
     const installLocation = typeof value.installLocation === "string" ? value.installLocation : null
     if (!installLocation) continue
     result.set(name, {
@@ -51,13 +50,13 @@ export interface MarketplacePluginEntry {
  * Returns a map from plugin name to offered version info.
  * Unknown or missing fields are stored as null.
  */
-export function parseMarketplaceManifest(raw: AnyValue): Map<string, MarketplacePluginEntry> {
+export function parseMarketplaceManifest(raw: JsonValue): Map<string, MarketplacePluginEntry> {
   const result = new Map<string, MarketplacePluginEntry>()
-  if (!isRecord(raw)) return result
+  if (!isJsonObject(raw)) return result
 
   for (const [name, value] of Object.entries(raw)) {
     if (!name) continue
-    if (!isRecord(value)) continue
+    if (!isJsonObject(value)) continue
 
     const version = typeof value.version === "string" && value.version ? value.version : null
     const sha = typeof value.sha === "string" && value.sha ? value.sha : null

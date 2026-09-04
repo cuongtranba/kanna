@@ -1,3 +1,4 @@
+import type { JsonValue } from "../shared/json"
 import type { HarnessEvent, HarnessToolRequest, HarnessTurn } from "./harness-types"
 import type { CodexAppServerManager } from "./codex-app-server"
 import type {
@@ -68,7 +69,7 @@ export interface BuildSubagentProviderRunArgs {
     openrouterApiKey?: string | null
     additionalDirectories?: string[]
     chatId?: string
-    onToolRequest: (request: HarnessToolRequest) => Promise<unknown>
+    onToolRequest: (request: HarnessToolRequest) => Promise<JsonValue>
     systemPromptOverride?: string
     initialPrompt?: string
     subagentOrchestrator?: SubagentOrchestrator
@@ -97,7 +98,7 @@ export interface BuildSubagentProviderRunArgs {
   getArmedLoop?: (chatId: string) => ArmedLoopInfo | null
   codexManager: CodexAppServerManager
   /** Forwards interactive tool requests (AskUserQuestion / ExitPlanMode) to the parent chat's UI handler. */
-  onToolRequest: (request: HarnessToolRequest) => Promise<unknown>
+  onToolRequest: (request: HarnessToolRequest) => Promise<JsonValue>
   /** Resolves credentials per provider. Returns false → run fails AUTH_REQUIRED. */
   authReady: (provider: AgentProvider) => Promise<boolean>
   /** Picks an oauth token for Claude runs, or null. Subagents share the primary pool. */

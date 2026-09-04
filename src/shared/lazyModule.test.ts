@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test"
-import type { AnyValue } from "./errors"
 import { createLazyLoader, isStaleChunkError } from "./lazyModule"
 
 describe("isStaleChunkError", () => {
@@ -95,7 +94,7 @@ describe("createLazyLoader", () => {
 
   test("normalizes a non-Error rejection into an Error", async () => {
     // Dynamic-import failures do not always arrive as Error instances.
-    const reason: AnyValue = "plain string failure"
+    const reason: unknown = "plain string failure"
     const load = createLazyLoader(() => Promise.reject(reason))
 
     const error = await load().then(

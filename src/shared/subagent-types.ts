@@ -1,3 +1,4 @@
+import { type JsonObject } from "./json"
 // Subagent domain types: definitions, runtime snapshots, loop progress.
 // Extracted from types.ts to keep the barrel lean.
 // All external consumers importing from "../shared/types" continue to work unchanged.
@@ -110,7 +111,7 @@ export interface ProviderUsage {
 export interface SubagentPendingTool {
   toolUseId: string
   toolKind: "ask_user_question" | "exit_plan_mode"
-  input: Record<string, unknown>
+  input: JsonObject
   requestedAt: number
 }
 

@@ -1,4 +1,4 @@
-import { type AnyValue, isRecord } from "../../../shared/errors"
+import { isJsonObject, type JsonValue } from "../../../shared/json"
 import type { PaneTabKind, PaneTabTarget } from "./types"
 
 /**
@@ -42,7 +42,7 @@ export function buildTabId(target: PaneTabTarget): string {
   }
 }
 
-function nonEmptyString(value: AnyValue): string | null {
+function nonEmptyString(value: JsonValue): string | null {
   if (typeof value !== "string") return null
   const trimmed = value.trim()
   return trimmed.length > 0 ? trimmed : null
@@ -53,8 +53,8 @@ function nonEmptyString(value: AnyValue): string | null {
  * Returns null for anything unusable so the caller can drop the tab entirely
  * rather than carrying a broken address into the tree.
  */
-export function normalizeTabTarget(value: AnyValue): PaneTabTarget | null {
-  if (!isRecord(value)) return null
+export function normalizeTabTarget(value: JsonValue | undefined): PaneTabTarget | null {
+  if (value === undefined || !isJsonObject(value)) return null
 
   switch (value.kind) {
     case "chat": {

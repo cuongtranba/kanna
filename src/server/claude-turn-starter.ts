@@ -22,7 +22,7 @@ import { isClaudeSdkProvider } from "./provider-catalog"
 import type { ChatRecord, ProjectRecord } from "./events"
 import type { ActiveTurn, ClaudeSessionState, StartingTurn } from "./claude-session-state"
 import type { PendingToolSlots } from "./pending-tool-slot"
-import type { AnyValue } from "../shared/errors"
+import type { JsonValue } from "../shared/json"
 import type { HarnessTurn, HarnessToolRequest } from "./harness-types"
 import type { EventStore } from "./event-store"
 import type { CodexAppServerManager } from "./codex-app-server"
@@ -64,7 +64,7 @@ export interface StartClaudeTurnArgs {
   planMode: boolean
   sessionToken: string | null
   forkSession: boolean
-  onToolRequest: (request: HarnessToolRequest) => Promise<AnyValue>
+  onToolRequest: (request: HarnessToolRequest) => Promise<JsonValue>
   provider: AgentProvider
 }
 
@@ -415,7 +415,7 @@ async function startTurnAfterTurnStarted(
     void deps.generateTitleInBackground(args.chatId, args.content, project.localPath, optimisticTitle ?? "New Chat")
   }
 
-  const onToolRequest = async (request: HarnessToolRequest): Promise<AnyValue> => {
+  const onToolRequest = async (request: HarnessToolRequest): Promise<JsonValue> => {
     // The request may arrive OUTSIDE any Kanna turn — the SDK self-resumes
     // after a background-task notification and calls `canUseTool` with the
     // prior turn long finalized. The parked continuation lives in the
@@ -428,7 +428,7 @@ async function startTurnAfterTurnStarted(
     }
     deps.emitStateChange(args.chatId)
 
-    return await new Promise<AnyValue>((resolve) => {
+    return await new Promise<JsonValue>((resolve) => {
       deps.pendingTools.park(args.chatId, {
         toolUseId: request.tool.toolId,
         provider: args.provider,

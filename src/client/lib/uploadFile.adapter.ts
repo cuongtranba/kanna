@@ -1,5 +1,47 @@
-import type { ChatAttachment } from "../../shared/types"
-import type { AnyValue } from "../../shared/errors"
+import type { AttachmentKind, ChatAttachment } from "../../shared/types"
+import { isJsonArray, isJsonObject, safeJsonParse, type JsonValue } from "../../shared/json"
+
+const ATTACHMENT_KINDS = new Set<string>(["image", "file", "mention"] satisfies AttachmentKind[])
+
+function isAttachmentKind(value: JsonValue): value is AttachmentKind {
+  return typeof value === "string" && ATTACHMENT_KINDS.has(value)
+}
+
+function stringOr(value: JsonValue, fallback: string): string {
+  return typeof value === "string" ? value : fallback
+}
+
+/**
+ * Decode one attachment out of the upload response. The wire is JSON, so each
+ * field is read through a guard; an entry with no `id` is dropped rather than
+ * forwarded, because nothing downstream can address it.
+ */
+function parseAttachment(value: JsonValue): ChatAttachment | null {
+  if (!isJsonObject(value)) return null
+  const id = value.id
+  if (typeof id !== "string") return null
+  return {
+    id,
+    kind: isAttachmentKind(value.kind) ? value.kind : "file",
+    displayName: stringOr(value.displayName, ""),
+    absolutePath: stringOr(value.absolutePath, ""),
+    relativePath: stringOr(value.relativePath, ""),
+    contentUrl: stringOr(value.contentUrl, ""),
+    mimeType: stringOr(value.mimeType, ""),
+    size: typeof value.size === "number" ? value.size : 0,
+  }
+}
+
+/** `null` means "this response was not an attachment list" — a hard failure. */
+function parseAttachments(value: JsonValue): ChatAttachment[] | null {
+  if (!isJsonArray(value)) return null
+  const attachments: ChatAttachment[] = []
+  for (const entry of value) {
+    const attachment = parseAttachment(entry)
+    if (attachment) attachments.push(attachment)
+  }
+  return attachments
+}
 
 export class UploadAbortedError extends Error {
   constructor() {
@@ -61,16 +103,13 @@ export function uploadFile(args: UploadFileArgs): UploadHandle {
 
     xhr.addEventListener("load", () => {
       if (aborted) return
-      let payload: AnyValue
-      try {
-        payload = xhr.responseText ? JSON.parse(xhr.responseText) : null
-      } catch {
-        payload = null
-      }
+      const payload: JsonValue = xhr.responseText ? safeJsonParse(xhr.responseText) : null
+
+      const body = isJsonObject(payload) ? payload : null
 
       if (xhr.status >= 200 && xhr.status < 300) {
-        const attachments = (<{ attachments?: ChatAttachment[] } | null>payload)?.attachments
-        if (!Array.isArray(attachments)) {
+        const attachments = body ? parseAttachments(body.attachments) : null
+        if (!attachments) {
           reject(new Error("Upload failed: malformed response"))
           return
         }
@@ -78,7 +117,7 @@ export function uploadFile(args: UploadFileArgs): UploadHandle {
         return
       }
 
-      const errorMessage = (<{ error?: string } | null>payload)?.error
+      const errorMessage = body?.error
       reject(new Error(typeof errorMessage === "string" ? errorMessage : "Upload failed"))
     })
 

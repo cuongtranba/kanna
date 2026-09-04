@@ -345,7 +345,14 @@ function BoardColumnView({
   )
 }
 
-function applyColumnEdge(data: Record<string | symbol, unknown>, hoveredColumnId: string) {
+/**
+ * The drop-target payload pragmatic-drag-and-drop hands back on `self.data`.
+ * Taken from `extractClosestEdge` itself rather than restated, so the shape
+ * cannot drift from the only function that reads it.
+ */
+type DropTargetData = Parameters<typeof extractClosestEdge>[0]
+
+function applyColumnEdge(data: DropTargetData, hoveredColumnId: string) {
   const edge = extractClosestEdge(data)
   if (edge !== "left" && edge !== "right") return
   const before = dropTargetForColumnEdge(liveColumns.current, hoveredColumnId, edge)
@@ -492,7 +499,7 @@ function LiveStamp({ clock }: { clock: WorkClock }) {
 }
 
 function applyCardEdge(
-  data: Record<string | symbol, unknown>,
+  data: DropTargetData,
   columnId: string,
   hoveredCardId: string,
   cards: readonly Card[],

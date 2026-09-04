@@ -1,8 +1,9 @@
 import type { HydratedTranscriptMessage, AskUserQuestionItem } from "../../../shared/types"
 import type { ToolRequestDecision } from "../../../shared/permission-policy"
-import { isRecord } from "../../../shared/errors"
+import { isJsonArray, isJsonObject, type JsonObject } from "../../../shared/json"
 import { Button } from "../ui/button"
 import { AskUserQuestionInteractive } from "./AskUserQuestionInteractive"
+import { encodeAskUserQuestionResult } from "../../lib/askUserQuestionJson"
 
 export type PendingToolRequestHydrated = Extract<HydratedTranscriptMessage, { kind: "pending_tool_request" }>
 
@@ -62,7 +63,7 @@ function GenericPending({
 }: {
   toolRequestId: string
   toolName: string
-  args: Record<string, unknown>
+  args: JsonObject
   onAnswer: (toolRequestId: string, decision: ToolRequestDecision) => void
 }) {
   // Short, single-line preview of the most descriptive arg so the user can
@@ -113,7 +114,7 @@ export function PendingToolRequestMessage({ entry, onAnswer }: Props) {
     // MCP shim args use `text` field per its zod schema; AskUserQuestionItem
     // uses `question` (matches the SDK native AskUserQuestion shape). Map
     // here so getKey()/answer keys use the question body, not "undefined".
-    const rawQuestions = Array.isArray(args.questions) ? args.questions.filter(isRecord) : []
+    const rawQuestions: JsonObject[] = isJsonArray(args.questions) ? args.questions.filter(isJsonObject) : []
     const questions: AskUserQuestionItem[] = rawQuestions.map((q) => {
       let question: string
       if (typeof q.question === "string") {
@@ -127,8 +128,12 @@ export function PendingToolRequestMessage({ entry, onAnswer }: Props) {
         id: typeof q.id === "string" ? q.id : undefined,
         question,
         header: typeof q.header === "string" ? q.header : undefined,
-        options: Array.isArray(q.options)
-          ? q.options.filter(isRecord).filter((o: Record<string, unknown>): o is { label: string; description?: string } => typeof o.label === "string")
+        options: isJsonArray(q.options)
+          ? q.options.filter(isJsonObject).flatMap((o) => (
+            typeof o.label === "string"
+              ? [{ label: o.label, description: typeof o.description === "string" ? o.description : undefined }]
+              : []
+          ))
           : undefined,
         multiSelect: typeof q.multiSelect === "boolean" ? q.multiSelect : false,
       }
@@ -139,7 +144,7 @@ export function PendingToolRequestMessage({ entry, onAnswer }: Props) {
         onSubmit={(finalAnswers) =>
           onAnswer(toolRequestId, {
             kind: "answer",
-            payload: { questions, answers: finalAnswers },
+            payload: encodeAskUserQuestionResult(questions, finalAnswers),
           })
         }
         onCancel={() =>

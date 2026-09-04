@@ -11,7 +11,8 @@ import type { BoardChatFacts } from "../../lib/boards/boardChatFacts"
 import type { CardContent, CardLink, FieldDef } from "../../../shared/boards/types"
 import type { CardDetailView, StartWorkResult, StartWorkStatus } from "../../../shared/boards/start-work"
 import type { WorktreeCleanupView } from "../../../shared/boards/worktree-cleanup"
-import type { AnyValue } from "../../../shared/errors"
+import type { ClientCommand } from "../../../shared/protocol"
+import { isJsonObject } from "../../../shared/json"
 
 function detailWith(status: StartWorkStatus, blockedReason: string | null = null): CardDetailView {
   return {
@@ -39,7 +40,7 @@ function detailWith(status: StartWorkStatus, blockedReason: string | null = null
 
 interface Harness {
   container: HTMLDivElement
-  commands: AnyValue[]
+  commands: ClientCommand[]
   unmount: () => void
 }
 
@@ -49,9 +50,9 @@ async function mount(
   chatFacts?: Record<string, BoardChatFacts>,
   cardFields?: readonly FieldDef[],
 ): Promise<Harness> {
-  const commands: AnyValue[] = []
+  const commands: ClientCommand[] = []
   const socket: CardDrawerSocket = {
-    command: <TResult,>(command: AnyValue) => {
+    command: <TResult,>(command: ClientCommand) => {
       commands.push(command)
       const type = (command as { type: string }).type
       if (type === "board.card.detail") return Promise.resolve(detail as TResult)
@@ -433,8 +434,10 @@ function blur(input: HTMLInputElement | HTMLTextAreaElement) {
   input.dispatchEvent(new FocusEvent("focusout", { bubbles: true }))
 }
 
-function updates(harness: Harness): AnyValue[] {
-  return harness.commands.filter((command) => (command as { type: string }).type === "board.card.update")
+type CardUpdateCommand = Extract<ClientCommand, { type: "board.card.update" }>
+
+function updates(harness: Harness): CardUpdateCommand[] {
+  return harness.commands.filter((command): command is CardUpdateCommand => command.type === "board.card.update")
 }
 
 const FULL: CardContent = {
@@ -587,7 +590,8 @@ describe("CardDrawer field editing", () => {
       typeInto(input, "  ")
       blur(input)
     })
-    const [update] = updates(harness) as [{ content: CardContent }]
+    const [update] = updates(harness)
+    if (!update) throw new Error("expected a board.card.update command")
     expect(update.content).not.toHaveProperty("assignee")
     expect(update.content).toHaveProperty("description")
     harness.unmount()
@@ -623,15 +627,17 @@ describe("CardDrawer field editing", () => {
     await act(async () => {
       chip?.click()
     })
-    const [update] = updates(harness) as [{ content: CardContent }]
-    expect(update.content.areas).toEqual({ kind: "multiselect", optionIds: ["ui", "api"] })
+    const [update] = updates(harness)
+    const content = update?.content
+    if (content === undefined || !isJsonObject(content)) throw new Error("expected a board.card.update command")
+    expect(content.areas).toEqual({ kind: "multiselect", optionIds: ["ui", "api"] })
     harness.unmount()
   })
 
   test("a rejected write is reported and the value is not left changed", async () => {
-    const commands: AnyValue[] = []
+    const commands: ClientCommand[] = []
     const socket: CardDrawerSocket = {
-      command: <TResult,>(command: AnyValue) => {
+      command: <TResult,>(command: ClientCommand) => {
         commands.push(command)
         const type = (command as { type: string }).type
         if (type === "board.card.detail") return Promise.resolve(schemaDetail(FULL) as TResult)

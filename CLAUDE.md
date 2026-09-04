@@ -190,6 +190,61 @@ React 19 rules: `rules-of-hooks`, `purity`, `globals` are errors;
 `set-state-in-effect`, `refs`, `immutability`, `preserve-manual-memoization`,
 `exhaustive-deps` are warnings.
 
+# Type Strictness — an untyped value has no legal spelling
+
+`bun run lint` bans `any` (`@typescript-eslint/no-explicit-any`), BOTH cast
+spellings, and `unknown` in **every** position. There is no escape valve; do not
+add `eslint-disable` comments.
+
+**The rule counts the CONCEPT, not one keyword** — the same lesson
+`deps-bundles` records below. The predecessor selected
+`TSTypeAnnotation > TSUnknownKeyword`, a DIRECT annotation only, so
+`Record<string, unknown>`, `unknown[]`, `Promise<unknown>` and `unknown | null`
+were all legal: 274 in production, including `error: unknown | null` in
+`shared/types.ts`, which is a one-token evasion of the exact rule it evades.
+`AS_CAST_BAN` matched `TSAsExpression` only, so `<T>x` was legal too — 18 sat in
+production, four of them spelled `<Record<string, AnyValue>>`.
+
+**The gap grew its own institution, and that is the part to not repeat.**
+`src/shared/errors.ts` exported `type AnyValue = unknown`, which reached **458
+sites across 120 files** while satisfying the rule perfectly;
+`plugin-http-routes.ts` documented the motive out loud ("`AnyValue` rather than
+the `unknown` keyword, which this repo bans"). `quick-response.ts` is the
+reductio — it spelled one signature `AnyValue` and the identical signature
+`unknown | null` forty lines apart. Renaming removes nothing.
+
+**Say what the value IS.** Most of those 458 were parsed JSON, so they now have
+a real type:
+
+| Boundary | Type | Module |
+| --- | --- | --- |
+| parsed JSON — `JSON.parse`, `res.json()`, SQLite text, protocol payloads | `JsonValue` / `JsonObject` / `JsonArray` | `src/shared/json.ts` |
+| a caught or rejected throwable | `Error`, via `toError()` / `onRejected()` | `src/shared/errors.ts` |
+| a dynamic `import()`/`require()` namespace, a `globalThis` slot | `LoadedModule` / `HostBag` | `src/shared/dynamic-module.ts` |
+
+`JsonValue` is strictly more informative than `unknown` and no less safe: it
+still cannot be used without narrowing, but narrowing it LANDS somewhere —
+indexing a `JsonObject` yields `JsonValue`, where `isRecord`'s
+`Record<string, unknown>` yields `unknown` and drops you back out of the type
+system. **When a parameter is `JsonValue`, use `isJsonObject`, not `isRecord`.**
+
+`errors.ts` and `dynamic-module.ts` are the only files exempt from the unknown
+ban, and each names ONE kind of untyped value rather than "anything at all".
+`LoadedModule`/`HostBag` are themselves banned outside a short enumerated file
+list in `eslint.config.js` — that list is what makes them not a second
+`AnyValue`, because spreading them costs a visible diff to the lint config.
+
+**Two facts that will bite you.** A TypeScript `interface` never satisfies an
+index-signature type, so (1) a predicate must be written
+`v is JsonValue & Foo`, not `v is Foo` (TS2677), and (2) a domain interface
+reaching a JSON field needs an explicit field-by-field encoder — never a cast,
+and never `JSON.parse(JSON.stringify(x))` on a hot path.
+
+**The one residue is named, not hidden.** `CommandAckResult`
+(`shared/protocol.ts`) is `JsonPrimitive | object`: the ack channel carries 51
+concrete result types with no common supertype, and relating result to command
+is issue #899 (`untyped-command-results`), not something a type can fix here.
+
 # Architecture Budget (ratchet — `bun run check:arch`)
 
 `src/ops/architecture/budget.ts` pins the size of every structural-defect

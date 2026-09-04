@@ -4,7 +4,7 @@ import { createBoardRegistry, type BoardRegistry } from "./board-registry"
 import { createBoardStore } from "./board-store.adapter"
 import type { BoardStore } from "./board-store"
 import type { BoardTemplateDefinition } from "../shared/boards/types"
-import type { AnyValue } from "../shared/errors"
+import type { JsonObject } from "../shared/json"
 
 const DEFINITION: BoardTemplateDefinition = {
   columns: [
@@ -17,7 +17,7 @@ const DEFINITION: BoardTemplateDefinition = {
 
 interface CapturedTool {
   name: string
-  run: (input: Record<string, AnyValue>) => Promise<{ content: { text: string }[]; isError?: true }>
+  run: (input: JsonObject) => Promise<{ content: { text: string }[]; isError?: true }>
 }
 
 let store: BoardStore
@@ -34,7 +34,7 @@ function build(projectId: string | null, chatId: string | null = "chat-1") {
   tools = new Map(list.map((entry) => [entry.name, entry]))
 }
 
-async function call(name: string, input: Record<string, AnyValue> = {}) {
+async function call(name: string, input: JsonObject = {}) {
   const entry = tools.get(name)
   if (!entry) throw new Error(`no tool ${name}`)
   return entry.run(input)

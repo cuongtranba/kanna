@@ -1,3 +1,4 @@
+import type { JsonValue } from "../json"
 import { describe, test, expect } from "bun:test"
 import { parseClaudePluginList, parseClaudePluginsFile } from "./parse-claude-plugins"
 
@@ -171,7 +172,7 @@ describe("parseClaudePluginsFile", () => {
   })
 
   test("v2: takes user-scoped entry, skips non-user scopes", () => {
-    const fixture = {
+    const fixture: JsonValue = {
       "plugin@mkt": [
         { scope: "project", version: "0.0.1", gitCommitSha: "proj-sha" },
         { scope: "user", version: "1.0.0", gitCommitSha: "user-sha", installedAt: "2026-01-01T00:00:00.000Z" },
@@ -185,7 +186,7 @@ describe("parseClaudePluginsFile", () => {
   })
 
   test("v2: skips keys with no user-scoped entry", () => {
-    const fixture = {
+    const fixture: JsonValue = {
       "plugin-a@mkt": [{ scope: "project", version: "1.0.0" }],
       "plugin-b@mkt": [{ scope: "user", version: "2.0.0", installedAt: "2026-01-01T00:00:00.000Z" }],
     }
@@ -195,7 +196,7 @@ describe("parseClaudePluginsFile", () => {
   })
 
   test("v2: multiple plugins produce one package each", () => {
-    const fixture = {
+    const fixture: JsonValue = {
       "plugin-a@mkt": [{ scope: "user", version: "1.0.0", gitCommitSha: "sha-a", installedAt: "2026-01-01T00:00:00.000Z" }],
       "plugin-b@mkt": [{ scope: "user", version: "2.0.0", gitCommitSha: "sha-b", installedAt: "2026-01-01T00:00:00.000Z" }],
     }
@@ -206,7 +207,7 @@ describe("parseClaudePluginsFile", () => {
   })
 
   test("v2: plugin key without @ uses key as both name and source", () => {
-    const fixture = {
+    const fixture: JsonValue = {
       "standalone-plugin": [
         { scope: "user", version: "1.0.0", installedAt: "2026-01-01T00:00:00.000Z" },
       ],
@@ -219,7 +220,7 @@ describe("parseClaudePluginsFile", () => {
   })
 
   test("v2: null revision when gitCommitSha is absent", () => {
-    const fixture = {
+    const fixture: JsonValue = {
       "plugin@mkt": [{ scope: "user", version: "1.0.0", installedAt: "2026-01-01T00:00:00.000Z" }],
     }
     const { packages } = parseClaudePluginsFile(fixture)

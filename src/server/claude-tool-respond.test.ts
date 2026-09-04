@@ -13,7 +13,7 @@ import {
 } from "./claude-tool-respond"
 import type { ActiveTurn } from "./claude-session-state"
 import { PendingToolSlots, type ParkedTool } from "./pending-tool-slot"
-import type { AnyValue } from "../shared/errors"
+import type { JsonValue } from "../shared/json"
 import type { AgentProvider, AskUserQuestionToolCall, ExitPlanModeToolCall } from "../shared/types"
 
 // ---------------------------------------------------------------------------
@@ -97,7 +97,7 @@ function makeCommand(
     type: "chat.respondTool",
     chatId: "chat-1",
     toolUseId: "tool-abc",
-    result: { confirmed: true } as AnyValue,
+    result: { confirmed: true },
     ...overrides,
   }
 }
@@ -106,7 +106,7 @@ function parkTool(
   slots: PendingToolSlots,
   chatId: string,
   tool: ParkedTool["tool"],
-  resolve: (v: AnyValue) => void,
+  resolve: (v: JsonValue) => void,
   provider: AgentProvider = "claude",
 ): ParkedTool {
   return slots.park(chatId, {
@@ -140,7 +140,7 @@ describe("respondTool", () => {
 
   it("throws when toolUseId does not match the parked request", async () => {
     const slots = new PendingToolSlots()
-    const resolve = mock((_v: AnyValue) => {})
+    const resolve = mock((_v: JsonValue) => {})
     parkTool(slots, "chat-1", askUserQuestionTool("tool-xyz"), resolve)
     const deps = makeDeps(new Map([["chat-1", makeActiveTurn()]]), slots)
 
@@ -152,10 +152,10 @@ describe("respondTool", () => {
 
   it("resolves an ask_user_question tool and updates active turn state", async () => {
     const slots = new PendingToolSlots()
-    const resolve = mock((_v: AnyValue) => {})
+    const resolve = mock((_v: JsonValue) => {})
     const appendMessage = mock(async (_chatId: string, _entry: unknown) => {})
     const emitStateChange = mock((_chatId: string) => {})
-    const result: AnyValue = { answer: "yes" }
+    const result: JsonValue = { answer: "yes" }
 
     parkTool(slots, "chat-1", askUserQuestionTool("tool-abc"), resolve)
     const active = makeActiveTurn({
@@ -190,9 +190,9 @@ describe("respondTool", () => {
 
   it("resolves a request parked with NO active turn (SDK self-wake)", async () => {
     const slots = new PendingToolSlots()
-    const resolve = mock((_v: AnyValue) => {})
+    const resolve = mock((_v: JsonValue) => {})
     const appendMessage = mock(async (_chatId: string, _entry: unknown) => {})
-    const result: AnyValue = { answers: { q1: "option-a" } }
+    const result: JsonValue = { answers: { q1: "option-a" } }
 
     parkTool(slots, "chat-1", askUserQuestionTool("tool-abc"), resolve)
     const deps = makeDeps(new Map(), slots, appendMessage)
@@ -206,7 +206,7 @@ describe("respondTool", () => {
 
   it("clears session token and appends context_cleared when exit_plan_mode confirmed+clearContext", async () => {
     const slots = new PendingToolSlots()
-    const resolve = mock((_v: AnyValue) => {})
+    const resolve = mock((_v: JsonValue) => {})
     const appendMessage = mock(async (_chatId: string, _entry: unknown) => {})
     const setSessionTokenForProvider = mock(
       async (_chatId: string, _provider: string, _token: string | null) => {},
@@ -221,7 +221,7 @@ describe("respondTool", () => {
     await respondTool(
       deps,
       makeCommand({
-        result: { confirmed: true, clearContext: true, message: "" } as AnyValue,
+        result: { confirmed: true, clearContext: true, message: "" },
       }),
     )
 
@@ -234,7 +234,7 @@ describe("respondTool", () => {
 
   it("does NOT clear context when confirmed=false even if clearContext=true", async () => {
     const slots = new PendingToolSlots()
-    const resolve = mock((_v: AnyValue) => {})
+    const resolve = mock((_v: JsonValue) => {})
     const appendMessage = mock(async (_chatId: string, _entry: unknown) => {})
     const setSessionTokenForProvider = mock(
       async (_chatId: string, _provider: string, _token: string | null) => {},
@@ -246,7 +246,7 @@ describe("respondTool", () => {
 
     await respondTool(
       deps,
-      makeCommand({ result: { confirmed: false, clearContext: true } as AnyValue }),
+      makeCommand({ result: { confirmed: false, clearContext: true } }),
     )
 
     expect(setSessionTokenForProvider).not.toHaveBeenCalled()
@@ -255,7 +255,7 @@ describe("respondTool", () => {
 
   it("sets postToolFollowUp on codex provider when exit_plan_mode confirmed", async () => {
     const slots = new PendingToolSlots()
-    const resolve = mock((_v: AnyValue) => {})
+    const resolve = mock((_v: JsonValue) => {})
 
     parkTool(slots, "chat-1", exitPlanModeTool("tool-abc"), resolve, "codex")
     const active = makeActiveTurn({ provider: "codex" })
@@ -265,7 +265,7 @@ describe("respondTool", () => {
     await respondTool(
       deps,
       makeCommand({
-        result: { confirmed: true, clearContext: false, message: "great plan" } as AnyValue,
+        result: { confirmed: true, clearContext: false, message: "great plan" },
       }),
     )
 
@@ -277,7 +277,7 @@ describe("respondTool", () => {
 
   it("sets postToolFollowUp on codex provider when exit_plan_mode rejected", async () => {
     const slots = new PendingToolSlots()
-    const resolve = mock((_v: AnyValue) => {})
+    const resolve = mock((_v: JsonValue) => {})
 
     parkTool(slots, "chat-1", exitPlanModeTool("tool-abc"), resolve, "codex")
     const active = makeActiveTurn({ provider: "codex" })
@@ -287,7 +287,7 @@ describe("respondTool", () => {
     await respondTool(
       deps,
       makeCommand({
-        result: { confirmed: false, clearContext: false, message: "needs work" } as AnyValue,
+        result: { confirmed: false, clearContext: false, message: "needs work" },
       }),
     )
 
@@ -299,7 +299,7 @@ describe("respondTool", () => {
 
   it("uses default messages when message field is empty", async () => {
     const slots = new PendingToolSlots()
-    const resolve = mock((_v: AnyValue) => {})
+    const resolve = mock((_v: JsonValue) => {})
 
     parkTool(slots, "chat-1", exitPlanModeTool("tool-abc"), resolve, "codex")
     const active = makeActiveTurn({ provider: "codex" })
@@ -309,7 +309,7 @@ describe("respondTool", () => {
     await respondTool(
       deps,
       makeCommand({
-        result: { confirmed: true, clearContext: false, message: "" } as AnyValue,
+        result: { confirmed: true, clearContext: false, message: "" },
       }),
     )
 

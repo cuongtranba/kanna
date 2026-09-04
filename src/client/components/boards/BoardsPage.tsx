@@ -7,9 +7,9 @@ import { cn } from "../../lib/utils"
 import { ownerKey, selectBoards, useBoardsStore } from "../../stores/boardsStore"
 import { selectTemplates, useBoardsPageStore } from "./BoardsPage.store"
 import { COLUMN_DOT_CLASS } from "../../lib/boards/columnStyle"
-import type { BoardsSnapshot } from "../../../shared/protocol"
+import type { BoardsSnapshot, ClientCommand, SubscriptionTopic } from "../../../shared/protocol"
 import type { BoardOwnerKind, BoardSummary, BoardTemplate } from "../../../shared/boards/types"
-import type { AnyValue } from "../../../shared/errors"
+import type { JsonValue } from "../../../shared/json"
 
 /**
  * The Boards page — `/boards/:projectId` for a project owner, or
@@ -25,8 +25,8 @@ import type { AnyValue } from "../../../shared/errors"
  */
 
 export interface BoardsPageSocket {
-  subscribe<TSnapshot>(topic: AnyValue, onSnapshot: (snapshot: TSnapshot) => void): () => void
-  command<TResult = AnyValue>(command: AnyValue): Promise<TResult>
+  subscribe(topic: SubscriptionTopic, onSnapshot: (snapshot: BoardsSnapshot) => void): () => void
+  command<TResult = JsonValue>(command: ClientCommand): Promise<TResult>
 }
 
 export interface BoardsPageProps {
@@ -49,7 +49,7 @@ export function BoardsPage({ ownerKind, ownerId, ownerName, socket, onOpenBoard 
     useBoardsPageStore.getState()
 
   useEffect(() => {
-    return socket.subscribe<BoardsSnapshot>(
+    return socket.subscribe(
       { type: "boards", ownerKind, ownerId },
       (snapshot) => {
         useBoardsStore.getState().setBoards(ownerKey(snapshot.ownerKind, snapshot.ownerId), snapshot.boards)
@@ -74,7 +74,7 @@ export function BoardsPage({ ownerKind, ownerId, ownerName, socket, onOpenBoard 
   }, [socket, setTemplates])
 
   const run = useCallback(
-    async (command: AnyValue) => {
+    async (command: ClientCommand) => {
       try {
         await socket.command(command)
         setError(null)
@@ -179,7 +179,7 @@ function BoardRow({
   onStartRename: (boardId: string) => void
   onRename: (boardId: string, title: string) => void
   onCancelRename: () => void
-  onCommand: (command: AnyValue) => Promise<void>
+  onCommand: (command: ClientCommand) => Promise<void>
 }) {
   const handleOpen = useCallback(() => onOpen(board.id), [board.id, onOpen])
 
@@ -242,7 +242,7 @@ function RowMenu({
 }: {
   board: BoardSummary
   onStartRename: (boardId: string) => void
-  onCommand: (command: AnyValue) => Promise<void>
+  onCommand: (command: ClientCommand) => Promise<void>
 }) {
   const open = useBoardsPageStore((state) => state.openMenuId === board.id)
   const { openMenu, closeMenu } = useBoardsPageStore.getState()

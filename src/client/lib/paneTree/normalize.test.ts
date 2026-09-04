@@ -3,6 +3,7 @@ import { normalizeLayout } from "./normalize"
 import { buildTabId } from "./tabTarget"
 import { collectPanes, createGroup, createPane, createTab, getTreeDepth } from "./tree"
 import { DEFAULT_PANE_ID } from "./types"
+import type { JsonValue } from "../../../shared/json"
 
 const term = (id: string) => createTab({ kind: "terminal", terminalId: id }, 0)
 
@@ -11,7 +12,8 @@ const CHAT_C1_TAB_ID = buildTabId({ kind: "chat", chatId: "c1" })
 
 describe("normalizeLayout", () => {
   test("returns a default layout for anything unusable", () => {
-    for (const value of [null, undefined, 42, "layout", {}, { root: null }, []]) {
+    const unusable: (JsonValue | undefined)[] = [null, undefined, 42, "layout", {}, { root: null }, []]
+    for (const value of unusable) {
       const layout = normalizeLayout(value)
       expect(layout.root.kind).toBe("pane")
       expect(layout.root.id).toBe(DEFAULT_PANE_ID)

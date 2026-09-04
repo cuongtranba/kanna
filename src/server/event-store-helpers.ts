@@ -1,3 +1,4 @@
+import type { JsonObject } from "../shared/json"
 /**
  * Pure helper functions extracted from event-store.ts.
  * No EventStore class dependencies. No IO side effects.
@@ -91,7 +92,7 @@ export function isSendToStartingProfilingEnabled(): boolean {
   return process.env.KANNA_PROFILE_SEND_TO_STARTING === "1"
 }
 
-export function logSendToStartingProfile(stage: string, details?: Record<string, unknown>): void {
+export function logSendToStartingProfile(stage: string, details?: JsonObject): void {
   if (!isSendToStartingProfilingEnabled()) {
     return
   }

@@ -1,7 +1,6 @@
+import type { JsonValue } from "../../shared/json"
 import { homedir } from "node:os"
 import path from "node:path"
-import type { AnyValue } from "../../shared/errors"
-import { isRecord } from "../../shared/errors"
 import { log } from "../../shared/log"
 import { randomUUID } from "node:crypto"
 import { createRuntimeDir, writeRuntimeFile, removeRuntimeDir } from "./runtime-dir.adapter"
@@ -92,7 +91,7 @@ export interface StartClaudeSessionPtyArgs {
   oauthToken: string | null
   sessionToken: string | null
   additionalDirectories?: string[]
-  onToolRequest: (request: HarnessToolRequest) => Promise<unknown>
+  onToolRequest: (request: HarnessToolRequest) => Promise<JsonValue>
   /**
    * Append text for `--append-system-prompt`. Defaults to the static
    * {@link KANNA_SYSTEM_PROMPT_APPEND} blurb for back-compat with older
@@ -613,9 +612,8 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
   function pushMerged(ev: HarnessEvent) {
     if (ev.type === "transcript" && ev.entry) {
       const entry = ev.entry
-      if (entry.kind === "account_info" && isRecord(entry) && entry.accountInfo !== undefined) {
-        const ai: AccountInfo = entry.accountInfo satisfies AnyValue
-        cachedAccountInfo = ai
+      if (entry.kind === "account_info") {
+        cachedAccountInfo = entry.accountInfo
       }
       if (entry.kind === "result") {
         sawResultEntry = true
@@ -624,9 +622,8 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
       // CLI knows about — including every skill, plugin command, project
       // command, and built-in. Cache it so getSupportedCommands() returns
       // the live set instead of the cold-start fallback.
-      if (entry.kind === "system_init" && isRecord(entry) && Array.isArray(entry.slashCommands)) {
-        const rawCommands: AnyValue[] = entry.slashCommands
-        cachedSlashCommands = rawCommands.filter((s): s is string => typeof s === "string").map((name) => ({
+      if (entry.kind === "system_init" && Array.isArray(entry.slashCommands)) {
+        cachedSlashCommands = entry.slashCommands.filter((s) => typeof s === "string").map((name) => ({
           name,
           description: "",
           argumentHint: "",

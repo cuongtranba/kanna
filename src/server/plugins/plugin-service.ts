@@ -15,7 +15,8 @@
  */
 import { homedir } from "node:os"
 import { join } from "node:path"
-import { errorMessage, type AnyValue } from "../../shared/errors"
+import { errorMessage } from "../../shared/errors"
+import type { JsonValue } from "../../shared/json"
 import type { InstalledPluginConfig } from "../../shared/plugins/settings"
 import { createPluginLogRing, type PluginLogEntry } from "../../shared/plugins/log-ring"
 import { parseKannaPluginManifest, resolvePluginEntry } from "../../shared/plugins/manifest"
@@ -42,7 +43,7 @@ const STOP_GRACE_MS = 5_000
 
 export type PluginRuntimeState = "stopped" | "starting" | "running" | "stopping" | "crashed"
 
-export type PluginCallResult = { readonly ok: true; readonly output: AnyValue } | { readonly ok: false; readonly error: string }
+export type PluginCallResult = { readonly ok: true; readonly output: JsonValue } | { readonly ok: false; readonly error: string }
 
 interface PendingCall {
   resolve(result: PluginCallResult): void
@@ -105,7 +106,7 @@ export interface PluginService {
   restore(): void
   start(id: string): Promise<void>
   status(id: string): { readonly state: PluginRuntimeState } | undefined
-  call(id: string, method: string, params: AnyValue): Promise<PluginCallResult>
+  call(id: string, method: string, params: JsonValue): Promise<PluginCallResult>
   stop(id: string): Promise<void>
   logs(id: string): readonly PluginLogEntry[]
 }
@@ -279,7 +280,7 @@ export function createPluginService(
     return record ? { state: record.state } : undefined
   }
 
-  async function call(id: string, method: string, params: AnyValue): Promise<PluginCallResult> {
+  async function call(id: string, method: string, params: JsonValue): Promise<PluginCallResult> {
     const record = registry.get(id)
     if (!record || record.state !== "running" || !record.connection) {
       return { ok: false, error: `plugin "${id}" is not running` }

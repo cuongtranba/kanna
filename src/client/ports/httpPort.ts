@@ -8,7 +8,7 @@
  * Architecture: .c3/adr/adr-20260715-client-state-effect-architecture.md
  */
 
-import type { AnyValue } from "../../shared/errors"
+import type { JsonValue } from "../../shared/json"
 
 export interface HttpRequestOptions {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD"
@@ -46,7 +46,7 @@ export interface HttpPort {
    * the same call with the body constraint lifted; it does not replace
    * `postJson`, whose narrower type still guards its own call sites.
    */
-  postJsonBody<T>(url: string, body: AnyValue, options?: Omit<HttpRequestOptions, "method" | "body">): Promise<HttpResponse<T>>
+  postJsonBody<T>(url: string, body: JsonValue, options?: Omit<HttpRequestOptions, "method" | "body">): Promise<HttpResponse<T>>
 
   /**
    * Perform a HEAD request (probe — no body returned).

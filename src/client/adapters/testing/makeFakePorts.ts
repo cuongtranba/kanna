@@ -7,7 +7,7 @@
  * Architecture: .c3/adr/adr-20260715-client-state-effect-architecture.md
  */
 
-import type { AnyValue } from "../../../shared/errors"
+import type { JsonValue } from "../../../shared/json"
 import type { HttpPort, HttpRequestOptions, HttpResponse } from "../../ports/httpPort"
 import type { StoragePort } from "../../ports/storagePort"
 import type { TimerPort } from "../../ports/timerPort"
@@ -88,7 +88,7 @@ export function makeFakeHttpPort(): FakeHttpPort {
 
     async postJsonBody<T>(
       url: string,
-      _body: AnyValue,
+      _body: JsonValue,
       _options?: Omit<HttpRequestOptions, "method" | "body">,
     ): Promise<HttpResponse<T>> {
       calls.push({ method: "POST", url })

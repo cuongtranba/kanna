@@ -8,7 +8,8 @@
 import type { CanUseTool, PermissionResult } from "@anthropic-ai/claude-agent-sdk"
 import type { HarnessToolRequest } from "./harness-types"
 import { normalizeToolCall } from "../shared/tools"
-import { type AnyValue, isRecord } from "../shared/errors"
+import { isJsonObject, type JsonObject, type JsonValue } from "../shared/json"
+import { toJsonObject } from "./json-boundary"
 import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
@@ -33,7 +34,7 @@ export interface BuildCanUseToolArgs {
   localPath: string
   chatId?: string
   sessionToken?: string | null
-  onToolRequest: (request: HarnessToolRequest) => Promise<AnyValue>
+  onToolRequest: (request: HarnessToolRequest) => Promise<JsonValue>
   toolCallback?: ToolCallbackService
   chatPolicy?: ChatPermissionPolicy
   /** When present and returns true, block LOOP_BLOCKED_NATIVE_TOOLS (loop-armed turn). */
@@ -72,7 +73,7 @@ export function buildCanUseTool(
     const tool = normalizeToolCall({
       toolName,
       toolId: options.toolUseID,
-      input: input ?? {},
+      input: toJsonObject(input ?? {}),
     })
 
     if (tool.toolKind !== "ask_user_question" && tool.toolKind !== "exit_plan_mode") {
@@ -86,7 +87,7 @@ export function buildCanUseTool(
         sessionId: args.sessionToken ?? "",
         toolUseId: options.toolUseID,
         toolName: `mcp__kanna__${tool.toolKind}`,
-        args: isRecord(tool.rawInput) ? tool.rawInput : {},
+        args: tool.rawInput ?? {},
         chatPolicy: args.chatPolicy ?? POLICY_DEFAULT,
         cwd: args.localPath,
       })
@@ -95,7 +96,8 @@ export function buildCanUseTool(
         return { behavior: "deny", message: result.decision.reason ?? "denied" }
       }
 
-      const payload: Record<string, unknown> = isRecord(result.decision.payload) ? result.decision.payload : {}
+      const rawPayload = result.decision.payload ?? null
+      const payload: JsonObject = isJsonObject(rawPayload) ? rawPayload : {}
 
       if (tool.toolKind === "ask_user_question") {
         return {
@@ -133,7 +135,7 @@ export function buildCanUseTool(
     // empty answers, the SDK actually executes the tool, and its own
     // tool_result overwrites the "Discarded" marker already written to the
     // transcript. Deny instead — the tool never runs.
-    if (isRecord(result) && result.discarded === true) {
+    if (isJsonObject(result) && result.discarded === true) {
       return {
         behavior: "deny",
         message: "The user cancelled this turn before answering.",
@@ -141,7 +143,7 @@ export function buildCanUseTool(
     }
 
     if (tool.toolKind === "ask_user_question") {
-      const record: Record<string, unknown> = isRecord(result) ? result : {}
+      const record: JsonObject = isJsonObject(result) ? result : {}
       return {
         behavior: "allow",
         updatedInput: {
@@ -152,7 +154,7 @@ export function buildCanUseTool(
       } satisfies PermissionResult
     }
 
-    const record: Record<string, unknown> = isRecord(result) ? result : {}
+    const record: JsonObject = isJsonObject(result) ? result : {}
     const confirmed = Boolean(record.confirmed)
     if (confirmed) {
       return {

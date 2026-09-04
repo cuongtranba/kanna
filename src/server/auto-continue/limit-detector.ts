@@ -1,38 +1,45 @@
-import { type AnyValue, isRecord } from "../../shared/errors"
+import { isJsonObject, safeJsonParse, type JsonObject, type JsonValue } from "../../shared/json"
 
 export interface LimitDetection {
   chatId: string
   resetAt: number
   tz: string
-  raw: AnyValue
+  /** Diagnostic only: the throwable, the result text, or the SDK payload. */
+  raw: Error | JsonValue
 }
 
 export interface LimitDetector {
-  detect(chatId: string, error: AnyValue): LimitDetection | null
+  detect(chatId: string, error: Error): LimitDetection | null
   detectFromResultText?(chatId: string, text: string, nowMs?: number): LimitDetection | null
-  detectFromSdkRateLimitInfo?(chatId: string, info: AnyValue): LimitDetection | null
+  detectFromSdkRateLimitInfo?(chatId: string, info: JsonValue): LimitDetection | null
 }
 
-function extractHeaders(error: AnyValue): Record<string, AnyValue> {
-  if (isRecord(error) && "headers" in error && isRecord(error.headers)) {
-    return error.headers
-  }
-  return {}
+/**
+ * The transport fields a rate-limit throwable may carry beyond `Error`'s own.
+ * Every member is optional and `message` overlaps `Error`, so an `Error`
+ * widens to this without a cast.
+ */
+interface RateLimitErrorLike {
+  readonly message?: string
+  readonly headers?: JsonValue
+  readonly status?: JsonValue
+  readonly code?: JsonValue
+  readonly data?: JsonValue
 }
 
-function parseBody(error: AnyValue): Record<string, AnyValue> | null {
-  if (!isRecord(error)) return null
-  const message = error.message
-  if (typeof message !== "string" || !message) return null
-  try {
-    const parsed: AnyValue = JSON.parse(message)
-    return isRecord(parsed) ? parsed : null
-  } catch {
-    return null
-  }
+function extractHeaders(error: Error): JsonObject {
+  const like: RateLimitErrorLike = error
+  const headers = like.headers
+  return headers !== undefined && isJsonObject(headers) ? headers : {}
 }
 
-function parseIsoMillis(value: AnyValue): number | null {
+function parseBody(error: Error): JsonObject | null {
+  if (!error.message) return null
+  const parsed = safeJsonParse(error.message)
+  return parsed !== null && isJsonObject(parsed) ? parsed : null
+}
+
+function parseIsoMillis(value: JsonValue | undefined): number | null {
   if (typeof value !== "string" || !value) return null
   const millis = new Date(value).getTime()
   return Number.isFinite(millis) ? millis : null
@@ -101,11 +108,12 @@ export function parseResetFromText(text: string, nowMs: number = Date.now()): { 
 }
 
 export class ClaudeLimitDetector implements LimitDetector {
-  detect(chatId: string, error: AnyValue): LimitDetection | null {
+  detect(chatId: string, error: Error): LimitDetection | null {
+    const like: RateLimitErrorLike = error
     const body = parseBody(error)
-    const inner = body && isRecord(body.error) ? body.error : null
+    const inner = body && isJsonObject(body.error) ? body.error : null
     const isRateLimit = inner?.type === "rate_limit_error"
-      || (isRecord(error) && error.status === 429 && inner?.type === "rate_limit_error")
+      || (like.status === 429 && inner?.type === "rate_limit_error")
 
     if (isRateLimit) {
       const headers = extractHeaders(error)
@@ -130,11 +138,7 @@ export class ClaudeLimitDetector implements LimitDetector {
     // `Error("Claude Code returned an error result: <text>")`. Parse the
     // text directly for "You've hit your limit · resets ..." / "usage limit
     // reached|<unix>" forms.
-    const message = isRecord(error) ? error.message : null
-    if (typeof message === "string") {
-      return this.detectFromResultText(chatId, message)
-    }
-    return null
+    return this.detectFromResultText(chatId, error.message)
   }
 
   detectFromResultText(chatId: string, text: string, nowMs: number = Date.now()): LimitDetection | null {
@@ -145,8 +149,8 @@ export class ClaudeLimitDetector implements LimitDetector {
     return null
   }
 
-  detectFromSdkRateLimitInfo(chatId: string, info: AnyValue): LimitDetection | null {
-    if (!isRecord(info)) return null
+  detectFromSdkRateLimitInfo(chatId: string, info: JsonValue): LimitDetection | null {
+    if (!isJsonObject(info)) return null
     if (info.status !== "rejected") return null
     const raw = info.resetsAt
     if (typeof raw !== "number" || !Number.isFinite(raw) || raw <= 0) return null
@@ -168,10 +172,10 @@ export function parseClaudeUsageLimitPipe(text: string): number | null {
 }
 
 export class CodexLimitDetector implements LimitDetector {
-  detect(chatId: string, error: AnyValue): LimitDetection | null {
-    if (!isRecord(error)) return null
-    const rpcCode = error.code
-    const rpcData = isRecord(error.data) ? error.data : null
+  detect(chatId: string, error: Error): LimitDetection | null {
+    const like: RateLimitErrorLike = error
+    const rpcCode = like.code
+    const rpcData = like.data !== undefined && isJsonObject(like.data) ? like.data : null
     const isRateLimit = rpcData?.code === "rate_limit" || rpcCode === -32001
     if (!isRateLimit) return null
 

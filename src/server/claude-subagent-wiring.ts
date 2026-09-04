@@ -14,7 +14,7 @@
  * imported from `paths-fs.adapter` directly.
  */
 
-import type { AnyValue } from "../shared/errors"
+import type { JsonValue } from "../shared/json"
 import type {
   ClaudeDriverPreference,
   LlmProviderSnapshot,
@@ -38,6 +38,7 @@ import type { WorkflowRegistry } from "./workflow-registry"
 import type { CodexAppServerManager } from "./codex-app-server"
 import type { RealpathFn } from "./paths"
 import { resolveSubagentRoots } from "./paths"
+import { toJsonObject } from "./json-boundary"
 import { resolveProjectInstructions, resolveSpawnPaths, resolveStackProjects } from "./claude-session-config"
 import { openrouterAuthReady, claudeAuthReady } from "./provider-catalog"
 import { OAuthPoolUnavailableError } from "./oauth-errors"
@@ -92,7 +93,7 @@ export interface SubagentWiringDeps {
   oauthPool: SubagentWiringOAuthPool | null
 
   // Per-run pending resolver registry (shared with the coordinator's cancel paths)
-  subagentPendingResolvers: Map<string, { resolve: (v: AnyValue) => void; reject: (e: Error) => void }>
+  subagentPendingResolvers: Map<string, { resolve: (v: JsonValue) => void; reject: (e: Error) => void }>
 
   // IO injection — realpath wraps realpathSync but is IO; inject via deps
   realpath: RealpathFn
@@ -214,7 +215,7 @@ export function buildSubagentProviderRunForChat(
         )
       : null
 
-  const onToolRequest = async (request: HarnessToolRequest): Promise<AnyValue> => {
+  const onToolRequest = async (request: HarnessToolRequest): Promise<JsonValue> => {
     if (
       request.tool.toolKind !== "ask_user_question" &&
       request.tool.toolKind !== "exit_plan_mode"
@@ -233,11 +234,11 @@ export function buildSubagentProviderRunForChat(
       runId: args.runId,
       toolUseId,
       toolKind: request.tool.toolKind,
-      input: request.tool.input,
+      input: toJsonObject(request.tool.input),
     })
     deps.emitStateChange(args.chatId)
     deps.subagentOrchestrator.notifySubagentToolPending(args.runId)
-    return await new Promise<AnyValue>((resolve, reject) => {
+    return await new Promise<JsonValue>((resolve, reject) => {
       // Defensive: if `canUseTool` somehow fires twice for the same
       // (chatId, runId, toolUseId) — e.g. SDK retry — reject the previous
       // resolver before overwriting so its Promise doesn't leak.

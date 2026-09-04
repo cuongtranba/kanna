@@ -1,3 +1,4 @@
+import { type JsonObject, type JsonArray } from "./json"
 /**
  * Transcript entry shapes and the TranscriptEntry union — extracted from shared/types.ts.
  * Imported via the re-export barrel in types.ts; all external consumers
@@ -74,7 +75,7 @@ interface TranscriptEntryBase {
 export interface ToolResultEntry extends TranscriptEntryBase {
   kind: "tool_result"
   toolId: string
-  content: string | Record<string, unknown> | readonly unknown[] | null
+  content: string | JsonObject | JsonArray | null
   isError?: boolean
   /**
    * Set when the original content exceeded the subagent payload cap
@@ -258,7 +259,7 @@ export interface PendingToolRequestEntry extends TranscriptEntryBase {
   kind: "pending_tool_request"
   toolRequestId: string
   toolName: string
-  arguments: Record<string, unknown>
+  arguments: JsonObject
 }
 
 export interface ToolRequestResolvedEntry extends TranscriptEntryBase {
@@ -384,7 +385,7 @@ export type HydratedTranscriptMessage =
   | ({ kind: "memory_loaded"; path: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "unknown"; json: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "auto_continue_prompt"; scheduleId: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
-  | ({ kind: "pending_tool_request"; toolRequestId: string; toolName: string; arguments: Record<string, unknown>; id: string; messageId?: string; timestamp: string; hidden?: boolean })
+  | ({ kind: "pending_tool_request"; toolRequestId: string; toolName: string; arguments: JsonObject; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "cron_armed"; jobId: string; instruction: string; mode: CronMode; scheduleText: string; scheduleHuman: string; nextFireAt: number | null; model?: string; upcomingFires?: readonly number[]; cwd?: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "cron_command_error"; message: string; input?: string; suggestion?: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "cron_run"; jobId: string; runId: string; instruction: string; spawnedChatId?: string; firedAt: number; id: string; messageId?: string; timestamp: string; hidden?: boolean })

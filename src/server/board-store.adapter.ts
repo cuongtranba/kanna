@@ -23,7 +23,8 @@ import { Database } from "bun:sqlite"
 import { mkdirSync } from "node:fs"
 import path from "node:path"
 import { LOG_PREFIX } from "../shared/branding"
-import { errorMessage, isRecord, type AnyValue } from "../shared/errors"
+import { errorMessage } from "../shared/errors"
+import { isJsonObject, type JsonObject, type JsonValue } from "../shared/json"
 import {
   decodeActor,
   decodeCardContent,
@@ -359,9 +360,10 @@ const MIGRATIONS: readonly string[] = [
  * this adapter stays a leaf that moves bytes. Invalid JSON, though, means the
  * row itself is damaged, and silently substituting a default would hide that.
  */
-function parseJson(text: string, label: string): AnyValue {
+function parseJson(text: string, label: string): JsonValue {
   try {
-    return JSON.parse(text)
+    const parsed: JsonValue = JSON.parse(text)
+    return parsed
   } catch (error) {
     throw new BoardStoreError("conflict", `stored ${label} is not valid JSON: ${errorMessage(error)}`)
   }
@@ -444,8 +446,8 @@ function toTemplate(row: TemplateRow): BoardTemplate {
 }
 
 
-function decodeSourceRef(value: AnyValue): RemoteSourceRef {
-  if (isRecord(value)) {
+function decodeSourceRef(value: JsonValue): RemoteSourceRef {
+  if (isJsonObject(value)) {
     if (value.provider === "github-issues" && typeof value.owner === "string" && typeof value.repo === "string") {
       return { provider: "github-issues", owner: value.owner, repo: value.repo }
     }
@@ -468,8 +470,8 @@ function decodeSourceRef(value: AnyValue): RemoteSourceRef {
   return { provider: "github-issues", owner: "", repo: "" }
 }
 
-function decodeWatermarks(value: AnyValue): Record<string, number> {
-  if (!isRecord(value)) return {}
+function decodeWatermarks(value: JsonValue): Record<string, number> {
+  if (!isJsonObject(value)) return {}
   const marks: Record<string, number> = {}
   for (const [field, mark] of Object.entries(value)) {
     if (typeof mark === "number" && Number.isFinite(mark)) marks[field] = mark
@@ -510,7 +512,7 @@ function toOutbox(row: OutboxRow): SyncOutboxEntry {
     cardId: row.card_id,
     bindingId: row.binding_id,
     op: isOutboxOp(row.op) ? row.op : "update",
-    payload: isRecord(payload) ? decodeOutboxPayload(payload) : {},
+    payload: isJsonObject(payload) ? decodeOutboxPayload(payload) : {},
     origin: decodeActor(parseJson(row.origin, "outbox origin")),
     attempts: row.attempts,
     nextAttemptAt: row.next_attempt_at,
@@ -520,7 +522,7 @@ function toOutbox(row: OutboxRow): SyncOutboxEntry {
 }
 
 function decodeOutboxPayload(
-  raw: Record<string, AnyValue>,
+  raw: JsonObject,
 ): Record<string, FieldValue | string | number | boolean | null> {
   const payload: Record<string, FieldValue | string | number | boolean | null> = {}
   for (const [key, value] of Object.entries(raw)) {

@@ -1,12 +1,12 @@
 import type { OpenRouterModel } from "../shared/types"
-import type { AnyValue } from "../shared/errors"
+import { isJsonObject, type JsonValue } from "../shared/json"
 
 interface RawModelPricing {
-  prompt?: AnyValue
-  completion?: AnyValue
+  prompt?: JsonValue
+  completion?: JsonValue
 }
 
-function toRate(value: AnyValue): number | null {
+function toRate(value: JsonValue | undefined): number | null {
   if (typeof value === "number") {
     return Number.isFinite(value) && value >= 0 ? value : null
   }
@@ -29,19 +29,18 @@ function parsePricing(
   return { promptPerTok: prompt, completionPerTok: completion }
 }
 
-import { isRecord } from "../shared/errors"
-
-export function parseOpenRouterModels(raw: AnyValue): OpenRouterModel[] {
-  if (!isRecord(raw)) return []
+export function parseOpenRouterModels(raw: JsonValue): OpenRouterModel[] {
+  if (!isJsonObject(raw)) return []
   const { data } = raw
   if (!Array.isArray(data)) return []
   const out: OpenRouterModel[] = []
   for (const entry of data) {
-    if (!isRecord(entry)) continue
+    if (!isJsonObject(entry)) continue
     if (typeof entry.id !== "string") continue
     const params = Array.isArray(entry.supported_parameters) ? entry.supported_parameters : []
     if (!params.includes("tools")) continue
-    const pricing = parsePricing(isRecord(entry.pricing) ? { prompt: entry.pricing.prompt, completion: entry.pricing.completion } : undefined)
+    const rawPricing = entry.pricing
+    const pricing = parsePricing(isJsonObject(rawPricing) ? { prompt: rawPricing.prompt, completion: rawPricing.completion } : undefined)
     out.push({
       id: entry.id,
       label: typeof entry.name === "string" && entry.name.length > 0 ? entry.name : entry.id,
@@ -53,7 +52,7 @@ export function parseOpenRouterModels(raw: AnyValue): OpenRouterModel[] {
 }
 
 export interface OpenRouterModelCacheDeps {
-  fetchRaw: () => Promise<unknown>
+  fetchRaw: () => Promise<JsonValue>
   ttlMs: number
   now: () => number
 }

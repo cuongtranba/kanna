@@ -1,3 +1,4 @@
+import type { JsonObject } from "../shared/json"
 import type { UpdateInstallResult, UpdateSnapshot } from "../shared/types"
 import { UpdateInstallError, type UpdateChecker, type UpdateReloader } from "./update-strategy"
 
@@ -8,7 +9,7 @@ export interface UpdateManagerDeps {
   checker: UpdateChecker
   reloader: UpdateReloader
   devMode?: boolean
-  trackEvent?: (eventName: string, properties?: Record<string, unknown>) => void
+  trackEvent?: (eventName: string, properties?: JsonObject) => void
 }
 
 export class UpdateManager {

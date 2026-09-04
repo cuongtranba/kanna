@@ -18,7 +18,7 @@ import * as reactQueryModule from "@tanstack/react-query"
 import * as reactModule from "react"
 import * as reactJsxRuntimeModule from "react/jsx-runtime"
 import * as zodModule from "zod"
-import { type AnyValue } from "../../shared/errors"
+import { type LoadedModule } from "../../shared/dynamic-module"
 import { CLIENT_HOST_MODULES, hostModuleUnavailableMessage } from "../../shared/plugins/host-modules"
 
 // `@kanna/plugin` carries no client runtime today — plugin code only ever
@@ -26,9 +26,9 @@ import { CLIENT_HOST_MODULES, hostModuleUnavailableMessage } from "../../shared/
 // compiler elides, so nothing has called `require("@kanna/plugin")` yet.
 // Reserved in the ABI (and here) for the runtime helpers a later P5/P6-UI
 // chunk adds (theme access, contribution registry hooks).
-const KANNA_PLUGIN_RUNTIME: Readonly<Record<string, AnyValue>> = {}
+const KANNA_PLUGIN_RUNTIME: Readonly<Record<string, LoadedModule>> = {}
 
-const HOST_MODULE_INSTANCES: Readonly<Record<string, AnyValue>> = {
+const HOST_MODULE_INSTANCES: Readonly<Record<string, LoadedModule>> = {
   "@kanna/plugin": KANNA_PLUGIN_RUNTIME,
   react: reactModule,
   "react/jsx-runtime": reactJsxRuntimeModule,
@@ -37,12 +37,12 @@ const HOST_MODULE_INSTANCES: Readonly<Record<string, AnyValue>> = {
 }
 
 export interface PluginHostRegistry {
-  require(name: string): AnyValue
+  require(name: string): LoadedModule
 }
 
 export function createPluginHostRegistry(): PluginHostRegistry {
   return {
-    require(name: string): AnyValue {
+    require(name: string): LoadedModule {
       if (!CLIENT_HOST_MODULES.includes(name) || !(name in HOST_MODULE_INSTANCES)) {
         throw new Error(hostModuleUnavailableMessage(name))
       }

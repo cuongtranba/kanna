@@ -21,11 +21,12 @@
  */
 
 import reactUseWebSocketDefault from "react-use-websocket"
-import { isRecord, type AnyValue } from "../../shared/errors"
+import { type LoadedModule } from "../../shared/dynamic-module"
+import { isRecord } from "../../shared/errors"
 
 type UseWebSocket = typeof reactUseWebSocketDefault
 
-const isHook = (value: AnyValue): value is UseWebSocket => typeof value === "function"
+const isHook = (value: LoadedModule): value is UseWebSocket => typeof value === "function"
 
 /**
  * Under Node/rolldown interop the binding is `module.exports`, whose own `default` is the
@@ -33,7 +34,7 @@ const isHook = (value: AnyValue): value is UseWebSocket => typeof value === "fun
  * shape, so a value matching neither means the package's entry changed — which throws here,
  * naming the cause, rather than surfacing as an unreadable minified TypeError at first render.
  */
-function resolveUseWebSocket(binding: AnyValue): UseWebSocket {
+function resolveUseWebSocket(binding: LoadedModule): UseWebSocket {
   if (isRecord(binding) && isHook(binding.default)) return binding.default
   if (isHook(binding)) return binding
   throw new Error(

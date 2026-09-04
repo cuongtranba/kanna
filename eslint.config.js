@@ -6,21 +6,62 @@ import globals from "globals"
 const stylistic = ["warn"]
 const strict = ["error"]
 
-// Type-strictness: ban `any` (via @typescript-eslint/no-explicit-any), all
-// `as` casts, and the `unknown` keyword. `as const` is explicitly exempted by
-// the selector. `catch (e)` (no `unknown` keyword) is untouched.
+// Type-strictness: ban `any` (via @typescript-eslint/no-explicit-any), BOTH cast
+// spellings, and every spelling of an untyped value. `as const` is exempted by
+// the selector. `catch (e)` (no annotation) is untouched.
+//
+// These rules count the CONCEPT, not one keyword — the lesson `deps-bundles`
+// records in CLAUDE.md. The predecessor `unknown` ban selected
+// `TSTypeAnnotation > TSUnknownKeyword`, i.e. a DIRECT annotation only, so
+// `unknown | null`, `unknown[]`, `Record<string, unknown>` and `Promise<unknown>`
+// were all legal — 274 of them in production, including `error: unknown | null`
+// in shared/types.ts, a one-token evasion of the exact rule. The gap also grew
+// its own institution: `export type AnyValue = unknown`, which reached 458 sites
+// across 120 files while satisfying the rule perfectly.
 const AS_CAST_BAN = {
   selector:
     "TSAsExpression:not([typeAnnotation.type='TSTypeReference'][typeAnnotation.typeName.name='const'])",
   message:
     "Type assertions (`x as T`) are banned. Use `satisfies`, a type guard (`isX(v): v is X`), or proper generics. `as const` is allowed.",
 }
-const UNKNOWN_BAN = {
-  selector: "TSTypeAnnotation > TSUnknownKeyword",
+// `<T>x` is the same assertion in the other spelling, and AS_CAST_BAN never saw
+// it: four sat in production (history-primer, kanna-mcp-http,
+// claude-session-parser, codex-app-server) for as long as that rule existed.
+const ANGLE_CAST_BAN = {
+  selector: "TSTypeAssertion",
   message:
-    "`unknown` is banned. Route boundary values through a typed guard, or narrow errors via src/shared/errors.ts `toError()`.",
+    "Angle-bracket assertions (`<T>x`) are banned exactly as `x as T` is. Use a type guard, `satisfies`, or proper generics.",
 }
-const TYPE_STRICT_SYNTAX = [AS_CAST_BAN, UNKNOWN_BAN]
+const UNKNOWN_BAN = {
+  selector: "TSUnknownKeyword",
+  message:
+    "`unknown` is banned in EVERY position — annotation, union member, generic argument, array element. Use JsonValue/JsonObject/JsonArray (src/shared/json.ts) for a JSON boundary, a type predicate for another boundary, or toError() for a caught value.",
+}
+// Bans re-inventing `AnyValue`, and confines the two sanctioned aliases to the
+// files that genuinely load host values. `LoadedModule`/`HostBag` differ from
+// `AnyValue` only because spreading them costs a visible diff to this list.
+const UNTYPED_ALIAS_BAN = {
+  selector: "TSTypeReference > Identifier[name=/^(AnyValue|LoadedModule|HostBag)$/]",
+  message:
+    "`AnyValue` is deleted — it was an alias for `unknown` that existed only to evade the unknown ban, which is a rename of the defect rather than a removal. Use JsonValue (src/shared/json.ts). `LoadedModule`/`HostBag` are for dynamic module namespaces only, in the files listed in eslint.config.js.",
+}
+const TYPE_STRICT_SYNTAX = [AS_CAST_BAN, ANGLE_CAST_BAN, UNKNOWN_BAN, UNTYPED_ALIAS_BAN]
+
+// The complete list of files permitted to name a dynamically loaded host value
+// (`src/shared/dynamic-module.ts` itself is covered by the chokepoint override
+// below). Adding one is the review moment `AnyValue` never had. Split by layer
+// because the two compose different rule sets — see the overrides.
+const SHARED_CLIENT_DYNAMIC_MODULE_FILES = [
+  "src/client/plugins/evaluatePlugin.ts",
+  "src/client/plugins/hostModuleRegistry.ts",
+  "src/client/lib/useWebSocket.ts",
+]
+const SERVER_OPS_DYNAMIC_MODULE_FILES = [
+  "src/server/mermaid-parse.adapter.ts",
+  "src/server/plugins/plugin-child-entry.adapter.ts",
+  "src/ops/architecture/budget-scan.adapter.ts",
+  "src/ops/architecture/cjs-interop-scan.adapter.ts",
+]
 
 // Side-effect seal for shared/client (extracted so overrides can recompose it).
 const SHARED_CLIENT_SEAL_SYNTAX = [
@@ -316,7 +357,7 @@ export default tseslint.config(
       "src/client/lib/testing/**",
     ],
     rules: {
-      complexity: ["error", { max: 132 }],
+      complexity: ["error", { max: 131 }],
       "max-params": ["error", { max: 12 }],
       "max-depth": ["error", { max: 7 }],
       "max-nested-callbacks": ["error", { max: 4 }],
@@ -370,12 +411,60 @@ export default tseslint.config(
     files: ["src/shared/log.ts"],
     rules: { "no-console": "off" },
   },
-  // Sanctioned `unknown` chokepoint: toError(e: unknown) narrows boundary
-  // errors. Keeps the as-ban + seal, drops only the unknown-keyword ban.
+  // The two sanctioned `unknown` chokepoints, each naming ONE kind of untyped
+  // value rather than "anything at all":
+  //   errors.ts        — a thrown value, narrowed by toError()
+  //   dynamic-module.ts — an import()/require() namespace or a globalThis slot
+  // Both keep the cast bans and the seal; only the unknown-keyword ban drops.
+  // Both are in src/shared, so they keep the shared/client seal; they drop the
+  // unknown ban (that is their job) and the alias ban (dynamic-module.ts's
+  // `HostBag` references `LoadedModule`).
   {
-    files: ["src/shared/errors.ts"],
+    files: ["src/shared/errors.ts", "src/shared/dynamic-module.ts"],
     rules: {
-      "no-restricted-syntax": ["error", ...SHARED_CLIENT_SEAL_SYNTAX, AS_CAST_BAN],
+      "no-restricted-syntax": ["error", ...SHARED_CLIENT_SEAL_SYNTAX, AS_CAST_BAN, ANGLE_CAST_BAN],
+    },
+  },
+  // Files that genuinely load a host value may NAME the alias. They still may
+  // not write the `unknown` keyword, so the type must come from the chokepoint.
+  // Split by layer because each layer composes a different rule set: shared and
+  // client carry the side-effect seal, while server and ops do not (`src/ops/**`
+  // is deliberately outside it — budget-scan.adapter.ts reads the filesystem).
+  {
+    files: SHARED_CLIENT_DYNAMIC_MODULE_FILES,
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        ...SHARED_CLIENT_SEAL_SYNTAX,
+        AS_CAST_BAN,
+        ANGLE_CAST_BAN,
+        UNKNOWN_BAN,
+      ],
+    },
+  },
+  {
+    files: SERVER_OPS_DYNAMIC_MODULE_FILES,
+    rules: {
+      "no-restricted-syntax": ["error", AS_CAST_BAN, ANGLE_CAST_BAN, UNKNOWN_BAN],
+    },
+  },
+  // Sanctioned LIBRARY-INTEROP chokepoint, and the only one.
+  //
+  // The Agent SDK types a tool's zod shape against its own `AnyZodRawShape`
+  // while the MCP SDK's `registerTool` wants `ZodRawShapeCompat`. Both describe
+  // the same runtime object — a single zod 4.5.4 is installed, so this is not a
+  // duplicate-copy problem — but neither package's type is assignable to the
+  // other's, and no guard can prove a structural claim about a third party's
+  // branded types. The assertion is unavoidable; its BLAST RADIUS is not.
+  //
+  // Confining it to one ~40-line module keeps `kanna-mcp-http.ts` fully gated,
+  // where the cast previously sat inline in ordinary application code. Same
+  // containment as dynamic-module.ts, and the same reason TerminalPane.tsx is
+  // exempt from the raw-hex rule for xterm's ITheme.
+  {
+    files: ["src/server/mcp-zod-compat.adapter.ts"],
+    rules: {
+      "no-restricted-syntax": ["error", AS_CAST_BAN, UNTYPED_ALIAS_BAN],
     },
   },
   // Tests + fixtures + test-helpers legitimately use console, `any`, `as`

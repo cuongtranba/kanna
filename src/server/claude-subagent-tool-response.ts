@@ -5,7 +5,7 @@
  * No direct IO — all side-effects are injected via SubagentToolResponseDeps.
  */
 
-import type { AnyValue } from "../shared/errors"
+import type { JsonObject, JsonValue } from "../shared/json"
 import type { SubagentRunEvent } from "./events"
 
 // ---------------------------------------------------------------------------
@@ -28,7 +28,7 @@ export interface SubagentToolResponseDeps {
   /** The shared in-memory resolver map owned by AgentCoordinator. */
   subagentPendingResolvers: Map<
     string,
-    { resolve: (v: AnyValue) => void; reject: (e: Error) => void }
+    { resolve: (v: JsonValue) => void; reject: (e: Error) => void }
   >
   store: SubagentToolResponseStoreDeps
   subagentOrchestrator: SubagentToolResponseOrchestratorDeps
@@ -44,7 +44,7 @@ export type RespondSubagentToolCommand = {
   chatId: string
   runId: string
   toolUseId: string
-  result: Record<string, unknown>
+  result: JsonObject
 }
 
 export type CancelSubagentRunCommand = {

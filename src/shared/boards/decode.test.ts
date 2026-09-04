@@ -1,3 +1,4 @@
+import type { JsonValue } from "../json"
 import { describe, expect, test } from "bun:test"
 import type { CardContent, FieldDef, FieldValue } from "./types"
 import {
@@ -419,7 +420,7 @@ describe("decodeFieldDefsForWrite", () => {
    * so the sender learns its change did not land.
    */
   test("refuses where decodeFieldDefs would drop", () => {
-    const ragged = [{ id: "ok", label: "Ok", kind: "text", options: null, required: false }, { id: 7 }]
+    const ragged: JsonValue = [{ id: "ok", label: "Ok", kind: "text", options: null, required: false }, { id: 7 }]
     expect(decodeFieldDefs(ragged)).toHaveLength(1)
     expect(decodeFieldDefsForWrite(ragged)).toBeNull()
   })

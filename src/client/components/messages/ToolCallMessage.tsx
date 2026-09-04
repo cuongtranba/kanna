@@ -1,5 +1,4 @@
 import { GitBranch, UserRound, X } from "lucide-react"
-import type { AnyValue } from "../../../shared/errors"
 import { isRecord } from "../../../shared/errors"
 import type { ProcessedToolCall } from "./types"
 import { MetaRow, MetaLabel, MetaCodeBlock, ExpandableRow, VerticalLineContainer, getToolIcon, LucideIconWrapper } from "./shared"
@@ -27,15 +26,9 @@ type ReadImageBlock = {
   mimeType?: string
 }
 
-function extractReadImageBlocks(value: AnyValue): ReadImageBlock[] {
-  let blocks: AnyValue[]
-  if (isRecord(value) && Array.isArray(value.content)) {
-    blocks = value.content
-  } else if (Array.isArray(value)) {
-    blocks = value
-  } else {
-    blocks = []
-  }
+function extractReadImageBlocks(value: ProcessedToolCall["rawResult"]): ReadImageBlock[] {
+  const wrapped = isRecord(value) && Array.isArray(value.content) ? value.content : null
+  const blocks = wrapped ?? (Array.isArray(value) ? value : [])
 
   return blocks.flatMap((block) => {
     if (!block || typeof block !== "object" || !("type" in block) || block.type !== "image") {

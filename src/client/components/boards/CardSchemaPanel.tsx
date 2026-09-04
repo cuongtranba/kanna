@@ -12,7 +12,28 @@ import {
   type FieldKind,
   type FieldOption,
 } from "../../../shared/boards/types"
-import { errorMessage, type AnyValue } from "../../../shared/errors"
+import { onRejected } from "../../../shared/errors"
+import type { JsonArray, JsonValue } from "../../../shared/json"
+import type { ClientCommand } from "../../../shared/protocol"
+
+/**
+ * The schema goes over the wire as `JsonValue`, and an interface is never
+ * assignable to `JsonObject` (TypeScript gives interfaces no implicit index
+ * signature), so the write is spelled out field by field. That also pins the
+ * wire shape: adding a member to `FieldDef` is a decision to make here, not a
+ * silent widening of what the server receives.
+ */
+function encodeFieldDefs(fields: readonly FieldDef[]): JsonArray {
+  return fields.map((field) => ({
+    id: field.id,
+    label: field.label,
+    kind: field.kind,
+    options: field.options
+      ? field.options.map((option) => ({ id: option.id, label: option.label, colorToken: option.colorToken }))
+      : null,
+    required: field.required,
+  }))
+}
 
 /**
  * What every card on this board HAS.
@@ -29,7 +50,7 @@ import { errorMessage, type AnyValue } from "../../../shared/errors"
  */
 
 export interface CardSchemaPanelSocket {
-  command<TResult = AnyValue>(command: AnyValue): Promise<TResult>
+  command<TResult = JsonValue>(command: ClientCommand): Promise<TResult>
 }
 
 export interface CardSchemaPanelProps {
@@ -73,14 +94,14 @@ export function CardSchemaPanel({ boardId, socket, onClose }: CardSchemaPanelPro
     const state = store()
     state.beginSave()
     void socket
-      .command({ type: "board.update", boardId, cardFields: state.draft })
+      .command({ type: "board.update", boardId, cardFields: encodeFieldDefs(state.draft) })
       .then(() => {
         store().endSave(null)
         onClose()
       })
-      .catch((cause: AnyValue) => {
-        store().endSave(errorMessage(cause))
-      })
+      .catch(onRejected((error) => {
+        store().endSave(error.message)
+      }))
   }, [boardId, onClose, socket])
 
   const missing = missingLoadBearingIds(draft)

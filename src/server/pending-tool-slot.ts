@@ -30,7 +30,7 @@
  * Side-effect seal: no IO. Resolving a promise is pure continuation passing.
  */
 import type { AgentProvider, NormalizedToolCall } from "../shared/types"
-import type { AnyValue } from "../shared/errors"
+import type { JsonObject, JsonValue } from "../shared/json"
 import { discardedToolResult } from "./claude-sdk-queue"
 
 export interface ParkedTool {
@@ -38,7 +38,7 @@ export interface ParkedTool {
   provider: AgentProvider
   tool: NormalizedToolCall & { toolKind: "ask_user_question" | "exit_plan_mode" }
   parkedAt: number
-  resolve: (result: AnyValue) => void
+  resolve: (result: JsonValue) => void
 }
 
 export class PendingToolSlots {
@@ -76,7 +76,7 @@ export class PendingToolSlots {
     return parked
   }
 
-  discard(chatId: string): { parked: ParkedTool; result: Record<string, unknown> } | null {
+  discard(chatId: string): { parked: ParkedTool; result: JsonObject } | null {
     const parked = this.slots.get(chatId)
     if (!parked) return null
     this.slots.delete(chatId)

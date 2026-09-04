@@ -1,3 +1,4 @@
+import type { JsonObject } from "../shared/json"
 import { ANALYTICS_ENDPOINT } from "../shared/analytics"
 import { PROD_SERVER_PORT } from "../shared/ports"
 import type { ShareMode } from "../shared/share"
@@ -8,7 +9,7 @@ interface AnalyticsRequestBody {
   environment: AnalyticsEnvironment
   event: {
     name: string
-    properties: Record<string, unknown>
+    properties: JsonObject
   }
 }
 
@@ -29,7 +30,7 @@ function isAnalyticsLoggingEnabled() {
 }
 
 export interface AnalyticsReporter {
-  track: (eventName: string, properties?: Record<string, unknown>) => void
+  track: (eventName: string, properties?: JsonObject) => void
   trackLaunch: (options: LaunchAnalyticsOptions) => void
 }
 
@@ -62,7 +63,7 @@ export class KannaAnalyticsReporter implements AnalyticsReporter {
     this.fetchImpl = args.fetchImpl ?? fetch
   }
 
-  track(eventName: string, properties?: Record<string, unknown>) {
+  track(eventName: string, properties?: JsonObject) {
     const { analyticsEnabled, analyticsUserId } = this.settings.getState()
     if (!analyticsEnabled || !analyticsUserId) {
       return
@@ -104,7 +105,7 @@ export class KannaAnalyticsReporter implements AnalyticsReporter {
     this.track("app_launch", getLaunchAnalyticsProperties(options))
   }
 
-  private buildEventProperties(properties?: Record<string, unknown>) {
+  private buildEventProperties(properties?: JsonObject) {
     return {
       current_version: this.currentVersion,
       environment: this.environment,

@@ -1,5 +1,5 @@
 import type { ZodType } from "zod"
-import { isRecord, type AnyValue } from "../../shared/errors"
+import { isJsonObject, safeJsonParse, type JsonObject, type JsonValue } from "../../shared/json"
 
 /**
  * The runtime shape `defineRpc({name, input, output})` produces — data only,
@@ -12,8 +12,11 @@ import { isRecord, type AnyValue } from "../../shared/errors"
  */
 export interface PluginRpcContract {
   readonly name: string
-  readonly input: ZodType
-  readonly output: ZodType
+  // Parameterized on JsonValue because these payloads cross a JSON socket: an
+  // unparameterized `ZodType` infers its parsed data as `unknown`, which is
+  // exactly the untyped hole this codebase no longer allows.
+  readonly input: ZodType<JsonValue>
+  readonly output: ZodType<JsonValue>
 }
 
 // Generic so the caller gets back the concrete schema types, not the erased
@@ -28,35 +31,31 @@ export interface PluginHostCallMessage {
   readonly type: "call"
   readonly id: string
   readonly method: string
-  readonly params: AnyValue
+  readonly params: JsonValue
 }
 
 /** Sent child → host over the plugin RPC socket, one JSON object per line. */
 export type PluginChildMessage =
   | { readonly type: "ready" }
-  | { readonly type: "result"; readonly id: string; readonly ok: true; readonly output: AnyValue }
+  | { readonly type: "result"; readonly id: string; readonly ok: true; readonly output: JsonValue }
   | { readonly type: "result"; readonly id: string; readonly ok: false; readonly error: string }
 
 export function encodePluginLine(message: PluginHostCallMessage | PluginChildMessage): string {
   return `${JSON.stringify(message)}\n`
 }
 
-function readString(source: Record<string, AnyValue>, key: string): string | null {
+function readString(source: JsonObject, key: string): string | null {
   const value = source[key]
   return typeof value === "string" ? value : null
 }
 
-function parseJsonLine(line: string): AnyValue {
-  try {
-    return JSON.parse(line)
-  } catch {
-    return null
-  }
+function parseJsonLine(line: string): JsonValue | null {
+  return safeJsonParse(line)
 }
 
 export function parsePluginHostCallMessage(line: string): PluginHostCallMessage | null {
   const parsed = parseJsonLine(line)
-  if (!isRecord(parsed) || parsed.type !== "call") return null
+  if (parsed === null || !isJsonObject(parsed) || parsed.type !== "call") return null
   const id = readString(parsed, "id")
   const method = readString(parsed, "method")
   if (id === null || method === null) return null
@@ -65,7 +64,7 @@ export function parsePluginHostCallMessage(line: string): PluginHostCallMessage 
 
 export function parsePluginChildMessage(line: string): PluginChildMessage | null {
   const parsed = parseJsonLine(line)
-  if (!isRecord(parsed)) return null
+  if (parsed === null || !isJsonObject(parsed)) return null
   if (parsed.type === "ready") return { type: "ready" }
   if (parsed.type !== "result") return null
   const id = readString(parsed, "id")

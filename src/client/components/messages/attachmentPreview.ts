@@ -1,4 +1,4 @@
-import type { AnyValue } from "../../../shared/errors"
+import { toError } from "../../../shared/errors"
 import type { ChatAttachment } from "../../../shared/types"
 import type { DomPort } from "../../ports/domPort"
 import type { HttpPort } from "../../ports/httpPort"
@@ -174,11 +174,11 @@ export async function fetchTextPreview(
       signal: controller?.signal,
       http: ports.http,
     })
-  } catch (error) {
-    if (isPreviewTimeout(error)) {
-      throw new Error("Preview request timed out", { cause: error })
+  } catch (cause) {
+    if (isPreviewTimeout(toError(cause))) {
+      throw new Error("Preview request timed out", { cause })
     }
-    throw error
+    throw cause
   } finally {
     if (timeoutId !== null) {
       timer.clearTimeout(timeoutId)
@@ -243,12 +243,17 @@ function resolvePreviewUrl(url: string, dom: DomPort) {
   return new URL(url, dom.getBaseURI() || dom.getHref()).toString()
 }
 
-function isPreviewTimeout(error: AnyValue) {
+/**
+ * The abort reason reaches this as a DOMException from the fetch, or — when the
+ * timer aborts with the literal reason string — as the Error `toError` builds
+ * from that string, so the message IS the reason.
+ */
+function isPreviewTimeout(error: Error) {
   if (error instanceof DOMException && error.name === "AbortError") {
     return true
   }
 
-  return typeof error === "string" && error === "preview-timeout"
+  return error.message === "preview-timeout"
 }
 
 function parseDelimitedRows(content: string, delimiter: "," | "\t") {

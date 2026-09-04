@@ -8,7 +8,9 @@
  */
 
 import type { TranscriptEntry } from "../shared/types"
-import { type AnyValue, isRecord } from "../shared/errors"
+import { isRecord } from "../shared/errors"
+import { toJsonArray, toJsonObject } from "./json-boundary"
+import { isJsonObject, type JsonArray, type JsonObject, type JsonValue } from "../shared/json"
 import { normalizeToolCall } from "../shared/tools"
 
 // ---------------------------------------------------------------------------
@@ -28,9 +30,9 @@ function stringFromUnknown<T>(value: T): string {
   }
 }
 
-function normalizeMcpServerEntry(s: AnyValue): { name: string; status: string } {
+function normalizeMcpServerEntry(s: JsonValue): { name: string; status: string } {
   if (typeof s === "string") return { name: s, status: "connected" }
-  if (isRecord(s) && typeof s.name === "string") {
+  if (isJsonObject(s) && typeof s.name === "string") {
     return { name: s.name, status: typeof s.status === "string" ? s.status : "connected" }
   }
   return { name: String(s), status: "connected" }
@@ -58,6 +60,34 @@ export function timestamped<T extends Omit<TranscriptEntry, "_id" | "createdAt">
 // Minimal structural interface for raw SDK JSONL messages. All properties are
 // optional so that both real SDK types and partial test fixtures are assignable.
 // No `any` or `unknown` — every accessed field is typed concretely.
+/**
+ * Token counts as the SDK and the CLI JSONL write them. Both spellings really
+ * occur — the SDK emits camelCase, the JSONL wire format snake_case — which is
+ * why `normalizeClaudeUsageSnapshot` reads each field under both names.
+ */
+export interface ClaudeRawUsage {
+  input_tokens?: number
+  inputTokens?: number
+  cache_creation_input_tokens?: number
+  cacheCreationInputTokens?: number
+  cache_read_input_tokens?: number
+  cacheReadInputTokens?: number
+  output_tokens?: number
+  outputTokens?: number
+  reasoning_output_tokens?: number
+  reasoningOutputTokens?: number
+  tool_uses?: number
+  toolUses?: number
+  duration_ms?: number
+  durationMs?: number
+}
+
+/** One entry of the SDK result's `modelUsage` map. */
+export interface ClaudeRawModelUsage {
+  contextWindow?: number
+  context_window?: number
+}
+
 interface ClaudeRawContentBlock {
   type?: string
   text?: string
@@ -65,8 +95,8 @@ interface ClaudeRawContentBlock {
   signature?: string
   name?: string
   id?: string
-  // input is structurally opaque; passed straight through to normalizeToolCall
-  input?: AnyValue
+  // tool_use input: JSON the model produced, passed to normalizeToolCall
+  input?: JsonValue
   tool_use_id?: string
   // content is opaque (tool_result bodies have nested structures) — passed
   // through as-is to ToolResultEntry.content which accepts any value.
@@ -79,7 +109,7 @@ interface ClaudeRawMessageBody {
   role?: string
   model?: string
   stop_reason?: string | null
-  usage?: AnyValue
+  usage?: ClaudeRawUsage
 }
 export interface ClaudeRawSdkMessage {
   type?: string
@@ -89,7 +119,7 @@ export interface ClaudeRawSdkMessage {
   tools?: string[]
   agents?: string[]
   slash_commands?: string[]
-  mcp_servers?: AnyValue[]
+  mcp_servers?: JsonValue[]
   message?: ClaudeRawMessageBody
   isApiErrorMessage?: boolean
   apiErrorStatus?: number
@@ -106,8 +136,8 @@ export interface ClaudeRawSdkMessage {
   tasks?: { task_id?: string; task_type?: string; description?: string }[]
   durationMs?: number
   pendingWorkflowCount?: number
-  usage?: AnyValue
-  modelUsage?: AnyValue
+  usage?: ClaudeRawUsage
+  modelUsage?: Record<string, ClaudeRawModelUsage>
   // SDK rate-limit event fields
   rate_limit_info?: Record<string, string | number | boolean | null>
   session_id?: string
@@ -163,11 +193,11 @@ const POLICY_REFUSAL_TEXT_MARKERS: readonly string[] = [
 // Private normalisation helpers
 // ---------------------------------------------------------------------------
 
-export function normalizeToolContent(c: AnyValue): string | Record<string, unknown> | readonly unknown[] | null {
+export function normalizeToolContent<T>(c: T): string | JsonObject | JsonArray | null {
   if (c === null || c === undefined) return null
   if (typeof c === "string") return c
-  if (Array.isArray(c)) return c
-  if (isRecord(c)) return c
+  if (Array.isArray(c)) return toJsonArray(c)
+  if (isRecord(c)) return toJsonObject(c)
   return null
 }
 
@@ -201,7 +231,7 @@ export function normalizeClaudeStreamMessage(message: ClaudeRawSdkMessage): Tran
           ? message.slash_commands.filter((entry: string) => !entry.startsWith("._"))
           : [],
         mcpServers: Array.isArray(message.mcp_servers)
-          ? message.mcp_servers.map((s: AnyValue) => normalizeMcpServerEntry(s))
+          ? message.mcp_servers.map((s: JsonValue) => normalizeMcpServerEntry(s))
           : [],
         debugRaw,
       }),
@@ -301,7 +331,7 @@ export function normalizeClaudeStreamMessage(message: ClaudeRawSdkMessage): Tran
           tool: normalizeToolCall({
             toolName: content.name,
             toolId: content.id,
-            input: isRecord(content.input) ? content.input : {},
+            input: content.input !== undefined && isJsonObject(content.input) ? content.input : {},
           }),
           debugRaw,
         }))

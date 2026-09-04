@@ -2,6 +2,8 @@ import { LegendList, type LegendListRef } from "@legendapp/list/react"
 import { AlertTriangle, ArrowUp, Ban, Building2, Check, ChevronDown, ChevronUp, Code, Columns2, Copy, Download, Ellipsis, FileText, FolderOpen, GitBranch, GitBranchPlus, GitMerge, GitPullRequest, Globe, LoaderCircle, Lock, Minus, PencilLine, PenLine, RefreshCw, Rows3, Search, Trash2, Upload, UserRound, WrapText } from "lucide-react"
 import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, type ChangeEvent as ReactChangeEvent, type MouseEvent as ReactMouseEvent, type ReactNode, type RefObject } from "react"
 import type {
+  BranchActionFailure,
+  BranchActionSuccess,
   ChatAttachment,
   ChatBranchHistoryEntry,
   ChatBranchListEntry,
@@ -11,10 +13,10 @@ import type {
   DiffCommitResult,
   ChatMergeBranchResult,
   ChatMergePreviewResult,
+  ChatSyncResult,
   GitHubPublishInfo,
   GitHubRepoAvailabilityResult,
 } from "../../../shared/types"
-import { isRecord } from "../../../shared/errors"
 import type { DomPort } from "../../ports/domPort"
 import type { TimerPort } from "../../ports/timerPort"
 import { domAdapter } from "../../adapters/dom.adapter"
@@ -54,6 +56,12 @@ import {
 
 export { canIgnoreDiffFile, canIgnoreDiffFolder, shouldLoadDiffPatchNow }
 
+/**
+ * What every git action handed to this sidebar settles to. `null` is the
+ * host's "no active chat / the call threw and was already surfaced" answer;
+ * the sidebar only ever reads `ok` off it.
+ */
+type BranchActionResult = BranchActionSuccess | BranchActionFailure
 type DiffRenderMode = "unified" | "split"
 type DiffFile = ChatDiffSnapshot["files"][number]
 type SidebarViewMode = "changes" | "history"
@@ -97,12 +105,12 @@ interface RightSidebarProps extends DiffFileActions {
   onCheckoutBranch: (branch: ChatBranchListEntry) => Promise<void>
   onCreateBranch: () => Promise<void>
   onGenerateCommitMessage: (args: { paths: string[] }) => Promise<{ subject: string; body: string }>
-  onInitializeGit: () => Promise<unknown>
+  onInitializeGit: () => Promise<BranchActionResult | null>
   onGetGitHubPublishInfo: () => Promise<GitHubPublishInfo>
   onCheckGitHubRepoAvailability: (args: { owner: string; name: string }) => Promise<GitHubRepoAvailabilityResult>
-  onSetupGitHub: (args: { owner: string; name: string; visibility: "public" | "private"; description: string }) => Promise<unknown>
+  onSetupGitHub: (args: { owner: string; name: string; visibility: "public" | "private"; description: string }) => Promise<BranchActionResult | null>
   onCommit: (args: { paths: string[]; summary: string; description: string; mode: DiffCommitMode }) => Promise<DiffCommitResult | null>
-  onSyncWithRemote: (action: "fetch" | "pull" | "push" | "publish") => Promise<unknown>
+  onSyncWithRemote: (action: "fetch" | "pull" | "push" | "publish") => Promise<ChatSyncResult | null>
   onDiffRenderModeChange: (mode: DiffRenderMode) => void
   onWrapLinesChange: (wrap: boolean) => void
   ports?: RightSidebarPorts
@@ -255,7 +263,7 @@ function GitHubPublishModal({
   onOpenChange: (open: boolean) => void
   onGetGitHubPublishInfo: () => Promise<GitHubPublishInfo>
   onCheckGitHubRepoAvailability: (args: { owner: string; name: string }) => Promise<GitHubRepoAvailabilityResult>
-  onPublish: (args: { owner: string; name: string; visibility: "public" | "private"; description: string }) => Promise<unknown>
+  onPublish: (args: { owner: string; name: string; visibility: "public" | "private"; description: string }) => Promise<BranchActionResult | null>
   ports?: RightSidebarPorts
 }) {
   const timer = ports?.timer ?? timerAdapter
@@ -346,7 +354,7 @@ function GitHubPublishModal({
         visibility,
         description,
       })
-      if (isRecord(result) && result.ok) {
+      if (result?.ok) {
         onOpenChange(false)
       }
     } finally {

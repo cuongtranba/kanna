@@ -9,7 +9,9 @@ import { ClaudeLimitDetector } from "./auto-continue/limit-detector"
 import { CodexAppServerManager } from "./codex-app-server"
 import { readLlmProviderSnapshot } from "./llm-provider"
 import type { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
-import { type AnyValue, isRecord } from "../shared/errors"
+import { isRecord, toError } from "../shared/errors"
+import { safeJsonParse, type JsonObject, type JsonValue } from "../shared/json"
+import { toJsonValue } from "./json-boundary"
 
 let activeOAuthPool: OAuthTokenPool | null = null
 
@@ -54,7 +56,7 @@ export function envWithoutParentClaudeCode(env: NodeJS.ProcessEnv): NodeJS.Proce
 
 type JsonSchema = {
   type: "object"
-  properties: Record<string, unknown>
+  properties: JsonObject
   required?: readonly string[]
   additionalProperties?: boolean
 }
@@ -64,7 +66,7 @@ export interface StructuredQuickResponseArgs<T> {
   task: string
   prompt: string
   schema: JsonSchema
-  parse: (value: AnyValue) => T | null
+  parse: (value: JsonValue) => T | null
 }
 
 interface QuickResponseAdapterArgs {
@@ -72,10 +74,10 @@ interface QuickResponseAdapterArgs {
   readLlmProvider?: () => Promise<LlmProviderSnapshot>
   runOpenAIStructured?: (
     config: LlmProviderSnapshot,
-    args: Omit<StructuredQuickResponseArgs<AnyValue>, "parse">
-  ) => Promise<AnyValue | null>
-  runClaudeStructured?: (args: Omit<StructuredQuickResponseArgs<AnyValue>, "parse">) => Promise<AnyValue | null>
-  runCodexStructured?: (args: Omit<StructuredQuickResponseArgs<AnyValue>, "parse">) => Promise<AnyValue | null>
+    args: Omit<StructuredQuickResponseArgs<JsonValue>, "parse">
+  ) => Promise<JsonValue | null>
+  runClaudeStructured?: (args: Omit<StructuredQuickResponseArgs<JsonValue>, "parse">) => Promise<JsonValue | null>
+  runCodexStructured?: (args: Omit<StructuredQuickResponseArgs<JsonValue>, "parse">) => Promise<JsonValue | null>
 }
 
 export interface StructuredQuickResponseFailure {
@@ -92,7 +94,7 @@ export function getQuickResponseWorkspace(env: Record<string, string | undefined
   return getDataRootDir(homedir(), env)
 }
 
-function parseJsonText(value: string): unknown | null {
+function parseJsonText(value: string): JsonValue | null {
   const trimmed = value.trim()
   if (!trimmed) return null
 
@@ -103,21 +105,27 @@ function parseJsonText(value: string): unknown | null {
   }
 
   for (const candidate of candidates) {
-    try {
-      return JSON.parse(candidate)
-    } catch {
-      continue
-    }
+    const parsed = safeJsonParse(candidate)
+    if (parsed !== null) return parsed
   }
 
   return null
 }
 
-function structuredOutputFromSdkMessage(message: AnyValue): AnyValue | null {
+/**
+ * Read a structured-output payload out of one SDK message.
+ *
+ * The message is NARROWED field by field rather than encoded whole. This runs
+ * on every streamed SDK message, and only the payload it actually finds needs
+ * to become a `JsonValue` — never the assistant text and tool results sitting
+ * beside it in the same message. It used to receive `toJsonValue(message)`,
+ * which paid for the whole message on every iteration to read three fields.
+ */
+function structuredOutputFromSdkMessage<T>(message: T): JsonValue | null {
   if (!isRecord(message)) return null
 
   if (message.type === "result") {
-    return message.structured_output ?? null
+    return toJsonValue(message.structured_output)
   }
 
   const assistantMessage = message.message
@@ -128,14 +136,14 @@ function structuredOutputFromSdkMessage(message: AnyValue): AnyValue | null {
   for (const item of content) {
     if (!isRecord(item)) continue
     if (item.type === "tool_use" && item.name === "StructuredOutput") {
-      return item.input ?? null
+      return toJsonValue(item.input)
     }
   }
 
   return null
 }
 
-export async function runClaudeStructured(args: Omit<StructuredQuickResponseArgs<AnyValue>, "parse">): Promise<AnyValue | null> {
+export async function runClaudeStructured(args: Omit<StructuredQuickResponseArgs<JsonValue>, "parse">): Promise<JsonValue | null> {
   const pool = activeOAuthPool
   // Reserve under a synthetic ephemeral key so concurrent quick-response
   // calls cannot all be handed the same lowest-lastUsedAt token. The lease
@@ -176,11 +184,11 @@ export async function runClaudeStructured(args: Omit<StructuredQuickResponseArgs
   })
 
   try {
-    const result = await Promise.race<AnyValue | null>([
+    const result = await Promise.race<JsonValue | null>([
       (async () => {
         for await (const message of q) {
-          if (isRecord(message) && message.type === "rate_limit_event") {
-            const detection = detector.detectFromSdkRateLimitInfo("", message.rate_limit_info)
+          if (message.type === "rate_limit_event") {
+            const detection = detector.detectFromSdkRateLimitInfo("", toJsonValue(message.rate_limit_info))
             if (detection) {
               detectedLimit = { resetAt: detection.resetAt, tz: detection.tz }
             }
@@ -213,7 +221,7 @@ export async function runClaudeStructured(args: Omit<StructuredQuickResponseArgs
         pool.markLimited(picked.id, resetAt)
       }
     } else {
-      const authDetection = new ClaudeAuthErrorDetector().detect("", error)
+      const authDetection = new ClaudeAuthErrorDetector().detect("", toError(error))
       if (authDetection && picked && pool) {
         // Token rejected by Anthropic (401). Mark it errored so the next
         // pickActive() skips it — otherwise quick-response would keep
@@ -238,8 +246,8 @@ export async function runClaudeStructured(args: Omit<StructuredQuickResponseArgs
 
 export async function runOpenAIStructured(
   config: LlmProviderSnapshot,
-  args: Omit<StructuredQuickResponseArgs<unknown>, "parse">
-): Promise<unknown | null> {
+  args: Omit<StructuredQuickResponseArgs<JsonValue>, "parse">
+): Promise<JsonValue | null> {
   const client = new OpenAI({
     apiKey: config.apiKey,
     baseURL: config.resolvedBaseUrl,
@@ -263,8 +271,8 @@ export async function runOpenAIStructured(
 
 export async function runCodexStructured(
   codexManager: CodexAppServerManager,
-  args: Omit<StructuredQuickResponseArgs<unknown>, "parse">
-): Promise<unknown | null> {
+  args: Omit<StructuredQuickResponseArgs<JsonValue>, "parse">
+): Promise<JsonValue | null> {
   const response = await codexManager.generateStructured({
     cwd: args.cwd,
     model: "gpt-5.4-mini",
@@ -279,10 +287,10 @@ export class QuickResponseAdapter {
   private readonly readLlmProvider: () => Promise<LlmProviderSnapshot>
   private readonly runOpenAIStructured: (
     config: LlmProviderSnapshot,
-    args: Omit<StructuredQuickResponseArgs<unknown>, "parse">
-  ) => Promise<unknown | null>
-  private readonly runClaudeStructured: (args: Omit<StructuredQuickResponseArgs<unknown>, "parse">) => Promise<unknown | null>
-  private readonly runCodexStructured: (args: Omit<StructuredQuickResponseArgs<unknown>, "parse">) => Promise<unknown | null>
+    args: Omit<StructuredQuickResponseArgs<JsonValue>, "parse">
+  ) => Promise<JsonValue | null>
+  private readonly runClaudeStructured: (args: Omit<StructuredQuickResponseArgs<JsonValue>, "parse">) => Promise<JsonValue | null>
+  private readonly runCodexStructured: (args: Omit<StructuredQuickResponseArgs<JsonValue>, "parse">) => Promise<JsonValue | null>
 
   constructor(args: QuickResponseAdapterArgs = {}) {
     this.codexManager = args.codexManager ?? new CodexAppServerManager()
@@ -351,8 +359,8 @@ export class QuickResponseAdapter {
   private async tryProvider<T>(
     provider: "openai" | "claude" | "codex",
     task: string,
-    parse: (value: AnyValue) => T | null,
-    run: () => Promise<AnyValue | null>
+    parse: (value: JsonValue) => T | null,
+    run: () => Promise<JsonValue | null>
   ): Promise<{ value: T | null; failure: StructuredQuickResponseFailure | null }> {
     try {
       const result = await run()

@@ -1,7 +1,6 @@
 import path from "node:path"
 import { QuickResponseAdapter } from "./quick-response"
-import type { AnyValue } from "../shared/errors"
-import { isRecord } from "../shared/errors"
+import { isJsonObject, type JsonValue } from "../shared/json"
 
 interface CommitMessageFile {
   path: string
@@ -35,7 +34,7 @@ function limitText(value: string, maxLength: number) {
   return value.length <= maxLength ? value : `${value.slice(0, maxLength).trimEnd()}\n...[truncated]`
 }
 
-function sanitizeSubject(value: AnyValue): string | null {
+function sanitizeSubject(value: JsonValue | undefined): string | null {
   if (typeof value !== "string") return null
   const normalized = (value.split(/\r?\n/u)[0] ?? "")
     .replace(/\s+/g, " ")
@@ -46,7 +45,7 @@ function sanitizeSubject(value: AnyValue): string | null {
   return normalized.length > 0 ? normalized : null
 }
 
-function sanitizeBody(value: AnyValue): string {
+function sanitizeBody(value: JsonValue | undefined): string {
   if (typeof value !== "string") return ""
   return value.trim()
 }
@@ -100,7 +99,7 @@ export async function generateCommitMessageDetailed(
     prompt: buildCommitMessagePrompt(args),
     schema: COMMIT_MESSAGE_SCHEMA,
     parse: (value) => {
-      const output = isRecord(value) ? value : {}
+      const output = isJsonObject(value) ? value : {}
       const subject = sanitizeSubject(output.subject)
       if (!subject) return null
       return {

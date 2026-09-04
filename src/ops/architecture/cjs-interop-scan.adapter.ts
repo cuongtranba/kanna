@@ -1,7 +1,9 @@
 import { readdirSync, readFileSync } from "node:fs"
 import { createRequire } from "node:module"
 import path from "node:path"
-import { isRecord, type AnyValue } from "../../shared/errors"
+import { type LoadedModule } from "../../shared/dynamic-module"
+import { isRecord } from "../../shared/errors"
+import { isJsonObject, type JsonObject, type JsonValue } from "../../shared/json"
 import { PRODUCTION_EXCLUDES } from "./budget"
 import {
   BUNDLED_ROOTS,
@@ -34,14 +36,14 @@ export interface ScanResult {
 }
 
 /** True when the package publishes an ESM entry, which is what Vite prefers for the browser. */
-function declaresEsmEntry(manifest: Record<string, AnyValue>): boolean {
+function declaresEsmEntry(manifest: JsonObject): boolean {
   if (manifest.type === "module") return true
   if (typeof manifest.module === "string") return true
   return hasEsmCondition(manifest.exports)
 }
 
-function hasEsmCondition(exportsField: AnyValue): boolean {
-  if (!isRecord(exportsField)) return false
+function hasEsmCondition(exportsField: JsonValue): boolean {
+  if (!isJsonObject(exportsField)) return false
   for (const [key, value] of Object.entries(exportsField)) {
     if ((key === "import" || key === "module") && value !== null && value !== undefined) return true
     if (hasEsmCondition(value)) return true
@@ -55,7 +57,7 @@ function hasEsmCondition(exportsField: AnyValue): boolean {
  * that precisely — `Object.defineProperty(exports, "default", ...)`, the shape TypeScript
  * emits, is invisible to any regex over the entry text.
  */
-function classifyLoadedModule(loaded: AnyValue): PackageInterop {
+function classifyLoadedModule(loaded: LoadedModule): PackageInterop {
   const isTranspiled = isRecord(loaded)
     && loaded.__esModule === true
     && Object.prototype.hasOwnProperty.call(loaded, "default")
@@ -87,8 +89,8 @@ function classifyPackage(require: NodeRequire, root: string, specifier: string):
   const manifestPath = resolveManifest(require, root, specifier)
   if (!manifestPath) return { kind: "unknown", reason: "its package.json could not be resolved" }
 
-  const manifest: AnyValue = JSON.parse(readFileSync(manifestPath, "utf8"))
-  if (isRecord(manifest) && declaresEsmEntry(manifest)) {
+  const manifest: JsonValue = JSON.parse(readFileSync(manifestPath, "utf8"))
+  if (isJsonObject(manifest) && declaresEsmEntry(manifest)) {
     return { kind: "safe", reason: "publishes an ESM entry, so the default export is a real ESM default" }
   }
 

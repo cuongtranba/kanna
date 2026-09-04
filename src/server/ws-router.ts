@@ -1,4 +1,4 @@
-import type { AnyValue } from "../shared/errors"
+import { safeJsonParse, type JsonValue } from "../shared/json"
 import { log } from "../shared/log"
 import type { ServerWebSocket } from "bun"
 import { PROTOCOL_VERSION } from "../shared/types"
@@ -529,10 +529,8 @@ export function createWsRouter({
     pushFollowedSessions: () => broadcast.pushFollowedSessions(),
     pushCronJobs: () => broadcast.pushCronJobs(),
     async handleMessage(ws: ServerWebSocket<ClientState>, raw: string | Buffer | ArrayBuffer | Uint8Array) {
-      let parsed: AnyValue
-      try {
-        parsed = JSON.parse(String(raw))
-      } catch {
+      const parsed: JsonValue | null = safeJsonParse(String(raw))
+      if (parsed === null) {
         send(ws, { v: PROTOCOL_VERSION, type: "error", message: "Invalid JSON" })
         return
       }

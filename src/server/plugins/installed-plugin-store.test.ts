@@ -15,7 +15,7 @@ interface Written {
 function fakeSettings(initial: InstalledPluginConfig[] = []) {
   const rows = [...initial]
   const writes: Written[] = []
-  const settings: InstalledPluginSettings = {
+  const settings: InstalledPluginSettings<void> = {
     getSnapshot: () => ({ installedPlugins: rows }),
     writePatch: async (patch) => {
       writes.push(patch.installedPlugins)

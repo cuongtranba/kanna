@@ -19,7 +19,7 @@ import { deriveCronJobs } from "./read-model"
 import { timestamped } from "../claude-message-normalizer"
 
 export interface CronCommandStore {
-  appendMessage(chatId: string, entry: TranscriptEntry): Promise<unknown>
+  appendMessage(chatId: string, entry: TranscriptEntry): Promise<void>
   appendAutoContinueEvent(event: AutoContinueEvent): Promise<void>
   getAutoContinueEvents(chatId: string): AutoContinueEvent[]
 }

@@ -1,7 +1,8 @@
 import { hydrateToolResult } from "../../shared/tools"
 import type { HydratedToolCall, HydratedToolCallBase, HydratedTranscriptMessage, NormalizedToolCall, SubagentTaskResult, SubagentToolStats, TranscriptEntry } from "../../shared/types"
-import type { AnyValue } from "../../shared/errors"
-import { isRecord } from "../../shared/errors"
+import type { JsonArray, JsonObject, JsonValue } from "../../shared/json"
+import { isJsonObject } from "../../shared/json"
+import { asJsonValue } from "./asJsonValue"
 
 // Mutable view of a tool call before the result is filled in.
 // HydratedToolCall is a discriminated union; we build the base shape here
@@ -47,22 +48,31 @@ function hydrateToolCall(entry: Extract<TranscriptEntry, { kind: "tool_call" }>)
   }
 }
 
-function getStructuredToolResultFromDebug(entry: Extract<TranscriptEntry, { kind: "tool_result" }>): string | Record<string, unknown> | readonly unknown[] | null | undefined {
+function getStructuredToolResultFromDebug(
+  entry: Extract<TranscriptEntry, { kind: "tool_result" }>,
+): string | JsonObject | JsonArray | undefined {
   if (!entry.debugRaw) return undefined
 
+  let structured: JsonValue | undefined
   try {
-    const parsed = JSON.parse(entry.debugRaw)
-    return parsed?.tool_use_result ?? undefined
+    const parsed: { tool_use_result?: JsonValue } = JSON.parse(entry.debugRaw)
+    structured = parsed.tool_use_result ?? undefined
   } catch {
     return undefined
   }
+  // A bare number or boolean is not a tool result any renderer can read; the
+  // declared type never admitted one, so drop it here rather than widen.
+  if (structured === undefined || typeof structured === "number" || typeof structured === "boolean") {
+    return undefined
+  }
+  return structured
 }
 
-function num(v: AnyValue): number | undefined { return typeof v === "number" ? v : undefined }
-function str(v: AnyValue): string | undefined { return typeof v === "string" ? v : undefined }
+function num(v: JsonValue | undefined): number | undefined { return typeof v === "number" ? v : undefined }
+function str(v: JsonValue | undefined): string | undefined { return typeof v === "string" ? v : undefined }
 
-function parseSubagentToolStats(v: AnyValue): SubagentToolStats | undefined {
-  if (!isRecord(v)) return undefined
+function parseSubagentToolStats(v: JsonValue | undefined): SubagentToolStats | undefined {
+  if (v === undefined || !isJsonObject(v)) return undefined
   const r = v
   const stats: SubagentToolStats = {
     readCount: num(r.readCount),
@@ -85,14 +95,14 @@ function getSubagentTaskResultFromDebug(
   entry: Extract<TranscriptEntry, { kind: "tool_result" }>,
 ): SubagentTaskResult | undefined {
   if (!entry.debugRaw) return undefined
-  let sidecar: AnyValue
+  let sidecar: JsonValue | undefined
   try {
-    const parsed: { toolUseResult?: AnyValue } = JSON.parse(entry.debugRaw)
+    const parsed: { toolUseResult?: JsonValue } = JSON.parse(entry.debugRaw)
     sidecar = parsed.toolUseResult
   } catch {
     return undefined
   }
-  if (!isRecord(sidecar)) return undefined
+  if (sidecar === undefined || !isJsonObject(sidecar)) return undefined
   const r = sidecar
   const result: SubagentTaskResult = {
     agentId: str(r.agentId),
@@ -202,7 +212,7 @@ export function processTranscriptMessages(entries: TranscriptEntry[]): HydratedT
             // falls back to the generic subagent row.
             pendingCall.hydrated.result = getSubagentTaskResultFromDebug(entry)
           } else {
-            pendingCall.hydrated.result = hydrateToolResult(pendingCall.normalized, rawResult)
+            pendingCall.hydrated.result = hydrateToolResult(pendingCall.normalized, asJsonValue(rawResult))
           }
           pendingCall.hydrated.rawResult = rawResult
           pendingCall.hydrated.isError = entry.isError

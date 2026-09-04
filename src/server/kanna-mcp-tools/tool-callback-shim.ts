@@ -1,7 +1,6 @@
 import type { ToolCallbackService } from "../tool-callback"
 import type { ChatPermissionPolicy } from "../../shared/permission-policy"
-import type { AnyValue } from "../../shared/errors"
-import { isRecord } from "../../shared/errors"
+import { isJsonObject, type JsonObject, type JsonValue } from "../../shared/json"
 
 export interface ToolHandlerContext {
   chatId: string
@@ -15,7 +14,7 @@ export interface ToolHandlerContext {
 
 export interface ToolHandlerResult {
   // Index signature required to satisfy MCP CallToolResult shape
-  [key: string]: AnyValue
+  [key: string]: JsonValue | undefined
   content: { type: "text"; text: string }[]
   isError?: boolean
 }
@@ -24,13 +23,13 @@ export interface GatedToolCallArgs {
   toolCallback: ToolCallbackService
   toolName: string
   ctx: ToolHandlerContext
-  args: AnyValue
-  formatAnswer: (payload: AnyValue) => ToolHandlerResult | Promise<ToolHandlerResult>
+  args: JsonValue
+  formatAnswer: (payload: JsonValue | undefined) => ToolHandlerResult | Promise<ToolHandlerResult>
   formatDeny: (reason: string) => ToolHandlerResult
 }
 
 export async function gatedToolCall(args: GatedToolCallArgs): Promise<ToolHandlerResult> {
-  const submitArgs: Record<string, AnyValue> = isRecord(args.args) ? args.args : {}
+  const submitArgs: JsonObject = isJsonObject(args.args) ? args.args : {}
   const res = await args.toolCallback.submit({
     chatId: args.ctx.chatId,
     sessionId: args.ctx.sessionId,

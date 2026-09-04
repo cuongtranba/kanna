@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import type { JsonValue } from "../shared/json"
 import type { ClaudeModelOptions, Subagent, TranscriptEntry } from "../shared/types"
 import type { HarnessEvent, HarnessTurn, HarnessToolRequest } from "./harness-types"
 import type { StartCodexSessionArgs, CodexSessionScope } from "./codex-app-server"
@@ -70,7 +71,7 @@ function makeResultEvent(costUsd?: number): HarnessEvent {
 // Default fakes
 // ---------------------------------------------------------------------------
 
-const noopOnToolRequest = async (_req: HarnessToolRequest): Promise<unknown> => undefined
+const noopOnToolRequest = async (_req: HarnessToolRequest): Promise<JsonValue> => null
 
 function makeArgs(over: Partial<BuildSubagentProviderRunArgs> = {}): BuildSubagentProviderRunArgs {
   return {
@@ -329,7 +330,7 @@ describe("buildSubagentProviderRun – Claude", () => {
 
   test("forwards onToolRequest into Claude session args", async () => {
     const receivedToolRequests: HarnessToolRequest[] = []
-    let capturedOnToolRequest: ((req: HarnessToolRequest) => Promise<unknown>) | null = null
+    let capturedOnToolRequest: ((req: HarnessToolRequest) => Promise<JsonValue>) | null = null
 
     const toolRequest: HarnessToolRequest = {
       tool: {

@@ -15,10 +15,10 @@ import { Blocks } from "lucide-react"
 import { Button } from "../components/ui/button"
 import { StatusPill } from "../components/ui/status-pill"
 import { SettingsEmptyState, SettingsList } from "../components/settings/SettingsList"
-import { type AnyValue } from "../../shared/errors"
+import type { JsonValue } from "../../shared/json"
 import type { InstalledPluginConfig } from "../../shared/plugins/settings"
 
-export type PostJsonBodyFn = (url: string, body: AnyValue) => Promise<{ readonly ok: boolean }>
+export type PostJsonBodyFn = (url: string, body: JsonValue) => Promise<{ readonly ok: boolean }>
 
 export interface PluginsSectionHandlers {
   readonly onReload: (id: string) => Promise<void>

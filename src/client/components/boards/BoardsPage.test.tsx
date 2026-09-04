@@ -5,7 +5,7 @@ import "../../lib/testing/setupHappyDom"
 import { BoardsPage, type BoardsPageSocket } from "./BoardsPage"
 import { useBoardsStore } from "../../stores/boardsStore"
 import { useBoardsPageStore } from "./BoardsPage.store"
-import type { AnyValue } from "../../../shared/errors"
+import type { BoardsSnapshot, ClientCommand, SubscriptionTopic } from "../../../shared/protocol"
 
 /**
  * `BoardsPage` is the same component for a project owner and a Stack owner —
@@ -19,16 +19,16 @@ async function mount(props: {
   ownerKind: "project" | "stack"
   ownerId: string
   ownerName: string
-  onSubscribe?: (topic: AnyValue) => void
-}): Promise<{ container: HTMLDivElement; commands: AnyValue[]; unmount: () => void }> {
-  const commands: AnyValue[] = []
+  onSubscribe?: (topic: SubscriptionTopic) => void
+}): Promise<{ container: HTMLDivElement; commands: ClientCommand[]; unmount: () => void }> {
+  const commands: ClientCommand[] = []
   const socket: BoardsPageSocket = {
-    subscribe: <TSnapshot,>(topic: AnyValue, onSnapshot: (snapshot: TSnapshot) => void) => {
+    subscribe: (topic: SubscriptionTopic, onSnapshot: (snapshot: BoardsSnapshot) => void) => {
       props.onSubscribe?.(topic)
-      onSnapshot({ ownerKind: props.ownerKind, ownerId: props.ownerId, boards: [] } as TSnapshot)
+      onSnapshot({ ownerKind: props.ownerKind, ownerId: props.ownerId, boards: [] })
       return () => undefined
     },
-    command: <TResult,>(command: AnyValue) => {
+    command: <TResult,>(command: ClientCommand) => {
       commands.push(command)
       const type = (command as { type: string }).type
       return Promise.resolve((type === "board.templates.list" ? [] : undefined) as TResult)
@@ -78,16 +78,16 @@ beforeEach(() => {
 
 describe("BoardsPage owner routing", () => {
   test("subscribes to the boards topic scoped to a Stack owner, not \"project\"", async () => {
-    let subscribedTopic: AnyValue | null = null
+    const subscribedTopics: SubscriptionTopic[] = []
     const harness = await mount({
       ownerKind: "stack",
       ownerId: "stack-1",
       ownerName: "My Stack",
       onSubscribe: (topic) => {
-        subscribedTopic = topic
+        subscribedTopics.push(topic)
       },
     })
-    expect(subscribedTopic).toEqual({ type: "boards", ownerKind: "stack", ownerId: "stack-1" })
+    expect(subscribedTopics[0]).toEqual({ type: "boards", ownerKind: "stack", ownerId: "stack-1" })
     harness.unmount()
   })
 
@@ -116,16 +116,16 @@ describe("BoardsPage owner routing", () => {
   })
 
   test("a project owner still subscribes and creates under ownerKind: \"project\"", async () => {
-    let subscribedTopic: AnyValue | null = null
+    const subscribedTopics: SubscriptionTopic[] = []
     const harness = await mount({
       ownerKind: "project",
       ownerId: "proj-1",
       ownerName: "Project A",
       onSubscribe: (topic) => {
-        subscribedTopic = topic
+        subscribedTopics.push(topic)
       },
     })
-    expect(subscribedTopic).toEqual({ type: "boards", ownerKind: "project", ownerId: "proj-1" })
+    expect(subscribedTopics[0]).toEqual({ type: "boards", ownerKind: "project", ownerId: "proj-1" })
 
     await act(async () => {
       emptyBoardButton(harness.container).click()

@@ -1,5 +1,5 @@
 import { useEffect, useReducer, useRef } from "react"
-import type { AnyValue } from "../../../../../shared/errors"
+import { onRejected } from "../../../../../shared/errors"
 import { TEXT_PREVIEW_LIMIT_BYTES, fetchTextPreview } from "../../attachmentPreview"
 import type { PreviewSource } from "../types"
 
@@ -55,13 +55,13 @@ export function useTextBodyContent(source: PreviewSource): TextLoadState {
         bodyCache.set(myKey, next)
         dispatch({ payload: next, type: "setLoadState" })
       })
-      .catch((err: AnyValue) => {
+      .catch(onRejected((error) => {
         if (cancelled || currentKeyRef.current !== myKey) return
-        const msg = err instanceof Error ? err.message : "Unable to load preview."
+        const msg = error.message
         const next: TextLoadState = { status: "error", message: msg }
         bodyCache.set(myKey, next)
         dispatch({ payload: next, type: "setLoadState" })
-      })
+      }))
     return () => {
       cancelled = true
     }

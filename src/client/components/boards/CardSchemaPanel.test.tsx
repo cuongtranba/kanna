@@ -5,7 +5,7 @@ import "../../lib/testing/setupHappyDom"
 import { CardSchemaPanel, type CardSchemaPanelSocket } from "./CardSchemaPanel"
 import { useCardSchemaStore } from "./CardSchemaPanel.store"
 import type { FieldDef } from "../../../shared/boards/types"
-import type { AnyValue } from "../../../shared/errors"
+import type { ClientCommand } from "../../../shared/protocol"
 
 const FIELDS: readonly FieldDef[] = [
   { id: "description", label: "Description", kind: "longtext", options: null, required: false },
@@ -20,7 +20,7 @@ const FIELDS: readonly FieldDef[] = [
 
 interface Harness {
   container: HTMLDivElement
-  commands: AnyValue[]
+  commands: ClientCommand[]
   closed: () => number
   unmount: () => void
 }
@@ -31,10 +31,10 @@ interface Harness {
  * have.
  */
 async function mount(fields: readonly FieldDef[] = FIELDS, fail?: string): Promise<Harness> {
-  const commands: AnyValue[] = []
+  const commands: ClientCommand[] = []
   let closes = 0
   const socket: CardSchemaPanelSocket = {
-    command: <TResult,>(command: AnyValue) => {
+    command: <TResult,>(command: ClientCommand) => {
       commands.push(command)
       return fail ? Promise.reject(new Error(fail)) : (Promise.resolve(undefined) as Promise<TResult>)
     },
@@ -97,7 +97,7 @@ async function click(element: HTMLElement) {
 }
 
 /** The command the Save button produced, or null when it never ran. */
-function savedFields(commands: AnyValue[]): FieldDef[] | null {
+function savedFields(commands: ClientCommand[]): FieldDef[] | null {
   const update = commands.find((command) => (command as { type?: string }).type === "board.update")
   return (update as { cardFields?: FieldDef[] } | undefined)?.cardFields ?? null
 }

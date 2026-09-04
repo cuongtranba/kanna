@@ -17,11 +17,9 @@ import {
   PACKAGE_UPDATE_SETTINGS_DEFAULTS,
 } from "../shared/types"
 import { assertSafeSkillAgents } from "../shared/skill-agents"
-
 /** Same guard `app-settings.ts` uses: narrows to a keyed record while keeping T. */
-function isPlainObject<T>(value: T): value is T & Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-}
+import { isPlainObject } from "../shared/settings/plain-object"
+
 
 const VALID_PACKAGE_KINDS = new Set<string>(["skill", "claude-plugin", "codex-plugin"])
 

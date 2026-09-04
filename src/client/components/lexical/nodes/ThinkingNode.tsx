@@ -1,5 +1,4 @@
-import type { AnyValue } from "../../../../shared/errors"
-import type { EditorConfig, LexicalEditor, SerializedLexicalNode, Spread } from "lexical"
+import type { EditorConfig, LexicalEditor, LexicalNode, SerializedLexicalNode, Spread } from "lexical"
 import type { ReactNode } from "react"
 import { DecoratorNode, $applyNodeReplacement } from "lexical"
 import type { DomPort } from "../../../ports/domPort"
@@ -88,6 +87,6 @@ export function $createThinkingNode(content: string): ThinkingNode {
   return $applyNodeReplacement(new ThinkingNode(content))
 }
 
-export function $isThinkingNode(node: AnyValue): node is ThinkingNode {
+export function $isThinkingNode(node: LexicalNode | null | undefined): node is ThinkingNode {
   return node instanceof ThinkingNode
 }

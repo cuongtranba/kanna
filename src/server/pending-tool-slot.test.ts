@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { PendingToolSlots, type ParkedTool } from "./pending-tool-slot"
 import type { NormalizedToolCall } from "../shared/types"
-import type { AnyValue } from "../shared/errors"
+import type { JsonValue } from "../shared/json"
 
 function askTool(toolId: string): NormalizedToolCall & { toolKind: "ask_user_question" } {
   return {
@@ -17,7 +17,7 @@ function park(
   slots: PendingToolSlots,
   chatId: string,
   toolId: string,
-  onResolve?: (result: AnyValue) => void,
+  onResolve?: (result: JsonValue) => void,
 ): ParkedTool {
   return slots.park(chatId, {
     toolUseId: toolId,
@@ -40,7 +40,7 @@ describe("PendingToolSlots", () => {
 
   test("take removes and returns the slot when toolUseId matches, without resolving", () => {
     const slots = new PendingToolSlots()
-    let resolved: AnyValue = null
+    let resolved: JsonValue = null
     park(slots, "chat-1", "tool-1", (r) => { resolved = r })
     const taken = slots.take("chat-1", "tool-1")
     expect(taken?.toolUseId).toBe("tool-1")
@@ -62,12 +62,12 @@ describe("PendingToolSlots", () => {
 
   test("discard removes the slot and resolves it with the discarded payload", () => {
     const slots = new PendingToolSlots()
-    let resolved: AnyValue = null
-    park(slots, "chat-1", "tool-1", (r) => { resolved = r })
+    const resolved: JsonValue[] = []
+    park(slots, "chat-1", "tool-1", (r) => { resolved.push(r) })
     const discarded = slots.discard("chat-1")
     expect(discarded?.parked.toolUseId).toBe("tool-1")
     expect(discarded?.result).toEqual({ discarded: true, answers: {} })
-    expect(resolved).toEqual({ discarded: true, answers: {} })
+    expect(resolved[0]).toEqual({ discarded: true, answers: {} })
     expect(slots.has("chat-1")).toBe(false)
   })
 
@@ -78,10 +78,10 @@ describe("PendingToolSlots", () => {
 
   test("parking over an occupied slot discards the prior request first", () => {
     const slots = new PendingToolSlots()
-    let firstResolved: AnyValue = null
-    park(slots, "chat-1", "tool-1", (r) => { firstResolved = r })
+    const firstResolved: JsonValue[] = []
+    park(slots, "chat-1", "tool-1", (r) => { firstResolved.push(r) })
     park(slots, "chat-1", "tool-2")
-    expect(firstResolved).toEqual({ discarded: true, answers: {} })
+    expect(firstResolved[0]).toEqual({ discarded: true, answers: {} })
     expect(slots.get("chat-1")?.toolUseId).toBe("tool-2")
   })
 

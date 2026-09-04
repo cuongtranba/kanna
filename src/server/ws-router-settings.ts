@@ -119,9 +119,9 @@ export async function testOAuthToken(token: string): Promise<{ ok: boolean; erro
  * stored headers only).  A refresh failure also yields undefined, so the probe
  * surfaces the unauthorized error that correctly signals re-auth is needed.
  */
-export async function resolveMcpTestBearer(
+export async function resolveMcpTestBearer<TWriteResult>(
   entry: McpServerConfig,
-  appSettings: { writePatch(p: AppSettingsPatch): Promise<unknown> },
+  appSettings: { writePatch(p: AppSettingsPatch): Promise<TWriteResult> },
 ): Promise<string | undefined> {
   if (entry.transport === "stdio" || entry.oauth?.status !== "authenticated") return undefined
   try {
@@ -134,9 +134,9 @@ export async function resolveMcpTestBearer(
   }
 }
 
-export async function runMcpAutoTest(
+export async function runMcpAutoTest<TWriteResult>(
   id: string,
-  appSettings: { getSnapshot(): AppSettingsSnapshot; writePatch(p: AppSettingsPatch): Promise<unknown> },
+  appSettings: { getSnapshot(): AppSettingsSnapshot; writePatch(p: AppSettingsPatch): Promise<TWriteResult> },
 ): Promise<void> {
   try {
     const entry = appSettings.getSnapshot().customMcpServers.find((s) => s.id === id)
