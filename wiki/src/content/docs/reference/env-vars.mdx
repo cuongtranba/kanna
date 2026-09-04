@@ -6,7 +6,18 @@ description: All KANNA_* env vars with defaults and descriptions.
 import EnvVarTable from '../../../components/EnvVarTable.astro'
 import { envVars } from './env-vars-data'
 
-Every `KANNA_*` env var Kanna reads, auto-extracted from source.
+Every `KANNA_*` env var Kanna reads, auto-extracted from source. These are
+tuning knobs — none of them is needed for a normal install.
+
+:::caution[Port, password and data directory are not env vars]
+`KANNA_PORT`, `KANNA_PASSWORD` and `KANNA_HOME` do **not** exist. Kanna has
+never read them, and setting one does nothing.
+
+- Port and password are **CLI flags**: `kanna --port 8080 --password <secret>`.
+  See [Self-host basics](/guides/ops/self-host/).
+- The data directory is always `~/.kanna` — it follows `HOME`, so relocating it
+  means running Kanna with a different `HOME`.
+:::
 
 <EnvVarTable vars={envVars} />
 
@@ -17,3 +28,7 @@ cd wiki && bun run scripts/extract-env-vars.ts
 ```
 
 Hand-curated descriptions live in `wiki/scripts/extract-env-vars.ts` under `DESCRIPTIONS`. Vars with no description are flagged in the table.
+
+Only vars the scan actually finds in `src/` are published, so a description
+written for a var the code does not read is dropped rather than documented into
+existence. Test-only knobs are skipped.

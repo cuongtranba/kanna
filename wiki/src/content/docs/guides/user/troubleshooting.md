@@ -5,24 +5,72 @@ description: When things go wrong.
 
 ## Claude returns "Answer questions?" or appears to cancel
 
-This is the CLI auto-rejecting the native `AskUserQuestion` / `ExitPlanMode` tools. Under PTY mode Kanna passes `--disallowedTools AskUserQuestion ExitPlanMode` and force-registers the MCP shims (`mcp__kanna__ask_user_question` / `mcp__kanna__exit_plan_mode`). If you're seeing this on SDK mode, set `KANNA_MCP_TOOL_CALLBACKS=1` and restart.
+The CLI auto-rejected the native `AskUserQuestion` / `ExitPlanMode` tools. Set
+`KANNA_MCP_TOOL_CALLBACKS=1` and restart, which routes those prompts through
+Kanna's own durable approval protocol instead — see
+[Security](/features/security-sandboxing/#durable-approval-protocol).
 
-## PTY mode refuses the spawn (smoke-test failed)
+## My container or server lost all its chats on restart
 
-Each PTY spawn runs a one-shot smoke test that confirms `--disallowedTools Bash` is honored. If the probe fails (the model reached Bash, or the probe timed out), the spawn is refused on the normal spawn-error path — this is a safety gate, do not bypass. Update the `claude` CLI to the latest version and re-run; the 24 h cache is keyed on the binary sha256, so a new binary re-runs the probe. (The old 8-probe "allowlist preflight" and `KANNA_PTY_PREFLIGHT_MODEL` no longer exist.)
+Almost certainly `KANNA_HOME`. **It is not a real variable** — Kanna has never
+read it, so a container that set `ENV KANNA_HOME=/data` and mounted a volume
+there wrote its chats to the image's own home directory and lost them.
 
-## OAuth token rotated but the chat is stuck on the rate-limited one
+The data directory is always `$HOME/.kanna`. Set `HOME` instead; see
+[Docker](/guides/ops/docker/) and
+[Self-host basics](/guides/ops/self-host/#persistence). The same applies to
+`KANNA_PORT` and `KANNA_PASSWORD`, which are the `--port` and `--password`
+flags.
 
-`AgentCoordinator` picks a token per chat. If you hit a limit mid-chat, send a new turn to trigger re-pick from the pool. The rotation log is in the server stderr.
+## A token stopped being used and never came back
+
+Check its status in **Settings → Providers**. A token marked `error` is skipped
+**permanently** — unlike `limited`, it does not heal on its own. Read
+`lastErrorMessage`, fix the cause (usually a revoked or mistyped credential),
+then re-enable it. See [OAuth Pool Admin](/guides/ops/oauth-pool-admin/#status-states).
+
+## The chat is stuck on a rate-limited token
+
+Kanna binds a token per chat. Send a new turn to trigger a re-pick from the
+pool. If every token is limited, the pool has nothing eligible — add another or
+wait out the reset.
+
+## A chat is compacting way earlier than the 1M window should
+
+The context window probably fell back to 200k. The 1M window is a per-chat
+toggle on models that offer it, not a separate model
+([Providers & Models](/features/providers-models/#claude)). If you added a
+custom model entry in **Settings → Models** with the same id as a built-in,
+check that its context-window option is still set — Kanna logs a warning
+whenever the resolved window is not the requested one.
+
+## My loop stopped waking up
+
+A loop wakes on the previous iteration finishing, so a failed or interrupted
+turn can leave nothing to wake it. Ask the agent to resume it, or check the
+**Progress** panel in the chat footer for the last recorded chunk — the tracking
+file is the durable record, so nothing is lost. See [Loops](/features/loops/).
+
+## A cron job keeps reporting skips
+
+A run is a whole agent turn, so a schedule faster than the work takes will spend
+most ticks skipping. Consecutive skips collapse into one card with a count. Pick
+a cadence with the work in mind — see
+[Cron Jobs](/features/cron-jobs/#sub-minute-schedules).
 
 ## "Maximum update depth exceeded" in the browser
 
-This is React error #185 — usually a Zustand selector returning a fresh reference each call (e.g., inline `?? []`). File a bug with the chat URL.
+React error #185 — usually a store selector returning a fresh reference on every
+call (an inline `?? []`). Please file a bug with the chat URL.
 
 ## Self-update fails under pm2
 
-The host-agnostic supervisor needs `pm2` in `$PATH`. Run `which pm2` from the same shell that started Kanna. If missing, see [Ops → Self-host](/guides/ops/self-host/).
+The default strategy installs from npm and exits for the supervisor to restart;
+it needs no pm2 config. If you set `KANNA_RELOADER=pm2` you must also set
+`KANNA_REPO_DIR`, or startup fails outright. See [pm2](/guides/ops/pm2/).
 
 ## Mobile keyboard pushes content off-screen
 
-Known iOS quirk. Kanna applies `font-size: 16px` to inputs to prevent zoom and `overscroll-behavior-y: contain` to prevent pull-to-refresh. If you still see issues, report with iOS version.
+Known iOS quirk. Kanna applies `font-size: 16px` to inputs to prevent zoom and
+`overscroll-behavior-y: contain` to prevent pull-to-refresh. If you still see
+issues, report with the iOS version.

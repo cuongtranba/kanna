@@ -8,7 +8,7 @@ The Share button in a chat's header creates a public read-only link that anyone 
 ## How it works
 
 - The server projects the current event log into a frozen JSON snapshot.
-- The snapshot is stored under `~/.kanna/shares/<token>.json` (file mode `0600`).
+- The snapshot is stored under `~/.kanna/data/shares/<token>.json` (file mode `0600`).
 - The URL is `<your-origin>/share/<token>`, where `<your-origin>` is the scheme + host of the request that minted it. The 256-bit token is the credential.
 - Viewers see the chat transcript, tool calls, diffs, and terminal output. They cannot send messages.
 - **Public reachability is a deployment concern.** Kanna will happily mint a `http://localhost:3210/share/<token>` URL if that's how you're hitting the server — recipients outside your network won't be able to open it. To make share URLs work for outside recipients, run Kanna behind a Cloudflare tunnel, deploy it to a reachable VPS, or expose a port.
@@ -21,9 +21,12 @@ The Share button in a chat's header creates a public read-only link that anyone 
 
 ## Limits
 
-- 10 MB per snapshot before large bodies (diffs, terminal output) are stripped.
-- 50 MB hard cap per snapshot.
-- 1 GB total shares directory budget.
+A snapshot larger than **50 MB** is refused rather than minted. In practice that
+is a very long chat with a lot of diff and terminal output.
+
+There is no cap on the total size of the shares directory, so a habit of minting
+links and never revoking them will accumulate on disk until each one expires.
+Expired snapshots are reclaimed by the daily sweep.
 
 ## Security
 

@@ -1,6 +1,6 @@
 ---
 title: Chat & Transcript
-description: Rendering, diffs, terminal, uploads, slash commands, plan mode, subagents, background tasks, auto-continue, compaction.
+description: Rendering, diffs, terminal, uploads, slash commands, plan mode, subagents, background tasks, auto-resume, compaction.
 ---
 
 import Screenshot from '../../../components/Screenshot.astro'
@@ -57,7 +57,7 @@ nothing you arranged on a desktop becomes unreachable on a narrow screen.
 
 ## Slash commands & @-mentions
 
-The composer offers in-place pickers for slash commands, file mentions, and subagent mentions.
+The composer offers in-place pickers for slash commands, file mentions, and subagent mentions. `/clear`, `/compact` and `/cron` are Kanna's own — see [Slash commands](/features/slash-commands/).
 
 <Screenshot
   light="/screenshots/light/composer.png"
@@ -89,11 +89,15 @@ See [Subagent Delegation](/guides/user/subagents/) for the full pattern.
 
 ## Background tasks
 
-Long-running tasks are tracked out-of-band with a status indicator. Pending tool requests survive server restart and replay on reconnect (when `KANNA_MCP_TOOL_CALLBACKS=1`).
+A task the agent launches in the background — a dev server, a long build, an async agent run — appears in the chat footer with its type, description, id, and live elapsed time.
 
-## Auto-continue
+They are more than a display. A chat with a live background task is held open: Kanna will not reap the session out from under a task that is still running, which is what used to kill long jobs silently a few minutes after they went quiet. The chat also keeps showing as running while the agent works after its turn, rather than looking idle.
 
-Optionally continue a turn automatically when the agent stops short. Toggleable per-chat.
+Pending tool requests survive a server restart and replay on reconnect (with `KANNA_MCP_TOOL_CALLBACKS=1`).
+
+## Auto-resume on rate limit
+
+When a turn hits a rate limit, Kanna can schedule a "continue" for the moment the limit resets instead of asking you. Enable it under **Settings → General**; each scheduled resume is still cancellable from the chat.
 
 ## Proactive compaction
 

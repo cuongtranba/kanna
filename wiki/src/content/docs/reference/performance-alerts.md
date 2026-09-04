@@ -140,6 +140,6 @@ that looks idle in `kanna_turn_tokens_total` shows up in
 `kanna_subagent_tokens_total`. Check both before concluding an install is quiet.
 
 **A missing series means unknown, never zero.** A turn that ended without a
-result entry reports no usage, and PTY-mode turns have no price resolver wired
-at all — so `kanna_turn_cost_usd_total` is deliberately sparser than the token
-counters. Derive spend from tokens and your own rates when the cost is absent.
+result entry reports no usage, and not every provider reports a price — so
+`kanna_turn_cost_usd_total` is deliberately sparser than the token counters.
+Derive spend from tokens and your own rates when the cost is absent.
