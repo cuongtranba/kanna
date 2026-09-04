@@ -31,4 +31,11 @@ Conventional Commits style. Short subject, body if non-obvious.
 
 ## CI gates
 
-CI runs `bun run lint` then `bun test` on every push to `main` and every PR. Merges are blocked on either failure.
+Every push to `main` and every PR runs lint, the ast-grep useState gate, the
+architecture budget, the complexity-ceiling check, typecheck, the client build,
+the bundle check, and the test suite — plus gitleaks and semgrep as separate
+workflows. Merges are blocked on any failure.
+
+Run `bun run check` and `bun run test` locally first; see
+[Lint & Tests](/guides/contributing/lint-and-tests/) for the full list and what
+each gate is for.
