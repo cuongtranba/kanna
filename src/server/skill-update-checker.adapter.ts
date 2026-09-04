@@ -2,10 +2,11 @@ import { errorMessage, isRecord, type AnyValue } from "../shared/errors"
 import type { InstalledPackage, PackageUpdateChecker, PackageUpdateStatus } from "../shared/packages/types"
 import {
   resolveGitHubRepo,
-  buildEntryMap,
+  buildTreeIndex,
   classifySkillUpdate,
   type GitTreeEntry,
 } from "../shared/packages/skill-update-classifier"
+import { pickLatestSemverTag } from "../shared/packages/tag-order"
 
 // ─── Parsing helpers (type-guard based, no `as T` assertions) ───────────────
 
@@ -31,20 +32,19 @@ function parseTreeResponse(raw: AnyValue): { entries: GitTreeEntry[]; truncated:
   return { entries, truncated: isRecord(raw) && raw.truncated === true }
 }
 
-interface ParsedTag {
-  name: string
-  commitSha: string
-}
-
-function parseTags(raw: AnyValue): ParsedTag[] {
+function parseTagNames(raw: AnyValue): string[] {
   if (!Array.isArray(raw)) return []
-  const results: ParsedTag[] = []
+  const results: string[] = []
   for (const t of raw) {
     if (!isRecord(t) || typeof t.name !== "string") continue
-    if (!isRecord(t.commit) || typeof t.commit.sha !== "string") continue
-    results.push({ name: t.name, commitSha: t.commit.sha })
+    results.push(t.name)
   }
   return results
+}
+
+function parseReleaseTagName(raw: AnyValue): string | null {
+  if (!isRecord(raw)) return null
+  return typeof raw.tag_name === "string" && raw.tag_name ? raw.tag_name : null
 }
 
 // ─── Dependencies ───────────────────────────────────────────────────────────
@@ -53,7 +53,7 @@ export interface SkillCheckerDeps {
   fetchFn: (url: string | URL | Request, init?: RequestInit) => Promise<Response>
   token: string | null
   rateLimitFloor?: number // default 5
-  tagScanLimit?: number // default 10
+  tagScanLimit?: number // default 100 (one page of tags)
 }
 
 // ─── Internal cache shapes ───────────────────────────────────────────────────
@@ -95,12 +95,12 @@ function buildGitHubHeaders(token: string | null, etag: string | null): Record<s
 export function createSkillUpdateChecker(deps: SkillCheckerDeps): PackageUpdateChecker {
   const { fetchFn, token } = deps
   const rateLimitFloor = deps.rateLimitFloor ?? 5
-  const tagScanLimit = deps.tagScanLimit ?? 10
+  const tagScanLimit = deps.tagScanLimit ?? 100
 
   // ETag cache per repo: key = owner/repo
   const treeCache = new Map<string, CachedTree>()
-  // Tag resolution cache: key = `${owner/repo}:${folderSha}`
-  const tagCache = new Map<string, string | null>()
+  // Latest-release-tag cache: key = owner/repo. Holds null for "resolved, none".
+  const latestTagCache = new Map<string, string | null>()
 
   async function fetchTree(repo: string, signal: AbortSignal): Promise<TreeFetchResult> {
     const cached = treeCache.get(repo)
@@ -169,72 +169,46 @@ export function createSkillUpdateChecker(deps: SkillCheckerDeps): PackageUpdateC
     }
   }
 
-  async function resolveTagForSha(
-    repo: string,
-    folderName: string,
-    folderSha: string,
-    signal: AbortSignal,
-  ): Promise<string | null> {
-    const cacheKey = `${repo}:${folderSha}`
-    if (tagCache.has(cacheKey)) {
-      return tagCache.get(cacheKey) ?? null
-    }
-
-    if (!token) {
-      tagCache.set(cacheKey, null)
-      return null
-    }
-
-    const headers = buildGitHubHeaders(token, null)
-
-    let tagsResp: Response
+  async function fetchJson(url: string, signal: AbortSignal): Promise<AnyValue | null> {
     try {
-      tagsResp = await fetchFn(
-        `https://api.github.com/repos/${repo}/tags?per_page=${tagScanLimit}`,
-        { headers, signal },
-      )
+      const resp = await fetchFn(url, { headers: buildGitHubHeaders(token, null), signal })
+      if (!resp.ok) return null
+      return await resp.json()
     } catch {
-      tagCache.set(cacheKey, null)
       return null
     }
+  }
 
-    if (!tagsResp.ok) {
-      tagCache.set(cacheKey, null)
-      return null
+  /**
+   * The newest release tag in `repo` — the ref a pinned skill would move to.
+   *
+   * Two sources, in order: the repo's latest RELEASE (authoritative when the
+   * project publishes releases), then the highest semver tag on the first page
+   * of tags. The tag list is ordered lexicographically by GitHub, so it is read
+   * only through `pickLatestSemverTag`, never by position.
+   *
+   * Resolved at most once per repo per check, and only for pinned packages that
+   * are actually behind — an unpinned skill is fixed by a plain `skills update`
+   * and needs no tag.
+   */
+  async function resolveLatestTag(repo: string, signal: AbortSignal): Promise<string | null> {
+    const cached = latestTagCache.get(repo)
+    if (cached !== undefined) return cached
+
+    const release = parseReleaseTagName(
+      await fetchJson(`https://api.github.com/repos/${repo}/releases/latest`, signal),
+    )
+    if (release) {
+      latestTagCache.set(repo, release)
+      return release
     }
 
-    const rawTags: AnyValue = await tagsResp.json()
-    const tags = parseTags(rawTags)
-
-    for (const tag of tags.slice(0, tagScanLimit)) {
-      let treeResp: Response
-      try {
-        treeResp = await fetchFn(
-          `https://api.github.com/repos/${repo}/git/trees/${tag.commitSha}?recursive=1`,
-          { headers, signal },
-        )
-      } catch {
-        tagCache.set(cacheKey, null)
-        return null
-      }
-
-      if (!treeResp.ok) continue
-
-      const rawTree: AnyValue = await treeResp.json()
-      const parsed = parseTreeResponse(rawTree)
-      if (!parsed) continue
-
-      const match = parsed.entries.find(
-        (e) => e.type === "tree" && e.path.split("/").at(-1) === folderName && e.sha === folderSha,
-      )
-      if (match) {
-        tagCache.set(cacheKey, tag.name)
-        return tag.name
-      }
-    }
-
-    tagCache.set(cacheKey, null)
-    return null
+    const tagNames = parseTagNames(
+      await fetchJson(`https://api.github.com/repos/${repo}/tags?per_page=${tagScanLimit}`, signal),
+    )
+    const latest = pickLatestSemverTag(tagNames)
+    latestTagCache.set(repo, latest)
+    return latest
   }
 
   function unknownStatus(skill: InstalledPackage, checkedAt: number, error: string): PackageUpdateStatus {
@@ -276,7 +250,7 @@ export function createSkillUpdateChecker(deps: SkillCheckerDeps): PackageUpdateC
 
       // Skills with no valid GitHub source → classify directly (returns "unknown")
       for (const skill of noRepo) {
-        results.push(classifySkillUpdate(new Map(), false, skill, checkedAt))
+        results.push(classifySkillUpdate(buildTreeIndex([]), false, skill, checkedAt))
       }
 
       let rateLimited = false
@@ -310,22 +284,26 @@ export function createSkillUpdateChecker(deps: SkillCheckerDeps): PackageUpdateC
           continue
         }
 
-        const entryMap = buildEntryMap(treeResult.entries)
+        const index = buildTreeIndex(treeResult.entries)
 
         for (const skill of repoSkills) {
-          results.push(classifySkillUpdate(entryMap, treeResult.truncated, skill, checkedAt))
+          results.push(classifySkillUpdate(index, treeResult.truncated, skill, checkedAt))
         }
       }
 
-      // Optional tag resolution: find which tag corresponds to latestRevision
-      if (token) {
+      // Resolve the re-pin target for PINNED packages that are behind. A pinned
+      // skill is the only kind `skills update` cannot fix — it resolves upstream
+      // at the pin and exits 0 unchanged — so it is the only kind that needs a
+      // tag to move to. Skipping the rest keeps this to one repo per pinned
+      // skill instead of one per outdated skill.
+      if (!rateLimited) {
         for (const result of results) {
-          if (!result.latestRevision || result.availability === "unknown") continue
+          if (result.availability !== "outdated") continue
           const skill = skills.find((s) => s.id === result.id)
-          if (!skill) continue
+          if (!skill?.pinnedRef) continue
           const repo = resolveGitHubRepo(skill)
           if (!repo) continue
-          result.latestVersion = await resolveTagForSha(repo, skill.name, result.latestRevision, signal)
+          result.latestVersion = await resolveLatestTag(repo, signal)
         }
       }
 

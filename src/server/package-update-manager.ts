@@ -206,6 +206,10 @@ export class PackageUpdateManager {
     const candidates = this.snapshot.packages.filter((entry) => {
       if (entry.update.availability !== "outdated") return false
       if (!autoApplyKinds.includes(entry.kind)) return false
+      // A pin is an explicit decision about which version to run, and the only
+      // way to satisfy a pinned package is to REPLACE that pin. Auto-apply must
+      // not make that choice silently — only a deliberate click may move a pin.
+      if (entry.pinnedRef) return false
       const backoff = this.autoApplyBackoff.get(entry.id)
       if (!backoff) return true
       if (backoff.failures >= AUTO_APPLY_MAX_FAILURES) return false

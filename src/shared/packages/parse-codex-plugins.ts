@@ -46,6 +46,7 @@ function parseInstalledArray(
       installPath,
       versionLabel: version ?? null,
       agents: [],
+      pinnedRef: null,
     })
   }
 

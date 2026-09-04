@@ -1,13 +1,13 @@
 import { describe, test, expect } from "bun:test"
 import { PackageUpdateManager } from "./package-update-manager"
 import type { PackageUpdateManagerDeps, TimerPort } from "./package-update-manager"
-import type { PackageInventorySnapshot, PackageUpdateApplier, PackageUpdateChecker, PackageUpdateStatus, PackageApplyResult } from "../shared/packages/types"
+import type { InstalledPackage, PackageInventorySnapshot, PackageUpdateApplier, PackageUpdateChecker, PackageUpdateStatus, PackageApplyResult } from "../shared/packages/types"
 import type { PackageUpdateSettings } from "../shared/app-settings-types"
 import { PACKAGE_UPDATE_SETTINGS_DEFAULTS } from "../shared/app-settings-types"
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-function makePkg(id: string, kind: "skill" | "claude-plugin" | "codex-plugin" = "skill") {
+function makePkg(id: string, kind: "skill" | "claude-plugin" | "codex-plugin" = "skill"): InstalledPackage {
   return {
     id,
     kind,
@@ -21,6 +21,7 @@ function makePkg(id: string, kind: "skill" | "claude-plugin" | "codex-plugin" = 
     installPath: null,
     versionLabel: null,
     agents: [],
+    pinnedRef: null,
   }
 }
 
@@ -555,6 +556,40 @@ describe("PackageUpdateManager", () => {
       expect(snap.autoApplyHistory).toHaveLength(1)
       expect(snap.autoApplyHistory[0].id).toBe("skill:foo")
       expect(snap.autoApplyHistory[0].ok).toBe(true)
+    })
+
+    // Satisfying a pinned package means REPLACING the pin — an explicit choice
+    // about which version to run. Auto-apply must never make it silently.
+    test("never auto-applies a pinned package", async () => {
+      const pkg = { ...makePkg("skill:c3"), pinnedRef: "v11.12.0" }
+      const deps = makeDeps({
+        inventory: makeInventory([pkg]),
+        checkers: [makeChecker("skill", [makeStatus("skill:c3", "outdated")])],
+        appliers: [makeApplier("skill")],
+        settings: makeSettings({ autoApply: true, autoApplyKinds: ["skill"] }),
+        hasAnyChatBusy: () => false,
+      })
+      const mgr = new PackageUpdateManager(deps)
+      await mgr.checkUpdates()
+      expect(mgr.getSnapshot().autoApplyHistory).toHaveLength(0)
+    })
+
+    test("still auto-applies unpinned packages alongside a pinned one", async () => {
+      const pinned = { ...makePkg("skill:c3"), pinnedRef: "v11.12.0" }
+      const free = makePkg("skill:foo")
+      const deps = makeDeps({
+        inventory: makeInventory([pinned, free]),
+        checkers: [
+          makeChecker("skill", [makeStatus("skill:c3", "outdated"), makeStatus("skill:foo", "outdated")]),
+        ],
+        appliers: [makeApplier("skill")],
+        settings: makeSettings({ autoApply: true, autoApplyKinds: ["skill"] }),
+        hasAnyChatBusy: () => false,
+      })
+      const mgr = new PackageUpdateManager(deps)
+      await mgr.checkUpdates()
+      const history = mgr.getSnapshot().autoApplyHistory
+      expect(history.map((e) => e.id)).toEqual(["skill:foo"])
     })
 
     test("filters by autoApplyKinds — skips kinds not in list", async () => {

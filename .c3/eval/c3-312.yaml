@@ -12,3 +12,5 @@ code:
   - src/shared/packages/parse-codex-plugins.test.ts
   - src/shared/packages/skill-update-classifier.ts
   - src/shared/packages/skill-update-classifier.test.ts
+  - src/shared/packages/tag-order.ts
+  - src/shared/packages/tag-order.test.ts

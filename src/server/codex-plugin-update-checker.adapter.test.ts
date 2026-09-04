@@ -19,6 +19,7 @@ function makePlugin(overrides: Partial<InstalledPackage> = {}): InstalledPackage
     installPath: "/home/testuser/.codex/plugins/mycodexplugin",
     versionLabel: "1.2.3",
     agents: [],
+    pinnedRef: null,
     ...overrides,
   }
 }
@@ -65,6 +66,7 @@ describe("createCodexPluginUpdateChecker", () => {
       installPath: null,
       versionLabel: null,
       agents: [],
+      pinnedRef: null,
     }
     const results = await checker.check([skill], makeAbortSignal())
     expect(results).toHaveLength(0)

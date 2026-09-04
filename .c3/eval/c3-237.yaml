@@ -7,7 +7,9 @@ code:
   - src/server/package-inventory-io.adapter.test.ts
   - src/server/package-update-appliers-boot.adapter.ts
   - src/server/skill-update-checker.adapter.ts
+  - src/server/skill-update-checker.adapter.test.ts
   - src/server/skill-update-applier.adapter.ts
+  - src/server/skill-update-applier.adapter.test.ts
   - src/server/claude-plugin-update-checker.adapter.ts
   - src/server/codex-plugin-update-checker.adapter.ts
   - src/server/codex-plugin-update-applier.adapter.ts

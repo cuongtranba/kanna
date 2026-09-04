@@ -41,6 +41,7 @@ export function parseSkillLock(
     const revision = asStringOrNull(entry.skillFolderHash)
     const installedAt = asStringOrNull(entry.installedAt)
     const updatedAt = asStringOrNull(entry.updatedAt)
+    const pinnedRef = asStringOrNull(entry.ref)
 
     packages.push({
       id: `skill:${name}`,
@@ -55,6 +56,7 @@ export function parseSkillLock(
       installPath,
       versionLabel: revision ? revision.slice(0, 8) : null,
       agents: agentPresenceMap.get(name) ?? [],
+      pinnedRef,
     })
   }
 
