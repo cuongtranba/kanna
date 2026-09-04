@@ -9,10 +9,11 @@ chunks pile up and get redone).
 
 ## Handoff
 
-**Phases 1, 2 and 4 are implemented; Phase 3 has its ADR and its rollup but no
-Option A/B code.** Read the Progress log below before the plan — several plan
-details were superseded by what the implementation found, and each deviation is
-recorded there with its reason.
+**All four phases are implemented.** Phase 3's ADR is `accepted` and Option A
+(card dependencies) shipped in its three slices; Phase 4's C3 facts are authored
+and the toolchain that blocked them is unblocked. Read the Progress log below
+before the plan — several plan details were superseded by what the
+implementation found, and each deviation is recorded there with its reason.
 
 **Start here:**
 
@@ -67,32 +68,90 @@ to pass.
 
 ## Next chunk
 
-**Two blockers, then Phase 3 Option A.**
+**Nothing outstanding.** Every phase in the plan is implemented and the branch is
+green. Two follow-ups are deliberately NOT in scope here and want their own
+change:
 
-1. **Get `adr-20260904-cross-project-orchestration` accepted or rejected.** It
-   is `proposed`. No Option A code may be written until it is `accepted` — the
-   plan's own rule, and adr-20260802's lesson. If accepted, ship it in three
-   slices: the `blockedBy` edge plus its cycle check, then the Start-work gate,
-   then the drawer copy.
+1. **The `/`-catalog gap (PLAN §7.4).** The command and skill picker is
+   primary-only, so skills committed in an additional project never appear in a
+   stack chat. Fixing it changes `ProjectCommandsSnapshot`'s shape and needs its
+   own reasoning about name collisions between projects. Documented under "Known
+   limitations" on the wiki's Stacks page; no issue was filed, because opening
+   one is an outward-facing action nobody authorized on this task.
+2. **A stack-wide autonomous loop (ADR Option B).** Rejected in
+   `adr-20260904-cross-project-orchestration` with its four open contracts named.
+   If it is wanted, it is a new ADR that answers them first.
 
-2. **Unblock the C3 toolchain, which is deadlocked on damage that predates this
-   branch.** `c3x check` reports BROKEN_SEAL on `c3-116-settings-page.md`,
-   `c3-237-package-autoupdate.md` and `c3-312-packages-shared.md`; `c3x repair`
-   cannot reseal because its own check fails with 8 errors in c3-237 / c3-312
-   (missing `## Contract` and `## Derived Materials`, an invalid Governance
-   `Type` enum, a blank Notes cell). Every other c3x command needs the cache
-   rebuild that the broken seal blocks, so `c3x lookup` answers nothing for ANY
-   file right now — not just stack files.
-
-   **This is why the stacks C3 component fact (PLAN §7.1) is NOT in this
-   branch.** Hand-authoring it would add a fourth unsealed fact and make the
-   deadlock worse; adding only the `.c3/eval/c3-NNN.yaml` binding would leave a
-   reference to a fact that does not exist, which is the exact c3-235 defect
-   `CLAUDE.md` already lists as open. Fix c3-237/c3-312 first (they belong to
-   the package-auto-update feature, not to stacks), then author the fact with
-   `c3x add component` and confirm with `c3x lookup` on three `Stack*` files.
+Two smaller things a later change could pick up, both pre-existing and neither
+caused here: `c3x check`'s last remaining warning is c3-113's stale eval anchor
+(`src/client/app/KannaTranscript.store.ts` matches no files), and `.c3/` holds a
+`c3-234-.md` whose filename lost its slug.
 
 ## Progress (latest first)
+
+- 2026-09-04 **Phase 3 Option A shipped, and Phase 4 completed.** ADR
+  `adr-20260904-cross-project-orchestration` moved `proposed` → `accepted` on the
+  user's decision, and Option A landed in the three slices it prescribes. Gates:
+  `bun run check`, `bun run lint`, `bun run lint:usestate`, `bunx ast-grep test`
+  (19 passed), `bun run check:arch` (69 passed), `bun run lint:limits` ("All 4
+  ESLint ceilings are tight"), gitleaks v8.30.1 via docker ("no leaks found").
+  `bun run test` is 7868 pass / 1 fail — the `waitForTuiReadyDismissingDialogs`
+  2000 ms wall-clock flake this file already documents, in PTY code this branch
+  does not touch; the `claude-pty/` directory passes 300/300, three runs in a row.
+  - **The edge is a `card_link` row of kind `blocked_by`, not a new table.**
+    `card_link` is already keyed `(card_id, kind, target_id)` and cascades from
+    `card`, so an edge de-duplicates itself, disappears with either endpoint, and
+    needs NO migration — which matters, because `board-store.adapter.ts` sits at
+    its architecture-budget pin.
+  - **The DAG check lives in `board-registry.ts`'s `addCardLink`.** Every
+    production card-link write already comes through the registry
+    (`board-start-work.ts`, `board-worktree-cleanup.ts`, `agent-coordinator.ts`)
+    and none reaches `BoardStore` directly, so validating that one arm means no
+    caller can author an unchecked edge. Three refusals: self, cross-board, cycle.
+  - **Deviation from the plan: the gate does not fire on a card whose chat is
+    live.** Blocking DEFERS starting; a blocker added mid-flight must not strip
+    the user's way back into a running chat. A leftover WORKTREE still defers —
+    resuming it starts the work — and reports the worktree it found rather than
+    reading as though it had vanished.
+  - **A blocker clears three ways: done, archived, or gone.** Archived is
+    load-bearing because `getCard` returns archived rows: an archived blocker can
+    never reach a done column, so treating it as still-blocking would wedge its
+    dependents with no gesture left to free them. A board marking no `done`
+    column stands the gate down entirely.
+  - **`CardDetail.blockers` is the single derivation**, computed once in
+    `registry.cardDetail`, so the drawer's list and the start-work gate cannot
+    disagree about what "done" means. `board-start-work.ts` consumes it rather
+    than recomputing; `unmetBlockers` and a speculative `registry.getCard` were
+    both deleted once that landed rather than left as dead surface.
+  - **A user gesture was treated as part of the feature, not an extra.** The ADR
+    is written against `orchestration-core`'s unreachability, so a server-only
+    edge would have repeated it. `CardDependencies.tsx` is a new module; the
+    picker offers the board's LOADED pages, prop-drilled from `BoardPane` exactly
+    as `cardFields` already is. Deliberately NOT an MCP tool — an agent that can
+    author its own ordering constraints can defer its own work.
+  - Budget: no pin raised. `CardDrawer.tsx` 830 → 797 and the pin followed it
+    down, after two extractions that earn their place independently —
+    `describeWorktreeContents` moved beside `discardBlockedReason` /
+    `mergeBlockedReason` in `shared/boards/worktree-cleanup.ts`, and the drawer's
+    pure wording helpers to `lib/boards/cardDrawerText.ts`.
+  - **The C3 deadlock is cleared, and it was worse than "three broken seals".**
+    `c3x repair` could not reseal because its own check failed with 8 errors in
+    c3-237 / c3-312, and ONE unsealed fact blocks every rebuild — so `c3x lookup`
+    answered nothing for any file in the tree. Fixed by authoring the missing
+    `## Contract` / `## Derived Materials` / `## Governance` sections from the
+    code they describe. `c3x check` is now 242 docs, 0 errors, and the two
+    "layer disconnect" warnings are gone too.
+  - **Stacks got three facts, not one** — the boards precedent, because stacks
+    span three containers: `c3-238` (server), `c3-313` (shared), `c3-121`
+    (client), each with its `.c3/eval/` binding and `code-map.yaml` block.
+    `c3x lookup` resolves `claude-session-config.ts`, `stack-activity.ts` and
+    `StackBoardsRoutePage.tsx` to them. `StacksSection.tsx` matches c3-121 AND
+    c3-115, whose glob covers all of `chat-ui/**`; that pre-existing binding was
+    left alone rather than narrowed.
+  - Churn audited per `CLAUDE.md`: neither known damage pattern (`\|` collapsed
+    to `\ |`, a glob's `*` eaten as emphasis) appears. c3x DOES strip backticks
+    from ADR headings — no text lost, and restoring them would only be undone by
+    the next repair, so it stands.
 
 - 2026-09-04 **Phase 4 + Phase 3 ADR + the rollup.**
   - **Wiki:** `wiki/src/content/docs/features/stacks.md` — what a stack is, the
@@ -248,11 +307,12 @@ Detail for each item is in `PLAN-stack-multi-project.md`.
       models, prompt composition (`## Workspace instructions` rename), Codex
       parity, subagent parity, sidebar UI (§5) — ADR
       `adr-20260904-project-stack-instructions`
-- [~] **3** Cross-project orchestration — ADR written
-      (`adr-20260904-cross-project-orchestration`, **proposed**, Option A
-      recommended, Option B rejected with reasons). Stack activity rollup
-      SHIPPED. No Option A/B code: the ADR is not accepted.
-- [~] **4** Housekeeping: wiki `features/stacks.md` DONE, env table
-      regenerated DONE, binding resolvers deduplicated DONE (with Phase 2).
-      C3 component fact BLOCKED on pre-existing broken seals; `/`-catalog issue
-      NOT filed (documented in the wiki instead).
+- [x] **3** Cross-project orchestration — ADR **accepted**; Option A (card
+      `blocked_by` dependencies) shipped in three slices: the edge and its DAG
+      check, the Start-work gate, the drawer section that reads and authors it.
+      Stack activity rollup SHIPPED. Option B remains rejected with reasons.
+- [x] **4** Housekeeping: wiki `features/stacks.md` DONE (and extended with the
+      dependency gesture), env table regenerated DONE, binding resolvers
+      deduplicated DONE (with Phase 2), C3 facts `c3-238` / `c3-313` / `c3-121`
+      DONE after unblocking the toolchain. `/`-catalog issue NOT filed
+      (documented in the wiki instead) — see Next chunk.
