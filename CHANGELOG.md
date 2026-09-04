@@ -8,6 +8,23 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.47.0](https://github.com/cuongtranba/kanna/compare/v1.46.0...v1.47.0) (2026-09-04)
+
+
+### Features
+
+* **plugins:** close the last three gaps — slash commands, e2e, and C3 ([#1044](https://github.com/cuongtranba/kanna/issues/1044)) ([e05a8ce](https://github.com/cuongtranba/kanna/commit/e05a8ce5b843aad9d3e6d716f1c4f9cbef48c027))
+* **plugins:** P11 — an install survives a restart ([#1040](https://github.com/cuongtranba/kanna/issues/1040)) ([bf613b7](https://github.com/cuongtranba/kanna/commit/bf613b78da2943aa432eb7494cfb826ee24c52b0))
+* **stacks:** multi-project stacks — per-project instructions, peer-root rules, and card dependencies ([#1033](https://github.com/cuongtranba/kanna/issues/1033)) ([0d1d40d](https://github.com/cuongtranba/kanna/commit/0d1d40d9070a5b7843aa44f8a8f4855843614f2f))
+
+
+### Bug Fixes
+
+* **a11y:** raw semantic tokens are backgrounds, never ink ([#1034](https://github.com/cuongtranba/kanna/issues/1034)) ([0a29149](https://github.com/cuongtranba/kanna/commit/0a29149c0668038f9fddc8a2d2493f3c908f517f))
+* **design:** act on the finish review — navbar overlap, pulsing dot, dead primitives ([#1037](https://github.com/cuongtranba/kanna/issues/1037)) ([fe4f1c7](https://github.com/cuongtranba/kanna/commit/fe4f1c72db697b88696d951c5e472f7ac3c65072))
+* **design:** the boundary rule is drawn at a device pixel, and the gloss leaves the measure ([#1038](https://github.com/cuongtranba/kanna/issues/1038)) ([0b32649](https://github.com/cuongtranba/kanna/commit/0b3264938f1807d992cde8bc247ac57cc77d0929))
+* **packages:** locate skills by path and offer a re-pin for pinned skills ([#1043](https://github.com/cuongtranba/kanna/issues/1043)) ([1ae06c0](https://github.com/cuongtranba/kanna/commit/1ae06c0969714fae5e230a5e0ef82585be898f96))
+
 ## [1.46.0](https://github.com/cuongtranba/kanna/compare/v1.45.0...v1.46.0) (2026-09-03)
 
 
