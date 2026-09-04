@@ -2037,14 +2037,23 @@ not `renderToStaticMarkup`.** zustand v5 serves `getInitialState()` as the
 `setState` and a working panel looks broken. That helper exists for this and
 documents it.
 
-**KNOWN GAP — an install does not survive a restart.** `createPluginService()`
-starts with an empty in-memory registry and nothing repopulates it: `server.ts`
-holds no reference to the service, and no install path writes
-`settings.installedPlugins`. So a CLI install is invisible to the running
-server, and every surface reports nothing after a reboot. `settings.json`
-already models this (`InstalledPluginConfig` + full CRUD + normalization in
-`plugins/plugin-settings.ts`); it is simply not connected. Tracked as P11 in
-`PROGRESS-plugin-system.md`, together with the e2e spec that would assert it.
+**Installs persist through `settings.installedPlugins`, not through the
+service.** `PluginService`'s registry is in-memory, so it takes an injected
+`InstalledPluginStore` port: `install`/`setEnabled` write through it, and
+`restore()` re-registers from the record WITHOUT recompiling, because the build
+output the install produced is already on disk. `installed-plugin-store.ts`
+binds that port to the normalized CRUD collection settings already had. Without
+this a CLI install was invisible to the running server and every surface
+reported nothing after a reboot, while the bundles sat on disk the whole time.
+
+**Two boot points configure it, and both are deliberate.** The server wires it
+in `createHttpDispatcher` — that factory runs once, already holds `appSettings`,
+and using it avoids touching `server.ts`, which sits EXACTLY on its 807-line
+budget ceiling. The CLI wires it in its own `plugin` arm, because it is a
+separate process. That CLI boot step is **injectable** (`preparePluginService`):
+the default constructs a real `AppSettingsManager`, so a test driving
+`setPluginServiceForTest` must pass a no-op or the real wiring silently replaces
+its fake — which is exactly the regression that caught it.
 
 **Not built, and deliberately not guessed:** plugin-contributed slash commands.
 `local-catalog-io.adapter.ts`'s existing `scope: "plugin"` is for **Claude Code**

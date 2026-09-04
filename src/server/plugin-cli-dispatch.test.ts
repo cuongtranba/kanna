@@ -37,7 +37,8 @@ function createFakeService(overrides: Partial<PluginService> = {}): FakePluginSe
     reload: async (id) => {
       calls.push(`reload:${id}`)
     },
-    setEnabled: () => {},
+    setEnabled: async () => {},
+    restore: () => {},
     start: async () => {},
     status: () => undefined,
     call: async () => ({ ok: false, error: "not implemented" }),
@@ -271,6 +272,9 @@ describe("runCli plugin arm", () => {
       },
       log: (message) => log.push(message),
       warn: (message) => warn.push(message),
+      // The suite installs its own service via `setPluginServiceForTest`; the
+      // real boot step would replace it with one backed by the real settings.json.
+      preparePluginService: async () => {},
     }
   }
 

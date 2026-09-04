@@ -15,7 +15,8 @@ import {
 } from "./http-api-routes"
 import { serveStatic } from "./http-static"
 import { handlePluginRequest } from "./plugin-http-routes"
-import { getPluginService } from "./plugins/plugin-service-host"
+import { configurePluginService, getPluginService } from "./plugins/plugin-service-host"
+import { createInstalledPluginStore } from "./plugins/installed-plugin-store"
 
 export interface HttpDispatcherDeps {
   store: EventStore
@@ -57,6 +58,13 @@ export function createHttpDispatcher(
   deps: HttpDispatcherDeps,
 ): (req: Request, server: Server<ClientState>) => Promise<Response | undefined> {
   const { store, appSettings, auth, sessionShare, distDir } = deps
+
+  // Boot-time composition: give the process's PluginService its durable record
+  // store and re-register what is already installed. This factory runs once and
+  // is the only boot path that holds `appSettings`, so it is where the wire
+  // goes — without it the registry is in-memory only and every install vanishes
+  // on restart while its bundles sit on disk.
+  configurePluginService(createInstalledPluginStore(appSettings))
 
   return async function dispatch(req: Request, server: Server<ClientState>): Promise<Response | undefined> {
     const url = new URL(req.url)

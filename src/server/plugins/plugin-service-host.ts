@@ -14,12 +14,29 @@
  * needs no `.adapter.ts` suffix — the IO lives in `plugin-service-io.adapter.ts`.
  */
 
-import { createPluginService, type PluginService } from "./plugin-service"
+import { createPluginService, type InstalledPluginStore, type PluginService } from "./plugin-service"
 
 let instance: PluginService | null = null
+let installedStore: InstalledPluginStore | null = null
+
+/**
+ * Give the process's service a durable home for its install records, and
+ * re-register whatever is already there.
+ *
+ * Called once at boot, BEFORE anything asks for the service. Without it the
+ * registry is in-memory only: an install vanishes on restart and a CLI install
+ * is invisible to the running server, even though both wrote their bundles to
+ * the same place on disk.
+ */
+export function configurePluginService(store: InstalledPluginStore): PluginService {
+  installedStore = store
+  instance = createPluginService({ installed: store })
+  instance.restore()
+  return instance
+}
 
 export function getPluginService(): PluginService {
-  instance ??= createPluginService()
+  instance ??= createPluginService(installedStore ? { installed: installedStore } : {})
   return instance
 }
 
@@ -30,4 +47,5 @@ export function getPluginService(): PluginService {
  */
 export function setPluginServiceForTest(service: PluginService | null): void {
   instance = service
+  if (service === null) installedStore = null
 }
