@@ -57,36 +57,48 @@ export interface BlockerCard {
   archivedAt: number | null
 }
 
+/** One edge as the reader sees it: what is waited on, and whether it still holds. */
+export interface CardBlocker {
+  cardId: string
+  title: string
+  cleared: boolean
+}
+
 /**
- * The blockers that still hold a card back.
+ * Every card this one waits on, each marked with whether it still holds.
+ *
+ * The single definition of when a dependency clears, so the drawer's list and
+ * the start-work gate cannot come to disagree about what "done" means — the
+ * same discipline `deriveStartWorkStatus` already applies to the button's label
+ * and its action.
  *
  * A blocker clears three ways, and the two beyond "reached `done`" are
  * deliberate rather than defensive. An ARCHIVED blocker can never reach a done
  * column, so treating it as still-blocking would wedge every dependent card
  * with no gesture left that could free them; a blocker that no longer exists is
- * the same case with the row already gone.
+ * the same case with the row already gone. Both are still LISTED, because a
+ * card that was waiting on something is worth showing what it waited on.
  *
- * `doneColumnId` null means the board has not marked where work finishes, and
- * the gate then stands down entirely. That is the same rule the rest of the
- * board feature runs on — behaviour comes from {@link ColumnSemantic}, never
- * from what a column is called — and the alternative is a board on which every
+ * `doneColumnId` null means the board has not marked where work finishes, so
+ * every blocker reads as cleared. That is the same rule the rest of the board
+ * feature runs on — behaviour comes from {@link ColumnSemantic}, never from
+ * what a column is called — and the alternative is a board on which every
  * dependency is permanently unmet.
  */
-export function unmetBlockers(
+export function resolveBlockers(
   blockerIds: readonly string[],
   lookup: (cardId: string) => BlockerCard | null,
   doneColumnId: string | null,
-): BlockerCard[] {
-  if (doneColumnId === null) return []
-  const unmet: BlockerCard[] = []
+): CardBlocker[] {
+  const resolved: CardBlocker[] = []
   for (const blockerId of blockerIds) {
     const blocker = lookup(blockerId)
     if (!blocker) continue
-    if (blocker.archivedAt !== null) continue
-    if (blocker.columnId === doneColumnId) continue
-    unmet.push(blocker)
+    const cleared =
+      doneColumnId === null || blocker.archivedAt !== null || blocker.columnId === doneColumnId
+    resolved.push({ cardId: blocker.id, title: blocker.title, cleared })
   }
-  return unmet
+  return resolved
 }
 
 /**
@@ -115,8 +127,8 @@ export function findBlockerCycle(
   const seen = new Set<string>([blockerId])
   const queue: string[] = [blockerId]
 
-  while (queue.length > 0) {
-    const current = queue.shift() as string
+  for (let head = 0; head < queue.length; head += 1) {
+    const current = queue[head] ?? blockerId
     for (const next of blockersOf(graph, current)) {
       if (next === cardId) return [cardId, ...pathTo(parent, blockerId, current), cardId]
       if (seen.has(next)) continue
@@ -160,9 +172,9 @@ export function describeBlockedByCycle(
  * blocked without telling them what to go and finish.
  */
 export function describeBlockedReason(blockerTitles: readonly string[]): string | null {
-  if (blockerTitles.length === 0) return null
   const quoted = blockerTitles.map((title) => `"${title}"`)
-  const last = quoted[quoted.length - 1] as string
+  const last = quoted[quoted.length - 1]
+  if (last === undefined) return null
   const listed = quoted.length === 1 ? last : `${quoted.slice(0, -1).join(", ")} and ${last}`
   return `Waiting on ${listed}.`
 }

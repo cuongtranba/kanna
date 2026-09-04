@@ -32,7 +32,15 @@ import type {
   SyncConflict,
 } from "../shared/boards/types"
 import type { RepoBoardOwner } from "../shared/boards/sync-types"
-import { BLOCKED_BY, buildBlockerGraph, describeBlockedByCycle, findBlockerCycle } from "../shared/boards/dependencies"
+import {
+  BLOCKED_BY,
+  blockerIdsOf,
+  buildBlockerGraph,
+  describeBlockedByCycle,
+  findBlockerCycle,
+  resolveBlockers,
+} from "../shared/boards/dependencies"
+import { findDoneColumn } from "../shared/boards/types"
 import {
   BoardStoreError,
   type BoardOwnerRef,
@@ -90,11 +98,6 @@ export interface BoardRegistry {
   boardView(boardId: string, pageSize?: number): BoardViewSnapshot | null
   cardPage(query: CardPageQuery): CardPage
   cardDetail(cardId: string): CardDetail | null
-  /**
-   * One card, archived ones included — a blocker that was archived is still the
-   * row that explains why a dependency cleared.
-   */
-  getCard(cardId: string): Card | null
   listTemplates(): BoardTemplate[]
   getTemplate(templateId: string): BoardTemplate | null
   findCardsByLink(kind: CardLinkKind, targetId: string): Card[]
@@ -321,15 +324,17 @@ export function createBoardRegistry(options: CreateBoardRegistryOptions): BoardR
       const bindings = store.listBindings(card.boardId)
       const syncLink =
         bindings.map((b) => store.getSyncLinkByCard(cardId, b.id)).find((link) => link !== null) ?? null
+      const links = store.listCardLinks(cardId)
+      const doneColumn = findDoneColumn(store.listColumns(card.boardId))
       return {
         card,
-        links: store.listCardLinks(cardId),
+        links,
         comments: store.listComments(cardId),
+        blockers: resolveBlockers(blockerIdsOf(links), (id) => store.getCard(id), doneColumn?.id ?? null),
         externalRef: syncLink?.externalId ?? null,
       }
     },
 
-    getCard: (cardId: string) => store.getCard(cardId),
     listTemplates: () => store.listTemplates(),
     getTemplate: (templateId: string) => store.getTemplate(templateId),
     findCardsByLink: (kind: CardLinkKind, targetId: string) => store.findCardsByLink(kind, targetId),

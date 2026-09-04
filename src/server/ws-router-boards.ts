@@ -23,6 +23,7 @@ import { BoardStoreError, type UpdateBoardPatch, type UpdateCardPatch } from "./
 import type { BoardRegistry } from "./board-registry"
 import type { BoardSync } from "./board-sync"
 import type { CardDetailView, StartWorkResult, StartWorkView } from "../shared/boards/start-work"
+import { BLOCKED_BY } from "../shared/boards/dependencies"
 import type { CleanupDecision, WorktreeCleanupView } from "../shared/boards/worktree-cleanup"
 import type { WorktreeCleanupOutcome } from "./board-worktree-cleanup"
 import { errorMessage } from "../shared/errors"
@@ -69,6 +70,8 @@ const BOARD_COMMAND_TYPES = new Set<string>([
   "board.card.archive",
   "board.card.detail",
   "board.card.comment",
+  "board.card.block",
+  "board.card.unblock",
   "board.card.update",
   "board.card.startWork",
   "board.card.resolveWorktree",
@@ -375,6 +378,18 @@ function dispatch(
         id,
         result: registry.addComment(command.cardId, USER, command.body),
       })
+      return true
+    }
+
+    case "board.card.block": {
+      registry.addCardLink(command.cardId, BLOCKED_BY, command.blockedByCardId)
+      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      return true
+    }
+
+    case "board.card.unblock": {
+      registry.removeCardLink(command.cardId, BLOCKED_BY, command.blockedByCardId)
+      send({ v: PROTOCOL_VERSION, type: "ack", id })
       return true
     }
 

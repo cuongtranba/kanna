@@ -5,12 +5,13 @@ import { Textarea } from "../ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select"
 import { cn } from "../../lib/utils"
 import { useCardDrawerStore } from "./CardDrawer.store"
+import { CardDependencies, type BlockerCandidate } from "./CardDependencies"
 import { usePaneLayoutStore } from "../../stores/paneLayoutStore"
 import { chatDotBgClass, chatStatusIndicator } from "../../lib/chatStatusIndicator"
 import { statusLabel } from "../../lib/statusLabel"
 import { NO_BOARD_CHAT_FACTS, type BoardChatFacts } from "../../lib/boards/boardChatFacts"
 import { COLUMN_DOT_CLASS } from "../../lib/boards/columnStyle"
-import type { ChatActivity } from "../../../shared/types"
+import { authorLabel, describeStartWork, workDetailRows } from "../../lib/boards/cardDrawerText"
 import {
   fieldDisplayText,
   fieldDraftText,
@@ -22,24 +23,20 @@ import {
   toggledOptionIds,
 } from "../../lib/boards/cardFieldValue"
 import type {
-  CardActor,
   CardContent,
   CardLink,
   ColumnColorToken,
   FieldDef,
   FieldValue,
 } from "../../../shared/boards/types"
+import { startWorkLabel, type CardDetailView, type StartWorkResult } from "../../../shared/boards/start-work"
 import {
-  startWorkLabel,
-  type CardDetailView,
-  type StartWorkResult,
-} from "../../../shared/boards/start-work"
-import {
+  describeWorktreeContents,
   discardBlockedReason,
   mergeBlockedReason,
   type CleanupDecision,
-  type WorktreeCleanupView,
 } from "../../../shared/boards/worktree-cleanup"
+import type { CardBlocker } from "../../../shared/boards/dependencies"
 import { errorMessage, type AnyValue } from "../../../shared/errors"
 
 /**
@@ -72,10 +69,14 @@ export interface CardDrawerProps {
    * than guessing a schema.
    */
   cardFields?: readonly FieldDef[]
+  /** Cards that may be waited on — the board's loaded pages, prop-drilled. */
+  boardCards?: readonly BlockerCandidate[]
   onClose: () => void
   /** Re-read after a write; the board's own snapshot arrives separately. */
   onChanged?: () => void
 }
+
+const NO_CANDIDATES: readonly BlockerCandidate[] = []
 
 /**
  * The one way this drawer puts a chat in front of the reader — shared by the
@@ -89,64 +90,13 @@ function openChatTab(chatId: string) {
 const NO_LINKS: readonly CardLink[] = []
 const NO_FIELDS: readonly FieldDef[] = []
 const NO_CONTENT: CardContent = {}
+const NO_BLOCKERS: readonly CardBlocker[] = []
 
 const GITHUB_SYNCED_FIELDS = new Set(["labels", "assignee"])
 
 /** Newest first, matching the order the card face picks its signal chat by. */
 function chatLinksOf(links: readonly CardLink[]): CardLink[] {
   return links.filter((entry) => entry.kind === "chat").sort((a, b) => b.createdAt - a.createdAt)
-}
-
-/** Who wrote a comment, in the reader's terms rather than the store's. */
-function authorLabel(kind: CardActor["kind"]): string {
-  switch (kind) {
-    case "agent":
-      return "Agent"
-    case "sync":
-      return "Sync"
-    case "user":
-      return "You"
-  }
-}
-
-/**
- * What to say after the button has run.
- *
- * Only the surprising outcomes get a line. Opening the chat is its own
- * feedback — the tab appears — and saying "Started" over it would be the UI
- * performing rather than explaining.
- */
-/** What the worktree is holding, so the choice is made with the numbers in view. */
-function describeWorktreeContents(cleanup: WorktreeCleanupView): string {
-  const parts: string[] = []
-  if (cleanup.unmergedCommitCount > 0) {
-    parts.push(
-      cleanup.unmergedCommitCount === 1
-        ? "1 commit to merge"
-        : `${cleanup.unmergedCommitCount.toString()} commits to merge`,
-    )
-  }
-  if (cleanup.dirtyFileCount > 0) {
-    parts.push(
-      cleanup.dirtyFileCount === 1
-        ? "1 uncommitted file"
-        : `${cleanup.dirtyFileCount.toString()} uncommitted files`,
-    )
-  }
-  return parts.length === 0 ? "Nothing left in it." : parts.join(" · ")
-}
-
-function describeStartWork(result: StartWorkResult): string | null {
-  if (result.reused) return null
-  if (result.movedToColumnId === null) return "Started · no column marked active"
-  return null
-}
-
-function workDetailRows(activity: ChatActivity): readonly string[] {
-  if (activity.agents > 0) return [`${activity.agents} agent${activity.agents === 1 ? "" : "s"}`]
-  if (activity.workflow) return [activity.workflow.name ?? "Workflow"]
-  if (activity.loop) return [`Loop · ${String(activity.loop.done)}/${String(activity.loop.total)}`]
-  return []
 }
 
 function IssueIdentityRow({ externalRef, content }: { externalRef: string; content: CardContent }) {
@@ -175,6 +125,7 @@ export function CardDrawer({
   socket,
   chatFacts,
   cardFields,
+  boardCards,
   onClose,
   onChanged,
 }: CardDrawerProps) {
@@ -211,6 +162,11 @@ export function CardDrawer({
         setError(errorMessage(cause))
       })
   }, [cardId, load, onChanged, setDraft, setError, socket])
+
+  const handleDependencyChanged = useCallback(() => {
+    load()
+    onChanged?.()
+  }, [load, onChanged])
 
   const handleArchive = useCallback(() => {
     void socket
@@ -375,6 +331,17 @@ export function CardDrawer({
             ) : null}
             {startWorkNote ? <p className="text-13 text-muted-foreground">{startWorkNote}</p> : null}
           </section>
+        ) : null}
+
+        {card ? (
+          <CardDependencies
+            cardId={card.id}
+            blockers={detail?.blockers ?? NO_BLOCKERS}
+            candidates={boardCards ?? NO_CANDIDATES}
+            socket={socket}
+            onChanged={handleDependencyChanged}
+            onError={setError}
+          />
         ) : null}
 
         {cleanup ? (

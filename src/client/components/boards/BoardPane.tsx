@@ -1,9 +1,10 @@
-import { useCallback, useEffect } from "react"
+import { useCallback, useEffect, useMemo } from "react"
 import { ListChecks, RefreshCw, Settings2 } from "lucide-react"
 import { Button } from "../ui/button"
 import { cn } from "../../lib/utils"
 import { useBoardSyncStore } from "./BoardPane.store"
 import { CardDrawer } from "./CardDrawer"
+import type { BlockerCandidate } from "./CardDependencies"
 import { BoardSyncPanel } from "./BoardSyncPanel"
 import { CardSchemaPanel } from "./CardSchemaPanel"
 import { useCardSchemaStore } from "./CardSchemaPanel.store"
@@ -28,6 +29,8 @@ export interface BoardPaneSocket {
   subscribe<TSnapshot>(topic: AnyValue, onSnapshot: (snapshot: TSnapshot) => void): () => void
   command<TResult = AnyValue>(command: AnyValue): Promise<TResult>
 }
+
+const EMPTY_CANDIDATES: readonly BlockerCandidate[] = []
 
 export interface BoardPaneProps {
   boardId: string
@@ -296,6 +299,19 @@ export function BoardPane({ boardId, socket, chatFacts, onOpenCard, onOpenBoards
     if (ownerProjectId) onOpenBoards?.(ownerProjectId)
   }, [onOpenBoards, ownerProjectId])
 
+  /**
+   * Every card the board has actually shipped, in column order.
+   *
+   * Memoized because the drawer filters it on every render, and a fresh array
+   * per board push would defeat that for no reason.
+   */
+  const blockerCandidates = useMemo<readonly BlockerCandidate[]>(() => {
+    if (!view) return EMPTY_CANDIDATES
+    return view.columns.flatMap((column) =>
+      (view.cards[column.id] ?? []).map((card) => ({ id: card.id, title: card.title })),
+    )
+  }, [view])
+
   if (!view) {
     return (
       <div className="flex h-full items-center justify-center bg-background p-8">
@@ -381,6 +397,9 @@ export function BoardPane({ boardId, socket, chatFacts, onOpenCard, onOpenBoards
             // The card's detail does not carry the board's schema, and the
             // drawer needs it to know what a card even has.
             cardFields={view.board.cardFields}
+            // Nor does it carry the board's other cards, which is what the
+            // "Blocked by" picker offers.
+            boardCards={blockerCandidates}
             onClose={handleCloseCard}
           />
         ) : null}

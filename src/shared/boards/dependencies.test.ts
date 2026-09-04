@@ -7,7 +7,7 @@ import {
   describeBlockedByCycle,
   describeBlockedReason,
   findBlockerCycle,
-  unmetBlockers,
+  resolveBlockers,
   type BlockerCard,
 } from "./dependencies"
 import type { CardLink } from "./types"
@@ -115,7 +115,7 @@ describe("blockerIdsOf", () => {
   })
 })
 
-describe("unmetBlockers", () => {
+describe("resolveBlockers", () => {
   const DONE = "col-done"
   const TODO = "col-todo"
 
@@ -127,34 +127,23 @@ describe("unmetBlockers", () => {
     return (id: string) => cards.find((entry) => entry.id === id) ?? null
   }
 
-  test("a blocker outside the done column still blocks", () => {
-    const blockers = unmetBlockers(["a"], lookupOf([card("a", TODO)]), DONE)
-    expect(blockers.map((entry) => entry.id)).toEqual(["a"])
+  /** A card that was waiting on something is worth showing what it waited on. */
+  test("lists cleared blockers as well as unmet ones", () => {
+    const cards = [card("a", TODO), card("b", DONE), card("c", TODO, 9)]
+    expect(resolveBlockers(["a", "b", "c"], lookupOf(cards), DONE)).toEqual([
+      { cardId: "a", title: "Card a", cleared: false },
+      { cardId: "b", title: "Card b", cleared: true },
+      { cardId: "c", title: "Card c", cleared: true },
+    ])
   })
 
-  test("a blocker in the done column clears", () => {
-    expect(unmetBlockers(["a"], lookupOf([card("a", DONE)]), DONE)).toEqual([])
+  test("a blocker that no longer exists is dropped, not listed as cleared", () => {
+    expect(resolveBlockers(["gone"], lookupOf([]), DONE)).toEqual([])
   })
 
-  test("an archived blocker clears — it can never reach done", () => {
-    // Otherwise archiving a blocker wedges every card waiting on it, with no
-    // gesture left that could free them.
-    expect(unmetBlockers(["a"], lookupOf([card("a", TODO, 123)]), DONE)).toEqual([])
-  })
-
-  test("a blocker that no longer exists clears", () => {
-    expect(unmetBlockers(["gone"], lookupOf([]), DONE)).toEqual([])
-  })
-
-  test("reports every unmet blocker, in edge order", () => {
-    const cards = [card("a", TODO), card("b", DONE), card("c", TODO)]
-    expect(unmetBlockers(["a", "b", "c"], lookupOf(cards), DONE).map((e) => e.id)).toEqual(["a", "c"])
-  })
-
-  test("a board with no done column blocks nothing", () => {
-    // Semantics drive behaviour and titles never do: a board that has not said
-    // where work finishes has not said when a dependency clears either, so the
-    // gate stands down rather than wedging every dependent card forever.
-    expect(unmetBlockers(["a"], lookupOf([card("a", TODO)]), null)).toEqual([])
+  test("with no done column every blocker reads as cleared", () => {
+    expect(resolveBlockers(["a"], lookupOf([card("a", TODO)]), null)).toEqual([
+      { cardId: "a", title: "Card a", cleared: true },
+    ])
   })
 })

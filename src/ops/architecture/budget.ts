@@ -40,7 +40,7 @@ export const MODULE_ALLOWANCES: Readonly<Record<string, number>> = {
   "src/client/app/SubagentsSection.tsx": 939,
   "src/client/app/useAppGlobalState.ts": 1421,
   "src/client/app/useKannaState.ts": 1447,
-  "src/client/components/boards/CardDrawer.tsx": 830,
+  "src/client/components/boards/CardDrawer.tsx": 797,
   "src/client/components/chat-ui/ChatInput.tsx": 1369,
   "src/client/components/chat-ui/RightSidebar.tsx": 2071,
   "src/client/stores/chatPreferencesStore.ts": 810,

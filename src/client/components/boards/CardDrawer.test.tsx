@@ -30,6 +30,7 @@ function detailWith(status: StartWorkStatus, blockedReason: string | null = null
     },
     links: [],
     comments: [],
+    blockers: [],
     externalRef: "412",
     startWork: { status, branch: "card/412-fix-login-redirect-loop", blockedReason },
     cleanup: null,

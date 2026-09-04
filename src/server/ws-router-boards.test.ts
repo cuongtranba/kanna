@@ -350,3 +350,84 @@ describe("board.sync", () => {
     expect(sent[0]).toMatchObject({ type: "error", id: "req-1" })
   })
 })
+
+describe("board.card.block / board.card.unblock", () => {
+  function twoCards(registry: ReturnType<typeof createBoardRegistry>) {
+    const board = registry.createBoard({
+      owner: { kind: "project", id: "project-1" },
+      title: "Sprint",
+      definition: {
+        columns: [
+          { title: "Todo", semantic: "start", colorToken: null, wipLimit: null },
+          { title: "Done", semantic: "done", colorToken: null, wipLimit: null },
+        ],
+        cardFields: [],
+        mappingDefaults: [],
+      },
+    })
+    const [todo] = registry.listColumns(board.id)
+    const api = registry.createCard({
+      boardId: board.id,
+      columnId: todo!.id,
+      title: "Ship the API schema",
+      actor: { kind: "user" },
+    })
+    const client = registry.createCard({
+      boardId: board.id,
+      columnId: todo!.id,
+      title: "Regenerate the client",
+      actor: { kind: "user" },
+    })
+    return { api, client }
+  }
+
+  test("both are routed as board commands", () => {
+    expect(isBoardCommand({ type: "board.card.block", cardId: "a", blockedByCardId: "b" })).toBe(true)
+    expect(isBoardCommand({ type: "board.card.unblock", cardId: "a", blockedByCardId: "b" })).toBe(true)
+  })
+
+  test("block writes the edge and acks", async () => {
+    const { deps, sent, registry } = setup()
+    const { api, client } = twoCards(registry)
+    await handleBoardCommand(
+      deps,
+      { type: "board.card.block", cardId: client.id, blockedByCardId: api.id },
+      "req-1",
+    )
+    expect(sent).toEqual([{ v: 1, type: "ack", id: "req-1" }])
+    expect(registry.cardDetail(client.id)!.blockers).toEqual([
+      { cardId: api.id, title: "Ship the API schema", cleared: false },
+    ])
+  })
+
+  test("unblock removes it", async () => {
+    const { deps, registry } = setup()
+    const { api, client } = twoCards(registry)
+    registry.addCardLink(client.id, "blocked_by", api.id)
+    await handleBoardCommand(
+      deps,
+      { type: "board.card.unblock", cardId: client.id, blockedByCardId: api.id },
+      "req-1",
+    )
+    expect(registry.cardDetail(client.id)!.blockers).toEqual([])
+  })
+
+  /**
+   * The refusal has to reach the user as a sentence naming the cards, not as a
+   * socket that dropped the command — the drawer renders whatever comes back.
+   */
+  test("a cycle becomes an error envelope naming both cards", async () => {
+    const { deps, sent, registry } = setup()
+    const { api, client } = twoCards(registry)
+    registry.addCardLink(client.id, "blocked_by", api.id)
+    await handleBoardCommand(
+      deps,
+      { type: "board.card.block", cardId: api.id, blockedByCardId: client.id },
+      "req-2",
+    )
+    expect(sent[0]).toMatchObject({ type: "error", id: "req-2" })
+    const message = (sent[0] as { message: string }).message
+    expect(message).toContain("Ship the API schema")
+    expect(message).toContain("Regenerate the client")
+  })
+})

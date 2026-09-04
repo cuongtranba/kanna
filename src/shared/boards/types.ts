@@ -6,6 +6,8 @@
  * this module is legal everywhere under the side-effect seal.
  */
 
+import type { CardBlocker } from "./dependencies"
+
 // ── Boards ────────────────────────────────────────────────────────────────────
 
 /**
@@ -442,6 +444,13 @@ export interface CardDetail {
   card: Card
   links: CardLink[]
   comments: CardComment[]
+  /**
+   * The cards this one waits on, resolved to titles and to whether each still
+   * holds. Carried here rather than re-derived per caller for the same reason
+   * `externalRef` is: `links` names only ids, and a drawer that had to fetch
+   * each blocker to name it would fan out one request per edge.
+   */
+  blockers: readonly CardBlocker[]
   /**
    * The tracker's own reference for this card — a GitHub issue number — or null
    * when the card came from nowhere.

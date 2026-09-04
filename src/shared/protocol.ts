@@ -384,6 +384,15 @@ export type ClientCommand =
   | { type: "board.card.detail"; cardId: string }
   | { type: "board.card.comment"; cardId: string; body: string }
   /**
+   * Order two cards: `cardId` waits on `blockedByCardId`.
+   *
+   * Refused when it would make the work circular, when the two are on different
+   * boards, or when either does not exist — the check is the server's, because a
+   * cycle is only diagnosable while the offending edge is still known.
+   */
+  | { type: "board.card.block"; cardId: string; blockedByCardId: string }
+  | { type: "board.card.unblock"; cardId: string; blockedByCardId: string }
+  /**
    * `content` is the card's WHOLE content, not just the field that changed: the
    * store replaces rather than merges, so a partial map would erase every field
    * it did not name. Untyped on the wire because the schema it has to satisfy

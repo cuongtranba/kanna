@@ -24,14 +24,8 @@ import {
   type StartWorkStatus,
   type StartWorkView,
 } from "../shared/boards/start-work"
-import { blockerIdsOf, describeBlockedReason, unmetBlockers } from "../shared/boards/dependencies"
-import {
-  findActiveColumn,
-  findDoneColumn,
-  type BoardColumn,
-  type Card,
-  type CardActor,
-} from "../shared/boards/types"
+import { describeBlockedReason } from "../shared/boards/dependencies"
+import { findActiveColumn, type BoardColumn, type Card, type CardActor } from "../shared/boards/types"
 import type { GitWorktree, StackBinding } from "../shared/types"
 import { resolveDefaultWorktreePath, type AddWorktreeOpts } from "./worktree-store.adapter"
 
@@ -91,7 +85,7 @@ async function resolve(deps: StartWorkDeps, cardId: string): Promise<ResolvedSta
 
   const detail = registry.cardDetail(cardId)
   if (!detail) throw new BoardStoreError("not_found", `card ${cardId} does not exist`)
-  const { card, links, externalRef } = detail
+  const { card, links, blockers, externalRef } = detail
 
   const board = registry.getBoard(card.boardId)
   if (!board) throw new BoardStoreError("not_found", `board ${card.boardId} does not exist`)
@@ -125,13 +119,9 @@ async function resolve(deps: StartWorkDeps, cardId: string): Promise<ResolvedSta
   // starts the work — so that case still defers, and reports the worktree it
   // found rather than reading as though it had vanished.
   if (status.kind !== "chat") {
-    const doneColumn = findDoneColumn(registry.listColumns(card.boardId))
-    const blockers = unmetBlockers(
-      blockerIdsOf(links),
-      (blockerId) => registry.getCard(blockerId),
-      doneColumn?.id ?? null,
+    const reason = describeBlockedReason(
+      blockers.filter((blocker) => !blocker.cleared).map((blocker) => blocker.title),
     )
-    const reason = describeBlockedReason(blockers.map((blocker) => blocker.title))
     if (reason) return blocked(reason, status)
   }
 
