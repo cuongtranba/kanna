@@ -390,6 +390,49 @@ purify), #286 (call-site selectors), #287 (ratchet infrastructure),
 #288–#302 (burn-down 90 → 0), and the final flip (server override
 moved to `error` + ratchet tooling deleted).
 
+# Commit messages must parse for release-please
+
+release-please parses every commit since the last tag with
+`@conventional-commits/parser`. When that parser THROWS it logs `commit could
+not be parsed`, **drops the commit** — from the changelog AND from the version
+calculation — and exits 0. The workflow is green, the release PR simply lacks
+the entry, and nothing reports a problem.
+
+Two commits were lost that way: **#1057** (`feat(motion)`, the entire motion
+layer) and **#1047** (`refactor(types)`). Neither appears anywhere in
+`CHANGELOG.md`. The omission is the visible cost; the latent one is worse — a
+window whose only `feat` is dropped is bumped as a patch, or not released at
+all.
+
+**The trigger, verified against the parser:** a body line that BEGINS with
+`word(` is read as a `type(scope):` header, so a nested `(` before the closing
+`)` breaks it. `` `calc(2 * var(--motion-carry))` `` at the start of a line
+throws; `see `calc(2 * var(--x))`` on the same line does not, and a `-`/`*`
+bullet in front of it is fine too.
+
+**The gate runs the REAL parser, never a regex over that shape**
+(`src/ops/release/commit-message.ts` + `scripts/check-commit-messages.ts`).
+Reproducing release-please's own verdict is the only check that cannot drift
+from it — a regex tuned to the known trigger would pass the next message that
+breaks the parser some other way. The test pins a real failing message, so a
+parser upgrade that stopped rejecting it fails loudly instead of quietly
+passing everything.
+
+Two layers:
+
+- **`.githooks/commit-msg`** — checks the message as it is written, the
+  earliest point. Stands down when bun is absent (CI still enforces), like the
+  gitleaks `pre-commit` hook. `bun run setup:hooks` wires both.
+- **CI job `commit-messages`** (`test.yml`, PR-only) — checks every commit in
+  the PR range PLUS the PR title, because a squash lands the title as the
+  subject and the commits as the body. It needs `fetch-depth: 0`; with the
+  shallow default the range is empty and the job passes having checked nothing.
+  The PR title rides an **env var**, never a `${{ }}` interpolation — it is
+  attacker-controlled on a fork PR. All three are pinned by
+  `commit-message-workflow.test.ts`.
+
+Run it by hand with `bun run check:commits --range origin/main..HEAD`.
+
 # Secret Scanning
 
 **Tool:** `gitleaks` pinned at **v8.30.1**, image `zricethezav/gitleaks:v8.30.1`, config at `.gitleaks.toml`.
