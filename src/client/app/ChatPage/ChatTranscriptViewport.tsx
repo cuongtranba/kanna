@@ -15,7 +15,6 @@ import { cn } from "../../lib/utils"
 import { shouldOpenLocalFileLinkInEditor } from "../../lib/pathUtils"
 import {
   buildResolvedTranscriptRows,
-  KannaTranscriptRow,
   type ResolvedTranscriptRow,
   useStableResolvedRows,
 } from "../KannaTranscript"
@@ -44,10 +43,11 @@ import type { TimerPort } from "../../ports/timerPort"
 import { LoopProgressSection } from "../LoopProgressSection"
 import { BackgroundTasksSection } from "../BackgroundTasksSection"
 import { PluginsFooterSlot } from "../PluginsFooterSlot"
+import { useArrivingRows } from "./useArrivingRows"
+import { TranscriptRowFrame, delegateRunIdOf } from "./TranscriptRowFrame"
 import {
   extractDelegateCalls,
   matchRunsToDelegateCalls,
-  DELEGATE_SUBAGENT_TOOL_NAME,
 } from "../subagent-run-placement"
 
 export interface ChatTranscriptViewportPorts {
@@ -414,26 +414,21 @@ export const ChatTranscriptViewport = memo(({
     })
   }, [dom, onOpenLocalLink, setLocalLinkMenuTarget, timer])
 
+  const arrivingRows = useArrivingRows(resolvedRows, activeChatId)
+
   const renderItem = useCallback(({ item }: { item: ResolvedTranscriptRow }) => {
-    const delegateToolId = item.kind === "single"
-      && item.message.kind === "tool"
-      && item.message.toolName === DELEGATE_SUBAGENT_TOOL_NAME
-      ? item.message.toolId
-      : null
+    const delegateToolId = delegateRunIdOf(item)
     const run = delegateToolId != null ? runsByDelegateToolId.get(delegateToolId) : null
     return (
-      <div
-        className={cn("mx-auto w-full max-w-[800px]", gapClassByRowId.get(item.id) ?? "pt-4")}
-        data-transcript-row-id={item.id}
-      >
-        <KannaTranscriptRow
-          row={item}
-          toolGroupExpanded={item.kind === "tool-group" ? (toolGroupExpanded[item.id] ?? false) : undefined}
-        />
-        {run ? renderRunTree(run, 0) : null}
-      </div>
+      <TranscriptRowFrame
+        row={item}
+        gapClass={gapClassByRowId.get(item.id) ?? "pt-4"}
+        arriveIndex={arrivingRows.indexOf(item.id)}
+        toolGroupExpanded={item.kind === "tool-group" ? (toolGroupExpanded[item.id] ?? false) : undefined}
+        runTree={run ? renderRunTree(run, 0) : null}
+      />
     )
-  }, [toolGroupExpanded, runsByDelegateToolId, renderRunTree, gapClassByRowId])
+  }, [toolGroupExpanded, runsByDelegateToolId, renderRunTree, gapClassByRowId, arrivingRows])
 
   const listHeader = (
     <div className="mx-auto w-full max-w-[800px]" style={{ paddingTop: `${headerOffsetPx}px` }}>

@@ -102,6 +102,7 @@
     --motion-instant: 80ms;
     --motion-quick: 160ms;
     --motion-row: 180ms;
+    --motion-carry: 240ms;
     --motion-panel: 280ms;
     --motion-stagger-tight: 14ms;
     --motion-stagger-row: 26ms;
@@ -574,6 +575,58 @@
 
   .kanna-panel-content-in {
     animation: kanna-panel-content-in var(--motion-row) var(--motion-ease-arriving) 120ms;
+  }
+
+  /*
+    The session sigil's newest tick grows up out of the baseline — the session's
+    history being written live rather than a stroke that was simply always
+    there. `transform-origin` is set inline from the real baseline, because it
+    is a viewBox coordinate this stylesheet cannot know.
+
+    No fill-mode, for the same reason as above: the resting state is the full
+    tick, so an animation that never runs costs the growth and not the tick.
+  */
+  @keyframes kanna-reduction-tick-in {
+    from {
+      transform: scaleY(0);
+    }
+
+    to {
+      transform: scaleY(1);
+    }
+  }
+
+  .kanna-reduction-tick-in {
+    animation: kanna-reduction-tick-in var(--motion-carry) var(--motion-ease-arriving);
+  }
+
+  /*
+    Work arriving in the transcript, rather than appearing.
+
+    TRANSFORM ONLY — no opacity, deliberately, and this is the one place in the
+    app where that rule is not negotiable. Rows arrive on their own while the
+    model streams, so the user did not ask for this animation and cannot retry
+    it; a frozen or throttled opacity tween would leave a row of real work
+    permanently invisible with no gesture that recovers it (handoff pitfall #1).
+    6px of travel and no fill-mode: if the animation never runs, the row is
+    simply already in place.
+
+    6px and no scale is also what keeps a 400-row transcript cheap — both
+    properties are compositor-only, and no measured height changes, so
+    LegendList's maintainVisibleContentPosition has nothing to correct.
+  */
+  @keyframes kanna-transcript-row-in {
+    from {
+      transform: translateY(6px);
+    }
+
+    to {
+      transform: translateY(0);
+    }
+  }
+
+  .kanna-transcript-row-in {
+    animation: kanna-transcript-row-in var(--motion-row) var(--motion-ease-arriving);
   }
 
   @keyframes kanna-cursor-blink {

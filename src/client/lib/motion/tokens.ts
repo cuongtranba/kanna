@@ -30,6 +30,16 @@ export const MOTION_DURATION = {
   quick: 160,
   /** List rows, tool cards, diff rows, board cards. */
   row: 180,
+  /**
+   * One element being CARRIED somewhere — the new-session title flying to the
+   * navbar (§01), the session sigil's newest tick growing out of the baseline
+   * (§03), the settings indicator travelling to the clicked row (§06).
+   *
+   * Not in the handoff's own table, which names 240ms inline at all three of
+   * those call sites. A value used three times is a token by definition, and
+   * leaving it inline is exactly the drift the table exists to prevent.
+   */
+  carry: 240,
   /** Terminal, git panel, drawer, sheet, empty state. Already shipped; kept. */
   panel: 280,
   /** Sidebar rows making room for a spawned row. */
