@@ -40,6 +40,8 @@ import {
   parseBuiltinCommand,
   type BuiltinCommand,
 } from "../shared/builtin-commands"
+import type { SlashCommandExpansion } from "../shared/slash-expansion"
+import { providerExpandsSlashCommands } from "../shared/types"
 
 // ---------------------------------------------------------------------------
 // Structural sub-interfaces — only the slices this module calls.
@@ -150,6 +152,16 @@ export interface SendCommandDeps {
 
   /** Dispatch a parsed `/cron` message (arm/list/manage or validation error). Returns the job id for arm commands, null otherwise. */
   runCronCommand(chatId: string, result: import("../shared/cron/types").CronParseResult, model?: string): Promise<string | null>
+
+  /**
+   * Resolve a `/name args` line against the chat's local skill / command
+   * catalog and return the prompt to run in its place. `null` when the line
+   * names nothing local — the message is then sent exactly as typed.
+   *
+   * Required, not optional: a provider added without this wiring would silently
+   * lose every skill, which is the defect this exists to fix.
+   */
+  expandSlashCommand(chatId: string, content: string): SlashCommandExpansion | null
 }
 
 // ---------------------------------------------------------------------------
@@ -323,6 +335,35 @@ export async function runBuiltinCommand(
 }
 
 /**
+ * The prompt a `/name args` line should actually run, when the provider's own
+ * harness cannot resolve it.
+ *
+ * Returns `null` — meaning "send the message unchanged" — for claude and
+ * openrouter (the claude CLI expands it there, and expanding twice would bypass
+ * its own skill machinery), and for any line the local catalog does not know.
+ */
+function resolveSlashExpansion(
+  deps: SendCommandDeps,
+  chatId: string,
+  provider: AgentProvider,
+  content: string,
+): SlashCommandExpansion | null {
+  if (providerExpandsSlashCommands(provider)) return null
+  return deps.expandSlashCommand(chatId, content)
+}
+
+/** The `startTurnForChat` fields an expansion contributes; empty when there is none. */
+function expansionTurnArgs(
+  expansion: SlashCommandExpansion | null,
+): Pick<StartTurnForChatArgs, "promptOverride" | "expandedCommand"> {
+  if (!expansion) return {}
+  return {
+    promptOverride: expansion.prompt,
+    expandedCommand: { name: expansion.name, kind: expansion.kind },
+  }
+}
+
+/**
  * True when the transcript already ends with the `user_prompt` this queued
  * message would append.
  *
@@ -392,10 +433,17 @@ export async function dequeueAndStartQueuedMessage(
     && !options.steered
     && isPromptAlreadyAppended(deps.store.getMessages(chatId), queuedMessage)
 
+  // Same gate as the builtin dispatch above: a steered message is an injection
+  // into a live session, so a slash command there falls through as text.
+  const expansion = options?.steered
+    ? null
+    : resolveSlashExpansion(deps, chatId, provider, queuedMessage.content)
+
   await deps.startTurnForChat({
     chatId,
     provider,
     content: options?.steered ? buildSteeredMessageContent(queuedMessage.content) : queuedMessage.content,
+    ...expansionTurnArgs(expansion),
     attachments: queuedMessage.attachments,
     model: settings.model,
     effort: settings.effort,
@@ -565,10 +613,17 @@ export async function sendCommand(
     return { chatId, queuedMessageId: queuedMessage.id, queued: true as const }
   }
 
+  // A local skill or command, expanded for a provider that cannot do it
+  // itself. Sits after the builtin dispatch (so `/clear` is never shadowed by a
+  // project command of the same name) and after the proactive-compact branch
+  // (which already declines to fire on any line starting with `/`).
+  const expansion = resolveSlashExpansion(deps, chatId, provider, command.content)
+
   await deps.startTurnForChat({
     chatId,
     provider,
     content: command.content,
+    ...expansionTurnArgs(expansion),
     attachments: command.attachments ?? [],
     model: settings.model,
     effort: settings.effort,

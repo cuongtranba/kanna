@@ -8,13 +8,13 @@ import {
 } from "@lexical/react/LexicalTypeaheadMenuPlugin"
 import type { MenuTextMatch, TriggerFn } from "@lexical/react/LexicalTypeaheadMenuPlugin"
 import { useSlashCommands } from "../../../hooks/useSlashCommands"
-import { commandsForProvider, filterCommands, normalizeCommandName } from "../../../lib/slash-commands"
+import { filterCommands, normalizeCommandName } from "../../../lib/slash-commands"
 import { mergePluginCommands } from "../../../lib/plugin-slash-commands"
 import {
   selectPluginCommandCenterItems,
   usePluginContributionsStore,
 } from "../../../stores/pluginContributionsStore"
-import type { AgentProvider, SlashCommand } from "../../../../shared/types"
+import type { SlashCommand } from "../../../../shared/types"
 import { $createSlashCommandNode } from "../nodes/SlashCommandNode"
 import { cn } from "../../../lib/utils"
 import { clampCommandDescription } from "../../../lib/formatters"
@@ -159,11 +159,6 @@ export interface SlashCommandTypeaheadPluginProps {
    * so every chat in a project shares one already-cached list.
    */
   projectId: string | null
-  /**
-   * Scopes the catalog: Kanna's builtins work everywhere, disk-scanned Claude
-   * Code skills only on a provider that runs the claude CLI.
-   */
-  provider: AgentProvider
 }
 
 // ---------------------------------------------------------------------------
@@ -172,7 +167,6 @@ export interface SlashCommandTypeaheadPluginProps {
 
 export function SlashCommandTypeaheadPlugin({
   projectId,
-  provider,
 }: SlashCommandTypeaheadPluginProps): ReactNode {
   const query = ChatTabScopedStore.useScopedStore((state) => state.slashQuery)
   const setQuery = ChatTabScopedStore.useScopedStore((state) => state.setSlashQuery)
@@ -184,17 +178,15 @@ export function SlashCommandTypeaheadPlugin({
 
   const highlightOnPointerMove = useTypeaheadHoverHighlight()
 
-  // Merged AFTER `commandsForProvider`, deliberately. That filter drops the
-  // disk-scanned Claude Code entries on codex because only a provider running
-  // the claude CLI can resolve them from disk. A Kanna plugin entry is resolved
-  // by neither: selecting it inserts the item's own prompt TEXT into the
-  // composer (see `plugin-slash-commands.ts` for why that is the only coherent
-  // option — there is no file on disk for `/name` to name), so it works on
-  // every provider exactly as a builtin does, and filtering it out here would
-  // hide a working entry.
+  // The catalog is NOT scoped by provider. It used to be — codex saw only the
+  // builtins, because a disk-scanned Claude Code entry meant nothing to a
+  // provider that does not run the claude CLI. Kanna now expands those entries
+  // itself for such a provider (`skill-invocation.ts`), so every entry in the
+  // list works everywhere, and a Kanna plugin entry (whose selection inserts
+  // its own prompt TEXT — see `plugin-slash-commands.ts`) always did.
   const merged = useMemo(
-    () => mergePluginCommands(commandsForProvider(slashCommands, provider), pluginCommandItems),
-    [provider, slashCommands, pluginCommandItems],
+    () => mergePluginCommands(slashCommands, pluginCommandItems),
+    [slashCommands, pluginCommandItems],
   )
 
   const options = useMemo<SlashCommandMenuOption[]>(() => {

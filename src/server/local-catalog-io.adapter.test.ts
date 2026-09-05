@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { scanLocalCatalog, statMtimes } from "./local-catalog-io.adapter"
+import { CATALOG_FILE_MAX_BYTES, readCatalogFileBody, scanLocalCatalog, statMtimes } from "./local-catalog-io.adapter"
 
 const dirs: string[] = []
 function tmp(prefix: string): string {
@@ -318,5 +318,33 @@ describe("local-catalog-io.adapter plugin discovery", () => {
     writePluginHome(home, [{ key: "proj-only@m", enabled: false, skills: { go: "description: g\n" } }])
     writeJson(join(cwd, ".claude", "settings.json"), { enabledPlugins: { "proj-only@m": true } })
     expect(scanLocalCatalog({ cwd, homeDir: home }).map((e) => e.name)).toEqual(["proj-only:go"])
+  })
+})
+
+/**
+ * The scan reads only the frontmatter prefix; expanding a `/name` for a
+ * provider that cannot needs the whole file.
+ */
+describe("readCatalogFileBody", () => {
+  test("returns the file's full text", () => {
+    const cwd = tmp("lci-")
+    const file = writeCommand(cwd, "review", "---\ndescription: r\n---\nReview $ARGUMENTS.\n")
+    expect(readCatalogFileBody(file)).toBe("---\ndescription: r\n---\nReview $ARGUMENTS.\n")
+  })
+
+  test("returns null for a missing file rather than throwing into the send path", () => {
+    expect(readCatalogFileBody(join(tmp("lci-"), "nope.md"))).toBeNull()
+  })
+
+  test("refuses a file past the size cap instead of inlining it into a prompt", () => {
+    const cwd = tmp("lci-")
+    const file = writeCommand(cwd, "huge", "x".repeat(CATALOG_FILE_MAX_BYTES + 1))
+    expect(readCatalogFileBody(file)).toBeNull()
+  })
+
+  test("a file exactly at the cap is still readable", () => {
+    const cwd = tmp("lci-")
+    const file = writeCommand(cwd, "big", "x".repeat(CATALOG_FILE_MAX_BYTES))
+    expect(readCatalogFileBody(file)?.length).toBe(CATALOG_FILE_MAX_BYTES)
   })
 })

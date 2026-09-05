@@ -1,7 +1,7 @@
 ---
 id: c3-115
 c3-version: 4
-c3-seal: cf5087dabe6351c98335e97af69bff249c0f54a38391dd274c8d332a491df6f3
+c3-seal: e18c147c7dc447c3ea8b31ddda7a0b53a284784b818800ec8a4b4575d538ae7a
 title: chat-ui-chrome
 type: component
 category: feature
@@ -50,7 +50,7 @@ Owns the composer and surrounding chrome: Lexical rich-text editor input, provid
 | --- | --- | --- |
 | Outcome | User sends a message to the agent with chosen provider/model | c3-1 |
 | Primary path | Type → choose model → click Send → emit chat.send command | c3-208 |
-| Alternate — mention/slash picker | @ and / typeahead open at start OR after whitespace (not only line start); Arrow keys navigate with scroll-into-view; Enter or click inserts a chip node, never submits; the slash list is project-keyed so a new chat renders it with no fetch. The list is provider-scoped by commandsForProvider, not gated on claude: Kanna's builtins show on every provider because Kanna implements them, while disk-scanned Claude Code skills are hidden on codex because only a claude-CLI provider can run them | c3-231 |
+| Alternate — mention/slash picker | @ and / typeahead open at start OR after whitespace (not only line start); Arrow keys navigate with scroll-into-view; Enter or click inserts a chip node, never submits; the slash list is project-keyed so a new chat renders it with no fetch. The list is NOT scoped by provider: it was, hiding every disk-scanned entry on codex, until c3-210 began expanding those entries itself — so every entry offered now works on every provider | c3-231 |
 | Alternate — drag-attach | Drop file → upload → reference inserted in payload | c3-217 |
 | Alternate — provider switch | Picker writes to preferences store; persists across sessions | ref-zustand-store |
 | Failure — send rejected | Show inline banner; retain text in store | c3-115 |

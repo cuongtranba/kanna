@@ -96,6 +96,30 @@ function parseFrontmatter(filePath: string): ParsedFrontmatter {
   return { name, description, argumentHint, userInvocable }
 }
 
+/**
+ * Ceiling on a skill/command file Kanna will inline into a prompt.
+ *
+ * The scan reads only {@link FRONTMATTER_BUDGET_BYTES}; an expansion needs the
+ * whole body, and the body goes straight into a turn's context. 256 KiB is far
+ * past any hand-written `SKILL.md` and far short of anything that would blow a
+ * context window on its own.
+ */
+export const CATALOG_FILE_MAX_BYTES = 256 * 1024
+
+/**
+ * Full text of a catalog file, or `null` when it cannot be used — missing,
+ * unreadable, or past the cap. Null rather than a throw: this is read on the
+ * send path, where the fallback is to treat the line as an ordinary prompt.
+ */
+export function readCatalogFileBody(filePath: string): string | null {
+  try {
+    if (statSync(filePath).size > CATALOG_FILE_MAX_BYTES) return null
+    return readFileSync(filePath, "utf8")
+  } catch {
+    return null
+  }
+}
+
 function safeStatMtime(filePath: string): number {
   try {
     return statSync(filePath).mtimeMs

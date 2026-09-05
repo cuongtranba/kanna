@@ -77,3 +77,50 @@ describe("UserMessage plate", () => {
     expect(html).toContain("const ready = true")
   })
 })
+
+/**
+ * On a provider whose harness cannot expand `/name`, Kanna resolves the line
+ * itself and sends the file's instructions. `content` stays the typed line, so
+ * without this note the row is indistinguishable from one that was sent
+ * verbatim — two very different things.
+ */
+describe("UserMessage expanded command", () => {
+  function renderExpanded(kind: "skill" | "command") {
+    return renderToStaticMarkup(
+      <ThemeProvider>
+        <UserMessageStore.Provider init={undefined}>
+          <UserMessage content="/kanna-test src" expandedCommand={{ name: "kanna-test", kind }} />
+        </UserMessageStore.Provider>
+      </ThemeProvider>,
+    )
+  }
+
+  test("keeps the typed line as the body", () => {
+    expect(renderExpanded("skill")).toContain("/kanna-test src")
+  })
+
+  test("names what ran, and whether it was a skill or a command", () => {
+    expect(renderExpanded("skill")).toContain("skill")
+    expect(renderExpanded("command")).toContain("command")
+    expect(renderExpanded("skill")).toContain("kanna-test")
+  })
+
+  // Quiet metadata, like the neighbouring "auto-sent": no tinted pill, so no
+  // TONE_PAIRINGS entry and nothing for the raw-ink guard to catch.
+  test("reads as muted metadata rather than a coloured badge", () => {
+    const html = renderExpanded("skill")
+    expect(html).toContain("text-muted-foreground")
+    expect(html).not.toMatch(/text-(warning|info|success|destructive)\b/)
+  })
+
+  test("says nothing when nothing was expanded", () => {
+    const html = renderToStaticMarkup(
+      <ThemeProvider>
+        <UserMessageStore.Provider init={undefined}>
+          <UserMessage content="plain message" />
+        </UserMessageStore.Provider>
+      </ThemeProvider>,
+    )
+    expect(html).not.toContain("ran the")
+  })
+})

@@ -1,10 +1,13 @@
 import { describe, test, expect } from "bun:test"
 import {
+  KANNA_SKILL_ROSTER_LIMIT,
   KANNA_SUBAGENT_ROSTER_LIMIT,
   KANNA_SYSTEM_PROMPT_APPEND,
   KANNA_SYSTEM_PROMPT_BASE,
   buildCodexDeveloperInstructions,
   buildKannaSystemPromptAppend,
+  renderSkillRosterBlock,
+  type SkillRosterEntry,
 } from "./kanna-system-prompt"
 import type { ResolvedStackBinding, Subagent } from "./types"
 
@@ -375,5 +378,77 @@ describe("buildCodexDeveloperInstructions", () => {
     const out = buildCodexDeveloperInstructions({ stackProjects: [fakeBinding()] }) ?? ""
     expect(out).toContain("## Stack projects")
     expect(out).not.toContain("absolute path")
+  })
+})
+
+/**
+ * A provider that cannot expand `/name` also cannot DISCOVER a skill: the
+ * catalog is a Kanna read-model the model never sees. `thread/start`'s
+ * `developerInstructions` is the only injection point Codex's app-server
+ * exposes, so the roster rides it — and reading the named SKILL.md is the
+ * invocation, since Codex has file tools and runs with full filesystem access.
+ */
+describe("renderSkillRosterBlock", () => {
+  const skill = (over: Partial<SkillRosterEntry> = {}): SkillRosterEntry => ({
+    name: "kanna-test",
+    description: "Run the test suite and the lint gates.",
+    filePath: "/repo/.claude/skills/kanna-test/SKILL.md",
+    ...over,
+  })
+
+  test("is empty for a project with no skills, so callers can splice it blind", () => {
+    expect(renderSkillRosterBlock([])).toBe("")
+  })
+
+  test("names each skill, its description, and the file to read", () => {
+    const out = renderSkillRosterBlock([skill()])
+    expect(out).toContain("## Skills")
+    expect(out).toContain("kanna-test")
+    expect(out).toContain("Run the test suite and the lint gates.")
+    expect(out).toContain("/repo/.claude/skills/kanna-test/SKILL.md")
+  })
+
+  test("says how to invoke one, since there is no tool that does it", () => {
+    expect(renderSkillRosterBlock([skill()])).toContain("read")
+  })
+
+  test("caps the roster so a large install cannot swamp the prompt", () => {
+    const many = Array.from({ length: 300 }, (_, i) =>
+      skill({ name: `skill-${i}`, filePath: `/repo/.claude/skills/skill-${i}/SKILL.md` }))
+    const out = renderSkillRosterBlock(many)
+    expect(out.split("\n").filter((line) => line.startsWith("- ")).length)
+      .toBe(KANNA_SKILL_ROSTER_LIMIT)
+    expect(out).toContain("300")
+  })
+
+  test("truncates a runaway description rather than dropping the skill", () => {
+    const out = renderSkillRosterBlock([skill({ description: "x".repeat(1000) })])
+    expect(out.length).toBeLessThan(600)
+    expect(out).toContain("kanna-test")
+  })
+
+  test("a skill with no description still lists, so it stays discoverable", () => {
+    expect(renderSkillRosterBlock([skill({ description: "" })])).toContain("kanna-test")
+  })
+})
+
+describe("buildCodexDeveloperInstructions — skills", () => {
+  const skills: SkillRosterEntry[] = [
+    { name: "kanna-test", description: "Run the gates.", filePath: "/repo/.claude/skills/kanna-test/SKILL.md" },
+  ]
+
+  test("carries the roster", () => {
+    const out = buildCodexDeveloperInstructions({ skills }) ?? ""
+    expect(out).toContain("## Skills")
+    expect(out).toContain("kanna-test")
+  })
+
+  test("an empty roster is still nothing to say", () => {
+    expect(buildCodexDeveloperInstructions({ skills: [] })).toBeUndefined()
+  })
+
+  test("instructions come before the roster — rules first, then capabilities", () => {
+    const out = buildCodexDeveloperInstructions({ globalPromptAppend: "Always TDD.", skills }) ?? ""
+    expect(out.indexOf("Always TDD.")).toBeLessThan(out.indexOf("## Skills"))
   })
 })

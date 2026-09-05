@@ -1,5 +1,6 @@
 import path from "node:path"
 import type { SlashCommand } from "../shared/types"
+import type { SkillRosterEntry } from "../shared/kanna-system-prompt"
 import type { CatalogKind, CatalogScope, RawCatalogEntry } from "./local-catalog-io.adapter"
 
 export interface LocalCatalogScanner {
@@ -27,6 +28,17 @@ export interface LocalCatalogServiceOptions {
 
 interface CacheRow {
   entries: SlashCommand[]
+  /**
+   * The same winners `entries` was projected from, keyed by lowercased name.
+   *
+   * `SlashCommand` drops `filePath`, which is precisely what a provider with no
+   * slash-command machinery of its own needs — Kanna opens the file and sends
+   * its contents. Kept beside the projection rather than rescanned, so a
+   * resolve and the picker can never answer from different scans.
+   */
+  winners: Map<string, RawCatalogEntry>
+  /** Roster projection — skills only, INCLUDING ones the picker hides. */
+  skills: SkillRosterEntry[]
   /** path → mtime at scan time; a single mismatch invalidates the row. */
   stamps: Map<string, number>
   expiresAt: number
@@ -87,16 +99,42 @@ function toSlashCommand(entry: RawCatalogEntry): SlashCommand {
   }
 }
 
-export function reduceCatalog(raw: readonly RawCatalogEntry[]): SlashCommand[] {
+/**
+ * Resolve scope/kind precedence to one entry per name.
+ *
+ * `requireUserInvocable` is the ONE difference between the two readers, and it
+ * is the difference `user-invocable: false` was invented for: such a skill is
+ * hidden from the `/` picker but still auto-triggerable, so the roster the
+ * model reads must list it while `resolve` must refuse it.
+ */
+function pickWinners(
+  raw: readonly RawCatalogEntry[],
+  opts: { requireUserInvocable: boolean },
+): Map<string, RawCatalogEntry> {
   const winners = new Map<string, RawCatalogEntry>()
   for (const entry of raw) {
-    if (!entry.userInvocable) continue
+    if (opts.requireUserInvocable && !entry.userInvocable) continue
     const key = normaliseKey(entry.name)
     const existing = winners.get(key)
     winners.set(key, existing ? pickStronger(existing, entry) : entry)
   }
-  return [...winners.values()]
+  return winners
+}
+
+export function reduceCatalog(raw: readonly RawCatalogEntry[]): SlashCommand[] {
+  return [...pickWinners(raw, { requireUserInvocable: true }).values()]
     .map(toSlashCommand)
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
+
+export function reduceSkillRoster(raw: readonly RawCatalogEntry[]): SkillRosterEntry[] {
+  return [...pickWinners(raw, { requireUserInvocable: false }).values()]
+    .filter((entry) => entry.kind === "skill")
+    .map((entry) => ({
+      name: entry.name,
+      description: entry.description,
+      filePath: entry.filePath,
+    }))
     .sort((a, b) => a.name.localeCompare(b.name))
 }
 
@@ -117,13 +155,41 @@ export class LocalCatalogService {
   }
 
   list(cwd: string): SlashCommand[] {
+    return this.row(cwd).entries
+  }
+
+  /**
+   * The catalog entry a typed `/name` resolves to, including the `filePath`
+   * `list` drops. Restricted to what the picker offers, so an invocation and
+   * the picker cannot disagree about which names exist.
+   */
+  resolve(cwd: string, name: string): RawCatalogEntry | null {
+    return this.row(cwd).winners.get(normaliseKey(name)) ?? null
+  }
+
+  /**
+   * Every local skill, for the roster a provider without skill machinery of its
+   * own is told about at session start. Commands are excluded: a command
+   * template is something the user invokes, not something a model reaches for.
+   */
+  skills(cwd: string): SkillRosterEntry[] {
+    return this.row(cwd).skills
+  }
+
+  private row(cwd: string): CacheRow {
     const now = this.now()
     const cached = this.cache.get(cwd)
-    if (cached && cached.expiresAt > now && this.stampsUnchanged(cached.stamps)) return cached.entries
+    if (cached && cached.expiresAt > now && this.stampsUnchanged(cached.stamps)) return cached
     const raw = this.scan({ cwd, homeDir: this.homeDir })
-    const entries = reduceCatalog(raw)
-    this.cache.set(cwd, { entries, stamps: this.readStamps(cwd, raw), expiresAt: now + this.ttl })
-    return entries
+    const row: CacheRow = {
+      entries: reduceCatalog(raw),
+      winners: pickWinners(raw, { requireUserInvocable: true }),
+      skills: reduceSkillRoster(raw),
+      stamps: this.readStamps(cwd, raw),
+      expiresAt: now + this.ttl,
+    }
+    this.cache.set(cwd, row)
+    return row
   }
 
   /** Empty stamps mean "unstampable" — the row can never be trusted again. */

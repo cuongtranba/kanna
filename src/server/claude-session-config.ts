@@ -69,6 +69,28 @@ export function resolveSpawnPaths(
   return { cwd: primary.worktreePath, additionalDirectories }
 }
 
+/** The two lookups {@link resolveChatCwd} needs, so it takes no whole EventStore. */
+export interface ChatCwdStore {
+  getChat(chatId: string): Pick<ChatRecord, "id" | "projectId" | "stackBindings"> | null | undefined
+  getProject(projectId: string): { localPath: string } | null | undefined
+}
+
+/**
+ * The working directory a chat's turns run in — its stack primary, else its
+ * project's path. `undefined` when the chat or its project is gone.
+ *
+ * The ONE resolver: cron fires, slash-command expansion and the skill roster
+ * all key on this, and a copy that disagreed would let one of them read a
+ * different project's `.claude` directory than the turn actually runs in.
+ */
+export function resolveChatCwd(store: ChatCwdStore, chatId: string): string | undefined {
+  const chat = store.getChat(chatId)
+  if (!chat) return undefined
+  const project = store.getProject(chat.projectId)
+  if (!project) return undefined
+  return resolveSpawnPaths(chat, project.localPath).cwd
+}
+
 /**
  * Resolve a chat's stack bindings into named entries.
  *

@@ -706,13 +706,80 @@ stateless-in-context. `shouldInjectPrimer` itself is unchanged: "token null ⇒
 prime" was always right; the bug was *what* got primed.
 
 The picker merges the builtins in `localCommandsForCwd`, not in
-`LocalCatalogService.list` (whose contract stays the disk catalog), and
-`commandsForProvider` narrows the list to builtins-only on codex — disk-scanned
-Claude Code skills mean nothing to a provider that does not run the claude CLI.
+`LocalCatalogService.list` (whose contract stays the disk catalog). The catalog
+is no longer narrowed by provider — see **Local skills on every provider** below.
 A project-authored `.claude/commands/clear.md` is dropped from the listing
 because dispatch intercepts that name first; rename it.
 
 See `adr-20260811-builtin-clear-compact-commands`.
+
+# Local skills on every provider — `/name` expansion + the Codex roster
+
+The claude CLI resolves `/name` against `.claude/skills` + `.claude/commands`
+itself, so `claude` and `openrouter` (same SDK, `settingSources: ["user",
+"project", "local"]`) have always worked. Codex received the literal line and
+answered it as prose, and `commandsForProvider` hid every non-builtin from its
+picker to stop that — which left the whole local skill catalog unreachable
+there. Kanna now expands the command itself, on two fronts.
+
+**`providerExpandsSlashCommands` (`provider-model-types.ts`) is the gate, and
+its DEFAULT direction is load-bearing.** It lists the providers whose harness
+does the expansion (claude, openrouter); everything else gets Kanna's. A
+provider added later and forgotten by the list therefore gets WORKING slash
+commands, where a default of "the harness handles it" would silently give it
+none. Its membership equals `providerUsesSdkSession` today and the two are
+pinned against each other by a test — but they answer different questions (how a
+prompt is DELIVERED vs what the prompt should BE), so do not collapse them.
+
+**User-invoked** — `expandSlashCommand` (`skill-invocation.ts`) resolves the
+name through `LocalCatalogService.resolve`, reads the file with
+`readCatalogFileBody`, and `buildSlashExpansion` (`shared/slash-expansion.ts`)
+substitutes `$ARGUMENTS` / `$1..$9`. A **command** expands to its substituted
+body verbatim (a command file *is* a prompt); a **skill** gets a header naming
+it, its directory, and the arguments, because `SKILL.md` is a document rather
+than a request. Dispatched from `claude-send-command.ts` at the two sites that
+already dispatch builtins — after `parseBuiltinCommand` (so `/clear` is never
+shadowed), after the `isChatBusy` branch (so a `/skill` typed mid-turn queues),
+and never for a steered message.
+
+**`StartTurnForChatArgs.promptOverride` is what the provider runs; `content`
+stays the line the user typed.** So the transcript bubble and the generated
+title read `/deploy staging` rather than an 8 KB skill body. `user_prompt`
+carries `expandedCommand` and `UserMessage` renders it as one muted line —
+without it "the skill ran" and "your text was sent verbatim" are
+indistinguishable, and they behave completely differently.
+
+**Model-invoked (Codex)** — `renderSkillRosterBlock` (`kanna-system-prompt.ts`)
+lists each skill's name, description and absolute `SKILL.md` path into
+`buildCodexDeveloperInstructions`, capped at `KANNA_SKILL_ROSTER_LIMIT` (60) and
+truncating long descriptions. **Reading the named file IS the invocation:**
+Codex's app-server protocol has no way to declare a tool — `ThreadStartParams`
+carries no `mcpServers`, `TurnStartParams` no `tools`, and an unknown dynamic
+tool call is answered `Unsupported dynamic tool call` — so `developerInstructions`
+is the only injection point there. It works because the thread runs
+`sandbox: "danger-full-access"`, which makes a personal or plugin skill outside
+the project cwd reachable by absolute path. The roster is the ONE consumer of
+`KannaSystemPromptOptions.skills`; the Claude suffix ignores it, since the CLI
+loads a skill on demand and this only inlines a pointer.
+
+**Applied at `thread/start`, so a skill authored mid-chat reaches the model at
+the next session start** (`/clear`, restart, idle reap) — `startSession` reuses a
+live session on a cwd match.
+
+**`LocalCatalogService` has two readers over ONE scan.** `resolve` is restricted
+to user-invocable entries so an invocation and the picker cannot disagree about
+which names exist; `skills` deliberately INCLUDES `user-invocable: false` ones,
+because that flag hides a skill from the picker while leaving auto-triggering
+intact. Both read the cached row — neither rescans.
+
+**`` !`cmd` `` and `@path` are NOT executed.** They survive verbatim and the
+expansion adds one line telling the model to run/read them with its own tools.
+Executing a shell command on the send path would put arbitrary execution ahead
+of the turn meant to approve it.
+
+**Every failure degrades to "send what the user typed."** An unresolvable name
+may be a path, or a command the provider itself knows; an unreadable `.claude`
+directory costs a skill, while failing the send costs the turn.
 
 # Mermaid Validation Gate (KANNA_MERMAID_GUARD)
 
@@ -2166,10 +2233,11 @@ prompt map is returned FROM `mergePluginCommands` rather than derived from the
 item list at the call site, so a dropped item can never still answer a lookup and
 hijack the catalog entry that beat it.
 
-**Merged AFTER `commandsForProvider`, deliberately.** That filter drops the
-disk-scanned entries on codex because only a claude-CLI provider can resolve
-them. A plugin entry is prompt text Kanna inserts locally, so it works on every
-provider exactly as a builtin does.
+**Provider-independent, and always was.** A plugin entry is prompt text Kanna
+inserts locally, so it works on every provider exactly as a builtin does. It
+predates the catalog itself becoming provider-independent (see **Local skills on
+every provider**), which is why `commandsForProvider` — the filter this merge
+used to sit after — no longer exists.
 
 **Every client `add*` needs a no-op twin in
 `src/server/plugins/plugin-child-entry.adapter.ts`.** Both bundles compile from

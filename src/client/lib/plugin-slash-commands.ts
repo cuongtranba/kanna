@@ -37,9 +37,9 @@
  *      resolved entirely client-side before the message is ever sent.
  *
  * Consequences worth knowing: the picker entry behaves like a text snippet, so
- * it works on EVERY provider (see the merge order note below), and the user can
- * read and edit the inserted text before sending — which is strictly better
- * than a `/name` that only reveals what it does after it runs.
+ * it works on EVERY provider, and the user can read and edit the inserted text
+ * before sending — which is strictly better than a `/name` that only reveals
+ * what it does after it runs.
  *
  * ── NAMESPACING AND DEDUPE ───────────────────────────────────────────────────
  *

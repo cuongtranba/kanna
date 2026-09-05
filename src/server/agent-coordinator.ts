@@ -179,7 +179,9 @@ import { createCronConfirm, type CronConfirm } from "./cron/confirm"
 import { createModelEscalation, type ModelEscalation } from "./model-escalation"
 import { parseMermaid } from "./mermaid-parse.adapter"
 import { repairMermaidSource } from "../shared/mermaidRepair"
-import { resolveSpawnPaths } from "./claude-session-config"
+import { resolveChatCwd } from "./claude-session-config"
+import { createLocalSkillAccess, type LocalSkillAccess } from "./skill-invocation"
+import { readCatalogFileBody } from "./local-catalog-io.adapter"
 import {
   addCounter,
   recordHistogram,
@@ -318,6 +320,7 @@ export class AgentCoordinator {
   readonly backgroundTaskOutputRegistry: import("./background-task-output-registry").BackgroundTaskOutputRegistry | null
   readonly subagentTranscriptRegistry: import("./subagent-transcript-registry").SubagentTranscriptRegistry | null
   readonly localCatalog: import("./local-catalog").LocalCatalogService | null
+  private readonly skillAccess: LocalSkillAccess
   readonly readLlmProvider: () => Promise<LlmProviderSnapshot>
   readonly listOpenRouterModelsFn: (() => Promise<import("../shared/types").OpenRouterModel[]>) | null
   readonly persistOAuthStateFn: ((id: string, oauth: McpOAuthState) => void) | null
@@ -468,6 +471,7 @@ export class AgentCoordinator {
     this.backgroundTaskOutputRegistry = args.backgroundTaskOutputRegistry ?? null
     this.subagentTranscriptRegistry = args.subagentTranscriptRegistry ?? null
     this.localCatalog = args.localCatalog ?? null
+    this.skillAccess = createLocalSkillAccess(this.localCatalog, (id) => resolveChatCwd(this.store, id), readCatalogFileBody)
   }
 
   private _buildModelEscalation(opts: { name: string; enabled: boolean; drain?: boolean }): ModelEscalation {
@@ -684,13 +688,7 @@ export class AgentCoordinator {
       pushCronJobsUpdate: () => this.onCronJobsChange?.(),
       cronRepair: this._cronRepair,
       cronConfirm: this._cronConfirm,
-      resolveChatCwd: (chatId) => {
-        const chat = this.store.getChat(chatId)
-        if (!chat) return undefined
-        const project = this.store.getProject(chat.projectId)
-        if (!project) return undefined
-        return resolveSpawnPaths(chat, project.localPath).cwd
-      },
+      resolveChatCwd: (chatId) => resolveChatCwd(this.store, chatId),
     }
   }
 
@@ -778,6 +776,7 @@ export class AgentCoordinator {
       startTurnForChat: (args) => this.startTurnForChat(args),
       clearChatContext: (chatId) => this.clearChatContext(chatId),
       runCronCommand: (chatId, result, model) => this.runCronCommand(chatId, result, model),
+      expandSlashCommand: (chatId, content) => this.skillAccess.expandSlashCommand(chatId, content),
     }
   }
 
@@ -1083,6 +1082,7 @@ export class AgentCoordinator {
       closeClaudeSession: (chatId, session) => this.closeClaudeSession(chatId, session),
       getSubagents: () => this.getSubagents(),
       getAppSettingsSnapshot: () => this.getAppSettingsSnapshot(),
+      listSkills: (chatId) => this.skillAccess.listSkills(chatId),
       generateTitleInBackground: (chatId, content, localPath, optimisticTitle) =>
         this.generateTitleInBackground(chatId, content, localPath, optimisticTitle),
       pendingTools: this.pendingTools,

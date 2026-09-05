@@ -1,6 +1,6 @@
 ---
 id: c3-231
-c3-seal: 59efb8754bd6d800bfc9e2347d24532977f30b26580e441914b3eda81da6dc53
+c3-seal: 8e7255799e1a8cf31c1f6bdb0a58227e484b98eb0416319c9535b45773629cfa
 title: local-catalog
 type: component
 category: feature
@@ -30,7 +30,7 @@ Scan local Claude Code skills and slash commands (project, personal, plugin) on 
 
 ## Purpose
 
-Owns the disk scan + dedupe + cache that turns raw `SKILL.md` and `.md` command files into a typed `SlashCommand[]` projection. Non-goals: drive the picker UI, watch filesystem changes mid-session, route claude CLI commands.
+Owns the disk scan + dedupe + cache that turns raw `SKILL.md` and `.md` command files into typed projections: the `SlashCommand[]` the `/` picker offers, the winning entry a typed `/name` resolves to (including its file path), and the skill roster a provider with no skill machinery of its own is told about. One scan backs all three. Non-goals: drive the picker UI, expand or run a command, watch filesystem changes mid-session, route claude CLI commands.
 
 ## Foundational Flow
 
@@ -67,6 +67,9 @@ Owns the disk scan + dedupe + cache that turns raw `SKILL.md` and `.md` command 
 | LocalCatalogService.list | OUT | cwd → SlashCommand[] sorted, deduped, user-invocable only | c3-210 | src/server/local-catalog.ts |
 | scanLocalCatalog | OUT | Pure IO; returns RawCatalogEntry[] from disk | c3-231 | src/server/local-catalog-io.adapter.ts |
 | Cache freshness | OUT | mtime stamps via the injected statMtimes port; no port ⇒ no caching; TTL ceiling configurable per instance | c3-231 | src/server/local-catalog.ts |
+| readCatalogFileBody | OUT | Pure IO; full text of one catalog file, or null when missing, unreadable, or past CATALOG_FILE_MAX_BYTES (256 KiB). The scan reads only the frontmatter prefix; an expansion needs the body, and the body goes straight into a turn's context. Null rather than throw — it runs on the send path, where the fallback is to send the line as typed | c3-210 | src/server/local-catalog-io.adapter.ts |
+| LocalCatalogService.skills | OUT | cwd → SkillRosterEntry[] (name, description, absolute SKILL.md path) for the roster a provider with no skill machinery is told at session start. Skills only — a command template is user-invoked, not model-invoked — and deliberately INCLUDING user-invocable: false entries, which are hidden from the picker but still auto-triggerable | c3-210 | src/server/local-catalog.ts |
+| LocalCatalogService.resolve | OUT | (cwd, name) → the winning RawCatalogEntry incl. the filePath list drops, case-insensitive; restricted to user-invocable entries so a typed /name and the picker cannot disagree about which names exist. Reads the cached row — no rescan | c3-210 | src/server/local-catalog.ts |
 
 ## Change Safety
 
