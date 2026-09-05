@@ -65,6 +65,8 @@ function toolActivityLabel(tool: NormalizedToolCall, localPath: string): string 
       return "preparing download..."
     case "image_generation":
       return "generating image..."
+    case "image_view":
+      return "viewing image..."
     case "mcp_generic":
       return truncateActivity(`${tool.input.server}.${tool.input.tool}`)
     case "unknown_tool":

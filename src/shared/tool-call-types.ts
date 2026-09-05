@@ -121,6 +121,14 @@ export interface ImageGenerationToolResult {
   fileName: string
 }
 
+/**
+ * Codex's `view_image`. `contentUrl` and `mimeType` are resolved at translation
+ * time, where the project id lives — the client renders the path it is given
+ * and never re-derives a URL.
+ */
+export interface ImageViewToolCall
+  extends ToolCallBase<"image_view", { path: string; contentUrl: string; mimeType: string }> { }
+
 export interface UnknownToolCall
   extends ToolCallBase<"unknown_tool", { payload: JsonObject }> { }
 
@@ -145,6 +153,7 @@ export type NormalizedToolCall =
   | OfferDownloadToolCall
   | PreviewFileToolCall
   | ImageGenerationToolCall
+  | ImageViewToolCall
   | WorkflowToolCall
   | UnknownToolCall
 
@@ -282,6 +291,10 @@ export type HydratedPreviewFileToolCall =
 export type HydratedImageGenerationToolCall =
   HydratedToolCallBase<"image_generation", ImageGenerationToolCall["input"], ImageGenerationToolResult>
 
+/** The result restates the path the call already carries, so it is unused by the card. */
+export type HydratedImageViewToolCall =
+  HydratedToolCallBase<"image_view", ImageViewToolCall["input"], string>
+
 export interface WorkflowToolResult {
   taskId?: string
   text: string
@@ -311,5 +324,6 @@ export type HydratedToolCall =
   | HydratedOfferDownloadToolCall
   | HydratedPreviewFileToolCall
   | HydratedImageGenerationToolCall
+  | HydratedImageViewToolCall
   | HydratedWorkflowToolCall
   | HydratedUnknownToolCall

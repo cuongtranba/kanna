@@ -266,11 +266,32 @@ describe("translateItemToToolCalls — error", () => {
 })
 
 describe("translateItemToToolCalls — imageView", () => {
-  test("maps to ImageView unknown_tool", () => {
-    const item = { type: "imageView", id: "iv-1", path: "img.png" } as unknown as ThreadItem
+  type ImageViewCall = { tool: { toolKind: string; toolName: string; input: { path: string; contentUrl: string; mimeType: string } } }
+
+  test("maps a project-relative path to an image_view call with a project content URL", () => {
+    const item = { type: "imageView", id: "iv-1", path: "assets/img.png" } as unknown as ThreadItem
     const [entry] = toolCallEntry(item)
-    expect((entry as { tool: { toolName: string } }).tool.toolName).toBe("ImageView")
-    expect((entry as unknown as { tool: { input: { payload: { path: string } } } }).tool.input.payload.path).toBe("img.png")
+    const call = entry as unknown as ImageViewCall
+    expect(call.tool.toolKind).toBe("image_view")
+    expect(call.tool.toolName).toBe("ImageView")
+    expect(call.tool.input.path).toBe("assets/img.png")
+    expect(call.tool.input.contentUrl).toBe("/api/projects/proj-1/files/assets/img.png/content")
+    expect(call.tool.input.mimeType).toBe("image/png")
+  })
+
+  test("maps an absolute path to the local-file content URL", () => {
+    const item = { type: "imageView", id: "iv-2", path: "/tmp/project/shot 1.webp" } as unknown as ThreadItem
+    const [entry] = toolCallEntry(item)
+    const call = entry as unknown as ImageViewCall
+    expect(call.tool.input.contentUrl).toBe(`/api/local-file?path=${encodeURIComponent("/tmp/project/shot 1.webp")}`)
+    expect(call.tool.input.mimeType).toBe("image/webp")
+  })
+
+  test("a relative path with no project yields an empty contentUrl rather than a broken one", () => {
+    const item = { type: "imageView", id: "iv-3", path: "assets/img.png" } as unknown as ThreadItem
+    const [entry] = translateItemToToolCalls(item, CTX_NO_PROJECT.projectId)
+    const call = entry as unknown as ImageViewCall
+    expect(call.tool.input.contentUrl).toBe("")
   })
 })
 

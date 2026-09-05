@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { act } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { ReadResultImages, ToolCallMessage } from "./ToolCallMessage"
 import { renderForLoopCheck } from "../../lib/testing/renderForLoopCheck"
@@ -91,6 +92,45 @@ describe("ToolCallMessage", () => {
       const text = document.body.textContent ?? ""
       expect(text.toLowerCase()).toContain("running")
       expect(text).toContain("3 agents")
+    } finally {
+      await r.cleanup()
+    }
+  })
+
+  test("image_view names the file in the collapsed row and mounts no image element until it is expanded", async () => {
+    const message: ProcessedToolCall = {
+      kind: "tool",
+      toolKind: "image_view",
+      toolName: "ImageView",
+      toolId: "t-iv-1",
+      input: {
+        path: "/home/me/proj/assets/shot.png",
+        contentUrl: "/api/local-file?path=%2Fhome%2Fme%2Fproj%2Fassets%2Fshot.png",
+        mimeType: "image/png",
+      },
+      result: "/home/me/proj/assets/shot.png",
+      id: "msg-iv-1",
+      timestamp: new Date().toISOString(),
+    }
+    const r = await renderForLoopCheck(
+      <ToolCallMessage message={message} isLoading={false} localPath="/home/me/proj" />,
+    )
+    try {
+      expect(r.loopWarnings).toEqual([])
+      expect(r.thrown).toBeNull()
+      expect(document.body.textContent ?? "").toContain("assets/shot.png")
+      // The bytes are the point: a collapsed row must mount no image element,
+      // or every image in a transcript is fetched on load.
+      expect(document.body.querySelector("img")).toBeNull()
+
+      const toggle = document.body.querySelector("button")
+      await act(async () => {
+        toggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      })
+
+      const img = document.body.querySelector("img")
+      expect(img).not.toBeNull()
+      expect(img?.getAttribute("src")).toBe("/api/local-file?path=%2Fhome%2Fme%2Fproj%2Fassets%2Fshot.png")
     } finally {
       await r.cleanup()
     }

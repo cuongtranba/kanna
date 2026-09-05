@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto"
 import { computeCostUsd, type ModelPrice } from "../shared/token-pricing"
 import { buildContentUrlForFilePath } from "../shared/projectFileUrl"
+import { inferAttachmentContentType } from "./uploads"
 import type {
   AskUserQuestionItem,
   ContextWindowUsageSnapshot,
@@ -237,6 +238,33 @@ function buildImageGenerationResult(
   })
 }
 
+/**
+ * Codex reports the path it viewed and nothing else. Resolving it to a content
+ * URL here — the only layer that knows the project id — is what lets the client
+ * render the image inline without a project id threaded through the transcript.
+ */
+function imageViewToolCall(
+  item: Extract<ThreadItem, { type: "imageView" }>,
+  projectId: string | null,
+): TranscriptEntry {
+  const input = {
+    path: item.path,
+    contentUrl: buildContentUrlForFilePath(projectId, item.path) ?? "",
+    mimeType: inferAttachmentContentType(item.path),
+  }
+  return timestamped({
+    kind: "tool_call",
+    tool: {
+      kind: "tool",
+      toolKind: "image_view",
+      toolName: "ImageView",
+      toolId: item.id,
+      input,
+      rawInput: toJsonObject(item),
+    },
+  })
+}
+
 function collabToolCall(item: CollabAgentToolCallItem): TranscriptEntry {
   return timestamped({
     kind: "tool_call",
@@ -463,7 +491,7 @@ function fileChangeToToolResults(item: Extract<ThreadItem, { type: "fileChange" 
   }))
 }
 
-export function translateItemToToolCalls(item: ThreadItem, _projectId: string | null): TranscriptEntry[] {
+export function translateItemToToolCalls(item: ThreadItem, projectId: string | null): TranscriptEntry[] {
   switch (item.type) {
     case "userMessage":
     case "reasoning":
@@ -541,19 +569,7 @@ export function translateItemToToolCalls(item: ThreadItem, _projectId: string | 
     case "imageGeneration":
       return [imageGenerationToolCallFromTyped(item)]
     case "imageView":
-      return [timestamped({
-        kind: "tool_call",
-        tool: {
-          kind: "tool",
-          toolKind: "unknown_tool",
-          toolName: "ImageView",
-          toolId: item.id,
-          input: {
-            payload: { path: item.path },
-          },
-          rawInput: toJsonObject(item),
-        },
-      })]
+      return [imageViewToolCall(item, projectId)]
     default: {
       warnUnknownItemType(item)
       const record: JsonObject = toJsonObject(item)
