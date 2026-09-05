@@ -1,6 +1,6 @@
 ---
 id: adr-20260818-adr-20260818-cron-armed-full-config
-c3-seal: e834290059588f8b22a8c0afd5ca37f080f1b993166da1e435c341ebd743d182
+c3-seal: 2e4835ed49e1f75b36e602f6382450cd20b0516455507e78472b19ad44fca453
 title: adr-20260818-cron-armed-full-config
 type: adr
 goal: 'Extend `CronArmedMessage` to display the full job configuration at arm time: model, the next 3 upcoming fire times (server-computed), cwd for spawn mode, plus Edit (copy command to clipboard) and Disarm actions. Update c3-120''s Purpose to reflect the expanded card.'
@@ -32,7 +32,7 @@ Extend `CronArmedEntry` with three optional fields (`model`, `upcomingFires`, `c
 
 | Check | Result |
 | --- | --- |
-| `bun run test src/client/components/messages/CronMessages.test.tsx` | All 17 CronArmedMessage cases pass (model, upcomingFires, nextFireAt fallback, cwd, Disarm, Edit) |
-| `bun run test src/server/cron/commands.test.ts` | All 18 cases pass (model+upcomingFires 3 fires, cwd wired, cwd omitted) |
-| `bun run lint` | 0 errors, 0 warnings |
-| `bun run typecheck` | 0 errors |
+| bun run test src/client/components/messages/CronMessages.test.tsx | All 17 CronArmedMessage cases pass (model, upcomingFires, nextFireAt fallback, cwd, Disarm, Edit) |
+| bun run test src/server/cron/commands.test.ts | All 18 cases pass (model+upcomingFires 3 fires, cwd wired, cwd omitted) |
+| bun run lint | 0 errors, 0 warnings |
+| bun run typecheck | 0 errors |

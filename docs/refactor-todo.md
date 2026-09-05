@@ -36,20 +36,22 @@ Use `[x]` when an item is complete. Add any follow-up notes directly under the i
   Expected impact: one source of truth for model normalization and capability checks.
   Status: completed on 2026-04-21.
 
-- [ ] WS router command handler extraction
+- [x] WS router command handler extraction
   Scope: `src/server/ws-router.ts`
   Goals:
   - Extract the repeated “resolve project, call diff store, ack, maybe broadcast” flow into a helper.
   - Collapse the repeated git-related command cases onto that helper.
   - Make broadcast semantics explicit and consistent (`return` vs `break`).
   Expected impact: smaller router, lower risk of inconsistent broadcast behavior.
+  Status: superseded. The router was split into `ws-router-chat.ts` / `-broadcast.ts` / `-envelope.ts` / `-utils.ts`, and the remaining flat `switch` is now tracked with CI enforcement by the `ws-router-dispatch-arms` entry in `src/ops/architecture/budget.ts` (issue #899), which is a stronger gate than this list.
 
-- [ ] Shared profiling/logging helper extraction
+- [x] Shared profiling/logging helper extraction
   Scope: `src/server/event-store.ts`, `src/server/ws-router.ts`
   Goals:
   - Move duplicated `KANNA_PROFILE_SEND_TO_STARTING` env-var checks and logging formatting into a shared profiling module.
   - Let call sites pass per-event details such as `traceId` and `startedAt`.
   Expected impact: one profiling format and one implementation path.
+  Status: completed. `isSendToStartingProfilingEnabled` / `logSendToStartingProfile` live in `src/server/event-store-helpers.ts` and are shared by every call site.
 
 - [ ] Tool call type-system registry refactor
   Commits: `3f50f10`, `f997856`

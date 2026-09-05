@@ -1,6 +1,6 @@
 ---
 id: adr-20260822-perf-alert-reopen-dedup
-c3-seal: 6affa2341e08375385484ff2d2cb2c23758a6a1f4675f6ffb19a8a9c3717f42a
+c3-seal: b5f0becb3f7531cfc9055171d5f7091b855446428e70b1e3176c45649b926cc0
 title: perf-alert-reopen-dedup
 type: adr
 goal: 'Make a flapping performance alert reuse one GitHub ticket instead of filing a new one per breach. `decideAction` was only ever shown OPEN issues, so the auto-close-on-resolve behaviour defeated its own dedup: the next breach matched nothing and created a fresh ticket. Five identical KannaMemoryPressure tickets landed in five hours. This adds a reopen path over recently-closed tickets and, with it, the first way for an operator to mute a rule for a release without pausing the rule fleet-wide.'
@@ -50,30 +50,30 @@ There is a second, related gap the flapping made visible. Four memory fixes ship
 
 | Entity | Type | Why affected | Governance review |
 | --- | --- | --- | --- |
-| c3-234 | component | Owns `src/ops/alerting/**` and `scripts/perf-alert-issue.ts`. The ticket decision's input type and action union both widen; no boundary moves and no new file appears, so the existing `code:` globs in `.c3/eval/c3-234.yaml` already cover the change | Confirm the pipeline stays a pure decision plus an IO adapter — the reopen must not leak GitHub's state vocabulary into `perf-issue.ts` beyond the two-value `CloseReason` |
+| c3-234 | component | Owns src/ops/alerting/** and scripts/perf-alert-issue.ts. The ticket decision's input type and action union both widen; no boundary moves and no new file appears, so the existing code: globs in .c3/eval/c3-234.yaml already cover the change | Confirm the pipeline stays a pure decision plus an IO adapter — the reopen must not leak GitHub's state vocabulary into perf-issue.ts beyond the two-value CloseReason |
 
 ## Compliance Rules
 
 | Rule | Why required | Action |
 | --- | --- | --- |
-| rule-colocated-bun-test | `perf-issue.test.ts` gains 11 cases for the flap, mute, ordering, and cap-interaction paths; `perf-alert-workflow.test.ts` gains 2 guarding the fetch query | comply |
+| rule-colocated-bun-test | perf-issue.test.ts gains 11 cases for the flap, mute, ordering, and cap-interaction paths; perf-alert-workflow.test.ts gains 2 guarding the fetch query | comply |
 
 ## Work Breakdown
 
 | Area | Detail | Evidence |
 | --- | --- | --- |
-| Decision | `OpenIssue` → `KnownIssue` with `closed`; `reopen` action; `muted` skip reason; `REOPEN_WINDOW_MS`; cap counts open only | src/ops/alerting/perf-issue.ts |
+| Decision | OpenIssue → KnownIssue with closed; reopen action; muted skip reason; REOPEN_WINDOW_MS; cap counts open only | src/ops/alerting/perf-issue.ts |
 | Ticket body | Footer states the reopen behaviour and the not-planned mute | src/ops/alerting/perf-issue.ts |
-| Adapter | Fetch `state=all&sort=updated&direction=desc`; map `state`/`closed_at`/`state_reason`; PATCH-then-comment on reopen | scripts/perf-alert-issue.ts |
+| Adapter | Fetch state=all&sort=updated&direction=desc; map state/closed_at/state_reason; PATCH-then-comment on reopen | scripts/perf-alert-issue.ts |
 | Docs | Ticket-behaviour list and a muting section | wiki/src/content/docs/reference/performance-alerts.md, CLAUDE.md |
 
 ## Enforcement Surfaces
 
 | Surface | Behavior | Evidence |
 | --- | --- | --- |
-| `perf-alert-workflow.test.ts` fetch guard | Asserts the script queries `state=all` and never `state=open`, ordered by recent activity. This is the one silent-revert path: narrowing the query leaves `decideAction` correct and fully tested while the pipeline returns to filing a ticket per flap, with the whole suite green | scripts/perf-alert-workflow.test.ts |
-| `perf-issue.test.ts` mute-scope case | Asserts a `not_planned` close on one release does not suppress the next. A marker-wide mute would silence real regressions | src/ops/alerting/perf-issue.test.ts |
-| `perf-issue.test.ts` footer case | Asserts the ticket body names "Close as not planned" | src/ops/alerting/perf-issue.test.ts |
+| perf-alert-workflow.test.ts fetch guard | Asserts the script queries state=all and never state=open, ordered by recent activity. This is the one silent-revert path: narrowing the query leaves decideAction correct and fully tested while the pipeline returns to filing a ticket per flap, with the whole suite green | scripts/perf-alert-workflow.test.ts |
+| perf-issue.test.ts mute-scope case | Asserts a not_planned close on one release does not suppress the next. A marker-wide mute would silence real regressions | src/ops/alerting/perf-issue.test.ts |
+| perf-issue.test.ts footer case | Asserts the ticket body names "Close as not planned" | src/ops/alerting/perf-issue.test.ts |
 
 ## Alternatives Considered
 
@@ -82,7 +82,7 @@ There is a second, related gap the flapping made visible. Four memory fixes ship
 | Stop closing tickets on resolve | Trades duplicate tickets for tickets that never close; the ticket would stop describing whether the alert is currently firing |
 | Comment on the closed ticket without reopening | The alert is firing, so there is an open problem. A comment on a closed issue notifies nobody watching open work |
 | Widen the quiet period to hours-to-days | Wrong mechanism: it gates commenting on an open ticket, and every flap here matched no ticket at all. Widening it would also delay legitimate "still firing" updates |
-| Pause `kanna-perf-memory` until the fleet upgrades | Silences a real rule fleet-wide to quiet one stale install, and nothing would restore it. The mute is per rule *and release*, which is the actual granularity of the complaint |
+| Pause kanna-perf-memory until the fleet upgrades | Silences a real rule fleet-wide to quiet one stale install, and nothing would restore it. The mute is per rule and release, which is the actual granularity of the complaint |
 | A mute list in the repo | Requires a PR to silence a ticket, so it will not be used. The close reason is one click, on the object being silenced |
 | Reopen regardless of close reason | Removes the only way to stop the pipeline, making a stale-install alert unmutable — the complaint that prompted this decision |
 
@@ -90,15 +90,15 @@ There is a second, related gap the flapping made visible. Four memory fixes ship
 
 | Risk | Mitigation | Verification |
 | --- | --- | --- |
-| A human closes a ticket as *completed* meaning "handled", and a later flap reopens it, reading as the pipeline ignoring them | The distinction is exactly what the two close reasons carry, and the footer states it on every ticket. Reopening a completed close is also the correct default: the alert is firing again, so the cause was not in fact removed | `perf-issue.test.ts` "respects a not-planned close as a mute for that release" |
-| A muted release keeps breaching and nobody is told | Intended: the operator asserted the work is done. The mute cannot outlive the release, because the marker carries the version | `perf-issue.test.ts` "a mute on one release does not silence the next" |
-| More than 100 `performance` issues are touched inside the reopen window, so a reopenable ticket falls off the page and a duplicate is filed | Degrades to today's behaviour rather than breaking. The open cap (10) and the dedup make the volume unreachable in practice | Fetch is newest-first by activity, asserted in `perf-alert-workflow.test.ts` |
+| A human closes a ticket as completed meaning "handled", and a later flap reopens it, reading as the pipeline ignoring them | The distinction is exactly what the two close reasons carry, and the footer states it on every ticket. Reopening a completed close is also the correct default: the alert is firing again, so the cause was not in fact removed | perf-issue.test.ts "respects a not-planned close as a mute for that release" |
+| A muted release keeps breaching and nobody is told | Intended: the operator asserted the work is done. The mute cannot outlive the release, because the marker carries the version | perf-issue.test.ts "a mute on one release does not silence the next" |
+| More than 100 performance issues are touched inside the reopen window, so a reopenable ticket falls off the page and a duplicate is filed | Degrades to today's behaviour rather than breaking. The open cap (10) and the dedup make the volume unreachable in practice | Fetch is newest-first by activity, asserted in perf-alert-workflow.test.ts |
 
 ## Verification
 
 | Check | Result |
 | --- | --- |
-| `bun run lint` | Clean |
-| `bun run typecheck` | Clean |
-| `bun test --conditions production` | 7022 pass, 2 skip, 0 fail across 539 files |
-| `bun test --conditions production src/ops/alerting/ scripts/perf-alert-workflow.test.ts` | 58 pass |
+| bun run lint | Clean |
+| bun run typecheck | Clean |
+| bun test --conditions production | 7022 pass, 2 skip, 0 fail across 539 files |
+| bun test --conditions production src/ops/alerting/ scripts/perf-alert-workflow.test.ts | 58 pass |

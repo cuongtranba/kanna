@@ -115,8 +115,19 @@ is also damaged: the backtick strip leaves `*` or `_` unguarded, and the NEXT
 serialization collapses them as markdown emphasis — silently discarding the
 character. Reproduced in #881: `` `mermaid-*.js`, `mermaid.core-*.js` `` →
 `mermaid-*.js, mermaid.core-*.js` → `mermaid-.js, mermaid.core-.js`. Any cell
-that held `` `glob-*.ext` `` and now shows `glob-.ext` (missing `*`) is damaged
-— restore the backticks and verify the glob characters are present.
+that held `` `glob-*.ext` `` and now shows `glob-.ext` (missing `*`) is damaged.
+
+**Restoring the backticks does NOT hold — that remedy buys exactly one cycle.**
+Measured: re-backticking `mermaid-*.js` survives one `repair`, then the run after
+that strips the backticks again and re-eats the `*`, which is why #881 kept coming
+back. **Escape the character instead** — `\*`, `\_` — which renders literally, is
+not a code span, and so survives repair indefinitely (verified over four
+consecutive runs). The same holds for `__tests__/`, which collapses to `tests/`
+unless written `\_\_tests\_\_/`, and for a `**` glob, written `\*\*`.
+
+**A literal `|` in a table cell cannot be made durable at all** — `\|` is the only
+markdown spelling and c3x truncates the row at it. Reword the cell so it needs no
+pipe ("open" or "closed", `install / ls / reload`); every fix below did that.
 
 Both defects are fixed in `cuongtranba/c3-skill` (the `insert-after` seq shift
 and the table-row normalizer). Until a release ships with them, `change apply`
@@ -146,10 +157,17 @@ so they will come back the same way:
 `goal:` frontmatter being rewritten to match the body's `## Goal` is c3x syncing
 the two, not damage — the body wins.
 
-Still open: `c3-235` is referenced by `.c3/eval/c3-235.yaml` and
-`code-map.yaml` (secret scanning, from #820) but no component fact was ever
-created, so `c3x repair` warns and `c3x lookup .gitleaks.toml` resolves to
-nothing. Either author the fact or drop the two references.
+Resolved: `c3-235` (secret scanning, from #820) now has its component fact at
+`.c3/c3-2-server/c3-235-secret-scanning.md`, bound by `.c3/eval/c3-235.yaml` and
+`code-map.yaml`.
+
+**A PR that edits a `.c3/` body without re-sealing breaks the whole tree, and
+nothing in CI catches it.** #1053 added three lines to
+`c3-1-client/c3-110-app-shell.md` and left `c3-seal` alone; `c3x check` then
+failed on that one file, which per (2) above blocks EVERY cache rebuild — so
+`c3x lookup` answered "no component mapping" for correctly-bound files like
+`.gitleaks.toml`, and the tree stayed that way until it was found by hand. Run
+`c3x check` after touching `.c3/`; it is the only thing that reports this.
 
 # Pull Requests
 

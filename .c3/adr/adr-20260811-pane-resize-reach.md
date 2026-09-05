@@ -1,6 +1,6 @@
 ---
 id: adr-20260811-pane-resize-reach
-c3-seal: d60ae00f3a2c0865cc0d01904c27692a37f0de4b187cd6e4c518399fe5901e81
+c3-seal: 6fcb6cd166b22f9d1b185a05a31b374578eb9e09451e8da477c7e817874a0a8e
 title: pane-resize-reach
 type: adr
 goal: |-
@@ -75,9 +75,9 @@ Its default is `MIN_TAB_WIDTH`, which reproduces the pre-preference layout exact
 
 | Check | Result |
 | --- | --- |
-| `bun run typecheck` | Clean — `AppSettingsSnapshot.panes` forced every construction site |
-| `bun run lint` | Clean at `--max-warnings=0` (caught a banned `unknown` in the clamp; retyped generic like `clampNumber`) |
-| `bunx ast-grep test && bun run lint:usestate` | 14 rules pass; the new `tabMinWidth` selector is a scalar, so reference-stable |
-| `bun test --conditions production` | 5551 pass, 2 skip, 0 fail across 460 files |
-| `bun test --conditions production src/client/lib/paneTree/resize.test.ts` | 10 pass — pins the axis mapping, the last-child sign, and the ancestor walk |
-| `bun test --conditions production src/client/stores/paneLayoutStore.test.ts` | Includes the end-to-end divider proof: focus on either side of one boundary moves it identically |
+| bun run typecheck | Clean — AppSettingsSnapshot.panes forced every construction site |
+| bun run lint | Clean at --max-warnings=0 (caught a banned unknown in the clamp; retyped generic like clampNumber) |
+| bunx ast-grep test && bun run lint:usestate | 14 rules pass; the new tabMinWidth selector is a scalar, so reference-stable |
+| bun test --conditions production | 5551 pass, 2 skip, 0 fail across 460 files |
+| bun test --conditions production src/client/lib/paneTree/resize.test.ts | 10 pass — pins the axis mapping, the last-child sign, and the ancestor walk |
+| bun test --conditions production src/client/stores/paneLayoutStore.test.ts | Includes the end-to-end divider proof: focus on either side of one boundary moves it identically |

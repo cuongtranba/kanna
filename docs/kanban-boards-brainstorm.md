@@ -517,7 +517,7 @@ template; instantiation is a pure function so it is testable without a DB.
   - **Superseded.** The fallback in §10 was taken: `react-kanban-kit` is gone and
     `KannaBoard` drives `@atlaskit/pragmatic-drag-and-drop` directly. The
     confinement held exactly as designed — server, store and sync were untouched.
-    See `docs/adr-20260811-board-owns-its-rendering.md`.
+    See `.c3/adr/adr-20260811-board-owns-its-rendering.md`.
 - **Design gate:** no raw hex, no `backdrop-blur`, project `Tooltip` instead of native `title`, `tabular-nums` on counts and ages. Column dots carry no pulse/glow.
 - **Store rules:** `boardsStore` selectors return stable refs (module-level `EMPTY`), state transitions are **named store actions** — no inline updaters in JSX (`no-jsx-inline-state-updater`, `no-jsx-inline-state-logic`), no inline functions passed to custom hooks (`no-unstable-hook-fn-arg`).
 - **Scale:** `virtualization` + `loadMore(columnId)` wired to a paged `board.cards.page` command; `totalChildrenCount` comes from a `COUNT(*)`, so a 5k-issue import renders as skeletons and pages in.

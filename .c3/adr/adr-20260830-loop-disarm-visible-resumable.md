@@ -1,6 +1,6 @@
 ---
 id: adr-20260830-loop-disarm-visible-resumable
-c3-seal: c6ad36d9d9bae865f699618e3048292c5faffad6d61822686775dffc8d34896d
+c3-seal: 2269c0a408086ee2ac654b6462df9cc218524a98d437885169d49b80c0372dc0
 title: loop-disarm-visible-resumable
 type: adr
 goal: 'Make disarming an autonomous loop observable and undoable. A real user `chat.send` disarms any armed loop as a takeover, and that happened with no transcript entry, no UI signal, and no way back: compaction then erased the `loop_armed` event carrying the loop''s spec, so re-arming meant restating goal, oracle, workdir and tracking file to `setup_loop` from scratch. Retain the arm/disarm pair as a tombstone, append a `loop_disarmed` transcript card, add a `resume_loop` MCP tool that re-arms from the tombstone, and stop gating the rate-limit resume affordance on the loop still being armed.'
@@ -44,35 +44,35 @@ Rejected: making `user_send` pause instead of disarm. The tool-blocking semantic
 
 | Entity | Type | Why affected | Evidence | Governance review |
 | --- | --- | --- | --- | --- |
-| c3-210 | component | Owns `stopLoop` / `disarmFailingLoop` / `isLoopArmed` and the loop MCP surface; gains the disarm card append, `resumeLoop`, and the `resume_loop` threading through both drivers' spawn args | c3-210#n9248@v1:sha256:4357f6d650059aba4f1624273b4114b7fad8925535deed9952140c789d48e5f8 | Confirm the card append cannot fail a user send, and that `resume_loop` stays gated to depth 0 like `setup_loop` |
-| c3-227 | component | `compactLoopWakeEvents` retention widened to keep the arm/disarm tombstone, and `deriveLastLoopSpec` added beside `deriveLoopState` — both files under `src/server/auto-continue/**`, which this component owns | c3-227#n10135@v1:sha256:f7affc2f6d825317e70bae8aa9faf9b19807849a5a39d911e467d871264b9fdd | Confirm both tombstone halves are retained together, and that `deriveLoopState` still returns null after a disarm |
-| c3-207 | component | `deriveChatSnapshot` stops gating `rateLimit` on `loopState`, so a live usage-limit schedule reaches the client after a disarm | c3-207#n6530@v1:sha256:fcde78a59ac52af675e32b8beffd96f801400deee2a39a336bba00bef3382138 | Confirm read-model purity and that no other consumer relied on the loop-armed coupling |
-| c3-112 | component | Chat transcript renders the new `loop_disarmed` card, and the Progress panel stays mounted for a live rate-limit with no rows | c3-112#n9385@v1:sha256:c7c8905039eb5b78ce4fe192f422d7dfe3ab9cda3da6799881f0549a3af1facb | Confirm design-token compliance (no hex, no native `title`) and no render-loop regression |
+| c3-210 | component | Owns stopLoop / disarmFailingLoop / isLoopArmed and the loop MCP surface; gains the disarm card append, resumeLoop, and the resume_loop threading through both drivers' spawn args | c3-210#n9248@v1:sha256:4357f6d650059aba4f1624273b4114b7fad8925535deed9952140c789d48e5f8 | Confirm the card append cannot fail a user send, and that resume_loop stays gated to depth 0 like setup_loop |
+| c3-227 | component | compactLoopWakeEvents retention widened to keep the arm/disarm tombstone, and deriveLastLoopSpec added beside deriveLoopState — both files under src/server/auto-continue/**, which this component owns | c3-227#n10135@v1:sha256:f7affc2f6d825317e70bae8aa9faf9b19807849a5a39d911e467d871264b9fdd | Confirm both tombstone halves are retained together, and that deriveLoopState still returns null after a disarm |
+| c3-207 | component | deriveChatSnapshot stops gating rateLimit on loopState, so a live usage-limit schedule reaches the client after a disarm | c3-207#n6530@v1:sha256:fcde78a59ac52af675e32b8beffd96f801400deee2a39a336bba00bef3382138 | Confirm read-model purity and that no other consumer relied on the loop-armed coupling |
+| c3-112 | component | Chat transcript renders the new loop_disarmed card, and the Progress panel stays mounted for a live rate-limit with no rows | c3-112#n9385@v1:sha256:c7c8905039eb5b78ce4fe192f422d7dfe3ab9cda3da6799881f0549a3af1facb | Confirm design-token compliance (no hex, no native title) and no render-loop regression |
 | c3-2 | container | Server container holds the affected server components; no responsibility crosses the container boundary | c3-2#n8682@v1:sha256:87984e312939cc03eed326c220cafc5c1bc82c40e789678100477a162a4901ce | Verify no-delta at container level |
 
 ## Compliance Rules
 
 | Rule | Why required | Evidence | Action |
 | --- | --- | --- | --- |
-| rule-colocated-bun-test | New client component gets `LoopDisarmedMessage.test.tsx` (10 cases, `renderToStaticMarkup` so no React root is mounted); the new `resumeLoop` and the disarm card are covered in the existing colocated `loop-wake-recovery.test.ts` and `claude-loop-commands.test.ts`; the retention change rewrites the compaction test that pinned the old erase-everything behaviour | rule-colocated-bun-test#n11234@v1:sha256:ce58e026c1076cb18ede38f3a4bd73793f28bf1392d299399571ba446985623f | comply |
+| rule-colocated-bun-test | New client component gets LoopDisarmedMessage.test.tsx (10 cases, renderToStaticMarkup so no React root is mounted); the new resumeLoop and the disarm card are covered in the existing colocated loop-wake-recovery.test.ts and claude-loop-commands.test.ts; the retention change rewrites the compaction test that pinned the old erase-everything behaviour | rule-colocated-bun-test#n11234@v1:sha256:ce58e026c1076cb18ede38f3a4bd73793f28bf1392d299399571ba446985623f | comply |
 
 ## Alternatives Considered
 
 | Alternative | Why rejected |
 | --- | --- |
 | Stop disarming on user send | The takeover is correct: an armed loop blocks Edit/Write/Task at spawn, so a user asking for a manual change while armed would silently get a crippled agent |
-| Keep erasing the spec; have the user re-run `setup_loop` | That is the current behaviour and it is what failed. It requires the user to remember four values the host already had, and `setup_loop` then refuses a passing oracle or a git-tracked plan without `force` |
-| Add a paused loop state (`loop_paused` / `loop_resumed`, mirroring cron) | Larger event-model change whose only extra benefit over a retained tombstone is naming; tool-blocking is binary, so a paused state forces a policy decision on every `isLoopArmed` consumer |
-| Render the disarm as a `status` entry instead of a new kind | `status` is the background-task activity line; overloading it would make the disarm unstyleable and unsearchable, and the cron precedent (`cron_job_change`) is a dedicated kind |
+| Keep erasing the spec; have the user re-run setup_loop | That is the current behaviour and it is what failed. It requires the user to remember four values the host already had, and setup_loop then refuses a passing oracle or a git-tracked plan without force |
+| Add a paused loop state (loop_paused / loop_resumed, mirroring cron) | Larger event-model change whose only extra benefit over a retained tombstone is naming; tool-blocking is binary, so a paused state forces a policy decision on every isLoopArmed consumer |
+| Render the disarm as a status entry instead of a new kind | status is the background-task activity line; overloading it would make the disarm unstyleable and unsearchable, and the cron precedent (cron_job_change) is a dedicated kind |
 
 ## Verification
 
 | Check | Result |
 | --- | --- |
 | bun test --conditions production src/server/auto-continue/ | 88 pass. Tombstone retained as a PAIR; the pre-existing "deriveLoopState returns null after disarmed-loop compaction" still passes, which is what proves the arm alone is never kept |
-| bun test --conditions production src/server/loop-wake-recovery.test.ts | 18 pass, incl. 3 new `resumeLoop` cases asserting the spec round-trips verbatim (subagent, oracle, workdir, tracking file) and both refusals |
-| bun test --conditions production src/server/claude-loop-commands.test.ts | 16 pass, incl. the card naming plan + worktree, no card without an armed loop, and no card on `chat_deleted` |
+| bun test --conditions production src/server/loop-wake-recovery.test.ts | 18 pass, incl. 3 new resumeLoop cases asserting the spec round-trips verbatim (subagent, oracle, workdir, tracking file) and both refusals |
+| bun test --conditions production src/server/claude-loop-commands.test.ts | 16 pass, incl. the card naming plan + worktree, no card without an armed loop, and no card on chat_deleted |
 | bun test --conditions production src/client/components/messages/ src/client/lib/ | 782 pass |
 | bun run test | 7316 pass / 2 skip / 0 fail across 551 files |
 | bun run typecheck && bun run lint && bun run lint:usestate && bunx ast-grep test | All clean (lint at --max-warnings=0; 19 ast-grep rules pass) |
-| bun run check:arch | 44 pass. `agent-coordinator.ts` 1483 → 1480 and `claude-pty/driver.ts` 1104 → 1103, both under their allowances |
+| bun run check:arch | 44 pass. agent-coordinator.ts 1483 → 1480 and claude-pty/driver.ts 1104 → 1103, both under their allowances |

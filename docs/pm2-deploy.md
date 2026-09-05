@@ -141,7 +141,7 @@ How this is contained:
   (`/`, `/chat/:id`, `/settings/:section`, `/workflows/:id`, `/share/:token`) fall back to
   `index.html`. Before this, a missing chunk returned `200 index.html`, and the browser
   reported the misleading `Failed to fetch dynamically imported module`.
-- Lazy imports go through `createLazyLoader` (`src/client/lib/lazyModule.ts`), which caches the
+- Lazy imports go through `createLazyLoader` (`src/shared/lazyModule.ts`), which caches the
   resolved module but **never** the rejection — so a later mount retries instead of staying
   broken for the life of the tab.
 - A Mermaid diagram that hits this shows "This diagram needs the latest version of the app"

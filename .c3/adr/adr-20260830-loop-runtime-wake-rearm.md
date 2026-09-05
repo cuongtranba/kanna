@@ -1,6 +1,6 @@
 ---
 id: adr-20260830-loop-runtime-wake-rearm
-c3-seal: f026d64bcd0315ed316180b541c415695b19bac2b1634b1199daf80c3f5c1e86
+c3-seal: afaf1b71668f964695ffa4c25846ea4bc1db9d6cbf21614ae17212bb1acbe48b
 title: loop-runtime-wake-rearm
 type: adr
 goal: Stop an ARMED autonomous loop from stalling silently when its own orchestrator turn dies before it can delegate. `recoverArmedLoopWakes` (adr-20260814) already restores a wake lost WITH the server, but nothing restores a wake lost while the server keeps running, so a single transient transport error ends the loop with no observer and no record. Add `handleFailedLoopTurn`, called from the store's turn-terminal observer, and move it plus the boot pass into one module (`src/server/loop-wake-recovery.ts`) so both halves of the wake invariant re-arm through exactly one code path.
@@ -38,34 +38,34 @@ The module split is not cosmetic: adding this logic to `claude-loop-commands.ts`
 
 | Entity | Type | Why affected | Evidence | Governance review |
 | --- | --- | --- | --- | --- |
-| c3-210 | component | Owns `LoopState`/`isLoopArmed`, `emitAutoContinueEvent`, and the `deliverSubagentToMain` delivery whose `loop_run_outcome`/`disarmFailingLoop` backstop this reuses; the new `loop-wake-recovery.ts` and the `onTurnTerminal` wiring are dispatch modules this component already owns per adr-20260814's precedent | c3-210#n9248@v1:sha256:4357f6d650059aba4f1624273b4114b7fad8925535deed9952140c789d48e5f8 | Confirm the re-arm never bypasses `emitAutoContinueEvent` (the single append path), never re-derives busy state from raw maps, and cannot throw into the turn-terminal observer |
-| c3-227 | N.A - checked, not modified | Checked because the re-arm emits `auto_continue_accepted` and reads `deriveChatSchedules`/`deriveLoopState`; both reads are pure and the `source: "subagent_background"` variant is owned by c3-210's `emitAutoContinueEvent`, not by c3-227's contract, which scopes to `auto_continue_scheduled`/`triggered`/`cancelled`. No file under `src/server/auto-continue/**` changed | c3-227#n10135@v1:sha256:f7affc2f6d825317e70bae8aa9faf9b19807849a5a39d911e467d871264b9fdd | None required now; re-open if the re-arm ever writes rate-limit/auth scheduling state |
+| c3-210 | component | Owns LoopState/isLoopArmed, emitAutoContinueEvent, and the deliverSubagentToMain delivery whose loop_run_outcome/disarmFailingLoop backstop this reuses; the new loop-wake-recovery.ts and the onTurnTerminal wiring are dispatch modules this component already owns per adr-20260814's precedent | c3-210#n9248@v1:sha256:4357f6d650059aba4f1624273b4114b7fad8925535deed9952140c789d48e5f8 | Confirm the re-arm never bypasses emitAutoContinueEvent (the single append path), never re-derives busy state from raw maps, and cannot throw into the turn-terminal observer |
+| c3-227 | N.A - checked, not modified | Checked because the re-arm emits auto_continue_accepted and reads deriveChatSchedules/deriveLoopState; both reads are pure and the source: "subagent_background" variant is owned by c3-210's emitAutoContinueEvent, not by c3-227's contract, which scopes to auto_continue_scheduled/triggered/cancelled. No file under src/server/auto-continue/** changed | c3-227#n10135@v1:sha256:f7affc2f6d825317e70bae8aa9faf9b19807849a5a39d911e467d871264b9fdd | None required now; re-open if the re-arm ever writes rate-limit/auth scheduling state |
 | c3-2 | container | Server container holds the affected component; no responsibility crosses the container boundary | c3-2#n8682@v1:sha256:87984e312939cc03eed326c220cafc5c1bc82c40e789678100477a162a4901ce | Verify no-delta at container level |
 
 ## Compliance Rules
 
 | Rule | Why required | Evidence | Action |
 | --- | --- | --- | --- |
-| rule-colocated-bun-test | A new production module (`loop-wake-recovery.ts`) owes a colocated suite; `loop-wake-recovery.test.ts` carries 15 cases covering both entry points, every guard, the boot/runtime subagent-guard asymmetry, and the never-throws contract. Shared `LoopCommandDeps` fakes moved to `src/server/test-helpers/loop-command-fakes.ts` so the two suites cannot assert the invariant differently | rule-colocated-bun-test#n11234@v1:sha256:ce58e026c1076cb18ede38f3a4bd73793f28bf1392d299399571ba446985623f | comply |
+| rule-colocated-bun-test | A new production module (loop-wake-recovery.ts) owes a colocated suite; loop-wake-recovery.test.ts carries 15 cases covering both entry points, every guard, the boot/runtime subagent-guard asymmetry, and the never-throws contract. Shared LoopCommandDeps fakes moved to src/server/test-helpers/loop-command-fakes.ts so the two suites cannot assert the invariant differently | rule-colocated-bun-test#n11234@v1:sha256:ce58e026c1076cb18ede38f3a4bd73793f28bf1392d299399571ba446985623f | comply |
 
 ## Alternatives Considered
 
 | Alternative | Why rejected |
 | --- | --- |
-| Widen `detectFromResultText` so transport errors reach `handleLimitDetection` | That handler's job is provider rate-limit/auth rotation — it marks tokens limited and schedules at a reset timestamp. An `ENOTFOUND` has no reset time and no token to blame, so it would fabricate a rotation for a network blip |
-| A periodic sweep calling `recoverArmedLoopWakes` on a timer | Polls every armed chat forever to catch a rare event, and its latency is the poll interval. The terminal observer already knows the exact moment a wake can be lost. Still worth adding later as defence in depth for paths nobody enumerated — it is idempotent — but it is not the primary fix |
-| Re-arm directly inside `claude-session-runner.ts`'s failure branches | There are five terminal paths across the SDK, Codex/PTY runners and the turn starter; each would need the call, and a sixth added later would silently miss it. `onTurnTerminal` is the single choke point they all already funnel through |
-| Re-arm synchronously in the observer | `recordTurnFailed` fires the observer before `activeTurns.delete` and before the queued-message drain, so `isChatBusy` still reports busy and the queue still looks empty — the guards would read a state that is about to change |
-| Add a `MODULE_ALLOWANCES` entry for the grown `claude-loop-commands.ts` | Pins are defect counts; raising one records that the PR made #889 worse. The wake invariant is a cohesive concern and a module of its own is the honest home |
+| Widen detectFromResultText so transport errors reach handleLimitDetection | That handler's job is provider rate-limit/auth rotation — it marks tokens limited and schedules at a reset timestamp. An ENOTFOUND has no reset time and no token to blame, so it would fabricate a rotation for a network blip |
+| A periodic sweep calling recoverArmedLoopWakes on a timer | Polls every armed chat forever to catch a rare event, and its latency is the poll interval. The terminal observer already knows the exact moment a wake can be lost. Still worth adding later as defence in depth for paths nobody enumerated — it is idempotent — but it is not the primary fix |
+| Re-arm directly inside claude-session-runner.ts's failure branches | There are five terminal paths across the SDK, Codex/PTY runners and the turn starter; each would need the call, and a sixth added later would silently miss it. onTurnTerminal is the single choke point they all already funnel through |
+| Re-arm synchronously in the observer | recordTurnFailed fires the observer before activeTurns.delete and before the queued-message drain, so isChatBusy still reports busy and the queue still looks empty — the guards would read a state that is about to change |
+| Add a MODULE_ALLOWANCES entry for the grown claude-loop-commands.ts | Pins are defect counts; raising one records that the PR made #889 worse. The wake invariant is a cohesive concern and a module of its own is the honest home |
 
 ## Verification
 
 | Check | Result |
 | --- | --- |
-| bun test --conditions production src/server/loop-wake-recovery.test.ts | 15 pass. Includes the RED-first case: an armed loop whose orchestrator turn failed re-arms exactly one `auto_continue_accepted` carrying the full loop prompt, plus `loop_run_outcome {ok:false}` |
-| bun test --conditions production src/server/claude-loop-commands.test.ts | 13 pass; module-surface test updated to pin `disarmFailingLoop` as exported and to drop the moved `recoverArmedLoopWakes` |
-| bun test --conditions production src/server/agent.turn-duration-metric.test.ts | 3 pass; the terminal-observer fake gains `getAutoContinueEvents` so the loop branch is exercised as a real no-op rather than an exception |
+| bun test --conditions production src/server/loop-wake-recovery.test.ts | 15 pass. Includes the RED-first case: an armed loop whose orchestrator turn failed re-arms exactly one auto_continue_accepted carrying the full loop prompt, plus loop_run_outcome {ok:false} |
+| bun test --conditions production src/server/claude-loop-commands.test.ts | 13 pass; module-surface test updated to pin disarmFailingLoop as exported and to drop the moved recoverArmedLoopWakes |
+| bun test --conditions production src/server/agent.turn-duration-metric.test.ts | 3 pass; the terminal-observer fake gains getAutoContinueEvents so the loop branch is exercised as a real no-op rather than an exception |
 | bun run test | 7299 pass / 2 skip / 0 fail across 550 files |
 | bun run typecheck && bun run lint && bun run lint:usestate | All clean (lint at --max-warnings=0) |
-| bun run check:arch | 44 pass. `claude-loop-commands.ts` 619 → 569 (under the 700 threshold, still unlisted); `agent-coordinator.ts` stays exactly at its 1483 allowance |
+| bun run check:arch | 44 pass. claude-loop-commands.ts 619 → 569 (under the 700 threshold, still unlisted); agent-coordinator.ts stays exactly at its 1483 allowance |
 | bun run build | Exits 0 |

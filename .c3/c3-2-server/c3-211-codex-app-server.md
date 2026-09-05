@@ -1,7 +1,7 @@
 ---
 id: c3-211
 c3-version: 4
-c3-seal: 01978c0bbd401665f63e08ddf671e55c1f7e7953bb04062675448805938686de
+c3-seal: 5111854ff1400030ff64327fc4613cfea3679cee1fd90effd2caab50f428af0a
 title: codex-app-server
 type: component
 category: feature
@@ -52,7 +52,7 @@ Spawns the Codex App Server child process, speaks JSON-RPC, maps its event strea
 | Alternate — cancel | RPC cancel propagates to running turn | c3-210 |
 | Failure — child crash | Restart child; surface error event | c3-209 |
 | Alternate — compaction | The protocol is initialize, initialized, thread/{fork,resume,start}, turn/{start,interrupt} — there is no compaction request, so Kanna can observe thread/compacted but never ask for it. A user /compact is therefore a Kanna-driven summarize turn plus a session-token wipe plus stopSession; the stop is required because startSession reuses a live session on a cwd match and never consults the token | c3-210 |
-| Alternate — no tool declaration | The protocol offers no way to give Codex a tool: `ThreadStartParams` carries no `mcpServers`, `TurnStartParams` no `tools`, and an unrecognised `item/tool/call` is answered `Unsupported dynamic tool call`. `developerInstructions` is therefore the ONLY per-session injection point, and it is how c3-210 delivers the local skill roster — naming each absolute `SKILL.md` path, which the thread can read because it runs `approvalPolicy: "never"` with `sandbox: "danger-full-access"`. See adr-20260905-provider-agnostic-slash-commands | c3-210 |
+| Alternate — no tool declaration | The protocol offers no way to give Codex a tool: ThreadStartParams carries no mcpServers, TurnStartParams no tools, and an unrecognised item/tool/call is answered Unsupported dynamic tool call. developerInstructions is therefore the ONLY per-session injection point, and it is how c3-210 delivers the local skill roster — naming each absolute SKILL.md path, which the thread can read because it runs approvalPolicy: "never" with sandbox: "danger-full-access". See adr-20260905-provider-agnostic-slash-commands | c3-210 |
 
 ## Governance
 

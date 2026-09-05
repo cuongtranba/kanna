@@ -1,6 +1,6 @@
 ---
 id: adr-20260818-cron-arm-confirm-tool-result
-c3-seal: 850991af5b908ca5771f8099fe056c43c086945b5ad3955fadc161f01708d985
+c3-seal: 29224db7a074c67ce7d689d503eb32425ae18e5363fdbb3c051ce178eb5ca7dd
 title: cron-arm-confirm-tool-result
 type: adr
 goal: After a successful `arm_cron` call, return the job id, the full `CronArmSummary`, and an explicit `AskUserQuestion` instruction so the model presents the configuration for user confirmation before the job runs unchecked.
@@ -49,8 +49,8 @@ The `ARM_CRON_DESCRIPTION` gains a post-arm review rule alongside the existing p
 
 | Check | Result |
 | --- | --- |
-| `bun test --conditions production src/server/kanna-mcp.test.ts` | arm_cron: 7 tests pass (job id in result, AskUserQuestion instruction, description covers both rules) |
-| `bun test --conditions production src/server/cron/commands.test.ts` | 18 tests pass |
-| `bun run test` | 6489 pass, 0 fail |
-| `bun run lint` | 0 errors, 0 warnings |
-| `bun run typecheck` | 0 errors |
+| bun test --conditions production src/server/kanna-mcp.test.ts | arm_cron: 7 tests pass (job id in result, AskUserQuestion instruction, description covers both rules) |
+| bun test --conditions production src/server/cron/commands.test.ts | 18 tests pass |
+| bun run test | 6489 pass, 0 fail |
+| bun run lint | 0 errors, 0 warnings |
+| bun run typecheck | 0 errors |
