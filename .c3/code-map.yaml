@@ -22,6 +22,7 @@ c3-110:
   - src/client/app/appRuntime.ts
   - src/client/app/useAppGlobalState.test.ts
   - src/client/app/useAppGlobalState.ts
+  - src/client/app/useKannaState.scrollback.test.tsx
   - src/client/app/useKannaState.test.ts
   - src/client/app/useKannaState.ts
   - src/client/components/LocalDev.tsx

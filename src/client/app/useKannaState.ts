@@ -936,14 +936,23 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
     })
   }, [activeChatId, appGlobal.routeChatId, appGlobal.sidebarReady, dom, focusEpoch, sidebarProjectGroups, socket])
 
-  useEffect(() => {
-    if (!activeChatId) return
-    const store = useChatStateStore.getState()
-    store.setOlderHistoryEntries(activeChatId, [])
-    store.setIsHistoryLoading(activeChatId, false)
-    store.setHistoryCursor(activeChatId, null)
-    store.setHasOlderHistory(activeChatId, false)
-  }, [activeChatId])
+  // There is deliberately NO "reset scrollback on chat change" effect here.
+  // Scrollback state is per-chat (`chatStateStore` slices) and a chat that has
+  // never been opened already reads as EMPTY_CHAT_SLICE, so entering a chat has
+  // nothing to clear; `releaseChat` frees the slice when the last subscription
+  // for that chat goes away. The effect that used to live here dated from when
+  // this state was GLOBAL (one chat at a time), and after #624 mapped it onto
+  // per-chat slices it cleared the slice of the chat being ENTERED — the only
+  // place `adoptServerHistory` ever writes the cursor. Because chat
+  // subscriptions are refcount-SHARED (`acquireChatSubscription`), the snapshot
+  // that carries `history` is delivered exactly once, to whichever consumer
+  // created the subscription; every LATER `useKannaState` for the same chat (the
+  // route-level one in App.tsx plus one per ChatTabRoot) ran the reset on its own
+  // mount, after that snapshot had already landed. Measured on a cold load of
+  // chat dfddedb5: adopt at t+111ms wrote `hasOlder: true` /
+  // `olderCursor: byte:4122128`, the reset at t+788ms wiped both, and no further
+  // snapshot ever arrived — so `handleStartReached` returned early forever and
+  // scrolling to the top neither showed the loader nor fetched a page.
 
   // project-git and project-commands subscriptions live in useAppGlobalState,
   // subscribing once per distinct open projectId (deduplication for session tabs).
