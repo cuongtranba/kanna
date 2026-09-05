@@ -14,6 +14,7 @@ import { type AppSettingsPatch, type AppSettingsSnapshot, type ClaudeAuthSetting
 import type { AgentProvider, ChatDiffSnapshot, ChatSnapshot, CloudflareTunnelSettings, GitWorktree, LocalProjectsSnapshot, ProjectCommandsSnapshot, SidebarChatRow, SidebarData, StackSummary } from "../../shared/types"
 import { NEW_CHAT_COMPOSER_ID, useChatPreferencesStore } from "../stores/chatPreferencesStore"
 import { useNewSessionStore } from "../stores/newSessionStore"
+import { flyChatTitleToTab } from "../lib/motion/titleFlip.adapter"
 import { useRightSidebarStore } from "../stores/rightSidebarStore"
 import { useTerminalLayoutStore } from "../stores/terminalLayoutStore"
 import { selectEditorCommandTemplate, selectEditorPreset, useAppSettingsStore } from "../stores/appSettingsStore"
@@ -988,6 +989,10 @@ export function useAppGlobalState(
     // chat surface and the composer are already spawning on their first
     // render — set it after and they paint at rest, then jump.
     useNewSessionStore.getState().markSpawned(result.chatId)
+    // Beat 3's carry (§01). Detached: it waits for both the sidebar row and
+    // the tab to render, and a chat must never fail to open because a
+    // flourish could not find its two ends.
+    void flyChatTitleToTab(result.chatId)
     const store = useKannaStateStore.getState()
     store.setSelectedProjectId(projectId)
     store.setPendingChatId(result.chatId)

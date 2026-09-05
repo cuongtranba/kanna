@@ -790,6 +790,37 @@
     a class the sidebar computes for itself — KannaSidebar sits exactly on its
     architecture-budget ceiling, and the shell already holds this flag.
   */
+  /*
+    ── The finger-tracked drawer (§07) ─────────────────────────────────────
+    On a phone motion IS the navigation, and the drawer's whole point is that
+    it follows the thumb rather than teleporting on release.
+
+    Two things happen here and nowhere else:
+
+    1. `display: flex` OVERRIDES the `hidden` a closed sidebar carries. That
+       is what lets a finger drag a closed drawer into view without React
+       re-rendering — `open` stays false, so the FocusScope stays untrapped
+       (trapping focus mid-swipe would be wrong) and `KannaSidebar` needs no
+       new prop, no new state and no new line. The class is applied only for
+       the length of a gesture, by `drawerVisual`.
+
+    2. The transform reads `--kanna-drawer-progress`, written per frame
+       through DomPort. 0 is fully closed, 1 fully open — the same scale
+       `sidebarDragProgress` reports, so the number the tests assert is the
+       number the pixels use.
+
+    Scoped below md deliberately: `sidebarDragProgress` already returns null
+    on a desktop viewport, so the class should never appear there, and this
+    media query means a bug that applied it anyway could not move a docked
+    sidebar.
+  */
+  @media (max-width: 767px) {
+    .kanna-drawer-dragging .kanna-sidebar-shell {
+      display: flex;
+      transform: translateX(calc((var(--kanna-drawer-progress, 1) - 1) * 100%));
+    }
+  }
+
   [data-kanna-spawning] .kanna-sidebar-shell {
     animation: kanna-shell-step-back calc(2 * var(--motion-carry)) var(--motion-ease-arriving) 260ms;
   }
