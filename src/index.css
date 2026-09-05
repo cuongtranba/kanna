@@ -403,10 +403,26 @@
     overflow: hidden;
   }
 
+  /*
+    Panels arrive from the edge they live on.
+
+    The 4px nudge these carried was too small to say anything: a panel appeared
+    with no sense of which edge it came from, so opening one read as a repaint
+    rather than a movement. The travel is now a full panel dimension, which
+    composes with the box growth `useTerminalToggleAnimation` /
+    `useRightSidebarToggleAnimation` already drive through
+    react-resizable-panels — the box opens and the content rides in behind it.
+
+    `--terminal-toggle-duration` and the `data-*-animated="false"` escape hatch
+    are both kept: the hatch is what lets a layout restore land without playing
+    an animation nobody asked for. The literal 280ms fallback and cubic-bezier
+    are now the motion tokens, so these read from the same table as everything
+    else.
+  */
   [data-terminal-visual] {
     transition:
-      opacity var(--terminal-toggle-duration, 280ms) cubic-bezier(0.22, 1, 0.36, 1),
-      transform var(--terminal-toggle-duration, 280ms) cubic-bezier(0.22, 1, 0.36, 1);
+      opacity var(--terminal-toggle-duration, var(--motion-panel)) var(--motion-ease-panel),
+      transform var(--terminal-toggle-duration, var(--motion-panel)) var(--motion-ease-panel);
     will-change: opacity, transform;
   }
 
@@ -414,9 +430,10 @@
     transition: none;
   }
 
+  /* Opens upward from the bottom edge. */
   [data-terminal-visual][data-terminal-open="false"] {
     opacity: 0;
-    transform: translateY(4px);
+    transform: translateY(100%);
   }
 
   [data-terminal-visual][data-terminal-open="true"] {
@@ -426,8 +443,8 @@
 
   [data-right-sidebar-visual] {
     transition:
-      opacity var(--terminal-toggle-duration, 280ms) cubic-bezier(0.22, 1, 0.36, 1),
-      transform var(--terminal-toggle-duration, 280ms) cubic-bezier(0.22, 1, 0.36, 1);
+      opacity var(--terminal-toggle-duration, var(--motion-panel)) var(--motion-ease-panel),
+      transform var(--terminal-toggle-duration, var(--motion-panel)) var(--motion-ease-panel);
     will-change: opacity, transform;
   }
 
@@ -435,9 +452,10 @@
     transition: none;
   }
 
+  /* Slides in from the right edge. */
   [data-right-sidebar-visual][data-right-sidebar-open="false"] {
     opacity: 0;
-    transform: translateX(4px);
+    transform: translateX(100%);
   }
 
   [data-right-sidebar-visual][data-right-sidebar-open="true"] {
@@ -526,6 +544,36 @@
     to {
       filter: blur(0);
     }
+  }
+
+  /*
+    The git panel's contents arrive AFTER the panel has landed, not with it —
+    a panel and its payload moving together read as one slab, and the reader
+    cannot tell the frame from what it holds.
+
+    Deliberately no `animation-fill-mode`. The resting state is the visible
+    one, so an animation that is throttled, frozen or never runs leaves the
+    diff list simply static — motion is lost, content is not (handoff pitfall
+    #1). A `forwards`/`both` fill here would strand the panel blank.
+
+    Applied to the list CONTAINER rather than each row: the file list is a
+    virtualized LegendList that recycles rows on scroll, so a per-row stagger
+    would replay every time a row came back into view.
+  */
+  @keyframes kanna-panel-content-in {
+    from {
+      opacity: 0;
+      transform: translateX(10px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  .kanna-panel-content-in {
+    animation: kanna-panel-content-in var(--motion-row) var(--motion-ease-arriving) 120ms;
   }
 
   @keyframes kanna-cursor-blink {
