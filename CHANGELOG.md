@@ -8,6 +8,21 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.48.0](https://github.com/cuongtranba/kanna/compare/v1.47.0...v1.48.0) (2026-09-05)
+
+
+### Features
+
+* **image-view:** render the viewed image inline when the row is expanded ([#1052](https://github.com/cuongtranba/kanna/issues/1052)) ([6b4c879](https://github.com/cuongtranba/kanna/commit/6b4c879ae032cfe93c38a185c6b694e4eccf2907))
+* **motion:** finish §07's finger-tracked drawer and §01's title carry ([#1058](https://github.com/cuongtranba/kanna/issues/1058)) ([779858d](https://github.com/cuongtranba/kanna/commit/779858dc6202e4ab2db129284c989d4c4f6b6e5a))
+* **skills:** run a local /skill on any provider, not just the claude CLI ([#1054](https://github.com/cuongtranba/kanna/issues/1054)) ([f491f0c](https://github.com/cuongtranba/kanna/commit/f491f0c085d6eba4d680b111a66919f1ce7bfe3b))
+
+
+### Bug Fixes
+
+* **client:** stop a second consumer from wiping a chat's scrollback cursor ([#1053](https://github.com/cuongtranba/kanna/issues/1053)) ([67da508](https://github.com/cuongtranba/kanna/commit/67da5086d031dca4681cb6e436211ae77c03cb43))
+* **messages:** strengthen user prompt hierarchy ([#1050](https://github.com/cuongtranba/kanna/issues/1050)) ([642bafd](https://github.com/cuongtranba/kanna/commit/642bafdef43457dcbeeb201811c17f1a2c2ea032))
+
 ## [1.47.0](https://github.com/cuongtranba/kanna/compare/v1.46.0...v1.47.0) (2026-09-04)
 
 
