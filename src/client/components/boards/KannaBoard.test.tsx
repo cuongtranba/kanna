@@ -5,12 +5,6 @@ import { EMPTY_CHAT_ACTIVITY } from "../../../shared/types"
 import type { BoardChatFacts } from "../../lib/boards/boardChatFacts"
 import type { BoardViewSnapshot, Card } from "../../../shared/boards/types"
 
-/**
- * The card's status row answers one question — "is an agent working this card
- * right now" — and says nothing when the answer is no. These pin both halves:
- * the signal when there is one, and the silence when there is not, which is
- * what keeps a 200-card board readable.
- */
 
 function card(id: string, overrides?: Partial<Card>): Card {
   return {
@@ -21,8 +15,6 @@ function card(id: string, overrides?: Partial<Card>): Card {
     title: id,
     rank: "a0",
     content: {},
-    // Attribution, deliberately: an agent wrote this row last. The status row
-    // must key on chat LIVENESS, so this alone buys the card nothing.
     updatedBy: { kind: "agent", chatId: "chat-that-wrote-it" },
     createdAt: 0,
     updatedAt: 0,
@@ -97,11 +89,9 @@ describe("BoardCard chat signal", () => {
 
     expect(html).toContain("bg-warning")
     expect(html).toContain("Running")
-    // tabular-nums so the ticker cannot reflow the card underneath it.
     expect(html).toMatch(/tabular-nums[^>]*>1:20</u)
   })
 
-  /** Colour never carries the meaning alone, and a dot never pulses. */
   test("the signal is never colour alone, and never animates", () => {
     const html = render(
       view({ "card-1": ["chat-1"] }, [card("card-1")]),
@@ -124,7 +114,6 @@ describe("BoardCard chat signal", () => {
     expect(html).not.toContain("bg-success")
   })
 
-  /** Silence is the healthy state: a badge on every card is noise. */
   test("a card with no linked chat renders no status row", () => {
     const html = render(view({}, [card("card-1")]), facts({}))
 
@@ -133,17 +122,12 @@ describe("BoardCard chat signal", () => {
     expect(html).not.toContain("Running")
   })
 
-  /**
-   * A link is evidence, not proof — the reaper deletes chats nobody wrote to,
-   * so a card can outlive its chat and must not claim one it cannot open.
-   */
   test("a link to a chat that no longer exists renders no status row", () => {
     const html = render(view({ "card-1": ["gone"] }, [card("card-1")]), facts({}))
 
     expect(html).not.toContain("chats")
   })
 
-  /** The board is mounted without chat facts in places that only need layout. */
   test("renders without any chat facts at all", () => {
     const html = render(view({ "card-1": ["chat-1"] }, [card("card-1")]))
 

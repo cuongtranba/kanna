@@ -1,14 +1,3 @@
-/**
- * Headless markdown → static React tree renderer using Lexical 0.45.
- *
- * Public API:
- *   renderMarkdownToReact(markdown, transformers?)  → ReactNode  (one-shot)
- *   useRenderedMarkdown(markdown)                   → ReactNode  (memoised hook)
- *   lexicalStateToReact()                           → ReactNode  (low-level)
- *
- * Visual-parity contract: className strings mirror `markdownComponents` in
- * src/client/components/messages/shared.tsx exactly.
- */
 
 import { useMemo, type ReactNode } from "react"
 import { createHeadlessEditor } from "@lexical/headless"
@@ -65,9 +54,6 @@ import { KANNA_BUILTIN_TRANSFORMERS } from "./gfmTransformers"
 import { buildKannaEditorConfig } from "../config"
 import { MessageCodeBlock } from "./MessageCodeBlock"
 
-// ---------------------------------------------------------------------------
-// Node set required by the headless editor
-// ---------------------------------------------------------------------------
 
 const KANNA_NODES = [
   HeadingNode,
@@ -83,22 +69,12 @@ const KANNA_NODES = [
   TableCellNode,
 ]
 
-// ---------------------------------------------------------------------------
-// Node walker — maps Lexical nodes → React elements
-// ---------------------------------------------------------------------------
 
-/** Unique key counter per render pass (reset each call to `lexicalStateToReact`). */
 let keyCounter = 0
 function nextKey(): string {
   return String(keyCounter++)
 }
 
-// Heading className map, triplicated (deliberately, see renderMessage.tsx's
-// file header) across this file, ../config.ts and ../markdown/renderMessage.tsx.
-// ../../headingClassMap.test.ts pins all three copies equal to each other so
-// they cannot silently drift. Uses the --text-N tokens (src/index.css @theme)
-// instead of arbitrary text-[Npx] utilities so headings respond to
-// --kanna-font-scale.
 export const HEADING_CLASS_MAP: Record<string, string> = {
   h1: "text-20 font-normal leading-tight mt-5 mb-3 first:mt-0 last:mb-0",
   h2: "text-18 font-normal leading-tight mt-5 mb-3 first:mt-0 last:mb-0",
@@ -108,9 +84,7 @@ export const HEADING_CLASS_MAP: Record<string, string> = {
   h6: "text-16 font-normal leading-tight mt-5 mb-3 first:mt-0 last:mb-0",
 }
 
-/** Walk a single Lexical node and return its React representation. */
 function walkNode(node: LexicalNode): ReactNode {
-  // --- Heading ---
   if ($isHeadingNode(node)) {
     const tag = node.getTag()
     const children = walkChildren(node)
@@ -126,7 +100,6 @@ function walkNode(node: LexicalNode): ReactNode {
     }
   }
 
-  // --- Blockquote ---
   if ($isQuoteNode(node)) {
     return (
       <blockquote
@@ -138,7 +111,6 @@ function walkNode(node: LexicalNode): ReactNode {
     )
   }
 
-  // --- Paragraph ---
   if ($isParagraphNode(node)) {
     return (
       <p key={nextKey()} className="break-words mt-5 mb-3 first:mt-0 last:mb-0">
@@ -147,10 +119,8 @@ function walkNode(node: LexicalNode): ReactNode {
     )
   }
 
-  // --- Code block (fenced) ---
   if ($isCodeNode(node)) {
     const lang = node.getLanguage() ?? ""
-    // Collect raw text from children (CodeHighlightNode / TextNode)
     const code = node
       .getChildren<LexicalNode>()
       .map((child) => {
@@ -165,7 +135,6 @@ function walkNode(node: LexicalNode): ReactNode {
     return <MessageCodeBlock key={nextKey()} source={code} lang={lang} />
   }
 
-  // --- List ---
   if ($isListNode(node)) {
     const listType = node.getListType()
     const children = walkChildren(node)
@@ -177,7 +146,6 @@ function walkNode(node: LexicalNode): ReactNode {
         </ol>
       )
     }
-    // "bullet" or "check" — render as <ul>
     return (
       <ul key={k} className="list-disc ml-5 my-2">
         {children}
@@ -185,12 +153,10 @@ function walkNode(node: LexicalNode): ReactNode {
     )
   }
 
-  // --- List item ---
   if ($isListItemNode(node)) {
     const checked = node.getChecked()
     const children = walkChildren(node)
     const k = nextKey()
-    // Checkbox task list item
     if (checked !== undefined) {
       return (
         <li key={k} className="my-0.5 list-none flex items-start gap-1.5">
@@ -211,7 +177,6 @@ function walkNode(node: LexicalNode): ReactNode {
     )
   }
 
-  // --- Link ---
   if ($isLinkNode(node) || $isAutoLinkNode(node)) {
     const url = node.getURL()
     return (
@@ -227,10 +192,8 @@ function walkNode(node: LexicalNode): ReactNode {
     )
   }
 
-  // --- Table ---
   if ($isTableNode(node)) {
     const rows = node.getChildren<TableRowNode>()
-    // First row is treated as the header row if all its cells have ROW header state
     const firstRow = rows[0]
     const isFirstRowHeader =
       firstRow !== undefined &&
@@ -286,18 +249,14 @@ function walkNode(node: LexicalNode): ReactNode {
     )
   }
 
-  // --- Line break ---
   if ($isLineBreakNode(node)) {
     return <br key={nextKey()} />
   }
 
-  // --- Text node (with format flags) ---
   if ($isTextNode(node)) {
     return renderTextNode(node)
   }
 
-  // --- Code highlight node (inside a CodeNode, already handled above;
-  //     but guard in case it appears at top level somehow) ---
   if ($isCodeHighlightNode(node)) {
     return (
       <code
@@ -309,12 +268,10 @@ function walkNode(node: LexicalNode): ReactNode {
     )
   }
 
-  // Fallback: try to walk children if it's an element, otherwise render text
   const fallbackText = node.getTextContent()
   return fallbackText ? <span key={nextKey()}>{fallbackText}</span> : null
 }
 
-/** Render a TextNode applying all its format flags. */
 function renderTextNode(node: TextNode): ReactNode {
   const fmt = node.getFormat()
   const text = node.getTextContent()
@@ -326,7 +283,6 @@ function renderTextNode(node: TextNode): ReactNode {
 
   let content: ReactNode = text
 
-  // Inline code takes priority — renders as <code>
   if (isInlineCode) {
     return (
       <code key={nextKey()} className="break-all px-1 bg-border/60 py-0.5 rounded text-sm">
@@ -345,7 +301,6 @@ function renderTextNode(node: TextNode): ReactNode {
     content = <strong key={nextKey()} className="font-semibold">{content}</strong>
   }
 
-  // Plain text — return as-is (string, no wrapper needed)
   if (!isBold && !isItalic && !isStrike) {
     return text
   }
@@ -353,19 +308,11 @@ function renderTextNode(node: TextNode): ReactNode {
   return content
 }
 
-/** Walk an element node's children and return an array of ReactNodes. */
 function walkChildren(node: { getChildren<T extends LexicalNode>(): T[] }): ReactNode[] {
   return node.getChildren<LexicalNode>().map(walkNode)
 }
 
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
 
-/**
- * Walk the Lexical editor state and return a static React tree.
- * Must be called INSIDE an `editor.getEditorState().read(...)` block.
- */
 export function lexicalStateToReact(): ReactNode {
   keyCounter = 0
   const root = $getRoot()
@@ -373,14 +320,6 @@ export function lexicalStateToReact(): ReactNode {
   return <>{children.map(walkNode)}</>
 }
 
-/**
- * Parse `markdown` once into a Lexical headless editor using the given
- * transformers, then synchronously walk the node tree to produce a static
- * React tree. No live editor — no reconciler — pure rendering.
- *
- * @param markdown     - Raw markdown string.
- * @param transformers - Transformer set (defaults to KANNA_BUILTIN_TRANSFORMERS).
- */
 export function renderMarkdownToReact(
   markdown: string,
   transformers: Array<Transformer> = KANNA_BUILTIN_TRANSFORMERS,
@@ -393,21 +332,13 @@ export function renderMarkdownToReact(
     }),
   )
 
-  // $convertFromMarkdownString must run inside an editor.update() call.
-  // Pass discrete:true to force synchronous execution (no microtask batching).
   editor.update(() => {
     $convertFromMarkdownString(markdown, transformers, undefined, true)
   }, { discrete: true })
 
-  // Read the resulting editor state synchronously.
   return editor.getEditorState().read(() => lexicalStateToReact())
 }
 
-/**
- * React hook that memoises the rendered React tree by markdown string.
- * Suitable for use in function components — call once per message, cheap
- * on re-renders when markdown hasn't changed.
- */
 export function useRenderedMarkdown(markdown: string): ReactNode {
   return useMemo(() => renderMarkdownToReact(markdown), [markdown])
 }

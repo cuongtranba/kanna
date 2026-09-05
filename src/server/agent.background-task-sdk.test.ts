@@ -1,12 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { backgroundTaskIdsFromToolResult } from "./agent"
 
-// The background-task keep-alive guard lives in the shared runClaudeSession
-// consume loop, so it applies to SDK sessions too — the SDK normalizes a
-// `Bash(run_in_background)` result to the SAME CLI text the PTY transcript
-// carries. These tests pin that the detector recognizes both content shapes
-// the SDK can produce (a plain string and an array of text blocks), which is
-// the only driver-specific risk for SDK parity on this feature.
 describe("backgroundTaskIdsFromToolResult (SDK parity)", () => {
   test("detects id from string content", () => {
     const content = "Command running in background with ID: bg_abc123\n"

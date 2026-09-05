@@ -24,17 +24,8 @@ export async function* createClaudeHarnessStream(
   let latestUsageSnapshot: ContextWindowUsageSnapshot | null = null
   let lastKnownContextWindow: number | undefined = configuredContextWindow
   const detector = new ClaudeLimitDetector()
-  // SDK rate-limit / api-error turns emit BOTH a synthetic assistant
-  // `isApiErrorMessage` (→ `api_error` entry, red card with text) AND a
-  // `type:"result"` whose `result` field repeats the same text (→ second
-  // red card + "Failed after Xs"). Track per-turn api_error emission so
-  // we can scrub the duplicate body off the trailing result entry; the
-  // duration footer still renders, the message renders once.
   let apiErrorEmittedInTurn = false
 
-  // Per-turn billed token usage and cost to attach to the result entry.
-  // Set when the `type:"result"` SDK message is processed; cleared after
-  // the result entry is yielded so they don't leak to a subsequent turn.
   let pendingResultUsage: ProviderUsage | undefined
   let pendingResultCost: number | undefined
 
@@ -69,8 +60,6 @@ export async function* createClaudeHarnessStream(
 
     if (sdkMessage?.type === "result") {
       const resultContextWindow = maxClaudeContextWindowFromModelUsage(sdkMessage.modelUsage)
-      // Never let SDK lower the configured window — see comment on
-      // parseConfiguredContextWindowFromModelId for the 1M beta footgun.
       if (resultContextWindow !== undefined) {
         lastKnownContextWindow = Math.max(lastKnownContextWindow ?? 0, resultContextWindow)
       }
@@ -105,10 +94,6 @@ export async function* createClaudeHarnessStream(
         }
       }
 
-      // Stash billed token figures for the result entry (populated below
-      // in the entry loop). Prefer `accumulatedUsage` (the per-turn
-      // cumulative that the SDK computes) for tokens; fall back to
-      // `finalUsage` when accumulated is null.
       const billed = accumulatedUsage ?? finalUsage
       pendingResultUsage = billed
         ? {

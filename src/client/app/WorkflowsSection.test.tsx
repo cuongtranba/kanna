@@ -6,14 +6,6 @@ import { formatWorkflowResult, WorkflowRunDetail, WorkflowsSection, WorkflowsSec
 import type { WorkflowRun, WorkflowRunSummary } from "../../shared/workflow-types"
 import { renderForLoopCheck } from "../lib/testing/renderForLoopCheck"
 
-/**
- * Unmount the root, do not merely detach its container.
- *
- * happy-dom registers ONE document for the whole Bun process and the test
- * preload wipes `document.body` after every test. A root left mounted keeps its
- * portal children registered against a body that has since been emptied, so the
- * next test to flush React work crashes deleting a node that is no longer there.
- */
 function closeRoot(root: Root, container: HTMLElement) {
   act(() => {
     root.unmount()
@@ -165,7 +157,6 @@ describe("WorkflowsSection — render-loop safety", () => {
   })
 })
 
-// ── WorkflowsSectionWithDetail — drill-in ─────────────────────────────────────
 
 function makeFullRun(over: Partial<WorkflowRun> = {}): WorkflowRun {
   return {
@@ -197,7 +188,6 @@ function makeFullRun(over: Partial<WorkflowRun> = {}): WorkflowRun {
   }
 }
 
-// ── WorkflowRunDetail — phase tree, previews, transcript drill-in ─────────────
 
 async function mountDetail(run: WorkflowRun, onSelectAgent?: (agentId: string) => void) {
   const container = document.createElement("div")
@@ -331,15 +321,11 @@ describe("WorkflowsSectionWithDetail — drill-in", () => {
     expect(row).toBeDefined()
 
     await act(async () => { row!.click() })
-    // getRunDetail should have been invoked with the run id
     expect(getRunDetail).toHaveBeenCalledWith("run-full")
 
-    // After the async detail resolves, the agent tree should appear in the dialog
-    // Radix Dialog renders into a portal (document.body), not the container
     await act(async () => {})
     expect(document.body.textContent).toContain("compiler")
     expect(document.body.textContent).toContain("Build succeeded.")
-    // Per-agent outcome summary (fixed/stale/tests) surfaces in the drill-in.
     expect(document.body.textContent).toContain("fixed 1 · stale 2 · tests ✓")
 
     closeRoot(root, container)
@@ -404,11 +390,9 @@ describe("WorkflowsSectionWithDetail re-fetch on snapshot push", () => {
     expect(btn).not.toBeNull()
     await act(async () => { btn!.click() })
     expect(calls).toEqual(["run-1"])
-    // v1 must be visible (alpha agent label rendered) but NOT bravo yet
     expect(document.body.textContent ?? "").toContain("pkg-alpha")
     expect(document.body.textContent ?? "").not.toContain("pkg-bravo")
 
-    // snapshot push — same row, new prop reference (running unchanged)
     await rerender([{ ...runRow }])
     expect(calls).toEqual(["run-1", "run-1"])
     expect(document.body.textContent ?? "").toContain("pkg-charlie")

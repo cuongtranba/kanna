@@ -3,9 +3,6 @@ import type { PushCommandDeps, PushManagerDep } from "./ws-router-push"
 import { handlePushCommand } from "./ws-router-push"
 import type { ClientCommand } from "../shared/protocol"
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function makePushManager(overrides: Partial<PushManagerDep> = {}): PushManagerDep {
   return {
@@ -46,9 +43,6 @@ function makeDeps(
   }
 }
 
-// ---------------------------------------------------------------------------
-// Unknown command
-// ---------------------------------------------------------------------------
 
 describe("handlePushCommand", () => {
   test("returns false for a non-push command", async () => {
@@ -63,9 +57,6 @@ describe("handlePushCommand", () => {
     expect(deps.broadcasts).toHaveLength(0)
   })
 
-  // ---------------------------------------------------------------------------
-  // push.identifyDevice
-  // ---------------------------------------------------------------------------
 
   test("push.identifyDevice — sets deviceId, calls recordDeviceSeen, broadcasts, acks", async () => {
     const deps = makeDeps()
@@ -90,9 +81,6 @@ describe("handlePushCommand", () => {
     expect((deps.sent[0] as { type: string }).type).toBe("ack")
   })
 
-  // ---------------------------------------------------------------------------
-  // push.subscribe
-  // ---------------------------------------------------------------------------
 
   test("push.subscribe — calls addSubscription, sets deviceId from result, broadcasts, acks with result", async () => {
     const deps = makeDeps({ addSubscription: mock(async () => ({ id: "sub-new" })) })
@@ -111,9 +99,6 @@ describe("handlePushCommand", () => {
     expect(ack.result).toEqual({ id: "sub-new" })
   })
 
-  // ---------------------------------------------------------------------------
-  // push.unsubscribe
-  // ---------------------------------------------------------------------------
 
   test("push.unsubscribe — calls removeSubscription, clears deviceId when it matches, broadcasts, acks", async () => {
     const deps = makeDeps(undefined, "dev-1")
@@ -133,9 +118,6 @@ describe("handlePushCommand", () => {
     expect(deps._deviceId).toBe("dev-1")
   })
 
-  // ---------------------------------------------------------------------------
-  // push.test
-  // ---------------------------------------------------------------------------
 
   test("push.test — calls sendTest with current deviceId and acks", async () => {
     const deps = makeDeps(undefined, "dev-1")
@@ -155,9 +137,6 @@ describe("handlePushCommand", () => {
     expect((deps.sent[0] as { type: string }).type).toBe("ack")
   })
 
-  // ---------------------------------------------------------------------------
-  // push.setProjectMute
-  // ---------------------------------------------------------------------------
 
   test("push.setProjectMute — calls setProjectMute, broadcasts, acks", async () => {
     const deps = makeDeps()
@@ -170,9 +149,6 @@ describe("handlePushCommand", () => {
     expect((deps.sent[0] as { type: string }).type).toBe("ack")
   })
 
-  // ---------------------------------------------------------------------------
-  // push.setChatMute
-  // ---------------------------------------------------------------------------
 
   test("push.setChatMute — calls setChatMute, broadcasts, acks", async () => {
     const deps = makeDeps()
@@ -194,9 +170,6 @@ describe("handlePushCommand", () => {
     expect(deps.broadcasts).toHaveLength(1)
   })
 
-  // ---------------------------------------------------------------------------
-  // push.setFocusedChat
-  // ---------------------------------------------------------------------------
 
   test("push.setFocusedChat — calls setFocusedChat when deviceId is set, acks", async () => {
     const deps = makeDeps(undefined, "dev-1")

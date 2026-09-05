@@ -22,12 +22,7 @@ import type { EventStore } from "./event-store"
 import { buildHistoryPrimer, extractPreviousAssistantReply } from "./history-primer"
 import { parseMentions, type ParsedMention } from "./mention-parser"
 
-/**
- * Exported for direct unit testing: every method takes `now`, so the
- * pause/resume/reset arithmetic is verifiable without racing real timers.
- */
 export class PausableTimeout {
-  /** Visible for tests: the residual window that a resume would re-arm. */
   remainingMs: number
   private readonly totalMs: number
   private deadline: number | null = null
@@ -58,12 +53,6 @@ export class PausableTimeout {
     this.start(now)
   }
 
-  /**
-   * Re-arm the full window from now. Makes this a stall/idle watchdog rather
-   * than a total wall-clock deadline: each streamed subagent event calls this
-   * so only a genuinely hung run (no activity for the whole window) fires.
-   * No-op while paused (an interactive approval gate holds the clock).
-   */
   reset(now: number = Date.now()): void {
     if (this.handle == null) return
     this.remainingMs = this.totalMs
@@ -92,10 +81,6 @@ function createDeferred<T>(): Deferred<T> {
   return { promise, resolve, reject }
 }
 
-/**
- * Returned by a keep-alive provider run after its FIRST turn completes. Lets
- * the orchestrator push further turns into the same warm session and close it.
- */
 export interface LiveTurnSource {
   runTurn(
     prompt: string,
@@ -110,31 +95,8 @@ export interface ProviderRunStart {
   model: string
   systemPrompt: string
   preamble: string | null
-  /**
-   * Per-subagent agentic-turn bound (Claude Code frontmatter maxTurns analog).
-   * Undefined = unbounded.
-   */
   maxTurns?: number
-  /**
-   * True when the provider enforces `maxTurns` natively (claude via SDK
-   * query()). When false and `maxTurns` is set, the orchestrator applies a
-   * host-side backstop: the run is aborted once its tool_call entry count
-   * exceeds the bound. Native enforcement is graceful (output kept); the
-   * backstop is a hard abort — PTY/Codex only.
-   */
   nativeMaxTurns?: boolean
-  /**
-   * Run the subagent against its provider.
-   *  - `onChunk(text)`: every assistant_text fragment, in order. Used to
-   *    persist `subagent_message_delta` events for streaming UI.
-   *  - `onEntry(entry)`: every TranscriptEntry — including the assistant_text
-   *    entries forwarded to onChunk, plus tool_call / tool_result / result.
-   *    Used to persist `subagent_entry_appended` events.
-   *  - `opts.keepAlive`: when true and provider is "claude", leaves the
-   *    session open and returns `live` for driving subsequent turns.
-   * Returns the final accumulated text + usage for the run_completed event,
-   * plus an optional `live` handle when keep-alive was requested.
-   */
   start: (
     onChunk: (chunk: string) => void,
     onEntry: (entry: TranscriptEntry) => void,
@@ -154,63 +116,21 @@ export interface SubagentOrchestratorDeps {
     subagent: Subagent
     chatId: string
     primer: string | null
-    /**
-     * Instruction text shown to the subagent above the primer — user's own
-     * message for direct mentions, parent agent's reply for chained mentions,
-     * or null when unavailable. Used by composeInitialPrompt to ensure the
-     * subagent sees the request, not only the prior context.
-     */
     userInstruction: string | null
     runId: string
     abortSignal: AbortSignal
-    /** Depth of THIS run in the chain (top-level user delegation = 0). */
     depth: number
-    /** Ancestor chain of subagent ids leading to this run, oldest first. */
     ancestorSubagentIds: string[]
-    /** User message id the originating chat turn is responding to. */
     parentUserMessageId: string
   }) => ProviderRunStart
-  /**
-   * Called when a subagent run enters a terminal state (failed / completed /
-   * interrupted) so external resources keyed on (chatId, runId) — e.g. the
-   * `subagentPendingResolvers` map on AgentCoordinator — can be released.
-   * The SDK's `canUseTool` Promise must be rejected when the run dies, or it
-   * hangs forever and leaks. Optional for tests.
-   */
   onRunTerminal?: (chatId: string, runId: string, reason: "failed" | "completed") => void
-  /**
-   * Called on every non-terminal subagent state change — run start and each
-   * persisted transcript entry. Wired by AgentCoordinator to
-   * `emitStateChange(chatId)` so the ws-router pushes a fresh chat snapshot
-   * (carrying `subagentRuns`) to connected clients WHILE the run is in
-   * flight. Without this the client only ever sees the run at terminal
-   * (the sole `onRunTerminal` broadcast), so a delegated run renders as
-   * blank/absent until it finishes. ws-router coalesces these at 16ms and
-   * signature-dedups, so high-frequency entry fan-out is cheap. Optional
-   * for tests.
-   */
   onRunProgress?: (chatId: string, runId: string) => void
-  /**
-   * Called when a `run_in_background` run reaches a terminal state, carrying
-   * its final outcome (completed text or failure). Wired by AgentCoordinator
-   * to deliver the result back into the main chat as a fresh turn — SDK driver
-   * via the live session's `sendPrompt`, PTY driver via a `subagent_background`
-   * auto-continue wake. Optional for tests.
-   * See adr-20260616-subagent-run-in-background.
-   */
   onBackgroundRunComplete?: (chatId: string, runId: string, outcome: BackgroundRunOutcome) => void
   now?: () => number
   maxParallel?: number
   maxChainDepth?: number
   runTimeoutMs?: number
-  /** Maximum number of live (keep-alive) sessions per chat. Default 5. */
   maxLive?: number
-  /**
-   * Idle timeout in ms before a live session is auto-closed. Default 300_000.
-   * Env-var wiring (KANNA_SUBAGENT_IDLE_TIMEOUT_MS) is done at the
-   * dep-construction site (agent.ts); not read here to stay within the
-   * side-effect seal.
-   */
   liveIdleTimeoutMs?: number
 }
 
@@ -219,39 +139,14 @@ const DEFAULT_MAX_CHAIN_DEPTH = 1
 const DEFAULT_MAX_LIVE = 5
 const DEFAULT_LIVE_IDLE_TIMEOUT_MS = 300_000
 
-/**
- * Terminal outcome of a single subagent run, surfaced to callers that
- * need the final reply text — e.g. `mcp__kanna__delegate_subagent` so
- * the main agent can synthesize the subagent's answer into its own reply.
- */
 export type DelegationOutcome =
   | { status: "completed"; runId: string; text: string }
   | { status: "failed"; runId: string; errorCode: SubagentErrorCode; errorMessage: string }
   | { status: "async_launched"; runId: string }
 
-/**
- * Terminal outcome of a background (run_in_background) run, delivered to
- * `onBackgroundRunComplete` once the detached run finishes. Excludes
- * `async_launched` — that is only the immediate return of the launch call.
- */
 export type BackgroundRunOutcome =
   | { status: "completed"; runId: string; text: string }
   | { status: "failed"; runId: string; errorCode: SubagentErrorCode; errorMessage: string }
-// Stall/idle window, NOT a total wall-clock deadline: the watchdog resets on
-// every streamed event (see PausableTimeout.reset + the onChunk/onEntry
-// hooks), so it fires only when a run goes silent for the whole window. A
-// long-but-active subagent runs indefinitely. Configurable via the
-// `subagentRunTimeoutMs` app setting / `KANNA_SUBAGENT_RUN_TIMEOUT_MS` env,
-// wired at AgentCoordinator construction; tests override via
-// SubagentOrchestratorDeps.runTimeoutMs.
-/**
- * Records what one delegated run spent. Only the completed path reports usage
- * — a failed or cancelled run carries none — so a run that ends any other way
- * contributes nothing rather than a zero.
- *
- * No `model` attribute: a subagent's model is its own configured one, and the
- * run-duration histogram beside this already dimensions by provider alone.
- */
 function recordSubagentSpend(provider: AgentProvider, usage: ProviderUsage | undefined): void {
   if (!usage) return
   for (const [kind, count] of splitBilledTokens(usage)) {
@@ -297,19 +192,11 @@ export class SubagentOrchestrator {
     this.recoveryPromise = this.recoverInterruptedRuns()
   }
 
-  /**
-   * Caller must `await` this before spawning new runs to ensure orphan
-   * `running` runs from a previous server lifetime have been failed first.
-   */
   whenRecovered(): Promise<void> {
     return this.recoveryPromise
   }
 
   private async recoverInterruptedRuns(): Promise<void> {
-    // Recover ALL `running` runs from the previous server lifetime, not just
-    // those mid-tool. A subagent crashed mid-bash (or mid-streaming) leaves
-    // its run in `running` forever otherwise, blocking the UI and leaking a
-    // permit until the server is restarted again with a fix.
     for (const run of this.deps.store.runningSubagentRuns()) {
       try {
         await this.deps.store.appendSubagentEvent({
@@ -340,17 +227,8 @@ export class SubagentOrchestrator {
   private maxLive() { return this.deps.maxLive ?? DEFAULT_MAX_LIVE }
   private idleTimeoutMs() { return this.deps.liveIdleTimeoutMs ?? DEFAULT_LIVE_IDLE_TIMEOUT_MS }
 
-  /** Test-only accessor: number of currently registered live sessions. */
   liveSessionCount() { return this.liveSessions.size }
 
-  /**
-   * Resolve a subagent by exact id, falling back to an unambiguous exact
-   * name match. Id is checked first so a name that collides with another
-   * subagent's id can never shadow the id owner; an ambiguous name (>1
-   * match) returns undefined so callers fail closed rather than delegating
-   * to the wrong subagent. The main model often passes the roster name
-   * where the UUID is expected — this keeps that ergonomic.
-   */
   private resolveSubagent(idOrName: string): Subagent | undefined {
     const subagents = this.deps.appSettings.getSnapshot().subagents
     const byId = subagents.find((s) => s.id === idOrName)
@@ -359,22 +237,10 @@ export class SubagentOrchestrator {
     return byName.length === 1 ? byName[0] : undefined
   }
 
-  /**
-   * Look up a subagent by id (or unambiguous name) from the current
-   * settings snapshot. Used by kanna-mcp to validate provider constraints
-   * before delegating.
-   */
   findSubagent(id: string): Subagent | undefined {
     return this.resolveSubagent(id)
   }
 
-  /**
-   * Error text for a delegation that named an unresolvable subagent.
-   * Embeds the LIVE roster (read from settings at error time, not at spawn
-   * time) so the model can self-correct on retry even when the roster in its
-   * system prompt is stale — subagents created mid-session were invisible to
-   * the running session, which caused repeated guessed ids like "claude".
-   */
   describeUnknownSubagent(requested: string): string {
     const subagents = this.deps.appSettings.getSnapshot().subagents
     if (subagents.length === 0) {
@@ -414,10 +280,6 @@ export class SubagentOrchestrator {
     }
     this.waiters.push({ chatId, resolve, reject })
     try {
-      // `release()` hands a permit to the next waiter by resolving its
-      // promise without incrementing this.permits — the permit transfers
-      // in-place. Decrementing here would double-charge the handoff and
-      // permanently leak one parallel slot per waiter (B1).
       await promise
     } finally {
       if (state) {
@@ -436,12 +298,6 @@ export class SubagentOrchestrator {
     this.permits += 1
   }
 
-  /**
-   * Clear the sticky cancel marker for a chat. Call this at the start of
-   * each new user turn so a previous cancelChat() does not poison every
-   * subsequent `delegateRun` with "Chat cancelled before run started"
-   * forever (B3 + delegate_subagent path).
-   */
   clearChatCancellation(chatId: string): void {
     this.cancelledChats.delete(chatId)
   }
@@ -454,18 +310,11 @@ export class SubagentOrchestrator {
       this.waiters.splice(i, 1)
       w.reject(new Error("CHAT_CANCELLED"))
     }
-    // Cancel every acquired/queued run in this chat. cancelRun is idempotent
-    // (re-cancellation no-op) and handles both queued and running states.
-    // Snapshot runIds first because cancelRun may mutate the map.
     const runIds: string[] = []
     for (const [runId, state] of this.runStateByRunId) {
       if (state.chatId === chatId) runIds.push(runId)
     }
     for (const runId of runIds) this.cancelRun(chatId, runId)
-    // Belt-and-suspenders: close any live sessions for this chat that may not
-    // have had a RunState entry (e.g. if cleanupRunState was already called).
-    // closeLiveRun is idempotent (early-returns if not in map), so calling it
-    // again for sessions already handled by cancelRun above is safe.
     for (const s of [...this.liveSessions.values()]) {
       if (s.chatId === chatId) void this.closeLiveRun(chatId, s.runId, "cancel")
     }
@@ -477,15 +326,10 @@ export class SubagentOrchestrator {
     if (state.cancelled) return
     if (state.chatId !== chatId) return
     state.cancelled = true
-    // Cascade to running descendants. With current DEFAULT_MAX_CHAIN_DEPTH=1
-    // this is a no-op in practice (children spawn only after parent
-    // completes) but guards forward-compat with higher chain depths.
     for (const childRunId of [...state.childRunIds]) {
       this.cancelRun(chatId, childRunId)
     }
     if (state.pendingAcquire && state.permitWaiter) {
-      // Queued: splice waiter out of this.waiters FIRST so release() cannot
-      // grant us a permit we will never use, then reject the Promise.
       const idx = this.waiters.findIndex((w) => w.resolve === state.permitWaiter!.resolve)
       if (idx >= 0) this.waiters.splice(idx, 1)
       const reject = state.permitWaiter.reject
@@ -503,21 +347,9 @@ export class SubagentOrchestrator {
     chatId: string
     userMessageId: string
     mentions: ParsedMention[]
-    /**
-     * The text accompanying the @agent mention. For user-triggered runs this
-     * is the user's typed message. For main-Claude-triggered runs this is the
-     * assistant's reply text. Passed through to the subagent's initial prompt
-     * so the run sees the request, not just the prior context primer. Default
-     * "" preserves prior call-site semantics (primer-only) in tests that
-     * haven't been migrated.
-     */
     userContent?: string
   }): Promise<void> {
     const userContent = args.userContent ?? ""
-    // A new mention batch from this chat means the user is asking for fresh
-    // work — clear any "cancelled" marker left over from a prior cancelChat
-    // call (B3). Without this, every subagent in a chat that has ever been
-    // cancelled would fail before start until process restart.
     this.cancelledChats.delete(args.chatId)
     await this.recoveryPromise
     const subagents = this.deps.appSettings.getSnapshot().subagents
@@ -579,16 +411,6 @@ export class SubagentOrchestrator {
     ))
   }
 
-  /**
-   * Public entry point for `mcp__kanna__delegate_subagent`. The main agent
-   * (or a parent subagent, when sub-spawning-sub is enabled) calls this with
-   * a subagent id and a prompt; the orchestrator runs the subagent and the
-   * caller awaits the terminal {@link DelegationOutcome}.
-   *
-   * Cycle / depth guards mirror the chained-mention path in `spawnRun`: a
-   * parent cannot delegate to a subagent already in its ancestor chain, and
-   * `depth > maxChainDepth` fails fast with `DEPTH_EXCEEDED`.
-   */
   async delegateRun(args: {
     chatId: string
     parentUserMessageId: string
@@ -598,43 +420,10 @@ export class SubagentOrchestrator {
     depth: number
     subagentId: string
     prompt: string
-    /**
-     * Overrides the label derived from `prompt`. Set by the MCP host when the
-     * prompt is server-rendered loop boilerplate that names no chunk, so the
-     * Progress row can still read as the chunk being worked.
-     */
     label?: string
-    /**
-     * The set of subagent ids the user explicitly @-mentioned for this turn.
-     * Required for the MANUAL_ONLY gate: a subagent with `triggerMode === "manual"`
-     * is blocked unless its id appears in this set.
-     */
     mentionedSubagentIds: string[]
-    /**
-     * Optional per-entry sink. Called once for each persisted
-     * `subagent_entry_appended` event while the run is in flight. Used by
-     * the MCP `delegate_subagent` tool to emit `notifications/progress`
-     * so the CLI's transport-error watchdog cannot declare the call lost
-     * on long-running subagent runs.
-     */
     onEntry?: (entry: TranscriptEntry) => void
-    /**
-     * When true, requests that the provider keep the session alive after
-     * the first turn and returns a LiveTurnSource for subsequent turns.
-     * The live session is registered in `liveSessions` and the permit is
-     * released after the first turn (idle sessions hold no permit).
-     * Over `maxLive` live sessions per chat → CAP_EXCEEDED.
-     */
     keepAlive?: boolean
-    /**
-     * When true, launch the run detached and return `{status:"async_launched",
-     * runId}` immediately instead of awaiting the terminal outcome. The run
-     * still flows through `spawnRun` (permit, RunState, timeout, abort,
-     * event-sourcing); on terminal the orchestrator calls
-     * `onBackgroundRunComplete` so the caller can deliver the result back into
-     * the main chat. Mutually exclusive with `keepAlive` (enforced by the MCP
-     * host). See adr-20260616-subagent-run-in-background.
-     */
     background?: boolean
   }): Promise<DelegationOutcome> {
     await this.recoveryPromise
@@ -739,11 +528,6 @@ export class SubagentOrchestrator {
       }
     }
     if (args.background) {
-      // Detached launch: kick off the run without awaiting and return
-      // immediately. The pre-generated runId lets the caller (UI, MCP) track
-      // the run before it finishes. On terminal, deliver the outcome via
-      // onBackgroundRunComplete. spawnRun never rejects (it maps every error to
-      // a failed DelegationOutcome), so the catch is defensive only.
       const runId = crypto.randomUUID()
       void this.spawnRun({
         subagent,
@@ -782,10 +566,6 @@ export class SubagentOrchestrator {
       onEntry: args.onEntry,
       keepAlive: args.keepAlive,
     })
-    // Trace point: this is the return that flows back through the MCP
-    // `delegate_subagent` tool to the parent claude as its tool_result.
-    // If the parent appears to hang after this point, the bug is on the
-    // MCP shim or the parent PTY side, not in the orchestrator.
     log.info("[kanna/subagent] delegateRun outcome", {
       chatId: args.chatId,
       subagentId: args.subagentId,
@@ -805,19 +585,10 @@ export class SubagentOrchestrator {
     parentRunId: string | null
     depth: number
     ancestorSubagentIds: string[]
-    /**
-     * Instruction the spawn was triggered by — user's typed text for top-level
-     * runs, parent agent's full reply for chained runs. Forwarded to the
-     * provider run so composeInitialPrompt can render it above the primer.
-     */
     userInstruction: string
-    /** Overrides the label derived from `userInstruction` (see {@link delegateRun}). */
     label?: string
-    /** External per-entry sink (see {@link delegateRun}). */
     onEntry?: (entry: TranscriptEntry) => void
-    /** When true, passes keepAlive to the provider run and registers a LiveSession on success. */
     keepAlive?: boolean
-    /** Pre-generated run id (background launches generate it up front to return synchronously). */
     runId?: string
   }): Promise<DelegationOutcome> {
     const runId = args.runId ?? crypto.randomUUID()
@@ -876,9 +647,6 @@ export class SubagentOrchestrator {
     })
     this.deps.onRunProgress?.(args.chatId, runId)
 
-    // Register RunState BEFORE acquire so cancelRun can find a queued run.
-    // The reducer marks the run as `status: "running"` from this event on,
-    // which is what the UI uses to show the X button.
     const runState: RunState = {
       chatId: args.chatId,
       parentRunId: args.parentRunId,
@@ -943,15 +711,8 @@ export class SubagentOrchestrator {
           parentUserMessageId: args.parentUserMessageId,
         })
       } catch (err) {
-        // Defensive: startProviderRun is a synchronous factory but a real impl
-        // (buildSubagentProviderRunForChat in agent.ts) can throw if e.g. the
-        // chat's project lookup fails. Without this guard the run would leak
-        // as `running` forever (no failed/completed event ever appended).
         const msg = err instanceof Error ? err.message : String(err)
         const outcome = await this.failRun(args.chatId, runId, "PROVIDER_ERROR", msg)
-        // releaseSlot — outer `finally` would re-release if we called raw
-        // `this.release()` here (B2). releaseSlot is idempotent via the
-        // `released` flag so the finally is a no-op.
         releaseSlot()
         this.cleanupRunState(runId)
         return outcome
@@ -967,13 +728,11 @@ export class SubagentOrchestrator {
       let finalText = ""
       let usage: ProviderUsage | undefined
       let liveHandle: LiveTurnSource | undefined
-      // Trailing-edge throttle handle for chunk-driven progress broadcasts.
       let chunkProgressTimer: ReturnType<typeof setTimeout> | null = null
       const CHUNK_PROGRESS_THROTTLE_MS = 100
 
       const onChunk = (chunk: string) => {
         if (!chunk) return
-        // Stall watchdog: any streamed activity re-arms the idle window.
         runState.timeout?.reset()
         this.deps.store
           .appendSubagentEvent({
@@ -987,19 +746,12 @@ export class SubagentOrchestrator {
           .catch((err) => {
             log.warn(`${LOG_PREFIX} subagent delta append failed`, { chatId: args.chatId, runId, err })
           })
-        // Trailing-edge throttle: fire progress after a quiet window so
-        // streamed assistant text becomes visible incrementally in the UI.
         if (chunkProgressTimer !== null) clearTimeout(chunkProgressTimer)
         chunkProgressTimer = setTimeout(() => {
           chunkProgressTimer = null
           this.deps.onRunProgress?.(args.chatId, runId)
         }, CHUNK_PROGRESS_THROTTLE_MS)
       }
-      // Host-side maxTurns backstop for providers without native enforcement
-      // (PTY claude, Codex). Tool_call entries approximate agentic turns —
-      // Claude Code's query() counts loop iterations, each of which issues
-      // tool calls. SDK runs (nativeMaxTurns) are excluded: the SDK stops
-      // gracefully on its own and a host abort would clobber that.
       const hostMaxTurns = runStart.maxTurns !== undefined && runStart.maxTurns > 0 && !runStart.nativeMaxTurns
         ? runStart.maxTurns
         : null
@@ -1008,13 +760,10 @@ export class SubagentOrchestrator {
 
       const externalOnEntry = args.onEntry
       const onEntry = (entry: TranscriptEntry) => {
-        // Stall watchdog: a persisted transcript entry counts as activity.
         runState.timeout?.reset()
         if (hostMaxTurns !== null && entry.kind === "tool_call") {
           toolCallCount += 1
           if (toolCallCount > hostMaxTurns) {
-            // Same order contract as the stall watchdog: reject BEFORE abort
-            // so Promise.race resolves MAX_TURNS, not USER_CANCELLED.
             maxTurnsRejection.reject(new Error("MAX_TURNS"))
             runState.abortController.abort()
           }
@@ -1031,8 +780,6 @@ export class SubagentOrchestrator {
           .catch((err) => {
             log.warn(`${LOG_PREFIX} subagent entry append failed`, { chatId: args.chatId, runId, err })
           })
-        // Fire immediately — applyEvent now runs synchronously in appendSubagentEvent
-        // so the broadcast snapshot already includes this entry.
         this.deps.onRunProgress?.(args.chatId, runId)
         if (externalOnEntry) {
           try {
@@ -1043,20 +790,7 @@ export class SubagentOrchestrator {
         }
       }
       const timeoutRejection = createDeferred<never>()
-      // Stall/idle watchdog, NOT a total wall-clock deadline. `onChunk` /
-      // `onEntry` call `reset()` on every streamed event, so this fires only
-      // when a run produces no activity for the whole window — matching
-      // Anthropic's guidance (no per-subagent wall-clock deadline; use a stall
-      // watchdog). A productively-working subagent is never killed mid-edit.
       const pausable = new PausableTimeout(this.timeoutMs(), () => {
-        // Race-rejection ORDER MATTERS. Reject TIMEOUT before aborting so
-        // `Promise.race` resolves with the TIMEOUT error and the catch
-        // branch records `failRun TIMEOUT` instead of `USER_CANCELLED`.
-        // Then abort the controller to tear down the underlying provider
-        // session — `buildSubagentProviderRun` wires
-        // `session.interrupt()` / `codexManager.stopSession()` to this
-        // signal, without which a timed-out run keeps streaming and
-        // pollutes the event log (B5).
         timeoutRejection.reject(new Error("TIMEOUT"))
         runState.abortController.abort()
       })
@@ -1068,9 +802,6 @@ export class SubagentOrchestrator {
         runState.abortController.signal.addEventListener("abort", abortListener, { once: true })
         let result: { text: string; usage?: ProviderUsage; live?: LiveTurnSource }
         try {
-          // Fast-path: if already aborted, fire listener synchronously so the
-          // race rejects on the next microtask. Doing this AFTER abortRejection.promise
-          // is passed to Promise.race ensures the rejection always has a handler.
           if (runState.abortController.signal.aborted) {
             abortListener()
           }
@@ -1103,17 +834,12 @@ export class SubagentOrchestrator {
         pausable.clear()
         runState.timeout = null
         if (chunkProgressTimer !== null) {
-          // Flush any pending chunk-driven progress immediately at run end
-          // so the final streamed text is always broadcast before completion.
           clearTimeout(chunkProgressTimer)
           chunkProgressTimer = null
           this.deps.onRunProgress?.(args.chatId, runId)
         }
       }
 
-      // Codex `stopSession` finishes the pending stream queue rather than
-      // rejecting — without this guard, a cancelled run can reach the
-      // success path.
       if (runState.cancelled) {
         return await this.failRun(args.chatId, runId, "USER_CANCELLED", "Cancelled by user")
       }
@@ -1218,17 +944,11 @@ export class SubagentOrchestrator {
     s.idleTimer = setTimeout(() => { void this.closeLiveRun(s.chatId, runId, "idle_timeout") }, this.idleTimeoutMs())
   }
 
-  /**
-   * Send a follow-up prompt to an existing live (keep-alive) session.
-   * Acquires a permit for the duration of the turn, then releases it so
-   * idle sessions hold no permit between turns.
-   */
   async sendToLiveRun(runId: string, prompt: string): Promise<BackgroundRunOutcome> {
     const session = this.liveSessions.get(runId)
     if (!session) {
       return { status: "failed", runId, errorCode: "NO_LIVE_SESSION", errorMessage: `No live subagent session ${runId}` }
     }
-    // Pause idle timer while the turn is in flight.
     if (session.idleTimer) { clearTimeout(session.idleTimer); session.idleTimer = null }
 
     await this.acquire(session.chatId, runId)
@@ -1239,10 +959,6 @@ export class SubagentOrchestrator {
       this.release()
     }
     try {
-      // Build inline sinks equivalent to those in spawnRun so events are
-      // persisted identically for follow-up turns. These capture turn-local
-      // mutable state (chunkProgressTimer) so they cannot be shared across
-      // concurrent turns on the same session.
       const { chatId } = session
       let chunkProgressTimer: ReturnType<typeof setTimeout> | null = null
       const CHUNK_PROGRESS_THROTTLE_MS = 100
@@ -1307,13 +1023,6 @@ export class SubagentOrchestrator {
     }
   }
 
-  /**
-   * Close a live session and clean up its resources. Makes the session
-   * ineligible for further turns, clears the idle timer, closes the
-   * underlying LiveTurnSource, cleans up RunState, and notifies the
-   * terminal callback so external resolvers (e.g. subagentPendingResolvers
-   * on AgentCoordinator) are released.
-   */
   async closeLiveRun(
     chatId: string,
     runId: string,
@@ -1359,10 +1068,6 @@ export class SubagentOrchestrator {
         error: { code, message },
       })
     } catch (err) {
-      // Persisting the failure event must never throw out of failRun — it's
-      // called from `catch` and `finally` blocks where an unhandled rejection
-      // would leak the permit. Log and continue; the orchestrator will still
-      // notify the terminal callback below so the resolver map is cleaned up.
       log.warn(`${LOG_PREFIX} failRun appendSubagentEvent threw`, { chatId, runId, code, err })
     }
     try {

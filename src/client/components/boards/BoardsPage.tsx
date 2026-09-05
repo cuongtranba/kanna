@@ -11,18 +11,6 @@ import type { BoardsSnapshot, ClientCommand, SubscriptionTopic } from "../../../
 import type { BoardOwnerKind, BoardSummary, BoardTemplate } from "../../../shared/boards/types"
 import type { JsonValue } from "../../../shared/json"
 
-/**
- * The Boards page — `/boards/:projectId` for a project owner, or
- * `/boards/stack/:stackId` for a Stack owner.
- *
- * It answers "what boards does this owner have?"; the board PANE answers
- * "where is this card up to?". Opening a row hands the board to a pane tab
- * rather than navigating into it, which is what lets a board sit beside the
- * chat an agent is working in.
- *
- * Rows, not a card grid: the comparison a reader makes runs down one column —
- * which board is busy — and a grid forces reading in two directions to find it.
- */
 
 export interface BoardsPageSocket {
   subscribe(topic: SubscriptionTopic, onSnapshot: (snapshot: BoardsSnapshot) => void): () => void
@@ -34,7 +22,6 @@ export interface BoardsPageProps {
   ownerId: string
   ownerName: string
   socket: BoardsPageSocket
-  /** Hands a board to the pane workspace. */
   onOpenBoard: (boardId: string) => void
 }
 
@@ -65,8 +52,6 @@ export function BoardsPage({ ownerKind, ownerId, ownerName, socket, onOpenBoard 
         if (!cancelled) setTemplates(list)
       })
       .catch(() => {
-        // A missing template list must not blank the page; the empty board
-        // option below still works.
       })
     return () => {
       cancelled = true
@@ -221,7 +206,6 @@ function BoardRow({
       </div>
 
       <div className="flex items-center gap-4 text-xs text-muted-foreground">
-        {/* tabular-nums so a live count cannot reflow the row. */}
         <span>
           <b className="font-medium tabular-nums text-foreground">{board.columnCount}</b> columns
         </span>
@@ -288,8 +272,6 @@ function RowMenu({
       </PopoverTrigger>
       <PopoverContent align="end" className="w-56 p-1">
         <MenuButton onClick={rename}>Rename</MenuButton>
-        {/* Says "structure" because that is what it copies: a board mirroring a
-            300-issue tracker must not silently clone 300 rows. */}
         <MenuButton onClick={duplicate}>Duplicate structure</MenuButton>
         <MenuButton onClick={saveTemplate}>Save as template</MenuButton>
         <div className="my-1 h-px bg-border" />
@@ -398,7 +380,6 @@ function TemplateRow({
           {columns.map((column) => column.title).join(" · ")}
         </span>
       </span>
-      {/* The shape, previewed: one pip per column in that column's own token. */}
       <span aria-hidden className="ml-auto flex shrink-0 gap-1">
         {columns.map((column, index) => (
           <span

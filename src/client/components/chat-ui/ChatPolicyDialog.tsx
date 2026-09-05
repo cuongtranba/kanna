@@ -27,9 +27,6 @@ function textToList(text: string): string[] {
 }
 
 export function ChatPolicyDialog(props: Props) {
-  // Mount the inner stateful component only while the dialog is open so its
-  // initial state is always derived from the current chat's policyOverride
-  // without a reset effect.
   if (!props.open) return null
   return <ChatPolicyDialogInner {...props} />
 }

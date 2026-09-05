@@ -55,7 +55,6 @@ interface DragEnd {
   now: number
 }
 
-/** Pure decision for the drag-to-close gesture: close on far drag or fast flick. */
 export function shouldCloseFromDragEnd({ startY, lastY, lastT, endY, now }: DragEnd): boolean {
   const dyFinal = endY - startY
   const dt = Math.max(1, now - lastT)

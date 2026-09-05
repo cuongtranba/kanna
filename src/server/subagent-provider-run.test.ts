@@ -6,9 +6,6 @@ import type { StartCodexSessionArgs, CodexSessionScope } from "./codex-app-serve
 import { buildSubagentProviderRun, composeInitialPrompt, composeSubagentSystemPrompt, drainOneTurn, type BuildSubagentProviderRunArgs } from "./subagent-provider-run"
 import type { StartCodexTurnArgs } from "./codex-app-server"
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function makeSubagent(over: Partial<Subagent> = {}): Subagent {
   const modelOptions: ClaudeModelOptions = { reasoningEffort: "medium", contextWindow: "1m" }
@@ -67,9 +64,6 @@ function makeResultEvent(costUsd?: number): HarnessEvent {
   return { type: "transcript", entry }
 }
 
-// ---------------------------------------------------------------------------
-// Default fakes
-// ---------------------------------------------------------------------------
 
 const noopOnToolRequest = async (_req: HarnessToolRequest): Promise<JsonValue> => null
 
@@ -101,9 +95,6 @@ function makeArgs(over: Partial<BuildSubagentProviderRunArgs> = {}): BuildSubage
   }
 }
 
-// ---------------------------------------------------------------------------
-// composeInitialPrompt
-// ---------------------------------------------------------------------------
 
 describe("composeInitialPrompt", () => {
   const subagent = makeSubagent({ name: "reviewer" })
@@ -134,9 +125,6 @@ describe("composeInitialPrompt", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// composeSubagentSystemPrompt
-// ---------------------------------------------------------------------------
 
 describe("composeSubagentSystemPrompt", () => {
   test("returns the subagent prompt unchanged when no global text", () => {
@@ -180,8 +168,6 @@ describe("composeSubagentSystemPrompt", () => {
     expect(out).not.toContain("## Stack projects")
   })
 
-  // A subagent that can write project B needs B's rules as much as the main
-  // agent does — this is the parity the feature would be missing without it.
   test("carries the stack and per-project instruction blocks", () => {
     const out = composeSubagentSystemPrompt("You are alpha.", {
       stackInstructions: "api is upstream of web",
@@ -196,9 +182,6 @@ describe("composeSubagentSystemPrompt", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// Claude tests
-// ---------------------------------------------------------------------------
 
 describe("buildSubagentProviderRun – Claude", () => {
   test("forwards assistant_text chunks and result entry to onChunk + onEntry", async () => {
@@ -373,9 +356,6 @@ describe("buildSubagentProviderRun – Claude", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// Codex tests
-// ---------------------------------------------------------------------------
 
 describe("buildSubagentProviderRun – Codex", () => {
   test("starts and stops sub:runId-keyed codex session", async () => {
@@ -482,14 +462,9 @@ describe("buildSubagentProviderRun – Codex", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// keep-alive / LiveTurnSource
-// ---------------------------------------------------------------------------
 
 describe("buildSubagentProviderRun – keep-alive Claude", () => {
   test("keep-alive claude run returns a live source that drives turn 2", async () => {
-    // A simple push-queue that lets the test feed events into the stream
-    // in sync with what the implementation requests.
     const queue: Array<{ resolve: (r: IteratorResult<HarnessEvent>) => void }> = []
     const pending: HarnessEvent[] = []
     const done = false
@@ -534,14 +509,12 @@ describe("buildSubagentProviderRun – keep-alive Claude", () => {
         getSupportedCommands: async () => [],
         pushChannelPrompt: async (text: string) => {
           pushed.push(text)
-          // Feed a reply for this prompt and then a result
           pushEvent(makeTextEvent(`r:${text}`))
           pushEvent(makeResultEvent())
         },
       }),
     })
 
-    // Pre-feed turn-1 events BEFORE calling start so the iterator sees them
     pushEvent(makeTextEvent("t1"))
     pushEvent(makeResultEvent())
 
@@ -599,7 +572,6 @@ describe("buildSubagentProviderRun – keep-alive Claude", () => {
         setModel: async () => {},
         setPermissionMode: async () => {},
         getSupportedCommands: async () => [],
-        // no pushChannelPrompt — keep-alive must fail closed
       }),
     })
 
@@ -639,12 +611,8 @@ describe("buildSubagentProviderRun – keep-alive Claude", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// drainOneTurn
-// ---------------------------------------------------------------------------
 
 describe("drainOneTurn", () => {
-  /** Returns a single AsyncIterator that advances through events on each next() call. */
   function makeIterator(events: HarnessEvent[]): AsyncIterator<HarnessEvent> {
     let i = 0
     return {
@@ -656,7 +624,6 @@ describe("drainOneTurn", () => {
   }
 
   test("returns text at first result and leaves iterator open", async () => {
-    // Build minimally-valid TranscriptEntry fixtures via cast (test file is lint-exempt)
     const events: HarnessEvent[] = [
       {
         type: "transcript",
@@ -678,7 +645,6 @@ describe("drainOneTurn", () => {
           result: "done",
         } as TranscriptEntry,
       },
-      // This event belongs to a second turn — drainOneTurn must NOT consume it
       {
         type: "transcript",
         entry: { _id: "e4", createdAt: 4, kind: "assistant_text", text: "TURN2" } as TranscriptEntry,
@@ -695,8 +661,6 @@ describe("drainOneTurn", () => {
     expect(out.sawResult).toBe(true)
     expect(out.sawError).toBe(false)
 
-    // Iterator is still open — TURN2 event must still be consumable.
-    // makeIterator returns the same object, so .next() resumes from where drain stopped.
     const next = await it.next()
     const nextEvent = next.value as Extract<HarnessEvent, { type: "transcript" }>
     expect(nextEvent.entry.kind).toBe("assistant_text")
@@ -788,8 +752,6 @@ describe("drainOneTurn", () => {
   })
 
   test("empty/premature-close: done before any result → not a successful turn", async () => {
-    // An iterator that closes immediately (e.g. driver crashed before sending result).
-    // Multi-turn callers depend on sawResult===false to detect this condition.
     const it = makeIterator([])
     const out = await drainOneTurn(it, () => {}, () => {})
     expect(out.text).toBe("")
@@ -799,8 +761,6 @@ describe("drainOneTurn", () => {
   })
 
   test("result with isError:true (no preceding api_error) sets sawError via result branch", async () => {
-    // PTY-synth error path: the driver synthesises a result entry with isError:true
-    // directly, without emitting a separate api_error entry first.
     const it = makeIterator([
       {
         type: "transcript",

@@ -1,13 +1,3 @@
-/**
- * CronJobEditDialog — the whole editable surface of an armed cron job.
- *
- * The dialog is the client half of a server contract that already exists:
- * `cron.update` carries a `CronJobPatch` and the server merges it over the
- * job. Two properties of that patch are what these tests pin — it must carry
- * ONLY what changed (a patch that restates an unchanged field is a patch that
- * can clobber a concurrent edit), and `schedule` must never travel without the
- * `scheduleText` the row renders, because the server takes them as a pair.
- */
 
 import { afterEach, describe, expect, test } from "bun:test"
 import { act } from "react"
@@ -69,16 +59,12 @@ async function mount(snapshot = job()): Promise<Harness> {
 }
 
 afterEach(async () => {
-  // The dialog portals into document.body, so a root left mounted commits
-  // against nodes the shared-document sweep already took — failing an
-  // unrelated test in a later file.
   await act(async () => {
     for (const root of mounted.splice(0)) root.unmount()
   })
   for (const container of containers.splice(0)) container.remove()
 })
 
-/** Portalled content lives on `document`, not inside the mount container. */
 function field(id: string): HTMLInputElement | HTMLTextAreaElement {
   const node = document.querySelector<HTMLInputElement | HTMLTextAreaElement>(`#${id}`)
   if (!node) throw new Error(`no #${id}`)
@@ -95,8 +81,6 @@ async function typeInto(id: string, value: string): Promise<void> {
   const node = field(id)
   const prototype = node instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype
   await act(async () => {
-    // React installs its own value setter on the node; going through the
-    // prototype descriptor is what makes the synthetic onChange fire.
     Object.getOwnPropertyDescriptor(prototype, "value")?.set?.call(node, value)
     node.dispatchEvent(new Event("input", { bubbles: true }))
   })
@@ -204,8 +188,6 @@ describe("CronJobEditDialog", () => {
       const fix = namedButton("Use every 5m")
       await click(fix)
       expect(field("cron-edit-schedule").value).toBe("every 5m")
-      // "every 5m" is the job's existing schedule, so correcting back to it
-      // leaves nothing changed — Save must go quiet rather than re-arm.
       expect(namedButton("Save").disabled).toBe(true)
     } finally {
       await harness.unmount()
@@ -225,9 +207,6 @@ describe("CronJobEditDialog", () => {
   test("saving warns that run history and the created age are reset", async () => {
     const harness = await mount()
     try {
-      // An update re-emits `cron_armed`, which deriveCronJobs reads as a fresh
-      // arming. That is the typed `/cron update` behaviour too; it must not be
-      // a surprise arriving from a button.
       expect(document.body.textContent ?? "").toContain("run history")
     } finally {
       await harness.unmount()

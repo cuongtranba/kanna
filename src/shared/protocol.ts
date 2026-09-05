@@ -55,27 +55,12 @@ export type SubscriptionTopic =
   | { type: "app-settings" }
   | { type: "push-config" }
   | { type: "chat"; chatId: string; recentLimit?: number; since?: number }
-  /**
-   * `chatId` names the chat whose tree is wanted.
-   *
-   * A chat can run in a git worktree of its project, so "the project's git
-   * state" is not one thing: two chats in one project can sit on different
-   * branches with different dirty files. Without the chat, the second one is
-   * shown the first one's tree. Omitted means the project's own checkout.
-   */
   | { type: "project-git"; projectId: string; chatId?: string }
   | { type: "project-commands"; projectId: string }
   | { type: "terminal"; terminalId: string }
   | { type: "pty-instances" }
   | { type: "workflows"; chatId: string }
   | { type: "boards"; ownerKind: BoardOwnerKind; ownerId: string }
-  /**
-   * `pageSize` is how many cards per column the subscriber wants.
-   *
-   * Paging RAISES it rather than appending client-side: every broadcast then
-   * carries a complete prefix of each column, so a snapshot pushed by an
-   * unrelated card edit cannot silently discard the pages already loaded.
-   */
   | { type: "board"; boardId: string; pageSize?: number }
   | { type: "followed-sessions" }
   | { type: "cron-jobs" }
@@ -151,7 +136,6 @@ export type ClientCommand =
   | { type: "project.setStar"; projectId: string; starred: boolean }
   | { type: "project.setInstructions"; projectId: string; instructions: string }
   | { type: "sidebar.reorderProjectGroups"; projectIds: string[] }
-  /** `chatId` names the tree to read from — a chat's worktree has its own contents. */
   | { type: "project.readDiffPatch"; projectId: string; path: string; chatId?: string }
   | { type: "stack.create"; title: string; projectIds: string[]; instructions?: string }
   | { type: "stack.rename"; stackId: string; title: string }
@@ -325,12 +309,6 @@ export type ClientCommand =
     }
   | { type: "board.create"; ownerKind: BoardOwnerKind; ownerId: string; title: string; templateId?: string | null }
   | { type: "board.archive"; boardId: string }
-  /**
-   * `cardFields` is the board's whole card schema, not a delta — the store
-   * writes it whole. Typed loose for the same reason `board.card.update`
-   * carries its content that way: it is decoded against the domain's own rules
-   * server-side, and a wire type would only be a second place to state them.
-   */
   | { type: "board.update"; boardId: string; title?: string; description?: string | null; cardFields?: JsonValue }
   | { type: "board.duplicate"; boardId: string; title: string }
   | { type: "board.saveAsTemplate"; boardId: string; name: string }
@@ -341,18 +319,9 @@ export type ClientCommand =
       repo: string
       direction: SyncDirection
       allowAgentPush: boolean
-      /** The checkout this repo lives in, so a Stack board's cards can Start work. */
       projectId?: string | null
-      /**
-       * Confirms a MOVE: the board this repo is currently synced by.
-       *
-       * A repo binds to exactly one board, so connecting one another board
-       * holds detaches it there. Omitting this on a held repo is refused rather
-       * than resolved — the server will not guess that a user meant to move.
-       */
       detachFromBoardId?: string | null
     }
-  /** Disconnect ONE repo from a board that may sync several. */
   | { type: "board.sync.unbind"; boardId: string; bindingId: string }
   | { type: "board.sync.pull"; boardId: string }
   | { type: "board.sync.push"; boardId: string }
@@ -366,9 +335,7 @@ export type ClientCommand =
       colorToken?: ColumnColorToken | null
       wipLimit?: number | null
     }
-  /** Reorder: the column it should sit after; null means first. */
   | { type: "board.column.move"; columnId: string; afterColumnId: string | null }
-  /** Refused while the column still holds cards. */
   | { type: "board.column.delete"; columnId: string }
   | { type: "board.card.create"; boardId: string; columnId: string; title: string; projectId?: string | null; afterCardId?: string | null }
   | {
@@ -381,25 +348,10 @@ export type ClientCommand =
   | { type: "board.card.archive"; cardId: string }
   | { type: "board.card.detail"; cardId: string }
   | { type: "board.card.comment"; cardId: string; body: string }
-  /**
-   * Order two cards: `cardId` waits on `blockedByCardId`.
-   *
-   * Refused when it would make the work circular, when the two are on different
-   * boards, or when either does not exist — the check is the server's, because a
-   * cycle is only diagnosable while the offending edge is still known.
-   */
   | { type: "board.card.block"; cardId: string; blockedByCardId: string }
   | { type: "board.card.unblock"; cardId: string; blockedByCardId: string }
-  /**
-   * `content` is the card's WHOLE content, not just the field that changed: the
-   * store replaces rather than merges, so a partial map would erase every field
-   * it did not name. Untyped on the wire because the schema it has to satisfy
-   * is the board's, which only the server can read — see `decodeContentForFields`.
-   */
   | { type: "board.card.update"; cardId: string; title?: string; content?: JsonValue }
-  /** Card → worktree → branch → chat. Idempotent: a card already working opens what it has. */
   | { type: "board.card.startWork"; cardId: string }
-  /** Answer the question a card asks on reaching `done`. */
   | { type: "board.card.resolveWorktree"; cardId: string; decision: CleanupDecision }
   | { type: "board.cards.page"; columnId: string; limit: number; afterRank?: string | null }
   | { type: "board.templates.list" }
@@ -489,34 +441,9 @@ export interface BoardsSnapshot {
 
 export interface BoardSnapshot {
   boardId: string
-  /** Null when the board was archived or never existed. */
   view: BoardViewSnapshot | null
 }
 
-/**
- * The payload of a command ack.
- *
- * This is the one value in the codebase that the untyped-value migration could
- * not give a meaningful type, and it is deliberately NOT a general-purpose
- * alias like the `AnyValue` that migration deleted.
- *
- * Nothing relates an ack's payload to the command that produced it, so its 51
- * concrete result types — `Board`, `AppSettingsSnapshot`, `ChatSyncResult`, … —
- * have no common supertype to name, and they live in server modules that
- * `src/shared/**` must not import. `JsonValue` cannot serve either: a
- * TypeScript `interface` never satisfies an index-signature type, so it would
- * reject all 51 even though the values genuinely are JSON on the wire.
- *
- * Written as `JsonPrimitive | object` rather than `unknown` so the ban needs no
- * exemption for this file. That is a weak constraint — it still admits a
- * function — but it is not nothing: it excludes `undefined`, which matters
- * because the field is optional and "absent" must stay distinct from "present
- * and undefined".
- *
- * The real fix is to relate result to command, which is issue #899
- * (`untyped-command-results` in the architecture budget, pinned at 60). This
- * type names that gap instead of hiding it.
- */
 export type CommandAckResult = JsonPrimitive | object
 
 export type ServerEnvelope =

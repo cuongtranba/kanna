@@ -1,9 +1,3 @@
-/**
- * Tests for the extracted send/queue handler cluster.
- *
- * Each test builds a minimal `SendCommandDeps` fake and asserts correct
- * behaviour without any real IO or OS calls.
- */
 
 import { describe, test, expect, beforeEach } from "bun:test"
 import {
@@ -21,9 +15,6 @@ import type { StartTurnForChatArgs } from "./claude-turn-starter"
 import { ClaudeSessionState, type CompactionTurnKind } from "./claude-session-state"
 import { buildCodexCompactPrompt } from "../shared/builtin-commands"
 
-// ---------------------------------------------------------------------------
-// Minimal fixture types
-// ---------------------------------------------------------------------------
 
 function makeQueuedMessage(overrides: Partial<QueuedChatMessage> = {}): QueuedChatMessage {
   return {
@@ -105,14 +96,9 @@ type DepsOptions = {
   customModels?: readonly CustomModelEntry[]
   clearedChatIds?: string[]
   activeTurn?: { compactionTurn?: CompactionTurnKind }
-  /**
-   * Whether the fake turn reaches its durable `recordTurnStarted` commit
-   * point. `false` simulates the process dying mid-spawn.
-   */
   turnReachesCommit?: boolean
   transcript?: TranscriptEntry[]
   cronCalls?: Array<{ chatId: string; ok: boolean }>
-  /** Catalog names the fake expander resolves, mapped to what it expands to. */
   localCommands?: Record<string, { prompt: string; kind: "skill" | "command" }>
   expandCalls?: Array<{ chatId: string; content: string }>
 }
@@ -209,9 +195,6 @@ function makeDeps(opts: DepsOptions = {}): SendCommandDeps & { startTurnCalled: 
   }
 }
 
-// ---------------------------------------------------------------------------
-// resolveProvider — pure
-// ---------------------------------------------------------------------------
 
 describe("resolveProvider", () => {
   test("returns command provider when set", () => {
@@ -231,9 +214,6 @@ describe("resolveProvider", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// getProviderSettings — pure
-// ---------------------------------------------------------------------------
 
 describe("getProviderSettings", () => {
   test("claude provider returns model string", () => {
@@ -264,9 +244,6 @@ describe("getProviderSettings", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// shouldInjectProactiveCompact
-// ---------------------------------------------------------------------------
 
 describe("shouldInjectProactiveCompact", () => {
   test("returns false for slash commands", () => {
@@ -276,13 +253,12 @@ describe("shouldInjectProactiveCompact", () => {
   })
 
   test("returns false when getMessages returns empty (no usage data)", () => {
-    // With no context window usage data, shouldProactivelyCompact returns false
     const deps = makeDeps({ chatCompactFailures: 0 })
     expect(shouldInjectProactiveCompact(deps, "chat-1", "hello")).toBe(false)
   })
 
   test("returns false when failure count is at or above threshold", () => {
-    const deps = makeDeps({ chatCompactFailures: 5 }) // MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES = 5
+    const deps = makeDeps({ chatCompactFailures: 5 })
     expect(shouldInjectProactiveCompact(deps, "chat-1", "hello")).toBe(false)
   })
 
@@ -293,16 +269,12 @@ describe("shouldInjectProactiveCompact", () => {
       maxTokens: 200_000,
       compactsAutomatically: false,
     })
-    // The whole point of the change: the hot path must not load the transcript.
     deps.store.getMessages = () => { throw new Error("must not read the whole transcript") }
 
     expect(shouldInjectProactiveCompact(deps, "chat-1", "hello")).toBe(true)
   })
 
   test("a null from store.getLatestContextWindowUsage does NOT fall through to getMessages", () => {
-    // `null` is a meaningful answer (post-compact, or a chat with no usage yet),
-    // so resolving the optional method with `??` would fall through to a full
-    // transcript load on exactly the chats this exists to protect.
     const deps = makeDeps({ chatCompactFailures: 0 })
     deps.store.getLatestContextWindowUsage = () => null
     deps.store.getMessages = () => { throw new Error("must not fall through on a null usage") }
@@ -311,9 +283,6 @@ describe("shouldInjectProactiveCompact", () => {
   })
 
   test("falls back to getMessages on a store fake without the method", () => {
-    // The hand-rolled fakes across the agent suites are injected as
-    // `store as never`, so a REQUIRED method would fail at runtime with no
-    // compile-time warning. This pins the optional shape.
     const deps = makeDeps({
       chatCompactFailures: 0,
       transcript: [
@@ -331,9 +300,6 @@ describe("shouldInjectProactiveCompact", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// enqueueMessage
-// ---------------------------------------------------------------------------
 
 describe("enqueueMessage", () => {
   test("calls store.enqueueMessage with the right content", async () => {
@@ -368,9 +334,6 @@ describe("enqueueMessage", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// dequeueAndStartQueuedMessage
-// ---------------------------------------------------------------------------
 
 describe("dequeueAndStartQueuedMessage", () => {
   test("removes the message once the turn reaches its durable commit point", async () => {
@@ -446,7 +409,6 @@ describe("dequeueAndStartQueuedMessage", () => {
     const msg = makeQueuedMessage({ content: "original" })
     await dequeueAndStartQueuedMessage(deps, "chat-1", msg, { steered: true })
     const startedContent = deps.startTurnCalled[0]?.content ?? ""
-    // Steered messages are wrapped (not the original string)
     expect(startedContent).not.toBe("original")
     expect(startedContent.length).toBeGreaterThan(0)
   })
@@ -469,9 +431,6 @@ describe("dequeueAndStartQueuedMessage", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// maybeStartNextQueuedMessage
-// ---------------------------------------------------------------------------
 
 describe("maybeStartNextQueuedMessage", () => {
   test("returns false and does nothing when a turn is active", async () => {
@@ -504,9 +463,6 @@ describe("maybeStartNextQueuedMessage", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// sendCommand — integration
-// ---------------------------------------------------------------------------
 
 describe("sendCommand", () => {
   let stopLoopCalled: string[]
@@ -566,9 +522,6 @@ describe("sendCommand", () => {
   })
 
   test("enqueues rather than spawning a concurrent turn while one is booting", async () => {
-    // Regression: the queue gate used to check activeTurns only, which is not
-    // populated until the provider session spawns — so a second send during
-    // that window started a second turn that clobbered the first.
     const d = makeDeps({
       startingChatIds: ["chat-1"],
       chatProvider: "claude",
@@ -595,10 +548,6 @@ describe("sendCommand", () => {
   })
 
   test("re-arms (not clears) background task keep-alive on user send", async () => {
-    // A user chatting mid-watch must not disarm the guard: clearing here let
-    // the idle reaper silently kill a healthy CI watch ~10 min after any user
-    // message (adr-20260801-background-task-wake-escalation). Instead the
-    // send refreshes the deadline and restores the wake budget.
     const session = makeTestSession({
       backgroundTasks: new Map([["task-1", { taskType: null, description: null, startedAt: 0, outputPath: null }]]),
       backgroundTaskDeadlineAt: 9999,
@@ -639,9 +588,6 @@ describe("sendCommand", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// Builtin commands — /clear and /compact
-// ---------------------------------------------------------------------------
 
 describe("builtin /clear", () => {
   test("on an idle chat clears context and starts no turn", async () => {
@@ -867,9 +813,6 @@ describe("non-builtin slash commands", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// Local slash-command expansion — providers whose harness cannot expand `/name`
-// ---------------------------------------------------------------------------
 
 const LOCAL = {
   "kanna-test": { prompt: "Run the gates.", kind: "skill" as const },
@@ -890,8 +833,6 @@ describe("sendCommand — local slash commands", () => {
     expect(deps.startTurnCalled[0]!.promptOverride).toBe("Run the gates.")
   })
 
-  // The bubble must stay readable: a skill body is thousands of characters and
-  // is not what the user asked for.
   test("the transcript keeps the typed line and records what expanded", async () => {
     const deps = makeDeps({ chatProvider: "codex", localCommands: LOCAL })
     await sendCommand(deps, {
@@ -949,9 +890,6 @@ describe("sendCommand — local slash commands", () => {
     expect(deps.startTurnCalled[0]!.content).toBe("/nope arg")
   })
 
-  // Builtins are Kanna state, and dispatch intercepts the name before the
-  // catalog is ever consulted — a project `.claude/commands/clear.md` must not
-  // shadow `/clear`.
   test("a builtin still wins over a catalog entry of the same name", async () => {
     const clearedChatIds: string[] = []
     const deps = makeDeps({
@@ -970,8 +908,6 @@ describe("sendCommand — local slash commands", () => {
     expect(deps.startTurnCalled).toHaveLength(0)
   })
 
-  // Expansion sits AFTER the busy check, exactly like the builtin dispatch, so
-  // a slash command typed mid-turn queues like any other message.
   test("a slash command typed while the chat is busy queues instead of expanding", async () => {
     const enqueuedMessages: Array<{ chatId: string; content: string }> = []
     const deps = makeDeps({
@@ -1004,8 +940,6 @@ describe("dequeueAndStartQueuedMessage — local slash commands", () => {
     expect(deps.startTurnCalled[0]!.promptOverride).toBe("Review the diff.")
   })
 
-  // A steered message is an injection into a live session, not a fresh turn —
-  // the same reason a builtin falls through as text there.
   test("a steered slash command falls through as text", async () => {
     const expandCalls: Array<{ chatId: string; content: string }> = []
     const deps = makeDeps({ chatProvider: "codex", localCommands: LOCAL, expandCalls })

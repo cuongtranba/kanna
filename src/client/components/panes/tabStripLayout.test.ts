@@ -26,8 +26,6 @@ describe("computeTabStripLayout", () => {
     expect(many.scrolls).toBe(false)
   })
 
-  // Below the icon-only floor there is nothing left to shrink, so the strip
-  // scrolls rather than rendering slivers.
   test("scrolls at the icon-only floor instead of shrinking further", () => {
     const layout = computeTabStripLayout({ availableWidth: 200, tabCount: 12, actionsWidth: 60 })
     expect(layout.tabWidth).toBe(MIN_TAB_WIDTH)
@@ -58,8 +56,6 @@ describe("computeTabStripLayout", () => {
     }
   })
 
-  // Static markup renders at width 0; the strip must stay legible rather than
-  // collapsing to icon-only in every server-rendered test.
   test("treats an unmeasured strip as roomy", () => {
     const layout = computeTabStripLayout({ availableWidth: 0, tabCount: 2, actionsWidth: 0 })
     expect(layout.tabWidth).toBe(MAX_TAB_WIDTH)
@@ -74,8 +70,6 @@ describe("computeTabStripLayout", () => {
   })
 })
 
-// A phone raises the floor: every chat tab carries the same icon, so a strip
-// that shrank to icon-only would be six identical slivers. It scrolls instead.
 describe("computeTabStripLayout with a raised floor", () => {
   const phone = { availableWidth: 390, actionsWidth: 0, minTabWidth: PHONE_MIN_TAB_WIDTH }
 

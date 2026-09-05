@@ -51,12 +51,6 @@ describe("terminalLayoutStore", () => {
   })
 })
 
-/**
- * The workspace pane tree is shared by every project and stores only a
- * terminalId, so a terminal tab resolves its own owner here. Getting this wrong
- * is not cosmetic: the active project would be borrowed instead, rendering one
- * project's terminal against another's cwd and reaping its tab on every switch.
- */
 describe("findTerminalOwner", () => {
   beforeEach(() => {
     useTerminalLayoutStore.setState({ projects: {} })

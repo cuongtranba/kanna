@@ -35,11 +35,6 @@ function buildClaudePluginPackage(entry: JsonObject): InstalledPackage | null {
   }
 }
 
-/**
- * Parse the output of `claude plugin list --json`.
- * Only user-scoped entries are included; duplicates (same id) are deduplicated
- * by taking the first occurrence.
- */
 export function parseClaudePluginList(raw: JsonValue): { packages: InstalledPackage[]; error: string | null } {
   if (!Array.isArray(raw)) {
     return { packages: [], error: "claude plugin list: expected a JSON array" }
@@ -63,16 +58,6 @@ export function parseClaudePluginList(raw: JsonValue): { packages: InstalledPack
   return { packages, error: null }
 }
 
-/**
- * Parse `~/.claude/plugins/installed_plugins.json`.
- *
- * v2 format (dict): keys are `pluginId@marketplaceName`, values are arrays of
- * scoped entries. Only the user-scoped entry per key is included; gitCommitSha
- * is stored in `revision` for update comparison.
- *
- * v1 format (array): each item is a flat entry; treated as user-scoped. Kept
- * as a fallback for older installations.
- */
 export function parseClaudePluginsFile(raw: JsonValue): { packages: InstalledPackage[]; error: string | null } {
   if (isJsonObject(raw)) {
     return parseClaudePluginsFileV2(raw)
@@ -93,7 +78,6 @@ function parseClaudePluginsFileV2(raw: JsonObject): {
   for (const [pluginKey, scopedEntries] of Object.entries(raw)) {
     if (!pluginKey || !Array.isArray(scopedEntries)) continue
 
-    // Extract marketplace name from `pluginName@marketplaceName` key format.
     const atIdx = pluginKey.indexOf("@")
     const pluginName = atIdx >= 0 ? pluginKey.slice(0, atIdx) : pluginKey
     const marketplaceName = atIdx >= 0 ? pluginKey.slice(atIdx + 1) : null
@@ -101,7 +85,6 @@ function parseClaudePluginsFileV2(raw: JsonObject): {
     if (!pluginName || seen.has(pluginKey)) continue
     seen.add(pluginKey)
 
-    // Take the first user-scoped entry for this plugin.
     let userEntry: JsonObject | null = null
     for (const entry of scopedEntries) {
       if (isJsonObject(entry) && asString(entry.scope) === "user") {

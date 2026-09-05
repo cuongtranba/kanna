@@ -25,8 +25,6 @@ describe("deriveLoopState", () => {
   })
 
   test("carries trackingFileRel through; legacy events without it replay as null", () => {
-    // The label fallback reads `## Next chunk` from this file, so a loop armed
-    // before the field existed must degrade to "no fallback", not crash.
     const withFile: AutoContinueEvent = {
       v: 3,
       kind: "loop_armed",

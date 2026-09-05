@@ -1,7 +1,3 @@
-/**
- * Tests for the extracted turn spawning pipeline (claude-turn-starter.ts).
- * Covers the key branches of startTurnForChat without touching agent.ts internals.
- */
 import { describe, test, expect, mock } from "bun:test"
 import { startTurnForChat, type StartTurnDeps, type StartTurnForChatArgs } from "./claude-turn-starter"
 import { OAuthPoolUnavailableError } from "./oauth-errors"
@@ -10,9 +6,6 @@ import { PendingToolSlots } from "./pending-tool-slot"
 import type { HarnessTurn } from "./harness-types"
 import type { TranscriptEntry } from "../shared/types"
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function makeFakeTurn(): HarnessTurn {
   return {
@@ -117,9 +110,6 @@ function makeArgs(overrides: Partial<StartTurnForChatArgs> = {}): StartTurnForCh
   }
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 describe("startTurnForChat", () => {
   test("1. closes a draining stream before starting a new turn", async () => {
@@ -135,7 +125,6 @@ describe("startTurnForChat", () => {
 
   test("2. throws when chat is already running (activeTurns has the chatId)", async () => {
     const deps = makeDeps()
-    // Pre-populate activeTurns to simulate an in-flight turn
     deps.activeTurns.set("chat-1", {} as ActiveTurn)
 
     await expect(startTurnForChat(deps, makeArgs())).rejects.toThrow("Chat is already running")
@@ -156,8 +145,6 @@ describe("startTurnForChat", () => {
   test("5. does NOT append user_prompt entry when appendUserPrompt is false", async () => {
     const deps = makeDeps()
     await startTurnForChat(deps, makeArgs({ appendUserPrompt: false }))
-    // appendMessage may be called for other things (account_info etc), but
-    // we can check that user_prompt was not the kind persisted.
     const appendCalls = (deps.store.appendMessage as ReturnType<typeof mock>).mock.calls
     const userPromptCalls = appendCalls.filter(
       (call: unknown[]) => (call[1] as { kind?: string })?.kind === "user_prompt"
@@ -178,15 +165,11 @@ describe("startTurnForChat", () => {
     const oauthError = new OAuthPoolUnavailableError("pool is full")
     const deps = makeDeps({
       startClaudeTurn: mock(async () => { throw oauthError }),
-      // Make it a claude provider so startClaudeTurn gets called
     })
-    // Use claude provider so isClaudeSdkProvider returns true → startClaudeTurn called
     const args = makeArgs({ provider: "claude", model: "claude-opus-4-5" })
 
-    // Should NOT throw (swallowed)
     await expect(startTurnForChat(deps, args)).resolves.toBeUndefined()
 
-    // Should persist the error as a result entry
     const appendCalls = (deps.store.appendMessage as ReturnType<typeof mock>).mock.calls
     const resultEntries = appendCalls.filter(
       (call: unknown[]) => {
@@ -206,7 +189,6 @@ describe("startTurnForChat", () => {
 
     await expect(startTurnForChat(deps, args)).rejects.toThrow("unexpected failure")
 
-    // Cleanup should still run
     expect(deps.store.recordTurnFailed as ReturnType<typeof mock>).toHaveBeenCalledWith("chat-1", "unexpected failure")
     expect(deps.emitStateChange as ReturnType<typeof mock>).toHaveBeenCalledWith("chat-1", { immediate: true })
   })
@@ -218,8 +200,6 @@ describe("startTurnForChat", () => {
     expect(deps.startClaudeTurn as ReturnType<typeof mock>).not.toHaveBeenCalled()
   })
 
-  // Switching a stack chat to Codex used to drop the stack silently — same
-  // full filesystem reach, but no idea the peer roots existed.
   describe("9b. Codex developer_instructions carry the stack", () => {
     function depsForBindings(stackBindings?: unknown) {
       const deps = makeDeps()
@@ -256,8 +236,6 @@ describe("startTurnForChat", () => {
   test("10. routes to startClaudeTurn for claude provider", async () => {
     const deps = makeDeps()
     const fakeTurn = makeFakeTurn()
-    // The real startClaudeTurn populates claudeSessions as a side effect;
-    // our mock must do the same so the SDK-session prompt-send path can proceed.
     deps.startClaudeTurn = mock(async () => {
       deps.claudeSessions.set("chat-1", {
         id: "sess-1",
@@ -309,16 +287,7 @@ describe("startTurnForChat", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// Provider-boot window
-//
-// Regression: the ActiveTurn is only registered AFTER the provider session
-// spawns, so for that whole window (seconds on a cold chat) the chat had no
-// server-side record — Stop no-oped and a second chat.send started a
-// concurrent turn. A StartingTurn marker now covers the gap.
-// ---------------------------------------------------------------------------
 
-/** A promise plus its resolver, for pausing a mocked provider boot. */
 function deferred<T>() {
   let resolve!: (value: T) => void
   const promise = new Promise<T>((res) => { resolve = res })
@@ -334,8 +303,6 @@ describe("startTurnForChat — starting-turn marker", () => {
     } as unknown as StartTurnDeps["codexManager"] })
 
     const pending = startTurnForChat(deps, makeArgs({ provider: "codex" }))
-    // Let the pre-boot awaits settle, then assert the marker exists while the
-    // provider is still booting and no ActiveTurn has been registered yet.
     await Promise.resolve()
     await new Promise((r) => setTimeout(r, 0))
     expect(deps.startingTurns.has("chat-1")).toBe(true)
@@ -384,7 +351,6 @@ describe("startTurnForChat — starting-turn marker", () => {
     const pending = startTurnForChat(deps, makeArgs({ provider: "codex" }))
     await new Promise((r) => setTimeout(r, 0))
 
-    // Simulate cancelChat landing mid-boot.
     const starting = deps.startingTurns.get("chat-1")!
     starting.cancelRequested = true
     deps.startingTurns.delete("chat-1")
@@ -434,7 +400,6 @@ describe("startTurnForChat — starting-turn marker", () => {
     const pending = startTurnForChat(deps, makeArgs({ provider: "codex" }))
     await new Promise((r) => setTimeout(r, 0))
 
-    // Cancel removes the first marker, then a fresh turn registers its own.
     const first = deps.startingTurns.get("chat-1")!
     first.cancelRequested = true
     deps.startingTurns.delete("chat-1")
@@ -449,7 +414,6 @@ describe("startTurnForChat — starting-turn marker", () => {
     gate.resolve(makeFakeTurn())
     await pending
 
-    // The first boot's identity-guarded cleanup must leave the second alone.
     expect(deps.startingTurns.get("chat-1")).toBe(second)
   })
 
@@ -462,7 +426,6 @@ describe("startTurnForChat — starting-turn marker", () => {
         return makeFakeTurn()
       }) as unknown as StartTurnDeps["startClaudeTurn"],
     })
-    // The claude path delivers its prompt through the SDK session queue.
     deps.claudeSessions.set("chat-1", {
       id: "sess-1",
       chatId: "chat-1",
@@ -476,8 +439,6 @@ describe("startTurnForChat — starting-turn marker", () => {
     await startTurnForChat(deps, makeArgs({ provider: "claude", model: "claude-opus-4-5" }))
     expect(captured).not.toBeNull()
 
-    // Simulate the SDK self-resuming after a background-task notification:
-    // the turn that owned this session is already gone from activeTurns.
     deps.activeTurns.delete("chat-1")
 
     const tool = {
@@ -487,7 +448,6 @@ describe("startTurnForChat — starting-turn marker", () => {
       toolId: "toolu_x",
       input: { questions: [] },
     }
-    // Never resolves — this IS the parked canUseTool continuation. Do not await.
     void captured!({ tool })
 
     expect(deps.pendingTools.get("chat-1")?.toolUseId).toBe("toolu_x")

@@ -12,9 +12,7 @@ export interface KannaSidebarStorePorts {
   storage?: StoragePort
 }
 
-/** Narrowest the main content column may become before the sidebar yields. */
 export const SIDEBAR_CONTENT_MIN_WIDTH = 400
-/** Settings is a two-column split, so it needs more room than a chat transcript. */
 export const SIDEBAR_CONTENT_MIN_WIDTH_SETTINGS = 720
 
 export function clampSidebarWidth(width: number) {
@@ -23,23 +21,11 @@ export function clampSidebarWidth(width: number) {
 }
 
 export interface ResolveSidebarWidthArgs {
-  /** The width the user asked for (stored preference or live drag). */
   requestedWidth: number
-  /** Measured window width; 0 when unmeasured. */
   viewportWidth: number
   contentMinWidth?: number
 }
 
-/**
- * Clamp the sidebar against the viewport as well as its own bounds.
- *
- * `clampSidebarWidth` alone only honours [MIN, MAX], so on a 900px window a
- * 520px sidebar left 380px of chat. Here the content column is served first:
- * the sidebar gets whatever is left over, but never drops below its own floor.
- *
- * An unmeasured viewport passes the request straight through — collapsing during
- * hydration would render a narrow sidebar that jumps wider on the first frame.
- */
 export function resolveSidebarWidth({
   requestedWidth,
   viewportWidth,
@@ -65,7 +51,6 @@ function persistSidebarWidth(width: number, ports: KannaSidebarStorePorts = {}) 
 
 const EMPTY_STACK_CHAT_WORKTREES = new Map<string, GitWorktree[]>()
 
-/** Flip one key of a Set, always returning a new Set. */
 function toggleInSet(previous: Set<string>, key: string): Set<string> {
   const next = new Set(previous)
   if (next.has(key)) next.delete(key)
@@ -77,7 +62,6 @@ function sameKeys(a: Set<string>, b: Set<string>) {
   return a.size === b.size && [...a].every((key) => b.has(key))
 }
 
-/** One project group, as far as collapse reconciliation is concerned. */
 export interface SidebarGroupDescriptor {
   groupKey: string
   defaultCollapsed?: boolean
@@ -86,9 +70,7 @@ export interface SidebarGroupDescriptor {
 interface KannaSidebarState {
   collapsedSections: Set<string>
   expandedGroups: Set<string>
-  /** Expansion captured before a collapse-all, restored by the next expand-all. */
   expandedGroupsSnapshot: Set<string>
-  /** Groups whose defaultCollapsed has already been applied once. */
   initializedCollapsedGroupKeys: Set<string>
   nowMs: number
   showNumberJumpHints: boolean
@@ -99,7 +81,6 @@ interface KannaSidebarState {
   stackCreatePanelOpen: boolean
   stackEditId: string | null
   stackDeleteConfirmId: string | null
-  /** Project whose instructions dialog is open. One at a time, like the stack panels. */
   instructionsProjectId: string | null
   stackChatCreateId: string | null
   stackChatWorktrees: Map<string, GitWorktree[]>
@@ -107,24 +88,17 @@ interface KannaSidebarState {
   isImporting: boolean
   importDialogOpen: boolean
 
-  // ─── Sections / groups ────────────────────────────────────────────────────
-  /** Drop keys for vanished groups and apply defaultCollapsed to newly-seen ones. */
   reconcileSidebarGroups: (groups: SidebarGroupDescriptor[]) => void
   toggleSectionCollapsed: (key: string) => void
   toggleGroupExpanded: (key: string) => void
-  /** Collapse everything, or restore the expansion captured by the last collapse-all. */
   toggleAllSectionsCollapsed: (allGroupKeys: string[]) => void
 
-  // ─── Width ────────────────────────────────────────────────────────────────
   setSidebarWidth: (width: number) => void
-  /** Step the width by a delta, clamped, and persist it. No-op at the boundary. */
   nudgeSidebarWidth: (delta: number) => void
   setSidebarWidthAndPersist: (width: number) => void
-  /** Clamp the live drag width and write it through to storage. */
   commitSidebarWidth: () => void
   setIsResizingSidebar: (resizing: boolean) => void
 
-  // ─── Stacks ───────────────────────────────────────────────────────────────
   toggleStackExpanded: (stackId: string) => void
   openStackCreatePanel: () => void
   openStackEditPanel: (stackId: string) => void
@@ -132,13 +106,11 @@ interface KannaSidebarState {
   setStackDeleteConfirmId: (id: string | null) => void
   setInstructionsProjectId: (projectId: string | null) => void
 
-  // ─── Stack chat creation ──────────────────────────────────────────────────
   beginStackChatCreate: (stackId: string) => void
   finishStackChatCreate: (worktrees: Map<string, GitWorktree[]>) => void
   endStackChatCreateLoading: () => void
   closeStackChatCreate: () => void
 
-  // ─── Misc ─────────────────────────────────────────────────────────────────
   setNowMs: (nowMs: number) => void
   setShowNumberJumpHints: (show: boolean) => void
   setArchivedProjectId: (id: string | null) => void
@@ -283,5 +255,4 @@ export const useKannaSidebarStore = create<KannaSidebarState>()((set) => ({
   setImportDialogOpen: (open) => set({ importDialogOpen: open }),
 }))
 
-// Re-export helpers that are used in KannaSidebar
 export { persistSidebarWidth, readStoredSidebarWidth }

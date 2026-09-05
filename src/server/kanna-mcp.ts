@@ -50,8 +50,6 @@ import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
 
-// Resolves to the same element type that createSdkMcpServer accepts for its
-// `tools` array, without spelling out `any` explicitly in this file.
 type KannaSdkToolList = NonNullable<Parameters<typeof createSdkMcpServer>[0]["tools"]>
 
 export interface OfferDownloadArgs {
@@ -59,12 +57,6 @@ export interface OfferDownloadArgs {
   localPath: string
 }
 
-/**
- * Per-spawn delegation context for `mcp__kanna__delegate_subagent`.
- * Main-agent spawns set `depth: 0`, `parentSubagentId: null`,
- * `parentRunId: null`, `ancestorSubagentIds: []`. Subagent spawns set
- * the caller's own run context so cycle / depth checks apply.
- */
 export interface KannaMcpDelegationContext {
   parentSubagentId: string | null
   parentRunId: string | null
@@ -81,74 +73,22 @@ export interface KannaMcpArgs extends OfferDownloadArgs {
   tunnelGateway?: TunnelGateway | null
   toolCallback?: ToolCallbackService
   chatPolicy?: ChatPermissionPolicy
-  /** Required for delegate_subagent. Omit when subagent registry is unavailable; the tool will then be hidden from the model. */
   subagentOrchestrator?: SubagentOrchestrator
-  /** Required alongside `subagentOrchestrator`. Defaults to a stub returning null when omitted. */
   delegationContext?: KannaMcpDelegationContext
-  /**
-   * Forces the `ask_user_question` / `exit_plan_mode` shims to register
-   * even when `KANNA_MCP_TOOL_CALLBACKS` is unset. The PTY driver sets
-   * this because the durable approval protocol is the only host path
-   * for interactive tools under PTY (no `canUseTool` hook). Does NOT
-   * register the 8 built-in shims — those stay gated on the env flag.
-   */
   forceInteractiveToolCallbacks?: boolean
-  /**
-   * Folder-restricted subagent: per-run allowlist of absolute path roots. When
-   * set, the kanna-mcp shims (read/glob/grep/bash/edit/write) auto-deny any
-   * path resolving outside the listed roots. Empty / unset = no extra check.
-   * Layered on top of the per-chat readPathDeny / writePathDeny.
-   */
   restrictedAllowedPaths?: readonly string[]
-  /**
-   * Backs the `setup_loop` MCP tool. Omit to hide the tool. Handler validates
-   * the loop spec, ensures the tracking file exists, and enqueues a
-   * validated templated recurring prompt as an auto-continue on this chat.
-   * See adr-20260711-setup-loop-template.
-   */
   setupLoop?: (input: LoopSetupInput) => Promise<SetupLoopHandlerResult>
-  /**
-   * Backs the `stop_loop` MCP tool. Disarms an armed loop on this chat
-   * (restores tools + stops prompt re-injection). Registered alongside
-   * `setup_loop` (same main-chat gating). Omit to hide the tool.
-   */
   stopLoop?: () => Promise<void>
-  /**
-   * Backs the `resume_loop` MCP tool. Re-arms the chat's most recent loop spec
-   * from the `loop_armed` tombstone. Registered alongside `setup_loop` (same
-   * main-chat gating). Omit to hide the tool.
-   */
   resumeLoop?: () => Promise<ResumeLoopResult>
-  /**
-   * Current armed-loop state for this chat, looked up per CALL. Gives the
-   * tracking-doc tools the loop's workdir (so a worktree loop resolves its
-   * tracking file beside the branch it describes) and `run_verify` the oracle
-   * command. Omit to fall back to the chat cwd and hide `run_verify`.
-   */
   getArmedLoop?: (chatId: string) => ArmedLoopInfo | null
-  /**
-   * Backs `validate_mermaid`. Defaults to the real mermaid parser; tests
-   * inject a fake so the tool suite never loads the mermaid bundle.
-   */
   parseMermaid?: MermaidParsePort
-  /**
-   * Backs `arm_cron` — runs a `/cron` line through the normal dispatch, so a
-   * model-armed job takes exactly the path a typed command takes. Omit to
-   * hide the tool; supplied only for main chats, like `setup_loop`.
-   */
   armCron?: (command: string) => Promise<{ jobId: string }>
-  /**
-   * Backs `update_cron` — edits a field on an already-armed job in place.
-   * Supplied only for main chats alongside `armCron`.
-   */
   updateCron?: (jobId: string, patch: import("../shared/cron/types").CronJobPatch) => Promise<void>
 }
 
-/** The slice of the armed loop the MCP tools need. */
 export interface ArmedLoopInfo {
   verifyCommand: string | null
   workdirAbs: string | null
-  /** Tracking file relative to `workdirAbs`; null for a loop armed before it was recorded. */
   trackingFileRel: string | null
 }
 
@@ -157,17 +97,9 @@ export type SetupLoopHandlerResult =
       ok: true
       trackingFileRel: string
       created: boolean
-      /** True when an existing tracking file was rewritten to conform to the loop schema. */
       reconciled: boolean
-      /** Section-level reconcile actions taken (empty when created or already conformant). */
       reconcileActions: string[]
-      /**
-       * Non-fatal arm-time oracle-strength warnings (`auditOracle`). Surfaced
-       * in the tool reply so a grep-shaped oracle is called out at the one
-       * moment the operator can still tighten it.
-       */
       oracleWarnings: string[]
-      /** Fully-rendered recurring prompt (echoed back for observability). */
       prompt: string
     }
   | { ok: false; errors: string[] }
@@ -349,20 +281,6 @@ Args:
 - label: optional human-readable title shown on the card
 `
 
-/**
- * Adapt the SDK MCP `extra` argument into a per-entry callback that emits
- * `notifications/progress` for each persisted subagent transcript entry.
- *
- * The Claude CLI MCP client arms a transport-error watchdog (`armedAt`)
- * on any control-channel error and, after 90s without recovery, drops
- * the in-flight tool call with `"transport dropped mid-call; response
- * for tool X was lost"`. The progress callback on the CLI side resets
- * `armedAt = 0`, so a single notification every few seconds keeps a
- * multi-minute `delegate_subagent` call alive even if the underlying
- * transport blips. Returns `undefined` (no-op) when the caller did not
- * supply a `progressToken` or the MCP runtime did not expose
- * `sendNotification`.
- */
 export function buildDelegateProgressEmitter<TExtra>(
   extra: TExtra,
 ): ((entry: TranscriptEntry) => void) | undefined {
@@ -416,7 +334,6 @@ function buildDelegateSubagentToolList(args: {
       DELEGATE_SUBAGENT_DESCRIPTION,
       delegate.schema.shape,
       async (input, extra) => {
-        // Reject keep_alive for non-claude subagents before delegating.
         if (input.keep_alive) {
           const subagent = orchestrator.findSubagent(input.subagent_id)
           if (subagent && subagent.provider !== "claude") {
@@ -436,9 +353,6 @@ function buildDelegateSubagentToolList(args: {
           resolveLoopChunkLabel,
         }
         const result = await delegate.handler(input, handlerCtx)
-        // When keep_alive was requested and the run completed, append the
-        // session-keep-alive hint so the model learns the run_id and knows
-        // how to drive follow-up turns.
         if (input.keep_alive && !result.isError && result.content.length > 0) {
           const parsed = (() => {
             try {
@@ -677,22 +591,6 @@ const RUN_VERIFY_DESCRIPTION =
   + "typecheck + tests) costs a minute or more each time."
 
 
-/**
- * Deterministic label for the chunk a loop iteration is about to delegate:
- * the armed loop's tracking file, `## Next chunk` section, first line.
- *
- * The delegation prompt itself is server-rendered boilerplate, identical every
- * iteration, so without this every Progress row read the same. The orchestrator
- * normally names the chunk in a `[chunk: …]` marker; this is the fallback for
- * when it does not, and unlike the marker it needs no model cooperation — at
- * delegate time that section IS the chunk (the worker only rewrites it once it
- * finishes).
- *
- * Returns null whenever anything is unknown (no loop armed, legacy loop with no
- * recorded tracking file, unreadable / non-markdown file, empty section). The
- * caller then falls back to the prompt's first line — a missing label must
- * never fail a delegation.
- */
 function buildLoopChunkLabelResolver(args: {
   cwd: string
   chatId: string
@@ -701,8 +599,6 @@ function buildLoopChunkLabelResolver(args: {
   const getArmedLoop = args.getArmedLoop
   if (!getArmedLoop) return undefined
   return async () => {
-    // Resolved per CALL, not per build: tools are built at spawn and
-    // setup_loop arms mid-turn.
     const loop = getArmedLoop(args.chatId)
     if (!loop?.trackingFileRel) return null
     const confined = confinePathToDir(loop.trackingFileRel, loop.workdirAbs ?? args.cwd, "file")
@@ -716,14 +612,6 @@ function buildLoopChunkLabelResolver(args: {
   }
 }
 
-/**
- * `query_tracking_file` + `append_tracking_row`: bound the loop tracking
- * file's context cost at the read/append boundary. Registered whenever a
- * chat is present, so both the main orchestrator and its subagents get them.
- * Paths are confined to the chat cwd; the format is dispatched by extension
- * through the structured-doc registry (`.md` today). See the loop-template
- * renderLoopPrompt which instructs the model to use these instead of Read/Edit.
- */
 function buildTrackingDocToolList(args: {
   cwd: string
   chatId: string | null
@@ -732,11 +620,6 @@ function buildTrackingDocToolList(args: {
   if (!args.chatId) return []
   const chatId = args.chatId
   const getArmedLoop = args.getArmedLoop
-  // A loop may run in a sibling git worktree (setup_loop's `workdir`), and its
-  // tracking file lives beside the branch it describes. Confining to the chat
-  // cwd would resolve the worker's `file:` against the wrong checkout, so the
-  // armed loop's workdir wins while a loop is armed. Resolved per CALL, not
-  // per build: tools are built at spawn, and setup_loop arms mid-turn.
   const baseDir = (): string => getArmedLoop?.(chatId)?.workdirAbs ?? args.cwd
   return [
     tool(
@@ -822,10 +705,6 @@ function buildTrackingDocToolList(args: {
   ]
 }
 
-/**
- * `replace_tracking_section`: the write op for sections that hold CURRENT
- * state rather than a log. Registered next to append for the same audience.
- */
 function buildReplaceTrackingSectionTool(baseDir: () => string): KannaSdkToolList {
   return [
     tool(
@@ -864,12 +743,6 @@ function buildReplaceTrackingSectionTool(baseDir: () => string): KannaSdkToolLis
   ]
 }
 
-/**
- * `run_verify`: run the armed loop's oracle, memoized on a fingerprint of the
- * working tree. Hidden unless a loop is armed with a recorded verify command —
- * there is nothing to run otherwise, and inventing one would be worse than
- * absent.
- */
 function buildRunVerifyToolList(args: {
   chatId: string | null
   cwd: string
@@ -907,7 +780,6 @@ function buildRunVerifyToolList(args: {
           }
         }
         const result = await runVerifyCommand({ command, cwd, timeoutMs: VERIFY_TOOL_TIMEOUT_MS })
-        // A timed-out run says nothing about the tree, so it is not cached.
         if (!result.timedOut) {
           setCachedVerify(chatId, command, digest, result)
         }
@@ -918,7 +790,6 @@ function buildRunVerifyToolList(args: {
   ]
 }
 
-/** Wall-clock bound for one `run_verify` call. A real gate is minutes, not seconds. */
 const VERIFY_TOOL_TIMEOUT_MS = 900_000
 
 const VALIDATE_MERMAID_DESCRIPTION =
@@ -928,15 +799,6 @@ const VALIDATE_MERMAID_DESCRIPTION =
   + "back with the offending line, mermaid's own caret excerpt, and what to "
   + "change. Cheap (a few milliseconds) — call it for every diagram you write."
 
-/**
- * `validate_mermaid`: the in-turn half of the mermaid validation gate. The
- * model fixes its own diagram before anyone sees it, which costs no extra
- * turn; the end-of-turn guard exists only for the turns where this was
- * skipped.
- *
- * Registered whenever a chat is present, so subagents get it too — a subagent
- * reply is rendered in the transcript the same as a main-turn one.
- */
 function buildValidateMermaidToolList(args: {
   chatId: string | null
   parse: MermaidParsePort
@@ -985,17 +847,6 @@ const ARM_CRON_DESCRIPTION =
   + "arm_cron again with the corrected line and remove the old job with "
   + "`/cron remove <jobId>`."
 
-/**
- * The `/cron` pair, mirroring the mermaid gate: `validate_cron` is the in-turn
- * oracle, `arm_cron` is the act it enables. Both answer from
- * `previewCronCommand`, so the model can never be told a line is valid by one
- * and refused by the other.
- *
- * `validate_cron` gates on a chat only — checking a line is free of
- * consequence. `arm_cron` additionally needs the injected capability, which
- * the spawner supplies for main chats alone: a subagent's chat is ephemeral
- * and must not leave recurring work behind.
- */
 function buildCronToolList(args: {
   chatId: string | null
   armCron?: (command: string) => Promise<{ jobId: string }>
@@ -1119,12 +970,7 @@ export function buildKannaMcpTools(args: KannaMcpArgs): KannaSdkToolList {
     }),
     ...buildSetupLoopToolList({ setupLoop: args.setupLoop, stopLoop: args.stopLoop, resumeLoop: args.resumeLoop, chatId }),
     ...buildTrackingDocToolList({ cwd, chatId, getArmedLoop: args.getArmedLoop }),
-    // The board is the agent's work queue: read your column, advance your card.
-    // Scoped to the chat's project and context-bounded — see the module header.
     ...buildBoardToolList({ boardRegistry: args.boardRegistry, chatId, projectId: args.projectId ?? null }, tool),
-    // Plugin authoring. `getPluginService()` is the ONE service the CLI and the
-    // HTTP surface also drive — a second one would keep a second registry.
-    // Mutating tools (scaffold/install/reload) are withheld at depth > 0.
     ...buildPluginToolList(getPluginService(), chatId, args.delegationContext?.depth ?? 0, tool),
     ...buildRunVerifyToolList({ chatId, cwd, getArmedLoop: args.getArmedLoop }),
     ...buildValidateMermaidToolList({ chatId, parse: args.parseMermaid ?? parseMermaid }),
@@ -1151,15 +997,6 @@ export function buildKannaMcpTools(args: KannaMcpArgs): KannaSdkToolList {
     )
   }
 
-  // Two independent gates:
-  //  • interactive (ask_user_question / exit_plan_mode): on when the env
-  //    flag is set OR the caller forces it. The PTY driver forces it
-  //    because the durable approval protocol is the only host path for
-  //    interactive tools under PTY (no canUseTool hook). See issue #215.
-  //  • built-in shims (read/glob/grep/bash/edit/write/webfetch/websearch):
-  //    gated on the env flag ONLY. Never force-registered — under PTY they
-  //    would duplicate the native CLI built-ins and route every bash/edit
-  //    through an approval prompt, contradicting --dangerously-skip-permissions.
   const envCallbacksEnabled = process.env.KANNA_MCP_TOOL_CALLBACKS === "1"
   const interactiveEnabled =
     (envCallbacksEnabled || args.forceInteractiveToolCallbacks === true) && Boolean(args.toolCallback)
@@ -1215,13 +1052,6 @@ export function buildKannaMcpTools(args: KannaMcpArgs): KannaSdkToolList {
     const webfetchTool = createWebFetchTool({ toolCallback: args.toolCallback })
     const websearchTool = createWebSearchTool({ toolCallback: args.toolCallback })
 
-    /**
-     * The shim's own zod schema is the decoder. It used to be `<I>input` — an
-     * assertion that the MCP SDK had already validated the payload — which is
-     * both banned and unprovable here. `safeParse` turns the same claim into a
-     * runtime check, and a payload that fails it becomes an error result rather
-     * than a crash inside the handler.
-     */
     function registerShim<TSchema extends z.ZodObject<z.ZodRawShape>>(shim: {
       name: string
       schema: TSchema

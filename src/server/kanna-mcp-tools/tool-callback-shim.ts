@@ -8,12 +8,10 @@ export interface ToolHandlerContext {
   toolUseId: string
   cwd: string
   chatPolicy: ChatPermissionPolicy
-  /** Folder-restricted subagent: per-run absolute path-root allowlist. Undefined = no extra check. */
   restrictedAllowedPaths?: readonly string[]
 }
 
 export interface ToolHandlerResult {
-  // Index signature required to satisfy MCP CallToolResult shape
   [key: string]: JsonValue | undefined
   content: { type: "text"; text: string }[]
   isError?: boolean

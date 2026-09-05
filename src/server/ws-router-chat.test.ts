@@ -1,8 +1,3 @@
-/**
- * ws-router-chat.test.ts
- *
- * Unit tests for the chat lifecycle WS command handlers.
- */
 import { describe, expect, mock, test } from "bun:test"
 import type {
   ChatAgentDep,
@@ -14,9 +9,6 @@ import type {
 import { handleChatCommand } from "./ws-router-chat"
 import type { ClientCommand, ServerEnvelope } from "../shared/protocol"
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function makeStore(overrides: Partial<ChatStoreDep> = {}): ChatStoreDep {
   return {
@@ -110,14 +102,8 @@ function makeDeps(
   }
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 describe("handleChatCommand", () => {
-  // -------------------------------------------------------------------------
-  // Unknown / out-of-scope
-  // -------------------------------------------------------------------------
 
   test("returns false for a non-chat command", async () => {
     const deps = makeDeps()
@@ -130,9 +116,6 @@ describe("handleChatCommand", () => {
     expect(deps.sent).toHaveLength(0)
   })
 
-  // -------------------------------------------------------------------------
-  // chat.create
-  // -------------------------------------------------------------------------
 
   test("chat.create — creates chat, acks, tracks analytics, broadcasts chat+sidebar", async () => {
     const deps = makeDeps()
@@ -146,9 +129,6 @@ describe("handleChatCommand", () => {
     expect(deps.chatSidebarBroadcasts).toContain("chat-1")
   })
 
-  // -------------------------------------------------------------------------
-  // chat.fork
-  // -------------------------------------------------------------------------
 
   test("chat.fork — forks chat, acks with result, broadcasts sidebar", async () => {
     const deps = makeDeps()
@@ -163,9 +143,6 @@ describe("handleChatCommand", () => {
     expect(deps.sent[0]).toMatchObject({ type: "ack", id: "r2" })
   })
 
-  // -------------------------------------------------------------------------
-  // chat.rename
-  // -------------------------------------------------------------------------
 
   test("chat.rename — renames, acks, broadcasts chat+sidebar", async () => {
     const deps = makeDeps()
@@ -179,9 +156,6 @@ describe("handleChatCommand", () => {
     expect(deps.chatSidebarBroadcasts).toContain("chat-1")
   })
 
-  // -------------------------------------------------------------------------
-  // chat.archive / chat.unarchive
-  // -------------------------------------------------------------------------
 
   test("chat.archive — archives, acks, broadcasts sidebar only", async () => {
     const deps = makeDeps()
@@ -196,9 +170,6 @@ describe("handleChatCommand", () => {
     expect(deps.chatSidebarBroadcasts).toHaveLength(0)
   })
 
-  // -------------------------------------------------------------------------
-  // chat.delete
-  // -------------------------------------------------------------------------
 
   test("chat.delete — cancels, closes schedules, closes chat, cancels tool callbacks, deletes, tracks analytics", async () => {
     const scheduleId = "sched-1"
@@ -233,9 +204,6 @@ describe("handleChatCommand", () => {
     expect(deps.sidebarBroadcasts).toBe(1)
   })
 
-  // -------------------------------------------------------------------------
-  // chat.setDraftProtection
-  // -------------------------------------------------------------------------
 
   test("chat.setDraftProtection — sets protection, acks, broadcasts all", async () => {
     const deps = makeDeps()
@@ -251,9 +219,6 @@ describe("handleChatCommand", () => {
     expect(deps.sent[0]).toMatchObject({ type: "ack", id: "r6" })
   })
 
-  // -------------------------------------------------------------------------
-  // chat.send
-  // -------------------------------------------------------------------------
 
   test("chat.send — calls agent.send, acks with result, calls profiling hooks", async () => {
     const sendResult = { chatId: "chat-sent" }
@@ -273,14 +238,10 @@ describe("handleChatCommand", () => {
     expect(agentSend as ReturnType<typeof mock>).toHaveBeenCalledWith(cmd)
     const ack = deps.sent[0] as { type: string; result: typeof sendResult }
     expect(ack.result).toEqual(sendResult)
-    // profiling hooks should have been called twice (ack + ack_completed)
     expect(deps.logCalls.some((c) => c.stage === "ws.chat_send_ack")).toBe(true)
     expect(deps.logCalls.some((c) => c.stage === "ws.chat_send_ack_completed")).toBe(true)
   })
 
-  // -------------------------------------------------------------------------
-  // chat.cancel
-  // -------------------------------------------------------------------------
 
   test("chat.cancel — cancels agent, cancels tool callbacks, acks", async () => {
     const cancelAllForChat = mock(async () => {})
@@ -313,9 +274,6 @@ describe("handleChatCommand", () => {
     expect(deps.sent[0]).toMatchObject({ type: "ack" })
   })
 
-  // -------------------------------------------------------------------------
-  // chat.loadHistory
-  // -------------------------------------------------------------------------
 
   test("chat.loadHistory — returns messages page", async () => {
     const page: import("../shared/types").ChatHistoryPage = { messages: [] as import("../shared/types").TranscriptEntry[], hasOlder: false, olderCursor: null }
@@ -348,9 +306,6 @@ describe("handleChatCommand", () => {
     ).rejects.toThrow("Chat not found")
   })
 
-  // -------------------------------------------------------------------------
-  // chat.toolRequestAnswer
-  // -------------------------------------------------------------------------
 
   test("chat.toolRequestAnswer — valid decision — answers, acks, broadcasts chat+sidebar", async () => {
     const answer = mock(async () => {})
@@ -429,9 +384,6 @@ describe("handleChatCommand", () => {
     ).rejects.toThrow("Tool request does not belong to this chat")
   })
 
-  // -------------------------------------------------------------------------
-  // chat.respondTool / chat.respondSubagentTool / chat.cancelSubagentRun
-  // -------------------------------------------------------------------------
 
   test("chat.respondTool — calls respondTool, acks", async () => {
     const respondTool = mock(async () => {})

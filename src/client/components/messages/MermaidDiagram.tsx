@@ -30,24 +30,13 @@ interface MermaidDiagramPorts {
   clipboard?: ClipboardPort
   timer?: TimerPort
   dom?: DomPort
-  /** Override the mermaid bundle loader — tests use this to simulate a stale chunk. */
   loadMermaid?: () => Promise<MermaidModule>
 }
 
-// Shared across every diagram on the page: one mermaid bundle, loaded once. The
-// loader deliberately does NOT cache failures — see lazyModule.ts.
 const loadMermaid = createLazyLoader(() =>
   import("mermaid").then((m): MermaidModule => m.default)
 )
 
-/**
- * Render `source`, falling back to a repaired copy when mermaid rejects it.
- *
- * The repair runs ONLY after a failure, so a diagram that renders is never
- * rewritten and cannot change meaning. When the repaired copy fails too, the
- * FIRST error is what propagates: its line and caret refer to the authored
- * source, which is the source the fallback view shows the reader.
- */
 async function renderWithRepair(
   mermaid: MermaidModule,
   domId: string,
@@ -60,8 +49,6 @@ async function renderWithRepair(
     const repaired = repairMermaidSource(source)
     if (repaired.repairs.length === 0) throw firstError
     try {
-      // A distinct id: mermaid leaves the failed attempt's element in the DOM,
-      // and reusing the id would collide with it.
       const { svg } = await mermaid.render(`${domId}-repaired`, repaired.source)
       return { svg, repairs: repaired.repairs }
     } catch {
@@ -70,7 +57,6 @@ async function renderWithRepair(
   }
 }
 
-/** `-.x → -.-x, -.o → -.-o` — each distinct rewrite once, in first-seen order. */
 function describeRepairs(repairs: readonly MermaidRepair[]): string {
   const seen: string[] = []
   for (const repair of repairs) {
@@ -121,8 +107,6 @@ function MermaidDiagramInner({ source, ports }: { source: string; ports?: Mermai
       .catch((err) => {
         if (cancelled) return
         const error = toError(err)
-        // A missing chunk is an app-version problem, not a diagram problem —
-        // surfacing the raw loader message here would blame the wrong thing.
         if (isStaleChunkError(error)) {
           setRenderState({ status: "error", kind: "stale-chunk" })
           return
@@ -173,8 +157,6 @@ function MermaidDiagramInner({ source, ports }: { source: string; ports?: Mermai
             </span>
             <div className="text-muted-foreground">{detail.summary}</div>
             {detail.excerpt ? (
-              // Monospace + `pre`: the caret ruler only means anything while
-              // its column alignment with the excerpt above it survives.
               <pre className="mt-1 overflow-x-auto rounded-md border border-border bg-muted px-2 py-1 font-mono text-xs leading-snug whitespace-pre text-muted-foreground">
                 {detail.excerpt}
               </pre>
@@ -211,8 +193,6 @@ function MermaidDiagramInner({ source, ports }: { source: string; ports?: Mermai
   return (
     <div className="relative group/mermaid my-3">
       {renderState.repairs.length > 0 && (
-        // The reader is looking at a diagram the author did not quite write, so
-        // say so — silently "fixing" it would misreport the source.
         <div className="flex items-start gap-1.5 text-xs text-muted-foreground mb-1">
           <Wrench className="size-3.5 shrink-0 mt-px" />
           <span>

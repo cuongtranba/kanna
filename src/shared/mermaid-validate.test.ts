@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test"
 import type { MermaidParsePort } from "./mermaid-validation"
 import { validateMermaid, validateMermaidFences } from "./mermaid-validate"
 
-/** Rejects any source containing `BAD`, with a realistic jison message. */
 const fakeParse: MermaidParsePort = (source) =>
   Promise.resolve(
     source.includes("BAD")

@@ -17,22 +17,9 @@ interface Options<T> {
   fetcher: (signal: AbortSignal) => Promise<T>
   cacheKey: string
   rootMargin?: string
-  /**
-   * Narrows an entry read back out of the shared cache. One module-level map
-   * serves every caller, so its entries are erased to the JSON they actually
-   * are — this is the caller's own proof that the entry under its key is the
-   * `T` it expects, and the only thing standing in for a cast. It must be
-   * reference-stable (module scope or `useCallback`); it feeds an effect.
-   * Omit it and a cached entry is simply ignored, so the fetcher runs again.
-   */
   fromCache?: (value: JsonValue) => T | undefined
 }
 
-/**
- * One module-level cache serves every caller, so the stored value is erased to
- * the JSON it actually is; `Options.fromCache` is what lets a caller read its
- * own entry back out of it.
- */
 const snippetCache = new Map<string, JsonValue>()
 function getCached<T extends JsonValue>(
   key: string,
@@ -61,10 +48,6 @@ export function useViewportFetch<T extends JsonValue>(opts: Options<T>): Viewpor
   const { cacheKey, enabled, ref, fetcher, rootMargin, fromCache } = opts
   const cached = getCached<T>(cacheKey, fromCache)
 
-  // `useMemo`, not a lazy ref: the store is READ during render by three
-  // `useStore` subscriptions, and reading a ref in render is a React 19
-  // violation (`react-hooks/refs`). Keyed on `cacheKey`, so switching keys
-  // yields a store already seeded from that key's cache entry.
   const store = useMemo(
     () => createStore<FetchStoreState<T>>(() => initialFetchState(getCached<T>(cacheKey, fromCache))),
     [cacheKey, fromCache],
@@ -77,13 +60,10 @@ export function useViewportFetch<T extends JsonValue>(opts: Options<T>): Viewpor
   const lastKeyRef = useRef(cacheKey)
   const controllerRef = useRef<AbortController | null>(null)
   const currentKeyRef = useRef(cacheKey)
-  // Written from an effect, not during render. A resolved fetch can only be
-  // observed after commit, so the ref is current by the time anything reads it.
   useEffect(() => {
     currentKeyRef.current = cacheKey
   }, [cacheKey])
 
-  // Reset store state when cacheKey changes
   useEffect(() => {
     if (lastKeyRef.current === cacheKey) return
     lastKeyRef.current = cacheKey

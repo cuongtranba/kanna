@@ -31,6 +31,9 @@ jobs:
       - name: useState gate (ast-grep)
         run: bun run lint:usestate
 
+      - name: No code comments
+        run: bun run lint:comments
+
       - name: Architecture budget (ratchet)
         run: bun run check:arch
 

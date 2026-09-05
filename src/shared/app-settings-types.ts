@@ -82,9 +82,6 @@ import type {
 } from "./mcp-types"
 import type { Subagent, SubagentInput, SubagentPatch } from "./subagent-types"
 
-// ---------------------------------------------------------------------------
-// Auth
-// ---------------------------------------------------------------------------
 
 export type OAuthTokenStatus = "active" | "limited" | "error" | "disabled"
 
@@ -98,16 +95,11 @@ export interface OAuthTokenEntry {
   lastErrorAt: number | null
   lastErrorMessage: string | null
   addedAt: number
-  // Per-token concurrent-chat cap. When omitted, the pool falls back to
-  // ClaudeAuthSettings.concurrencyDefault. Default 1 preserves the
-  // historical 1-token-per-chat invariant. Any integer at or above
-  // OAUTH_TOKEN_MAX_CONCURRENT_MIN; there is no upper bound.
   maxConcurrent?: number
 }
 
 export interface ClaudeAuthSettings {
   tokens: OAuthTokenEntry[]
-  // Pool-wide default applied to tokens whose maxConcurrent is omitted.
   concurrencyDefault: number
 }
 
@@ -131,15 +123,9 @@ export const CLAUDE_AUTH_DEFAULTS: ClaudeAuthSettings = {
 export const OAUTH_TOKEN_LABEL_MAX = 64
 export const OAUTH_TOKEN_VALUE_MAX = 1024
 
-// ---------------------------------------------------------------------------
-// Upload
-// ---------------------------------------------------------------------------
 
 export const GLOBAL_PROMPT_APPEND_MAX_CHARS = 8_000
 
-// ---------------------------------------------------------------------------
-// Claude driver
-// ---------------------------------------------------------------------------
 
 export type ClaudeDriverPreference = "sdk" | "pty"
 
@@ -182,9 +168,6 @@ export interface ChatSessionStateSnapshot {
   updatedAt: number
 }
 
-// ---------------------------------------------------------------------------
-// Keybindings
-// ---------------------------------------------------------------------------
 
 export type KeybindingAction =
   | "toggleEmbeddedTerminal"
@@ -212,19 +195,6 @@ export type KeybindingAction =
   | "resizePaneUp"
   | "resizePaneDown"
 
-/**
- * Pane commands deliberately sit on `cmd+ctrl` / `ctrl+alt`.
- *
- * `cmd+alt` is already the `jumpToSidebarChat` modifier: holding it reveals the
- * sidebar number-jump hints regardless of which other key is pressed, so a
- * `cmd+alt+…` pane binding would flash that overlay on every use. `ctrl+shift`
- * and `cmd+w` families are reserved by browsers (new incognito window, close
- * tab) and cannot be prevented from a page.
- *
- * Resize adds Shift to the focus arrows: the two commands are the same gesture
- * aimed at the same axis, and modifier matching is exact, so they cannot
- * collide.
- */
 export const DEFAULT_KEYBINDINGS: Record<KeybindingAction, string[]> = {
   toggleEmbeddedTerminal: ["cmd+j", "ctrl+`"],
   toggleRightSidebar: ["cmd+b", "ctrl+b"],
@@ -285,9 +255,6 @@ export interface KeybindingsSnapshot {
   filePathDisplay: string
 }
 
-// ---------------------------------------------------------------------------
-// App settings snapshot & patch
-// ---------------------------------------------------------------------------
 
 export interface AppSettingsSnapshot {
   analyticsEnabled: boolean
@@ -301,7 +268,6 @@ export interface AppSettingsSnapshot {
     minColumnWidth: number
   }
   panes: {
-    /** How narrow a tab may get before the strip scrolls instead of shrinking. */
     tabMinWidth: number
   }
   editor: {
@@ -331,25 +297,11 @@ export interface AppSettingsSnapshot {
   installedPlugins: InstalledPluginConfig[]
 }
 
-/**
- * Runtime knobs for delegated subagent runs (delegate_subagent) and the
- * autonomous loop (setup_loop). `runTimeoutMs` is the stall/idle watchdog
- * window — a run is aborted only after this long with NO streamed activity,
- * not a total wall-clock cap. `defaultLoopSubagentId` is the subagent
- * setup_loop delegates to when the caller omits an explicit id.
- */
 export interface SubagentRuntimeSettings {
   runTimeoutMs: number
   defaultLoopSubagentId: string | null
 }
 
-/**
- * Persisted knobs for the background package update checker (#949).
- * `checkEnabled` is the master switch for background checking; applying
- * updates on click still works when off. `checkIntervalMs` is clamped
- * to [1 h, 30 d]. `autoApply` defaults false (opt-in). `skillAgents`
- * become spawn arguments for skill install/update.
- */
 export interface PackageUpdateSettings {
   checkEnabled: boolean
   checkIntervalMs: number
@@ -358,9 +310,9 @@ export interface PackageUpdateSettings {
   skillAgents: string[]
 }
 
-export const PACKAGE_UPDATE_CHECK_INTERVAL_MIN_MS = 3_600_000 // 1 h
-export const PACKAGE_UPDATE_CHECK_INTERVAL_MAX_MS = 2_592_000_000 // 30 d
-export const PACKAGE_UPDATE_CHECK_INTERVAL_DEFAULT_MS = 86_400_000 // 24 h
+export const PACKAGE_UPDATE_CHECK_INTERVAL_MIN_MS = 3_600_000
+export const PACKAGE_UPDATE_CHECK_INTERVAL_MAX_MS = 2_592_000_000
+export const PACKAGE_UPDATE_CHECK_INTERVAL_DEFAULT_MS = 86_400_000
 
 export const PACKAGE_UPDATE_SETTINGS_DEFAULTS: PackageUpdateSettings = {
   checkEnabled: true,
@@ -431,9 +383,6 @@ export interface AppSettingsPatch {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Type guards
-// ---------------------------------------------------------------------------
 
 export function isEditorPreset(value: string): value is EditorPreset {
   return value === "cursor" || value === "vscode" || value === "xcode" || value === "windsurf" || value === "custom"

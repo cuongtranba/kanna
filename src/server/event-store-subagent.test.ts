@@ -9,9 +9,6 @@ import {
   type SubagentRunMap,
 } from "./event-store-subagent"
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 const TS = 1_700_000_000_000
 
@@ -69,9 +66,6 @@ function startedEvent(
   }
 }
 
-// ---------------------------------------------------------------------------
-// applySubagentEvent — subagent_run_started
-// ---------------------------------------------------------------------------
 
 describe("applySubagentEvent / subagent_run_started", () => {
   test("creates a new run snapshot in the inner map", () => {
@@ -101,9 +95,6 @@ describe("applySubagentEvent / subagent_run_started", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// applySubagentEvent — subagent_message_delta
-// ---------------------------------------------------------------------------
 
 describe("applySubagentEvent / subagent_message_delta", () => {
   test("appends content to finalText", () => {
@@ -149,9 +140,6 @@ describe("applySubagentEvent / subagent_message_delta", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// applySubagentEvent — subagent_entry_appended
-// ---------------------------------------------------------------------------
 
 describe("applySubagentEvent / subagent_entry_appended", () => {
   test("pushes a non-result entry without touching usage", () => {
@@ -209,9 +197,6 @@ describe("applySubagentEvent / subagent_entry_appended", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// applySubagentEvent — subagent_run_completed
-// ---------------------------------------------------------------------------
 
 describe("applySubagentEvent / subagent_run_completed", () => {
   test("sets status completed, finishedAt, finalText", () => {
@@ -243,15 +228,11 @@ describe("applySubagentEvent / subagent_run_completed", () => {
       chatId: "chat-1",
       runId: "run-1",
       finalContent: "done",
-      // no usage field
     })
     expect(outer.get("chat-1")?.get("run-1")?.usage?.inputTokens).toBe(99)
   })
 })
 
-// ---------------------------------------------------------------------------
-// applySubagentEvent — subagent_run_failed
-// ---------------------------------------------------------------------------
 
 describe("applySubagentEvent / subagent_run_failed", () => {
   test("sets status failed and clears pendingTool", () => {
@@ -275,9 +256,6 @@ describe("applySubagentEvent / subagent_run_failed", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// applySubagentEvent — subagent_run_cancelled
-// ---------------------------------------------------------------------------
 
 describe("applySubagentEvent / subagent_run_cancelled", () => {
   test("sets status cancelled and clears pendingTool", () => {
@@ -298,9 +276,6 @@ describe("applySubagentEvent / subagent_run_cancelled", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// applySubagentEvent — subagent_tool_pending
-// ---------------------------------------------------------------------------
 
 describe("applySubagentEvent / subagent_tool_pending", () => {
   test("sets pendingTool on the run", () => {
@@ -323,9 +298,6 @@ describe("applySubagentEvent / subagent_tool_pending", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// applySubagentEvent — subagent_tool_resolved
-// ---------------------------------------------------------------------------
 
 describe("applySubagentEvent / subagent_tool_resolved", () => {
   test("clears pendingTool and appends synthetic tool_result entry", () => {
@@ -356,9 +328,6 @@ describe("applySubagentEvent / subagent_tool_resolved", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// getSubagentRuns
-// ---------------------------------------------------------------------------
 
 describe("getSubagentRuns", () => {
   test("returns runs keyed by runId", () => {
@@ -377,9 +346,6 @@ describe("getSubagentRuns", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// runningSubagentRuns
-// ---------------------------------------------------------------------------
 
 describe("runningSubagentRuns", () => {
   test("yields only running runs across all chats", () => {
@@ -408,9 +374,6 @@ describe("runningSubagentRuns", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// settled-run eviction cap (MAX_SUBAGENT_RUNS_PER_CHAT)
-// ---------------------------------------------------------------------------
 
 describe("applySubagentEvent / settled-run eviction", () => {
   function addAndComplete(
@@ -526,9 +489,6 @@ describe("applySubagentEvent / settled-run eviction", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// per-run entries cap (MAX_SUBAGENT_ENTRIES_PER_RUN)
-// ---------------------------------------------------------------------------
 
 describe("applySubagentEvent / per-run entries cap", () => {
   function appendEntry(outer: Map<string, SubagentRunMap>, runId: string, id: string) {

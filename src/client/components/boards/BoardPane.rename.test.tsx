@@ -8,12 +8,6 @@ import { useBoardsStore } from "../../stores/boardsStore"
 import type { BoardSnapshot, ClientCommand, SubscriptionTopic } from "../../../shared/protocol"
 import type { BoardViewSnapshot } from "../../../shared/boards/types"
 
-/**
- * The board's name is edited where it is READ — in the header, by clicking it.
- * It was previously only reachable from the list's overflow menu, which meant
- * the one place the name is always in front of you was the one place you could
- * not change it.
- */
 
 const VIEW: BoardViewSnapshot = {
   board: {
@@ -48,10 +42,6 @@ async function mount(): Promise<{ container: HTMLDivElement; commands: ClientCom
       return Promise.resolve(undefined as TResult)
     },
   }
-  // Deliberately NOT attached to `document.body`. The document is shared across
-  // test files in one process and two of them wipe it wholesale, which detaches
-  // a mounted container and makes its unmount throw. Nothing here portals, so
-  // staying out of the document keeps this file out of that blast radius.
   const container = document.createElement("div")
   const root = createRoot(container)
   await act(async () => {
@@ -123,7 +113,6 @@ describe("renaming a board from its header", () => {
     harness.unmount()
   })
 
-  /** Dismissing must be a real cancel, or the editor is a trap. */
   test("Escape discards without sending anything", async () => {
     const harness = await mount()
     await act(async () => { titleButton(harness.container).click() })
@@ -135,7 +124,6 @@ describe("renaming a board from its header", () => {
     harness.unmount()
   })
 
-  /** A board with no name is worse than the name it already had. */
   test("an empty or unchanged name sends nothing", async () => {
     const harness = await mount()
     await act(async () => { titleButton(harness.container).click() })

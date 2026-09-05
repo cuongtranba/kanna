@@ -25,15 +25,6 @@ function pickNonCollidingPath(destDir: string, fileName: string): string {
   return candidate
 }
 
-/**
- * If `rawPath` is an absolute path resolving outside `projectRoot`, copy the
- * file into `<projectRoot>/.kanna/outputs/<basename>` and return the new
- * project-relative path. Otherwise return the input untouched.
- *
- * Best-effort: returns the input unchanged on copy failure so a missing
- * source file does not break the caller's tool-result emission. Sync because
- * the codex notification handler is sync and any await would reorder events.
- */
 export function relocateExternalFileIntoProject(
   rawPath: string,
   projectRoot: string,

@@ -37,8 +37,6 @@ function ExitPlanModeMessageInner({ message, onConfirm, isLatest, ports = {} }: 
   const cancelEdit = ExitPlanModeMessageStore.useScopedStore((s) => s.cancelEdit)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  // Closes over the onConfirm prop and the DOM event, so it stays in the
-  // component; only the state transition (cancelEdit) lives in the store.
   const handleEditKeyDown = useCallback((e: ReactKeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey && editMessage.trim()) {
       e.preventDefault()

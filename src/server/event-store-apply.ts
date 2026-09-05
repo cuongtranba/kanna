@@ -1,10 +1,3 @@
-/**
- * Pure event dispatch — applies any StoreEvent to the in-memory state.
- *
- * Extracted from EventStore.applyEvent() to reduce event-store.ts file size.
- * All functions are pure state mutations — no IO, no side effects
- * (side-effect seal: IO lives in *.adapter.ts files).
- */
 
 import type { AgentProvider, TranscriptEntry } from "../shared/types"
 import type { AutoContinueEvent } from "./auto-continue/events"
@@ -23,14 +16,6 @@ function isAutoContinueEvent(event: StoreEvent): event is AutoContinueEvent {
   return "kind" in event
 }
 
-/**
- * Apply a single StoreEvent to the full in-memory state.
- *
- * @param event               - the event to apply
- * @param state               - full StoreState (mutated in-place)
- * @param legacyMessagesByChatId - legacy transcript store (mutated for `message_appended`)
- * @param replayChatProvider  - provider-replay tracking map
- */
 export function applyStoreEvent(
   event: StoreEvent,
   state: StoreState,

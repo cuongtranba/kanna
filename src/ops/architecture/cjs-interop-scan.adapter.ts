@@ -35,7 +35,6 @@ export interface ScanResult {
   readonly filesScanned: number
 }
 
-/** True when the package publishes an ESM entry, which is what Vite prefers for the browser. */
 function declaresEsmEntry(manifest: JsonObject): boolean {
   if (manifest.type === "module") return true
   if (typeof manifest.module === "string") return true
@@ -51,12 +50,6 @@ function hasEsmCondition(exportsField: JsonValue): boolean {
   return false
 }
 
-/**
- * Applies rolldown's own `__toESM` predicate: the two interops disagree exactly when the
- * loaded module carries `__esModule` AND an own `default`. Requiring the package answers
- * that precisely — `Object.defineProperty(exports, "default", ...)`, the shape TypeScript
- * emits, is invisible to any regex over the entry text.
- */
 function classifyLoadedModule(loaded: LoadedModule): PackageInterop {
   const isTranspiled = isRecord(loaded)
     && loaded.__esModule === true
@@ -66,11 +59,6 @@ function classifyLoadedModule(loaded: LoadedModule): PackageInterop {
     : { kind: "safe", reason: "CommonJS whose default binding is `module.exports` under either interop" }
 }
 
-/**
- * Fallback for a package that cannot be required in this process (browser globals at import
- * time, native bindings). Reads the resolved entry instead. Weaker than loading it, so a file
- * that shows neither marker is reported `unknown` rather than waved through.
- */
 function classifyEntryText(entryPath: string): PackageInterop {
   const source = readFileSync(entryPath, "utf8")
   const marksEsModule = source.includes("__esModule")
@@ -105,7 +93,6 @@ function classifyPackage(require: NodeRequire, root: string, specifier: string):
   }
 }
 
-/** `require.resolve` follows an `exports` map that may not expose `package.json`, so fall back to node_modules. */
 function resolveManifest(require: NodeRequire, root: string, specifier: string): string | null {
   const packageName = packageNameOf(specifier)
   try {

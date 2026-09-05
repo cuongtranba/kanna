@@ -70,13 +70,6 @@ function makeSnapshot(overrides: Partial<AppSettingsSnapshot> = {}): AppSettings
 }
 
 describe("buildAgentAppSettingsView", () => {
-  // Regression guard for the bug where `server.ts` built the
-  // `getAppSettingsSnapshot` accessor inline and silently dropped
-  // `globalPromptAppend`. The missing field meant the user-authored
-  // "Project instructions" block was never appended to any spawn's
-  // `--append-system-prompt`, even though the UI persisted it. Anyone
-  // shrinking the view in the future must update both the type and this
-  // assertion together.
   test("forwards globalPromptAppend so the agent suffix builder receives it", () => {
     const view = buildAgentAppSettingsView(
       makeSnapshot({
@@ -109,14 +102,6 @@ describe("buildAgentAppSettingsView", () => {
     expect(view.globalPromptAppend).toBe("")
   })
 
-  // Regression guard for the bug where `buildAgentAppSettingsView` dropped
-  // `customMcpServers`. The missing field made `getEnabledCustomMcpServers()`
-  // see `undefined`, fall through its `Array.isArray` guard, and return `[]`
-  // for EVERY spawn — so no user-configured MCP server (context7 etc.) ever
-  // reached either Claude driver, even though the UI persisted it and the
-  // connect-test (which reads the full snapshot directly) passed. Anyone
-  // shrinking the view in the future must update both the type and this
-  // assertion together.
   test("forwards customMcpServers so both drivers receive the user's MCP entries", () => {
     const context7: McpServerConfig = {
       id: "mcp-context7",
@@ -134,8 +119,6 @@ describe("buildAgentAppSettingsView", () => {
     expect(view.customMcpServers).toEqual([context7])
   })
 
-  // Pin the exact shape: a future edit that adds keys must opt in here,
-  // and one that removes a consumed key fails loudly.
   test("returns exactly the keys the AgentCoordinator consumes", () => {
     const view = buildAgentAppSettingsView(makeSnapshot())
     expect(Object.keys(view).sort()).toEqual([

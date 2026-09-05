@@ -9,9 +9,6 @@ import {
   type SubagentToolResponseDeps,
 } from "./claude-subagent-tool-response"
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function makeResolver() {
   let resolveFn: ((v: unknown) => void) | undefined
@@ -20,7 +17,6 @@ function makeResolver() {
     resolveFn = res
     rejectFn = rej
   })
-  // Suppress unhandled-rejection noise in tests
   promise.catch(() => undefined)
   return {
     promise,
@@ -46,9 +42,6 @@ function makeDeps(
   }
 }
 
-// ---------------------------------------------------------------------------
-// subagentPendingKey
-// ---------------------------------------------------------------------------
 
 describe("subagentPendingKey", () => {
   it("concatenates chatId, runId, and toolUseId with ::", () => {
@@ -60,9 +53,6 @@ describe("subagentPendingKey", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// rejectPendingResolvers
-// ---------------------------------------------------------------------------
 
 describe("rejectPendingResolvers", () => {
   it("rejects entries matching predicate and removes them from the map", async () => {
@@ -80,7 +70,6 @@ describe("rejectPendingResolvers", () => {
 
     await expect(r1.promise).rejects.toThrow("test reason")
     expect(deps.subagentPendingResolvers.has("chat1::run1::t1")).toBe(false)
-    // Non-matching entry untouched
     expect(deps.subagentPendingResolvers.has("chat2::run2::t2")).toBe(true)
   })
 
@@ -95,9 +84,6 @@ describe("rejectPendingResolvers", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// rejectPendingResolversForChat
-// ---------------------------------------------------------------------------
 
 describe("rejectPendingResolversForChat", () => {
   it("rejects all resolvers belonging to the given chatId", async () => {
@@ -117,9 +103,6 @@ describe("rejectPendingResolversForChat", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// rejectPendingResolversForRun
-// ---------------------------------------------------------------------------
 
 describe("rejectPendingResolversForRun", () => {
   it("rejects all resolvers belonging to the given run", async () => {
@@ -136,9 +119,6 @@ describe("rejectPendingResolversForRun", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// respondSubagentTool
-// ---------------------------------------------------------------------------
 
 describe("respondSubagentTool", () => {
   it("resolves the pending resolver, appends event, notifies orchestrator, emits state", async () => {
@@ -156,11 +136,8 @@ describe("respondSubagentTool", () => {
 
     await respondSubagentTool(deps, command)
 
-    // Resolver resolved with the result
     await expect(resolver.promise).resolves.toEqual({ content: "ok" })
-    // Removed from the map
     expect(deps.subagentPendingResolvers.has("chatX::runY::toolZ")).toBe(false)
-    // Event persisted
     expect(deps.store.appendSubagentEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         type: "subagent_tool_resolved",
@@ -171,9 +148,7 @@ describe("respondSubagentTool", () => {
         resolution: "user",
       }),
     )
-    // Orchestrator notified
     expect(deps.subagentOrchestrator.notifySubagentToolResolved).toHaveBeenCalledWith("runY")
-    // State emitted
     expect(deps.emitStateChange).toHaveBeenCalledWith("chatX")
   })
 
@@ -194,9 +169,6 @@ describe("respondSubagentTool", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// cancelSubagentRun
-// ---------------------------------------------------------------------------
 
 describe("cancelSubagentRun", () => {
   it("delegates to orchestrator.cancelRun", () => {

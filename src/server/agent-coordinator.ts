@@ -198,28 +198,10 @@ import type {
 const DEFAULT_CLAUDE_SESSION_IDLE_MS = 10 * 60 * 1000
 const DEFAULT_CLAUDE_SESSION_MAX_RESIDENT = 4
 const DEFAULT_CLAUDE_SESSION_SWEEP_INTERVAL_MS = 60 * 1000
-// Keep a PTY session warm up to 30 min while a background Bash task is pending —
-// comfortably longer than the 10-min idle window and typical CI durations.
 const DEFAULT_PTY_BACKGROUND_TASK_MAX_MS = 30 * 60 * 1000
-// Max watchdog wakes per background-task watch epoch. Each expiry of the
-// backgroundTaskMaxMs window with tasks still pending wakes the session (the
-// agent re-checks + reports to the user) instead of silently reaping it; when
-// the budget is gone the sweep closes the session with a visible notice.
-// Default 3 → up to ~2h of keep-alive with a user-visible check-in every 30min.
-// See adr-20260801-background-task-wake-escalation.
 const DEFAULT_BACKGROUND_TASK_MAX_WAKES = 3
-// OpenRouter-only watchdog: a stalled upstream leaves the SDK stream open but
-// silent after the session-token handshake, so the runClaudeSession for-await
-// never ends and the existing fail-close never fires. Abort if no transcript
-// entry arrives within this window. system_init is the SDK init echo (precedes
-// model inference), so 2 min is generous; env-tunable per deployment.
 const DEFAULT_OPENROUTER_FIRST_ENTRY_TIMEOUT_MS = 2 * 60 * 1000
 
-/**
- * Records what one turn spent, off the usage its runner stashed on the
- * ActiveTurn. A turn that reported nothing records nothing: absent usage means
- * the provider told us nothing, which is a different claim from zero.
- */
 function recordTurnSpend(active: ActiveTurn): void {
   const usage = active.usage
   if (!usage) return
@@ -233,12 +215,6 @@ function recordTurnSpend(active: ActiveTurn): void {
   }
 }
 
-// Thrown by Claude spawn paths when the OAuth pool has tokens but every one
-// is currently unusable (rate-limited, errored, disabled, or reserved by
-// another chat). `startTurnForChat` catches this and persists `message` as a
-// `result` transcript entry instead of letting it surface as an ephemeral
-// commandError that gets wiped by the next chat snapshot tick.
-// Moved to oauth-errors.ts to avoid a circular import with claude-turn-starter.ts.
 export class AgentCoordinator {
   readonly store: EventStore
   private readonly onStateChange: (chatId?: string, options?: { immediate?: boolean }) => void
@@ -250,12 +226,6 @@ export class AgentCoordinator {
   reportBackgroundError: ((message: string) => void) | null = null
   private readonly activeTurns = new Map<string, ActiveTurn>()
   private readonly pendingTools = new PendingToolSlots()
-  /**
-   * Turns claimed by `startTurnForChat` whose provider session is still
-   * booting — the window before an `ActiveTurn` exists. Cancel, send-queueing
-   * and status derivation all consult this so the chat is never mistaken for
-   * idle mid-spawn.
-   */
   private readonly startingTurns = new Map<string, StartingTurn>()
   private readonly drainingStreams = new Map<string, { turn: HarnessTurn }>()
   private readonly claudeSessions = new Map<string, ClaudeSessionState>()
@@ -265,10 +235,6 @@ export class AgentCoordinator {
   readonly claudeAuthErrorDetector: ClaudeAuthErrorDetector
   readonly scheduleManager: ScheduleManager | null
   readonly cronScheduler: import("./cron/scheduler").CronScheduler | null
-  /**
-   * One per coordinator: a skip streak spans ticks, so it cannot be rebuilt
-   * per dispatch the way the stateless cron deps are.
-   */
   readonly cronSkipCoalescer = new CronSkipCoalescer()
   private readonly pendingCronOutcomes = new Set<Promise<void>>()
   private readonly _cronRepair: CronRepair
@@ -278,7 +244,6 @@ export class AgentCoordinator {
   readonly getSubagents: () => Subagent[]
   readonly getAppSettingsSnapshot: NonNullable<AgentCoordinatorArgs["getAppSettingsSnapshot"]>
   private readonly subagentOrchestrator: SubagentOrchestrator
-  /** Public accessor for tests + the `delegate_subagent` MCP tool wiring. */
   getSubagentOrchestrator(): SubagentOrchestrator {
     return this.subagentOrchestrator
   }
@@ -288,19 +253,7 @@ export class AgentCoordinator {
   readonly throwOnClaudeSessionStart: boolean
   readonly autoResumeByChat = new Map<string, boolean>()
   readonly openrouterFirstEntryTimeoutMs: number
-  // Per-tokenId rotation dedupe state. When a shared OAuth token throws
-  // limit/auth-error against N chats simultaneously, only the first chat
-  // pays the cost of marking the pool + picking a fresh target; subsequent
-  // chats within TOKEN_ROTATION_DEDUPE_WINDOW_MS reuse the dedupe slot to
-  // stagger their respawns by TOKEN_ROTATION_HERD_STAGGER_MS each.
   readonly tokenRotationDedupe = new Map<string, TokenRotationDedupeEntry>()
-  // Per-chat circuit breaker for proactive `/compact` injection lives in the
-  // persisted ChatRecord (`compactFailureCount`): increments on every compact
-  // attempt that fails (turn errored / cancelled) and resets on success.
-  // After MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES, skip further proactive
-  // compacts on this chat so doomed sessions don't hammer the API on every
-  // turn (mirrors claude-code's autoCompact circuit breaker). Persisting it
-  // means a server restart cannot reset a doomed chat's breaker to 0.
   readonly tunnelGateway: TunnelGateway | null
   readonly oauthPool: OAuthTokenPool | null
   readonly toolCallback: ToolCallbackService | null
@@ -310,11 +263,6 @@ export class AgentCoordinator {
   readonly claudePtyRegistry: import("./claude-pty/pid-registry.adapter").ClaudePtyRegistry | null
   readonly ptyInstanceRegistry: import("./claude-pty/pty-instance-registry").PtyInstanceRegistry | null
   readonly workflowRegistry: import("./workflow-registry").WorkflowRegistry | null
-  /**
-   * Boards, for the agent's board tools. Read at every spawn: a tool list built
-   * without it evaluates to empty and the agent silently has no board — the
-   * declared-but-never-passed failure `getArmedLoop` already had once.
-   */
   readonly boardRegistry: import("./board-registry").BoardRegistry | null
   readonly loopTrackingRegistry: import("./loop-tracking-registry").LoopTrackingRegistry | null
   readonly backgroundTaskOutputRegistry: import("./background-task-output-registry").BackgroundTaskOutputRegistry | null
@@ -367,14 +315,8 @@ export class AgentCoordinator {
         return { source: result.source, repaired: result.repairs.length > 0 }
       },
     })
-    // The store's turn-terminal observer: every provider path funnels through
-    // recordTurn*, and the ActiveTurn still holds its CronRunTag and start time
-    // here (turns leave the map only after the terminal record persists). Feeds
-    // turn telemetry, cron attribution, and the armed-loop wake invariant.
     this.store.onTurnTerminal = (chatId, outcome) => {
       const active = this.activeTurns.get(chatId)
-      // A background-task self-wake streams entries with no ActiveTurn: it is
-      // not a turn a user waited on, so it contributes no latency observation.
       if (active) {
         recordHistogram(TURN_DURATION_MS, Date.now() - active.startedAt, {
           provider: active.provider,
@@ -416,18 +358,9 @@ export class AgentCoordinator {
       }),
       onRunTerminal: (chatId, runId) => {
         this.rejectPendingResolversForRun(chatId, runId)
-        // failRun appended the terminal event synchronously before invoking
-        // this hook, so the store already has the new state. Emit now so
-        // multi-subagent fan-outs do not have to wait for Promise.all.
         this.emitStateChange(chatId)
       },
       onRunProgress: (chatId) => {
-        // Run start + every persisted subagent entry. Without this the
-        // client only gets a snapshot at terminal, so a delegated run
-        // renders blank until it finishes (delegate_subagent blocks the
-        // main turn, which itself emits nothing meanwhile). ws-router
-        // coalesces (16ms) and signature-dedups, so per-entry fan-out is
-        // cheap.
         this.emitStateChange(chatId)
       },
       onBackgroundRunComplete: (chatId, runId, outcome) => {
@@ -435,9 +368,6 @@ export class AgentCoordinator {
       },
       maxLive: positiveIntegerFromEnv(process.env.KANNA_SUBAGENT_MAX_LIVE, 0) || undefined,
       liveIdleTimeoutMs: positiveIntegerFromEnv(process.env.KANNA_SUBAGENT_IDLE_TIMEOUT_MS, 0) || undefined,
-      // Stall/idle watchdog window. Precedence: app setting > env > orchestrator
-      // default. The orchestrator reads this once at construction; a settings
-      // change takes effect on next server start (acceptable — restart-scoped).
       runTimeoutMs: (this.getAppSettingsSnapshot().subagentRuntime?.runTimeoutMs
         ?? positiveIntegerFromEnv(process.env.KANNA_SUBAGENT_RUN_TIMEOUT_MS, 0))
         || undefined,
@@ -494,17 +424,9 @@ export class AgentCoordinator {
     return [...this.activeTurns.keys()]
   }
 
-  // ---------------------------------------------------------------------------
-  // Test-inspection accessors — expose private maps for *.test.ts assertions
-  // without widening the production surface. These are the ONLY paths external
-  // test code is allowed to read (or seed) the internal maps through.
-  // ---------------------------------------------------------------------------
 
-  /** @testing Returns the live claude-session map. */
   getClaudeSessionMap(): Map<string, ClaudeSessionState> { return this.claudeSessions }
-  /** @testing Returns the live active-turn map. */
   getActiveTurnMap(): Map<string, ActiveTurn> { return this.activeTurns }
-  /** @testing Returns the live pending-tool slots object. */
   getPendingToolSlots(): PendingToolSlots { return this.pendingTools }
 
   setBackgroundErrorReporter(report: ((message: string) => void) | null) {
@@ -527,7 +449,6 @@ export class AgentCoordinator {
     return getActiveStatusesFn(this.sessionStateQueryDeps())
   }
 
-  /** Returns true when a Kanna turn is currently active on the given chat. */
   hasActiveTurn(chatId: string): boolean {
     return this.activeTurns.has(chatId)
   }
@@ -544,18 +465,10 @@ export class AgentCoordinator {
     return getDrainingChatIdsFn(this.sessionStateQueryDeps())
   }
 
-  /**
-   * Snapshot of live claude PTY session states per chat. Used by the
-   * sidebar badge selector. Chats not present are implicitly `cold`.
-   */
   getClaudeSessionStates(): Map<string, "warming" | "active" | "idle"> {
     return getClaudeSessionStatesFn(this.sessionStateQueryDeps())
   }
 
-  /**
-   * Live Claude-Code background tasks per chat (UI-shaped). Threaded into
-   * deriveChatSnapshot so the composer can list what is running.
-   */
   getBackgroundTasksByChatId(): Map<string, ChatBackgroundTask[]> {
     return getBackgroundTasksByChatIdFn(this.sessionStateQueryDeps())
   }
@@ -568,9 +481,6 @@ export class AgentCoordinator {
     this.onStateChange(chatId, options)
   }
 
-  // ---------------------------------------------------------------------------
-  // Session config helpers deps
-  // ---------------------------------------------------------------------------
 
   private claudeSessionConfigDeps(): ClaudeSessionConfigHelpersDeps {
     return {
@@ -603,9 +513,6 @@ export class AgentCoordinator {
     return resolveChatPolicyFn(this.claudeSessionConfigDeps(), chatId)
   }
 
-  // ---------------------------------------------------------------------------
-  // Session lifecycle deps
-  // ---------------------------------------------------------------------------
 
   private sessionLifecycleDeps(): SessionLifecycleDeps {
     return {
@@ -639,9 +546,6 @@ export class AgentCoordinator {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Auto-continue command deps
-  // ---------------------------------------------------------------------------
 
   private autoContinueDeps(): AutoContinueCommandDeps {
     return {
@@ -714,9 +618,6 @@ export class AgentCoordinator {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Cancel handler deps
-  // ---------------------------------------------------------------------------
 
   private cancelHandlerDeps(): CancelHandlerDeps {
     return {
@@ -734,9 +635,6 @@ export class AgentCoordinator {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Chat management deps
-  // ---------------------------------------------------------------------------
 
   private chatManagementDeps(): ChatManagementDeps {
     return {
@@ -756,9 +654,6 @@ export class AgentCoordinator {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Send command deps
-  // ---------------------------------------------------------------------------
 
   private sendCommandDeps(): SendCommandDeps {
     return {
@@ -780,9 +675,6 @@ export class AgentCoordinator {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Subagent wiring deps
-  // ---------------------------------------------------------------------------
 
   private subagentWiringDeps(): SubagentWiringDeps {
     return {
@@ -818,21 +710,6 @@ export class AgentCoordinator {
     return resolveClaudeIdleMsFn(this.sessionLifecycleDeps())
   }
 
-  /**
-   * True when the chat is hosting an in-flight background Workflow. A live
-   * workflow runs inside the warm PTY claude process but registers no
-   * activeTurn, pendingPromptSeq, or lastUsedAt bump, so without this signal
-   * the idle reaper / budget enforcer would tear the process down mid-run and
-   * abort the workflow.
-   *
-   * Liveness comes from the registry's live-run-dir probe, NOT the terminal
-   * `wf_<runId>.json` sidecar: Claude only flushes that sidecar at/near
-   * termination, so a sidecar-only check is blind for the entire run (the
-   * window the guard must cover). `hasActiveRun` reads the live
-   * `subagents/workflows/wf_*` transcript dirs (written from second one) and
-   * requires activity within one idle window so a stalled/crashed run still
-   * eventually reaps.
-   */
   hasLiveWorkflow(chatId: string): boolean {
     return hasLiveWorkflowFn(this.sessionLifecycleDeps(), chatId)
   }
@@ -845,14 +722,6 @@ export class AgentCoordinator {
     return this.claudeSessionLifecycle.backgroundTaskMaxWakes
   }
 
-  /**
-   * Watchdog wake for a still-pending background task whose keep-alive
-   * deadline lapsed (sweep escalation). Enqueues an agent-directed prompt on
-   * the chat and starts it via the normal queued-message path, so the warm
-   * session is reused and the agent re-checks the task and reports to the
-   * user. Fire-and-forget: failures are logged and reported, never thrown
-   * into the sweep. See adr-20260801-background-task-wake-escalation.
-   */
   wakeBackgroundTaskSession(
     chatId: string,
     taskIds: string[],
@@ -872,12 +741,6 @@ export class AgentCoordinator {
       })
   }
 
-  /**
-   * Visible abandonment notice: the wake budget ran out and the sweep closed
-   * the session while background task(s) were still pending (the CLI kills
-   * its child tasks on shutdown). The one invariant of the escalation design
-   * is that this never happens silently.
-   */
   notifyBackgroundTasksAbandoned(chatId: string, taskIds: string[]): void {
     log.warn("[kanna/agent] background task(s) abandoned at session close", { chatId, taskIds })
     void this.store.appendMessage(
@@ -897,29 +760,10 @@ export class AgentCoordinator {
       })
   }
 
-  /**
-   * True while the session has at least one Claude-Code background Bash task
-   * that has not yet settled. Primary gate is set size > 0: settle events
-   * (task_notification) remove their id from the set, so the guard clears the
-   * moment the last task reports. The deadline is a zombie backstop only —
-   * it fires when a settle notification is genuinely lost (SDK crash / dropped
-   * message) and is reset on every launch and settle, so it never expires
-   * during normal execution regardless of task duration.
-   */
   hasPendingBackgroundTask(session: ClaudeSessionState, now: number): boolean {
     return hasPendingBackgroundTaskFn(session, now)
   }
 
-  /**
-   * Tear down a Claude session and (by default) release the OAuth-pool
-   * reservation owned by the chat.
-   *
-   * `keepReservation: true` — used by rate-limit / auth-error rotation
-   * paths that have ALREADY claimed a fresh token via `pickActive(chatId)`
-   * before calling close. Without this flag, `release(chatId)` would
-   * scan reservedBy for `owner === chatId` and drop the *new* token the
-   * rotation just claimed, leaking the rotation's reservation (audit #9d).
-   */
   closeClaudeSession(
     chatId: string,
     session: ClaudeSessionState,
@@ -928,12 +772,6 @@ export class AgentCoordinator {
     closeClaudeSessionFn(this.sessionLifecycleDeps(), chatId, session, opts)
   }
 
-  /**
-   * Register the workflow disk-watch dir for an SDK session once the session
-   * token is known. No-op if the registry is absent, already registered, or
-   * the driver preference is PTY (the PTY driver registers from its own
-   * resolved transcript path in driver.ts cleanup and must not be double-fired).
-   */
   maybeRegisterSdkWorkflowsDir(session: ClaudeSessionState): void {
     maybeRegisterSdkWorkflowsDirFn(this.sessionLifecycleDeps(), session)
   }
@@ -946,13 +784,6 @@ export class AgentCoordinator {
     enforceClaudeSessionBudgetFn(this.sessionLifecycleDeps(), protectedChatId)
   }
 
-  /**
-   * Format a refusal message when `pickActive(chatId)` returned null but the
-   * pool has tokens. Names the offending tokens so the user knows which
-   * chat to close or which token to add a quota to, instead of seeing the
-   * generic "all tokens unavailable" line that doesn't say what's holding
-   * them. `scopeSuffix` lets the subagent path tag its variant.
-   */
   buildPoolUnavailableMessage(reservedFor: string, scopeSuffix: string): string {
     return buildPoolUnavailableMessageFn(this.sessionLifecycleDeps(), reservedFor, scopeSuffix)
   }
@@ -1157,7 +988,6 @@ export class AgentCoordinator {
     return spawnClaudeTurn(this.spawnClaudeTurnDeps(), args)
   }
 
-  /** Delegates to sendCommandFn — see claude-send-command.ts. */
   async send(command: Extract<ClientCommand, { type: "chat.send" }>) {
     return sendCommandFn(this.sendCommandDeps(), command)
   }
@@ -1261,8 +1091,6 @@ export class AgentCoordinator {
 
   async emitAutoContinueEvent(event: AutoContinueEvent): Promise<void> {
     await emitAutoContinueEventFn(this.autoContinueDeps(), event)
-    // Arming, disarming and re-arming all land here, so one reconcile keeps
-    // the watched tracking file in step with the loop the log now describes.
     if (this.loopTrackingRegistry) {
       syncLoopTracking(
         {
@@ -1289,33 +1117,22 @@ export class AgentCoordinator {
     return handleAuthFailureFn(this.sessionErrorHandlerDeps(), session, detection)
   }
 
-  /** Delegates to fireAutoContinueFn — see claude-autocontinue-commands.ts. */
   async fireAutoContinue(chatId: string, scheduleId: string) {
     return fireAutoContinueFn(this.autoContinueDeps(), chatId, scheduleId)
   }
 
-  /** Delegates to acceptAutoContinueFn — see claude-autocontinue-commands.ts. */
   async acceptAutoContinue(chatId: string, scheduleId: string, scheduledAt: number): Promise<void> {
     return acceptAutoContinueFn(this.autoContinueDeps(), chatId, scheduleId, scheduledAt)
   }
 
-  /** Delegates to rescheduleAutoContinueFn — see claude-autocontinue-commands.ts. */
   async rescheduleAutoContinue(chatId: string, scheduleId: string, scheduledAt: number): Promise<void> {
     return rescheduleAutoContinueFn(this.autoContinueDeps(), chatId, scheduleId, scheduledAt)
   }
 
-  /** Delegates to cancelAutoContinueFn — see claude-autocontinue-commands.ts. */
   async cancelAutoContinue(chatId: string, scheduleId: string, reason: "user" | "chat_deleted"): Promise<void> {
     return cancelAutoContinueFn(this.autoContinueDeps(), chatId, scheduleId, reason)
   }
 
-  /**
-   * Deliver a finished `run_in_background` subagent's result back into the
-   * main chat as a fresh turn AND clear the main-agent's Claude session so the
-   * next turn starts with a fresh context window. Wired as the orchestrator's
-   * `onBackgroundRunComplete` hook. Delegates to deliverSubagentToMainFn —
-   * see claude-loop-commands.ts.
-   */
   private async deliverSubagentToMain(
     chatId: string,
     runId: string,
@@ -1324,18 +1141,10 @@ export class AgentCoordinator {
     return deliverSubagentToMainFn(this.loopCommandDeps(), chatId, runId, outcome)
   }
 
-  /** Boot half of the wake invariant: re-arm any ARMED loop left with no pending wake. */
   async recoverArmedLoopWakes(): Promise<string[]> {
     return recoverArmedLoopWakesFn(this.loopCommandDeps())
   }
 
-  /**
-   * Arm an autonomous loop on the main chat. Validates the loop spec, ensures
-   * the tracking file exists (writes a skeleton if absent), then /clears the
-   * main-agent Claude session and enqueues the templated recurring prompt so
-   * the next turn starts the loop. Backs `mcp__kanna__setup_loop`. Delegates
-   * to setupLoopFn — see claude-loop-commands.ts.
-   */
   async setupLoop(args: {
     chatId: string
     input: LoopSetupInput
@@ -1343,28 +1152,20 @@ export class AgentCoordinator {
     return setupLoopFn(this.loopCommandDeps(), args)
   }
 
-  /** Current armed-loop state for a chat, or null. Delegates to isLoopArmedFn — see claude-loop-commands.ts. */
   isLoopArmed(chatId: string): LoopState | null {
     return isLoopArmedFn(this.loopCommandDeps(), chatId)
   }
 
-  /** Disarm an armed loop (`stop_loop`, user-send takeover). See claude-loop-commands.ts. */
   async stopLoop(chatId: string, reason: "goal_met" | "user_send" | "chat_deleted"): Promise<void> {
     return stopLoopFn(this.loopCommandDeps(), chatId, reason)
   }
 
-  /** Re-arm the chat's most recent loop spec. Backs `resume_loop` — see loop-wake-recovery.ts. */
   async resumeLoop(chatId: string): Promise<ResumeLoopResult> {
     return resumeLoopFn(this.loopCommandDeps(), chatId)
   }
 
-  /**
-   * Re-push hook for the global cron-jobs WS topic; the router assigns it at
-   * wiring time. Fired from `emitCronEvent` on every cron state change.
-   */
   onCronJobsChange: (() => void) | null = null
 
-  /** Dispatch a parsed `/cron` message. Delegates to runCronCommandFn — see cron/commands.ts. */
   async runCronCommand(
     chatId: string,
     result: import("../shared/cron/types").CronParseResult,
@@ -1373,32 +1174,17 @@ export class AgentCoordinator {
     return runCronCommandFn(this.cronCommandDeps(), chatId, result, model)
   }
 
-  /**
-   * Arm a `/cron` line on the model's behalf (the `arm_cron` tool), through
-   * the same parse and dispatch a typed command takes.
-   *
-   * Anything not an armable line is REFUSED here rather than dispatched: a
-   * failed dispatch appends an error card and offers the line back to the
-   * model for repair, so a model answering its own repair prompt with another
-   * bad line would loop. Refusing keeps escalation strictly user-initiated.
-   */
   async armCron(chatId: string, command: string): Promise<{ jobId: string }> {
     const parsed = parseCronCommand(command)
     if (!parsed?.ok || parsed.command.sub !== "arm") {
       throw new Error(`not an armable /cron command: ${command}`)
     }
-    // arm_cron already instructs the model to call AskUserQuestion after arming,
-    // so skip the host-escalated confirm turn to avoid double-confirming.
     const deps = { ...this.cronCommandDeps(), cronConfirm: undefined }
     const jobId = await runCronCommandFn(deps, chatId, parsed)
     if (!jobId) throw new Error(`arm_cron: no job id returned for command: ${command}`)
     return { jobId }
   }
 
-  /**
-   * Edit one field on an already-armed job in place. Refuses when the job is
-   * unknown or has an active run — mirrors `runCronCommand`'s "update" case.
-   */
   async updateCron(
     chatId: string,
     jobId: string,
@@ -1410,26 +1196,16 @@ export class AgentCoordinator {
     })
   }
 
-  /**
-   * Disarm every cron job on a chat (chat deleted) and drop its timers.
-   * Delegates to disarmCronJobsForChatFn — see cron/commands.ts.
-   */
   async disarmCronJobsForChat(chatId: string): Promise<void> {
     await disarmCronJobsForChatFn(this.cronCommandDeps(), chatId)
     this.cronScheduler?.clearChat(chatId)
     this.cronSkipCoalescer.clearChat(chatId)
   }
 
-  /** One cron tick — the CronScheduler's fire callback. Delegates to fireCronJobFn — see cron/fire.ts. */
   async fireCronJob(chatId: string, jobId: string): Promise<void> {
     return fireCronJobFn(this.cronFireDeps(), chatId, jobId)
   }
 
-  /**
-   * Boot-time cron reconciliation: visible server_offline skip notices for
-   * fires missed while the server was down, plus settling runs no restart
-   * could have kept alive. Delegates to reconcileCronRunsAtBootFn.
-   */
   async reconcileCronRunsAtBoot(
     missed: ReadonlyArray<{ chatId: string; jobId: string; missedCount: number }>,
     chatIds: readonly string[],
@@ -1444,18 +1220,11 @@ export class AgentCoordinator {
     )
   }
 
-  /**
-   * Await all `cron_run_outcome` writes started by `onTurnTerminal`. Called
-   * in the shutdown path after the cancel loop so a deploy-cancelled cron
-   * turn is recorded as `cancelled` (not `orphaned` at next boot) before the
-   * event log is snapshotted and truncated.
-   */
   async drainCronOutcomes(): Promise<void> {
     if (this.pendingCronOutcomes.size === 0) return
     await Promise.allSettled([...this.pendingCronOutcomes])
   }
 
-  /** Delegates to listLiveSchedulesFn — see claude-loop-commands.ts. */
   listLiveSchedules(chatId: string): string[] {
     return listLiveSchedulesFn(this.loopCommandDeps(), chatId)
   }

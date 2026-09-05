@@ -1,10 +1,5 @@
 import { describe, test, expect, mock, beforeEach } from "bun:test"
 
-// ---------------------------------------------------------------------------
-// SDK mock — must be registered before the module under test is imported.
-// Bun hoists mock.module() calls, so this executes before the top-level
-// `import { query } from "@anthropic-ai/claude-agent-sdk"` in the source.
-// ---------------------------------------------------------------------------
 
 type FakeQuery = {
   accountInfo: () => Promise<unknown>
@@ -34,31 +29,15 @@ mock.module("@anthropic-ai/claude-agent-sdk", () => ({
   },
 }))
 
-// Mock kanna-mcp so we don't need a real MCP server
 mock.module("./kanna-mcp", () => ({
   createKannaMcpServer: () => ({ transport: "stdio", command: "echo", args: [] }),
 }))
 
-// NOTE: We do NOT mock.module("./claude-prompt-helpers") — toSdkEffort is pure
-// and safe to use for real; the identity mock leaked into
-// claude-prompt-helpers.test.ts under CI's file ordering.
 
-// NOTE: We do NOT mock.module these siblings — that would pollute the global
-// module registry and break their own test files that run later:
-//   ./claude-spawn-helpers, ./claude-harness-stream, ./claude-sdk-queue,
-//   ./claude-usage-math, ./claude-session-config (re-exported by agent.ts)
-// Instead we inject fakes through the StartClaudeSessionDeps parameter.
 
-// ---------------------------------------------------------------------------
-// Import the module under test AFTER mock.module() registrations
-// ---------------------------------------------------------------------------
 import { startClaudeSession, type StartClaudeSessionDeps } from "./claude-session-start"
 
-// ---------------------------------------------------------------------------
-// Fake deps (replace the 4 sibling modules that must not be mock.module-d)
-// ---------------------------------------------------------------------------
 
-/** Minimal queue fake: satisfies the structural AsyncMessageQueueCtor dep. */
 class FakeQueue<T> implements AsyncIterable<T> {
   private items: T[] = []
   private _closed = false
@@ -95,9 +74,6 @@ function makeFakeDeps(): StartClaudeSessionDeps {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Minimal valid args reused across tests
-// ---------------------------------------------------------------------------
 const BASE_ARGS = {
   projectId: "proj-1",
   localPath: "/tmp/test",
@@ -115,7 +91,6 @@ beforeEach(() => {
 })
 
 describe("startClaudeSession", () => {
-  // ── 1. Shape of returned handle ────────────────────────────────────────
   test("returned handle has provider = 'claude'", async () => {
     const handle = await startClaudeSession(BASE_ARGS, makeFakeDeps())
     expect(handle.provider).toBe("claude")
@@ -137,7 +112,6 @@ describe("startClaudeSession", () => {
     expect(typeof handle.close).toBe("function")
   })
 
-  // ── 2. keepAlive behaviour ─────────────────────────────────────────────
   test("handle has no pushChannelPrompt when keepAlive is not set", async () => {
     const handle = await startClaudeSession(BASE_ARGS, makeFakeDeps())
     expect(handle.pushChannelPrompt).toBeUndefined()
@@ -148,13 +122,11 @@ describe("startClaudeSession", () => {
     expect(typeof handle.pushChannelPrompt).toBe("function")
   })
 
-  // ── 3. close() delegates to underlying query ───────────────────────────
   test("close() can be called without throwing", async () => {
     const handle = await startClaudeSession(BASE_ARGS, makeFakeDeps())
     expect(() => handle.close()).not.toThrow()
   })
 
-  // ── 4. getAccountInfo error-safety ─────────────────────────────────────
   test("getAccountInfo returns null when underlying accountInfo() throws", async () => {
     mockQueryFn = () => ({
       ...defaultFakeQ(),
@@ -165,7 +137,6 @@ describe("startClaudeSession", () => {
     expect(info).toBeNull()
   })
 
-  // ── 5. getSupportedCommands error-safety ───────────────────────────────
   test("getSupportedCommands returns [] when supportedCommands() throws", async () => {
     mockQueryFn = () => ({
       ...defaultFakeQ(),
@@ -176,21 +147,18 @@ describe("startClaudeSession", () => {
     expect(cmds).toEqual([])
   })
 
-  // ── 6. SDK options — model is forwarded ───────────────────────────────
   test("SDK options include the model passed to startClaudeSession", async () => {
     await startClaudeSession({ ...BASE_ARGS, model: "claude-sonnet-4-5" }, makeFakeDeps())
     const args = capturedQueryArgs as { options: { model: string } }
     expect(args.options.model).toBe("claude-sonnet-4-5")
   })
 
-  // ── 7. SDK options — cwd is localPath ─────────────────────────────────
   test("SDK cwd equals localPath", async () => {
     await startClaudeSession({ ...BASE_ARGS, localPath: "/projects/myapp" }, makeFakeDeps())
     const args = capturedQueryArgs as { options: { cwd: string } }
     expect(args.options.cwd).toBe("/projects/myapp")
   })
 
-  // ── 8. SDK options — planMode maps to permissionMode ──────────────────
   test("planMode:true maps to permissionMode 'plan'", async () => {
     await startClaudeSession({ ...BASE_ARGS, planMode: true }, makeFakeDeps())
     const args = capturedQueryArgs as { options: { permissionMode: string } }
@@ -203,18 +171,12 @@ describe("startClaudeSession", () => {
     expect(args.options.permissionMode).toBe("acceptEdits")
   })
 
-  // ── 9. SDK options — multi-root memory switch ─────────────────────────
-  // A stack spawn can WRITE every additional root, so it must also read every
-  // additional root's CLAUDE.md. The SDK spawns the same CLI the PTY driver
-  // does, so both paths apply the identical helper.
   function envOfSpawn(): NodeJS.ProcessEnv {
     return (capturedQueryArgs as { options: { env: NodeJS.ProcessEnv } }).options.env
   }
 
   const isolatedEnvDeps = (): StartClaudeSessionDeps => ({
     ...makeFakeDeps(),
-    // A copy, so the assertion cannot be satisfied (or defeated) by whatever
-    // the real process.env happens to carry.
     buildClaudeEnv: (env) => ({ ...env, CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: undefined }),
   })
 

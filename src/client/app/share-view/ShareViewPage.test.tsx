@@ -62,8 +62,6 @@ describe("ShareViewPage", () => {
       const main = container.querySelector("main")
       expect(main).not.toBeNull()
       const cls = main?.className ?? ""
-      // The app pins html/body/#root to height:100% overflow:hidden, so the
-      // share page must scroll itself rather than relying on document scroll.
       expect(cls).toContain("h-[100dvh]")
       expect(cls).toContain("overflow-y-auto")
     } finally {

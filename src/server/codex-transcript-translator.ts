@@ -34,12 +34,6 @@ export interface TranslationContext {
 
 const timestamped = createTranscriptEntry
 
-/**
- * Narrow through the sanctioned `isRecord` chokepoint. The return type is
- * inferred rather than written — callers pass generated protocol shapes as
- * often as parsed JSON, and `JsonObject` would be a claim about the former
- * that nothing checks. Use `toJsonObject` where a `JsonObject` is required.
- */
 export function asRecord<T>(value: T) {
   if (!isRecord(value)) return null
   return value
@@ -238,11 +232,6 @@ function buildImageGenerationResult(
   })
 }
 
-/**
- * Codex reports the path it viewed and nothing else. Resolving it to a content
- * URL here — the only layer that knows the project id — is what lets the client
- * render the image inline without a project id threaded through the transcript.
- */
 function imageViewToolCall(
   item: Extract<ThreadItem, { type: "imageView" }>,
   projectId: string | null,

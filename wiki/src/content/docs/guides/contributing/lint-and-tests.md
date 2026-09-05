@@ -25,6 +25,7 @@ CI runs these in order, and each covers something the others do not:
 | --- | --- |
 | `bun run lint` | ESLint at `--max-warnings=0`: the side-effect seal and the design gate |
 | `bun run lint:usestate` | ast-grep: the React #185 rules and inline tint pairings |
+| `bun run lint:comments` | The no-code-comments rule across `src/`, `scripts/`, `e2e/` |
 | `bun run check:arch` | The architecture budget ratchet |
 | `bun run lint:limits` | Proves the complexity ceilings are still *tight* |
 | `bun run typecheck` | TypeScript 7, by explicit path |
@@ -32,13 +33,34 @@ CI runs these in order, and each covers something the others do not:
 | `bun run check:bundle` | Bundle size and CJS interop |
 | `bun run test` | The suite |
 
-`bun run check` chains typecheck → lint → build:client → check:bundle, which is
-the fastest single command that catches most of it. `bunx ast-grep test` runs
-the fixtures for the rules in `rules/`, and `bun run scan:secrets` runs gitleaks
-over the working tree — wire the pre-commit hook once with `bun run setup:hooks`.
+`bun run check` chains typecheck → lint → lint:comments → build:client →
+check:bundle, which is the fastest single command that catches most of it.
+`bunx ast-grep test` runs the fixtures for the rules in `rules/`, and
+`bun run scan:secrets` runs gitleaks over the working tree — wire the pre-commit
+hook once with `bun run setup:hooks`.
 
 Two more workflows gate a PR: **gitleaks** (any finding blocks the merge) and
 **semgrep**.
+
+## Why `lint:comments` exists
+
+First-party TypeScript under `src/`, `scripts/` and `e2e/` carries no comments —
+not a `//`, not a `/* */`, not a `/** */`, not a `{/* */}` JSX container. A
+comment is verified by nothing, so it rots in place and outlives the code it
+describes; anything that cannot live in a name, a type or a small named function
+belongs in `CLAUDE.md`, a `.c3/` fact, an ADR, or this wiki, where a reader can
+search it and a build can hold it to account.
+
+The exceptions are comments a **tool executes** — `eslint-disable`,
+`/// <reference />`, `@ts-expect-error`, `@vite-ignore`, `prettier-ignore`,
+`@license`, and a `#!` shebang. Deleting one of those is a behavior change, not
+a cleanup, so the checker leaves them alone. Give an `eslint-disable` its
+rationale after ESLint's own `--` separator rather than in a second comment.
+
+The gate parses each file with the TypeScript scanner rather than a regex, which
+cannot tell a comment from `"https://…"` inside a string literal. Re-strip an
+offending tree with `bun run strip:comments`; `wiki/`, `rules/`, `rule-tests/`,
+`.c3/` and the root config files are deliberately out of scope.
 
 ## Why `lint:limits` exists
 

@@ -10,11 +10,6 @@ import {
 } from "./observability"
 import { startMetricRecorder, type MetricRecorder } from "./test-helpers/metric-recorder"
 
-// No provider is registered in tests, so every call runs against the
-// @opentelemetry/api no-op implementations — the exact configuration the
-// production server has when KANNA_OTEL is off. The contract under test is
-// "instrumentation must be invisible": values pass through, errors propagate,
-// and nothing throws for lack of an SDK.
 
 describe("withSpan", () => {
   test("returns the wrapped function's value", async () => {
@@ -58,9 +53,6 @@ describe("metric helpers", () => {
   })
 })
 
-// These register a real SDK meter provider, so they assert what was RECORDED
-// rather than that recording is harmless. Disposal is not optional — see
-// test-helpers/metric-recorder.ts.
 describe("recordHistogram against a real meter provider", () => {
   let recorder: MetricRecorder | null = null
 
@@ -84,10 +76,6 @@ describe("recordHistogram against a real meter provider", () => {
     expect(codex).toMatchObject({ count: 1, sum: 1_000 })
   })
 
-  // The regression this pins: OTel's DEFAULT explicit buckets top out at
-  // 10_000 ms. A Kanna turn runs 10s-10min, so under the defaults every
-  // observation falls in the +Inf bucket and histogram_quantile — the whole
-  // point of the metric — returns garbage.
   test("turn-length durations land in distinct finite buckets", async () => {
     recorder = startMetricRecorder({ buckets: { [TURN_DURATION_MS]: DURATION_BUCKETS_MS } })
     const durations = [5_000, 30_000, 120_000, 600_000]
@@ -107,9 +95,6 @@ describe("recordHistogram against a real meter provider", () => {
     expect([...DURATION_BUCKETS_MS]).toEqual([...DURATION_BUCKETS_MS].sort((a, b) => a - b))
   })
 
-  // Pins that a 45s package apply — a realistic slow skill install — lands in a
-  // distinct finite bucket rather than +Inf (which would make histogram_quantile
-  // useless for diagnosing slow applies).
   test("45s package apply lands in a finite bucket", async () => {
     recorder = startMetricRecorder({ buckets: { [PACKAGE_APPLY_DURATION_MS]: DURATION_BUCKETS_MS } })
     recordHistogram(PACKAGE_APPLY_DURATION_MS, 45_000, { kind: "skill", ok: "true", trigger: "manual" })
@@ -118,6 +103,6 @@ describe("recordHistogram against a real meter provider", () => {
     if (!point) throw new Error("no histogram recorded")
 
     expect(point.count).toBe(1)
-    expect(point.counts.at(-1)).toBe(0) // not in +Inf
+    expect(point.counts.at(-1)).toBe(0)
   })
 })

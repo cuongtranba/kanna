@@ -1,10 +1,3 @@
-/**
- * Colocated unit tests for claude-subagent-wiring.ts.
- *
- * Tests cover the two extracted functions without a real AgentCoordinator:
- *   - buildClaudeSubagentStarter  — PTY vs SDK dispatch logic
- *   - buildSubagentProviderRunForChat — ProviderRunStart construction
- */
 
 import { describe, expect, test } from "bun:test"
 import {
@@ -16,9 +9,6 @@ import {
 import type { ProviderRunStart } from "./subagent-orchestrator"
 import type { Subagent } from "../shared/subagent-types"
 
-// ---------------------------------------------------------------------------
-// Minimal stubs — only what the functions call
-// ---------------------------------------------------------------------------
 
 const NOOP_PROMISE = () => Promise.resolve(null as unknown as never)
 
@@ -114,9 +104,6 @@ const BASE_ARGS: BuildSubagentProviderRunForChatArgs = {
   parentUserMessageId: "msg-1",
 }
 
-// ---------------------------------------------------------------------------
-// buildClaudeSubagentStarter
-// ---------------------------------------------------------------------------
 
 describe("buildClaudeSubagentStarter", () => {
   test("returns a function", () => {
@@ -214,9 +201,6 @@ describe("buildClaudeSubagentStarter", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// buildSubagentProviderRunForChat
-// ---------------------------------------------------------------------------
 
 describe("buildSubagentProviderRunForChat", () => {
   test("returns a ProviderRunStart with a start function", () => {
@@ -239,8 +223,6 @@ describe("buildSubagentProviderRunForChat", () => {
   })
 
   test("delegation context increments depth and chains ancestorSubagentIds", () => {
-    // We verify the ProviderRunStart is created correctly with depth 0+1=1
-    // by checking the function doesn't throw with proper args
     const args: BuildSubagentProviderRunForChatArgs = {
       ...BASE_ARGS,
       depth: 0,
@@ -267,29 +249,14 @@ describe("buildSubagentProviderRunForChat", () => {
       },
     })
 
-    // We can't easily invoke onToolRequest without running start(), but we can
-    // confirm the ProviderRunStart builds without error, which exercises the
-    // closure that captures subagentPendingKey.
     const result = buildSubagentProviderRunForChat(deps, BASE_ARGS)
     expect(typeof result.start).toBe("function")
-    // The key builder will be called lazily when onToolRequest fires during a run.
-    expect(keyBuilt).toBeNull() // not yet called
+    expect(keyBuilt).toBeNull()
   })
 })
 
-// ---------------------------------------------------------------------------
-// authReady — the subagent spawn gate
-// ---------------------------------------------------------------------------
 
-/**
- * Regression cover for the AUTH_REQUIRED-on-empty-pool class: the main chat
- * spawns fine on local claude CLI credentials when no OAuth token is
- * configured, but every delegation used to fail this preflight, so the loop
- * orchestrator armed and then died on its first delegate_subagent call.
- */
 describe("buildSubagentProviderRunForChat — authReady", () => {
-  // ProviderRunStart.authReady() takes no argument — the provider is bound at
-  // construction from the subagent record.
   const authReadyFor = (deps: SubagentWiringDeps, provider: Subagent["provider"] = "claude") =>
     buildSubagentProviderRunForChat(deps, {
       ...BASE_ARGS,
@@ -321,8 +288,6 @@ describe("buildSubagentProviderRunForChat — authReady", () => {
   })
 
   test("readiness does not depend on a claudeAuth.authenticated settings flag", async () => {
-    // The flag never existed on ClaudeAuthSettings and was never written; an
-    // empty snapshot must not make claude look unauthenticated.
     const deps = makeDeps({ oauthPool: poolWith(false, false), getAppSettingsSnapshot: () => ({}) })
     expect(await authReadyFor(deps)).toBe(true)
   })

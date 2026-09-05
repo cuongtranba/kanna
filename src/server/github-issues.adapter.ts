@@ -1,18 +1,3 @@
-/**
- * GitHub Issues as a {@link BoardSyncProvider}.
- *
- * Fetch and write only — every decision about who wins lives in
- * `board-sync-reconcile.ts`. Splitting it that way is what lets the hard part
- * (last-writer-wins, echo suppression) be tested without a token.
- *
- * Two facts about this API that the code depends on:
- *  - `/issues` returns PULL REQUESTS too, distinguished only by a
- *    `pull_request` key. Importing them would fill a board with review noise.
- *  - `since` is inclusive and matches `updated_at`, so a cursor set to the last
- *    item's timestamp re-reads that item next pull. Harmless (reconcile makes
- *    it a no-op) and strictly safer than advancing past it, which would drop an
- *    item updated in the same second.
- */
 
 import { isJsonObject, type JsonValue } from "../shared/json"
 import type {
@@ -30,14 +15,9 @@ import type { RemoteSourceRef } from "../shared/boards/types"
 
 const API = "https://api.github.com"
 
-/**
- * How many HTTP requests one pull may spend. Bounded so a repo with a very long
- * PR-only history cannot burn the hourly quota in a single click.
- */
 const MAX_PULL_REQUESTS = 10
 
 export interface GitHubFetchOptions {
-  /** Injected so tests can drive the adapter without a network. */
   fetchImpl?: typeof fetch
 }
 
@@ -73,7 +53,6 @@ function decodeLabels(value: JsonValue): string[] {
 
 function decodeIssue(value: JsonValue): RemoteItem | null {
   if (!isJsonObject(value)) return null
-  // A pull request is served by the issues endpoint and must not become a card.
   if ("pull_request" in value) return null
   const { number, title, html_url: htmlUrl, state, updated_at: updatedAt } = value
   if (typeof number !== "number" || typeof title !== "string") return null
@@ -124,13 +103,6 @@ export function createGitHubIssuesProvider(options: GitHubFetchOptions = {}): Bo
       const repo = repoOf(input.source)
       if (!repo) return { items: [], cursor: input.cursor, rateLimit: null }
 
-      // One "pull" may need SEVERAL requests. `/issues` returns issues and pull
-      // requests interleaved, oldest-updated first, and a fork carries its
-      // upstream's PR history — so a single page can be entirely PRs and import
-      // nothing while real issues sit further along. Observed on
-      // cuongtranba/kanna: 13 issues, first page all PRs, zero imported.
-      // Pages are followed until enough ISSUES are collected, the remote runs
-      // out, or the request budget is spent.
       const wanted = Math.min(Math.max(input.limit, 1), 500)
       const perPage = 100
       const items: RemoteItem[] = []
@@ -157,9 +129,6 @@ export function createGitHubIssuesProvider(options: GitHubFetchOptions = {}): Bo
         const body: JsonValue = await response.json()
         if (!Array.isArray(body) || body.length === 0) break
 
-        // The cursor advances on EVERY entry the page returned, including the
-        // filtered pull requests. Advancing only on kept items stalls the sync
-        // forever on a page with no issues in it.
         let newestSeen = 0
         for (const entry of body) {
           if (isJsonObject(entry) && typeof entry.updated_at === "string") {
@@ -170,8 +139,6 @@ export function createGitHubIssuesProvider(options: GitHubFetchOptions = {}): Bo
           if (item) items.push(item)
         }
 
-        // `since` is inclusive, so a page whose newest entry equals the cursor
-        // would repeat forever. Stopping is correct: there is nothing newer.
         const next = newestSeen > 0 ? new Date(newestSeen).toISOString() : cursor
         if (next === cursor) break
         cursor = next
@@ -203,8 +170,6 @@ export function createGitHubIssuesProvider(options: GitHubFetchOptions = {}): Bo
         })
 
         if (!response.ok) {
-          // 5xx and secondary rate limits are worth another attempt; a 4xx is
-          // the request itself being wrong and retrying only burns quota.
           const retryable = response.status >= 500 || response.status === 403 || response.status === 429
           outcomes.push({
             ok: false,

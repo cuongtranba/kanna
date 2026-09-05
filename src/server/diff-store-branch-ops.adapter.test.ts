@@ -131,10 +131,8 @@ describe("checkoutBranch", () => {
 
   test("cancels when dirty paths and bringChanges is false", async () => {
     const repo = await makeRepo()
-    // Create another branch to checkout
     await runGit(["switch", "-c", "other"], repo)
     await runGit(["switch", "main"], repo)
-    // Dirty the working tree
     writeFileSync(path.join(repo, "dirty.txt"), "changes\n")
 
     const result = await checkoutBranch(makeDeps(), {
@@ -189,7 +187,6 @@ describe("previewMergeBranch", () => {
 
   test("returns up_to_date when branch has no new commits", async () => {
     const repo = await makeRepo()
-    // Create a branch but don't add commits — so it has 0 commits ahead of main
     await runGit(["switch", "-c", "empty-branch"], repo)
     await runGit(["switch", "main"], repo)
 
@@ -203,7 +200,6 @@ describe("previewMergeBranch", () => {
 
   test("returns mergeable when branch has new commits", async () => {
     const repo = await makeRepo()
-    // Create a branch with a commit
     await runGit(["switch", "-c", "with-commits"], repo)
     writeFileSync(path.join(repo, "new-file.txt"), "content\n")
     await runGit(["add", "new-file.txt"], repo)
@@ -308,8 +304,6 @@ describe("syncBranch", () => {
   test("fetch returns failure when no remote configured", async () => {
     const repo = await makeRepo()
     const result = await syncBranch(makeDeps(), { projectPath: repo, action: "fetch" })
-    // fetch --all --prune with no remotes: git either returns non-zero or returns ok with nothing to fetch
-    // Either is acceptable — just verify we get a response
     expect(result.action).toBe("fetch")
   }, 30_000)
 

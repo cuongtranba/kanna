@@ -4,10 +4,6 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { startKannaServer } from "./server"
 
-// Regression suite for the stale-chunk incident: a browser tab left open across a
-// deploy requests a hashed chunk the new build no longer ships. The server used to
-// answer that miss with `200 index.html`, so the browser rejected HTML-as-a-module
-// and surfaced "Failed to fetch dynamically imported module" instead of a clean 404.
 
 const tempDirs: string[] = []
 
@@ -52,7 +48,6 @@ describe("static asset serving", () => {
       )
 
       expect(response.status).toBe(404)
-      // The actual defect: HTML was served for a JS module request.
       expect(response.headers.get("content-type") ?? "").not.toContain("text/html")
       expect(await response.text()).not.toContain("<!DOCTYPE html>")
     } finally {

@@ -1,15 +1,5 @@
 import { create } from "zustand"
 
-/**
- * The new-card title being typed, per column.
- *
- * Keyed by column because every column has its own field and a reader may
- * start typing in one, look away, and add a card somewhere else — a single
- * draft would silently move their half-typed title to another column.
- *
- * A store rather than component state because the fields are rendered through
- * the kanban library's `renderListFooter` render prop, which remounts freely.
- */
 interface CardAdderState {
   draftByColumn: Record<string, string>
   setDraft(columnId: string, draft: string): void

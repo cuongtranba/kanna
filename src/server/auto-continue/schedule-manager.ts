@@ -12,7 +12,6 @@ export interface Clock {
 export const realClock: Clock = {
   now: () => Date.now(),
   setTimeout: (fn, delayMs) => {
-    // Node's setTimeout returns NodeJS.Timeout; cast through Number coercion for the Clock interface
     const t = setTimeout(fn, delayMs)
     return Number(t)
   },
@@ -72,7 +71,6 @@ export class ScheduleManager {
       case "loop_armed":
       case "loop_disarmed":
       case "loop_run_outcome":
-        // Loop arm/disarm/outcome are durable state markers, not schedule timers.
         return
       case "cron_armed":
       case "cron_disarmed":
@@ -81,7 +79,6 @@ export class ScheduleManager {
       case "cron_run_started":
       case "cron_run_outcome":
       case "cron_run_skipped":
-        // Cron timers belong to CronScheduler, not this one-shot manager.
         return
       default: {
         const _exhaustive: never = event
@@ -106,8 +103,6 @@ export class ScheduleManager {
       }
     }
 
-    // Past-due schedules fire out-of-band via microtask rather than clock.setTimeout.
-    // This keeps clock.pending() reflecting only genuinely future timers.
     if (delay <= 0) {
       void Promise.resolve().then(run)
       return

@@ -6,50 +6,22 @@ export interface ChatSchedulesProjection {
   liveScheduleId: string | null
 }
 
-/** The arm-time facts of a loop. Outlives the disarm via the `loop_armed` tombstone. */
 export type LoopSpec = Omit<LoopState, "consecutiveFailures">
 
-/** Armed-loop state for a chat, or null when no loop is currently armed. */
 export interface LoopState {
   subagentId: string
   prompt: string
-  /** Timestamp of the `loop_armed` event that armed the current loop. Used by
-   *  the Loop Progress panel to exclude delegations from before the arm. */
   armedAt: number
-  /**
-   * Delegated iterations that have failed back-to-back since the last success.
-   * Reset by `loop_armed` and by any successful run. Lets the host disarm a
-   * loop that cannot make progress, instead of re-firing it indefinitely or
-   * relying on the model to give up at the right moment.
-   */
   consecutiveFailures: number
-  /** The loop's oracle command, or null for a loop armed before this was recorded. */
   verifyCommand: string | null
-  /** Absolute directory the oracle runs in, or null (see `verifyCommand`). */
   workdirAbs: string | null
-  /**
-   * Tracking file relative to `workdirAbs`, or null for a loop armed before
-   * this was recorded. Read at delegate time to label a Progress row with the
-   * chunk being worked when the orchestrator did not name it itself.
-   */
   trackingFileRel: string | null
 }
 
-/**
- * Fold the auto-continue event log into the chat's current armed-loop state.
- * The latest `loop_armed` wins; a later `loop_disarmed` clears it. Pure replay
- * over the same durable event stream `deriveChatSchedules` uses, so it survives
- * restart for free. Used to (a) re-inject the loop prompt on every
- * background-completion wake, (b) tool-block loop-orchestrator turns, and
- * (c) decide when a failing loop has earned an automatic disarm.
- */
 export function deriveLoopState(
   events: readonly AutoContinueEvent[],
   chatId: string,
 ): LoopState | null {
-  // `failures` is tracked alongside rather than folded into `state` on every
-  // event: it avoids rebuilding the state object per outcome, and it keeps the
-  // one spread outside the loop where its operand is definitely an object.
   let state: Omit<LoopState, "consecutiveFailures"> | null = null
   let failures = 0
   for (const event of events) {
@@ -68,25 +40,12 @@ export function deriveLoopState(
       state = null
       failures = 0
     } else if (event.kind === "loop_run_outcome" && state !== null) {
-      // Outcomes arriving while no loop is armed are ignored, not counted:
-      // they belong to a run the user already stopped.
       failures = event.ok ? 0 : failures + 1
     }
   }
   return state === null ? null : { ...state, consecutiveFailures: failures }
 }
 
-/**
- * The most recent loop spec on a chat, ARMED OR NOT — what `resume_loop`
- * re-arms from, and what names the loop's real tracking file once it is off.
- *
- * `deriveLoopState` deliberately returns null after a `loop_disarmed`, because
- * every live reader asks "is a loop running right now". This asks the different
- * question "what loop did this chat last run", which survives the disarm. It
- * reads the `loop_armed` tombstone `compactLoopWakeEvents` retains; a chat that
- * never armed a loop, or whose tombstone predates the retention change, yields
- * null and callers must degrade rather than guess.
- */
 export function deriveLastLoopSpec(
   events: readonly AutoContinueEvent[],
   chatId: string,

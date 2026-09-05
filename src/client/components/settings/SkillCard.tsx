@@ -14,15 +14,6 @@ const AVAILABILITY_LABEL: Record<UpdateAvailability, string> = {
   unknown: "Unknown",
 }
 
-/**
- * The label for the card's action button, or null when there is no action that
- * would work.
- *
- * A pinned skill cannot be moved by `skills update` — the CLI resolves upstream
- * AT the pin and exits 0 unchanged — so a pinned card offers a re-pin or
- * nothing at all. An "Update" button on a pinned skill is a button that
- * provably does nothing.
- */
 function actionLabel(entry: PackageUpdateEntry | null): string | null {
   if (!entry) return null
   const repinTo = repinTarget(entry, entry.update)

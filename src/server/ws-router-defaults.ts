@@ -1,12 +1,3 @@
-/**
- * ws-router-defaults.ts
- *
- * Pure helpers and fallback-factory functions used by createWsRouter when
- * optional dependencies (diffStore, llmProvider, appSettings) are absent.
- *
- * All exports are side-effect-free (no IO, no process.env reads).
- * Extracted from ws-router.ts.
- */
 import { randomUUID } from "node:crypto"
 import { isClaudeReasoningEffort, isCodexReasoningEffort } from "../shared/provider-model-types"
 import {
@@ -34,25 +25,7 @@ import type {
 import { DEFAULT_TAB_MIN_WIDTH } from "../shared/pane-tab-width"
 import type { AppSettingsManager } from "./app-settings"
 
-// ---------------------------------------------------------------------------
-// mergeAppSettingsPatch — pure transform
-// ---------------------------------------------------------------------------
 
-/**
- * Apply an `AppSettingsPatch` onto an existing `AppSettingsSnapshot`.
- * Pure function — does not mutate the input snapshot.
- */
-/**
- * Merge a partial model-options patch over a subagent's existing options.
- *
- * The union member is decided by what the subagent ALREADY has: a settings
- * patch cannot switch providers on its own, and a blind spread across members
- * yields an object that belongs to none of them. Discriminating on the current
- * shape is what makes the result PROVABLY a union member — the
- * `<Subagent["modelOptions"]>` assertion this replaces claimed the same thing
- * without checking anything, so a patch carrying a foreign field was silently
- * accepted.
- */
 function mergeSubagentModelOptions(
   current: Subagent["modelOptions"],
   patch: SubagentPatch["modelOptions"],
@@ -73,7 +46,6 @@ function mergeSubagentModelOptions(
       fastMode: "fastMode" in patch && patch.fastMode !== undefined ? patch.fastMode : current.fastMode,
     }
   }
-  // OpenRouterModelOptions is `Record<string, never>` — nothing to merge.
   return current
 }
 
@@ -192,11 +164,6 @@ export function mergeAppSettingsPatch(
       ...snapshot.plugins,
       ...patch.plugins,
     },
-    // Not applied here (CRUD-shaped, like subagents would need but customMcpServers/
-    // customModels/textSnippets above deliberately don't get either): this is the
-    // no-AppSettingsManager fallback path, and AppSettingsManager.applyPatch is the
-    // real writer. Keeping the previous value avoids assigning the patch's
-    // create/update/delete shape onto the snapshot's array field.
     installedPlugins: snapshot.installedPlugins,
     claudeDriver: {
       preference: patch.claudeDriver?.preference ?? snapshot.claudeDriver.preference,
@@ -218,9 +185,6 @@ export function mergeAppSettingsPatch(
   }
 }
 
-// ---------------------------------------------------------------------------
-// buildInitialAppSettingsSnapshot — the out-of-the-box fallback snapshot
-// ---------------------------------------------------------------------------
 
 export function buildInitialAppSettingsSnapshot(): AppSettingsSnapshot {
   return {
@@ -287,9 +251,6 @@ export function buildInitialAppSettingsSnapshot(): AppSettingsSnapshot {
   }
 }
 
-// ---------------------------------------------------------------------------
-// buildFallbackDiffStore — noop DiffStore for when diffStore arg is absent
-// ---------------------------------------------------------------------------
 
 export function buildFallbackDiffStore() {
   return {
@@ -371,9 +332,6 @@ export function buildFallbackDiffStore() {
   }
 }
 
-// ---------------------------------------------------------------------------
-// buildFallbackLlmProvider — noop LlmProvider for when llmProvider arg is absent
-// ---------------------------------------------------------------------------
 
 export function buildFallbackLlmProvider() {
   return {
@@ -424,10 +382,6 @@ export function buildFallbackLlmProvider() {
   }
 }
 
-// ---------------------------------------------------------------------------
-// buildResolvedAppSettings — wraps optional AppSettingsManager with in-memory
-// fallback, enabling all callers to treat settings as always-present.
-// ---------------------------------------------------------------------------
 
 type AppSettingsManagerSubset = Pick<AppSettingsManager,
   "getSnapshot" | "write"
@@ -512,5 +466,4 @@ export function buildResolvedAppSettings(
   return self
 }
 
-/** The inferred return type of buildResolvedAppSettings. */
 export type ResolvedAppSettings = ReturnType<typeof buildResolvedAppSettings>

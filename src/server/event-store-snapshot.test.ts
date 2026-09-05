@@ -23,9 +23,6 @@ import { deriveCronJobs } from "./cron/read-model"
 import { MAX_RECENT_CRON_RUNS } from "../shared/cron/types"
 import type { StoreEvent } from "./events"
 
-// ---------------------------------------------------------------------------
-// Mock StorageBackend
-// ---------------------------------------------------------------------------
 
 function makeStorage(initial: Record<string, string> = {}): StorageBackend & {
   written: Map<string, string>
@@ -93,9 +90,6 @@ const PATHS: SnapshotLogPaths = {
   toolRequestsLogPath: "/data/tool-requests.jsonl",
 }
 
-// ---------------------------------------------------------------------------
-// loadSnapshotIntoState
-// ---------------------------------------------------------------------------
 describe("loadSnapshotIntoState", () => {
   test("returns empty result when snapshot file does not exist", async () => {
     const storage = makeStorage()
@@ -180,9 +174,6 @@ describe("loadSnapshotIntoState", () => {
     expect(state.chatsById.get("chat-1")?.unread).toBe(false)
   })
 
-  // A chat whose jobs are all disarmed never appends again, so without
-  // retention on this path an already-bloated snapshot would stay bloated for
-  // the life of the process.
   test("converges an already-bloated cron history from the snapshot", async () => {
     const events: AutoContinueEvent[] = [{
       v: 3,
@@ -283,9 +274,6 @@ describe("loadSnapshotIntoState", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// buildSnapshotFile
-// ---------------------------------------------------------------------------
 describe("buildSnapshotFile", () => {
   test("returns snapshot with correct version and empty arrays", () => {
     const state = createEmptyState()
@@ -330,9 +318,6 @@ describe("buildSnapshotFile", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// truncateLogsAfterSnapshot
-// ---------------------------------------------------------------------------
 describe("truncateLogsAfterSnapshot", () => {
   test("writes snapshot JSON and clears all compactable log files", async () => {
     const storage = makeStorage({
@@ -355,9 +340,6 @@ describe("truncateLogsAfterSnapshot", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// calcShouldTruncateLogs
-// ---------------------------------------------------------------------------
 describe("calcShouldTruncateLogs", () => {
   test("returns false when combined size is below threshold", async () => {
     const storage = makeStorage(
@@ -368,7 +350,6 @@ describe("calcShouldTruncateLogs", () => {
   })
 
   test("returns true when combined size meets 2 MiB threshold", async () => {
-    // 2 MiB spread across files: put all in the projects log
     const bigData = "x".repeat(2 * 1024 * 1024)
     const storage = makeStorage({ "/data/projects.jsonl": bigData })
     const result = await calcShouldTruncateLogs(storage, PATHS)
@@ -376,9 +357,6 @@ describe("calcShouldTruncateLogs", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// readSidebarOrderFromProjectsLog
-// ---------------------------------------------------------------------------
 describe("readSidebarOrderFromProjectsLog", () => {
   test("returns empty array if file does not exist", async () => {
     const storage = makeStorage()
@@ -419,9 +397,6 @@ describe("readSidebarOrderFromProjectsLog", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// writeSidebarOrderFile
-// ---------------------------------------------------------------------------
 describe("writeSidebarOrderFile", () => {
   test("writes projectIds as JSON to the sidebar order file", async () => {
     const storage = makeStorage()
@@ -433,9 +408,6 @@ describe("writeSidebarOrderFile", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// loadSidebarOrder
-// ---------------------------------------------------------------------------
 describe("loadSidebarOrder", () => {
   test("reads from dedicated sidebar-order.json when it exists", async () => {
     const storage = makeStorage({
@@ -458,7 +430,6 @@ describe("loadSidebarOrder", () => {
     const storage = makeStorage({ "/data/projects.jsonl": `${sidebarEvent}\n` })
     const result = await loadSidebarOrder(storage, "/data/sidebar-order.json", "/data/projects.jsonl", "/data", [])
     expect(result).toEqual(["p2", "p1"])
-    // Should have written the sidebar-order.json file as a migration
     expect(storage.written.has("/data/sidebar-order.json")).toBe(true)
   })
 
@@ -469,9 +440,6 @@ describe("loadSidebarOrder", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// computeLegacyTranscriptStats
-// ---------------------------------------------------------------------------
 describe("computeLegacyTranscriptStats", () => {
   test("returns hasLegacyData false when nothing present", async () => {
     const storage = makeStorage({ "/data/messages.jsonl": "" })
@@ -510,9 +478,6 @@ describe("computeLegacyTranscriptStats", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// migrateLegacyTranscripts
-// ---------------------------------------------------------------------------
 describe("migrateLegacyTranscripts", () => {
   test("returns false immediately when no legacy data", async () => {
     const storage = makeStorage()
@@ -558,16 +523,12 @@ describe("migrateLegacyTranscripts", () => {
     expect(snapshotCalled).toBe(true)
     expect(cacheCalled).toBe(true)
 
-    // The renamed file (tmp→final) should exist
     expect(storage.renamed).toHaveLength(1)
     expect(storage.renamed[0][1]).toBe("/data/transcripts/chat-1.jsonl")
     expect(messages.some((m) => m.includes("migration complete"))).toBe(true)
   })
 })
 
-// ---------------------------------------------------------------------------
-// loadAndReplayLogs
-// ---------------------------------------------------------------------------
 describe("loadAndReplayLogs", () => {
   test("exits early when storageReset is true before loading", async () => {
     const storage = makeStorage()
@@ -599,7 +560,6 @@ describe("loadAndReplayLogs", () => {
       () => {},
     )
 
-    // Should be sorted by timestamp: p2 (100) before p1 (200)
     expect(applied).toHaveLength(2)
     const first = applied[0] as Extract<typeof applied[0], { type: "project_opened" }>
     expect(first.type).toBe("project_opened")
@@ -634,15 +594,7 @@ describe("loadAndReplayLogs", () => {
     expect(cleared).toBe(true)
   })
 
-  // A replayed log can always contain a type this binary does not know: a
-  // branch that was run locally and never landed, or a downgrade after a
-  // newer version wrote the log. `applyStoreEvent` has no default case, so
-  // such an event is a no-op on apply — boot must survive it rather than die
-  // in the .sort() comparator, which no try/catch guards.
   test("an unknown event type is skipped and the rest of the log still replays", async () => {
-    // Real shape: `turn_resume_attempted` shipped in PR #493 (v0.108.0) on a
-    // branch that never merged, and two of its rows in a dev turns.jsonl
-    // crash-looped the server on every boot.
     const turns = [
       JSON.stringify({ v: STORE_VERSION, type: "turn_started", timestamp: 110, chatId: "c1", turnId: "t1" }),
       JSON.stringify({ v: STORE_VERSION, type: "turn_resume_attempted", timestamp: 120, chatId: "c1", turnId: "t1" }),
@@ -664,21 +616,12 @@ describe("loadAndReplayLogs", () => {
       () => {},
     )
 
-    // The unknown row is handed to applyEvent (which no-ops on it) but must
-    // not abort the replay — the known turn events on either side survive.
-    // Widened to string: `turn_resume_attempted` is deliberately NOT in the
-    // StoreEvent union — that is the whole point of the fixture.
     expect(applied.map((e): string => ("type" in e ? e.type : e.kind)))
       .toEqual(["project_opened", "turn_started", "turn_resume_attempted", "turn_finished"])
-    // An unknown type is NOT a corrupt log — history must not be wiped.
     expect(clearCalled).toBe(false)
     expect(storage.readTextSync("/data/turns.jsonl")).toBe(turns)
   })
 
-  // Orchestration is retired (adr-20260802-retire-orchestration-core), but
-  // installs that used it still hold an orch.jsonl on disk. That file stays
-  // out of the replay set, and the log is user data, so it must survive
-  // byte-for-byte.
   test("a legacy orch.jsonl is neither replayed nor rewritten", async () => {
     const legacy = [
       JSON.stringify({ v: STORE_VERSION, type: "orch_run_created", timestamp: 50, runId: "run-1", config: {}, tasks: [] }),
@@ -701,7 +644,6 @@ describe("loadAndReplayLogs", () => {
       () => {},
     )
 
-    // StoreEvent is a union of `type`-tagged and `kind`-tagged variants.
     expect(applied.map((e) => ("type" in e ? e.type : e.kind))).toEqual(["project_opened"])
     expect(clearCalled).toBe(false)
     expect(storage.readTextSync("/data/orch.jsonl")).toBe(legacy)

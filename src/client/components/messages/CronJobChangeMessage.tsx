@@ -5,7 +5,6 @@ interface Props {
   message: ProcessedCronJobChangeMessage
 }
 
-/** Quiet one-line notice for a management action: removed / paused / resumed. */
 export function CronJobChangeMessage({ message }: Props) {
   return (
     <div className="flex items-center gap-2 text-muted-foreground">

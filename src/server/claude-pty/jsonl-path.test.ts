@@ -55,12 +55,10 @@ describe("encodeCwd realpath + dot replacement", () => {
   })
 
   test("replaces dots with dashes in segment names", async () => {
-    // mkdtemp ensures the directory exists so realpathSync succeeds
     const tmp = await mkdtemp(path.join(tmpdir(), "kanna.dot-test-"))
     try {
       const encoded = encodeCwd(tmp)
       expect(encoded).not.toContain(".")
-      // The "kanna.dot-test-XXXX" segment dot must be replaced
       expect(encoded).toContain("kanna-dot-test-")
     } finally {
       await rm(tmp, { recursive: true, force: true })
@@ -101,7 +99,7 @@ describe("encodeCwd realpath + dot replacement", () => {
 
 describe("computeWorkflowsDir", () => {
   test("computeWorkflowsDir = <projectDir>/<sessionId>/workflows", () => {
-    const cwd = process.cwd() // existing dir; realpathSync requires it to exist
+    const cwd = process.cwd()
     const sessionId = "11111111-2222-3333-4444-555555555555"
     const expected = `${computeProjectDir({ homeDir: "/home/x", cwd })}/${sessionId}/workflows`
     expect(computeWorkflowsDir({ homeDir: "/home/x", cwd, sessionId })).toBe(expected)

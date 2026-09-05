@@ -5,11 +5,6 @@ import type { ProjectTerminalLayout } from "../../stores/terminalLayoutStore"
 import type { BoardSummary, BoardViewSnapshot } from "../../../shared/boards/types"
 import type { SidebarChatRow, SidebarData, SidebarProjectGroup } from "../../../shared/types"
 
-/**
- * The workspace is shared by every project, so a tab must be able to title
- * itself from a project other than the active one. Every miss here reads as a
- * tab labelled with its fallback — which is what shipped for boards.
- */
 
 function chat(chatId: string, title: string, extra: Partial<SidebarChatRow> = {}): SidebarChatRow {
   return { chatId, title, status: "idle", unread: false, ...extra } as SidebarChatRow
@@ -78,13 +73,6 @@ describe("buildTabPresentationContext", () => {
     expect(describeTab({ kind: "board", boardId: "board-1" }, context).label).toBe("Sprint")
   })
 
-  /**
-   * Arriving straight at `/boards/:projectId/:boardId` — a refresh, a bookmark —
-   * subscribes to that ONE board, never to the project's list, so
-   * `boardsByOwner` is empty and the list alone would leave the tab reading its
-   * fallback. The board's own view carries its title, so the tab titles itself
-   * from the same snapshot it renders.
-   */
   test("titles a board from its own view when the list was never loaded", () => {
     const context = buildTabPresentationContext({
       terminalProjects: {},

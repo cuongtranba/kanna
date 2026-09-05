@@ -9,7 +9,6 @@ import {
   readOracleScript,
 } from "./loop-template-io.adapter"
 
-/** Reconcile stub that reports the input as already conformant. */
 const noopReconcile = (existing: string) => ({ content: existing, changed: false, actions: [] })
 
 describe("ensureTrackingFile", () => {
@@ -151,7 +150,6 @@ describe("inspectTrackingFile", () => {
     expect(result.gitTracked).toBe(false)
   }, 30_000)
 
-  // The case that matters: a committed tracking file from a finished loop.
   test("reports a committed file as gitTracked", async () => {
     const abs = path.join(repo, "PROGRESS.md")
     await writeFile(abs, "# committed\n")

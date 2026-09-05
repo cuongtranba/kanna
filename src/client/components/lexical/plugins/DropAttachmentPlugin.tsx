@@ -11,19 +11,13 @@ import { uploadFile } from "../../../lib/uploadFile.adapter"
 import { $createAttachmentNode } from "../nodes"
 import type { ChatAttachment } from "../../../../shared/types"
 
-// ─── Constants (mirrors ChatInput) ───────────────────────────────────────────
 
 export const MAX_FILES_PER_DROP = 50
 export const MAX_CONCURRENT_DROP_UPLOADS = 3
 
-// ─── Upload helpers ────────────────────────────────────────────────────────────
 
 export type UploadFileFn = typeof uploadFile
 
-/**
- * Uploads a batch of Files and inserts an AttachmentNode for each one.
- * Respects MAX_CONCURRENT_DROP_UPLOADS concurrency. Exported for testing.
- */
 export async function uploadDroppedFiles(
   files: File[],
   editor: LexicalEditor,
@@ -44,7 +38,6 @@ export async function uploadDroppedFiles(
         projectId,
         file,
         onProgress: () => {
-          // progress not tracked in the lexical plugin (no per-file progress UI here)
         },
       })
       const { attachments } = await handle.promise
@@ -71,10 +64,6 @@ export async function uploadDroppedFiles(
   await Promise.all(chains)
 }
 
-/**
- * Extracts File objects from a DragEvent's dataTransfer.
- * Returns an empty array when the event carries no files.
- */
 export function getDroppedFiles(event: DragEvent): File[] {
   const items = event.dataTransfer?.items
   if (items) {
@@ -88,7 +77,6 @@ export function getDroppedFiles(event: DragEvent): File[] {
     }
     return files
   }
-  // Fallback: use FileList directly
   const fileList = event.dataTransfer?.files
   if (!fileList) return []
   const files: File[] = []
@@ -99,16 +87,13 @@ export function getDroppedFiles(event: DragEvent): File[] {
   return files
 }
 
-// ─── Props ────────────────────────────────────────────────────────────────────
 
 export interface DropAttachmentPluginProps {
   projectId: string | null
   onUploadError?: (msg: string) => void
-  /** Injectable for testing. Defaults to the real uploadFile. */
   uploadFileFn?: UploadFileFn
 }
 
-// ─── Plugin ───────────────────────────────────────────────────────────────────
 
 export function DropAttachmentPlugin({
   projectId,
@@ -121,7 +106,6 @@ export function DropAttachmentPlugin({
     const unregisterDragover = editor.registerCommand<DragEvent>(
       DRAGOVER_COMMAND,
       (event) => {
-        // Signal that drops are accepted so the browser shows the copy cursor.
         const files = getDroppedFiles(event)
         if (files.length === 0) return false
         event.preventDefault()

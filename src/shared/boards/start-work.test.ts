@@ -79,11 +79,6 @@ describe("deriveStartWorkStatus", () => {
     expect(startWorkLabel(status)).toBe("Open chat")
   })
 
-  /**
-   * The stale-empty-chat reaper deletes a chat nobody sent a message to. The
-   * card's link outlives it, and a button reading "Open chat" would open
-   * nothing.
-   */
   test("a chat that no longer exists falls back to Resume", () => {
     const status = deriveStartWorkStatus({
       links: [link("worktree", "/tmp/wt/card-1"), link("chat", "chat-9")],
@@ -93,10 +88,6 @@ describe("deriveStartWorkStatus", () => {
     expect(status).toEqual({ kind: "worktree", worktreePath: "/tmp/wt/card-1" })
   })
 
-  /**
-   * A worktree removed outside Kanna leaves the link behind. Reusing that path
-   * would spawn a chat with a cwd that is not there.
-   */
   test("a worktree removed on disk falls back to idle", () => {
     const status = deriveStartWorkStatus({
       links: [link("worktree", "/tmp/wt/card-1")],
@@ -147,7 +138,6 @@ describe("resolveStartWorkProjectId", () => {
     expect(resolveStartWorkProjectId(card({ projectId: "proj-9" }), board())).toBe("proj-9")
   })
 
-  /** On a Stack board the board owner is a stack, so the card must say. */
   test("a stack board with no card project resolves to nothing", () => {
     expect(resolveStartWorkProjectId(card(), board({ ownerKind: "stack", ownerId: "stack-1" }))).toBeNull()
   })
@@ -166,18 +156,10 @@ describe("findAdvanceColumn", () => {
     expect(findAdvanceColumn(pipeline, "progress")?.id).toBe("test")
   })
 
-  /**
-   * Order, never a semantic guess: `test` carries no semantic and still wins
-   * over the `review` column behind it.
-   */
   test("the next column wins over a later review column", () => {
     expect(findAdvanceColumn(pipeline, "test")?.id).toBe("qa")
   })
 
-  /**
-   * `done` closes the card and asks the merge/discard/leave question — a
-   * decision that costs work to get wrong, so it stays the user's.
-   */
   test("never advances into the done column", () => {
     expect(findAdvanceColumn(pipeline, "qa")).toBeNull()
     expect(findAdvanceColumn([column("open", "start"), column("progress", "active"), column("closed", "done")], "progress")).toBeNull()
@@ -219,10 +201,6 @@ describe("buildStartWorkPrompt", () => {
     expect(prompt).not.toContain("Labels")
   })
 
-  /**
-   * The card id is the point: the prompt names the card and the column, so the
-   * agent moves the right one without reading the whole board back first.
-   */
   test("an advance column becomes a card_move instruction", () => {
     const prompt = buildStartWorkPrompt(card(), "card/abc-fix", {
       cardId: "card-1",
@@ -235,7 +213,6 @@ describe("buildStartWorkPrompt", () => {
     expect(prompt).toContain("Test")
   })
 
-  /** A board with nowhere to advance to says nothing rather than improvising. */
   test("no advance column leaves the prompt free of move instructions", () => {
     expect(buildStartWorkPrompt(card(), "card/abc-fix", null)).not.toContain("card_move")
   })

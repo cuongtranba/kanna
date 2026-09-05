@@ -1,16 +1,4 @@
 import type { JsonObject } from "../shared/json"
-/**
- * ws-router-misc.ts
- *
- * WS command handlers for terminal, message-queue, stack, and share operations:
- *   terminal.create, terminal.input, terminal.resize, terminal.close
- *   message.enqueue, message.steer, message.dequeue
- *   stack.create, stack.rename, stack.remove, stack.addProject,
- *     stack.removeProject, stack.listWorktrees
- *   share.mint, share.revoke, share.list
- *
- * Extracted from ws-router.ts.
- */
 
 import { PROTOCOL_VERSION } from "../shared/types"
 import type { GitWorktree } from "../shared/types"
@@ -19,11 +7,7 @@ import type { TerminalSnapshot } from "../shared/protocol"
 import type { ShareCommandResult } from "../shared/session-share/protocol"
 import type { MintRequest, MintResponse, RevokeRequest, ShareError, ShareSummary } from "../shared/session-share/types"
 
-// ---------------------------------------------------------------------------
-// Dep interfaces (duck-typed; avoids circular imports with ws-router.ts)
-// ---------------------------------------------------------------------------
 
-/** The subset of EventStore methods consumed by misc WS commands. */
 export interface MiscStoreDep {
   getProject(id: string): { localPath: string } | undefined | null
   createStack(title: string, projectIds: string[]): Promise<{ id: string }>
@@ -34,7 +18,6 @@ export interface MiscStoreDep {
   removeProjectFromStack(stackId: string, projectId: string): Promise<void>
 }
 
-/** The subset of TerminalManager methods consumed by misc WS commands. */
 export interface MiscTerminalsDep {
   createTerminal(args: {
     projectPath: string
@@ -48,22 +31,18 @@ export interface MiscTerminalsDep {
   close(terminalId: string): void
 }
 
-/** The subset of AgentCoordinator methods consumed by misc WS commands. */
 export interface MiscAgentDep {
   enqueue(command: Extract<ClientCommand, { type: "message.enqueue" }>): Promise<{ queuedMessageId: string }>
   steer(command: Extract<ClientCommand, { type: "message.steer" }>): Promise<void>
   dequeue(command: Extract<ClientCommand, { type: "message.dequeue" }>): Promise<void>
 }
 
-/** The subset of AnalyticsReporter consumed by misc WS commands. */
 export interface MiscAnalyticsDep {
   track(event: string, props?: JsonObject): void
 }
 
-/** Shared result wrapper used by SessionShareService methods. */
 export type ShareResult<T> = { ok: true; data: T } | { ok: false; error: ShareError }
 
-/** The subset of SessionShareService consumed by misc WS commands. */
 export interface MiscSessionShareDep {
   mintToken(req: MintRequest, baseUrl: string): Promise<ShareResult<MintResponse>>
   revokeToken(req: RevokeRequest): Promise<ShareResult<{ tokenId: string }>>
@@ -71,46 +50,20 @@ export interface MiscSessionShareDep {
 }
 
 export interface MiscCommandDeps {
-  /** EventStore methods for project/stack operations. */
   store: MiscStoreDep
-  /** TerminalManager for terminal lifecycle. */
   terminals: MiscTerminalsDep
-  /** AgentCoordinator for message-queue operations. */
   agent: MiscAgentDep
-  /** Optional session-share service (feature-gated). */
   sessionShare?: MiscSessionShareDep | null
-  /** Analytics reporter. */
   analytics: MiscAnalyticsDep
-  /**
-   * List the worktrees for a given repo root.
-   * Injected to avoid a direct dependency on the IO adapter.
-   */
   listWorktrees(repoPath: string): Promise<GitWorktree[]>
-  /** Return the origin host for the current WebSocket connection. */
   getOriginHost(): string
-  /** Pre-bound to the current WebSocket; called to send an ack envelope. */
   send(envelope: ServerEnvelope): void
-  /** Broadcast sidebar snapshot to all connected clients. */
   broadcastSidebar(): Promise<void>
-  /** Broadcast chat + sidebar snapshots to all connected clients. */
   broadcastChatAndSidebar(chatId: string): Promise<void>
-  /**
-   * Push a fresh terminal snapshot to subscribers of the given terminal.
-   * Called after terminal.close to reflect the updated status.
-   */
   pushTerminalSnapshot(terminalId: string): void
 }
 
-// ---------------------------------------------------------------------------
-// Command dispatcher
-// ---------------------------------------------------------------------------
 
-/**
- * Handle one misc WS command (terminal/message/stack/share group).
- *
- * Returns `true` when the command was handled (caller should `return`).
- * Returns `false` when the command type is outside this module's scope.
- */
 export async function handleMiscCommand(
   deps: MiscCommandDeps,
   command: ClientCommand,
@@ -119,9 +72,6 @@ export async function handleMiscCommand(
   const { store, terminals, agent, sessionShare, analytics, send, broadcastSidebar, broadcastChatAndSidebar, pushTerminalSnapshot, listWorktrees, getOriginHost } = deps
 
   switch (command.type) {
-    // ------------------------------------------------------------------
-    // message.*
-    // ------------------------------------------------------------------
     case "message.enqueue": {
       const result = await agent.enqueue(command)
       send({ v: PROTOCOL_VERSION, type: "ack", id, result })
@@ -141,9 +91,6 @@ export async function handleMiscCommand(
       return true
     }
 
-    // ------------------------------------------------------------------
-    // terminal.*
-    // ------------------------------------------------------------------
     case "terminal.create": {
       const project = store.getProject(command.projectId)
       if (!project) {
@@ -176,14 +123,8 @@ export async function handleMiscCommand(
       return true
     }
 
-    // ------------------------------------------------------------------
-    // stack.*
-    // ------------------------------------------------------------------
     case "stack.create": {
       const stack = await store.createStack(command.title, command.projectIds)
-      // Carried on the create rather than sent as a follow-up command: the
-      // client has no stack id until this ack, and a second round-trip could
-      // leave a created stack with its instructions silently dropped.
       if (command.instructions?.trim()) {
         await store.setStackInstructions(stack.id, command.instructions)
       }
@@ -233,9 +174,6 @@ export async function handleMiscCommand(
       return true
     }
 
-    // ------------------------------------------------------------------
-    // share.*
-    // ------------------------------------------------------------------
     case "share.mint": {
       if (!sessionShare) {
         const noSvcResult: ShareCommandResult = { ok: false, error: { kind: "snapshot_write_failed", message: "session-share service unavailable" } }

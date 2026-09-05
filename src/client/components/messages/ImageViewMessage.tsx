@@ -16,8 +16,6 @@ function ImageViewMessageInner({ toolId, path, contentUrl, mimeType }: Props) {
   const setOpen = ImageViewMessageStore.useScopedStore((s) => s.setOpen)
   const fileName = fileNameOfPath(path)
 
-  // A relative path on a chat with no project cannot be turned into a URL.
-  // Naming the file beats a picture element that renders as a broken box.
   if (!contentUrl) {
     return (
       <div className="rounded-lg border border-border bg-muted/20 px-3 py-2 text-sm text-muted-foreground">

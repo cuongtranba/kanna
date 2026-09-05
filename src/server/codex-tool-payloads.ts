@@ -1,14 +1,3 @@
-/**
- * codex-tool-payloads — the pure encode/decode leaves shared by the codex
- * transcript translator and the app-server transport: the transcript-entry
- * factory, the dynamic-tool payload shapes, and the AskUserQuestion wire
- * encoding.
- *
- * Extracted from codex-transcript-translator so these payload shapes do not
- * count against that module's architecture-budget ceiling. It is a LEAF —
- * it imports no sibling codex module, so the translator can depend on it
- * without a cycle.
- */
 
 import { randomUUID } from "node:crypto"
 import type { TranscriptEntry } from "../shared/types"
@@ -53,15 +42,6 @@ export function genericDynamicToolCall(toolId: string, toolName: string, input: 
   })
 }
 
-/**
- * Encode the codex questions as the `rawInput` JSON a tool_call entry carries.
- *
- * Written field by field rather than walked: `ToolRequestUserInputQuestion` is
- * a generated INTERFACE, and a TypeScript interface never satisfies an
- * index-signature type — so `JsonObject` is unreachable from it by narrowing,
- * and a cast is banned. Naming the fields also makes the wire shape a visible
- * decision: a new protocol field is not silently forwarded to the client.
- */
 export function toAskUserQuestionRawInput(questions: readonly ToolRequestUserInputQuestion[]): JsonObject {
   return {
     questions: questions.map((question): JsonObject => ({

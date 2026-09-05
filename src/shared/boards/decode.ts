@@ -1,17 +1,3 @@
-/**
- * Decoders for board values that arrive as JSON.
- *
- * SQLite stores card content, actors, field schemas, and template definitions
- * as JSON text. That text is a BOUNDARY — it can be stale (written by an older
- * build), hand-edited, or corrupt — so it is validated on the way in rather
- * than asserted into shape. Every decoder returns `null` on anything it does
- * not recognise, and the collection decoders drop unrecognised entries instead
- * of failing the whole row: one malformed label must not make a card
- * unreadable.
- *
- * Pure, no IO. The adapter calls these; it does no shape-checking of its own,
- * which keeps it the leaf module the side-effect seal expects.
- */
 
 import { isJsonObject, type JsonValue } from "../json"
 import {
@@ -46,7 +32,6 @@ function decodeOptionalNumber(value: JsonValue): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null
 }
 
-// ── Field schema ──────────────────────────────────────────────────────────────
 
 export function decodeFieldOption(value: JsonValue): FieldOption | null {
   if (!isJsonObject(value)) return null
@@ -85,30 +70,7 @@ export function decodeFieldDefs(value: JsonValue): FieldDef[] {
   return fields
 }
 
-// ── Field schema, arriving on the wire ────────────────────────────────────────
 
-/**
- * A board's field schema as an INSTRUCTION rather than as history.
- *
- * The strict counterpart to {@link decodeFieldDefs}, split from it for the
- * reason spelled out over {@link decodeContentForFields}: a schema written by
- * an older build must stay readable, so storage drops what it cannot parse and
- * keeps the rest. A schema arriving from a client is a change being asked for —
- * dropping the one field it could not read would ack an edit that never landed,
- * and would orphan every card's value for that field with nobody the wiser.
- *
- * Beyond shape it refuses three things the lenient decoder has no way to see:
- *
- * A duplicate field id. {@link CardContent} is keyed by field id, so two fields
- * sharing one would fight over a single value forever.
- *
- * A duplicate option id within a field, for the same reason one level down. The
- * same id on two DIFFERENT fields is fine — options are scoped to their field.
- *
- * An option colour outside {@link COLUMN_COLOR_TOKENS}. The palette is closed
- * on purpose: a stored hex is a colour correct in exactly one of the two
- * themes, and an open set brings back the rainbow-column look.
- */
 export function decodeFieldDefsForWrite(value: JsonValue): FieldDef[] | null {
   if (!Array.isArray(value)) return null
   const fields: FieldDef[] = []
@@ -130,9 +92,6 @@ function decodeFieldDefForWrite(value: JsonValue): FieldDef | null {
   if (typeof kind !== "string" || !isFieldKind(kind)) return null
   if (value.required !== undefined && typeof value.required !== "boolean") return null
 
-  // The option list is not optional decoration: `select` without one offers
-  // nothing, and any other kind carrying one is a client that has confused two
-  // field kinds.
   const wantsOptions = kind === "select" || kind === "multiselect"
   if (!wantsOptions) {
     if (value.options !== undefined && value.options !== null) return null
@@ -161,7 +120,6 @@ function decodeFieldOptionForWrite(value: JsonValue): FieldOption | null {
   return { id, label, colorToken: value.colorToken }
 }
 
-// ── Card content ──────────────────────────────────────────────────────────────
 
 export function decodeFieldValue(value: JsonValue): FieldValue | null {
   if (!isJsonObject(value)) return null
@@ -206,28 +164,7 @@ export function decodeCardContent(value: JsonValue): CardContent {
   return content
 }
 
-// ── Card content, against a schema ────────────────────────────────────────────
 
-/**
- * The strict counterpart to {@link decodeCardContent}, for content arriving on
- * the WIRE rather than out of storage.
- *
- * The two differ in what they do with something they cannot read, and the
- * difference is the whole point. Storage is history: a row written by an older
- * build must stay readable, so a value that no longer parses is dropped and the
- * rest of the card survives. A write is an instruction: dropping a field there
- * would ack a change that never landed, and the writer would have no way to
- * know. So this one refuses the whole patch.
- *
- * It also knows the board's schema, which the storage decoder does not, so a
- * value can be checked against its DEFINITION and not merely against itself:
- * `FieldValue` is discriminated by the same names as {@link FieldKind} exactly
- * so `value.kind !== field.kind` is a question that can be asked.
- *
- * `required` is deliberately not consulted. A patch names the fields it changes
- * and no others, so completeness is not knowable here — and required is
- * advisory in this product anyway: it marks a field, it never refuses a save.
- */
 export function decodeContentForFields(
   fields: readonly FieldDef[],
   value: JsonValue,
@@ -245,7 +182,6 @@ export function decodeContentForFields(
   return content
 }
 
-/** One value, checked against the definition it claims to belong to. */
 export function decodeValueForField(field: FieldDef, value: JsonValue): FieldValue | null {
   if (!isJsonObject(value)) return null
   if (value.kind !== field.kind) return null
@@ -262,7 +198,6 @@ export function decodeValueForField(field: FieldDef, value: JsonValue): FieldVal
         ? { kind: "number", value: value.value }
         : null
     case "date":
-      // `isInteger` implies finite, and epoch milliseconds are whole.
       return typeof value.value === "number" && Number.isInteger(value.value)
         ? { kind: "date", value: value.value }
         : null
@@ -279,8 +214,6 @@ export function decodeValueForField(field: FieldDef, value: JsonValue): FieldVal
         : null
     }
     case "label": {
-      // Free strings by design — a label field has no option list to check
-      // against, which is what distinguishes it from a multiselect.
       const values = decodeStrictStringArray(value.values)
       return values ? { kind: "label", values } : null
     }
@@ -291,7 +224,6 @@ function offersOption(field: FieldDef, optionId: string): boolean {
   return (field.options ?? []).some((option) => option.id === optionId)
 }
 
-/** Refuses a ragged array rather than silencing its bad entries. */
 function decodeStrictStringArray(value: JsonValue): string[] | null {
   if (!Array.isArray(value)) return null
   const values: string[] = []
@@ -302,13 +234,7 @@ function decodeStrictStringArray(value: JsonValue): string[] | null {
   return values
 }
 
-// ── Actors ────────────────────────────────────────────────────────────────────
 
-/**
- * Falls back to `{kind:"user"}` rather than null: an unreadable actor must not
- * make a card unreadable, and "a person did it" is the conservative default —
- * it never grants an agent-origin write the push it would otherwise be held for.
- */
 export function decodeActor(value: JsonValue): CardActor {
   if (!isJsonObject(value)) return { kind: "user" }
   if (value.kind === "agent" && typeof value.chatId === "string") {
@@ -320,7 +246,6 @@ export function decodeActor(value: JsonValue): CardActor {
   return { kind: "user" }
 }
 
-// ── Templates ─────────────────────────────────────────────────────────────────
 
 export function decodeTemplateColumn(value: JsonValue): BoardTemplateColumn | null {
   if (!isJsonObject(value)) return null
@@ -363,6 +288,5 @@ export function decodeTemplateDefinition(value: JsonValue): BoardTemplateDefinit
   return { columns, cardFields: decodeFieldDefs(value.cardFields), mappingDefaults }
 }
 
-// ── Misc ──────────────────────────────────────────────────────────────────────
 
 export { decodeOptionalString, decodeOptionalNumber, decodeStringArray }

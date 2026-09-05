@@ -1,10 +1,3 @@
-/**
- * messageTransformers.test.ts
- *
- * Tests for KANNA_MESSAGE_TRANSFORMERS:
- *  - MERMAID_FENCE: ```mermaid fences → MermaidNode
- *  - LOCAL_FILE_LINK: [text](/abs/path) → LocalFileLinkNode
- */
 
 import { describe, expect, it } from "bun:test"
 import { createHeadlessEditor } from "@lexical/headless"
@@ -27,9 +20,6 @@ import {
 import { KANNA_MESSAGE_TRANSFORMERS } from "./messageTransformers"
 import type { LexicalEditor } from "lexical"
 
-// ---------------------------------------------------------------------------
-// Test editor factory
-// ---------------------------------------------------------------------------
 
 const GFM_NODES = [
   HeadingNode,
@@ -55,10 +45,6 @@ function buildEditor(): LexicalEditor {
   })
 }
 
-/**
- * Parse markdown using KANNA_MESSAGE_TRANSFORMERS and return the editor.
- * All node inspection MUST happen inside editor.getEditorState().read().
- */
 function parseMarkdown(markdown: string): LexicalEditor {
   const editor = buildEditor()
   editor.update(
@@ -70,10 +56,6 @@ function parseMarkdown(markdown: string): LexicalEditor {
   return editor
 }
 
-/**
- * Flatten all nodes in the tree (depth-first) into a flat list.
- * MUST be called inside an editor.getEditorState().read() callback.
- */
 function flattenNodes(nodes: LexicalNode[]): LexicalNode[] {
   const result: LexicalNode[] = []
   function visit(node: LexicalNode) {
@@ -91,9 +73,6 @@ function flattenNodes(nodes: LexicalNode[]): LexicalNode[] {
   return result
 }
 
-// ---------------------------------------------------------------------------
-// MERMAID_FENCE tests
-// ---------------------------------------------------------------------------
 
 describe("MERMAID_FENCE transformer", () => {
   it("converts a ```mermaid fence to a MermaidNode", () => {
@@ -119,8 +98,6 @@ describe("MERMAID_FENCE transformer", () => {
     })
   })
 
-  // A 4-backtick opener is how a diagram whose label contains ``` is written.
-  // The closer must match the opener's length, so the inner ``` is body.
   it("closes a 4-backtick fence only on a fence at least as long", () => {
     const source = 'flowchart TD\n  A["```"] --> B'
     const markdown = `\`\`\`\`mermaid\n${source}\n\`\`\`\`\n\nafter`
@@ -165,9 +142,6 @@ describe("MERMAID_FENCE transformer", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// LOCAL_FILE_LINK tests
-// ---------------------------------------------------------------------------
 
 describe("LOCAL_FILE_LINK transformer", () => {
   it("converts a link with /Users/ path to LocalFileLinkNode", () => {
@@ -224,9 +198,6 @@ describe("LOCAL_FILE_LINK transformer", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// Combined content tests
-// ---------------------------------------------------------------------------
 
 describe("KANNA_MESSAGE_TRANSFORMERS combined", () => {
   it("handles both mermaid and regular code blocks in same document", () => {
@@ -245,16 +216,13 @@ describe("KANNA_MESSAGE_TRANSFORMERS combined", () => {
     editor.getEditorState().read(() => {
       const allNodes = flattenNodes($getRoot().getChildren<LexicalNode>())
       const mermaidNodes = allNodes.filter($isMermaidNode)
-      // Should have exactly one mermaid node and NO MermaidNode for the ts block
       expect(mermaidNodes.length).toBe(1)
       expect(mermaidNodes[0]!.getTextContent()).toBe("graph LR\nA-->B")
     })
   })
 
   it("ThinkingNode class is registered but not created by transformers (transformers don't produce ThinkingNodes)", () => {
-    // Verify ThinkingNode is in the node set (no import errors)
     expect(ThinkingNode.getType()).toBe("kanna-thinking")
-    // Transformers don't parse <think> tags - that's handled at the renderMessage layer
     const markdown = "<think>some thinking</think>"
     const editor = parseMarkdown(markdown)
     editor.getEditorState().read(() => {

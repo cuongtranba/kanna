@@ -219,8 +219,6 @@ function mimeEssence(mimeType: string) {
   return mimeType.split(";")[0]?.trim().toLowerCase() ?? ""
 }
 
-// displayName may be a human label (e.g. preview_file's `label`) with no
-// extension, so fall back to the on-disk relativePath before giving up.
 function attachmentExtensions(attachment: ChatAttachment): string[] {
   return [getFileExtension(attachment.displayName), getFileExtension(attachment.relativePath)]
 }
@@ -243,11 +241,6 @@ function resolvePreviewUrl(url: string, dom: DomPort) {
   return new URL(url, dom.getBaseURI() || dom.getHref()).toString()
 }
 
-/**
- * The abort reason reaches this as a DOMException from the fetch, or — when the
- * timer aborts with the literal reason string — as the Error `toError` builds
- * from that string, so the message IS the reason.
- */
 function isPreviewTimeout(error: Error) {
   if (error instanceof DOMException && error.name === "AbortError") {
     return true

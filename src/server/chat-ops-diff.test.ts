@@ -108,13 +108,6 @@ describe("diffChatMeta", () => {
     expect(op.sections.liveScheduleId).toBe("sched-1")
   })
 
-  // Regression guard for a whole class of bug, not just one field.
-  //
-  // The composer picker reads its own zustand store, which is fed only by full
-  // snapshots. Any picker data that also travels as a chat.ops section is
-  // therefore delivered down a path the picker never observes — which is
-  // exactly how the slash-command list ended up stuck on a loading skeleton
-  // that never resolved. Picker state belongs in its own project-scoped topic.
   test("picker data is never delta-only: no slash-command key is a chat.ops section", () => {
     const keys: readonly string[] = SECTION_KEYS
     expect(keys).not.toContain("slashCommands")

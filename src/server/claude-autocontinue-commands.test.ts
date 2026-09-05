@@ -1,9 +1,3 @@
-/**
- * Tests for the extracted auto-continue command handlers.
- *
- * Each test builds a minimal `AutoContinueCommandDeps` fake and asserts the
- * correct behaviour of the function under test. No real IO or OS calls.
- */
 
 import { describe, test, expect } from "bun:test"
 import { AUTO_CONTINUE_EVENT_VERSION } from "./auto-continue/events"
@@ -21,9 +15,6 @@ import {
 } from "./claude-autocontinue-commands"
 import type { QueuedChatMessage, TranscriptEntry } from "../shared/types"
 
-// ---------------------------------------------------------------------------
-// Minimal fake builder
-// ---------------------------------------------------------------------------
 
 function makeQueuedMessage(): QueuedChatMessage {
   return {
@@ -85,9 +76,6 @@ function makeDeps(overrides: Partial<AutoContinueCommandDeps> = {}): AutoContinu
   }
 }
 
-// ---------------------------------------------------------------------------
-// resolveAutoResumeFor
-// ---------------------------------------------------------------------------
 
 describe("resolveAutoResumeFor", () => {
   test("returns per-chat override when present", () => {
@@ -108,9 +96,6 @@ describe("resolveAutoResumeFor", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// emitAutoContinueEvent
-// ---------------------------------------------------------------------------
 
 describe("emitAutoContinueEvent", () => {
   test("appends event to store", async () => {
@@ -159,9 +144,6 @@ describe("emitAutoContinueEvent", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// getChatSchedule
-// ---------------------------------------------------------------------------
 
 describe("getChatSchedule", () => {
   test("returns undefined when no events", () => {
@@ -187,9 +169,6 @@ describe("getChatSchedule", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// requireFuture
-// ---------------------------------------------------------------------------
 
 describe("requireFuture", () => {
   test("does not throw when scheduledAt is in the future", () => {
@@ -205,9 +184,6 @@ describe("requireFuture", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// fireAutoContinue
-// ---------------------------------------------------------------------------
 
 describe("fireAutoContinue", () => {
   test("no-ops when chat does not exist", async () => {
@@ -232,12 +208,11 @@ describe("fireAutoContinue", () => {
     await fireAutoContinue(deps, "chat-1", "sched-1")
     expect(store.events).toHaveLength(1)
     expect(store.events[0]?.kind).toBe("auto_continue_fired")
-    expect(enqueued).toContain("continue") // fallback when no schedule prompt
+    expect(enqueued).toContain("continue")
   })
 
   test("uses schedule prompt when present", async () => {
     const store = makeStore()
-    // Seed a proposed event so getChatSchedule finds it
     await store.appendAutoContinueEvent({
       v: AUTO_CONTINUE_EVENT_VERSION,
       kind: "auto_continue_proposed",
@@ -248,7 +223,6 @@ describe("fireAutoContinue", () => {
       resetAt: Date.now() + 3_600_000,
       tz: "UTC",
     })
-    // Accept it so the schedule has the prompt
     await store.appendAutoContinueEvent({
       v: AUTO_CONTINUE_EVENT_VERSION,
       kind: "auto_continue_accepted",
@@ -284,9 +258,6 @@ describe("fireAutoContinue", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// acceptAutoContinue
-// ---------------------------------------------------------------------------
 
 describe("acceptAutoContinue", () => {
   async function seedProposed(store: FakeStore) {
@@ -312,7 +283,6 @@ describe("acceptAutoContinue", () => {
   test("throws when schedule not in proposed state", async () => {
     const store = makeStore()
     await seedProposed(store)
-    // Cancel it first
     await store.appendAutoContinueEvent({
       v: AUTO_CONTINUE_EVENT_VERSION,
       kind: "auto_continue_cancelled",
@@ -346,9 +316,6 @@ describe("acceptAutoContinue", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// rescheduleAutoContinue
-// ---------------------------------------------------------------------------
 
 describe("rescheduleAutoContinue", () => {
   async function seedScheduled(store: FakeStore) {
@@ -402,9 +369,6 @@ describe("rescheduleAutoContinue", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// cancelAutoContinue
-// ---------------------------------------------------------------------------
 
 describe("cancelAutoContinue", () => {
   test("no-ops silently when schedule not found", async () => {

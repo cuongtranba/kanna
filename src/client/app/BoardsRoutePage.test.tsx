@@ -11,16 +11,6 @@ import type { KannaState } from "./useKannaState"
 import type { SidebarChatRow, SidebarProjectGroup } from "../../shared/types"
 import type { JsonValue } from "../../shared/json"
 
-/**
- * Looking at a board is not a conversation, so it must not start one.
- *
- * The board itself now opens as a pane tab, which is what makes board↔chat a
- * tab click rather than a round trip through the sidebar. This route is only
- * the LIST, and these pin that it stays inert: it hands the board to its own
- * address and creates nothing on the way. The previous version created a chat
- * on every open, and that is exactly the kind of thing that reads as normal
- * until someone notices the stray conversations.
- */
 
 const BOARD = {
   id: "board-1",
@@ -134,11 +124,6 @@ describe("BoardsRoutePage", () => {
     harness.unmount()
   })
 
-  /**
-   * The whole point: the list hands the board to its own address and does
-   * nothing else. The workspace at that address is what opens the tab, so a
-   * project with no chat is no longer a reason to invent one.
-   */
   test("opening a board navigates to its address and creates nothing", async () => {
     const harness = await mount([])
     await act(async () => {

@@ -13,8 +13,6 @@ import {
 const template = buildWebhookPayloadTemplate()
 
 describe("webhook payload template", () => {
-  // A field the payload type reads but the template never sends arrives
-  // undefined, and the ticket silently loses a section rather than failing.
   test("sends every field the issue renderer reads", () => {
     for (const field of TEMPLATED_FIELDS) expect(template).toContain(field)
   })
@@ -23,14 +21,11 @@ describe("webhook payload template", () => {
     expect(template).toContain(`"event_type": "${PERF_ALERT_EVENT_TYPE}"`)
   })
 
-  // GitHub rejects a client_payload with more than 10 top-level properties.
   test("stays within GitHub's client_payload key limit", () => {
     expect(CLIENT_PAYLOAD_KEYS.length).toBeLessThanOrEqual(10)
     for (const key of CLIENT_PAYLOAD_KEYS) expect(template).toContain(`"${key}":`)
   })
 
-  // Without %q a label containing a quote or backslash breaks the JSON body and
-  // the notification is silently rejected by GitHub.
   test("every interpolated value is JSON-escaped", () => {
     const interpolations = template.match(/\{\{[^}]*\}\}/g) ?? []
     const controlAction = /\{\{\s*(range|if|else|end)\b/
@@ -41,8 +36,6 @@ describe("webhook payload template", () => {
     }
   })
 
-  // The template is JSON once the actions are substituted. Replacing each
-  // action with a literal proves the punctuation around them is well-formed.
   test("renders to parseable JSON once actions are substituted", () => {
     const rendered = template
       .replace(/\{\{ range [^}]*\}\}|\{\{ if \$i \}\},\{\{ end \}\}|\{\{ end \}\}/g, "")
@@ -64,7 +57,6 @@ describe("buildContactPoint", () => {
     expect(contactPoint.settings.headers.Accept).toBe("application/vnd.github+json")
   })
 
-  // Without the resolve notification the ticket never closes itself.
   test("resolved notifications are not suppressed", () => {
     expect(contactPoint.disableResolveMessage).toBe(false)
   })
@@ -77,8 +69,6 @@ describe("mergePerfRoute", () => {
     routes: [{ receiver: "someone-elses-slack", object_matchers: [["team", "=", "infra"]] }],
   }
 
-  // The whole point of grouping: ten breaching installs are one regression and
-  // must produce one ticket that lists them, not ten tickets.
   test("groups by rule and release", () => {
     expect(mergePerfRoute(existing).routes?.[0]?.group_by).toEqual(["alertname", "service_version"])
   })
@@ -89,14 +79,10 @@ describe("mergePerfRoute", () => {
     expect(route?.object_matchers).toEqual([["kanna_alert", "=", "perf"]])
   })
 
-  // Grafana's policy endpoint is a whole-tree PUT on an instance other people
-  // use. Rebuilding the tree instead of merging would delete their routes.
   test("preserves the default receiver and unrelated routes", () => {
     const merged = mergePerfRoute(existing)
     expect(merged.routes).toContainEqual(existing.routes[0])
 
-    // Everything outside `routes` must survive untouched, including tree fields
-    // this module does not declare (mute timings, per-route overrides).
     const { routes: _merged, ...mergedRest } = merged
     const { routes: _existing, ...existingRest } = existing
     expect(mergedRest).toEqual(existingRest)
@@ -112,8 +98,6 @@ describe("mergePerfRoute", () => {
     expect(twice).toEqual(once)
   })
 
-  // Alertmanager matches routes in order; a broad route ahead of this one would
-  // swallow the alert before it ever reached GitHub.
   test("puts the perf route first", () => {
     expect(mergePerfRoute(existing).routes?.[0]?.receiver).toBe(CONTACT_POINT_NAME)
   })

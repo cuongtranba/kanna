@@ -1,4 +1,3 @@
-/** Async iterable queue used in tests to feed events into a session stream. */
 export class AsyncEventQueue<T> implements AsyncIterable<T> {
   private readonly values: T[] = []
   private readonly waiters: Array<{ resolve: (result: IteratorResult<T>) => void; reject: (error: unknown) => void }> = []

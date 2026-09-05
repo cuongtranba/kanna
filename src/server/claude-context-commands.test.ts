@@ -112,10 +112,6 @@ describe("clearChatContext", () => {
     expect(h.session?.suppressSessionTokenPersist).toBe(true)
   })
 
-  // A booting turn owns the session just as much as a registered one — it is
-  // mid-spawn on it — but it has no ActiveTurn yet. Inline cron re-checks
-  // `isChatBusy` and then awaits twice before calling here, so a turn can
-  // start inside that window; closing its session there kills the spawn.
   test("does not close a claude session whose turn is still booting", async () => {
     const h = makeHarness({ session: {}, hasStartingTurn: true })
 

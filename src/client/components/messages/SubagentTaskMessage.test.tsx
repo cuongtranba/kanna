@@ -75,7 +75,6 @@ describe("SubagentTaskMessage — expandable drill-in", () => {
     expect(button?.getAttribute("aria-expanded")).toBe("false")
 
     await act(async () => { button?.dispatchEvent(new MouseEvent("click", { bubbles: true })) })
-    // allow the fetch microtasks to settle
     await act(async () => { await Promise.resolve() })
 
     expect(fetchFn).toHaveBeenCalledTimes(1)

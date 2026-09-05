@@ -8,9 +8,6 @@ import {
 } from "./ws-router-defaults"
 import type { AppSettingsSnapshot, SubagentInput } from "../shared/types"
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function makeSnapshot(): AppSettingsSnapshot {
   return buildInitialAppSettingsSnapshot()
@@ -26,9 +23,6 @@ const BASE_SUBAGENT_INPUT: SubagentInput = {
   contextScope: "full-transcript",
 }
 
-// ---------------------------------------------------------------------------
-// mergeAppSettingsPatch
-// ---------------------------------------------------------------------------
 
 describe("mergeAppSettingsPatch", () => {
   test("subagents.create appends a new subagent with generated id and trims name", () => {
@@ -42,7 +36,7 @@ describe("mergeAppSettingsPatch", () => {
     const s = result.subagents[0]
     expect(s).toBeDefined()
     if (!s) return
-    expect(s.name).toBe("My Bot") // trimmed
+    expect(s.name).toBe("My Bot")
     expect(s.triggerMode).toBe("manual")
     expect(typeof s.id).toBe("string")
     expect(s.id.length).toBeGreaterThan(0)
@@ -83,9 +77,9 @@ describe("mergeAppSettingsPatch", () => {
       editor: { preset: "vscode" },
     })
     expect(result.terminal.scrollbackLines).toBe(2_000)
-    expect(result.terminal.minColumnWidth).toBe(450) // preserved from base
+    expect(result.terminal.minColumnWidth).toBe(450)
     expect(result.editor.preset).toBe("vscode")
-    expect(result.editor.commandTemplate).toBe("cursor {path}") // preserved from base
+    expect(result.editor.commandTemplate).toBe("cursor {path}")
   })
 
   test("providerDefaults.claude modelOptions are deep-merged", () => {
@@ -96,9 +90,7 @@ describe("mergeAppSettingsPatch", () => {
       },
     })
     expect(result.providerDefaults.claude.modelOptions.reasoningEffort).toBe("low")
-    // contextWindow preserved since we included it in the patch
     expect(result.providerDefaults.claude.modelOptions.contextWindow).toBe("200k")
-    // unrelated provider unchanged
     expect(result.providerDefaults.codex.modelOptions.reasoningEffort).toBe("high")
   })
 
@@ -126,13 +118,10 @@ describe("mergeAppSettingsPatch", () => {
     const snapshot = makeSnapshot()
     const result = mergeAppSettingsPatch(snapshot, { analyticsEnabled: false })
     expect(result).not.toBe(snapshot)
-    expect(snapshot.analyticsEnabled).toBe(true) // original unchanged
+    expect(snapshot.analyticsEnabled).toBe(true)
     expect(result.analyticsEnabled).toBe(false)
   })
 
-  // typography is a GROUP (never a bare scalar), so a patch touching an
-  // unrelated field must leave typography untouched, and vice versa -- the
-  // server twin of applyPatch's own merge (app-settings.ts applyPatch site 8).
   test("typography is preserved across an unrelated patch, and mergeable on its own", () => {
     const snapshot = { ...makeSnapshot(), typography: { scale: "lg" as const } }
 
@@ -145,9 +134,6 @@ describe("mergeAppSettingsPatch", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// buildFallbackDiffStore
-// ---------------------------------------------------------------------------
 
 describe("buildFallbackDiffStore", () => {
   test("returns an object with all required DiffStore methods", () => {
@@ -183,9 +169,6 @@ describe("buildFallbackDiffStore", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// buildFallbackLlmProvider
-// ---------------------------------------------------------------------------
 
 describe("buildFallbackLlmProvider", () => {
   test("returns an object with read, write, validate methods", () => {
@@ -233,9 +216,6 @@ describe("buildFallbackLlmProvider", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// buildResolvedAppSettings
-// ---------------------------------------------------------------------------
 
 describe("buildResolvedAppSettings", () => {
   test("getSnapshot returns built-in fallback when no appSettings provided", () => {
@@ -251,7 +231,6 @@ describe("buildResolvedAppSettings", () => {
     expect(resolved.getSnapshot().analyticsEnabled).toBe(true)
     const after = await resolved.writePatch({ analyticsEnabled: false })
     expect(after.analyticsEnabled).toBe(false)
-    // getSnapshot reflects the mutation
     expect(resolved.getSnapshot().analyticsEnabled).toBe(false)
   })
 
@@ -272,7 +251,6 @@ describe("buildResolvedAppSettings", () => {
   test("createSubagent falls back to writePatch when manager lacks createSubagent", async () => {
     const resolved = buildResolvedAppSettings(undefined)
     const result = await resolved.createSubagent({ ...BASE_SUBAGENT_INPUT, name: "FallbackBot" })
-    // Should be the newly created subagent, not a NOT_FOUND error
     if ("code" in result) {
       throw new Error(`Expected subagent but got error: ${result.message}`)
     }

@@ -13,9 +13,7 @@ import { useOptionalKannaSocket } from "./KannaSocketProvider"
 
 interface Props {
   job: CronJobSnapshot
-  /** The ARMING chat — every cron command is addressed to it. */
   chatId: string
-  /** The global page's link into the arming chat; the per-chat panel has none. */
   trailing?: ReactNode
   divider: boolean
 }
@@ -51,9 +49,6 @@ function CronJobRowContent({ job, chatId, trailing, divider }: Props) {
   }, [chatId, job.jobId, send])
 
   const handleEdit = useCallback(() => {
-    // `aria-disabled` leaves the button clickable, so the guard has to be here
-    // as well as on the attribute — the server would refuse the update anyway,
-    // in a chat the user may not be looking at.
     if (hasActiveRun(job)) return
     openEditor()
   }, [job, openEditor])
@@ -67,9 +62,6 @@ function CronJobRowContent({ job, chatId, trailing, divider }: Props) {
 
   const elapsedMs = now - job.armedAt
   const activeRun = job.lastRun?.status === "running" ? job.lastRun : null
-  // The server refuses an update mid-run and reports it as a cron_command_error
-  // in the ARMING chat — which the global page never shows. Disabling here is
-  // what keeps that refusal from being invisible.
   const runInFlight = hasActiveRun(job)
 
   return (
@@ -103,12 +95,6 @@ function CronJobRowContent({ job, chatId, trailing, divider }: Props) {
         </div>
       </div>
       <span className="flex shrink-0 items-center gap-1">
-        {/* `aria-disabled` rather than `disabled`: a disabled button emits no
-            pointer events, so the tooltip explaining WHY it is unavailable
-            would never open on the one state that needs explaining. The reason
-            also rides the accessible name, because Radix mounts the tooltip
-            content only while open — a screen reader would otherwise be told
-            the control is unavailable and never told why. */}
         <HoverHint label={runInFlight ? EDIT_BLOCKED_REASON : "Edit cron job"} side="top">
           <button
             type="button"
@@ -151,8 +137,6 @@ function CronJobRowContent({ job, chatId, trailing, divider }: Props) {
           <X className="h-3.5 w-3.5" aria-hidden="true" />
         </button>
       </span>
-      {/* Mounted only while open, and keyed by the job's arming, so the form
-          always initializes from the current job without an effect. */}
       {editing ? (
         <CronJobEditDialog
           key={`${job.jobId} ${String(job.armedAt)}`}
@@ -166,21 +150,6 @@ function CronJobRowContent({ job, chatId, trailing, divider }: Props) {
   )
 }
 
-/**
- * One armed cron job: schedule (humanized), run mode, next-fire countdown, last
- * run status, and the pause / resume / edit / remove controls.
- *
- * Rendered by BOTH cron surfaces — the global `/cron` page and the per-chat
- * footer panel — which were previously two hand-maintained copies of the same
- * markup. The row owns its own socket rather than taking callbacks, so a new
- * control costs nothing at either call site; `BackgroundTasksSection` sets the
- * same precedent.
- *
- * Display model: schedule lifecycle (paused/active) takes precedence over run
- * execution status. A paused job shows the Paused pill as its primary
- * indicator; any last-run status is rendered as a clearly-labeled secondary so
- * it cannot override the schedule state.
- */
 export function CronJobRow(props: Props) {
   return (
     <CronJobRowStore.Provider init={undefined}>

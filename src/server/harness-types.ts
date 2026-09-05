@@ -22,21 +22,11 @@ export interface ClaudeSessionHandle {
   stream: AsyncIterable<HarnessEvent>
   getAccountInfo?: () => Promise<AccountInfo | null>
   interrupt: () => Promise<void>
-  /**
-   * Trigger shutdown (non-blocking). The process will exit asynchronously.
-   * Callers that need to wait for the exit should await `closed`.
-   */
   close: () => void
-  /**
-   * Resolves when the underlying claude process has fully exited and all
-   * cleanup is done. Awaiting this during shutdown ensures the SessionEnd
-   * hook fires before the Kanna process exits.
-   */
   closed: Promise<void>
   sendPrompt: (content: string) => Promise<void>
   setModel: (model: string) => Promise<void>
   setPermissionMode: (planMode: boolean) => Promise<void>
   getSupportedCommands: () => Promise<SlashCommand[]>
-  /** Present only for keep-alive channel-delivery sessions; drives turn 2+. */
   pushChannelPrompt?: (text: string) => Promise<void>
 }

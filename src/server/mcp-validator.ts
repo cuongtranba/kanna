@@ -10,7 +10,6 @@ const DEFAULT_TIMEOUT_MS = 10_000
 
 export interface ValidateMcpOptions {
   timeoutMs?: number
-  /** Optional pre-resolved bearer token to inject for oauth servers. */
   bearer?: string
 }
 
@@ -61,7 +60,6 @@ export async function validateMcpServer(
       try {
         await client.close()
       } catch {
-        // ignore cleanup errors
       }
     }
   }
@@ -108,7 +106,6 @@ function formatError(
       return `command not found: ${config.command}`
     }
   } else {
-    // Check for SDK-typed HTTP error (StreamableHTTPError carries numeric code)
     if (err instanceof StreamableHTTPError) {
       const code = err.code
       if (code === 401 || code === 403) return "unauthorized (check headers/env)"
@@ -116,12 +113,10 @@ function formatError(
       try {
         host = new URL(config.url).host
       } catch {
-        // ignore URL parse error
       }
       return `HTTP ${code} from ${host}`
     }
 
-    // Fallback: scan for a 3-digit HTTP status code in the error message
     const m = raw.match(/\b(\d{3})\b/)
     if (m) {
       const status = Number(m[1])
@@ -130,7 +125,6 @@ function formatError(
       try {
         host = new URL(config.url).host
       } catch {
-        // ignore URL parse error
       }
       return `HTTP ${status} from ${host}`
     }

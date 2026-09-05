@@ -1,17 +1,3 @@
-/**
- * Read-model and change notification for boards.
- *
- * Every board mutation in Kanna goes through this facade rather than through
- * {@link BoardStore} directly, and every mutation here runs inside
- * {@link mutate}, which notifies subscribers after the write commits. That is
- * structural, not a convention: a write that forgets to broadcast leaves the
- * UI showing stale columns until the next reload, and it is invisible in
- * review. `board-registry.test.ts` enumerates the mutating surface and asserts
- * each one emits.
- *
- * No IO of its own — the store is injected, so this module stays inside the
- * side-effect seal.
- */
 
 import type {
   Board,
@@ -59,10 +45,8 @@ import {
   type UpsertBindingInput,
 } from "./board-store"
 
-/** How many cards each column ships in the initial board snapshot. */
 export const DEFAULT_BOARD_PAGE_SIZE = 30
 
-/** Conflicts are a review queue, not a log; the newest are the actionable ones. */
 const MAX_CONFLICTS = 100
 
 export type { BoardSummary, BoardViewSnapshot, CardDetail }
@@ -73,17 +57,9 @@ export interface BoardChange {
 }
 
 export interface BindSyncInput extends UpsertBindingInput {
-  /**
-   * The board this repo is being taken FROM, when another board holds it.
-   *
-   * Required only for a move, and checked against the live owner rather than
-   * trusted — so a screen whose view of the world went stale is refused instead
-   * of silently detaching a board the user never saw.
-   */
   detachFromBoardId?: string | null
 }
 
-/** `owner/repo` for a refusal a human has to act on. */
 function sourceLabel(ref: RemoteSourceRef): string {
   return ref.provider === "github-issues"
     ? `${ref.owner}/${ref.repo}`
@@ -91,7 +67,6 @@ function sourceLabel(ref: RemoteSourceRef): string {
 }
 
 export interface BoardRegistry {
-  // Reads
   listBoards(owner: BoardOwnerRef): BoardSummary[]
   getBoard(boardId: string): Board | null
   listColumns(boardId: string): BoardColumn[]
@@ -102,7 +77,6 @@ export interface BoardRegistry {
   getTemplate(templateId: string): BoardTemplate | null
   findCardsByLink(kind: CardLinkKind, targetId: string): Card[]
 
-  // Writes — each notifies subscribers
   createBoard(input: CreateBoardInput): Board
   updateBoard(boardId: string, patch: UpdateBoardPatch): Board
   archiveBoard(boardId: string): void
@@ -119,51 +93,17 @@ export interface BoardRegistry {
   addComment(cardId: string, author: CardActor, body: string): CardComment
   createTemplate(input: CreateTemplateInput): BoardTemplate
   deleteTemplate(templateId: string): void
-  /**
-   * Copy a board's STRUCTURE — columns and card schema — into a new board.
-   *
-   * Deliberately not its cards: a board mirroring a 300-issue tracker would
-   * silently clone 300 rows, and the UI labels this "Duplicate structure" so
-   * the two can never disagree.
-   */
-  // Sync
   listBindings(boardId: string): SyncBinding[]
-  /**
-   * The board already holding this repo, if it is not `excludingBoardId`.
-   *
-   * Read-only, and the connect screen's whole basis for asking before moving:
-   * a repo binds to exactly one board, so a second board wanting it is a MOVE.
-   */
   repoBindingOwner(
     providerId: ProviderId,
     sourceRef: RemoteSourceRef,
     excludingBoardId: string,
   ): RepoBoardOwner | null
-  /**
-   * Connect a board to a tracker. Broadcasts: the board's sync state is visible on it.
-   *
-   * A repo binds to exactly ONE board. `sync_link_external_idx` is unique per
-   * `(binding_id, external_id)` — per BINDING, not per issue — so two bindings
-   * on the same repo each hold every issue as a SEPARATE card, with two sync
-   * links and two outbox entries, and the two boards then race each other
-   * last-writer-wins onto the real tracker. Binding a repo another board holds
-   * is therefore refused unless `detachFromBoardId` names that board, which
-   * makes the move explicit and auditable rather than an accident of clicking
-   * Connect twice.
-   */
   bindSync(input: BindSyncInput): SyncBinding
-  /**
-   * Disconnect one repo. The cards it created stay; only the link is cut.
-   *
-   * Takes the board id as well as the binding id and refuses a binding that
-   * belongs to another board — the same discipline the MCP board tools use, so
-   * a guessed id cannot reach across boards.
-   */
   unbindSync(boardId: string, bindingId: string): void
   listConflicts(boardId: string): SyncConflict[]
 
   duplicateBoard(boardId: string, title: string): Board
-  /** Turn a board's columns + card schema into a reusable template. */
   saveBoardAsTemplate(boardId: string, name: string, description?: string | null): BoardTemplate
 
   subscribe(cb: (change: BoardChange) => void): () => void
@@ -188,20 +128,13 @@ export function createBoardRegistry(options: CreateBoardRegistryOptions): BoardR
 
   function notify(boardId: string, owner: BoardOwnerRef): void {
     for (const subscriber of subscribers) {
-      // One bad subscriber must not abort the rest of the fan-out, nor the
-      // write that triggered it — the write has already committed.
       try {
         subscriber({ boardId, owner })
       } catch {
-        // Subscriber failures are its own problem.
       }
     }
   }
 
-  /**
-   * Run a write and broadcast it. `resolveBoardId` runs BEFORE the write when
-   * the board id is only derivable from a row the write is about to remove.
-   */
   function mutate<T>(resolveBoardId: () => string, write: () => T): T {
     const boardId = resolveBoardId()
     const owner = ownerOf(boardId)
@@ -216,7 +149,6 @@ export function createBoardRegistry(options: CreateBoardRegistryOptions): BoardR
     return column.boardId
   }
 
-  /** A board's reusable shape: its columns and its card schema. */
   function definitionOf(board: Board): BoardTemplateDefinition {
     return {
       columns: store.listColumns(board.id).map((column) => ({
@@ -226,7 +158,6 @@ export function createBoardRegistry(options: CreateBoardRegistryOptions): BoardR
         wipLimit: column.wipLimit,
       })),
       cardFields: board.cardFields,
-      // Sync mappings belong to a binding, not to the shape being copied.
       mappingDefaults: [],
     }
   }
@@ -237,22 +168,6 @@ export function createBoardRegistry(options: CreateBoardRegistryOptions): BoardR
     return card.boardId
   }
 
-  /**
-   * Refuse a dependency edge that could not be diagnosed once stored
-   * (adr-20260904-cross-project-orchestration, D2).
-   *
-   * This sits in the generic `addCardLink` rather than in a method of its own
-   * because every production write to a card link already comes through this
-   * registry — start-work, worktree cleanup, the agent coordinator — and none
-   * reaches {@link BoardStore} directly. Validating the one arm means no
-   * caller, present or future, can author a `blocked_by` edge that skipped the
-   * check.
-   *
-   * Cross-board is refused for the same reason a cycle is: the start-work gate
-   * resolves blockers through the card's OWN board, so an edge pointing off it
-   * would read as permanently unmet and wedge the card with nothing on screen
-   * to explain why.
-   */
   function requireAcyclicBlocker(cardId: string, blockerId: string): void {
     const card = store.getCard(cardId)
     if (!card) throw new BoardStoreError("not_found", `card ${cardId} does not exist`)
@@ -301,8 +216,6 @@ export function createBoardRegistry(options: CreateBoardRegistryOptions): BoardR
         cursors[column.id] = page.nextCursor
         for (const card of page.cards) shipped.add(card.id)
       }
-      // Scoped to the page, not the board: a 5000-card board ships one page and
-      // must not pay for the links of the 4970 cards it left behind.
       const chatLinksByCard: Record<string, string[]> = {}
       for (const link of store.listCardLinksForBoard(boardId, "chat")) {
         if (!shipped.has(link.cardId)) continue
@@ -405,10 +318,6 @@ export function createBoardRegistry(options: CreateBoardRegistryOptions): BoardR
             .filter((existing) => existing.boardId !== binding.boardId)
 
           if (foreign.length > 0) {
-            // Naming the board is what makes this a move the user chose rather
-            // than one they discovered afterwards, and re-checking it here
-            // closes the window between the screen reading the owner and the
-            // user confirming.
             const holder = foreign[0]
             if (!detachFromBoardId || !foreign.some((b) => b.boardId === detachFromBoardId)) {
               throw new BoardStoreError(
@@ -417,9 +326,6 @@ export function createBoardRegistry(options: CreateBoardRegistryOptions): BoardR
                   "connecting it here detaches it from that board — pass detachFromBoardId to confirm",
               )
             }
-            // Deleting the binding cascades its sync links and outbox; the
-            // other board's CARDS stay, because unbinding is not deleting the
-            // work (see unbindSync).
             for (const stale of foreign) store.deleteBinding(stale.id)
           }
 

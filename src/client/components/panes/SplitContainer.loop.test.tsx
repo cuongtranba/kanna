@@ -15,9 +15,6 @@ const nested: PaneLayout = {
 }
 
 describe("SplitContainer render loop", () => {
-  // The container wires a resize callback per group and a focus handler per
-  // pane; an unstable identity there would re-run the library's layout effect
-  // every render (React #185).
   test("mounts a nested tree without a render loop", async () => {
     const { loopWarnings, thrown, cleanup } = await renderForLoopCheck(
       <SplitContainer

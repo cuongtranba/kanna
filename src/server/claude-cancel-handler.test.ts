@@ -1,9 +1,3 @@
-/**
- * Tests for the extracted cancelChat standalone function.
- *
- * Each test builds a minimal `CancelHandlerDeps` fake and asserts the
- * correct behaviour without any real IO or OS calls.
- */
 
 import { describe, test, expect, beforeEach } from "bun:test"
 import { cancelChat, type CancelHandlerDeps } from "./claude-cancel-handler"
@@ -13,11 +7,7 @@ import { PendingToolSlots, type ParkedTool } from "./pending-tool-slot"
 import type { HarnessTurn, ClaudeSessionHandle } from "./harness-types"
 import type { TranscriptEntry } from "../shared/types"
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
-/** Minimal HarnessTurn (used for ActiveTurn.turn). */
 function makeFakeTurn(overrides: Partial<HarnessTurn> = {}): HarnessTurn {
   return {
     provider: "claude",
@@ -28,7 +18,6 @@ function makeFakeTurn(overrides: Partial<HarnessTurn> = {}): HarnessTurn {
   }
 }
 
-/** Minimal ClaudeSessionHandle (used for ClaudeSessionState.session). */
 function makeFakeHandle(): ClaudeSessionHandle {
   return {
     provider: "claude",
@@ -154,9 +143,6 @@ function makeDeps(overrides: DepOverrides = {}): CancelHandlerDeps {
   }
 }
 
-// ---------------------------------------------------------------------------
-// No active turn
-// ---------------------------------------------------------------------------
 
 describe("no active turn", () => {
   test("resolvers are rejected and orchestrator signalled even with no active turn", async () => {
@@ -186,13 +172,6 @@ describe("no active turn", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// No active turn — cancel during the provider-boot window
-//
-// Regression: startTurnForChat registers the ActiveTurn only AFTER the provider
-// session spawns, so Stop pressed during that window used to hit `if (!active)
-// return` and no-op silently — the user had to press Stop a second time.
-// ---------------------------------------------------------------------------
 
 describe("starting turn cancel (provider-boot window)", () => {
   test("marks the starting turn cancelled so the booting turn tears itself down", async () => {
@@ -271,9 +250,6 @@ describe("starting turn cancel (provider-boot window)", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// No active turn — self-wake turn interrupt
-// ---------------------------------------------------------------------------
 
 describe("self-wake turn cancel", () => {
   test("interrupts the session stream, appends interrupted, clears the flag", async () => {
@@ -338,9 +314,6 @@ describe("self-wake turn cancel", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// Active turn — concurrent cancel guard
-// ---------------------------------------------------------------------------
 
 describe("concurrent cancel guard", () => {
   test("second call is no-op when cancelRequested is already true", async () => {
@@ -349,14 +322,10 @@ describe("concurrent cancel guard", () => {
     const activeTurns = new Map([["chat-1", active]])
     const deps = makeDeps({ activeTurns, appendedMessages })
     await cancelChat(deps, "chat-1")
-    // No messages should be appended because the guard returns early
     expect(appendedMessages.length).toBe(0)
   })
 })
 
-// ---------------------------------------------------------------------------
-// Active turn — transcript entries
-// ---------------------------------------------------------------------------
 
 describe("transcript entries", () => {
   let appendedMessages: TranscriptEntry[]
@@ -409,9 +378,6 @@ describe("transcript entries", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// Active turn — pending tool handling
-// ---------------------------------------------------------------------------
 
 describe("pending tool", () => {
   function parkPendingTool(
@@ -446,11 +412,6 @@ describe("pending tool", () => {
     expect(pendingTools.has("chat-1")).toBe(false)
   })
 
-  // The settle is provider- and toolKind-agnostic: dropping the resolve left
-  // the SDK worker blocked inside canUseTool while the ActiveTurn was
-  // deleted, so respondTool threw "No pending tool request" and Stop could
-  // never recover the chat. Resolving (never rejecting — a rejection throws
-  // inside the SDK worker) is the only in-band way out.
   test.each([
     ["claude", "ask_user_question"],
     ["claude", "exit_plan_mode"],
@@ -473,11 +434,6 @@ describe("pending tool", () => {
   )
 
   test("settles a request parked with NO active turn (SDK self-wake) on the FIRST Stop", async () => {
-    // Regression for session 04fb43c9: a question parked during a
-    // background-task self-wake has no ActiveTurn. One Stop must settle the
-    // continuation, append the discarded tool_result, AND clear the
-    // self-wake flag — previously the first press only handled the turn
-    // branch and a second press was needed for the flag.
     let resolved: unknown = undefined
     const appendedMessages: TranscriptEntry[] = []
     const pendingTools = new PendingToolSlots()
@@ -499,9 +455,6 @@ describe("pending tool", () => {
   })
 
   test("appends the discarded tool_result BEFORE resolving", async () => {
-    // Share one array so append/resolve interleaving is observable: the
-    // transcript must already carry the discarded marker by the time the SDK
-    // worker is released, otherwise the UI can render an unanswered card.
     const appendedMessages: TranscriptEntry[] = []
     let appendedWhenResolved = -1
     const pendingTools = new PendingToolSlots()
@@ -515,14 +468,10 @@ describe("pending tool", () => {
 
     const appendIdx = appendedMessages.findIndex((m) => m.kind === "tool_result")
     expect(appendIdx).toBeGreaterThanOrEqual(0)
-    // The tool_result was already in the transcript when the worker resumed.
     expect(appendedWhenResolved).toBeGreaterThan(appendIdx)
   })
 })
 
-// ---------------------------------------------------------------------------
-// Claude session prompt-seq drain
-// ---------------------------------------------------------------------------
 
 describe("claude session prompt-seq drain", () => {
   test("removes claudePromptSeq from pendingPromptSeqs", async () => {
@@ -554,7 +503,6 @@ describe("claude session prompt-seq drain", () => {
     const activeTurns = new Map([["chat-1", active]])
     const deps = makeDeps({ activeTurns, claudeSessions })
     await cancelChat(deps, "chat-1")
-    // codex provider → seq drain branch not entered
     expect(session.pendingPromptSeqs).toContain(9)
     expect(session.cancelledResultPending).toBe(0)
   })
@@ -566,15 +514,11 @@ describe("claude session prompt-seq drain", () => {
     const activeTurns = new Map([["chat-1", active]])
     const deps = makeDeps({ activeTurns, claudeSessions })
     await cancelChat(deps, "chat-1")
-    // seq 99 not in list — splice is a no-op, but cancelledResultPending still increments
     expect(session.pendingPromptSeqs).toEqual([1, 3])
     expect(session.cancelledResultPending).toBe(1)
   })
 })
 
-// ---------------------------------------------------------------------------
-// State change event
-// ---------------------------------------------------------------------------
 
 describe("state change", () => {
   test("emitStateChange is called after removing activeTurn", async () => {
@@ -587,9 +531,6 @@ describe("state change", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// Interrupt and PTY session cleanup
-// ---------------------------------------------------------------------------
 
 describe("interrupt and close", () => {
   test("calls interrupt() and close() on the active turn", async () => {
@@ -614,7 +555,6 @@ describe("interrupt and close", () => {
     const active = makeActiveTurn({ turn })
     const activeTurns = new Map([["chat-1", active]])
     const deps = makeDeps({ activeTurns })
-    // Should not throw
     await expect(cancelChat(deps, "chat-1")).resolves.toBeUndefined()
   })
 
@@ -652,14 +592,6 @@ describe("interrupt and close", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// Queued messages
-//
-// Stop means stop: cancelling must never hand the chat straight to the next
-// queued message. It used to, so with anything queued the chat went back to
-// "running" in the same tick and Stop needed a second press. Queued messages
-// stay parked and keep their "Send now" / "Remove" actions in the transcript.
-// ---------------------------------------------------------------------------
 
 describe("queued messages", () => {
   test("cancelling an active turn does not start the next queued message", async () => {
@@ -669,17 +601,10 @@ describe("queued messages", () => {
 
     await cancelChat(deps, "chat-1")
 
-    // The dep is gone entirely — the cancel path has no way to start a turn.
     expect("maybeStartNextQueuedMessage" in deps).toBe(false)
   })
 })
 
-// ---------------------------------------------------------------------------
-// backgroundTaskWakeSuppressed — Stop marks the session so task-notification
-// self-wakes from pre-Stop background tasks cannot re-enter the model.
-// Issue #819: Stop pressed while background tasks were pending; the tasks
-// later completed and triggered a self-wake that merged a PR unattended.
-// ---------------------------------------------------------------------------
 
 describe("backgroundTaskWakeSuppressed", () => {
   test("cancelling an active turn with pending background tasks sets the flag", async () => {

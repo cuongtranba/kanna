@@ -4,12 +4,7 @@ import { persist } from "zustand/middleware"
 interface DiffCommitState {
   checkedPathsByProjectId: Record<string, Record<string, boolean>>
   reconcileProject: (projectId: string, paths: string[]) => void
-  /** Flip one path; the previous value is read inside the store (unknown = checked). */
   toggleChecked: (projectId: string, path: string) => void
-  /**
-   * Flip the whole set. Mirrors the tri-state header checkbox: anything less
-   * than fully-selected selects all, fully-selected clears all.
-   */
   toggleAllChecked: (projectId: string, paths: string[]) => void
 }
 

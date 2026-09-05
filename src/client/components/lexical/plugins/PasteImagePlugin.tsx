@@ -11,12 +11,10 @@ import { uploadFile } from "../../../lib/uploadFile.adapter"
 import { $createAttachmentNode } from "../nodes"
 import type { ChatAttachment } from "../../../../shared/types"
 
-// ─── Constants (mirrors ChatInput) ──────────────────────────────────────────
 
 export const MAX_FILES_PER_PASTE = 50
 export const MAX_CONCURRENT_UPLOADS = 3
 
-// ─── Clipboard helpers (ported from ChatInput.tsx) ────────────────────────────
 
 const CLIPBOARD_EXTENSION_BY_MIME_TYPE: Record<string, string> = {
   "image/gif": "gif",
@@ -71,14 +69,9 @@ export function hasClipboardTextPayload(clipboardData: DataTransfer | null | und
   return clipboardData.types.includes("text/plain") || clipboardData.types.includes("text/html")
 }
 
-// ─── Upload helpers ────────────────────────────────────────────────────────────
 
 export type UploadFileFn = typeof uploadFile
 
-/**
- * Uploads a batch of Files and inserts an AttachmentNode for each one.
- * Respects MAX_CONCURRENT_UPLOADS concurrency. Exported for testing.
- */
 export async function uploadAndInsertFiles(
   files: File[],
   editor: LexicalEditor,
@@ -88,7 +81,6 @@ export async function uploadAndInsertFiles(
 ): Promise<void> {
   if (files.length === 0 || files.length > MAX_FILES_PER_PASTE) return
 
-  // Process with concurrency limit
   let index = 0
 
   async function processNext(): Promise<void> {
@@ -100,7 +92,6 @@ export async function uploadAndInsertFiles(
         projectId,
         file,
         onProgress: () => {
-          // progress not tracked in the lexical plugin (no per-file progress UI here)
         },
       })
       const { attachments } = await handle.promise
@@ -120,7 +111,6 @@ export async function uploadAndInsertFiles(
     await processNext()
   }
 
-  // Spin up up to MAX_CONCURRENT_UPLOADS concurrent chains
   const chains: Promise<void>[] = []
   for (let i = 0; i < Math.min(MAX_CONCURRENT_UPLOADS, files.length); i++) {
     chains.push(processNext())
@@ -128,16 +118,13 @@ export async function uploadAndInsertFiles(
   await Promise.all(chains)
 }
 
-// ─── Props ────────────────────────────────────────────────────────────────────
 
 export interface PasteImagePluginProps {
   projectId: string | null
   onUploadError?: (msg: string) => void
-  /** Injectable for testing. Defaults to the real uploadFile. */
   uploadFileFn?: UploadFileFn
 }
 
-// ─── Plugin ───────────────────────────────────────────────────────────────────
 
 export function PasteImagePlugin({
   projectId,
@@ -150,26 +137,18 @@ export function PasteImagePlugin({
     return editor.registerCommand<PasteCommandType>(
       PASTE_COMMAND,
       (payload) => {
-        // Only handle ClipboardEvents (keyboard paste / context-menu paste).
-        // InputEvent and KeyboardEvent variants don't carry clipboard data.
         if (!(payload instanceof ClipboardEvent)) return false
 
         const clipboardData = payload.clipboardData
         const files = getClipboardImageFiles(clipboardData?.items ?? [], Date.now())
         if (files.length === 0) return false
 
-        // If there is also text content, let Lexical handle the text paste
-        // normally — only intercept file extraction, don't stop propagation.
         const hasText = hasClipboardTextPayload(clipboardData)
 
         if (projectId) {
-          // Fire-and-forget: we don't block the editor on upload
           void uploadAndInsertFiles(files, editor, projectId, uploadFileFn, onUploadError)
         }
 
-        // Return true (handled) only when there is NO text, so Lexical doesn't
-        // also try to paste the clipboard text. When text IS present we return
-        // false and let the default text paste proceed.
         return !hasText
       },
       COMMAND_PRIORITY_HIGH,

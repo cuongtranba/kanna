@@ -31,7 +31,6 @@ describe("runSandboxPreflight (cross-platform)", () => {
 
   test("linux: ok when sentinel denied via bwrap tmpfs", async () => {
     if (process.platform !== "linux") return
-    // Requires bwrap installed on the test machine.
     const home = await mkdtemp(path.join(tmpdir(), "kanna-sb-pf-lin-"))
     const runtimeDir = await mkdtemp(path.join(tmpdir(), "kanna-sb-pf-runtime-"))
     try {

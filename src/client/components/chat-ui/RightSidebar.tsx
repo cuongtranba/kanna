@@ -56,11 +56,6 @@ import {
 
 export { canIgnoreDiffFile, canIgnoreDiffFolder, shouldLoadDiffPatchNow }
 
-/**
- * What every git action handed to this sidebar settles to. `null` is the
- * host's "no active chat / the call threw and was already surfaced" answer;
- * the sidebar only ever reads `ok` off it.
- */
 type BranchActionResult = BranchActionSuccess | BranchActionFailure
 type DiffRenderMode = "unified" | "split"
 type DiffFile = ChatDiffSnapshot["files"][number]
@@ -281,7 +276,6 @@ function GitHubPublishModal({
   const setOwner = useRightSidebarUiStore((store) => store.setPublishOwner)
   const setName = useRightSidebarUiStore((store) => store.setPublishName)
   const setVisibility = useRightSidebarUiStore((store) => store.setPublishVisibility)
-  // TS type predicate narrowing string -> RepoVisibility: a boundary concern.
   const handleVisibilityChange = useCallback((value: string) => {
     if (isRepoVisibility(value)) setVisibility(value)
   }, [setVisibility])
@@ -899,7 +893,6 @@ function BranchSwitcher({
   const setIsMutating = useRightSidebarUiStore((store) => store.setBranchSwitcherIsMutating)
   const setQuery = useRightSidebarUiStore((store) => store.setBranchSwitcherQuery)
   const setEntryView = useRightSidebarUiStore((store) => store.setBranchSwitcherEntryView)
-  // TS type predicate narrowing string -> EntryView: a boundary concern.
   const handleEntryViewChange = useCallback((value: string) => {
     if (isEntryView(value)) setEntryView(value)
   }, [setEntryView])
@@ -1473,9 +1466,6 @@ function RightSidebarImpl({
   const clearPatchError = useRightSidebarUiStore((store) => store.clearPatchError)
   const setPatchResult = useRightSidebarUiStore((store) => store.setPatchResult)
   const setPatchError = useRightSidebarUiStore((store) => store.setPatchError)
-  // Holds the diff file list's own scrollable node (LegendList is the
-  // scroller). Passed to each card as the IntersectionObserver root for its
-  // sticky header. Populated from `filesListRef` after the list mounts.
   const scrollContainerRef = useRef<HTMLElement | null>(null)
   const filesListRef = useRef<LegendListRef | null>(null)
   const patchDigestsByPathRef = useRef<Record<string, string>>({})
@@ -1497,8 +1487,6 @@ function RightSidebarImpl({
   const reconcileCheckedPaths = useDiffCommitStore((store) => store.reconcileProject)
   const toggleCheckedPath = useDiffCommitStore((store) => store.toggleChecked)
   const toggleAllCheckedPaths = useDiffCommitStore((store) => store.toggleAllChecked)
-  // These wrap the projectId guard (projectId is a prop, so it stays here).
-  // The state transitions themselves live in the stores.
   const handleToggleCollapsed = useCallback((path: string) => {
     if (!projectId) return
     toggleCollapsedPath(projectId, path)
@@ -1726,8 +1714,6 @@ function RightSidebarImpl({
     ],
   )
 
-  // LegendList owns its scroll node; mirror it into scrollContainerRef so each
-  // card's sticky-header IntersectionObserver has the right root.
   useEffect(() => {
     const node = filesListRef.current?.getScrollableNode?.()
     scrollContainerRef.current = node instanceof HTMLElement ? node : null

@@ -400,7 +400,6 @@ describe("importClaudeSessions", () => {
       expect(chats.length).toBe(1)
       expect(store.getMessages(chats[0].id).length).toBe(2)
 
-      // append a new turn
       const line3 = JSON.stringify({
         type: "user", uuid: "u2", sessionId: "sess-grow", cwd: ctx.realProj,
         timestamp: "2026-04-20T10:00:02.000Z",

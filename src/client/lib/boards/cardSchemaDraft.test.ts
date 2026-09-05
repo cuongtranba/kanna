@@ -59,10 +59,6 @@ describe("mintFieldId", () => {
   })
 })
 
-/**
- * The invariant the whole editor rests on. `CardContent` is keyed by field id,
- * so an id that moves takes every card's value for that field with it.
- */
 describe("a field id is immutable once created", () => {
   test("renaming changes the label and nothing else", () => {
     const renamed = renameField(FIELDS, "description", "Summary")

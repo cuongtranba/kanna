@@ -6,10 +6,6 @@ import type { AutoContinueEvent } from "./auto-continue/events"
 import { AsyncEventQueue } from "./test-helpers/async-event-queue"
 import { waitFor } from "./test-helpers/wait-for"
 
-// Multi-chat fake store keyed by chatId. The companion fixture in
-// agent.oauth-rotation.test.ts hard-codes chat-1; this version supports any
-// number of chats so we can exercise the cap-sharing path
-// (adr-20260522-oauth-token-share-cap).
 function createMultiChatStore(chatIds: string[]) {
   const chats = new Map<string, {
     id: string
@@ -159,7 +155,6 @@ function createMultiChatStore(chatIds: string[]) {
       this.queuedMessages = this.queuedMessages.filter((m) => m.id !== id)
     },
     *runningSubagentRuns() {
-      // Empty — no subagent runs in this fixture.
     },
   }
 }
@@ -193,11 +188,6 @@ describe("AgentCoordinator OAuth share-cap smoke (adr-20260522-oauth-token-share
   test(
     "cap=2 on one token: two chats turn concurrently; force 429; both rotate; respawns staggered",
     async () => {
-      // Pool: ONE shared token "a" with cap=2 (both chats land here at pick
-      // time) plus a rotation target "b" that is initially disabled so the
-      // pool's spread-load tiebreaker does not send chat-2 to b. We enable
-      // b inside the first chat's sendPrompt — right before throwing 429 —
-      // so the rotation pickActive that follows finds it as a target.
       let tokens: OAuthTokenEntry[] = [
         makeToken("a", { maxConcurrent: 2 }),
         makeToken("b", { status: "disabled", maxConcurrent: 2 }),
@@ -211,9 +201,7 @@ describe("AgentCoordinator OAuth share-cap smoke (adr-20260522-oauth-token-share
         },
       )
 
-      // Spawn telemetry: which token id was handed to which chat, and when.
       const spawns: Array<{ chatId: string; tokenId: string | null; at: number }> = []
-      // Per-chat event queues so each chat has its own stream.
       const eventQueues = new Map<string, AsyncEventQueue<never>>()
 
       const store = createMultiChatStore(["chat-1", "chat-2"])
@@ -238,24 +226,17 @@ describe("AgentCoordinator OAuth share-cap smoke (adr-20260522-oauth-token-share
             getSupportedCommands: async () => [],
             sendPrompt: async () => {
               if (tokenId === "a") {
-                // Enable rotation target right before throwing so the
-                // rotation pickActive that follows finds "b" active.
-                // Idempotent across both chats.
                 tokens = tokens.map((t) => (
                   t.id === "b" ? { ...t, status: "active", maxConcurrent: 2 } : t
                 ))
                 events.throw(makeRateLimitError())
               }
-              // Subsequent spawns (on "b" after rotation) — silent: do not
-              // throw, do not emit a result. Test asserts only the rotation
-              // bookkeeping, not the second turn.
             },
           }
         },
         oauthPool: pool,
       })
 
-      // Fire two chats concurrently. With cap=2 on "a" both should land on "a".
       await Promise.all([
         coordinator.send({
           type: "chat.send",
@@ -273,7 +254,6 @@ describe("AgentCoordinator OAuth share-cap smoke (adr-20260522-oauth-token-share
         }),
       ])
 
-      // Wait for both rotations to land.
       await waitFor(
         () =>
           store.getAutoContinueEvents("chat-1").some((e) => e.kind === "auto_continue_accepted")
@@ -282,19 +262,14 @@ describe("AgentCoordinator OAuth share-cap smoke (adr-20260522-oauth-token-share
         "both chats received auto_continue_accepted rotation events",
       )
 
-      // ── Assertion 1: both chats initially spawned on the shared token "a".
       const initialSpawns = spawns.filter((s) => s.tokenId === "a")
       expect(initialSpawns.map((s) => s.chatId).sort()).toEqual(["chat-1", "chat-2"])
 
-      // ── Assertion 2: dedupe — exactly one writeStatus marked "a" as limited,
-      // even though two chats independently detected the 429.
       const limitedCalls = writeStatusCalls.filter(
         (c) => c.id === "a" && c.patch.status === "limited",
       )
       expect(limitedCalls).toHaveLength(1)
 
-      // ── Assertion 3: both chats received a token_rotation auto-continue
-      // event (every shared owner rotates, none drops on the floor).
       for (const chatId of ["chat-1", "chat-2"]) {
         const accepted = store.getAutoContinueEvents(chatId).filter(
           (e) => e.kind === "auto_continue_accepted",
@@ -305,12 +280,6 @@ describe("AgentCoordinator OAuth share-cap smoke (adr-20260522-oauth-token-share
         expect(ev.source).toBe("token_rotation")
       }
 
-      // ── Assertion 4: respawns are staggered — the two rotation events'
-      // scheduledAt timestamps must differ by at least
-      // TOKEN_ROTATION_HERD_STAGGER_MS (250) so the second cold-boot lands
-      // after the first instead of stampeding. The dedupe slot in
-      // acquireRotationSlot() applies extra delay only to the SECOND+ caller
-      // per token within the 5s window, so the gap is exactly one stagger.
       const scheduledAts = store.autoContinueEvents
         .filter((e) => e.kind === "auto_continue_accepted")
         .map((e) => (e as { scheduledAt: number }).scheduledAt)

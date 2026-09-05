@@ -140,8 +140,6 @@ describe("EventStore", () => {
   })
 
   test("getLatestContextWindowUsage reads the tail and agrees with a full scan", async () => {
-    // The only case exercising the real FsStorageBackend slice APIs end to end —
-    // every other test of this read runs against fakes.
     const dataDir = await createTempDataDir()
     const store = new EventStore(dataDir)
     await store.initialize()
@@ -159,9 +157,6 @@ describe("EventStore", () => {
     } as TranscriptEntry)
     await store.flush()
 
-    // Cold stores: a warm cache would answer from memory and prove nothing
-    // about the tail read. Each gets its own instance so the full-scan
-    // comparison cannot be served by the cache the tail read populated.
     const tailStore = new EventStore(dataDir)
     await tailStore.initialize()
     const fullStore = new EventStore(dataDir)
@@ -211,7 +206,6 @@ describe("EventStore", () => {
     const project = await store.openProject("/tmp/project")
     const chat = await store.createChat(project.id)
 
-    // Latest real turn, then a flood of readout updates larger than the window.
     await store.appendMessage(chat.id, entry("user_prompt", 100, { content: "do we need to update nats" }))
     for (let index = 0; index < 10; index += 1) {
       await store.appendMessage(chat.id, {
@@ -223,15 +217,11 @@ describe("EventStore", () => {
     }
     await store.appendMessage(chat.id, entry("assistant_text", 300, { content: "yes" }))
 
-    // Window of 3: coalescing the cwu run to its last entry keeps both real
-    // turns plus the latest readout. Without coalescing the window would be the
-    // last 3 entries (cwu, cwu, assistant_text) and the user_prompt is evicted.
     const { messages } = store.getRecentChatHistory(chat.id, 3)
     const kinds = messages.map((message) => message.kind)
     expect(kinds).toContain("user_prompt")
     expect(kinds).toEqual(["user_prompt", "context_window_updated", "assistant_text"])
 
-    // Latest readout value preserved (last entry of the collapsed run).
     const cwu = messages.find((message) => message.kind === "context_window_updated")
     expect(cwu?.kind === "context_window_updated" && cwu.usage.usedTokens).toBe(1009)
   })
@@ -255,7 +245,6 @@ describe("EventStore", () => {
     }
     await store.appendMessage(chat.id, entry("assistant_text", 300, { content: "second" }))
 
-    // Coalesced view = [user_prompt, cwu(last), assistant_text].
     const recent = store.getRecentMessagesPage(chat.id, 2)
     expect(recent.messages.map((message) => message._id)).toEqual(["cwu-4", "assistant_text-300"])
     expect(recent.hasOlder).toBe(true)
@@ -304,13 +293,6 @@ describe("EventStore", () => {
     expect(reloaded.getQueuedMessages(chat.id).map((message) => message.id)).toEqual([second.id])
   })
 
-  // The cron tag is the ONLY link between a fired run and the turn that
-  // answers it: the dequeue copies it onto the ActiveTurn, and the store's
-  // turn-terminal observer reads it there to attribute `cron_run_outcome`.
-  // Lose it in the queue and every cron run finishes unattributed and stays
-  // "running" forever. This has to exercise the REAL store — the cron fire
-  // suite fakes `enqueueMessage` and hand-preserves the tag, so it stayed
-  // green for as long as production was dropping the field.
   test("carries the cron run tag through enqueue and reload", async () => {
     const dataDir = await createTempDataDir()
     const store = new EventStore(dataDir)
@@ -365,9 +347,6 @@ describe("EventStore", () => {
     expect(reloaded.getChat(chat.id)?.unread).toBe(true)
   })
 
-  // The end-to-end shape of the retention: append through the real store,
-  // snapshot + truncate the log, reboot, and the history must still be bounded
-  // — and must derive to exactly what the uncompacted log would have.
   test("bounds cron run history across snapshot and restart", async () => {
     const dataDir = await createTempDataDir()
     const store = new EventStore(dataDir)
@@ -840,11 +819,6 @@ describe("EventStore", () => {
 })
 
 describe("retired session_commands_loaded events", () => {
-  // The picker's catalog used to be persisted per chat. Retiring the event must
-  // not disturb a user's existing ~/.kanna/data: an unknown `type` falls
-  // through the apply switch as a no-op, and STORE_VERSION deliberately does
-  // NOT change — a version bump is a fail-closed clearStorage() that would wipe
-  // every user's chat history. If someone bumps it, this test goes red.
   test("replays a legacy line as a no-op without wiping history", async () => {
     const dataDir = await createTempDataDir()
     const seed = new EventStore(dataDir)
@@ -938,8 +912,6 @@ describe("EventStore subagent runs", () => {
     const project = await store.openProject("/tmp/p-sa-snap")
     const chat = await store.createChat(project.id)
 
-    // Fold chat_created into snapshot.json and truncate the event logs —
-    // the same state a server reboot leaves behind for pre-existing chats.
     await store.snapshotAndTruncateLogs()
 
     const rebooted = new EventStore(dataDir)
@@ -1231,7 +1203,6 @@ describe("EventStore subagent runs", () => {
     expect(run.pendingTool?.toolKind).toBe("ask_user_question")
   })
 
-  // --- ADR adr-20260519-subagent-live-progress-decouple: scoped sync-apply ---
 
   test("subagent event is visible in-memory synchronously before writeChain settles", async () => {
     const { store, chatId, baseTs } = await setupStoreWithChat()
@@ -1242,7 +1213,6 @@ describe("EventStore subagent runs", () => {
       model: "claude-opus-4-7", parentUserMessageId: "u1", parentRunId: null, depth: 0,
     })
 
-    // Fire without await — in-memory must update synchronously (before any disk I/O)
     void store.appendSubagentEvent({
       v: 3, type: "subagent_entry_appended", timestamp: baseTs + 1, chatId, runId,
       entry: {
@@ -1292,30 +1262,22 @@ describe("EventStore subagent runs", () => {
       model: "claude-opus-4-7", parentUserMessageId: "u1", parentRunId: null, depth: 0,
     })
 
-    // Flush the writeChain so the run_started disk write completes before we
-    // set up the directory trap. Without this, the pending write can race
-    // with rm+mkdir: it recreates turns.jsonl as a file between the two calls,
-    // causing mkdir to fail with EEXIST (observed on CI ext4).
     await store.flush()
 
-    // Replace turns.jsonl with a directory so appendFile fails.
     const turnsLogPath = join(dir, "turns.jsonl")
     await rm(turnsLogPath, { force: true })
     await mkdir(turnsLogPath)
 
     const errorSpy = spyOn(console, "error").mockImplementation(() => {})
     try {
-      // Pre-fix: appendSubagentEvent throws (awaits failing writeChain)
-      // Post-fix: resolves immediately; disk error is caught asynchronously
       await store.appendSubagentEvent({
         v: 3, type: "subagent_entry_appended", timestamp: baseTs + 1, chatId, runId,
         entry: {
           _id: "e-fail", createdAt: baseTs + 1, kind: "assistant_text",
           text: "will this appear?", messageId: "m-fail",
         } as unknown as TranscriptEntry,
-      }).catch(() => {/* pre-fix: swallow rejection so test can assert in-mem */})
+      }).catch(() => {})
 
-      // Let any async disk work (and its .catch) settle
       await new Promise<void>((resolve) => setTimeout(resolve, 20))
 
       const run = store.getSubagentRuns(chatId)[runId]
@@ -1539,7 +1501,6 @@ describe("EventStore push events", () => {
   })
 })
 
-// Helper: apply a raw store event directly (bypasses file I/O for unit testing)
 function applyRaw(store: EventStore, event: Record<string, unknown>) {
   ;(store as any).applyEvent(event)
 }
@@ -1607,7 +1568,6 @@ describe("ChatTimingState accumulator", () => {
     applyRaw(store, { v: 3, type: "chat_created", timestamp: 2000, chatId: "c1", projectId: "p1", title: "T" })
     applyRaw(store, { v: 3, type: "turn_started", timestamp: 5000, chatId: "c1" })
     applyRaw(store, { v: 3, type: "turn_finished", timestamp: 8000, chatId: "c1" })
-    // Gap of ACTIVE_SESSION_IDLE_GAP_MS + 1 ms > threshold
     applyRaw(store, { v: 3, type: "turn_started", timestamp: 8000 + gap, chatId: "c1" })
 
     const t = store.state.chatTimingsByChatId.get("c1")!
@@ -1627,9 +1587,7 @@ describe("ChatTimingState accumulator", () => {
     applyRaw(store, { v: 3, type: "turn_started", timestamp: 8000 + ACTIVE_SESSION_IDLE_GAP_MS, chatId: "c1" })
 
     const t = store.state.chatTimingsByChatId.get("c1")!
-    // Active session preserved (no reset since gap is not strictly greater)
     expect(t.activeSessionStartedAt).toBe(2000)
-    // Cumulative idle includes the full threshold gap (8000→8000+gap) plus the original 3000 (2000→5000)
     expect(t.cumulativeMs.idle).toBe(3000 + ACTIVE_SESSION_IDLE_GAP_MS)
   })
 })
@@ -1838,7 +1796,6 @@ describe("EventStore ToolRequest", () => {
       resolvedAt: 5_000,
     })
 
-    // Simulate restart: drop instance, create a new one against the same dataDir.
     const store2 = new EventStore(dataDir)
     await store2.initialize()
     const replayed = await store2.getToolRequest("persisted-id")
@@ -1966,7 +1923,6 @@ describe("EventStore deleteChat prunes toolRequestsById", () => {
     } as TranscriptEntry
 
     await store.appendMessage(chat.id, baseEntry)
-    // Simulate JSONL re-emit with a fresh _id but same messageId.
     await store.appendMessage(chat.id, { ...baseEntry, _id: "duplicate-id" } as TranscriptEntry)
 
     const messages = store.getMessages(chat.id)
@@ -2007,10 +1963,8 @@ describe("EventStore deleteChat prunes toolRequestsById", () => {
       messageId: "claude-msg-1",
     } as TranscriptEntry)
 
-    // New EventStore instance against the same dataDir simulates restart.
     const second = new EventStore(dataDir)
     await second.initialize()
-    // Force transcript load so seen set is populated.
     expect(second.getMessages(chat.id)).toHaveLength(1)
 
     await second.appendMessage(chat.id, {
@@ -2134,7 +2088,6 @@ describe("getLastUserMessageId", () => {
     await store.appendMessage(chat.id, userEntry)
     await store.flush()
 
-    // Fresh store instance — in-memory map is empty
     const coldStore = new EventStore(dataDir)
     await coldStore.initialize()
 

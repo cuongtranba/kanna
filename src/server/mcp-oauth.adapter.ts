@@ -52,14 +52,12 @@ async function resolveAuthServer(
   serverUrl: string,
   fetchFn: typeof fetch,
 ): Promise<ResolvedAuthServer> {
-  // Fix 4: 10s timeout on all fetches
   const probe = await fetchFn(serverUrl, {
     method: "POST",
     headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }),
     signal: AbortSignal.timeout(10_000),
   })
-  // Fix 1: consume the probe response body to avoid a leaked socket
   await probe.body?.cancel()
   const prmUrl = resourceMetadataUrl(probe.headers.get("www-authenticate"), serverUrl)
   const prm: { authorization_servers?: string[]; scopes_supported?: string[] } = await (await fetchFn(prmUrl, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(10_000) })).json()
@@ -67,10 +65,6 @@ async function resolveAuthServer(
   if (!issuer) throw new Error("protected-resource metadata has no authorization_servers")
   const scope = (prm.scopes_supported ?? []).join(" ")
 
-  // Fix 2: expanded candidate list per RFC 8414 / OpenID Discovery.
-  // We avoid the MCP SDK's discoverAuthorizationServerMetadata helper because
-  // it tries RFC8414 path-aware URLs first and aborts on SPA HTML (e.g. claude.ai
-  // returns 200 text/html for /.well-known/oauth-authorization-server/v1/design/mcp).
   const issuerClean = issuer.replace(/\/$/, "")
   const issuerUrl = new URL(issuer)
   const { origin, pathname } = issuerUrl
@@ -104,7 +98,6 @@ export async function startMcpOAuth(
   deps: McpOAuthDeps,
 ): Promise<StartResult> {
   const fetchFn = deps.fetchFn ?? fetch
-  // Fix 3: hoist serverUrl to top, reused for probe and resource param
   const serverUrl = requireNetworkUrl(config)
   const prev = config.transport === "stdio" ? undefined : config.oauth
   if (prev?.status === "authenticated" && prev.tokens) {
@@ -151,8 +144,6 @@ export async function startMcpOAuth(
 export interface CompleteDeps {
   fetchFn?: typeof fetch
   persist: (oauth: McpOAuthState) => void
-  // injected so the adapter does not import the validator (avoids a cycle);
-  // returns the tool count after a bearer-authenticated listTools.
   listTools: (serverUrl: string, accessToken: string) => Promise<number>
 }
 
@@ -189,8 +180,6 @@ export async function completeMcpOAuth(
     return { status: "error", testedAt: new Date().toISOString(), message: "token exchange failed" }
   }
 
-  // Persist authenticated state BEFORE listTools so tokens are never lost if
-  // listTools throws.
   const authenticatedState: McpOAuthState = {
     enabled: true,
     status: "authenticated",
@@ -208,8 +197,6 @@ export async function completeMcpOAuth(
     const toolCount = await deps.listTools(requireNetworkUrl(config), tokens.access_token)
     return { status: "ok", testedAt, toolCount }
   } catch {
-    // Tokens are already persisted as authenticated — do NOT overwrite with
-    // an error status; the user can retry the tool check without re-authing.
     return { status: "error", testedAt, message: "authenticated but tool check failed" }
   }
 }
@@ -219,7 +206,6 @@ const EXPIRY_SKEW_MS = 60_000
 export interface EnsureFreshDeps {
   fetchFn?: typeof fetch
   persist: (oauth: McpOAuthState) => void
-  /** AS metadata per issuer (must include token_endpoint). Provided by the caller. */
   metadataByIssuer?: Record<string, AuthorizationServerMetadata>
 }
 
@@ -231,8 +217,6 @@ export async function ensureFreshMcpToken(
   const oauth = config.transport === "stdio" ? undefined : config.oauth
   if (!oauth?.tokens?.access_token) throw new Error("server is not authenticated")
   const tokens = oauth.tokens
-  // RFC 6749 makes expires_in optional. When absent, the token is non-expiring:
-  // return it directly without refreshing (no obtainedAt check needed either).
   if (tokens.expires_in === undefined || tokens.expires_in === null) {
     return tokens.access_token
   }
@@ -245,9 +229,6 @@ export async function ensureFreshMcpToken(
   if (!issuer) throw new Error("missing issuer for refresh")
   const client = oauth.clientByIssuer?.[issuer]
   if (!client) throw new Error("missing client for refresh")
-  // Prefer the caller-supplied metadata, else the metadata persisted at
-  // complete. Without it the SDK re-discovers token_endpoint from issuer,
-  // which fails when issuer is a non-resolvable resource URL.
   const metadata = deps.metadataByIssuer?.[issuer] ?? oauth.metadata
   try {
     const next = await refreshAuthorization(issuer, {

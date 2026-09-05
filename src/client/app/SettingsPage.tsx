@@ -187,7 +187,6 @@ const sidebarItems = [
     icon: Command,
     subtitle: "Edit global app shortcuts stored in the active keybindings file.",
   },
-  // always last
   {
     id: "changelog",
     label: "Changelog",
@@ -203,13 +202,6 @@ export function resolveSettingsSectionId(sectionId: string | undefined): Sidebar
   return sidebarItems.find((item) => item.id === sectionId)?.id ?? null
 }
 
-/**
- * The nav rows a given install may see. The Kanna plugin system is off by
- * default (`AppSettingsSnapshot.plugins.enabled`), and a disabled install must
- * render nothing of it — not a nav row that leads to an empty page. The
- * catalog itself stays static so `SidebarPageId` and `resolveSettingsSectionId`
- * do not depend on runtime settings.
- */
 export function visibleSettingsSidebarItems(pluginsEnabled: boolean): readonly SidebarItem[] {
   if (pluginsEnabled) return sidebarItems
   return sidebarItems.filter((item) => item.id !== "kanna-plugins")
@@ -263,13 +255,9 @@ type ChangelogCache = {
   releases: GithubRelease[]
 }
 
-// Fetched through the Kanna server (which prefers the authenticated `gh` CLI)
-// rather than directly from the browser, so we avoid GitHub's 60 req/hr
-// unauthenticated per-IP limit that surfaced as a 403 in the changelog panel.
 type FetchReleases = () => Promise<GithubRelease[]>
 
 let changelogCache: ChangelogCache | null = null
-// KEYBINDING_ACTIONS imported from shared/types
 
 export function getKeybindingsSubtitle(filePathDisplay: string) {
   return `Edit global app shortcuts stored in ${filePathDisplay}.`
@@ -506,12 +494,6 @@ export function ChangelogSection({
               </div>
 
               <div className="flex flex-row items-center justify-end min-w-0 flex-1 gap-2 ">
-                {/* <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                  
-                  <span className="rounded-full bg-muted px-2.5 py-1 font-mono text-foreground/80">
-                    {release.tag_name}
-                  </span>
-                </div> */}
 
              
             
@@ -678,9 +660,6 @@ export function GlobalInstructionsSection({ state }: { state: KannaState }) {
 
   useEffect(() => {
     if (persisted !== persistedAtMount) {
-      // External update (initial hydration, watcher reload, save round-trip) —
-      // resync the draft. Unsaved local edits intentionally lose to the latest
-      // server value to match every other section in this page.
       useSettingsPageStore.setState({
         globalInstructionsPersistedAtMount: persisted,
         globalInstructionsDraft: persisted,
@@ -817,8 +796,6 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
   const pushDeviceId = useSettingsPageStore((s) => s.pushDeviceId)
   const setPushDeviceId = useSettingsPageStore((s) => s.setPushDeviceId)
 
-  // Async push/WS orchestration: stays in the component. Stores never absorb I/O;
-  // settingsPageStore only learns the resulting device id.
   const handleEnablePush = useCallback(async () => {
     if (!state.pushConfig) return
     const id = await subscribePush({
@@ -1455,17 +1432,6 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
                       : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
                   }`}
                 >
-                  {/*
-                    ONE node that travels, rather than a highlight that blinks
-                    from row to row. `layoutId` is what makes it the same
-                    element across renders, so Motion animates the position
-                    change instead of unmounting one box and mounting another.
-
-                    A crossfade was the alternative and cannot do this job: it
-                    has no direction, so it does not lead the eye to the new
-                    section — it only resets it. Twelve sections an evening is
-                    twelve times the reader loses their place.
-                  */}
                   {item.id === selectedPage ? (
                     <motion.span
                       layoutId="settings-nav-indicator"
@@ -1553,13 +1519,6 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
                 </div>
               </div>
             ) : (
-              /*
-                Keyed on the section so the arrival replays when the reader
-                changes section — a CSS animation only runs on a fresh mount,
-                and without the key this wrapper is the same element all
-                evening. The subtree already unmounts wholesale on a section
-                change, so the key costs no state that was not already lost.
-              */
               <div className="mx-auto max-w-4xl kanna-settings-section-in" key={selectedPage}>
                 <div className="pb-6">
                   <div className="flex items-center justify-between gap-4 min-h-[34px]">
@@ -2460,14 +2419,6 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
   )
 }
 
-/**
- * Every action's drafted text, parsed into bindings.
- *
- * Derived from KEYBINDING_ACTIONS rather than written out action-by-action: the
- * hand-listed version silently needed editing for each new action, and the
- * spread over DEFAULT_KEYBINDINGS is what makes the result a total record
- * without a cast.
- */
 function buildKeybindingPayload(source: Record<string, string>): Record<KeybindingAction, string[]> {
   const drafted: Partial<Record<KeybindingAction, string[]>> = {}
   for (const action of KEYBINDING_ACTIONS) {

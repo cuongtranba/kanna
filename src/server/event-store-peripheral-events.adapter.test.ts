@@ -16,11 +16,7 @@ import {
   type PeripheralEventsDeps,
 } from "./event-store-peripheral-events.adapter"
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
-/** Minimal in-memory StorageBackend stub. */
 function makeStorage(files: Map<string, string> = new Map()): StorageBackend {
   return {
     mkdir: async () => {},
@@ -71,9 +67,6 @@ function makePushEvent(): PushEvent {
   return { type: "push_device_registered", deviceId: "d-1", pushToken: "pt-1", platform: "web", timestamp: 1000 } as unknown as PushEvent
 }
 
-// ---------------------------------------------------------------------------
-// Tunnel tests
-// ---------------------------------------------------------------------------
 
 describe("getTunnelEvents", () => {
   test("returns empty array for unknown chatId", () => {
@@ -124,11 +117,9 @@ describe("appendTunnelEvent", () => {
 
     await appendTunnelEvent(deps, ev)
 
-    // Disk
     const content = files.get("/data/tunnels.jsonl") ?? ""
     expect(content.trim()).toBe(JSON.stringify(ev))
 
-    // In-memory map
     expect(getTunnelEvents(deps, "chat-1")).toEqual([ev])
   })
 
@@ -168,9 +159,6 @@ describe("loadTunnelEvents", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// Share tests
-// ---------------------------------------------------------------------------
 
 describe("getShareEvents", () => {
   test("returns empty array by default", () => {
@@ -217,9 +205,6 @@ describe("loadShareEvents", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// Push tests
-// ---------------------------------------------------------------------------
 
 describe("appendPushEvent", () => {
   test("writes to pushLogPath (no in-memory state)", async () => {

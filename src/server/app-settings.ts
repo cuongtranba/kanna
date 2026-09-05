@@ -176,8 +176,6 @@ interface NormalizedAppSettings {
 }
 
 const DEFAULT_SHARE_DEFAULT_TTL_HOURS = 24
-// Stall/idle window for subagent runs (see subagent-orchestrator
-// DEFAULT_RUN_TIMEOUT_MS). Kept in sync as the app-settings default.
 const DEFAULT_SUBAGENT_RUN_TIMEOUT_MS = 600_000
 const MIN_SUBAGENT_RUN_TIMEOUT_MS = 30_000
 const MAX_SUBAGENT_RUN_TIMEOUT_MS = 86_400_000
@@ -214,10 +212,6 @@ type TextSnippetValidationError = ValidationErrorOf<
   "INVALID_SHORTCUT" | "EMPTY_EXPANSION" | "DUPLICATE_SHORTCUT" | "NOT_FOUND"
 >
 
-// Subclassed rather than collapsed into one class: createSubagent /
-// updateSubagent discriminate by class identity to decide which failures they
-// may return as a typed SubagentValidationError, so each collection keeps its
-// own runtime identity.
 class ValidationException<E extends { code: string; message: string }> extends Error {
   constructor(readonly validationError: E) {
     super(validationError.message)
@@ -537,7 +531,6 @@ function normalizeSubagentEntry<T>(
   }
 }
 
-/** Positive integer or undefined — mirrors Claude Code's frontmatter maxTurns validation. */
 function normalizeSubagentMaxTurns(value: number | undefined): number | undefined {
   return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : undefined
 }
@@ -817,7 +810,6 @@ function normalizeSubagentRuntime<T>(
     if (typeof rawId !== "string") {
       warnings.push("subagentRuntime.defaultLoopSubagentId must be a string")
     } else if (!subagents.some((s) => s.id === rawId)) {
-      // Unknown id (subagent deleted / renamed): clear it rather than persist a dangling ref.
       warnings.push(`subagentRuntime.defaultLoopSubagentId "${rawId}" is not a known subagent; clearing`)
     } else {
       defaultLoopSubagentId = rawId
@@ -1304,19 +1296,11 @@ interface CollectionPatch<CreateInput, EntryPatch> {
 }
 
 interface CollectionCrud<Entry, CreateInput, EntryPatch> {
-  /** Builds the new entry; throws the collection's validation exception on refusal. */
   create: (input: CreateInput, current: readonly Entry[]) => Entry
-  /** Merges the patch onto the found entry; throws the collection's validation exception on refusal. */
   update: (existing: Entry, patch: EntryPatch, current: readonly Entry[]) => Entry
   notFound: (id: string) => Error
 }
 
-/**
- * The create/update/delete mechanics every settings collection shares: append,
- * locate-then-splice, filter — all producing a new array. Returns undefined
- * when the patch names none of the three arms, so collections with extra arms
- * (MCP's setters) can fall through with their precedence intact.
- */
 function applyCollectionPatch<Entry extends { id: string }, CreateInput, EntryPatch>(
   current: readonly Entry[],
   patch: CollectionPatch<CreateInput, EntryPatch> | undefined,
@@ -1363,8 +1347,6 @@ const SUBAGENT_CRUD: CollectionCrud<Subagent, SubagentInput, SubagentPatch> = {
   },
   update(existing, patch, current) {
     const nextName = patch.name !== undefined ? patch.name.trim() : existing.name
-    // Only a patch that touches the name re-validates it: stored names predate
-    // today's rules and an unrelated edit must not be refused because of one.
     if (patch.name !== undefined) {
       const nameError = validateSubagentName(nextName, current.map((s) => ({ id: s.id, name: s.name })), existing.id)
       if (nameError) throw new SubagentValidationException(nameError)
@@ -1416,7 +1398,6 @@ function validatedMcpEntry(entry: McpServerConfig, current: readonly McpServerCo
   return entry
 }
 
-/** MCP's arms beyond create/update/delete; each rewrites one entry in place. */
 function applyMcpSetterPatch(
   current: McpServerConfig[],
   patch: NonNullable<AppSettingsPatch["customMcpServers"]>,
@@ -1443,8 +1424,6 @@ const CUSTOM_MODEL_CRUD: CollectionCrud<CustomModelEntry, CustomModelInput, Cust
     if (error) throw new CustomModelValidationException(error)
     return entry
   },
-  // Deliberately unvalidated: an edit that invalidates the entry is dropped by
-  // normalizeCustomModels with a warning rather than refused here.
   update: applyCustomModelPatch,
   notFound: (id) => new CustomModelValidationException({ code: "NOT_FOUND", message: `custom model ${id} not found` }),
 }
@@ -1477,9 +1456,6 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
   }
   if (patch.subagentRuntime?.defaultLoopSubagentId != null) {
     const id = patch.subagentRuntime.defaultLoopSubagentId
-    // Validate against the post-patch roster so setting a default in the same
-    // patch that creates the subagent still works is out of scope — require the
-    // subagent to already exist.
     if (!state.subagents.some((s) => s.id === id)) {
       throw new Error(`subagentRuntime.defaultLoopSubagentId "${id}" is not a known subagent`)
     }
@@ -1805,10 +1781,6 @@ export class AppSettingsManager {
         throw error
       }
 
-      // Only fall back to defaults at initialization. After init, a transient
-      // SyntaxError (mid-write read from another process, partial flush, etc.)
-      // must NOT clobber in-memory state — otherwise the next mutateTokenStatus
-      // call would persist those defaults and permanently drop user data.
       if (!options?.allowDefaultsFallback) {
         throw error
       }

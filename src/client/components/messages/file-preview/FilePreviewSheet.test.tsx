@@ -11,7 +11,6 @@ const SRC: PreviewSource = {
   mimeType: "application/zip", size: 10, origin: "offer_download",
 }
 
-/** Wraps SheetBody in a Dialog root so Radix DialogTitle resolves its context. */
 function renderSheetBody(source: PreviewSource) {
   return renderToStaticMarkup(
     createElement(Dialog, { open: true }, createElement(SheetBody, { source, onClose: () => {} })),
@@ -52,10 +51,6 @@ describe("FilePreviewSheet smoke", () => {
 })
 
 describe("shouldCloseFromDragEnd", () => {
-  // Pure-logic test: the gesture wiring (pointer handlers → this fn → onClose)
-  // is trivial, while mounting SheetBody and dispatching DOM pointer events
-  // under happy-dom in the shared bun process was order-dependently flaky in CI
-  // (a neighbor's portal unmount could corrupt React's event delegation).
   const base = { startY: 100, lastY: 100, lastT: 0, now: 1000 }
 
   test("closes when dragged past the distance threshold", () => {
@@ -67,7 +62,6 @@ describe("shouldCloseFromDragEnd", () => {
   })
 
   test("closes on a fast downward flick even under the distance threshold", () => {
-    // 30px in 10ms → velocity 3 > 0.5
     expect(shouldCloseFromDragEnd({ startY: 100, lastY: 100, lastT: 990, endY: 130, now: 1000 })).toBe(true)
   })
 })

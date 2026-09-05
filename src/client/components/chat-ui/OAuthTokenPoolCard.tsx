@@ -13,7 +13,6 @@ import { useOAuthTokenPoolCardStore } from "../../stores/oauthTokenPoolCardStore
 import type { TimerPort } from "../../ports/timerPort"
 import { timerAdapter } from "../../adapters/timer.adapter"
 
-// ─── helpers ────────────────────────────────────────────────────────────────
 
 function formatLimitedUntil(msUntilReset: number): string {
   if (msUntilReset <= 0) return "reset now"
@@ -26,7 +25,6 @@ function formatLimitedUntil(msUntilReset: number): string {
   return `reset in ${hr}h ${remMin.toString().padStart(2, "00")}m`
 }
 
-// ─── types ───────────────────────────────────────────────────────────────────
 
 interface TokenRowPorts {
   timer?: TimerPort
@@ -37,12 +35,10 @@ export interface OAuthTokenPoolCardProps {
   concurrencyDefault: number
   onWrite: (patch: Partial<ClaudeAuthSettings>) => Promise<void>
   onTest: (token: string) => Promise<{ ok: boolean; error: string | null }>
-  /** Timestamp override for test determinism; defaults to Date.now() at render. */
   now?: number
   ports?: TokenRowPorts
 }
 
-// ─── status pill ─────────────────────────────────────────────────────────────
 
 function StatusPill({ entry, now }: { entry: OAuthTokenEntry; now: number }) {
   if (entry.status === "active") {
@@ -80,7 +76,6 @@ function StatusPill({ entry, now }: { entry: OAuthTokenEntry; now: number }) {
     )
   }
 
-  // error
   const message = entry.lastErrorMessage ?? "Unknown error"
   return (
     <TooltipProvider>
@@ -89,18 +84,15 @@ function StatusPill({ entry, now }: { entry: OAuthTokenEntry; now: number }) {
           <span className="inline-flex cursor-default items-center gap-1.5 text-xs text-destructive">
             <span className="size-1.5 rounded-full bg-destructive" aria-hidden="true" />
             Error
-            {/* sr-only text ensures the error message is present in the DOM for accessibility */}
             <span className="sr-only">{message}</span>
           </span>
         </TooltipTrigger>
-        {/* aria-hidden: message already in sr-only above; tooltip is supplemental hover UX */}
         <TooltipContent aria-hidden="true">{message}</TooltipContent>
       </Tooltip>
     </TooltipProvider>
   )
 }
 
-// ─── token row ───────────────────────────────────────────────────────────────
 
 function TokenRow({
   entry,
@@ -154,7 +146,6 @@ function TokenRow({
 
   return (
     <div className="flex items-center justify-between gap-3 border-t border-border py-3">
-      {/* left: label + masked token + status */}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-3">
           <span className={`text-sm font-medium ${isDisabled ? "text-muted-foreground/60" : "text-foreground"}`}>{entry.label}</span>
@@ -170,7 +161,6 @@ function TokenRow({
         </div>
       </div>
 
-      {/* right: transient test result + action buttons */}
       <div className="flex shrink-0 items-center gap-2">
         <HoverHint label="Maximum concurrent chats sharing this OAuth token. Higher = risks Anthropic rate limits.">
         <label className="inline-flex items-center gap-1 text-xs text-muted-foreground">
@@ -231,7 +221,6 @@ function TokenRow({
   )
 }
 
-// ─── add-token form ───────────────────────────────────────────────────────────
 
 function AddTokenForm({
   tokens,
@@ -309,7 +298,6 @@ function AddTokenForm({
   )
 }
 
-// ─── main component ───────────────────────────────────────────────────────────
 
 export function OAuthTokenPoolCard({
   tokens,
@@ -386,7 +374,6 @@ export function OAuthTokenPoolCard({
         />
       ))}
 
-      {/* inline add-token form — always visible, even when list is empty */}
       <AddTokenForm tokens={tokens} onWrite={onWrite} />
     </div>
   )

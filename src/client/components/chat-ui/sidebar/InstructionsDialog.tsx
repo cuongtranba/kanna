@@ -1,14 +1,3 @@
-/**
- * Edit a project's or a stack's instructions.
- *
- * One component for both because they are the same edit with a different
- * heading — the server caps both at `GLOBAL_PROMPT_APPEND_MAX_CHARS` and
- * treats blank as a clear, so a second dialog would only be a second place to
- * get the counter wrong.
- *
- * Deliberately not `useAppDialog().prompt`: that is a single-line input and
- * coerces an emptied value to `null`, which would make clearing impossible.
- */
 
 import { useCallback, type ReactNode } from "react"
 import { createScopedStore } from "../../../lib/createScopedStore"
@@ -30,7 +19,6 @@ import { cn } from "../../../lib/utils"
 interface InstructionsDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  /** Names what the instructions are FOR, e.g. the project or stack title. */
   title: string
   description: string
   initialValue: string
@@ -42,11 +30,6 @@ interface DraftState {
   setValue: (value: string) => void
 }
 
-/**
- * The draft lives in a scoped store, not `useState` — `useState` is banned in
- * `src/client`. Scoped rather than global because two dialogs must never share
- * a draft, and the store is created per Provider mount.
- */
 const draftStore = createScopedStore<{ initialValue: string }, DraftState>(
   "InstructionsDialogDraft",
   (init) => (set) => ({
@@ -68,8 +51,6 @@ function InstructionsDialogInner({
   const overCap = value.length > GLOBAL_PROMPT_APPEND_MAX_CHARS
 
   const handleOpenChange = useCallback((next: boolean) => {
-    // Re-seed from the persisted value on every open, so a cancelled edit is
-    // not still sitting in the box the next time the dialog is opened.
     if (next) setValue(initialValue)
     onOpenChange(next)
   }, [initialValue, onOpenChange, setValue])
@@ -113,8 +94,6 @@ function InstructionsDialogInner({
 
 export function InstructionsDialog(props: InstructionsDialogProps): ReactNode {
   return (
-    // Keyed on the persisted value so a project whose instructions changed
-    // elsewhere gets a store seeded from the new text, not the stale draft.
     <draftStore.Provider init={{ initialValue: props.initialValue }} key={props.initialValue}>
       <InstructionsDialogInner {...props} />
     </draftStore.Provider>

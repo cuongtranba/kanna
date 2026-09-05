@@ -9,17 +9,6 @@ import { handleObservabilityCommand } from "./ws-router-observability"
 import { encodeCwd } from "./claude-pty/jsonl-path.adapter"
 import type { ServerEnvelope } from "../shared/protocol"
 
-// End-to-end evidence for PR D (WS-Drill): a chat imported by session id, with
-// no live-driver registration, still serves its native Agent/Task subagent
-// transcript on the first `subagents.getRun` request — the lazy-derivation
-// path this PR adds, exercised against real on-disk files (no fakes) the way
-// a real Tribe campaign session would look.
-//
-// deriveImportedSubagentsDir defaults to the real OS home dir (matching
-// where claude-code actually writes `~/.claude/projects/**/subagents/`), so
-// unlike the import scan (which takes an injectable homeDir), the subagents
-// sidecar fixture below must live under the real homedir() — cleaned up in
-// `finally`.
 describe("subagent drill-in for imported chats (e2e)", () => {
   test("lazily derives + registers the subagents dir and serves the child transcript", async () => {
     const dataDir = mkdtempSync(path.join(tmpdir(), "kanna-data-"))
@@ -32,9 +21,6 @@ describe("subagent drill-in for imported chats (e2e)", () => {
       const projDir = path.join(importScanHomeDir, ".claude", "projects", encodeCwd(realProj))
       mkdirSync(projDir, { recursive: true })
 
-      // Top-level session transcript: user prompt → assistant Task tool_use →
-      // tool_result carrying the toolUseResult sidecar (Task 1.5's fix makes
-      // this round-trip through debugRaw).
       const lines = [
         JSON.stringify({
           type: "user", uuid: "u1", sessionId, cwd: realProj,
@@ -55,10 +41,6 @@ describe("subagent drill-in for imported chats (e2e)", () => {
       ]
       writeFileSync(path.join(projDir, `${sessionId}.jsonl`), `${lines.join("\n")}\n`, "utf8")
 
-      // The Hunter's own sidechain transcript sidecar, exactly where claude-code
-      // writes it: <projectDir>/<sessionId>/subagents/agent-<agentId>.jsonl —
-      // under the REAL home dir, since that's what deriveImportedSubagentsDir
-      // (no homeDir override at this call site, matching production) resolves.
       const subagentsDir = path.join(realHomeSubagentsRoot, sessionId, "subagents")
       mkdirSync(subagentsDir, { recursive: true })
       const sidechainLines = [
@@ -73,14 +55,12 @@ describe("subagent drill-in for imported chats (e2e)", () => {
       const chatId = result.results[0]?.chatId
       if (!chatId) throw new Error("no chatId")
 
-      // Task 1.5 evidence: agentId survives the import mapper.
       const messages = store.getMessages(chatId)
       const toolResult = messages.find((m) => m.kind === "tool_result")
       expect(toolResult?.debugRaw).toBeDefined()
       const sidecar = JSON.parse(toolResult?.debugRaw ?? "{}")
       expect(sidecar.toolUseResult.agentId).toBe(agentId)
 
-      // Task 3 evidence: no live registration exists yet for this imported chat.
       const registry = createSubagentTranscriptRegistry()
       expect(registry.has(chatId)).toBe(false)
 
@@ -104,8 +84,6 @@ describe("subagent drill-in for imported chats (e2e)", () => {
       rmSync(dataDir, { recursive: true, force: true })
       rmSync(importScanHomeDir, { recursive: true, force: true })
       rmSync(realProj, { recursive: true, force: true })
-      // realHomeSubagentsRoot is namespaced by encodeCwd(realProj) — a
-      // freshly minted tmpdir per run — so removing the whole root is safe.
       rmSync(realHomeSubagentsRoot, { recursive: true, force: true })
     }
   })

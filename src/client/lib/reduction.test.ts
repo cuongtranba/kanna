@@ -33,8 +33,6 @@ describe("buildReduction", () => {
   })
 
   test("the running turn gets its OWN tick, never a completed one re-marked", () => {
-    // Regression: the newest COMPLETED turn used to be drawn as live, so a
-    // finished turn wore the running mark for the whole of the next turn.
     const live = buildReduction([1, 2, 3], { live: true })
     expect(live.ticks).toHaveLength(4)
     expect(live.ticks.map((t) => t.live)).toEqual([false, false, false, true])
@@ -42,16 +40,12 @@ describe("buildReduction", () => {
   })
 
   test("a first-ever live turn still draws a sigil", () => {
-    // Regression: with no completed results yet, the sigil was empty during
-    // the very first turn of a session — exactly when it is most wanted.
     const { ticks } = buildReduction([], { live: true })
     expect(ticks).toHaveLength(1)
     expect(ticks[0]!.live).toBe(true)
   })
 
   test("the live tick does not renormalise the completed ones", () => {
-    // It is drawn at full height rather than scaled, so a still-growing
-    // duration cannot make every other tick twitch each frame.
     const completed = [100, 200]
     const withoutLive = buildReduction(completed)
     const withLive = buildReduction(completed, { live: true })

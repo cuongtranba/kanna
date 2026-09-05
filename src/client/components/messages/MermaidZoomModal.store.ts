@@ -5,7 +5,6 @@ const MIN_SCALE = 0.25
 const MAX_SCALE = 8
 const SCALE_STEP = 0.25
 
-/** Pointer position at gesture start, already corrected for the current offset. */
 interface DragState {
   x: number
   y: number
@@ -21,14 +20,10 @@ export interface MermaidZoomModalState {
   offset: OffsetState
   drag: DragState | null
 
-  /** Step the zoom by one notch, clamped. No-op at the boundary. */
   zoomIn: () => void
   zoomOut: () => void
-  /** Restore scale and offset together — one transition, not two writes. */
   resetView: () => void
-  /** Anchor a pan gesture on the current offset. */
   beginDrag: (pointerX: number, pointerY: number) => void
-  /** Move to an absolute offset derived from the anchor. No-op without one. */
   dragTo: (pointerX: number, pointerY: number) => void
   endDrag: () => void
 }

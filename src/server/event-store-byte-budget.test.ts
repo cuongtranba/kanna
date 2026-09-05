@@ -6,7 +6,6 @@ import {
   RECENT_PAGE_BYTE_BUDGET,
 } from "./event-store-helpers"
 
-/** Builds an entry whose serialized size is roughly `bytes`. */
 function entryOfSize(id: number, bytes: number): TranscriptEntry {
   return {
     _id: `e${id}`,
@@ -21,8 +20,6 @@ const fat = (count: number) => Array.from({ length: count }, (_, i) => entryOfSi
 
 describe("fitLimitToByteBudget", () => {
   test("leaves a lean page at the full entry limit", () => {
-    // 200 x ~100B is far under budget, so the byte cap must not bite —
-    // this is the regression guard for "small chats got smaller".
     expect(fitLimitToByteBudget(lean(500), 200)).toBe(200)
   })
 
@@ -41,8 +38,6 @@ describe("fitLimitToByteBudget", () => {
   })
 
   test("never ships fewer than the minimum, even when every entry blows the budget", () => {
-    // One 2 MB entry alone exceeds the budget; an empty-looking chat would be
-    // a worse outcome than an over-budget page.
     const huge = Array.from({ length: 50 }, (_, i) => entryOfSize(i, 2_000_000))
     expect(fitLimitToByteBudget(huge, 200)).toBe(MIN_RECENT_PAGE_ENTRIES)
   })
@@ -59,7 +54,6 @@ describe("fitLimitToByteBudget", () => {
   })
 
   test("selects the NEWEST entries, not the oldest", () => {
-    // Paging back relies on the page being the tail of the transcript.
     const entries = [...fat(50), ...lean(50)]
     const fitted = fitLimitToByteBudget(entries, 200)
     expect(fitted).toBeGreaterThanOrEqual(50)

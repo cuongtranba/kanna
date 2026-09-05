@@ -25,16 +25,12 @@ function createEditorFormFromInitial(
 }
 
 interface TextSnippetsSectionState {
-  // TextSnippetsSection navigation
   editing: SnippetEditingState
 
-  // SnippetEditor form (ONE active at a time)
   editorForm: SnippetEditorFormState
 
-  // Actions — navigation
   setEditing: (editing: SnippetEditingState) => void
 
-  // Actions — editor form
   resetEditorForm: (shortcut: string, expansion: string) => void
   patchEditorForm: (patch: Partial<SnippetEditorFormState>) => void
 }

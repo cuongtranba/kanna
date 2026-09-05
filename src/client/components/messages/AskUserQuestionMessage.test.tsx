@@ -34,7 +34,6 @@ function makeMessage(overrides: Partial<AskMessage> = {}): AskMessage {
   } as unknown as AskMessage
 }
 
-/** Render, pick "Alpha", press Submit. Returns the container for assertions. */
 async function renderAndSubmit(
   onSubmit: (t: string, q: AskUserQuestionItem[], a: AskUserQuestionAnswerMap) => void | Promise<void>,
 ) {
@@ -60,22 +59,15 @@ async function renderAndSubmit(
   return container
 }
 
-// markSubmitted is optimistic: it flips the card to the "Answers" view before
-// the server has accepted anything. If chat.respondTool rejects (e.g. the
-// ActiveTurn holding the parked pendingTool was already dropped) the card must
-// come back, otherwise it reads as answered while the turn is still parked and
-// the user has no way to retry.
 describe("AskUserQuestionMessage — optimistic submit rollback", () => {
   test("a rejected onSubmit returns the card to the interactive state and shows the error", async () => {
     const onSubmit = mock(() => Promise.reject(new Error("No pending tool request")))
 
     const container = await renderAndSubmit(onSubmit)
-    // Let the rejection microtask settle.
     await act(async () => { await Promise.resolve() })
 
     expect(container.querySelector('[data-testid="ask-user-question-error:toolu_1"]')).not.toBeNull()
     expect(container.textContent).toContain("No pending tool request")
-    // Back to interactive: the option and Submit control are present again.
     const buttons = Array.from(container.querySelectorAll("button")).map((b) => b.textContent?.trim())
     expect(buttons).toContain("Submit")
     expect(container.textContent).not.toContain("Answers")
@@ -95,8 +87,6 @@ describe("AskUserQuestionMessage — optimistic submit rollback", () => {
   })
 
   test("a synchronous void onSubmit keeps the completed state", async () => {
-    // Guards the widened `void | Promise<void>` type against the many
-    // `() => undefined` callers (share view, tests, standalone transcript).
     const onSubmit = mock(() => undefined)
 
     const container = await renderAndSubmit(onSubmit)
@@ -119,9 +109,6 @@ describe("AskUserQuestionMessage — optimistic submit rollback", () => {
   })
 })
 
-// The main agent's question can be buried by background-task output, so the
-// actionable card moves to the footer above the composer. The inline row must
-// then degrade to a pointer — exactly one place to answer.
 describe("AskUserQuestionMessage — askUserQuestionSurface", () => {
   async function renderWith(surface: "inline" | "footer" | undefined, message = makeMessage()) {
     const container = document.createElement("div")
@@ -143,10 +130,8 @@ describe("AskUserQuestionMessage — askUserQuestionSurface", () => {
     const container = await renderWith("footer")
 
     expect(container.querySelector('[data-testid="ask-user-question-moved:toolu_1"]')).not.toBeNull()
-    // Question text stays readable so the transcript still reads as a narrative.
     expect(container.textContent).toContain("Pick one")
     expect(container.textContent).toContain("Answer below")
-    // ...but nothing here is clickable.
     expect(container.querySelectorAll("button")).toHaveLength(0)
     container.remove()
   })

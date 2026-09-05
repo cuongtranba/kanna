@@ -1,11 +1,3 @@
-/**
- * Pure OTel export-config resolution. No IO and no process access — the
- * adapter passes env + settings in, so precedence is testable without a
- * collector: KANNA_OTEL=disabled beats everything, KANNA_OTEL=enabled beats
- * the setting, otherwise the telemetry setting decides. Distinct Kanna
- * installs report under distinct service names by deriving the name from the
- * machine's display name (each distribution is one machine).
- */
 
 import { APP_VERSION } from "../shared/branding"
 
@@ -23,17 +15,11 @@ export interface OtelEnvInput {
 export interface ResolvedOtelConfig {
   serviceName: string
   serviceVersion: string
-  /** Raw machine display name, exported as the host.name resource attribute. */
   machineName: string
-  /** Unset when OTEL_EXPORTER_OTLP_ENDPOINT is set — the exporter reads the env itself. */
   traceUrl: string | undefined
   metricUrl: string | undefined
 }
 
-/**
- * Machine display names carry spaces and punctuation ("Cuong's MacBook Pro");
- * metric labels and service dropdowns are friendlier without them.
- */
 export function sanitizeServiceNamePart(raw: string): string {
   return raw
     .toLowerCase()

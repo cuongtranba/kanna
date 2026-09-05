@@ -134,7 +134,6 @@ export interface CreateUpdateStrategyDeps {
   fetchLatestVersion: (packageName: string) => Promise<string>
   installVersion: (packageName: string, version: string) => UpdateInstallAttemptResult
   latestVersionHint: () => string | null
-  // Required for pm2 branch (KANNA_REPO_DIR).
   repoDir?: string
 }
 
@@ -200,7 +199,6 @@ async function detectLockfileChange(repoDir: string): Promise<boolean> {
     )
     return output.trim().length > 0
   } catch {
-    // No prior HEAD@{1} (fresh clone) or other git error — install to be safe
     return true
   }
 }

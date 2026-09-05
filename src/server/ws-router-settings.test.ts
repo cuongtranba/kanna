@@ -23,9 +23,6 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { DEFAULT_TAB_MIN_WIDTH } from "../shared/pane-tab-width"
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function makeSnapshot(): AppSettingsSnapshot {
   return {
@@ -95,9 +92,6 @@ async function makeDeps(tmpDir: string): Promise<SettingsCommandDeps & { sent: u
   }
 }
 
-// ---------------------------------------------------------------------------
-// isSubagentValidationError
-// ---------------------------------------------------------------------------
 
 describe("isSubagentValidationError", () => {
   test("returns true for validation error shape", () => {
@@ -111,9 +105,6 @@ describe("isSubagentValidationError", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// handleSettingsCommand — selected cases
-// ---------------------------------------------------------------------------
 
 describe("handleSettingsCommand", () => {
   test("settings.readKeybindings → acks with keybindings snapshot", async () => {
@@ -175,7 +166,6 @@ describe("handleSettingsCommand", () => {
     const tmpD = await mkdtemp(path.join(tmpdir(), "ws-settings-test-"))
     try {
       const deps = await makeDeps(tmpD)
-      // Cast via unknown to bypass TS narrowing — simulates an unknown command type
       const handled = await handleSettingsCommand(deps, { type: "chat.create" } as unknown as ClientCommand, "req-5")
       expect(handled).toBe(false)
       expect(deps.sent).toHaveLength(0)

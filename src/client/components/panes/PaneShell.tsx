@@ -8,19 +8,6 @@ import { PaneTabStrip } from "./PaneTabStrip"
 import { selectRetainedTabIds } from "./paneRetention"
 import type { TabPresentationContext } from "./tabPresentation"
 
-/**
- * One pane in the SplitContainer tree.
- *
- * Owns:
- *   - the PaneScopedStore.Provider (all per-pane ephemeral state lives here)
- *   - width measurement for the tab strip (stored in PaneScopedStore.layoutWidth)
- *   - the PaneTabStrip
- *   - content lookup via the registry
- *
- * Split-pane actions (select/close/split) are forwarded up to the store via
- * the callbacks, which are computed once in ChatPage and stable across renders
- * of the same layout shape.
- */
 
 export interface SplitArgs {
   tabId: string
@@ -35,15 +22,9 @@ export interface PaneShellProps {
   presentation: TabPresentationContext
   onSelectTab: (tabId: string) => void
   onCloseTab: (tabId: string) => void
-  /** Called with the resolved tab id, pane id, and split direction. */
   onSplit: (args: SplitArgs) => void
 }
 
-/**
- * Outer shell: mounts the Provider so the inner shell can access the scoped
- * store.  Keeping Provider and consumer in separate components is the standard
- * React pattern — a component cannot consume a context it provides itself.
- */
 export function PaneShell(props: PaneShellProps) {
   return (
     <PaneScopedStore.Provider init={undefined}>
@@ -66,7 +47,6 @@ function PaneShellInner({
   const setLayoutWidth = PaneScopedStore.useScopedStore((s) => s.setLayoutWidth)
   const layoutWidth = PaneScopedStore.useScopedStore((s) => s.layoutWidth)
 
-  // Measure the pane container and keep PaneScopedStore.layoutWidth in sync.
   useLayoutEffect(() => {
     const element = containerRef.current
     if (!element) return
@@ -85,7 +65,6 @@ function PaneShellInner({
     return () => observer.disconnect()
   }, [storeApi, setLayoutWidth])
 
-  // Forward the split action with the pane's currently-focused tab + pane id.
   const handleSplit = useCallback(
     (position: SplitPosition) => {
       const tabId = pane.focusedTabId ?? pane.tabs[0]?.tabId
@@ -94,7 +73,6 @@ function PaneShellInner({
     [pane.focusedTabId, pane.tabs, pane.id, onSplit],
   )
 
-  // A pane with no explicit focus still shows its first tab.
   const activeTabId = pane.focusedTabId ?? pane.tabs[0]?.tabId ?? null
 
   const tabRecency = PaneScopedStore.useScopedStore((s) => s.tabRecency)
@@ -120,12 +98,6 @@ function PaneShellInner({
         onCloseTab={onCloseTab}
         onSplit={handleSplit}
       />
-      {/*
-        Retained tabs are all mounted and absolutely stacked. `visibility:hidden`
-        (not `display:none`) keeps each one's layout box, so scroll offsets and
-        xterm's measured geometry survive a tab switch; `inert` takes the hidden
-        subtrees out of the focus and accessibility trees.
-      */}
       <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
         {pane.tabs
           .filter((tab) => retainedTabIds.has(tab.tabId))
@@ -135,11 +107,6 @@ function PaneShellInner({
               <div
                 key={tab.tabId}
                 className={cn(
-                  // flex-COL, not the default row: a row container sizes each
-                  // child to its content width, which collapsed the chat card to
-                  // 24px in a 1117px pane. A column stretches children across
-                  // the cross axis, so any registry content fills the pane
-                  // without needing its own flex-1.
                   "absolute inset-0 flex min-h-0 min-w-0 flex-col",
                   !isActiveTab && "invisible pointer-events-none",
                 )}

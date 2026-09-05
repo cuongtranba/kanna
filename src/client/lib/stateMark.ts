@@ -1,13 +1,5 @@
 import type { StatusTone } from "./statusLabel"
 
-/**
- * State is carried in the mark's FORM, not in hue.
- *
- * A dot that changes colour is unreadable in greyscale, at a glance from across
- * the desk, and to a reader with reduced colour vision — the three ways this UI
- * is actually read during a long session. Each tone therefore owns a mark with
- * its own silhouette, and colour is free to agree without ever deciding.
- */
 export type StateMarkKind = "doubled" | "based" | "struck" | "half"
 
 export function stateMarkKind(tone: StatusTone): StateMarkKind {
@@ -27,12 +19,6 @@ export interface MarkStroke {
   readonly y2: number
 }
 
-/**
- * Geometry for the 9x13 mark, as exact strokes rather than a drawing.
- *
- * Kept as data so the shapes are testable and identical everywhere they render;
- * a component that hand-rolls its own path is a mark that will drift.
- */
 export function stateMarkStrokes(kind: StateMarkKind): readonly MarkStroke[] {
   switch (kind) {
     case "doubled":

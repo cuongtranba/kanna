@@ -61,8 +61,6 @@ describe("ProjectSectionMenu", () => {
 })
 
 describe("ProjectSectionMenu — Edit instructions", () => {
-  // Hidden rather than disabled where the host has no dialog: a menu item that
-  // does nothing is worse than one that is not offered.
   test("renders without throwing when the handler is supplied", () => {
     expect(() =>
       renderToStaticMarkup(

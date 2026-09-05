@@ -44,11 +44,6 @@ describe("provider catalog normalization", () => {
     })
   })
 
-  // Reproduces the reported defect: a user adds `claude-opus-5` by hand in
-  // Settings → Models (the form collects no context-window field), the entry
-  // shadows the built-in, the 1M toggle disappears, and every turn silently
-  // runs on 200k — visible only as `model: "claude-opus-5"` with no `[1m]`
-  // suffix in the turn's runConfig.
   test("a hand-added override does not strip the built-in's 1m option", () => {
     const handAdded: CustomModelEntry = {
       id: "claude-opus-5",
@@ -174,11 +169,6 @@ describe("claudeAuthReady", () => {
     hasUsable: () => usable,
   })
 
-  // Mirrors the main-chat spawn gate (claude-session-spawner.ts), which refuses
-  // ONLY when the pool holds tokens but none are pickable. An absent/empty pool
-  // falls through to the local claude CLI credentials. Subagents must match, or
-  // a user with zero configured OAuth tokens gets a working main chat and
-  // AUTH_REQUIRED on every delegation.
   test("true when no pool is configured at all — local CLI credentials", () => {
     expect(claudeAuthReady(null, "chat-1")).toBe(true)
     expect(claudeAuthReady(undefined, "chat-1")).toBe(true)

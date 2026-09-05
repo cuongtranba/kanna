@@ -74,8 +74,6 @@ export function getMergeBranchGroups(
     uniqueEntriesByName.delete(currentBranchName)
   }
 
-  // Pre-seed usedNames with the current branch so it cannot re-enter
-  // via the recent fallback even after being deleted from uniqueEntriesByName.
   const usedNames = new Set<string>(currentBranchName ? [currentBranchName] : [])
   const defaultBranch = branchList.defaultBranchName
     ? uniqueEntriesByName.get(branchList.defaultBranchName)

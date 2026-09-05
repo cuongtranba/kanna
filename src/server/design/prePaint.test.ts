@@ -3,15 +3,10 @@ import { join } from "node:path"
 import { resolveEffectiveScaleStep, resolveTypographyVars } from "../../shared/design/typography"
 import type { JsonValue } from "../../shared/json"
 
-// Pins the SHIPPED pre-paint snippet in index.html to the pure oracle
-// (resolveEffectiveScaleStep + resolveTypographyVars). This test executes the
-// literal inline <script> body extracted from index.html — never a copy of
-// it — so any drift between the shipped snippet and the pure module fails here.
 
 const HTML_PATH = join(import.meta.dir, "../../..", "index.html")
 const html = await Bun.file(HTML_PATH).text()
 
-/** Extracts the body of the first plain (non-`type="module"`) inline <script>. */
 function extractBlockingScript(source: string): string {
   const match = /<script>([\s\S]*?)<\/script>/.exec(source)
   if (!match) throw new Error("expected a plain <script> block (no type attribute) in index.html")
@@ -28,8 +23,6 @@ interface StyleStub {
 
 function makeStyleStub(): StyleStub {
   return {
-    // Mirrors the CSS fallback `var(--kanna-font-scale, 1)` — the value the
-    // property "reads as" when the pre-paint script never touches it.
     props: { "--kanna-font-scale": "1" },
     colorScheme: "",
     setProperty(prop, value) {
@@ -56,11 +49,6 @@ interface FakeLocalStorage {
   getItem(key: string): string | null
 }
 
-/**
- * Executes the shipped inline script against fakes and returns the resulting
- * `--kanna-font-scale` property map (never a hardcoded single-key read — the
- * whole recorded map is compared against the pure module's map).
- */
 function runPrePaintScript(storedValue: string | null): Record<string, string> {
   const style = makeStyleStub()
   const documentElement: FakeDocumentElement = { classList: { toggle: () => {} }, style }
@@ -113,8 +101,6 @@ describe("index.html pre-paint script — --kanna-font-scale (P6)", () => {
   test("override wins over cache when both are present", () => {
     const result = runPrePaintScript(envelope({ typographyOverride: "xxl", typographyServerDefaultCache: "sm" }))
     expect(result).toEqual(oracle("xxl", "sm"))
-    // The headline proof this task exists for: a seeded xxl override yields
-    // --kanna-font-scale: "1.5" before any React code runs.
     expect(result["--kanna-font-scale"]).toBe("1.5")
   })
 
@@ -132,11 +118,6 @@ describe("index.html pre-paint script — --kanna-font-scale (P6)", () => {
     expect(result["--kanna-font-scale"]).toBe("1.125")
   })
 
-  // Cross-product matrix: pins the shipped snippet to the pure oracle across
-  // every combination of (override, cache) input classes, so no single point
-  // in the input space (like the invalid-override/valid-cache case above) can
-  // silently drift again. Expectations always come from the oracle — never a
-  // hand-written table — so the assertion cannot itself encode the bug.
   const INPUT_CLASSES: readonly [label: string, value: JsonValue | undefined][] = [
     ["valid step", "lg"],
     ["invalid non-empty string", "not-a-real-step"],
@@ -144,11 +125,6 @@ describe("index.html pre-paint script — --kanna-font-scale (P6)", () => {
     ["null", null],
     ["undefined", undefined],
     ["non-string garbage", 42],
-    // Object.hasOwn coerces its key argument to a string via ToPropertyKey, so a
-    // single-element array whose String() equals a valid step name (e.g.
-    // String(["xxl"]) === "xxl") is a distinct input class from plain non-string
-    // garbage like `42` (String(42) === "42", not a key). Reachable: the envelope
-    // comes from JSON.parse(localStorage.getItem(...)), and JSON carries arrays.
     ["array whose String() is a valid step", ["xxl"]],
   ]
 

@@ -40,14 +40,8 @@ const HEARTBEAT_INTERVAL_MS = 15_000
 const PING_TIMEOUT_MS = 4_000
 const SEND_TO_STARTING_PROFILE_STORAGE_KEY = "kanna:profile-send-to-starting"
 
-/**
- * Every payload a snapshot push can carry. `subscribe` is generic over the one
- * the caller expects, so the stored callback is erased to the whole union —
- * the method-shorthand declaration is what lets a narrower listener bind.
- */
 type SnapshotData = ServerSnapshot["data"]
 
-/** What a command ack resolves to, straight off the wire. */
 type CommandResult = Extract<ServerEnvelope, { type: "ack" }>["result"]
 
 interface InternalSubscriptionEntry {
@@ -110,7 +104,6 @@ export class KannaSocket {
     }
     this.started = true
 
-    // Register service worker message handler via the DOM port.
     this.serviceWorkerCleanup = this.dom.addServiceWorkerMessageListener((event: MessageEvent) => {
       const data: { type?: string; url?: string } = event.data
       if (data?.type === "kanna.navigate" && typeof data.url === "string") {
@@ -203,12 +196,6 @@ export class KannaSocket {
     })
   }
 
-  /**
-   * Fire-and-forget: enqueues a push.setFocusedChat command without awaiting
-   * an ack. Focus hints are advisory (the server suppresses notifications for
-   * the focused chat); a lost or late hint is harmless, so we don't gate the
-   * UI on a round-trip.
-   */
   setFocusedChat(chatId: string | null) {
     const id = generateUUID()
     this.enqueue({

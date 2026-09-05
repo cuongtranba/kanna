@@ -24,14 +24,6 @@ import {
   type SubagentInput,
 } from "../../shared/types"
 
-/**
- * Unmount the root, do not merely detach its container.
- *
- * happy-dom registers ONE document for the whole Bun process and the test
- * preload wipes `document.body` after every test. A root left mounted keeps its
- * portal children registered against a body that has since been emptied, so the
- * next test to flush React work crashes deleting a node that is no longer there.
- */
 function closeRoot(root: Root, container: HTMLElement) {
   act(() => {
     root.unmount()
@@ -443,10 +435,8 @@ describe("SubagentsSection — edit form", () => {
         />,
       )
     })
-    // Make the form dirty: tweak description
     const desc = container.querySelector<HTMLInputElement>("[data-testid='subagent-form-description'] ")!
     expect(desc).toBeDefined()
-    // Toggle context scope to dirty (works without value-setter hack since it's a real click)
     const fullTranscriptBtn = Array.from(container.querySelectorAll("button")).find(
       (b) => b.textContent?.trim() === "Full transcript",
     )!
@@ -467,16 +457,13 @@ describe("SubagentsSection — trigger mode control", () => {
       subagents: [subagent],
       editing: { kind: "edit", id: "sa-9" },
     })
-    // Save should be disabled initially (no unsaved changes)
     const save = container.querySelector<HTMLButtonElement>("[data-testid='subagent-form-save']")!
     expect(save.disabled).toBe(true)
-    // Find the "Manual" button in the Trigger SegmentedControl
     const manualBtn = Array.from(container.querySelectorAll("button")).find(
       (b) => b.textContent?.trim() === "Manual",
     )
     expect(manualBtn).toBeDefined()
     await act(async () => { manualBtn!.click() })
-    // After clicking Manual, form should be dirty so Save is enabled
     expect(save.disabled).toBe(false)
     cleanup()
   })

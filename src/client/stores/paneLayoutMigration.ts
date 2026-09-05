@@ -6,19 +6,6 @@ import {
   type PaneNode,
 } from "../lib/paneTree"
 
-/**
- * One-time seed of the pane tree from the layout state Kanna kept before tabs.
- *
- * This is a cross-key migration, not a zustand version bump: the old layout
- * lived in two separate localStorage entries ("terminal-layouts" and
- * "right-sidebar-layouts") with different scoping rules, and the tree replaces
- * both. The seed is a pure function so it can be table-tested against real
- * legacy shapes before anyone's saved layout depends on it.
- *
- * The old arrangement is preserved rather than flattened into tabs — a user who
- * had three terminals side by side under their chat still has them, so nobody
- * loses a layout they built by upgrading.
- */
 
 export interface LegacyTerminal {
   id: string
@@ -26,12 +13,9 @@ export interface LegacyTerminal {
 
 export interface LegacyProjectLayout {
   terminals: readonly LegacyTerminal[]
-  /** [chat%, terminal%] of the workspace column. */
   mainSizes: readonly [number, number]
-  /** Per-terminal widths, as percentages. */
   terminalSizes: readonly number[]
   changesVisible: boolean
-  /** Width of the git panel, as a percentage of the whole page. */
   changesSizePercent: number
 }
 
@@ -41,16 +25,12 @@ const WORKSPACE_GROUP_ID = "workspace"
 const TERMINALS_GROUP_ID = "terminals"
 const ROOT_GROUP_ID = "root"
 
-/** Percentages from localStorage may be anything; fall back rather than trust. */
 function percentToFraction(value: number, fallback: number): number {
   if (!Number.isFinite(value) || value <= 0 || value >= 100) return fallback
   return value / 100
 }
 
 export function buildLayoutFromLegacy(legacy: LegacyProjectLayout): PaneLayout {
-  // The chat pane starts empty: a chat tab is addressed by chatId and the
-  // legacy layout records none. ChatPage opens a tab for the chat in the URL on
-  // mount, so the pane fills itself the moment a chat is shown.
   const chatPane = createPane(CHAT_PANE_ID, [])
 
   const terminals = legacy.terminals.filter((terminal) => terminal.id.trim().length > 0)
@@ -61,9 +41,6 @@ export function buildLayoutFromLegacy(legacy: LegacyProjectLayout): PaneLayout {
     ]),
   )
 
-  // Terminals were a horizontal strip; keep them as sibling panes so the
-  // arrangement survives the upgrade. createGroup collapses the single-terminal
-  // case to that one pane, so no group is created needlessly.
   const terminalNode: PaneNode | null =
     terminalPanes.length > 0
       ? createGroup(TERMINALS_GROUP_ID, "horizontal", terminalPanes, [...legacy.terminalSizes])

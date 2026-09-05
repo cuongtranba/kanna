@@ -14,7 +14,6 @@ function hThree(): PaneNode {
   return createGroup("g1", "horizontal", [createPane("a"), createPane("b"), createPane("c")])
 }
 
-/** Outer vertical [a, inner], inner horizontal [b, c]. */
 function nested(): PaneNode {
   return createGroup("g-out", "vertical", [
     createPane("a"),
@@ -24,9 +23,6 @@ function nested(): PaneNode {
 
 describe("findResizeBoundary", () => {
   test("left/right resolve on a horizontal group, up/down find nothing there", () => {
-    // `direction` is handed straight to the resize library's `orientation`,
-    // where "horizontal" lays children out in a row — so left/right is the
-    // horizontal axis. Inverting this is the easy mistake; this test pins it.
     expect(findResizeBoundary(hSplit(), "a", "right")).toEqual({ groupId: "g1", index: 0, deltaRatio: S })
     expect(findResizeBoundary(hSplit(), "a", "up")).toBeNull()
     expect(findResizeBoundary(hSplit(), "a", "down")).toBeNull()
@@ -43,10 +39,6 @@ describe("findResizeBoundary", () => {
   })
 
   test("last child falls back to the boundary on its left, keeping the sign", () => {
-    // The divider moves the way the arrow points, always. The last child has no
-    // divider on its right, so pressing right slides the one on its left right,
-    // shrinking the pane. Flipping the sign here to "right always grows me"
-    // would make the only divider on screen travel against the key.
     expect(findResizeBoundary(hThree(), "c", "right")).toEqual({ groupId: "g1", index: 1, deltaRatio: S })
     expect(findResizeBoundary(hThree(), "c", "left")).toEqual({ groupId: "g1", index: 1, deltaRatio: -S })
   })
@@ -58,8 +50,6 @@ describe("findResizeBoundary", () => {
   })
 
   test("the ancestor walk indexes the branch, not the pane", () => {
-    // `c` sits at index 1 of g-in, but g-in is the LAST child of g-out, so the
-    // vertical boundary is g-out's only one.
     expect(findResizeBoundary(nested(), "c", "down")).toEqual({ groupId: "g-out", index: 0, deltaRatio: S })
     expect(findResizeBoundary(nested(), "c", "right")).toEqual({ groupId: "g-in", index: 0, deltaRatio: S })
   })

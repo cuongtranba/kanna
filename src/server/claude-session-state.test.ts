@@ -1,14 +1,7 @@
-/**
- * Tests for ClaudeSessionState class protocol methods.
- * Stage 1 of issue #893: background-task invariants live in methods, not comments.
- */
 
 import { describe, it, expect } from "bun:test"
 import { ClaudeSessionState } from "./claude-session-state"
 
-// ---------------------------------------------------------------------------
-// Minimal stub for a ClaudeSessionHandle
-// ---------------------------------------------------------------------------
 function makeHandle(): import("./harness-types").ClaudeSessionHandle {
   return {
     provider: "claude",
@@ -60,9 +53,6 @@ function makeSession(overrides?: Partial<ConstructorParameters<typeof ClaudeSess
 const NOW = 1_000_000
 const MAX_MS = 30_000
 
-// ---------------------------------------------------------------------------
-// isHoldingWork
-// ---------------------------------------------------------------------------
 describe("ClaudeSessionState.isHoldingWork", () => {
   it("returns false when backgroundTasks is empty", () => {
     const s = makeSession()
@@ -90,16 +80,13 @@ describe("ClaudeSessionState.isHoldingWork", () => {
   it("returns true when level-sourced regardless of deadline", () => {
     const s = makeSession({
       backgroundTasks: new Map([["t1", { taskType: null, description: null, startedAt: NOW, outputPath: null }]]),
-      backgroundTaskDeadlineAt: 0, // expired
+      backgroundTaskDeadlineAt: 0,
       backgroundTasksLevelSourced: true,
     })
     expect(s.isHoldingWork(NOW)).toBe(true)
   })
 })
 
-// ---------------------------------------------------------------------------
-// guardExpired
-// ---------------------------------------------------------------------------
 describe("ClaudeSessionState.guardExpired", () => {
   it("returns false when backgroundTasks is empty", () => {
     const s = makeSession()
@@ -134,9 +121,6 @@ describe("ClaudeSessionState.guardExpired", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// noteUserSend
-// ---------------------------------------------------------------------------
 describe("ClaudeSessionState.noteUserSend", () => {
   it("refreshes deadline when tasks are pending", () => {
     const s = makeSession({
@@ -158,10 +142,8 @@ describe("ClaudeSessionState.noteUserSend", () => {
       backgroundTaskWakeSuppressed: true,
     })
     s.noteUserSend(MAX_MS, NOW)
-    // No tasks → deadline untouched, wakeCount untouched
     expect(s.backgroundTaskDeadlineAt).toBe(99)
     expect(s.backgroundTaskWakeCount).toBe(3)
-    // But wake suppression always cleared
     expect(s.backgroundTaskWakeSuppressed).toBe(false)
   })
 
@@ -172,9 +154,6 @@ describe("ClaudeSessionState.noteUserSend", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// noteLaunch
-// ---------------------------------------------------------------------------
 describe("ClaudeSessionState.noteLaunch", () => {
   it("returns empty array when launches is empty", () => {
     const s = makeSession()
@@ -214,7 +193,6 @@ describe("ClaudeSessionState.noteLaunch", () => {
     })
     const added = s.noteLaunch([{ id: "task-1", outputPath: null }], "new", MAX_MS, NOW)
     expect(added).toEqual([])
-    // original description preserved
     expect(s.backgroundTasks.get("task-1")?.description).toBe("old")
   })
 
@@ -246,9 +224,6 @@ describe("ClaudeSessionState.noteLaunch", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// noteSettle
-// ---------------------------------------------------------------------------
 describe("ClaudeSessionState.noteSettle", () => {
   it("removes the settled task", () => {
     const s = makeSession({
@@ -284,9 +259,6 @@ describe("ClaudeSessionState.noteSettle", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// applyLevelSnapshot
-// ---------------------------------------------------------------------------
 describe("ClaudeSessionState.applyLevelSnapshot", () => {
   it("sets levelSourced true", () => {
     const s = makeSession()
@@ -344,9 +316,6 @@ describe("ClaudeSessionState.applyLevelSnapshot", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// hasBackgroundTasks
-// ---------------------------------------------------------------------------
 describe("ClaudeSessionState.hasBackgroundTasks", () => {
   it("returns false when map is empty", () => {
     const s = makeSession()
@@ -361,9 +330,6 @@ describe("ClaudeSessionState.hasBackgroundTasks", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// getBackgroundTaskEntries
-// ---------------------------------------------------------------------------
 describe("ClaudeSessionState.getBackgroundTaskEntries", () => {
   it("returns empty array when no tasks", () => {
     const s = makeSession()
@@ -380,9 +346,6 @@ describe("ClaudeSessionState.getBackgroundTaskEntries", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// getBackgroundTaskIds
-// ---------------------------------------------------------------------------
 describe("ClaudeSessionState.getBackgroundTaskIds", () => {
   it("returns empty array when no tasks", () => {
     const s = makeSession()
@@ -403,9 +366,6 @@ describe("ClaudeSessionState.getBackgroundTaskIds", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// abandonBackgroundTasks
-// ---------------------------------------------------------------------------
 describe("ClaudeSessionState.abandonBackgroundTasks", () => {
   it("returns empty array when no tasks", () => {
     const s = makeSession()

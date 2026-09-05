@@ -16,10 +16,10 @@ import type {
 } from "./claude-session-types"
 
 export interface ImportClaudeSessionsResult {
-  imported: number    // brand new sessions
-  updated: number     // existing sessions whose hash or imported title changed
-  skipped: number     // unchanged (hash match) or empty-entry sessions
-  failed: number      // cwd missing or store error
+  imported: number
+  updated: number
+  skipped: number
+  failed: number
   newProjects: number
 }
 
@@ -148,23 +148,11 @@ async function backfillImportedChatTitle(
   return true
 }
 
-/**
- * Extract the source record uuid from an entry _id.
- * Mapper format: `${uuid}-user`, `${uuid}-text-<n>`, `${uuid}-tool_call-<n>`,
- * `${uuid}-tool_result-<n>`. We match known trailing suffixes so that UUID v4
- * values (which contain dashes) are not split incorrectly.
- */
 function extractUuidFromEntryId(entryId: string): string | null {
   const match = entryId.match(/^(.+)-(?:user|text-\d+|tool_call-\d+|tool_result-\d+)$/)
   return match ? match[1] : null
 }
 
-/**
- * Collect the set of record uuids already stored for a chat.
- * Entries with a random uuid prefix (records that had no uuid) will always
- * be absent from any record.uuid lookup — assumed acceptable since real Claude
- * sessions always include uuid.
- */
 function collectExistingUuids(store: EventStore, chatId: string): Set<string> {
   const seen = new Set<string>()
   for (const entry of store.getMessages(chatId)) {
@@ -202,7 +190,6 @@ export async function importOneSession(
   store: EventStore,
   session: ParsedClaudeSession,
 ): Promise<ImportOutcome> {
-  // Check if a chat already exists for this sessionId
   let existingChat: ChatRecord | undefined
   for (const chat of store.state.chatsById.values()) {
     if (!chat.deletedAt && chat.sessionTokensByProvider.claude === session.sessionId) {
@@ -215,14 +202,12 @@ export async function importOneSession(
     try {
       const titleBackfilled = await backfillImportedChatTitle(store, existingChat, session)
 
-      // Hash match → nothing new to do beyond possible title backfill
       if (existingChat.sourceHash === session.sourceHash) {
         return titleBackfilled
           ? { status: "updated", chatId: existingChat.id }
           : { status: "skipped", chatId: existingChat.id }
       }
 
-      // Hash changed → append only new records
       const appended = await applyDelta(store, existingChat.id, session)
       const outcome: ImportOutcome = appended > 0 || titleBackfilled
         ? { status: "updated", chatId: existingChat.id }
@@ -235,7 +220,6 @@ export async function importOneSession(
     }
   }
 
-  // No existing chat — new import path
   if (!cwdExists(session.cwd)) {
     return { status: "failed", reason: "cwd_missing" }
   }
@@ -353,7 +337,6 @@ export async function importSessionsByIds(args: ImportSessionsByIdsArgs): Promis
       try {
         onSessionImported({ chatId, sessionId, sourcePath: filePath, sourceMtimeMs: statSync(filePath).mtimeMs })
       } catch {
-        // seam must never fail the import
       }
     }
   }

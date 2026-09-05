@@ -11,9 +11,6 @@ import type {
   GithubRelease,
 } from "../shared/types"
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
 
 export type SelectedBranch =
   | { kind: "local"; name: string }
@@ -28,9 +25,6 @@ export type SelectedBranch =
       remoteRef?: string
     }
 
-// ---------------------------------------------------------------------------
-// Repo / branch queries
-// ---------------------------------------------------------------------------
 
 export async function resolveRepo(
   projectPath: string
@@ -277,11 +271,8 @@ export async function getMergeCommitCount(repoRoot: string, sourceRef: string) {
 }
 
 export async function predictMergeConflicts(repoRoot: string, sourceRef: string) {
-  // Try the newer `git merge-tree --write-tree` form (requires Git 2.38+).
   const newResult = await runGit(["merge-tree", "--write-tree", "--messages", "HEAD", sourceRef], repoRoot)
 
-  // Exit code 129 means the --write-tree flag is not supported (Git < 2.38).
-  // Fall back to the legacy three-argument form.
   if (newResult.exitCode !== 129) {
     const output = `${newResult.stdout}\n${newResult.stderr}`.trim()
 
@@ -300,7 +291,6 @@ export async function predictMergeConflicts(repoRoot: string, sourceRef: string)
     throw new Error(output || "Failed to analyze merge conflicts")
   }
 
-  // Legacy fallback: `git merge-tree <base> HEAD <source>` (Git < 2.38).
   const baseResult = await runGit(["merge-base", "HEAD", sourceRef], repoRoot)
   if (baseResult.exitCode !== 0) {
     throw new Error(baseResult.stderr.trim() || "Failed to find merge base")
@@ -314,7 +304,6 @@ export async function predictMergeConflicts(repoRoot: string, sourceRef: string)
     throw new Error(legacyOutput || "Failed to analyze merge conflicts")
   }
 
-  // In the legacy form, conflict markers (<<<<<<) appear in the output when there are conflicts.
   if (legacyOutput.includes("<<<<<<<") || legacyOutput.toLowerCase().includes("conflict")) {
     return {
       hasConflicts: true,
@@ -325,9 +314,6 @@ export async function predictMergeConflicts(repoRoot: string, sourceRef: string)
   return { hasConflicts: false }
 }
 
-// ---------------------------------------------------------------------------
-// GitHub URL parsing (pure)
-// ---------------------------------------------------------------------------
 
 export function extractGitHubRepoSlug(remoteUrl: string | null | undefined) {
   if (!remoteUrl) return null
@@ -350,9 +336,6 @@ export function extractGitHubRepoSlug(remoteUrl: string | null | undefined) {
   return null
 }
 
-// ---------------------------------------------------------------------------
-// GitHub API — pull requests
-// ---------------------------------------------------------------------------
 
 export interface GitHubPullRequestResponseItem {
   number: number
@@ -409,7 +392,6 @@ export async function fetchGitHubPullRequests(
       return ghPulls
     }
   } catch {
-    // Fall back to an unauthenticated HTTP request when `gh` is unavailable.
   }
 
   const response = await fetchImpl(`https://api.github.com/repos/${repoSlug}/pulls?state=open&per_page=50`, {
@@ -426,9 +408,6 @@ export async function fetchGitHubPullRequests(
   return Array.isArray(json) ? json : []
 }
 
-// ---------------------------------------------------------------------------
-// GitHub API — releases
-// ---------------------------------------------------------------------------
 
 type GitHubReleasesCliApiLike = (path: string) => Promise<GithubRelease[] | null>
 
@@ -453,9 +432,6 @@ async function fetchGitHubReleasesViaGh(path: string): Promise<GithubRelease[] |
   return Array.isArray(json) ? json : []
 }
 
-// Fetches published releases for the changelog panel. Prefers the authenticated
-// `gh` CLI (5000 req/hr) and falls back to an unauthenticated HTTP request
-// (60 req/hr per IP) so the browser never hits GitHub's low anonymous limit.
 export async function fetchGitHubReleases(
   repoSlug: string,
   deps: FetchLike | FetchGitHubReleasesDeps = fetch
@@ -468,7 +444,6 @@ export async function fetchGitHubReleases(
   try {
     releases = await ghApiImpl(ghPath)
   } catch {
-    // Fall back to an unauthenticated HTTP request when `gh` is unavailable.
   }
 
   if (!releases) {
@@ -488,9 +463,6 @@ export async function fetchGitHubReleases(
   return Array.isArray(releases) ? releases.filter((release) => !release.draft) : []
 }
 
-// ---------------------------------------------------------------------------
-// Commit history
-// ---------------------------------------------------------------------------
 
 function buildGitHubCommitUrl(remoteUrl: string | null, sha: string) {
   const slug = extractGitHubRepoSlug(remoteUrl)
@@ -581,9 +553,6 @@ export async function getBranchHistory(args: {
   return { entries }
 }
 
-// ---------------------------------------------------------------------------
-// Branch action failure factories
-// ---------------------------------------------------------------------------
 
 export function createBranchActionFailure(title: string, detail: string, fallback: string) {
   return {
@@ -609,9 +578,6 @@ export function createMergeActionFailure(args: {
   } as const
 }
 
-// ---------------------------------------------------------------------------
-// GitHub auth / publish helpers
-// ---------------------------------------------------------------------------
 
 export function sanitizeRepoName(name: string) {
   return name
@@ -685,13 +651,6 @@ export async function getGitHubOwners(): Promise<string[]> {
   return [...owners]
 }
 
-/**
- * The `owner/repo` a checkout's `origin` points at, or null when there is none
- * to read.
- *
- * Offered as a default when binding a board to a tracker: a developer who
- * already cloned the repo should not have to type its name back.
- */
 export async function readOriginRepoSlug(repoRoot: string): Promise<string | null> {
   const result = await runGit(["remote", "get-url", "origin"], repoRoot)
   if (result.exitCode !== 0) return null

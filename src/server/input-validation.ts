@@ -1,21 +1,7 @@
-/**
- * Shared pure input-validation helpers.
- *
- * Extracted from `loop-template.ts` so the loop setup and the orchestration run
- * validators enforce IDENTICAL rules (shell-command parseability, path
- * confinement). NO IO — path logic operates on strings only; callers supply the
- * base dir.
- */
 
 import path from "node:path"
 import { parse as shellParse } from "shell-quote"
 
-/**
- * A shell command is "parseable" when quotes balance and it yields at least one
- * token. shell-quote is intentionally lenient (an unclosed quote parses to two
- * tokens rather than throwing), so quote balance is enforced explicitly. Quote
- * chars escaped with a preceding backslash are ignored.
- */
 export function shellCommandIsParseable(cmd: string): boolean {
   let singles = 0
   let doubles = 0
@@ -35,12 +21,6 @@ export function shellCommandIsParseable(cmd: string): boolean {
 
 export type ConfinedPath = { abs: string; rel: string } | { error: string }
 
-/**
- * Resolve `input` against `baseDir` and refuse anything that escapes it. Returns
- * both the absolute path and the base-relative path, or a single error string.
- * A blank input, a NUL byte, `..` escape, or a path equal to the base itself is
- * rejected.
- */
 export function confinePathToDir(input: string, baseDir: string, label = "path"): ConfinedPath {
   const raw = input.trim()
   if (raw === "") return { error: `${label} is blank` }

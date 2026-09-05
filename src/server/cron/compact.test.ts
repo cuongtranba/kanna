@@ -87,7 +87,6 @@ function runSkipped(
   }
 }
 
-/** `count` fully-settled runs (start + outcome), timestamps stepping by 1000. */
 function settledRuns(jobId: string, count: number, startAt: number): AutoContinueEvent[] {
   const out: AutoContinueEvent[] = []
   for (let i = 0; i < count; i += 1) {
@@ -101,11 +100,6 @@ function skips(jobId: string, count: number, startAt: number): AutoContinueEvent
   return Array.from({ length: count }, (_, i) => runSkipped(jobId, startAt + i * 1000))
 }
 
-/**
- * The whole point of the module: compaction must be invisible to both readers
- * of cron run events. Every shape below is checked against BOTH, so a shape
- * that breaks one is not silently excused by the other.
- */
 const PARITY_SHAPES: Array<{ name: string; log: AutoContinueEvent[] }> = [
   { name: "200 settled pairs", log: [armed("j1", 1), ...settledRuns("j1", 200, 100)] },
   { name: "200 skips", log: [armed("j1", 1), ...skips("j1", 200, 100)] },
@@ -208,7 +202,6 @@ describe("compactCronRunEvents — invariants", () => {
       kept.filter((e) => e.kind === "cron_run_outcome").map((e) => (e as { runId: string }).runId),
     )
     expect([...startIds].sort()).toEqual([...outcomeIds].sort())
-    // A surviving half-pair is what makes boot write a bogus `orphaned` outcome.
     expect(findRunningCronRuns(kept, CHAT)).toEqual([])
   })
 
@@ -245,10 +238,6 @@ describe("compactCronRunEvents — invariants", () => {
     expect(kept.filter((e) => e.kind === "cron_run_started")).toHaveLength(MAX_RECENT_CRON_RUNS)
   })
 
-  // Deliberately runs FAR more non-cron events past the retention budget than
-  // the budget allows: a version of this test with only one or two of them
-  // passes even when the code treats them as droppable run records, because
-  // the budget is never reached.
   test("I/J: non-cron events are never touched, however many there are", () => {
     const loopArmed: AutoContinueEvent = {
       v: AUTO_CONTINUE_EVENT_VERSION,
@@ -287,7 +276,6 @@ describe("compactCronRunEvents — invariants", () => {
     const kept = compactCronRunEvents([...log])
 
     expect(kept.filter((e) => !e.kind.startsWith("cron_"))).toEqual(nonCron)
-    // The cron side must still actually be compacted, or this proves nothing.
     expect(kept.filter((e) => e.kind === "cron_run_started")).toHaveLength(MAX_RECENT_CRON_RUNS)
   })
 })
@@ -308,8 +296,6 @@ describe("compactCronRunEvents — reclaim rules", () => {
   })
 
   test("pins are retained IN ADDITION to the newest N, not instead of one", () => {
-    // Counting the pin against the budget would evict a settled record that is
-    // still inside the true newest-20 window, diverging from the read model.
     const log = [
       armed("j1", 1),
       runStarted("j1", "live", 100),

@@ -5,7 +5,6 @@ import {
   resolveTabInsertionIndex,
 } from "./paneDropGeometry"
 
-/** A 200x100 pane at the origin, so ratios map to round numbers. */
 const rect = { left: 0, top: 0, width: 200, height: 100 }
 
 const at = (x: number, y: number) => resolvePaneDropIntent({ pointer: { x, y }, rect })
@@ -18,7 +17,6 @@ describe("resolvePaneDropIntent", () => {
   test("the merge zone spans the middle 40% on both axes", () => {
     expect(MERGE_ZONE_RATIO).toBe(0.4)
 
-    // The band is centred: 40% of 200 spans x in [60, 140]; of 100, y in [30, 70].
     expect(at(61, 50)).toEqual({ kind: "merge" })
     expect(at(139, 50)).toEqual({ kind: "merge" })
     expect(at(100, 31)).toEqual({ kind: "merge" })
@@ -40,9 +38,6 @@ describe("resolvePaneDropIntent", () => {
   })
 
   test("a corner resolves to the proportionally nearer edge", () => {
-    // 10px from the left edge is 5% of the width; 10px from the top is 10% of
-    // the height. Proportional distance is what keeps a wide, short pane from
-    // always answering "top".
     expect(at(10, 10)).toEqual({ kind: "split", position: "left" })
     expect(at(30, 4)).toEqual({ kind: "split", position: "top" })
   })
@@ -65,7 +60,6 @@ describe("resolvePaneDropIntent", () => {
   })
 
   test("merges into a pane too small to split meaningfully", () => {
-    // A degenerate rect has no usable edge zones; merging is the safe answer.
     const tiny = { left: 0, top: 0, width: 0, height: 0 }
 
     expect(resolvePaneDropIntent({ pointer: { x: 0, y: 0 }, rect: tiny })).toEqual({

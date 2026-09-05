@@ -10,9 +10,7 @@ interface PushNotificationsSectionProps {
   config: PushConfigSnapshot
   projects: LocalProjectsSnapshot["projects"]
   currentDeviceId: string | null
-  /** The committed server VAPID contact subject (JWT `sub`), the dirty baseline. */
   contactSubject: string
-  /** The editable draft (held in the settings-page store, not local state). */
   contactSubjectDraft: string
   onContactSubjectDraftChange: (value: string) => void
   onEnable: () => Promise<void>
@@ -20,7 +18,6 @@ interface PushNotificationsSectionProps {
   onTest: () => Promise<void>
   onMuteToggle: (localPath: string, muted: boolean) => Promise<void>
   onRemoveDevice: (id: string) => Promise<void>
-  /** Persist a new contact subject (validated) to app settings. */
   onContactSubjectSave: (value: string) => Promise<void>
 }
 

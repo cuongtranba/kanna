@@ -7,21 +7,13 @@ import { asJsonValue } from "../lib/asJsonValue"
 interface PreferencesState {
   autoResumeOnRateLimit: boolean
   setAutoResumeOnRateLimit: (value: boolean) => void
-  /** Device-local font-scale override; undefined means "no override, defer to server default". */
   typographyOverride?: FontScaleStep
-  /** Last-seen server-provided font-scale default, cached for pre-paint reads. */
   typographyServerDefaultCache?: FontScaleStep
   setTypographyOverride: (step: FontScaleStep) => void
   clearTypographyOverride: () => void
   cacheTypographyServerDefault: (step: FontScaleStep) => void
 }
 
-/**
- * `persistedState` is whatever a previous version of this app left in
- * localStorage, so it is read as JSON and every field is re-checked. A v1
- * writer's field names are all this knows; nothing enforces that a v1 writer
- * actually kept to them.
- */
 export function migratePreferencesState(
   persistedState: JsonValue,
 ): Pick<PreferencesState, "autoResumeOnRateLimit" | "typographyOverride" | "typographyServerDefaultCache"> {

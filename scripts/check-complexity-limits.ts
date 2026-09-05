@@ -1,15 +1,3 @@
-/**
- * Proves every ESLint complexity ceiling is still TIGHT.
- *
- * A ceiling nothing reaches gates nothing: if `complexity` is pinned at 141 but
- * the worst function is now 90, the rule silently stopped constraining anything
- * and 50 points of regression are available for free. This runs ESLint once with
- * every pinned ceiling lowered by one and requires each rule to report at least
- * one production violation — the analog of the budget's `pattern_shrank`, for a
- * measurement a regex cannot make.
- *
- * Reuses the budget's own PRODUCTION_EXCLUDES so "production" means one thing.
- */
 import { ESLINT_LIMIT_PINS, PRODUCTION_EXCLUDES } from "../src/ops/architecture/budget"
 
 interface EslintMessage {

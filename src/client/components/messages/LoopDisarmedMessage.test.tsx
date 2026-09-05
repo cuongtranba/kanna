@@ -12,8 +12,6 @@ function render(message: Omit<ProcessedLoopDisarmedMessage, "id" | "timestamp" |
 }
 
 describe("LoopDisarmedMessage", () => {
-  // The whole point of the card: a user message disarms an armed loop, and
-  // that used to leave no trace at all.
   test("user_send names the user's own message as the thing that stopped the loop", () => {
     const html = render({ reason: "user_send", resumable: false })
     expect(html).toContain("Loop stopped by your message")
@@ -40,8 +38,6 @@ describe("LoopDisarmedMessage", () => {
     expect(html).toContain("The chat was deleted.")
   })
 
-  // A review once read the wrong plan in the wrong checkout because nothing
-  // recorded either.
   test("shows the tracking file and the worktree it ran in", () => {
     const html = render({
       reason: "user_send",
@@ -70,15 +66,11 @@ describe("LoopDisarmedMessage", () => {
     expect(html).not.toContain("resume_loop")
   })
 
-  // No client action is wired for re-arming yet, so the card must not grow a
-  // dead button.
   test("renders no interactive control", () => {
     const html = render({ reason: "repeated_failures", resumable: true })
     expect(html).not.toContain("<button")
   })
 
-  // DESIGN.md: native `title` is banned as a hover surface; the project
-  // Tooltip is the replacement.
   test("uses no native title attribute", () => {
     const html = render({
       reason: "goal_met",

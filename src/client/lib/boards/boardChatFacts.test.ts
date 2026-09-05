@@ -3,10 +3,6 @@ import { buildBoardChatFacts } from "./boardChatFacts"
 import { EMPTY_CHAT_ACTIVITY } from "../../../shared/types"
 import type { SidebarChatRow, SidebarData, SidebarProjectGroup } from "../../../shared/types"
 
-/**
- * The board reads chat liveness from the same sidebar snapshot the sidebar
- * draws, so a chat cannot be "Running" on the left and silent on the card.
- */
 
 function row(partial: Partial<SidebarChatRow> & { chatId: string }): SidebarChatRow {
   return {
@@ -61,11 +57,6 @@ describe("buildBoardChatFacts", () => {
     })
   })
 
-  /**
-   * Every bucket, every group. A card links a chat by id and neither knows nor
-   * cares which project group, or which fold of it, the chat is currently
-   * filed under — missing one bucket makes a live chat read as deleted.
-   */
   test("reads every bucket of every group, starred and not", () => {
     const facts = buildBoardChatFacts(
       sidebar({
@@ -99,10 +90,6 @@ describe("buildBoardChatFacts", () => {
     expect(facts["chat-1"]?.unread).toBe(true)
   })
 
-  /**
-   * The absence of a key is what tells a card its chat is gone — the reaper
-   * deletes chats nobody wrote to, so the board must not invent a placeholder.
-   */
   test("an empty sidebar knows about no chats at all", () => {
     expect(buildBoardChatFacts(sidebar({}))).toEqual({})
   })

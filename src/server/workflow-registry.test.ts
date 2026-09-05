@@ -49,8 +49,6 @@ describe("WorkflowRegistry", () => {
   })
 
   describe("getAgentTranscript", () => {
-    // Real agent files are entirely isSidechain:true; the registry must parse
-    // via normalizeClaudeStreamMessage directly (same as the subagent viewer).
     const textLine = JSON.stringify({
       type: "assistant",
       uuid: "a1",
@@ -165,11 +163,8 @@ describe("WorkflowRegistry", () => {
     test("getRun running enrich: summary from real journal shape (counts + testsPass)", () => {
       const io = fakeIo(new Map([["/d", []]]))
       const journal: import("./workflow-watch-io.adapter").WorkflowJournalEntry[] = [
-        // The adapter normalizes `fixed: [1941]` / `stale: [...]` arrays to counts.
         { type: "result", agentId: "a1", result: { dir: "/repo/pkg/coding", fixed: 1, stale: 2, skipped: 0, testsPass: true } },
-        // A clean no-op agent (all zero counts) falls back to its summary string.
         { type: "result", agentId: "a2", result: { dir: "/repo/pkg/y", fixed: 0, stale: 0, skipped: 0, summary: "nothing to do" } },
-        // tests failing.
         { type: "result", agentId: "a3", result: { dir: "/repo/pkg/z", fixed: 3, testsPass: false } },
       ]
       const reg = createWorkflowRegistry({
@@ -207,7 +202,6 @@ describe("WorkflowRegistry", () => {
       const run = reg.getRun("chat1", "wf_live")
       expect(run).not.toBeNull()
       expect(run?.status).toBe("running")
-      // unknown / stale runId still null
       expect(reg.getRun("chat1", "wf_unknown")).toBeNull()
     })
 
@@ -245,22 +239,16 @@ describe("WorkflowRegistry", () => {
       })
       reg.subscribe((c) => seen.push(c))
       reg.register("chat1", "/d")
-      expect(reg.snapshot("chat1").map((r) => r.runId)).toEqual([]) // nothing launched yet
+      expect(reg.snapshot("chat1").map((r) => r.runId)).toEqual([])
       launched = true
-      liveCb!() // live run dir appeared → watcher fires
+      liveCb!()
       expect(seen).toContain("chat1")
       expect(reg.snapshot("chat1").map((r) => r.runId)).toEqual(["wf_live"])
     })
   })
 
   describe("re-run reuses a runId over a crashed-at-launch sidecar", () => {
-    // A failed sidecar with agentCount 0 + no agents is the no-op crash shape
-    // (script threw at eval before any agent ran). When a later launch reuses
-    // the runId (Claude embeds it in the persisted script filename) and pours
-    // agents into the same live dir, the stale crash sidecar must NOT mask the
-    // live re-run. Discriminator is content-based (agentCount 0 vs non-empty
-    // journal), not mtime ordering.
-    const CRASH = { status: "failed", agentCount: 0, taskId: "task_old", workflowName: "sweep" } // workflowProgress omitted -> agents:[]
+    const CRASH = { status: "failed", agentCount: 0, taskId: "task_old", workflowName: "sweep" }
     const journal2: import("./workflow-watch-io.adapter").WorkflowJournalEntry[] = [
       { type: "started", agentId: "a1" },
       { type: "started", agentId: "a2" },
@@ -278,7 +266,6 @@ describe("WorkflowRegistry", () => {
       expect(snap).toHaveLength(1)
       expect(snap[0].status).toBe("running")
       expect(snap[0].agentCount).toBe(2)
-      // carries the crash sidecar's taskId/workflowName so the launch card can bind
       expect(snap[0].taskId).toBe("task_old")
       expect(snap[0].workflowName).toBe("sweep")
     })
@@ -298,7 +285,7 @@ describe("WorkflowRegistry", () => {
       const io = fakeIo(new Map([["/d", [{ runId: "wf_x", raw: { runId: "wf_x", ...CRASH } }]]]))
       const reg = createWorkflowRegistry({
         read: io.read, watch: io.watch,
-        listRunDirs: () => [{ runId: "wf_x", newestMtimeMs: 0 }], // stale
+        listRunDirs: () => [{ runId: "wf_x", newestMtimeMs: 0 }],
         readRunJournal: () => journal2,
       })
       reg.register("chat1", "/d")

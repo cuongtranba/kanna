@@ -65,10 +65,6 @@ export function normalizeClaudeModelOptions(
   }
   const requestedWindow = modelOptions?.claude?.contextWindow
   const contextWindow = normalizeClaudeContextWindow(model, requestedWindow, customModels)
-  // A downgrade shrinks the usable context 5x and shows up only as a missing
-  // `[1m]` suffix in the turn's runConfig, so it must never pass in silence.
-  // The usual cause is a `customModels` entry that shadows a built-in without
-  // redeclaring its `contextWindowOptions`.
   if (requestedWindow !== undefined && requestedWindow !== contextWindow) {
     log.warn("[kanna/provider] requested Claude context window is unavailable for this model", {
       model,
@@ -109,25 +105,11 @@ export function openrouterAuthReady(snapshot: LlmProviderSnapshot): boolean {
   return snapshot.provider === "openrouter" && snapshot.enabled && snapshot.apiKey.length > 0
 }
 
-/** The read-only c3-224 probes the Claude spawn gate needs. */
 export interface ClaudeAuthPoolProbe {
   hasAnyToken(): boolean
   hasUsable(reservedFor?: string): boolean
 }
 
-/**
- * Can a Claude spawn proceed for `reservedFor`?
- *
- * This is the single definition of the Claude spawn gate, and it deliberately
- * mirrors what `claude-session-spawner.ts` / `quick-response.ts` express as
- * `pool.hasAnyToken() && !picked` → refuse: an OAuth token is required only
- * once the user has configured one. With an absent or empty pool the driver
- * falls through to the local claude CLI credentials, so the gate must pass.
- *
- * Getting this wrong in only one caller is invisible in the common case and
- * splits behaviour by call site — a user with zero configured tokens had a
- * working main chat and AUTH_REQUIRED on every subagent delegation.
- */
 export function claudeAuthReady(
   pool: ClaudeAuthPoolProbe | null | undefined,
   reservedFor?: string,

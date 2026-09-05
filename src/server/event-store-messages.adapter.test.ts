@@ -24,9 +24,6 @@ import {
 } from "./event-store-messages.adapter"
 import { getLatestContextWindowUsage } from "./proactive-compact"
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function makeStorage(files: Map<string, string> = new Map()): StorageBackend {
   return {
@@ -92,9 +89,6 @@ function makeDeps(overrides: Partial<MessageReadDeps> = {}): MessageReadDeps {
   }
 }
 
-// ---------------------------------------------------------------------------
-// getSeenMessageIds
-// ---------------------------------------------------------------------------
 
 describe("getSeenMessageIds", () => {
   test("creates an empty set for unknown chatId", () => {
@@ -120,9 +114,6 @@ describe("getSeenMessageIds", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// loadTranscriptFromDisk
-// ---------------------------------------------------------------------------
 
 describe("loadTranscriptFromDisk", () => {
   test("returns empty array when file does not exist", () => {
@@ -163,9 +154,6 @@ describe("loadTranscriptFromDisk", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// getMessages
-// ---------------------------------------------------------------------------
 
 describe("getMessages", () => {
   test("returns from cache when chatId matches", () => {
@@ -215,9 +203,6 @@ describe("getMessages", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// getQueuedMessages
-// ---------------------------------------------------------------------------
 
 describe("getQueuedMessages", () => {
   test("returns empty array for unknown chat", () => {
@@ -236,9 +221,6 @@ describe("getQueuedMessages", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// getQueuedMessage
-// ---------------------------------------------------------------------------
 
 describe("getQueuedMessage", () => {
   test("returns null for unknown queuedMessageId", () => {
@@ -259,9 +241,6 @@ describe("getQueuedMessage", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// getRecentMessagesPage
-// ---------------------------------------------------------------------------
 
 describe("getRecentMessagesPage", () => {
   test("returns empty page for limit 0", () => {
@@ -301,9 +280,6 @@ describe("getRecentMessagesPage", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// getMessagesPageBefore
-// ---------------------------------------------------------------------------
 
 describe("getMessagesPageBefore", () => {
   test("returns empty page for limit 0", () => {
@@ -314,9 +290,6 @@ describe("getMessagesPageBefore", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// getRecentChatHistory
-// ---------------------------------------------------------------------------
 
 describe("getRecentChatHistory", () => {
   test("includes pending tool request entries", () => {
@@ -344,9 +317,6 @@ describe("getRecentChatHistory", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// getChatCount
-// ---------------------------------------------------------------------------
 
 describe("getChatCount", () => {
   test("returns 0 for project with no chats", () => {
@@ -367,9 +337,6 @@ describe("getChatCount", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// TranscriptCache (LRU) + window-only cloning
-// ---------------------------------------------------------------------------
 
 describe("TranscriptCache", () => {
   function countingStorage(files: Map<string, string>): { storage: StorageBackend; reads: () => number } {
@@ -405,13 +372,13 @@ describe("TranscriptCache", () => {
 
     for (const id of ["chat-a", "chat-b", "chat-c", "chat-d"]) getMessages(deps, id)
     expect(reads()).toBe(4)
-    getMessages(deps, "chat-b") // cache hit, touches LRU order
+    getMessages(deps, "chat-b")
     expect(reads()).toBe(4)
-    getMessages(deps, "chat-e") // evicts chat-a (LRU)
+    getMessages(deps, "chat-e")
     expect(reads()).toBe(5)
-    getMessages(deps, "chat-b") // still cached
+    getMessages(deps, "chat-b")
     expect(reads()).toBe(5)
-    getMessages(deps, "chat-a") // was evicted -> disk again
+    getMessages(deps, "chat-a")
     expect(reads()).toBe(6)
   })
 
@@ -420,13 +387,12 @@ describe("TranscriptCache", () => {
       transcriptFile("chat-a"), transcriptFile("chat-b"), transcriptFile("chat-c"),
     ])
     const { storage, reads } = countingStorage(files)
-    // One transcript is ~150 bytes; a 260-byte budget holds two, not four.
     const deps = makeDeps({ storage, transcriptCache: new TranscriptCache(4, 260) })
 
     getMessages(deps, "chat-a")
     getMessages(deps, "chat-b")
     expect(reads()).toBe(2)
-    getMessages(deps, "chat-c") // budget exceeded -> evicts chat-a despite cap 4
+    getMessages(deps, "chat-c")
     expect(reads()).toBe(3)
     getMessages(deps, "chat-a")
     expect(reads()).toBe(4)
@@ -435,11 +401,10 @@ describe("TranscriptCache", () => {
   test("does not cache a transcript that individually exceeds the byte budget", () => {
     const files = new Map([transcriptFile("chat-a")])
     const { storage, reads } = countingStorage(files)
-    // 1-byte budget: every real transcript exceeds it and must not be pinned.
     const deps = makeDeps({ storage, transcriptCache: new TranscriptCache(4, 1) })
 
     getMessages(deps, "chat-a")
-    getMessages(deps, "chat-a") // not cached: degrades to disk re-reads, not a memory pin
+    getMessages(deps, "chat-a")
     expect(reads()).toBe(2)
   })
 
@@ -455,7 +420,7 @@ describe("TranscriptCache", () => {
 
     cache.appendTo("chat-b", { _id: "big", createdAt: 3, kind: "assistant_text", text: "x".repeat(300) })
 
-    getMessages(deps, "chat-a") // chat-a evicted by chat-b's growth
+    getMessages(deps, "chat-a")
     expect(reads()).toBe(3)
   })
 
@@ -489,10 +454,6 @@ describe("TranscriptCache", () => {
   })
 
   test("evicts the sole cached entry when it grows past the byte budget via appendTo", () => {
-    // The size>1 guard kept an oversized entry in the cache permanently, pinning
-    // 524 MB RSS for a 96 MB transcript. The guard is removed: once a solo entry
-    // exceeds the budget it is evicted and subsequent reads use the tail path,
-    // which costs only a small chunk read rather than the full ~524 MB spike.
     const files = new Map([transcriptFile("chat-a")])
     const { storage, reads } = countingStorage(files)
     const cache = new TranscriptCache(4, 200)
@@ -509,9 +470,6 @@ describe("TranscriptCache", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// Tail-read fast path (byte-offset cursors)
-// ---------------------------------------------------------------------------
 
 function makeSliceStorage(content: string): StorageBackend {
   const buf = Buffer.from(content, "utf8")
@@ -540,7 +498,6 @@ describe("transcript tail-read", () => {
     expect(tail!.reachedStart).toBe(false)
     expect(tail!.entries.length).toBeGreaterThan(5)
     const first = tail!.entries[0]!
-    // firstLineByteOffset points at the raw line of the first parsed entry
     const at = Buffer.from(content, "utf8").subarray(tail!.lineOffsets[0]!).toString("utf8")
     expect(at.startsWith(JSON.stringify({ _id: first._id, createdAt: first.createdAt, kind: "assistant_text", text: (first as { text: string }).text }).slice(0, 20))).toBe(true)
   })
@@ -600,9 +557,6 @@ describe("transcript tail-read", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// getLatestChatContextWindowUsage — tail-backed proactive-compact trigger
-// ---------------------------------------------------------------------------
 
 const TRANSCRIPT_PATH = "/data/transcripts/chat-t.jsonl"
 
@@ -623,11 +577,6 @@ function linesToFile(lines: string[]): string {
   return `${lines.join("\n")}\n`
 }
 
-/**
- * Slice storage that records the span of every byte read. "Did not read the
- * whole file" is the actual claim of this change, and the read spans are the
- * only direct evidence for it.
- */
 function makeCountingSliceStorage(content: string): { storage: StorageBackend; spans: number[] } {
   const spans: number[] = []
   const base = makeSliceStorage(content)
@@ -643,7 +592,6 @@ function makeCountingSliceStorage(content: string): { storage: StorageBackend; s
   }
 }
 
-/** Padding large enough that one 64 KiB window cannot cover the whole file. */
 function padding(count: number): string[] {
   return Array.from({ length: count }, (_v, i) => entryLine(i))
 }
@@ -665,7 +613,6 @@ describe("getLatestChatContextWindowUsage", () => {
     const deps = makeDeps({ storage })
 
     expect(getLatestChatContextWindowUsage(deps, "chat-t")?.usedTokens).toBe(180_000)
-    // Pins that growth actually happened rather than one lucky oversized read.
     expect(spans.length).toBeGreaterThan(1)
   })
 
@@ -676,8 +623,6 @@ describe("getLatestChatContextWindowUsage", () => {
     const deps = makeDeps({ storage, transcriptCache: cache })
 
     expect(getLatestChatContextWindowUsage(deps, "chat-t")).toBe(null)
-    // Reaching BOF must NOT promote the transcript into the full cache — that
-    // would re-introduce the very memory this read exists to avoid.
     expect(cache.has("chat-t")).toBe(false)
   })
 
@@ -691,14 +636,10 @@ describe("getLatestChatContextWindowUsage", () => {
     const deps = makeDeps({ storage })
 
     expect(getLatestChatContextWindowUsage(deps, "chat-t")).toBe(null)
-    // The perf assertion for the tri-state: a boundary is a CONCLUSIVE null,
-    // so the scan must stop at the first window. Treating it as "not found"
-    // would walk to BOF on every send for the rest of the chat's life.
     expect(spans.length).toBe(1)
   })
 
   test("agrees with a full backward scan on randomized transcripts", () => {
-    // Seeded LCG — deterministic, no Math.random.
     let seed = 0x2f6e2b1
     const next = () => {
       seed = (seed * 1103515245 + 12345) & 0x7fffffff
@@ -749,9 +690,6 @@ describe("getLatestChatContextWindowUsage", () => {
   })
 
   test("reads legacy in-memory messages that have no file on disk", () => {
-    // A legacy chat has no transcript file at all, so a tail read would see an
-    // empty transcript and wrongly report "no usage", silently disabling the
-    // proactive compact for it.
     const deps = makeDeps({
       storage: makeSliceStorage(""),
       legacyMessagesByChatId: new Map([
@@ -768,26 +706,19 @@ describe("getLatestChatContextWindowUsage", () => {
   })
 
   test("reads each byte at most once when no marker exists", () => {
-    // Non-overlapping windows are what keep the marker-less case — MEASURED as
-    // 241 of 264 chats on the reference install — cheaper than a flat read.
-    // Re-reading from EOF with a growing window costs ~2x the file instead.
     const content = linesToFile(padding(4000))
     const fileBytes = Buffer.byteLength(content, "utf8")
     const { storage, spans } = makeCountingSliceStorage(content)
     const deps = makeDeps({ storage })
 
     expect(getLatestChatContextWindowUsage(deps, "chat-t")).toBe(null)
-    // A little slack for the torn leading line each window re-covers.
     expect(spans.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(fileBytes * 1.1)
   })
 
   test("stops looking past the lookback bound and reports no current usage", () => {
-    // A marker further back than one turn's worth of entries describes a
-    // context window that has since been fully replaced, so `null` (no
-    // proactive compact) is the correct answer rather than a stale reading.
     const farBack = [
       usageLine(180_000, 200_000, 0),
-      ...padding(200_000), // pushes the marker well past 8 MiB from EOF
+      ...padding(200_000),
     ]
     const content = linesToFile(farBack)
     expect(Buffer.byteLength(content, "utf8")).toBeGreaterThan(8 * 1024 * 1024)
@@ -799,9 +730,6 @@ describe("getLatestChatContextWindowUsage", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// getRecentRawEntries
-// ---------------------------------------------------------------------------
 
 describe("getRecentRawEntries", () => {
   function makeSliceStorage(content: string): StorageBackend {
@@ -859,9 +787,6 @@ describe("getRecentRawEntries", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// TranscriptCache.isSeeded / markSeeded — seeding state independent of LRU
-// ---------------------------------------------------------------------------
 
 describe("TranscriptCache isSeeded / markSeeded", () => {
   test("isSeeded returns false for an unknown chatId", () => {
@@ -905,9 +830,6 @@ describe("TranscriptCache isSeeded / markSeeded", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// getMessagesView — marks oversized transcripts as seeded without caching them
-// ---------------------------------------------------------------------------
 
 describe("getMessagesView seeding for oversized transcripts", () => {
   test("marks chat as seeded after disk load even when transcript exceeds maxBytes", () => {
@@ -954,9 +876,6 @@ describe("getMessagesView seeding for oversized transcripts", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// seedSeenMessageIdsFromTail — avoids full-transcript parse for large chats
-// ---------------------------------------------------------------------------
 
 describe("seedSeenMessageIdsFromTail", () => {
   function makeMessageEntry(i: number, messageId?: string): string {

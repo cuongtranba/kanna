@@ -7,7 +7,6 @@ import type { JsonValue } from "../../../shared/json"
 
 const term = (id: string) => createTab({ kind: "terminal", terminalId: id }, 0)
 
-/** Derived, not hard-coded, so the id scheme can change without editing tests. */
 const CHAT_C1_TAB_ID = buildTabId({ kind: "chat", chatId: "c1" })
 
 describe("normalizeLayout", () => {
@@ -51,8 +50,6 @@ describe("normalizeLayout", () => {
     expect(collectPanes(layout.root)[0]?.tabs.map((tab) => tab.tabId)).toEqual([CHAT_C1_TAB_ID])
   })
 
-  // Ids are re-derived from the target, so a persisted id that disagrees with
-  // its own target cannot poison dedup or React keys.
   test("re-derives the tab id from its target", () => {
     const layout = normalizeLayout({
       root: {
@@ -160,8 +157,6 @@ describe("normalizeLayout", () => {
     expect(collectPanes(deep.root).length).toBeGreaterThan(0)
   })
 
-  // Ids recovered for id-less nodes are derived from tree position, not a
-  // counter — otherwise React keys would churn on every read and remount panes.
   test("recovers missing ids deterministically", () => {
     const malformed = {
       root: {

@@ -4,13 +4,6 @@ import { join } from "node:path"
 const CSS_PATH = join(import.meta.dir, "../../..", "src/index.css")
 const css = await Bun.file(CSS_PATH).text()
 
-/**
- * Walks `css`, returning the body text of every top-level-or-nested block
- * whose selector (whitespace-normalized) satisfies `matchesSelector`. Mirrors
- * the `extractBlock` idiom in `src/shared/design/tokens.ts`, generalized to
- * arbitrary selectors and repeated occurrences (e.g. `--shell-top-band` is
- * declared once in `:root` and again under the `md:` media query).
- */
 function extractBlocks(cssText: string, matchesSelector: (selector: string) => boolean): string[] {
   const blocks: string[] = []
   const headerRe = /([^{}]+)\{/g
@@ -50,7 +43,6 @@ describe("index.css — --kanna-font-scale wiring (P3)", () => {
     const blocks = extractBlocks(css, (selector) => selector === "input, textarea, select")
     expect(blocks.length, "expected an `input, textarea, select { ... }` rule").toBe(1)
     const body = blocks[0]
-    // Assert the literal 16px floor is present — dropping it reintroduces iOS zoom-on-focus.
     expect(body).toMatch(/font-size\s*:\s*max\(16px,\s*1rem\)/)
   })
 
@@ -67,10 +59,6 @@ describe("index.css — --kanna-font-scale wiring (P3)", () => {
   })
 
   test("no --text-N--line-height companion is ever declared", () => {
-    // A stock Tailwind step (e.g. text-base) also emits line-height; the custom
-    // --text-N tokens must stay font-size-only, exactly like the text-[Npx]
-    // utilities they replace. Presence of a paired var would silently change
-    // line-height on every site that migrates.
     expect(css).not.toMatch(/--text-\d+--line-height/)
   })
 
@@ -83,7 +71,6 @@ describe("index.css — --kanna-font-scale wiring (P3)", () => {
     }
 
     const shellTopBandValues = [...css.matchAll(/--shell-top-band\s*:\s*([^;]+);/g)].map((m) => m[1].trim())
-    // Declared twice: the base :root value and the md: breakpoint override.
     expect(shellTopBandValues.length).toBe(2)
     for (const value of shellTopBandValues) {
       expect(value).toMatch(/rem$/)

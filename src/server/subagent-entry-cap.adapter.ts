@@ -4,8 +4,6 @@ import path from "node:path"
 import type { TranscriptEntry, ToolResultEntry } from "../shared/types"
 import { isRecord } from "../shared/errors"
 
-// Bytes (UTF-8), not chars. Matches claude-code's 50K char default in
-// spirit but enforced precisely against the byte size we serialize.
 export const SUBAGENT_RESULT_THRESHOLD = 50_000
 export const PREVIEW_SIZE = 2000
 const PERSISTED_OPEN_TAG = "<persisted-output>"
@@ -26,10 +24,6 @@ interface ContentSizeInfo {
 }
 
 function measureContent(content: ToolResultEntry["content"]): ContentSizeInfo | null {
-  // Measure the BYTES we actually write to disk + ship through the
-  // JSONL event log. Char length under-counts multibyte content, and
-  // counting only text-block lengths while serializing the full array
-  // (incl. image / tool_reference blocks) misses real payload size.
   if (typeof content === "string") {
     return {
       size: Buffer.byteLength(content, "utf8"),
@@ -49,25 +43,17 @@ function measureContent(content: ToolResultEntry["content"]): ContentSizeInfo | 
 }
 
 function safeBasename(toolId: string): string {
-  // Defense-in-depth: SDK tool IDs are typically UUID-ish, but if anything
-  // ever supplies a path separator, "..", or non-printable char, the file
-  // write could escape subagent-results/<runId>/.
   const cleaned = toolId.replace(/[^a-zA-Z0-9_-]/g, "_").replace(/_+/g, "_").slice(0, 200)
   return cleaned.length > 0 ? cleaned : "tool"
 }
 
 function buildPreview(serialized: string): { preview: string; hasMore: boolean } {
-  // Operate on bytes, not chars: PREVIEW_SIZE is a byte budget so multibyte
-  // content (CJK, emoji, etc.) does not silently exceed it.
   const buf = Buffer.from(serialized, "utf8")
   if (buf.byteLength <= PREVIEW_SIZE) {
     return { preview: serialized, hasMore: false }
   }
-  // Take PREVIEW_SIZE bytes, then back off to the last valid UTF-8 boundary
-  // by re-decoding (slicing a Buffer can land mid-codepoint).
   let cutBytes = PREVIEW_SIZE
   let preview = buf.subarray(0, cutBytes).toString("utf8")
-  // toString("utf8") replaces invalid trailing bytes with U+FFFD; trim them.
   while (preview.endsWith("�") && cutBytes > 0) {
     cutBytes -= 1
     preview = buf.subarray(0, cutBytes).toString("utf8")
@@ -119,17 +105,12 @@ export async function capTranscriptEntry(args: CapArgs): Promise<TranscriptEntry
   const dir = dirFor(args)
   await mkdir(dir, { recursive: true })
   const ext = info.isJson ? "json" : "txt"
-  // Include a short content hash in the filename so that two tool results
-  // sharing the same toolId (e.g. legacy / colliding IDs across runs) do not
-  // silently serve each other's payload via the wx-skip path below.
   const hash = shortContentHash(info.serialized)
   const filePath = path.join(dir, `${safeBasename(entry.toolId)}.${hash}.${ext}`)
   try {
     await writeFile(filePath, info.serialized, { encoding: "utf-8", flag: "wx" })
   } catch (err) {
     const code = isRecord(err) && typeof err.code === "string" ? err.code : undefined
-    // Same (toolId, content-hash) writing twice = identical content; safe to
-    // skip. Any other write error must surface.
     if (code !== "EEXIST") throw err
   }
   const { preview, hasMore } = buildPreview(info.serialized)

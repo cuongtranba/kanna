@@ -1,13 +1,3 @@
-/**
- * Pure event-builder functions for EventStore write operations.
- *
- * Each function validates its inputs (throwing on error), then constructs and
- * returns the event object that the EventStore should persist. Returning `null`
- * signals a no-op (state is already the desired value, so no event is needed).
- *
- * Extracted from event-store.ts to reduce file size. All functions are pure —
- * no IO, no side effects (side-effect seal: IO lives in *.adapter.ts files).
- */
 
 import path from "node:path"
 import type { AgentProvider, QueuedChatMessage, StackBinding } from "../shared/types"
@@ -29,7 +19,6 @@ import type {
 } from "./events"
 import { resolveLocalPath } from "./paths"
 
-// ─── Internal helper ───────────────────────────────────────────────────────
 
 function requireChat(chatsById: Map<string, ChatRecord>, chatId: string): ChatRecord {
   const chat = chatsById.get(chatId)
@@ -37,13 +26,11 @@ function requireChat(chatsById: Map<string, ChatRecord>, chatId: string): ChatRe
   return chat
 }
 
-// ─── Project builders ─────────────────────────────────────────────────────
 
 export type OpenProjectResult =
   | { kind: "existing"; project: ProjectRecord }
   | { kind: "new"; event: Extract<ProjectEvent, { type: "project_opened" }> }
 
-/** Resolves an existing project or builds the `project_opened` event for a new one. */
 export function buildOpenProjectResult(
   state: Pick<StoreState, "projectsById" | "projectIdsByPath">,
   localPath: string,
@@ -69,7 +56,6 @@ export function buildOpenProjectResult(
   return { kind: "new", event }
 }
 
-/** Builds the `project_removed` event. Throws if the project is not found. */
 export function buildRemoveProjectEvent(
   projectsById: Map<string, { id: string; deletedAt?: number }>,
   projectId: string,
@@ -79,7 +65,6 @@ export function buildRemoveProjectEvent(
   return { v: STORE_VERSION, type: "project_removed", timestamp: Date.now(), projectId }
 }
 
-/** Builds the `project_star_set` event. Throws if the project is not found. */
 export function buildSetProjectStarEvent(
   projectsById: Map<string, { id: string; deletedAt?: number }>,
   projectId: string,
@@ -97,9 +82,7 @@ export function buildSetProjectStarEvent(
   }
 }
 
-// ─── Stack builders ───────────────────────────────────────────────────────
 
-/** Builds the `stack_added` event. Throws on invalid inputs. */
 export function buildCreateStackEvent(
   state: Pick<StoreState, "projectsById" | "stacksById">,
   title: string,
@@ -124,7 +107,6 @@ export function buildCreateStackEvent(
   }
 }
 
-/** Builds the `stack_renamed` event, or `null` if the title is unchanged. Throws if not found. */
 export function buildRenameStackEvent(
   stacksById: Map<string, StackRecord>,
   stackId: string,
@@ -138,18 +120,6 @@ export function buildRenameStackEvent(
   return { v: STORE_VERSION, type: "stack_renamed", timestamp: Date.now(), stackId, title: trimmed }
 }
 
-/**
- * Normalize an instructions edit against its current value.
- *
- * Returns `null` for a no-op write (unchanged, or clearing what is already
- * absent) so a builder can pass that straight through, mirroring
- * `buildRenameStackEvent`. Throws over the cap rather than truncating: silently
- * dropping the tail of someone's conventions is worse than refusing the edit.
- *
- * The cap is the global prompt's, deliberately — every block is spent from the
- * same context window, so a second number would only be a second thing to get
- * wrong (adr-20260904 D3).
- */
 function normalizeInstructionsEdit(current: string | undefined, next: string): string | null {
   const trimmed = next.trim()
   if (trimmed.length > GLOBAL_PROMPT_APPEND_MAX_CHARS) {
@@ -159,10 +129,6 @@ function normalizeInstructionsEdit(current: string | undefined, next: string): s
   return trimmed
 }
 
-/**
- * Builds `project_instructions_set`, or `null` when nothing changes. Throws if
- * the project is missing, deleted, or the text is over the cap.
- */
 export function buildSetProjectInstructionsEvent(
   projectsById: Map<string, ProjectRecord>,
   projectId: string,
@@ -175,10 +141,6 @@ export function buildSetProjectInstructionsEvent(
   return { v: STORE_VERSION, type: "project_instructions_set", timestamp: Date.now(), projectId, instructions: next }
 }
 
-/**
- * Builds `stack_instructions_set`, or `null` when nothing changes. Throws if
- * the stack is missing, deleted, or the text is over the cap.
- */
 export function buildSetStackInstructionsEvent(
   stacksById: Map<string, StackRecord>,
   stackId: string,
@@ -191,7 +153,6 @@ export function buildSetStackInstructionsEvent(
   return { v: STORE_VERSION, type: "stack_instructions_set", timestamp: Date.now(), stackId, instructions: next }
 }
 
-/** Builds the `stack_removed` event, or `null` if already deleted. Throws if not found. */
 export function buildRemoveStackEvent(
   stacksById: Map<string, StackRecord>,
   stackId: string,
@@ -202,7 +163,6 @@ export function buildRemoveStackEvent(
   return { v: STORE_VERSION, type: "stack_removed", timestamp: Date.now(), stackId }
 }
 
-/** Builds the `stack_project_added` event, or `null` if already a member. Throws if not found. */
 export function buildAddProjectToStackEvent(
   state: Pick<StoreState, "projectsById" | "stacksById">,
   stackId: string,
@@ -216,7 +176,6 @@ export function buildAddProjectToStackEvent(
   return { v: STORE_VERSION, type: "stack_project_added", timestamp: Date.now(), stackId, projectId }
 }
 
-/** Builds the `stack_project_removed` event, or `null` if not a member. Throws on constraint violations. */
 export function buildRemoveProjectFromStackEvent(
   stacksById: Map<string, StackRecord>,
   stackId: string,
@@ -231,12 +190,7 @@ export function buildRemoveProjectFromStackEvent(
   return { v: STORE_VERSION, type: "stack_project_removed", timestamp: Date.now(), stackId, projectId }
 }
 
-// ─── Sidebar order ────────────────────────────────────────────────────────
 
-/**
- * Computes the new de-duplicated + validated sidebar order.
- * Returns `null` if the order is unchanged (caller can skip the write).
- */
 export function computeNewSidebarOrder(
   projectsById: Map<string, { deletedAt?: number }>,
   currentOrder: string[],
@@ -256,9 +210,7 @@ export function computeNewSidebarOrder(
   return unique
 }
 
-// ─── Chat lifecycle builders ───────────────────────────────────────────────
 
-/** Builds the `chat_created` event after full validation. Throws on invalid inputs. */
 export function buildCreateChatEvent(
   state: Pick<StoreState, "projectsById" | "stacksById">,
   projectId: string,
@@ -272,11 +224,6 @@ export function buildCreateChatEvent(
   }
 
   if (options?.stackBindings !== undefined) {
-    // A stack is optional. `StackBinding` names a project and a worktree and
-    // nothing else, and every consumer — spawn cwd, the system-prompt block,
-    // the navbar — reads it without ever resolving a stack. A card's "Start
-    // work" chat needs exactly one binding, which a Stack cannot express: a
-    // Stack requires two projects.
     const stack = options.stackId === undefined ? null : state.stacksById.get(options.stackId)
     if (options.stackId !== undefined && (!stack || stack.deletedAt)) throw new Error("Stack not found")
     if (options.stackBindings.length === 0) throw new Error("stackBindings cannot be empty")
@@ -315,7 +262,6 @@ export function buildCreateChatEvent(
   }
 }
 
-/** Builds the `chat_renamed` event, or `null` if the title is unchanged / empty. */
 export function buildRenameChatEvent(
   chatsById: Map<string, ChatRecord>,
   chatId: string,
@@ -328,21 +274,17 @@ export function buildRenameChatEvent(
   return { v: STORE_VERSION, type: "chat_renamed", timestamp: Date.now(), chatId, title: trimmed }
 }
 
-/** Builds the `chat_archived` event. Throws if the chat is not found. */
 export function buildArchiveChatEvent(chatsById: Map<string, ChatRecord>, chatId: string): ChatEvent {
   requireChat(chatsById, chatId)
   return { v: STORE_VERSION, type: "chat_archived", timestamp: Date.now(), chatId }
 }
 
-/** Builds the `chat_unarchived` event. Throws if the chat is not found. */
 export function buildUnarchiveChatEvent(chatsById: Map<string, ChatRecord>, chatId: string): ChatEvent {
   requireChat(chatsById, chatId)
   return { v: STORE_VERSION, type: "chat_unarchived", timestamp: Date.now(), chatId }
 }
 
-// ─── Chat state-setter builders ────────────────────────────────────────────
 
-/** Builds the `chat_provider_set` event, or `null` if the provider is unchanged. */
 export function buildChatProviderEvent(
   chatsById: Map<string, ChatRecord>,
   chatId: string,
@@ -353,7 +295,6 @@ export function buildChatProviderEvent(
   return { v: STORE_VERSION, type: "chat_provider_set", timestamp: Date.now(), chatId, provider }
 }
 
-/** Builds the `chat_plan_mode_set` event, or `null` if unchanged. */
 export function buildPlanModeEvent(
   chatsById: Map<string, ChatRecord>,
   chatId: string,
@@ -364,7 +305,6 @@ export function buildPlanModeEvent(
   return { v: STORE_VERSION, type: "chat_plan_mode_set", timestamp: Date.now(), chatId, planMode }
 }
 
-/** Builds the `chat_compact_failures_set` event, or `null` if unchanged. */
 export function buildCompactFailuresEvent(
   chatsById: Map<string, ChatRecord>,
   chatId: string,
@@ -378,7 +318,6 @@ export function buildCompactFailuresEvent(
   }
 }
 
-/** Builds the `chat_read_state_set` event, or `null` if unchanged. */
 export function buildChatReadStateEvent(
   chatsById: Map<string, ChatRecord>,
   chatId: string,
@@ -389,7 +328,6 @@ export function buildChatReadStateEvent(
   return { v: STORE_VERSION, type: "chat_read_state_set", timestamp: Date.now(), chatId, unread }
 }
 
-/** Builds the `chat_policy_override_set` event. Throws if the chat is not found. */
 export function buildChatPolicyOverrideEvent(
   chatsById: Map<string, ChatRecord>,
   chatId: string,
@@ -402,7 +340,6 @@ export function buildChatPolicyOverrideEvent(
   }
 }
 
-/** Builds the `chat_source_hash_set` event, or `null` if unchanged. */
 export function buildChatSourceHashEvent(
   chatsById: Map<string, ChatRecord>,
   chatId: string,
@@ -413,23 +350,13 @@ export function buildChatSourceHashEvent(
   return { v: STORE_VERSION, type: "chat_source_hash_set", timestamp: Date.now(), chatId, sourceHash }
 }
 
-// ─── Queued-message builders ───────────────────────────────────────────────
 
-/** Builds the `queued_message_enqueued` event and the resolved QueuedChatMessage. */
 export function buildEnqueueMessageResult(
   chatsById: Map<string, ChatRecord>,
   chatId: string,
   message: Omit<QueuedChatMessage, "id" | "createdAt"> & Partial<Pick<QueuedChatMessage, "id" | "createdAt">>,
 ): { event: QueuedMessageEvent; queuedMessage: QueuedChatMessage } {
   requireChat(chatsById, chatId)
-  // Spread, never re-enumerate. This builder owns exactly three things — the
-  // generated id, the timestamp, and a defensive copy of `attachments`; the
-  // rest of the dispatch metadata is the caller's and must survive verbatim.
-  // Listing the fields by hand made every addition to QueuedChatMessage a
-  // silent data-loss bug (an omitted optional property is not a type error),
-  // and `cronRun` was lost that way: the queued message reached the turn with
-  // no tag, so `onTurnTerminal` could not attribute the outcome and the cron
-  // run was never settled.
   const queuedMessage: QueuedChatMessage = {
     ...message,
     id: message.id ?? crypto.randomUUID(),
@@ -446,7 +373,6 @@ export function buildEnqueueMessageResult(
   return { event, queuedMessage }
 }
 
-/** Builds the `queued_message_removed` event. Throws if not found. */
 export function buildRemoveQueuedMessageEvent(
   chatsById: Map<string, ChatRecord>,
   queuedMessagesByChatId: Map<string, QueuedChatMessage[]>,
@@ -462,9 +388,7 @@ export function buildRemoveQueuedMessageEvent(
   }
 }
 
-// ─── Turn / session builders ───────────────────────────────────────────────
 
-/** Builds the `turn_started` event. Throws if the chat is not found. */
 export function buildTurnStartedEvent(
   chatsById: Map<string, ChatRecord>,
   chatId: string,
@@ -477,13 +401,11 @@ export function buildTurnStartedEvent(
   }
 }
 
-/** Builds the `turn_finished` event. Throws if the chat is not found. */
 export function buildTurnFinishedEvent(chatsById: Map<string, ChatRecord>, chatId: string): TurnEvent {
   requireChat(chatsById, chatId)
   return { v: STORE_VERSION, type: "turn_finished", timestamp: Date.now(), chatId }
 }
 
-/** Builds the `turn_failed` event. Throws if the chat is not found. */
 export function buildTurnFailedEvent(
   chatsById: Map<string, ChatRecord>,
   chatId: string,
@@ -493,13 +415,11 @@ export function buildTurnFailedEvent(
   return { v: STORE_VERSION, type: "turn_failed", timestamp: Date.now(), chatId, error }
 }
 
-/** Builds the `turn_cancelled` event. Throws if the chat is not found. */
 export function buildTurnCancelledEvent(chatsById: Map<string, ChatRecord>, chatId: string): TurnEvent {
   requireChat(chatsById, chatId)
   return { v: STORE_VERSION, type: "turn_cancelled", timestamp: Date.now(), chatId }
 }
 
-/** Builds the `session_token_set` event, or `null` if unchanged. */
 export function buildSessionTokenEvent(
   chatsById: Map<string, ChatRecord>,
   chatId: string,
@@ -514,7 +434,6 @@ export function buildSessionTokenEvent(
   }
 }
 
-/** Builds the `pending_fork_session_token_set` event, or `null` if unchanged. */
 export function buildPendingForkSessionTokenEvent(
   chatsById: Map<string, ChatRecord>,
   chatId: string,
@@ -536,14 +455,11 @@ export function buildPendingForkSessionTokenEvent(
   }
 }
 
-// ─── Tool-request builders ────────────────────────────────────────────────
 
-/** Builds the `tool_request_put` event. */
 export function buildPutToolRequestEvent(req: ToolRequest): ToolRequestEvent {
   return { v: 3, type: "tool_request_put", timestamp: Date.now(), request: req }
 }
 
-/** Builds the `tool_request_resolved` event. Throws if the request id is unknown. */
 export function buildResolveToolRequestEvent(
   toolRequestsById: Map<string, ToolRequest>,
   id: string,
@@ -567,6 +483,5 @@ export function buildResolveToolRequestEvent(
   }
 }
 
-// ─── Re-export ProjectRecord for callers of OpenProjectResult ─────────────
 
 export type { ProjectRecord } from "./events"

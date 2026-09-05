@@ -22,36 +22,13 @@ export type DelegateSubagentInput = z.infer<typeof InputSchema>
 
 export interface DelegateSubagentContext {
   chatId: string
-  /** Subagent id of the caller when invoked from a subagent's own MCP — null for the main agent. */
   parentSubagentId: string | null
-  /** Run id of the caller when invoked from a subagent — null for the main agent. */
   parentRunId: string | null
-  /** Ancestor chain (oldest first, excludes the immediate caller). */
   ancestorSubagentIds: string[]
-  /** Depth of the spawned run. Main agent → 1, subagent → its depth + 1. */
   depth: number
-  /**
-   * Resolves to the user message id the current turn is responding to.
-   * Returns null when no turn is active — the tool then errors out rather
-   * than fabricating a parent.
-   */
   getParentUserMessageId: () => string | null
-  /** Subagent ids the user @-mentioned in the message that started the turn. Gates manual-trigger subagents. */
   getMentionedSubagentIds: () => string[]
-  /**
-   * Optional per-entry callback. Each persisted subagent transcript entry
-   * (tool_call, tool_result, assistant_text, …) is forwarded here while
-   * the run is in flight. Wired by `kanna-mcp.ts` to emit MCP
-   * `notifications/progress` so the CLI's transport-error watchdog
-   * resets its `armedAt` timer and does not declare the call lost on
-   * long-running subagent runs.
-   */
   onEntry?: (entry: TranscriptEntry) => void
-  /**
-   * Deterministic fallback label for a loop iteration, read from the armed
-   * loop's `## Next chunk`. Consulted only when the prompt carries no explicit
-   * `[chunk: …]` marker. Absent for chats with no armed loop.
-   */
   resolveLoopChunkLabel?: () => Promise<string | null>
 }
 
@@ -67,16 +44,6 @@ export interface DelegateSubagentTool {
 const DESCRIPTION =
   "Hand off focused work to a specialized subagent listed in the system prompt. By default blocks until the subagent finishes and returns its final reply as text. Pass run_in_background:true to launch it without waiting — you get {status:'async_launched', run_id} immediately and the reply arrives as a new turn when it finishes. Brief the subagent like a smart colleague who just walked in: state the goal, what was tried, what to check, any constraints. The subagent cannot see your chat history — distill the context yourself."
 
-/**
- * The run's Progress-panel label. An explicit `[chunk: …]` marker wins: it is
- * per-delegation, so under `parallelism > 1` each of the turn's chunks keeps
- * its own name, which a single shared plan section cannot express. Otherwise
- * fall back to the armed loop's `## Next chunk`.
- *
- * Returns undefined to let the orchestrator derive a label from the prompt.
- * A resolver failure is swallowed for the same reason: a label is cosmetic and
- * must never fail a delegation.
- */
 async function resolveRunLabel(
   prompt: string,
   resolveLoopChunkLabel?: () => Promise<string | null>,
@@ -117,10 +84,6 @@ export function createDelegateSubagentTool(deps: {
           isError: true,
         }
       }
-      // Fail before delegateRun so no ghost run record (and no failed-run
-      // card in the UI) is persisted for a guessed id; the live roster in
-      // the error lets the model self-correct on the next call even when
-      // the system-prompt roster is stale.
       if (!deps.orchestrator.findSubagent(input.subagent_id)) {
         return {
           content: [{

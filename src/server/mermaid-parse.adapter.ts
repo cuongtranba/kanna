@@ -1,21 +1,3 @@
-/**
- * The only place mermaid is loaded server-side.
- *
- * mermaid is a browser library: importing it evaluates DOMPurify, which needs
- * a `window` to hook onto, and `mermaid.initialize` walks a `document`. It
- * needs far less of one than a full DOM implementation, though — the surface
- * below is the measured minimum, and with it `mermaid.parse` answers in ~9 ms
- * for every diagram type.
- *
- * Rejected alternatives:
- *  - promote happy-dom to a production dependency: it replaces the process's
- *    `fetch`/`FormData`/`Blob` (see scripts/test-preload.ts, which has to undo
- *    exactly that), which is far too much blast radius for a parse;
- *  - shell out to a child process: ~200 ms of spawn for a 9 ms parse.
- *
- * The shim is installed only around the import and torn down immediately, so
- * nothing downstream can sniff `window` and take a browser code path.
- */
 
 import { type HostBag, type LoadedModule } from "../shared/dynamic-module"
 import { isRecord } from "../shared/errors"
@@ -24,9 +6,6 @@ import type { MermaidParsePort, MermaidParseResult } from "../shared/mermaid-val
 
 interface MermaidModule {
   initialize: (config: { startOnLoad: boolean; securityLevel: "strict" }) => void
-  // Declared `Promise<void>` because `parseMermaid` only cares whether it
-  // THROWS — mermaid's own diagram result is discarded. Awaiting a
-  // `Promise<void>` still awaits the real promise.
   parse: (text: string) => Promise<void>
 }
 
@@ -72,14 +51,6 @@ function shimValues(target: GlobalBag): GlobalBag {
   }
 }
 
-/**
- * Install the minimum DOM surface mermaid needs on `target`, returning a
- * function that puts `target` back exactly as it was.
- *
- * A real `document` (a browser, or the happy-dom the test preload registers
- * process-wide) means we stand down: clobbering it would break every other
- * consumer sharing the process, and mermaid works fine with the real one.
- */
 export function installDomShim(target: GlobalBag): () => void {
   if (target.document !== undefined) return () => undefined
 
@@ -104,7 +75,6 @@ function isMermaidModule(value: LoadedModule): value is MermaidModule {
   return typeof value.initialize === "function" && typeof value.parse === "function"
 }
 
-/** `globalThis` viewed as the string-keyed bag the shim writes into. */
 const globalBag: GlobalBag = globalThis
 
 const loadMermaid = createLazyLoader(async (): Promise<MermaidModule> => {

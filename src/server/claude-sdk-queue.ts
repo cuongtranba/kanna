@@ -3,10 +3,6 @@ import { type ClaudeRawSdkMessage, isSdkToClaudeMessage } from "./claude-message
 import type { NormalizedToolCall } from "../shared/types"
 import type { JsonObject } from "../shared/json"
 
-/**
- * Generic async iterable queue used to buffer SDK user-message turns.
- * Pure data structure — no IO.
- */
 export class AsyncMessageQueue<T> implements AsyncIterable<T> {
   private readonly values: T[] = []
   private readonly waiters: Array<(result: IteratorResult<T, undefined>) => void> = []
@@ -54,10 +50,6 @@ export class AsyncMessageQueue<T> implements AsyncIterable<T> {
   }
 }
 
-/**
- * Builds the discard payload for ask_user_question / exit_plan_mode tools
- * when a pending tool call is discarded (e.g. session closed mid-flight).
- */
 export function discardedToolResult(
   tool: NormalizedToolCall & { toolKind: "ask_user_question" | "exit_plan_mode" }
 ): JsonObject {
@@ -73,9 +65,6 @@ export function discardedToolResult(
   }
 }
 
-/**
- * Filters the raw SDK stream to Claude-only messages.
- */
 export async function* toClaudeMessageStream(q: Query): AsyncGenerator<ClaudeRawSdkMessage> {
   for await (const m of q) {
     if (isSdkToClaudeMessage(m)) yield m

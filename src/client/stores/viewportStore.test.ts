@@ -20,8 +20,6 @@ describe("viewportStore", () => {
     expect(useViewportStore.getState().height).toBe(900)
   })
 
-  // The resize listener fires on every frame of a drag. Returning the identical
-  // state object for an unchanged size keeps zustand from waking subscribers.
   test("syncViewport is a no-op when the size is unchanged", () => {
     useViewportStore.getState().syncViewport(1440, 900)
     const before = useViewportStore.getState()

@@ -6,8 +6,6 @@ import type { AutoContinueEvent } from "./auto-continue/events"
 import { AsyncEventQueue } from "./test-helpers/async-event-queue"
 import { waitFor } from "./test-helpers/wait-for"
 
-// Minimal store (trimmed copy from agent.oauth-account-info.test.ts — do NOT
-// modify agent.test.ts).
 function createFakeStore() {
   const chat = {
     id: "chat-1",

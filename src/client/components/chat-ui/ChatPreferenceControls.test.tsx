@@ -62,8 +62,6 @@ describe("ChatPreferenceControls", () => {
         onPlanModeChange={() => {}}
       />
     )
-    // Every InputPopover trigger should have at least one min-h-[36px] +
-    // touch-manipulation pair so taps register reliably on mobile.
     expect(html).toContain("min-h-[36px]")
     expect(html).toContain("touch-manipulation")
   })

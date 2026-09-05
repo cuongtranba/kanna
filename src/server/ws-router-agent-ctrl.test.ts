@@ -3,9 +3,6 @@ import type { AgentCtrlCommandDeps, AgentCtrlAgentDep, TunnelGatewayDep } from "
 import { handleAgentCtrlCommand } from "./ws-router-agent-ctrl"
 import type { ClientCommand } from "../shared/protocol"
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function makeAgent(overrides: Partial<AgentCtrlAgentDep> = {}): AgentCtrlAgentDep {
   return {
@@ -45,9 +42,6 @@ function makeDeps(
   }
 }
 
-// ---------------------------------------------------------------------------
-// Unrecognized command
-// ---------------------------------------------------------------------------
 
 describe("handleAgentCtrlCommand", () => {
   test("returns false for a non-agent-ctrl command", async () => {
@@ -62,9 +56,6 @@ describe("handleAgentCtrlCommand", () => {
     expect(deps.broadcasts).toHaveLength(0)
   })
 
-  // ---------------------------------------------------------------------------
-  // autoContinue
-  // ---------------------------------------------------------------------------
 
   test("autoContinue.accept — calls agent, acks, and broadcasts", async () => {
     const deps = makeDeps()
@@ -97,9 +88,6 @@ describe("handleAgentCtrlCommand", () => {
     expect(deps.broadcasts).toEqual(["c-3"])
   })
 
-  // ---------------------------------------------------------------------------
-  // tunnel
-  // ---------------------------------------------------------------------------
 
   test("tunnel.accept — calls tunnelGateway, acks, and broadcasts", async () => {
     const tunnel = makeTunnel()
@@ -141,9 +129,6 @@ describe("handleAgentCtrlCommand", () => {
     expect(deps.broadcasts).toEqual(["c-7"])
   })
 
-  // ---------------------------------------------------------------------------
-  // pty
-  // ---------------------------------------------------------------------------
 
   test("pty.cancel — acks {ok:true} on success", async () => {
     const deps = makeDeps()

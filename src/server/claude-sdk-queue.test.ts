@@ -3,11 +3,7 @@ import { AsyncMessageQueue, discardedToolResult, toClaudeMessageStream } from ".
 import type { ClaudeRawSdkMessage } from "./claude-message-normalizer"
 import type { NormalizedToolCall } from "../shared/types"
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
-/** Build a fake Query (AsyncGenerator) from an array of objects */
 async function* fakeQuery(
   items: Record<string, unknown>[]
 ): AsyncGenerator<Record<string, unknown>, void> {
@@ -16,7 +12,6 @@ async function* fakeQuery(
   }
 }
 
-/** Collect all values from an async iterable into an array */
 async function collect<T>(iter: AsyncIterable<T>): Promise<T[]> {
   const out: T[] = []
   for await (const v of iter) {
@@ -25,9 +20,6 @@ async function collect<T>(iter: AsyncIterable<T>): Promise<T[]> {
   return out
 }
 
-// ---------------------------------------------------------------------------
-// AsyncMessageQueue
-// ---------------------------------------------------------------------------
 
 describe("AsyncMessageQueue", () => {
   test("push + async iteration yields values in order", async () => {
@@ -56,10 +48,8 @@ describe("AsyncMessageQueue", () => {
 
   test("waiter is resolved immediately when queue had a pending value", async () => {
     const q = new AsyncMessageQueue<string>()
-    // Start consuming before any push
     const iter = q[Symbol.asyncIterator]()
     const nextPromise = iter.next()
-    // Push while a waiter is registered
     q.push("hello")
     const result = await nextPromise
     expect(result).toEqual({ done: false, value: "hello" })
@@ -77,7 +67,6 @@ describe("AsyncMessageQueue", () => {
     const q = new AsyncMessageQueue<number>()
     const iter = q[Symbol.asyncIterator]()
     const nextPromise = iter.next()
-    // Close while a waiter is pending
     q.close()
     const result = await nextPromise
     expect(result).toEqual({ done: true, value: undefined })
@@ -91,11 +80,7 @@ describe("AsyncMessageQueue", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// discardedToolResult
-// ---------------------------------------------------------------------------
 
-/** Build a minimal mock NormalizedToolCall with the given toolKind. */
 function makeTool<TKind extends "ask_user_question" | "exit_plan_mode">(
   toolKind: TKind
 ): NormalizedToolCall & { toolKind: TKind } {
@@ -129,9 +114,6 @@ describe("discardedToolResult", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// toClaudeMessageStream
-// ---------------------------------------------------------------------------
 
 describe("toClaudeMessageStream", () => {
   test("passes through all SDK messages unchanged", async () => {
@@ -139,7 +121,6 @@ describe("toClaudeMessageStream", () => {
       { type: "assistant", uuid: "a" },
       { type: "system", uuid: "b" },
     ]
-    // fakeQuery produces objects; cast to satisfy Query's AsyncGenerator shape
     const q = fakeQuery(messages as Record<string, unknown>[])
     const result = await collect(toClaudeMessageStream(q as never))
     expect(result).toHaveLength(2)

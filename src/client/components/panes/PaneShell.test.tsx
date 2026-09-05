@@ -40,23 +40,16 @@ describe("PaneShell retention", () => {
     const pane = createPane("p1", [chatTab, termTab])
     const html = renderShell({ ...pane, focusedTabId: chatTab.tabId })
 
-    // The terminal is not the active tab, but its subtree is still in the DOM —
-    // unmounting it would destroy the PTY scrollback.
     expect(html).toContain("content-chat")
     expect(html).toContain("content-terminal-t1")
   })
 
   test("hides backgrounded tabs with visibility, never display:none", () => {
-    // display:none collapses the layout box, which discards scroll offsets and
-    // makes xterm remeasure to zero. visibility:hidden keeps the box.
     const pane = createPane("p1", [chatTab, termTab])
     const html = renderShell({ ...pane, focusedTabId: chatTab.tabId })
 
     expect(html).toContain("invisible")
     expect(html).not.toContain("display:none")
-    // Not the Tailwind `hidden` utility either — it is display:none by another
-    // name. (Substring-matching `hidden` alone would hit `overflow-hidden` and
-    // the icons' `aria-hidden`, so match the class-list boundary.)
     expect(html).not.toContain("min-w-0 hidden")
   })
 
@@ -104,9 +97,6 @@ describe("PaneShell retention", () => {
 
 describe("PaneShell content sizing", () => {
   test("stacks tab content in a column so it fills the pane width", () => {
-    // Regression: the wrapper was a row flex, which sizes each child to its
-    // CONTENT width — the chat card rendered 24px wide inside a 1117px pane.
-    // Only the terminal escaped, because it happens to carry flex-1.
     const pane = createPane("p1", [chatTab])
     const html = renderShell({ ...pane, focusedTabId: chatTab.tabId })
 

@@ -48,7 +48,6 @@ export function createEditTool(deps: { toolCallback: ToolCallbackService }): Edi
             }
           }
 
-          // Count occurrences
           let count = 0
           let idx = 0
           while ((idx = content.indexOf(input.oldString, idx)) !== -1) {
@@ -69,8 +68,6 @@ export function createEditTool(deps: { toolCallback: ToolCallbackService }): Edi
             }
           }
 
-          // Use split/join instead of replace to avoid special replacement patterns
-          // ($&, $1, $$, $', $`) being interpreted in newString.
           const updated = content.split(input.oldString).join(input.newString)
           try {
             await writeFile(resolved, updated, "utf8")

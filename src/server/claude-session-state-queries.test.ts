@@ -18,9 +18,6 @@ import { ClaudeSessionState } from "./claude-session-state"
 import type { ActiveTurn, StartingTurn } from "./claude-session-state"
 import { PendingToolSlots, type ParkedTool } from "./pending-tool-slot"
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 const STUB_HANDLE = {
   provider: "claude" as const,
@@ -56,8 +53,6 @@ function makeSession(overrides?: Partial<ConstructorParameters<typeof ClaudeSess
     backgroundTasks: new Map(),
     backgroundTaskDeadlineAt: 0,
     backgroundTaskWakeCount: 0,
-    // Explicit even though overrides could patch it: a falsy-by-omission flag
-    // would make the level-sourced tests pass for the wrong reason.
     backgroundTasksLevelSourced: false,
     selfWakeActive: false,
     recentToolDescriptions: new Map(),
@@ -119,9 +114,6 @@ function makeDeps(overrides?: Partial<SessionStateQueryDeps>): SessionStateQuery
   }
 }
 
-// ---------------------------------------------------------------------------
-// getActiveStatuses
-// ---------------------------------------------------------------------------
 
 describe("getActiveStatuses", () => {
   it("returns empty map when no active turns", () => {
@@ -179,9 +171,6 @@ describe("getActiveStatuses", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// getBackgroundTasksByChatId
-// ---------------------------------------------------------------------------
 
 describe("getBackgroundTasksByChatId", () => {
   it("omits chats with no background tasks", () => {
@@ -207,9 +196,6 @@ describe("getBackgroundTasksByChatId", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// getWaitStartedAtByChatId
-// ---------------------------------------------------------------------------
 
 describe("getWaitStartedAtByChatId", () => {
   it("returns empty map when no turns are waiting", () => {
@@ -233,9 +219,6 @@ describe("getWaitStartedAtByChatId", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// getPendingTool
-// ---------------------------------------------------------------------------
 
 function parkTool(slots: PendingToolSlots, chatId: string, toolUseId: string, parkedAt = Date.now()): void {
   slots.park(chatId, {
@@ -305,9 +288,6 @@ describe("pending-tool overlays", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// getDrainingChatIds
-// ---------------------------------------------------------------------------
 
 describe("getDrainingChatIds", () => {
   it("returns empty set when no draining streams", () => {
@@ -325,9 +305,6 @@ describe("getDrainingChatIds", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// getClaudeSessionStates
-// ---------------------------------------------------------------------------
 
 describe("getClaudeSessionStates", () => {
   it("returns empty map when no sessions", () => {
@@ -359,7 +336,7 @@ describe("getClaudeSessionStates", () => {
     const session = makeSession({ chatId: "chat-1", lastUsedAt: 0 })
     const deps = makeDeps({
       claudeSessions: new Map([["chat-1", session]]),
-      resolveClaudeIdleMs: () => 1, // 1 ms — already elapsed
+      resolveClaudeIdleMs: () => 1,
     })
     expect(getClaudeSessionStates(deps).get("chat-1")).toBe("idle")
   })
@@ -374,9 +351,6 @@ describe("getClaudeSessionStates", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// isClaudeSessionIdle
-// ---------------------------------------------------------------------------
 
 describe("isClaudeSessionIdle", () => {
   it("returns false when provider is an SDK provider", () => {
@@ -419,10 +393,6 @@ describe("isClaudeSessionIdle", () => {
     expect(isClaudeSessionIdle(deps, "chat-1", session, Date.now())).toBe(false)
   })
 
-  // Nothing streams while a turn boots, so `lastUsedAt` stays at the previous
-  // turn's end — a warm session reused for a follow-up looks maximally idle
-  // for exactly the window in which it is being used. Reaping there kills the
-  // spawn in flight.
   it("returns false when the chat's turn is still booting", () => {
     const session = makeSession({ lastUsedAt: 0 })
     const deps = makeDeps({
@@ -439,9 +409,6 @@ describe("isClaudeSessionIdle", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// isSessionInUse — table-driven for all 7 clauses
-// ---------------------------------------------------------------------------
 
 function makeInUseDeps(overrides?: Partial<SessionInUseDeps>): SessionInUseDeps {
   return {
@@ -517,9 +484,6 @@ describe("isSessionInUse", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// sweepIdleClaudeSessions
-// ---------------------------------------------------------------------------
 
 describe("sweepIdleClaudeSessions", () => {
   it("does nothing when no sessions", () => {
@@ -558,11 +522,6 @@ describe("sweepIdleClaudeSessions", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// sweepIdleClaudeSessions — background-task guard expiry escalation
-// (adr-20260801-background-task-wake-escalation: an expired guard on a
-// still-pending task must produce a visible wake, never a silent close)
-// ---------------------------------------------------------------------------
 
 describe("sweepIdleClaudeSessions background-task escalation", () => {
   function makeExpiredSession(overrides?: Partial<ClaudeSessionState>): ClaudeSessionState {
@@ -577,14 +536,6 @@ describe("sweepIdleClaudeSessions background-task escalation", () => {
     })
   }
 
-  // The regression test for adr-20260808-...-level-signal-authoritative.
-  //
-  // Chat 1ed924dd: "start the local dev" launched a vite dev server as
-  // background task ba35e96q4 at 12:41:56. Its output file stopped growing at
-  // 12:45:04 (786 B — the startup banner, then silence) and the server ran on
-  // perfectly happily. The SDK level signal said so the whole time; the fixed
-  // 30-min deadline did not, and at 13:14:39 the watchdog injected a raw
-  // <background-task-check> prompt into the user's chat.
   it("never wakes a level-sourced session whose task simply never settles", () => {
     const now = Date.now()
     const session = makeExpiredSession({
@@ -604,9 +555,6 @@ describe("sweepIdleClaudeSessions background-task escalation", () => {
       closeClaudeSession: closeFn,
       wakeBackgroundTaskSession: wakeFn,
       notifyBackgroundTasksAbandoned: notifyFn,
-      // The REAL predicate, as buildSessionStateQueryDeps wires it. makeDeps
-      // stubs it to `() => false`, which would let the idle reaper close this
-      // session and hide the very regression under test.
       hasPendingBackgroundTask: (s, n) => hasPendingBackgroundTask(s, n),
     })
     sweepIdleClaudeSessions(deps, now)

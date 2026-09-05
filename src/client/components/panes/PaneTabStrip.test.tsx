@@ -56,7 +56,6 @@ describe("PaneTabStrip", () => {
     expect(html).toContain('aria-selected="true"')
   })
 
-  // The only pane-focus affordance is the tint of the active tab's top bar.
   test("tints the active tab indicator by pane focus", () => {
     expect(render(createPane("p", [chat]), true)).toContain('data-tab-indicator="focused"')
     expect(render(createPane("p", [chat]), false)).toContain('data-tab-indicator="unfocused"')
@@ -68,8 +67,6 @@ describe("PaneTabStrip", () => {
     expect(html).not.toContain("#")
   })
 
-  // A chat tab became closable when it stopped being the only one; with N open
-  // chats the user needs a way to close the one they are done with.
   test("every tab offers a close affordance", () => {
     const html = render(createPane("p", [chat, t1]))
     expect(html).toContain("Close Chat")
@@ -94,19 +91,11 @@ describe("PaneTabStrip", () => {
     expect(html).toContain("Split right")
   })
 
-  // Half of the shell's top-band contract: the strip must read its height from
-  // the shared token, not a local literal, or it drifts out of line with the
-  // sidebar header. The sidebar side is asserted in KannaSidebar.test.tsx.
   test("takes its height from the shared top-band token", () => {
     expect(render(createPane("p", [chat]))).toContain(SHELL_TOP_BAND_CLASS)
   })
 })
 
-/**
- * The tab strip shows the same chats the sidebar lists, so it must speak the
- * same status language. Before this, a chat mid-turn read "Running" on the left
- * and showed a plain, indistinguishable icon on its tab.
- */
 describe("PaneTabStrip chat status", () => {
   const running: TabPresentationContext = {
     chatStatuses: { c1: { status: "running", unread: false, sessionState: "active" } },
@@ -123,8 +112,6 @@ describe("PaneTabStrip chat status", () => {
     expect(html).not.toContain("#")
   })
 
-  // Colour alone never communicates (DESIGN.md): the status has to reach a
-  // screen reader too, and the tab's accessible name is where it lands.
   test("the status is spelled out for assistive tech", () => {
     const html = render(createPane("p", [chat]), true, 800, running)
     expect(html).toContain("Running")
@@ -133,21 +120,16 @@ describe("PaneTabStrip chat status", () => {
   test("the PTY session badge rides along with the same drawn mark as the sidebar", () => {
     const html = render(createPane("p", [chat]), true, 800, running)
     expect(html).toContain("data-tab-session-badge")
-    // Drawn, not a text glyph: both surfaces render the same SVG family, so
-    // the sidebar and the tab strip cannot drift into two vocabularies.
     expect(html).toContain("<svg")
     expect(html).not.toMatch(/[●◐○◌]/)
   })
 
-  // The dot lives in the icon's slot precisely so a strip squeezed to
-  // icon-only tabs does not lose the status it exists to show.
   test("the dot survives a strip too cramped for labels", () => {
     const html = render(createPane("p", [chat, changes, t1]), true, 200, running)
     expect(html).not.toContain(">Chat<")
     expect(html).toContain('data-tab-status="warning"')
   })
 
-  // …while the secondary badge yields its width first.
   test("the session badge yields when there is no room for labels", () => {
     const html = render(createPane("p", [chat, changes, t1]), true, 200, running)
     expect(html).not.toContain("data-tab-session-badge")
@@ -164,9 +146,6 @@ describe("PaneTabStrip chat status", () => {
 
 describe("PaneTabStrip split availability", () => {
   test("marks the split actions unavailable when the pane has one tab", () => {
-    // The engine refuses this split (it would strand an empty pane), so the
-    // button must not offer it. Found by driving the real app in a browser:
-    // the split produced a pane with no tabs, no content, and no close button.
     const html = render(createPane("p1", [chat]))
 
     expect(html).toContain('aria-label="Split right"')
@@ -181,14 +160,8 @@ describe("PaneTabStrip split availability", () => {
   })
 })
 
-/**
- * Store-driven, so these render through the client path — zustand serves
- * `getInitialState()` to a server render and a `setState` here would be
- * invisible (see renderClientMarkup).
- */
 describe("PaneTabStrip tab width preference", () => {
   const pane = createPane("p1", [chat, t1, changes])
-  /** 3 tabs sharing 260px less the 52px split actions. */
   const SHARED_WIDTH = Math.round((260 - 52) / 3)
 
   afterEach(() => {

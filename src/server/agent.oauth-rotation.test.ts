@@ -7,7 +7,6 @@ import type { AutoContinueEvent } from "./auto-continue/events"
 import { AsyncEventQueue } from "./test-helpers/async-event-queue"
 import { waitFor } from "./test-helpers/wait-for"
 
-// ── Helpers (minimal copies from agent.test.ts — do NOT modify agent.test.ts) ──
 
 function createFakeStore() {
   const chat = {
@@ -160,7 +159,6 @@ function createFakeStore() {
       this.queuedMessages = this.queuedMessages.filter((entry) => entry.id !== queuedMessageId)
     },
     *runningSubagentRuns() {
-      // Empty stub — fake store has no subagent runs; recoverInterruptedRuns is a no-op.
     },
   }
 }
@@ -193,7 +191,6 @@ function makeRateLimitError(resetAt = Date.now() + 60_000) {
   return err
 }
 
-// ── Tests ──
 
 describe("AgentCoordinator OAuth rotation", () => {
   test(
@@ -231,8 +228,6 @@ describe("AgentCoordinator OAuth rotation", () => {
             setPermissionMode: async () => {},
             getSupportedCommands: async () => [],
             sendPrompt: async () => {
-              // Throw the rate-limit error from the stream once sendPrompt is called.
-              // activeTurns is already set at this point by startTurnForChat.
               events.throw(limitErr)
             },
           }
@@ -248,7 +243,6 @@ describe("AgentCoordinator OAuth rotation", () => {
         model: "claude-opus-4-7",
       })
 
-      // Wait for the rate-limit to be detected and the auto-continue event to land.
       await waitFor(
         () =>
           writeStatusCalls.some(
@@ -258,17 +252,14 @@ describe("AgentCoordinator OAuth rotation", () => {
         "token marked limited + auto_continue_accepted event written",
       )
 
-      // The first (and only) oauth token used should be from token "a".
       expect(capturedOauthTokens[0]).toBe("sk-ant-a")
 
-      // writeStatus should have been called to mark "a" as limited.
       const limitedCall = writeStatusCalls.find(
         (c) => (c.patch as { status?: string }).status === "limited",
       )
       expect(limitedCall).toBeDefined()
       expect(limitedCall!.id).toBe("a")
 
-      // Exactly one auto_continue_accepted event with source "token_rotation".
       const acceptedEvents = store.getAutoContinueEvents("chat-1").filter(
         (e) => e.kind === "auto_continue_accepted",
       )
@@ -314,7 +305,6 @@ describe("AgentCoordinator OAuth rotation", () => {
           setPermissionMode: async () => {},
           getSupportedCommands: async () => [],
           sendPrompt: async () => {
-            // Emit the SDK rate-limit event into the harness stream.
             events.push({
               type: "rate_limit",
               rateLimit: { resetAt, tz: "system" },
@@ -511,14 +501,11 @@ describe("AgentCoordinator OAuth rotation", () => {
         throw new Error("expected accepted event")
       }
 
-      // Simulate the SDK draining more rate_limit events from the now-rotated-away session.
-      // These must NOT trigger additional rotations or queued continues.
       firstStream!.push({ type: "rate_limit", rateLimit: { resetAt, tz: "system" } })
       firstStream!.push({ type: "rate_limit", rateLimit: { resetAt, tz: "system" } })
 
       await coordinator.fireAutoContinue("chat-1", firstAccepted.scheduleId)
 
-      // Give the stale events time to drain.
       await new Promise((resolve) => setTimeout(resolve, 50))
 
       const acceptedEvents = store.getAutoContinueEvents("chat-1").filter(
@@ -535,8 +522,8 @@ describe("AgentCoordinator OAuth rotation", () => {
   test(
     "when all tokens limited, scheduledAt is the earliest unlimit time across the pool",
     async () => {
-      const aResetAt = Date.now() + 30_000  // Token A unlimits first
-      const bResetAt = Date.now() + 60_000  // Token B unlimits later
+      const aResetAt = Date.now() + 30_000
+      const bResetAt = Date.now() + 60_000
 
       let tokens: OAuthTokenEntry[] = [makeToken("a"), makeToken("b")]
       const pool = new OAuthTokenPool(
@@ -598,7 +585,6 @@ describe("AgentCoordinator OAuth rotation", () => {
 
       await coordinator.fireAutoContinue("chat-1", firstAccepted.scheduleId)
 
-      // Wait for the second rate_limit (Token B) to produce another accepted event.
       await waitFor(
         () =>
           store.autoContinueEvents.filter((e) => e.kind === "auto_continue_accepted").length >= 2,
@@ -612,9 +598,6 @@ describe("AgentCoordinator OAuth rotation", () => {
       const second = acceptedEvents[1]
       if (second?.kind !== "auto_continue_accepted") throw new Error("expected second accepted")
 
-      // canRotate is false (both limited now), so scheduledAt should pick the
-      // earliest unlimit time across the pool — Token A — not the just-detected
-      // Token B reset.
       expect(second.scheduledAt).toBe(aResetAt)
     },
     10_000,
@@ -623,10 +606,6 @@ describe("AgentCoordinator OAuth rotation", () => {
   test(
     "startClaudeTurn refuses to spawn when pool has tokens but none usable",
     async () => {
-      // All tokens errored — pickActive returns null, hasAnyToken stays true.
-      // Without the guard the SDK would spawn with `oauthToken: null`, env
-      // would have no CLAUDE_CODE_OAUTH_TOKEN, and the CLI would fall back
-      // to the user's keychain (typically expired) → opaque 401 loop.
       const tokens: OAuthTokenEntry[] = [
         makeToken("a", { status: "error", lastErrorMessage: "401" }),
         makeToken("b", { status: "error", lastErrorMessage: "401" }),
@@ -645,10 +624,6 @@ describe("AgentCoordinator OAuth rotation", () => {
         oauthPool: pool,
       })
 
-      // chat.send should resolve OK — the refusal is persisted to the
-      // transcript as a `result` entry instead of bubbling up as a thrown
-      // error that would show only briefly in commandError before the
-      // next snapshot tick clears it.
       const result = await coordinator.send({
         type: "chat.send",
         chatId: "chat-1",
@@ -660,7 +635,6 @@ describe("AgentCoordinator OAuth rotation", () => {
       expect(spawnAttempts).toBe(0)
       expect(result.chatId).toBe("chat-1")
 
-      // Transcript must contain the durable refusal entry.
       const refusalEntries = store.messages.filter(
         (entry) => entry.kind === "result" && entry.subtype === "error",
       )
@@ -669,8 +643,6 @@ describe("AgentCoordinator OAuth rotation", () => {
       expect(refusal.isError).toBe(true)
       expect(refusal.result).toMatch(/All OAuth tokens are unavailable/i)
 
-      // recordTurnFailed still fires so the activeTurn is cleaned up and
-      // runtime status flips back to idle.
       expect(store.turnFailedCount).toBe(1)
     },
     10_000,
@@ -706,7 +678,6 @@ describe("AgentCoordinator OAuth rotation", () => {
           setPermissionMode: async () => {},
           getSupportedCommands: async () => [],
           sendPrompt: async () => {
-            // Emit a CLI-shaped 401 result entry into the harness stream.
             events.push({
               type: "transcript",
               entry: {
@@ -740,7 +711,6 @@ describe("AgentCoordinator OAuth rotation", () => {
         "401 detected → token marked error + auto_continue_accepted",
       )
 
-      // Token "a" (the spawned-with token) must be marked errored.
       const erroredCall = writeStatusCalls.find(
         (c) => (c.patch as { status?: string }).status === "error",
       )
@@ -748,8 +718,6 @@ describe("AgentCoordinator OAuth rotation", () => {
       expect((erroredCall!.patch as { lastErrorMessage?: string }).lastErrorMessage)
         .toMatch(/Failed to authenticate/i)
 
-      // Rotation event must be emitted with source "token_rotation"
-      // pointing at the alternative token.
       const accepted = store.getAutoContinueEvents("chat-1").find(
         (e) => e.kind === "auto_continue_accepted",
       )
@@ -764,9 +732,6 @@ describe("AgentCoordinator OAuth rotation", () => {
   test(
     "401 with no rotation target emits auto_continue_proposed (manual recovery)",
     async () => {
-      // Single token in the pool — when it 401s and gets marked errored,
-      // pickActive() returns null. The agent must surface a proposed
-      // recovery event instead of looping silently.
       let tokens: OAuthTokenEntry[] = [makeToken("a")]
       const writeStatusCalls: Array<{ id: string; patch: unknown }> = []
 
@@ -830,7 +795,6 @@ describe("AgentCoordinator OAuth rotation", () => {
       )
       expect(erroredCall?.id).toBe("a")
 
-      // No accepted event — the chat cannot continue without manual fix.
       const accepted = store.getAutoContinueEvents("chat-1").filter(
         (e) => e.kind === "auto_continue_accepted",
       )
@@ -880,12 +844,6 @@ describe("AgentCoordinator OAuth rotation", () => {
               if (sessionIndex === 0) {
                 events.push({ type: "rate_limit", rateLimit: { resetAt, tz: "system" } })
               } else if (sessionIndex === 1) {
-                // Delay the prompt-too-long result so the previous session's
-                // finally block has time to run AFTER this session's
-                // activeTurn is registered. This reproduces the race where
-                // the closed session would wipe the new session's activeTurn
-                // before the new session's isError branch can clear the
-                // sessionToken — leaving the chat stuck in a loop.
                 setTimeout(() => {
                   events.push({
                     type: "transcript",
@@ -928,9 +886,6 @@ describe("AgentCoordinator OAuth rotation", () => {
 
       await coordinator.fireAutoContinue("chat-1", accepted.scheduleId)
 
-      // After rotation→continue→prompt-too-long, the new session's isError
-      // branch must run (activeTurn alive) to clear sessionToken so the next
-      // turn starts with bounded history.
       await waitFor(
         () => store.chat.sessionTokensByProvider.claude === null,
         4000,
@@ -947,16 +902,7 @@ describe("AgentCoordinator OAuth rotation", () => {
   test(
     "errored rate-limit RESULT with no matching active turn still schedules a resume (loop silent-death regression)",
     async () => {
-      // Regression for the 9h autonomous-loop stall: a synthetic 429 `result`
-      // arriving when the pending prompt-seq queue is already drained (observed
-      // on an auto-continue wake turn) fails the
-      // `completedClaudePromptSeq === active.claudePromptSeq` gate, so the entire
-      // error-handling block — INCLUDING limit detection — was skipped and the
-      // loop died with NO resume schedule (no proposal, no accept). It only
-      // recovered when the user manually typed "resume" hours later. A
-      // recognizable rate-limit result must schedule a resume even when the seq
-      // gate misses. Idempotent: handleLimitDetection dedupes on a live schedule.
-      let tokens: OAuthTokenEntry[] = [makeToken("a")] // single token → no rotation target
+      let tokens: OAuthTokenEntry[] = [makeToken("a")]
       const pool = new OAuthTokenPool(
         () => tokens,
         (id, patch) => {
@@ -970,8 +916,6 @@ describe("AgentCoordinator OAuth rotation", () => {
         store: store as never,
         onStateChange: () => {},
         oauthPool: pool,
-        // auto-resume preference defaults to OFF → the resume is a *proposal*,
-        // respecting the user's setting (not a silent forced accept).
         startClaudeSession: async () => ({
           provider: "claude",
           stream: events,
@@ -983,7 +927,6 @@ describe("AgentCoordinator OAuth rotation", () => {
           setPermissionMode: async () => {},
           getSupportedCommands: async () => [],
           sendPrompt: async () => {
-            // Turn 1 finalizes normally, draining the pending prompt-seq…
             events.push({
               type: "transcript",
               entry: {
@@ -996,8 +939,6 @@ describe("AgentCoordinator OAuth rotation", () => {
                 result: "",
               } as never,
             })
-            // …then a synthetic 429 result arrives with the seq queue empty and
-            // no active turn — the gate misses. Pre-fix this was silently dropped.
             events.push({
               type: "transcript",
               entry: {
@@ -1040,7 +981,6 @@ describe("AgentCoordinator OAuth rotation", () => {
           (e) => e.kind === "auto_continue_proposed" || e.kind === "auto_continue_accepted",
         )
       expect(schedule).toBeDefined()
-      // Single-token pool → no rotation; auto-resume off → a proposal (respects setting).
       expect(schedule!.kind).toBe("auto_continue_proposed")
     },
     10_000,

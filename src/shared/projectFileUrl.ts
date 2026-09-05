@@ -20,10 +20,6 @@ export function isAbsoluteFilePath(value: string): boolean {
   return value.startsWith("/") || WINDOWS_DRIVE_PATH.test(value)
 }
 
-/**
- * Pick the right content URL for a file path. Absolute paths cannot be project-relative,
- * so they route through `/api/local-file`. Relative paths go through the project route.
- */
 export function buildContentUrlForFilePath(
   projectId: string | null | undefined,
   filePath: string | null | undefined,

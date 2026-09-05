@@ -1,17 +1,8 @@
-/**
- * dom.adapter.ts — Browser DOM/window/navigator implementation of DomPort.
- *
- * Wraps document.title, window.location, document.visibilityState,
- * document.hasFocus, navigator.userAgent, and window event listeners.
- *
- * Architecture: .c3/adr/adr-20260715-client-state-effect-architecture.md
- */
 
 import type { DomPort, ServiceWorkerRegistrationLike, ComputedStyleLike } from "../ports/domPort"
 
 declare global {
   interface Navigator {
-    /** iOS Safari "Add to Home Screen" standalone-mode flag. */
     readonly standalone?: boolean
   }
 }
@@ -94,7 +85,7 @@ export const domAdapter: DomPort = {
 
   addServiceWorkerMessageListener(handler: (event: MessageEvent) => void): () => void {
     if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) {
-      return () => { /* no-op: service workers not supported */ }
+      return () => { }
     }
     navigator.serviceWorker.addEventListener("message", handler)
     return () => {
@@ -197,7 +188,6 @@ export const domAdapter: DomPort = {
       mq.addEventListener("change", wrappedHandler)
       return () => mq.removeEventListener("change", wrappedHandler)
     }
-    // Legacy fallback (Safari < 14, older browsers)
     const legacyHandler = () => {
       handler(mq.matches)
     }

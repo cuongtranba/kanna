@@ -22,6 +22,5 @@ test("renders plain code (no HighlightedCode) when no language is given", () => 
   )
   expect(html).toContain('aria-label="Copy code"')
   expect(html).toContain("plain text")
-  // No language class when lang is empty.
   expect(html).not.toContain("language-")
 })

@@ -138,7 +138,6 @@ describe("ws-router stack commands", () => {
     const ws = new FakeWebSocket()
     router.handleOpen(ws as never)
 
-    // Create a stack first
     const stack = await store.createStack("Original", [p1.id, p2.id])
 
     await router.handleMessage(

@@ -100,16 +100,6 @@ export async function readKeybindingsSnapshot(filePath: string) {
   }
 }
 
-/**
- * Build a complete action -> shortcuts record.
- *
- * Seeding from `DEFAULT_KEYBINDINGS` — itself a full
- * `Record<KeybindingAction, string[]>` — is what makes the result TOTAL, so no
- * assertion is needed. `Object.fromEntries` cannot express that: it types every
- * key as `string`, and the `<Record<KeybindingAction, string[]>>` bridge that
- * used to close the gap would have gone on claiming totality even if an action
- * were dropped from `KEYBINDING_ACTIONS`.
- */
 function buildBindings(pick: (action: KeybindingAction) => string[]): Record<KeybindingAction, string[]> {
   const bindings: Record<KeybindingAction, string[]> = { ...DEFAULT_KEYBINDINGS }
   for (const action of KEYBINDING_ACTIONS) {

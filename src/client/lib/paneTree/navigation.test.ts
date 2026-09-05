@@ -3,14 +3,6 @@ import { collectPaneBounds, findAdjacentPane } from "./navigation"
 import { createGroup, createPane } from "./tree"
 import type { PaneNode } from "./types"
 
-/**
- *  ┌─────────┬─────────┐
- *  │   pa    │   pb    │
- *  ├─────────┤         │
- *  │   pc    │         │
- *  └─────────┴─────────┘
- * Left column split vertically; right column a single tall pane.
- */
 function lShaped(): PaneNode {
   return createGroup("root", "horizontal", [
     createGroup("left", "vertical", [createPane("pa"), createPane("pc")]),
@@ -48,8 +40,6 @@ describe("findAdjacentPane", () => {
     expect(findAdjacentPane(root, "pc", "up")).toBe("pa")
   })
 
-  // A pure tree walk would answer "pb" for pc→up, because pb is pc's uncle.
-  // Geometry gives the answer a user expects.
   test("does not leave the column when moving up from the lower-left pane", () => {
     expect(findAdjacentPane(lShaped(), "pc", "up")).not.toBe("pb")
   })
@@ -78,7 +68,6 @@ describe("findAdjacentPane", () => {
   })
 
   test("prefers the nearest candidate, then the best overlap", () => {
-    //  pa | pb | pc  — from pa, "right" must stop at pb, not skip to pc.
     const row = createGroup("root", "horizontal", [
       createPane("pa"),
       createPane("pb"),
@@ -88,10 +77,7 @@ describe("findAdjacentPane", () => {
     expect(findAdjacentPane(row, "pc", "left")).toBe("pb")
   })
 
-  // Ties are broken by pane id so the result is deterministic and testable.
   test("breaks a perfect tie deterministically", () => {
-    //  pz  |  pa   (stacked on the right, both equally adjacent to pz)
-    //      |  pb
     const root = createGroup("root", "horizontal", [
       createPane("pz"),
       createGroup("right", "vertical", [createPane("pb"), createPane("pa")]),

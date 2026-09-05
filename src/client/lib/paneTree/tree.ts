@@ -13,17 +13,11 @@ import {
   isPane,
 } from "./types"
 
-// ─── Construction ───────────────────────────────────────────────────────────
 
 export function createTab(target: PaneTabTarget, createdAt: number): PaneTab {
   return { tabId: buildTabId(target), target, createdAt }
 }
 
-/**
- * Build a pane, coercing `focusedTabId` to a real member and dropping duplicate
- * tab ids. Every path that changes a pane's tabs goes through here, so the
- * focus-is-a-member invariant cannot be violated by construction.
- */
 export function createPane(
   id: string,
   tabs: readonly PaneTab[] = [],
@@ -43,11 +37,6 @@ export function createPane(
   return { kind: "pane", id, tabs: deduped, focusedTabId: focused }
 }
 
-/**
- * Build a group, upholding two invariants: a group never has zero children (it
- * becomes an empty pane) and never has exactly one (it collapses to that child,
- * since a lone child has no boundary to drag).
- */
 export function createGroup(
   id: string,
   direction: SplitDirection,
@@ -70,7 +59,6 @@ export function createDefaultLayout(): PaneLayout {
   return { root: createPane(DEFAULT_PANE_ID), focusedPaneId: DEFAULT_PANE_ID }
 }
 
-// ─── Queries ────────────────────────────────────────────────────────────────
 
 export function getTreeDepth(node: PaneNode): number {
   if (isPane(node)) return 1
@@ -82,7 +70,6 @@ export function collectPanes(node: PaneNode): PaneLeaf[] {
   return node.children.flatMap(collectPanes)
 }
 
-/** Child-index path from the root to a pane, or null when absent. */
 export function findPanePath(node: PaneNode, paneId: string): number[] | null {
   if (isPane(node)) return node.id === paneId ? [] : null
 
@@ -117,10 +104,6 @@ export function getNodeAtPath(node: PaneNode, path: readonly number[]): PaneNode
   return current ?? null
 }
 
-/**
- * The pane a user would most naturally land on when `paneId` disappears: walk
- * outward, preferring the nearest pane to the left, then the nearest to the right.
- */
 export function findNearestSiblingPaneId(root: PaneNode, paneId: string): string | null {
   const path = findPanePath(root, paneId)
   if (!path) return null
@@ -143,12 +126,7 @@ export function findNearestSiblingPaneId(root: PaneNode, paneId: string): string
   return null
 }
 
-// ─── Structural primitives ──────────────────────────────────────────────────
 
-/**
- * Replace the node at `path`, rebuilding every ancestor through `createGroup`
- * so sizes renormalize and single-child collapse cascades on the way back up.
- */
 export function replaceNodeAtPath(
   root: PaneNode,
   path: readonly number[],
@@ -166,12 +144,6 @@ export function replaceNodeAtPath(
   return createGroup(root.id, root.direction, children, root.sizes)
 }
 
-/**
- * Remove the pane at `path`.
- *
- * Removing the root pane empties it in place rather than deleting it — the tree
- * must always offer somewhere to render.
- */
 export function removePaneByPath(root: PaneNode, path: readonly number[]): PaneNode {
   if (path.length === 0) return createPane(root.id)
 
@@ -193,13 +165,6 @@ export interface DetachTabResult {
   sourcePaneId: string | null
 }
 
-/**
- * Pull a tab out of the tree.
- *
- * The single primitive under split, move and close. `preserveEmptyPaneId` keeps
- * a pane alive even when the detach empties it — needed when splitting a pane's
- * own last tab, where deleting the source would destroy the split target.
- */
 export function detachTab(
   root: PaneNode,
   tabId: string,
@@ -221,10 +186,6 @@ export function detachTab(
   return { root: removePaneByPath(root, path), tab, sourcePaneId: pane.id }
 }
 
-/**
- * Put a tab into a pane. Returns null when the pane does not exist, so callers
- * decide how to recover rather than being thrown at.
- */
 export function insertTabIntoPane(
   root: PaneNode,
   paneId: string,

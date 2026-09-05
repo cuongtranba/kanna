@@ -202,7 +202,6 @@ describe("discardFile", () => {
 
     expect(result.snapshotChanged).toBe(false)
 
-    // Verify the file was restored
     const content = await Bun.file(path.join(repo, "README.md")).text()
     expect(content).toBe("hello\n")
   }, 30_000)
@@ -329,7 +328,6 @@ describe("generateCommitMessage", () => {
 
   test("deduplicates paths before processing", async () => {
     const repo = await makeRepo()
-    // Both paths resolve to the same file — the error should mention the unique path
     await expect(
       generateCommitMessage(makeDeps(), {
         projectPath: repo,

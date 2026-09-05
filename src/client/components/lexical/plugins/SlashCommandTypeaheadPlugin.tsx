@@ -21,14 +21,6 @@ import { clampCommandDescription } from "../../../lib/formatters"
 import { ChatTabScopedStore } from "../../../stores/chatTabScopedStore"
 import { useTypeaheadHoverHighlight } from "./typeahead-hover-highlight"
 
-// ---------------------------------------------------------------------------
-// Custom trigger: slash at the start of the input OR after whitespace.
-//
-// Mirrors the mention trigger so `/cmd` opens the picker anywhere in the
-// composer, not only at the very beginning. A `/` mid-word (e.g. a path like
-// `src/file`) does NOT trigger because it must be preceded by start-of-text or
-// whitespace. `\S*` terminates the query at the first space.
-// ---------------------------------------------------------------------------
 
 const SLASH_TRIGGER_RE = /(?:^|\s)(\/(\S*))$/
 
@@ -36,9 +28,6 @@ function useSlashTrigger(): TriggerFn {
   return useCallback((text: string, _editor: LexicalEditor): MenuTextMatch | null => {
     const match = SLASH_TRIGGER_RE.exec(text)
     if (match === null) return null
-    // match.index = start of the full match (may include a leading space)
-    // match[1] = "/query" (no leading whitespace), match[2] = "query"
-    // leadOffset = position of `/` in the text
     const leadOffset = match.index + (match[0].length - match[1].length)
     return {
       leadOffset,
@@ -48,9 +37,6 @@ function useSlashTrigger(): TriggerFn {
   }, [])
 }
 
-// ---------------------------------------------------------------------------
-// MenuOption subclass
-// ---------------------------------------------------------------------------
 
 export class SlashCommandMenuOption extends MenuOption {
   readonly command: SlashCommand
@@ -61,13 +47,6 @@ export class SlashCommandMenuOption extends MenuOption {
   }
 }
 
-/**
- * Dedupe commands by normalized name, keeping the first occurrence. The
- * upstream merge (CLI built-ins + local skill catalog) can surface the same
- * command twice; the picker's option keys (option.key === command.name) must
- * be unique or React emits duplicate-key errors and the typeahead's selection
- * tracking breaks.
- */
 export function dedupeCommandsByName(commands: SlashCommand[]): SlashCommand[] {
   const seen = new Set<string>()
   const result: SlashCommand[] = []
@@ -80,38 +59,13 @@ export function dedupeCommandsByName(commands: SlashCommand[]): SlashCommand[] {
   return result
 }
 
-// ---------------------------------------------------------------------------
-// Selection
-// ---------------------------------------------------------------------------
 
 export interface ApplySlashCommandSelectionArgs {
   readonly command: SlashCommand
-  /** From `mergePluginCommands`. A name present here belongs to a Kanna plugin
-   * and expands to text; anything else becomes a `SlashCommandNode`. */
   readonly promptByName: ReadonlyMap<string, string>
   readonly textNodeContainingQuery: TextNode | null
 }
 
-/**
- * Writes the picked command into the editor. Runs inside a Lexical update (the
- * typeahead calls `onSelectOption` within one); exported so both branches can
- * be driven from a headless editor.
- *
- * The two branches are NOT interchangeable, and that is the whole plugin
- * command-center decision:
- *
- *   - A CATALOG entry becomes a `SlashCommandNode`, whose text content is
- *     `/name`. Something downstream resolves that name — `runBuiltinCommand`,
- *     or the claude CLI reading the command's file off disk.
- *   - A KANNA PLUGIN entry becomes plain TEXT: the item's own `prompt`. It was
- *     contributed at runtime by a browser bundle, so there is no file to
- *     resolve and no builtin arm to intercept it; `/name` would reach the CLI
- *     as a command it rejects. See `../../../lib/plugin-slash-commands.ts` for
- *     the alternatives considered.
- *
- * `promptByName` carries only entries the merge ACCEPTED, so a hit here can
- * never be a catalog command that a dropped plugin entry happened to shadow.
- */
 export function $applySlashCommandSelection({
   command,
   promptByName,
@@ -122,15 +76,10 @@ export function $applySlashCommandSelection({
     const promptNode = $createTextNode(pluginPrompt)
     if (textNodeContainingQuery !== null) textNodeContainingQuery.replace(promptNode)
     else $insertNodes([promptNode])
-    // Caret at the end of the inserted text: the user reads and edits it before
-    // sending, which is the point of inserting prose rather than a command.
     promptNode.select(pluginPrompt.length, pluginPrompt.length)
     return
   }
 
-  // Replace the trigger text (`/query`) with the slash-command node.
-  // `.replace()` preserves the caret position (a prior `.remove()` +
-  // `$insertNodes` corrupted the selection and submitted raw text).
   const commandNode = $createSlashCommandNode({
     commandName: normalizeCommandName(command.name),
     hasArgument: Boolean(command.argumentHint),
@@ -142,28 +91,16 @@ export function $applySlashCommandSelection({
     $insertNodes([commandNode])
   }
 
-  // Inline decorator node can't hold the caret; drop a trailing space text node
-  // after it and place the caret there so the user can type the argument.
   const trailingSpace = $createTextNode(" ")
   commandNode.insertAfter(trailingSpace)
   trailingSpace.select()
 }
 
-// ---------------------------------------------------------------------------
-// Plugin props
-// ---------------------------------------------------------------------------
 
 export interface SlashCommandTypeaheadPluginProps {
-  /**
-   * The catalog is keyed by project, not chat: it comes from the project's cwd,
-   * so every chat in a project shares one already-cached list.
-   */
   projectId: string | null
 }
 
-// ---------------------------------------------------------------------------
-// Plugin component
-// ---------------------------------------------------------------------------
 
 export function SlashCommandTypeaheadPlugin({
   projectId,
@@ -178,12 +115,6 @@ export function SlashCommandTypeaheadPlugin({
 
   const highlightOnPointerMove = useTypeaheadHoverHighlight()
 
-  // The catalog is NOT scoped by provider. It used to be — codex saw only the
-  // builtins, because a disk-scanned Claude Code entry meant nothing to a
-  // provider that does not run the claude CLI. Kanna now expands those entries
-  // itself for such a provider (`skill-invocation.ts`), so every entry in the
-  // list works everywhere, and a Kanna plugin entry (whose selection inserts
-  // its own prompt TEXT — see `plugin-slash-commands.ts`) always did.
   const merged = useMemo(
     () => mergePluginCommands(slashCommands, pluginCommandItems),
     [slashCommands, pluginCommandItems],
@@ -230,13 +161,8 @@ export function SlashCommandTypeaheadPlugin({
       },
     ) => {
       if (anchorElementRef.current == null) return null
-      // No loading state to render: the catalog arrives with the project
-      // snapshot, so an empty list means "nothing matches", never "not yet".
       if (menuOptions.length === 0) return null
 
-      // Plain function, not a hook: menuRenderFn is itself a callback.
-      // Keeps the handler out of the JSX attribute (selectOptionAndCleanUp
-      // is a Lexical callback, not a store action).
       const handleOptionMouseDown = (
         event: ReactMouseEvent<HTMLLIElement>,
         option: SlashCommandMenuOption,
@@ -245,10 +171,6 @@ export function SlashCommandTypeaheadPlugin({
         selectOptionAndCleanUp(option)
       }
 
-      // Hover follows the POINTER, not the hit test — see
-      // useTypeaheadHoverHighlight. `mouseenter` here made every arrow key
-      // press hand the highlight straight back to the row the scroll had just
-      // moved under a resting cursor (#1019).
       const handleOptionMouseMove = (
         event: ReactMouseEvent<HTMLLIElement>,
         index: number,

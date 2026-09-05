@@ -1,49 +1,11 @@
-/**
- * Transcript entry fixture for the long-session bench.
- *
- * WHY THIS EXISTS. The original fixture emitted one shape at one size —
- * `"lorem ipsum dolor sit amet ".repeat(40)`, ~1 KB, every entry. Under it a
- * 200-entry window weighs a fixed ~184 KB, so the July 2026 long-session OKR
- * measured a window whose cost could not vary with content and concluded the
- * initial page needed no byte bound. Real windows are heavy-tailed: the same
- * 200 entries weigh 0.47 MB in one chat and 3.89 MB in another, and that
- * spread — not entry count, not file size — is what a chat tab actually pays
- * on open. A fixture with no tail cannot express the failure it is meant to
- * catch.
- *
- * PROVENANCE. The percentiles below were measured on 2026-08-10 over the last
- * 200 entries of each of the 25 largest transcripts in a real store (n=5000
- * entries):
- *
- *   mean 8536 B | p10 655 | p25 1156 | p50 1738 | p75 2993
- *              | p90 7636 | p95 18818 | p99 212563 | max 898755
- *
- * Note the shape, not just the scale: the MEDIAN (1.7 KB) is within 2x of the
- * old fixture, which is why the old one looked plausible. The tail is what was
- * missing — p99 is 122x the median and the largest single entry is ~900 KB.
- *
- * `tool_result` carries that tail (34% of entries, mean 19.5 KB), so sampled
- * fat entries are emitted as tool_result to preserve the kind/size
- * correlation, not just the marginal distribution.
- *
- * RE-MEASURING. When the corpus shifts materially, re-run the measurement and
- * update BOTH the table and the docstring above. Keep the numbers and their
- * date together — a percentile with no provenance is indistinguishable from an
- * invented one, which is the failure this file exists to prevent.
- */
 import type { TranscriptEntry } from "../../src/shared/types"
 
-/** Headline percentiles of the measured distribution, for reporting. */
 export const ENTRY_SIZE_PERCENTILES = {
   p50: 1738,
   p95: 18818,
   max: 898755,
 } as const
 
-/**
- * Inverse CDF of the measured entry-size distribution, as
- * [cumulativeProbability, bytes] knots. Sampling interpolates between knots.
- */
 const SIZE_CDF: ReadonlyArray<readonly [number, number]> = [
   [0.00, 320],
   [0.10, 655],
@@ -56,13 +18,8 @@ const SIZE_CDF: ReadonlyArray<readonly [number, number]> = [
   [1.00, 898755],
 ]
 
-/** Entries at or above this size are emitted as tool_result (the fat kind). */
 const FAT_ENTRY_BYTES = 10_000
 
-/**
- * Deterministic PRNG (mulberry32). The bench must be replayable: a fixture
- * that reshuffles per run makes two bench numbers incomparable.
- */
 export function mulberry32(seed: number): () => number {
   let a = seed >>> 0
   return () => {
@@ -73,7 +30,6 @@ export function mulberry32(seed: number): () => number {
   }
 }
 
-/** Draws one entry size in bytes from the measured distribution. */
 export function sampleEntryBytes(rng: () => number): number {
   const u = rng()
   for (let i = 1; i < SIZE_CDF.length; i += 1) {
@@ -88,7 +44,6 @@ export function sampleEntryBytes(rng: () => number): number {
   return SIZE_CDF[SIZE_CDF.length - 1]![1]
 }
 
-/** Filler that does not compress to nothing, so byte counts stay honest. */
 function filler(bytes: number, rng: () => number): string {
   if (bytes <= 0) return ""
   const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789 "
@@ -99,14 +54,8 @@ function filler(bytes: number, rng: () => number): string {
   return out.slice(0, bytes)
 }
 
-/**
- * Builds one transcript entry whose serialized size is approximately
- * `targetBytes`. Fat draws become tool_result; the rest rotate through the
- * kinds that dominate a real window.
- */
 export function makeSizedEntry(i: number, targetBytes: number, rng: () => number): TranscriptEntry {
   const createdAt = 1700000000000 + i
-  // Rough envelope overhead of the JSON scaffolding around the payload.
   const payloadBytes = Math.max(1, targetBytes - 120)
 
   if (targetBytes >= FAT_ENTRY_BYTES) {
@@ -164,7 +113,6 @@ export interface SizeSummary {
   max: number
 }
 
-/** Percentiles of an emitted fixture, reported alongside every bench result. */
 export function summarizeSizes(sizes: readonly number[]): SizeSummary {
   if (sizes.length === 0) return { p50: 0, p95: 0, max: 0 }
   const sorted = [...sizes].sort((a, b) => a - b)

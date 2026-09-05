@@ -136,7 +136,6 @@ test("localBranchExists distinguishes a real branch from a lookalike", async () 
     git(dir, "branch", "card/412-fix-login")
     expect(await localBranchExists(dir, "card/412-fix-login")).toBe(true)
     expect(await localBranchExists(dir, "card/999-nope")).toBe(false)
-    // A tag is not a branch: attaching a worktree to it would detach HEAD.
     git(dir, "tag", "card/tagged")
     expect(await localBranchExists(dir, "card/tagged")).toBe(false)
   } finally {

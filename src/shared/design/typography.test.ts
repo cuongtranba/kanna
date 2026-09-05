@@ -37,11 +37,6 @@ describe("isFontScaleStep", () => {
     }
   })
 
-  // Each case is wrapped in a single-element tuple ([c]) rather than passed as a bare
-  // array of scalars: bun's test.each spreads an array *row* as positional arguments,
-  // so an un-wrapped `[]` row (one of our garbage cases) would be spread to zero
-  // arguments instead of passed as the single value `[]` — wrapping keeps every row
-  // shape uniform regardless of what the case value itself is.
   test.each([undefined, null, "", "MD", "huge", 0, Number.NaN, {}, [], "SM", "medium"].map((c) => [c]))(
     "rejects garbage input %p",
     (value) => {
@@ -100,8 +95,6 @@ describe("resolveEffectiveScaleStep — pure precedence: deviceOverride ?? serve
   })
 
   test("never reads a store: is a plain function of exactly its two arguments", () => {
-    // Same two inputs, called repeatedly, must yield the same output every time —
-    // proof there is no hidden state (store, clock, random) influencing the result.
     const a = resolveEffectiveScaleStep("xl", "sm")
     const b = resolveEffectiveScaleStep("xl", "sm")
     const c = resolveEffectiveScaleStep("xl", "sm")

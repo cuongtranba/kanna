@@ -7,15 +7,9 @@ import type { ProcessedCronListMessage } from "./types"
 
 interface Props {
   message: ProcessedCronListMessage
-  /** Live jobs from ChatSnapshot — the card always shows the CURRENT list. */
   cronJobs?: readonly CronJobSnapshot[]
 }
 
-/**
- * `/cron list` (and bare `/cron` help) card. Renders the chat's LIVE job
- * list from the snapshot — the entry marks where the user asked, not a
- * frozen copy of the answer.
- */
 export function CronListMessage({ message, cronJobs }: Props) {
   const jobs = cronJobs ?? []
   return (

@@ -38,8 +38,6 @@ describe("ClaudeAuthErrorDetector.detect", () => {
 
   test("returns null for generic errors", () => {
     expect(detector.detect("c1", new Error("unrelated"))).toBe(null)
-    // Production reaches the detector through `toError`, so a non-Error
-    // throwable arrives as a plain Error carrying its stringified form.
     expect(detector.detect("c1", toError(null))).toBe(null)
     expect(detector.detect("c1", toError(undefined))).toBe(null)
   })

@@ -5,18 +5,12 @@ import type { DomPort } from "../../../ports/domPort"
 import { domAdapter } from "../../../adapters/dom.adapter"
 import { ThinkingBlock } from "../../messages/ThinkingBlock"
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
 
 export type SerializedThinkingNode = Spread<
   { content: string },
   SerializedLexicalNode
 >
 
-// ---------------------------------------------------------------------------
-// Node
-// ---------------------------------------------------------------------------
 
 export class ThinkingNode extends DecoratorNode<ReactNode> {
   readonly __content: string
@@ -28,7 +22,6 @@ export class ThinkingNode extends DecoratorNode<ReactNode> {
     this.__dom = dom
   }
 
-  // ── Static interface ──────────────────────────────────────────────────────
 
   static getType(): string {
     return "kanna-thinking"
@@ -42,7 +35,6 @@ export class ThinkingNode extends DecoratorNode<ReactNode> {
     return $createThinkingNode(serializedNode.content)
   }
 
-  // ── Serialization ─────────────────────────────────────────────────────────
 
   exportJSON(): SerializedThinkingNode {
     return {
@@ -52,7 +44,6 @@ export class ThinkingNode extends DecoratorNode<ReactNode> {
     }
   }
 
-  // ── DOM ───────────────────────────────────────────────────────────────────
 
   createDOM(_config: EditorConfig, _editor: LexicalEditor): HTMLElement {
     return this.__dom.createElement("div")
@@ -62,7 +53,6 @@ export class ThinkingNode extends DecoratorNode<ReactNode> {
     return false
   }
 
-  // ── Behaviour ─────────────────────────────────────────────────────────────
 
   isInline(): boolean {
     return false
@@ -72,16 +62,12 @@ export class ThinkingNode extends DecoratorNode<ReactNode> {
     return this.__content
   }
 
-  // ── Decorator ─────────────────────────────────────────────────────────────
 
   decorate(_editor: LexicalEditor, _config: EditorConfig): ReactNode {
     return <ThinkingBlock content={this.__content} />
   }
 }
 
-// ---------------------------------------------------------------------------
-// Factory helpers
-// ---------------------------------------------------------------------------
 
 export function $createThinkingNode(content: string): ThinkingNode {
   return $applyNodeReplacement(new ThinkingNode(content))

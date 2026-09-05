@@ -72,10 +72,6 @@ describe("contrast engine sanity", () => {
 
 describe("the catalog measures what is drawn", () => {
   test("no pairing survives whose consumer was deleted", () => {
-    // The four `status/*` tinted pills were the only consumers of those
-    // pairings. Keeping them after the pills became marks would leave this
-    // suite proving contrast for a surface nothing renders — a check that
-    // gates nothing, which is exactly the failure mode this repo removes.
     const names = TONE_PAIRINGS.map((p) => p.name)
     expect(names).not.toContain("status/running")
     expect(names).not.toContain("status/completed")
@@ -86,8 +82,6 @@ describe("the catalog measures what is drawn", () => {
   test("every mark colour is measured on the plain surface it actually sits on", () => {
     const marks = TONE_PAIRINGS.filter((p) => p.name.startsWith("mark/"))
     expect(marks.length).toBe(4)
-    // A mark is drawn on the card/background itself, never over a tint, so a
-    // pairing claiming otherwise would be measuring the wrong composite.
     for (const mark of marks) expect(mark.alpha).toBe(1)
   })
 

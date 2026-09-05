@@ -76,8 +76,6 @@ describe("linkifyTextRefs", () => {
   })
 
   test("sentence boundary blocks right-side URL match (Priority B only)", () => {
-    // Period+space between ref and URL triggers sentence-boundary block (Priority B).
-    // URL must NOT contain the number (which would trigger Priority A and bypass the check).
     const t = "#42 done. https://example.com/dashboard"
     expect(linkifyTextRefs(t)).toBe(t)
   })
@@ -85,7 +83,6 @@ describe("linkifyTextRefs", () => {
   test("trailing punctuation stripped from URL before linking", () => {
     const result = linkifyTextRefs("PR #1 see https://example.com/pull/1.")
     expect(result).toContain("[PR #1](https://example.com/pull/1)")
-    // trailing dot stays outside the markdown link
     expect(result).toContain("https://example.com/pull/1.")
   })
 

@@ -19,7 +19,6 @@ function job(overrides: Partial<CronJobSnapshot> = {}): CronJobSnapshot {
   }
 }
 
-/** `lastRun` drives the pills; `recentRuns` drives the in-flight predicate. */
 function withRun(run: CronRunSnapshot, overrides: Partial<CronJobSnapshot> = {}): CronJobSnapshot {
   return job({ lastRun: run, recentRuns: [run], ...overrides })
 }
@@ -68,8 +67,6 @@ describe("CronJobsSection — schedule vs. run status display model", () => {
   })
 
   test("active job with lastRun running shows 'running for' derived from firedAt not armedAt", () => {
-    // armedAt=1_000, firedAt=5_000: the two elapsed values differ, so the
-    // presence of "running for" pins which one the row is measuring from.
     const html = render([
       withRun({ runId: "r1", firedAt: 5_000, status: "running" }, { paused: false, armedAt: 1_000 }),
     ])
@@ -95,10 +92,6 @@ describe("CronJobsSection — edit affordance", () => {
   })
 
   test("edit is marked unavailable while a run is in flight, and says why", () => {
-    // The server refuses `update` mid-run and reports it as a
-    // cron_command_error in the arming chat, which the /cron page never shows.
-    // The reason has to ride the accessible NAME: Radix mounts tooltip content
-    // only while open, so a hover-only explanation reaches no screen reader.
     const html = render([withRun({ runId: "r1", firedAt: 2_000, status: "running" })])
     expect(html).toContain('aria-disabled="true"')
     expect(html).toContain("cannot edit while a run is in flight")

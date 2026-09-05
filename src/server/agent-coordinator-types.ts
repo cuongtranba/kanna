@@ -1,9 +1,3 @@
-/**
- * Public types for AgentCoordinator construction.
- *
- * Extracted from agent.ts so the coordinator's constructor-arg surface can be
- * read independently of the full class body (agent.ts was 1300+ LOC).
- */
 
 import type { AnalyticsReporter } from "./analytics"
 import type { CodexAppServerManager } from "./codex-app-server"
@@ -31,13 +25,7 @@ import type { StartClaudeSessionPtyArgs } from "./claude-pty/driver"
 import type { JsonValue } from "../shared/json"
 import type { ModelPrice } from "../shared/token-pricing"
 
-/** App settings snapshot returned by `getAppSettingsSnapshot`. */
 export interface AppSettingsSnapshot {
-  // NOTE: no `claudeAuth` here on purpose. Claude spawn readiness is decided
-  // from the live OAuth pool via `claudeAuthReady` (provider-catalog.ts), not
-  // from a settings flag. A `claudeAuth.authenticated` field once lived here;
-  // nothing ever wrote it, so the one caller that read it treated every user
-  // as unauthenticated. ClaudeAuthSettings is `{tokens, concurrencyDefault}`.
   claudeDriver?: {
     preference?: ClaudeDriverPreference
     lifecycle?: { idleTimeoutMs?: number; maxConcurrent?: number }
@@ -55,17 +43,7 @@ export interface ClaudeSessionLifecycleOptions {
   idleMs: number
   maxResidentSessions: number
   sweepIntervalMs: number
-  /** Max time a warm PTY session is held open solely because a background Bash
-   * task is still pending (no other activity). Bounds a hung/never-completing
-   * task so it cannot pin a process forever.
-   * See adr-20260604-pty-background-task-keepalive. */
   backgroundTaskMaxMs: number
-  /** Max watchdog wakes per background-task watch epoch. When the
-   * backgroundTaskMaxMs deadline lapses with tasks still pending, the sweep
-   * wakes the session (agent re-checks + reports to the user) instead of
-   * silently reaping it, up to this many times; then it closes the session
-   * with a visible abandonment notice.
-   * See adr-20260801-background-task-wake-escalation. */
   backgroundTaskMaxWakes: number
 }
 
@@ -89,43 +67,24 @@ export interface AgentCoordinatorArgs {
     chatId?: string
     tunnelGateway?: TunnelGateway | null
     onToolRequest: (request: HarnessToolRequest) => Promise<JsonValue>
-    /** Append text for the claude_code preset's `systemPrompt.append`. */
     systemPromptAppend?: string
-    /** When set, redirect the SDK to OpenRouter instead of Anthropic. */
     openrouterApiKey?: string | null
-    /** Orchestrator for delegate_subagent. Omit to hide the tool. */
     subagentOrchestrator?: SubagentOrchestrator
-    /** Per-spawn delegation context (depth / ancestor chain / parentUserMessageId resolver). */
     delegationContext?: KannaMcpDelegationContext
-    /** Subagent-only override — REPLACES the claude_code preset append entirely. */
     systemPromptOverride?: string
-    /** Subagent-only one-shot prompt — closes the queue after the single turn. */
     initialPrompt?: string
-    /** Routes AskUserQuestion/ExitPlanMode through tool-callback when KANNA_MCP_TOOL_CALLBACKS=1. */
     toolCallback?: ToolCallbackService
-    /** Per-chat permission policy. Defaults to POLICY_DEFAULT if omitted. */
     chatPolicy?: ChatPermissionPolicy
-    /** Enabled user MCP servers, merged into the SDK's mcpServers map. */
     customMcpServers?: readonly McpServerConfig[]
-    /** Pre-resolved oauth bearer tokens keyed by server id. */
     oauthBearers?: ReadonlyMap<string, string>
-    /** Folder-restricted subagent: disallow native FS tools + allowlist mcp__kanna__*. */
     restrictedAllowedPaths?: string[]
-    /** Backs the `setup_loop` MCP tool. Omit to hide the tool. */
     setupLoop?: (input: LoopSetupInput) => Promise<SetupLoopHandlerResult>
-    /** Backs the `arm_cron` MCP tool; main chats only. */
     armCron?: (command: string) => Promise<{ jobId: string }>
-    /** Backs the `update_cron` MCP tool; main chats only. */
     updateCron?: (jobId: string, patch: import("../shared/cron/types").CronJobPatch) => Promise<void>
-    /** Backs the `stop_loop` MCP tool. Omit to hide the tool. */
     stopLoop?: () => Promise<void>
-    /** Live check: true while an autonomous loop is armed. */
     isLoopArmed?: () => boolean
-    /** Keep the SDK prompt queue open after the initial prompt for multi-turn keep-alive. */
     keepAlive?: boolean
-    /** Per-turn price for computing cost when the provider doesn't report it (OpenRouter). */
     turnPrice?: ModelPrice | null
-    /** Overrides the configured context window (OpenRouter model contextLength). */
     contextWindowOverride?: number
   }) => Promise<ClaudeSessionHandle>
   startClaudeSessionPTY?: (args: StartClaudeSessionPtyArgs) => Promise<ClaudeSessionHandle>
@@ -134,41 +93,23 @@ export interface AgentCoordinatorArgs {
   scheduleManager?: ScheduleManager
   cronScheduler?: import("./cron/scheduler").CronScheduler
   getAutoResumePreference?: () => boolean
-  /**
-   * Watchdog (ms) for an OpenRouter turn whose SDK stream emits no transcript
-   * entry after the session-token handshake. Default 120000 (2 min).
-   */
   openrouterFirstEntryTimeoutMs?: number
   getSubagents?: () => Subagent[]
   getAppSettingsSnapshot?: () => AppSettingsSnapshot
   throwOnClaudeSessionStart?: boolean
   oauthPool?: OAuthTokenPool
-  /** Populated on boot; will be consumed by canUseTool. */
   toolCallback?: ToolCallbackService
-  /** Per-chat permission policy forwarded to startClaudeSession. Defaults to POLICY_DEFAULT if omitted. */
   chatPolicy?: ChatPermissionPolicy
-  /** Claude subprocess lifecycle tuning. Defaults are conservative and may be overridden in tests. */
   claudeSessionLifecycle?: Partial<ClaudeSessionLifecycleOptions>
-  /** On-disk registry of claude PTY children for crash-orphan reap on next boot. */
   claudePtyRegistry?: import("./claude-pty/pid-registry.adapter").ClaudePtyRegistry
-  /** In-memory live-status registry surfaced to the UI. */
   ptyInstanceRegistry?: import("./claude-pty/pty-instance-registry").PtyInstanceRegistry
-  /** Registry of workflow runs per chat, populated by PTY driver from the on-disk workflows dir. */
   workflowRegistry?: import("./workflow-registry").WorkflowRegistry
-  /** Boards, so the agent's board tools can be registered at spawn. */
   boardRegistry?: import("./board-registry").BoardRegistry
-  /** Watches each armed loop's tracking file so the Progress panel can list every step. */
   loopTrackingRegistry?: import("./loop-tracking-registry").LoopTrackingRegistry
-  /** Registry mapping each chat to its `…/subagents` dir for Agent child-transcript drill-in. */
   subagentTranscriptRegistry?: import("./subagent-transcript-registry").SubagentTranscriptRegistry
-  /** Reads the persisted LLM provider snapshot (OpenRouter key source). */
   readLlmProvider?: () => Promise<LlmProviderSnapshot>
-  /** Lists OpenRouter models (with pricing + contextLength) for cost computation. */
   listOpenRouterModels?: () => Promise<import("../shared/types").OpenRouterModel[]>
-  /** Local skill + slash command catalog (user, project, plugin scans). */
   localCatalog?: import("./local-catalog").LocalCatalogService
-  /** Persist updated OAuth state for a custom MCP server (called after token refresh at spawn). */
   persistOAuthState?: (id: string, oauth: McpOAuthState) => void
-  /** Tracks bash background-task output file paths so the UI can tail them. */
   backgroundTaskOutputRegistry?: import("./background-task-output-registry").BackgroundTaskOutputRegistry
 }

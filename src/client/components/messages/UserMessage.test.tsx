@@ -20,9 +20,6 @@ describe("UserMessage plate", () => {
   })
 
   test("sits on the rail rather than in a right-aligned bubble", () => {
-    // The bubble was the last card on this surface: its own box, radius, fill
-    // and alignment meant the user's own words were the one thing not measured
-    // from the rail everything else hangs off.
     const html = render("hi")
     expect(html).toContain("items-start")
     expect(html).not.toContain("items-end")
@@ -46,16 +43,12 @@ describe("UserMessage plate", () => {
   })
 
   test("names the speaker in the margin, and hides that gloss from screen readers", () => {
-    // The label is decoration for the eye: the transcript already exposes
-    // authorship structurally, so announcing "You" before every prompt is noise.
     const html = render("hi")
     expect(html).toContain(">You<")
     expect(html).toContain('aria-hidden="true"')
   })
 
   test("stacks the speaker above the text, so the prompt starts on the rail", () => {
-    // Spending a 48px gutter plus a gap on the gloss inside the measure would
-    // push the prompt far off the transcript's reading rail.
     const html = render("hi")
     expect(html).toContain("flex-col")
     expect(html).not.toContain("sm:flex-row")
@@ -78,12 +71,6 @@ describe("UserMessage plate", () => {
   })
 })
 
-/**
- * On a provider whose harness cannot expand `/name`, Kanna resolves the line
- * itself and sends the file's instructions. `content` stays the typed line, so
- * without this note the row is indistinguishable from one that was sent
- * verbatim — two very different things.
- */
 describe("UserMessage expanded command", () => {
   function renderExpanded(kind: "skill" | "command") {
     return renderToStaticMarkup(
@@ -105,8 +92,6 @@ describe("UserMessage expanded command", () => {
     expect(renderExpanded("skill")).toContain("kanna-test")
   })
 
-  // Quiet metadata, like the neighbouring "auto-sent": no tinted pill, so no
-  // TONE_PAIRINGS entry and nothing for the raw-ink guard to catch.
   test("reads as muted metadata rather than a coloured badge", () => {
     const html = renderExpanded("skill")
     expect(html).toContain("text-muted-foreground")

@@ -57,15 +57,7 @@ describe("startClaudeSessionPTY", () => {
     }
   })
 
-  // ANTHROPIC_API_KEY in the parent env no longer fails the auth precheck:
-  // PTY mode is OAuth-only and buildPtyEnv unconditionally strips the key
-  // from the child env, so the CLI can never bill API. Coverage moved to
-  // auth.test.ts ("ANTHROPIC_API_KEY in parent env does not block ...") and
-  // the "strips ANTHROPIC_API_KEY defensively" buildPtyEnv test below.
 
-  // Preflight gate removed: kanna trusts the claude CLI as the source of
-  // truth for tool execution. The PreflightGate arg is still accepted on the
-  // driver interface (back-compat with callers) but is never invoked.
 
   test.skipIf(process.env.KANNA_PTY_E2E !== "1")(
     "E2E: spawn claude, send one prompt, observe one transcript event",
@@ -149,18 +141,15 @@ describe("startClaudeSessionPTY", () => {
             throw new Error(`${label}: timed out waiting for result entry`)
           }
 
-          // Enter plan mode; wait for TUI to process slash command.
           await handle.setPermissionMode(true)
           await new Promise((r) => setTimeout(r, 800))
 
           await handle.sendPrompt("Reply with exactly the word: plantest")
           await awaitResult("plan-mode prompt")
 
-          // Exit plan mode via Shift+Tab; wait for TUI to process keypress.
           await handle.setPermissionMode(false)
           await new Promise((r) => setTimeout(r, 800))
 
-          // Session must still accept prompts after the Shift+Tab key sequence.
           await handle.sendPrompt("Reply with exactly the word: normaltest")
           await awaitResult("post-shift-tab prompt")
         } finally {
@@ -173,8 +162,6 @@ describe("startClaudeSessionPTY", () => {
     90_000,
   )
 
-  // OS sandbox wrap removed: kanna trusts the claude CLI as the source of
-  // truth and runs it directly under the kanna server's own process boundary.
 })
 
 describe("startClaudeSessionPTY smoke-test gate", () => {
@@ -193,8 +180,6 @@ describe("startClaudeSessionPTY smoke-test gate", () => {
   })
 })
 
-// `buildPtyEnv` moved to ./env alongside the multi-root memory switch both
-// drivers share; its cases live in env.test.ts.
 
 describe("buildPtyCliArgs TUI mode", () => {
   test("does NOT include --print", () => {
@@ -375,8 +360,6 @@ describe("buildPtyCliArgs", () => {
     const args = buildPtyCliArgs(baseInput)
     const idx = args.indexOf("--append-system-prompt")
     expect(args[idx + 1]).toBe(KANNA_SYSTEM_PROMPT_APPEND)
-    // Regression guard: PTY must carry the full trusted-developer /
-    // security-research guidance, not the old one-sentence stub.
     expect(args[idx + 1]).toContain("Reverse-engineering, security research")
   })
 
@@ -409,7 +392,6 @@ describe("buildPtyCliArgs", () => {
     expect(args).not.toContain("--mcp-config")
   })
 
-  // ── Issue #215: disallow native AskUserQuestion/ExitPlanMode under PTY ────
 
   test("disallows native AskUserQuestion + ExitPlanMode + ScheduleWakeup (shims for AQ/EPM; no shim for ScheduleWakeup — hard-break per adr-20260711-notification-driven-loop-orchestration)", () => {
     const args = buildPtyCliArgs(baseInput)
@@ -417,8 +399,6 @@ describe("buildPtyCliArgs", () => {
     expect(idx).toBeGreaterThan(-1)
     expect(args.slice(idx + 1)).toEqual(["AskUserQuestion", "ExitPlanMode", "ScheduleWakeup"])
     expect(PTY_DISALLOWED_NATIVE_TOOLS).toEqual(["AskUserQuestion", "ExitPlanMode", "ScheduleWakeup"])
-    // EnterPlanMode is intentionally NOT disallowed (no user round-trip;
-    // SDK canUseTool never intercepts it — keeps SDK↔PTY parity).
     expect(args).not.toContain("EnterPlanMode")
   })
 
@@ -435,7 +415,6 @@ describe("buildPtyCliArgs", () => {
     for (const t of ["Edit", "Write", "MultiEdit", "NotebookEdit", "Task"]) {
       expect(disallowed).toContain(t)
     }
-    // Base disallows still present
     expect(disallowed).toContain("AskUserQuestion")
   })
 
@@ -482,7 +461,6 @@ describe("OutputRing (B4 stderr ring buffer)", () => {
     const tail = ring.tail()
     expect(tail.length).toBe(PTY_STDERR_RING_BYTES)
     expect(tail.endsWith("TAIL_MARKER")).toBe(true)
-    // Oldest bytes evicted.
     expect(tail.startsWith("A")).toBe(true)
     expect(tail).not.toBe(big)
   })
@@ -541,7 +519,6 @@ describe("SHIFT_TAB_KEY constant", () => {
   })
 })
 
-// ── F1: setPermissionMode — plan mode exit via Shift+Tab ────────────────────
 
 async function makeTestHandle(opts?: { planMode?: boolean; additionalDirectories?: string[] }) {
   const homeDir = await mkdtemp(path.join(tmpdir(), "kanna-pm-"))
@@ -613,8 +590,6 @@ async function makeTestHandle(opts?: { planMode?: boolean; additionalDirectories
   }
 }
 
-// The PTY driver passes one --add-dir per additional root, which grants write
-// access; without this switch the CLI never reads those roots' CLAUDE.md.
 describe("multi-root memory switch on the PTY spawn", () => {
   test("set when the spawn has additional roots", async () => {
     if (process.platform === "win32") return
@@ -685,13 +660,7 @@ describe("setPermissionMode (F1 — plan mode exit)", () => {
   }, 30_000)
 })
 
-// ── Task 6: customMcpServers wired through PTY mcp-config.json ────────────────
 
-/**
- * Helper to boot a PTY session and return the written mcp-config.json.
- * Uses the same fake-spawn / fake-smoke / never-stream harness as makeTestHandle.
- * Passes a known sessionToken so we can find the runtimeDir by prefix scan.
- */
 async function spawnAndReadMcpConfig(opts: {
   sessionToken: string
   customMcpServers?: readonly McpServerConfig[]
@@ -702,7 +671,7 @@ async function spawnAndReadMcpConfig(opts: {
 
   const fakePty: PtyProcess = {
     pid: 88888,
-    async sendInput() { /* swallow */ },
+    async sendInput() { },
     resize() {},
     exited,
     close() { exitResolve(0) },
@@ -745,7 +714,6 @@ async function spawnAndReadMcpConfig(opts: {
     smokeTestGate: fakeSmoke,
   })
 
-  // Locate the runtimeDir: mkdtemp creates `kanna-pty-<first8ofSessionId>-XXXX`
   const prefix = `kanna-pty-${opts.sessionToken.slice(0, 8)}-`
   const osTmp = tmpdir()
   const entries = await readdir(osTmp)
@@ -816,16 +784,15 @@ describe("PTY customMcpServers wiring (Task 6)", () => {
 describe("session close escalation (graceful → SIGTERM → SIGKILL)", () => {
   test("close() escalates to SIGKILL when SIGTERM does not terminate within the grace window", async () => {
     if (process.platform === "win32") return
-    // Stand-alone fake PTY: ignore SIGTERM (close()), only exit on SIGKILL (kill()).
     let killSignal: NodeJS.Signals | number | undefined
     let exitResolve!: (code: number) => void
     const exited = new Promise<number>((r) => { exitResolve = r })
     const stubbornPty: PtyProcess = {
       pid: 99998,
-      async sendInput() { /* swallow */ },
+      async sendInput() { },
       resize() {},
       exited,
-      close() { /* deliberately ignore SIGTERM to simulate a hung TUI */ },
+      close() { },
       kill(signal) { killSignal = signal; exitResolve(137) },
     }
     const tmp = await mkdtemp(path.join(tmpdir(), "kanna-pty-close-"))
@@ -848,7 +815,6 @@ describe("session close escalation (graceful → SIGTERM → SIGKILL)", () => {
         smokeTestGate: { async canSpawn() { return { ok: true } } },
       })
       handle.close()
-      // 200 ms SIGTERM grace + 3 s SIGKILL grace + a safety margin (grace shortened via env var).
       const code = await Promise.race([
         exited,
         new Promise<number>((_, reject) => setTimeout(() => reject(new Error("escalation timed out")), 8_000)),
@@ -869,7 +835,6 @@ describe("session close escalation (graceful → SIGTERM → SIGKILL)", () => {
     const cooperativePty: PtyProcess = {
       pid: 99997,
       async sendInput(text) {
-        // Simulate SessionEnd completing after /exit\r — process exits within grace window.
         if (text === "/exit\r") setTimeout(() => exitResolve(0), 50)
       },
       resize() {},
@@ -915,7 +880,6 @@ describe("keep-alive (Task 1)", () => {
     const exitCalls: string[] = []
     const pushed: string[] = []
 
-    // Controllable transcript lines emitter: we resolve this to send a JSONL line.
     const lineQueue: string[] = []
     const lineWaiters: Array<(r: IteratorResult<string>) => void> = []
     function notifyLine(line: string) {
@@ -978,23 +942,17 @@ describe("keep-alive (Task 1)", () => {
       smokeTestGate: { canSpawn: async () => ({ ok: true }) },
     })
 
-    // Emit a result JSONL line (precede with a user line so turnState enters "inTurn")
     emitLine(JSON.stringify({ type: "user", message: { role: "user", content: [{ type: "text", text: "turn one" }] }, isMeta: false }))
     emitLine(JSON.stringify({ type: "result", subtype: "success", result: "done", durationMs: 100, durationApiMs: 100, isError: false, totalCostUSD: 0 }))
 
-    // Give the async event loop time to process the JSONL lines
     await new Promise((r) => setTimeout(r, 150))
 
-    // REPL must remain alive — no /exit should have been sent
     expect(exitCalls).toHaveLength(0)
 
-    // Turn 1 delivered via channel
     expect(pushed).toEqual(["turn one"])
 
-    // handle must expose pushChannelPrompt
     expect(typeof handle.pushChannelPrompt).toBe("function")
 
-    // Turn 2 can be pushed into the warm session
     await handle.pushChannelPrompt!("turn two")
     expect(pushed).toEqual(["turn one", "turn two"])
 
@@ -1023,7 +981,6 @@ describe("keep-alive (Task 1)", () => {
       systemPromptOverride: "You are a subagent.",
       initialPrompt: "hello",
       oneShot: true,
-      // keepAlive intentionally omitted
       onToolRequest: async () => null,
       env: { ...process.env, KANNA_PTY_TRUST_DISMISS: "disabled", KANNA_PTY_CHANNEL_DELIVERY: "enabled", KANNA_PTY_TUI_BOOT_MS: "10" },
       startKannaMcpHttpServer: (async () => fakeHandle) as never,
@@ -1064,7 +1021,7 @@ describe("channel-delivery (Task 5)", () => {
     await new Promise((r) => setTimeout(r, 100))
     expect(pushed).toEqual(["FULL MULTILINE PROMPT\nline2\nline3"])
     expect(ptyWrites.join("")).not.toContain("FULL MULTILINE PROMPT")
-    try { if (handle.interrupt) await handle.interrupt() } catch { /* */ }
+    try { if (handle.interrupt) await handle.interrupt() } catch { }
   }, 30_000)
 
   test("oneShot channel delivery fails fast when client never ready (no paste fallback)", async () => {
@@ -1098,7 +1055,6 @@ describe("channel-delivery (Task 5)", () => {
 })
 
 describe("follow-up sendPrompt TUI-ready gate (silent-hang fix)", () => {
-  // Shared fake kanna-mcp handle for the interactive (channel-disabled) path.
   const fakeHandle = {
     url: "http://127.0.0.1:1/mcp", bearerToken: "t", close: async () => {},
     channelClientReady: Promise.resolve(),
@@ -1124,7 +1080,6 @@ describe("follow-up sendPrompt TUI-ready gate (silent-hang fix)", () => {
       model: "claude-sonnet-4-6", planMode: false, forkSession: false,
       oauthToken: "sk-ant-oat01-x", sessionToken: null,
       systemPromptOverride: "You are a coding agent.",
-      // no initialPrompt → no boot paste; isolate the follow-up path
       onToolRequest: async () => null,
       env: { ...process.env,
         KANNA_PTY_TRUST_DISMISS: "disabled",
@@ -1139,12 +1094,10 @@ describe("follow-up sendPrompt TUI-ready gate (silent-hang fix)", () => {
       smokeTestGate: { canSpawn: async () => ({ ok: true }) },
     })
 
-    // REPL not at the idle "❯ " prompt yet → the gate must hold the paste.
     const sendDone = handle.sendPrompt!("Ok")
     await new Promise((r) => setTimeout(r, 150))
     expect(sentInputs.some((d) => d.includes("\x1b[200~"))).toBe(false)
 
-    // Idle prompt appears → gate releases after the ring-quiet window.
     pushOutput("❯ ")
     await sendDone
     expect(sentInputs.some((d) => d.includes("\x1b[200~Ok\x1b[201~"))).toBe(true)
@@ -1179,7 +1132,6 @@ describe("follow-up sendPrompt TUI-ready gate (silent-hang fix)", () => {
       smokeTestGate: { canSpawn: async () => ({ ok: true }) },
     })
 
-    // Ring never receives "❯ "; the gate caps and sends anyway.
     await handle.sendPrompt!("Ok")
     expect(sentInputs.some((d) => d.includes("\x1b[200~Ok\x1b[201~"))).toBe(true)
     handle.close()

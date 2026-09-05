@@ -7,8 +7,6 @@ import type { AutoContinueEvent } from "./auto-continue/events"
 import { AsyncEventQueue } from "./test-helpers/async-event-queue"
 import { waitFor } from "./test-helpers/wait-for"
 
-// Minimal fake store — same shape as oauth-rotation.test.ts but kept local so
-// these reservation-lifetime tests stay independent of rotation-test edits.
 function createFakeStore() {
   const chat = {
     id: "chat-1",
@@ -131,9 +129,6 @@ function makeToken(id: string, overrides: Partial<OAuthTokenEntry> = {}): OAuthT
 
 describe("OAuth pool reservation lifetime", () => {
   test("reservation released when turn finishes — another chat can claim the same token", async () => {
-    // Single-token pool exposes the over-sticky reservation bug: before the
-    // fix, chat-1's reservation persists for the entire chat lifetime so a
-    // second chat can never claim the same token even when chat-1 is idle.
     let tokens: OAuthTokenEntry[] = [makeToken("a")]
     const pool = new OAuthTokenPool(
       () => tokens,
@@ -190,7 +185,6 @@ describe("OAuth pool reservation lifetime", () => {
       "chat-1 turn finished",
     )
 
-    // Wait for runTurn's finally to drain after the stream closes.
     await waitFor(
       () => pool.pickActive("chat-other")?.id === "a",
       4000,
@@ -199,12 +193,6 @@ describe("OAuth pool reservation lifetime", () => {
   }, 10_000)
 
   test("rotation pin survives turn end — a concurrent chat cannot steal the rotated token", async () => {
-    // Regression for audit #1: on a rate-limit the failure handler marks the
-    // active token limited and pins the replacement under the same chatId for
-    // the scheduled auto-continue to reuse. The turn-end release MUST skip
-    // that pinned token — otherwise a concurrent chat picks it during the
-    // TOKEN_ROTATION_SCHEDULE_DELAY_MS gap and the rotation re-spawns on a
-    // token someone else now owns.
     let tokens: OAuthTokenEntry[] = [makeToken("a"), makeToken("b")]
     const pool = new OAuthTokenPool(
       () => tokens,
@@ -268,23 +256,17 @@ describe("OAuth pool reservation lifetime", () => {
       "token_rotation auto_continue emitted",
     )
 
-    // First session was spawned on token "a".
     if (capturedOauthTokens[0] !== "sk-ant-a") {
       throw new Error(`expected first spawn on token a, got ${capturedOauthTokens[0]}`)
     }
 
-    // Give runClaudeSession's finally a tick to run after the stream closed.
     await waitFor(() => capturedOauthTokens.length >= 1, 2000, "first session settled")
 
-    // Token "a" is limited. Token "b" is the rotation target pinned under
-    // chat-1. A different chat MUST NOT be able to claim "b" (or "a").
     const stolen = pool.pickActive("chat-other")
     if (stolen !== null) {
       throw new Error(`concurrent chat stole token ${stolen.id} — rotation pin leaked`)
     }
 
-    // chat-1 still owns the rotation target so the scheduled auto-continue
-    // re-spawns on "b".
     const owned = pool.pickActive("chat-1")
     if (owned?.id !== "b") {
       throw new Error(`expected chat-1 to still own rotated token b, got ${owned?.id ?? "null"}`)

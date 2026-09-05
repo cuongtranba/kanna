@@ -780,12 +780,6 @@ describe("DiffStore", () => {
   }, 30_000)
 })
 
-/**
- * A chat can run in a git worktree of its project. Keying git state by project
- * gave every chat in a project one shared entry, so a worktree chat and a
- * main-checkout chat overwrote each other's branch, files and upstream. These
- * pin the key that makes that impossible.
- */
 test("a worktree and its main checkout keep separate state", async () => {
   const { dir, cleanup } = makeTempRepo()
   const worktreePath = join(dir, "..", `wt-${Date.now().toString()}`)
@@ -800,7 +794,6 @@ test("a worktree and its main checkout keep separate state", async () => {
     expect(store.getSnapshot(dir).branchName).toBe("main")
     expect(store.getSnapshot(worktreePath).branchName).toBe("feature/x")
 
-    // Dirtying one tree must not show up in the other.
     writeFileSync(join(worktreePath, "only-here.txt"), "x")
     await store.refreshSnapshot(worktreePath)
     await store.refreshSnapshot(dir)

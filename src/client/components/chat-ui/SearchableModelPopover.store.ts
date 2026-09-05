@@ -6,10 +6,6 @@ export interface SearchableModelPopoverState {
   query: string
 
   setQuery: (query: string) => void
-  /**
-   * Drive the popover from a single boolean: opening keeps the query, closing
-   * clears it. Callers pass the raw open-change value, no branching in the view.
-   */
   setPopoverOpen: (open: boolean) => void
   closeAndClearQuery: () => void
 }

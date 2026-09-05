@@ -1,17 +1,3 @@
-/**
- * ws-router-boards.ts
- *
- * WS command handlers for kanban boards.
- *
- * Every write here goes through {@link BoardRegistry}, never the store, so the
- * matching snapshot push happens automatically (see `board-registry.ts`).
- * Handlers only translate the wire command into a registry call.
- *
- * All commands originating on this path are attributed to the user. Agent-origin
- * writes arrive through the kanna-mcp board tools instead and carry their chat
- * id, because attribution decides whether a change may be pushed to a remote
- * tracker.
- */
 
 import { PROTOCOL_VERSION } from "../shared/types"
 import type { ClientCommand, ServerEnvelope } from "../shared/protocol"
@@ -32,25 +18,11 @@ const USER: CardActor = { kind: "user" }
 
 export interface BoardCommandDeps {
   boardRegistry: BoardRegistry | undefined
-  /** Absent when no sync provider is configured; sync commands then refuse. */
   boardSync: BoardSync | undefined
-  /**
-   * Card → worktree → chat. Injected rather than built here because it reaches
-   * git and the chat store, neither of which this module may import.
-   */
   startWork: ((cardId: string) => Promise<StartWorkResult>) | undefined
-  /** The same resolver, read-only — what the drawer's button label is derived from. */
   startWorkView: ((cardId: string) => Promise<StartWorkView>) | undefined
-  /** The question a card asks on reaching `done`, and the answer to it. */
   cleanupView: ((cardId: string) => Promise<WorktreeCleanupView | null>) | undefined
   resolveCleanup: ((cardId: string, decision: CleanupDecision) => Promise<WorktreeCleanupOutcome>) | undefined
-  /** `owner/repo` from the board project's `origin`, offered as a default when binding. */
-  /**
-   * One suggestion per project the board's owner covers — a project board
-   * yields at most one, a Stack board one per member project. Reads each
-   * project's `origin` remote, so it is async and never called on a broadcast
-   * path (`board.sync.status` is request/response only).
-   */
   suggestSyncRepos: ((boardId: string) => Promise<readonly RepoSuggestion[]>) | undefined
   send: (envelope: ServerEnvelope) => void
 }
@@ -88,13 +60,6 @@ export function isBoardCommand(command: ClientCommand): boolean {
   return BOARD_COMMAND_TYPES.has(command.type)
 }
 
-/**
- * Handle one board command.
- *
- * Returns `true` when handled. A {@link BoardStoreError} becomes an error
- * envelope rather than a thrown exception: these are ordinary user-facing
- * outcomes ("that column still has cards"), and the socket must stay open.
- */
 export async function handleBoardCommand(
   deps: BoardCommandDeps,
   command: ClientCommand,
@@ -165,10 +130,6 @@ export async function handleBoardCommand(
   }
 }
 
-/**
- * Sync commands are async and reach the network, so they are dispatched
- * separately from the synchronous store commands above.
- */
 async function dispatchSync(
   registry: BoardRegistry,
   sync: BoardSync | undefined,
@@ -192,8 +153,6 @@ async function dispatchSync(
   }
 
   if (command.type === "board.sync.unbind") {
-    // Disconnecting one repo, not the board: the other bindings and every
-    // card this one produced stay exactly where they are.
     registry.unbindSync(command.boardId, command.bindingId)
     send({ v: PROTOCOL_VERSION, type: "ack", id, result: { bindingId: command.bindingId } })
     return true
@@ -207,7 +166,6 @@ async function dispatchSync(
       bindings: registry.listBindings(command.boardId),
       conflicts: registry.listConflicts(command.boardId),
       suggestedRepos: suggestRepos ? await suggestRepos(command.boardId) : [],
-      // Shown, not offered: the engine routes by the same function.
       routing: {
         open: named(columnForRemoteState(columns, "open")),
         closed: named(columnForRemoteState(columns, "closed")),
@@ -243,8 +201,6 @@ function dispatch(
 ): boolean {
   switch (command.type) {
     case "board.create": {
-      // A template supplies the columns and card schema; without one the board
-      // starts empty rather than guessing a layout.
       const template = command.templateId ? registry.getTemplate(command.templateId) : null
       const board = registry.createBoard({
         owner: { kind: command.ownerKind, id: command.ownerId },
@@ -263,11 +219,6 @@ function dispatch(
       }
 
       if (command.cardFields !== undefined) {
-        // Decoded against the domain's rules rather than trusted from the wire,
-        // for the reason `board.card.update` gives one case below: the store
-        // writes the schema whole and validates nothing. A duplicate field id
-        // would leave two fields fighting over one card value, and there is no
-        // way back once cards have written through it.
         const cardFields = decodeFieldDefsForWrite(command.cardFields)
         if (!cardFields) {
           send({
@@ -397,10 +348,6 @@ function dispatch(
       const patch: UpdateCardPatch = command.title === undefined ? {} : { title: command.title }
 
       if (command.content !== undefined) {
-        // Checked against THIS board's schema rather than trusted from the
-        // wire: the store replaces a card's content wholesale and validates
-        // nothing, so a field the board never declared would persist — and the
-        // sender would be acked for it.
         const detail = registry.cardDetail(command.cardId)
         const board = detail ? registry.getBoard(detail.card.boardId) : null
         if (!board) {

@@ -23,10 +23,6 @@ export function scanClaudeSessions(homeDir: string = homedir()): ParsedClaudeSes
   return sessions
 }
 
-/**
- * Locate one session's transcript by uuid: O(#project-dirs) existence checks,
- * never reads or hashes unrelated sessions (unlike scanClaudeSessions).
- */
 export function locateClaudeSessionFile(homeDir: string, sessionId: string): string | null {
   const projectsDir = path.join(homeDir, ".claude", "projects")
   if (!existsSync(projectsDir)) return null

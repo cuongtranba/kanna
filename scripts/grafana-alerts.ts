@@ -1,18 +1,3 @@
-/**
- * Applies the alert rules, GitHub contact point and notification route to
- * Grafana.
- *
- * The IO half of `src/ops/alerting/`. Everything it writes is derived from that
- * pure module, so Grafana holds no configuration this repo does not describe.
- * Re-running is idempotent: rules are keyed by uid, the contact point by name,
- * and the route is merged into the existing policy tree.
- *
- *   bun run scripts/grafana-alerts.ts --dry-run
- *   bun run scripts/grafana-alerts.ts
- *
- * Env: KANNA_GRAFANA_URL, KANNA_GRAFANA_USER, KANNA_GRAFANA_PASSWORD,
- *      KANNA_GITHUB_REPO, KANNA_GITHUB_DISPATCH_TOKEN
- */
 
 import {
   ALERT_RULES,
@@ -55,8 +40,6 @@ async function grafana(path: string, init: RequestInit = {}): Promise<unknown> {
     headers: {
       Authorization: auth,
       "Content-Type": "application/json",
-      // Keeps the rules editable in the UI instead of locking them as
-      // file-provisioned; this repo stays the source of truth by convention.
       "X-Disable-Provenance": "true",
       ...init.headers,
     },
@@ -87,9 +70,6 @@ if (dryRun) {
   process.exit(0)
 }
 
-// Re-applying is the normal path, so ask whether the folder exists rather than
-// creating and interpreting the failure — Grafana answers an existing folder
-// with 409 or 412 depending on how it collides, and neither is an error here.
 const folderExists = await grafana(`/api/folders/${FOLDER_UID}`)
   .then(() => true)
   .catch(() => false)

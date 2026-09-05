@@ -1,17 +1,3 @@
-/**
- * CronJobsPage — the page owns its scroll container.
- *
- * The shell pins `html`/`body`/`#root` to `h-[100dvh] overflow-hidden` and
- * wraps the `Outlet` in `flex flex-1 flex-col overflow-hidden` (App.tsx), so a
- * route page that does not scroll ITSELF is clipped at the viewport edge with
- * no scrollbar and no touch scroll. Issue #772 is exactly that: six armed cron
- * jobs on a phone, and the rows below the fold were unreachable.
- *
- * Mounted through `renderClientMarkup` rather than `renderToStaticMarkup`
- * because the page reads `useCronJobsStore`, and zustand v5 serves
- * `getInitialState()` as the server snapshot — a `setState` here would be
- * invisible to a server render.
- */
 
 import { afterEach, describe, expect, test } from "bun:test"
 import { act } from "react"
@@ -24,11 +10,6 @@ import { CronJobsPage } from "./CronJobsPage"
 import { KannaSocketProvider } from "./KannaSocketProvider"
 import type { KannaSocket } from "./socket"
 
-/**
- * `KannaSocket` is a class with private fields, so a structural literal needs a
- * cast — the precedent set by `KannaSocketProvider.test.tsx`. The page only
- * ever calls `command`, and only from a click handler.
- */
 const sentCommands: unknown[] = []
 
 const FAKE_SOCKET = {
@@ -84,9 +65,6 @@ describe("CronJobsPage scroll container (#772)", () => {
       const root = container.firstElementChild
       expect(root).not.toBeNull()
       const cls = root?.className ?? ""
-      // Height participation AND scrolling: without `min-h-0` a flex child
-      // refuses to shrink below its content, so `overflow-y-auto` never
-      // engages and the content is clipped instead of scrolled.
       expect(cls).toContain("overflow-y-auto")
       expect(cls).toContain("min-h-0")
       expect(cls).toContain("flex-1")
@@ -98,8 +76,6 @@ describe("CronJobsPage scroll container (#772)", () => {
   test("the scroll container is the root, not the 900px reading column", async () => {
     const { container, cleanup } = await mountPage([row(1)])
     try {
-      // A scrollbar inside the centred column would sit mid-page rather than at
-      // the viewport edge, so the max-width block must NOT be the scroller.
       const column = container.querySelector(".max-w-\\[900px\\]")
       expect(column).not.toBeNull()
       expect(column?.className ?? "").not.toContain("overflow-y-auto")
@@ -112,8 +88,6 @@ describe("CronJobsPage scroll container (#772)", () => {
     const rows = [row(1), row(2), row(3), row(4), row(5), row(6)]
     const { container, cleanup } = await mountPage(rows)
     try {
-      // Nothing truncates the list; the defect was purely that the overflow
-      // could not be reached, so the guarantee is "rendered AND scrollable".
       for (const entry of rows) {
         expect(container.textContent ?? "").toContain(entry.job.instruction)
       }
@@ -136,11 +110,6 @@ describe("CronJobsPage scroll container (#772)", () => {
   })
 })
 
-/**
- * The controls address the ARMING chat, not the page. A row on the global page
- * belongs to a different chat than the one next to it, so a command that lost
- * its `chatId` would silently act on nothing (or on the wrong job).
- */
 describe("CronJobsPage row controls", () => {
   async function clickLabelled(container: HTMLElement, label: string): Promise<void> {
     const button = container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)

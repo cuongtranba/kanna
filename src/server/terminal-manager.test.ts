@@ -12,8 +12,6 @@ const RAW_READ_HEX_COMMAND = `python3 -c "exec('import os,sys,tty,termios,select
 const isSupportedPlatform = process.platform !== "win32" && typeof Bun.Terminal === "function"
 const describeIfSupported = isSupportedPlatform ? describe : describe.skip
 
-// ─── resolveShellArgs unit tests ─────────────────────────────────────────────
-// These run on all platforms; the Windows branch is guarded inside the function.
 
 const describeUnix = process.platform !== "win32" ? describe : describe.skip
 
@@ -54,8 +52,6 @@ beforeAll(async () => {
   tempProjectPath = await mkdtemp(path.join(os.tmpdir(), "kanna-terminal-manager-"))
   tempHomePath = await mkdtemp(path.join(os.tmpdir(), "kanna-terminal-home-"))
   await mkdir(path.join(tempHomePath, ".config"), { recursive: true })
-  // Create a minimal .zshrc to prevent the zsh-newuser-install interactive dialog
-  // from running on first login (which would intercept test input).
   await writeFile(path.join(tempHomePath, ".zshrc"), "# minimal test config\n", "utf8")
   process.env.HOME = tempHomePath
   process.env.ZDOTDIR = tempHomePath
@@ -119,11 +115,6 @@ async function createSession(terminalId: string) {
   })
 
   manager.write(terminalId, "printf '__KANNA_READY__\\n'\r")
-  // Wait for the actual command output (the bare string on its own line: __KANNA_READY__\r\n)
-  // rather than the terminal echo of the input (which also contains __KANNA_READY__ inside quotes).
-  // On a loaded runner the shell can miss the 5s window; close() here so the
-  // throw does not leak a live shell + PTY (the caller's try/finally has not
-  // started yet, so it would never reap it otherwise).
   try {
     await waitFor(() => output.includes("__KANNA_READY__\r\n"), SHELL_START_TIMEOUT_MS)
   } catch (error) {
@@ -254,13 +245,9 @@ describeIfSupported("TerminalManager", () => {
     const { manager } = await createSession(terminalId)
 
     try {
-      // `exit\r` makes the shell exit naturally — the bug was that this
-      // path never reaped the shell's process group, leaving any
-      // background descendants (e.g. `bun run dev`) adopted by init.
       manager.write(terminalId, "exit\r")
       await waitFor(() => manager.getSnapshot(terminalId)?.status === "exited", COMMAND_TIMEOUT_MS)
 
-      // The exited handler must have issued a SIGKILL to the shell pgroup.
       expect(pgroupKillCalls.some((call) => call.signal === "SIGKILL")).toBe(true)
     } finally {
       process.kill = originalKill

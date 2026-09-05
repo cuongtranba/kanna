@@ -6,8 +6,6 @@ import { TextSnippetsSection, type TextSnippetsSectionHandlers } from "./TextSni
 import { useTextSnippetsSectionStore } from "../stores/textSnippetsSectionStore"
 import type { TextSnippet } from "../../shared/types"
 
-// The section reads `editing` from a module-singleton store, so a test that
-// walks into the editor would otherwise start the next one there.
 beforeEach(() => {
   useTextSnippetsSectionStore.setState({ editing: { kind: "list" } })
 })
@@ -105,7 +103,6 @@ describe("TextSnippetsSection — editor", () => {
       handlers: { ...noopHandlers, onCreate: async (input) => { created.push(input) } },
     })
 
-    // Open the create form.
     const addButton = [...container.querySelectorAll("button")].find((b) =>
       b.textContent?.includes("Add snippet"),
     )
@@ -125,8 +122,6 @@ describe("TextSnippetsSection — editor", () => {
       expansionInput!.dispatchEvent(new Event("input", { bubbles: true }))
     })
 
-    // In editor mode the list header button is gone; the only "Add snippet"
-    // button is the form submit.
     const submit = [...container.querySelectorAll("button")].find(
       (b) => b.textContent === "Add snippet",
     )
@@ -205,8 +200,6 @@ describe("TextSnippetsSection — editor", () => {
   })
 })
 
-// happy-dom controlled-input helper: set value via the native setter so React's
-// onChange fires.
 function setNativeValue(el: HTMLInputElement | HTMLTextAreaElement, value: string) {
   const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype
   const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set

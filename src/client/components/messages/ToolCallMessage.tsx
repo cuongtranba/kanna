@@ -87,7 +87,6 @@ export function ToolCallMessage({ message, isLoading = false, localPath, chatId 
   const hasResult = message.result !== undefined
   const showLoadingState = !hasResult && isLoading
 
-  // Must be called unconditionally at the top — Rules of Hooks
   const workflowRuns = useWorkflowsStore(useShallow(selectRuns(chatId)))
 
   const name = useMemo(() => {

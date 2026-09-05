@@ -1,15 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { join } from "node:path"
 
-/**
- * Regression coverage for `HOST_STUB_NAMESPACE`'s onLoad handler. The P1
- * acceptance tests (`plugin-system-acceptance.test.tsx`) only assert on the
- * compiled bundle's TEXT, never evaluate it — which is exactly why the
- * bare-`{}` stub shipped unnoticed: it compiles fine and only throws once a
- * `.shared.ts`-style contract file calls a declarative builder from the
- * OTHER target's ABI (`defineRpc` from `@kanna/plugin/server`) at module top
- * level. This test evaluates the compiled output, not just its text.
- */
 const TMP_DIR = join(import.meta.dir, "..", "__fixtures__", "plugins", ".tmp-shared-stub")
 
 describe("plugin-build.adapter — HOST_STUB_NAMESPACE", () => {
@@ -38,10 +29,6 @@ describe("plugin-build.adapter — HOST_STUB_NAMESPACE", () => {
     expect(result.ok).toBe(true)
     if (!result.ok) return
 
-    // A bare `{}` stub answers `defineRpc(...)` with `undefined(...)`, which
-    // throws before this import ever resolves. The fixed Proxy stub returns
-    // its argument unchanged, so `contract` round-trips and `contribute`
-    // stays reachable.
     const url = URL.createObjectURL(new Blob([result.client], { type: "text/javascript" }))
     try {
       const evaluated: Record<string, unknown> = await import(/* @vite-ignore */ url)

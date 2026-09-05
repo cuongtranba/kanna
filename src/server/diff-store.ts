@@ -67,26 +67,10 @@ import {
 } from "./diff-store-commit-ops.adapter"
 import type { DiffStoreCommitOpsDeps } from "./diff-store-commit-ops.adapter"
 
-// Re-exports for backwards compatibility with other modules
 export { runGit, formatGitFailure, extractGitHubRepoSlug, fetchGitHubPullRequests, fetchGitHubReleases }
 export { appendGitIgnoreEntry } from "./diff-store-parse"
 
 export class DiffStore {
-  /**
-   * Git state per REPO PATH, not per project.
-   *
-   * A chat can run in a git worktree of its project, and a worktree is a
-   * different working tree with its own branch, its own dirty files and its own
-   * upstream. Keying by project id gave every chat in a project one shared
-   * entry: a worktree chat and a main-checkout chat overwrote each other's
-   * state and thrashed each other's broadcasts. A path is what a git command
-   * actually operates on, so keying by it is collision-free by construction.
-   *
-   * The key is the path the CALLER gave, not the repo root `resolveRepo` finds.
-   * Reads are synchronous (the envelope builder is pure), so a read cannot
-   * resolve a repo; keeping get and refresh on the same key is what makes them
-   * agree.
-   */
   private readonly states = new Map<string, StoredChatDiffState>()
 
   constructor(_: string) {}

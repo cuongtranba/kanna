@@ -42,8 +42,6 @@ import { useTranscriptActions } from "./transcriptActionsContext"
 
 const SPECIAL_TOOL_NAMES = new Set(["AskUserQuestion", "ExitPlanMode", "TodoWrite", DELEGATE_SUBAGENT_TOOL_NAME, PREVIEW_FILE_TOOL_NAME])
 
-// Tool kinds that render a dedicated card (download link, generated image).
-// They must never fold into a CollapsedToolGroup or their card is hidden.
 const SPECIAL_TOOL_KINDS = new Set<ProcessedToolCall["toolKind"]>(["offer_download", "image_generation"])
 
 export type TranscriptRenderItem =
@@ -316,16 +314,12 @@ function sameMessage(left: HydratedTranscriptMessage, right: HydratedTranscriptM
       return true
     case "unknown":
       return right.kind === "unknown" && left.json === right.json
-    // schedule state changes propagate via outer comparator's prev.schedules !== next.schedules check (line 681)
     case "auto_continue_prompt":
       return right.kind === "auto_continue_prompt" && left.scheduleId === right.scheduleId
     case "pending_tool_request":
       return right.kind === "pending_tool_request"
         && left.toolRequestId === right.toolRequestId
         && left.toolName === right.toolName
-    // Cron entries are immutable once appended — live run status joins from
-    // ChatSnapshot.cronJobs in the component, not from the message — so
-    // kind + id equality (checked above) is identity.
     case "cron_armed":
     case "cron_command_error":
     case "cron_run":
@@ -390,8 +384,6 @@ export function useStableResolvedRows(rows: ResolvedTranscriptRow[]) {
     result: [],
   })
 
-  // Intentional: previousState.current is read in useMemo to implement stable row identity.
-  // The alternative would require setState in an effect (set-state-in-effect, deferred PR).
   const result = useMemo(() => {
     // eslint-disable-next-line react-hooks/refs
     const nextState = computeStableResolvedTranscriptRows(rows, previousState.current)
@@ -419,8 +411,6 @@ interface TranscriptSingleRowProps {
   isLatestTodoWrite: boolean
   hideResult: boolean
   isFinalStatus: boolean
-  // Widened (not narrowed to Promise<void>) so a rejected chat.respondTool can
-  // roll the optimistic card back while `() => undefined` callers still fit.
   onAskUserQuestionSubmit: (
     toolUseId: string,
     questions: AskUserQuestionItem[],

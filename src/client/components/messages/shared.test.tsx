@@ -59,6 +59,5 @@ test("MermaidFallbackCodeBlock copies the source without the line-number gutter"
   expect(copy).not.toBeNull()
   await act(async () => { copy.click() })
 
-  // Scraping the rendered children would have yielded "1graph TD2A-->B3B-->C".
   expect(clipboard.clipboard).toBe(source)
 })

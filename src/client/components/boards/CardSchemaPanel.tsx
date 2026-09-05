@@ -16,13 +16,6 @@ import { onRejected } from "../../../shared/errors"
 import type { JsonArray, JsonValue } from "../../../shared/json"
 import type { ClientCommand } from "../../../shared/protocol"
 
-/**
- * The schema goes over the wire as `JsonValue`, and an interface is never
- * assignable to `JsonObject` (TypeScript gives interfaces no implicit index
- * signature), so the write is spelled out field by field. That also pins the
- * wire shape: adding a member to `FieldDef` is a decision to make here, not a
- * silent widening of what the server receives.
- */
 function encodeFieldDefs(fields: readonly FieldDef[]): JsonArray {
   return fields.map((field) => ({
     id: field.id,
@@ -35,19 +28,6 @@ function encodeFieldDefs(fields: readonly FieldDef[]): JsonArray {
   }))
 }
 
-/**
- * What every card on this board HAS.
- *
- * A panel inside the board pane, like the sync settings, because a schema is
- * reasoning about the board: the columns it will be filled through stay in
- * view while it is decided. Until this existed a board created without a
- * template had `cardFields: []` and its cards were title-only forever.
- *
- * Two things it will not do, both because a field id is the key card content is
- * stored under. It never rewrites an id — renaming changes the label alone —
- * and it never rewrites card content on removal, so an orphaned value survives
- * and re-adding the field brings it back.
- */
 
 export interface CardSchemaPanelSocket {
   command<TResult = JsonValue>(command: ClientCommand): Promise<TResult>
@@ -61,7 +41,6 @@ export interface CardSchemaPanelProps {
 
 const KINDS: FieldKind[] = ["text", "longtext", "url", "number", "date", "select", "multiselect", "label"]
 
-/** Reading the store inside a handler keeps every callback free of state deps. */
 function store() {
   return useCardSchemaStore.getState()
 }
@@ -85,11 +64,6 @@ export function CardSchemaPanel({ boardId, socket, onClose }: CardSchemaPanelPro
     store().addField()
   }, [])
 
-  /**
-   * The whole schema goes over, not a delta — the store writes `cardFields`
-   * whole. On a refusal the panel stays open holding the draft: it is the only
-   * copy of what was typed, and the server's reason is actionable in place.
-   */
   const handleSave = useCallback(() => {
     const state = store()
     state.beginSave()
@@ -188,12 +162,6 @@ export function CardSchemaPanel({ boardId, socket, onClose }: CardSchemaPanelPro
   )
 }
 
-/**
- * One field.
- *
- * Its own component so each row can bind its handlers to its own id once,
- * instead of the panel making a fresh arrow per row per render.
- */
 function FieldRow({ field, first, last }: { field: FieldDef; first: boolean; last: boolean }) {
   const pendingRemoval = useCardSchemaStore((state) => state.pendingRemovalFieldId === field.id)
   const optionDraft = useCardSchemaStore((state) => state.optionDraftByField[field.id] ?? "")
@@ -277,8 +245,6 @@ function FieldRow({ field, first, last }: { field: FieldDef; first: boolean; las
             Remove {field.label}? Cards keep the values they already have, and get them back if this field
             comes back.
           </p>
-          {/* Stated where the removal happens, and not blocking it: a board with
-              no tracker and no agent is entitled to drop the field. */}
           {note ? <p className="text-13 text-destructive-text [text-wrap:pretty]">{note}</p> : null}
           <div className="flex items-center gap-2">
             <Button size="sm" variant="ghost" className="text-destructive-text" onClick={handleRemove}>

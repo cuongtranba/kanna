@@ -146,9 +146,9 @@ describe("PushManager.observeStatuses", () => {
     await manager.observeStatuses([chat({ status: "running" })])
     nowMs = 2000
     await manager.observeStatuses([chat({ status: "waiting_for_user" })])
-    nowMs = 3500  // 1.5s later
+    nowMs = 3500
     await manager.observeStatuses([chat({ status: "running" })])
-    nowMs = 4000  // .5s later
+    nowMs = 4000
     await manager.observeStatuses([chat({ status: "waiting_for_user" })])
 
     expect(sender.sent).toHaveLength(1)
@@ -286,9 +286,6 @@ describe("PushManager subscriptions", () => {
   })
 
   test("403 auth rejection leaves the subscription intact (not a dead device)", async () => {
-    // Regression: Apple `403 BadJwtToken` from a misconfigured VAPID subject is
-    // a server config error, NOT a gone subscription. Deleting the device here
-    // was the bug that made every subscribe self-destruct on the first push.
     await manager.initialize()
     const { id } = await manager.addSubscription({
       subscription: { endpoint: "https://push.example/x", keys: { p256dh: "p", auth: "a" } },
@@ -407,13 +404,13 @@ describe("PushManager subscriptions", () => {
     })
     nowMs = 5_000
     await manager.recordDeviceSeen(id)
-    nowMs = 5_000 + 30 * 60 * 1000  // 30m later
+    nowMs = 5_000 + 30 * 60 * 1000
     await manager.recordDeviceSeen(id)
-    nowMs = 5_000 + 60 * 60 * 1000 + 1  // 1h+1ms after first
+    nowMs = 5_000 + 60 * 60 * 1000 + 1
     await manager.recordDeviceSeen(id)
 
     const seenEvents = store.events.filter(e => e.kind === "subscription_seen")
-    expect(seenEvents).toHaveLength(2)  // first + after 1h
+    expect(seenEvents).toHaveLength(2)
   })
 
   test("addSubscription called twice with same endpoint returns same id and persists update", async () => {
@@ -432,7 +429,6 @@ describe("PushManager subscriptions", () => {
     })
     expect(second.id).toBe(first.id)
 
-    // Replay events to verify durability
     const replay = new PushManager({ store, sender, vapid: VAPID, now: () => nowMs })
     await replay.initialize()
     const devices = replay.listDevices()
@@ -476,7 +472,6 @@ describe("PushManager subscriptions", () => {
     expect(snap.preferences.mutedProjectPaths).toContain("/tmp/muted")
     expect(snap.devices).toHaveLength(1)
     expect(snap.devices[0].isCurrentDevice).toBe(true)
-    // Sensitive material must NOT leak into device summaries:
     expect(snap.devices[0]).not.toHaveProperty("endpoint")
     expect(snap.devices[0]).not.toHaveProperty("keys")
   })

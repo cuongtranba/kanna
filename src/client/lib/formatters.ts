@@ -39,12 +39,6 @@ export function formatModelLabel(modelId: string): string {
 
 export const SIDEBAR_RECENT_WINDOW_MS = 24 * 60 * 60_000
 
-/**
- * Formats elapsed time between startedAt and now as a human-readable string.
- * Under 60s: "Ns" | 60s..1h: "Mm Ss" | 1h+: "Hh Mm"
- * Tabular-nums-friendly — no leading zeros except on trailing parts.
- * Clock skew (startedAt > now) is clamped to 0.
- */
 export function formatAge(startedAt: number, now: number): string {
   const elapsedMs = Math.max(0, now - startedAt)
   const totalSeconds = Math.floor(elapsedMs / 1_000)
@@ -56,10 +50,6 @@ export function formatAge(startedAt: number, now: number): string {
   return `${seconds}s`
 }
 
-/**
- * Formats startedAt as a wall-clock "HH:MM" string (24-hour, local time).
- * Pair with tabular-nums for stable layout.
- */
 export function formatStartedClock(startedAt: number): string {
   const d = new Date(startedAt)
   const hh = d.getHours().toString().padStart(2, "0")
@@ -83,10 +73,6 @@ export function formatSidebarAgeLabel(lastMessageAt: number | undefined, nowMs: 
   return `${Math.floor(deltaMs / weekMs)}w`
 }
 
-/**
- * Tail-truncates to `maxChars` (ellipsis included), trimming trailing
- * whitespace before the ellipsis so a cut never reads "foo …".
- */
 export function truncateEndEllipsis(text: string, maxChars: number): string {
   if (text.length <= maxChars) return text
   return `${text.slice(0, maxChars - 1).trimEnd()}…`
@@ -94,7 +80,6 @@ export function truncateEndEllipsis(text: string, maxChars: number): string {
 
 const COMMAND_DESCRIPTION_MAX_CHARS = 80
 
-/** One clamp for every slash-command description surface (picker + typeahead). */
 export function clampCommandDescription(text: string): string {
   return truncateEndEllipsis(text, COMMAND_DESCRIPTION_MAX_CHARS)
 }

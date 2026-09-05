@@ -35,8 +35,6 @@ import { sameRuntime } from "../../shared/equality"
 import { useAppGlobalContext } from "./AppGlobalProvider"
 import type { ChatNavigatorPort } from "./chatNavigator"
 
-// Re-export pure helpers / types that have moved to useAppGlobalState but
-// are imported by consumers from this module (backward-compat, zero consumer changes).
 export {
   applySidebarProjectOrder,
   getNewestRemainingChatId,
@@ -202,13 +200,6 @@ function sameLoopProgress(
   return true
 }
 
-/**
- * Fold a `project-commands` snapshot into the picker's store.
- *
- * Guards on the subscribed project: a snapshot that arrives for a different
- * project (an in-flight frame from the project we just left) must not overwrite
- * the current project's list.
- */
 export function applyProjectCommandsSnapshot(
   subscribedProjectId: string,
   snapshot: ProjectCommandsSnapshot | null,
@@ -308,11 +299,6 @@ export function reconcileOptimisticUserPrompts(
   })
 }
 
-// Proactive `/compact` injection (server-side) queues the user's real message
-// instead of running it. The server response carries `queued: true` so the
-// client can drop its optimistic user_prompt — the message will render via the
-// queue panel until the post-compact dequeue persists a real user_prompt and
-// reconcileOptimisticUserPrompts takes over.
 export function pruneOptimisticOnQueuedAck(
   optimisticPrompts: OptimisticUserPrompt[],
   optimisticId: string,
@@ -337,37 +323,8 @@ function logKannaState(message: string, details?: JsonValue) {
   void details
 }
 
-/**
- * Live chat subscriptions, keyed by `chatId:resyncNonce` and reference-counted.
- *
- * `useKannaState(chatId)` now runs once per OPEN CHAT TAB as well as once at the
- * route level, so the same chat commonly has two consumers. `socket.subscribe`
- * mints an independent server subscription per call, so without this each
- * consumer got its own stream and both wrote the same per-chat store slice —
- * every push replaced `messages` with a fresh array, the transcript list never
- * settled long enough to measure its rows, and it rendered permanently empty
- * (LegendList parks unmeasured items off-screen, so it looked like "no history"
- * rather than a loop).
- *
- * One subscription per chat, shared by every consumer, is the same guarantee
- * AppGlobalProvider gives the global topics. The nonce is part of the key so a
- * resync genuinely resubscribes instead of joining the stale stream.
- */
 const liveChatSubscriptions = new Map<string, { count: number; unsubscribe: () => void }>()
 
-/**
- * Join the subscription for `key`, creating it only if this is the first
- * consumer. Returns a release function; the underlying subscription is torn down
- * when the last consumer releases it.
- *
- * Reference counting also makes this safe under React StrictMode's deliberate
- * double mount/unmount, which would otherwise leave the stream torn down.
- */
-/**
- * Subscription keys are `${chatId}:${chatResyncNonce}`, so one chat can hold
- * several keys at once (a resync bumps the nonce). Everything below keys on
- * the chat, not the subscription.
- */
 function chatIdOfSubscriptionKey(key: string): string {
   const separator = key.lastIndexOf(":")
   return separator === -1 ? key : key.slice(0, separator)
@@ -399,16 +356,6 @@ function acquireChatSubscription(key: string, create: () => () => void): () => v
     liveChatSubscriptions.delete(key)
     entry.unsubscribe()
 
-    // Tearing down the last subscription for a chat is the only moment at
-    // which its cached snapshot + transcript are provably unreachable, so it
-    // is where the memory is freed. Without this the slice outlives every tab
-    // that showed it and the heap grows with each chat visited.
-    //
-    // Deferred by one microtask because a RESYNC releases the old key and
-    // acquires the new one within the same commit: releasing synchronously
-    // would wipe the slice between those two steps and force a refetch of a
-    // chat that never stopped being displayed. By the time the microtask runs
-    // the replacement subscription is registered, so the re-check sees it.
     const chatId = chatIdOfSubscriptionKey(key)
     queueMicrotask(() => {
       if (hasLiveSubscriptionForChat(chatId)) return
@@ -417,11 +364,6 @@ function acquireChatSubscription(key: string, create: () => () => void): () => v
   }
 }
 
-/**
- * Subscription refcounting is module-private, but it now decides when a chat's
- * cached transcript is freed — a correctness boundary worth testing directly
- * rather than through a mounted component.
- */
 export const __testing = {
   acquireChatSubscription,
   hasLiveSubscriptionForChat,
@@ -672,16 +614,10 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
   const sessStore = ports.sessStore ?? sessionStorageAdapter
   const dom = ports.dom ?? domAdapter
   const timer = ports.timer ?? timerAdapter
-  // App-global state is owned by AppGlobalProvider (mounted once at KannaLayout).
-  // Reading it via context prevents duplicate global socket subscriptions when
-  // multiple useKannaState instances mount (one per open chat tab).
   const appGlobal = useAppGlobalContext()
   const socket = appGlobal.socket
-  // Derived early so the chatStateStore selectors below can capture it without
-  // a separate variable hoisted over hook calls.
   const optimisticScopeId = activeChatId ?? NEW_CHAT_OPTIMISTIC_SCOPE
 
-  // ---- per-chat state reads --------------------------------------------
 
   const chatSnapshot = useChatStateStore((state) => selectChatSlice(state, activeChatId ?? "").chatSnapshot)
   const chatResyncNonce = useChatStateStore((state) => selectChatSlice(state, activeChatId ?? "").chatResyncNonce)
@@ -715,18 +651,13 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
   )
   const runtime = activeChatSnapshot?.runtime ?? null
 
-  // Convenience aliases consumed by per-chat logic below.
   const { connectionStatus } = appGlobal
   const sidebarProjectGroups = appGlobal.sidebarData.projectGroups
-  // Ref used only for logging inside the chat subscription effect so
-  // sidebarProjectGroups doesn't need to be in that effect's dep array (adding
-  // it would restart the subscription on every sidebar change).
   const sidebarProjectGroupsForLogRef = useRef(sidebarProjectGroups)
   useLayoutEffect(() => {
     sidebarProjectGroupsForLogRef.current = sidebarProjectGroups
   })
 
-  // ---- per-chat derived values -----------------------------------------
 
   const activeProjectId = useMemo(
     () => activeChatSnapshot?.runtime.projectId
@@ -735,15 +666,8 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
     [activeChatId, activeChatSnapshot?.runtime.projectId, selectedProjectId, sidebarProjectGroups]
   )
 
-  // Intentional ref reads/writes in useMemo: this implements "sticky" diff state — when diffs
-  // go null for the active project, we return the last known value to prevent a visible null flash.
-  // The alternative (setState in layoutEffect) triggers set-state-in-effect warnings that are
-  // deferred to a follow-up PR. Both are React compiler concerns in the same category.
   /* eslint-disable react-hooks/refs */
   const chatDiffSnapshot = useMemo(() => {
-    // The chat's own tree first; a bare project's checkout is the fallback for
-    // a view with no chat, and for the moment before the chat's first snapshot
-    // lands.
     const key = activeProjectId ? gitSnapshotKey(activeProjectId, activeChatId) : null
     const currentDiffs = key
       ? (diffSnapshotsByKey[key] ?? (activeProjectId ? diffSnapshotsByKey[activeProjectId] ?? null : null))
@@ -787,7 +711,6 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
     ?? fallbackLocalProjectPath
   )
 
-  // ---- per-chat effects ------------------------------------------------
 
   useEffect(() => {
     if (connectionStatus !== "connected") return
@@ -801,14 +724,10 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
   useEffect(() => {
     if (!activeChatId) {
       logKannaState("clearing chat snapshot for non-chat route")
-      // Per-chat slices are keyed by chatId — no mutation needed for the null route.
       return
     }
 
     const subscriptionId = ++chatSubscriptionDebugRef.current
-    // Shared per chat: several tabs (plus the route) may want the same chat, and
-    // duplicate streams fighting over one store slice stop the transcript from
-    // ever settling. See acquireChatSubscription.
     const chatId = activeChatId
     return acquireChatSubscription(`${chatId}:${chatResyncNonce}`, () => {
     logKannaState("subscribing to chat", {
@@ -846,8 +765,6 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
           reusedSnapshot: reused,
         })
         if (!reused) return snapshot
-        // Core unchanged but the op-log seq may have advanced — adopt it so
-        // the next chat.ops event stays contiguous (refs stay stable).
         if (current && snapshot && current.seq !== snapshot.seq) {
           return { ...current, seq: snapshot.seq }
         }
@@ -892,8 +809,6 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
       logKannaState("clearing chat snapshot for non-chat route")
       return
     }
-    // Only the primary tab (route chatId === this instance's chatId) may navigate
-    // away. A background tab must never call closeChat() and yank the route.
     if (!isPrimaryChatInstance(activeChatId, appGlobal.routeChatId)) return
     if (!appGlobal.sidebarReady || !chatReady) return
     const exists = sidebarProjectGroups.some((group) => group.chats.some((chat) => chat.chatId === activeChatId))
@@ -911,8 +826,6 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
 
   useEffect(() => {
     if (!chatSnapshot) return
-    // Only the primary tab may set the globally-selected project. A background tab
-    // must not steal project focus while the user is looking at a different chat.
     if (!isPrimaryChatInstance(chatSnapshot.runtime.chatId, appGlobal.routeChatId)) return
     useKannaStateStore.getState().setSelectedProjectId(chatSnapshot.runtime.projectId)
     if (pendingChatId === chatSnapshot.runtime.chatId) {
@@ -922,9 +835,6 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
 
   useEffect(() => {
     if (!activeChatId || !appGlobal.sidebarReady) return
-    // Only the primary tab (the one the user is looking at) may push a markRead.
-    // A background tab would steal the read timestamp even though the user has
-    // not seen its messages on the current route.
     if (!isPrimaryChatInstance(activeChatId, appGlobal.routeChatId)) return
     if (!shouldMarkActiveChatRead(dom)) return
     const activeSidebarChat = sidebarProjectGroups
@@ -936,26 +846,7 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
     })
   }, [activeChatId, appGlobal.routeChatId, appGlobal.sidebarReady, dom, focusEpoch, sidebarProjectGroups, socket])
 
-  // There is deliberately NO "reset scrollback on chat change" effect here.
-  // Scrollback state is per-chat (`chatStateStore` slices) and a chat that has
-  // never been opened already reads as EMPTY_CHAT_SLICE, so entering a chat has
-  // nothing to clear; `releaseChat` frees the slice when the last subscription
-  // for that chat goes away. The effect that used to live here dated from when
-  // this state was GLOBAL (one chat at a time), and after #624 mapped it onto
-  // per-chat slices it cleared the slice of the chat being ENTERED — the only
-  // place `adoptServerHistory` ever writes the cursor. Because chat
-  // subscriptions are refcount-SHARED (`acquireChatSubscription`), the snapshot
-  // that carries `history` is delivered exactly once, to whichever consumer
-  // created the subscription; every LATER `useKannaState` for the same chat (the
-  // route-level one in App.tsx plus one per ChatTabRoot) ran the reset on its own
-  // mount, after that snapshot had already landed. Measured on a cold load of
-  // chat dfddedb5: adopt at t+111ms wrote `hasOlder: true` /
-  // `olderCursor: byte:4122128`, the reset at t+788ms wiped both, and no further
-  // snapshot ever arrived — so `handleStartReached` returned early forever and
-  // scrolling to the top neither showed the loader nor fetched a page.
 
-  // project-git and project-commands subscriptions live in useAppGlobalState,
-  // subscribing once per distinct open projectId (deduplication for session tabs).
 
   useEffect(() => {
     logKannaState("active snapshot resolved", {
@@ -1082,7 +973,6 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
     })
   }, [optimisticScopeId, serverTranscriptEntries])
 
-  // ---- per-chat handlers -----------------------------------------------
 
   const loadOlderHistory = useCallback(async () => {
     if (!activeChatId || !historyCursor || isHistoryLoading || !hasOlderHistory) {
@@ -1192,7 +1082,6 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
         useKannaStateStore.getState().setOptimisticUserPrompts((current) => pruneOptimisticOnQueuedAck(current, optimisticId, { queued: true }))
         useChatStateStore.getState().setOptimisticProcessing(optimisticScopeId, null)
       } else if (!activeChatId && result.chatId) {
-        // New chat created: move processing entry from the new-chat scope to the real chatId.
         useChatStateStore.getState().setOptimisticProcessing(optimisticScopeId, null)
         useChatStateStore.getState().setOptimisticProcessing(result.chatId, { ackedAt: performance.now() })
       } else {
@@ -1232,10 +1121,6 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
 
   const handleSteerQueuedMessage = useCallback(async (queuedMessageId: string) => {
     if (!activeChatId) return
-    // Steering cancels the active turn (status → idle) then restarts a fresh
-    // one. Without an optimistic marker the UI flickers to "done" during that
-    // gap. Mirror handleSend: show processing immediately, ack after the
-    // command resolves (server has appended the prompt + started the turn).
     useChatStateStore.getState().setOptimisticProcessing(activeChatId, { ackedAt: null })
     try {
       await socket.command({
@@ -1300,9 +1185,6 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
       })
     } catch (error) {
       useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
-      // Rethrow so AskUserQuestionMessage can undo its optimistic
-      // markSubmitted — swallowing here left the card reading "Answers" while
-      // the turn stayed parked. Mirrors handleSend.
       throw error
     }
   }, [activeChatId, socket])
@@ -1383,9 +1265,7 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
 
   // eslint-disable-next-line react-hooks/refs
   return {
-    // ---- spread app-global fields ----
     ...appGlobal,
-    // ---- per-chat overrides / additions ----
     activeChatId,
     activeProjectId,
     chatSnapshot,

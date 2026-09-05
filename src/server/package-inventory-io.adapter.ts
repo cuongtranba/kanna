@@ -48,8 +48,6 @@ async function buildAgentPresenceMap(skillNames: string[]): Promise<Map<string, 
 }
 
 function resolvedHome(): string {
-  // process.env.HOME is mutable (e.g. in tests); os.homedir() uses getpwuid
-  // on Linux and ignores HOME changes after process start, so prefer the env var.
   return process.env.HOME ?? os.homedir()
 }
 
@@ -64,7 +62,6 @@ async function readSkillPackages(): Promise<SourceResult> {
     return { packages: [], error: null }
   }
 
-  // Build presence map only for skill names found in the lock file.
   const skillNames = extractSkillNamesFromLock(raw)
   const presenceMap = await buildAgentPresenceMap(skillNames)
 
@@ -91,10 +88,8 @@ async function readClaudePluginPackages(): Promise<SourceResult> {
       if (raw !== null) return parseClaudePluginList(raw)
     }
   } catch {
-    // CLI unavailable — fall through to the file fallback.
   }
 
-  // Fallback: read the installed_plugins.json file.
   const fallbackPath = path.join(resolvedHome(), ".claude", "plugins", "installed_plugins.json")
   try {
     const raw = safeJsonParse(await readTextFileOrThrow(fallbackPath))

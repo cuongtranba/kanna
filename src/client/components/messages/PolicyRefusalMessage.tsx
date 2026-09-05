@@ -7,16 +7,10 @@ interface Props {
 
 const USAGE_POLICY_URL = "https://www.anthropic.com/legal/aup"
 
-// Claude prefixes even a deliberate policy refusal with "API Error:". Strip it
-// for display: the card already frames this as a policy block, not a transport
-// error, and the prefix is exactly the mislabel this component exists to fix.
 function stripApiErrorPrefix(text: string): string {
   return text.replace(/^API Error:\s*/i, "")
 }
 
-// A model refusal is an attention state, not a system failure — warning (amber)
-// register, distinct from the destructive (coral) ApiErrorMessage card it sits
-// beside. See adr-20260607-surface-policy-refusal-entry.
 export function PolicyRefusalMessage({ message }: Props) {
   const body = stripApiErrorPrefix(message.text)
   return (

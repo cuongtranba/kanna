@@ -139,7 +139,6 @@ describe("hydrateToolResult", () => {
       input: { questions: [{ text: "Lang?", header: "L", options: [], multiSelect: false }] },
     })
 
-    // MCP shim wraps the answers JSON inside a CallToolResult envelope.
     const envelope = {
       content: [{
         type: "text",
@@ -331,7 +330,6 @@ describe("hydrateToolResult — Workflow", () => {
     const tool = normalizeToolCall({ toolName: "Workflow", toolId: "t1", input: { scriptPath: "/p/.wf.mjs" } })
     const result = hydrateToolResult(tool, "Workflow launched in background. Task ID: wcxjintdj\nSummary: fix sonar")
     expect(result).toBeDefined()
-    // taskId must be a structured field on the result object — not just present in raw text
     expect(result).not.toBe("Workflow launched in background. Task ID: wcxjintdj\nSummary: fix sonar")
     expect(typeof result).toBe("object")
     const r = result as Record<string, unknown>

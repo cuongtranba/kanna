@@ -1,13 +1,3 @@
-/**
- * Package-update settings normalization, lifted out of `app-settings.ts`.
- *
- * `app-settings.ts` is a listed oversized module pinned EXACTLY at its
- * architecture-budget ceiling, so it has no room for any new feature until
- * something cohesive leaves. This normalizer is the natural candidate: it owns
- * one feature's settings shape end to end (validation, clamping, and the
- * warnings it emits) and nothing else in `app-settings.ts` reaches into it.
- * Pure move — behaviour, warning strings and clamps are unchanged.
- */
 
 import type { PackageUpdateSettings } from "../shared/types"
 import type { PackageKind } from "../shared/packages/types"
@@ -17,7 +7,6 @@ import {
   PACKAGE_UPDATE_SETTINGS_DEFAULTS,
 } from "../shared/types"
 import { assertSafeSkillAgents } from "../shared/skill-agents"
-/** Same guard `app-settings.ts` uses: narrows to a keyed record while keeping T. */
 import { isPlainObject } from "../shared/settings/plain-object"
 
 

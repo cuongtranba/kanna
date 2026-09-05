@@ -1,11 +1,3 @@
-/**
- * storage.adapter.ts — localStorage implementation of StoragePort.
- *
- * A thin wrapper over window.localStorage. Guards against environments
- * where localStorage is absent (SSR stubs, some private-browsing modes).
- *
- * Architecture: .c3/adr/adr-20260715-client-state-effect-architecture.md
- */
 
 import type { StoragePort } from "../ports/storagePort"
 

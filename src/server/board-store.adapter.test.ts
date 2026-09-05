@@ -55,7 +55,6 @@ afterEach(() => {
     try {
       openStores.pop()?.close()
     } catch {
-      // A test may have closed the store itself.
     }
   }
   while (tempDirs.length > 0) {
@@ -102,7 +101,6 @@ describe("migrations and seeding", () => {
       "QA",
       "Deployment",
     ])
-    // "Start work" and the worktree-cleanup prompt both key off these.
     expect(pipeline?.definition.columns.find((column) => column.semantic === "active")?.title).toBe("In progress")
     expect(pipeline?.definition.columns.find((column) => column.semantic === "done")?.title).toBe("Deployment")
   })
@@ -131,7 +129,6 @@ describe("boards", () => {
     store.createBoard({ owner: { kind: "stack", id: "p1" }, title: "Stack board" })
 
     expect(store.listBoards({ kind: "project", id: "p1" }).map((b) => b.title)).toEqual(["One"])
-    // Same id, different owner kind: must not bleed across.
     expect(store.listBoards({ kind: "stack", id: "p1" }).map((b) => b.title)).toEqual(["Stack board"])
   })
 
@@ -194,7 +191,6 @@ describe("columns", () => {
 
     const after = store.listColumns(board.id)
     expect(after.map((column) => column.title)).toEqual(["Done", "Todo", "Doing"])
-    // Only the moved column's rank changed: that is the point of fractional order.
     expect(after.find((c) => c.title === "Todo")!.rank).toBe(ranksBefore.get(columns[0]!.id)!)
     expect(after.find((c) => c.title === "Doing")!.rank).toBe(ranksBefore.get(columns[1]!.id)!)
   })
@@ -297,7 +293,6 @@ describe("cards", () => {
     })
 
     expect(moved.columnId).toBe(columns[1]!.id)
-    // Attribution drives the agent-push hold; it is not cosmetic.
     expect(moved.updatedBy).toEqual(AGENT)
     expect(store.countCardsByColumn(board.id)[columns[0]!.id]).toBe(0)
     expect(store.countCardsByColumn(board.id)[columns[1]!.id]).toBe(1)
@@ -332,7 +327,6 @@ describe("cards", () => {
   })
 
   test("a WIP limit never blocks a move", () => {
-    // Advisory by design: a hard limit would wedge an agent mid-run.
     const store = newStore()
     const { board, columns } = seedBoard(store)
     const doing = columns[1]!
@@ -458,15 +452,12 @@ describe("cards", () => {
       projectId: "project-2",
       actor: USER,
     })
-    // Without this, "Start work" on a stack board has no checkout to use.
     expect(store.getCard(card.id)?.projectId).toBe("project-2")
   })
 })
 
 describe("ordering parity with SQLite", () => {
   test("SQLite's ORDER BY matches JavaScript's string ordering for order keys", () => {
-    // The whole ordering design rests on this. If it ever diverges, cards
-    // silently render in a different order than they are stored in.
     const store = newStore()
     const { board, columns } = seedBoard(store)
 
@@ -535,7 +526,6 @@ describe("ordering parity with SQLite", () => {
       actor: USER,
       afterCardId: first.id,
     })
-    // Hammer the same gap so keys grow.
     for (let index = 0; index < 60; index += 1) {
       below = store.moveCard({
         cardId: below.id,
@@ -707,11 +697,6 @@ describe("validateCardContent", () => {
     ).toEqual([])
   })
 
-  /**
-   * The two things it deliberately stays quiet about, both of which the WIRE
-   * decoder refuses. See the function's own comment for why the store cannot
-   * afford to agree with it.
-   */
   test("says nothing about a field the schema has not declared", () => {
     expect(
       validateCardContent(
@@ -777,11 +762,6 @@ describe("cardBranchName", () => {
   })
 })
 
-/**
- * The store's own schema gate. The WS router validates the one path a person
- * edits from; this is what stands under every other caller — the sync engine,
- * the board MCP tools, and anything added next.
- */
 describe("card content is checked against the board's fields", () => {
   const SCHEMA: BoardTemplateDefinition = {
     ...SIMPLE_DEFINITION,
@@ -851,12 +831,6 @@ describe("card content is checked against the board's fields", () => {
     expect(updated.content.notes).toEqual({ kind: "text", value: "ok" })
   })
 
-  /**
-   * The gate reports contradictions, not surprises. A board's schema is edited
-   * under content already written, and the sync engine writes `description`
-   * onto boards that have never declared it — refusing there would turn a
-   * GitHub pull into a hard failure on every board made without a template.
-   */
   test("a field the schema has not declared is stored, not refused", () => {
     const store = newStore()
     const { card } = seedTypedBoard(store)
@@ -868,7 +842,6 @@ describe("card content is checked against the board's fields", () => {
     expect(updated.content.description).toEqual({ kind: "longtext", value: "from GitHub" })
   })
 
-  /** `required` marks a field; it never refuses a save. */
   test("content omitting a required field still writes", () => {
     const store = newStore()
     const { card } = seedTypedBoard(store)
@@ -888,13 +861,6 @@ describe("card content is checked against the board's fields", () => {
   })
 })
 
-/**
- * The table always allowed many bindings per board — `sync_binding_board_idx`
- * is a plain, non-unique index — so nothing here needed a migration. What was
- * missing was an application-level identity: `upsertBinding` used to look a
- * board up by `board_id` alone, which silently made "connect this board to a
- * second repo" mean "retarget the first".
- */
 describe("sync bindings", () => {
   const REPO_1 = { provider: "github-issues", owner: "o1", repo: "r1" } as const
   const REPO_2 = { provider: "github-issues", owner: "o2", repo: "r2" } as const
@@ -993,7 +959,6 @@ describe("sync bindings", () => {
 
     expect(store.listBindings(board.id).map((b) => b.id)).toEqual([second.id])
     expect(store.getSyncLinkByCard(card.id, binding.id)).toBeNull()
-    // The card itself survives: unbinding a repo is not deleting the work.
     expect(store.getCard(card.id)).not.toBeNull()
   })
 
@@ -1003,15 +968,6 @@ describe("sync bindings", () => {
   })
 })
 
-/**
- * A binding remembers its checkout, and repos are findable across boards.
- *
- * Both exist for the Stack board: its cards come from several repos and the
- * board itself names none, so `projectId` is the only thing that can tell Start
- * work which worktree to mint — and `findBindingsBySource` is what lets the
- * connect screen see that a repo already belongs somewhere before it offers to
- * take it.
- */
 describe("binding project + cross-board lookup", () => {
   const REPO_1 = { provider: "github-issues", owner: "o1", repo: "r1" } as const
   const REPO_2 = { provider: "github-issues", owner: "o2", repo: "r2" } as const

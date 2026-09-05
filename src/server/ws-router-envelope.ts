@@ -1,12 +1,3 @@
-/**
- * ws-router-envelope.ts
- *
- * Snapshot-envelope computation for the WebSocket router.
- * Extracted from ws-router.ts to reduce its size.
- *
- * `createEnvelopeBuilder(deps)` returns `{ createEnvelope, getSidebarSnapshotCacheEntry }`
- * whose closures capture the stable dep objects — no shared mutable state lives here.
- */
 import os from "node:os"
 import { log } from "../shared/log"
 import { PROTOCOL_VERSION } from "../shared/types"
@@ -42,24 +33,9 @@ import type { ResolvedAppSettings } from "./ws-router-defaults"
 
 const DEFAULT_CHAT_RECENT_LIMIT = 200
 
-/**
- * Ceiling on a board subscription's page size.
- *
- * The topic arrives from the client verbatim, and every board broadcast
- * rebuilds the snapshot from it — so an unbounded value would let one socket
- * turn each card edit into a full-board read. Well above any hand-managed
- * board; a tracker import past it pages instead.
- */
 const MAX_BOARD_PAGE_SIZE = 500
 
-export /**
- * The tree a `project-git` subscriber is asking about.
- *
- * With a chat, its resolved cwd — the worktree it runs in, or the project's
- * checkout when it has no binding. Without one, the project's checkout. Null
- * when the project (or the named chat) is gone, which is the existence gate the
- * snapshot's `null` reports.
- */
+export
 function resolveTopicRepoPath(
   store: EventStore,
   projectId: string,
@@ -79,7 +55,6 @@ export function resolveBoardPageSize(requested: number | undefined): number | un
   return Math.min(requested, MAX_BOARD_PAGE_SIZE)
 }
 
-// ── Deps type ─────────────────────────────────────────────────────────────────
 
 export interface EnvelopeDeps {
   store: EventStore
@@ -105,7 +80,6 @@ export interface EnvelopeDeps {
   pushManager: PushManager
 }
 
-// ── Internal: sidebar cache entry ─────────────────────────────────────────────
 
 function buildSidebarSnapshotCacheEntry(
   deps: EnvelopeDeps,
@@ -170,28 +144,15 @@ function buildSidebarSnapshotCacheEntry(
   return sidebar
 }
 
-// ── Exported factory ──────────────────────────────────────────────────────────
 
 export interface EnvelopeBuilder {
-  /**
-   * Returns a cached sidebar entry (computes it once per cache object).
-   * Exposed so callers can read the pre-computed signature for dedup.
-   */
   getSidebarSnapshotCacheEntry(cache?: SnapshotComputationCache): NonNullable<SnapshotComputationCache["sidebar"]>
-  /**
-   * Build the full ServerEnvelope for a given subscription topic.
-   */
   createEnvelope(
     id: string,
     topic: SubscriptionTopic,
     cache?: SnapshotComputationCache,
     connection?: ServerWebSocket<ClientState>,
   ): ServerEnvelope
-  /**
-   * Light chat snapshot (recentLimit 0 — no transcript window; `messages`
-   * carry only the synthetic pending_tool_request rows). Feeds the
-   * meta-diff of the `chat.ops` broadcast path.
-   */
   deriveChatMeta(chatId: string): ChatSnapshot | null
 }
 
@@ -355,9 +316,6 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
       }
     }
 
-    // Built inline: the catalog is a synchronous disk read behind an
-    // mtime-validated cache, so there is nothing to await and no loading state
-    // to represent. The list is in this first frame, or the project is unknown.
     if (topic.type === "project-commands") {
       const project = store.getProject(topic.projectId)
       return {
@@ -493,10 +451,6 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
       }
     }
 
-    // Capture seq BEFORE deriving: ops recorded mid-derive then overlap the
-    // snapshot, and the client reducer's upsert-by-_id makes that idempotent.
-    // Optional-chained like the registry subscriptions: partial store fakes in tests
-    // may not implement chatOps; the real EventStore always does.
     const seq = typeof store.chatOps?.currentSeq === "function"
       ? store.chatOps.currentSeq(topic.chatId)
       : undefined
@@ -528,11 +482,6 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
   return { getSidebarSnapshotCacheEntry, createEnvelope, deriveChatMeta }
 }
 
-/**
- * All armed cron jobs across every chat/project — the global management
- * page's read model, aggregated on demand from the same per-chat event
- * streams the chat snapshot uses.
- */
 function buildCronJobsGlobalRows(store: EventStore): CronJobsGlobalRow[] {
   const now = Date.now()
   const rows: CronJobsGlobalRow[] = []

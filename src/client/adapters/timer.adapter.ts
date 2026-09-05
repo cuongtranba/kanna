@@ -1,11 +1,3 @@
-/**
- * timer.adapter.ts — Browser timer implementation of TimerPort.
- *
- * Thin wrappers over window.setTimeout / clearTimeout / setInterval /
- * clearInterval / requestAnimationFrame / cancelAnimationFrame.
- *
- * Architecture: .c3/adr/adr-20260715-client-state-effect-architecture.md
- */
 
 import type { TimerPort } from "../ports/timerPort"
 

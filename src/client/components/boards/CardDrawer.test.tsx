@@ -141,7 +141,6 @@ describe("CardDrawer start work", () => {
     harness.unmount()
   })
 
-  /** A board that marks no active column moves nothing, and the drawer says so. */
   test("reports a board with no active column", async () => {
     const harness = await mount(detailWith({ kind: "idle" }), () =>
       Promise.resolve({ ...RESULT, movedToColumnId: null }),
@@ -175,7 +174,6 @@ describe("CardDrawer start work", () => {
     harness.unmount()
   })
 
-  /** An older server has no start-work wiring; the drawer must not paint a dead button. */
   test("renders no button when the server sent no status", async () => {
     const detail = { ...detailWith({ kind: "idle" }), startWork: null }
     const harness = await mount(detail, () => Promise.resolve(RESULT))
@@ -198,11 +196,6 @@ function chatButton(container: HTMLElement, text: string): HTMLButtonElement | u
   )
 }
 
-/**
- * A card's chats are the answer to "who is on this" — the drawer held them and
- * showed none of it, so the only way from a card to its conversation was to
- * press Start work and hope it resolved to the same chat.
- */
 describe("CardDrawer issue identity", () => {
   test("identity renders from externalRef with a GitHub link", async () => {
     const detail: CardDetailView = {
@@ -238,7 +231,6 @@ describe("CardDrawer linked chats", () => {
 
     expect(harness.container.textContent).toContain("Fix login redirect")
     expect(harness.container.textContent).toContain("Running")
-    // The worktree link is not a chat and must not be listed as one.
     expect(harness.container.textContent).not.toContain("/wt/card-412")
     harness.unmount()
   })
@@ -272,7 +264,6 @@ describe("CardDrawer linked chats", () => {
     harness.unmount()
   })
 
-  /** A card outlives its chats; offering to open one that is gone is a dead end. */
   test("a link whose chat no longer exists is not clickable", async () => {
     const harness = await mount(linkedDetail([link("chat-gone", "chat", 2)]), () =>
       Promise.resolve(RESULT),
@@ -326,7 +317,6 @@ describe("CardDrawer worktree cleanup", () => {
     harness.unmount()
   })
 
-  /** The rule: a column drag must not be able to destroy an agent's work. */
   test("discard is refused, with the reason, while the worktree holds work", async () => {
     const harness = await mount(cleanupDetail({ dirtyFileCount: 1 }), () => Promise.resolve(RESULT))
     expect(buttonNamed(harness.container, "Discard worktree").disabled).toBe(true)
@@ -361,14 +351,7 @@ describe("CardDrawer worktree cleanup", () => {
   })
 })
 
-// ── The card schema ───────────────────────────────────────────────────────────
 
-/**
- * `Board.cardFields` is a user-definable schema, and the drawer used to render a
- * fixed `<dl>` of Labels / Assignee / Source keyed on the ids the built-in
- * templates happen to use. A board built on any other schema showed a card with
- * most of its fields invisible and none of them editable.
- */
 
 const SCHEMA: readonly FieldDef[] = [
   { id: "description", label: "Description", kind: "longtext", options: null, required: false },
@@ -429,7 +412,6 @@ function typeInto(input: HTMLInputElement | HTMLTextAreaElement, value: string) 
   input.dispatchEvent(new Event("input", { bubbles: true }))
 }
 
-/** React's `onBlur` listens to the native `focusout`; a `blur` event never bubbles to it. */
 function blur(input: HTMLInputElement | HTMLTextAreaElement) {
   input.dispatchEvent(new FocusEvent("focusout", { bubbles: true }))
 }
@@ -472,7 +454,6 @@ describe("CardDrawer card schema", () => {
     harness.unmount()
   })
 
-  /** Content can outlive a schema change; only what the board declares is a field. */
   test("a value the schema does not declare is not rendered", async () => {
     const harness = await mountSchema({ ...FULL, retired: { kind: "text", value: "ghost-value" } })
     expect(harness.container.textContent).not.toContain("ghost-value")
@@ -486,7 +467,6 @@ describe("CardDrawer card schema", () => {
     harness.unmount()
   })
 
-  /** Advisory, never blocking — the same posture as the WIP limit. */
   test("an empty required field says so, and saving is never refused", async () => {
     const harness = await mountSchema({})
     expect(harness.container.textContent).toContain("Required")
@@ -517,7 +497,6 @@ describe("CardDrawer card schema", () => {
     harness.unmount()
   })
 
-  /** The design brief's column rule: a token is a 6px dot, never a background wash. */
   test("an option's colour is a dot, not a fill", async () => {
     const harness = await mountSchema(FULL)
     const dot = harness.container.querySelector(".bg-destructive")
@@ -563,7 +542,6 @@ describe("CardDrawer field editing", () => {
     harness.unmount()
   })
 
-  /** Esc drops the draft — and the blur that follows it must not resurrect it. */
   test("Escape reverts and sends nothing", async () => {
     const harness = await mountSchema(FULL)
     await act(async () => {
@@ -603,7 +581,6 @@ describe("CardDrawer field editing", () => {
       fieldButton(harness.container, "Assignee").click()
     })
     await act(async () => {
-      // The estimate is still a button while the assignee holds the edit.
       fieldButton(harness.container, "Estimate").click()
     })
     expect(harness.container.querySelectorAll("dl input, dl textarea")).toHaveLength(1)

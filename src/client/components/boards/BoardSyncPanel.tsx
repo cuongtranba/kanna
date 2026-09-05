@@ -11,18 +11,6 @@ import { onRejected } from "../../../shared/errors"
 import type { JsonValue } from "../../../shared/json"
 import type { ClientCommand } from "../../../shared/protocol"
 
-/**
- * Where a board's cards come from.
- *
- * A panel inside the board pane, like the card drawer, because binding a board
- * is reasoning ABOUT the board — the columns it will route into need to stay in
- * view while the choice is made.
- *
- * It shows the routing rather than offering it. Open/closed is the one state
- * every tracker has, and it meets a board's user-named columns through column
- * semantics alone; a second way to say where a card goes would be a second way
- * for this screen and the sync engine to disagree.
- */
 
 export interface BoardSyncPanelSocket {
   command<TResult = JsonValue>(command: ClientCommand): Promise<TResult>
@@ -40,16 +28,11 @@ const DIRECTIONS: SegmentedOption<SyncDirection>[] = [
   { value: "both", label: "Both" },
 ]
 
-/** What a conflict was about, in the reader's terms rather than the store's. */
 function conflictLine(conflict: SyncConflict): string {
   const kept = conflict.resolvedAs === "local" ? "kept yours" : "took theirs"
   return `${conflict.field} changed in both places · ${kept}`
 }
 
-/**
- * One row's disconnect button. A component rather than an inline arrow in the
- * map so the handler is bound once per row instead of re-created every render.
- */
 function BindingDisconnect({
   bindingId,
   onDisconnect,
@@ -90,10 +73,6 @@ function isAlreadyConnected(suggestion: RepoSuggestion, bindings: readonly SyncB
   )
 }
 
-/**
- * What the row's button offers. A repo held by another board is MOVED, not
- * added — naming both "Connect" would hide that one board loses its feed.
- */
 function offerLabel(isBoundElsewhere: boolean, isSaving: boolean): string {
   if (isSaving) return isBoundElsewhere ? "Moving…" : "Connecting…"
   return isBoundElsewhere ? "Move here" : "Connect"
@@ -178,7 +157,6 @@ function SuggestionRow({
   )
 }
 
-/** Unmapped columns warn; they never block. A one-way pull does not need them. */
 function routingWarning(routing: SyncColumnRouting, direction: SyncDirection): string | null {
   if (!routing.open && !routing.closed) {
     return "This board marks no column as start or done, so pulled issues land in the first column and closing one moves nothing."
@@ -238,8 +216,6 @@ export function BoardSyncPanel({ boardId, socket, onClose }: BoardSyncPanelProps
       setError("That is not a repository. Use owner/repo, or paste its GitHub URL.")
       return
     }
-    // If the typed slug matches a suggestion, thread its projectId so
-    // Start work can find the right checkout on a Stack board.
     const matchingSuggestion = state.status?.suggestedRepos.find(
       (s) => s.repo?.owner === slug.owner && s.repo?.repo === slug.repo,
     )
@@ -266,8 +242,6 @@ export function BoardSyncPanel({ boardId, socket, onClose }: BoardSyncPanelProps
 
   const handleDisconnect = useCallback(
     (bindingId: string) => {
-      // Disconnecting a repo leaves its cards alone — only the link is cut —
-      // so this needs no confirm step the way archiving a board does.
       void socket
         .command({ type: "board.sync.unbind", boardId, bindingId })
         .then(load)
@@ -282,7 +256,6 @@ export function BoardSyncPanel({ boardId, socket, onClose }: BoardSyncPanelProps
     (suggestion: RepoSuggestion) => {
       if (!suggestion.repo) return
       const state = useBoardSyncPanelStore.getState()
-      // Two-step confirm for repos currently synced to another board.
       if (suggestion.boundTo && state.confirmingDetach !== suggestion.projectId) {
         state.setConfirmingDetach(suggestion.projectId)
         return
@@ -383,8 +356,6 @@ export function BoardSyncPanel({ boardId, socket, onClose }: BoardSyncPanelProps
 
       {status ? (
         <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-4">
-          {/* Policy first: it applies to every repo connected below, so it has
-              to be readable before the connect buttons are reached. */}
           <section className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground">Direction</p>
             <SegmentedControl value={direction} onValueChange={setDirection} options={DIRECTIONS} size="sm" />
@@ -400,8 +371,6 @@ export function BoardSyncPanel({ boardId, socket, onClose }: BoardSyncPanelProps
               />
               <span>
                 Let agent changes reach GitHub
-                {/* Off by default: an agent dragging a card to done must not
-                    silently close a real issue. */}
                 <span className="block text-muted-foreground">
                   Off by default. An agent moving a card to done would otherwise close the issue.
                 </span>
@@ -451,8 +420,6 @@ export function BoardSyncPanel({ boardId, socket, onClose }: BoardSyncPanelProps
                 spellCheck={false}
                 className="flex-1 font-mono text-13"
               />
-              {/* Beside the field it acts on. A footer button would read as
-                  applying to the panel, which is what the rows above do. */}
               <Button size="sm" onClick={handleSave} disabled={saving || repoDraft.trim().length === 0}>
                 {saving ? "Saving…" : "Connect"}
               </Button>

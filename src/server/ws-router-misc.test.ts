@@ -1,8 +1,3 @@
-/**
- * ws-router-misc.test.ts
- *
- * Unit tests for handleMiscCommand (terminal, message, stack, share groups).
- */
 
 import { describe, expect, mock, test } from "bun:test"
 import type {
@@ -16,9 +11,6 @@ import type {
 import { handleMiscCommand } from "./ws-router-misc"
 import type { ClientCommand, ServerEnvelope } from "../shared/protocol"
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function makeStore(overrides: Partial<MiscStoreDep> = {}): MiscStoreDep {
   return {
@@ -130,9 +122,6 @@ function makeDeps(opts: {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Unknown command
-// ---------------------------------------------------------------------------
 
 describe("handleMiscCommand", () => {
   test("returns false for an unrelated command type", async () => {
@@ -146,9 +135,6 @@ describe("handleMiscCommand", () => {
     expect(deps.sent).toHaveLength(0)
   })
 
-  // ---------------------------------------------------------------------------
-  // message.*
-  // ---------------------------------------------------------------------------
 
   test("message.enqueue — calls agent.enqueue, acks with result, broadcasts chat+sidebar", async () => {
     const deps = makeDeps({ agentOverrides: { enqueue: mock(async () => ({ queuedMessageId: "q-1" })) } })
@@ -195,9 +181,6 @@ describe("handleMiscCommand", () => {
     expect(deps.chatBroadcasts).toContain("chat-3")
   })
 
-  // ---------------------------------------------------------------------------
-  // terminal.*
-  // ---------------------------------------------------------------------------
 
   test("terminal.create — calls createTerminal with project path, acks with snapshot", async () => {
     const deps = makeDeps({
@@ -269,9 +252,6 @@ describe("handleMiscCommand", () => {
     expect(deps.pushSnapshots).toContain("term-2")
   })
 
-  // ---------------------------------------------------------------------------
-  // stack.*
-  // ---------------------------------------------------------------------------
 
   test("stack.create — creates stack, acks with stackId, tracks analytics, broadcasts sidebar", async () => {
     const deps = makeDeps({
@@ -346,9 +326,6 @@ describe("handleMiscCommand", () => {
     await expect(handleMiscCommand(deps, cmd, "r15")).rejects.toThrow("Project not found")
   })
 
-  // ---------------------------------------------------------------------------
-  // share.*
-  // ---------------------------------------------------------------------------
 
   test("share.mint — mints token, acks with ok result when service available", async () => {
     const shareService = makeSessionShare()

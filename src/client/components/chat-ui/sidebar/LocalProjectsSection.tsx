@@ -37,11 +37,6 @@ import { domAdapter } from "../../../adapters/dom.adapter"
 
 interface Props {
   projectGroups: SidebarProjectGroup[]
-  /**
-   * Label rendered above the list. Without it the list reads as a continuation of
-   * whichever section precedes it in the sidebar (e.g. Stacks). Omitted when the
-   * list is empty so no orphan label is left behind.
-   */
   heading?: string
   editorLabel: string
   collapsedSections: Set<string>
@@ -205,11 +200,8 @@ const SortableProjectGroup = memo(({
   const isExpanded = expandedGroups.has(groupKey)
   const isEmptyProject = group.chats.length === 0
   const hasMore = group.olderChats.length > 0
-  /** Rows in the open cascade, so the collapse can fold from the far end. */
   const cascadeCount = group.previewChats.length + (isExpanded ? group.olderChats.length : 0)
   const hasProjectMenu = Boolean(onHideProject && onCopyPath && onOpenExternalPath)
-  // Dialog openness lives in the sidebar store, one project at a time — the
-  // same shape as the stack panels, and `useState` is banned in src/client.
   const instructionsOpen = useKannaSidebarStore((s) => s.instructionsProjectId === groupKey)
   const setInstructionsProjectId = useKannaSidebarStore((s) => s.setInstructionsProjectId)
 
@@ -265,8 +257,6 @@ const SortableProjectGroup = memo(({
       >
         <ChevronRight
           className={cn(
-            // duration-[--motion-quick]: the chevron and the cascade it opens
-            // are one gesture, so they read from one token.
             "size-3.5 shrink-0 text-muted-foreground transition-transform duration-[var(--motion-quick)] motion-reduce:transition-none",
             !collapsedSections.has(groupKey) && "rotate-90"
           )}
@@ -374,15 +364,6 @@ const SortableProjectGroup = memo(({
         />
       ) : null}
 
-      {/*
-        The cascade. Opening staggers from the header downwards; closing folds
-        back towards it (MotionReveal's `count` reverses the exit delay), which
-        is what makes a collapse read as folding shut rather than toppling over.
-
-        AnimatePresence sits OUTSIDE the mount condition so the rows survive
-        long enough to play that exit — inside it, React would have unmounted
-        them before the first frame.
-      */}
       <AnimatePresence initial={false}>
         {!collapsedSections.has(groupKey) && (isEmptyProject ? Boolean(onNewLocalChat) : group.previewChats.length > 0 || hasMore) && (
           <div key="project-rows" className="flex flex-col gap-px pl-1">

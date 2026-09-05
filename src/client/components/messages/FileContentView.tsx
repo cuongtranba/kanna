@@ -17,7 +17,6 @@ interface DiffLine {
   content: string
 }
 
-// Parse content and extract line numbers if they match the pattern: N→content
 function parseContent(content: string): ParsedLine[] {
   const lines = content.split("\n")
   const lineNumberPattern = /^\s*(\d+)→(.*)$/
@@ -37,12 +36,10 @@ function parseContent(content: string): ParsedLine[] {
   })
 }
 
-// Strip XML-like tags from content
 function stripXmlTags(text: string): string {
   return text.replace(/<[^>]+>/g, "")
 }
 
-// Compute unified diff (same logic as EditDiffView)
 function computeUnifiedDiff(oldStr: string, newStr: string): DiffLine[] {
   const oldLines = oldStr.split("\n")
   const newLines = newStr.split("\n")
@@ -104,7 +101,6 @@ function buildDiffLines(rawDiff: RawLine[]): DiffLine[] {
 }
 
 export function FileContentView({ content, isDiff = false, oldString, newString }: FileContentViewProps) {
-  // Diff mode
   const diffLines = useMemo(() => {
     if (isDiff && oldString !== undefined && newString !== undefined) {
       return computeUnifiedDiff(oldString, newString)
@@ -112,7 +108,6 @@ export function FileContentView({ content, isDiff = false, oldString, newString 
     return []
   }, [isDiff, oldString, newString])
 
-  // Text mode with line numbers
   const parsedLines = useMemo(() => {
     if (!isDiff) {
       return parseContent(content)
@@ -124,7 +119,6 @@ export function FileContentView({ content, isDiff = false, oldString, newString 
     return parsedLines.some((line) => line.lineNumber !== null)
   }, [parsedLines])
 
-  // Diff rendering
   if (isDiff && diffLines.length > 0) {
     return (
       <div className="my-1 rounded-lg border border-border overflow-hidden">
@@ -186,7 +180,6 @@ export function FileContentView({ content, isDiff = false, oldString, newString 
     )
   }
 
-  // Text rendering with optional line numbers
   return (
     <div className="my-1 rounded-lg border border-border overflow-hidden">
       <div className="overflow-auto max-h-64 md:max-h-[50vh]">

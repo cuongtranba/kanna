@@ -103,7 +103,6 @@ describe("deriveCronJobs", () => {
       3000,
     )
     expect(resumed[0]!.paused).toBe(false)
-    // Interval anchors at armedAt: next grid slot after now=3000 is 1000 + 300000.
     expect(resumed[0]!.nextFireAt).toBe(301_000)
   })
 
@@ -210,7 +209,6 @@ describe("deriveCronJobs", () => {
       ),
     ).toBe(true)
     expect(hasUnpausedCronJob([armed("j1", 1000), event("cron_disarmed", "j1", 2000)], CHAT)).toBe(false)
-    // A paused job alongside an unpaused one still counts.
     expect(
       hasUnpausedCronJob([armed("j1", 1000), armed("j2", 1500), event("cron_paused", "j1", 2000)], CHAT),
     ).toBe(true)

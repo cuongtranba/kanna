@@ -22,7 +22,6 @@ describe("loop verify cache", () => {
     expect(getCachedVerify("c1", "make check", "digest-a")).toEqual(RESULT)
   })
 
-  // The whole point: a changed tree must re-run, never reuse.
   test("a different digest misses", () => {
     setCachedVerify("c1", "make check", "digest-a", RESULT)
     expect(getCachedVerify("c1", "make check", "digest-b")).toBeNull()
@@ -38,8 +37,6 @@ describe("loop verify cache", () => {
     expect(getCachedVerify("c2", "make check", "digest-a")).toBeNull()
   })
 
-  // A null digest means "tree state unknown" — caching that would serve a
-  // remembered pass for a tree we cannot fingerprint.
   test("a null digest is never stored and never hits", () => {
     setCachedVerify("c1", "make check", null, RESULT)
     expect(getCachedVerify("c1", "make check", null)).toBeNull()

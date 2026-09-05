@@ -5,16 +5,7 @@ import { DecoratorNode, $applyNodeReplacement } from "lexical"
 import { domAdapter } from "../../../adapters/dom.adapter"
 import { LocalFileLinkCard } from "../../messages/LocalFileLinkCard"
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
 
-// A type alias, not an interface, and that is load-bearing. Lexical's
-// KlassConstructor types importJSON's parameter as
-// `SerializedLexicalNode & Record<string, unknown>`; an interface gets no
-// implicit index signature, so the spread below stops matching and the class
-// no longer satisfies LexicalNodeConfig. The other five nodes here already
-// spread type aliases for the same reason.
 export type CreateLocalFileLinkNodeArgs = {
   path: string
   line?: number
@@ -26,9 +17,6 @@ export type SerializedLocalFileLinkNode = Spread<
   SerializedLexicalNode
 >
 
-// ---------------------------------------------------------------------------
-// Node
-// ---------------------------------------------------------------------------
 
 export class LocalFileLinkNode extends DecoratorNode<ReactNode> {
   readonly __path: string
@@ -50,7 +38,6 @@ export class LocalFileLinkNode extends DecoratorNode<ReactNode> {
     this.__dom = dom
   }
 
-  // ── Static interface ──────────────────────────────────────────────────────
 
   static getType(): string {
     return "kanna-local-file-link"
@@ -74,7 +61,6 @@ export class LocalFileLinkNode extends DecoratorNode<ReactNode> {
     })
   }
 
-  // ── Serialization ─────────────────────────────────────────────────────────
 
   exportJSON(): SerializedLocalFileLinkNode {
     const json: SerializedLocalFileLinkNode = {
@@ -91,7 +77,6 @@ export class LocalFileLinkNode extends DecoratorNode<ReactNode> {
     return json
   }
 
-  // ── DOM ───────────────────────────────────────────────────────────────────
 
   createDOM(_config: EditorConfig, _editor: LexicalEditor): HTMLElement {
     return this.__dom.createElement("span")
@@ -101,7 +86,6 @@ export class LocalFileLinkNode extends DecoratorNode<ReactNode> {
     return false
   }
 
-  // ── Behaviour ─────────────────────────────────────────────────────────────
 
   isInline(): boolean {
     return true
@@ -111,7 +95,6 @@ export class LocalFileLinkNode extends DecoratorNode<ReactNode> {
     return this.__path
   }
 
-  // ── Decorator ─────────────────────────────────────────────────────────────
 
   decorate(_editor: LexicalEditor, _config: EditorConfig): ReactNode {
     const linkText =
@@ -123,9 +106,6 @@ export class LocalFileLinkNode extends DecoratorNode<ReactNode> {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Factory helpers
-// ---------------------------------------------------------------------------
 
 export function $createLocalFileLinkNode(
   args: CreateLocalFileLinkNodeArgs,

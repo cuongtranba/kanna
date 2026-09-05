@@ -17,15 +17,11 @@ const ROW_STATUS_CONFIG: Record<
 
 interface Props {
   loopProgress: LoopProgressSnapshot
-  /** Accept the live rate-limit schedule to resume immediately. */
   onResume?: (scheduleId: string, scheduledAt: number) => void
 }
 
 export function LoopProgressSection({ loopProgress, onResume }: Props) {
   const { armed, rows, rateLimit } = loopProgress
-  // Nothing to show once a loop was never armed and produced no rows. A live
-  // rate-limit keeps the panel up even then: it carries the "Resume now" action,
-  // which must outlive the disarm a user's own message causes.
   if (!armed && rows.length === 0 && !rateLimit) return null
 
   return (

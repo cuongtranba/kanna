@@ -11,9 +11,6 @@ import type { StoragePort } from "../ports/storagePort"
 import type { DomPort } from "../ports/domPort"
 import type { TimerPort } from "../ports/timerPort"
 
-// ---------------------------------------------------------------------------
-// sameDiffs
-// ---------------------------------------------------------------------------
 
 function makeMinimalDiff(overrides?: Partial<ChatDiffSnapshot>): ChatDiffSnapshot {
   return {
@@ -93,9 +90,6 @@ describe("sameDiffs", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// shouldPreserveExistingProjectDiffs
-// ---------------------------------------------------------------------------
 
 describe("shouldPreserveExistingProjectDiffs", () => {
   test("returns false when current is null", () => {
@@ -143,9 +137,6 @@ describe("shouldPreserveExistingProjectDiffs", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// transitionUpdateRestart (pure state machine)
-// ---------------------------------------------------------------------------
 
 describe("transitionUpdateRestart", () => {
   test("idle + reload_requested (new) → awaiting_disconnect", () => {
@@ -213,9 +204,6 @@ describe("transitionUpdateRestart", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// UpdateRestartRuntime
-// ---------------------------------------------------------------------------
 
 function makeStorage(initial: Record<string, string> = {}): StoragePort {
   const store = new Map(Object.entries(initial))
@@ -355,9 +343,7 @@ describe("UpdateRestartRuntime", () => {
       { storage: s, dom, timer, onSnapshot: (snap) => snapshots.push(snap) },
       { isServerReady },
     )
-    // resolveReady is set synchronously by the promise executor inside poll()
     resolveReady()
-    // flush microtasks so the async poll() continuation runs
     for (let i = 0; i < 5; i++) await Promise.resolve()
     expect(dom.reloaded).toBe(1)
     expect(r.getSnapshot().phase).toBe("idle")

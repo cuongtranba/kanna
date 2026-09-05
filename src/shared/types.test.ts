@@ -15,11 +15,6 @@ import {
   type CustomModelEntry,
 } from "./types"
 
-/**
- * `KEYBINDING_ACTIONS` is a `satisfies` array, not a `Record`, so the compiler
- * never notices an action missing from it — and a missing entry silently costs
- * the action its Settings row and its key on disk. These are that check.
- */
 describe("keybinding registration", () => {
   test("KEYBINDING_ACTIONS lists every action in DEFAULT_KEYBINDINGS", () => {
     expect([...KEYBINDING_ACTIONS].sort()).toEqual(
@@ -124,10 +119,6 @@ describe("mergeCustomModels", () => {
     expect(opus[0]!.label).toBe("Renamed Opus")
   })
 
-  // A hand-added entry carries only the fields the Settings form collects, so a
-  // whole-object replace silently strips capabilities the built-in declared —
-  // which is how `claude-opus-5` lost its 1M option and every turn was forced
-  // back to the 200k window with no warning anywhere.
   test("an override inherits optional fields the custom entry omits", () => {
     const builtin = PROVIDERS.find((p) => p.id === "claude")!.models.find((m) => m.id === "claude-opus-5")!
     expect(builtin.contextWindowOptions?.some((o) => o.id === "1m")).toBe(true)
@@ -154,9 +145,6 @@ describe("mergeCustomModels", () => {
     expect(model.supportedEfforts).toBeUndefined()
   })
 
-  // The Settings editor pre-fills its context-window checkbox from this, so it
-  // has to agree with the merge or opening and saving an entry would write the
-  // inherited 1M away.
   test("effectiveContextWindowOptions agrees with what mergeCustomModels resolves", () => {
     for (const id of ["claude-opus-5", "claude-haiku-4-5-20251001"]) {
       const merged = mergeCustomModels(base(), [entry({ id, label: "Renamed" })])

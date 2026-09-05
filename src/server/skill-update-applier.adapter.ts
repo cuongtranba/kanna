@@ -16,7 +16,7 @@ async function spawnCapture(
   signal: AbortSignal,
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   const proc = Bun.spawn(command, { cwd, stdout: "pipe", stderr: "pipe", env })
-  const onAbort = () => { try { proc.kill() } catch { /* best-effort */ } }
+  const onAbort = () => { try { proc.kill() } catch { } }
   signal.addEventListener("abort", onAbort, { once: true })
   try {
     const [stdout, stderr, exitCode] = await Promise.all([
@@ -34,11 +34,6 @@ function buildUpdateSkillCommand(skillName: string): string[] {
   return [NPX, "skills", "update", assertSafeSkillId(skillName), "--global", "--yes"]
 }
 
-/**
- * `skills add owner/repo[/folder]#ref` — the CLI's own source syntax
- * (its `appendFolderAndRef`), and the only way to move a pinned skill:
- * `skills update` resolves upstream AT the pin and exits 0 unchanged.
- */
 export function buildRepinSkillCommand(source: string, installPath: string | null, ref: string): string[] {
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(source)) {
     throw new Error("Skill source must be an owner/repo pair.")
@@ -54,13 +49,6 @@ export function buildRepinSkillCommand(source: string, installPath: string | nul
   return [NPX, "skills", "add", `${withFolder}#${ref}`, "--global", "--yes"]
 }
 
-/**
- * Re-read the lock's folder hash for one skill.
- *
- * The CLI exits 0 whether it moved the skill or decided it had nothing to do,
- * so the exit code alone cannot tell an applied update from a no-op. The lock
- * is the only place the answer is written down.
- */
 async function readLockRevision(skillName: string): Promise<string | null> {
   try {
     const raw: JsonValue = JSON.parse(await readTextFileOrThrow(getGlobalSkillLockPath()))
@@ -113,12 +101,6 @@ export const skillUpdateApplier: PackageUpdateApplier = {
       }
 
       const toRevision = await readLockRevision(pkg.name)
-      // A pinned skill whose revision did not move is a no-op dressed as a
-      // success: the CLI resolved at the pin and found nothing to do. Reporting
-      // ok would leave the card flagged Outdated behind a button that silently
-      // does nothing — the defect this path exists to surface. Only pinned
-      // packages are judged this way; for an unpinned one an unchanged revision
-      // legitimately means "already current".
       if (pkg.pinnedRef && toRevision !== null && toRevision === fromRevision) {
         return {
           id: pkg.id,

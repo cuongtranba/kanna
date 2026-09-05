@@ -34,7 +34,6 @@ async function mount(props: Partial<Parameters<typeof WorkflowAgentTranscriptPan
       />,
     )
   })
-  // let the fetch promise resolve + re-render
   await act(async () => {})
   return { container, onClose, cleanup: () => container.remove() }
 }

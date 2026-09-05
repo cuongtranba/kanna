@@ -89,7 +89,6 @@ async function main() {
     process.exit(1)
   }
 
-  // Backup current state files
   const stamp = new Date().toISOString().replace(/[:.]/g, "-")
   const backupDir = path.join(DATA_DIR, `recover-backup-${stamp}`)
   await Bun.write(path.join(backupDir, ".keep"), "")
@@ -209,7 +208,6 @@ async function main() {
 
   const projects = [...projectsByPath.values()]
 
-  // Write snapshot
   const snapshot = {
     v: STORE_VERSION,
     generatedAt: Date.now(),
@@ -218,7 +216,6 @@ async function main() {
   }
   await writeFile(path.join(DATA_DIR, "snapshot.json"), JSON.stringify(snapshot, null, 2))
 
-  // Write projects.jsonl
   const projectLines = projects.map((p) => JSON.stringify({
     v: STORE_VERSION,
     type: "project_opened",
@@ -229,7 +226,6 @@ async function main() {
   }))
   await writeFile(path.join(DATA_DIR, "projects.jsonl"), projectLines.join("\n") + (projectLines.length ? "\n" : ""))
 
-  // Write chats.jsonl
   const chatLines: string[] = []
   for (const c of chats) {
     chatLines.push(JSON.stringify({
@@ -243,7 +239,6 @@ async function main() {
   }
   await writeFile(path.join(DATA_DIR, "chats.jsonl"), chatLines.join("\n") + (chatLines.length ? "\n" : ""))
 
-  // Truncate other logs to fresh empty state
   for (const f of ["messages.jsonl", "queued-messages.jsonl", "turns.jsonl", "schedules.jsonl"]) {
     await writeFile(path.join(DATA_DIR, f), "")
   }

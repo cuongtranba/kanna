@@ -110,9 +110,6 @@ describe("reconcileItem", () => {
   })
 
   test("a remote touch that changed nothing is not an edit", () => {
-    // GitHub bumps updated_at for things Kanna does not mirror (a comment, a
-    // reaction). Treating the timestamp alone as a change would resurrect a
-    // local edit's loser every time someone commented.
     const decision = reconcileItem({
       remote: remote({ updatedAt: T0 + 10 * MINUTE }),
       local: local(),
@@ -127,7 +124,6 @@ describe("reconcileItem", () => {
       local: local({ title: "Local title", updatedAt: T0 + MINUTE }),
       link: link(),
     })
-    // Remote newer than local, so both contested fields go remote.
     expect(decision).toEqual({
       kind: "apply",
       cardId: "card-1",
@@ -151,9 +147,6 @@ describe("reconcileItem", () => {
   })
 
   test("a field below its watermark is ignored even when the values differ", () => {
-    // This is the echo case: we pushed "Ours", the watermark records the remote
-    // timestamp our write produced, and the remote copy we are now reading is
-    // the older one.
     const decision = reconcileItem({
       remote: remote({ title: "Theirs", updatedAt: T0 }),
       local: local({ title: "Ours", updatedAt: T0 }),
@@ -163,8 +156,6 @@ describe("reconcileItem", () => {
   })
 
   test("a first sync with no link takes nothing it cannot justify", () => {
-    // No link means no watermark and no lastSyncedAt: the local card cannot be
-    // known to be dirty, so the remote is authoritative for what differs.
     const decision = reconcileItem({
       remote: remote({ title: "Remote title" }),
       local: local({ title: "Local title" }),
@@ -181,7 +172,6 @@ describe("watermarks", () => {
   })
 
   test("a successful push stamps the remote timestamp our write produced", () => {
-    // Without this the next pull reads our own change as a remote one.
     expect(watermarksAfterPush({ title: T0 }, T0 + 5 * MINUTE, ["title", "state"])).toEqual({
       title: T0 + 5 * MINUTE,
       state: T0 + 5 * MINUTE,

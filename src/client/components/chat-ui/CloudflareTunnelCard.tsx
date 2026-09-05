@@ -131,7 +131,6 @@ export function CloudflareTunnelCard({
     )
   }
 
-  // failed
   const actions: CardAction[] = [
     {
       id: "retry",

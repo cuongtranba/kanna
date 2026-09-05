@@ -50,9 +50,7 @@ describe("subagentsSectionStore", () => {
 
     const form = useSubagentsSectionStore.getState().form
     expect(form.draft.name).toBe("renamed")
-    // Untouched draft fields survive the patch...
     expect(form.draft.systemPrompt).toBe("review it")
-    // ...and so does unrelated form state.
     expect(form.error).toEqual({ field: "name", message: "taken" })
   })
 

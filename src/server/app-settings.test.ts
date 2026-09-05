@@ -514,8 +514,6 @@ describe("AppSettingsManager.setClaudeAuth", () => {
       }],
     })
 
-    // Simulate the watcher reading the file mid-write: file briefly contains
-    // truncated/partial JSON that JSON.parse rejects.
     await writeFile(filePath, "{ \"claudeAuth\": { \"tokens\":", "utf8")
 
     let caught: unknown = null
@@ -526,9 +524,6 @@ describe("AppSettingsManager.setClaudeAuth", () => {
     }
     expect(caught).toBeInstanceOf(SyntaxError)
 
-    // In-memory state must still hold the token; otherwise the next
-    // mutateTokenStatus would persist an empty token list and drop OAuth keys
-    // permanently.
     expect(mgr.getSnapshot().claudeAuth.tokens).toHaveLength(1)
     expect(mgr.getSnapshot().claudeAuth.tokens[0]?.token).toBe("sk-ant-abc")
 
@@ -541,7 +536,6 @@ describe("AppSettingsManager.setClaudeAuth", () => {
     const mgr = trackManager(new AppSettingsManager(filePath))
     await mgr.initialize()
 
-    // Seed initial tokens.
     await mgr.setClaudeAuth({
       tokens: [{
         id: "t1", label: "prod", token: "sk-ant-abc",
@@ -550,8 +544,6 @@ describe("AppSettingsManager.setClaudeAuth", () => {
       }],
     })
 
-    // Race many mutateTokenStatus writes against repeated full-file reads.
-    // Every read must parse to valid JSON with the token present.
     let stop = false
     const reader = (async () => {
       while (!stop) {
@@ -640,7 +632,6 @@ describe("subagent CRUD", () => {
     if (!("id" in created)) return
     expect(created.maxTurns).toBe(50)
 
-    // Invalid values (zero, negative, fractional) normalize to undefined.
     const bad = await mgr.createSubagent(baseInput({ name: "bad-turns", maxTurns: -3 }))
     if (!("id" in bad)) return
     expect(bad.maxTurns).toBeUndefined()
@@ -648,14 +639,12 @@ describe("subagent CRUD", () => {
     if (!("id" in frac)) return
     expect(frac.maxTurns).toBeUndefined()
 
-    // Patch updates the bound; explicit null clears back to unbounded.
     const updated = await mgr.updateSubagent(created.id, { maxTurns: 200 })
     if (!("id" in updated)) return
     expect(updated.maxTurns).toBe(200)
     const cleared = await mgr.updateSubagent(created.id, { maxTurns: null })
     if (!("id" in cleared)) return
     expect(cleared.maxTurns).toBeUndefined()
-    // Omitted key keeps the existing value.
     await mgr.updateSubagent(created.id, { maxTurns: 75 })
     const kept = await mgr.updateSubagent(created.id, { description: "unrelated" })
     if (!("id" in kept)) return
@@ -899,10 +888,6 @@ describe("claudeDriver settings", () => {
     }
   })
 
-  // Validation-only tests skip initialize()/dispose() — setClaudeDriver throws
-  // synchronously before reaching writePatch, so no watcher or file I/O is
-  // needed. Avoids leaking inotify handles on Linux CI when rm -rf runs in
-  // afterEach.
   test("setClaudeDriver rejects out-of-range idleTimeoutMs", async () => {
     const mgr = trackManager(new AppSettingsManager(path.join(tmpdir(), "kanna-settings-unused.json")))
     await expect(mgr.setClaudeDriver({ lifecycle: { idleTimeoutMs: 100 } })).rejects.toThrow(/idleTimeoutMs/)
@@ -976,7 +961,7 @@ describe("customMcpServers — load + normalize", () => {
   test("customMcpServers drops malformed entries with warning", async () => {
     const filePath = await writeSettingsFile({
       customMcpServers: [
-        { id: "x", name: "bad", transport: "stdio" }, // missing command
+        { id: "x", name: "bad", transport: "stdio" },
         "not-an-object",
       ],
     })
@@ -1305,7 +1290,6 @@ describe("customMcpServers — OAuth", () => {
     const filePath = await createTempFilePath()
     const mgr = trackManager(new AppSettingsManager(filePath))
     await mgr.initialize()
-    // stdio entries don't have oauth in the type union; cast to exercise the runtime guard
     const badInput = {
       name: "bad-oauth",
       transport: "stdio" as const,
@@ -1351,7 +1335,6 @@ describe("customMcpServers — OAuth", () => {
     const mgr = trackManager(new AppSettingsManager(filePath))
     await mgr.initialize()
 
-    // create two http entries
     await mgr.writePatch({
       customMcpServers: {
         create: { name: "alpha", transport: "http", url: "https://alpha.example.com/mcp", headers: {} },
@@ -1377,7 +1360,6 @@ describe("customMcpServers — OAuth", () => {
 
     if (alpha.transport === "stdio" || beta.transport === "stdio") throw new Error("expected network")
     expect(alpha.oauth).toEqual(nextOauth)
-    // beta's oauth untouched (was never set)
     expect(beta.oauth).toBeUndefined()
     mgr.dispose()
   })
@@ -1402,7 +1384,6 @@ describe("customMcpServers — OAuth", () => {
     const entry = mgr.getSnapshot().customMcpServers[0]!
     if (entry.transport === "stdio") throw new Error("expected network")
     expect(entry.oauth).toEqual(patchedOauth)
-    // other fields preserved
     expect(entry.name).toBe("srv")
     expect(entry.url).toBe("https://srv.example.com/mcp")
     mgr.dispose()
@@ -1530,10 +1511,6 @@ describe("textSnippets", () => {
   })
 })
 
-// The four settings collections (subagents, MCP servers, custom models, text
-// snippets) share one create/update/delete shape but deliberately differ in
-// what each arm validates. These pin the differences so a shared CRUD path
-// cannot quietly level them.
 describe("collection CRUD contracts", () => {
   async function freshManager() {
     const manager = trackManager(new AppSettingsManager(await createTempFilePath()))
@@ -1654,11 +1631,6 @@ describe("collection CRUD contracts", () => {
   })
 })
 
-// typography is a GROUP (never a bare scalar) so that a future `bodyFamily`
-// field is purely additive. These pin the three sites most likely to silently
-// drop it: toFilePayload (on-disk write), the shouldWrite comparison, and the
-// server twin of mergeAppSettingsPatch is covered separately in
-// ws-router-defaults.test.ts.
 describe("typography settings", () => {
   test("writePatch round-trips typography.scale through the file (toFilePayload)", async () => {
     const filePath = await createTempFilePath()
@@ -1689,8 +1661,6 @@ describe("typography settings", () => {
     reloaded.dispose()
 
     expect(secondContent).toBe(firstContent)
-    // atomicWriteJson replaces the file via a tmp-file + rename, which always
-    // produces a NEW inode. A genuine no-op load must leave the inode untouched.
     expect(secondStat.ino).toBe(firstStat.ino)
   })
 

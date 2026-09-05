@@ -9,7 +9,6 @@ function asString(value: JsonValue): string {
   return typeof value === "string" ? value : ""
 }
 
-/** Entry from the `available` array — a plugin that has an update. */
 export interface CodexPluginAvailableEntry {
   id: string
   version: string | null
@@ -52,12 +51,6 @@ function parseInstalledArray(
   return packages
 }
 
-/**
- * Parse the output of `codex plugin list --json`.
- *
- * The real CLI output is `{ installed: [...], available: [...] }`. Entries
- * whose `id` starts with `.system` are Codex built-ins and are excluded.
- */
 export function parseCodexPluginList(raw: JsonValue): { packages: InstalledPackage[]; error: string | null } {
   if (!isJsonObject(raw)) {
     return { packages: [], error: "codex plugin list: expected a JSON object" }
@@ -71,12 +64,6 @@ export function parseCodexPluginList(raw: JsonValue): { packages: InstalledPacka
   return { packages: parseInstalledArray(installed), error: null }
 }
 
-/**
- * Parse the `available` array from `codex plugin list --json`.
- *
- * Returns a map of plugin id → latest available version. An entry in
- * `available` means the plugin has an update relative to what is installed.
- */
 export function parseCodexPluginAvailable(raw: JsonValue): Map<string, CodexPluginAvailableEntry> {
   const result = new Map<string, CodexPluginAvailableEntry>()
   if (!isJsonObject(raw)) return result

@@ -14,7 +14,6 @@ import { buildTabId } from "./tabTarget"
 import { collectPanes, createGroup, createPane, createTab, findPaneContainingTab, getTreeDepth } from "./tree"
 import { DEFAULT_PANE_ID, MAX_TREE_DEPTH, type PaneLayout } from "./types"
 
-/** Derived, not hard-coded, so the id scheme can change without editing tests. */
 const CHAT_C1_TAB_ID = buildTabId({ kind: "chat", chatId: "c1" })
 
 const term = (id: string) => createTab({ kind: "terminal", terminalId: id }, 0)
@@ -26,7 +25,6 @@ function ids(n: string) {
   return { paneId: `pane-${n}`, groupId: `group-${n}` }
 }
 
-/** One pane holding tabs a, b, c. */
 function singlePane(): PaneLayout {
   return {
     root: createPane("p1", [term("a"), term("b"), term("c")], TA),
@@ -44,7 +42,6 @@ function twoPaneLayout(): PaneLayout {
   }
 }
 
-/** The same two panes, with the left one given an explicit share. */
 function skewed(left: number) {
   return createGroup(
     "g1",
@@ -86,8 +83,6 @@ describe("splitPane", () => {
     expect(collectPanes(left!.root).map((p) => p.id)).toEqual(["pane-l", "p1"])
   })
 
-  // Without flattening, three "split right" operations would nest three levels
-  // deep and the resize handles would become unusable.
   test("splitting the same direction repeatedly stays flat", () => {
     let layout: PaneLayout | null = {
       root: createPane("p1", [term("a"), term("b"), term("c")], TA),
@@ -114,10 +109,6 @@ describe("splitPane", () => {
     expect(getTreeDepth(layout!.root)).toBe(3)
   })
 
-  // This asserted the opposite until a browser check showed what it produced.
-  // The emptied source pane does survive the detach (`preserveEmptyPaneId`), but
-  // an empty pane has no tabs — so no close button and no content, leaving dead
-  // space the user cannot remove. The split is refused instead.
   test("splitting the only tab of a pane is refused rather than stranding it", () => {
     const layout: PaneLayout = {
       root: createPane("p1", [term("a")], TA),
@@ -130,14 +121,12 @@ describe("splitPane", () => {
   })
 
   test("rejects a split that would exceed the depth cap", () => {
-    // Explicitly at the cap: v[ pane, h[ pane, v[ pane, pane ] ] ].
     const layout: PaneLayout = {
       root: createGroup("outer", "vertical", [
         createPane("pA", [term("a")]),
         createGroup("mid", "horizontal", [
           createPane("pB", [term("b")]),
           createGroup("inner", "vertical", [
-            // Two tabs, so detaching one cannot collapse the pane and make room.
             createPane("pC", [term("c"), createTab({ kind: "chat", chatId: "c1" }, 0)], TC),
             createPane("pD", [createTab({ kind: "changes" }, 0)]),
           ]),
@@ -147,19 +136,15 @@ describe("splitPane", () => {
     }
     expect(getTreeDepth(layout.root)).toBe(MAX_TREE_DEPTH)
 
-    // pC's parent is vertical, so a horizontal split must nest — depth 5.
     expect(
       splitPane(layout, { tabId: TC, targetPaneId: "pC", position: "right", ids: ids("x") }),
     ).toBeNull()
 
-    // A same-direction split stays flat and is still allowed at the cap.
     expect(
       splitPane(layout, { tabId: TC, targetPaneId: "pC", position: "bottom", ids: ids("y") }),
     ).not.toBeNull()
   })
 
-  // A split that empties its source pane collapses it, which can free a level —
-  // so the cap is measured on the real candidate tree, never predicted.
   test("a collapsing source pane can make room for an otherwise-too-deep split", () => {
     const layout: PaneLayout = {
       root: createGroup("outer", "vertical", [
@@ -176,8 +161,6 @@ describe("splitPane", () => {
     }
     expect(getTreeDepth(layout.root)).toBe(MAX_TREE_DEPTH)
 
-    // pC holds only this tab, so the detach collapses pC and the inner group,
-    // leaving room for the new pane.
     const next = splitPane(layout, {
       tabId: TC, targetPaneId: "pD", position: "right", ids: ids("z"),
     })
@@ -220,7 +203,6 @@ describe("closeTab", () => {
     expect(next?.root.kind === "pane" && next.root.focusedTabId).toBe(TA)
   })
 
-  // The tree must always offer somewhere to render.
   test("closing the last tab of the last pane leaves one empty focused pane", () => {
     const layout: PaneLayout = { root: createPane("p1", [term("a")], TA), focusedPaneId: "p1" }
     const next = closeTab(layout, TA)
@@ -280,8 +262,6 @@ describe("focusTab / focusPane", () => {
     expect(next.focusedPaneId).toBe("pb")
   })
 
-  // Returning null on a no-op lets the store keep referential identity and skip
-  // a re-render.
   test("focusing what is already focused is a no-op", () => {
     expect(focusTab(twoPaneLayout(), TA)).toBeNull()
     expect(focusPane(twoPaneLayout(), "pa")).toBeNull()
@@ -305,7 +285,6 @@ describe("reorderPaneTabs", () => {
     expect(next?.root.kind === "pane" && next.root.tabs.map((t) => t.tabId)).toEqual([TC, TA, TB])
   })
 
-  // A partial order is safe: unmentioned tabs keep their relative order at the end.
   test("appends tabs the caller did not mention", () => {
     const next = reorderPaneTabs(singlePane(), "p1", [TC])
     expect(next?.root.kind === "pane" && next.root.tabs.map((t) => t.tabId)).toEqual([TC, TA, TB])
@@ -334,9 +313,6 @@ describe("openTab", () => {
     )
   })
 
-  // Because the id is derived from the target, "open" is idempotent PER TARGET:
-  // reopening the SAME chat focuses its tab, while a different chatId derives a
-  // different id and therefore opens a second tab.
   test("reopening an existing target focuses it instead of duplicating", () => {
     const layout: PaneLayout = {
       root: createGroup("g1", "horizontal", [
@@ -386,13 +362,11 @@ describe("resizeGroup", () => {
   })
 
   test("returns null once the boundary is already at the floor", () => {
-    // What keeps a held arrow key from re-rendering the tree forever.
     const layout: PaneLayout = { ...twoPaneLayout(), root: skewed(MIN_PANE_FRACTION) }
     expect(resizeGroup(layout, "g1", 0, -0.05)).toBeNull()
   })
 
   test("returns null for a boundary index past the last pair", () => {
-    // Why findResizeBoundary must never emit `children.length - 1`.
     expect(resizeGroup(twoPaneLayout(), "g1", 1, 0.05)).toBeNull()
   })
 })
@@ -404,9 +378,6 @@ describe("default pane id", () => {
 })
 
 describe("splitPane refuses to strand an empty pane", () => {
-  // An empty pane has no tabs, so its strip has no close button and no content:
-  // it is dead space the user cannot get rid of. The only way to produce one was
-  // splitting a pane's sole tab out of it, so that is refused at the engine.
   test("returns null when the tab is the target pane's only tab", () => {
     const layout: PaneLayout = {
       root: createPane("p1", [createTab({ kind: "chat", chatId: "c1" }, 0)]),
@@ -442,8 +413,6 @@ describe("splitPane refuses to strand an empty pane", () => {
   })
 
   test("still splits when the tab is dragged in from another pane", () => {
-    // The source pane empties and collapses, which is correct — the drop target
-    // keeps its own tabs, so nothing is stranded.
     const layout: PaneLayout = {
       root: createGroup("g0", "horizontal", [
         createPane("pa", [createTab({ kind: "chat", chatId: "c1" }, 0)]),

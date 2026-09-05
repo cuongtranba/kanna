@@ -12,30 +12,11 @@ import {
   toggleRequired,
 } from "../../lib/boards/cardSchemaDraft"
 
-/**
- * The open schema editor's draft.
- *
- * Seeded by {@link CardSchemaState.open} when the panel opens, NOT from the
- * board's snapshot: a board broadcast carries a freshly decoded `cardFields`
- * array on every card move, so re-seeding from it would wipe an edit in
- * progress the moment anyone dragged a card. Closing discards the draft, which
- * is what makes dismissing the panel a real cancel.
- *
- * Every transition lives here rather than in the panel, and the setters take
- * the RAW input value and narrow it, so the component never casts a `<select>`
- * value or decides what an unknown colour means.
- */
 interface CardSchemaState {
   draft: readonly FieldDef[]
   newLabel: string
   newKind: FieldKind
-  /** Per-field "add an option" text, keyed by field id. */
   optionDraftByField: Readonly<Record<string, string>>
-  /**
-   * The field whose removal is awaiting confirmation. One at a time, because
-   * the confirmation replaces that row's controls — two open at once would put
-   * the same question in two places.
-   */
   pendingRemovalFieldId: string | null
   saving: boolean
   error: string | null
@@ -84,8 +65,6 @@ export const useCardSchemaStore = create<CardSchemaState>()((set) => ({
   setNewLabel: (newLabel) => set({ newLabel }),
   setNewKind: (raw) => set({ newKind: isFieldKind(raw) ? raw : "text" }),
 
-  // The add form clears itself, so the next field is typed into an empty box
-  // rather than over the last one's name.
   addField: () =>
     set((state) => ({ draft: addField(state.draft, state.newLabel, state.newKind), newLabel: "" })),
 
@@ -113,7 +92,5 @@ export const useCardSchemaStore = create<CardSchemaState>()((set) => ({
     set((state) => ({ draft: setOptionColor(state.draft, fieldId, optionId, raw) })),
 
   beginSave: () => set({ saving: true, error: null }),
-  // The draft survives a refusal: it is the only copy of what the reader typed,
-  // and the server's reason is actionable in place.
   endSave: (error) => set({ saving: false, error }),
 }))

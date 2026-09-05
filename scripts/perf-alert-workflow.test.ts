@@ -2,10 +2,6 @@ import { describe, expect, test } from "bun:test"
 import { existsSync } from "node:fs"
 import { PERF_ALERT_EVENT_TYPE } from "../src/ops/alerting/webhook-payload"
 
-// The event name is agreed between two places that never import each other:
-// the Go template Grafana holds, and this workflow's trigger. Nothing at
-// runtime would report a mismatch — the dispatch would simply be accepted by
-// GitHub and match no workflow, so alerts would vanish silently.
 
 const WORKFLOW_PATH = new URL("../.github/workflows/perf-alert.yml", import.meta.url)
 
@@ -45,16 +41,12 @@ describe("perf-alert workflow", () => {
     expect(env.GITHUB_REPOSITORY).toContain("github.repository")
   })
 
-  // Two dispatches for one alert racing would each find no ticket and open one.
   test("serialises runs per alert so the dedup check cannot race", () => {
     expect(workflow.concurrency?.group).toContain("client_payload.alert.alertname")
     expect(workflow.concurrency?.["cancel-in-progress"]).toBe(false)
   })
 })
 
-// decideAction can only reopen a ticket it is shown. Narrowing this query back
-// to state=open would leave every unit test green while the pipeline silently
-// returned to filing a fresh ticket per flap.
 describe("perf-alert issue script", () => {
   test("fetches closed tickets too, so a re-firing alert can reopen one", () => {
     expect(issueScript).toContain("state=all")
@@ -66,11 +58,6 @@ describe("perf-alert issue script", () => {
     expect(issueScript).toContain("direction=desc")
   })
 
-  // The workflow runs this with no `bun install`, deliberately, so a lockfile
-  // problem can never stop an alert being filed. That only holds while nothing
-  // it imports reaches node_modules — importing rules.ts for the ticket scope
-  // would drag observability.ts and @opentelemetry/api in, and the job would
-  // die on module resolution with tickets simply never appearing.
   test("imports nothing outside the repo", () => {
     for (const [, specifier] of issueScript.matchAll(/\bfrom\s+"([^"]+)"/g)) {
       expect(specifier.startsWith("."), specifier).toBe(true)

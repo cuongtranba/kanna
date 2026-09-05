@@ -1,6 +1,3 @@
-// Git diff, branch, and worktree types.
-// Extracted from types.ts to keep the barrel lean.
-// All external consumers importing from "../shared/types" continue to work unchanged.
 
 export interface ChatDiffFile {
   path: string
@@ -157,9 +154,9 @@ export type DiffCommitFailure = BranchActionFailure & {
 export type DiffCommitResult = DiffCommitSuccess | DiffCommitFailure
 
 export interface GitWorktree {
-  path: string                 // absolute
-  branch: string               // e.g. "main", "feat/x", "(detached)"
-  sha: string                  // HEAD commit sha
+  path: string
+  branch: string
+  sha: string
   isPrimary: boolean
-  isLocked: boolean            // git has flagged this worktree as locked (pruning inhibited)
+  isLocked: boolean
 }

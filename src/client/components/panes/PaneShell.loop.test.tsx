@@ -16,9 +16,6 @@ const registry: PaneContentRegistry = {
 const presentation: TabPresentationContext = { terminalTitles: {} }
 
 describe("PaneShell render loop", () => {
-  // The shell notes each activation into the pane-scoped store from an effect
-  // and derives the retained set from that same store. A recency write that did
-  // not settle — or a selector returning a fresh array — would loop (React #185).
   test("mounts and records activation without a render loop", async () => {
     const pane = createPane("p1", [
       createTab({ kind: "chat", chatId: "c1" }, 0),

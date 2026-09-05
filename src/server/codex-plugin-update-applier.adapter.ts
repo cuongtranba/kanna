@@ -10,7 +10,7 @@ async function spawnCapture(
   signal: AbortSignal,
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   const proc = Bun.spawn(command, { cwd, stdout: "pipe", stderr: "pipe", env })
-  const onAbort = () => { try { proc.kill() } catch { /* best-effort */ } }
+  const onAbort = () => { try { proc.kill() } catch { } }
   signal.addEventListener("abort", onAbort, { once: true })
   try {
     const [stdout, stderr, exitCode] = await Promise.all([
@@ -24,15 +24,6 @@ async function spawnCapture(
   }
 }
 
-/**
- * Returns a PackageUpdateApplier for codex-plugin packages.
- *
- * There is no `codex plugin update` command (verified).
- * Apply sequence:
- * 1. `codex plugin marketplace upgrade` — refresh the snapshot (best-effort)
- * 2. `codex plugin add <pluginId>` — re-add; the CLI updates in place when the plugin is installed.
- *    If re-add fails (exit ≠ 0), report the error rather than attempting a destructive remove+add.
- */
 export function createCodexPluginUpdateApplier(codexBinary: string | null): PackageUpdateApplier {
   return {
     kind: "codex-plugin",
@@ -56,15 +47,12 @@ export function createCodexPluginUpdateApplier(codexBinary: string | null): Pack
       const combinedSignal = AbortSignal.any([signal, AbortSignal.timeout(APPLY_TIMEOUT_MS)])
       const fromRevision = pkg.revision
 
-      // Step 1: refresh the marketplace snapshot (best-effort)
       const upgradeCmd = [codexBinary, "plugin", "marketplace", "upgrade"]
       try {
         await spawnCapture(upgradeCmd, cwd, env, combinedSignal)
       } catch {
-        // best-effort
       }
 
-      // Step 2: re-add to update in place (plugin name is pkg.name)
       const addCmd = [codexBinary, "plugin", "add", pkg.name]
       try {
         const { stdout, stderr, exitCode } = await spawnCapture(addCmd, cwd, env, combinedSignal)

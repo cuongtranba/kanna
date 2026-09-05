@@ -7,14 +7,6 @@ function expandTilde(p: string, homeDir: string): string {
   return path.join(homeDir, p.slice(1).replace(/^\//, ""))
 }
 
-/**
- * Resolve symlinks so the bwrap `--tmpfs <path>` mount lands on the real
- * inode the kernel resolves to at access time. Without this, a symlinked
- * `homeDir` (common in container images) gets a tmpfs on the symlink while
- * the real target stays readable — a sandbox bypass. Mirrors
- * profile-macos.ts `resolveReal`: walk-up fallback for paths that do not
- * exist yet (e.g. `~/.ssh` on a fresh machine).
- */
 function resolveReal(p: string): string {
   try {
     return realpathSync(p)
@@ -31,15 +23,6 @@ function resolveReal(p: string): string {
 
 export interface BwrapArgsResult {
   argv: string[]
-  /**
-   * Deny patterns containing a glob that cannot be expressed as a bwrap
-   * `--tmpfs` mount (bwrap has no glob support). NOT silently ignored:
-   * glob deny rules are enforced primarily by the kanna-mcp tool-callback
-   * layer (`permission-gate.ts`, minimatch) for the `mcp__kanna__*` PTY
-   * tool surface. The OS sandbox only ever provided defense-in-depth for
-   * literal credential directories. Returned so the caller can surface
-   * the gap instead of the previous silent drop.
-   */
   unmountableGlobs: string[]
 }
 

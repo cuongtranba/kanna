@@ -4,10 +4,6 @@ import { join } from "node:path"
 import { validateMcpServer, networkHeaders } from "./mcp-validator"
 import type { McpServerConfig } from "../shared/types"
 
-// Write stub to a temp file so bun resolves node_modules from the repo root
-// instead of from an inline -e script whose cwd is unpredictable.
-// Uses the high-level McpServer API (server.tool()) which auto-handles
-// tools/list without requiring ListToolsRequestSchema (avoids z.looseObject issue in Bun).
 const STUB_OK_SCRIPT = `
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"

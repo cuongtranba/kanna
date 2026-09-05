@@ -5,9 +5,6 @@ import type { TimerPort } from "../ports/timerPort"
 import type { StoragePort } from "../ports/storagePort"
 import type { WebSocketPort, WebSocketLike, WsEventPayload } from "../ports/webSocketPort"
 
-// ---------------------------------------------------------------------------
-// Fake WebSocket
-// ---------------------------------------------------------------------------
 
 type WsHandler = (event?: WsEventPayload) => void
 
@@ -61,9 +58,6 @@ class FakeWebSocket implements WebSocketLike {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Fake WebSocketPort
-// ---------------------------------------------------------------------------
 
 function makeFakeWebSocketPort(): WebSocketPort {
   return {
@@ -77,9 +71,6 @@ function makeFakeWebSocketPort(): WebSocketPort {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Fake TimerPort
-// ---------------------------------------------------------------------------
 
 class FakeTimers implements TimerPort {
   private nextId = 1
@@ -110,7 +101,7 @@ class FakeTimers implements TimerPort {
     return this.nextId++
   }
 
-  cancelAnimationFrame(_id: number): void { /* no-op */ }
+  cancelAnimationFrame(_id: number): void { }
 
   runTimeout(id: number) {
     const callback = this.timeouts.get(id)
@@ -124,9 +115,6 @@ class FakeTimers implements TimerPort {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Fake DomPort
-// ---------------------------------------------------------------------------
 
 type DomHandler = (event?: Event) => void
 
@@ -138,18 +126,18 @@ class FakeDomPort implements DomPort {
   lastSetHref: string | null = null
 
   getTitle(): string { return "" }
-  setTitle(_title: string): void { /* no-op */ }
+  setTitle(_title: string): void { }
   getVisibilityState(): DocumentVisibilityState { return this.visibilityState }
   hasFocus(): boolean { return true }
   getHref(): string { return this.href }
   getPathname(): string { return "/" }
   getSearch(): string { return "" }
-  reload(): void { /* no-op */ }
+  reload(): void { }
   getUserAgent(): string { return "FakeBrowser/1.0" }
   isSecureContext(): boolean { return true }
   getInnerWidth(): number { return 1024 }
   getInnerHeight(): number { return 768 }
-  setBodyStyle(_property: string, _value: string): void { /* no-op */ }
+  setBodyStyle(_property: string, _value: string): void { }
   getBodyStyle(_property: string): string { return "" }
 
   setHref(href: string): void {
@@ -158,7 +146,7 @@ class FakeDomPort implements DomPort {
   }
 
   addServiceWorkerMessageListener(_handler: (event: MessageEvent) => void): () => void {
-    return () => { /* no-op */ }
+    return () => { }
   }
 
   getActiveElement(): Element | null { return null }
@@ -174,7 +162,7 @@ class FakeDomPort implements DomPort {
   }
 
   addWindowCustomListener(_type: string, _handler: () => void): () => void {
-    return () => { /* no-op */ }
+    return () => { }
   }
 
   getHostname(): string { return "localhost" }
@@ -189,30 +177,30 @@ class FakeDomPort implements DomPort {
     return { pushManager: { subscribe: async () => { throw new Error("not used in socket tests") }, getSubscription: async () => null } }
   }
 
-  upsertHeadMeta(_name: string, _content: string): void { /* no-op */ }
+  upsertHeadMeta(_name: string, _content: string): void { }
   getComputedBackgroundColor(): string { return "" }
-  setDocumentElementColorScheme(_scheme: "light" | "dark"): void { /* no-op */ }
-  setDocumentElementStyleProperty(_property: string, _value: string): void { /* no-op */ }
-  toggleDocumentElementClass(_className: string, _force: boolean): void { /* no-op */ }
+  setDocumentElementColorScheme(_scheme: "light" | "dark"): void { }
+  setDocumentElementStyleProperty(_property: string, _value: string): void { }
+  toggleDocumentElementClass(_className: string, _force: boolean): void { }
   matchesMediaQuery(_query: string): boolean { return false }
   addMediaQueryListener(_query: string, _handler: (matches: boolean) => void): () => void {
-    return () => { /* no-op */ }
+    return () => { }
   }
 
   isWebShareSupported(): boolean { return false }
   webShare(_data: { title?: string; url?: string }): Promise<void> { return Promise.resolve() }
   getBaseURI(): string { return "http://localhost/" }
-  triggerDownload(_url: string, _filename: string): void { /* no-op */ }
+  triggerDownload(_url: string, _filename: string): void { }
   getCssVar(_name: string, fallback: string): string { return fallback }
   getComputedStyle(_element: Element): ComputedStyleLike { return { paddingLeft: "", paddingRight: "", paddingTop: "", paddingBottom: "" } }
   getOrigin(): string { return "http://localhost" }
-  openWindow(_url: string, _target: string, _features: string): void { /* no-op */ }
-  dispatchContextMenuEvent(_target: EventTarget, _clientX: number, _clientY: number): void { /* no-op */ }
+  openWindow(_url: string, _target: string, _features: string): void { }
+  dispatchContextMenuEvent(_target: EventTarget, _clientX: number, _clientY: number): void { }
   isTouchDevice(): boolean { return false }
   isIOSStandalone(): boolean { return false }
   getBodyElement(): Element { return document.body }
   confirmDialog(_message: string): boolean { return true }
-  dispatchCustomWindowEvent(_type: string): void { /* no-op */ }
+  dispatchCustomWindowEvent(_type: string): void { }
   createElement<K extends keyof HTMLElementTagNameMap>(tagName: K): HTMLElementTagNameMap[K] {
     return document.createElement(tagName)
   }
@@ -268,9 +256,6 @@ class FakeDomPort implements DomPort {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Fake StoragePort
-// ---------------------------------------------------------------------------
 
 function makeFakeStoragePort(): StoragePort {
   const store = new Map<string, string>()
@@ -282,9 +267,6 @@ function makeFakeStoragePort(): StoragePort {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Test helpers
-// ---------------------------------------------------------------------------
 
 function makePorts() {
   const dom = new FakeDomPort()
@@ -295,9 +277,6 @@ function makePorts() {
   return { dom, timer, webSocket, localStorage, sessionStorage }
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 describe("KannaSocket", () => {
   beforeEach(() => {

@@ -8,17 +8,6 @@ interface Props {
   message: ProcessedCronCommandErrorMessage
 }
 
-/**
- * A `/cron` line that failed hard validation. Shows the line as typed, the
- * precise error (which part, why) and — when the fix was unambiguous — a
- * complete ready-to-send corrected command with a copy affordance. Nothing
- * armed.
- *
- * The typed line matters here more than it looks: `/cron` starts no turn, so
- * no `user_prompt` bubble records it, and this card is the only place it ever
- * appears. When there is no suggestion to copy, the model is separately asked
- * to repair the line (see server/cron/repair.ts) and its reply follows below.
- */
 export function CronCommandErrorMessage({ message }: Props) {
   return (
     <CopyStateStore.Provider init={undefined}>

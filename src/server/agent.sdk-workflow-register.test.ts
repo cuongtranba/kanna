@@ -10,7 +10,6 @@ import { computeWorkflowsDir } from "./claude-pty/jsonl-path.adapter"
 import { AsyncEventQueue } from "./test-helpers/async-event-queue"
 import { waitFor } from "./test-helpers/wait-for"
 
-// Minimal fake store — pattern mirrors agent.oauth-rotation.test.ts.
 function createFakeStore() {
   const chat = {
     id: "chat-sdk-wf-1",
@@ -132,7 +131,6 @@ function createFakeStore() {
   }
 }
 
-/** Minimal fake WorkflowRegistry that records register/unregister calls. */
 function createFakeWorkflowRegistry(): WorkflowRegistry & {
   registerCalls: Array<{ chatId: string; dir: string }>
   unregisterCalls: string[]
@@ -168,9 +166,6 @@ function createFakeWorkflowRegistry(): WorkflowRegistry & {
 
 const CHAT_ID = "chat-sdk-wf-1"
 const SESSION_UUID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
-// Use /tmp which is guaranteed to exist; realpathSync resolves it.
-// On macOS /tmp → /private/tmp, so we use the resolved real path as the
-// project localPath so it matches what computeWorkflowsDir will produce.
 const LOCAL_PATH = realpathSync("/tmp")
 
 describe("AgentCoordinator — SDK workflow dir registration", () => {
@@ -178,7 +173,6 @@ describe("AgentCoordinator — SDK workflow dir registration", () => {
 
   beforeEach(() => {
     prevDriver = process.env.KANNA_CLAUDE_DRIVER
-    // Ensure we are explicitly in SDK mode (default, but make it explicit).
     delete process.env.KANNA_CLAUDE_DRIVER
   })
 
@@ -193,7 +187,6 @@ describe("AgentCoordinator — SDK workflow dir registration", () => {
       const store = createFakeStore()
       const workflowRegistry = createFakeWorkflowRegistry()
 
-      // Build an event queue: emit session_token then close so the session loop ends.
       const events = new AsyncEventQueue<HarnessEvent>()
 
       const coordinator = new AgentCoordinator({
@@ -212,13 +205,10 @@ describe("AgentCoordinator — SDK workflow dir registration", () => {
             setPermissionMode: async () => {},
             getSupportedCommands: async () => [],
             sendPrompt: async () => {
-              // Emit session_token — the call under test. The stream stays open;
-              // waitFor polls until register() is called.
               events.push({ type: "session_token", sessionToken: SESSION_UUID })
             },
           }
         },
-        // Disable sweep timer in tests.
         claudeSessionLifecycle: { sweepIntervalMs: 0 },
       })
 
@@ -271,7 +261,6 @@ describe("AgentCoordinator — SDK workflow dir registration", () => {
           setPermissionMode: async () => {},
           getSupportedCommands: async () => [],
           sendPrompt: async () => {
-            // Emit session_token twice to verify the once-flag prevents double-register.
             events.push({ type: "session_token", sessionToken: SESSION_UUID })
             events.push({ type: "session_token", sessionToken: SESSION_UUID })
           },
@@ -293,7 +282,6 @@ describe("AgentCoordinator — SDK workflow dir registration", () => {
         "workflow registry register() called at least once",
       )
 
-      // Allow any stray second call to arrive.
       await new Promise((r) => setTimeout(r, 50))
 
       expect(workflowRegistry.registerCalls).toHaveLength(1)
@@ -314,9 +302,6 @@ describe("AgentCoordinator — SDK workflow dir registration", () => {
         store: store as never,
         onStateChange: () => {},
         workflowRegistry,
-        // Under PTY driver preference the coordinator calls startClaudeSessionPTYFn,
-        // not startClaudeSession. We stub both: startClaudeSession must not be
-        // called; startClaudeSessionPTY provides the session.
         startClaudeSession: async () => {
           throw new Error("SDK driver must not be used under KANNA_CLAUDE_DRIVER=pty")
         },
@@ -331,8 +316,6 @@ describe("AgentCoordinator — SDK workflow dir registration", () => {
           setPermissionMode: async () => {},
           getSupportedCommands: async () => [],
           sendPrompt: async () => {
-            // Under PTY the session_token would arrive via the JSONL parser;
-            // simulate it the same way to confirm the guard blocks registration.
             events.push({ type: "session_token", sessionToken: SESSION_UUID })
           },
         }),
@@ -347,10 +330,8 @@ describe("AgentCoordinator — SDK workflow dir registration", () => {
         model: "claude-sonnet-4-5",
       })
 
-      // Give the async session loop time to process the session_token event.
       await new Promise((r) => setTimeout(r, 200))
 
-      // The PTY guard must prevent SDK-side registration.
       expect(workflowRegistry.registerCalls).toHaveLength(0)
     },
     10_000,

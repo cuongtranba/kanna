@@ -1,12 +1,4 @@
-/**
- * Tests for the extracted spawnClaudeTurn function (claude-session-spawner.ts).
- * Covers session creation, reuse, eviction, OAuth pool handling, and driver selection
- * without touching AgentCoordinator internals.
- */
 
-// NOTE: do NOT mock.module("../shared/log") here — Bun's mock.module mutates
-// the global registry for the whole test run, turning shared/log into noops
-// for every later test file (analytics.test.ts asserts real log output).
 
 import { describe, test, expect } from "bun:test"
 import { spawnClaudeTurn, type SpawnClaudeTurnArgs, type SpawnClaudeTurnDeps } from "./claude-session-spawner"
@@ -17,9 +9,6 @@ import type { ActiveTurn } from "./claude-session-state"
 import type { ClaudeSessionHandle } from "./harness-types"
 import type { LlmProviderSnapshot } from "../shared/types"
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function makeFakeHandle(overrides: Partial<ClaudeSessionHandle> = {}): ClaudeSessionHandle {
   return {
@@ -32,13 +21,11 @@ function makeFakeHandle(overrides: Partial<ClaudeSessionHandle> = {}): ClaudeSes
     setModel: async () => {},
     setPermissionMode: async () => {},
     getSupportedCommands: async () => [],
-    // getAccountInfo is optional — omit to keep the fake minimal
     pushChannelPrompt: undefined,
     ...overrides,
   }
 }
 
-/** A valid LlmProviderSnapshot for tests that exercise the OpenRouter path. */
 function makeOpenRouterProvider(apiKey = "or-key"): LlmProviderSnapshot {
   return {
     provider: "openrouter",
@@ -127,8 +114,6 @@ function makeDeps(overrides: Partial<SpawnClaudeTurnDeps> = {}): SpawnClaudeTurn
     isLoopArmed: () => null,
     closeClaudeSession: () => {},
     enforceClaudeSessionBudget: () => {},
-    // readLlmProvider is only called in the OpenRouter path — default throws to
-    // surface accidental calls; override per-test when exercising that path.
     readLlmProvider: async () => { throw new Error("readLlmProvider called unexpectedly") },
     buildPoolUnavailableMessage: () => "pool unavailable",
     listOpenRouterModelsFn: null,
@@ -147,9 +132,6 @@ function makeDeps(overrides: Partial<SpawnClaudeTurnDeps> = {}): SpawnClaudeTurn
   }
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 describe("spawnClaudeTurn", () => {
   describe("fresh session spawn", () => {

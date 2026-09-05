@@ -15,7 +15,6 @@ interface Harness {
   container: HTMLDivElement
   commands: ClientCommand[]
   errors: string[]
-  /** Mutable so the harness can be read after the click that increments it. */
   changes: { count: number }
   unmount: () => void
 }
@@ -82,7 +81,6 @@ describe("CardDependencies", () => {
     ])
     expect(harness.container.textContent).toContain("Blocked by")
     expect(harness.container.textContent).toContain("Ship the API schema")
-    // Pair colour with a label: the state is readable without seeing the mark.
     expect(harness.container.textContent).toContain("Not done")
     expect(harness.container.textContent).toContain("Done")
     harness.unmount()
@@ -100,7 +98,6 @@ describe("CardDependencies", () => {
     harness.unmount()
   })
 
-  /** The server refuses a cycle by naming the cards; the drawer shows that verbatim. */
   test("a refused write surfaces the server's own sentence", async () => {
     const harness = await mount([{ cardId: "card-2", title: "Ship the API schema", cleared: false }], {
       reject: 'that would make the work circular: "A" → "B" → "A"',

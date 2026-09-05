@@ -41,7 +41,6 @@ async function walkDir(root: string, results: string[]): Promise<void> {
     const full = path.join(root, entry.name)
     if (entry.isDirectory()) {
       if (SKIP_DIRS.has(entry.name)) continue
-      // Symlink guard: skip symlinked directories to prevent traversal loops
       try {
         const st = await lstat(full)
         if (st.isSymbolicLink()) continue

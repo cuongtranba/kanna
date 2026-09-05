@@ -71,13 +71,6 @@ describe("collectPendingQuestionRuns", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// selectPendingMainQuestion
-//
-// The MAIN agent's question is not "naturally last" the way the 2026-06-18
-// subagent ADR assumed: Claude-Code background tasks stream 100+ entries into
-// the same transcript below a parked question, burying it off-screen.
-// ---------------------------------------------------------------------------
 
 type AnyMessage = Parameters<typeof selectPendingMainQuestion>[0][number]
 

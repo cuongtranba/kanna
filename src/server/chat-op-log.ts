@@ -1,9 +1,3 @@
-/**
- * Per-chat monotonic op-log ring buffer backing the `chat.ops` delta
- * broadcast. Memory-only: durability stays with the transcript JSONL +
- * snapshot machinery; a ring miss means the subscriber falls back to a
- * full snapshot (the always-safe resync path).
- */
 import type { ChatOp } from "../shared/chat-ops"
 
 interface ChatOpLogState {
@@ -42,11 +36,6 @@ export class ChatOpLog {
     return this.byChat.get(chatId)?.seq ?? 0
   }
 
-  /**
-   * Ops after `afterSeq`, or null when the ring no longer covers that point
-   * (caller must resync via full snapshot). An up-to-date subscriber gets an
-   * empty batch with `toSeq === afterSeq`.
-   */
   since(chatId: string, afterSeq: number): ChatOpBatch | null {
     const state = this.byChat.get(chatId)
     const seq = state?.seq ?? 0

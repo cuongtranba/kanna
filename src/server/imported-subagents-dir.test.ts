@@ -2,11 +2,6 @@ import { describe, expect, test } from "bun:test"
 import { deriveImportedSubagentsDir } from "./imported-subagents-dir"
 import { encodeCwd } from "./claude-pty/jsonl-path.adapter"
 
-// Uses process.cwd() (guaranteed to exist on any runner) rather than a
-// hardcoded absolute path — encodeCwd() realpath()s the cwd, so a path that
-// doesn't exist on the machine running the test throws ENOENT. Derive the
-// expected encoded segment via encodeCwd() itself so this never diverges
-// from the real implementation over symlink resolution differences.
 const REAL_CWD = process.cwd()
 const encodedCwd = encodeCwd(REAL_CWD)
 

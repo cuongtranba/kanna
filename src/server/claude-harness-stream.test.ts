@@ -72,7 +72,6 @@ describe("createClaudeHarnessStream", () => {
     expect(rateLimits).toHaveLength(1)
     const ev = rateLimits[0]
     expect(ev.type).toBe("rate_limit")
-    // SDK emits resetsAt as epoch seconds; limit-detector converts to ms
     expect(ev.rateLimit?.resetAt).toBe(resetAt * 1000)
   })
 
@@ -147,7 +146,6 @@ describe("createClaudeHarnessStream", () => {
     )
     expect(apiErrorEntries).toHaveLength(1)
     expect(resultEntries).toHaveLength(1)
-    // Result body is scrubbed to "" to avoid duplicate display
     expect(resultEntries[0].result).toBe("")
   })
 
@@ -235,7 +233,6 @@ describe("createClaudeHarnessStream", () => {
     const cwUpdated = events.filter(
       (e) => e.type === "transcript" && e.entry?.kind === "context_window_updated",
     )
-    // Only one context_window_updated per unique usage id
     expect(cwUpdated).toHaveLength(1)
   })
 
@@ -264,10 +261,8 @@ describe("createClaudeHarnessStream", () => {
     const cwUpdated = events.flatMap((e) =>
       e.type === "transcript" && e.entry?.kind === "context_window_updated" ? [e.entry] : [],
     )
-    // The configuredContextWindow (1M) should prevail over modelUsage (200K)
     const lastSnapshot = cwUpdated[cwUpdated.length - 1]
     expect(lastSnapshot).toBeDefined()
-    // maxTokens in the snapshot should reflect the 1M floor, not the 200K from modelUsage
     expect(lastSnapshot.usage.maxTokens).toBeGreaterThanOrEqual(1_000_000)
   })
 })

@@ -34,12 +34,6 @@ import type { ToolCallbackService } from "../tool-callback"
 import type { TunnelGateway } from "../cloudflare-tunnel/gateway"
 import type { ChatPermissionPolicy } from "../../shared/permission-policy"
 
-// Fallback list returned by getSupportedCommands() if claude's system_init
-// JSONL message hasn't been observed yet (cold start before first spawn).
-// Names follow claude's own format — no leading "/" — so the chat input
-// renders `/clear` (not `//clear`) after `applyCommandToInput` prefixes the
-// slash. The driver overwrites this with the full live list as soon as
-// the spawned claude subprocess emits its system_init entry.
 const STATIC_SUPPORTED_COMMANDS: SlashCommand[] = [
   { name: "model", description: "Switch model", argumentHint: "model name" },
   { name: "exit", description: "Exit the session", argumentHint: "" },
@@ -47,12 +41,6 @@ const STATIC_SUPPORTED_COMMANDS: SlashCommand[] = [
   { name: "help", description: "List commands", argumentHint: "" },
 ]
 
-// Framing folded into the subagent system prompt when its task is delivered
-// via the kanna channel. Without it the model treats <channel> messages as
-// low-trust interruptions and refuses (proven in the Phase-0 spike).
-// One-shot runs use single-turn framing; keep-alive runs use multi-turn framing
-// so the model knows to expect and accept repeated channel messages over the
-// session lifetime rather than treating turn 2+ as suspicious interrupts.
 const CHANNEL_PROMPT_FRAMING_BASE =
   'Your task for this run is delivered via the kanna channel as a <channel source="kanna"> message. ' +
   "Treat that channel message as your authoritative instructions from the orchestrator and act on it " +
@@ -68,16 +56,8 @@ export function buildChannelPromptFraming(keepAlive: boolean): string {
   return keepAlive ? CHANNEL_PROMPT_FRAMING_MULTITURN : CHANNEL_PROMPT_FRAMING_BASE
 }
 
-// Max wait for the claude MCP client to finish initialize before we push the
-// channel prompt. On timeout the spawn fails fast (no paste fallback).
-// Env-overridable so tests don't wait the full default.
 const CHANNEL_READY_TIMEOUT_DEFAULT_MS = 15_000
 
-/**
- * After a keep-alive turn's result, the REPL needs a beat to finish rendering
- * the assistant block and return to the `❯` idle prompt before the next
- * channel push enqueues. 300ms empirically clears this on tested models.
- */
 const CHANNEL_REPL_IDLE_BEAT_MS = 300
 
 export interface StartClaudeSessionPtyArgs {
@@ -92,135 +72,48 @@ export interface StartClaudeSessionPtyArgs {
   sessionToken: string | null
   additionalDirectories?: string[]
   onToolRequest: (request: HarnessToolRequest) => Promise<JsonValue>
-  /**
-   * Append text for `--append-system-prompt`. Defaults to the static
-   * {@link KANNA_SYSTEM_PROMPT_APPEND} blurb for back-compat with older
-   * callers; production callers in `agent.ts` pass the dynamic value
-   * from `buildKannaSystemPromptAppend` so the subagent roster is
-   * embedded.
-   */
   systemPromptAppend?: string
   systemPromptOverride?: string
   initialPrompt?: string
   homeDir?: string
   env?: NodeJS.ProcessEnv
-  /** Routes AskUserQuestion/ExitPlanMode + built-in shims through durable approval when KANNA_MCP_TOOL_CALLBACKS=1. */
   toolCallback?: ToolCallbackService
-  /** Tunnel gateway for kanna-mcp expose_port. */
   tunnelGateway?: TunnelGateway | null
-  /** Per-chat permission policy for kanna-mcp built-in shims. */
   chatPolicy?: ChatPermissionPolicy
-  /** Orchestrator for delegate_subagent. Omit to hide the tool from the model. */
   subagentOrchestrator?: SubagentOrchestrator
-  /** Per-spawn delegation context (depth / ancestor chain / parentUserMessageId resolver). */
   delegationContext?: KannaMcpDelegationContext
-  /** Backs the `setup_loop` MCP tool. Omit to hide the tool from the model. */
   setupLoop?: (input: LoopSetupInput) => Promise<SetupLoopHandlerResult>
-  /** Backs the `arm_cron` MCP tool; main chats only. */
   armCron?: (command: string) => Promise<{ jobId: string }>
-  /** Backs the `update_cron` MCP tool; main chats only. */
   updateCron?: (jobId: string, patch: import("../../shared/cron/types").CronJobPatch) => Promise<void>
-  /** Backs the `stop_loop` MCP tool. Omit to hide the tool from the model. */
   stopLoop?: () => Promise<void>
-  /** Backs the `resume_loop` MCP tool. Main chats only (depth 0). */
   resumeLoop?: () => Promise<import("../loop-wake-recovery").ResumeLoopResult>
-  /** Evaluated at spawn: when true, add LOOP_BLOCKED tools to --disallowedTools. */
   isLoopArmed?: () => boolean
-  /**
-   * Live armed-loop slice for the kanna-mcp tools (tracking-file workdir,
-   * oracle command, tracking file). Unlike `isLoopArmed` this is NOT gated to
-   * main-agent spawns — a loop's worker subagent needs the same workdir, or it
-   * writes its progress into the wrong checkout.
-   */
   getArmedLoop?: (chatId: string) => ArmedLoopInfo | null
   boardRegistry?: BoardRegistry
-  /** Enabled user-defined MCP servers, written into mcp-config.json. */
   customMcpServers?: readonly McpServerConfig[]
-  /** Pre-resolved oauth bearer tokens keyed by server id. */
   oauthBearers?: ReadonlyMap<string, string>
-  /** Test-injection seams: each replaces the real implementation with a fake. */
   startKannaMcpHttpServer?: typeof startKannaMcpHttpServer
   smokeTestGate?: SmokeTestGate
   spawnPtyProcess?: (args: SpawnPtyProcessArgs) => Promise<PtyProcess>
   startTranscriptStreamFn?: typeof startTranscriptStream
-  /**
-   * One-shot semantics: after the first `result` entry, close stdin so
-   * the subprocess exits. Mirrors the SDK driver's prompt-queue close
-   * for single-turn subagent runs.
-   */
   oneShot?: boolean
-  /**
-   * Keep-alive multi-turn. Only meaningful with `oneShot && channel delivery`.
-   * When true, the first `result` does NOT trigger `oneShotClose()` — the REPL
-   * stays open so further turns can be delivered via `pushChannelPrompt`.
-   */
   keepAlive?: boolean
-  /**
-   * Maximum number of agentic turns. PTY claude has no native enforcement;
-   * the orchestrator's host-side tool-call-count backstop reads this via
-   * ProviderRunStart.maxTurns. Forwarded here so the wiring can pass it
-   * through without losing it on the PTY branch.
-   */
   maxTurns?: number
-  /** Label of the OAuth-pool token. Surfaces in AccountInfo since the CLI doesn't emit account info in stream-json. */
   oauthLabel?: string
-  /** Masked OAuth-pool token (e.g. `sk-ant-oat01...XXXX`). Computed by AgentCoordinator; never the raw token. */
   oauthKeyMasked?: string
-  /**
-   * Optional on-disk registry of claude PTY children so a non-graceful
-   * server crash can reap orphan processes on the next boot. When set,
-   * the driver registers the spawn's pid + runtimeDir before sending the
-   * first prompt and unregisters during cleanup.
-   */
   ptyRegistry?: ClaudePtyRegistry
-  /**
-   * Optional in-memory live-status registry surfaced to the client UI.
-   * Driver upserts phase transitions; ws-router fans deltas out to
-   * subscribed sockets.
-   */
   ptyInstanceRegistry?: PtyInstanceRegistry
-  /**
-   * Optional registry for workflow runs. When set, the driver registers
-   * the chat's workflows dir once the transcript file path is known and
-   * unregisters on cleanup.
-   */
   workflowRegistry?: import("../workflow-registry").WorkflowRegistry
-  /**
-   * Optional registry for native Agent subagent transcripts. When set, the
-   * driver registers the chat's `…/subagents` dir (sibling of `…/workflows`)
-   * once the transcript file path is known, and unregisters on cleanup.
-   */
   subagentTranscriptRegistry?: import("../subagent-transcript-registry").SubagentTranscriptRegistry
-  /** Optional sampler override (tests inject deterministic values). */
   sampleProcessTreeUsage?: (pid: number) => Promise<ProcessTreeSample | null>
-  /** Optional poll-interval override (ms). Defaults to 2000. */
   memorySamplerIntervalMs?: number
-  /**
-   * When set, this spawn is a folder-restricted subagent run. Drives:
-   *   1. extends PTY_DISALLOWED_NATIVE_TOOLS with Read/Edit/Write/Bash/Glob/Grep/WebFetch
-   *      so the model cannot reach the FS via the native built-ins
-   *   2. emits `--tools "mcp__kanna__*"` allowlist so only kanna-mcp shims are usable
-   *   3. registers a per-run path-deny scope in the kanna-mcp host keyed on the
-   *      delegationContext.parentRunId (see toolCallback / permission-gate)
-   */
   restrictedAllowedPaths?: string[]
 }
 
-/**
- * Native FS tools disallowed when a subagent is folder-restricted. Layered ON TOP
- * of {@link PTY_DISALLOWED_NATIVE_TOOLS} (which is always disallowed). Mirrors
- * the SDK driver's `restrictedDisallowedTools` set.
- */
 export const RESTRICTED_FS_NATIVE_TOOLS = [
   "Read", "Edit", "Write", "Bash", "Glob", "Grep", "WebFetch",
 ] as const
 
-/**
- * Derive an AccountInfo from the picked OAuth-pool token. The claude CLI
- * never emits account info in stream-json, so the user-configured token
- * label and the coordinator-computed masked key are the only account
- * signals PTY has.
- */
 export function deriveAccountInfoFromOauth(args: { label?: string; oauthKeyMasked?: string }): AccountInfo | null {
   const hasLabel = Boolean(args.label && args.label.length > 0)
   const hasMasked = Boolean(args.oauthKeyMasked && args.oauthKeyMasked.length > 0)
@@ -231,7 +124,6 @@ export function deriveAccountInfoFromOauth(args: { label?: string; oauthKeyMaske
   return info
 }
 
-/** VT100 Shift+Tab sequence sent to exit plan mode (one press cycles back to acceptEdits). */
 export const SHIFT_TAB_KEY = "\x1b[Z"
 
 export const PLAN_MODE_EXIT_UNSUPPORTED =
@@ -239,30 +131,9 @@ export const PLAN_MODE_EXIT_UNSUPPORTED =
   + "(plan mode may have been toggled externally via Shift+Tab). "
   + "Restart the session to return to acceptEdits."
 
-/** Backward-compat re-exports — callers that import from driver.ts continue to work. */
 export const PTY_STDERR_RING_BYTES = OUTPUT_RING_DEFAULT_BYTES
 export { OutputRing }
 
-/**
- * Native CLI built-ins removed from the model's context under PTY (issue
- * #215). The SDK driver intercepts these via the `canUseTool` hook
- * (`buildCanUseTool` in agent.ts); PTY has no such hook, so the CLI
- * auto-rejects them with `is_error: "Answer questions?"` and the model
- * mis-reads it as a user cancel. Disallowing the natives forces the model
- * onto the `mcp__kanna__ask_user_question` / `mcp__kanna__exit_plan_mode`
- * shims, which the PTY driver always registers (forceInteractiveToolCallbacks)
- * and which route through the durable approval protocol to the UI.
- * `EnterPlanMode` is intentionally excluded — it has no user round-trip and
- * the SDK hook never intercepts it, so leaving it native preserves parity.
- *
- * `ScheduleWakeup` is disallowed with NO Kanna replacement — the native CLI
- * wake is a dead-letter under Kanna's spawn model (the fire lands as an
- * isMeta:true transcript line that `jsonl-to-event.ts` drops, and the in-memory
- * cron dies on restart). Loop orchestration uses notification-driven wakes via
- * `delegate_subagent({run_in_background: true})` + `subagent_background`
- * auto-continue delivery, with per-iteration /clear on the main-agent Claude
- * session. See adr-20260711-notification-driven-loop-orchestration.
- */
 export const PTY_DISALLOWED_NATIVE_TOOLS = ["AskUserQuestion", "ExitPlanMode", "ScheduleWakeup"] as const
 
 export interface BuildPtyCliArgsInput {
@@ -275,48 +146,14 @@ export interface BuildPtyCliArgsInput {
   additionalDirectories?: string[]
   systemPromptOverride?: string
   systemPromptAppend?: string
-  /** Absolute path to kanna's own mcp-config JSON. Merged with user's MCP configs (no --strict-mcp-config). */
   mcpConfigPath?: string
-  /** When set, registers this MCP server as a dev channel so the host can
-   *  push prompts via notifications/claude/channel (subagent one-shot only). */
   channelServerName?: string
-  /** When true, layer FS restriction: disallow native FS tools + allowlist `mcp__kanna__*`. */
   restricted?: boolean
-  /**
-   * When true, an autonomous loop is armed on this chat: disallow the
-   * direct-edit + native Agent tools (LOOP_BLOCKED_NATIVE_TOOLS mirror) so the
-   * orchestrator can only delegate. PTY has no canUseTool hook, so this is the
-   * host enforcement path (parity with the SDK driver's canUseTool block).
-   */
   loopArmed?: boolean
 }
 
-/**
- * Native tools disallowed while a loop is armed (PTY mirror of the SDK
- * `LOOP_BLOCKED_NATIVE_TOOLS`). Kept as a literal here to avoid a server→pty
- * import edge; the driver test pins parity with the SDK list.
- */
 export const PTY_LOOP_BLOCKED_NATIVE_TOOLS = ["Edit", "Write", "MultiEdit", "NotebookEdit", "Task"] as const
 
-/**
- * Build claude CLI args for TUI driver mode.
- *
- * Kanna spawns the claude CLI under a real PTY and watches the on-disk
- * transcript JSONL file as the event source. The CLI runs interactively
- * with `--dangerously-skip-permissions` so tool calls are auto-approved.
- *
- *   • No `--print` / `--output-format` / `--input-format` / `--verbose` —
- *     TUI mode does NOT use the stream-json headless transport.
- *   • No `--session-id` for new sessions — TUI claude generates its own UUID
- *     on first prompt; kanna identifies the session via the transcript file.
- *   • `--strict-mcp-config` — CLI ignores user MCP config; kanna provides
- *     its own via `--mcp-config` so the MCP surface is fully controlled.
- *   • `--setting-sources user,project,local` — user's installed skills,
- *     slash commands, plugins, agents, and project / local settings layers
- *     all load normally.
- *   • `--dangerously-skip-permissions` — auto-run tools because the CLI's
- *     own interactive permission prompt is not routed through kanna's UI.
- */
 export function buildPtyCliArgs(args: BuildPtyCliArgsInput): string[] {
   const cliArgs: string[] = [
     "--model", args.model,
@@ -324,15 +161,6 @@ export function buildPtyCliArgs(args: BuildPtyCliArgsInput): string[] {
     "--permission-mode", args.planMode ? "plan" : "acceptEdits",
     "--dangerously-skip-permissions",
   ]
-  // TUI mode session handling:
-  //   • New session (no sessionToken)                  → no --session-id (TUI ignores it; claude generates its own UUID)
-  //   • Resume existing session (sessionToken set)     → --resume <token>
-  //   • Fork existing session (sessionToken + fork)    → --session-id <newUuid> --resume <token> --fork-session
-  //
-  // Interactive TUI claude ignores `--session-id` for new sessions and
-  // always generates its own UUID. Watcher uses an mtime filter on the
-  // project dir instead — only JSONLs created at or after spawn start are
-  // candidates, so stale JSONLs from prior sessions cannot win the race.
   if (args.sessionToken && !args.forkSession) {
     cliArgs.push("--resume", args.sessionToken)
   } else if (args.sessionToken && args.forkSession) {
@@ -357,14 +185,8 @@ export function buildPtyCliArgs(args: BuildPtyCliArgsInput): string[] {
     )
   }
   if (args.restricted) {
-    // Folder-restricted subagent: allowlist kanna shims only so the model
-    // cannot reach the FS via native built-ins. Push BEFORE --disallowedTools
-    // so the disallow flag's variadic tail does not swallow the allowlist.
     cliArgs.push("--tools", "mcp__kanna__*")
   }
-  // `--disallowedTools` is variadic in the claude CLI (space-separated tool
-  // strings as separate argv — code.claude.com/docs/en/cli-reference). Push
-  // it LAST so it cannot greedily swallow a subsequent flag value.
   const disallow: string[] = args.restricted
     ? [...PTY_DISALLOWED_NATIVE_TOOLS, ...RESTRICTED_FS_NATIVE_TOOLS]
     : [...PTY_DISALLOWED_NATIVE_TOOLS]
@@ -377,17 +199,6 @@ export function buildPtyCliArgs(args: BuildPtyCliArgsInput): string[] {
   return cliArgs
 }
 
-/**
- * Resolve the UUID the spawn runs under.
- *   - new session (no token)     → fresh uuid (claude generates its own anyway)
- *   - resume (token, no fork)     → reuse the token so the transcript path is known up-front
- *   - fork (token + forkSession)  → MUST be a FRESH uuid, distinct from the source token.
- *
- * Forking with `sessionId === sessionToken` emits
- * `--session-id <tok> --resume <tok> --fork-session`, collides the new fork id
- * with the source session, and claude refuses the fork — so PTY-created
- * conversations could not be forked. Always mint a new id for forks.
- */
 export function resolveSpawnSessionId(
   args: { sessionToken: string | null; forkSession: boolean },
   newId: () => string = randomUUID,
@@ -464,8 +275,6 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     throw new Error(`PTY smoke-test refused spawn: ${smoke.reason}`)
   }
 
-  // A stack spawn gets one --add-dir per additional root, so it must also read
-  // those roots' memory files — see `withAdditionalDirectoryMemory`.
   const spawnEnv = withAdditionalDirectoryMemory(
     buildPtyEnv({
       baseEnv: env,
@@ -503,11 +312,6 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
         stopLoop: args.stopLoop,
         getArmedLoop: args.getArmedLoop,
         boardRegistry: args.boardRegistry,
-        // PTY has no canUseTool hook — the durable approval protocol is the
-        // only host path for AskUserQuestion/ExitPlanMode. Force the shims
-        // on regardless of KANNA_MCP_TOOL_CALLBACKS (issue #215). Paired
-        // with --disallowedTools AskUserQuestion ExitPlanMode above so the
-        // model uses the shim instead of the auto-rejected native built-in.
         forceInteractiveToolCallbacks: true,
         restrictedAllowedPaths: args.restrictedAllowedPaths,
       },
@@ -518,8 +322,8 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
       { encoding: "utf8", mode: 0o600 },
     )
   } catch (err) {
-    try { if (mcpHandle) await mcpHandle.close() } catch { /* swallow */ }
-    try { await removeRuntimeDir(runtimeDir) } catch { /* swallow */ }
+    try { if (mcpHandle) await mcpHandle.close() } catch { }
+    try { await removeRuntimeDir(runtimeDir) } catch { }
     throw err
   }
 
@@ -551,9 +355,6 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
 
   let closed = false
   let cleanedUp = false
-  // This handle's own OS pid, captured once the child spawns. Teardown is
-  // scoped to it so a stale re-spawn handle (same chatId + sessionId, older
-  // pid) cannot clobber the live registry entry on its delayed exit.
   let ownPid: number | null = null
   let workflowRegistrationCancelled = false
   let cachedAccountInfo: AccountInfo | null = deriveAccountInfoFromOauth({ label: args.oauthLabel, oauthKeyMasked: args.oauthKeyMasked })
@@ -569,9 +370,6 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     if (cleanedUp) return
     cleanedUp = true
     stopMemorySampler()
-    // Guard against the re-spawn clobber: only flip the chat to "exited" if
-    // its live registry entry still belongs to THIS handle's pid. A newer
-    // spawn for the same chatId already overwrote pid → leave it alone.
     if (ownPid !== null) {
       args.ptyInstanceRegistry?.markExitedIfCurrent(args.chatId, ownPid, {
         phase: "exited",
@@ -579,27 +377,14 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
         lastEventAt: Date.now(),
       })
     }
-    // PTY teardown no longer cancels pending tool-callback records. close()
-    // also fires on transparent rotation / idle sweep where the model's
-    // turn is still live; denying mid-prompt asks was the source of the
-    // "ask_user_question dropped" UX bug. Pendings now resolve only via
-    // explicit chat.cancel / chat.delete (cancelAllForChat in ws-router)
-    // or recoverOnStartup fail-close on the next server boot.
     try { if (mcpHandle) await mcpHandle.close() } catch (err) {
-      // Logged because a swallowed mcpHandle close error means the loopback
-      // HTTP server may still be listening — a real resource leak.
       log.warn("[kanna/pty] mcpHandle.close failed (HTTP server may leak)", { chatId: args.chatId, sessionId, err })
     }
     try { await removeRuntimeDir(runtimeDir) } catch (err) {
       log.warn("[kanna/pty] runtimeDir cleanup failed", { chatId: args.chatId, runtimeDir, err })
     }
     if (args.ptyRegistry && ownPid !== null) {
-      // Unregister by THIS handle's pid (not sessionId): a live re-spawn
-      // shares the sessionId, so a sessionId-scoped unregister would delete
-      // the live process's reap entry. See pid-registry.adapter.ts.
       try { await args.ptyRegistry.unregister(ownPid) } catch (err) {
-        // A stale entry on disk only matters across server restarts — log
-        // for observability but do not fail cleanup.
         log.warn("[kanna/pty] ptyRegistry.unregister failed", { chatId: args.chatId, sessionId, pid: ownPid, err })
       }
     }
@@ -618,10 +403,6 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
       if (entry.kind === "result") {
         sawResultEntry = true
       }
-      // system_init carries the full slash-command list the spawned claude
-      // CLI knows about — including every skill, plugin command, project
-      // command, and built-in. Cache it so getSupportedCommands() returns
-      // the live set instead of the cold-start fallback.
       if (entry.kind === "system_init" && Array.isArray(entry.slashCommands)) {
         cachedSlashCommands = entry.slashCommands.filter((s) => typeof s === "string").map((name) => ({
           name,
@@ -645,7 +426,6 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
   }
 
   let oneShotClosing = false
-  // pty is declared before use; assigned in the spawn try-block below.
   let pty: PtyProcess
 
   let memorySamplerHandle: ReturnType<typeof setInterval> | null = null
@@ -708,9 +488,6 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
       lastEventAt: Date.now(),
     })
     startMemorySampler(pty.pid)
-    // Record the live PTY in the on-disk registry so a non-graceful
-    // server crash can reap this orphan on the next boot. Persistence is
-    // best-effort — failure to write must not block the spawn.
     if (args.ptyRegistry) {
       try {
         await args.ptyRegistry.register({
@@ -730,25 +507,17 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
       sessionId,
       error: err instanceof Error ? err.message : String(err),
     })
-    try { await mcpHandle.close() } catch { /* swallow */ }
-    try { await removeRuntimeDir(runtimeDir) } catch { /* swallow */ }
+    try { await mcpHandle.close() } catch { }
+    try { await removeRuntimeDir(runtimeDir) } catch { }
     throw err
   }
 
-  // Wait for TUI to render its input box, dismissing the trust dialog if
-  // present. The combined helper handles the ANSI-encoded trust dialog text
-  // and keeps polling until the real "❯ " input box appears after dismiss.
   const tuiReadyMs = Number((args.env ?? process.env).KANNA_PTY_TUI_BOOT_MS ?? 3000)
   const tuiReadyQuietRaw = (args.env ?? process.env).KANNA_PTY_TUI_READY_QUIET_MS
   const tuiReadyQuietMs = tuiReadyQuietRaw !== undefined ? Number(tuiReadyQuietRaw) : undefined
   const trustDismiss = (args.env ?? process.env).KANNA_PTY_TRUST_DISMISS ?? "enabled"
-  // Grace period (ms) between /exit and SIGTERM — allows the SessionEnd hook to
-  // complete before the process is forcibly terminated. Increase via
-  // KANNA_PTY_SESSION_END_GRACE_MS when hooks take longer than the default.
   const sessionEndGraceMs = Number((args.env ?? process.env).KANNA_PTY_SESSION_END_GRACE_MS ?? 5_000)
   if (channelDeliveryEnabled && trustDismiss !== "disabled") {
-    // Channel path: dismiss both trust dialog AND dev-channels dialog.
-    // +8 s over the base cap to absorb both dialogs + project reload.
     const readyResult = await waitForTuiReadyDismissingDialogs(pty, ring, { hardCapMs: tuiReadyMs + 8_000 })
     if (readyResult === "timeout") {
       log.warn("[kanna/pty] TUI ready marker not detected after dialogs dismiss (channel path)", { chatId: args.chatId, hardCapMs: tuiReadyMs + 8_000 })
@@ -756,7 +525,6 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
       log.info("[kanna/pty] TUI ready (channel path)", { chatId: args.chatId })
     }
   } else if (trustDismiss !== "disabled") {
-    // +5 s over the base cap to absorb trust-dialog dismiss + project reload.
     const readyResult = await waitForTuiReadyWithTrustDismiss(pty, ring, { hardCapMs: tuiReadyMs + 5_000, quietPeriodMs: tuiReadyQuietMs })
     if (readyResult === "timeout") {
       log.warn("[kanna/pty] TUI ready marker not detected after trust dismiss", { chatId: args.chatId, hardCapMs: tuiReadyMs + 5_000 })
@@ -775,14 +543,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     lastEventAt: Date.now(),
   })
 
-  // Open transcript-file event stream.
   const projectDir = computeProjectDir({ homeDir: home, cwd: args.localPath })
-  // knownFilePath: only known up-front when resuming (we know the
-  // sessionToken). For new sessions interactive TUI claude generates its
-  // own UUID and ignores `--session-id`, so the path is unknown — fall
-  // back to discovery via `findLatestTranscript` with an mtime floor at
-  // spawn-start time to filter out stale JSONLs from prior sessions in
-  // the same project dir.
   const knownFilePath = args.sessionToken && !args.forkSession
     ? computeJsonlPath({ homeDir: home, cwd: args.localPath, sessionId: args.sessionToken })
     : undefined
@@ -792,18 +553,10 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     projectDir,
     knownFilePath,
     minMtimeMs: spawnStartedAtMs,
-    // Race-free discovery via claude's per-PID session registry at
-    // `${home}/.claude/sessions/<pid>.json`. Falls back to the mtime
-    // heuristic if the registry file does not appear in time (older
-    // claude versions, broken HOME, etc).
     claudeChildPid: pty.pid,
     homeDir: home,
   })
 
-  // Once the transcript file is discovered, register the workflows dir with the
-  // workflow registry. The actual session UUID (used by Claude for the on-disk
-  // subdir) is embedded in the JSONL path — it is NOT `sessionId` (which is
-  // kanna's internal spawn id). We derive it as: basename(filePath, '.jsonl').
   if (args.workflowRegistry) {
     const registry = args.workflowRegistry
     const chatId = args.chatId
@@ -816,9 +569,6 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     })
   }
 
-  // Register the sibling `…/subagents` dir so the UI can drill into a native
-  // Agent subagent's child transcript on demand (read-only; never feeds the
-  // turn pipeline). Same sessionUUID derivation + cancel guard as workflows.
   if (args.subagentTranscriptRegistry) {
     const subRegistry = args.subagentTranscriptRegistry
     const chatId = args.chatId
@@ -835,7 +585,6 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     configuredContextWindow: parseConfiguredContextWindowFromModelId(args.model),
   })
 
-  // Pipe transcript JSONL lines through the parser into the merged event queue.
   void (async () => {
     try {
       for await (const line of transcriptStream.lines) {
@@ -918,8 +667,8 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     try { await sendExitCommand(pty) } catch (err) {
       log.warn("[kanna/pty] oneShotClose sendExitCommand failed", { chatId: args.chatId, sessionId, err })
     }
-    try { await pty.exited } catch { /* swallow */ }
-    try { transcriptStream.close() } catch { /* swallow */ }
+    try { await pty.exited } catch { }
+    try { transcriptStream.close() } catch { }
     await cleanupResources()
     log.info("[kanna/pty] oneShotClose finished", { chatId: args.chatId, sessionId })
   }
@@ -936,23 +685,17 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
           channelReadyTimer = setTimeout(() => reject(new Error("channel client not ready")), readyTimeoutMs)
         }),
       ])
-      // Race resolved via channelClientReady — cancel the pending timer so it
-      // never fires as an unhandled rejection in a later test.
       if (channelReadyTimer !== null) { clearTimeout(channelReadyTimer); channelReadyTimer = null }
-      // Settle: the channel handler registers just after the dev-channels
-      // dialog is accepted and the client reports initialized.
       await new Promise((r) => setTimeout(r, 300))
       await mcpHandle.pushChannelPrompt(args.initialPrompt)
       log.info("[kanna/pty] delivered initial prompt via channel push", { chatId: args.chatId })
     } catch (err) {
-      // FAIL FAST: do not paste. A silent paste would re-introduce the
-      // multi-line truncation bug. Surface a clear spawn failure instead.
       const message = err instanceof Error ? err.message : String(err)
       log.error("[kanna/pty] channel delivery failed; failing spawn (no paste fallback)", { chatId: args.chatId, sessionId, error: message })
-      try { transcriptStream.close() } catch { /* swallow */ }
-      try { pty.close() } catch { /* swallow */ }
-      try { await mcpHandle.close() } catch { /* swallow */ }
-      try { await removeRuntimeDir(runtimeDir) } catch { /* swallow */ }
+      try { transcriptStream.close() } catch { }
+      try { pty.close() } catch { }
+      try { await mcpHandle.close() } catch { }
+      try { await removeRuntimeDir(runtimeDir) } catch { }
       throw new Error(`PTY channel delivery failed: ${message}`, { cause: err })
     }
   } else if (args.initialPrompt) {
@@ -986,19 +729,10 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     provider: "claude",
     stream,
     interrupt: async () => {
-      try { await pty.sendInput("\x03") } catch { /* swallow */ }
+      try { await pty.sendInput("\x03") } catch { }
     },
     sendPrompt: async (content) => {
       const text = content
-      // Gate on the TUI being back at its idle "❯ " input box before pasting.
-      // After a long previous turn the REPL may still be rendering (stop-hook
-      // summary / turn_duration / context compaction); pasting then drops the
-      // keystrokes silently and the turn hangs forever with no transcript line
-      // (observed: a "Ok" follow-up never reached claude). The first-prompt
-      // path already gates this way; follow-up turns must too. The ring-quiet
-      // settle inside waitForTuiReady is the real protector — it holds the
-      // paste until output stops growing. Best-effort: on cap timeout we warn
-      // and send anyway, so this is never worse than the prior zero-gate path.
       const followupReadyMs = Number(
         (args.env ?? process.env).KANNA_PTY_FOLLOWUP_READY_MS ?? tuiReadyMs,
       )
@@ -1043,8 +777,6 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
     getAccountInfo: async () => cachedAccountInfo,
     pushChannelPrompt: (channelDeliveryEnabled && args.keepAlive)
       ? async (text: string) => {
-          // Ready promise already resolved during turn-1 delivery; settle a
-          // beat so the REPL is back at idle before the next enqueue.
           await new Promise((r) => setTimeout(r, CHANNEL_REPL_IDLE_BEAT_MS))
           await mcpHandle.pushChannelPrompt(text)
         }
@@ -1053,27 +785,20 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
       if (closed) return
       closed = true
       void (async () => {
-        // 3-stage shutdown escalation:
-        //   1. /exit (graceful REPL exit)               — sessionEndGraceMs (default 5 s)
-        //   2. SIGTERM (terminal.close + proc.kill)     — 3 s grace
-        //   3. SIGKILL (force kill, unblocks hung TUI)
-        // Each timer is cleared if pty.exited resolves before the deadline.
-        // The SessionEnd hook fires during stage 1; increase KANNA_PTY_SESSION_END_GRACE_MS
-        // when hooks take longer than the default.
-        try { await sendExitCommand(pty) } catch { /* swallow */ }
+        try { await sendExitCommand(pty) } catch { }
         const sigkillTimer: { ref: ReturnType<typeof setTimeout> | null } = { ref: null }
         const termTimer = setTimeout(() => {
-          try { pty.close() } catch { /* swallow */ }
+          try { pty.close() } catch { }
           sigkillTimer.ref = setTimeout(() => {
-            try { pty.kill("SIGKILL") } catch { /* swallow */ }
+            try { pty.kill("SIGKILL") } catch { }
           }, 3000)
         }, sessionEndGraceMs)
         try {
           await pty.exited
-        } catch { /* swallow */ }
+        } catch { }
         clearTimeout(termTimer)
         if (sigkillTimer.ref !== null) clearTimeout(sigkillTimer.ref)
-        try { transcriptStream.close() } catch { /* swallow */ }
+        try { transcriptStream.close() } catch { }
         await cleanupResources()
         while (mergedWaiters.length > 0) {
           const w = mergedWaiters.shift()

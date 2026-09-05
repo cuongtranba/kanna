@@ -83,9 +83,6 @@ export function ModelsSection({ models, handlers, dom = domAdapter }: ModelsSect
           label: initial.label,
           modelProvider: initial.provider,
           supportedEfforts: initial.supportedEfforts ?? [],
-          // Read the EFFECTIVE options, not the declared ones: an entry that
-          // inherits 1M from the built-in must open with the box already
-          // ticked, or saving would write the inheritance away.
           offersOneMillionContext: effectiveContextWindowOptions(
             initial.provider,
             initial.id,
@@ -179,7 +176,6 @@ function ModelRow({
   )
 }
 
-// ── Editor form ─────────────────────────────────────────────────────────────
 
 function ModelEditor({
   initial,
@@ -196,16 +192,12 @@ function ModelEditor({
   const patchEditorForm = useModelsSectionStore((state) => state.patchEditorForm)
   const toggleSupportedEffort = useModelsSectionStore((state) => state.toggleSupportedEffort)
   const toggleOneMillionContext = useModelsSectionStore((state) => state.toggleOneMillionContext)
-  // The guard is a TS type predicate narrowing string -> ModelProvider, so it
-  // belongs at the boundary, not in the store.
   const handleProviderChange = useCallback((value: string) => {
     if (isModelProvider(value)) patchEditorForm({ modelProvider: value })
   }, [patchEditorForm])
 
   const { id, label, modelProvider, supportedEfforts, offersOneMillionContext, submitting, error } = editorForm
 
-  // Always explicit, both ways — `[200k]` says "no 1M" where omitting the field
-  // would mean "inherit whatever the built-in offers".
   const contextWindowOptions: readonly ProviderContextWindowOption[] = offersOneMillionContext
     ? CLAUDE_CONTEXT_WINDOW_OPTIONS
     : CLAUDE_CONTEXT_WINDOW_OPTIONS.filter((option) => option.id === "200k")
@@ -343,7 +335,6 @@ function ModelEditor({
   )
 }
 
-// ── Settings page wrapper ─────────────────────────────────────────────────
 
 export function ModelsSettingsBranch(props: {
   state: Pick<KannaState, "handleWriteAppSettings">

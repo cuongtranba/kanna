@@ -30,7 +30,6 @@ describe("PreviewFileMessage", () => {
   test("renders card with file name and friendly type label", () => {
     const html = renderToStaticMarkup(<PreviewFileMessage message={buildMessage()} />)
     expect(html).toContain("Design Spec")
-    // displayName "Design Spec" has no extension — text/markdown mime classifies as Markdown
     expect(html).toContain("Markdown")
   })
 

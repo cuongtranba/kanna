@@ -2,12 +2,6 @@ import { describe, test, expect } from "bun:test"
 import type { HarnessEvent } from "./harness-types"
 import type { TranscriptEntry } from "../shared/types"
 
-// Compile-time proof: exhaustive switch must cover all variants without guards.
-// With the old interface (all-optional fields on one type), this function would
-// fail to compile because:
-//   1. ev.entry / ev.rateLimit are possibly undefined even after narrowing
-//   2. The default branch cannot narrow ev to never (it is an interface, not a union)
-// After the union change both problems disappear.
 function exhaustiveSwitch(ev: HarnessEvent): string {
   switch (ev.type) {
     case "transcript":    return `transcript:${ev.entry.kind}`

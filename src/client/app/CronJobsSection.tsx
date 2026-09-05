@@ -4,18 +4,9 @@ import { CronJobRow } from "./CronJobRow"
 
 interface Props {
   jobs: readonly CronJobSnapshot[]
-  /** The chat these jobs are armed on — every cron command is addressed to it. */
   chatId: string
 }
 
-/**
- * Live list of the chat's armed cron jobs. The transcript's `cron_armed` card
- * records the arming moment; this panel is the live surface.
- *
- * The row itself — including its controls and its socket wiring — is
- * `CronJobRow`, shared with the global `/cron` page so the two surfaces cannot
- * drift.
- */
 export function CronJobsSection({ jobs, chatId }: Props) {
   if (jobs.length === 0) return null
 

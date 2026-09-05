@@ -69,9 +69,6 @@ describe("PtyInstanceRegistry", () => {
   })
 
   test("markExitedIfCurrent is a no-op when a newer pid owns the chat entry", () => {
-    // The leak: an OLD handle (pid 38830) tears down AFTER the NEW handle
-    // (pid 41506) already re-registered the same chatId. The stale handle must
-    // NOT flip the live entry to exited.
     const registry = createPtyInstanceRegistry({ coalesceMs: 0 })
     registry.upsert("c1", baseline({ pid: 41506, phase: "ready" }))
     const events: PtyInstanceDelta[] = []

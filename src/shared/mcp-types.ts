@@ -1,6 +1,3 @@
-// MCP (Model Context Protocol) server types.
-// Extracted from types.ts to keep the barrel lean.
-// All external consumers importing from "../shared/types" continue to work unchanged.
 
 import type {
   OAuthTokens,
@@ -21,7 +18,6 @@ export interface McpOAuthFlowState {
   state: string
   issuer: string
   authorizationUrl: string
-  // AS metadata cached between start and complete (avoids re-discovery)
   metadata: AuthorizationServerMetadata
 }
 
@@ -29,17 +25,11 @@ export interface McpOAuthState {
   enabled: boolean
   status: "unauthenticated" | "authenticated" | "error"
   errorMessage?: string
-  // resolved AS issuer (set on complete; used by refresh without re-discovery)
   issuer?: string
-  // cached AS metadata (token_endpoint, etc.) persisted at complete so refresh
-  // uses it directly instead of re-discovering from issuer (which may be a
-  // non-resolvable resource URL, e.g. claude.ai design MCP)
   metadata?: AuthorizationServerMetadata
-  // DCR result keyed by AS issuer (SEP-2352)
   clientByIssuer?: Record<string, OAuthClientInformationFull>
   tokens?: OAuthTokens
   obtainedAt?: number
-  // present only mid-flow; cleared on complete/cancel
   flow?: McpOAuthFlowState
 }
 

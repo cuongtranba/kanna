@@ -5,12 +5,6 @@ interface Props {
   message: ProcessedCronRunSkippedMessage
 }
 
-/**
- * Quiet one-line notice for cron ticks that did not run — skip-and-record is
- * the overlap policy, so the monitoring chat always shows the miss. One card
- * can stand for several consecutive ticks (see `cron/skip-coalescer.ts`),
- * which is what keeps a sub-minute schedule's runs visible among its skips.
- */
 export function CronRunSkippedMessage({ message }: Props) {
   const count = message.missedCount ?? 1
   return (

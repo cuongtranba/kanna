@@ -7,14 +7,6 @@ import { getPathBasename } from "../lib/formatters"
 import { SHELL_PAGE_SCROLL_CLASS } from "../lib/shellChrome"
 import { CronJobRow } from "./CronJobRow"
 
-/**
- * Global cron management page (/cron): every armed job across every project
- * and chat, grouped by project, with a link into each job's chat.
- *
- * The rows are `CronJobRow`, shared with the per-chat footer panel — including
- * its pause / resume / edit / remove controls, which address the arming chat
- * directly over the socket.
- */
 export function CronJobsPage() {
   const rows = useCronJobsStore((s) => s.rows)
 

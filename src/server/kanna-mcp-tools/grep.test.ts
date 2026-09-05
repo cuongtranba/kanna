@@ -33,7 +33,6 @@ describe("mcp__kanna__grep", () => {
       const svc = createToolCallbackService({ store, serverSecret: "k", now: () => 1 })
       const tool = createGrepTool({ toolCallback: svc })
 
-      // Use a dedicated search dir separate from the event store dir
       const searchDir = path.join(dir, "search")
       await mkdir(searchDir)
       await writeFile(path.join(searchDir, "alpha.txt"), "hello world\nfoo bar\nhello again")
@@ -44,7 +43,6 @@ describe("mcp__kanna__grep", () => {
       const result = await tool.handler({ path: searchDir, pattern: "hello" }, ctx(dir))
       expect(result.isError).toBeFalsy()
       const lines = result.content[0].text.split("\n").filter(Boolean)
-      // Should find "hello world", "hello again", "hello sub"
       expect(lines.length).toBe(3)
       expect(lines.every((l) => l.includes("hello"))).toBe(true)
     } finally { await cleanup() }

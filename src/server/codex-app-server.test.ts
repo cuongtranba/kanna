@@ -1990,9 +1990,6 @@ describe("CodexAppServerManager", () => {
     const content = result.entry.content as { contentUrl: string; relativePath: string; fileName: string }
     expect(content.fileName).toBe("ig_07031bcd.png")
     expect(content.relativePath).toBe("/Users/x/.codex/generated_images/019e/ig_07031bcd.png")
-    // Codex stores generated images at absolute paths outside the project; the URL
-    // must route through /api/local-file rather than the project-files endpoint,
-    // which rejects absolute paths and produces a malformed double-slash URL.
     expect(content.contentUrl).toBe(
       "/api/local-file?path=%2FUsers%2Fx%2F.codex%2Fgenerated_images%2F019e%2Fig_07031bcd.png",
     )
@@ -2083,7 +2080,6 @@ describe("CodexAppServerManager", () => {
     if (call.entry.kind !== "tool_call") throw new Error("missing tool call")
     expect(call.entry.tool.toolKind).toBe("image_generation")
     expect(call.entry.tool.toolName).toBe("ImageGeneration")
-    // Input is the COMPLETED args (revisedPrompt populated), not the in_progress placeholder.
     const input = call.entry.tool.input as { revisedPrompt: string | null; status: string | undefined }
     expect(input.revisedPrompt).toBe("Tom chasing Jerry through a kitchen")
     expect(input.status).toBe("completed")
@@ -2392,9 +2388,6 @@ describe("CodexAppServerManager", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// Helpers for scope-keyed session tests
-// ---------------------------------------------------------------------------
 
 function makeFakeSpawn() {
   let counter = 0

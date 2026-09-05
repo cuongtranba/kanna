@@ -18,7 +18,6 @@ function baseConfig(): McpServerConfig {
   }
 }
 
-// Fake AS: 401 -> PRM -> openid-config -> register -> (authorize is browser).
 function fakeFetch(): typeof fetch {
   return (async (input: string | URL | Request, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input.toString()
@@ -36,7 +35,6 @@ function fakeFetch(): typeof fetch {
     if (url === "https://example.test/v1/.well-known/oauth-protected-resource") {
       return json({ authorization_servers: ["https://as.test/v1/mcp"], scopes_supported: ["a", "b"] })
     }
-    // Candidate 1 (path-aware oauth-authorization-server): not found — fall through to openid-config
     if (url === "https://as.test/.well-known/oauth-authorization-server/v1/mcp") {
       return new Response("not found", { status: 404 })
     }
@@ -60,7 +58,6 @@ function fakeFetch(): typeof fetch {
 test("startMcpOAuth discovers AS, registers, and returns an authorization URL", async () => {
   const cfg = baseConfig()
   const persisted: McpOAuthState[] = []
-  // Fix 6: typed persist param, no as never cast
   const result = await startMcpOAuth(cfg, {
     fetchFn: fakeFetch(),
     persist: (oauth: McpOAuthState) => persisted.push(oauth),
@@ -73,7 +70,6 @@ test("startMcpOAuth discovers AS, registers, and returns an authorization URL", 
   expect(u.searchParams.get("code_challenge_method")).toBe("S256")
   expect(u.searchParams.get("resource")).toBe("https://example.test/v1/mcp")
   const last = persisted.at(-1)
-  // Fix 7: strengthen crypto assertions
   expect(typeof last?.flow?.state).toBe("string")
   expect((last?.flow?.state ?? "").length).toBeGreaterThan(20)
   expect(typeof last?.flow?.codeVerifier).toBe("string")
@@ -81,7 +77,6 @@ test("startMcpOAuth discovers AS, registers, and returns an authorization URL", 
   expect(last?.issuer).toBe("https://as.test/v1/mcp")
 })
 
-// Fix 8: alreadyAuthenticated branch — never calls fetch
 test("startMcpOAuth returns alreadyAuthenticated when tokens are present", async () => {
   const cfg: McpServerConfig = {
     id: "s1",
@@ -108,20 +103,17 @@ test("startMcpOAuth returns alreadyAuthenticated when tokens are present", async
 
   const result = await startMcpOAuth(cfg, {
     fetchFn: fetchThatThrows,
-    persist: (_oauth: McpOAuthState) => { /* should not be called */ },
+    persist: (_oauth: McpOAuthState) => { },
   })
   expect(result.kind).toBe("alreadyAuthenticated")
 })
 
-// Fix 9: first AS-metadata candidate returns 200 text/html (SPA trap), later
-// candidate returns valid JSON — discovery still succeeds.
 test("startMcpOAuth falls through SPA-HTML candidate to working openid-config", async () => {
   const spaFetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input.toString()
     const json = (body: unknown, status = 200) =>
       new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } })
 
-    // Probe — 401 with www-authenticate header
     if (url === "https://example.test/v1/mcp" && init?.method === "POST") {
       return new Response("unauthorized", {
         status: 401,
@@ -131,15 +123,12 @@ test("startMcpOAuth falls through SPA-HTML candidate to working openid-config", 
         },
       })
     }
-    // PRM
     if (url === "https://example.test/v1/.well-known/oauth-protected-resource") {
       return json({ authorization_servers: ["https://as.test/"], scopes_supported: ["read"] })
     }
-    // First candidate: /.well-known/oauth-authorization-server/ (path-aware) — SPA HTML trap
     if (url === "https://as.test/.well-known/oauth-authorization-server/") {
       return new Response("<html>SPA</html>", { status: 200, headers: { "content-type": "text/html" } })
     }
-    // Second candidate: issuer /.well-known/openid-configuration — working JSON
     if (url === "https://as.test/.well-known/openid-configuration") {
       return json({
         issuer: "https://as.test/",
@@ -150,7 +139,6 @@ test("startMcpOAuth falls through SPA-HTML candidate to working openid-config", 
         code_challenge_methods_supported: ["S256"],
       })
     }
-    // Registration
     if (url === "https://as.test/oauth/register") {
       return json({ client_id: "spa-client", redirect_uris: ["http://localhost:8765/callback"] }, 201)
     }
@@ -170,27 +158,21 @@ test("startMcpOAuth falls through SPA-HTML candidate to working openid-config", 
   expect(persisted.at(-1)?.issuer).toBe("https://as.test/")
 })
 
-// Fix 10: probe 401 with NO www-authenticate header — adapter falls back to
-// derived PRM URL and completes.
 test("startMcpOAuth derives PRM URL from serverUrl when www-authenticate header is absent", async () => {
   const noHeaderFetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input.toString()
     const json = (body: unknown, status = 200) =>
       new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } })
 
-    // Probe — 401 with NO www-authenticate header
     if (url === "https://example.test/v1/mcp" && init?.method === "POST") {
       return new Response("unauthorized", { status: 401 })
     }
-    // Derived PRM URL: ${origin}/.well-known/oauth-protected-resource${pathname}
     if (url === "https://example.test/.well-known/oauth-protected-resource/v1/mcp") {
       return json({ authorization_servers: ["https://as2.test/"], scopes_supported: ["openid"] })
     }
-    // First candidate (path-aware): not found
     if (url === "https://as2.test/.well-known/oauth-authorization-server/") {
       return new Response("not found", { status: 404 })
     }
-    // AS metadata via openid-configuration (root, no path)
     if (url === "https://as2.test/.well-known/openid-configuration") {
       return json({
         issuer: "https://as2.test/",
@@ -201,7 +183,6 @@ test("startMcpOAuth derives PRM URL from serverUrl when www-authenticate header 
         code_challenge_methods_supported: ["S256"],
       })
     }
-    // Registration
     if (url === "https://as2.test/oauth/register") {
       return json({ client_id: "no-header-client", redirect_uris: ["http://localhost:8765/callback"] }, 201)
     }
@@ -298,7 +279,6 @@ test("completeMcpOAuth exchanges code, persists tokens, returns ok", async () =>
   expect(saved?.flow).toBeUndefined()
 })
 
-// Fix 4 tests — error-path coverage
 
 test("completeMcpOAuth returns error and persists error state when token exchange fails", async () => {
   const cfg = authedConfigWithFlow()
@@ -347,7 +327,6 @@ test("completeMcpOAuth rejects when callback URL has no code", async () => {
 
 test("completeMcpOAuth rejects when no registered client for issuer", async () => {
   const cfg = authedConfigWithFlow()
-  // Patch clientByIssuer to be empty so there is no client for the issuer
   if (cfg.transport !== "stdio" && cfg.oauth) {
     cfg.oauth = { ...cfg.oauth, clientByIssuer: {} }
   }
@@ -376,11 +355,9 @@ test("completeMcpOAuth keeps tokens when listTools throws (Fix 1)", async () => 
       listTools: async () => { throw new Error("connection refused") },
     },
   )
-  // listTools failure should return error (tool check failed), not throw
   expect(result.status).toBe("error")
   if (result.status !== "error") throw new Error("unreachable")
   expect(result.message).toMatch(/tool check failed/)
-  // Tokens MUST be persisted as authenticated — not lost
   const last = persistedStates.at(-1)!
   expect(last.status).toBe("authenticated")
   expect(last.tokens?.access_token).toBe("AT")
@@ -416,7 +393,6 @@ test("ensureFreshMcpToken returns cached token when still valid", async () => {
 })
 
 test("ensureFreshMcpToken refreshes and persists rotated tokens when expired", async () => {
-  // obtainedAt far in the past => expired
   const cfg = authedTokenConfig(Date.now() - 30000 * 1000, 28800)
   let saved: McpOAuthState | undefined
   const token = await ensureFreshMcpToken(cfg, {
@@ -432,17 +408,15 @@ test("ensureFreshMcpToken refreshes and persists rotated tokens when expired", a
 })
 
 test("ensureFreshMcpToken throws when not authenticated", async () => {
-  const cfg = baseConfig() // oauth status unauthenticated, no tokens
+  const cfg = baseConfig()
   await expect(
     ensureFreshMcpToken(cfg, { persist: () => {}, metadataByIssuer: {} }),
   ).rejects.toThrow(/not authenticated/i)
 })
 
 test("ensureFreshMcpToken throws when expired and no refresh_token", async () => {
-  // Build a config with an expired token but no refresh_token
   const cfg = authedTokenConfig(Date.now() - 30000 * 1000, 100, "EXPIRED")
   if (cfg.transport !== "stdio" && cfg.oauth) {
-    // Strip refresh_token from the tokens
     const { refresh_token: _dropped, ...tokensWithoutRefresh } = cfg.oauth.tokens as OAuthTokens & { refresh_token?: string }
     cfg.oauth = {
       ...cfg.oauth,
@@ -459,7 +433,6 @@ test("ensureFreshMcpToken throws when expired and no refresh_token", async () =>
 })
 
 test("ensureFreshMcpToken persists error state when refresh endpoint returns error", async () => {
-  // Expired config with refresh_token, but token endpoint returns 400 invalid_grant
   const cfg = authedTokenConfig(Date.now() - 30000 * 1000, 100, "STALE")
   const failRefreshFetch = (async (input: string | URL | Request) => {
     const url = typeof input === "string" ? input : input.toString()
@@ -485,10 +458,8 @@ test("ensureFreshMcpToken persists error state when refresh endpoint returns err
 })
 
 test("ensureFreshMcpToken returns cached token without refresh when expires_in is absent", async () => {
-  // Build a config with no expires_in, obtainedAt far in the past
   const cfg = authedTokenConfig(Date.now() - 30000 * 1000, 0, "FOREVER")
   if (cfg.transport !== "stdio" && cfg.oauth) {
-    // Remove expires_in from tokens entirely
     const { expires_in: _dropped, ...tokensWithoutExpiry } = cfg.oauth.tokens as OAuthTokens & { expires_in?: number }
     cfg.oauth = {
       ...cfg.oauth,
@@ -523,8 +494,6 @@ test("completeMcpOAuth persists AS metadata for later refresh", async () => {
 })
 
 test("ensureFreshMcpToken refreshes using persisted oauth.metadata when metadataByIssuer is absent", async () => {
-  // Regression: refresh must not re-discover token_endpoint from a
-  // non-resolvable issuer. The persisted metadata supplies it.
   const cfg = authedTokenConfig(Date.now() - 30000 * 1000, 28800)
   if (cfg.transport !== "stdio" && cfg.oauth) {
     cfg.oauth = {
@@ -536,7 +505,6 @@ test("ensureFreshMcpToken refreshes using persisted oauth.metadata when metadata
   const token = await ensureFreshMcpToken(cfg, {
     fetchFn: tokenFetch(),
     persist: (o: McpOAuthState) => { saved = o },
-    // no metadataByIssuer — fallback to oauth.metadata
   })
   expect(token).toBe("AT")
   expect(saved?.status).toBe("authenticated")

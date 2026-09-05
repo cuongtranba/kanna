@@ -12,7 +12,6 @@ interface Props {
   onAnswer: (toolRequestId: string, decision: ToolRequestDecision) => void
 }
 
-// ── exit_plan_mode ───────────────────────────────────────────────────────────
 
 function ExitPlanModePending({
   toolRequestId,
@@ -53,7 +52,6 @@ function ExitPlanModePending({
   )
 }
 
-// ── generic fallback ─────────────────────────────────────────────────────────
 
 function GenericPending({
   toolRequestId,
@@ -66,9 +64,6 @@ function GenericPending({
   args: JsonObject
   onAnswer: (toolRequestId: string, decision: ToolRequestDecision) => void
 }) {
-  // Short, single-line preview of the most descriptive arg so the user can
-  // tell what they're approving without expanding raw JSON. Falls back to
-  // the JSON itself for tools we don't have a curated key for.
   const previewKey = (["command", "path", "url", "pattern", "query"] as const).find(
     (k) => typeof args[k] === "string" && String(args[k]).length > 0,
   )
@@ -105,15 +100,11 @@ function GenericPending({
   )
 }
 
-// ── public component ─────────────────────────────────────────────────────────
 
 export function PendingToolRequestMessage({ entry, onAnswer }: Props) {
   const { toolRequestId, toolName, arguments: args } = entry
 
   if (toolName === "mcp__kanna__ask_user_question") {
-    // MCP shim args use `text` field per its zod schema; AskUserQuestionItem
-    // uses `question` (matches the SDK native AskUserQuestion shape). Map
-    // here so getKey()/answer keys use the question body, not "undefined".
     const rawQuestions: JsonObject[] = isJsonArray(args.questions) ? args.questions.filter(isJsonObject) : []
     const questions: AskUserQuestionItem[] = rawQuestions.map((q) => {
       let question: string

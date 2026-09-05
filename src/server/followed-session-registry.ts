@@ -64,7 +64,6 @@ export function createFollowedSessionRegistry(deps: FollowedSessionRegistryDeps)
           try {
             await deps.runDelta(chatId, entry.sourcePath)
           } catch {
-            // a bad file must not kill the tick loop
           }
           entry.lastSize = stat.size
           entry.lastGrowthAt = deps.now()

@@ -1,17 +1,3 @@
-/**
- * ws-router-project.ts
- *
- * WS command handlers for project management, session import, sidebar ordering,
- * system utilities, and update management:
- *   system.ping, system.openExternal,
- *   update.check, update.install, update.reload,
- *   project.open, project.create, project.remove, project.setStar,
- *   project.readDiffPatch,
- *   sessions.importClaude, sessions.importClaudeSession,
- *   sidebar.reorderProjectGroups
- *
- * Extracted from ws-router.ts.
- */
 import { PROTOCOL_VERSION } from "../shared/types"
 import { resolveSpawnPaths } from "./claude-session-config"
 import type { ChatRecord } from "./events"
@@ -20,14 +6,9 @@ import type { ClientCommand, ImportSessionsByIdsResult, ServerEnvelope } from ".
 import type { ImportClaudeSessionsResult } from "./claude-session-importer.adapter"
 import type { DiscoveredProject } from "./discovery.adapter"
 
-// ---------------------------------------------------------------------------
-// Dep interfaces (duck-typed; avoids circular imports with ws-router.ts)
-// ---------------------------------------------------------------------------
 
-/** The subset of EventStore consumed by project WS commands. */
 export interface ProjectStoreDep {
   getProject(projectId: string): { id: string; localPath: string } | null | undefined
-  /** Needed to read a patch from a chat's own worktree rather than the project's checkout. */
   getChat(chatId: string): Pick<ChatRecord, "id" | "stackBindings"> | null | undefined
   openProject(localPath: string, title?: string): Promise<{ id: string }>
   removeProject(projectId: string): Promise<void>
@@ -37,79 +18,41 @@ export interface ProjectStoreDep {
   state: { projectIdsByPath: ReadonlyMap<string, string> }
 }
 
-/** The subset of UpdateManager consumed by update WS commands. */
 export interface ProjectUpdateManagerDep {
   checkForUpdates(opts?: { force?: boolean }): Promise<UpdateSnapshot>
   installUpdate(opts?: { version?: string }): Promise<UpdateInstallResult>
   forceReload(): Promise<UpdateInstallResult>
 }
 
-/** The subset of DiffStore consumed by project.readDiffPatch. */
 export interface ProjectDiffStoreDep {
   readPatch(args: { projectPath: string; path: string }): Promise<{ patch: string }>
 }
 
-/** Analytics reporter subset. */
 export interface ProjectAnalyticsDep {
   track(event: string): void
 }
 
-/** Terminal manager subset needed to clean up on project removal. */
 export interface ProjectTerminalsDep {
   closeByCwd(cwd: string): void
 }
 
 export interface ProjectCommandDeps {
-  /** Project-related store methods. */
   store: ProjectStoreDep
-  /** Update manager — optional; commands fail gracefully when absent. */
   updateManager?: ProjectUpdateManagerDep | null
-  /** Diff store for readPatch. */
   diffStore: ProjectDiffStoreDep
-  /** Analytics reporter. */
   analytics: ProjectAnalyticsDep
-  /** Re-scans the workspace for new/removed projects. */
   refreshDiscovery: () => Promise<DiscoveredProject[]>
-  /** Ensures the target directory exists (creates it if needed). */
   ensureProjectDirectory: (path: string) => Promise<void>
-  /** Normalizes / resolves a local path string. */
   resolveLocalPath: (path: string) => string
-  /**
-   * Imports Claude sessions from disk.
-   * Caller pre-binds the store so the function signature is simple.
-   */
   importClaudeSessionsFn: () => Promise<ImportClaudeSessionsResult>
-  /**
-   * Imports specific Claude sessions by id.
-   * Caller pre-binds the store so the function signature is simple.
-   */
   importSessionsByIdsFn: (sessionIds: string[]) => Promise<ImportSessionsByIdsResult>
-  /**
-   * Opens an external application (editor, Finder, browser …).
-   * Caller pre-binds any internal deps.
-   */
   openExternalFn: (command: Extract<ClientCommand, { type: "system.openExternal" }>) => Promise<void>
-  /** Terminal manager — used to close terminals on project removal. */
   terminals: ProjectTerminalsDep
-  /** Pre-bound to the current WebSocket; called to send an ack or push envelope. */
   send: (envelope: ServerEnvelope) => void
-  /**
-   * Broadcast sidebar + project-list snapshots to all connected clients.
-   * Corresponds to `broadcastFilteredSnapshots({ includeSidebar: true })`.
-   */
   broadcastSidebar: () => Promise<void>
 }
 
-// ---------------------------------------------------------------------------
-// Command dispatcher
-// ---------------------------------------------------------------------------
 
-/**
- * Handle one project / session / sidebar / system / update WS command.
- *
- * Returns `true` when the command was handled (caller should `return`).
- * Returns `false` when the command type is outside this module's scope.
- */
 export async function handleProjectCommand(
   deps: ProjectCommandDeps,
   command: ClientCommand,
@@ -132,9 +75,6 @@ export async function handleProjectCommand(
   } = deps
 
   switch (command.type) {
-    // -----------------------------------------------------------------------
-    // system
-    // -----------------------------------------------------------------------
     case "system.ping": {
       send({ v: PROTOCOL_VERSION, type: "ack", id })
       return true
@@ -145,9 +85,6 @@ export async function handleProjectCommand(
       return true
     }
 
-    // -----------------------------------------------------------------------
-    // update
-    // -----------------------------------------------------------------------
     case "update.check": {
       const unavailableSnapshot: UpdateSnapshot = {
         currentVersion: "unknown",
@@ -182,9 +119,6 @@ export async function handleProjectCommand(
       return true
     }
 
-    // -----------------------------------------------------------------------
-    // project
-    // -----------------------------------------------------------------------
     case "project.open": {
       await ensureProjectDirectory(command.localPath)
       const normalizedPath = resolveLocalPath(command.localPath)
@@ -238,9 +172,6 @@ export async function handleProjectCommand(
       if (!project) {
         throw new Error("Project not found")
       }
-      // The diff this patch belongs to was computed against the CHAT's tree, so
-      // the patch has to be read from the same one or it describes a different
-      // file — or none.
       const chat = command.chatId === undefined ? null : store.getChat(command.chatId)
       const result = await diffStore.readPatch({
         projectPath: chat ? resolveSpawnPaths(chat, project.localPath).cwd : project.localPath,
@@ -250,9 +181,6 @@ export async function handleProjectCommand(
       return true
     }
 
-    // -----------------------------------------------------------------------
-    // sessions
-    // -----------------------------------------------------------------------
     case "sessions.importClaude": {
       const result = await importClaudeSessionsFn()
       if (result.newProjects > 0) {
@@ -272,9 +200,6 @@ export async function handleProjectCommand(
       return true
     }
 
-    // -----------------------------------------------------------------------
-    // sidebar
-    // -----------------------------------------------------------------------
     case "sidebar.reorderProjectGroups": {
       await store.setSidebarProjectOrder(command.projectIds)
       send({ v: PROTOCOL_VERSION, type: "ack", id })

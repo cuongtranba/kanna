@@ -1,8 +1,3 @@
-/**
- * The hook is the ONLY thing that turns "plugins enabled" into contributions
- * the sidebar and chat footer can render. Before it existed every surface was
- * mounted but permanently empty, so these cases pin the wiring itself.
- */
 import { describe, expect, test, afterEach, mock } from "bun:test"
 import { renderForLoopCheck } from "../lib/testing/renderForLoopCheck"
 import { usePluginContributionsStore } from "../stores/pluginContributionsStore"
@@ -34,7 +29,6 @@ async function mountWith(load: () => Promise<unknown>) {
   }
   const rendered = await renderForLoopCheck(<Probe />)
   cleanups.push(rendered.cleanup)
-  // Let the load promise settle before asserting on the store.
   await Promise.resolve()
   await Promise.resolve()
   return rendered
@@ -72,8 +66,6 @@ describe("usePluginContributions", () => {
     expect(usePluginContributionsStore.getState().sidebarItems).toHaveLength(0)
   })
 
-  // One bad plugin must not take the rest of the surface down — the same
-  // containment `PluginBoundary` gives at render time, one step earlier.
   test("a per-plugin failure still commits the plugins that did load", async () => {
     setPluginsEnabled(true)
     await mountWith(async () => ({
@@ -86,8 +78,6 @@ describe("usePluginContributions", () => {
     expect(usePluginContributionsStore.getState().sidebarItems).toHaveLength(1)
   })
 
-  // The `/` picker reads this off the store, so a load that drops it leaves
-  // every contributed command invisible with nothing to notice it by.
   test("command-center items reach the store", async () => {
     setPluginsEnabled(true)
     await mountWith(async () => ({

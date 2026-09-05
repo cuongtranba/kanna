@@ -1,15 +1,3 @@
-/**
- * The sidebar's bottom nav: Workflows / Cron jobs / Settings, the connection
- * status row, and any sidebar items PLUGINS have contributed.
- *
- * Extracted from `KannaSidebar.tsx`, which sits on its architecture-budget
- * ceiling and therefore had no room for a new entry. Plugin items belong here
- * rather than in the chat list: an `addSidebarItem` contribution is a
- * navigation destination, exactly like the three built-ins beside it.
- *
- * `PluginSidebarItems` self-hides when nothing is contributed, so a install
- * with plugins disabled renders this block exactly as it renders today.
- */
 import { CalendarClock, Settings, Workflow } from "lucide-react"
 import type { NavigateFunction } from "react-router-dom"
 import { cn } from "../lib/utils"

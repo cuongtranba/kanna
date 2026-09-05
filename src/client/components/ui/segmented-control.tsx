@@ -49,7 +49,6 @@ export function SegmentedControl<T extends string>({
       {options.map((option) => {
         const isActive = option.value === value
         const icon = option.icon
-        // Support both LucideIcon components (forwardRef objects or functions) and ReactNode
         let iconElement: React.ReactNode = null
         if (icon) {
           if (isValidElement(icon)) {

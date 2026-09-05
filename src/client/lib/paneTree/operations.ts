@@ -26,10 +26,6 @@ import {
   isPane,
 } from "./types"
 
-/**
- * Every operation is pure and returns `null` when it changes nothing, so the
- * store can hand back the previous state object and skip a re-render.
- */
 
 function directionOf(position: SplitPosition) {
   return position === "left" || position === "right" ? "horizontal" : "vertical"
@@ -43,7 +39,6 @@ function firstPaneId(root: PaneNode): string | null {
   return collectPanes(root)[0]?.id ?? null
 }
 
-// ─── Split ──────────────────────────────────────────────────────────────────
 
 export interface SplitPaneArgs {
   tabId: string
@@ -61,21 +56,11 @@ export function splitPane(layout: PaneLayout, args: SplitPaneArgs): PaneLayout |
   const source = findPaneContainingTab(layout.root, tabId)
   if (!source) return null
 
-  // Splitting a pane's ONLY tab moves that tab into the new pane and leaves the
-  // source empty — and an empty pane has no tabs, so no close button and no
-  // content: dead space the user cannot remove. Splitting is the only way to
-  // produce one, so it is refused here rather than papered over downstream.
-  //
-  // A tab dragged in from a DIFFERENT pane is unaffected: the target keeps its
-  // own tabs, and the source pane collapsing is the correct outcome.
   if (source.pane.id === targetPaneId && source.pane.tabs.length <= 1) return null
 
-  // Preserve the target even if this detach empties it: splitting a pane's own
-  // last tab must not delete the pane we are splitting out of.
   const detached = detachTab(layout.root, tabId, { preserveEmptyPaneId: targetPaneId })
   if (!detached.tab) return null
 
-  // Indices may have shifted if a pane collapsed during the detach.
   const path = findPanePath(detached.root, targetPaneId)
   if (!path) return null
 
@@ -91,8 +76,6 @@ export function splitPane(layout: PaneLayout, args: SplitPaneArgs): PaneLayout |
   let nextRoot: PaneNode
 
   if (parent && isGroup(parent) && parent.direction === direction) {
-    // Same direction: become a sibling and halve the target's share, so the
-    // tree stays flat no matter how many times the user splits the same way.
     const index = path.at(-1)!
     const children = [...parent.children]
     const sizes = [...parent.sizes]
@@ -109,7 +92,6 @@ export function splitPane(layout: PaneLayout, args: SplitPaneArgs): PaneLayout |
       createGroup(parent.id, parent.direction, children, sizes),
     )
   } else {
-    // Different direction (or at the root): wrap the target in a new group.
     const target = getNodeAtPath(detached.root, path)
     if (!target) return null
     const children = after ? [target, newPane] : [newPane, target]
@@ -120,19 +102,12 @@ export function splitPane(layout: PaneLayout, args: SplitPaneArgs): PaneLayout |
     )
   }
 
-  // Build-then-reject: measuring the real candidate is simpler and more correct
-  // than trying to predict the resulting depth up front.
   if (getTreeDepth(nextRoot) > MAX_TREE_DEPTH) return null
 
   return { root: nextRoot, focusedPaneId: ids.paneId }
 }
 
-// ─── Close ──────────────────────────────────────────────────────────────────
 
-/**
- * Which tab should take focus when `tabId` closes: the one to its right, else
- * the one to its left. Closing a background tab never moves focus.
- */
 function closeSuccessorTabId(tabIds: readonly string[], tabId: string): string | null {
   const index = tabIds.indexOf(tabId)
   if (index < 0) return null
@@ -153,8 +128,6 @@ export function closeTab(layout: PaneLayout, tabId: string): PaneLayout | null {
   const detached = detachTab(layout.root, tabId)
   const root = detached.root
 
-  // Focus chain: keep the focused pane if it survived, else the nearest sibling
-  // of the pane that collapsed, else the first pane, else the default.
   const focusedPaneId =
     layout.focusedPaneId === null
       ? null
@@ -168,7 +141,6 @@ export function closeTab(layout: PaneLayout, tabId: string): PaneLayout | null {
   return focusTab(next, successor) ?? next
 }
 
-// ─── Move ───────────────────────────────────────────────────────────────────
 
 export function moveTabToPane(
   layout: PaneLayout,
@@ -192,7 +164,6 @@ export function moveTabToPane(
   return { root, focusedPaneId: toPaneId }
 }
 
-// ─── Focus ──────────────────────────────────────────────────────────────────
 
 export function focusTab(layout: PaneLayout, tabId: string): PaneLayout | null {
   const found = findPaneContainingTab(layout.root, tabId)
@@ -211,7 +182,6 @@ export function focusPane(layout: PaneLayout, paneId: string): PaneLayout | null
   return { ...layout, focusedPaneId: paneId }
 }
 
-// ─── Reorder ────────────────────────────────────────────────────────────────
 
 export function reorderPaneTabs(
   layout: PaneLayout,
@@ -233,7 +203,6 @@ export function reorderPaneTabs(
     seen.add(tabId)
     ordered.push(tab)
   }
-  // A partial order is legal — anything unmentioned keeps its relative position.
   for (const tab of pane.tabs) {
     if (!seen.has(tab.tabId)) ordered.push(tab)
   }
@@ -249,19 +218,12 @@ export function reorderPaneTabs(
   return { ...layout, root }
 }
 
-// ─── Open ───────────────────────────────────────────────────────────────────
 
 export interface OpenTabResult {
   layout: PaneLayout
   tabId: string
 }
 
-/**
- * Open a target, or focus it if it is already open anywhere in the tree.
- *
- * Because the id is derived from the target, this is idempotent — which is what
- * makes the singleton kinds (chat, changes) singletons by construction.
- */
 export function openTab(
   layout: PaneLayout,
   target: PaneTabTarget,
@@ -289,7 +251,6 @@ export function openTab(
   return { layout: { root, focusedPaneId: focus ? paneId : layout.focusedPaneId }, tabId }
 }
 
-// ─── Resize ─────────────────────────────────────────────────────────────────
 
 function findGroupPath(node: PaneNode, groupId: string, path: number[] = []): number[] | null {
   if (isGroup(node)) {
@@ -302,14 +263,6 @@ function findGroupPath(node: PaneNode, groupId: string, path: number[] = []): nu
   return null
 }
 
-/**
- * Set a group's sizes outright.
- *
- * The resize library reports absolute sizes rather than a delta, so this is the
- * commit path for a finished drag. Sizes are floored and renormalized, which
- * is the structural clamp — `resizeGroup` remains the pairwise one used for
- * keyboard nudges, where only the dragged boundary should move.
- */
 export function setGroupSizes(
   layout: PaneLayout,
   groupId: string,

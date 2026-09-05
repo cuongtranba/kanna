@@ -1,14 +1,3 @@
-/**
- * Turn spawning pipeline for AgentCoordinator.
- *
- * Extracted from agent.ts to reduce file size. Contains the two adjacent
- * private methods that form the "spawn and route" logic:
- *   - startTurnForChat   — validates state, appends user prompt, records turn_started
- *   - startTurnAfterTurnStarted — picks provider, spawns session, routes to codec
- *
- * All IO is delegated through the StartTurnDeps interface; this file is pure
- * orchestration and therefore does NOT need an `.adapter.ts` suffix.
- */
 import type { AgentProvider } from "../shared/types"
 import { isCodexReasoningEffort, providerUsesSdkSession } from "../shared/types"
 import { isClaudeSdkProvider } from "./provider-catalog"
@@ -43,16 +32,7 @@ export type {
   StartTurnForChatArgs,
 } from "./claude-turn-starter-types"
 
-// ---------------------------------------------------------------------------
-// Extracted functions
-// ---------------------------------------------------------------------------
 
-/**
- * Extracted from AgentCoordinator.startTurnForChat.
- *
- * Validates pre-conditions, appends the user prompt, records turn_started,
- * then delegates to startTurnAfterTurnStarted.
- */
 export async function startTurnForChat(
   deps: StartTurnDeps,
   args: StartTurnForChatArgs,
@@ -80,18 +60,12 @@ async function startTurnForChatOuter(
     planMode: args.planMode,
   })
 
-  // Close any lingering draining stream before starting a new turn.
   const draining = deps.drainingStreams.get(args.chatId)
   if (draining) {
     draining.turn.close()
     deps.clearDrainingStream(args.chatId)
   }
 
-  // A new user turn implicitly clears any prior cancellation marker —
-  // otherwise a Stop-then-resend cycle wedges every delegate_subagent
-  // call in this chat with "Chat cancelled before run started" until
-  // process restart. Mirrors the clear already done by
-  // runMentionsForUserMessage for the @mention path.
   deps.subagentOrchestrator.clearChatCancellation(args.chatId)
 
   const chat = deps.store.requireChat(args.chatId)
@@ -99,11 +73,6 @@ async function startTurnForChatOuter(
     throw new Error("Chat is already running")
   }
 
-  // Claim the chat BEFORE the first await. Everything from here to the
-  // `activeTurns.set` below is async (store writes, then a full provider
-  // session spawn), and until this marker existed the chat looked idle to
-  // cancel, to `chat.send`, and to the snapshot — so Stop silently no-oped
-  // and a second send raced in a concurrent turn.
   const starting: StartingTurn = {
     chatId: args.chatId,
     provider: args.provider,
@@ -116,18 +85,12 @@ async function startTurnForChatOuter(
   try {
     await startTurnForChatInner(deps, args, starting, chat)
   } finally {
-    // Identity-guarded: a cancel may have removed this marker and a newer turn
-    // may have registered its own. Only ever clear our own.
     if (deps.startingTurns.get(args.chatId) === starting) {
       deps.startingTurns.delete(args.chatId)
     }
   }
 }
 
-/**
- * The original body of `startTurnForChat`, minus the starting-marker
- * bookkeeping its caller now owns.
- */
 async function startTurnForChatInner(
   deps: StartTurnDeps,
   args: StartTurnForChatArgs,
@@ -147,11 +110,6 @@ async function startTurnForChatInner(
     planMode: args.planMode,
   })
 
-  // Both reads below are lazy on purpose. The `&&` chain short-circuits for
-  // any chat that already has a title, and the primer thunk runs only when
-  // a primer is actually built. getRecentRawEntries reads only the tail via
-  // readTranscriptTail — avoids loading a multi-MB transcript for every loop
-  // iteration where shouldInjectPrimer is true (session_token cleared by /clear).
   const loadExistingMessages = () => deps.store.getRecentRawEntries(args.chatId, PRIMER_TAIL_LIMIT)
   const shouldGenerateTitle = args.appendUserPrompt
     && chat.title === "New Chat"
@@ -241,11 +199,6 @@ async function startTurnForChatInner(
       stack: error instanceof Error ? error.stack : undefined,
       kind: isOAuthRefusal ? "oauth_pool_unavailable" : "unknown",
     })
-    // OAuth-pool refusal: persist the formatted refusal (with chat-link
-    // markdown produced by `buildPoolUnavailableMessage`) as a `result`
-    // transcript entry so the UI's transcript renders it inline and
-    // durably, instead of relying on the ephemeral commandError banner
-    // that gets wiped by the next chat snapshot tick.
     if (isOAuthRefusal) {
       try {
         await deps.store.appendMessage(
@@ -275,9 +228,6 @@ async function startTurnForChatInner(
     }
     deps.activeTurns.delete(args.chatId)
     deps.emitStateChange(args.chatId, { immediate: true })
-    // Swallow refusals — the transcript entry above is the user-facing
-    // signal. Re-throwing would surface a transient commandError banner
-    // that races with snapshot ticks and visibly flickers (see #235).
     if (isOAuthRefusal) {
       return
     }
@@ -285,13 +235,6 @@ async function startTurnForChatInner(
   }
 }
 
-/**
- * Extracted from AgentCoordinator.startTurnAfterTurnStarted.
- *
- * Picks provider, resolves session tokens / priming, spawns the SDK/PTY
- * claude session or Codex turn, registers the ActiveTurn, and routes to
- * the codec (runTurn vs sendPrompt on the SDK queue).
- */
 async function startTurnAfterTurnStarted(
   deps: StartTurnDeps,
   ctx: StartTurnAfterTurnStartedCtx,
@@ -302,11 +245,6 @@ async function startTurnAfterTurnStarted(
   }
 
   const onToolRequest = async (request: HarnessToolRequest): Promise<JsonValue> => {
-    // The request may arrive OUTSIDE any Kanna turn — the SDK self-resumes
-    // after a background-task notification and calls `canUseTool` with the
-    // prior turn long finalized. The parked continuation lives in the
-    // per-chat PendingToolSlots either way; when a turn IS live, its status
-    // additionally flips to waiting_for_user for the composer.
     const active = deps.activeTurns.get(args.chatId)
     if (active) {
       active.status = "waiting_for_user"
@@ -335,17 +273,12 @@ async function startTurnAfterTurnStarted(
     targetProvider,
     Boolean(args.userClearedContext),
   )
-  // `promptOverride` is what the provider runs when Kanna expanded a local
-  // slash command for it; `args.content` stays the line the user typed, which
-  // is what the transcript and the title are built from.
   const userPromptText = buildPromptText(args.promptOverride ?? args.content, args.attachments)
   const primer = shouldPrime
     ? buildHistoryPrimer(loadExistingMessages(), targetProvider, userPromptText)
     : null
   const promptContent = primer ?? userPromptText
 
-  // Which instructions apply to this turn, resolved once so the Claude and
-  // Codex branches below cannot disagree about them.
   const lookupProject = (id: string) => {
     const p = deps.store.getProject(id)
     return p ? { title: p.title, instructions: p.instructions } : undefined
@@ -394,11 +327,6 @@ async function startTurnAfterTurnStarted(
       provider: args.provider,
       model: args.model,
     })
-    // Codex declares a single cwd, so the peer roots are not part of its
-    // workspace — but the thread runs `sandbox: "danger-full-access"` with
-    // approvals off, so they are still reachable by absolute path. Naming them
-    // in developer_instructions is what stops a provider switch from silently
-    // turning a stack chat into a single-project one.
     const sessionToken = await deps.codexManager.startSession({
       chatId: args.chatId,
       cwd: resolveSpawnPaths(chat, project.localPath).cwd,
@@ -407,10 +335,6 @@ async function startTurnAfterTurnStarted(
       serviceTier: args.serviceTier,
       sessionToken: existingToken,
       pendingForkSessionToken: pendingForkToken,
-      // The skill roster is Codex's ONLY route to a local skill: its protocol
-      // has no way to declare a tool, so naming each SKILL.md by absolute path
-      // is what makes one reachable. Applied at `thread/start`, so a skill
-      // authored mid-chat lands at the next session start.
       developerInstructions: buildCodexDeveloperInstructions({
         ...instructionOptions,
         stackProjects,
@@ -441,10 +365,6 @@ async function startTurnAfterTurnStarted(
     })
   }
 
-  // Stop landed while the provider session was booting. `cancelChat` has
-  // already written the `interrupted` entry and flipped the chat to idle, so
-  // tear the freshly-spawned turn down silently — never register it, never
-  // run it.
   if (starting.cancelRequested) {
     logSendToStartingProfile(args.profile, "start_turn.cancelled_during_boot", {
       chatId: args.chatId,
@@ -456,13 +376,8 @@ async function startTurnAfterTurnStarted(
         new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
       ])
     } catch {
-      // best-effort — close() below is the backstop
     }
     turn.close()
-    // Under PTY the turn handle is a ghost facade over the long-lived session
-    // and interrupt() sends SIGINT, killing the CLI — drop the dead session so
-    // the next turn respawns. Mirrors the active-turn path in
-    // claude-cancel-handler.ts.
     if (args.provider === "claude" && deps.resolveClaudeDriverPreference() === "pty") {
       const session = deps.claudeSessions.get(args.chatId)
       if (session) deps.closeClaudeSession(args.chatId, session)
@@ -475,9 +390,6 @@ async function startTurnAfterTurnStarted(
     provider: args.provider,
     turn,
     startedAt: starting.startedAt,
-    // Binds the turn to the session it runs on, so that session can still
-    // recognise (and fail-close) its own turn after an out-of-band teardown
-    // has unregistered it. Undefined for providers with no Claude session.
     sessionId: deps.claudeSessions.get(args.chatId)?.id,
     model: args.model,
     effort: args.effort,
@@ -510,10 +422,6 @@ async function startTurnAfterTurnStarted(
       .then(async (accountInfo) => {
         const session = deps.claudeSessions.get(args.chatId)
         if (args.provider === "openrouter") {
-          // OpenRouter routes through the SDK with ANTHROPIC_AUTH_TOKEN set to
-          // the OpenRouter key, so the SDK self-reports tokenSource
-          // "ANTHROPIC_AUTH_TOKEN" with no account — mislabeling the chat as
-          // Anthropic. Override with the OpenRouter identity instead.
           if (!session) return
           if (session.accountInfoLoaded) return
           session.accountInfoLoaded = true
@@ -533,11 +441,6 @@ async function startTurnAfterTurnStarted(
             if (!session) return
             if (session.accountInfoLoaded) return
             session.accountInfoLoaded = true
-            // Mirror the PTY driver's deriveAccountInfoFromOauth: when the
-            // turn was started with a kanna OAuth-pool token, surface its
-            // name as organization and tag the source so the UI renders
-            // "Pool token" identically across drivers. SDK-reported extras
-            // (email, subscriptionType) are preserved.
             if (session.activeTokenId) {
               augmented = {
                 ...accountInfo,
@@ -557,9 +460,6 @@ async function startTurnAfterTurnStarted(
   }
 
   if (providerUsesSdkSession(args.provider)) {
-    // claude and openrouter both deliver their prompt through the SDK
-    // session queue; gating this on `=== "claude"` is what left openrouter's
-    // prompt undelivered, hanging every openrouter turn until the watchdog.
     const session = deps.claudeSessions.get(args.chatId)
     if (!session) {
       throw new Error("SDK session was not initialized")
@@ -567,9 +467,6 @@ async function startTurnAfterTurnStarted(
     const promptSeq = session.nextPromptSeq + 1
     session.nextPromptSeq = promptSeq
     session.pendingPromptSeqs.push(promptSeq)
-    // A new turn starts: clear any stale cancellation marker so a previous
-    // cancel that never produced a tail result can't suppress this turn's
-    // real result.
     session.cancelledResultPending = 0
     active.claudePromptSeq = promptSeq
     logClaudeSteer("claude_prompt_sent", {

@@ -44,9 +44,6 @@ describe("policy.evaluate basics", () => {
     expect(verdict.verdict).toBe("auto-deny")
   })
 
-  // Issue #215 follow-up: interactive tools must always ask, regardless
-  // of chatPolicy.defaultAction. Auto-allow would resolve with no payload
-  // and crash the MCP shim formatter (-32602).
   test("mcp__kanna__ask_user_question always asks even under auto-allow policy", () => {
     const verdict = policy.evaluate({
       toolName: "mcp__kanna__ask_user_question",
@@ -236,12 +233,11 @@ describe("regex try/catch guard", () => {
       chatPolicy: {
         ...POLICY_DEFAULT,
         toolDenyList: [
-          { tool: "mcp__kanna__bash", pattern: "[" }, // invalid regex
+          { tool: "mcp__kanna__bash", pattern: "[" },
         ],
       },
       cwd: "/tmp/project",
     })
-    // Should not throw — malformed pattern skipped, falls through to auto-allow for "ls".
     expect(result.verdict).toBe("auto-allow")
   })
 
@@ -252,7 +248,7 @@ describe("regex try/catch guard", () => {
       chatPolicy: {
         ...POLICY_DEFAULT,
         toolDenyList: [
-          { tool: "mcp__kanna__webfetch", pattern: "[" }, // invalid regex
+          { tool: "mcp__kanna__webfetch", pattern: "[" },
         ],
         defaultAction: "auto-allow",
       },
@@ -268,7 +264,7 @@ describe("regex try/catch guard", () => {
       chatPolicy: {
         ...POLICY_DEFAULT,
         toolAllowList: [
-          { tool: "mcp__kanna__webfetch", pattern: "[" }, // invalid regex
+          { tool: "mcp__kanna__webfetch", pattern: "[" },
         ],
         defaultAction: "ask",
       },
@@ -355,7 +351,6 @@ describe("policy.evaluate restrictedAllowedPaths", () => {
       chatPolicy: { ...POLICY_DEFAULT, defaultAction: "auto-allow" },
       cwd: "/repo/kanna",
     })
-    // no restriction + no chat-level deny → falls through to auto-allow
     expect(v.verdict).toBe("auto-allow")
   })
 })

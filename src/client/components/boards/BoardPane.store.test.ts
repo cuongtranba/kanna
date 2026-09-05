@@ -5,11 +5,6 @@ beforeEach(() => {
   useBoardSyncStore.setState({ openCardId: null, syncPanelOpen: false, schemaPanelOpen: false })
 })
 
-/**
- * All three overlay the same columns, so a second one on top would hide the
- * board the reader is deciding about. Asserted here rather than trusted to the
- * markup because each opener is written independently.
- */
 describe("one aside at a time", () => {
   const asides = ["openCardId", "syncPanelOpen", "schemaPanelOpen"] as const
 

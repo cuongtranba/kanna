@@ -4,7 +4,6 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { computeWorkspaceDigest, runVerifyCommand } from "./loop-verify-io.adapter"
 
-/** Non-interactive git env so a stray credential/pager prompt cannot hang CI. */
 const GIT_TEST_ENV: Record<string, string | undefined> = {
   ...process.env,
   GIT_TERMINAL_PROMPT: "0",
@@ -24,7 +23,6 @@ async function git(args: string[], cwd: string): Promise<void> {
   if (exitCode !== 0) throw new Error(`git ${args.join(" ")} failed: ${stderr}`)
 }
 
-/** Temp git repo with one commit, so `rev-parse HEAD` resolves. */
 async function makeRepo(root: string): Promise<string> {
   await git(["init", "-q", "-b", "main"], root)
   await git(["config", "user.email", "test@kanna.local"], root)
@@ -98,7 +96,6 @@ describe("runVerifyCommand", () => {
       timeoutMs: 10_000,
     })
     expect(result.exitCode).toBe(0)
-    // macOS tmpdir is a /var -> /private/var symlink; compare basenames.
     expect(result.output).toContain(path.basename(tempRoot))
   }, 30_000)
 
@@ -112,7 +109,6 @@ describe("runVerifyCommand", () => {
     expect(result.exitCode).toBe(0)
     expect(result.output.length).toBeLessThanOrEqual(200)
     expect(result.output.split("\n")[0] ?? "").toContain("truncated")
-    // Tail kept: the last line survives, the first does not.
     expect(result.output.trimEnd().endsWith("line-2000")).toBe(true)
     expect(result.output).not.toContain("line-1\n")
   }, 30_000)
@@ -131,7 +127,6 @@ describe("runVerifyCommand", () => {
     expect(result.exitCode).not.toBe(0)
     expect(elapsed).toBeLessThan(4_500)
 
-    // The killed command must not finish later: no stray child left behind.
     await Bun.sleep(1_500)
     const markerStat = await stat(marker).catch(() => null)
     expect(markerStat).toBeNull()
@@ -140,8 +135,6 @@ describe("runVerifyCommand", () => {
   test("kills the whole process group so a backgrounded grandchild dies too", async () => {
     const marker = path.join(tempRoot, "grandchild-marker")
     const result = await runVerifyCommand({
-      // The subshell is a grandchild of the spawned shell: killing the shell
-      // pid alone would orphan it (a real verify command spawns a test runner).
       command: `( sleep 2; touch ${JSON.stringify(marker)} ) & wait`,
       cwd: tempRoot,
       timeoutMs: 300,

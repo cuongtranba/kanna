@@ -86,7 +86,6 @@ describe("mcp__kanna__edit", () => {
       )
       expect(result.isError).toBeFalsy()
       const updated = await readFile(filePath, "utf8")
-      // Must contain literal "$&-literal", not "foo-literal"
       expect(updated).toBe("$&-literal bar")
     } finally { await cleanup() }
   }, 30_000)

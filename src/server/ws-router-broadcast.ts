@@ -1,13 +1,3 @@
-/**
- * ws-router-broadcast.ts
- *
- * BroadcastManager — owns the connected-socket set, pending-broadcast state,
- * and all snapshot-push / broadcast methods. Wires event subscriptions
- * (terminals, keybindings, appSettings, update, ptyInstances, workflows)
- * and exposes a `dispose()` to tear them down.
- *
- * Extracted from ws-router.ts to reduce its size.
- */
 import { log } from "../shared/log"
 import { PROTOCOL_VERSION } from "../shared/types"
 import type { ServerWebSocket } from "bun"
@@ -40,7 +30,6 @@ import { diffChatMeta } from "./chat-ops-diff"
 import type { ChatMetaSignatures } from "./chat-ops-diff"
 import type { ClientState, SnapshotBroadcastFilter, SnapshotComputationCache } from "./ws-router-utils"
 
-// ── Deps ──────────────────────────────────────────────────────────────────────
 
 export interface BroadcastManagerDeps {
   agent: AgentCoordinator
@@ -58,11 +47,9 @@ export interface BroadcastManagerDeps {
   envelopeBuilder: EnvelopeBuilder
 }
 
-// ── BroadcastManager ─────────────────────────────────────────────────────────
 
 export class BroadcastManager {
   private readonly sockets = new Set<ServerWebSocket<ClientState>>()
-  /** Last-recorded meta signatures per chat for the chat.ops diff. */
   private readonly metaSigsByChatId = new Map<string, ChatMetaSignatures>()
   private pendingBroadcastTimer: ReturnType<typeof setTimeout> | null = null
   private pendingBroadcastAll = false
@@ -94,15 +81,12 @@ export class BroadcastManager {
       backgroundTaskOutputRegistry,
     } = deps
 
-    // Wire background error reporter
     agent.setBackgroundErrorReporter?.(this.broadcastError.bind(this))
 
-    // Terminal events
     this.disposeTerminalEvents = terminals.onEvent((event) => {
       this.pushTerminalEvent(event.terminalId, event)
     })
 
-    // Keybinding snapshot push on change
     this.disposeKeybindingEvents = keybindings.onChange(() => {
       for (const ws of this.sockets) {
         const snapshotSignatures = ensureSnapshotSignatures(ws)
@@ -118,7 +102,6 @@ export class BroadcastManager {
       }
     })
 
-    // App-settings snapshot push on change
     this.disposeAppSettingsEvents = resolvedAppSettings.onChange(() => {
       for (const ws of this.sockets) {
         const snapshotSignatures = ensureSnapshotSignatures(ws)
@@ -134,7 +117,6 @@ export class BroadcastManager {
       }
     })
 
-    // Update snapshot push on change
     this.disposeUpdateEvents = updateManager?.onChange(() => {
       for (const ws of this.sockets) {
         const snapshotSignatures = ensureSnapshotSignatures(ws)
@@ -150,7 +132,6 @@ export class BroadcastManager {
       }
     }) ?? (() => {})
 
-    // PTY instance events
     this.disposePtyInstances = ptyInstances?.subscribe((delta: PtyInstanceDelta) => {
       if (delta.type === "added") {
         this.pushPtyInstancesEvent({ type: "pty-instances.added", instance: delta.instance })
@@ -161,8 +142,6 @@ export class BroadcastManager {
       }
     }) ?? (() => {})
 
-    // Workflow snapshot push on change — also schedules sidebar re-push so
-    // ChatActivity.workflow reflects the live workflow state.
     this.disposeWorkflows = workflowRegistry?.subscribe((chatId) => {
       for (const ws of this.sockets) {
         const snapshotSignatures = ensureSnapshotSignatures(ws)
@@ -179,9 +158,6 @@ export class BroadcastManager {
       this.scheduleChatStateBroadcast(chatId)
     }) ?? (() => {})
 
-    // Board changes: one write can move both the board view and its owner's
-    // board list (a card added changes the list's card count), so a single
-    // change re-pushes whichever of the two topics a socket is on.
     this.disposeBoards = boardRegistry?.subscribe((change: BoardChange) => {
       for (const ws of this.sockets) {
         const snapshotSignatures = ensureSnapshotSignatures(ws)
@@ -201,16 +177,10 @@ export class BroadcastManager {
       }
     }) ?? (() => {})
 
-    // The armed loop's tracking file changed — the Progress panel rides the
-    // chat snapshot, so re-push that rather than a topic of its own. The watch
-    // is already debounced; the coalescer then merges this with the
-    // subagent-completion push that lands milliseconds later.
     this.disposeLoopTracking = loopTrackingRegistry?.subscribe((chatId) => {
       this.scheduleChatStateBroadcast(chatId)
     }) ?? (() => {})
 
-    // Background task output: push updated snapshot to sockets subscribed to
-    // the matching topic whenever new output arrives from the poller.
     this.disposeBackgroundTaskOutput = backgroundTaskOutputRegistry?.subscribe((chatId, taskId) => {
       for (const ws of this.sockets) {
         const snapshotSignatures = ensureSnapshotSignatures(ws)
@@ -226,7 +196,6 @@ export class BroadcastManager {
       }
     }) ?? (() => {})
 
-    // Package update snapshot push on change
     this.disposePackageUpdateEvents = packageUpdateManager?.onChange(() => {
       for (const ws of this.sockets) {
         const snapshotSignatures = ensureSnapshotSignatures(ws)
@@ -243,7 +212,6 @@ export class BroadcastManager {
     }) ?? (() => {})
   }
 
-  // ── Socket lifecycle ────────────────────────────────────────────────────────
 
   addSocket(ws: ServerWebSocket<ClientState>): void {
     this.sockets.add(ws)
@@ -253,7 +221,6 @@ export class BroadcastManager {
     this.sockets.delete(ws)
   }
 
-  // ── Protected-chat helpers ──────────────────────────────────────────────────
 
   getProtectedChatIds(): Set<string> {
     const { agent } = this.deps
@@ -307,14 +274,7 @@ export class BroadcastManager {
     }
   }
 
-  // ── Chat ops (delta) path ───────────────────────────────────────────────────
 
-  /**
-   * Records runtime/section/pending delta ops for a chat into the op-log
-   * (once per broadcast pass — deduped via the shared computation cache).
-   * Ordering authority is the op-log itself: subscribers only ever read
-   * batches out of `chatOps.since`.
-   */
   private recordMetaOps(chatId: string, cache?: SnapshotComputationCache): void {
     const { store, envelopeBuilder } = this.deps
     if (typeof store.chatOps?.record !== "function") return
@@ -333,7 +293,6 @@ export class BroadcastManager {
     }
   }
 
-  // ── Snapshot push ───────────────────────────────────────────────────────────
 
   async pushSnapshots(
     ws: ServerWebSocket<ClientState>,
@@ -378,10 +337,6 @@ export class BroadcastManager {
             sentCount += 1
             continue
           }
-          // Ring gap — drop tracking AND the snapshot signature so the
-          // fallback full snapshot below always sends and re-arms the
-          // delta path (a signature-dedup skip here would strand the
-          // subscriber outside both paths).
           seqMap.delete(id)
           snapshotSignatures.delete(id)
         }
@@ -438,7 +393,6 @@ export class BroadcastManager {
     }
   }
 
-  // ── Broadcast ───────────────────────────────────────────────────────────────
 
   async broadcastSnapshots(): Promise<void> {
     const { store } = this.deps
@@ -553,7 +507,6 @@ export class BroadcastManager {
     }
   }
 
-  // ── Per-topic targeted pushes ───────────────────────────────────────────────
 
   pushTerminalSnapshot(terminalId: string): void {
     for (const ws of this.sockets) {
@@ -598,11 +551,6 @@ export class BroadcastManager {
     }
   }
 
-  /**
-   * Pushed on `FollowedSessionRegistry` membership change. Public — unlike
-   * the other registries above, the registry's `onChange` dep is a single
-   * callback wired from server.ts (no internal pubsub to subscribe to here).
-   */
   pushFollowedSessions(): void {
     for (const ws of this.sockets) {
       const snapshotSignatures = ensureSnapshotSignatures(ws)
@@ -618,7 +566,6 @@ export class BroadcastManager {
     }
   }
 
-  /** Re-push the global cron-jobs topic; fired from emitCronEvent on every cron state change. */
   pushCronJobs(): void {
     for (const ws of this.sockets) {
       const snapshotSignatures = ensureSnapshotSignatures(ws)
@@ -634,7 +581,6 @@ export class BroadcastManager {
     }
   }
 
-  // ── Cleanup ─────────────────────────────────────────────────────────────────
 
   dispose(): void {
     if (this.pendingBroadcastTimer) {

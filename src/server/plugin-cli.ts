@@ -1,15 +1,3 @@
-/**
- * Pure argv parser for the `kanna plugin <subcommand>` CLI surface. No IO —
- * this only shapes `argv` into a discriminated command the caller can act
- * on, so it does not need the `.adapter.ts` suffix (side-effect seal).
- *
- * Never throws: every unmatched or malformed input resolves to
- * `{ kind: "error" }` with a human-readable `message`, because this backs a
- * CLI entry point that should print a usage message on bad input, not
- * crash the process. Wiring this into `cli-runtime.ts`'s dispatch (deciding
- * exit codes, stdout formatting) is a later chunk — see
- * PROGRESS-plugin-system.md's P7 note.
- */
 
 const DEFAULT_LOGS_TAIL = 100
 

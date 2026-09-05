@@ -7,15 +7,12 @@ function expandTilde(p: string, homeDir: string): string {
   return path.join(homeDir, p.slice(1).replace(/^\//, ""))
 }
 
-/** Resolve symlinks so sandbox-exec path matching works correctly on macOS. */
 function resolveReal(p: string): string {
   try {
     return realpathSync(p)
   } catch {
-    // Path may not exist yet (e.g. ~/.ssh on a fresh machine).
-    // Resolve as much of the prefix as possible by walking up.
     const parent = path.dirname(p)
-    if (parent === p) return p // reached root
+    if (parent === p) return p
     try {
       return path.join(realpathSync(parent), path.basename(p))
     } catch {
@@ -25,11 +22,6 @@ function resolveReal(p: string): string {
 }
 
 function escapeForScheme(s: string): string {
-  // sandbox-exec DSL is TinyScheme. Strings cannot contain unescaped quotes
-  // or backslashes; a literal newline/CR would terminate the string and let
-  // the remainder of a crafted deny path inject arbitrary profile clauses.
-  // Strip C0 control chars + DEL (incl. \n \r \t) — no legitimate filesystem
-  // deny path contains them.
   return s
     .replace(/[\x00-\x1f\x7f]/g, "")
     .replace(/\\/g, "\\\\")
@@ -37,7 +29,6 @@ function escapeForScheme(s: string): string {
 }
 
 function denyEntry(action: string, raw: string, homeDir: string): string {
-  // Strip trailing /** and treat as subpath
   if (raw.endsWith("/**")) {
     const base = resolveReal(expandTilde(raw.slice(0, -3), homeDir))
     return `(deny ${action} (subpath "${escapeForScheme(base)}"))`
@@ -45,7 +36,6 @@ function denyEntry(action: string, raw: string, homeDir: string): string {
 
   const expanded = expandTilde(raw, homeDir)
 
-  // Paths with remaining wildcards (no glob support in sandbox-exec) → literal fallback
   if (expanded.includes("*")) {
     return `(deny ${action} (literal "${escapeForScheme(expanded)}"))`
   }
@@ -53,13 +43,10 @@ function denyEntry(action: string, raw: string, homeDir: string): string {
   const resolved = resolveReal(expanded)
   const escaped = escapeForScheme(resolved)
 
-  // Tilde-origin paths are directory trees → subpath
   if (raw.startsWith("~")) {
     return `(deny ${action} (subpath "${escaped}"))`
   }
 
-  // Absolute paths: use subpath for dotdir basenames (e.g. .ssh, .aws — directory trees),
-  // literal for bare filenames (e.g. shadow, sudoers — specific files).
   const basename = path.basename(resolved)
   if (basename.startsWith(".")) {
     return `(deny ${action} (subpath "${escaped}"))`

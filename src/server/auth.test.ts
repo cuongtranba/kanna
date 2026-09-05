@@ -26,8 +26,6 @@ async function startPasswordServer(options: {
     strictPort: false,
     password: "secret",
     trustProxy: options.trustProxy ?? false,
-    // Don't scan the real ~/.claude / ~/.codex on boot — keeps the test fast
-    // and isolated from the dev machine's session history.
     discoverProjects: () => [],
   })
   const project = await server.store.openProject(projectDir, "Project")
@@ -42,9 +40,6 @@ function extractCookie(response: Response) {
 
 describe("password auth", () => {
   test("serves the app shell to unauthenticated browser requests", async () => {
-    // Create a minimal client bundle fixture so the static file handler can serve it.
-    // In CI, `bun run build` produces dist/client/index.html before tests run.
-    // Locally (no prior build) we inject a temp distDir via the test-only option.
     const distDir = await mkdtemp(path.join(tmpdir(), "kanna-dist-"))
     tempDirs.push(distDir)
     await writeFile(

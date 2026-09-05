@@ -2,18 +2,12 @@ import { useMemo } from "react"
 import type { AppSettingsPatch } from "../../shared/types"
 import type { KannaState } from "./useKannaState"
 
-/** The branch shape every collection key of `AppSettingsPatch` shares. */
 export interface AppSettingsCrudBranch<Input, Patch> {
   create?: Input
   update?: { id: string; patch: Patch }
   delete?: { id: string }
 }
 
-/**
- * Files the branch under its `AppSettingsPatch` key — the ONLY thing that
- * differs between the Settings CRUD sections. Declare it at module scope so the
- * reference stays stable across renders.
- */
 export type AppSettingsPatchWrapper<Input, Patch> = (
   branch: AppSettingsCrudBranch<Input, Patch>,
 ) => AppSettingsPatch

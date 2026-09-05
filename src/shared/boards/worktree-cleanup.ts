@@ -1,39 +1,16 @@
-/**
- * What to do with a card's worktree once the card reaches `done`.
- *
- * Asked, never performed. A column drag is a one-gesture action with no undo,
- * and an agent's uncommitted work is not recoverable from it — so reaching
- * `done` opens a question and nothing else. Declining is a real answer that is
- * remembered, because a prompt that returns every time trains people to
- * dismiss it without reading.
- */
 
 import type { CardLink, ColumnSemantic } from "./types"
 
 export type CleanupDecision = "merge" | "discard" | "leave"
 
-/**
- * The link kind that records a decline.
- *
- * Keyed by worktree path rather than by card, so starting work again later —
- * a new worktree — asks again. The old answer was about the old checkout.
- */
 export const CLEANUP_DECLINED: CardLink["kind"] = "cleanup_declined"
 
 export interface CleanupFacts {
   columnSemantic: ColumnSemantic | null
   links: readonly CardLink[]
-  /** Worktree paths that still exist on disk. */
   existingWorktreePaths: ReadonlySet<string>
 }
 
-/**
- * The worktree awaiting a decision, or null when there is nothing to ask about.
- *
- * Derived, not event-driven: a card sitting in `done` with a live worktree IS
- * the pending question, however it got there. A missed "moved" event therefore
- * cannot lose the prompt, and a replayed one cannot double it.
- */
 export function pendingCleanupWorktree(facts: CleanupFacts): string | null {
   if (facts.columnSemantic !== "done") return null
 
@@ -54,21 +31,11 @@ export function pendingCleanupWorktree(facts: CleanupFacts): string | null {
 export interface WorktreeCleanupView {
   worktreePath: string
   branch: string
-  /** Uncommitted files in the worktree. */
   dirtyFileCount: number
-  /** Commits on the branch the project's current branch cannot reach. */
   unmergedCommitCount: number
-  /** Whether merging would conflict, known before the user chooses. */
   hasConflicts: boolean
 }
 
-/**
- * Why the worktree must not be deleted, or null when it holds nothing.
- *
- * Both conditions are refusals rather than confirmations. "Are you sure?" is
- * the wrong question when the honest answer is that the work has nowhere else
- * to exist.
- */
 export function discardBlockedReason(view: WorktreeCleanupView): string | null {
   const reasons: string[] = []
   if (view.dirtyFileCount > 0) {
@@ -87,7 +54,6 @@ export function discardBlockedReason(view: WorktreeCleanupView): string | null {
   return `That worktree still holds ${reasons.join(" and ")}.`
 }
 
-/** Why merging cannot run, or null when it can. */
 export function mergeBlockedReason(view: WorktreeCleanupView): string | null {
   if (view.dirtyFileCount > 0) {
     return "Commit or discard the changes in that worktree before merging its branch."
@@ -99,13 +65,6 @@ export function mergeBlockedReason(view: WorktreeCleanupView): string | null {
   return null
 }
 
-/**
- * What the worktree is holding, so the choice is made with the numbers in view.
- *
- * Beside {@link discardBlockedReason} and {@link mergeBlockedReason} rather than
- * in the drawer: all three read the same view to answer the same question, and
- * a count the refusal disagreed with would be worse than no count at all.
- */
 export function describeWorktreeContents(view: WorktreeCleanupView): string {
   const parts: string[] = []
   if (view.unmergedCommitCount > 0) {

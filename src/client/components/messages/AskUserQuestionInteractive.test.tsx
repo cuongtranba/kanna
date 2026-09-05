@@ -163,18 +163,15 @@ describe("AskUserQuestionInteractive — slide nav", () => {
       )
     })
 
-    // Q1: no back button visible (no ChevronLeft icon).
     const initialBackButtons = Array.from(container.querySelectorAll("button"))
       .filter((b) => b.querySelector("svg.lucide-chevron-left"))
     expect(initialBackButtons).toHaveLength(0)
 
-    // Advance to Q2.
     const f1 = Array.from(container.querySelectorAll("button"))
       .find((b) => b.textContent?.trim() === "F1")
     await act(async () => { f1!.click() })
     await act(async () => { await wait(200) })
 
-    // Back button now visible.
     const backBtn = Array.from(container.querySelectorAll("button"))
       .find((b) => b.querySelector("svg.lucide-chevron-left"))
     expect(backBtn).toBeDefined()
@@ -195,7 +192,6 @@ describe("AskUserQuestionInteractive — slide nav", () => {
       )
     })
 
-    // Q1 — no Submit.
     expect(Array.from(container.querySelectorAll("button")).some((b) => b.textContent?.trim() === "Submit")).toBe(false)
 
     const f1 = Array.from(container.querySelectorAll("button"))
@@ -203,7 +199,6 @@ describe("AskUserQuestionInteractive — slide nav", () => {
     await act(async () => { f1!.click() })
     await act(async () => { await wait(200) })
 
-    // Q2 — Submit appears after picking S1.
     const s1 = Array.from(container.querySelectorAll("button"))
       .find((b) => b.textContent?.trim() === "S1")
     await act(async () => { s1!.click() })
@@ -244,7 +239,6 @@ describe("AskUserQuestionInteractive — multi-select", () => {
 
     await act(async () => { getBtn("Alpha")!.click() })
     await act(async () => { getBtn("Beta")!.click() })
-    // No auto-advance.
     expect(onSubmit).toHaveBeenCalledTimes(0)
 
     await act(async () => { getBtn("Submit")!.click() })
@@ -255,26 +249,10 @@ describe("AskUserQuestionInteractive — multi-select", () => {
   })
 })
 
-// React 19 + HappyDOM: set the input value via the native HTMLInputElement prototype
-// setter (bypassing React's instance-level value tracker so the old and new values
-// differ), then trigger React's polyfill-path change detection with focus + keydown.
-//
-// Background: in Bun's test runner react-dom is evaluated before HappyDOM finishes
-// installing `oninput` on document, so React's `isInputEventSupported` flag is false
-// at module-init time.  With that flag false, React uses the polyfill path
-// (`getTargetInstForInputEventPolyfill`) which watches for keydown/keyup events on the
-// focused element and calls `updateValueIfChanged`.  Calling `input.focus()` fires
-// `focusin` which sets React's `activeElementInst$1`; the subsequent keydown then
-// compares React's tracked value ("") with the DOM value (our new string) and fires
-// `onChange`.  No fiber introspection required.
 function setInputValue(input: HTMLInputElement, value: string): void {
   const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!
   nativeSetter.call(input, value)
   input.focus()
-  // Dispatch the native `input` event React's `onChange` actually listens to,
-  // so the change propagates regardless of when happy-dom registers relative to
-  // react-dom load (which decides whose HTMLInputElement React's value tracker
-  // binds to). The trailing keydown still drives the Enter-to-submit handler.
   input.dispatchEvent(new Event("input", { bubbles: true }))
   input.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true }))
 }
@@ -320,7 +298,7 @@ describe("AskUserQuestionInteractive — Other input", () => {
       )
     })
 
-    expect(container.querySelectorAll("button").length).toBeLessThan(3) // no option buttons, only Submit
+    expect(container.querySelectorAll("button").length).toBeLessThan(3)
     const input = container.querySelector("input[type=text]") as HTMLInputElement
     await act(async () => {
       setInputValue(input, "freeform")

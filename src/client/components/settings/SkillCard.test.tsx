@@ -109,8 +109,6 @@ describe("InstalledSkillCard", () => {
     expect(html).toContain("Pinned v11.12.0")
   })
 
-  // `skills update` resolves upstream AT the pin, so offering "Update" on a
-  // pinned card offers a button that provably cannot move it.
   test("offers Re-pin, not Update, when a pinned skill is behind", () => {
     const entry = makeEntry({
       pinnedRef: "v11.12.0",

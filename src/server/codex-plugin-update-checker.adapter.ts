@@ -4,7 +4,6 @@ import { safeJsonParse, type JsonValue } from "../shared/json"
 import type { InstalledPackage, PackageUpdateChecker, PackageUpdateStatus } from "../shared/packages/types"
 import { parseCodexPluginAvailable } from "../shared/packages/parse-codex-plugins"
 
-// ─── Dependency interfaces ────────────────────────────────────────────────────
 
 export interface CodexPluginCheckerSpawnResult {
   stdout: string
@@ -12,23 +11,17 @@ export interface CodexPluginCheckerSpawnResult {
 }
 
 export interface CodexPluginCheckerDeps {
-  /** Spawn a command and capture stdout + exit code. */
   spawnFn: (cmd: string[], env: NodeJS.ProcessEnv, signal: AbortSignal) => Promise<CodexPluginCheckerSpawnResult>
-  /** Resolved `codex` binary path; null when unavailable. */
   codexBinary: string | null
-  /** Minimum ms between marketplace upgrade runs (default 1 h). */
   refreshThrottleMs?: number
-  /** Monotonic clock for throttle checks (default `Date.now`). */
   nowFn?: () => number
 }
 
-// ─── Internal state ───────────────────────────────────────────────────────────
 
 interface ThrottleEntry {
   lastRefreshedAt: number
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function unknownStatus(pkg: InstalledPackage, checkedAt: number, error: string): PackageUpdateStatus {
   return {
@@ -43,14 +36,11 @@ function unknownStatus(pkg: InstalledPackage, checkedAt: number, error: string):
   }
 }
 
-// ─── Factory ─────────────────────────────────────────────────────────────────
 
 export function createCodexPluginUpdateChecker(deps: CodexPluginCheckerDeps): PackageUpdateChecker {
-  const refreshThrottleMs = deps.refreshThrottleMs ?? 3_600_000 // 1 h
+  const refreshThrottleMs = deps.refreshThrottleMs ?? 3_600_000
   const nowFn = deps.nowFn ?? (() => Date.now())
 
-  // Single throttle entry (upgrade applies to all marketplaces at once).
-  // Initialize to -Infinity so the first call always triggers an upgrade.
   const throttle: ThrottleEntry = { lastRefreshedAt: -Infinity }
 
   async function maybeRunMarketplaceUpgrade(signal: AbortSignal): Promise<void> {
@@ -61,7 +51,6 @@ export function createCodexPluginUpdateChecker(deps: CodexPluginCheckerDeps): Pa
     try {
       await deps.spawnFn([deps.codexBinary, "plugin", "marketplace", "upgrade"], process.env, signal)
     } catch {
-      // best-effort
     }
   }
 
@@ -110,7 +99,6 @@ export function createCodexPluginUpdateChecker(deps: CodexPluginCheckerDeps): Pa
       const available = parseCodexPluginAvailable(parsed)
 
       return codexPkgs.map((pkg) => {
-        // pkg.name is the raw plugin id (without the "codex-plugin:" prefix)
         const pluginId = pkg.name
         const availableEntry = available.get(pluginId)
 
@@ -142,7 +130,6 @@ export function createCodexPluginUpdateChecker(deps: CodexPluginCheckerDeps): Pa
   }
 }
 
-// ─── Default deps builder ─────────────────────────────────────────────────────
 
 export function buildCodexPluginCheckerDeps(codexBinary: string | null): CodexPluginCheckerDeps {
   return {

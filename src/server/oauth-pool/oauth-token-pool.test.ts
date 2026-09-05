@@ -122,12 +122,8 @@ describe("OAuthTokenPool.markDisabled / markEnabled", () => {
       (id, patch) => { store = store.map((t) => t.id === id ? { ...t, ...patch } : t) },
       () => 1000,
     )
-    pool.pickActive("chat-1") // reserves "a"
+    pool.pickActive("chat-1")
     pool.markError("a", "401")
-    // chat-2 (which never touched "a") must be able to claim "b" — even
-    // though "a" was reserved by chat-1 before markError. Without dropping
-    // the reservation, errored-status check already skips "a" anyway, but
-    // we assert markError leaves no stale entry in reservedBy.
     expect(pool.pickActive("chat-2")?.id).toBe("b")
   })
 })
@@ -328,11 +324,9 @@ describe("OAuthTokenPool reservations (concurrent sessions)", () => {
       (id, patch) => { store = store.map((t) => t.id === id ? { ...t, ...patch } : t) },
       () => 1000,
     )
-    pool.pickActive("chat-1") // reserves a
-    pool.markLimited("a", 9999) // a now limited; reservation must drop
-    // chat-2 should still get b (a is limited, not reservation-blocking)
+    pool.pickActive("chat-1")
+    pool.markLimited("a", 9999)
     expect(pool.pickActive("chat-2")?.id).toBe("b")
-    // After b is also limited, chat-1 has nothing left.
     pool.markLimited("b", 9999)
     expect(pool.pickActive("chat-1")).toBe(null)
   })
@@ -344,13 +338,10 @@ describe("OAuthTokenPool reservations (concurrent sessions)", () => {
       (id, patch) => { store = store.map((t) => t.id === id ? { ...t, ...patch } : t) },
       () => 1000,
     )
-    // Initial pick: chat-1=a, chat-2=b, c idle.
     expect(pool.pickActive("chat-1")?.id).toBe("a")
     expect(pool.pickActive("chat-2")?.id).toBe("b")
-    // Both hit rate-limit at the same time on their own token.
     pool.markLimited("a", 9999)
     pool.markLimited("b", 9999)
-    // Each tries to rotate. Reservations prevent both from claiming c.
     const chat1Rot = pool.pickActive("chat-1")
     const chat2Rot = pool.pickActive("chat-2")
     const ids = [chat1Rot?.id, chat2Rot?.id].filter(Boolean)
@@ -367,7 +358,6 @@ describe("OAuthTokenPool reservations (concurrent sessions)", () => {
     )
     const first = pool.pickActive()
     expect(first?.id).toBe("a")
-    // No reservation taken; another caller can still get a.
     const second = pool.pickActive("chat-x")
     expect(second?.id).toBe("a")
   })
@@ -383,7 +373,6 @@ describe("OAuthTokenPool.hasUsable (TOCTOU parity with pickActive)", () => {
     )
     pool.pickActive("chat-A")
     expect(pool.hasUsable("chat-B")).toBe(false)
-    // Owner sees their own reservation as usable.
     expect(pool.hasUsable("chat-A")).toBe(true)
   })
 
@@ -397,7 +386,6 @@ describe("OAuthTokenPool.hasUsable (TOCTOU parity with pickActive)", () => {
     pool.pickActive("chat-A")
     pool.pickActive("chat-B")
     expect(pool.hasUsable("chat-C")).toBe(false)
-    // And the matching pickActive agrees — TOCTOU gap closed.
     expect(pool.pickActive("chat-C")).toBeNull()
   })
 
@@ -412,7 +400,6 @@ describe("OAuthTokenPool.hasUsable (TOCTOU parity with pickActive)", () => {
     )
     expect(pool.hasUsable()).toBe(true)
     expect(writes).toEqual([])
-    // pickActive does revive on commit, hasUsable does not.
     pool.pickActive("chat-A")
     expect(writes.length).toBeGreaterThan(0)
   })
@@ -461,7 +448,7 @@ describe("OAuthTokenPool.pickEphemeral", () => {
     )
     const lease = pool.pickEphemeral()
     lease?.release()
-    lease?.release() // no throw, no spurious reservation re-cleanup
+    lease?.release()
     expect(pool.pickEphemeral()?.token.id).toBe("a")
   })
 
@@ -480,9 +467,6 @@ describe("OAuthTokenPool.pickEphemeral", () => {
 
 describe("OAuthTokenPool.pickActive (pure read loop, deferred revival)", () => {
   test("does NOT call writeStatus on tokens it ultimately does not pick", () => {
-    // Two elapsed-limited tokens. pickActive should pick exactly ONE (LRU)
-    // and only emit ONE revival writeStatus — the previous implementation
-    // wrote status for every elapsed candidate inside the read loop.
     const writes: Array<{ id: string; patch: unknown }> = []
     const store = [
       tok("a", { status: "limited", limitedUntil: 500, lastUsedAt: 100 }),
@@ -494,7 +478,7 @@ describe("OAuthTokenPool.pickActive (pure read loop, deferred revival)", () => {
       () => 1000,
     )
     const picked = pool.pickActive("chat-A")
-    expect(picked?.id).toBe("a") // older lastUsedAt
+    expect(picked?.id).toBe("a")
     const revivals = writes.filter((w) => {
       const p = w.patch as { status?: string }
       return p.status === "active"
@@ -516,7 +500,6 @@ describe("OAuthTokenPool.describeUnavailability", () => {
       ],
       () => {}, () => 1000,
     )
-    // pin Phong to a different chat
     pool.pickActive("chat-other")
     const result = pool.describeUnavailability("chat-new")
     const byId = new Map(result.map((r) => [r.tokenId, r]))
@@ -570,7 +553,6 @@ describe("OAuthTokenPool concurrency cap (adr-20260522-oauth-token-share-cap)", 
     expect(pool.pickActive("chat-3")).toBe(null)
     pool.release("chat-1")
     expect(pool.pickActive("chat-3")?.id).toBe("a")
-    // chat-2 still owns it, so chat-1 cannot crash-overcommit
     pool.release("chat-3")
     expect(pool.describeUnavailability("chat-4")).toEqual([
       { tokenId: "a", label: "a", reason: "available" },
@@ -581,7 +563,7 @@ describe("OAuthTokenPool concurrency cap (adr-20260522-oauth-token-share-cap)", 
     const pool = new OAuthTokenPool(
       () => [tok("a")],
       () => {}, () => 1000,
-      () => 3, // global cap = 3
+      () => 3,
     )
     expect(pool.pickActive("c1")?.id).toBe("a")
     expect(pool.pickActive("c2")?.id).toBe("a")
@@ -614,8 +596,6 @@ describe("OAuthTokenPool concurrency cap (adr-20260522-oauth-token-share-cap)", 
       () => {}, () => 1000,
       () => 5,
     )
-    // a (cap=1) and b (cap=2) both available; a wins LRU but cap=1 means
-    // chat-2 falls through to b.
     expect(pool.pickActive("chat-1")?.id).toBe("a")
     expect(pool.pickActive("chat-2")?.id).toBe("b")
     expect(pool.pickActive("chat-3")?.id).toBe("b")
@@ -627,8 +607,6 @@ describe("OAuthTokenPool concurrency cap (adr-20260522-oauth-token-share-cap)", 
       () => [tok("a", { maxConcurrent: 2, lastUsedAt: 1 }), tok("b", { maxConcurrent: 2, lastUsedAt: 2 })],
       () => {}, () => 1000,
     )
-    // a is LRU-first. chat-1 picks a. chat-2 should pick b (owner count
-    // 0 < a's 1), not stack on a.
     expect(pool.pickActive("chat-1")?.id).toBe("a")
     expect(pool.pickActive("chat-2")?.id).toBe("b")
   })
@@ -642,10 +620,7 @@ describe("OAuthTokenPool concurrency cap (adr-20260522-oauth-token-share-cap)", 
     pool.pickActive("c2")
     pool.pickActive("c3")
     pool.release("c2")
-    // c1, c3 still own the token; new chat blocked because 2/3.
-    // Add a new chat (c4) — should fit since 1 slot free.
     expect(pool.pickActive("c4")?.id).toBe("a")
-    // Now 3/3 again, c5 blocked.
     expect(pool.pickActive("c5")).toBe(null)
   })
 
@@ -658,7 +633,6 @@ describe("OAuthTokenPool concurrency cap (adr-20260522-oauth-token-share-cap)", 
     pool.pickActive("chat-2")
     const taken = pool.takeStaleOwners("a").sort()
     expect(taken).toEqual(["chat-1", "chat-2"])
-    // Owners cleared — token immediately available again.
     expect(pool.pickActive("chat-3")?.id).toBe("a")
   })
 

@@ -3,7 +3,6 @@ import { createCodexPluginUpdateChecker, type CodexPluginCheckerDeps } from "./c
 import type { InstalledPackage } from "../shared/packages/types"
 import pluginListFixture from "./__fixtures__/codex-plugin-list.json"
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function makePlugin(overrides: Partial<InstalledPackage> = {}): InstalledPackage {
   return {
@@ -44,7 +43,6 @@ function makeDeps(overrides: Partial<CodexPluginCheckerDeps> = {}): CodexPluginC
   }
 }
 
-// ─── Tests ────────────────────────────────────────────────────────────────────
 
 describe("createCodexPluginUpdateChecker", () => {
   test("kind is codex-plugin", () => {
@@ -73,7 +71,6 @@ describe("createCodexPluginUpdateChecker", () => {
   })
 
   test("up_to_date when plugin is installed but not in available", async () => {
-    // mycodexplugin is in installed but NOT in available (fixture has only another-plugin in available)
     const pkg = makePlugin()
     const checker = createCodexPluginUpdateChecker(makeDeps())
     const results = await checker.check([pkg], makeAbortSignal())
@@ -87,7 +84,6 @@ describe("createCodexPluginUpdateChecker", () => {
   })
 
   test("outdated when plugin is in available array", async () => {
-    // another-plugin 0.5.0 installed, 0.6.0 available in the fixture
     const pkg = makePlugin({
       id: "codex-plugin:another-plugin",
       name: "another-plugin",
@@ -104,7 +100,6 @@ describe("createCodexPluginUpdateChecker", () => {
     expect(r.error).toBeNull()
   })
 
-  // ─── Spawn-failure table ──────────────────────────────────────────────────
 
   test("unknown when codex binary is null", async () => {
     const checker = createCodexPluginUpdateChecker(makeDeps({ codexBinary: null }))
@@ -171,7 +166,6 @@ describe("createCodexPluginUpdateChecker", () => {
     expect(results[0]!.error).toMatch(/ENOENT/)
   })
 
-  // ─── Throttle ─────────────────────────────────────────────────────────────
 
   test("runs marketplace upgrade only once within throttle window", async () => {
     let upgradeCount = 0
@@ -202,17 +196,13 @@ describe("createCodexPluginUpdateChecker", () => {
     })
     const checker = createCodexPluginUpdateChecker(deps)
     await checker.check([makePlugin()], makeAbortSignal())
-    now = 2_000 // advance past throttle
+    now = 2_000
     await checker.check([makePlugin()], makeAbortSignal())
     expect(upgradeCount).toBe(2)
   })
 
-  // ─── .system exclusion ────────────────────────────────────────────────────
 
   test("does not return status for .system plugins (they are filtered by the parser)", async () => {
-    // Feeding a .system plugin into check() — the checker itself doesn't filter at
-    // input; the inventory read layer already excludes them. But if one somehow
-    // arrives, it should be treated as up_to_date (not in available map).
     const systemPkg = makePlugin({
       id: "codex-plugin:.system-builtin",
       name: ".system-builtin",
@@ -224,7 +214,6 @@ describe("createCodexPluginUpdateChecker", () => {
     expect(results[0]!.availability).toBe("up_to_date")
   })
 
-  // ─── Multiple packages ────────────────────────────────────────────────────
 
   test("handles multiple packages with mixed status", async () => {
     const pkgs: InstalledPackage[] = [

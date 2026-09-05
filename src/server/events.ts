@@ -38,10 +38,7 @@ export interface ChatRecord {
   lastTurnOutcome: "success" | "failed" | "cancelled" | null
   stackId?: string
   stackBindings?: StackBinding[]
-  /** Per-chat permission policy overlay; merges over the global defaults. */
   policyOverride?: ChatPermissionPolicyOverride | null
-  // Consecutive failed proactive `/compact` injections. Persisted so the
-  // circuit breaker survives a server restart instead of resetting to 0.
   compactFailureCount?: number
 }
 
@@ -112,7 +109,6 @@ export type ProjectEvent = {
   type: "project_instructions_set"
   timestamp: number
   projectId: string
-  /** Trimmed; empty string clears. See adr-20260904. */
   instructions: string
 }
 
@@ -219,18 +215,12 @@ export type QueuedMessageEvent =
       queuedMessageId: string
     }
 
-/**
- * Model + run config active when a turn starts. Recorded on `turn_started`
- * so a turns.jsonl trace shows exactly which provider/model/driver/config
- * executed each turn. Optional: historical events predate this field.
- */
 export interface TurnRunConfig {
   provider: AgentProvider
   model: string
   effort?: string
   serviceTier?: "fast"
   planMode: boolean
-  /** Resolved claude driver preference at turn start (claude turns only meaningful). */
   driver: ClaudeDriverPreference
 }
 
@@ -285,7 +275,7 @@ export type StackEvent =
       timestamp: number
       stackId: string
       title: string
-      projectIds: string[]    // ≥2 at creation; invariant enforced by the store, not the event
+      projectIds: string[]
     }
   | {
       v: 3
@@ -319,7 +309,6 @@ export type StackEvent =
       type: "stack_instructions_set"
       timestamp: number
       stackId: string
-      /** Trimmed; empty string clears. See adr-20260904. */
       instructions: string
     }
 
@@ -332,8 +321,6 @@ export type SubagentRunEvent =
       runId: string
       subagentId: string | null
       subagentName: string
-      /** Short prompt-derived label (see SubagentRunSnapshot.label). Optional for
-       *  back-compat: older events and error paths omit it. */
       label?: string
       provider: AgentProvider
       model: string
@@ -513,7 +500,6 @@ export interface StackRecord {
   createdAt: number
   updatedAt: number
   deletedAt?: number
-  /** How this stack's projects relate; rendered as `## Stack instructions`. */
   instructions?: string
 }
 

@@ -17,7 +17,6 @@ const isProductionSource = (relativePath: string): boolean =>
   SOURCE_EXTENSIONS.some((ext) => relativePath.endsWith(ext))
   && !PRODUCTION_EXCLUDES.some((excluded) => relativePath.includes(excluded))
 
-/** Matches `wc -l`: the number of newline characters, so manifest pins are comparable to a shell measurement. */
 const countLines = (contents: string): number => {
   let lines = 0
   for (let i = 0; i < contents.length; i += 1) if (contents[i] === "\n") lines += 1
@@ -44,10 +43,6 @@ export function measureModules(root: string, directory = "src"): ModuleMeasureme
     .sort((a, b) => a.path.localeCompare(b.path))
 }
 
-/**
- * Counts matching LINES, not matching occurrences, so a pin stays comparable to
- * the `grep -c` a reviewer will run to check it by hand.
- */
 function measurePattern(root: string, sources: readonly ModuleMeasurement[], budget: PatternBudget): PatternMeasurement {
   const expression = new RegExp(budget.pattern)
   const sites: string[] = []
@@ -84,11 +79,6 @@ const limitOf = (setting: LoadedModule): number | null => {
   return null
 }
 
-/**
- * Reads ceilings out of the real eslint.config.js rather than a transcription,
- * so a pin and the value ESLint actually enforces cannot agree on paper while
- * disagreeing in fact.
- */
 export async function readEslintLimits(
   root: string,
   rules: readonly string[],

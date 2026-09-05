@@ -1,19 +1,6 @@
 import { readFile } from "node:fs/promises"
 import path from "node:path"
 
-/**
- * Mirror of the per-PID file Claude Code itself writes on every spawn under
- * `${homeDir}/.claude/sessions/<pid>.json` (claude-code source:
- * src/utils/concurrentSessions.ts `registerSession`). Reading this file is
- * the only race-free way for a supervisor to discover the session UUID
- * claude assigned to a TUI spawn — `--session-id` is honored but only in
- * non-resume flows, and the UUID is otherwise never emitted to PTY stdout
- * before the first prompt commit.
- *
- * Claude removes the file on graceful exit; a crashed claude leaves it
- * behind, which is harmless for our use case because we always look up by
- * the live child PID we just spawned.
- */
 export interface ClaudeSessionRegistryEntry {
   pid: number
   sessionId: string

@@ -56,7 +56,6 @@ describe("SplitContainer", () => {
   })
 
   test("nests groups, one separator per boundary", () => {
-    // g1 has one boundary, g2 has one boundary.
     expect(renderLayout(nested).split("data-separator").length - 1).toBe(2)
   })
 
@@ -78,9 +77,6 @@ describe("SplitContainer", () => {
     expect(html).toContain("content-empty")
   })
 
-  // Sizes are not asserted here: react-resizable-panels resolves defaultSize at
-  // runtime, so static markup carries flex-grow rather than the percentage.
-  // The size arithmetic is covered by the engine and store suites.
   test("lays a horizontal group out as a row and a vertical one as a column", () => {
     expect(renderLayout(split)).toContain("flex-direction:row")
 
@@ -91,8 +87,6 @@ describe("SplitContainer", () => {
     expect(renderLayout(vertical)).toContain("flex-direction:column")
   })
 
-  // ARIA orientation is deliberately the inverse of the split direction: a
-  // horizontal split is divided by a vertically-oriented separator.
   test("gives the separator the inverse aria-orientation", () => {
     expect(renderLayout(split)).toContain('aria-orientation="vertical"')
   })

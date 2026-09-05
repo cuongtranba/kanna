@@ -80,9 +80,6 @@ describe("startKannaMcpHttpServer", () => {
           },
         }),
       })
-      // Past auth: status is 200 (initialize succeeded) or some other
-      // non-401 status from the MCP layer. Either way the bearer check
-      // didn't block us.
       expect(res.status).not.toBe(401)
     } finally {
       await handle.close()

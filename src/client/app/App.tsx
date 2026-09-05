@@ -45,12 +45,6 @@ import { timerAdapter } from "../adapters/timer.adapter"
 import { localStorageAdapter } from "../adapters/storage.adapter"
 import { fetchAuthStatus, postAuthLogin } from "../api/auth"
 
-/*
-  One instance for the app's lifetime. It holds a little gesture state (armed,
-  current progress), and a module-level singleton keeps `useSidebarSwipeGesture`'s
-  effect deps stable — built per render it would re-register the touch listeners
-  on every render, which is the shape `no-unstable-hook-fn-arg` exists to catch.
-*/
 const drawerVisual = createDrawerVisual()
 
 const VERSION_SEEN_STORAGE_KEY = "kanna:last-seen-version"
@@ -183,7 +177,7 @@ function useAppAuthState(ports: AppPorts = {}) {
   const dom = ports.dom ?? domAdapter
   const authStatus = useAppShellStore((s) => s.authStatus)
   const retryTimeoutRef = useRef<number | null>(null)
-  const refreshRef = useRef<() => Promise<void>>(async () => { /* stable ref kept current by useLayoutEffect */ })
+  const refreshRef = useRef<() => Promise<void>>(async () => { })
 
   const refresh = useCallback(async () => {
     if (retryTimeoutRef.current !== null) {
@@ -204,7 +198,6 @@ function useAppAuthState(ports: AppPorts = {}) {
       return
     }
 
-    // fetchAuthStatus returns {} on non-ok HTTP; treat as a retry condition
     const responseOk = Object.keys(payload).length > 0 ? true : null
     if (shouldRetryAuthStatusRequest(responseOk)) {
       retryTimeoutRef.current = timer.setTimeout(() => {
@@ -267,9 +260,6 @@ function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
   const params = useParams()
   const state = useKannaState(params.chatId ?? null)
   const dialog = useAppDialog()
-  // Turns the global plugins switch into loaded contributions for the sidebar
-  // and the chat footer. Mounted at the app root so a plugin surface survives
-  // route changes rather than reloading on every navigation.
   usePluginContributions()
   const chatSoundPreference = useAppSettingsStore(selectChatSoundPreference)
   const chatSoundId = useAppSettingsStore(selectChatSoundId)
@@ -354,8 +344,6 @@ function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
       navigate(`/chat/${chatId}`)
     }
   }, [navigate, setPermissionsChatId, state.activeChatId])
-  // Closes over an async command on the state prop, so it stays in the
-  // component; the store only learns that the dialog closed.
   const handleApplyChatPolicy = useCallback((next: Parameters<typeof state.handleSetChatPolicyOverride>[1]) => {
     if (!permissionsChatId) return
     void state.handleSetChatPolicyOverride(permissionsChatId, next).catch(() => undefined)
@@ -509,37 +497,15 @@ function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
           </span>
         </NoticeBanner>
       ) : null}
-      {/*
-        `data-kanna-spawning` is beat 3's switch. The sidebar's own root reads
-        it through a descendant rule (`.kanna-sidebar-shell` in index.css)
-        rather than subscribing to the store itself: KannaSidebar sits exactly
-        on its architecture-budget ceiling, and a flag the shell already owns
-        does not need to be re-derived one component deeper.
-      */}
       <div
         className="flex flex-1 min-h-0 overflow-hidden"
         data-kanna-spawning={isSpawningChat ? "true" : undefined}
       >
         {sidebarElement}
-        {/*
-          The outlet is a card inset to match the sidebar's own md:my-2 card, so
-          both columns' top edges — and therefore the sidebar header and the
-          pane tab strip that sit on them — start on the same line.
-
-          It is also `overflow-hidden`, so NOTHING above a route page scrolls:
-          every full-page route below must own its own scroll container, via
-          SHELL_PAGE_SCROLL_CLASS (src/client/lib/shellChrome.ts). A page that
-          skips it is clipped at the viewport edge with no way to reach the
-          content below the fold — issue #772.
-        */}
         <div
           className={cn(
             "flex flex-1 flex-col overflow-hidden",
             SHELL_CONTENT_CARD_CLASS,
-            // Beat 3 of the new-session sentence (§01), the half that comes
-            // FORWARD. Its partner — the sidebar stepping back — lives on
-            // KannaSidebar's own root, because `display: contents` on a
-            // wrapper here would generate no box for a transform to apply to.
             isSpawningChat && "kanna-surface-forward",
           )}
           inert={mobileSidebarModalOpen ? true : undefined}
@@ -560,15 +526,6 @@ function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
   )
 }
 
-/**
- * Outer shell: mounts `AppGlobalProvider` (one set of global socket
- * subscriptions) and renders `KannaLayoutInner` as its child.
- *
- * Splitting into two components is necessary because a React context provider
- * only affects CHILDREN, not the component that renders it. Placing the
- * provider here ensures `KannaLayoutInner` (and everything it renders) reads
- * from a single shared `AppGlobalState` instance.
- */
 function KannaLayout({ ports = {} }: { ports?: AppPorts } = {}) {
   return (
     <AppGlobalProvider>
@@ -588,9 +545,6 @@ function AuthedApp() {
     return <PasswordScreen error={auth.state.error} onSubmit={auth.submitPassword} />
   }
 
-  // The socket provider sits INSIDE the auth gate (an unauthenticated visitor
-  // must not open a connection) but ABOVE the router, so route changes — and,
-  // later, multiple mounted chat tabs — all share the one WebSocket.
   return (
     <KannaSocketProvider>
       <Routes>
@@ -601,18 +555,8 @@ function AuthedApp() {
           <Route path="/chat/:chatId" element={<DeferredRoute><WorkspacePage /></DeferredRoute>} />
           <Route path="/workflows/:chatId" element={<DeferredRoute><WorkflowsPage /></DeferredRoute>} />
           <Route path="/cron" element={<DeferredRoute><CronJobsPage /></DeferredRoute>} />
-          {/* The list answers "what boards does this project have" — not a
-              workspace question, so it is a page of its own. */}
           <Route path="/boards/:projectId" element={<DeferredRoute><BoardsRoutePage /></DeferredRoute>} />
-          {/* A board is its own address, so refresh and Back both work on it —
-              and it opens INTO the workspace, as a tab beside the chats, so
-              switching board↔chat is the tab strip rather than a round trip
-              through the sidebar. */}
           <Route path="/boards/:projectId/:boardId" element={<DeferredRoute><WorkspacePage /></DeferredRoute>} />
-          {/* A Stack board's owner is the Stack, not any one of its projects —
-              the literal "stack" segment ranks these above the two routes
-              above (react-router scores static segments over dynamic ones),
-              so `/boards/stack/:stackId` never gets read as a project id. */}
           <Route path="/boards/stack/:stackId" element={<DeferredRoute><StackBoardsRoutePage /></DeferredRoute>} />
           <Route path="/boards/stack/:stackId/:boardId" element={<WorkspacePage />} />
         </Route>
@@ -623,14 +567,6 @@ function AuthedApp() {
 
 export function App() {
   return (
-    /*
-      `reducedMotion="user"` is the single gate for every Motion component in
-      the app: Motion drops the transform and keeps the end state, so a reveal
-      still arrives — it just does not travel. Declared once here rather than
-      per component, because a component that forgets it is a component whose
-      motion nobody asked for. anime.js has no equivalent and is gated by
-      `prefersReducedMotion()` at each timeline instead.
-    */
     <MotionConfig reducedMotion="user">
       <QueryClientProvider client={queryClient}>
         <SocketBridge />

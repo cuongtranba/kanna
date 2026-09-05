@@ -1,8 +1,4 @@
 import type { JsonObject } from "../shared/json"
-/**
- * Pure utilities for ws-router — no closure over createWsRouter state.
- * Extracted from ws-router.ts to reduce its size.
- */
 import type { ServerWebSocket } from "bun"
 import { log } from "../shared/log"
 import type { SidebarData } from "../shared/types"
@@ -10,14 +6,11 @@ import { PROTOCOL_VERSION } from "../shared/types"
 import type { ServerEnvelope, SubscriptionTopic } from "../shared/protocol"
 import type { EventStore } from "./event-store"
 
-// ── Shared interfaces ──────────────────────────────────────────────────────────
 
 export interface ClientState {
   subscriptions: Map<string, SubscriptionTopic>
   snapshotSignatures: Map<string, string>
-  /** Per-subscription last-delivered chat op-log seq (ops delta path). */
   chatOpSeqBySubId?: Map<string, number>
-  /** Dispose fns for background-task-output watchers, keyed by subscription id. */
   backgroundTaskWatchers?: Map<string, () => void>
   protectedDraftChatIds?: Set<string>
   pushDeviceId?: string | null
@@ -41,11 +34,9 @@ export interface SnapshotComputationCache {
     data: SidebarData
     signature: string
   }
-  /** Chats whose meta ops were already recorded during this broadcast pass. */
   chatMetaOpsRecordedChatIds?: Set<string>
 }
 
-// ── Profiling helpers ─────────────────────────────────────────────────────────
 
 export function isSendToStartingProfilingEnabled(): boolean {
   return process.env.KANNA_PROFILE_SEND_TO_STARTING === "1"
@@ -69,7 +60,6 @@ export function logSendToStartingProfile(
   }))
 }
 
-// ── Subscription counting ─────────────────────────────────────────────────────
 
 export function countSubscriptionsByTopic(ws: ServerWebSocket<ClientState>): {
   total: number
@@ -139,7 +129,6 @@ export function countSubscriptionsByTopic(ws: ServerWebSocket<ClientState>): {
   }
 }
 
-// ── Store helpers ─────────────────────────────────────────────────────────────
 
 export function getSidebarProjectOrder(store: EventStore): string[] {
   return typeof store.getSidebarProjectOrder === "function"
@@ -147,7 +136,6 @@ export function getSidebarProjectOrder(store: EventStore): string[] {
     : []
 }
 
-// ── Stale-state detection ─────────────────────────────────────────────────────
 
 const BENIGN_STALE_STATE_MESSAGES = [
   /^Chat not found$/,
@@ -160,7 +148,6 @@ export function isBenignStaleStateMessage(message: string): boolean {
   return BENIGN_STALE_STATE_MESSAGES.some((pattern) => pattern.test(message))
 }
 
-// ── WebSocket send helper ─────────────────────────────────────────────────────
 
 export function send(ws: ServerWebSocket<ClientState>, message: ServerEnvelope): number {
   const payload = JSON.stringify(message)
@@ -188,7 +175,6 @@ export function ensureChatOpSeqMap(
   return ws.data.chatOpSeqBySubId
 }
 
-// ── Topic / envelope helpers ──────────────────────────────────────────────────
 
 export function shouldIncludeTopic(
   topic: SubscriptionTopic,
@@ -232,9 +218,6 @@ export function shouldIncludeTopic(
   return true
 }
 
-// timings.derivedAtMs = Date.now() on every call, making every snapshot unique
-// and defeating signature-based dedup. Strip timings from the signature so that
-// idle/finished chats are only sent once instead of on every broadcastSnapshots call.
 export function getStableChatSnapshotSignature(
   snapshot: Extract<ServerEnvelope, { type: "snapshot" }>["snapshot"]
 ): string {
@@ -245,6 +228,4 @@ export function getStableChatSnapshotSignature(
   return JSON.stringify(snapshot)
 }
 
-// Re-export PROTOCOL_VERSION so callers that import from utils don't need a
-// second import just for the protocol version.
 export { PROTOCOL_VERSION }

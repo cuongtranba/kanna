@@ -679,11 +679,8 @@ describe("deriveChatSnapshot subagent immutability", () => {
     const capturedEntries = snap1!.subagentRuns.r1!.entries
     expect(capturedEntries).toHaveLength(1)
 
-    // Simulate reducer push (event-store does run.entries.push(entry) in place)
     ;(run.entries as unknown[]).push({ _id: "e2", createdAt: 2, kind: "assistant_text", text: "b", messageId: "m2" })
 
-    // The earlier snapshot's entries snapshot MUST remain length=1 — clients
-    // depend on this to detect "did anything change" via length comparison.
     expect(capturedEntries).toHaveLength(1)
     expect(run.entries).toHaveLength(2)
   })
@@ -753,7 +750,7 @@ describe("deriveTimings", () => {
     const out = deriveTimings(
       { createdAt: 500 } as any,
       { ...baseTiming },
-      undefined, // no in-memory wait
+      undefined,
       undefined,
       3000,
     )
@@ -761,7 +758,7 @@ describe("deriveTimings", () => {
     expect(out.chatCreatedAt).toBe(500)
     expect(out.stateEnteredAt).toBe(1000)
     expect(out.derivedAtMs).toBe(3000)
-    expect(out.cumulativeMs.idle).toBe(500 + 2000) // 500 from accumulator + 2000 open segment to nowMs
+    expect(out.cumulativeMs.idle).toBe(500 + 2000)
     expect(out.cumulativeMs.waiting_for_user).toBe(0)
   })
 
@@ -773,7 +770,7 @@ describe("deriveTimings", () => {
       2500,
       3000,
     )
-    expect(out.cumulativeMs.waiting_for_user).toBe(500) // 3000 - 2500
+    expect(out.cumulativeMs.waiting_for_user).toBe(500)
     expect(out.stateEnteredAt).toBe(2500)
   })
 

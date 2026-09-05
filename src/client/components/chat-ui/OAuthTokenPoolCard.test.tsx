@@ -96,9 +96,7 @@ describe("OAuthTokenPoolCard", () => {
         onTest={async () => ({ ok: true, error: null })}
       />,
     )
-    // Add token button should be present
     expect(html).toContain("Add token")
-    // disabled attribute on the button
     expect(html).toContain("disabled")
   })
 
@@ -152,14 +150,10 @@ describe("OAuthTokenPoolCard", () => {
   })
 
   test("Add button calls onWrite with appended token", async () => {
-    // We test the handler logic by checking onWrite receives the correct shape
-    // Since we can't do interactive testing with renderToStaticMarkup,
-    // we test the component logic via direct invocation patterns
     const calls: Array<Partial<{ tokens: OAuthTokenEntry[] }>> = []
     const onWrite = async (patch: Partial<{ tokens: OAuthTokenEntry[] }>) => {
       calls.push(patch)
     }
-    // Render to ensure no errors
     const html = renderToStaticMarkup(
       <OAuthTokenPoolCard
         concurrencyDefault={1}
@@ -181,7 +175,6 @@ describe("OAuthTokenPoolCard", () => {
         onTest={async () => ({ ok: true, error: null })}
       />,
     )
-    // Each remove button has aria-label="Remove" — count those
     const removeCount = (html.match(/aria-label="Remove"/g) ?? []).length
     expect(removeCount).toBe(2)
   })
@@ -205,10 +198,8 @@ describe("OAuthTokenPoolCard", () => {
     const betaIdx = html.indexOf("beta")
     const alphaIdx = html.indexOf("alpha")
     const gammaIdx = html.indexOf("gamma")
-    // "In use" badge must appear within beta's row segment (between beta and gamma)
     expect(inUseIdx).toBeGreaterThan(betaIdx)
     expect(inUseIdx).toBeLessThan(gammaIdx)
-    // alpha and gamma rows should not contain "In use" before them in their segment
     expect(html.slice(alphaIdx, betaIdx)).not.toContain("In use")
     expect(html.slice(gammaIdx)).not.toContain("In use")
   })

@@ -252,8 +252,6 @@ export function deriveSidebarData(
     })
   const projectGroups = allGroups.filter((g) => g.starredAt == null)
 
-  // Rolled up from the rows just built, so the stack row and the chat rows
-  // under it can never disagree about what is running.
   const activityByStackId = new Map<string, ChatActivity[]>()
   for (const group of allGroups) {
     for (const chat of group.chats) {
@@ -333,7 +331,6 @@ export function deriveTimings(
   }
 
   if (!accumulator) {
-    // Legacy chat with no events folded yet
     const idleSegment = Math.max(0, nowMs - chat.createdAt)
     cumulativeMs.idle = idleSegment
     return {
@@ -351,13 +348,11 @@ export function deriveTimings(
   cumulativeMs.running = accumulator.cumulativeMs.running
   cumulativeMs.failed = accumulator.cumulativeMs.failed
 
-  // Open segment from accumulator's stateEnteredAt → nowMs
   const openSegmentMs = Math.max(0, nowMs - accumulator.stateEnteredAt)
 
   let stateEnteredAt = accumulator.stateEnteredAt
 
   if (activeStatus === "waiting_for_user" && waitStartedAt != null) {
-    // Add the running portion before wait started
     const preWaitMs = Math.max(0, waitStartedAt - accumulator.stateEnteredAt)
     cumulativeMs[accumulator.status] += preWaitMs
     cumulativeMs.waiting_for_user += Math.max(0, nowMs - waitStartedAt)
@@ -400,10 +395,6 @@ export function deriveChatSnapshot(
   const runtime: ChatRuntime = {
     chatId: chat.id,
     projectId: project.id,
-    // The chat's OWN working directory — its worktree when it has one. Reporting
-    // the project's checkout told the reader they were on `main` in the main
-    // tree while the agent edited a card branch somewhere else, and pointed
-    // "Open in Finder" at the wrong directory.
     localPath: resolveSpawnPaths(chat, project.localPath).cwd,
     title: chat.title,
     status: deriveStatus(chat, activeStatuses.get(chat.id)),
@@ -428,10 +419,6 @@ export function deriveChatSnapshot(
   const { schedules, liveScheduleId } = deriveChatSchedules(autoContinueEvents, chat.id)
   const { tunnels, liveTunnelId } = deriveChatTunnels(getTunnelEvents(chat.id), chat.id)
 
-  // One resolver, shared with the spawn path (`claude-session-config.ts`).
-  // The inline copy that used to live here agreed with it only because
-  // `store.getProject` filters `deletedAt` — a drift risk, so the two are now
-  // literally the same function.
   const resolvedBindings = chat.stackBindings && chat.stackBindings.length > 0
     ? resolveStackProjects(chat, (id) => {
         const project = state.projectsById.get(id)
@@ -440,10 +427,6 @@ export function deriveChatSnapshot(
     : undefined
 
   const subagentRunsMap = state.subagentRunsByChatId.get(chat.id)
-  // Clone each run + its entries array so the snapshot is immutable. The
-  // reducer mutates `run.entries.push(...)` in place; without this clone every
-  // snapshot would share the same growing array, defeating client-side
-  // structural-compare dedup (sameChatSnapshotCore → sameSubagentRuns).
   const subagentRuns: ChatSnapshot["subagentRuns"] = subagentRunsMap
     ? Object.fromEntries(
         Array.from(subagentRunsMap.entries(), ([id, run]) => [id, { ...run, entries: [...run.entries] }]),
@@ -452,11 +435,6 @@ export function deriveChatSnapshot(
 
   const loopState = deriveLoopState(autoContinueEvents, chat.id)
   const liveSchedule = liveScheduleId ? schedules[liveScheduleId] : undefined
-  // NOT gated on `loopState`: a rate-limited loop is exactly when a user types
-  // "resume", and that message disarms the loop — which nulled `loopState`,
-  // which nulled this, which un-rendered the "Resume now" button. The attempt
-  // to resume destroyed the resume affordance. A live rate-limit schedule is
-  // worth surfacing whether or not a loop is still armed.
   const rateLimit: LoopRateLimitInfo | null =
     liveSchedule
     && (liveSchedule.state === "proposed" || liveSchedule.state === "scheduled")
@@ -515,7 +493,6 @@ export function stackSummaries(
         createdAt: s.createdAt,
         updatedAt: s.updatedAt,
         ...(s.instructions ? { instructions: s.instructions } : {}),
-        // Omitted when idle, so the row renders no indicator at all.
         ...(activity.activeChats > 0 ? { activity } : {}),
       }
     })

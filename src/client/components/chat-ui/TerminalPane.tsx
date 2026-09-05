@@ -154,15 +154,8 @@ interface MacOptionKeyEvent {
   getModifierState?: (key: string) => boolean
 }
 
-/** Terminal font size at the default (md, 1.0) typography scale. */
 const TERMINAL_BASE_FONT_SIZE = 13
 
-/**
- * xterm renders to a canvas, so it is wholly immune to the `--kanna-font-scale`
- * CSS variable — its font size must be derived from the same pure core and
- * pushed in explicitly. Rounded to the nearest pixel (canvas glyph metrics are
- * integral).
- */
 export function getTerminalFontSize(step: JsonValue | undefined): number {
   return Math.round(TERMINAL_BASE_FONT_SIZE * resolveFontScale(step))
 }
@@ -413,10 +406,6 @@ function TerminalPaneInner({
     refreshTerminal(terminal)
   }, [terminalTheme])
 
-  // xterm is canvas, wholly immune to the CSS `--kanna-font-scale` variable — a
-  // scale change must refit the cell-metric path (getMeasuredTerminalSize) and
-  // send a PTY resize in-place, or the server's terminal dimensions silently
-  // desync from what the user sees.
   useEffect(() => {
     const terminal = terminalRef.current
     const element = containerRef.current

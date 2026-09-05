@@ -1,21 +1,8 @@
-/**
- * ws-router-push.ts
- *
- * WS command handlers for push-notification lifecycle operations:
- *   push.identifyDevice, push.subscribe, push.unsubscribe,
- *   push.test, push.setProjectMute, push.setChatMute, push.setFocusedChat
- *
- * Extracted from ws-router.ts.
- */
 import { PROTOCOL_VERSION } from "../shared/types"
 import type { PushSubscribeRequestPayload } from "../shared/types"
 import type { ClientCommand, ServerEnvelope } from "../shared/protocol"
 
-// ---------------------------------------------------------------------------
-// Dep interfaces (duck-typed; avoids circular imports with ws-router.ts)
-// ---------------------------------------------------------------------------
 
-/** The subset of PushManager methods consumed by push WS commands. */
 export interface PushManagerDep {
   recordDeviceSeen(id: string): Promise<void>
   addSubscription(args: {
@@ -31,31 +18,14 @@ export interface PushManagerDep {
 }
 
 export interface PushCommandDeps {
-  /** Push manager for device/subscription operations. */
   pushManager: PushManagerDep
-  /** Read the current connection's push device id. */
   getPushDeviceId: () => string | null | undefined
-  /** Persist a new device id on the current connection (or null to clear). */
   setPushDeviceId: (id: string | null) => void
-  /** Pre-bound to the current WebSocket; called to send an ack envelope. */
   send: (envelope: ServerEnvelope) => void
-  /**
-   * Broadcast the updated push-config snapshot to all connected clients.
-   * Called after any operation that changes subscription or mute state.
-   */
   broadcastPushConfig: () => Promise<void>
 }
 
-// ---------------------------------------------------------------------------
-// Command dispatcher
-// ---------------------------------------------------------------------------
 
-/**
- * Handle one push WS command.
- *
- * Returns `true` when the command was handled (caller should `return`).
- * Returns `false` when the command type is outside this module's scope.
- */
 export async function handlePushCommand(
   deps: PushCommandDeps,
   command: ClientCommand,

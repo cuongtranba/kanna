@@ -1,13 +1,3 @@
-/**
- * Settings -> Skills section, extracted verbatim from `SettingsPage.tsx`.
- *
- * The move is behaviour-preserving: `SkillsSection` and its three private
- * helpers (`formatInstallCount`, `SkillErrorBlock`, `SkillResultCard`) are
- * unchanged, and `SettingsPage.tsx` now imports the section instead of
- * declaring it. The extraction pays for the Plugins settings row: the page is
- * pinned at an exact `MODULE_ALLOWANCES` ceiling with no headroom, so a new
- * section can only be added by first moving an existing one out.
- */
 import { useCallback, useEffect, type ReactNode } from "react"
 import { ExternalLink, Loader2, Search, X } from "lucide-react"
 import type {
@@ -135,9 +125,6 @@ export function SkillsSection({
   const packageUpdateSnapshot = useSettingsPageStore((s) => s.packageUpdateSnapshot)
 
   const isChecking = packageUpdateSnapshot?.status === "checking"
-  // "Update all" covers only what a plain `skills update` can actually move. A
-  // pinned skill needs its pin REPLACED, which is a per-card decision the user
-  // makes by name — a bulk button must never do it silently.
   const bulkUpdatableIds = packageUpdateSnapshot?.packages
     .filter((p) => p.kind === "skill" && !p.pinnedRef)
     .filter((p) => p.update.availability === "outdated" || p.update.availability === "partial")

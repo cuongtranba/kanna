@@ -1,24 +1,3 @@
-/**
- * Standalone Claude session spawner — the logic extracted from the private
- * `startClaudeTurn` method of AgentCoordinator.
- *
- * Responsibilities:
- *   - Decide whether an existing session can be reused or must be evicted and
- *     replaced (localPath / effort / forkSession / loop-armed flip).
- *   - Pick an OAuth pool token, look up OpenRouter pricing, build the system
- *     prompt append and delegation context, then spawn the ClaudeSessionHandle
- *     via either the PTY or SDK driver.
- *   - Register the new ClaudeSessionState in the claudeSessions map, fire
- *     enforceClaudeSessionBudget, start the session event loop, and load slash
- *     commands in the background.
- *   - When reusing an existing session: update lastUsedAt, call setModel /
- *     setPermissionMode if the options changed.
- *   - Return a HarnessTurn built from the session handle.
- *
- * Side-effect seal: this module contains NO direct IO (no node:fs, no HTTP
- * calls, no Bun primitives). Every effectful operation is injected through
- * SpawnClaudeTurnDeps so the module remains testable without real drivers.
- */
 
 import type { JsonValue } from "../shared/json"
 import type {
@@ -53,14 +32,9 @@ import type { ClaudePtyRegistry } from "./claude-pty/pid-registry.adapter"
 import type { PtyInstanceRegistry } from "./claude-pty/pty-instance-registry"
 import type { WorkflowRegistry } from "./workflow-registry"
 import type { SubagentTranscriptRegistry } from "./subagent-transcript-registry"
-// Type-only import from the SDK session start module — no IO is pulled in.
 import type { startClaudeSession as StartClaudeSessionFn } from "./claude-session-start"
 
-// ---------------------------------------------------------------------------
-// Minimal structural interfaces — only the operations this module calls.
-// ---------------------------------------------------------------------------
 
-/** Subset of OAuthTokenPool used by spawnClaudeTurn. */
 interface SpawnOAuthPool {
   pickActive(chatId: string): { id: string; token: string; label: string } | null | undefined
   hasAnyToken(): boolean
@@ -68,22 +42,13 @@ interface SpawnOAuthPool {
   release(chatId: string): void
 }
 
-// ---------------------------------------------------------------------------
-// Exported arg types
-// ---------------------------------------------------------------------------
 
-/** Arguments for spawnClaudeTurn — mirrors the private startClaudeTurn args. */
 export interface SpawnClaudeTurnArgs {
   chatId: string
   projectId: string
   localPath: string
   additionalDirectories?: string[]
   stackProjects?: ResolvedStackBinding[]
-  /**
-   * Workspace / stack / per-project instruction blocks for this turn, resolved
-   * by the caller so the Claude and Codex branches cannot disagree about them.
-   * Omitted, the workspace block is still read from settings as before.
-   */
   instructions?: Omit<KannaSystemPromptOptions, "stackProjects">
   model: string
   effort?: string
@@ -94,30 +59,17 @@ export interface SpawnClaudeTurnArgs {
   provider: AgentProvider
 }
 
-// ---------------------------------------------------------------------------
-// Dependency bundle
-// ---------------------------------------------------------------------------
 
-/**
- * All AgentCoordinator fields and methods accessed by spawnClaudeTurn.
- *
- * Mutable maps are passed directly; private methods are exposed as function
- * references so the extracted function can be tested independently.
- */
 export interface SpawnClaudeTurnDeps {
-  // Mutable session state maps
   claudeSessions: Map<string, ClaudeSessionState>
   activeTurns: Map<string, ActiveTurn>
   mentionedSubagentIdsByChat: Map<string, string[]>
 
-  // OAuth pool (structural subset)
   oauthPool: SpawnOAuthPool | null
 
-  // Session-start function references (injected so tests can stub them)
   startClaudeSessionFn: typeof StartClaudeSessionFn
   startClaudeSessionPTYFn: (args: StartClaudeSessionPtyArgs) => Promise<ClaudeSessionHandle>
 
-  // Opaque state references passed through to the start functions
   subagentOrchestrator: SubagentOrchestrator
   toolCallback: ToolCallbackService | null
   tunnelGateway: TunnelGateway | null
@@ -126,13 +78,8 @@ export interface SpawnClaudeTurnDeps {
   workflowRegistry: WorkflowRegistry | null
   subagentTranscriptRegistry: SubagentTranscriptRegistry | null
 
-  // Method references for private AgentCoordinator helpers
   resolveClaudeDriverPreference: () => ClaudeDriverPreference
   isLoopArmed: (chatId: string) => LoopState | null
-  /**
-   * Boards, for the agent's board tools. Like `getArmedLoop` and unlike
-   * `isLoopArmed`, it is NOT depth-gated: a subagent works a card too.
-   */
   boardRegistry?: BoardRegistry
   closeClaudeSession: (chatId: string, session: ClaudeSessionState) => void
   enforceClaudeSessionBudget: (protectedChatId?: string) => void
@@ -144,34 +91,16 @@ export interface SpawnClaudeTurnDeps {
   getEnabledCustomMcpServers: () => readonly McpServerConfig[]
   buildOAuthBearers: (servers: readonly McpServerConfig[]) => Promise<Map<string, string>>
   setupLoop: (chatId: string, input: LoopSetupInput) => Promise<SetupLoopHandlerResult>
-  /** Backs the `arm_cron` MCP tool — see AgentCoordinator.armCron. */
   armCron: (chatId: string, command: string) => Promise<{ jobId: string }>
-  /** Backs the `update_cron` MCP tool — see AgentCoordinator.updateCron. */
   updateCron?: (chatId: string, jobId: string, patch: import("../shared/cron/types").CronJobPatch) => Promise<void>
   stopLoop: (chatId: string, reason: "goal_met" | "user_send" | "chat_deleted") => Promise<void>
-  /** Backs the `resume_loop` MCP tool — see AgentCoordinator.resumeLoop. */
   resumeLoop: (chatId: string) => Promise<import("./loop-wake-recovery").ResumeLoopResult>
   resolveChatPolicy: (chatId: string) => ChatPermissionPolicy
-  /** Fires the session event loop. Return value is discarded (fire-and-forget). */
   runClaudeSession: (session: ClaudeSessionState) => void
   emitStateChange: (chatId: string) => void
 }
 
-// ---------------------------------------------------------------------------
-// Core function
-// ---------------------------------------------------------------------------
 
-/**
- * Spawns or reuses a Claude session for a chat turn.
- *
- * Extracted from AgentCoordinator.startClaudeTurn. Behavior is identical to
- * the original private method; all side-effectful operations are injected via
- * `deps`.
- *
- * Returns a HarnessTurn that delegates interrupt / getAccountInfo to the live
- * session handle. The stream is empty (the event loop in runClaudeSession is
- * the actual reader).
- */
 export async function spawnClaudeTurn(
   deps: SpawnClaudeTurnDeps,
   args: SpawnClaudeTurnArgs,
@@ -188,10 +117,6 @@ export async function spawnClaudeTurn(
     session.effort !== args.effort ||
     args.forkSession ||
     session.additionalDirectories.join("|") !== (args.additionalDirectories ?? []).join("|") ||
-    // Both drivers bake the loop tool-block into the spawn (PTY via
-    // --disallowedTools CLI args, SDK via options.disallowedTools), so an
-    // armed-state flip (arm OR disarm) requires a fresh session. The SDK's
-    // dynamic canUseTool deny remains as belt-and-suspenders mid-turn.
     session.loopArmedAtSpawn !== loopArmedNow
   ) {
     if (session) {
@@ -202,11 +127,6 @@ export async function spawnClaudeTurn(
     const isOpenRouter = args.provider === "openrouter"
     const openrouterApiKey = isOpenRouter ? (await deps.readLlmProvider()).apiKey : null
     const picked = isOpenRouter ? null : (deps.oauthPool?.pickActive(args.chatId) ?? null)
-    // If the pool is populated but every token is currently unusable
-    // (limited/error/disabled/reserved), refuse to spawn rather than let
-    // the CLI fall back to its keychain auth — that path serves whichever
-    // login the CLI binary's keychain holds, which is typically
-    // expired in a pool-managed setup and produces opaque 401 loops.
     if (!isOpenRouter && deps.oauthPool && deps.oauthPool.hasAnyToken() && !picked) {
       throw new OAuthPoolUnavailableError(deps.buildPoolUnavailableMessage(args.chatId, ""))
     }
@@ -217,8 +137,6 @@ export async function spawnClaudeTurn(
     if (isOpenRouter && deps.listOpenRouterModelsFn) {
       try {
         const models = await deps.listOpenRouterModelsFn()
-        // OpenRouter routing variants (":nitro", ":floor", ...) aren't their
-        // own /models entries — fall back to the base id for pricing/context.
         const baseModelId = stripModelVariantSuffix(args.model)
         const m = models.find((x) => x.id === args.model)
           ?? models.find((x) => x.id === baseModelId)
@@ -284,9 +202,6 @@ export async function spawnClaudeTurn(
             isLoopArmed: delegationContext.depth === 0
               ? () => deps.isLoopArmed(chatIdForCtx) !== null
               : undefined,
-            // Deliberately NOT depth-gated like isLoopArmed: the tracking-doc
-            // tools are registered for subagents too, and a worker without the
-            // loop's workdir resolves its tracking file against the chat cwd.
             getArmedLoop: (id) => toArmedLoopInfo(deps.isLoopArmed(id)),
             boardRegistry: deps.boardRegistry,
             toolCallback: deps.toolCallback ?? undefined,
@@ -334,7 +249,6 @@ export async function spawnClaudeTurn(
             isLoopArmed: delegationContext.depth === 0
               ? () => deps.isLoopArmed(chatIdForCtx) !== null
               : undefined,
-            // See the PTY branch: not depth-gated, on purpose.
             getArmedLoop: (id) => toArmedLoopInfo(deps.isLoopArmed(id)),
             boardRegistry: deps.boardRegistry,
             toolCallback: deps.toolCallback ?? undefined,
@@ -345,9 +259,6 @@ export async function spawnClaudeTurn(
             contextWindowOverride: openrouterContextWindow,
           })
     } catch (err) {
-      // Spawn failed before we registered the session — release the OAuth
-      // pool reservation. Without this the token stays "in use" until process
-      // restart, eventually starving every chat once all tokens are reserved.
       if (picked) deps.oauthPool?.release(args.chatId)
       throw err
     }
@@ -374,9 +285,6 @@ export async function spawnClaudeTurn(
       backgroundTasks: new Map<string, SessionBackgroundTask>(),
       backgroundTaskDeadlineAt: 0,
       backgroundTaskWakeCount: 0,
-      // The SDK level signal is per-process: nothing is emitted at startup, so
-      // every fresh CLI process starts untrusted and promotes itself on its
-      // first background_tasks_changed snapshot.
       backgroundTasksLevelSourced: false,
       selfWakeActive: false,
       recentToolDescriptions: new Map<string, string>(),
@@ -389,8 +297,6 @@ export async function spawnClaudeTurn(
     deps.claudeSessions.set(args.chatId, session)
     deps.enforceClaudeSessionBudget(args.chatId)
     void deps.runClaudeSession(session)
-    // Slash commands come from the local disk catalog via the project-scoped
-    // `project-commands` topic; no CLI `getSupportedCommands()` refresh here.
   } else {
     session.lastUsedAt = Date.now()
     if (session.model !== args.model) {

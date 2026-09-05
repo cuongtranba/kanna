@@ -10,24 +10,14 @@ import {
 import type { TextSnippet } from "../../../../shared/types"
 import { isTypeaheadMenuOpen } from "./SubmitPlugin"
 
-// ---------------------------------------------------------------------------
-// Props
-// ---------------------------------------------------------------------------
 
 export interface SnippetExpandPluginProps {
   snippets: readonly TextSnippet[]
 }
 
-// ---------------------------------------------------------------------------
-// Matching (pure — exported for tests)
-// ---------------------------------------------------------------------------
 
 const TRAILING_TOKEN_RE = /(\S+)$/
 
-/**
- * Returns the snippet whose `shortcut` equals the trailing whitespace-free
- * token immediately before the caret, or null when nothing matches.
- */
 export function findSnippetForCaret(
   textBeforeCaret: string,
   snippets: readonly TextSnippet[],
@@ -41,9 +31,6 @@ export function findSnippetForCaret(
   return null
 }
 
-// ---------------------------------------------------------------------------
-// Tab decision (pure — exported for tests)
-// ---------------------------------------------------------------------------
 
 export interface TabKeyLike {
   readonly shiftKey: boolean
@@ -55,16 +42,6 @@ export interface TabKeyLike {
 
 export type TabDecision = "ignore" | "swallow-repeat" | "attempt"
 
-/**
- * Decides how the KEY_TAB_COMMAND handler treats a Tab keydown.
- *
- * OS auto-repeat keydowns (`event.repeat`) inherit the decision of the
- * initial keydown of the same physical press: after the initial press
- * expanded a snippet, the trailing token no longer matches, so re-evaluating
- * a repeat would fall through to the browser's default Tab focus traversal
- * and steal the caret from the composer (the residual "caret vanishes after
- * Tab" report following #524 — holding Tab ≳300 ms fires repeats).
- */
 export function decideTab(
   event: TabKeyLike,
   menuOpen: boolean,
@@ -78,36 +55,17 @@ export function decideTab(
   return "attempt"
 }
 
-// ---------------------------------------------------------------------------
-// Plugin
-// ---------------------------------------------------------------------------
 
-/**
- * Expands a text snippet when the user presses Tab after a matching shortcut.
- *
- *   – Plain Tab, caret after a shortcut token → replace the token in place
- *   – Shift/Ctrl/Meta/Alt+Tab                 → ignored (plan-mode toggle etc.)
- *   – A typeahead picker (@ / /) open          → ignored
- *   – No matching shortcut                     → ignored (browser default Tab)
- *   – Auto-repeat keydowns of an expanding press → swallowed (keep the caret)
- *
- * Multi-line expansions insert soft line breaks between segments.
- */
 export function SnippetExpandPlugin({ snippets }: SnippetExpandPluginProps): null {
   const [editor] = useLexicalComposerContext()
 
   useEffect(() => {
-    // Whether the initial (non-repeat) keydown of the current Tab press
-    // expanded a snippet. Repeat keydowns consult this instead of re-reading
-    // editor state, which by then no longer has a matching trailing token.
     let lastPressExpanded = false
 
     return editor.registerCommand(
       KEY_TAB_COMMAND,
       (event: KeyboardEvent) => {
         const decision = decideTab(event, isTypeaheadMenuOpen(), snippets.length, lastPressExpanded)
-        // Every new physical press resets the flag; only an expanding initial
-        // keydown (below) re-arms it for that press's repeats.
         if (!event.repeat) lastPressExpanded = false
         if (decision === "ignore") return false
         if (decision === "swallow-repeat") {
@@ -115,17 +73,6 @@ export function SnippetExpandPlugin({ snippets }: SnippetExpandPluginProps): nul
           return true
         }
 
-        // Decide synchronously whether a snippet will expand, then
-        // preventDefault BEFORE the mutation. `editor.update` defers its
-        // callback whenever a command is already dispatching: KEY_TAB_COMMAND
-        // fires inside an active update (`editor._updating === true`), so
-        // `updateEditor` queues our callback instead of running it inline
-        // (LexicalUpdates.ts). If we gated preventDefault on a flag the
-        // callback sets, the flag would still be false when we check it, Tab's
-        // default focus traversal would move focus to the next control (the
-        // Send button), and the caret would vanish from the composer even
-        // though the text expanded a tick later. A synchronous state read lets
-        // us preventDefault up front and keep focus in the editor.
         const willExpand = editor.getEditorState().read(() => {
           const selection = $getSelection()
           if (!$isRangeSelection(selection) || !selection.isCollapsed()) return false
@@ -159,10 +106,6 @@ export function SnippetExpandPlugin({ snippets }: SnippetExpandPluginProps): nul
           const start = offset - token.length
           const parts = snippet.expansion.split("\n")
 
-          // Splice the token straight to the first expansion line so the node
-          // is never emptied (an empty TextNode gets pruned during DOM
-          // reconciliation). `spliceText(..., true)` lands the caret at the end
-          // of the inserted first line.
           node.spliceText(start, token.length, parts[0] ?? "", true)
 
           if (parts.length > 1) {

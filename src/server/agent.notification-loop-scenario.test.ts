@@ -3,22 +3,6 @@ import { AgentCoordinator } from "./agent"
 import type { AutoContinueEvent } from "./auto-continue/events"
 import type { TranscriptEntry, SlashCommand } from "../shared/types"
 
-// Long-scenario test for the notification-driven loop-orchestration pattern
-// (adr-20260711-notification-driven-loop-orchestration).
-//
-// The loop pattern is: main-agent = stateless-in-context / stateful-in-file
-// (PROGRESS.md). Every subagent_background delivery /clears the main-agent
-// Claude session; the next main turn is a fresh spawn that re-reads
-// PROGRESS.md. This test simulates 50 iterations of the loop and asserts
-// the /clear invariant holds across every iteration — proves the pattern is
-// safe for 8h+ runs where compaction / rate-limit / model drift would
-// otherwise degrade a persistent main context.
-//
-// Failure mode this guards against: session 326c9b8c (transcript kept at
-// `.kanna/data/transcripts/`) where the old `schedule_wakeup` timer-based
-// path let main context accumulate → 13 compact_boundary events → protocol
-// forgotten → loop died silently. Under this new pattern, main context
-// never accumulates.
 
 function timestamped<T extends Omit<TranscriptEntry, "_id" | "createdAt">>(entry: T): TranscriptEntry {
   return {
@@ -94,8 +78,6 @@ function createLoopStore() {
     listAutoContinueChats () {
       return [...new Set(this.autoContinueEvents.map((e) => e.chatId))]
     },
-    // The remainder are inert stubs the coordinator will only touch when a
-    // real turn spawns; this scenario only exercises deliverSubagentToMain.
     async enqueueMessage() {},
     getQueuedMessages: () => [],
     getQueuedMessage: () => null,
@@ -109,7 +91,6 @@ function createLoopStore() {
     async forkChat() { return chat },
     async recordSessionCommandsLoaded() {},
     *runningSubagentRuns() {
-      // No subagent runs — recoverInterruptedRuns is a no-op.
     },
   }
 }
@@ -133,16 +114,10 @@ describe("notification-driven loop orchestration — 50-iteration scenario", () 
     const deliver = (coordinator as unknown as { deliverSubagentToMain: DeliverFn }).deliverSubagentToMain
       .bind(coordinator)
 
-    // Simulate main having a live Claude session at the start (as if user's
-    // first /loop message spawned it).
     await store.setSessionTokenForProvider("chat-loop", "claude", "session-token-turn-0")
 
     const N = 50
     for (let i = 1; i <= N; i += 1) {
-      // Between deliveries, pretend the next main spawn started a new session
-      // (a real subagent-driven auto-continue would trigger a fresh main
-      // spawn; here we simulate the reassignment). This is the value we
-      // expect deliverSubagentToMain to wipe on iteration i+1.
       await store.setSessionTokenForProvider("chat-loop", "claude", `session-token-turn-${i}`)
 
       await deliver("chat-loop", `run-${i}`, {
@@ -151,21 +126,12 @@ describe("notification-driven loop orchestration — 50-iteration scenario", () 
         text: `iteration ${i} of the loop is done`,
       })
 
-      // Invariant 1: after every delivery, session_token is wiped (main /clear)
       expect(store.chat.sessionTokensByProvider.claude ?? null).toBeNull()
     }
 
-    // Invariant 2: exactly N context_cleared transcript entries appended
     const cleared = store.messages.filter((m) => m.kind === "context_cleared")
     expect(cleared).toHaveLength(N)
 
-    // Invariant 3: exactly N auto-continue events, all subagent_background,
-    // each carrying the structured <task-notification> XML (Claude Code's
-    // LocalAgentTask format). Un-armed ad-hoc deliveries include the
-    // subagent's <result> body; context never accumulates because every
-    // delivery /clears the session (Invariant 1) — the result rides exactly
-    // one fresh prompt. (Armed loops omit <result>: PROGRESS.md is the loop's
-    // only durability contract — covered by the armed-wake test in agent.test.ts.)
     const events = store.getAutoContinueEvents("chat-loop")
     expect(events).toHaveLength(N)
     for (let i = 0; i < N; i += 1) {
@@ -177,11 +143,6 @@ describe("notification-driven loop orchestration — 50-iteration scenario", () 
         expect(ev.prompt).toContain(`<task-id>run-${i + 1}</task-id>`)
         expect(ev.prompt).toContain("<status>completed</status>")
         expect(ev.prompt).toContain(`<result>iteration ${i + 1} of the loop is done</result>`)
-        // No loop ever armed this chat, so there is no tombstone naming a plan
-        // — and the prompt must therefore name NO file. It used to assert
-        // "PROGRESS.md", which is setup_loop's DEFAULT filename and matched 26
-        // different plans on one install; resolved against the chat cwd it sent
-        // a post-loop review to an unrelated finished loop's plan.
         expect(ev.prompt).not.toContain("PROGRESS.md")
         expect(ev.prompt).toContain("context has been cleared")
       }
@@ -214,7 +175,6 @@ describe("notification-driven loop orchestration — 50-iteration scenario", () 
       errorMessage: "deadline exceeded",
     })
 
-    // Same /clear even on failure
     expect(store.chat.sessionTokensByProvider.claude ?? null).toBeNull()
     expect(store.messages.filter((m) => m.kind === "context_cleared")).toHaveLength(1)
 
@@ -225,7 +185,6 @@ describe("notification-driven loop orchestration — 50-iteration scenario", () 
       expect(ev.source).toBe("subagent_background")
       expect(ev.prompt).toContain("TIMEOUT")
       expect(ev.prompt).toContain("deadline exceeded")
-      // See the success case: with no armed loop there is no plan to name.
       expect(ev.prompt).not.toContain("PROGRESS.md")
     }
   })
@@ -288,11 +247,6 @@ describe("notification-driven loop orchestration — 50-iteration scenario", () 
     const deliver = (coordinator as unknown as { deliverSubagentToMain: DeliverFn }).deliverSubagentToMain
       .bind(coordinator)
 
-    // Interleave 13 compact_boundary entries into the transcript at random
-    // points across 50 iterations. In the old timer-based pattern this was
-    // exactly the failure mode (main context piled up, then compaction
-    // discarded the protocol). Under the new pattern each iteration is a
-    // fresh spawn, so compact_boundary is a no-op.
     const N = 50
     const compactAt = new Set([2, 5, 9, 14, 18, 22, 27, 31, 35, 40, 44, 47, 49])
     expect(compactAt.size).toBe(13)
@@ -310,7 +264,6 @@ describe("notification-driven loop orchestration — 50-iteration scenario", () 
       expect(store.chat.sessionTokensByProvider.claude ?? null).toBeNull()
     }
 
-    // All 50 deliveries succeeded despite 13 interleaved compactions
     expect(store.messages.filter((m) => m.kind === "context_cleared")).toHaveLength(N)
     expect(store.getAutoContinueEvents("chat-loop")).toHaveLength(N)
     expect(store.messages.filter((m) => m.kind === "compact_boundary")).toHaveLength(13)

@@ -1,16 +1,6 @@
-/**
- * agent.ts — public barrel for the AgentCoordinator and its utility re-exports.
- *
- * The AgentCoordinator class lives in agent-coordinator.ts. This file exists
- * so that all existing callers importing from "./agent" continue to work
- * without changes — re-exporting the class and the utility symbols that
- * external modules expect from this path.
- */
 
-// Primary export: the coordinator class
 export { AgentCoordinator } from "./agent-coordinator"
 
-// Utility re-exports expected from this path by external callers
 export { LOOP_BLOCKED_NATIVE_TOOLS, buildCanUseTool, buildClaudeEnv } from "./claude-spawn-helpers"
 export type { BuildCanUseToolArgs } from "./claude-spawn-helpers"
 

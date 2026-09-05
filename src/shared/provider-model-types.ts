@@ -1,11 +1,4 @@
-/**
- * Provider and model catalog types — extracted from shared/types.ts.
- * Imported via the re-export barrel in types.ts; all external consumers
- * continue to import from "../shared/types" unchanged.
- */
 
-// AgentProvider lives in types.ts and is only needed as a type here.
-// import type = erased at compile time → no circular runtime dependency.
 import type { AgentProvider } from "./types"
 
 export const DEFAULT_OPENROUTER_SDK_MODEL = "moonshotai/kimi-k2.5:nitro"
@@ -20,9 +13,6 @@ export interface OpenRouterModel {
   pricing?: { promptPerTok: number; completionPerTok: number }
 }
 
-// ---------------------------------------------------------------------------
-// Provider model option primitives
-// ---------------------------------------------------------------------------
 
 export interface ProviderModelOption {
   id: string
@@ -93,9 +83,6 @@ export type ChatProviderPreferences = {
   openrouter: ProviderPreference<OpenRouterModelOptions>
 }
 
-// ---------------------------------------------------------------------------
-// Model option defaults and type-guards
-// ---------------------------------------------------------------------------
 
 export type ModelOptions = Partial<{
   [K in AgentProvider]: Partial<ProviderModelOptionsByProvider[K]>
@@ -128,9 +115,6 @@ export function isClaudeContextWindow(value: string | null | undefined): value i
   return CLAUDE_CONTEXT_WINDOW_OPTIONS.some((option) => option.id === value)
 }
 
-// ---------------------------------------------------------------------------
-// Provider catalog
-// ---------------------------------------------------------------------------
 
 export interface ProviderCatalogEntry {
   id: AgentProvider
@@ -234,9 +218,6 @@ export function getProviderCatalog(provider: AgentProvider): ProviderCatalogEntr
   return entry
 }
 
-// ---------------------------------------------------------------------------
-// Custom model entries (user-configurable overrides over the catalog)
-// ---------------------------------------------------------------------------
 
 export interface CustomModelEntry {
   id: string
@@ -265,9 +246,6 @@ export interface CustomModelPatch {
   contextWindowOptions?: readonly ProviderContextWindowOption[] | null
 }
 
-// ---------------------------------------------------------------------------
-// Text snippets (keyboard-shortcut text expansions)
-// ---------------------------------------------------------------------------
 
 export interface TextSnippet {
   id: string
@@ -287,9 +265,6 @@ export interface TextSnippetPatch {
   expansion?: string
 }
 
-// ---------------------------------------------------------------------------
-// mergeCustomModels — folds user overrides into the provider catalog
-// ---------------------------------------------------------------------------
 
 function customEntryToModelOption(entry: CustomModelEntry): ProviderModelOption {
   return {
@@ -313,13 +288,6 @@ export function mergeCustomModels(
     for (const custom of forProvider) {
       const option = customEntryToModelOption(custom)
       const idx = models.findIndex((m) => m.id === option.id)
-      // An override MERGES over the built-in rather than replacing it, because
-      // the Settings form collects only id/label/efforts — so a hand-added
-      // entry for an id that already ships would otherwise strip capabilities
-      // it never had a way to declare. `customEntryToModelOption` omits absent
-      // optionals, so a field the user did set still wins. There is no
-      // "explicitly none" to preserve: `applyCustomModelPatch` collapses a
-      // cleared field to `undefined`, indistinguishable from never-set.
       if (idx >= 0) models[idx] = { ...models[idx], ...option }
       else models.push(option)
     }
@@ -327,46 +295,11 @@ export function mergeCustomModels(
   })
 }
 
-// ---------------------------------------------------------------------------
-// Provider session helpers and model-id normalization
-// ---------------------------------------------------------------------------
 
-/**
- * True when the provider's turns run through the Claude SDK session transport
- * (a live `claudeSessions` entry consumed by `runClaudeSession`, prompts
- * delivered via `session.sendPrompt`) rather than the generic harness-turn
- * transport (`runTurn` over `active.turn.stream`).
- *
- * `claude` and `openrouter` both ride the SDK session — openrouter just points
- * the SDK at OpenRouter's Anthropic-compatible endpoint. Branching on
- * `provider === "claude"` where the real intent is "uses the SDK session" is
- * what silently dropped openrouter's prompt delivery; use this predicate so a
- * new SDK-backed provider can never be forgotten by an `if`-chain again.
- */
 export function providerUsesSdkSession(provider: AgentProvider): boolean {
   return provider === "claude" || provider === "openrouter"
 }
 
-/**
- * True when the provider's own harness resolves a typed `/name` against the
- * local `.claude/skills` + `.claude/commands` catalog and expands it before the
- * model sees it.
- *
- * `claude` and `openrouter` both run the Claude Agent SDK with
- * `settingSources: ["user", "project", "local"]` (`claude-session-start.ts`),
- * so the CLI does this itself and Kanna must not do it again. Everything else —
- * Codex today, any provider added later — gets Kanna's own expansion
- * (`skill-invocation.ts`), because the alternative is the literal string
- * `/deploy staging` reaching a model as prose.
- *
- * The DEFAULT is deliberately "Kanna expands": a new provider forgotten by this
- * list gets working slash commands, where a default of "the harness handles it"
- * would silently give it none. The membership happens to equal
- * {@link providerUsesSdkSession} today, but the questions are different — one
- * asks how a prompt is delivered, the other what the prompt should be — so a
- * provider on a different transport that still shells out to the claude CLI
- * belongs here and not there.
- */
 export function providerExpandsSlashCommands(provider: AgentProvider): boolean {
   return provider === "claude" || provider === "openrouter"
 }
@@ -484,12 +417,6 @@ export function normalizeClaudeContextWindow(
     : DEFAULT_CLAUDE_MODEL_OPTIONS.contextWindow
 }
 
-/**
- * The context-window options a custom entry effectively offers: its own when it
- * declares them, else the built-in's — the same fallback `mergeCustomModels`
- * applies. The Settings editor reads this so that saving an entry which was
- * inheriting 1M does not silently write the inheritance away.
- */
 export function effectiveContextWindowOptions(
   provider: "claude" | "codex",
   modelId: string,

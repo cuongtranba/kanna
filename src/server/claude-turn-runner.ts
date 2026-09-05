@@ -1,16 +1,3 @@
-/**
- * Standalone turn-runner — extracted from AgentCoordinator.runTurn.
- *
- * Responsibilities:
- *   - Stream events from an in-flight HarnessTurn and write them to the store.
- *   - Handle cancellation, errors, and limit detection.
- *   - On completion: release OAuth pool token, emit state change, and kick off
- *     the next queued message or postToolFollowUp turn.
- *
- * Side-effect seal: this module contains NO direct IO (no node:fs, no HTTP
- * calls, no Bun primitives). Every effectful operation is injected through
- * RunTurnDeps so the module remains testable without a real coordinator.
- */
 
 import type { AgentProvider, TranscriptEntry } from "../shared/types"
 import { billedUsageOfResult } from "../shared/token-pricing"
@@ -21,11 +8,7 @@ import type { LimitDetector } from "./auto-continue/limit-detector"
 import type { StartTurnForChatArgs } from "./claude-turn-starter"
 import { timestamped } from "./claude-message-normalizer"
 
-// ---------------------------------------------------------------------------
-// Structural sub-interfaces — only the operations this module calls.
-// ---------------------------------------------------------------------------
 
-/** Subset of EventStore used by runTurn. */
 interface RunTurnStore {
   setSessionTokenForProvider(
     chatId: string,
@@ -43,64 +26,26 @@ interface RunTurnStore {
   recordTurnCancelled(chatId: string): Promise<void>
 }
 
-/** Subset of OAuthTokenPool used by runTurn. */
 interface RunTurnOAuthPool {
   release(chatId: string): void
 }
 
-// ---------------------------------------------------------------------------
-// Dependency bundle
-// ---------------------------------------------------------------------------
 
-/**
- * All AgentCoordinator fields and callbacks accessed by runTurn.
- * Passed as a single deps object so the function stays testable without a
- * real coordinator.
- */
 export interface RunTurnDeps {
-  /** Structural subset of EventStore — no concrete import. */
   store: RunTurnStore
-  /** Map of chatId → in-flight turn; mutated to reflect turn lifecycle. */
   activeTurns: Map<string, ActiveTurn>
-  /** Map of chatId → draining stream; mutated when a result arrives early. */
   drainingStreams: Map<string, { turn: HarnessTurn }>
-  /** OAuth pool for releasing the per-chat token reservation on completion. */
   oauthPool: RunTurnOAuthPool | null
-  /** Detector for codex-side rate-limit / limit errors. */
   codexLimitDetector: LimitDetector
-  /** Delegate to the coordinator's handleLimitError (already has detector bound via args). */
   handleLimitError: (chatId: string, detector: LimitDetector, error: Error) => Promise<boolean>
-  /** Notify the WebSocket layer that UI state changed. */
   emitStateChange: (chatId: string) => void
-  /** Remove the draining-stream entry for a chat (coordinator keeps the map). */
   clearDrainingStream: (chatId: string) => void
-  /** Spawn a follow-up turn for a chat (postToolFollowUp path). */
   startTurnForChat: (args: StartTurnForChatArgs) => Promise<void>
-  /** Process the next queued message for a chat after the current turn ends. */
   maybeStartNextQueuedMessage: (chatId: string) => Promise<boolean | void>
-  /**
-   * Tear down the chat's codex process. A live session is reused whenever the
-   * cwd matches, regardless of session token, so a compaction that only nulls
-   * the token would leave the next turn on the same thread.
-   */
   stopCodexSession: (chatId: string) => void
 }
 
-// ---------------------------------------------------------------------------
-// Standalone function
-// ---------------------------------------------------------------------------
 
-/**
- * Commit a Codex compaction, all-or-nothing.
- *
- * The boundary is written BEFORE the summary because the history primer
- * resumes at the last boundary and replays what follows — the other order
- * would cut the summary out and hand Codex an empty context.
- *
- * A turn that errored, was cancelled, or produced no prose commits nothing:
- * dropping the thread without a replacement summary is strictly worse than
- * not compacting at all.
- */
 async function finalizeCodexSummary(
   deps: RunTurnDeps,
   active: ActiveTurn,
@@ -116,20 +61,11 @@ async function finalizeCodexSummary(
   deps.stopCodexSession(active.chatId)
 }
 
-/**
- * Drive a single agentic turn to completion.
- *
- * Reads from `active.turn.stream`, writes transcript entries to the store,
- * and handles the full lifecycle: result detection, cancel recording, OAuth
- * token release, and post-turn scheduling (postToolFollowUp or queue drain).
- */
 export async function runTurn(deps: RunTurnDeps, active: ActiveTurn): Promise<void> {
   const isCodexSummary = active.compactionTurn === "codex_summary"
   const summaryParts: string[] = []
   try {
     for await (const event of active.turn.stream) {
-      // Once cancelled, stop processing further stream events.
-      // cancel() already removed us from activeTurns and notified the UI.
       if (active.cancelRequested) break
 
       switch (event.type) {
@@ -149,11 +85,6 @@ export async function runTurn(deps: RunTurnDeps, active: ActiveTurn): Promise<vo
         case "rate_limit": break
 
         case "transcript": {
-          // The whole point of a summarize turn is that its prose becomes the
-          // context, not another transcript message — so it is accumulated and
-          // written once as a `compact_summary` below. Codex emits one
-          // assistant_text per item, so transforming each in place would produce
-          // N summaries for one compaction.
           if (isCodexSummary && event.entry.kind === "assistant_text") {
             summaryParts.push(event.entry.text)
             continue
@@ -167,8 +98,6 @@ export async function runTurn(deps: RunTurnDeps, active: ActiveTurn): Promise<vo
 
           if (event.entry.kind === "result") {
             active.hasFinalResult = true
-            // Stashed before the terminal record, which is what fires the observer
-            // that records token spend — see ActiveTurn.usage.
             active.usage = billedUsageOfResult(event.entry)
             if (event.entry.isError) {
               await deps.store.recordTurnFailed(active.chatId, event.entry.result || "Turn failed")
@@ -176,10 +105,6 @@ export async function runTurn(deps: RunTurnDeps, active: ActiveTurn): Promise<vo
               await deps.store.recordTurnFinished(active.chatId)
               await finalizeCodexSummary(deps, active, summaryParts)
             }
-            // Remove from activeTurns as soon as the result arrives so the UI
-            // transitions to idle immediately. The stream may still be open
-            // (e.g. background tasks), but the user should be able to send
-            // new messages without having to hit stop first.
             deps.activeTurns.delete(active.chatId)
             deps.drainingStreams.set(active.chatId, { turn: active.turn })
           }
@@ -220,21 +145,10 @@ export async function runTurn(deps: RunTurnDeps, active: ActiveTurn): Promise<vo
       await deps.store.recordTurnCancelled(active.chatId)
     }
     active.turn.close()
-    // Only remove if we're still the active turn for this chat.
-    // We may have already been removed by result handling or cancel(),
-    // and a new turn may have started for the same chatId.
     if (deps.activeTurns.get(active.chatId) === active) {
       deps.activeTurns.delete(active.chatId)
     }
-    // Stream has fully ended — no longer draining.
     deps.clearDrainingStream(active.chatId)
-    // Turn-scoped reservation: release so another chat can claim this
-    // token while this chat is idle. The rotation race between concurrent
-    // in-flight turns is still serialized — both startClaudeTurn and the
-    // pickActive() inside markLimited/markError run atomically in the JS
-    // event loop, and a token marked limited/errored already drops its
-    // reservation. The next turn for this chat reuses its existing claude
-    // session (no re-pick) or pickActive again if it needs a fresh one.
     deps.oauthPool?.release(active.chatId)
     deps.emitStateChange(active.chatId)
 

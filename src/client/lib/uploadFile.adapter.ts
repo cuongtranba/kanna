@@ -11,11 +11,6 @@ function stringOr(value: JsonValue, fallback: string): string {
   return typeof value === "string" ? value : fallback
 }
 
-/**
- * Decode one attachment out of the upload response. The wire is JSON, so each
- * field is read through a guard; an entry with no `id` is dropped rather than
- * forwarded, because nothing downstream can address it.
- */
 function parseAttachment(value: JsonValue): ChatAttachment | null {
   if (!isJsonObject(value)) return null
   const id = value.id
@@ -32,7 +27,6 @@ function parseAttachment(value: JsonValue): ChatAttachment | null {
   }
 }
 
-/** `null` means "this response was not an attachment list" — a hard failure. */
 function parseAttachments(value: JsonValue): ChatAttachment[] | null {
   if (!isJsonArray(value)) return null
   const attachments: ChatAttachment[] = []
@@ -145,7 +139,6 @@ export function uploadFile(args: UploadFileArgs): UploadHandle {
       try {
         xhr.abort()
       } catch {
-        // no-op: abort can throw if request already settled
       }
     },
   }

@@ -23,14 +23,13 @@ export interface PackageUpdateManagerDeps {
   settings: () => PackageUpdateSettings
   timer: TimerPort
   now: () => number
-  /** Returns true if any chat is currently busy. Auto-apply defers when true. */
   hasAnyChatBusy: () => boolean
 }
 
 const AUTO_APPLY_ROUND_CAP = 5
 const AUTO_APPLY_MAX_FAILURES = 3
-const AUTO_APPLY_BACKOFF_BASE_MS = 600_000 // 10 min
-const AUTO_APPLY_MAX_BACKOFF_MS = 86_400_000 // 24 h ceiling
+const AUTO_APPLY_BACKOFF_BASE_MS = 600_000
+const AUTO_APPLY_MAX_BACKOFF_MS = 86_400_000
 const AUTO_APPLY_HISTORY_LIMIT = 50
 
 const IDLE_SNAPSHOT: PackageUpdateSnapshot = {
@@ -63,7 +62,6 @@ export class PackageUpdateManager {
     }
   }
 
-  /** Start background timer. Called from server.ts after boot. */
   start(): void {
     if (this.timerHandle !== null) return
     const { timer, settings } = this.deps
@@ -206,9 +204,6 @@ export class PackageUpdateManager {
     const candidates = this.snapshot.packages.filter((entry) => {
       if (entry.update.availability !== "outdated") return false
       if (!autoApplyKinds.includes(entry.kind)) return false
-      // A pin is an explicit decision about which version to run, and the only
-      // way to satisfy a pinned package is to REPLACE that pin. Auto-apply must
-      // not make that choice silently — only a deliberate click may move a pin.
       if (entry.pinnedRef) return false
       const backoff = this.autoApplyBackoff.get(entry.id)
       if (!backoff) return true
@@ -265,11 +260,6 @@ export class PackageUpdateManager {
     this.setSnapshot({ ...this.snapshot, status: "idle", applying: [] })
   }
 
-  /**
-   * Apply updates for the given package ids sequentially.
-   * Rejects if an apply is already in progress.
-   * Re-inventories after all applies complete to refresh disk state.
-   */
   async applyUpdates(ids: PackageId[], signal?: AbortSignal, trigger: "manual" | "auto" = "manual"): Promise<PackageApplyResult[]> {
     if (this.snapshot.status === "applying") {
       throw new Error("An update apply is already in progress")
@@ -335,7 +325,6 @@ export class PackageUpdateManager {
       try {
         l(next)
       } catch {
-        // listener errors must not break the manager
       }
     }
   }

@@ -4,11 +4,6 @@ import { createRoot } from "react-dom/client"
 import { STAGGER_LIMIT } from "../../lib/motion"
 import { useArrivingRows, type ArrivingRows } from "./useArrivingRows"
 
-/**
- * The whole point of this hook is what does NOT animate. A virtualized list
- * remounts rows constantly, so the interesting assertions are all about rows
- * the hook must stay silent about.
- */
 
 interface Row {
   id: string
@@ -18,7 +13,6 @@ function rows(...ids: string[]): Row[] {
   return ids.map((id) => ({ id }))
 }
 
-/** Drives the hook through a real React root and reports the live result. */
 function mountHook(initial: Row[], chatId: string | null) {
   const container = document.createElement("div")
   document.body.appendChild(container)
@@ -57,8 +51,6 @@ function mountHook(initial: Row[], chatId: string | null) {
 
 describe("useArrivingRows", () => {
   test("a chat's existing backlog never animates on open", () => {
-    // Opening a chat makes every row "new" by any count-based measure.
-    // Animating a whole backlog on arrival is handoff pitfall #1's shape.
     const hook = mountHook(rows("a", "b", "c"), "chat-1")
     expect(hook.indexOf("a")).toBeUndefined()
     expect(hook.indexOf("c")).toBeUndefined()
@@ -93,17 +85,12 @@ describe("useArrivingRows", () => {
     hook.update(rows("a", "b"), "chat-1")
     expect(hook.indexOf("b")).toBe(0)
 
-    // Same length, different render — the map is cleared, so `b` is no longer
-    // arriving. This is what bounds the map to one burst instead of the
-    // transcript's whole history.
     hook.update(rows("a", "b"), "chat-1")
     expect(hook.indexOf("b")).toBeUndefined()
     hook.cleanup()
   })
 
   test("switching chats does not animate the new chat's backlog", () => {
-    // Without the reset the new chat's rows read as an append onto the old
-    // chat's length, and animate (or not) depending on which was longer.
     const hook = mountHook(rows("a"), "chat-1")
     hook.update(rows("x", "y", "z"), "chat-2")
 
@@ -113,8 +100,6 @@ describe("useArrivingRows", () => {
   })
 
   test("the returned handle is reference-stable across renders", () => {
-    // renderItem lists this in its useCallback deps; a fresh object per render
-    // would re-render every visible row on every streamed chunk.
     const hook = mountHook(rows("a"), "chat-1")
     const first = hook.result()
     hook.update(rows("a", "b"), "chat-1")

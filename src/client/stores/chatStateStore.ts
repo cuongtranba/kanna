@@ -3,7 +3,6 @@ import type { ChatSnapshot, TranscriptEntry } from "../../shared/types"
 import { applyChatOps } from "../../shared/chat-ops"
 import type { ChatOpsEvent } from "../../shared/chat-ops"
 
-// Stable empty refs — NEVER use inline ?? [] or ?? {} in selectors (React error #185)
 const EMPTY_OLDER_HISTORY_ENTRIES: TranscriptEntry[] = []
 
 export interface ChatSlice {
@@ -42,10 +41,6 @@ function patchChat(state: ChatStateStoreState, chatId: string, patch: Partial<Ch
 
 interface ChatStateStoreState {
   chats: Record<string, ChatSlice>
-  /**
-   * Per-scope optimistic processing state, keyed by scopeId.
-   * scopeId = chatId for existing chats, or NEW_CHAT_OPTIMISTIC_SCOPE for new chats.
-   */
   optimisticProcessing: Record<string, OptimisticProcessingEntry>
 
   setChatSnapshot: (chatId: string, value: ChatSnapshot | null | ((current: ChatSnapshot | null) => ChatSnapshot | null)) => void
@@ -53,32 +48,11 @@ interface ChatStateStoreState {
   setIsHistoryLoading: (chatId: string, value: boolean) => void
   setHistoryCursor: (chatId: string, value: string | null) => void
   setHasOlderHistory: (chatId: string, value: boolean) => void
-  /**
-   * Takes the scrollback bookmark a chat snapshot ships, but only while the
-   * client is still sitting on the newest page.
-   *
-   * The server derives `history.olderCursor` from the NEWEST page alone — it
-   * has no idea how far this client has scrolled back — so once older pages
-   * have been merged in, the snapshot's bookmark points forward of them.
-   * Adopting it there rewinds scrollback to the bottom: the next load-older
-   * refetches a page already merged, `mergeTranscriptEntries` dedups it to
-   * zero new rows, and the transcript looks frozen while `hasOlder` still
-   * promises more. Snapshots are pushed on subscribe, on reconnect, and on a
-   * chat-op ring gap, so on a long busy chat that stranded everything past
-   * the first page or two.
-   */
   adoptServerHistory: (chatId: string, history: { olderCursor: string | null; hasOlder: boolean }) => void
   setChatReady: (chatId: string, value: boolean) => void
   setChatResyncNonce: (chatId: string, value: number) => void
   bumpChatResyncNonce: (chatId: string) => void
-  /**
-   * Folds a `chat.ops` delta into the named chat's snapshot.
-   * "applied" on contiguous events; "stale" when already covered or for a
-   * different chat; "gap" when the event skips ahead or the baseline has no
-   * seq — caller must call bumpChatResyncNonce(chatId).
-   */
   applyChatOpsEvent: (chatId: string, event: ChatOpsEvent) => "applied" | "stale" | "gap"
-  /** Remove a chat's slice from the store (e.g. when unmounting its tab). */
   releaseChat: (chatId: string) => void
 
   setOptimisticProcessing: (
@@ -87,7 +61,6 @@ interface ChatStateStoreState {
   ) => void
 }
 
-/** Returns the stable EMPTY_CHAT_SLICE for absent chats — always the same reference. */
 export function selectChatSlice(state: ChatStateStoreState, chatId: string): ChatSlice {
   return state.chats[chatId] ?? EMPTY_CHAT_SLICE
 }

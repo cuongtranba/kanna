@@ -1,7 +1,4 @@
 import { type JsonObject } from "./json"
-// Subagent domain types: definitions, runtime snapshots, loop progress.
-// Extracted from types.ts to keep the barrel lean.
-// All external consumers importing from "../shared/types" continue to work unchanged.
 
 import type { AgentProvider } from "./core-types"
 import type { ClaudeModelOptions, CodexModelOptions, OpenRouterModelOptions } from "./provider-model-types"
@@ -28,10 +25,6 @@ export interface Subagent {
   triggerMode: SubagentTriggerMode
   workingDir?: string
   allowedPaths?: string[]
-  // Per-subagent agentic-turn bound — the analog of Claude Code's agent
-  // frontmatter `maxTurns`. Unset = unbounded (Claude Code's default).
-  // Claude-SDK runs pass it natively to query() (graceful stop, output kept);
-  // PTY/Codex runs get a host-side tool-call-count backstop (hard abort).
   maxTurns?: number
   createdAt: number
   updatedAt: number
@@ -120,13 +113,6 @@ export interface SubagentRunSnapshot {
   chatId: string
   subagentId: string | null
   subagentName: string
-  /**
-   * Short human label for this run, derived from the first line of the spawn
-   * prompt (e.g. "Migrate useKannaState.ts"). Null for runs started before this
-   * field existed or by error paths that never carried a prompt. Drives the
-   * Loop Progress panel rows so each round reads as the chunk it worked on
-   * rather than an opaque run id.
-   */
   label: string | null
   provider: AgentProvider
   model: string
@@ -139,30 +125,13 @@ export interface SubagentRunSnapshot {
   finalText: string | null
   error: { code: SubagentErrorCode; message: string } | null
   usage: ProviderUsage | null
-  /**
-   * Every TranscriptEntry the subagent produced, in arrival order. Includes
-   * tool_call, tool_result, system_init, account_info, result. assistant_text
-   * entries also live here in addition to being concatenated into finalText
-   * via subagent_message_delta — clients should prefer entries[] for rich
-   * rendering, finalText only as a quick text-only summary.
-   */
   entries: TranscriptEntry[]
-  /**
-   * Set while the subagent is awaiting a user response to an
-   * interactive tool call (AskUserQuestion / ExitPlanMode). Null
-   * otherwise. The orchestrator's wall-clock timeout is paused while
-   * this is non-null.
-   */
   pendingTool: SubagentPendingTool | null
 }
 
 export type LoopRowStatus = "pending" | "running" | "done" | "failed"
 
 export interface LoopRow {
-  /**
-   * A real subagent run id, or a synthetic `progress:<n>` / `next` id for a
-   * step read out of the tracking file rather than the live run log.
-   */
   runId: string
   label: string
   status: LoopRowStatus
@@ -171,31 +140,19 @@ export interface LoopRow {
 }
 
 export interface LoopRateLimitInfo {
-  /** The live auto-continue schedule id, so the panel's Resume action can accept it. */
   scheduleId: string
-  /** epoch ms the usage limit resets (and the resume is/would be scheduled for) */
   resetAt: number
   tz: string
-  /**
-   * true  → an auto-continue is already scheduled to fire at `resetAt`
-   *         (the loop resumes on its own).
-   * false → the resume is only proposed and waits on the user
-   *         (auto-resume setting off) — render a "Resume" action.
-   */
   scheduled: boolean
 }
 
 export interface LoopProgressSnapshot {
   chatId: string
-  /** Whether a loop is currently armed for this chat. */
   armed: boolean
-  /** Oldest first — checklist order, with the in-flight or pending step last. */
   rows: LoopRow[]
-  /** Non-null while the loop is paused on a Claude usage limit. */
   rateLimit: LoopRateLimitInfo | null
 }
 
-// Type guards
 
 export function isSubagentContextScope(value: string): value is SubagentContextScope {
   return value === "previous-assistant-reply" || value === "full-transcript"

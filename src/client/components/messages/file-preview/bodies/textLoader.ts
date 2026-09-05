@@ -39,7 +39,6 @@ export function useTextBodyContent(source: PreviewSource): TextLoadState {
   // eslint-disable-next-line react-hooks/refs -- intentional render-time sync write so async fetch completion (which can fire between render and commit) sees the latest key and refuses to overwrite state for a stale key.
   currentKeyRef.current = cacheKey
 
-  // getDerivedStateFromProps pattern: reset state when key changes (same-render update)
   if (lastKey !== cacheKey) {
     dispatch({ type: "resetForKey", newKey: cacheKey })
   }

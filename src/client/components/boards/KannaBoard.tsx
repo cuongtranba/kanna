@@ -35,38 +35,11 @@ import {
 } from "../ui/context-menu"
 import type { BoardColumn, BoardViewSnapshot, Card } from "../../../shared/boards/types"
 
-/**
- * The board, drawn by us.
- *
- * This used to wrap `react-kanban-kit`, which supplied layout, drag-and-drop
- * and virtualization. The virtualization is why it is gone: virtua hides an
- * item until a `ResizeObserver` measures it, and an item measured at zero size
- * while the pane was still laying out stayed hidden forever — a real card,
- * invisible, on the one surface where the cards ARE the product. The library's
- * own engine, `@atlaskit/pragmatic-drag-and-drop`, is used directly here
- * instead; it is what the package wrapped, so this is a layer removed rather
- * than a dependency swapped.
- *
- * Nothing is virtualized now, and nothing needs to be: a column renders at most
- * one page of cards (30, raised on demand, capped server-side), so the DOM is
- * bounded by the paging contract rather than by the size of the board.
- *
- * Design rules this encodes (docs/kanban-boards-design-brief.md):
- *  - a column at rest is NOT a tinted panel; it is the page with a 1px divider,
- *  - a column's colour is a 6px dot, never a background wash,
- *  - the drop target shows a 1px line only WHILE dragging,
- *  - a healthy card shows no badges; silence is the healthy state.
- */
 
 export type { CardMoveRequest }
 
 export interface KannaBoardProps {
   view: BoardViewSnapshot
-  /**
-   * Live facts for every chat the workspace knows about, keyed by chat id.
-   * Optional: a board mounted for its layout alone still renders, and its cards
-   * then simply say nothing — which is what a healthy card says anyway.
-   */
   chatFacts?: Readonly<Record<string, CardChatFacts>>
   onCardMove: (move: CardMoveRequest) => void
   onColumnMove: (columnId: string, afterColumnId: string | null) => void
@@ -79,28 +52,15 @@ export interface KannaBoardProps {
   onMoveToTop: (cardId: string) => void
 }
 
-/** Data keys marking what a drag is carrying, so a card cannot drop as a column. */
 const CARD = "kanna-board-card"
 const COLUMN = "kanna-board-column"
 
-/**
- * The current columns, readable from a drag callback.
- *
- * Drag listeners are registered once per element; closing over the snapshot
- * would pin them to whatever the board looked like when the listener was
- * attached. A module-level ref keeps them current without re-registering every
- * listener on every board update. One board is open per pane, and a drag is
- * global to the document, so a single slot cannot drift.
- */
 const liveColumns: { current: readonly BoardColumn[] } = { current: [] }
 
 export function KannaBoard(props: KannaBoardProps) {
   const { view, onCardMove, onColumnMove } = props
   const boardRef = useRef<HTMLDivElement | null>(null)
 
-  // Assigned in a layout effect, never during render: a drag listener is
-  // registered once per element and must read the CURRENT board, but writing a
-  // ref while rendering is what `react-hooks/refs` forbids.
   const viewRef = useRef(view)
   useLayoutEffect(() => {
     viewRef.current = view
@@ -115,8 +75,6 @@ export function KannaBoard(props: KannaBoardProps) {
       const target = useBoardDragStore.getState().cardDrop
       useBoardDragStore.getState().endDrag()
       if (!target) return
-      // Always resolve against the FULL (unfiltered) view so a drag performed
-      // inside an active filter lands correctly among all cards in the column.
       const move = resolveCardDrop(viewRef.current, cardId, target)
       if (move) onCardMove(move)
     },
@@ -134,7 +92,6 @@ export function KannaBoard(props: KannaBoardProps) {
     [onColumnMove],
   )
 
-  // Horizontal auto-scroll when a drag reaches the board's edge.
   useEffect(() => {
     const element = boardRef.current
     if (!element) return
@@ -228,8 +185,6 @@ function BoardColumnView({
     const list = listRef.current
     if (!outer || !list) return
     const store = useBoardDragStore.getState()
-    // The header is the handle: dragging from the card area must move a card,
-    // not the column it sits in.
     const handle = outer.querySelector<HTMLElement>("[data-column-handle]") ?? undefined
 
     return combine(
@@ -252,9 +207,6 @@ function BoardColumnView({
         element: list,
         canDrop: ({ source }) => source.data[CARD] === true,
         getData: () => ({ columnId }),
-        // The list is the fallback target: an empty column, or the space under
-        // the last card, both mean "put it at the end". A card hovered inside
-        // it overrides this with its own edge.
         onDragEnter: () => { store.setCardDrop({ columnId, beforeCardId: null }) },
         onDragLeave: () => { store.setCardDrop(null) },
       }),
@@ -296,7 +248,6 @@ function BoardColumnView({
         <span className="truncate text-[0.9375rem] font-semibold leading-tight text-foreground">
           {column.title}
         </span>
-        {/* tabular-nums so a live count cannot reflow the header. */}
         <span
           className={cn(
             "ml-auto font-mono text-xs tabular-nums",
@@ -347,11 +298,6 @@ function BoardColumnView({
   )
 }
 
-/**
- * The drop-target payload pragmatic-drag-and-drop hands back on `self.data`.
- * Taken from `extractClosestEdge` itself rather than restated, so the shape
- * cannot drift from the only function that reads it.
- */
 type DropTargetData = Parameters<typeof extractClosestEdge>[0]
 
 function applyColumnEdge(data: DropTargetData, hoveredColumnId: string) {
@@ -418,23 +364,10 @@ function BoardCard({
   const handleOpen = useCallback(() => { onOpen(cardId) }, [cardId, onOpen])
   const handleMoveToTop = useCallback(() => { onMoveToTop(cardId) }, [cardId, onMoveToTop])
 
-  // Liveness, not attribution. `card.updatedBy.kind === "agent"` — what this row
-  // used to key on — says an agent wrote the row last, so a card finished an
-  // hour ago looked identical to one mid-turn.
   const signal = cardWorkSignal(chatIds, chatFacts)
   const isNew = isNewCard(card, newSince)
 
   return (
-    /*
-      `layout` is the travel beat: when the drop resolves and the list
-      reorders, Motion measures the card's old and new rects and springs
-      between them — a real FLIP, so the card ends where the DATA says it went
-      rather than where the pointer was released.
-
-      Safe to put on the same element pragmatic-drag-and-drop binds: that
-      library uses native HTML5 drag and never writes a transform to the source
-      element, so nothing here is fighting it for the same property.
-    */
     <motion.div
       ref={ref}
       layout
@@ -448,12 +381,9 @@ function BoardCard({
             type="button"
             onClick={handleOpen}
             className={cn(
-              // Flat by default: 1px edge, no shadow, no left stripe.
               "w-full cursor-grab rounded-lg border border-border bg-card px-3 py-2 text-left",
               "transition-[colors,transform,opacity] duration-[var(--motion-quick)] hover:bg-secondary",
               "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-              // The lift: the card is in your hand. Scale and fade together —
-              // what is left behind is the slot, not the card.
               dragging && "scale-[1.02] opacity-40",
             )}
           >
@@ -467,7 +397,6 @@ function BoardCard({
               </span>
             ) : null}
             {signal ? (
-              // Only rendered when there is something to say. A healthy card is silent.
               <span
                 className={cn(
                   "mt-1.5 flex items-center gap-1.5 text-xs",
@@ -475,8 +404,6 @@ function BoardCard({
                 )}
               >
                 {signal.tone ? (
-                  // A resting dot: no pulse, no glow. The label beside it is what
-                  // carries the meaning — the colour only sharpens it.
                   <span
                     aria-hidden
                     className={cn("size-1.5 shrink-0 rounded-full", chatDotBgClass(signal.tone))}
@@ -498,17 +425,6 @@ function BoardCard({
   )
 }
 
-/**
- * The one thing on the board that ticks.
- *
- * Its own component so the second hand re-renders a stamp rather than the
- * board: a card is silent unless its chat is live, so at most a handful of
- * these exist at once, and the other 200 cards never re-render for the clock.
- *
- * Elapsed reads m:ss because a turn is watched second by second; a countdown
- * reads 12m because a schedule is not, and a scheduled job ticking down by the
- * second would pull the eye to the one row asking for no attention.
- */
 function LiveStamp({ clock }: { clock: WorkClock }) {
   const now = useNow(1_000)
   const text = clock.kind === "elapsed"
@@ -529,12 +445,6 @@ function applyCardEdge(
   useBoardDragStore.getState().setCardDrop({ columnId, beforeCardId })
 }
 
-/**
- * 1px line, only while dragging. Depth is a state response, not a resting style.
- *
- * It DRAWS itself from the left rather than blinking on, so the line reads as
- * the board answering "here" instead of as a flicker the eye has to interpret.
- */
 function CardDropLine() {
   return (
     <div
@@ -553,10 +463,6 @@ function ColumnDropLine() {
   )
 }
 
-/**
- * The tail of a partly-loaded column: honest about what is missing, and the
- * thing that asks for the next page when it scrolls into view.
- */
 function MoreCards({
   columnId,
   onLoadMore,
@@ -578,20 +484,12 @@ function MoreCards({
 
   return (
     <div ref={ref} className="space-y-2" aria-hidden>
-      {/* `animate-pulse` is sanctioned for skeletons. */}
       <div className="h-14 w-full animate-pulse rounded-lg border border-border bg-secondary" />
       <div className="h-14 w-full animate-pulse rounded-lg border border-border bg-secondary" />
     </div>
   )
 }
 
-/**
- * Adding a card is one field at the foot of its column.
- *
- * Not a dialog and not a button that opens one: a card is a title, and
- * everything else about it is edited in the drawer afterwards. Typing where the
- * card will appear is the shortest path between intent and result.
- */
 function CardAdder({
   columnId,
   onAdd,
@@ -632,11 +530,6 @@ function CardAdder({
   )
 }
 
-/**
- * Adding a column is one field, not a dialog: a column is a name, and the role
- * and colour are set afterwards from the same popover that edits every other
- * column.
- */
 function ColumnAdder({ onAdd, isFirst }: { onAdd: (title: string) => void; isFirst: boolean }) {
   const draft = useColumnAdderStore((state) => state.draft)
 
@@ -657,9 +550,6 @@ function ColumnAdder({ onAdd, isFirst }: { onAdd: (title: string) => void; isFir
 
   return (
     <form onSubmit={handleSubmit} className="w-64 shrink-0 px-3 pt-1">
-      {/* An empty board teaches HERE, beside the field that acts on it. Copy
-          that says "add a column" while the field is somewhere else is worse
-          than no copy. */}
       {isFirst ? (
         <p className="mb-2 px-1 text-sm text-muted-foreground [text-wrap:pretty]">
           No columns yet. Name your first one to start tracking work your agents can pick up.

@@ -12,15 +12,6 @@ import { git, makeTempRepo, type TempRepo } from "./test-helpers/worktree-repo"
 import { resolveSpawnPaths } from "./claude-session-config"
 import type { BoardTemplateDefinition } from "../shared/boards/types"
 
-/**
- * "Start work" against real git and a real event store.
- *
- * The unit suite fakes git and the chat store, which is right for the branching
- * — but it cannot tell whether a worktree actually lands on disk, whether the
- * chat the event store writes really resolves its cwd to that worktree, or
- * whether the checkout stays clean. Those are the three claims the feature
- * makes, and they are only true if measured here.
- */
 
 const DEFINITION: BoardTemplateDefinition = {
   columns: [
@@ -87,7 +78,6 @@ beforeEach(setup)
 afterEach(() => {
   repo.cleanup()
   rmSync(dataDir, { recursive: true, force: true })
-  // The worktree lands beside the repo, so cleaning the repo alone leaks it.
   rmSync(path.join(path.dirname(repo.dir), ".kanna-worktrees"), { recursive: true, force: true })
 })
 
@@ -98,23 +88,18 @@ test(
 
     const result = await startWork(deps(), card.id)
 
-    // 1. The worktree exists, on the branch the card owns.
     expect(existsSync(result.worktreePath!)).toBe(true)
     const worktrees = await listWorktrees(repo.dir)
     const created = worktrees.find((entry) => entry.branch === result.branch)
     expect(created).toBeDefined()
     expect(result.branch).toBe(`card/${card.id.slice(0, 8)}-fix-login-redirect-loop`)
 
-    // 2. The chat spawns IN it. This is the claim the whole binding change was
-    //    made for, and `resolveSpawnPaths` is what the turn starter calls.
     const chat = store.getChat(result.chatId)!
     expect(chat.stackId).toBeUndefined()
     expect(resolveSpawnPaths(chat, project.localPath).cwd).toBe(created!.path)
 
-    // 3. The checkout is not dirtied by its own worktree.
     expect(git(repo.dir, "status", "--porcelain")).toBe("")
 
-    // 4. The card carries both links and sits in the active column.
     const links = registry.cardDetail(card.id)!.links
     expect(links.find((link) => link.kind === "chat")?.targetId).toBe(result.chatId)
     expect(links.find((link) => link.kind === "worktree")?.targetId).toBe(created!.path)
@@ -152,16 +137,12 @@ test(
     const { card } = await seedCard("Fix: login redirect loop")
     const first = await startWork(deps(), card.id)
 
-    // Remove the worktree the way a user would, leaving the branch behind.
     git(repo.dir, "worktree", "remove", "--force", first.worktreePath!)
     expect(await localBranchExists(repo.dir, first.branch)).toBe(true)
 
-    // The chat still exists, so the card opens it; the point is that nothing
-    // fell over and no second branch appeared.
     const view = await startWorkView(deps(), card.id)
     expect(view.status).toEqual({ kind: "chat", chatId: first.chatId, worktreePath: null })
 
-    // With the chat gone too, the card starts again and reuses the branch.
     await store.deleteChat(first.chatId)
     const again = await startWork(deps(), card.id)
     expect(again.branch).toBe(first.branch)

@@ -3,14 +3,6 @@ import { useNavigate, useOutletContext, useParams } from "react-router-dom"
 import { BoardsPage } from "../components/boards/BoardsPage"
 import type { KannaState } from "./useKannaState"
 
-/**
- * Route for `/boards/stack/:stackId` — the list, and only the list.
- *
- * Mirrors `BoardsRoutePage`, one owner kind over: a Stack board has no single
- * project checkout to imply, so the owner is the Stack itself. Opening a board
- * hands it to `/boards/stack/:stackId/:boardId`, which the workspace owns the
- * same way it owns a project board's address.
- */
 export function StackBoardsRoutePage() {
   const state = useOutletContext<KannaState>()
   const navigate = useNavigate()

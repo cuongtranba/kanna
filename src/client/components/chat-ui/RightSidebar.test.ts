@@ -174,9 +174,6 @@ describe("RightSidebar", () => {
       })
     ))
 
-    // The file list is virtualized (LegendList), so individual file cards are
-    // not present in static markup — assert the changes view was selected via
-    // its always-rendered commit box, and that the empty-state branch was not.
     expect(markup).toContain("Commit message (override)")
     expect(markup).not.toContain("No file changes.")
     expect(markup).toContain("Open branch switcher")

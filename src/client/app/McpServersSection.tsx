@@ -246,7 +246,6 @@ function OAuthPill({ oauth }: { oauth: McpOAuthState | undefined }) {
   }
 }
 
-// ── Editor form ───────────────────────────────────────────────────────────
 
 function McpServerEditor({
   initial,
@@ -264,8 +263,6 @@ function McpServerEditor({
   const editorForm = useMcpServersSectionStore((s) => s.editorForm)
   const resetEditorForm = useMcpServersSectionStore((s) => s.resetEditorForm)
   const patchEditorForm = useMcpServersSectionStore((s) => s.patchEditorForm)
-  // TS type predicate narrowing string -> McpServerTransport: a boundary
-  // concern, not a store transition.
   const handleTransportChange = useCallback((v: string) => {
     if (isMcpServerTransport(v)) patchEditorForm({ transport: v })
   }, [patchEditorForm])
@@ -289,9 +286,6 @@ function McpServerEditor({
     completing,
   } = editorForm
 
-  // Reset form state from `initial` on mount.
-  // McpServerEditor always mounts fresh (it is only rendered when editing.kind !== "list"
-  // and unmounts when the user returns to the list), so a mount-only effect is correct.
   const initialRef = useRef(initial)
   useEffect(() => {
     resetEditorForm(initialRef.current)
@@ -649,7 +643,6 @@ function McpServerEditor({
   )
 }
 
-// ── Settings page wrapper ─────────────────────────────────────────────────
 
 export function McpServersSettingsBranch(props: {
   state: Pick<KannaState, "handleWriteAppSettings" | "handleTestMcpServer" | "handleStartMcpOAuth" | "handleCompleteMcpOAuth">
@@ -663,7 +656,6 @@ export function McpServersSettingsBranch(props: {
   const handlers = useMemo<McpServersSectionHandlers>(
     () => ({
       ...crud,
-      // Deleting the server being edited leaves the editor pointing at nothing.
       onDelete: async (id) => {
         await crud.onDelete(id)
         setEditing({ kind: "list" })

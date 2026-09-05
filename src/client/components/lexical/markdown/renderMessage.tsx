@@ -1,21 +1,3 @@
-/**
- * Message-level markdown renderer with:
- *  - ThinkingBlock support (pre-pass: split <think>…</think> segments)
- *  - MermaidNode, LocalFileLinkNode support (custom DecoratorNode handling)
- *
- * Public API:
- *   renderMessageMarkdown(text: string): ReactNode  (one-shot)
- *   useRenderedMessage(text: string): ReactNode     (memoised hook)
- *
- * Design rationale:
- *   lexicalToReact.tsx's walker handles the standard GFM node set but has no
- *   branch for custom DecoratorNodes (MermaidNode, LocalFileLinkNode). Rather
- *   than editing lexicalToReact.tsx (owned by another agent), this module
- *   implements its own headless walk that delegates to node.decorate() for
- *   DecoratorNodes and falls back to the shared text/element rendering for
- *   everything else. The approach keeps the two walkers in sync with only the
- *   custom-node branch added here.
- */
 
 import { useMemo, type ReactNode } from "react"
 import { createHeadlessEditor } from "@lexical/headless"
@@ -64,9 +46,6 @@ import {
 import { KANNA_MESSAGE_TRANSFORMERS } from "./messageTransformers"
 import { MessageCodeBlock } from "./MessageCodeBlock"
 
-// ---------------------------------------------------------------------------
-// Node set: GFM built-ins + custom message nodes
-// ---------------------------------------------------------------------------
 
 const MESSAGE_NODES = [
   HeadingNode,
@@ -83,26 +62,15 @@ const MESSAGE_NODES = [
   ...KANNA_MESSAGE_NODES,
 ]
 
-// ---------------------------------------------------------------------------
-// Node walker — mirrors lexicalToReact.tsx + adds DecoratorNode handling
-// ---------------------------------------------------------------------------
 
-/** Unique key counter per render pass. */
 let keyCounter = 0
 function nextKey(): string {
   return String(keyCounter++)
 }
 
-/** Current editor/config set at the start of each render pass. */
 let renderEditor: LexicalEditor | null = null
 let renderConfig: EditorConfig | null = null
 
-// Heading className map, triplicated (deliberately, see the file header above)
-// across this file, ../config.ts and ./lexicalToReact.tsx.
-// ../../headingClassMap.test.ts pins all three copies equal to each other so
-// they cannot silently drift. Uses the --text-N tokens (src/index.css @theme)
-// instead of arbitrary text-[Npx] utilities so headings respond to
-// --kanna-font-scale.
 export const HEADING_CLASS_MAP: Record<string, string> = {
   h1: "text-20 font-normal leading-tight mt-5 mb-3 first:mt-0 last:mb-0",
   h2: "text-18 font-normal leading-tight mt-5 mb-3 first:mt-0 last:mb-0",
@@ -112,19 +80,15 @@ export const HEADING_CLASS_MAP: Record<string, string> = {
   h6: "text-16 font-normal leading-tight mt-5 mb-3 first:mt-0 last:mb-0",
 }
 
-/** Walk a single Lexical node and return its React representation. */
 function walkNode(node: LexicalNode): ReactNode {
-  // --- MermaidNode (DecoratorNode, block) ---
   if ($isMermaidNode(node) && renderEditor && renderConfig) {
     return <span key={nextKey()}>{node.decorate(renderEditor, renderConfig)}</span>
   }
 
-  // --- LocalFileLinkNode (DecoratorNode, inline) ---
   if ($isLocalFileLinkNode(node) && renderEditor && renderConfig) {
     return <span key={nextKey()}>{node.decorate(renderEditor, renderConfig)}</span>
   }
 
-  // --- Heading ---
   if ($isHeadingNode(node)) {
     const tag = node.getTag()
     const children = walkChildren(node)
@@ -140,7 +104,6 @@ function walkNode(node: LexicalNode): ReactNode {
     }
   }
 
-  // --- Blockquote ---
   if ($isQuoteNode(node)) {
     return (
       <blockquote
@@ -152,7 +115,6 @@ function walkNode(node: LexicalNode): ReactNode {
     )
   }
 
-  // --- Paragraph ---
   if ($isParagraphNode(node)) {
     return (
       <p key={nextKey()} className="break-words mt-5 mb-3 first:mt-0 last:mb-0">
@@ -161,7 +123,6 @@ function walkNode(node: LexicalNode): ReactNode {
     )
   }
 
-  // --- Code block (fenced) ---
   if ($isCodeNode(node)) {
     const lang = node.getLanguage() ?? ""
     const code = node
@@ -178,7 +139,6 @@ function walkNode(node: LexicalNode): ReactNode {
     return <MessageCodeBlock key={nextKey()} source={code} lang={lang} />
   }
 
-  // --- List ---
   if ($isListNode(node)) {
     const listType = node.getListType()
     const children = walkChildren(node)
@@ -197,7 +157,6 @@ function walkNode(node: LexicalNode): ReactNode {
     )
   }
 
-  // --- List item ---
   if ($isListItemNode(node)) {
     const checked = node.getChecked()
     const children = walkChildren(node)
@@ -217,7 +176,6 @@ function walkNode(node: LexicalNode): ReactNode {
     )
   }
 
-  // --- Link ---
   if ($isLinkNode(node) || $isAutoLinkNode(node)) {
     const url = node.getURL()
     return (
@@ -233,7 +191,6 @@ function walkNode(node: LexicalNode): ReactNode {
     )
   }
 
-  // --- Table ---
   if ($isTableNode(node)) {
     const rows = node.getChildren<TableRowNode>()
     const firstRow = rows[0]
@@ -291,17 +248,14 @@ function walkNode(node: LexicalNode): ReactNode {
     )
   }
 
-  // --- Line break ---
   if ($isLineBreakNode(node)) {
     return <br key={nextKey()} />
   }
 
-  // --- Text node (with format flags) ---
   if ($isTextNode(node)) {
     return renderTextNode(node)
   }
 
-  // --- Code highlight node ---
   if ($isCodeHighlightNode(node)) {
     return (
       <code
@@ -313,12 +267,10 @@ function walkNode(node: LexicalNode): ReactNode {
     )
   }
 
-  // Fallback: text content
   const fallbackText = node.getTextContent()
   return fallbackText ? <span key={nextKey()}>{fallbackText}</span> : null
 }
 
-/** Render a TextNode applying all its format flags. */
 function renderTextNode(node: TextNode): ReactNode {
   const fmt = node.getFormat()
   const text = node.getTextContent()
@@ -345,19 +297,11 @@ function renderTextNode(node: TextNode): ReactNode {
   return content
 }
 
-/** Walk an element node's children and return an array of ReactNodes. */
 function walkChildren(node: { getChildren<T extends LexicalNode>(): T[] }): ReactNode[] {
   return node.getChildren<LexicalNode>().map(walkNode)
 }
 
-// ---------------------------------------------------------------------------
-// Message-segment rendering
-// ---------------------------------------------------------------------------
 
-/**
- * Render a single markdown text segment (no <think> tags) through the Lexical
- * headless editor using KANNA_MESSAGE_TRANSFORMERS and the custom node set.
- */
 function renderMarkdownSegment(markdown: string): ReactNode {
   const processed = linkifyTextRefs(markdown)
   const editorConfig = buildKannaEditorConfig({
@@ -384,29 +328,11 @@ function renderMarkdownSegment(markdown: string): ReactNode {
   })
 }
 
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
 
-/**
- * Render a standalone markdown document (e.g. a previewed .md file) to a
- * React tree with the full message transformer set — mermaid fences become
- * MermaidDiagram blocks, GFM tables/lists/code render as in chat messages.
- * No <think>-segment pre-pass: file content is not an assistant message.
- */
 export function renderMarkdownDocument(markdown: string): ReactNode {
   return renderMarkdownSegment(markdown)
 }
 
-/**
- * Render an assistant message text to a React tree.
- *
- * Pre-pass: splits out `<think>…</think>` segments using parseThinkingSegments.
- * For each "thinking" segment, renders a ThinkingBlock component.
- * For each "text" segment, parses markdown via the Lexical headless engine.
- *
- * @param text - Raw assistant message text (may contain <think> blocks and markdown).
- */
 export function renderMessageMarkdown(text: string): ReactNode {
   const segments = parseThinkingSegments(text)
 
@@ -421,10 +347,6 @@ export function renderMessageMarkdown(text: string): ReactNode {
   return <>{nodes}</>
 }
 
-/**
- * React hook that memoises the rendered React tree by text string.
- * Suitable for function components — cheap on re-renders when text hasn't changed.
- */
 export function useRenderedMessage(text: string): ReactNode {
   return useMemo(() => renderMessageMarkdown(text), [text])
 }

@@ -1,13 +1,3 @@
-/**
- * The two transient panels the Stacks section can open below itself: the
- * create/edit form, and the delete confirmation.
- *
- * Extracted from `KannaSidebar.tsx`, which is on its architecture-budget
- * ceiling — the budget's prescribed remedy is a module that owns the code
- * rather than a raised pin. Both panels are inline (not dialogs) so they stay
- * in the sidebar's scroll flow, which is why they live together: they are the
- * same slot, and at most one is open at a time.
- */
 
 import type { ReactNode } from "react"
 import type { StackSummary } from "../../../../shared/types"
@@ -27,7 +17,6 @@ export function StackEditPanels({
   stacks: StackSummary[]
   projects: Array<{ id: string; title: string }>
   createPanelOpen: boolean
-  /** Non-null puts the create panel into edit mode against this stack. */
   editId: string | null
   deleteConfirmId: string | null
   onSubmit: (title: string, projectIds: string[], instructions: string) => Promise<void>

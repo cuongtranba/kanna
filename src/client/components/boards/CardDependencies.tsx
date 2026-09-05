@@ -7,25 +7,11 @@ import { onRejected } from "../../../shared/errors"
 import type { JsonValue } from "../../../shared/json"
 import type { ClientCommand } from "../../../shared/protocol"
 
-/**
- * "Blocked by" — the card's ordering edges, and the gesture that authors them.
- *
- * The user-facing half of adr-20260904-cross-project-orchestration. It lives in
- * its own module rather than inside `CardDrawer.tsx` because that file sits at
- * its architecture-budget pin, and because this is a self-contained concern:
- * it owns its two commands and reports outcomes back to the drawer rather than
- * reaching into its store.
- *
- * A gesture is the point. `c3-232 orchestration-core` was retired for being
- * unreachable from anything a user does (adr-20260802), so an ordering feature
- * with only a server-side edge would repeat exactly that mistake.
- */
 
 export interface CardDependenciesSocket {
   command<TResult = JsonValue>(command: ClientCommand): Promise<TResult>
 }
 
-/** A card that may be waited on: everything the picker needs and nothing more. */
 export interface BlockerCandidate {
   id: string
   title: string
@@ -34,25 +20,12 @@ export interface BlockerCandidate {
 export interface CardDependenciesProps {
   cardId: string
   blockers: readonly CardBlocker[]
-  /**
-   * The cards this one could wait on — the board's LOADED pages, prop-drilled
-   * from the board view for the same reason `cardFields` is. A board with more
-   * cards than one page per column offers what is on screen; the alternative is
-   * a search endpoint, which is its own change.
-   */
   candidates: readonly BlockerCandidate[]
   socket: CardDependenciesSocket
-  /** Re-read the card after a write. */
   onChanged: () => void
   onError: (message: string) => void
 }
 
-/**
- * The trigger reads "Add a blocker…" at all times, so it is a menu rather than
- * a field with a value. Same sentinel trick as `SelectFieldValue`'s
- * `CLEAR_SELECTION`: a value no card id can collide with, because every real
- * option is prefixed.
- */
 const NO_SELECTION = "add"
 
 function candidateValue(cardId: string): string {
@@ -69,8 +42,6 @@ export function CardDependencies({
 }: CardDependenciesProps) {
   const blocked = useMemo(() => new Set(blockers.map((entry) => entry.cardId)), [blockers])
 
-  // A card cannot wait on itself, and offering an edge that already exists
-  // would report "already blocked" as an error the user could have been spared.
   const offered = useMemo(
     () => candidates.filter((entry) => entry.id !== cardId && !blocked.has(entry.id)),
     [blocked, cardId, candidates],
@@ -83,8 +54,6 @@ export function CardDependencies({
         .command({ type: "board.card.block", cardId, blockedByCardId: chosen.slice(2) })
         .then(onChanged)
         .catch(onRejected((error) => {
-          // The server refuses a cycle by naming the cards in it, so this is
-          // the whole explanation the user needs.
           onError(error.message)
         }))
     },
@@ -134,14 +103,6 @@ export function CardDependencies({
   )
 }
 
-/**
- * One edge.
- *
- * A cleared blocker stays listed rather than disappearing: what a card waited
- * on is part of reading it, and a row that vanished on completion would make
- * the card's history depend on when you happened to look. Cleared is carried by
- * a check plus muted, struck text — never by colour alone.
- */
 function BlockerRow({
   blocker,
   onRemove,

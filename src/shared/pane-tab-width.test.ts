@@ -24,13 +24,10 @@ describe("clampTabMinWidth", () => {
   })
 
   test("coerces a numeric string, like the rest of app-settings does", () => {
-    // settings.json is hand-editable, so "120" is a value a real file can hold.
     expect(clampTabMinWidth("120")).toBe(120)
   })
 
   test("the default reproduces the pre-preference behaviour", () => {
-    // Tabs used to shrink all the way to the icon-only floor, so the default
-    // has to BE that floor or every existing layout would change on upgrade.
     expect(DEFAULT_TAB_MIN_WIDTH).toBe(MIN_TAB_WIDTH)
   })
 })

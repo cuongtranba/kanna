@@ -20,7 +20,7 @@ describe("formatCompactDuration", () => {
   test("≥ a day → Dd Hh", () => {
     expect(formatCompactDuration(24 * 60 * 60_000)).toBe("1d")
     expect(formatCompactDuration(25 * 60 * 60_000)).toBe("1d 1h")
-    expect(formatCompactDuration(48 * 60 * 60_000 + 30 * 60_000)).toBe("2d") // <1h trailing → drop
+    expect(formatCompactDuration(48 * 60 * 60_000 + 30 * 60_000)).toBe("2d")
   })
   test("negative input clamps to 0s", () => {
     expect(formatCompactDuration(-50)).toBe("0s")

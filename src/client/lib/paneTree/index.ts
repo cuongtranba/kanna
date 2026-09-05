@@ -1,11 +1,3 @@
-/**
- * The pane tree: a pure, DOM-free model of a tab + split-pane layout.
- *
- * Every operation is a pure function returning `null` when it changes nothing,
- * so the store can preserve referential identity. Ids for newly created nodes
- * are passed in rather than generated, which keeps the whole engine
- * deterministic and unit-testable.
- */
 
 export {
   MAX_TREE_DEPTH,

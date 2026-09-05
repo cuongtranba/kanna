@@ -1,8 +1,6 @@
 import type { JsonValue } from "./json"
 import type { ChatPermissionPolicyOverride } from "./permission-policy"
 
-// Re-export domain-specific type modules — extracted to keep this barrel lean.
-// All external consumers importing from "../shared/types" continue to work unchanged.
 export * from "./core-types"
 export * from "./provider-model-types"
 export * from "./tool-call-types"
@@ -12,8 +10,6 @@ export * from "./subagent-types"
 export * from "./app-settings-types"
 export * from "./git-diff-types"
 
-// Import the re-exported names we reference in the body of this file.
-// (export * makes them available to importers, but not within this file itself.)
 import type { AgentProvider, KannaStatus, AttachmentKind, LlmProviderKind } from "./core-types"
 import type {
   ModelOptions,
@@ -172,21 +168,15 @@ export interface ProjectSummary {
   title: string
   createdAt: number
   updatedAt: number
-  /**
-   * This project's own conventions, rendered as a
-   * `## Project instructions — <title>` block for any chat that can write it.
-   * Absent and empty are the same thing (adr-20260904).
-   */
   instructions?: string
 }
 
 export interface Stack {
   id: string
   title: string
-  projectIds: string[]   // insertion order; drives sidebar order within the stack
+  projectIds: string[]
   createdAt: number
   updatedAt: number
-  /** How this stack's projects relate — rendered as `## Stack instructions`. */
   instructions?: string
 }
 
@@ -198,16 +188,12 @@ export interface StackSummary {
   createdAt: number
   updatedAt: number
   instructions?: string
-  /**
-   * Rolled up from this stack's member chats. Absent when nothing is running,
-   * so the sidebar row renders no indicator rather than a row of zeroes.
-   */
   activity?: StackActivity
 }
 
 export interface StackBinding {
   projectId: string
-  worktreePath: string                          // absolute, matches agent SDK cwd input
+  worktreePath: string
   role: "primary" | "additional"
 }
 
@@ -245,9 +231,7 @@ export interface SidebarChatRow {
   canFork?: boolean
   stateEnteredAt?: number
   stackId?: string
-  /** Live Claude PTY session lifecycle state for the sidebar badge. Missing implies "cold". */
   sessionState?: ClaudeSessionLifecycleStatus
-  /** True when the chat has a non-null policyOverride. Missing implies false. */
   hasPolicyOverride?: boolean
 }
 
@@ -261,7 +245,6 @@ export interface SidebarProjectGroup {
   defaultCollapsed: boolean
   starredAt?: number
   sourceProvider?: AgentProvider | null
-  /** Seeds the "Edit instructions" dialog without a second round-trip. */
   instructions?: string
 }
 
@@ -362,20 +345,11 @@ export interface ChatStateTimings {
   cumulativeMs: ChatTimingCumulativeMs
 }
 
-/**
- * A live Claude-Code background task (`Bash(run_in_background: true)`,
- * background Agent run, workflow) tracked on the chat's warm session.
- * Mirrors Claude Code's own /tasks view: id + type + human description.
- */
 export interface ChatBackgroundTask {
   id: string
-  /** SDK `task_type` when known (e.g. "local_bash", "local_agent"); null when only the launch regex saw it. */
   taskType: string | null
-  /** SDK payload description, else the launching tool call's description/command. */
   description: string | null
-  /** Epoch ms the server first observed the task. */
   startedAt: number
-  /** True when the server has an output file path and can stream content for this task. */
   hasOutput: boolean
 }
 
@@ -390,11 +364,8 @@ export interface ChatRuntime {
   planMode: boolean
   sessionTokensByProvider: Partial<Record<AgentProvider, string | null>>
   timings: ChatStateTimings
-  /** Per-chat permission policy overlay. Null means "use global defaults". */
   policyOverride: ChatPermissionPolicyOverride | null
-  /** Current claude PTY session lifecycle state for this chat. `cold` when no live session. */
   sessionState: ClaudeSessionLifecycleStatus
-  /** Live Claude-Code background tasks on this chat's warm session. Empty when none. */
   backgroundTasks: ChatBackgroundTask[]
 }
 
@@ -416,12 +387,6 @@ export interface SlashCommand {
   scope?: SlashCommandScope
 }
 
-/**
- * The composer `/` picker's catalog for one project. Keyed by project because
- * it is derived purely from that project's cwd (plus the user's own
- * `~/.claude`), never from a chat — so every chat in a project shares one list
- * and a freshly opened chat needs no load of its own.
- */
 export interface ProjectCommandsSnapshot {
   projectId: string
   commands: SlashCommand[]
@@ -435,13 +400,6 @@ export interface ResolvedStackBinding {
   projectStatus: "active" | "missing"
 }
 
-/**
- * One `## Project instructions — <title>` block. Kept separate from
- * {@link ResolvedStackBinding} because the two answer different questions:
- * a binding is a ROOT this chat can reach, whereas a block is a project whose
- * rules apply — and a solo chat has the second without having the first
- * (adr-20260904 D5).
- */
 export interface ProjectInstructionBlock {
   projectId: string
   projectTitle: string
@@ -460,15 +418,8 @@ export interface ChatSnapshot {
   liveTunnelId: string | null
   resolvedBindings?: ResolvedStackBinding[]
   subagentRuns: Record<string, SubagentRunSnapshot>
-  /** Loop Progress panel view — armed state, per-round rows, rate-limit resume. */
   loopProgress: LoopProgressSnapshot
-  /** Armed cron jobs on this chat — footer panel + run-card status joins. */
   cronJobs: readonly import("./cron/types").CronJobSnapshot[]
-  /**
-   * Chat op-log sequence this snapshot reflects. Absent when the producer
-   * has no op-log (share page, legacy paths) — such snapshots never get
-   * `chat.ops` deltas applied on top.
-   */
   seq?: number
 }
 
@@ -497,15 +448,9 @@ export interface AutoContinueSchedule {
   tz: string
   resetAt: number
   detectedAt: number
-  /**
-   * Prompt replayed when a `subagent_background` delivery fires. Absent on
-   * provider-failure schedules, which fire the literal `"continue"`.
-   */
   prompt?: string
 }
 
-// Type guards for string literal unions — used by Select/SegmentedControl callbacks
-// (Radix Select passes `string`; these guards narrow without an `as` cast)
 
 export function isAgentProvider(value: string): value is AgentProvider {
   return value === "claude" || value === "codex" || value === "openrouter"

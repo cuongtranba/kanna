@@ -19,8 +19,6 @@ function tabKinds(layout: ReturnType<typeof buildLayoutFromLegacy>) {
 }
 
 describe("buildLayoutFromLegacy", () => {
-  // The chat pane is seeded EMPTY: a chat tab is addressed by chatId and the
-  // legacy layout records none. ChatPage opens a tab for the chat in the URL.
   test("a bare project becomes a single focused, empty chat pane", () => {
     const layout = buildLayoutFromLegacy(legacy())
     expect(layout.root.kind).toBe("pane")
@@ -28,8 +26,6 @@ describe("buildLayoutFromLegacy", () => {
     expect(layout.focusedPaneId).toBe(layout.root.id)
   })
 
-  // Terminals were a horizontal strip beneath the chat; preserving that
-  // arrangement means nobody loses the layout they had built.
   test("one terminal becomes a vertical split under the chat", () => {
     const layout = buildLayoutFromLegacy(legacy({ terminals: [{ id: "t1" }] }))
     expect(layout.root.kind).toBe("group")
@@ -81,8 +77,6 @@ describe("buildLayoutFromLegacy", () => {
     expect(tabKinds(layout).filter((kind) => kind === "terminal")).toHaveLength(3)
   })
 
-  // The chat pane carries no tab yet, but it must exist and hold focus so the
-  // tab ChatPage opens for the URL's chat lands there rather than in a terminal.
   test("the chat pane always exists, is always focused, and starts empty", () => {
     for (const input of [
       legacy(),
@@ -97,7 +91,6 @@ describe("buildLayoutFromLegacy", () => {
     }
   })
 
-  // Legacy values came from localStorage and may be anything.
   test("survives nonsense sizes", () => {
     const layout = buildLayoutFromLegacy(
       legacy({

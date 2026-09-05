@@ -1,8 +1,3 @@
-/**
- * ws-router-project.test.ts
- *
- * Unit tests for the project / session / sidebar / system / update WS command handlers.
- */
 import { describe, expect, mock, test } from "bun:test"
 import type {
   ProjectAnalyticsDep,
@@ -16,9 +11,6 @@ import { handleProjectCommand } from "./ws-router-project"
 import type { ClientCommand, ServerEnvelope } from "../shared/protocol"
 import type { UpdateInstallResult, UpdateSnapshot } from "../shared/types"
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function makeStore(overrides: Partial<ProjectStoreDep> = {}): ProjectStoreDep {
   return {
@@ -121,14 +113,8 @@ function makeDeps(
   }
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 describe("handleProjectCommand", () => {
-  // -------------------------------------------------------------------------
-  // Unknown / out-of-scope
-  // -------------------------------------------------------------------------
 
   test("returns false for a non-project command", async () => {
     const deps = makeDeps()
@@ -141,9 +127,6 @@ describe("handleProjectCommand", () => {
     expect(deps.sent).toHaveLength(0)
   })
 
-  // -------------------------------------------------------------------------
-  // system.ping
-  // -------------------------------------------------------------------------
 
   test("system.ping — sends ack, returns true, no broadcast", async () => {
     const deps = makeDeps()
@@ -154,9 +137,6 @@ describe("handleProjectCommand", () => {
     expect(deps.sidebarBroadcasts).toBe(0)
   })
 
-  // -------------------------------------------------------------------------
-  // update.check
-  // -------------------------------------------------------------------------
 
   test("update.check — no updateManager — returns fallback snapshot", async () => {
     const deps = makeDeps({ updateManager: null })
@@ -202,14 +182,11 @@ describe("handleProjectCommand", () => {
     expect(deps.sent[0]).toMatchObject({ type: "ack", id: "r5" })
   })
 
-  // -------------------------------------------------------------------------
-  // project.open
-  // -------------------------------------------------------------------------
 
   test("project.open — new project — tracks analytics, acks with projectId", async () => {
     const deps = makeDeps({
       storeOverrides: {
-        state: { projectIdsByPath: new Map() }, // path not in map → new
+        state: { projectIdsByPath: new Map() },
         openProject: mock(async () => ({ id: "new-proj" })),
       },
     })
@@ -241,9 +218,6 @@ describe("handleProjectCommand", () => {
     expect((deps.analytics as ReturnType<typeof makeAnalytics>).events).not.toContain("project_opened")
   })
 
-  // -------------------------------------------------------------------------
-  // project.create
-  // -------------------------------------------------------------------------
 
   test("project.create — new project — tracks both analytics events, acks", async () => {
     const deps = makeDeps({
@@ -265,9 +239,6 @@ describe("handleProjectCommand", () => {
     expect(ack.result.projectId).toBe("created-proj")
   })
 
-  // -------------------------------------------------------------------------
-  // project.remove
-  // -------------------------------------------------------------------------
 
   test("project.remove — removes project, closes terminal, tracks analytics", async () => {
     const closeByCwd = mock(() => {})
@@ -292,9 +263,6 @@ describe("handleProjectCommand", () => {
     expect(deps.sent[0]).toMatchObject({ type: "ack", id: "r9" })
   })
 
-  // -------------------------------------------------------------------------
-  // project.setStar
-  // -------------------------------------------------------------------------
 
   test("project.setStar — sets star, acks, broadcasts sidebar", async () => {
     const setProjectStar = mock(async () => {})
@@ -310,9 +278,6 @@ describe("handleProjectCommand", () => {
     expect(deps.sent[0]).toMatchObject({ type: "ack", id: "r10" })
   })
 
-  // -------------------------------------------------------------------------
-  // project.readDiffPatch
-  // -------------------------------------------------------------------------
 
   test("project.readDiffPatch — returns patch content", async () => {
     const deps = makeDeps({
@@ -349,9 +314,6 @@ describe("handleProjectCommand", () => {
     ).rejects.toThrow("Project not found")
   })
 
-  // -------------------------------------------------------------------------
-  // sessions.importClaude
-  // -------------------------------------------------------------------------
 
   test("sessions.importClaude — imports sessions, acks, broadcasts sidebar", async () => {
     const deps = makeDeps({ importResult: { imported: 3, newProjects: 0 } })
@@ -368,9 +330,6 @@ describe("handleProjectCommand", () => {
     expect(deps.refreshDiscovery as ReturnType<typeof mock>).toHaveBeenCalled()
   })
 
-  // -------------------------------------------------------------------------
-  // sidebar.reorderProjectGroups
-  // -------------------------------------------------------------------------
 
   test("sidebar.reorderProjectGroups — sets order, acks, broadcasts sidebar", async () => {
     const setSidebarProjectOrder = mock(async () => {})
@@ -386,9 +345,6 @@ describe("handleProjectCommand", () => {
     expect(deps.sent[0]).toMatchObject({ type: "ack", id: "r15" })
   })
 
-  // -------------------------------------------------------------------------
-  // system.openExternal
-  // -------------------------------------------------------------------------
 
   test("system.openExternal — calls openExternalFn, acks", async () => {
     const openExternalFn = mock(async () => {})

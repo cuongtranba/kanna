@@ -1,6 +1,3 @@
-/**
- * Tests for api/share.ts — verifies the share snapshot queryFn.
- */
 
 import { describe, expect, test } from "bun:test"
 import { fetchShareSnapshot, shareQueryKeys, shareQueryOptions } from "./share"

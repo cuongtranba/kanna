@@ -47,8 +47,6 @@ describe("deriveChatTunnels", () => {
   })
 
   test("tunnel_accepted does not allocate a fresh record (no-op semantics)", () => {
-    // We can't directly observe object identity across calls (each call rebuilds map),
-    // but we can confirm tunnel_accepted doesn't change observable state.
     const proposedOnly: CloudflareTunnelEvent[] = [
       { ...base, kind: "tunnel_proposed", timestamp: 1, port: 5173, sourcePid: null },
     ]

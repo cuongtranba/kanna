@@ -101,10 +101,6 @@ describe("catalogRootDirs", () => {
   })
 })
 
-/**
- * Builds a service whose freshness stamps are driven by a mutable map, so a
- * test can simulate "a file on disk changed" without touching a real disk.
- */
 function makeStampedService(scan: LocalCatalogScanner, opts?: { ttl?: number; now?: () => number }) {
   const mtimes = new Map<string, number>()
   let statCalls = 0
@@ -134,8 +130,6 @@ describe("LocalCatalogService freshness", () => {
     expect(svc.list("/proj").map((e) => e.name)).toEqual(["n-1"])
     expect(svc.list("/proj").map((e) => e.name)).toEqual(["n-1"])
     expect(calls).toBe(1)
-    // One stamp-read on the miss, one validation on the hit: the hit is earned
-    // by re-stat'ing, not assumed from the clock.
     expect(statCalls()).toBe(2)
   })
 
@@ -148,7 +142,6 @@ describe("LocalCatalogService freshness", () => {
     mtimes.set("/proj/.claude/skills/a/SKILL.md", 20)
     expect(svc.list("/proj").map((e) => e.name)).toEqual(["n-1"])
 
-    // Editing a SKILL.md's frontmatter bumps no directory — only the file.
     mtimes.set("/proj/.claude/skills/a/SKILL.md", 21)
     expect(svc.list("/proj").map((e) => e.name)).toEqual(["n-2"])
     expect(calls).toBe(2)
@@ -163,7 +156,6 @@ describe("LocalCatalogService freshness", () => {
     mtimes.set("/home/u/.claude/skills", 10)
     expect(svc.list("/proj").map((e) => e.name)).toEqual(["n-1"])
 
-    // A brand-new skill folder bumps its parent root.
     mtimes.set("/home/u/.claude/skills", 11)
     expect(svc.list("/proj").map((e) => e.name)).toEqual(["n-2"])
     expect(calls).toBe(2)
@@ -246,12 +238,6 @@ describe("LocalCatalogService", () => {
   })
 })
 
-/**
- * `list()` is a picker projection and drops the file path, which is exactly
- * what a provider that cannot expand `/name` itself needs: Kanna has to open
- * the file and send its contents. These two readers surface what the scan
- * already found rather than scanning again.
- */
 describe("LocalCatalogService.resolve", () => {
   const entries = [
     raw({ name: "deploy", kind: "skill", scope: "personal", filePath: "/home/u/.claude/skills/deploy/SKILL.md" }),
@@ -301,8 +287,6 @@ describe("LocalCatalogService.skills", () => {
     expect(svc.skills("/proj").map((e) => e.name)).toEqual(["deploy"])
   })
 
-  // `user-invocable: false` hides a skill from the `/` picker while leaving
-  // auto-triggering intact, so the roster must still name it.
   test("includes a skill the picker hides", () => {
     const { svc } = makeStampedService(() => [
       raw({ name: "internal", kind: "skill", scope: "project", userInvocable: false }),

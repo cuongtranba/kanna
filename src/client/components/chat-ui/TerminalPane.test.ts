@@ -30,13 +30,13 @@ describe("getTerminalFontSize", () => {
   })
 
   test("scales up with lg/xl/xxl, rounded to the nearest pixel", () => {
-    expect(getTerminalFontSize("lg")).toBe(15) // 13 * 1.125 = 14.625 -> 15
-    expect(getTerminalFontSize("xl")).toBe(16) // 13 * 1.25  = 16.25  -> 16
-    expect(getTerminalFontSize("xxl")).toBe(20) // 13 * 1.5   = 19.5   -> 20
+    expect(getTerminalFontSize("lg")).toBe(15)
+    expect(getTerminalFontSize("xl")).toBe(16)
+    expect(getTerminalFontSize("xxl")).toBe(20)
   })
 
   test("scales down with sm, rounded to the nearest pixel", () => {
-    expect(getTerminalFontSize("sm")).toBe(11) // 13 * 0.875 = 11.375 -> 11
+    expect(getTerminalFontSize("sm")).toBe(11)
   })
 
   test("falls back to the base size for garbage input, same as resolveFontScale", () => {

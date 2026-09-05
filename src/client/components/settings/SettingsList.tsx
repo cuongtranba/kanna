@@ -2,7 +2,6 @@ import type { ReactNode } from "react"
 import { Pencil, Trash2, type LucideIcon } from "lucide-react"
 import { Button } from "../ui/button"
 
-/** Placeholder shown where a Settings collection has no entries yet. */
 export function SettingsEmptyState({ icon: Icon, message }: { icon: LucideIcon; message: string }) {
   return (
     <div className="flex flex-col items-center justify-center rounded-md border border-dashed px-6 py-10 text-center">
@@ -16,10 +15,6 @@ export function SettingsList({ children }: { children: ReactNode }) {
   return <ul className="flex flex-col divide-y rounded-md border">{children}</ul>
 }
 
-/**
- * `label` names the entry, not the verb — it becomes the accessible name of both
- * buttons ("Edit fs" / "Delete fs"), which is how a row is addressed in tests.
- */
 export function SettingsRowActions({
   label,
   onEdit,

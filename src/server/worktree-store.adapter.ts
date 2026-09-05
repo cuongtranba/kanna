@@ -3,7 +3,6 @@ import { join } from "node:path"
 import type { GitWorktree } from "../shared/types"
 import { runGit, formatGitFailure } from "./diff-store"
 
-// Resolves macOS /var -> /private/var symlinks so git's resolved path matches the caller-supplied one.
 function normalizePath(p: string): string {
   return existsSync(p) ? realpathSync(p) : p
 }
@@ -53,10 +52,6 @@ export async function isDirty(worktreePath: string): Promise<{ dirty: boolean; f
     throw new Error(formatGitFailure(result) || "git status failed")
   }
   if (result.stdout.length === 0) return { dirty: false, fileCount: 0 }
-  // NOTE: git status --porcelain -z emits two NUL-separated fields for rename/copy
-  // entries (newname\0oldname). The naive split here over-counts those by one. The
-  // `dirty` boolean is unaffected; only `fileCount` is approximate. Phase 2 may
-  // refine if a precise count is needed for UI/gating.
   const fileCount = result.stdout.split("\0").filter((s) => s.length > 0).length
   return { dirty: fileCount > 0, fileCount }
 }
@@ -71,14 +66,6 @@ export async function removeWorktree(repoRoot: string, path: string, opts: { for
   }
 }
 
-/**
- * Whether a local branch of exactly this name exists.
- *
- * Asked before `git worktree add -b`, because a card whose worktree was removed
- * but whose branch survived must reattach to that branch rather than fail —
- * "never creates a second" applies to the branch too. `refs/heads/` is spelled
- * out so a tag of the same name cannot answer yes and detach HEAD.
- */
 export async function localBranchExists(repoRoot: string, branch: string): Promise<boolean> {
   const result = await runGit(["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`], repoRoot)
   return result.exitCode === 0
@@ -120,8 +107,6 @@ export async function addWorktree(repoRoot: string, opts: AddWorktreeOpts): Prom
     throw new Error(formatGitFailure(result) || "git worktree add failed")
   }
   const list = await listWorktrees(repoRoot)
-  // Resolve symlinks before comparing: on macOS, mkdtemp returns /var/... but
-  // git resolves /var -> /private/var, so a plain string match would fail.
   const normalized = normalizePath(opts.path)
   const created = list.find((w) => w.path === normalized || w.path === opts.path)
   if (!created) {

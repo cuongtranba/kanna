@@ -1,10 +1,6 @@
 import React from "react"
 import { Link } from "react-router-dom"
 
-// Parse server-formatted error/refusal text that embeds chat references as
-// markdown links (`[title](/chat/<uuid>)`) and render the `/chat/<id>` ones
-// as clickable react-router links. Plain text segments stay untouched.
-// Source: AgentCoordinator.buildPoolUnavailableMessage.
 const CHAT_LINK_RE = /\[([^\]]+)\]\(\/chat\/([0-9a-fA-F][0-9a-fA-F-]{7,})\)/g
 
 export function renderChatLinks(text: string, linkClassName?: string): React.ReactNode {

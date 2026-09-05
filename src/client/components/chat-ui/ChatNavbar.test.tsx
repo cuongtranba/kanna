@@ -102,7 +102,6 @@ describe("ChatNavbar layout – bell icon width and status row overflow", () => 
       expect(btn).not.toBeNull()
       const svg = btn?.querySelector("svg")
       expect(svg).not.toBeNull()
-      // size-4.5 constrains width to 18px; h-4.5 alone leaves lucide's 24px default width
       expect(svg?.getAttribute("class") ?? "").toContain("size-4.5")
     } finally {
       await r.cleanup()
@@ -127,8 +126,6 @@ describe("ChatNavbar layout – bell icon width and status row overflow", () => 
     )
     try {
       expect(r.loopWarnings).toEqual([])
-      // The cursor-default flex row must carry min-w-0 so the flex-1 center wrapper
-      // can actually constrain it and prevent symmetric overflow over the bell/share buttons.
       const el = document.querySelector('[class*="cursor-default"]') as HTMLElement | null
       expect(el).not.toBeNull()
       expect(el?.className ?? "").toContain("min-w-0")

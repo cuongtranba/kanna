@@ -8,7 +8,6 @@ import {
   classifyClaudePluginUpdate,
 } from "../shared/packages/parse-claude-plugin-marketplace"
 
-// ─── Dependency interfaces ────────────────────────────────────────────────────
 
 export interface ClaudePluginCheckerSpawnResult {
   stdout: string
@@ -16,45 +15,29 @@ export interface ClaudePluginCheckerSpawnResult {
 }
 
 export interface ClaudePluginCheckerDeps {
-  /** Read a text file; returns null when the path does not exist. */
   readFileFn: (p: string) => Promise<string | null>
-  /** Spawn a command and capture stdout + exit code. */
   spawnFn: (
     cmd: string[],
     cwd: string,
     env: NodeJS.ProcessEnv,
   ) => Promise<ClaudePluginCheckerSpawnResult>
-  /** Resolved `claude` binary path; null when unavailable. */
   claudeBinary: string | null
-  /** Path to `~/.claude/plugins/` (injected for testability). */
   pluginsDir: string
-  /** Minimum ms between marketplace git-fetches per marketplace name (default 1 h). */
   refreshThrottleMs?: number
-  /** Monotonic clock for throttle checks (default `Date.now`). */
   nowFn?: () => number
 }
 
-// ─── Internal state ───────────────────────────────────────────────────────────
 
 interface ThrottleEntry {
   lastRefreshedAt: number
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/**
- * Extract the plugin name (the subdirectory name inside the marketplace clone)
- * from an InstalledPackage whose `name` is `pluginName@marketplaceName`.
- */
 function pluginNameFromPackage(pkg: InstalledPackage): string {
   const atIdx = pkg.name.indexOf("@")
   return atIdx >= 0 ? pkg.name.slice(0, atIdx) : pkg.name
 }
 
-/**
- * Run `git log -1 --format=%H -- <subpath>` inside `repoDir` to get the
- * latest commit SHA that touched a specific path.
- */
 async function gitLogLatestSha(
   deps: ClaudePluginCheckerDeps,
   repoDir: string,
@@ -74,28 +57,20 @@ async function gitLogLatestSha(
   }
 }
 
-/**
- * Run `git fetch --depth=1` in `repoDir` to pull the latest changes.
- * Errors are swallowed; this is best-effort.
- */
 async function gitFetch(deps: ClaudePluginCheckerDeps, repoDir: string): Promise<void> {
   try {
     await deps.spawnFn(["git", "fetch", "--depth=1"], repoDir, process.env)
   } catch {
-    // best-effort
   }
 }
 
-// ─── Factory ─────────────────────────────────────────────────────────────────
 
 export function createClaudePluginUpdateChecker(deps: ClaudePluginCheckerDeps): PackageUpdateChecker {
-  const refreshThrottleMs = deps.refreshThrottleMs ?? 3_600_000 // 1 h
+  const refreshThrottleMs = deps.refreshThrottleMs ?? 3_600_000
   const nowFn = deps.nowFn ?? (() => Date.now())
 
-  // Per-marketplace last-refresh timestamps.
   const throttle = new Map<string, ThrottleEntry>()
 
-  // Cache: installLocation → { pluginName → latestSha }
   const shaCache = new Map<string, Map<string, string | null>>()
 
   async function loadKnownMarketplaces(): Promise<ReturnType<typeof parseKnownMarketplaces>> {
@@ -162,14 +137,12 @@ export function createClaudePluginUpdateChecker(deps: ClaudePluginCheckerDeps): 
 
       const checkedAt = nowFn()
 
-      // Group by marketplace (source field).
       const byMarketplace = new Map<string, InstalledPackage[]>()
       const noMarketplace: InstalledPackage[] = []
 
       for (const pkg of claudePlugins) {
         const marketplace = pkg.source
         if (!marketplace || marketplace === pluginNameFromPackage(pkg)) {
-          // source == pluginName means no marketplace was parsed
           noMarketplace.push(pkg)
         } else {
           const list = byMarketplace.get(marketplace)
@@ -244,7 +217,6 @@ export function createClaudePluginUpdateChecker(deps: ClaudePluginCheckerDeps): 
   }
 }
 
-// ─── Default deps builder ─────────────────────────────────────────────────────
 
 export function findClaudeBinary(): string | null {
   return Bun.which("claude") ?? null

@@ -116,15 +116,6 @@ function resolveCloudflaredPath(settingsPath: string): string {
   return cloudflaredBin
 }
 
-/**
- * Subset of {@link AppSettingsSnapshot} the {@link AgentCoordinator} consumes.
- *
- * Extracted so the wiring is testable: a previous inline lambda silently
- * dropped `globalPromptAppend`, which left the user-authored "Project
- * instructions" block out of every spawn's `--append-system-prompt`. The
- * accompanying test in `server.test.ts` pins every consumed field so a future
- * edit cannot regress the contract again.
- */
 export interface AgentAppSettingsView {
   claudeDriver: AppSettingsSnapshot["claudeDriver"]
   globalPromptAppend: AppSettingsSnapshot["globalPromptAppend"]
@@ -156,24 +147,11 @@ export interface StartKannaServerOptions {
   openBrowser?: boolean
   share?: ShareMode
   dataDir?: string
-  /** Override the directory containing the built client bundle (default: <root>/dist/client). Used in tests. */
   distDir?: string
   password?: string | null
   strictPort?: boolean
-  /**
-   * When true, the auth layer trusts X-Forwarded-Proto for CSRF origin
-   * checks, redirect URLs, and the Secure cookie flag. The hostname still
-   * comes from the request URL / Host header. Only enable when the server is
-   * reachable solely through a trusted reverse proxy such as cloudflared.
-   */
   trustProxy?: boolean
   onMigrationProgress?: (message: string) => void
-  /**
-   * Override project discovery. Defaults to scanning the real home dir
-   * (`~/.claude/projects`, `~/.codex/sessions`). Tests inject a stub so boot
-   * does not read the dev machine's entire session history — a full Codex
-   * session scan can take seconds and is the only slow step in boot.
-   */
   discoverProjects?: () => DiscoveredProject[]
   update?: {
     version: string
@@ -218,9 +196,6 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
   const machineDisplayName = getMachineDisplayName()
   await store.initialize()
 
-  // Deferred holders: toolCallback and followedSessionRegistry are built
-  // before the WS router, but need to invoke router methods. The holders
-  // are populated in wireRuntimeCallbacks after the router is created.
   let broadcastChatState: ((chatId: string) => void) | null = null
   let pushFollowedSessions: (() => void) | null = null
 
@@ -407,7 +382,6 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     cloudflaredPath: resolveCloudflaredPath(appSettings.getSnapshot().cloudflareTunnel.cloudflaredPath),
     onEvent: async (event) => {
       await store.appendTunnelEvent(event)
-      // broadcastChatState is populated after router creation
       broadcastChatState?.(event.chatId)
     },
   })
@@ -438,8 +412,6 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     homeDir: defaultHomeDir(),
   })
 
-  // scheduleManager and cronScheduler reference agent via closures; agent is
-  // created immediately below once both are ready.
   let agent!: AgentCoordinator
   const scheduleManager = new ScheduleManager({
     fire: async (chatId, scheduleId) => {
@@ -531,18 +503,6 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     },
     removeWorktree,
   }
-  /**
-   * The repos a board could connect to, one row per project it covers.
-   *
-   * A project board yields at most one; a Stack board yields one per member
-   * project, which is what turns the connect screen into a single "connect all
-   * N" gesture. A project with no `origin` is listed with `repo: null` rather
-   * than dropped — the screen has to say "no remote" about it.
-   *
-   * Each row costs a `git remote get-url` subprocess, so this is deliberately
-   * only reachable from `board.sync.status`, a request/response command. It
-   * must not be pulled onto a broadcast path.
-   */
   const suggestSyncRepos = async (boardId: string): Promise<readonly RepoSuggestion[]> => {
     const board = boardRegistry.getBoard(boardId)
     if (!board) return []
@@ -562,9 +522,6 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
           projectId,
           projectName: project.title,
           repo: named,
-          // A repo binds to exactly one board, so the screen has to know who
-          // holds it BEFORE offering Connect — otherwise the first the user
-          // hears of a move is the refusal.
           boundTo: named
             ? boardRegistry.repoBindingOwner(
                 "github-issues",
@@ -642,7 +599,6 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     packageUpdateManager,
   })
 
-  // Resolve deferred holders now that the router exists.
   broadcastChatState = (chatId: string) => { router.scheduleChatStateBroadcast(chatId) }
   pushFollowedSessions = () => { router.pushFollowedSessions() }
   agent.onCronJobsChange = () => { router.pushCronJobs() }

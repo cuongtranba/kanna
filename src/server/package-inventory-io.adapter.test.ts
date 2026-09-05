@@ -119,7 +119,6 @@ describe("readPackageInventory", () => {
 
       const snapshot = await readPackageInventory()
       expect(snapshot.packages.some((p) => p.kind === "skill")).toBe(true)
-      // claude and codex plugins are not installed in test env — should be 0 or empty, no crash
       expect(Array.isArray(snapshot.packages)).toBe(true)
       expect(Array.isArray(snapshot.errors)).toBe(true)
     })

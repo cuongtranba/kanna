@@ -44,9 +44,6 @@ describe("ClaudePtyRegistry", () => {
   })
 
   test("re-spawn of the same sessionId with a new pid keeps BOTH entries (identity is pid, not sessionId)", async () => {
-    // A chat re-spawns its claude PTY via --resume <sessionId>: the old and
-    // new processes briefly coexist with the SAME sessionId but DIFFERENT pids.
-    // Both must be tracked so reap can reach whichever survives.
     const registry = new ClaudePtyRegistry(registryPath)
     await registry.register({ chatId: "c1", sessionId: "s1", pid: 38830, cwd: "/tmp/a", runtimeDir: "/tmp/r-old" })
     await registry.register({ chatId: "c1", sessionId: "s1", pid: 41506, cwd: "/tmp/a", runtimeDir: "/tmp/r-new" })
@@ -67,12 +64,10 @@ describe("ClaudePtyRegistry", () => {
   })
 
   test("unregister(stale pid) does NOT remove the live re-spawn entry sharing the sessionId", async () => {
-    // Regression for the leak: the OLD handle's deferred cleanup must not
-    // delete the NEW handle's entry just because they share a sessionId.
     const registry = new ClaudePtyRegistry(registryPath)
     await registry.register({ chatId: "c1", sessionId: "s1", pid: 38830, cwd: "/tmp/a", runtimeDir: "/tmp/r-old" })
     await registry.register({ chatId: "c1", sessionId: "s1", pid: 41506, cwd: "/tmp/a", runtimeDir: "/tmp/r-new" })
-    await registry.unregister(38830) // old handle's cleanupResources
+    await registry.unregister(38830)
 
     const raw = JSON.parse(await readFile(registryPath, "utf8")) as { entries: Array<{ pid: number }> }
     expect(raw.entries.map((e) => e.pid)).toEqual([41506])
@@ -117,7 +112,6 @@ describe("ClaudePtyRegistry", () => {
     expect(child.signalCode).toBe("SIGKILL")
     void childPid
 
-    // runtimeDir cleaned up
     await expect(stat(runtimeDir)).rejects.toThrow()
 
     const raw = JSON.parse(await readFile(registryPath, "utf8")) as { entries: unknown[] }
@@ -125,11 +119,6 @@ describe("ClaudePtyRegistry", () => {
   }, 30_000)
 
   test("killProcessTree reaps a NON-leader process and its descendants", async () => {
-    // Reproduces the PM2 deployment: the PTY child is NOT its own process-group
-    // leader (it inherits the server's pgid), so the old `kill(-pid)` was a
-    // no-op. killProcessTree must walk children by ppid and SIGKILL the whole
-    // subtree by pid. Parent forks a `sleep` child WITHOUT setsid; both share
-    // the test runner's process group.
     const parent = Bun.spawn(
       [
         "python3",
@@ -154,7 +143,6 @@ describe("ClaudePtyRegistry", () => {
     ])
     expect(exited).not.toBe("timeout")
 
-    // The descendant `sleep` must also be gone (kill 0 throws ESRCH once dead).
     await new Promise((r) => setTimeout(r, 200))
     let childAlive = true
     try { process.kill(childPid, 0) } catch { childAlive = false }

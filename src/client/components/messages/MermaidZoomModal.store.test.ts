@@ -55,7 +55,6 @@ describe("MermaidZoomModal.store", () => {
     store.getState().dragTo(130, 70)
     expect(store.getState().offset).toEqual({ x: 30, y: 20 })
 
-    // a second gesture continues from where the first ended
     store.getState().endDrag()
     store.getState().beginDrag(0, 0)
     store.getState().dragTo(5, 5)

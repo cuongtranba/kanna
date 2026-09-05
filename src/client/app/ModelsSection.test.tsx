@@ -7,8 +7,6 @@ import { useModelsSectionStore } from "../stores/modelsSectionStore"
 import type { CustomModelEntry } from "../../shared/types"
 import type { DomPort } from "../ports/domPort"
 
-// The section reads `editing` from a module-singleton store, so a test that
-// walks into the editor would otherwise start the next one there.
 beforeEach(() => {
   useModelsSectionStore.setState({ editing: { kind: "list" } })
 })
@@ -60,8 +58,6 @@ function clickText(container: HTMLElement, text: string) {
   })
 }
 
-// happy-dom controlled-input helper: set value via the native setter so React's
-// onChange fires.
 function type(el: HTMLInputElement, value: string) {
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set
   setter?.call(el, value)
@@ -148,7 +144,6 @@ describe("ModelsSection — editor", () => {
       handlers: { ...noopHandlers, onCreate: async (input) => { created.push(input) } },
     })
 
-    // Two "Add model" buttons in list mode (claude, codex); the first is claude.
     const addButtons = [...container.querySelectorAll("button")].filter(
       (b) => b.textContent?.includes("Add model"),
     )
@@ -164,8 +159,6 @@ describe("ModelsSection — editor", () => {
 
     await clickText(container, "Add model")
 
-    // A create always records the context-window choice explicitly, so a new
-    // Claude model can never be left inheriting — or silently pinned to 200k.
     expect(created).toEqual([
       {
         id: "claude-opus-4-9",
@@ -174,7 +167,6 @@ describe("ModelsSection — editor", () => {
         contextWindowOptions: [{ id: "200k", label: "200k" }],
       },
     ])
-    // onDone ran, so the list (both per-provider Add buttons) is back.
     expect(
       [...container.querySelectorAll("button")].filter((b) => b.textContent?.includes("Add model")),
     ).toHaveLength(2)
@@ -221,9 +213,6 @@ describe("ModelsSection — editor", () => {
     })
     await clickText(container, "Save changes")
 
-    // `claude-opus-4-8` is a built-in that offers 1M, and this entry declares no
-    // options of its own — so the editor opens with the box already ticked and
-    // the save preserves what the entry was effectively offering.
     expect(updates).toEqual([
       {
         id: "claude-opus-4-8",
@@ -237,8 +226,6 @@ describe("ModelsSection — editor", () => {
     await cleanup()
   })
 
-  // The reported defect: a hand-added `claude-opus-5` shadowed the built-in,
-  // the 1M toggle vanished from the composer, and every turn ran on 200k.
   test("editing an entry that inherits 1M opens with the box ticked and keeps it", async () => {
     const updates: Array<{ id: string; patch: unknown }> = []
     const { container, cleanup } = await mount({
@@ -302,7 +289,6 @@ describe("ModelsSection — editor", () => {
 
     expect(container.textContent).toContain("server said no")
     expect(container.textContent).toContain("Add model")
-    // Still submittable — `submitting` was cleared in the finally.
     const submit = [...container.querySelectorAll("button")].find((b) => b.textContent === "Add model")
     expect(submit!.disabled).toBe(false)
     await cleanup()

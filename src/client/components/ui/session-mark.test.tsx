@@ -9,7 +9,6 @@ const render = (kind: SessionMarkKind) => renderToStaticMarkup(<SessionMark kind
 
 describe("SessionMark", () => {
   test("draws every kind as SVG, never as a text glyph", () => {
-    // The whole point: ●◐○◌ were literal characters set as text.
     for (const kind of KINDS) {
       const html = render(kind)
       expect(html).toContain("<svg")
@@ -23,8 +22,6 @@ describe("SessionMark", () => {
   })
 
   test("warmth reads as fill, so it cannot be mistaken for a run-state stroke", () => {
-    // stateMark.tsx owns the stroke vocabulary for what a turn is doing. A
-    // fully warm session is solid; a cold-ish one is an outline.
     expect(render("filled")).toContain('fill="currentColor"')
     expect(render("ring")).toContain('fill="none"')
     expect(render("dashed")).toContain("stroke-dasharray")

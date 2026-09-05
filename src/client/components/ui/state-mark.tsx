@@ -2,10 +2,6 @@ import { cn } from "../../lib/utils"
 import { stateMarkKind, stateMarkStrokes } from "../../lib/stateMark"
 import { statusToneClass, type StatusTone } from "../../lib/statusLabel"
 
-/**
- * The mark never ships without its word. Pairing shape with a label is what
- * keeps state legible when colour is unavailable or unread.
- */
 export function StateMark({ tone, className }: { tone: StatusTone; className?: string }) {
   const strokes = stateMarkStrokes(stateMarkKind(tone))
   return (

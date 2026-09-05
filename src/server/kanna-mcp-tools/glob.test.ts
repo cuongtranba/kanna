@@ -33,7 +33,6 @@ describe("mcp__kanna__glob", () => {
       const svc = createToolCallbackService({ store, serverSecret: "k", now: () => 1 })
       const tool = createGlobTool({ toolCallback: svc })
 
-      // Create a mix of .ts and .txt files
       await writeFile(path.join(dir, "foo.ts"), "")
       await writeFile(path.join(dir, "bar.ts"), "")
       await writeFile(path.join(dir, "baz.txt"), "")

@@ -1,39 +1,9 @@
-// Bun test preload. Runs before any test module loads.
-//
-// Bun normally sets NODE_ENV=test for `bun test`, but a shell that exports
-// NODE_ENV=production (a common dev quirk) overrides that. When React loads
-// with NODE_ENV=production it omits the `act` test API, which breaks every
-// test that imports `act` from "react". Force NODE_ENV back to "test" so
-// React loads its development bundle.
 export {}
 
 if (process.env.NODE_ENV === "production") {
   process.env.NODE_ENV = "test"
 }
 
-// Register happy-dom BEFORE any test module loads, so `globalThis.document`
-// exists for the whole shared Bun test process.
-//
-// Why this must happen here and stay registered: `@radix-ui/react-use-layout-
-// effect` resolves its effect ONCE at module-eval time as
-// `globalThis?.document ? React.useLayoutEffect : () => {}`. Whichever test file
-// first loads that module decides the value for the ENTIRE run. Client tests
-// register happy-dom via `setupHappyDom.ts`, but it uses a top-level
-// `await import` whose settlement bun does NOT reliably order before the sibling
-// component imports that pull in Radix — so on some runs Radix loaded while
-// `document` was still undefined, the no-op stuck process-wide, `Portal` never
-// mounted, and every dialog-content assertion silently failed. Purely
-// order-dependent: green or red with identical code (the WorkflowsSection
-// drill-in tests; CI #27399622423). The preload is the one place guaranteed to
-// run before every test module, so registering here removes the race.
-//
-// happy-dom's `register()` swaps in its own fetch/Request/Response/Headers AND
-// FormData/Blob/File. Restore the native Bun implementations afterwards: the
-// 100+ server tests Bun.serve a loopback server and POST multipart bodies to it
-// (src/server/uploads.test.ts, kanna-mcp-tools/webfetch.test.ts), and happy-dom's
-// fetch can't reach loopback / its FormData doesn't serialize through native
-// fetch. The DOM globals (document/window/HTMLElement/…) stay happy-dom's, which
-// is all the client render tests need.
 {
   const nativeFetch = globalThis.fetch
   const nativeRequest = globalThis.Request
@@ -61,45 +31,9 @@ if (process.env.NODE_ENV === "production") {
 
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
-  // Reset the shared happy-dom document between every test, process-wide.
-  //
-  // happy-dom registers ONE global document for the whole Bun process, reused
-  // across every test file. React portals (Radix Dialog/Popover/Tooltip and the
-  // raw `createPortal` modals) mount into `document.body`, NOT the test's own
-  // container — so a test that calls `container.remove()` but never unmounts its
-  // React root leaks the portal node into `document.body`, where it survives
-  // into later test files. Now that portals actually render (see above), a
-  // leaked dialog poisons any later document-wide query, e.g.
-  // `document.querySelector('[role="dialog"]')` in MermaidZoomModal.test.tsx
-  // picking up a stale WorkflowsSection dialog. Clearing the body after each
-  // test makes every test start from a clean DOM. Safe because tests append a
-  // fresh container per render and none build DOM in `beforeAll`.
-  //
-  // Clearing alone is not enough, because the wipe cannot reach the React root
-  // that owns the nodes. A test that mounts a root and only calls
-  // `container.remove()` leaves that root live and still holding host nodes —
-  // including any portal node, whose container is `document.body` itself.
-  // Whenever that root next commits (a store write, a Radix `Presence`
-  // teardown, a resolved promise), React removes a node the wipe already took
-  // and happy-dom throws `removeChild: The node to be removed is not a child of
-  // this node`. Bun blames whichever test is running WHEN the leaked root
-  // commits, which is a different test in a different file, and the file order
-  // is the filesystem's — so it reproduces on CI's ext4 and not on a dev
-  // machine's APFS. Failing the test that leaked keeps the diagnosis where the
-  // fix is.
-  // Only REACT-OWNED leftovers are reported. A node React never made (Lexical's
-  // typeahead plugin appends its menu straight to `document.body`, even under
-  // `renderToStaticMarkup`) is swept and forgotten: nothing holds a reference
-  // that could commit against it later.
   const isReactOwned = (element: Element): boolean =>
     Object.keys(element).some((key) => key.startsWith("__reactFiber$") || key.startsWith("__reactContainer$"))
 
-  // Teardowns a test helper wants run BEFORE the sweep — `renderForLoopCheck`
-  // unmounts the roots its callers forgot here. It cannot own the `afterEach`
-  // itself: bun runs hooks in registration order and this preload registers
-  // first, so the helper's own hook would fire after the sweep had already
-  // failed the test. A global registry keeps the ordering guaranteed without
-  // the preload importing client code.
   const teardowns = new Set<() => void>()
   ;(globalThis as { __kannaDomTeardowns?: Set<() => void> }).__kannaDomTeardowns = teardowns
 
@@ -123,26 +57,14 @@ if (process.env.NODE_ENV === "production") {
   })
 }
 
-// Temporary diagnostic: detect leaked `node:fs` watchers (the intermittent
-// CI hang is a single bun "File Watcher" thread stuck on inotify read at
-// shutdown because some test created an fs.watch and never closed it). When
-// KANNA_WATCH_LEAK=1, every watch() call is tracked with its creation stack
-// and any watcher still open at process exit is dumped to stderr.
 if (process.env.KANNA_WATCH_LEAK === "1") {
-  // Synchronous require — Bun does not await top-level await in preload.
   const { mock } = require("bun:test") as typeof import("bun:test")
   const realFs = require("node:fs") as typeof import("node:fs")
 
-  // Bun's test runner tears down hard and does not reliably run
-  // 'exit'/'beforeExit' listeners, so an end-of-run dump is impossible.
-  // Instead log every OPEN (id + target + creation stack) and every CLOSE
-  // (id) immediately to fd 2. Post-process: an id with OPEN and no matching
-  // CLOSE is a leaked watcher — its stack pinpoints the culprit test.
   const emit = (msg: string) => {
     try {
       realFs.writeSync(2, msg)
     } catch {
-      /* fd 2 gone — nothing we can do */
     }
   }
 

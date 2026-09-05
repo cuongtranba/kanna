@@ -1,10 +1,3 @@
-/**
- * Tunnel, Share, and Push peripheral event operations extracted from
- * event-store.ts. All IO is performed through the injected StorageBackend.
- *
- * This module is an adapter (`.adapter.ts`) because it performs disk IO.
- * It must NOT import from event-store.ts (no circular deps).
- */
 import type { StorageBackend } from "./storage/backend"
 import type { CloudflareTunnelEvent } from "./cloudflare-tunnel/events"
 import type { PushEvent } from "./push/events"
@@ -16,7 +9,6 @@ import {
   loadTunnelEventsFromLog,
 } from "./event-store-snapshot"
 
-// ─── Deps interface ────────────────────────────────────────────────────────
 
 export interface PeripheralEventsDeps {
   readonly storage: StorageBackend
@@ -24,15 +16,11 @@ export interface PeripheralEventsDeps {
   readonly sharesLogPath: string
   readonly pushLogPath: string
   readonly tunnelEventsByChatId: Map<string, CloudflareTunnelEvent[]>
-  /** Mutable share events array — methods push into this directly. */
   readonly shareEventsAll: ShareEvent[]
-  /** Read the current write-chain promise. */
   getWriteChain: () => Promise<void>
-  /** Replace the write-chain promise (called inside async chain links). */
   setWriteChain: (p: Promise<void>) => void
 }
 
-// ─── Tunnel ────────────────────────────────────────────────────────────────
 
 export async function appendTunnelEvent(
   deps: PeripheralEventsDeps,
@@ -63,7 +51,6 @@ export async function loadTunnelEvents(deps: PeripheralEventsDeps): Promise<void
   await loadTunnelEventsFromLog(deps.storage, deps.tunnelLogPath, deps.tunnelEventsByChatId)
 }
 
-// ─── Share ─────────────────────────────────────────────────────────────────
 
 export async function appendShareEvent(
   deps: PeripheralEventsDeps,
@@ -86,7 +73,6 @@ export async function loadShareEvents(deps: PeripheralEventsDeps): Promise<void>
   await loadShareEventsFromLog(deps.storage, deps.sharesLogPath, deps.shareEventsAll)
 }
 
-// ─── Push ──────────────────────────────────────────────────────────────────
 
 export async function appendPushEvent(
   deps: PeripheralEventsDeps,

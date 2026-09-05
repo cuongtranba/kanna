@@ -48,10 +48,6 @@ function SharePopoverBodyInner(props: SharePopoverBodyProps) {
     try {
       await onMint(chatId)
     } catch {
-      // Contained on purpose: a failed mint must not escape as an unhandled
-      // rejection (the previous `void p.finally()` let it), and this client has
-      // no error-surfacing affordance yet. The button re-enables so the user
-      // can retry.
     } finally {
       setBusy(false)
     }
@@ -111,7 +107,6 @@ export function SharePopoverBody(props: SharePopoverBodyProps) {
 }
 
 export function SharePopover(props: SharePopoverProps) {
-  // Capture timestamp once when the popover opens so expiry labels are stable during the session.
   // eslint-disable-next-line react-hooks/purity
   const now = useMemo(() => Date.now(), [props.open]) // eslint-disable-line react-hooks/exhaustive-deps
   return (

@@ -3,26 +3,6 @@ import path from "node:path"
 import process from "node:process"
 import { isJsonArray, isJsonObject, safeJsonParse, type JsonValue } from "../../shared/json"
 
-/**
- * On-disk registry of claude PTY children so a non-graceful server crash
- * does not leak orphan claude processes (a Bun.Terminal child survives parent
- * death). On the next server boot `reapStale()` SIGKILLs each recorded
- * process subtree and removes its runtimeDir (mcp-config.json + settings).
- *
- * Identity is the OS `pid`, NOT the `sessionId`: a chat re-spawns its claude
- * PTY via `--resume <sessionId>`, so old and new processes briefly coexist
- * with the same sessionId but different pids.
- *
- * Reap kills by process SUBTREE (`killProcessTree`), NOT by process group.
- * Under a process supervisor (e.g. PM2) the PTY child inherits the server's
- * pgid rather than becoming its own group leader, so the old `kill(-pid)`
- * either no-op'd (empty group → orphan survived) or, had the pgid matched,
- * would have SIGKILL'd the entire kanna app.
- *
- * Mirrors {@link import("../terminal-pid-registry").TerminalPidRegistry}
- * but adds `runtimeDir` so we can clean up the tmp dir kanna allocated
- * for the spawn (otherwise it leaks every restart).
- */
 export interface ClaudePtyEntry {
   chatId: string
   sessionId: string
@@ -48,8 +28,6 @@ export class ClaudePtyRegistry {
 
   async register(entry: Omit<ClaudePtyEntry, "createdAt">): Promise<void> {
     await this.loadIfNeeded()
-    // Dedupe on pid (the stable process identity), not sessionId — see the
-    // class doc: --resume re-spawns share a sessionId but differ by pid.
     const next = this.entries.filter((existing) => existing.pid !== entry.pid)
     next.push({ ...entry, createdAt: Date.now() })
     this.entries = next
@@ -71,13 +49,8 @@ export class ClaudePtyRegistry {
     }
     for (const entry of stored) {
       await killProcessTree(entry.pid)
-      // Best-effort: remove the spawn's runtimeDir (mcp-config.json +
-      // settings.local.json + any other kanna-side scratch). Children
-      // wrote nothing user-facing here, but the dir leaks per restart
-      // without cleanup.
       if (entry.runtimeDir && entry.runtimeDir.length > 0) {
         try { await rm(entry.runtimeDir, { recursive: true, force: true }) } catch {
-          /* swallow — best-effort */
         }
       }
     }
@@ -131,32 +104,19 @@ function isValidEntry(value: JsonValue): value is JsonValue & ClaudePtyEntry {
   )
 }
 
-/**
- * SIGKILL `pid` and every descendant, identified by walking the live
- * pid→ppid table. Kills by pid, never by process group: a Bun.Terminal child
- * is not guaranteed to be its own group leader (under PM2 it inherits the
- * server's pgid), so `kill(-pid)` is unreliable (empty-group no-op) or
- * dangerous (could signal the whole app). Descendants are collected BEFORE
- * any signal is sent, so a process that reparents after its parent dies is
- * still reached. Best-effort: ESRCH/EPERM and a failed `ps` are swallowed.
- */
 export async function killProcessTree(pid: number): Promise<void> {
   if (process.platform === "win32") return
   if (!Number.isFinite(pid) || pid <= 0) return
 
   const targets = [pid, ...(await collectDescendants(pid))]
-  // Leaves-first: signal descendants before the root so a parent cannot
-  // re-fork on the way down (claude children are inert here, but cheap).
   for (const target of targets.reverse()) {
     try {
       process.kill(target, "SIGKILL")
     } catch {
-      // ESRCH (already gone) and EPERM (race with kernel reap) are fine.
     }
   }
 }
 
-/** Read the live pid→ppid table via `ps` and BFS the descendants of `root`. */
 async function collectDescendants(root: number): Promise<number[]> {
   let childrenByParent: Map<number, number[]>
   try {

@@ -1,14 +1,4 @@
-/**
- * Tests for the extracted runClaudeSession event-loop function.
- *
- * Each test builds a fake `RunClaudeSessionDeps` object, a fake `ClaudeSessionState`,
- * and an async-iterable stream of `HarnessEvent`s, then asserts the side effects
- * produced by the function.
- */
 
-// NOTE: do NOT mock.module("../shared/log") here — Bun's mock.module mutates
-// the global registry for the whole test run, turning shared/log into noops
-// for every later test file (analytics.test.ts asserts real log output).
 
 import { describe, test, expect } from "bun:test"
 import { runClaudeSession } from "./claude-session-runner"
@@ -19,11 +9,7 @@ import { PendingToolSlots, type ParkedTool } from "./pending-tool-slot"
 import type { HarnessEvent } from "./harness-types"
 import type { TranscriptEntry } from "../shared/types"
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
-/** Build a minimal ClaudeSessionState. Override individual fields as needed. */
 function makeSession(overrides: Partial<ConstructorParameters<typeof ClaudeSessionState>[0]> = {}): ClaudeSessionState {
   const fakeHandle = {
     provider: "claude" as const,
@@ -69,7 +55,6 @@ function makeSession(overrides: Partial<ConstructorParameters<typeof ClaudeSessi
   })
 }
 
-/** Build a minimal ActiveTurn backed by a fake HarnessTurn. */
 function makeActiveTurn(chatId: string, overrides: Partial<ActiveTurn> = {}): ActiveTurn {
   const fakeTurn = {
     provider: "claude" as const,
@@ -96,12 +81,10 @@ function makeActiveTurn(chatId: string, overrides: Partial<ActiveTurn> = {}): Ac
   }
 }
 
-/** Create a fake stream from a list of HarnessEvents. */
 async function* fakeStream(events: HarnessEvent[]): AsyncIterable<HarnessEvent> {
   for (const e of events) yield e
 }
 
-/** Build a fake result TranscriptEntry. */
 function fakeResultEntry(isError: boolean, result = "ok"): TranscriptEntry {
   return {
     _id: "entry-1",
@@ -114,7 +97,6 @@ function fakeResultEntry(isError: boolean, result = "ok"): TranscriptEntry {
   } as unknown as TranscriptEntry
 }
 
-/** Build a fake system_init TranscriptEntry. */
 function fakeSystemInitEntry(): TranscriptEntry {
   return {
     _id: "entry-sys",
@@ -129,7 +111,6 @@ function fakeSystemInitEntry(): TranscriptEntry {
   } as unknown as TranscriptEntry
 }
 
-/** Build a minimal RunClaudeSessionDeps with all fields as no-ops. */
 function makeDeps(session: ClaudeSessionState, overrides: Partial<RunClaudeSessionDeps> = {}): RunClaudeSessionDeps {
   const sessions = new Map<string, ClaudeSessionState>()
   sessions.set(session.chatId, session)
@@ -173,17 +154,8 @@ function makeDeps(session: ClaudeSessionState, overrides: Partial<RunClaudeSessi
   }
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 describe("runClaudeSession", () => {
-  // A session torn down out of band (budget eviction, idle reap, /clear)
-  // removes its own map entry BEFORE this runner's stream unwinds. Gating the
-  // fail-close on "am I still the current session" therefore skipped it
-  // entirely: the ActiveTurn survived with no terminal event, the chat
-  // reported busy forever, and every consumer of that event — above all the
-  // cron outcome observer — was starved.
   test("out-of-band close still fail-closes the turn it owned", async () => {
     const session = makeSession({ id: "sess-1" })
     const active = makeActiveTurn("chat-1", { sessionId: "sess-1" })
@@ -192,8 +164,6 @@ describe("runClaudeSession", () => {
 
     const deps = makeDeps(session, {
       activeTurns,
-      // Evicted: closeClaudeSession already dropped the entry, and nothing
-      // took its place.
       claudeSessions: new Map(),
       store: {
         ...makeDeps(session).store,
@@ -240,7 +210,6 @@ describe("runClaudeSession", () => {
     const deps = makeDeps(session, {
       emitStateChange: (chatId) => stateChangeChatIds.push(chatId),
     })
-    // The session stream is empty (returns immediately)
     session.session.stream = fakeStream([])
 
     await runClaudeSession(deps, session)
@@ -276,9 +245,7 @@ describe("runClaudeSession", () => {
     const session = makeSession()
     const tokenCalls: string[] = []
 
-    // Remove the session from the map so it's "not current"
     const sessions = new Map<string, ClaudeSessionState>()
-    // Don't add session — so get(session.chatId) returns undefined, !== session
 
     const deps = makeDeps(session, {
       claudeSessions: sessions,
@@ -371,9 +338,7 @@ describe("runClaudeSession", () => {
 
     await runClaudeSession(deps, session)
 
-    // The cancelled result entry should be swallowed — appendMessage NOT called
     expect(appendCalls).toHaveLength(0)
-    // Counter decremented
     expect(session.cancelledResultPending).toBe(0)
   })
 
@@ -400,7 +365,7 @@ describe("runClaudeSession", () => {
 
   test("successful result entry calls recordTurnFinished and clears activeTurns", async () => {
     const session = makeSession()
-    session.pendingPromptSeqs = [1]  // so completedClaudePromptSeq shifts to 1
+    session.pendingPromptSeqs = [1]
 
     const active = makeActiveTurn(session.chatId, { claudePromptSeq: 1 })
     const activeTurns = new Map([[session.chatId, active]])
@@ -424,10 +389,7 @@ describe("runClaudeSession", () => {
 
     expect(finishedCalls).toHaveLength(1)
     expect(finishedCalls[0]).toBe("chat-1")
-    // activeTurns should be cleared after result
     expect(activeTurns.size).toBe(0)
-    // oauthPool.release called once (from result handling) + once (finally if still current)
-    // Actually only result path, finally only if isCurrentSession & active?.provider=="claude" & not already deleted
     expect(releaseCalls.length).toBeGreaterThan(0)
   })
 
@@ -600,8 +562,6 @@ describe("runClaudeSession", () => {
   })
 
   test("status entry with backgroundTaskIdsSnapshot REPLACES the guard set", async () => {
-    // Pre-arm with a stale id: the level signal must replace, not merge, so a
-    // missed settle bookend can never wedge a stale running indicator.
     const session = makeSession({ backgroundTasks: new Map([["stale1", { taskType: null, description: null, startedAt: 0, outputPath: null }]]) })
 
     const snapshotEntry = {
@@ -648,8 +608,6 @@ describe("runClaudeSession", () => {
   })
 
   test("empty→non-empty transition restores the watchdog wake budget (launch edge)", async () => {
-    // A fresh watch epoch gets a fresh wake budget
-    // (adr-20260801-background-task-wake-escalation).
     const session = makeSession({ backgroundTaskWakeCount: 3 })
     const bgToolCallEntry = {
       _id: "tool-call-reset",
@@ -692,7 +650,6 @@ describe("runClaudeSession", () => {
     await runClaudeSession(deps, session)
     expect(session.backgroundTaskWakeCount).toBe(0)
 
-    // Same epoch continues (set stays non-empty): budget must NOT reset.
     session.backgroundTaskWakeCount = 1
     const snapB = {
       _id: "snap-reset-b",
@@ -708,9 +665,6 @@ describe("runClaudeSession", () => {
   })
 
   test("a background_tasks_changed snapshot promotes the session to level-sourced", async () => {
-    // adr-20260808-...-level-signal-authoritative: the SDK level signal is what
-    // a consumer needing "is background work running" should hold, so its first
-    // arrival retires the deadline for this session.
     const session = makeSession()
     expect(session.backgroundTasksLevelSourced).toBe(false)
     const snap = {
@@ -730,8 +684,6 @@ describe("runClaudeSession", () => {
   })
 
   test("the level-sourced flag survives an empty snapshot that clears the set", async () => {
-    // Sticky: an EMPTY snapshot proves the signal works just as well as a
-    // non-empty one, so the next launch on this session is trusted at once.
     const session = makeSession()
     const deps = makeDeps(session)
     const snap = (id: string, ids: string[]) => ({
@@ -755,9 +707,6 @@ describe("runClaudeSession", () => {
   })
 
   test("a launch tool_result paired with its tool_call does NOT promote the session (PTY invariant)", async () => {
-    // The launch-regex fallback is the ONLY signal on PTY, where CLI >= 2.1.x
-    // writes no system rows. Promoting on it would hand PTY sessions SDK
-    // semantics they cannot support and disable their only keep-alive bound.
     const session = makeSession()
     const toolCallEntry = {
       _id: "tool-call-pty",
@@ -787,9 +736,6 @@ describe("runClaudeSession", () => {
   })
 
   test("a tool_result without a matching tool_call does not arm the background task guard (phantom-arm prevention)", async () => {
-    // Scenario: the model reads another chat's transcript with Bash/Read and
-    // the echoed content contains a launch marker. Without the provenance gate,
-    // this would phantom-arm the guard for a task the session never launched.
     const session = makeSession()
     const readToolResultEntry = {
       _id: "tool-res-read",
@@ -871,10 +817,6 @@ describe("runClaudeSession", () => {
   })
 
   test("SDK ordering: level snapshot before tool_result enriches outputPath and fires onBackgroundTaskLaunch once", async () => {
-    // The SDK's background_tasks_changed level snapshot arrives ~1ms before the
-    // Bash tool_result that carries the output path (observed in chat 3cf1de5c,
-    // issue #806). The launch branch must enrich the existing entry with outputPath
-    // rather than skip it, preserving snapshot-supplied taskType/description/startedAt.
     const session = makeSession()
     const snapshotEntry = {
       _id: "snap-sdk-order",
@@ -923,9 +865,6 @@ describe("runClaudeSession", () => {
   })
 
   test("SDK ordering: onBackgroundTaskLaunch not fired again when outputPath already known", async () => {
-    // Guard: if somehow a tool_result arrives for an id whose outputPath is already set
-    // (e.g. a replay scenario), do not double-fire trackTask — it would re-register
-    // the file reader from offset 0.
     const session = makeSession({
       backgroundTasks: new Map([["known1", { taskType: "local_bash", description: "existing", startedAt: 100, outputPath: "/tmp/known1.output" }]]),
     })
@@ -1042,9 +981,6 @@ describe("runClaudeSession", () => {
   })
 
   test("appending any transcript entry bumps lastUsedAt (self-wake turns keep the session warm)", async () => {
-    // A task-notification self-wake streams entries without a Kanna-driven
-    // turn, so lastUsedAt must track stream activity or the idle reaper kills
-    // the session mid-work (chat dd05b76e, 2026-07-22).
     const session = makeSession({ lastUsedAt: 0 })
 
     const textEntry = {
@@ -1109,30 +1045,15 @@ describe("runClaudeSession", () => {
         recordTurnFailed: async (_chatId, reason) => { failedReasons.push(reason) },
       },
     })
-    // Stream produces NO result entry (empty stream), so hasFinalResult stays false
     session.session.stream = fakeStream([])
 
     await runClaudeSession(deps, session)
 
-    // The finally block should fail-close since hasFinalResult is false and provider is "claude"
     expect(failedReasons).toContain("session stream ended without a result")
   })
 })
 
-// ---------------------------------------------------------------------------
-// Out-of-turn parked requests + self-wake lifecycle
-//
-// When the SDK self-resumes after a background-task notification it calls
-// `canUseTool` outside any Kanna turn. The continuation parks in the
-// per-chat PendingToolSlots — NO ActiveTurn is fabricated. The predecessor
-// design rebuilt a "ghost" ActiveTurn to hold the resolve; every consumer of
-// `activeTurns` then had to special-case it, and the one that didn't (the
-// delete path) leaked the ghost forever: chat stuck "running", sends queued
-// with no drain, selfWakeActive wedged true, idle reaper blocked
-// (session 04fb43c9-fa05-406b-b552-c6e8c077c734).
-// ---------------------------------------------------------------------------
 
-/** Minimal ask_user_question tool call satisfying ParkedTool.tool. */
 function askUserQuestionTool(toolId: string) {
   return {
     kind: "tool",
@@ -1175,11 +1096,6 @@ function fakeToolCallEntry(): TranscriptEntry {
 
 describe("runClaudeSession — self-wake + out-of-turn parked requests", () => {
   test("regression 04fb43c9: a self-wake with an answered question ends fully idle and drains the queue", async () => {
-    // The incident sequence: background Agent completes → SDK self-wakes and
-    // streams entries with no ActiveTurn → model asks AskUserQuestion
-    // (parked out-of-turn) → user answers (slot taken) → wake keeps working
-    // → terminal result. Afterward the chat must be COMPLETELY idle: no
-    // turn, no wedged selfWakeActive, and the queued user message drains.
     const session = makeSession({ pendingPromptSeqs: [] })
     const pendingTools = new PendingToolSlots()
     const drainedFor: string[] = []
@@ -1246,7 +1162,6 @@ describe("runClaudeSession — self-wake + out-of-turn parked requests", () => {
 
     await runClaudeSession(deps, session)
 
-    // Never leave the SDK worker blocked inside canUseTool.
     expect(resolved).toHaveLength(1)
     expect(resolved[0]).toMatchObject({ discarded: true })
     expect(pendingTools.has(session.chatId)).toBe(false)
@@ -1312,9 +1227,6 @@ describe("runClaudeSession — self-wake + out-of-turn parked requests", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// Mermaid guard hand-off
-// ---------------------------------------------------------------------------
 
 function fakeAssistantTextEntry(text: string): TranscriptEntry {
   return {
@@ -1370,8 +1282,6 @@ describe("runClaudeSession — mermaid guard", () => {
     ])
   })
 
-  // A correction the guard enqueues has to be there before the drain looks,
-  // or it sits until something else wakes the chat.
   test("runs before the queued-message drain", async () => {
     const harness = guardHarness([fakeAssistantTextEntry("text"), fakeResultEntry(false)])
 
@@ -1398,8 +1308,6 @@ describe("runClaudeSession — mermaid guard", () => {
     expect(harness.calls).toEqual([])
   })
 
-  // A self-wake turn streams text with no ActiveTurn. Carrying it into the
-  // next real turn would blame that turn for a diagram it never wrote.
   test("does not carry text across a turn boundary", async () => {
     const harness = guardHarness([
       fakeAssistantTextEntry("wake text"),
@@ -1414,16 +1322,6 @@ describe("runClaudeSession — mermaid guard", () => {
     expect(harness.calls[1]).toBeUndefined()
   })
 
-  // ---------------------------------------------------------------------------
-  // Orphaned-stream self-wake barrier (issue #860)
-  //
-  // When cancelChat removes the ActiveTurn and sets cancelledResultPending > 0,
-  // the SDK stream may keep flowing for seconds with model output belonging to
-  // the cancelled prompt. Those entries must NOT arm selfWakeActive — there is
-  // no new self-wake turn, only orphaned output from a turn already cancelled.
-  // Without this guard each assistant_text / tool_call re-renders the chat as
-  // "running" and the user needs repeated Stop presses.
-  // ---------------------------------------------------------------------------
 
   test("orphaned stream entries after cancel do not arm selfWakeActive mid-stream (issue #860)", async () => {
     const session = makeSession({ cancelledResultPending: 1 })

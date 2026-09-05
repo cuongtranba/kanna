@@ -6,11 +6,9 @@ import type { SocketStatus } from "../app/socket"
 import type { OptimisticUserPrompt } from "../app/useKannaState"
 import type { StoragePort } from "../ports/storagePort"
 
-// Stable empty refs — NEVER use inline ?? [] or ?? {} in selectors (React error #185)
 export const EMPTY_OPTIMISTIC_PROMPTS: OptimisticUserPrompt[] = []
 export const EMPTY_DIFF_SNAPSHOTS: Record<string, ChatDiffSnapshot | null> = {}
 
-/** The key a chat's (or a bare project's) git snapshot is stored and read under. */
 export function gitSnapshotKey(projectId: string, chatId?: string | null): string {
   return chatId ?? projectId
 }
@@ -22,14 +20,6 @@ interface KannaStateStoreState {
   localProjects: LocalProjectsSnapshot | null
   updateSnapshot: UpdateSnapshot | null
   uiRestartPhase: string | null
-  /**
-   * Git state keyed by {@link gitSnapshotKey} — a chat id when the snapshot is
-   * a chat's own tree, a project id when it is the project's checkout.
-   *
-   * Not keyed by project: a chat can run in a git worktree, so two chats in one
-   * project can sit on different branches with different dirty files. One slot
-   * per project showed the second chat the first one's tree.
-   */
   diffSnapshotsByKey: Record<string, ChatDiffSnapshot | null>
   keybindings: KeybindingsSnapshot | null
   pushConfig: PushConfigSnapshot | null
@@ -74,8 +64,6 @@ export interface KannaStateStorePorts {
   storage?: StoragePort
 }
 
-// Read initial UI restart phase from sessionStorage synchronously at module load.
-// This mirrors the original useState lazy-init pattern.
 function readInitialUiRestartPhase(ports: KannaStateStorePorts = {}): string | null {
   const storage = ports.storage ?? sessionStorageAdapter
   return storage.getItem("kanna:ui-update-restart")

@@ -1,10 +1,3 @@
-// Applies the resolved typography scale to the document as CSS custom
-// properties, and caches the server-provided default for pre-paint reads.
-//
-// Deliberately a SEPARATE module from useTheme.tsx: ~10 component tests
-// `mock.module` the theme hook wholesale (e.g. TextMessage.test.tsx), and
-// widening ThemeContextValue to carry typography would break every one of
-// them. See docs/tribe/planning/typography-scale-preference-plan.md, Task 8.
 
 import { useEffect, type ReactNode } from "react"
 import { useAppSettingsStore } from "../stores/appSettingsStore"

@@ -361,17 +361,11 @@ describe("SubagentOrchestrator", () => {
     })
     const runs = Object.values(h.store.getSubagentRuns(h.chatId))
     expect(runs[0].error?.code).toBe("TIMEOUT")
-    // unblock the stuck provider so harness teardown is clean
     h.resolveReply("sa-a", "late")
   })
 
   test("idle stall-watchdog: steady streamed activity keeps a run alive past runTimeoutMs", async () => {
     const alpha = makeSubagent({ id: "sa-a", name: "alpha" })
-    // 200ms idle window; provider streams a chunk every 60ms for a total of
-    // ~300ms (1.5x the window). Each gap (60ms) is well under the window, so
-    // each chunk must reset the watchdog — otherwise the run is killed at
-    // 200ms. Proves the timer is idle-based, not wall-clock. Generous margins
-    // keep it non-flaky under CI load.
     const h = await setupHarness({ subagents: [alpha], runTimeoutMs: 200 })
     h.mockProviderRun({
       authReady: async () => true,
@@ -402,7 +396,6 @@ describe("SubagentOrchestrator", () => {
       nativeMaxTurns: false,
       authReady: async () => true,
       start: async (_onChunk, onEntry) => {
-        // Stream 5 tool calls — the 4th must trip the backstop (count > 3).
         for (let i = 0; i < 5; i += 1) {
           onEntry({
             _id: `tc-${i}`, createdAt: i, kind: "tool_call",
@@ -410,7 +403,6 @@ describe("SubagentOrchestrator", () => {
           } as TranscriptEntry)
           await new Promise((r) => setTimeout(r, 5))
         }
-        // Never resolves on its own — the backstop must end the race.
         return new Promise(() => {})
       },
     })
@@ -432,9 +424,6 @@ describe("SubagentOrchestrator", () => {
       nativeMaxTurns: true,
       authReady: async () => true,
       start: async (_onChunk, onEntry) => {
-        // 4 tool calls exceed the bound, but native enforcement owns the stop
-        // — the host must NOT abort (a host abort would clobber the SDK's
-        // graceful max_turns stop that preserves output).
         for (let i = 0; i < 4; i += 1) {
           onEntry({
             _id: `tc-${i}`, createdAt: i, kind: "tool_call",
@@ -630,11 +619,9 @@ describe("SubagentOrchestrator", () => {
       runTimeoutMs: 100,
     })
 
-    // startDeferred controls when start() resolves
     let startResolve!: (result: { text: string }) => void
     const startDeferred = new Promise<{ text: string }>((resolve) => { startResolve = resolve })
 
-    // Capture the runId assigned to the spawned run
     let capturedRunId: string | null = null
     const origAppendSubagentEvent = harness.store.appendSubagentEvent.bind(harness.store)
     harness.store.appendSubagentEvent = async (event) => {
@@ -655,20 +642,15 @@ describe("SubagentOrchestrator", () => {
       mentions: [{ kind: "subagent", subagentId: "sa-1", raw: "@agent/alpha" }],
     })
 
-    // Wait for the run to start so capturedRunId is populated
     await new Promise((r) => setTimeout(r, 10))
     expect(capturedRunId).not.toBeNull()
 
-    // Pause the timeout — simulates a tool request being made
     harness.orchestrator.notifySubagentToolPending(capturedRunId!)
 
-    // Wait well past the original 100ms timeout window
     await new Promise((r) => setTimeout(r, 200))
 
-    // Resume the timeout — simulates tool response received
     harness.orchestrator.notifySubagentToolResolved(capturedRunId!)
 
-    // Resolve the provider start — run should complete normally
     startResolve({ text: "done after pause" })
 
     await runPromise
@@ -681,11 +663,6 @@ describe("SubagentOrchestrator", () => {
   test("reset() while paused is a no-op: residual window survives resume instead of re-arming full", async () => {
     const harness = await setupHarness({
       subagents: [makeSubagent({ id: "sa-1", name: "alpha" })],
-      // Wall-clock budget, scaled 4x from the original 900ms. The assertions
-      // below race real setTimeout against this window, so under full-suite
-      // load a ~500ms sleep could overshoot and flake. Widening keeps every
-      // ratio intact while putting the margins well outside scheduler jitter.
-      // The real fix is an injectable clock; this only buys headroom.
       runTimeoutMs: 3_600,
     })
 
@@ -720,23 +697,14 @@ describe("SubagentOrchestrator", () => {
     expect(capturedRunId).not.toBeNull()
     expect(capturedOnChunk).not.toBeNull()
 
-    // Burn ~2000ms of the 3600ms idle window, then pause (≈1600ms residual).
     await new Promise((r) => setTimeout(r, 2_000))
     harness.orchestrator.notifySubagentToolPending(capturedRunId!)
 
-    // A chunk streamed mid-pause calls reset() — it must NOT re-arm the full
-    // window while the approval gate holds the clock.
     capturedOnChunk!("chunk-during-pause")
 
     await new Promise((r) => setTimeout(r, 400))
     harness.orchestrator.notifySubagentToolResolved(capturedRunId!)
 
-    // Silence after resume: the residual must fire. POLL for it rather than
-    // sleeping a fixed span — a fixed deadline turns event-loop delay under
-    // full-suite load into a test failure, which is what made this flake 2 runs
-    // in 3. The residual-vs-full-window arithmetic this test used to infer from
-    // timing is now owned deterministically by subagent-pausable-timeout.test.ts;
-    // what remains here is the wiring: the orchestrator does eventually TIMEOUT.
     const deadline = Date.now() + 20_000
     let run = Object.values(harness.store.getSubagentRuns(harness.chatId))[0]
     while (run.status !== "failed" && Date.now() < deadline) {
@@ -746,7 +714,6 @@ describe("SubagentOrchestrator", () => {
     expect(run.status).toBe("failed")
     expect(run.error?.code).toBe("TIMEOUT")
 
-    // unblock the stuck provider so harness teardown is clean
     startResolve({ text: "late" })
     await runPromise
   }, 30_000)
@@ -770,7 +737,6 @@ describe("SubagentOrchestrator", () => {
       chatId: chat.id, runId, toolUseId: "t1",
       toolKind: "ask_user_question", input: {},
     })
-    // Construct a fresh orchestrator (simulating restart with the pending state replayed)
     const orchestrator = new SubagentOrchestrator({
       store,
       appSettings: { getSnapshot: () => ({ subagents: [] }) },
@@ -780,8 +746,6 @@ describe("SubagentOrchestrator", () => {
     const runs = store.getSubagentRuns(chat.id)
     expect(runs[runId].status).toBe("failed")
     expect(runs[runId].error?.code).toBe("INTERRUPTED")
-    // After INTERRUPTED recovery, pendingTool must be cleared so UI does not
-    // render both the pending-response card and the error card simultaneously.
     expect(runs[runId].pendingTool).toBeNull()
   })
 
@@ -799,9 +763,6 @@ describe("SubagentOrchestrator", () => {
       provider: "claude", model: "claude-opus-4-7",
       parentUserMessageId: "u1", parentRunId: null, depth: 0,
     })
-    // No subagent_tool_pending: the run was mid-bash or mid-streaming when
-    // the server died. Previously this case was skipped by the recovery
-    // guard, leaving the run pinned as `running` forever.
     const orchestrator = new SubagentOrchestrator({
       store,
       appSettings: { getSnapshot: () => ({ subagents: [] }) },
@@ -837,9 +798,6 @@ describe("SubagentOrchestrator", () => {
       },
     })
     await orchestrator.whenRecovered()
-    // Recovery itself goes through appendSubagentEvent directly, not failRun.
-    // To exercise the onRunTerminal hook, simulate a run that fails via the
-    // public surface: start a run whose provider factory throws.
     const failingOrchestrator = new SubagentOrchestrator({
       store,
       appSettings: {
@@ -866,7 +824,6 @@ describe("SubagentOrchestrator", () => {
       subagents: [makeSubagent({ id: "sa-a", name: "alpha" }), makeSubagent({ id: "sa-b", name: "beta" })],
       maxParallel: 1,
     })
-    // Hold alpha so it keeps the single permit while beta is queued
     h.holdReply("sa-a")
     h.programReply("sa-b", "beta-reply")
 
@@ -879,7 +836,6 @@ describe("SubagentOrchestrator", () => {
       ],
     })
 
-    // Wait for both runs to be registered in the store (started events)
     const startDeadline = Date.now() + 2000
     while (Date.now() < startDeadline) {
       await new Promise((r) => setTimeout(r, 20))
@@ -889,12 +845,10 @@ describe("SubagentOrchestrator", () => {
     const runs = h.store.getSubagentRuns(h.chatId)
     const beta = Object.values(runs).find((r) => r.subagentName === "beta")!
     expect(beta).toBeDefined()
-    expect(beta.status).toBe("running") // queued runs read as running in store
+    expect(beta.status).toBe("running")
 
-    // Cancel beta while it is queued waiting for a permit
     h.orchestrator.cancelRun(h.chatId, beta.runId)
 
-    // Wait for beta's failed event
     const cancelDeadline = Date.now() + 5000
     let cancelled = h.store.getSubagentRuns(h.chatId)[beta.runId]
     while (Date.now() < cancelDeadline && cancelled.status !== "failed") {
@@ -904,7 +858,6 @@ describe("SubagentOrchestrator", () => {
     expect(cancelled.status).toBe("failed")
     expect(cancelled.error?.code).toBe("USER_CANCELLED")
 
-    // Unblock alpha so test teardown is clean
     h.resolveReply("sa-a", "alpha-done")
   }, 10_000)
 
@@ -942,7 +895,6 @@ describe("SubagentOrchestrator", () => {
       mentions: [{ kind: "subagent", subagentId: "sa-a", raw: "@agent/alpha" }],
     })
 
-    // Wait for the run to start and capture the abort signal
     const startDeadline = Date.now() + 2000
     while (Date.now() < startDeadline && signalCaptured === null) {
       await new Promise((r) => setTimeout(r, 20))
@@ -953,7 +905,6 @@ describe("SubagentOrchestrator", () => {
     orchestrator.cancelRun(chat.id, run.runId)
     expect((signalCaptured as AbortSignal | null)?.aborted).toBe(true)
 
-    // Wait for the failed event
     const cancelDeadline = Date.now() + 5000
     let cancelled = store.getSubagentRuns(chat.id)[run.runId]
     while (Date.now() < cancelDeadline && cancelled.status !== "failed") {
@@ -972,13 +923,11 @@ describe("SubagentOrchestrator", () => {
     expect(() => orchestrator.cancelRun("chat-x", "run-x")).not.toThrow()
   })
 
-  // ── Regression suite for B1–B5 (codex review 2026-05-18) ──
 
   test("B1 — permit is not double-counted on waiter handoff", async () => {
     const subagents = [1, 2, 3].map((i) => makeSubagent({ id: `sa-${i}`, name: `a${i}` }))
     const h = await setupHarness({ subagents, maxParallel: 1 })
 
-    // 3 runs serialized through 1 permit. Each holds, then we resolve in order.
     for (const s of subagents) h.holdReply(s.id)
 
     const promise = h.orchestrator.runMentionsForUserMessage({
@@ -987,7 +936,6 @@ describe("SubagentOrchestrator", () => {
       mentions: subagents.map((s) => ({ kind: "subagent" as const, subagentId: s.id, raw: `@agent/${s.name}` })),
     })
 
-    // Drain serially.
     for (const s of subagents) {
       const deadline = Date.now() + 2000
       while (Date.now() < deadline && !h.pendingHolds.has(s.id)) {
@@ -997,9 +945,6 @@ describe("SubagentOrchestrator", () => {
     }
 
     await promise
-    // After every run completes, the permit count must equal the starting cap.
-    // B1: without the fix, each waiter handoff leaked one slot — permits
-    // would be 1 - 3 = -2 here, and activePermitCount would be 3 instead of 0.
     expect(h.orchestrator.activePermitCount()).toBe(0)
     expect(h.activeStarts.max).toBe(1)
   })
@@ -1007,8 +952,6 @@ describe("SubagentOrchestrator", () => {
   test("B2 — startProviderRun throw does not double-release the slot", async () => {
     const h = await setupHarness({ subagents: [makeSubagent({})], maxParallel: 1 })
 
-    // Override startProviderRun to throw synchronously — exercises the
-    // PROVIDER_ERROR early-return path that used to call raw release().
     const realDeps = (h.orchestrator as unknown as {
       deps: { startProviderRun: (a: { subagent: { id: string } }) => unknown }
     }).deps
@@ -1020,16 +963,12 @@ describe("SubagentOrchestrator", () => {
       mentions: [{ kind: "subagent", subagentId: "sa-1", raw: "@agent/alpha" }],
     })
 
-    // The failed early-return must have released exactly one slot. With the
-    // bug present, the outer finally would release again → activePermitCount
-    // would go negative (or, equivalently, permits would grow above the cap).
     expect(h.orchestrator.activePermitCount()).toBe(0)
   })
 
   test("B3 — cancelChat does not block a future mention batch in the same chat", async () => {
     const h = await setupHarness({ subagents: [makeSubagent({})] })
 
-    // First batch: run + complete normally.
     h.programReply("sa-1", "first ok")
     await h.orchestrator.runMentionsForUserMessage({
       chatId: h.chatId,
@@ -1037,12 +976,8 @@ describe("SubagentOrchestrator", () => {
       mentions: [{ kind: "subagent", subagentId: "sa-1", raw: "@agent/alpha" }],
     })
 
-    // User cancels chat after the run completed. Before the B3 fix this
-    // permanently added the chatId to cancelledChats, so the next batch
-    // failed at acquire() time with "Chat cancelled before run started".
     h.orchestrator.cancelChat(h.chatId)
 
-    // Second batch must run successfully.
     h.programReply("sa-1", "second ok")
     await h.orchestrator.runMentionsForUserMessage({
       chatId: h.chatId,
@@ -1061,8 +996,6 @@ describe("SubagentOrchestrator", () => {
     const h = await setupHarness({ subagents: [makeSubagent({ id: "sa-1" })] })
 
     h.orchestrator.cancelChat(h.chatId)
-    // Without clearChatCancellation, delegateRun would fail at the
-    // cancelledChats gate with "Chat cancelled before run started".
     h.orchestrator.clearChatCancellation(h.chatId)
 
     h.programReply("sa-1", "delegated ok")
@@ -1090,10 +1023,6 @@ describe("SubagentOrchestrator", () => {
       authReady: async () => true,
       start: () =>
         new Promise<{ text: string }>((_resolve, reject) => {
-          // The orchestrator does not pass abortSignal to the mock start()
-          // wrapper — read it off runStateByRunId once the run exists. This
-          // mirrors how `runClaudeSubagent` consumes args.abortSignal in
-          // real code.
           const wait = () => {
             const runIds = Object.keys(h.store.getSubagentRuns(h.chatId))
             const runId = runIds[0]
@@ -1136,8 +1065,6 @@ describe("SubagentOrchestrator", () => {
       maxParallel: 3,
     })
 
-    // alpha replies with @agent/beta; beta replies with @agent/gamma;
-    // both beta and gamma are put on hold so all three are in-flight together.
     h.programReply("sa-a", "delegate to @agent/beta")
     h.holdReply("sa-b")
     h.holdReply("sa-c")
@@ -1148,7 +1075,6 @@ describe("SubagentOrchestrator", () => {
       mentions: [{ kind: "subagent", subagentId: "sa-a", raw: "@agent/alpha" }],
     })
 
-    // Wait for alpha to complete and beta to start
     const betaStartDeadline = Date.now() + 5000
     while (Date.now() < betaStartDeadline) {
       await new Promise((r) => setTimeout(r, 20))
@@ -1159,10 +1085,8 @@ describe("SubagentOrchestrator", () => {
     const betaRun = Object.values(runs).find((r) => r.subagentName === "beta")
     expect(betaRun).toBeDefined()
 
-    // Now resolve beta so it returns @agent/gamma and gamma starts
     h.resolveReply("sa-b", "delegate to @agent/gamma")
 
-    // Wait for gamma to start
     const gammaStartDeadline = Date.now() + 5000
     while (Date.now() < gammaStartDeadline) {
       await new Promise((r) => setTimeout(r, 20))
@@ -1172,10 +1096,8 @@ describe("SubagentOrchestrator", () => {
     const gammaRun = Object.values(h.store.getSubagentRuns(h.chatId)).find((r) => r.subagentName === "gamma")
     expect(gammaRun).toBeDefined()
 
-    // Cancel gamma directly — should mark it USER_CANCELLED
     h.orchestrator.cancelRun(h.chatId, gammaRun!.runId)
 
-    // Wait for gamma to fail with USER_CANCELLED
     const cancelDeadline = Date.now() + 5000
     while (Date.now() < cancelDeadline) {
       await new Promise((r) => setTimeout(r, 20))
@@ -1481,32 +1403,23 @@ describe("SubagentOrchestrator", () => {
       expect(outcome.status).toBe("completed")
       if (outcome.status !== "completed") throw new Error("unreachable")
       const runId = outcome.runId
-      // 1 run_started + 3 entries = at least 4 progress emits, all for this run/chat.
       expect(h.progressCalls.length).toBeGreaterThanOrEqual(4)
       for (const c of h.progressCalls) {
         expect(c.chatId).toBe(h.chatId)
         expect(c.runId).toBe(runId)
       }
-      // run_started fires before any entry-driven emit.
       expect(h.progressCalls[0]).toEqual({ chatId: h.chatId, runId })
-      // Terminal hook still fires exactly once on completion.
       expect(h.terminalCalls).toEqual([{ chatId: h.chatId, runId, reason: "completed" }])
     })
 
-    // --- ADR adr-20260519-subagent-live-progress-decouple: orchestrator wiring ---
 
     test("onEntry fires onRunProgress directly without awaiting appendSubagentEvent settlement", async () => {
       const h = await setupHarness({ subagents: [makeSubagent({})] })
 
-      // Wrap appendSubagentEvent so subagent_entry_appended returns a never-settling
-      // promise — simulates a saturated writeChain that drains long after onEntry returns.
-      // Other event types (run_started, run_completed) resolve normally so delegateRun
-      // can complete without timing out.
       const original = h.store.appendSubagentEvent.bind(h.store)
       h.store.appendSubagentEvent = async (event) => {
         await original(event)
         if (event.type === "subagent_entry_appended") {
-          // Never-settling promise simulates a saturated disk write queue.
           return new Promise<void>(() => {})
         }
       }
@@ -1516,13 +1429,10 @@ describe("SubagentOrchestrator", () => {
         authReady: async () => true,
         async start(_onChunk, onEntry) {
           const beforeCount = h.progressCalls.length
-          // onEntry is synchronous from the orchestrator's perspective.
           onEntry({
             _id: "e1", createdAt: 1, kind: "assistant_text",
             text: "working", messageId: "m1",
           } as TranscriptEntry)
-          // If onRunProgress is chained on the never-settling promise → 0.
-          // If onRunProgress is called directly → 1.
           progressCountInsideStart = h.progressCalls.length - beforeCount
           return { text: "done" }
         },
@@ -1568,20 +1478,15 @@ describe("SubagentOrchestrator", () => {
         prompt: "go",
         mentionedSubagentIds: [],
       })
-      runStartProgress.value = 1 // always 1 call for run_started
+      runStartProgress.value = 1
 
-      // Let the trailing-edge throttle fire (implementation uses ~100ms window).
       await new Promise<void>((resolve) => setTimeout(resolve, 250))
 
       expect(outcome.status).toBe("completed")
       if (outcome.status !== "completed") throw new Error("unreachable")
 
-      // At least one chunk-driven progress call must have fired beyond run_started.
-      // Pre-fix: no chunk progress → progressCalls.length === 1 (only run_started).
-      // Post-fix: trailing-edge throttle fires → progressCalls.length >= 2.
       expect(h.progressCalls.length).toBeGreaterThanOrEqual(2)
 
-      // Final text must be fully assembled after the run.
       const run = h.store.getSubagentRuns(h.chatId)[outcome.runId]
       expect(run.finalText).toBe("Hello world!")
     })
@@ -1602,14 +1507,12 @@ describe("SubagentOrchestrator", () => {
       })
       expect(outcome.status).toBe("failed")
       if (outcome.status !== "failed") throw new Error("unreachable")
-      // run_started progress emit fired before the failure.
       expect(h.progressCalls).toEqual([{ chatId: h.chatId, runId: outcome.runId }])
       expect(h.terminalCalls).toEqual([
         { chatId: h.chatId, runId: outcome.runId, reason: "failed" },
       ])
     })
 
-    // ── keep_alive tests ──
 
     function makeLiveTurnSource(): { live: LiveTurnSource; closed: { value: boolean } } {
       const closed = { value: false }
@@ -1643,7 +1546,6 @@ describe("SubagentOrchestrator", () => {
       expect(h.orchestrator.liveSessionCount()).toBe(1)
     })
 
-    // ── run_in_background tests (adr-20260616-subagent-run-in-background) ──
 
     test("delegateRun background returns async_launched without awaiting the run", async () => {
       const h = await setupHarness({ subagents: [makeSubagent({})] })
@@ -1662,7 +1564,6 @@ describe("SubagentOrchestrator", () => {
       })
       expect(out.status).toBe("async_launched")
       expect(out.runId).toBeTruthy()
-      // The run is still in flight: no completion delivered yet.
       expect(h.backgroundCompletions).toHaveLength(0)
     })
 
@@ -1681,12 +1582,10 @@ describe("SubagentOrchestrator", () => {
         background: true,
         mentionedSubagentIds: [],
       })
-      // Wait for the detached spawn to reach its held provider start before resolving.
       for (let i = 0; i < 50 && !h.pendingHolds.has("sa-1"); i++) {
         await new Promise((r) => setTimeout(r, 0))
       }
       h.resolveReply("sa-1", "background result")
-      // Drain microtasks until the completion is delivered.
       for (let i = 0; i < 50 && h.backgroundCompletions.length === 0; i++) {
         await new Promise((r) => setTimeout(r, 0))
       }
@@ -1722,7 +1621,6 @@ describe("SubagentOrchestrator", () => {
       expect(c.outcome.status === "failed" && c.outcome.errorCode).toBe("PROVIDER_ERROR")
     })
 
-    // ── Task 5: sendToLiveRun + closeLiveRun ──
 
     function makeOrchestrator(h: Awaited<ReturnType<typeof setupHarness>>, live: LiveTurnSource) {
       h.mockProviderRun({
@@ -1756,7 +1654,7 @@ describe("SubagentOrchestrator", () => {
       const out = await orch.sendToLiveRun(d.runId, "second turn")
       expect(out.status).toBe("completed")
       expect(out.status === "completed" && out.text).toContain("second")
-      expect(orch.liveSessionCount()).toBe(1) // still alive
+      expect(orch.liveSessionCount()).toBe(1)
     })
 
     test("closeLiveRun tears down + deregisters", async () => {
@@ -1866,10 +1764,6 @@ describe("SubagentOrchestrator", () => {
   })
 
   test("full-transcript scope builds primer via tail read, not getMessages", async () => {
-    // full-transcript scope still called store.getMessages() after PR #841,
-    // which on a 96 MB transcript costs ~524 MB peak RSS for a 60 k-char primer.
-    // getRecentRawEntries() with a 1000-entry tail is equivalent in practice
-    // because buildHistoryPrimer already truncates the output to PRIMER_MAX_CHARS.
     const h = await setupHarness({ subagents: [makeSubagent({ contextScope: "full-transcript" })] })
 
     await h.store.appendMessage(h.chatId, {
@@ -1907,10 +1801,6 @@ describe("SubagentOrchestrator", () => {
     expect(capturedPrimer).toContain("hi there")
   })
 
-  // The duration rides the span that already wraps the whole run, so what needs
-  // pinning is that every run contributes exactly one observation carrying its
-  // outcome — a failed run must not vanish from the distribution, or the
-  // latency a user actually experiences would look better than it is.
   describe("kanna.subagent.run.duration_ms", () => {
     let recorder: MetricRecorder | null = null
 

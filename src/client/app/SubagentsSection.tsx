@@ -264,7 +264,6 @@ function SubagentForm(props: SubagentFormProps) {
   const patchFormDraft = useSubagentsSectionStore((state) => state.patchFormDraft)
   const patchForm = useSubagentsSectionStore((state) => state.patchForm)
 
-  // Initialize store with baseline on mount (key prop ensures re-mount on subagent switch)
   useEffect(() => {
     resetForm(baseline)
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -591,7 +590,6 @@ function FormRow(props: {
   )
 }
 
-// ── SettingsPage wiring ──────────────────────────────────────────────────────
 import type { KannaState } from "./useKannaState"
 import { useAppSettingsStore, selectCustomModels } from "../stores/appSettingsStore"
 
@@ -648,8 +646,6 @@ export function SubagentsSettingsBranch(props: {
         const result = await props.state.socket.command<SubagentCommandResult>({
           type: "subagent.update",
           id,
-          // maxTurns: explicit null when cleared — an absent key would keep
-          // the server's previous value (JSON drops undefined).
           patch: { ...input, maxTurns: input.maxTurns ?? null },
         })
         return result
@@ -699,12 +695,6 @@ const SUBAGENT_RUN_TIMEOUT_MIN_S = 30
 const SUBAGENT_RUN_TIMEOUT_MAX_S = 86_400
 const DEFAULT_SUBAGENT_RUN_TIMEOUT_S = 600
 
-/**
- * Runtime knobs for delegated subagent runs + the autonomous loop:
- * the idle stall-watchdog window and the default loop subagent. Reads
- * `subagentRuntime` off the app-settings store and writes patches through
- * `handleWriteAppSettings` (optimistic, same path as every other setting).
- */
 function LoopRuntimePanel(props: {
   subagents: Subagent[]
   handleWriteAppSettings: KannaState["handleWriteAppSettings"]
@@ -718,7 +708,6 @@ function LoopRuntimePanel(props: {
   const error = useSubagentsSectionStore((state) => state.loopError)
   const setError = useSubagentsSectionStore((state) => state.setLoopError)
 
-  // Sync draft when server value changes (e.g. on load)
   useEffect(() => {
     setTimeoutDraft(String(timeoutSeconds))
   // eslint-disable-next-line react-hooks/exhaustive-deps

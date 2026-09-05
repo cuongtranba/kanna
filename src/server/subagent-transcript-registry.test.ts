@@ -1,8 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { createSubagentTranscriptRegistry } from "./subagent-transcript-registry"
 
-// Real agent files are entirely isSidechain:true — the live parser drops them,
-// so the registry must parse via normalizeClaudeStreamMessage directly.
 const SIDECHAIN_LINES = [
   JSON.stringify({
     type: "assistant",

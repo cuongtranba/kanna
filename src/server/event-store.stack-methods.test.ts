@@ -21,7 +21,6 @@ describe("Replay determinism", () => {
   test("Replay produces identical state to live mutations", async () => {
     const dir = await createTempDataDir()
 
-    // Live mutations.
     const store1 = createTestEventStore(dir)
     await store1.initialize()
     const pa = await store1.openProject("/tmp/a", "A")
@@ -33,7 +32,6 @@ describe("Replay determinism", () => {
     await store1.removeProjectFromStack(s.id, pa.id)
     const liveStacks = store1.listStacks()
 
-    // Fresh store, same dir → replays the log.
     const store2 = createTestEventStore(dir)
     await store2.initialize()
     const replayed = store2.listStacks()
@@ -204,8 +202,6 @@ test("createChat rejects a stackId with no stackBindings", async () => {
   await expect(store.createChat(p1, { stackId: stack.id })).rejects.toThrow(/requires stackBindings/u)
 })
 
-// The binding is what a card's "Start work" chat needs; a Stack needs two
-// projects, so it cannot express one worktree of one project.
 test("createChat accepts a lone worktree binding with no stack", async () => {
   const { store, projectIds: [p1] } = await buildStoreWithProjects(["/tmp/p1"])
   const chat = await store.createChat(p1, {
@@ -297,14 +293,7 @@ test("Replay preserves chat stackId and stackBindings", async () => {
   expect(replayed?.stackBindings).toEqual(chat.stackBindings)
 })
 
-// ---------------------------------------------------------------------------
-// Instructions (adr-20260904)
-// ---------------------------------------------------------------------------
 
-/**
- * An event that applies live but not on replay is the classic failure here, so
- * every case below is asserted through a second store reading the same log.
- */
 describe("project + stack instructions", () => {
   test("round-trips through a real store and survives replay", async () => {
     const dir = await createTempDataDir()
@@ -317,7 +306,6 @@ describe("project + stack instructions", () => {
     await store1.setProjectInstructions(pa.id, "  never edit generated/  ")
     await store1.setStackInstructions(stack.id, "api is upstream of web")
 
-    // Live: trimmed on the way in.
     expect(store1.getProject(pa.id)?.instructions).toBe("never edit generated/")
     expect(store1.getStack(stack.id)?.instructions).toBe("api is upstream of web")
 

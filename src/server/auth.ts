@@ -111,15 +111,6 @@ async function readLoginForm(req: Request) {
 }
 
 export interface AuthManagerOptions {
-  /**
-   * When true, the auth layer trusts X-Forwarded-Proto to decide whether the
-   * public origin is http or https. The hostname always comes from the Host
-   * header (never X-Forwarded-Host) because X-Forwarded-Host is passed
-   * through by some tunnels unmodified and would otherwise allow open
-   * redirects.
-   * Enable only when the server is reachable solely through a trusted reverse
-   * proxy such as cloudflared.
-   */
   trustProxy?: boolean
   sessionStore: AuthSessionStore
   getMaxAgeMs: () => number

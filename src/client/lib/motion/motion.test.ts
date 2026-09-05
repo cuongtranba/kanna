@@ -10,11 +10,6 @@ import {
   staggerDelay,
 } from "."
 
-/**
- * A DomPort answering the media query however the test wants. Spread over the
- * shared fake rather than cast from a one-method literal, so a new DomPort
- * member stays a compile error here.
- */
 function domAnswering(matches: (query: string) => boolean): DomPort {
   return { ...makeFakeDomPort(), matchesMediaQuery: matches }
 }
@@ -42,21 +37,12 @@ describe("prefersReducedMotion", () => {
 
 describe("configureMotionEngine", () => {
   test("stops anime.js pausing on a hidden document", () => {
-    // The default is `true`, which freezes running timelines mid-transition
-    // when the tab is backgrounded — the state no user action produced.
     engine.pauseOnDocumentHidden = true
     configureMotionEngine()
     expect(engine.pauseOnDocumentHidden).toBe(false)
   })
 
   test("revives an engine that already paused before it was configured", () => {
-    // Flipping the flag alone is not enough: it is read at `visibilitychange`
-    // time, so an engine paused before bootstrap stays paused forever and every
-    // later animation silently never runs.
-    //
-    // The paused state is set directly rather than through `engine.pause()`:
-    // that method early-returns when no animation is running (`!this.reqId`),
-    // so driving it here would leave `paused` false and assert nothing.
     engine.pauseOnDocumentHidden = true
     engine.paused = true
     configureMotionEngine()

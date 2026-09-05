@@ -1,6 +1,5 @@
 import { createScopedStore } from "../lib/createScopedStore"
 
-/** Whether this row's edit dialog is open. One instance per rendered row. */
 export interface CronJobRowState {
   editing: boolean
   openEditor: () => void

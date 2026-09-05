@@ -15,7 +15,7 @@ export interface BashTool {
   handler: (input: BashInput, ctx: ToolHandlerContext) => Promise<ToolHandlerResult>
 }
 
-const OUTPUT_CAP = 1_000_000 // 1 MB per stream
+const OUTPUT_CAP = 1_000_000
 
 async function readBounded(stream: ReadableStream<Uint8Array> | null, maxBytes: number): Promise<string> {
   if (!stream) return ""

@@ -15,8 +15,6 @@ describe("flattenLayoutForMobile", () => {
   })
 
   test("gathers tabs from every pane so none is unreachable on a narrow screen", () => {
-    // A layout split on desktop then opened on a phone must not strand the tabs
-    // that live in the panes we are not rendering.
     const layout: PaneLayout = {
       root: createGroup("g1", "horizontal", [
         createPane("pa", [chat]),
@@ -55,7 +53,6 @@ describe("flattenLayoutForMobile", () => {
       focusedPaneId: "pb",
     }
 
-    // pb's own focus is its first tab, "changes" — that is what the phone shows.
     expect(flattenLayoutForMobile(layout).focusedTabId).toBe(changes.tabId)
   })
 

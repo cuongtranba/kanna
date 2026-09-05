@@ -72,7 +72,6 @@ describe("registration", () => {
 
 describe("project scoping", () => {
   test("a board in ANOTHER project is refused, not read", async () => {
-    // An agent must not reach another project's board by guessing an id.
     const foreign = registry.createBoard({ owner: { kind: "project", id: "project-2" }, title: "Theirs" })
     const result = await call("board_get", { board_id: foreign.id })
     expect(result.isError).toBe(true)
@@ -106,7 +105,6 @@ describe("project scoping", () => {
 
 describe("context bounding", () => {
   test("board_get returns a window plus the TOTAL, never the whole column", async () => {
-    // A 5k-issue import would otherwise blow up one turn.
     let previous: string | null = null
     for (let index = 0; index < 55; index += 1) {
       previous = registry.createCard({
@@ -120,7 +118,6 @@ describe("context bounding", () => {
 
     const text = (await call("board_get", { board_id: boardId })).content[0]?.text ?? ""
     expect(text).toContain("55 cards")
-    // 20 shown, the rest reported as elided so the model knows what it has NOT seen.
     expect(text).toContain("… 35 more")
     expect(text.split("Card ").length - 1).toBe(20)
   })
@@ -139,7 +136,6 @@ describe("context bounding", () => {
 
 describe("writes", () => {
   test("a moved card is attributed to the agent", async () => {
-    // Attribution is what holds the change back from a connected tracker.
     const card = registry.createCard({
       boardId,
       columnId: columnIds[0]!,
@@ -183,10 +179,6 @@ describe("writes", () => {
 
 describe("registration reaches the real MCP host", () => {
   test("the board tools appear ONLY when boardRegistry is supplied at the spawn site", async () => {
-    // The regression this pins: the tools can be perfectly built and still be
-    // invisible to the agent, because a list built without the registry
-    // evaluates to empty and nothing errors. CLAUDE.md records `getArmedLoop`
-    // shipping in exactly that state.
     const { buildKannaMcpTools } = await import("./kanna-mcp")
     const base = { projectId: "project-1", localPath: "/tmp", chatId: "chat-1" }
     const boardNames = (list: { name?: string }[]) =>

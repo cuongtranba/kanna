@@ -10,13 +10,6 @@ function stripTrailingSep(path: string): string {
   return path.replace(/[/\\]+$/, "")
 }
 
-/**
- * Produce the display path for the navbar git label.
- * - With `homeDir`: collapse a `homeDir` prefix of `localPath` to `~` and keep
- *   the full relative path; fall back to the full absolute path when `localPath`
- *   is not under `homeDir`.
- * - Without `homeDir`: fall back to the worktree basename (legacy behavior).
- */
 function displayPath(localPath: string, homeDir?: string): string {
   const path = stripTrailingSep(localPath)
   if (!homeDir) {

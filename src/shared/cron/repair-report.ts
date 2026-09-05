@@ -1,19 +1,8 @@
-/**
- * The words a rejected `/cron` line is reported in.
- *
- * Two surfaces say it: the `validate_cron` tool result the model reads while
- * composing a fix, and the repair prompt Kanna sends when its own parser had
- * no fix to offer. They share this module so the model is never taught two
- * vocabularies for the same defect.
- *
- * Pure — the grammar text lives beside the parser that enforces it.
- */
 
 import { cronModeConsequence } from "./arm-summary"
 import { CRON_SHORTCUTS } from "./parse-schedule"
 import type { CronParseError } from "./types"
 
-/** One parse failure: which part, why, and the fix when Kanna knows it. */
 export function formatCronDefect(error: CronParseError): string {
   const parts = [`Invalid /cron (${error.part}): ${error.message}`]
   if (error.suggestion !== undefined) parts.push(`Suggested fix: ${error.suggestion}`)
@@ -29,11 +18,6 @@ const GRAMMAR = [
   "- sub-minute schedules ARE supported and have no floor: `every 2s` and `*/2 * * * * *` both arm. Never tell the user cron cannot run faster than once a minute.",
 ].join("\n")
 
-/**
- * Asks the model to repair a line Kanna could not. Only sent when the parser
- * produced no suggestion of its own, so the model is never spending a turn on
- * something a copy-and-send affordance already solved.
- */
 export function formatCronRepairRequest(error: CronParseError): string {
   return [
     "The user typed a `/cron` command that could not be parsed, so nothing was scheduled:",

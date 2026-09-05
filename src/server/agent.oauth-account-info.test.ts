@@ -8,7 +8,6 @@ import type { AutoContinueEvent } from "./auto-continue/events"
 import { AsyncEventQueue } from "./test-helpers/async-event-queue"
 import { waitFor } from "./test-helpers/wait-for"
 
-// ── Helpers (minimal copies from agent.test.ts — do NOT modify agent.test.ts) ──
 
 function createFakeStore() {
   const chat = {
@@ -143,7 +142,6 @@ describe("AgentCoordinator SDK OAuth-pool account info parity", () => {
         startClaudeSession: async () => ({
           provider: "claude",
           stream: events,
-          // SDK-reported account info knows nothing about the kanna pool name.
           getAccountInfo: async (): Promise<AccountInfo> => ({
             tokenSource: "CLAUDE_CODE_OAUTH_TOKEN",
             email: "user@example.com",
@@ -188,13 +186,9 @@ describe("AgentCoordinator SDK OAuth-pool account info parity", () => {
       )
 
       const info = accountInfoEntry(store.messages)!
-      // Name (PTY mirror): pool token label surfaces as organization.
       expect(info.organization).toBe("Primary Pool Key")
-      // Source (PTY mirror): kanna-oauth-pool → UI renders "Pool token".
       expect(info.tokenSource).toBe("kanna-oauth-pool")
-      // Masked key still attached.
       expect(info.oauthKeyMasked).toBeTruthy()
-      // SDK-reported extras preserved (PTY lacks these).
       expect(info.email).toBe("user@example.com")
       expect(info.subscriptionType).toBe("Max")
     },
@@ -237,7 +231,6 @@ describe("AgentCoordinator SDK OAuth-pool account info parity", () => {
             })
           },
         }),
-        // No oauthPool → no picked token.
       })
 
       await coordinator.send({
@@ -289,8 +282,6 @@ describe("AgentCoordinator OpenRouter account info", () => {
         startClaudeSession: async () => ({
           provider: "claude",
           stream: events,
-          // OpenRouter redirect sets ANTHROPIC_AUTH_TOKEN, so the SDK
-          // self-reports this misleading Anthropic source with no account.
           getAccountInfo: async (): Promise<AccountInfo> => ({
             tokenSource: "ANTHROPIC_AUTH_TOKEN",
           }),
@@ -332,14 +323,10 @@ describe("AgentCoordinator OpenRouter account info", () => {
       )
 
       const info = accountInfoEntry(store.messages)!
-      // Source renders "OpenRouter", not the raw Anthropic env-var name.
       expect(info.tokenSource).toBe("openrouter")
-      // Masked OpenRouter key, never the raw secret.
       expect(info.oauthKeyMasked).toBe(maskOauthKey(rawKey))
       expect(info.oauthKeyMasked).not.toBe(rawKey)
-      // Model surfaces as the organization line.
       expect(info.organization).toBeTruthy()
-      // Exactly one account_info entry (gated by accountInfoLoaded).
       expect(store.messages.filter((m) => m.kind === "account_info").length).toBe(1)
     },
     10_000,

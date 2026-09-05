@@ -321,8 +321,6 @@ export function OpenExternalContextMenuContent({
     includeDefault,
   })
 
-  // openAppValue is a module-level helper, not a store action; this is an
-  // extraction to keep the handler out of the JSX attribute.
   const handleSelectApp = useCallback((event: Event, value: OpenAppValue) => {
     event.preventDefault()
     openAppValue({ value, editorCommandTemplate, onOpenExternal })

@@ -32,8 +32,8 @@ describe("workflow-watch-io.adapter", () => {
   })
 
   test("arms when the workflows dir is created AFTER watch starts (watches parent)", async () => {
-    const base = tmp()                      // exists
-    const dir = join(base, "workflows")     // does NOT exist yet
+    const base = tmp()
+    const dir = join(base, "workflows")
     let calls = 0
     const dispose = watchWorkflowDir(dir, () => { calls += 1 }, { debounceMs: 20 })
     mkdirSync(dir)
@@ -59,19 +59,15 @@ describe("workflow-watch-io.adapter", () => {
 
     const dispose = watchWorkflowDir(d, () => { calls += 1 }, { debounceMs: 30, deps })
 
-    flushTimers() // runs the arming-window safety-net scheduled by watchWorkflowDir
-    flushTimers() // runs the debounce timer it enqueued
+    flushTimers()
+    flushTimers()
     expect(calls).toBe(1)
 
     dispose()
   })
 
   test("watchWorkflowDir coalesces rapid change events into one debounced call; dispose stops it", () => {
-    // Deterministic: inject a fake watcher + controllable timers so the test
-    // never depends on real fs-event delivery latency or wall-clock timer
-    // scheduling (both load-sensitive — the prior sleep-based version flaked
-    // under a busy suite, firing 0 or 2 times instead of the expected 1).
-    const d = tmp() // must exist so watchWorkflowDir takes the armTarget path
+    const d = tmp()
     let calls = 0
     let changeCb: (() => void) | null = null
     const pendingTimeouts = new Map<number, () => void>()
@@ -99,15 +95,11 @@ describe("workflow-watch-io.adapter", () => {
     const dispose = watchWorkflowDir(d, () => { calls += 1 }, { debounceMs: 30, deps })
     expect(changeCb).not.toBeNull()
 
-    // Two rapid change events land inside one debounce window: the second
-    // fire() clears the first pending timer, so exactly one timer survives.
     changeCb!()
     changeCb!()
     flushTimers()
     expect(calls).toBe(1)
 
-    // After dispose, a late change event must never produce another call — the
-    // `disposed` guard short-circuits fire() regardless of timing.
     dispose()
     changeCb!()
     flushTimers()
@@ -116,11 +108,11 @@ describe("workflow-watch-io.adapter", () => {
 
   test("listWorkflowRunDirs reads sibling subagents/workflows/wf_* with newest mtime", () => {
     const session = tmp()
-    const workflowsDir = join(session, "workflows")          // registered (sidecar) dir
-    const liveRoot = join(session, "subagents", "workflows") // live run dirs
+    const workflowsDir = join(session, "workflows")
+    const liveRoot = join(session, "subagents", "workflows")
     mkdirSync(join(liveRoot, "wf_a"), { recursive: true })
     mkdirSync(join(liveRoot, "wf_b"), { recursive: true })
-    mkdirSync(join(liveRoot, "ignore"), { recursive: true })  // not wf_*
+    mkdirSync(join(liveRoot, "ignore"), { recursive: true })
     writeFileSync(join(liveRoot, "wf_a", "journal.jsonl"), "{}")
     writeFileSync(join(liveRoot, "wf_b", "agent-x.jsonl"), "{}")
 
@@ -165,9 +157,6 @@ describe("workflow-watch-io.adapter", () => {
     mkdirSync(runDir, { recursive: true })
     writeFileSync(
       join(runDir, "journal.jsonl"),
-      // The real sonar-sweep workflow returns count fields as ARRAYS, plus a
-      // boolean testsPass and a long notes string — the prior parser silently
-      // dropped all of these (it expected `fixed: number`, `test_status`).
       `${JSON.stringify({
         type: "result",
         agentId: "r1",
@@ -177,7 +166,6 @@ describe("workflow-watch-io.adapter", () => {
 
     const entries = readWorkflowRunJournal(join(session, "workflows"), "wf_real")
     expect(entries).toHaveLength(1)
-    // Arrays collapse to their length; testsPass + notes survive.
     expect(entries[0].result).toMatchObject({
       dir: "backend-core/pkg/enmime/internal/coding",
       fixed: 1, stale: 2, skipped: 0, testsPass: true, notes: "Finding #1941 fixed.",

@@ -30,11 +30,6 @@ import { AsyncEventQueue } from "./test-helpers/async-event-queue"
 import { waitFor } from "./test-helpers/wait-for"
 import { ClaudeSessionState } from "./claude-session-state"
 
-/**
- * Minimal in-memory WorkflowRegistry whose `hasActiveRun` reflects a per-chat
- * boolean map. Only `hasActiveRun` is exercised by the idle/budget guards; the
- * rest are inert stubs to satisfy the interface.
- */
 function makeFakeWorkflowRegistry(activeByChat: Map<string, boolean>): WorkflowRegistry {
   return {
     register: () => {},
@@ -97,9 +92,6 @@ describe("normalizeClaudeStreamMessage", () => {
   })
 
   test("result message without a result field normalizes to an empty string, not undefined", () => {
-    // Aborted-stream errors (subtype "error_during_execution") carry no
-    // `result` key. The entry must still satisfy the `result: string` contract
-    // so the client never calls `.trim()` on undefined.
     const entries = normalizeClaudeStreamMessage({
       type: "result",
       subtype: "error_during_execution",
@@ -135,10 +127,6 @@ describe("normalizeClaudeStreamMessage", () => {
   })
 
   test("surfaces a settled background task notification as a status entry", () => {
-    // The Agent SDK emits SDKTaskNotificationMessage (type:system,
-    // subtype:task_notification) when a Bash(run_in_background) task settles.
-    // Kanna previously dropped it, so the background completion never reached
-    // the transcript/event log. Surface it as a status entry.
     const entries = normalizeClaudeStreamMessage({
       type: "system",
       subtype: "task_notification",
@@ -255,10 +243,6 @@ describe("normalizeClaudeStreamMessage", () => {
     })
 
     test("returns null when no per-assistant snapshot exists so cumulative result.usage never leaks into usedTokens", () => {
-      // Compact/system turns carry no `assistant` usage; SDK `result.usage` is
-      // cumulative (sums cache reads per tool round-trip). Emitting it as
-      // usedTokens previously inflated the proactive-compact input to millions
-      // and forced a second, spurious compact.
       const cumulative = normalizeClaudeUsageSnapshot({
         input_tokens: 4,
         cache_read_input_tokens: 4_596_128,
@@ -341,14 +325,6 @@ describe("normalizeClaudeStreamMessage", () => {
       expect(entries[0].kind).toBe("assistant_text")
     })
 
-    // The Claude CLI reuses model "<synthetic>" for benign turn-end placeholders
-    // (CVH constant in the binary) as well as real API errors. Those benign
-    // markers carry zero information and must NOT render as a red api_error card
-    // NOR as an assistant_text bubble — they are dropped entirely. In PTY
-    // channel-delivered turns the CLI emits one at the start of every turn; if
-    // surfaced as assistant_text it flips the UI out of its waiting state before
-    // the real reply streams (spinner vanishes, placeholder reads as the answer).
-    // See adr-20260607-drop-synthetic-no-response-marker.
     test.each([
       "No response requested.",
       "No action needed.",
@@ -381,10 +357,6 @@ describe("normalizeClaudeStreamMessage", () => {
     })
   })
 
-  // A deliberate model refusal (Claude CLI: stop_reason "refusal" / Usage-Policy
-  // block) must surface as its own `policy_refusal` kind, NOT a generic red
-  // api_error card that reads like a transport failure.
-  // See adr-20260607-surface-policy-refusal-entry.
   describe("policy refusal classification", () => {
     const POLICY_TEXT =
       "API Error: Claude Code is unable to respond to this request, which appears to violate our Usage Policy (https://www.anthropic.com/legal/aup). Request ID: req_011CboJxt7if3fGCx2YcYSKz"
@@ -439,11 +411,6 @@ describe("normalizeClaudeStreamMessage", () => {
     })
   })
 
-  // Claude emits extended-reasoning as a separate `thinking` content block
-  // ({type:"thinking", thinking, signature}) alongside text/tool_use. It must
-  // surface as its own `assistant_thinking` kind so the UI can render it
-  // collapsed, and so the event log distinguishes reasoning from output.
-  // See adr-20260607-thinking-blocks-transcript-kind.
   describe("thinking content blocks", () => {
     test("a thinking block becomes an assistant_thinking entry carrying the text + signature", () => {
       const entries = normalizeClaudeStreamMessage({
@@ -1173,7 +1140,6 @@ describe("AgentCoordinator codex integration", () => {
               mcpServers: [],
             }),
           }
-          // Produce the result event
           yield {
             type: "transcript" as const,
             entry: timestamped({
@@ -1184,7 +1150,6 @@ describe("AgentCoordinator codex integration", () => {
               result: "done",
             }),
           }
-          // Stream stays open (simulates background tasks still running)
           await new Promise<void>((resolve) => {
             resolveStream = resolve
           })
@@ -1215,28 +1180,16 @@ describe("AgentCoordinator codex integration", () => {
       content: "run something with a background task",
     })
 
-    // Wait for the active turn to be removed — this happens synchronously
-    // right after recordTurnFinished resolves, which is itself after
-    // appendMessage(result). Using this as the waitFor condition avoids a
-    // microtask-gap race: waiting for messages.some("result") fires one await
-    // before activeTurns.delete, so the assertion would see the turn still set.
     await waitFor(() => !coordinator.getActiveStatuses().has("chat-1"))
 
-    // The active turn should be removed even though the stream is still open.
-    // This is the key assertion: the UI should show idle (not "Running...")
-    // so the user can send new messages without hitting stop.
     expect(coordinator.getActiveStatuses().has("chat-1")).toBe(false)
-    // Result must have been appended (that's what triggers the removal).
     expect(store.messages.some((entry) => entry.kind === "result")).toBe(true)
     expect(store.turnFinishedCount).toBe(1)
 
-    // The stream is still open, so it should be draining
     expect(coordinator.getDrainingChatIds().has("chat-1")).toBe(true)
 
-    // Clean up the hanging stream
     resolveStream()
 
-    // After the stream closes, draining should stop
     await waitFor(() => !coordinator.getDrainingChatIds().has("chat-1"))
   })
 
@@ -1314,7 +1267,6 @@ describe("AgentCoordinator codex integration", () => {
     const interruptCalled = new Promise<void>((resolve) => {
       resolveInterrupt = resolve
     })
-    // interrupt() that hangs until we resolve it — simulating a slow SDK
     let interruptDone = false
 
     const fakeCodexManager = {
@@ -1333,7 +1285,6 @@ describe("AgentCoordinator codex integration", () => {
               mcpServers: [],
             }),
           }
-          // Stream that never ends (simulates the SDK hanging)
           await new Promise(() => {})
         }
 
@@ -1342,7 +1293,6 @@ describe("AgentCoordinator codex integration", () => {
           stream: stream(),
           interrupt: async () => {
             resolveInterrupt()
-            // Hang to simulate a slow interrupt
             await new Promise<void>((resolve) => {
               setTimeout(() => {
                 interruptDone = true
@@ -1372,30 +1322,21 @@ describe("AgentCoordinator codex integration", () => {
       content: "do something",
     })
 
-    // Wait for the turn to be running
     await waitFor(() => coordinator.getActiveStatuses().get("chat-1") === "running")
 
-    // Cancel — this should immediately remove from active turns
     const cancelPromise = coordinator.cancel("chat-1")
 
-    // The turn should be removed from activeTurns immediately,
-    // BEFORE interrupt() resolves
     await interruptCalled
     expect(coordinator.getActiveStatuses().has("chat-1")).toBe(false)
-    expect(interruptDone).toBe(false) // interrupt is still in progress
+    expect(interruptDone).toBe(false)
 
     await cancelPromise
 
-    // Verify only one "interrupted" message was appended
     const interruptedMessages = store.messages.filter((entry) => entry.kind === "interrupted")
     expect(interruptedMessages).toHaveLength(1)
   })
 
   test("a single cancel stops a turn whose provider session is still booting", async () => {
-    // The reported "Stop needs two clicks" bug: the ActiveTurn is registered
-    // only AFTER the provider session spawns, so a cancel landing during that
-    // window used to find nothing and return silently — the turn then started
-    // anyway and the user had to press Stop again.
     let releaseBoot!: () => void
     let signalBootStarted!: () => void
     const bootStarted = new Promise<void>((resolve) => { signalBootStarted = resolve })
@@ -1408,9 +1349,6 @@ describe("AgentCoordinator codex integration", () => {
       async startTurn(): Promise<HarnessTurn> {
         signalBootStarted()
         await bootGate
-        // A stream that records being consumed and then never settles. Written
-        // as a bare iterator rather than a generator so `streamStarted` flips
-        // exactly when someone starts iterating.
         const stream: AsyncIterable<never> = {
           [Symbol.asyncIterator]() {
             streamStarted = true
@@ -1440,12 +1378,9 @@ describe("AgentCoordinator codex integration", () => {
       content: "do something",
     })
 
-    // Mid-boot the chat must already report busy, or the composer would show
-    // Send and a second send could race in a concurrent turn.
     await bootStarted
     expect(coordinator.getActiveStatuses().get("chat-1")).toBe("starting")
 
-    // ONE cancel, while the provider is still spawning.
     await coordinator.cancel("chat-1")
     expect(coordinator.getActiveStatuses().has("chat-1")).toBe(false)
 
@@ -1453,8 +1388,6 @@ describe("AgentCoordinator codex integration", () => {
     await sendPromise
     await new Promise((resolve) => setTimeout(resolve, 20))
 
-    // The boot resolved after the cancel — it must tear itself down rather
-    // than registering and running.
     expect(coordinator.getActiveStatuses().has("chat-1")).toBe(false)
     expect(streamStarted).toBe(false)
     expect(turnClosed).toBe(true)
@@ -1512,14 +1445,12 @@ describe("AgentCoordinator codex integration", () => {
 
     await waitFor(() => coordinator.getActiveStatuses().get("chat-1") === "running")
 
-    // Fire multiple cancel calls concurrently (simulating repeated stop button clicks)
     await Promise.all([
       coordinator.cancel("chat-1"),
       coordinator.cancel("chat-1"),
       coordinator.cancel("chat-1"),
     ])
 
-    // Only one "interrupted" message should exist
     const interruptedMessages = store.messages.filter((entry) => entry.kind === "interrupted")
     expect(interruptedMessages).toHaveLength(1)
   })
@@ -1543,11 +1474,9 @@ describe("AgentCoordinator codex integration", () => {
               mcpServers: [],
             }),
           }
-          // Wait for cancel, then yield another event that should be ignored
           await new Promise<void>((resolve) => {
             resolveStream = resolve
           })
-          // This event arrives after cancel — should not be processed
           yield {
             type: "transcript" as const,
             entry: timestamped({
@@ -1587,7 +1516,6 @@ describe("AgentCoordinator codex integration", () => {
     const messageCountBefore = store.messages.filter((entry) => entry.kind === "assistant_text").length
     await coordinator.cancel("chat-1")
 
-    // Give the stream time to yield the extra event
     await new Promise((resolve) => setTimeout(resolve, 50))
 
     const postCancelTextMessages = store.messages.filter((entry) => entry.kind === "assistant_text")
@@ -1690,10 +1618,6 @@ describe("AgentCoordinator codex integration", () => {
   })
 
   test("cancel() parks the queue: a follow-up queued message does NOT auto-start after stop", async () => {
-    // Stop means stop. Auto-starting the next queued message put the chat
-    // straight back into "running", so Stop looked like it needed a second
-    // press. The queued message stays parked with its Send now / Remove
-    // actions instead.
     let releaseInterrupt!: () => void
     const interrupted = new Promise<void>((resolve) => {
       releaseInterrupt = resolve
@@ -1718,11 +1642,9 @@ describe("AgentCoordinator codex integration", () => {
             }),
           }
           if (startTurnCalls.length === 1) {
-            // First turn hangs until interrupted by cancel().
             await interrupted
             return
           }
-          // Second turn (auto-started from the queue) completes immediately.
           yield {
             type: "transcript" as const,
             entry: timestamped({
@@ -1769,7 +1691,6 @@ describe("AgentCoordinator codex integration", () => {
     await coordinator.cancel("chat-1")
     await new Promise((resolve) => setTimeout(resolve, 20))
 
-    // No second turn, and the queued message is still there for the user.
     expect(startTurnCalls).toEqual(["first prompt"])
     expect(store.queuedMessages).toHaveLength(1)
     expect(coordinator.getActiveStatuses().has("chat-1")).toBe(false)
@@ -1947,8 +1868,6 @@ describe("AgentCoordinator claude integration", () => {
         setModel: async () => {},
         setPermissionMode: async () => {},
         getSupportedCommands: async () => [],
-        // Turn never produces its own result — it hangs until cancelled,
-        // mirroring an in-flight SDK turn the user stops.
         sendPrompt: async () => {
           events.push({ type: "session_token" as const, sessionToken: "claude-session-1" })
           events.push({
@@ -1980,8 +1899,6 @@ describe("AgentCoordinator claude integration", () => {
     await coordinator.cancel("chat-1")
     await waitFor(() => store.messages.some((entry) => entry.kind === "interrupted"))
 
-    // The SDK's interrupt() resolves the query loop with a tail error result
-    // (subtype error_during_execution, empty text). This must be swallowed.
     events.push({
       type: "transcript" as const,
       entry: timestamped({
@@ -1993,7 +1910,6 @@ describe("AgentCoordinator claude integration", () => {
       }),
     })
 
-    // Give the stream loop a tick to process (and drop) the tail result.
     await new Promise((resolve) => setTimeout(resolve, 10))
 
     const interruptedEntries = store.messages.filter((entry) => entry.kind === "interrupted")
@@ -2027,10 +1943,6 @@ describe("AgentCoordinator claude integration", () => {
         setModel: async () => {},
         setPermissionMode: async () => {},
         getSupportedCommands: async () => [],
-        // Mirrors the SDK failing to resume a conversation the CLI never
-        // persisted: the doomed spawn first emits its own fresh session id,
-        // then an error result whose message lives only in debugRaw.errors
-        // (result text is empty).
         sendPrompt: async () => {
           events.push({ type: "session_token" as const, sessionToken: "poisoned-new" })
           events.push({
@@ -2058,9 +1970,6 @@ describe("AgentCoordinator claude integration", () => {
     })
     await waitFor(() => store.turnFailedCount === 1)
 
-    // Self-heal: the poisoned token (including the doomed spawn's own fresh
-    // id) is cleared and the dead session closed, so the next send spawns
-    // fresh instead of looping on "No conversation found" forever.
     expect(store.chat.sessionTokensByProvider.claude ?? null).toBeNull()
     expect(closeCount).toBeGreaterThanOrEqual(1)
 
@@ -2115,9 +2024,6 @@ describe("AgentCoordinator claude integration", () => {
     await coordinator.cancel("chat-1")
     await waitFor(() => store.messages.some((entry) => entry.kind === "interrupted"))
 
-    // A slow spawn can emit its session_token AFTER the user cancelled — the
-    // CLI may never persist that conversation to disk, so storing the token
-    // would poison the next resume ("No conversation found with session ID").
     events.push({ type: "session_token" as const, sessionToken: "poison-late" })
     events.push({
       type: "transcript" as const,
@@ -2352,11 +2258,9 @@ describe("AgentCoordinator claude integration", () => {
 
     ;(coordinator as any).sweepIdleClaudeSessions(100)
 
-    // chat-plain has no live workflow → reaped; chat-wf is protected.
     expect(closed).toEqual(["chat-plain"])
     expect(coordinator.getClaudeSessionMap().has("chat-wf")).toBe(true)
 
-    // Once the run is no longer active, the next sweep reaps it.
     activeByChat.set("chat-wf", false)
     ;(coordinator as any).sweepIdleClaudeSessions(200)
     expect(closed).toEqual(["chat-plain", "chat-wf"])
@@ -2422,8 +2326,6 @@ describe("AgentCoordinator claude integration", () => {
       }))
     }
 
-    // chat-old is the LRU candidate but hosts a running workflow, so the
-    // enforcer must skip it and evict the next-oldest plain session instead.
     put("chat-old", 1)
     put("chat-mid", 2)
     put("chat-new", 3)
@@ -2493,32 +2395,21 @@ describe("AgentCoordinator claude integration", () => {
 
     const session = coordinator.getClaudeSessionMap().get("chat-1") as any
     expect(session.backgroundTasks.has("bgABC123")).toBe(true)
-    // Armed by the launch regex only — no level snapshot arrived, so this
-    // session keeps the deadline + wake ladder verified below. This is the
-    // PTY path, and it must stay byte-for-byte the old behaviour
-    // (adr-20260808-...-level-signal-authoritative).
     expect(session.backgroundTasksLevelSourced).toBe(false)
     const deadline = session.backgroundTaskDeadlineAt as number
     expect(deadline).toBeGreaterThan(0)
 
-    // Session is long-idle (lastUsedAt old) but a background task is pending →
-    // the reaper must NOT close it before the deadline.
     session.lastUsedAt = 0
     ;(coordinator as any).sweepIdleClaudeSessions(deadline - 1)
     expect(coordinator.getClaudeSessionMap().has("chat-1")).toBe(true)
     expect(closeCount).toBe(0)
 
-    // Past the deadline the guard does NOT silently release: the sweep fires
-    // a watchdog wake (visible to the user) and re-arms the deadline
-    // (adr-20260801-background-task-wake-escalation).
     ;(coordinator as any).sweepIdleClaudeSessions(deadline + 1)
     expect(coordinator.getClaudeSessionMap().has("chat-1")).toBe(true)
     expect(closeCount).toBe(0)
     expect(session.backgroundTaskWakeCount).toBe(1)
     expect(session.backgroundTaskDeadlineAt).toBeGreaterThan(deadline)
 
-    // Only when the wake budget is exhausted AND the session is time-idle
-    // does the sweep close it — with a visible abandonment notice.
     session.backgroundTaskWakeCount = 3
     session.lastUsedAt = 0
     const finalDeadline = session.backgroundTaskDeadlineAt as number
@@ -2532,11 +2423,6 @@ describe("AgentCoordinator claude integration", () => {
   })
 
   test("an SDK level-sourced background task survives an indefinitely quiet sweep", async () => {
-    // The bug from chat 1ed924dd, end to end. "start the local dev" launched a
-    // vite dev server; the SDK level signal reported it live and never
-    // retracted it, but the 30-min deadline lapsed during the server's normal
-    // silence and Kanna injected a <background-task-check> prompt into the
-    // chat. With the level signal trusted, no clock can expire this guard.
     const store = createFakeStore()
     let closeCount = 0
     const coordinator = new AgentCoordinator({
@@ -2590,7 +2476,6 @@ describe("AgentCoordinator claude integration", () => {
     expect(session.backgroundTasks.has("ba35e96q4")).toBe(true)
     expect(session.backgroundTasksLevelSourced).toBe(true)
 
-    // Long past any deadline, with the session fully time-idle.
     session.lastUsedAt = 0
     ;(coordinator as any).sweepIdleClaudeSessions(Date.now() + 2 * 60 * 60_000)
 
@@ -2598,7 +2483,6 @@ describe("AgentCoordinator claude integration", () => {
     expect(closeCount).toBe(0)
     expect(session.backgroundTaskWakeCount).toBe(0)
     expect(session.backgroundTasks.has("ba35e96q4")).toBe(true)
-    // The sharpest assertion: the watchdog prompt never reached the chat.
     expect(JSON.stringify(store.messages)).not.toContain("<background-task-check>")
 
     coordinator.dispose()
@@ -2709,8 +2593,6 @@ describe("AgentCoordinator claude integration", () => {
       }))
     }
 
-    // chat-old is the LRU candidate but has a pending background task → the
-    // enforcer must skip it and evict the next-oldest plain session instead.
     put("chat-old", 1, { ids: ["bgX"], deadlineAt: Date.now() + 100_000 })
     put("chat-mid", 2)
     put("chat-new", 3)
@@ -2775,9 +2657,6 @@ describe("AgentCoordinator claude integration", () => {
     })
     await waitFor(() => store.turnFinishedCount === 2)
 
-    // Clearing here let the idle reaper silently kill a healthy watch ~10min
-    // after any user message. The send now refreshes the keep-alive window
-    // and restores the wake budget; pending ids stay until settle/snapshot.
     expect(session.backgroundTasks.size).toBe(1)
     expect(session.backgroundTaskDeadlineAt).toBeGreaterThanOrEqual(before + 100_000)
     expect(session.backgroundTaskWakeCount).toBe(0)
@@ -2788,8 +2667,6 @@ describe("AgentCoordinator claude integration", () => {
   test("settle notification removes its task id from the set and allows immediate reap", async () => {
     const store = createFakeStore()
     let closeCount = 0
-    // Expose the events queue so the test can push settle entries at a
-    // deterministic time (after the launch turn ends), avoiding setTimeout races.
     let sessionEvents!: AsyncEventQueue<any>
     const coordinator = new AgentCoordinator({
       store: store as never,
@@ -2865,11 +2742,9 @@ describe("AgentCoordinator claude integration", () => {
     expect(session.backgroundTasks.size).toBe(2)
     session.lastUsedAt = 0
 
-    // Session not reapable while tasks pending.
     ;(coordinator as any).sweepIdleClaudeSessions(Date.now())
     expect(coordinator.getClaudeSessionMap().has("chat-1")).toBe(true)
 
-    // Push first settle — set shrinks to 1, still not reapable.
     sessionEvents.push({
       type: "transcript" as const,
       entry: timestamped({
@@ -2884,7 +2759,6 @@ describe("AgentCoordinator claude integration", () => {
     ;(coordinator as any).sweepIdleClaudeSessions(Date.now())
     expect(coordinator.getClaudeSessionMap().has("chat-1")).toBe(true)
 
-    // Push second settle — set empty, deadline cleared, session reaps immediately.
     sessionEvents.push({
       type: "transcript" as const,
       entry: timestamped({
@@ -2904,9 +2778,6 @@ describe("AgentCoordinator claude integration", () => {
   })
 
   test("does not load slash commands from the CLI on a fresh Claude session", async () => {
-    // Slash commands come exclusively from the local disk catalog, served by
-    // the project-commands topic; a real turn's spawn must NOT call the CLI's
-    // getSupportedCommands nor record any CLI-derived command list.
     const events = new AsyncEventQueue<any>()
     const store = createFakeStore()
     let getSupportedCalled = false
@@ -3083,12 +2954,6 @@ describe("AgentCoordinator claude integration", () => {
   })
 
   test("Claude steer + result without echoed cancel still clears running state", async () => {
-    // Repro: sometimes the underlying SDK closes its stream cleanly on cancel
-    // and never emits a `result.subtype=cancelled` (which would map to an
-    // `interrupted` entry). When the next prompt's `result` arrives the
-    // session.pendingPromptSeqs queue still holds the orphaned cancelled seq,
-    // so the FIFO shift returns the wrong seq and `activeTurns` is never
-    // cleared — leaving the UI stuck on "Running...".
     const events = new AsyncEventQueue<any>()
     const prompts: string[] = []
 
@@ -3151,8 +3016,6 @@ describe("AgentCoordinator claude integration", () => {
 
     expect(prompts).toHaveLength(2)
 
-    // SDK never echoes a cancelled result for the first prompt — only the
-    // result for the steered second prompt arrives.
     events.push({
       type: "transcript" as const,
       entry: timestamped({
@@ -3248,7 +3111,6 @@ describe("AgentCoordinator claude integration", () => {
     const store = createFakeStore()
     store.chat.provider = "claude"
     store.chat.sessionTokensByProvider = { claude: "claude-tok" }
-    // Existing assistant reply so primer has content.
     store.messages.push(timestamped({ kind: "user_prompt", content: "first" }))
     store.messages.push(timestamped({ kind: "assistant_text", text: "first-reply" }))
 
@@ -3413,8 +3275,6 @@ describe("AgentCoordinator claude integration", () => {
     store.chat.provider = "claude"
     store.chat.sessionToken = "sess-huge"
     store.chat.sessionTokensByProvider = { claude: "sess-huge" }
-    // Seed a usage snapshot that sits above the auto-compact threshold so
-    // the next send() must inject /compact first.
     store.messages.push(timestamped({
       kind: "context_window_updated",
       usage: { usedTokens: 180_000, maxTokens: 200_000, compactsAutomatically: false },
@@ -3435,8 +3295,6 @@ describe("AgentCoordinator claude integration", () => {
         getSupportedCommands: async () => [],
         sendPrompt: async (content: string) => {
           prompts.push(content)
-          // Emit a successful result so the turn ends and any queued message
-          // (the user's real prompt) dequeues + runs.
           events.push({
             type: "transcript" as const,
             entry: timestamped({
@@ -3463,8 +3321,6 @@ describe("AgentCoordinator claude integration", () => {
 
     expect(prompts[0]).toBe("/compact")
     expect(prompts[1]).toBe("now refactor the auth module")
-    // User's original prompt was queued during compact, then dequeued by
-    // maybeStartNextQueuedMessage after /compact succeeded.
     expect(store.queuedMessages.length).toBe(0)
 
     events.close()
@@ -3530,9 +3386,6 @@ describe("AgentCoordinator claude integration", () => {
 
     const store = createFakeStore()
     store.chat.provider = "claude"
-    // Usage is above the auto-compact threshold, so the ONLY thing that can
-    // suppress injection is the persisted circuit breaker on the chat record
-    // (mirrors a doomed chat whose breaker survived a server restart).
     store.chat.compactFailureCount = 3
     store.messages.push(timestamped({
       kind: "context_window_updated",
@@ -3675,9 +3528,6 @@ describe("AgentCoordinator claude integration", () => {
               result: content === "/compact" ? "compacted" : "done",
             }),
           })
-          // Hold the /compact turn open so we can probe dequeue() mid-flight.
-          // sendPrompt must still resolve so startTurnForChat returns; defer
-          // the result event until release.
           if (content === "/compact") {
             void compactGate.then(pushResult)
             return
@@ -3707,7 +3557,6 @@ describe("AgentCoordinator claude integration", () => {
       })
     ).rejects.toThrow(/compact is running/)
 
-    // Queued message must survive the rejected dequeue.
     expect(store.queuedMessages.length).toBe(1)
 
     releaseCompact()
@@ -3718,12 +3567,6 @@ describe("AgentCoordinator claude integration", () => {
     events.close()
   })
 
-  // Regression (adr-20260608-pty-compact-boundary-dequeue-finalize): under the
-  // PTY driver the interactive `/compact` writes a `compact_boundary` line but
-  // NO terminal `result`/`turn_duration`, so the compact turn never finalized —
-  // its compaction-tagged active turn lingered forever, permanently
-  // wedging `dequeue()` and the queued-message drain. The boundary must now
-  // finalize the compact turn and drain the queue.
   test("PTY: compact_boundary finalizes the proactive compact turn and drains the queue", async () => {
     const events = new AsyncEventQueue<any>()
     const prompts: string[] = []
@@ -3741,8 +3584,6 @@ describe("AgentCoordinator claude integration", () => {
     const coordinator = new AgentCoordinator({
       store: store as never,
       onStateChange: () => {},
-      // Force the PTY driver so the compact_boundary finalize branch is active;
-      // the PTY path uses the injected startClaudeSessionPTY (not the SDK one).
       getAppSettingsSnapshot: () => ({ claudeDriver: { preference: "pty" } }),
       startClaudeSession: async () => {
         throw new Error("SDK driver must not be used under PTY preference")
@@ -3760,15 +3601,12 @@ describe("AgentCoordinator claude integration", () => {
         sendPrompt: async (content: string) => {
           prompts.push(content)
           if (content === "/compact") {
-            // PTY `/compact` emits ONLY a compact_boundary — never a result.
-            // Defer it past the mid-flight dequeue probe below.
             void boundaryGate.then(() => events.push({
               type: "transcript" as const,
               entry: timestamped({ kind: "compact_boundary" }),
             }))
             return
           }
-          // The real prompt (drained after compact) completes normally.
           events.push({
             type: "transcript" as const,
             entry: timestamped({
@@ -3795,7 +3633,6 @@ describe("AgentCoordinator claude integration", () => {
     expect(store.queuedMessages.length).toBe(1)
     const queuedId = store.queuedMessages[0].id
 
-    // Bug repro: while the compact turn is open, dequeue is blocked.
     await expect(
       coordinator.dequeue({
         type: "message.dequeue",
@@ -3804,26 +3641,16 @@ describe("AgentCoordinator claude integration", () => {
       })
     ).rejects.toThrow(/compact is running/)
 
-    // compact_boundary arrives (no result follows, as in real PTY).
     releaseBoundary()
 
-    // The fix finalizes the compact turn on the boundary and drains the queue:
-    // the real prompt runs and the queued message is gone.
     await waitFor(() => prompts.length >= 2, 2000)
     expect(prompts).toEqual(["/compact", "user's real prompt"])
     expect(store.queuedMessages.length).toBe(0)
-    // Both turns finalized (compact via boundary, real prompt via result).
     await waitFor(() => store.turnFinishedCount >= 2, 2000)
 
     events.close()
   })
 
-  // PTY bakes the loop tool-block into --disallowedTools at spawn time, so a
-  // flip of the armed state (setup_loop arms, stop_loop / user takeover
-  // disarms) MUST respawn the session at the next turn boundary — otherwise
-  // the block goes stale (armed session keeps tools blocked after disarm, and
-  // vice versa). SDK re-evaluates isLoopArmed() per tool call and never
-  // respawns for this.
   test("PTY: loop armed-state flip respawns the session; steady state reuses it", async () => {
     const store = createFakeStore()
     store.chat.provider = "claude"
@@ -3869,8 +3696,6 @@ describe("AgentCoordinator claude integration", () => {
       },
     })
 
-    // Pin the armed state to the test toggle — the send() takeover path would
-    // otherwise disarm before the spawn check ever sees an armed loop.
     coordinator.isLoopArmed = () => (armed ? { subagentId: "sa-1", prompt: "loop prompt", armedAt: 0, consecutiveFailures: 0, verifyCommand: null, workdirAbs: null, trackingFileRel: null } : null)
 
     const sendTurn = async (content: string, expectedFinished: number) => {
@@ -3884,24 +3709,19 @@ describe("AgentCoordinator claude integration", () => {
       await waitFor(() => store.turnFinishedCount >= expectedFinished, 2000)
     }
 
-    // Turn 1 spawns armed.
     await sendTurn("turn 1 (armed)", 1)
     expect(spawnCount).toBe(1)
 
-    // Steady state (still armed): session reused.
     await sendTurn("turn 2 (armed)", 2)
     expect(spawnCount).toBe(1)
 
-    // Disarm flip: must respawn so --disallowedTools is dropped.
     armed = false
     await sendTurn("turn 3 (disarmed)", 3)
     expect(spawnCount).toBe(2)
 
-    // Steady state (disarmed): session reused.
     await sendTurn("turn 4 (disarmed)", 4)
     expect(spawnCount).toBe(2)
 
-    // Arm flip: must respawn so --disallowedTools is applied.
     armed = true
     await sendTurn("turn 5 (armed)", 5)
     expect(spawnCount).toBe(3)
@@ -3909,9 +3729,6 @@ describe("AgentCoordinator claude integration", () => {
     for (const q of queues) q.close()
   })
 
-  // SDK bakes options.disallowedTools at spawn too (filter-at-spawn — the
-  // model never sees the blocked tools), so the armed-state flip must respawn
-  // SDK sessions just like PTY ones.
   test("SDK: loop armed-state flip respawns the session; steady state reuses it", async () => {
     const store = createFakeStore()
     store.chat.provider = "claude"
@@ -4183,7 +4000,6 @@ function createFakeStore() {
       return Object.fromEntries(this.subagentRuns.entries())
     },
     *runningSubagentRuns() {
-      // Empty stub — fake store has no subagent runs; recoverInterruptedRuns is a no-op.
     },
   }
 }
@@ -4224,7 +4040,6 @@ describe("AgentCoordinator rate-limit detection (manual mode)", () => {
         setPermissionMode: async () => {},
         getSupportedCommands: async () => [],
         sendPrompt: async () => {
-          // Throw after sendPrompt is called — activeTurns is already set by this point
           events.throw(limitErr)
         },
       }),
@@ -4302,7 +4117,6 @@ describe("AgentCoordinator auto-continue firing", () => {
     const limitErr = makeLimitError()
     const events = new AsyncEventQueue<any>()
 
-    // FakeClock lets us manually advance time to trigger armed schedules.
     class FakeClock {
       private currentTime = 0
       private readonly timers = new Map<number, { fn: () => void; fireAt: number }>()
@@ -4370,18 +4184,13 @@ describe("AgentCoordinator auto-continue firing", () => {
       autoResumeOnRateLimit: true,
     })
 
-    // Wait for auto_continue_accepted to be stored (Task 12 already handles this).
     await waitFor(() => store.getAutoContinueEvents("chat-1").length >= 1 && store.turnFailedCount >= 1)
 
     const acceptedEvent = store.getAutoContinueEvents("chat-1")[0]
     expect(acceptedEvent.kind).toBe("auto_continue_accepted")
 
-    // The limit error header sets resetAt = new Date(5_000).toISOString() → 5000 ms from epoch.
-    // Advancing the clock past that fires the schedule.
     clock.advance(10_000)
 
-    // Wait for the fired event to appear (auto-continue fallback "continue" is
-    // intentionally NOT appended as a user_prompt to avoid the noisy bubble).
     await waitFor(
       () => store.getAutoContinueEvents("chat-1").some((e) => e.kind === "auto_continue_fired")
     )
@@ -4393,8 +4202,6 @@ describe("AgentCoordinator auto-continue firing", () => {
       expect(firedEvent.scheduleId).toBe(acceptedEvent.scheduleId)
     }
 
-    // The fallback "continue" prompt must NOT appear as a user_prompt entry —
-    // it would show as a confusing "auto-sent" bubble in the UI.
     const continuePrompts = store.messages.filter(
       (m) => m.kind === "user_prompt" && m.content === "continue"
     )
@@ -4419,7 +4226,6 @@ describe("AgentCoordinator.deliverSubagentToMain (notification-driven /clear)", 
       startClaudeSession: async () => { throw new Error("not needed") },
     })
 
-    // seed the chat with a non-null claude session token so we can verify it is wiped
     await store.setSessionTokenForProvider("chat-1", "claude", "prior-session-uuid")
 
     await (coordinator as unknown as { deliverSubagentToMain: DeliverFn }).deliverSubagentToMain(
@@ -4428,16 +4234,11 @@ describe("AgentCoordinator.deliverSubagentToMain (notification-driven /clear)", 
       { status: "completed", runId: "run-bg", text: "the answer" },
     )
 
-    // Session token wiped
     expect(store.chat.sessionTokensByProvider.claude ?? null).toBeNull()
 
-    // context_cleared transcript entry appended
     const cleared = store.messages.filter((m) => m.kind === "context_cleared")
     expect(cleared).toHaveLength(1)
 
-    // Auto-continue event with subagent_background source + the structured
-    // <task-notification> XML (Claude Code's LocalAgentTask format). Un-armed
-    // ad-hoc deliveries carry the subagent's <result> body.
     const events = store.getAutoContinueEvents("chat-1")
     expect(events).toHaveLength(1)
     const ev = events[0]
@@ -4448,8 +4249,6 @@ describe("AgentCoordinator.deliverSubagentToMain (notification-driven /clear)", 
       expect(ev.prompt).toContain("<task-id>run-bg</task-id>")
       expect(ev.prompt).toContain("<status>completed</status>")
       expect(ev.prompt).toContain("<result>the answer</result>")
-      // Ad-hoc delivery on a chat that never armed a loop: no tombstone, so the
-      // prompt names no tracking file rather than guessing "PROGRESS.md".
       expect(ev.prompt).not.toContain("PROGRESS.md")
       expect(ev.prompt).toContain("context has been cleared")
     }
@@ -4491,7 +4290,6 @@ describe("AgentCoordinator.deliverSubagentToMain (notification-driven /clear)", 
       }),
     })
 
-    // Complete one turn so a warm SDK session lingers in claudeSessions.
     await coordinator.send({
       type: "chat.send",
       chatId: "chat-1",
@@ -4508,8 +4306,6 @@ describe("AgentCoordinator.deliverSubagentToMain (notification-driven /clear)", 
       { status: "completed", runId: "run-bg", text: "the answer" },
     )
 
-    // Idle warm session torn down: without this, the next turn would reuse
-    // the in-band SDK session and the documented /clear would be a no-op.
     expect(closeCount).toBeGreaterThanOrEqual(1)
     expect(store.chat.sessionTokensByProvider.claude ?? null).toBeNull()
 
@@ -4518,7 +4314,6 @@ describe("AgentCoordinator.deliverSubagentToMain (notification-driven /clear)", 
 
   test("armed loop: notification omits <result> (PROGRESS.md is the contract) and the full loop prompt follows", async () => {
     const store = createFakeStore()
-    // Pre-arm the loop via store events so isLoopArmed() returns the armed state.
     store.autoContinueEvents.push({
       v: AUTO_CONTINUE_EVENT_VERSION,
       timestamp: 0,
@@ -4549,7 +4344,6 @@ describe("AgentCoordinator.deliverSubagentToMain (notification-driven /clear)", 
       expect(ev.prompt).toContain("<task-id>run-loop</task-id>")
       expect(ev.prompt).not.toContain("<result>")
       expect(ev.prompt).not.toContain("iteration output that must not leak")
-      // The full loop discipline prompt is re-injected after the notification.
       expect(ev.prompt).toContain("LOOP DISCIPLINE PROMPT")
     }
   })
@@ -4573,7 +4367,6 @@ describe("AgentCoordinator.deliverSubagentToMain (notification-driven /clear)", 
       },
     )
 
-    // /clear happens regardless of subagent outcome
     const cleared = store.messages.filter((m) => m.kind === "context_cleared")
     expect(cleared).toHaveLength(1)
 
@@ -4603,7 +4396,6 @@ describe("AgentCoordinator.deliverSubagentToMain (notification-driven /clear)", 
       { status: "completed", runId: "run-x", text: "irrelevant" },
     )
 
-    // No side effects on unknown chat
     expect(store.getAutoContinueEvents("does-not-exist")).toHaveLength(0)
     expect(store.messages.filter((m) => m.kind === "context_cleared")).toHaveLength(0)
   })
@@ -4625,7 +4417,6 @@ describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
     }
   }
 
-  /** Coordinator wired to a real temp project root, as the setupLoop tests use. */
   async function makeSetupLoopCoordinator(
     projectRoot: string,
     over: { triggerMode?: "auto" | "manual" } = {},
@@ -4649,8 +4440,6 @@ describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
     const projectRoot = await mkdtemp(path.join(tmpdir(), "kanna-setup-loop-"))
     try {
       const store = createFakeStore()
-      // Redirect the fake's getProject to point at a real tmp cwd so the
-      // IO adapter has somewhere to write.
       store.getProject = () => ({ id: "project-1", localPath: projectRoot }) as never
       await store.setSessionTokenForProvider("chat-1", "claude", "prior")
 
@@ -4675,17 +4464,14 @@ describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
       expect(result.trackingFileRel).toBe("PROGRESS.md")
       expect(result.created).toBe(true)
 
-      // Skeleton written to disk
       const written = await Bun.file(path.join(projectRoot, "PROGRESS.md")).text()
       expect(written).toContain("eslint --max-warnings=0 passes")
       expect(written).toContain("bun run lint")
       expect(written).toContain("start with src/client")
 
-      // Main /clear applied
       expect(store.chat.sessionTokensByProvider.claude ?? null).toBeNull()
       expect(store.messages.filter((m) => m.kind === "context_cleared")).toHaveLength(1)
 
-      // Two auto-continue events: loop_armed (durable state) + the accepted schedule.
       const events = store.getAutoContinueEvents("chat-1")
       expect(events.filter((e) => e.kind === "loop_armed")).toHaveLength(1)
       const ev = events.find((e) => e.kind === "auto_continue_accepted")
@@ -4701,9 +4487,6 @@ describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
     }
   })
 
-  // The false-green incident: a grep/file-existence oracle armed silently and
-  // later declared GOAL MET over an unfinished feature. The audit must say so
-  // in the arm result, while the operator can still tighten the command.
   test("a grep-shaped verify script arms WITH oracle audit warnings", async () => {
     const projectRoot = await mkdtemp(path.join(tmpdir(), "kanna-setup-loop-"))
     try {
@@ -4763,8 +4546,6 @@ describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
           setModel: async () => {},
           setPermissionMode: async () => {},
           getSupportedCommands: async () => [],
-          // The turn hangs mid-stream — setup_loop is called from INSIDE a
-          // running turn, so the session keeps streaming after the /clear.
           sendPrompt: async () => {
             events.push({ type: "session_token" as const, sessionToken: "pre-clear-token" })
             events.push({
@@ -4799,9 +4580,6 @@ describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
       if (!result.ok) throw new Error(result.errors.join(", "))
       expect(store.chat.sessionTokensByProvider.claude ?? null).toBeNull()
 
-      // The still-streaming turn emits another session_token for the OLD
-      // conversation (observed 121ms after the wipe in the field) — it must
-      // not resurrect the cleared token.
       events.push({ type: "session_token" as const, sessionToken: "pre-clear-token" })
       await new Promise((resolve) => setTimeout(resolve, 10))
 
@@ -4837,13 +4615,11 @@ describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
       expect(result.reconcileActions).toContain('inserted "## Goal"')
       expect(result.reconcileActions).toContain('inserted "## Next chunk"')
 
-      // Original prose preserved as preamble; canonical sections inserted after it
       const content = await Bun.file(abs).text()
       expect(content).toContain("user-authored content")
       expect(content).toContain("## Goal")
       expect(content).toContain("## Verify command")
       expect(content).toContain("## Next chunk")
-      // loop_armed + auto_continue_accepted
       expect(store.getAutoContinueEvents("chat-1")).toHaveLength(2)
     } finally {
       await rm(projectRoot, { recursive: true, force: true })
@@ -4863,14 +4639,12 @@ describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
       })
       const input = { goal: "g", verifyCommand: "false", subagentId: "sa-1" }
 
-      // First call creates the canonical skeleton …
       const first = await coordinator.setupLoop({ chatId: "chat-1", input })
       if (!first.ok) throw new Error(first.errors.join(", "))
       expect(first.created).toBe(true)
       const abs = path.join(projectRoot, "PROGRESS.md")
       const written = await Bun.file(abs).text()
 
-      // … re-arming with the same inputs leaves it byte-identical.
       const second = await coordinator.setupLoop({ chatId: "chat-1", input })
       if (!second.ok) throw new Error(second.errors.join(", "))
       expect(second.created).toBe(false)
@@ -4916,8 +4690,6 @@ describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
     }
   })
 
-  // An oracle that already passes cannot distinguish done from not-done, so a
-  // loop armed on it declares GOAL MET on iteration one having done nothing.
   test("refuses to arm when the verify command already exits 0", async () => {
     const projectRoot = await mkdtemp(path.join(tmpdir(), "kanna-setup-loop-"))
     try {
@@ -4929,7 +4701,6 @@ describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
       expect(result.ok).toBe(false)
       if (result.ok) throw new Error("expected refusal")
       expect(result.errors[0]).toContain("already exits 0")
-      // Nothing was armed and no tracking file was written.
       expect(await Bun.file(path.join(projectRoot, "PROGRESS.md")).exists()).toBe(false)
     } finally {
       await rm(projectRoot, { recursive: true, force: true })
@@ -4990,7 +4761,6 @@ describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
       if (result.ok) throw new Error("expected reject")
       expect(result.errors.length).toBeGreaterThanOrEqual(3)
 
-      // No side effects on invalid input
       expect(store.messages.filter((m) => m.kind === "context_cleared")).toHaveLength(0)
       expect(store.getAutoContinueEvents("chat-1")).toHaveLength(0)
     } finally {
@@ -5015,10 +4785,7 @@ describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
   })
 })
 
-// ── AgentCoordinator: acceptAutoContinue / rescheduleAutoContinue / cancelAutoContinue / listLiveSchedules ──
 
-// Minimal coordinator factory for Task 14 auto-continue tests; intentionally omits
-// codexManager and generateTitle — do not use for tests that need provider flows.
 function makeCoordinatorWithStore(extraStoreFields: Partial<ReturnType<typeof createFakeStore>> = {}) {
   const store = { ...createFakeStore(), ...extraStoreFields }
   const coordinator = new AgentCoordinator({
@@ -5033,7 +4800,6 @@ function makeCoordinatorWithStore(extraStoreFields: Partial<ReturnType<typeof cr
 describe("AgentCoordinator.acceptAutoContinue", () => {
   test("happy path: appends auto_continue_accepted with source 'user' for a proposed schedule", async () => {
     const { store, coordinator } = makeCoordinatorWithStore()
-    // Seed a proposed event
     const scheduleId = "sched-1"
     const proposedEvent: AutoContinueEvent = {
       v: 3,
@@ -5063,7 +4829,6 @@ describe("AgentCoordinator.acceptAutoContinue", () => {
   test("guard: rejects when schedule state is not 'proposed'", async () => {
     const { store, coordinator } = makeCoordinatorWithStore()
     const scheduleId = "sched-cancel"
-    // Seed a proposed + cancelled event so state = "cancelled"
     store.autoContinueEvents.push({
       v: 3,
       kind: "auto_continue_proposed",
@@ -5114,7 +4879,6 @@ describe("AgentCoordinator.rescheduleAutoContinue", () => {
   test("happy path: appends auto_continue_rescheduled for a scheduled schedule", async () => {
     const { store, coordinator } = makeCoordinatorWithStore()
     const scheduleId = "sched-sched"
-    // Seed proposed + accepted = state "scheduled"
     store.autoContinueEvents.push({
       v: 3,
       kind: "auto_continue_proposed",
@@ -5152,7 +4916,6 @@ describe("AgentCoordinator.rescheduleAutoContinue", () => {
   test("guard: rejects when schedule state is not 'scheduled'", async () => {
     const { store, coordinator } = makeCoordinatorWithStore()
     const scheduleId = "sched-prop"
-    // Proposed only = state "proposed"
     store.autoContinueEvents.push({
       v: 3,
       kind: "auto_continue_proposed",
@@ -5231,7 +4994,6 @@ describe("AgentCoordinator.cancelAutoContinue", () => {
   test("guard: silently no-ops when schedule state is outside proposed|scheduled (does not throw, no event appended)", async () => {
     const { store, coordinator } = makeCoordinatorWithStore()
     const scheduleId = "sched-fired"
-    // Seed a fired schedule
     store.autoContinueEvents.push({
       v: 3,
       kind: "auto_continue_fired",
@@ -5241,10 +5003,8 @@ describe("AgentCoordinator.cancelAutoContinue", () => {
 
     })
 
-    // Should not throw
     await coordinator.cancelAutoContinue("chat-1", scheduleId, "user")
 
-    // No cancelled event appended
     const cancelled = store.autoContinueEvents.filter((e) => e.kind === "auto_continue_cancelled")
     expect(cancelled).toHaveLength(0)
   })
@@ -5253,13 +5013,11 @@ describe("AgentCoordinator.cancelAutoContinue", () => {
 describe("AgentCoordinator.listLiveSchedules", () => {
   test("returns scheduleIds for proposed and scheduled states only", async () => {
     const { store, coordinator } = makeCoordinatorWithStore()
-    // proposed
     store.autoContinueEvents.push({
       v: 3, kind: "auto_continue_proposed", timestamp: Date.now(),
       chatId: "chat-1", scheduleId: "sched-proposed",
       detectedAt: Date.now(), resetAt: Date.now() + 10_000, tz: "UTC",
     })
-    // scheduled
     store.autoContinueEvents.push({
       v: 3, kind: "auto_continue_proposed", timestamp: Date.now(),
       chatId: "chat-1", scheduleId: "sched-scheduled",
@@ -5271,7 +5029,6 @@ describe("AgentCoordinator.listLiveSchedules", () => {
       scheduledAt: Date.now() + 30_000, tz: "UTC", source: "user",
       resetAt: Date.now() + 10_000, detectedAt: Date.now(),
     })
-    // fired (should not appear)
     store.autoContinueEvents.push({
       v: 3, kind: "auto_continue_fired", timestamp: Date.now(),
       chatId: "chat-1", scheduleId: "sched-fired",
@@ -5353,7 +5110,6 @@ describe("AgentCoordinator subagent mention gating", () => {
             rawInput: { questions: [{ id: "q1", question: "color?" }] },
           },
         }
-        // Capture the promise — do NOT await; stream will block until it resolves
         toolRequestPromise = args.onToolRequest(toolRequest)
         async function* stream() {
           const result = await toolRequestPromise!
@@ -5388,16 +5144,13 @@ describe("AgentCoordinator subagent mention gating", () => {
       prompt: "go",
     })
 
-    // Wait for the pending tool event to be appended by the orchestrator
     await waitFor(() => store.subagentEvents.some((e: any) => e.type === "subagent_tool_pending"))
 
-    // The promise must still be pending (not yet resolved)
     let resolvedEarly = false
     void toolRequestPromise!.then(() => { resolvedEarly = true })
-    await Promise.resolve() // flush microtasks
+    await Promise.resolve()
     expect(resolvedEarly).toBe(false)
 
-    // Verify appendSubagentEvent was called with the correct pending event
     const pendingEvent = store.subagentEvents.find((e: any) => e.type === "subagent_tool_pending")
     expect(pendingEvent).toMatchObject({
       type: "subagent_tool_pending",
@@ -5407,11 +5160,9 @@ describe("AgentCoordinator subagent mention gating", () => {
       input: { questions: [{ id: "q1", question: "color?" }] },
     })
 
-    // Get the runId from the run_started event (getSubagentRuns has it keyed by runId)
     const runId = Object.keys(store.getSubagentRuns())[0]
     expect(runId).toBeDefined()
 
-    // Resolve via respondSubagentTool
     await coordinator.respondSubagentTool({
       type: "chat.respondSubagentTool",
       chatId: "chat-1",
@@ -5448,7 +5199,6 @@ describe("AgentCoordinator subagent mention gating", () => {
             rawInput: { plan: "do X" },
           },
         }
-        // Capture the promise — do NOT await; stream will block until it resolves
         toolRequestPromise = args.onToolRequest(toolRequest)
         async function* stream() {
           const result = await toolRequestPromise!
@@ -5483,16 +5233,13 @@ describe("AgentCoordinator subagent mention gating", () => {
       prompt: "go",
     })
 
-    // Wait for the pending tool event to be appended by the orchestrator
     await waitFor(() => store.subagentEvents.some((e: any) => e.type === "subagent_tool_pending"))
 
-    // The promise must still be pending (not yet resolved)
     let resolvedEarly = false
     void toolRequestPromise!.then(() => { resolvedEarly = true })
-    await Promise.resolve() // flush microtasks
+    await Promise.resolve()
     expect(resolvedEarly).toBe(false)
 
-    // Verify appendSubagentEvent was called with the correct pending event
     const pendingEvent = store.subagentEvents.find((e: any) => e.type === "subagent_tool_pending")
     expect(pendingEvent).toMatchObject({
       type: "subagent_tool_pending",
@@ -5502,11 +5249,9 @@ describe("AgentCoordinator subagent mention gating", () => {
       input: { plan: "do X" },
     })
 
-    // Get the runId from the run_started event (getSubagentRuns has it keyed by runId)
     const runId = Object.keys(store.getSubagentRuns())[0]
     expect(runId).toBeDefined()
 
-    // Resolve via respondSubagentTool with confirmed:true
     await coordinator.respondSubagentTool({
       type: "chat.respondSubagentTool",
       chatId: "chat-1",
@@ -5545,14 +5290,9 @@ describe("AgentCoordinator subagent mention gating", () => {
         }
         toolRequestPromise = args.onToolRequest(toolRequest)
         async function* stream() {
-          // Block until the resolver Promise settles (resolves OR rejects).
-          // Without the cancel-rejection fix, this awaits forever and the
-          // test times out instead of asserting the rejection.
           try {
             await toolRequestPromise!
           } catch {
-            // Expected on cancel; surface as a result so the stream closes
-            // cleanly and the harness can shut down.
           }
           yield { type: "transcript" as const, entry: timestamped({ kind: "result", subtype: "success" as const }) }
         }
@@ -5583,18 +5323,13 @@ describe("AgentCoordinator subagent mention gating", () => {
     })
     await waitFor(() => store.subagentEvents.some((e: any) => e.type === "subagent_tool_pending"))
 
-    // Sanity: the Promise must be pending before cancel.
     let settledEarly = false
     void toolRequestPromise!.then(() => { settledEarly = true }, () => { settledEarly = true })
     await Promise.resolve()
     expect(settledEarly).toBe(false)
 
-    // Cancel the chat. Without the fix this leaves the resolver in the map
-    // forever and the SDK's canUseTool Promise hangs — wedging the session.
     await coordinator.cancel("chat-1")
 
-    // The pending Promise must reject (or resolve to a sentinel) so the
-    // SDK harness can unwind.
     await expect(toolRequestPromise!).rejects.toThrow()
   }, 10_000)
 
@@ -5606,7 +5341,6 @@ describe("AgentCoordinator subagent mention gating", () => {
       getSubagents: () => [],
       getAppSettingsSnapshot: () => ({}),
     })
-    // No prior pending — must not throw.
     await coordinator.respondSubagentTool({
       type: "chat.respondSubagentTool",
       chatId: "chat-1",
@@ -5626,8 +5360,6 @@ describe("AgentCoordinator subagent mention gating", () => {
       getAppSettingsSnapshot: () => ({}),
       startClaudeSession: async () => {
         async function* stream() {
-          // Block indefinitely; the orchestrator's abort race resolves the
-          // run via USER_CANCELLED once cancelSubagentRun fires.
           await new Promise<void>(() => {})
           yield { type: "transcript" as const, entry: timestamped({ kind: "result", subtype: "success" as const }) }
         }
@@ -5667,12 +5399,10 @@ describe("AgentCoordinator subagent mention gating", () => {
     await waitFor(() => store.subagentEvents.some((e: any) =>
       e.type === "subagent_run_failed" && e.runId === runId && e.error.code === "USER_CANCELLED",
     ))
-    // emitStateChange fires from onRunTerminal hook.
     expect(emits).toContain("chat-1")
   }, 10_000)
 })
 
-// ── canUseTool routing tests ───────────────────────────────────────────────────
 
 describe("buildTaskNotification", () => {
   test("completed with result: full XML with truncated body", () => {
@@ -5687,7 +5417,6 @@ describe("buildTaskNotification", () => {
     expect(xml).toContain("<status>completed</status>")
     expect(xml).toContain("<result>")
     expect(xml).toContain("[... truncated]")
-    // 4k cap + fixed envelope — never balloons the re-entry prompt.
     expect(xml.length).toBeLessThan(4_500)
   })
 
@@ -5801,7 +5530,6 @@ describe("buildCanUseTool", () => {
       { toolUseID: "tool-use-1", requestId: "req-tool-use-1", signal: new AbortController().signal },
     )
 
-    // Legacy path must be taken: onToolRequest called once, toolCallback NOT called
     expect(onToolRequestCallCount).toBe(1)
     expect(toolCallbackSubmitCallCount).toBe(0)
     expect(result.behavior).toBe("allow")
@@ -5852,7 +5580,6 @@ describe("buildCanUseTool", () => {
         { toolUseID: "tool-use-2", requestId: "req-tool-use-2", signal: new AbortController().signal },
       )
 
-      // Flag-on path: toolCallback called once, legacy onToolRequest NOT called
       expect(toolCallbackSubmitCallCount).toBe(1)
       expect(onToolRequestCallCount).toBe(0)
       expect(result.behavior).toBe("allow")
@@ -5914,7 +5641,6 @@ describe("buildCanUseTool", () => {
           onToolRequestCallCount++
           return { answers: { q1: "fallback-answer" } }
         },
-        // toolCallback intentionally omitted
       })
 
       await canUseTool(
@@ -5953,7 +5679,6 @@ describe("buildCanUseTool", () => {
   test("E2E: KANNA_MCP_TOOL_CALLBACKS=1 — AskUserQuestion routes through tool-callback and SDK receives updated input via answer", async () => {
     process.env.KANNA_MCP_TOOL_CALLBACKS = "1"
     try {
-      // Real EventStore + real ToolCallbackService + real buildCanUseTool.
       const tempDir = await mkdtemp(path.join(tmpdir(), "kanna-e2e-"))
       const store = new EventStore(tempDir)
       await store.initialize()
@@ -5967,7 +5692,6 @@ describe("buildCanUseTool", () => {
         localPath: "/tmp/project",
         chatId: "c-1",
         sessionToken: "s-1",
-        // Legacy callback should NOT fire on flag-on path.
         onToolRequest: async () => { throw new Error("legacy path called unexpectedly") },
         toolCallback: svc,
         chatPolicy: POLICY_DEFAULT,
@@ -5985,14 +5709,12 @@ describe("buildCanUseTool", () => {
         }],
       }
 
-      // Kick off the canUseTool call (pending, awaits external answer).
       const resultPromise = canUseTool("AskUserQuestion", askUserQuestionInput, {
         toolUseID: "tu-e2e",
         suggestions: [],
         signal: new AbortController().signal,
       } as any)
 
-      // Find the pending record and answer it.
       const pending = store.listPendingToolRequests("c-1")
       expect(pending).toHaveLength(1)
       await svc.answer(pending[0].id, {
@@ -6012,7 +5734,6 @@ describe("buildCanUseTool", () => {
   })
 })
 
-// ── AgentCoordinator.chatPolicy plumbing ──────────────────────────────────────
 
 describe("AgentCoordinator chatPolicy plumbing", () => {
   test("plumbs chatPolicy through to startClaudeSession", async () => {
@@ -6072,7 +5793,6 @@ describe("AgentCoordinator chatPolicy plumbing", () => {
   })
 })
 
-// ── AgentCoordinator PTY driver selection ──────────────────────────────────────
 
 describe("AgentCoordinator PTY driver selection", () => {
   test("AgentCoordinator selects PTY driver when KANNA_CLAUDE_DRIVER=pty", async () => {
@@ -6139,7 +5859,6 @@ describe("AgentCoordinator PTY driver selection", () => {
   })
 })
 
-// ── Late tool request (SDK self-resume) regression ─────────────────────────────
 
 describe("AgentCoordinator late tool request", () => {
   test("onToolRequest fired after result event parks in the slot — no ghost turn — and respondTool answers it", async () => {
@@ -6445,11 +6164,9 @@ describe("AgentCoordinator.dispose — awaits session closed promises", () => {
       let disposed = false
       const disposePromise = coordinator.dispose().then(() => { disposed = true })
 
-      // dispose() should not have resolved yet — session is still open
       await new Promise((r) => setTimeout(r, 20))
       expect(disposed).toBe(false)
 
-      // Resolve the session's closed promise (simulating PTY process exit)
       resolveSessionClosed()
       await disposePromise
 

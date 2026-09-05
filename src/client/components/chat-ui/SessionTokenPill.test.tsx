@@ -99,11 +99,9 @@ describe("SessionTokenPill", () => {
     const html = renderPill(
       <SessionTokenPill totals={totals({ inputTokens: 100, outputTokens: 20 })} />,
     )
-    // Popover trigger: cursor-pointer + touch-manipulation, no cursor-default.
     expect(html).toContain("cursor-pointer")
     expect(html).toContain("touch-manipulation")
     expect(html).not.toContain("cursor-default")
-    // Radix popover trigger annotates the button with aria-expanded / data-state.
     expect(html).toMatch(/aria-expanded=/)
     expect(html).toMatch(/data-state="closed"/)
   })

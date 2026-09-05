@@ -7,11 +7,6 @@ export interface RetryPrompt {
 
 const NO_ATTACHMENTS: ChatAttachment[] = []
 
-/**
- * The prompt that started the turn a failed `result` ended — the nearest
- * preceding `user_prompt`, not the chat's latest one (`getPreviousPrompt`),
- * so retrying an older failure re-sends what that turn actually ran.
- */
 export function findRetryPromptForResult(
   messages: readonly HydratedTranscriptMessage[],
   resultMessageId: string,

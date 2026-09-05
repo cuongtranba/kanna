@@ -1,10 +1,3 @@
-/**
- * Renders the sidebar entries plugins contribute via
- * `plugin.addSidebarItem(...)` (`../plugins/contributionRegistry.ts`). One
- * item per (pluginId, id) pair; `icon` is a small named-icon string rather
- * than an open catalog lookup, mirroring the `toolIcons` convention in
- * `../components/messages/shared.tsx`.
- */
 import { Blocks, type LucideIcon } from "lucide-react"
 import { cn } from "../lib/utils"
 import type { PluginSidebarItem } from "../plugins/contributionRegistry"

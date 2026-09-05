@@ -8,18 +8,7 @@ import type { AutoContinueEvent } from "./auto-continue/events"
 import { AsyncEventQueue } from "./test-helpers/async-event-queue"
 import { waitFor } from "./test-helpers/wait-for"
 
-// End-to-end coverage for the gap identified in the OAuth-pool audit:
-// the existing rotation tests inject SDK-shaped fake sessions and prove the
-// coordinator rotates on a `rate_limit` HarnessEvent regardless of driver,
-// while parity-matrix proves the PTY parser emits the same event shape as
-// the SDK. This file stitches the two halves together: a real
-// `createJsonlEventParser` consumes an actual `rate_limit_event` JSONL line
-// and the resulting events drive the coordinator through markLimited →
-// pickActive → token_rotation → fireAutoContinue re-spawn on the rotated
-// token — all under `KANNA_CLAUDE_DRIVER=pty`.
 
-// ── Minimal store fake (mirrors agent.oauth-rotation.test.ts; do NOT
-//    modify agent.test.ts) ──
 function createFakeStore() {
   const chat = {
     id: "chat-1",
@@ -136,11 +125,6 @@ function makeToken(id: string, overrides: Partial<OAuthTokenEntry> = {}): OAuthT
   }
 }
 
-/**
- * The exact JSONL line the claude CLI mirrors into its transcript when a
- * subscription rate-limit is hit. `resetsAt` is epoch SECONDS — the
- * ClaudeLimitDetector coerces to ms.
- */
 function rateLimitJsonlLine(resetAtSeconds: number): string {
   return JSON.stringify({
     type: "rate_limit_event",
@@ -183,7 +167,6 @@ describe("AgentCoordinator OAuth rotation — PTY driver (JSONL-sourced rate-lim
       const coordinator = new AgentCoordinator({
         store: store as never,
         onStateChange: () => {},
-        // SDK path must NOT be taken when KANNA_CLAUDE_DRIVER=pty.
         startClaudeSession: async () => {
           sdkCalled = true
           throw new Error("SDK driver must not be used under KANNA_CLAUDE_DRIVER=pty")
@@ -203,9 +186,6 @@ describe("AgentCoordinator OAuth rotation — PTY driver (JSONL-sourced rate-lim
             setPermissionMode: async () => {},
             getSupportedCommands: async () => [],
             sendPrompt: async () => {
-              // Feed the actual JSONL line through the real PTY parser and
-              // push whatever HarnessEvents it yields — exactly what
-              // jsonl-reader → driver does in production.
               for (const ev of parser.parse(rateLimitJsonlLine(resetAtSeconds))) {
                 events.push(ev)
               }
@@ -238,7 +218,6 @@ describe("AgentCoordinator OAuth rotation — PTY driver (JSONL-sourced rate-lim
         (c) => (c.patch as { status?: string }).status === "limited",
       )
       expect(limited?.id).toBe("a")
-      // resetsAt seconds coerced to ms by the detector.
       expect((limited?.patch as { limitedUntil?: number }).limitedUntil).toBe(resetAtSeconds * 1000)
 
       const accepted = store.getAutoContinueEvents("chat-1").find(

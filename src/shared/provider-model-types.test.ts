@@ -2,11 +2,6 @@ import { describe, expect, test } from "bun:test"
 import { AGENT_PROVIDERS } from "./core-types"
 import { providerExpandsSlashCommands, providerUsesSdkSession } from "./provider-model-types"
 
-/**
- * Two predicates that answer different questions and happen to agree today.
- * Pinned so the agreement stays a fact anyone can check rather than an
- * assumption someone collapses into one function.
- */
 describe("providerExpandsSlashCommands", () => {
   test("claude and openrouter expand `/name` themselves — the SDK reads the catalog", () => {
     expect(providerExpandsSlashCommands("claude")).toBe(true)

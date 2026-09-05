@@ -10,16 +10,6 @@ import { usePreferencesStore } from "../stores/preferences"
 import type { KannaState } from "./useKannaState"
 import type { AppSettingsPatch } from "../../shared/types"
 
-/**
- * P7 regression guard: `scripts/verify-session-tabs.sh` exists because a
- * blank-white-page regression once shipped with every test green — every one
- * of them mounted a page component by hand instead of through the real
- * router. `SettingsPage` calls `useOutletContext` and `useTheme()`, both of
- * which throw when the component is mounted standalone, so this test drives
- * it the way the app actually does: `MemoryRouter` -> `Routes` -> a layout
- * route rendering `<Outlet context={...}/>` -> `ThemeProvider` -> the real
- * `/settings/:sectionId` route.
- */
 
 interface Harness {
   container: HTMLDivElement
@@ -116,7 +106,6 @@ describe("SettingsPage typography row (real router)", () => {
     const harness = await mount(fakeState())
 
     expect(harness.container.textContent).toContain("Typography Scale")
-    // No device override and no server value yet -> falls back to "md" ("Default").
     findTrigger(harness.container, "Default")
 
     harness.unmount()

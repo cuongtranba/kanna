@@ -1,9 +1,3 @@
-/**
- * The dialog is a controlled Radix surface, so it renders into a PORTAL on
- * document.body rather than into the container — every assertion reads
- * `document.body`, and every root is unmounted (the preload's sweep fails a
- * different test in a different file otherwise).
- */
 
 import { describe, expect, test } from "bun:test"
 import { renderClientMarkup } from "../../../lib/testing/renderClientMarkup"
@@ -54,8 +48,6 @@ describe("InstructionsDialog", () => {
     }
   })
 
-  // The cap is the server's, and it refuses rather than truncating — so the
-  // counter has to be visible before Save is pressed, not after it fails.
   test("counts against the same cap the server enforces", async () => {
     const { cleanup } = await renderClientMarkup(
       <InstructionsDialog {...props({ initialValue: "abc" })} />,

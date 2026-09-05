@@ -34,9 +34,6 @@ describe("repairMermaidSource", () => {
     expect(result.source).toBe("flowchart LR\n  A-.-xB")
   })
 
-  // The span guards below are not defensive padding: mermaid PARSES `-.x`
-  // inside a label, a pipe label and a comment, so rewriting one there would
-  // silently corrupt text the author wrote on purpose.
   test("does not touch `-.x` inside a bracket label", () => {
     const source = 'flowchart LR\n  A[uses -.x here] --> B[b]'
     expect(repairMermaidSource(source)).toEqual({ source, repairs: [] })
@@ -71,8 +68,6 @@ describe("repairMermaidSource", () => {
   })
 
   test("leaves the valid links that merely look similar alone", () => {
-    // `-.-x` / `-.-o` are the correct spellings, `-.->` is a dotted arrow and
-    // `-..->` is a longer dotted arrow — none may be rewritten.
     const source = "flowchart LR\n  A -.-x B\n  B -.-o C\n  C -.-> D\n  D -..-> E\n"
     expect(repairMermaidSource(source)).toEqual({ source, repairs: [] })
   })

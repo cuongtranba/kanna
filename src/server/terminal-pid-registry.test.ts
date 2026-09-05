@@ -46,9 +46,6 @@ describe("TerminalPidRegistry", () => {
   }, 30_000)
 
   test("reapStale kills live process groups and clears the file", async () => {
-    // Spawn a process that becomes its own pgroup leader (mirrors how
-    // PTY-allocated shells in TerminalManager have pid == pgid). The
-    // ready handshake ensures setsid() has run before we attempt to reap.
     const child = Bun.spawn(
       ["python3", "-c", "import os, sys, time; os.setsid(); sys.stdout.write('ready\\n'); sys.stdout.flush(); time.sleep(60)"],
       { stdout: "pipe", stderr: "ignore", stdin: "ignore" },
@@ -75,14 +72,13 @@ describe("TerminalPidRegistry", () => {
 
     expect(reaped.map((entry) => entry.terminalId).sort()).toEqual(["t1", "t2"])
 
-    // Wait for the kernel to reap the killed child.
     const exitedWithTimeout = await Promise.race([
       child.exited,
       new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), 3_000)),
     ])
     expect(exitedWithTimeout).not.toBe("timeout")
     expect(child.signalCode).toBe("SIGKILL")
-    void childPid // pid retained for clarity; assertion is on the subprocess handle
+    void childPid
 
     const raw = JSON.parse(await readFile(registryPath, "utf8")) as { entries: unknown[] }
     expect(raw.entries).toEqual([])

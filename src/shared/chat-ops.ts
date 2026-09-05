@@ -1,12 +1,3 @@
-/**
- * Chat op-log types + pure reducer.
- *
- * During live turns the server pushes small `chat.ops` deltas instead of
- * re-broadcasting the full chat snapshot. The client folds them into its
- * snapshot with `applyChatOps`. Full snapshot remains the subscribe/resync
- * path; the reducer is idempotent under snapshot/ops overlap (append of an
- * already-present `_id` replaces in place).
- */
 import type { ChatRuntime, ChatSnapshot, TranscriptEntry } from "./types"
 
 export type ChatSections = Pick<ChatSnapshot,
@@ -28,11 +19,6 @@ export interface ChatOpsEvent {
   ops: ChatOp[]
 }
 
-/**
- * Incremental analog of the server's `coalesceContextWindowUpdates`: within
- * a run of consecutive `context_window_updated` entries only the last
- * survives, so appending one onto a trailing one replaces it.
- */
 function appendCoalesced(messages: readonly TranscriptEntry[], fresh: readonly TranscriptEntry[]): TranscriptEntry[] {
   const result = [...messages]
   for (const entry of fresh) {

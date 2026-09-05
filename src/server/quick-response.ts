@@ -32,11 +32,6 @@ function isClaudeRateLimitMessage(message: string): boolean {
   return CLAUDE_RATE_LIMIT_PATTERNS.some((pattern) => pattern.test(message))
 }
 
-// Env vars set by a parent Claude Code session. The Agent SDK refuses to
-// spawn a child Claude Code process when these are present ("Claude Code
-// cannot be launched inside another Claude Code session"), so strip them
-// before forwarding env to the SDK. Auth still resolves via macOS keychain
-// or ANTHROPIC_API_KEY.
 const NESTED_CLAUDE_CODE_ENV_KEYS = [
   "CLAUDECODE",
   "CLAUDE_CODE_ENTRYPOINT",
@@ -112,15 +107,6 @@ function parseJsonText(value: string): JsonValue | null {
   return null
 }
 
-/**
- * Read a structured-output payload out of one SDK message.
- *
- * The message is NARROWED field by field rather than encoded whole. This runs
- * on every streamed SDK message, and only the payload it actually finds needs
- * to become a `JsonValue` — never the assistant text and tool results sitting
- * beside it in the same message. It used to receive `toJsonValue(message)`,
- * which paid for the whole message on every iteration to read three fields.
- */
 function structuredOutputFromSdkMessage<T>(message: T): JsonValue | null {
   if (!isRecord(message)) return null
 
@@ -145,15 +131,8 @@ function structuredOutputFromSdkMessage<T>(message: T): JsonValue | null {
 
 export async function runClaudeStructured(args: Omit<StructuredQuickResponseArgs<JsonValue>, "parse">): Promise<JsonValue | null> {
   const pool = activeOAuthPool
-  // Reserve under a synthetic ephemeral key so concurrent quick-response
-  // calls cannot all be handed the same lowest-lastUsedAt token. The lease
-  // is released in the finally below (audit #2).
   const lease = pool?.pickEphemeral() ?? null
   const picked = lease?.token ?? null
-  // Refuse to spawn when the pool has tokens but none are currently usable
-  // (all reserved, limited, errored, or disabled). Without this, env-less
-  // spawn would silently fall back to the CLI keychain auth path which
-  // typically holds a stale or unrelated token → opaque 401 loops.
   if (pool && pool.hasAnyToken() && !picked) {
     lease?.release()
     log.warn("[quick-response] no usable OAuth token in pool; skipping claude provider")
@@ -216,17 +195,12 @@ export async function runClaudeStructured(args: Omit<StructuredQuickResponseArgs
       log.info(`[quick-response] claude rate-limited, falling back: ${reason}`)
       if (picked && pool) {
         const limit = detectedLimit ?? (errorLimit ? { resetAt: errorLimit.resetAt, tz: errorLimit.tz } : null)
-        // Fallback window when we can't parse the precise reset: 5 minutes.
         const resetAt = limit?.resetAt ?? Date.now() + 5 * 60_000
         pool.markLimited(picked.id, resetAt)
       }
     } else {
       const authDetection = new ClaudeAuthErrorDetector().detect("", toError(error))
       if (authDetection && picked && pool) {
-        // Token rejected by Anthropic (401). Mark it errored so the next
-        // pickActive() skips it — otherwise quick-response would keep
-        // selecting the same dead token by lastUsedAt ordering and burn
-        // every subsequent call on the same 401.
         log.warn(`[quick-response] claude auth error, marking token ${picked.id} errored: ${reason}`)
         pool.markError(picked.id, authDetection.reason)
       } else {
@@ -239,7 +213,6 @@ export async function runClaudeStructured(args: Omit<StructuredQuickResponseArgs
     try {
       q.close()
     } catch {
-      // Ignore close failures on timed-out or failed quick responses.
     }
   }
 }

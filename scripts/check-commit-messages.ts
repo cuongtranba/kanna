@@ -1,19 +1,3 @@
-/**
- * Fails when a commit message release-please cannot parse would reach `main`.
- *
- * Two entry points, both landing in the same validator:
- *
- *   --file <path>     the `commit-msg` hook's message file, checked as it is
- *                     written — the earliest and cheapest point.
- *   --range <range>   every commit in a PR, plus (with --title) the PR title,
- *                     because a squash lands the title as the subject and the
- *                     constituent commit messages as the body. If every part
- *                     parses, the squash does.
- *
- * The IO lives here and the verdict lives in
- * `src/ops/release/commit-message.ts`, mirroring how `budget-scan.adapter.ts`
- * splits from `budget.ts`.
- */
 
 import { spawnSync } from "node:child_process"
 import { readFileSync } from "node:fs"
@@ -22,12 +6,6 @@ import {
   validateCommitMessage,
 } from "../src/ops/release/commit-message"
 
-/**
- * ASCII RS (0x1e), which git emits as `%x1e`. A commit message can contain any
- * printable text including blank lines, so the separator has to be a control
- * character — splitting on anything typable would cut bodies in half and hand
- * the parser fragments the author never wrote.
- */
 const RECORD_SEPARATOR = "\u001e"
 
 interface Args {
@@ -85,8 +63,6 @@ function main(): void {
     candidates.push(...commitsInRange(args.range))
   }
   if (args.title !== null) {
-    // A squash lands the PR title as the subject line, so it is checked as a
-    // one-line message — the same thing release-please will read.
     candidates.push({ label: "PR title", message: `${args.title}\n` })
   }
 

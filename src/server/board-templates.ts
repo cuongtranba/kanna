@@ -1,13 +1,3 @@
-/**
- * Built-in board templates.
- *
- * Pure data — seeded into `board_template` on every boot by
- * `board-store.adapter.ts` (insert-if-absent, keyed by the stable ids below), so
- * adding a template here ships it to existing installs without a migration.
- *
- * Ids are stable strings rather than generated uuids precisely so that seeding
- * stays idempotent; never renumber one.
- */
 
 import type { BoardTemplateDefinition, FieldDef } from "../shared/boards/types"
 
@@ -18,7 +8,6 @@ export interface BuiltinBoardTemplate {
   definition: BoardTemplateDefinition
 }
 
-// ── Shared field sets ─────────────────────────────────────────────────────────
 
 const ASSIGNEE_FIELD: FieldDef = {
   id: "assignee",
@@ -65,7 +54,6 @@ const PRIORITY_FIELD: FieldDef = {
   ],
 }
 
-// ── Templates ─────────────────────────────────────────────────────────────────
 
 export const BUILTIN_BOARD_TEMPLATES: readonly BuiltinBoardTemplate[] = [
   {
@@ -179,7 +167,6 @@ export const BUILTIN_BOARD_TEMPLATES: readonly BuiltinBoardTemplate[] = [
   },
 ]
 
-/** Look up a built-in by its stable id. */
 export function findBuiltinTemplate(templateId: string): BuiltinBoardTemplate | null {
   return BUILTIN_BOARD_TEMPLATES.find((template) => template.id === templateId) ?? null
 }

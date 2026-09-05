@@ -24,7 +24,6 @@ describe("paneLayoutStore", () => {
     expect(findPaneContainingTab(layout.root, "terminal_2_t1")).not.toBeNull()
   })
 
-  // The singleton rule, enforced by the id derivation rather than by a check here.
   test("opening chat twice does not create a second chat tab", () => {
     s().openTab({ kind: "chat", chatId: "c1" })
     s().openTab({ kind: "chat", chatId: "c1" })
@@ -32,11 +31,6 @@ describe("paneLayoutStore", () => {
     expect(tabs.filter((tab) => tab.target.kind === "chat")).toHaveLength(1)
   })
 
-  /**
-   * The point of collapsing the per-project layouts into one: chats opened from
-   * different projects land in the SAME workspace, side by side, instead of one
-   * project's arrangement replacing the other's.
-   */
   test("chats from different projects accumulate in one workspace", () => {
     s().openTab({ kind: "chat", chatId: "chat-in-project-a" })
     s().openTab({ kind: "chat", chatId: "chat-in-project-b" })
@@ -65,8 +59,6 @@ describe("paneLayoutStore", () => {
     expect(findPaneContainingTab(s().getLayout().root, "terminal_2_t1")).toBeNull()
   })
 
-  // Operations return null when nothing changes; the store must translate that
-  // into an untouched state object so subscribers do not re-render.
   test("a no-op action preserves state identity", () => {
     s().openTab({ kind: "chat", chatId: "c1" })
     const before = s().layout
@@ -94,8 +86,6 @@ describe("paneLayoutStore", () => {
       changesVisible: true,
       changesSizePercent: 33,
     })
-    // Unchanged: a workspace that already holds tabs is never re-seeded — which
-    // is what stops the second project you open from wiping the first's tabs.
     expect(collectPanes(s().getLayout().root)).toHaveLength(2)
   })
 
@@ -109,8 +99,6 @@ describe("paneLayoutStore", () => {
   })
 
   test("resizeGroup adjusts one boundary", () => {
-    // Two tabs: splitting a pane's ONLY tab is refused, since it would strand
-    // an empty pane.
     s().openTab({ kind: "chat", chatId: "c1" })
     s().openTab({ kind: "terminal", terminalId: "t1" })
     const paneId = collectPanes(s().getLayout().root)[0]!.id
@@ -126,7 +114,6 @@ describe("paneLayoutStore", () => {
     expect(after.sizes[0]).toBeCloseTo(0.65, 6)
   })
 
-  /** A horizontal split; returns the pane ids left-to-right. */
   function splitHorizontally(): string[] {
     s().openTab({ kind: "chat", chatId: "c1" })
     s().openTab({ kind: "terminal", terminalId: "t1" })
@@ -147,11 +134,6 @@ describe("paneLayoutStore", () => {
     expect(leftShare()).toBeCloseTo(0.55, 6)
   })
 
-  /**
-   * The end-to-end proof of the divider model: one boundary moves the same way
-   * whichever side of it holds focus. Under a "right always grows me" rule this
-   * case would come back 0.45 and the divider would travel against the key.
-   */
   test("the divider moves identically from the pane on either side of it", () => {
     const [, right] = splitHorizontally()
     s().focusPane(right!)
@@ -180,14 +162,6 @@ describe("paneLayoutStore", () => {
 })
 
 describe("paneLayoutStore persistence", () => {
-  /**
-   * v1 kept `layouts` keyed by projectId. There is no honest mapping from N
-   * project trees to the one workspace, so the migration drops the arrangement
-   * rather than picking a project's tree arbitrarily — ChatPage re-opens the
-   * tabs. What it must NOT do is leak the old shape through: a surviving
-   * `layouts` key would sit in storage forever, and a surviving `layout` taken
-   * from one project would silently make that project's arrangement global.
-   */
   test("migrating from v1 drops the per-project layouts but keeps the node sequence", () => {
     const migrate = usePaneLayoutStore.persist.getOptions().migrate
     expect(migrate).toBeDefined()
@@ -210,9 +184,7 @@ describe("paneLayoutStore persistence", () => {
 describe("paneLayoutStore keyboard commands", () => {
   beforeEach(reset)
 
-  /** A left/right split with the left pane focused. */
   function twoPanes() {
-    // The pane needs a tab to keep; splitting its only tab is refused.
     s().openTab({ kind: "chat", chatId: "c1" })
     s().openTab({ kind: "terminal", terminalId: "t1" })
     const layout = s().getLayout()
@@ -251,7 +223,6 @@ describe("paneLayoutStore keyboard commands", () => {
 
     s().focusTab(ids[0])
     s().cycleFocusedPaneTab(-1)
-    // Stepping back from the first tab lands on the last.
     expect(collectPanes(s().getLayout().root)[0].focusedTabId).toBe(ids[ids.length - 1])
 
     s().cycleFocusedPaneTab(1)
@@ -281,7 +252,6 @@ describe("paneLayoutStore keyboard commands", () => {
     const layout = s().getLayout()
     expect(layout.focusedPaneId).not.toBeNull()
 
-    // No crash, no throw, on an untouched workspace.
     s().focusAdjacentPane("down")
     s().cycleFocusedPaneTab(1)
     s().splitFocusedPane("bottom")

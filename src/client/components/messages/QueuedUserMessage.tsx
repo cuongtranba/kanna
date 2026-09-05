@@ -40,7 +40,6 @@ export function QueuedUserMessage({ message, onRemove, onSendNow }: QueuedUserMe
                   className="rounded-full size-[24px] bg-muted text-muted-foreground border border-primary/10 group-hover:!text-primary hover:bg-muted/60"
                   onClick={onSendNow}
                 >
-                  {/* Send Now */}
                   <ArrowUp className="size-3.5"/>
                 </Button>
 
@@ -56,15 +55,6 @@ export function QueuedUserMessage({ message, onRemove, onSendNow }: QueuedUserMe
               <X className="size-3"/>
             </Button>
 
-            {/* <Button
-              type="button"
-              variant="none"
-              size="none"
-              className="!p-1 border rounded-full text-xs font-medium text-muted-foreground hover:text-foreground gap-0.5 absolute top-0 right-0 bg-background translate-x-[30%] -translate-y-[30%]"
-              onClick={onSendNow}
-            >
-              <ArrowUp className="size-3"/>
-            </Button> */}
           </div>
           
         ) : null}

@@ -2,7 +2,6 @@ import { describe, test, expect } from "bun:test"
 import type { InstalledPackage } from "../shared/packages/types"
 import { createSkillUpdateChecker } from "./skill-update-checker.adapter"
 
-// ─── Test helpers ─────────────────────────────────────────────────────────
 
 function makeSkill(overrides: Partial<InstalledPackage> = {}): InstalledPackage {
   const name = overrides.name ?? "my-skill"
@@ -20,7 +19,6 @@ function makeSkill(overrides: Partial<InstalledPackage> = {}): InstalledPackage 
     agents: [],
     pinnedRef: null,
     ...overrides,
-    // id is always derived from the resolved name, applied last to avoid spread override
     id: `skill:${name}`,
   }
 }
@@ -77,7 +75,6 @@ function errorResponse(status: number, rateRemaining = 100): Response {
 
 const neverSignal = new AbortController().signal
 
-// ─── Tests ────────────────────────────────────────────────────────────────
 
 describe("createSkillUpdateChecker", () => {
   test("up_to_date when installed hash matches upstream", async () => {
@@ -132,7 +129,7 @@ describe("createSkillUpdateChecker", () => {
   test("unknown (not outdated) when tree is truncated and entry missing", async () => {
     const skill = makeSkill({ revision: "aaa111" })
     const fetchFn = async (_url: string | URL | Request): Promise<Response> =>
-      fakeTreeResponse([], true) // truncated, no entries
+      fakeTreeResponse([], true)
 
     const checker = createSkillUpdateChecker({ fetchFn, token: null })
     const results = await checker.check([skill], neverSignal)
@@ -161,7 +158,7 @@ describe("createSkillUpdateChecker", () => {
 
     const results2 = await checker.check([skill], neverSignal)
     expect(results2[0].availability).toBe("up_to_date")
-    expect(callCount).toBe(2) // two requests, second returns 304
+    expect(callCount).toBe(2)
   })
 
   test("403 with rate limit exhausted marks skill as unknown rate limited", async () => {
@@ -185,7 +182,7 @@ describe("createSkillUpdateChecker", () => {
       callCount++
       const urlStr = String(url)
       if (urlStr.includes("repo-a")) {
-        return errorResponse(403, 0) // exhausted for repo-a
+        return errorResponse(403, 0)
       }
       return fakeTreeResponse([{ path: "b", type: "tree", sha: "bbb" }])
     }
@@ -195,7 +192,6 @@ describe("createSkillUpdateChecker", () => {
 
     expect(results.find((r) => r.id === "skill:a")?.error).toBe("rate limited")
     expect(results.find((r) => r.id === "skill:b")?.error).toBe("rate limited")
-    // repo-b should not be fetched once rate-limited
     expect(callCount).toBe(1)
   })
 
@@ -253,16 +249,10 @@ describe("createSkillUpdateChecker", () => {
   })
 
   test("does not call skills CLI (no spawn/exec in implementation)", () => {
-    // The adapter uses only fetch — verifying that the implementation
-    // compiles and runs without any child_process or Bun.spawn invocations.
-    // This test passes by construction: the side-effect seal bans process
-    // spawning from adapter files, and lint enforces it.
     expect(typeof createSkillUpdateChecker).toBe("function")
   })
 
   describe("re-pin target resolution", () => {
-    // `skills update` resolves upstream AT the pin, so a pinned skill needs a
-    // TAG to move to. Everything else is fixed by a plain update and needs none.
     test("resolves the latest release tag for a pinned, outdated skill", async () => {
       const skill = makeSkill({ revision: "aaa111", pinnedRef: "v11.12.0" })
       const fetchFn = async (url: string | URL | Request): Promise<Response> => {
@@ -282,8 +272,6 @@ describe("createSkillUpdateChecker", () => {
       expect(results[0].latestVersion).toBe("v11.13.4")
     })
 
-    // GitHub orders tags lexicographically, so `v20260102-…` precedes `v11.13.4`.
-    // Reading position instead of version is what left a pin unresolvable.
     test("falls back to the highest semver tag when the repo has no releases", async () => {
       const skill = makeSkill({ revision: "aaa111", pinnedRef: "v11.12.0" })
       const fetchFn = async (url: string | URL | Request): Promise<Response> => {
@@ -393,7 +381,6 @@ describe("createSkillUpdateChecker", () => {
       expect(releaseFetches).toBe(1)
     })
 
-    // Resolution needs no credentials: the tree fetch already runs unauthenticated.
     test("resolves without a token", async () => {
       const skill = makeSkill({ revision: "aaa111", pinnedRef: "v11.12.0" })
       const fetchFn = async (url: string | URL | Request): Promise<Response> => {

@@ -8,7 +8,6 @@ interface CronJobsState {
   setRows(rows: readonly CronJobsGlobalRow[]): void
 }
 
-/** Global cron-jobs topic (all projects/chats) — feeds the /cron management page. */
 export const useCronJobsStore = create<CronJobsState>()((set) => ({
   rows: EMPTY,
   setRows: (rows) => set({ rows: rows.length > 0 ? rows : EMPTY }),

@@ -37,26 +37,19 @@ function createDefaultFormState(): SubagentFormState {
 }
 
 interface SubagentsSectionState {
-  // SubagentsSettingsBranch navigation
   editing: SubagentsEditingState
 
-  // SubagentForm state (ONE active form at a time)
   form: SubagentFormState
 
-  // LoopRuntimePanel state
   timeoutDraft: string
   loopError: string | null
 
-  // Actions — navigation
   setEditing: (editing: SubagentsEditingState) => void
 
-  // Actions — form
   resetForm: (draft: SubagentInput) => void
   patchForm: (patch: Partial<SubagentFormState>) => void
-  /** Patches the nested draft — not reachable through `patchForm`'s shallow merge. */
   patchFormDraft: (patch: Partial<SubagentInput>) => void
 
-  // Actions — LoopRuntimePanel
   setTimeoutDraft: (draft: string) => void
   setLoopError: (error: string | null) => void
 }

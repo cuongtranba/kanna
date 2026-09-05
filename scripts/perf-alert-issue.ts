@@ -1,11 +1,3 @@
-/**
- * Files the GitHub issue for a Grafana performance alert.
- *
- * The IO half of `src/ops/alerting/perf-issue.ts`: reads the dispatch payload,
- * fetches the performance tickets, and performs whatever the pure decision
- * says. Run by `.github/workflows/perf-alert.yml` with the workflow's own
- * GITHUB_TOKEN — no extra secret.
- */
 
 import {
   decideAction,
@@ -29,8 +21,6 @@ if (!raw) {
 
 const payload = JSON.parse(raw) as PerfAlertPayload
 if (!payload.alert?.alertname) {
-  // A malformed dispatch is not worth failing the workflow over; it would just
-  // turn a bad alert into a red build with nothing to fix.
   console.warn("payload carries no alertname; nothing to file")
   process.exit(0)
 }
@@ -53,11 +43,6 @@ const api = async (path: string, init: RequestInit = {}) => {
   return response.json()
 }
 
-// Closed tickets are fetched too, so a rule that dips under its threshold and
-// breaches again reopens its ticket rather than filing a new one. Newest-first
-// by activity bounds the page: anything closed inside REOPEN_WINDOW_MS is here
-// unless 100 perf tickets were touched more recently, which the open cap and
-// the dedup together make unreachable.
 const listed = await api(
   `/repos/${repo}/issues?state=all&labels=performance&sort=updated&direction=desc&per_page=100`,
 ) as Array<{
@@ -70,8 +55,6 @@ const listed = await api(
   pull_request?: unknown
 }>
 
-// "Close as duplicate" says the same thing "close as not planned" does: this is
-// not the ticket to track it on. Reopening either would undo a human decision.
 const MUTING_CLOSE_REASONS = new Set(["not_planned", "duplicate"])
 
 function closedState(issue: (typeof listed)[number]): KnownIssue["closed"] {
