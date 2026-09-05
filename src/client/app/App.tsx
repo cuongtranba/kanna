@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, type ReactNode } from "react"
 import { QueryClientProvider } from "@tanstack/react-query"
+import { MotionConfig } from "motion/react"
 import { Navigate, Outlet, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom"
 import { queryClient } from "../query/queryClient"
 import { SocketBridge } from "./SocketBridge"
@@ -592,17 +593,27 @@ function AuthedApp() {
 
 export function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <SocketBridge />
-      <TooltipProvider>
-        <AppDialogProvider>
-          <Routes>
-            <Route path="/share/:token" element={<SharePage />} />
-            <Route path="*" element={<AuthedApp />} />
-          </Routes>
-          <Toaster />
-        </AppDialogProvider>
-      </TooltipProvider>
-    </QueryClientProvider>
+    /*
+      `reducedMotion="user"` is the single gate for every Motion component in
+      the app: Motion drops the transform and keeps the end state, so a reveal
+      still arrives — it just does not travel. Declared once here rather than
+      per component, because a component that forgets it is a component whose
+      motion nobody asked for. anime.js has no equivalent and is gated by
+      `prefersReducedMotion()` at each timeline instead.
+    */
+    <MotionConfig reducedMotion="user">
+      <QueryClientProvider client={queryClient}>
+        <SocketBridge />
+        <TooltipProvider>
+          <AppDialogProvider>
+            <Routes>
+              <Route path="/share/:token" element={<SharePage />} />
+              <Route path="*" element={<AuthedApp />} />
+            </Routes>
+            <Toaster />
+          </AppDialogProvider>
+        </TooltipProvider>
+      </QueryClientProvider>
+    </MotionConfig>
   )
 }
