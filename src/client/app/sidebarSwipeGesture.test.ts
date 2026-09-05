@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import {
   evaluateSidebarSwipe,
   shouldPreventNativeBack,
+  sidebarDragProgress,
   SIDEBAR_SWIPE_HORIZONTAL_RATIO,
   SIDEBAR_SWIPE_MAX_DURATION_MS,
   SIDEBAR_SWIPE_MIN_HORIZONTAL_PX,
@@ -9,6 +10,7 @@ import {
   SIDEBAR_SWIPE_OPEN_START_MAX_X,
   SIDEBAR_SWIPE_PREVENT_MIN_DX,
   type SwipeGestureContext,
+  type SwipePoint,
 } from "./sidebarSwipeGesture"
 
 const MOBILE_CTX_CLOSED: SwipeGestureContext = {
@@ -225,5 +227,55 @@ describe("shouldPreventNativeBack", () => {
       DESKTOP_CTX_CLOSED
     )
     expect(result).toBe(false)
+  })
+})
+
+describe("sidebarDragProgress", () => {
+  const mobile = { sidebarOpen: false, viewportWidth: 390 }
+  const open = { sidebarOpen: true, viewportWidth: 390 }
+  const at = (x: number, t = 0): SwipePoint => ({ x, y: 0, t })
+
+  test("opening tracks the finger 1:1 across the drawer's width", () => {
+    expect(sidebarDragProgress(at(0), at(0), 300, mobile)).toBe(0)
+    expect(sidebarDragProgress(at(0), at(150), 300, mobile)).toBe(0.5)
+    expect(sidebarDragProgress(at(0), at(300), 300, mobile)).toBe(1)
+  })
+
+  test("closing starts from fully open and pushes back toward zero", () => {
+    expect(sidebarDragProgress(at(300), at(300), 300, open)).toBe(1)
+    expect(sidebarDragProgress(at(300), at(150), 300, open)).toBe(0.5)
+    expect(sidebarDragProgress(at(300), at(0), 300, open)).toBe(0)
+  })
+
+  test("it never reports past either end, however far the finger travels", () => {
+    expect(sidebarDragProgress(at(0), at(900), 300, mobile)).toBe(1)
+    expect(sidebarDragProgress(at(300), at(-900), 300, open)).toBe(0)
+  })
+
+  test("a drag in the exhausted direction is not the drawer's to draw", () => {
+    // Pulling right on an already-open drawer, or left on a closed one.
+    expect(sidebarDragProgress(at(300), at(360), 300, open)).toBeNull()
+    expect(sidebarDragProgress(at(0), at(-60), 300, mobile)).toBeNull()
+  })
+
+  test("it stands down where the gesture itself stands down", () => {
+    expect(sidebarDragProgress(at(0), at(150), 300, { sidebarOpen: false, viewportWidth: 1200 })).toBeNull()
+    expect(
+      sidebarDragProgress(at(0), at(150), 300, { ...mobile, startedInHorizontalScroller: true }),
+    ).toBeNull()
+  })
+
+  test("an unmeasured drawer reports nothing rather than dividing by zero", () => {
+    expect(sidebarDragProgress(at(0), at(150), 0, mobile)).toBeNull()
+  })
+
+  test("tracking does not change what a release MEANS", () => {
+    // The thresholds are the gesture users already learned. Progress is a
+    // separate question, and a drag that draws must still be judged by
+    // evaluateSidebarSwipe alone — here, 40px is drawn but does not open.
+    const start = at(10, 0)
+    const end = at(50, 100)
+    expect(sidebarDragProgress(start, end, 300, mobile)).toBeCloseTo(40 / 300)
+    expect(evaluateSidebarSwipe(start, end, mobile)).toBeNull()
   })
 })
