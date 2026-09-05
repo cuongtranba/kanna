@@ -1,5 +1,5 @@
 import { memo, useMemo } from "react"
-import type { ChatAttachment } from "../../../shared/types"
+import type { ChatAttachment, SlashCommandKind } from "../../../shared/types"
 import { renderMarkdownToReact } from "../lexical/markdown/lexicalToReact"
 import { classifyAttachmentPreview } from "./attachmentPreview"
 import { AttachmentFileCard, AttachmentImageCard } from "./AttachmentCard"
@@ -20,6 +20,12 @@ interface Props {
   attachments?: ChatAttachment[]
   steered?: boolean
   autoContinue?: { scheduleId: string }
+  /**
+   * Kanna resolved this line against the local catalog and sent the file's
+   * instructions instead. `content` is still the typed line, so without saying
+   * so "the skill ran" and "your text was sent verbatim" look identical.
+   */
+  expandedCommand?: { name: string; kind: SlashCommandKind }
   ports?: UserMessagePorts
 }
 
@@ -35,7 +41,7 @@ function parseSystemMessage(content: string) {
   }
 }
 
-function UserMessageInner({ content, attachments = [], steered = false, autoContinue, ports }: Props) {
+function UserMessageInner({ content, attachments = [], steered = false, autoContinue, expandedCommand, ports }: Props) {
   const dom = ports?.dom ?? domAdapter
   const selectedAttachmentId = UserMessageStore.useScopedStore((s) => s.selectedAttachmentId)
   const setSelectedAttachmentId = UserMessageStore.useScopedStore((s) => s.setSelectedAttachmentId)
@@ -109,6 +115,11 @@ function UserMessageInner({ content, attachments = [], steered = false, autoCont
             </div>
           </div>
         ) : null}
+        {expandedCommand ? (
+          <span className="text-xs text-muted-foreground opacity-70">
+            ran the <span className="font-mono">{expandedCommand.name}</span> {expandedCommand.kind}
+          </span>
+        ) : null}
         {autoContinue ? (
           <span className="text-xs text-muted-foreground opacity-70">auto-sent</span>
         ) : null}
@@ -122,10 +133,17 @@ function UserMessageInner({ content, attachments = [], steered = false, autoCont
   )
 }
 
-export const UserMessage = memo(({ content, attachments = [], steered = false, autoContinue, ports }: Props) => {
+export const UserMessage = memo(({ content, attachments = [], steered = false, autoContinue, expandedCommand, ports }: Props) => {
   return (
     <UserMessageStore.Provider init={undefined}>
-      <UserMessageInner content={content} attachments={attachments} steered={steered} autoContinue={autoContinue} ports={ports} />
+      <UserMessageInner
+        content={content}
+        attachments={attachments}
+        steered={steered}
+        autoContinue={autoContinue}
+        expandedCommand={expandedCommand}
+        ports={ports}
+      />
     </UserMessageStore.Provider>
   )
 })

@@ -7,7 +7,7 @@ import { type JsonObject, type JsonArray } from "./json"
  * import type = erased at compile time → no circular runtime dependency.
  */
 
-import type { AgentProvider, ChatAttachment, ProviderUsage } from "./types"
+import type { AgentProvider, ChatAttachment, ProviderUsage, SlashCommandKind } from "./types"
 import type { ToolRequestStatus, ToolRequestDecision } from "./permission-policy"
 import type { NormalizedToolCall, HydratedToolCall } from "./tool-call-types"
 import type { CodexErrorInfoTag } from "./codex-error-classification"
@@ -98,6 +98,16 @@ export interface UserPromptEntry extends TranscriptEntryBase {
   autoContinue?: { scheduleId: string }
   subagentMentions?: Array<{ subagentId: string; raw: string }>
   unknownSubagentMentions?: Array<{ name: string; raw: string }>
+  /**
+   * Set when Kanna resolved this line against the local skill / command catalog
+   * and sent the file's instructions in its place, because the provider's own
+   * harness cannot expand `/name` (`skill-invocation.ts`).
+   *
+   * `content` remains the line the user typed, so without this the transcript
+   * cannot distinguish "the skill ran" from "your text was sent verbatim" —
+   * which look identical and behave completely differently.
+   */
+  expandedCommand?: { name: string; kind: SlashCommandKind }
 }
 
 export interface SystemInitEntry extends TranscriptEntryBase {
@@ -367,7 +377,7 @@ export type TranscriptEntry =
 // ---------------------------------------------------------------------------
 
 export type HydratedTranscriptMessage =
-  | ({ kind: "user_prompt"; content: string; attachments?: ChatAttachment[]; steered?: boolean; autoContinue?: { scheduleId: string }; id: string; messageId?: string; timestamp: string; hidden?: boolean })
+  | ({ kind: "user_prompt"; content: string; attachments?: ChatAttachment[]; steered?: boolean; autoContinue?: { scheduleId: string }; expandedCommand?: { name: string; kind: SlashCommandKind }; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "system_init"; model: string; tools: string[]; agents: string[]; slashCommands: string[]; mcpServers: McpServerInfo[]; provider: AgentProvider; id: string; messageId?: string; timestamp: string; hidden?: boolean; debugRaw?: string })
   | ({ kind: "account_info"; accountInfo: AccountInfo; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "assistant_text"; text: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })

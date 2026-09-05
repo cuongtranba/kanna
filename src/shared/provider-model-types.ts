@@ -347,6 +347,30 @@ export function providerUsesSdkSession(provider: AgentProvider): boolean {
   return provider === "claude" || provider === "openrouter"
 }
 
+/**
+ * True when the provider's own harness resolves a typed `/name` against the
+ * local `.claude/skills` + `.claude/commands` catalog and expands it before the
+ * model sees it.
+ *
+ * `claude` and `openrouter` both run the Claude Agent SDK with
+ * `settingSources: ["user", "project", "local"]` (`claude-session-start.ts`),
+ * so the CLI does this itself and Kanna must not do it again. Everything else —
+ * Codex today, any provider added later — gets Kanna's own expansion
+ * (`skill-invocation.ts`), because the alternative is the literal string
+ * `/deploy staging` reaching a model as prose.
+ *
+ * The DEFAULT is deliberately "Kanna expands": a new provider forgotten by this
+ * list gets working slash commands, where a default of "the harness handles it"
+ * would silently give it none. The membership happens to equal
+ * {@link providerUsesSdkSession} today, but the questions are different — one
+ * asks how a prompt is delivered, the other what the prompt should be — so a
+ * provider on a different transport that still shells out to the claude CLI
+ * belongs here and not there.
+ */
+export function providerExpandsSlashCommands(provider: AgentProvider): boolean {
+  return provider === "claude" || provider === "openrouter"
+}
+
 function catalogModelsFor(
   provider: AgentProvider,
   customModels?: readonly CustomModelEntry[],

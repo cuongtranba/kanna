@@ -26,6 +26,66 @@ export const KANNA_SYSTEM_PROMPT_APPEND = KANNA_SYSTEM_PROMPT_BASE
 export const KANNA_SUBAGENT_ROSTER_LIMIT = 20
 
 /**
+ * Soft cap on the skill roster. Higher than the subagent cap because a machine
+ * routinely carries a hundred-odd skills across project, personal and plugin
+ * scopes, and lower than "all of them" because the roster rides EVERY turn's
+ * developer instructions.
+ */
+export const KANNA_SKILL_ROSTER_LIMIT = 60
+
+/** One skill, as the roster needs to describe it. */
+export interface SkillRosterEntry {
+  /** Catalog name — what the user types after `/`. */
+  name: string
+  /** Frontmatter `description`; may be empty for a skill that declares none. */
+  description: string
+  /** Absolute path of the `SKILL.md` holding the instructions. */
+  filePath: string
+}
+
+/** A description long enough to swamp the roster is cut, never dropped. */
+const SKILL_DESCRIPTION_LIMIT = 200
+
+/**
+ * Render the `## Skills` block for a provider whose harness has no skill
+ * machinery of its own.
+ *
+ * The claude CLI both discovers and loads skills; Codex does neither, so the
+ * roster carries the two facts a model needs to use one — that it exists, and
+ * the absolute path of the file to read. Reading that file IS the invocation:
+ * Kanna registers no skill tool because Codex's app-server protocol has no way
+ * to declare one (`ThreadStartParams` has no `mcpServers`, `TurnStartParams` no
+ * `tools`, and an unknown dynamic tool call is answered "Unsupported"). Codex
+ * runs `sandbox: "danger-full-access"`, so a personal or plugin skill outside
+ * the project cwd is reachable by its absolute path.
+ *
+ * Returns "" for an empty list so callers can splice it unconditionally.
+ */
+export function renderSkillRosterBlock(skills: readonly SkillRosterEntry[]): string {
+  if (skills.length === 0) return ""
+  const shown = skills.slice(0, KANNA_SKILL_ROSTER_LIMIT)
+  const lines = shown.map((skill) => {
+    const description = skill.description.length > SKILL_DESCRIPTION_LIMIT
+      ? `${skill.description.slice(0, SKILL_DESCRIPTION_LIMIT - 1).trimEnd()}…`
+      : skill.description
+    return `- \`${skill.name}\`${description ? ` — ${description}` : ""} → ${skill.filePath}`
+  })
+  // A truncated roster says so, and says how many exist: a model that cannot
+  // find the skill it wants must know the list is partial, not complete.
+  const truncated = skills.length > shown.length
+    ? ["", `Showing ${shown.length} of ${skills.length} skills.`]
+    : []
+  return [
+    "## Skills",
+    "",
+    "Reusable procedures available on this machine. When one applies to the task, read its file below and follow it — that is how a skill is invoked here; there is no tool for it. The user can also invoke one directly by typing `/<name>`.",
+    "",
+    ...lines,
+    ...truncated,
+  ].join("\n")
+}
+
+/**
  * Render the `## Stack projects` block naming each bound project (title + role
  * + worktree path). Returns "" when the list is empty so callers can splice it
  * unconditionally. Shared by the main-turn builder and the subagent
@@ -89,6 +149,10 @@ export function buildCodexDeveloperInstructions(
       ? `${stackBlock}\n\n${CODEX_STACK_REACH_NOTE}`
       : stackBlock)
   }
+
+  // Last: rules and workspace shape first, then what the model can reach for.
+  const skillBlock = renderSkillRosterBlock(args.skills ?? [])
+  if (skillBlock) sections.push(skillBlock)
 
   if (sections.length === 0) return undefined
   return sections.join("\n\n")
@@ -166,6 +230,17 @@ export interface KannaSystemPromptOptions {
    * Empty / absent for solo chats — the block is then omitted entirely.
    */
   stackProjects?: ResolvedStackBinding[]
+
+  /**
+   * Local skills, rendered as a `## Skills` roster.
+   *
+   * Consumed ONLY by {@link buildCodexDeveloperInstructions}. The claude CLI
+   * discovers and loads skills itself (`settingSources: ["user","project",
+   * "local"]`), so listing them again in its system prompt would duplicate a
+   * roster the harness already owns — and duplicate it worse, since the CLI
+   * loads a skill on demand while this inlines only a pointer.
+   */
+  skills?: readonly SkillRosterEntry[]
 }
 
 /**

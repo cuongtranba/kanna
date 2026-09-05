@@ -91,6 +91,7 @@ function makeDeps(overrides: Partial<StartTurnDeps> = {}): StartTurnDeps {
     closeClaudeSession: mock(() => {}),
     getSubagents: mock(() => []),
     getAppSettingsSnapshot: mock(() => ({ globalPromptAppend: undefined })),
+    listSkills: mock(() => []),
     generateTitleInBackground: mock(async () => {}),
     pendingTools: new PendingToolSlots(),
     startClaudeTurn: mock(async () => fakeTurn),

@@ -112,6 +112,9 @@ type DepsOptions = {
   turnReachesCommit?: boolean
   transcript?: TranscriptEntry[]
   cronCalls?: Array<{ chatId: string; ok: boolean }>
+  /** Catalog names the fake expander resolves, mapped to what it expands to. */
+  localCommands?: Record<string, { prompt: string; kind: "skill" | "command" }>
+  expandCalls?: Array<{ chatId: string; content: string }>
 }
 
 function makeDeps(opts: DepsOptions = {}): SendCommandDeps & { startTurnCalled: StartTurnForChatArgs[] } {
@@ -196,6 +199,12 @@ function makeDeps(opts: DepsOptions = {}): SendCommandDeps & { startTurnCalled: 
     runCronCommand: async (chatId: string, result: { ok: boolean }) => {
       (opts.cronCalls ?? []).push({ chatId, ok: result.ok })
       return null
+    },
+    expandSlashCommand: (chatId: string, content: string) => {
+      opts.expandCalls?.push({ chatId, content })
+      const name = /^\/([\w:./-]+)/.exec(content.trim())?.[1] ?? ""
+      const hit = opts.localCommands?.[name]
+      return hit ? { prompt: hit.prompt, name, kind: hit.kind } : null
     },
   }
 }
@@ -855,5 +864,158 @@ describe("non-builtin slash commands", () => {
     expect(deps.startTurnCalled).toHaveLength(1)
     expect(deps.startTurnCalled[0].content).toBe("/deploy staging")
     expect(deps.startTurnCalled[0].appendUserPrompt).toBe(true)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Local slash-command expansion — providers whose harness cannot expand `/name`
+// ---------------------------------------------------------------------------
+
+const LOCAL = {
+  "kanna-test": { prompt: "Run the gates.", kind: "skill" as const },
+  review: { prompt: "Review the diff.", kind: "command" as const },
+}
+
+describe("sendCommand — local slash commands", () => {
+  test("codex runs the skill's instructions, not the line the user typed", async () => {
+    const deps = makeDeps({ chatProvider: "codex", localCommands: LOCAL })
+    await sendCommand(deps, {
+      type: "chat.send",
+      chatId: "chat-1",
+      content: "/kanna-test src",
+      provider: "codex",
+    } as never)
+
+    expect(deps.startTurnCalled).toHaveLength(1)
+    expect(deps.startTurnCalled[0]!.promptOverride).toBe("Run the gates.")
+  })
+
+  // The bubble must stay readable: a skill body is thousands of characters and
+  // is not what the user asked for.
+  test("the transcript keeps the typed line and records what expanded", async () => {
+    const deps = makeDeps({ chatProvider: "codex", localCommands: LOCAL })
+    await sendCommand(deps, {
+      type: "chat.send",
+      chatId: "chat-1",
+      content: "/kanna-test src",
+      provider: "codex",
+    } as never)
+
+    const args = deps.startTurnCalled[0]!
+    expect(args.content).toBe("/kanna-test src")
+    expect(args.appendUserPrompt).toBe(true)
+    expect(args.expandedCommand).toEqual({ name: "kanna-test", kind: "skill" })
+  })
+
+  test("claude is left alone — its own CLI expands the command", async () => {
+    const expandCalls: Array<{ chatId: string; content: string }> = []
+    const deps = makeDeps({ chatProvider: "claude", localCommands: LOCAL, expandCalls })
+    await sendCommand(deps, {
+      type: "chat.send",
+      chatId: "chat-1",
+      content: "/kanna-test src",
+      provider: "claude",
+    } as never)
+
+    expect(expandCalls).toHaveLength(0)
+    expect(deps.startTurnCalled[0]!.promptOverride).toBeUndefined()
+    expect(deps.startTurnCalled[0]!.content).toBe("/kanna-test src")
+  })
+
+  test("openrouter is left alone too — same SDK, same catalog", async () => {
+    const expandCalls: Array<{ chatId: string; content: string }> = []
+    const deps = makeDeps({ chatProvider: "openrouter", localCommands: LOCAL, expandCalls })
+    await sendCommand(deps, {
+      type: "chat.send",
+      chatId: "chat-1",
+      content: "/review",
+      provider: "openrouter",
+    } as never)
+
+    expect(expandCalls).toHaveLength(0)
+    expect(deps.startTurnCalled[0]!.promptOverride).toBeUndefined()
+  })
+
+  test("a name the catalog does not know is sent verbatim", async () => {
+    const deps = makeDeps({ chatProvider: "codex", localCommands: LOCAL })
+    await sendCommand(deps, {
+      type: "chat.send",
+      chatId: "chat-1",
+      content: "/nope arg",
+      provider: "codex",
+    } as never)
+
+    expect(deps.startTurnCalled[0]!.promptOverride).toBeUndefined()
+    expect(deps.startTurnCalled[0]!.content).toBe("/nope arg")
+  })
+
+  // Builtins are Kanna state, and dispatch intercepts the name before the
+  // catalog is ever consulted — a project `.claude/commands/clear.md` must not
+  // shadow `/clear`.
+  test("a builtin still wins over a catalog entry of the same name", async () => {
+    const clearedChatIds: string[] = []
+    const deps = makeDeps({
+      chatProvider: "codex",
+      clearedChatIds,
+      localCommands: { clear: { prompt: "not this", kind: "command" } },
+    })
+    await sendCommand(deps, {
+      type: "chat.send",
+      chatId: "chat-1",
+      content: "/clear",
+      provider: "codex",
+    } as never)
+
+    expect(clearedChatIds).toEqual(["chat-1"])
+    expect(deps.startTurnCalled).toHaveLength(0)
+  })
+
+  // Expansion sits AFTER the busy check, exactly like the builtin dispatch, so
+  // a slash command typed mid-turn queues like any other message.
+  test("a slash command typed while the chat is busy queues instead of expanding", async () => {
+    const enqueuedMessages: Array<{ chatId: string; content: string }> = []
+    const deps = makeDeps({
+      chatProvider: "codex",
+      activeChatIds: ["chat-1"],
+      enqueuedMessages,
+      localCommands: LOCAL,
+    })
+    const result = await sendCommand(deps, {
+      type: "chat.send",
+      chatId: "chat-1",
+      content: "/kanna-test",
+      provider: "codex",
+    } as never)
+
+    expect(result.queued).toBe(true)
+    expect(enqueuedMessages).toEqual([{ chatId: "chat-1", content: "/kanna-test" }])
+    expect(deps.startTurnCalled).toHaveLength(0)
+  })
+})
+
+describe("dequeueAndStartQueuedMessage — local slash commands", () => {
+  test("a queued slash command expands when it drains", async () => {
+    const deps = makeDeps({ chatProvider: "codex", localCommands: LOCAL })
+    await dequeueAndStartQueuedMessage(
+      deps,
+      "chat-1",
+      makeQueuedMessage({ content: "/review", provider: "codex" }),
+    )
+    expect(deps.startTurnCalled[0]!.promptOverride).toBe("Review the diff.")
+  })
+
+  // A steered message is an injection into a live session, not a fresh turn —
+  // the same reason a builtin falls through as text there.
+  test("a steered slash command falls through as text", async () => {
+    const expandCalls: Array<{ chatId: string; content: string }> = []
+    const deps = makeDeps({ chatProvider: "codex", localCommands: LOCAL, expandCalls })
+    await dequeueAndStartQueuedMessage(
+      deps,
+      "chat-1",
+      makeQueuedMessage({ content: "/review", provider: "codex" }),
+      { steered: true },
+    )
+    expect(expandCalls).toHaveLength(0)
+    expect(deps.startTurnCalled[0]!.promptOverride).toBeUndefined()
   })
 })

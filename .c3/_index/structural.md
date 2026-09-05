@@ -1,5 +1,5 @@
 # C3 Structural Index
-<!-- hash: sha256:a1be99d1f4b0bcaf07c541bebcdd962200ceb179032ce0c9548f8dc28c27a562 -->
+<!-- hash: sha256:7a9a4e62470cb377986b20e54e4733bf2027704fed4e35c222117c860a08069a -->
 
 ## c3-0 — Kanna (system)
 
@@ -142,7 +142,7 @@ files: src/server/process-utils.adapter.ts, src/server/process-utils.test.ts
 container: c3-2 | context: c3-0
 refs: ref-colocated-bun-test, ref-event-sourcing, ref-provider-adapter, ref-tool-hydration, rule-colocated-bun-test
 reverse deps: adr-20260617-subagent-id-or-name-resolution, adr-20260617-subagent-trigger-mode
-files: src/server/agent.test.ts, src/server/agent.ts, src/server/claude-context-commands.test.ts, src/server/claude-context-commands.ts, src/server/claude-send-command.test.ts, src/server/claude-send-command.ts, src/server/claude-session-lifecycle.test.ts, src/server/claude-session-lifecycle.ts, src/server/claude-session-runner.test.ts, src/server/claude-session-runner.ts, src/server/claude-session-state-queries.test.ts, src/server/claude-session-state-queries.ts, src/server/claude-session-state.ts, src/server/claude-turn-starter.ts, src/server/history-primer.test.ts, src/server/history-primer.ts, src/server/loop-wake-recovery.test.ts, src/server/loop-wake-recovery.ts, src/server/mention-parser.test.ts, src/server/mention-parser.ts, src/server/proactive-compact.test.ts, src/server/proactive-compact.ts, src/server/subagent-entry-cap.test.ts, src/server/subagent-orchestrator.test.ts, src/server/subagent-orchestrator.ts, src/server/subagent-provider-run.test.ts, src/server/subagent-provider-run.ts
+files: src/server/agent.test.ts, src/server/agent.ts, src/server/claude-context-commands.test.ts, src/server/claude-context-commands.ts, src/server/claude-send-command.test.ts, src/server/claude-send-command.ts, src/server/claude-session-lifecycle.test.ts, src/server/claude-session-lifecycle.ts, src/server/claude-session-runner.test.ts, src/server/claude-session-runner.ts, src/server/claude-session-state-queries.test.ts, src/server/claude-session-state-queries.ts, src/server/claude-session-state.ts, src/server/claude-turn-starter-types.ts, src/server/claude-turn-starter.ts, src/server/history-primer.test.ts, src/server/history-primer.ts, src/server/loop-wake-recovery.test.ts, src/server/loop-wake-recovery.ts, src/server/mention-parser.test.ts, src/server/mention-parser.ts, src/server/proactive-compact.test.ts, src/server/proactive-compact.ts, src/server/subagent-entry-cap.test.ts, src/server/subagent-orchestrator.test.ts, src/server/subagent-orchestrator.ts, src/server/subagent-provider-run.test.ts, src/server/subagent-provider-run.ts
 
 ## c3-211 — codex-app-server (component)
 container: c3-2 | context: c3-0
@@ -246,6 +246,7 @@ reverse deps: adr-20260618-adr-20260618-openrouter-sdk-provider
 ## c3-231 — local-catalog (component)
 container: c3-2 | context: c3-0
 refs: ref-colocated-bun-test, ref-local-first-data, ref-side-effect-adapter
+files: src/server/claude-slash-commands.test.ts, src/server/claude-slash-commands.ts, src/server/local-catalog-io.adapter.test.ts, src/server/local-catalog-io.adapter.ts, src/server/local-catalog.test.ts, src/server/local-catalog.ts, src/server/skill-invocation.test.ts, src/server/skill-invocation.ts, src/shared/slash-expansion.test.ts, src/shared/slash-expansion.ts
 
 ## c3-232 — boards (component)
 container: c3-2 | context: c3-0
@@ -293,7 +294,7 @@ context: c3-0
 ## c3-301 — types (component)
 container: c3-3 | context: c3-0
 refs: ref-strong-typing, rule-strong-typing
-files: src/shared/analytics.ts, src/shared/kanna-system-prompt.test.ts, src/shared/kanna-system-prompt.ts, src/shared/mask-oauth-key.test.ts, src/shared/mask-oauth-key.ts, src/shared/mention-pattern.ts, src/shared/permission-policy.test.ts, src/shared/permission-policy.ts, src/shared/projectFileUrl.test.ts, src/shared/projectFileUrl.ts, src/shared/types.test.ts, src/shared/types.ts
+files: src/shared/analytics.ts, src/shared/dynamic-module.ts, src/shared/json.test.ts, src/shared/json.ts, src/shared/kanna-system-prompt.test.ts, src/shared/kanna-system-prompt.ts, src/shared/mask-oauth-key.test.ts, src/shared/mask-oauth-key.ts, src/shared/mention-pattern.ts, src/shared/permission-policy.test.ts, src/shared/permission-policy.ts, src/shared/projectFileUrl.test.ts, src/shared/projectFileUrl.ts, src/shared/types.test.ts, src/shared/types.ts
 
 ## c3-302 — protocol (component)
 container: c3-3 | context: c3-0
@@ -575,6 +576,7 @@ src/server/claude-session-runner.ts → c3-210
 src/server/claude-session-state-queries.test.ts → c3-210
 src/server/claude-session-state-queries.ts → c3-210
 src/server/claude-session-state.ts → c3-210
+src/server/claude-turn-starter-types.ts → c3-210
 src/server/claude-turn-starter.ts → c3-210
 src/server/history-primer.test.ts → c3-210
 src/server/history-primer.ts → c3-210
@@ -662,6 +664,16 @@ src/server/workflow-watch-io.adapter.test.ts → c3-229
 src/server/workflow-watch-io.adapter.ts → c3-229
 src/shared/workflow-types.test.ts → c3-229
 src/shared/workflow-types.ts → c3-229
+src/server/claude-slash-commands.test.ts → c3-231
+src/server/claude-slash-commands.ts → c3-231
+src/server/local-catalog-io.adapter.test.ts → c3-231
+src/server/local-catalog-io.adapter.ts → c3-231
+src/server/local-catalog.test.ts → c3-231
+src/server/local-catalog.ts → c3-231
+src/server/skill-invocation.test.ts → c3-231
+src/server/skill-invocation.ts → c3-231
+src/shared/slash-expansion.test.ts → c3-231
+src/shared/slash-expansion.ts → c3-231
 src/server/board-*.ts → c3-232
 src/server/kanna-mcp-boards.test.ts → c3-232
 src/server/kanna-mcp-boards.ts → c3-232
@@ -709,6 +721,9 @@ src/server/claude-session-config.ts → c3-239
 src/server/event-store.stack-methods.test.ts → c3-239
 src/server/ws-router.stack.test.ts → c3-239
 src/shared/analytics.ts → c3-301
+src/shared/dynamic-module.ts → c3-301
+src/shared/json.test.ts → c3-301
+src/shared/json.ts → c3-301
 src/shared/kanna-system-prompt.test.ts → c3-301
 src/shared/kanna-system-prompt.ts → c3-301
 src/shared/mask-oauth-key.test.ts → c3-301

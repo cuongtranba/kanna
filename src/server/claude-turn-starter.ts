@@ -9,154 +9,39 @@
  * All IO is delegated through the StartTurnDeps interface; this file is pure
  * orchestration and therefore does NOT need an `.adapter.ts` suffix.
  */
-import type {
-  AgentProvider,
-  ChatAttachment,
-  ResolvedStackBinding,
-  Subagent,
-  TranscriptEntry,
-  ClaudeDriverPreference,
-} from "../shared/types"
+import type { AgentProvider } from "../shared/types"
 import { isCodexReasoningEffort, providerUsesSdkSession } from "../shared/types"
 import { isClaudeSdkProvider } from "./provider-catalog"
-import type { ChatRecord, ProjectRecord } from "./events"
-import type { ActiveTurn, ClaudeSessionState, StartingTurn } from "./claude-session-state"
-import type { PendingToolSlots } from "./pending-tool-slot"
+import type { ChatRecord } from "./events"
+import type { ActiveTurn, StartingTurn } from "./claude-session-state"
 import type { JsonValue } from "../shared/json"
 import type { HarnessTurn, HarnessToolRequest } from "./harness-types"
-import type { EventStore } from "./event-store"
-import type { CodexAppServerManager } from "./codex-app-server"
-import type { SubagentOrchestrator } from "./subagent-orchestrator"
+import type {
+  StartTurnAfterTurnStartedCtx,
+  StartTurnDeps,
+  StartTurnForChatArgs,
+} from "./claude-turn-starter-types"
 import { OAuthPoolUnavailableError } from "./oauth-errors"
 import { buildPromptText } from "./claude-prompt-helpers"
 import { buildHistoryPrimer, shouldInjectPrimer } from "./history-primer"
 import { fallbackTitleFromMessage } from "./generate-title"
 import { parseMentions, type ParsedMention } from "./mention-parser"
 import { resolveProjectInstructions, resolveSpawnPaths, resolveStackProjects } from "./claude-session-config"
-import { buildCodexDeveloperInstructions, type KannaSystemPromptOptions } from "../shared/kanna-system-prompt"
+import { buildCodexDeveloperInstructions } from "../shared/kanna-system-prompt"
 import { timestamped } from "./claude-message-normalizer"
-import {
-  logClaudeSteer,
-  logSendToStartingProfile,
-  type SendToStartingProfile,
-} from "./claude-steer-log"
+import { logClaudeSteer, logSendToStartingProfile } from "./claude-steer-log"
 import { log } from "../shared/log"
 import { withSpan } from "./observability"
 import { LOG_PREFIX } from "../shared/branding"
 
 const PRIMER_TAIL_LIMIT = 1000
 
-// ---------------------------------------------------------------------------
-// Dep types
-// ---------------------------------------------------------------------------
-
-/** Args for the inner startClaudeTurn dep — mirrors the private method signature. */
-export interface StartClaudeTurnArgs {
-  chatId: string
-  projectId: string
-  localPath: string
-  additionalDirectories?: string[]
-  stackProjects?: ResolvedStackBinding[]
-  /** Workspace / stack / per-project instruction blocks for this turn. */
-  instructions?: Omit<KannaSystemPromptOptions, "stackProjects">
-  model: string
-  effort?: string
-  planMode: boolean
-  sessionToken: string | null
-  forkSession: boolean
-  onToolRequest: (request: HarnessToolRequest) => Promise<JsonValue>
-  provider: AgentProvider
-}
-
-/** AppSettings snapshot fields consumed by this module. */
-export interface StartTurnAppSettings {
-  globalPromptAppend?: string
-}
-
-/**
- * All AgentCoordinator fields / methods accessed by the turn spawning pipeline.
- * Passed as a single deps argument to the two extracted functions.
- */
-export interface StartTurnDeps {
-  // Maps (mutable — methods read and write these)
-  activeTurns: Map<string, ActiveTurn>
-  /**
-   * Turns whose provider session is still booting. Registered synchronously
-   * here before the first `await` and removed in a `finally`, so cancel /
-   * send-queueing / status derivation all see the chat as busy during the
-   * spawn window.
-   */
-  startingTurns: Map<string, StartingTurn>
-  claudeSessions: Map<string, ClaudeSessionState>
-  drainingStreams: Map<string, { turn: HarnessTurn }>
-  mentionedSubagentIdsByChat: Map<string, string[]>
-
-  // Service objects
-  store: EventStore
-  codexManager: CodexAppServerManager
-  subagentOrchestrator: Pick<SubagentOrchestrator, "clearChatCancellation">
-
-  // Callbacks for private AgentCoordinator methods
-  clearDrainingStream: (chatId: string) => void
-  emitStateChange: (chatId: string, options?: { immediate?: boolean }) => void
-  resolveClaudeDriverPreference: () => ClaudeDriverPreference
-  /**
-   * Tear down a Claude session. Only used when a cancel lands mid-boot under
-   * the PTY driver, where interrupting the fresh turn kills the CLI and the
-   * session in `claudeSessions` is left dead.
-   */
-  closeClaudeSession: (chatId: string, session: ClaudeSessionState) => void
-  getSubagents: () => Subagent[]
-  getAppSettingsSnapshot: () => StartTurnAppSettings
-  /** Fired in background (return value discarded). */
-  generateTitleInBackground: (chatId: string, content: string, localPath: string, optimisticTitle: string) => Promise<void>
-  pendingTools: PendingToolSlots
-  startClaudeTurn: (args: StartClaudeTurnArgs) => Promise<HarnessTurn>
-  findLastUserMessageId: (chatId: string) => string | null
-  /** Fires the runTurn loop (return value discarded). */
-  runTurn: (active: ActiveTurn) => void
-}
-
-// ---------------------------------------------------------------------------
-// Arg types (mirror the private method signatures)
-// ---------------------------------------------------------------------------
-
-export interface StartTurnForChatArgs {
-  chatId: string
-  provider: AgentProvider
-  content: string
-  attachments: ChatAttachment[]
-  model: string
-  effort?: string
-  serviceTier?: "fast"
-  planMode: boolean
-  appendUserPrompt: boolean
-  steered?: boolean
-  autoContinue?: { scheduleId: string }
-  cronRun?: import("../shared/cron/types").CronRunTag
-  userClearedContext?: boolean
-  profile?: SendToStartingProfile | null
-  /**
-   * Invoked once `turn_started` is durably recorded — the point after which
-   * this turn is replayable from the event log. Callers that hold the turn's
-   * only durable trigger (a queued message) release it here, so a crash
-   * before this point leaves the trigger intact instead of losing the turn.
-   */
-  onTurnRecorded?: () => Promise<void>
-}
-
-interface StartTurnAfterTurnStartedCtx {
-  args: StartTurnForChatArgs
-  /** This boot's marker — checked once the provider session resolves. */
-  starting: StartingTurn
-  chat: ChatRecord
-  project: ProjectRecord
-  /** Lazy: reads recent tail entries for primer injection — avoids loading the full transcript. */
-  loadExistingMessages: () => readonly TranscriptEntry[]
-  shouldGenerateTitle: boolean
-  optimisticTitle: string | null
-  appendedUserMessageId: string | null
-}
+export type {
+  StartClaudeTurnArgs,
+  StartTurnAppSettings,
+  StartTurnDeps,
+  StartTurnForChatArgs,
+} from "./claude-turn-starter-types"
 
 // ---------------------------------------------------------------------------
 // Extracted functions
@@ -309,6 +194,7 @@ async function startTurnForChatInner(
         autoContinue: args.autoContinue,
         ...(subagentMentions.length > 0 ? { subagentMentions } : {}),
         ...(unknownSubagentMentions.length > 0 ? { unknownSubagentMentions } : {}),
+        ...(args.expandedCommand ? { expandedCommand: args.expandedCommand } : {}),
       },
       Date.now()
     )
@@ -449,7 +335,10 @@ async function startTurnAfterTurnStarted(
     targetProvider,
     Boolean(args.userClearedContext),
   )
-  const userPromptText = buildPromptText(args.content, args.attachments)
+  // `promptOverride` is what the provider runs when Kanna expanded a local
+  // slash command for it; `args.content` stays the line the user typed, which
+  // is what the transcript and the title are built from.
+  const userPromptText = buildPromptText(args.promptOverride ?? args.content, args.attachments)
   const primer = shouldPrime
     ? buildHistoryPrimer(loadExistingMessages(), targetProvider, userPromptText)
     : null
@@ -518,7 +407,15 @@ async function startTurnAfterTurnStarted(
       serviceTier: args.serviceTier,
       sessionToken: existingToken,
       pendingForkSessionToken: pendingForkToken,
-      developerInstructions: buildCodexDeveloperInstructions({ ...instructionOptions, stackProjects }),
+      // The skill roster is Codex's ONLY route to a local skill: its protocol
+      // has no way to declare a tool, so naming each SKILL.md by absolute path
+      // is what makes one reachable. Applied at `thread/start`, so a skill
+      // authored mid-chat lands at the next session start.
+      developerInstructions: buildCodexDeveloperInstructions({
+        ...instructionOptions,
+        stackProjects,
+        skills: deps.listSkills(args.chatId),
+      }),
     })
     if (pendingForkToken && sessionToken) {
       await deps.store.setPendingForkSessionToken(args.chatId, null)

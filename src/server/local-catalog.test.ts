@@ -245,3 +245,92 @@ describe("LocalCatalogService", () => {
     expect(calls).toBe(2)
   })
 })
+
+/**
+ * `list()` is a picker projection and drops the file path, which is exactly
+ * what a provider that cannot expand `/name` itself needs: Kanna has to open
+ * the file and send its contents. These two readers surface what the scan
+ * already found rather than scanning again.
+ */
+describe("LocalCatalogService.resolve", () => {
+  const entries = [
+    raw({ name: "deploy", kind: "skill", scope: "personal", filePath: "/home/u/.claude/skills/deploy/SKILL.md" }),
+    raw({ name: "deploy", kind: "skill", scope: "project", filePath: "/proj/.claude/skills/deploy/SKILL.md" }),
+    raw({ name: "hidden", kind: "skill", scope: "project", userInvocable: false }),
+  ]
+
+  test("returns the same winner list() shows, with the file path list() drops", () => {
+    const { svc } = makeStampedService(() => entries)
+    expect(svc.resolve("/proj", "deploy")).toMatchObject({
+      name: "deploy",
+      kind: "skill",
+      scope: "project",
+      filePath: "/proj/.claude/skills/deploy/SKILL.md",
+    })
+  })
+
+  test("matches case-insensitively, as the catalog dedupes", () => {
+    const { svc } = makeStampedService(() => entries)
+    expect(svc.resolve("/proj", "DePloY")?.filePath).toBe("/proj/.claude/skills/deploy/SKILL.md")
+  })
+
+  test("refuses a name the picker does not offer, so the two cannot disagree", () => {
+    const { svc } = makeStampedService(() => entries)
+    expect(svc.resolve("/proj", "hidden")).toBeNull()
+    expect(svc.resolve("/proj", "nope")).toBeNull()
+  })
+
+  test("shares the cache with list() rather than rescanning", () => {
+    let calls = 0
+    const { svc } = makeStampedService(() => {
+      calls += 1
+      return entries
+    })
+    svc.list("/proj")
+    svc.resolve("/proj", "deploy")
+    expect(calls).toBe(1)
+  })
+})
+
+describe("LocalCatalogService.skills", () => {
+  test("lists skills only — a command template is not model-invocable", () => {
+    const { svc } = makeStampedService(() => [
+      raw({ name: "review", kind: "command", scope: "project" }),
+      raw({ name: "deploy", kind: "skill", scope: "project" }),
+    ])
+    expect(svc.skills("/proj").map((e) => e.name)).toEqual(["deploy"])
+  })
+
+  // `user-invocable: false` hides a skill from the `/` picker while leaving
+  // auto-triggering intact, so the roster must still name it.
+  test("includes a skill the picker hides", () => {
+    const { svc } = makeStampedService(() => [
+      raw({ name: "internal", kind: "skill", scope: "project", userInvocable: false }),
+    ])
+    expect(svc.skills("/proj").map((e) => e.name)).toEqual(["internal"])
+  })
+
+  test("still resolves precedence, so one name yields one skill", () => {
+    const { svc } = makeStampedService(() => [
+      raw({ name: "deploy", kind: "skill", scope: "plugin", description: "plugin" }),
+      raw({ name: "deploy", kind: "skill", scope: "project", description: "project" }),
+    ])
+    expect(svc.skills("/proj")).toHaveLength(1)
+    expect(svc.skills("/proj")[0]!.description).toBe("project")
+  })
+
+  test("carries name, description and path — the three facts the roster states", () => {
+    const { svc } = makeStampedService(() => [
+      raw({
+        name: "deploy",
+        kind: "skill",
+        scope: "project",
+        description: "Ship it.",
+        filePath: "/proj/.claude/skills/deploy/SKILL.md",
+      }),
+    ])
+    expect(svc.skills("/proj")).toEqual([
+      { name: "deploy", description: "Ship it.", filePath: "/proj/.claude/skills/deploy/SKILL.md" },
+    ])
+  })
+})

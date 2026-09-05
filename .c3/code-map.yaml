@@ -151,6 +151,7 @@ c3-210:
   - src/server/claude-session-state-queries.ts
   - src/server/claude-session-state.ts
   - src/server/claude-turn-starter.ts
+  - src/server/claude-turn-starter-types.ts
   - src/server/history-primer.test.ts
   - src/server/history-primer.ts
   - src/server/loop-wake-recovery.test.ts
@@ -258,6 +259,17 @@ c3-229:
   - src/server/workflow-watch-io.adapter.ts
   - src/shared/workflow-types.test.ts
   - src/shared/workflow-types.ts
+c3-231:
+  - src/server/local-catalog.ts
+  - src/server/local-catalog.test.ts
+  - src/server/local-catalog-io.adapter.ts
+  - src/server/local-catalog-io.adapter.test.ts
+  - src/server/claude-slash-commands.ts
+  - src/server/claude-slash-commands.test.ts
+  - src/server/skill-invocation.ts
+  - src/server/skill-invocation.test.ts
+  - src/shared/slash-expansion.ts
+  - src/shared/slash-expansion.test.ts
 c3-232:
   - src/server/board-*.ts
   - src/server/kanna-mcp-boards.test.ts
