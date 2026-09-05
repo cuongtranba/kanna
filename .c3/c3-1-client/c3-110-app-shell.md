@@ -1,7 +1,7 @@
 ---
 id: c3-110
 c3-version: 4
-c3-seal: 2f299cc66565faeefddc07eaec99a61ffc2a4aecfd5a187183736dbd8e672a24
+c3-seal: 5c6f214e8e4a994171cb3841616c02057f812dcf214426be1edeaa36b37cea7d
 title: app-shell
 type: component
 category: feature

@@ -1,6 +1,6 @@
 ---
 id: adr-20260819-n-sync-bindings-per-board
-c3-seal: 511361ada526b1829f36d5ad8857f315926594a1cd344eb3383a4b38709ed5d1
+c3-seal: 295d134f7e9a0f94f658d391e70d0508098b7fa34aa92e25a6700539d4d1d8bf
 title: n-sync-bindings-per-board
 type: adr
 goal: |-
@@ -93,25 +93,25 @@ be counted because there was only ever one outbox to filter.
 
 | Entity | Type | Why affected | Evidence | Governance review |
 | --- | --- | --- | --- | --- |
-| c3-232 | component | Owns the store port, the registry and the sync engine. Its BoardRegistry contract loses `getBinding` for `listBindings` and gains `unbindSync`; its Tracker sync contract becomes per-binding, including per-binding failure isolation | c3-232#n11096@v1:sha256:d8161c3abb4c208d15db7ddb37393f1078dbcf8f23a6ee558a5129ddc5c9158c | ref-side-effect-adapter and ref-cqrs-read-models both hold — the loop stays in the engine, the adapter stays the only SQLite importer |
-| c3-119 | component | The sync panel's contract said it binds a board to *a* tracker; it now connects several, lists them, and disconnects one without touching the others | c3-119#n9259@v1:sha256:44cee1d73329ad6c49681fb54007e97847bf257532bbc07977c5e3bfe14314c4 | ref-ws-subscription — the panel still reads `board.sync.status` request/response, adding no subscription |
+| c3-232 | component | Owns the store port, the registry and the sync engine. Its BoardRegistry contract loses getBinding for listBindings and gains unbindSync; its Tracker sync contract becomes per-binding, including per-binding failure isolation | c3-232#n11096@v1:sha256:d8161c3abb4c208d15db7ddb37393f1078dbcf8f23a6ee558a5129ddc5c9158c | ref-side-effect-adapter and ref-cqrs-read-models both hold — the loop stays in the engine, the adapter stays the only SQLite importer |
+| c3-119 | component | The sync panel's contract said it binds a board to a tracker; it now connects several, lists them, and disconnects one without touching the others | c3-119#n9259@v1:sha256:44cee1d73329ad6c49681fb54007e97847bf257532bbc07977c5e3bfe14314c4 | ref-ws-subscription — the panel still reads board.sync.status request/response, adding no subscription |
 
 ## Compliance Refs
 
 | Ref | Why required | Evidence | Action |
 | --- | --- | --- | --- |
-| ref-side-effect-adapter | The binding loop, `deleteBinding` and `countHeldOutbox` all touch persistence; only `board-store.adapter.ts` may import `bun:sqlite` | ref-side-effect-adapter#n10118@v1:sha256:d97da3a35cbbfc743202e4b37a53c5ae837c6f8c802bdd22685991e0bfe439ee | comply — the new store methods are declared on the `board-store.ts` port and implemented in the adapter; `board-sync.ts` takes them injected and imports no IO |
-| ref-cqrs-read-models | `BoardSyncStatus` is derived per read, not persisted, so widening it to a list must not add stored state | ref-cqrs-read-models#n9985@v1:sha256:cc9d478fbc03fb946ec0feaf95b2e7bb2d9a0be5222850d04c8b5410718e9369 | comply — `bindings`, `suggestedRepos` and `routing` are all recomputed on every status read |
+| ref-side-effect-adapter | The binding loop, deleteBinding and countHeldOutbox all touch persistence; only board-store.adapter.ts may import bun:sqlite | ref-side-effect-adapter#n10118@v1:sha256:d97da3a35cbbfc743202e4b37a53c5ae837c6f8c802bdd22685991e0bfe439ee | comply — the new store methods are declared on the board-store.ts port and implemented in the adapter; board-sync.ts takes them injected and imports no IO |
+| ref-cqrs-read-models | BoardSyncStatus is derived per read, not persisted, so widening it to a list must not add stored state | ref-cqrs-read-models#n9985@v1:sha256:cc9d478fbc03fb946ec0feaf95b2e7bb2d9a0be5222850d04c8b5410718e9369 | comply — bindings, suggestedRepos and routing are all recomputed on every status read |
 
 ## Work Breakdown
 
 | Area | Detail | Evidence |
 | --- | --- | --- |
-| Store port | `getBinding` → `listBindings`; add `deleteBinding`, `countHeldOutbox`; `upsertBinding` keys on (board_id, source_ref) | src/server/board-store.ts, src/server/board-store.adapter.ts |
-| Sync engine | `resolve` returns a list; extract `pullOneBinding` / `drainOneBinding`; add `BindingPullResult`; drop `PullSummary.cursor` | src/server/board-sync.ts |
-| Registry | `listBindings`, `unbindSync` with a cross-board ownership check | src/server/board-registry.ts |
-| Wire | `board.sync.unbind`; `BoardSyncStatus.bindings`; `suggestedRepo` → `RepoSuggestion[]` | src/shared/protocol.ts, src/shared/boards/sync-types.ts, src/server/ws-router-boards.ts |
-| Suggestions | `suggestSyncRepos` walks a Stack's member projects, one `git remote get-url` each, request/response only | src/server/server.ts |
+| Store port | getBinding → listBindings; add deleteBinding, countHeldOutbox; upsertBinding keys on (board_id, source_ref) | src/server/board-store.ts, src/server/board-store.adapter.ts |
+| Sync engine | resolve returns a list; extract pullOneBinding / drainOneBinding; add BindingPullResult; drop PullSummary.cursor | src/server/board-sync.ts |
+| Registry | listBindings, unbindSync with a cross-board ownership check | src/server/board-registry.ts |
+| Wire | board.sync.unbind; BoardSyncStatus.bindings; suggestedRepo → RepoSuggestion[] | src/shared/protocol.ts, src/shared/boards/sync-types.ts, src/server/ws-router-boards.ts |
+| Suggestions | suggestSyncRepos walks a Stack's member projects, one git remote get-url each, request/response only | src/server/server.ts |
 | UI | Connected repos render as a list with per-row disconnect; the repo field becomes an add row seeded with the next unbound suggestion | src/client/components/boards/BoardSyncPanel.tsx |
 
 ## Enforcement Surfaces
@@ -126,19 +126,19 @@ be counted because there was only ever one outbox to filter.
 
 | Alternative | Rejected because |
 | --- | --- |
-| Keep `getBinding` and add `listBindings` beside it | Two readers of the same table, one of which silently answers for the first row only. The singular reader is exactly the defect; leaving it callable guarantees a future call site reintroduces the bug. |
-| Aggregate the per-binding cursors into `PullSummary.cursor` | A cursor is a per-binding watermark. An aggregate is a value no binding holds, and every consumer that read it would be reading a lie that typechecks. |
-| Defer unbind and `RepoSuggestion[]` to #760 | Both are consequences of N bindings existing, not of the connect screen. With one binding, "disconnect" was indistinguishable from "rebind" and `held` could not be counted at all; splitting them would ship a state the UI cannot express. |
-| Add a UNIQUE constraint on (board_id, source_ref) | The correctness rule that matters is one repo to one *board*, which is cross-board and cannot be expressed as a per-board unique index. #760 owns that rule; a per-board constraint would look like it and not be it. |
+| Keep getBinding and add listBindings beside it | Two readers of the same table, one of which silently answers for the first row only. The singular reader is exactly the defect; leaving it callable guarantees a future call site reintroduces the bug. |
+| Aggregate the per-binding cursors into PullSummary.cursor | A cursor is a per-binding watermark. An aggregate is a value no binding holds, and every consumer that read it would be reading a lie that typechecks. |
+| Defer unbind and RepoSuggestion[] to #760 | Both are consequences of N bindings existing, not of the connect screen. With one binding, "disconnect" was indistinguishable from "rebind" and held could not be counted at all; splitting them would ship a state the UI cannot express. |
+| Add a UNIQUE constraint on (board_id, source_ref) | The correctness rule that matters is one repo to one board, which is cross-board and cannot be expressed as a per-board unique index. #760 owns that rule; a per-board constraint would look like it and not be it. |
 
 ## Risks
 
 | Risk | Mitigation | Verification |
 | --- | --- | --- |
-| A board carrying two bindings to the same repo double-imports every issue as two cards | `upsertBinding` keys on (board_id, source_ref), so re-binding the same repo updates rather than duplicates; the cross-board rule is #760's | bun run test --conditions production src/server/board-store.adapter.test.ts |
+| A board carrying two bindings to the same repo double-imports every issue as two cards | upsertBinding keys on (board_id, source_ref), so re-binding the same repo updates rather than duplicates; the cross-board rule is #760's | bun run test --conditions production src/server/board-store.adapter.test.ts |
 | Losing an existing board's cursor on upgrade | Identity widened, never narrowed — an existing row still matches on (board_id, source_ref) and its cursor is preserved on re-bind | bun run test --conditions production src/server/board-store.adapter.test.ts |
-| `suggestSyncRepos` shelling out per project lands on a broadcast path and spawns N git subprocesses per push | Reachable only from `board.sync.status`, a request/response command; documented at both the definition and the dep declaration | src/server/server.ts, src/server/ws-router-boards.ts |
-| One binding's failure silently degrading the whole board's sync to zero | Errors recorded per binding on `BindingPullResult` rather than caught and continued | bun run test --conditions production src/server/board-sync.test.ts |
+| suggestSyncRepos shelling out per project lands on a broadcast path and spawns N git subprocesses per push | Reachable only from board.sync.status, a request/response command; documented at both the definition and the dep declaration | src/server/server.ts, src/server/ws-router-boards.ts |
+| One binding's failure silently degrading the whole board's sync to zero | Errors recorded per binding on BindingPullResult rather than caught and continued | bun run test --conditions production src/server/board-sync.test.ts |
 
 ## Verification
 

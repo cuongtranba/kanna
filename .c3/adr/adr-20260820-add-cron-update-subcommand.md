@@ -1,6 +1,6 @@
 ---
 id: adr-20260820-add-cron-update-subcommand
-c3-seal: 2f55c53536f3ccef2b6fd568d718dde7064d03f71188cc77b69787ed57438500
+c3-seal: 18f42b2ff4aec4bf6b9358f6eacbd8e2968f6950d8b19011df3ecc48ec05fe66
 title: add-cron-update-subcommand
 type: adr
 goal: |-
@@ -48,8 +48,8 @@ arm-and-remove.
 
 | Entity | Type | Why affected | Evidence | Governance review |
 | --- | --- | --- | --- | --- |
-| c3-311 | component | parseCronCommand gains update subcommand; CronJobPatch type and CronCommand union extended; confirm-report now names update_cron | c3-311#n11794@v1:sha256:6a406a06e4870c174397d1c452437f4dde4225e7f542f11f9bb110e8601287df "Owns everything about `/cron` that is pure and shared: `parseCronCommand`" | Purpose updated to document the update grammar and CronJobPatch |
-| c3-233 | component | runCronCommand gains update case; cron_armed gains paused field; update_cron MCP tool and cron.update WS command added | c3-233#n11319@v1:sha256:87aa10e5888f4abbbebf2476b319cbcd260277726ced8403aa21268be4b54d3f "Owns the server half of the `/cron` feature. `runCronCommand` dispatches" | Purpose updated to list update dispatch and new tooling |
+| c3-311 | component | parseCronCommand gains update subcommand; CronJobPatch type and CronCommand union extended; confirm-report now names update_cron | c3-311#n11794@v1:sha256:6a406a06e4870c174397d1c452437f4dde4225e7f542f11f9bb110e8601287df "Owns everything about /cron that is pure and shared: parseCronCommand" | Purpose updated to document the update grammar and CronJobPatch |
+| c3-233 | component | runCronCommand gains update case; cron_armed gains paused field; update_cron MCP tool and cron.update WS command added | c3-233#n11319@v1:sha256:87aa10e5888f4abbbebf2476b319cbcd260277726ced8403aa21268be4b54d3f "Owns the server half of the /cron feature. runCronCommand dispatches" | Purpose updated to list update dispatch and new tooling |
 
 ## Work Breakdown
 

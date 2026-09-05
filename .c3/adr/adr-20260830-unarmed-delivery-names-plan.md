@@ -1,6 +1,6 @@
 ---
 id: adr-20260830-unarmed-delivery-names-plan
-c3-seal: 9262746fd1601286051c4b9de95daf63ccfc915dab7af6718800e21e2f2fbbae
+c3-seal: eafa71dce2bb4b43c17da9d233cb9e8b52f453da3c4317aba57c5fda790461a5
 title: unarmed-delivery-names-plan
 type: adr
 goal: Stop the un-armed background-delivery prompt from asserting a tracking filename it has no basis for. `deliverSubagentToMain`'s no-loop-armed branch told a context-cleared main agent to "Read PROGRESS.md if present" — a hardcoded literal. Name the real plan from the `loop_armed` tombstone instead, as an absolute path, and name nothing when there is no tombstone.
@@ -38,14 +38,14 @@ Deliberately NOT changed: `kanna-mcp.ts`'s `baseDir()` still falls back to the c
 
 | Entity | Type | Why affected | Evidence | Governance review |
 | --- | --- | --- | --- | --- |
-| c3-210 | component | Owns `deliverSubagentToMain`; its un-armed prompt branch is the defect and now derives the plan path from the loop tombstone instead of a hardcoded filename | c3-210#n9248@v1:sha256:4357f6d650059aba4f1624273b4114b7fad8925535deed9952140c789d48e5f8 | Confirm the no-tombstone path names no file, and that the armed branch is untouched |
-| c3-227 | N.A - checked, not modified | Checked because the prompt now reads `deriveLastLoopSpec`; that is a pure replay this component already exports and no file under `src/server/auto-continue/**` changed | c3-227#n10135@v1:sha256:f7affc2f6d825317e70bae8aa9faf9b19807849a5a39d911e467d871264b9fdd | None required now |
+| c3-210 | component | Owns deliverSubagentToMain; its un-armed prompt branch is the defect and now derives the plan path from the loop tombstone instead of a hardcoded filename | c3-210#n9248@v1:sha256:4357f6d650059aba4f1624273b4114b7fad8925535deed9952140c789d48e5f8 | Confirm the no-tombstone path names no file, and that the armed branch is untouched |
+| c3-227 | N.A - checked, not modified | Checked because the prompt now reads deriveLastLoopSpec; that is a pure replay this component already exports and no file under src/server/auto-continue/** changed | c3-227#n10135@v1:sha256:f7affc2f6d825317e70bae8aa9faf9b19807849a5a39d911e467d871264b9fdd | None required now |
 
 ## Verification
 
 | Check | Result |
 | --- | --- |
 | bun test --conditions production src/server/claude-loop-commands.test.ts | 18 pass, incl. 2 new cases written RED first: the prompt names the disarmed loop's real plan as an absolute path, and names no file at all when the chat never ran a loop |
-| bun test --conditions production src/server/agent.test.ts src/server/agent.notification-loop-scenario.test.ts | 147 pass. Four assertions that pinned `toContain("PROGRESS.md")` on UN-ARMED deliveries are inverted to `not.toContain` — they encoded the guess this ADR removes. The armed-loop assertion at the `setup_loop` test is untouched and still passes, because a rendered loop prompt legitimately names its own file |
+| bun test --conditions production src/server/agent.test.ts src/server/agent.notification-loop-scenario.test.ts | 147 pass. Four assertions that pinned toContain("PROGRESS.md") on UN-ARMED deliveries are inverted to not.toContain — they encoded the guess this ADR removes. The armed-loop assertion at the setup_loop test is untouched and still passes, because a rendered loop prompt legitimately names its own file |
 | bun run test | 7318 pass / 2 skip / 0 fail across 551 files |
 | bun run typecheck && bun run lint && bun run check:arch | Clean; 44 arch checks pass |

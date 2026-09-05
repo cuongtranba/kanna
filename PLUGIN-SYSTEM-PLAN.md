@@ -171,6 +171,19 @@ the user wrote it, per Paseo's `install`). Compiled bundles + manifest cache go 
 
 ## Files to create
 
+> **The shipped modules landed under `plugins/` subdirectories, not the flat paths
+> this table names.** Read the paths below as intent, not as where the code is:
+> `src/server/plugins/**` (`plugin-service.ts`, `plugin-service-host.ts`,
+> `plugin-service-io.adapter.ts`, `plugin-build.adapter.ts`,
+> `plugin-child-entry.adapter.ts`, `plugin-rpc-protocol.ts`,
+> `plugin-scaffold.ts`, `installed-plugin-store.ts`, `plugin-settings.ts`) and
+> `src/shared/plugins/**` (`manifest.ts`, `host-modules.ts`, `log-ring.ts`,
+> `paths.ts`, `settings.ts`). Check for an existing module there before creating
+> one at a flat path, or you will write a duplicate. Two rows are deliberately
+> unbuilt rather than moved: `ws-router-plugins.ts` (all plugin traffic rides
+> `/api/plugins/*` — the router is at its dispatch-arm ratchet) and
+> `PluginTheme.ts` (`addTheme` is deferred by this plan).
+
 ### Shared (pure — no IO)
 | File | Contents |
 |---|---|

@@ -1,6 +1,6 @@
 ---
 id: adr-20260814-otel-observability
-c3-seal: 3502fb51884b5a892597bdf59c3db2c246ab29941565844e5f8d95d899d48e64
+c3-seal: fce5f6e8b231b6320d635e530f634d32d61a3888155772eaf55d54a4de14c915
 title: otel-observability
 type: adr
 goal: 'Give the server memory and turn/subagent-lifecycle observability where none existed. Add `src/server/observability.ts` (a pure, dependency-free facade over `@opentelemetry/api` — `withSpan`, `addCounter`, `recordUpDown`) that domain code instruments unconditionally, and `src/server/otel.adapter.ts` (the ONLY file allowed to import the OTel SDK/exporters or touch memory/process IO) that wires three independently-switched concerns: OTLP trace+metric export (`KANNA_OTEL=enabled`), a periodic memory log line (`KANNA_MEMLOG_MS`), and an on-demand `SIGUSR2` heap snapshot (`KANNA_HEAP_SNAPSHOT`).'
@@ -38,34 +38,34 @@ Call sites instrumented so far, all additive (span/counter wrapping around an un
 
 | Entity | Type | Why affected | Evidence | Governance review |
 | --- | --- | --- | --- | --- |
-| c3-2 | container | `observability.ts` and `otel.adapter.ts` are new cross-cutting files with no owning component in `code-map.yaml` or any component's stated Purpose; named honestly at the container level rather than forced under an ill-fitting component | c3-2#n8693@v1:sha256:a150ce22160259313c47bc66940b905a9c2196924fd447f802cff12dbb1e9702 | Decide in a future change-unit whether sustained growth of this concern (more spans, more exporters, a dashboard) earns a dedicated component fact, e.g. c3-233 |
-| c3-210 | component | `claude-turn-starter.ts` and `subagent-orchestrator.ts` (both c3-210-owned files — the latter directly per `code-map.yaml`, the former per the same precedent `adr-20260814-armed-loop-wake-recovery` and the predecessor queued-message ADR already establish) gained `withSpan`/`addCounter` wrapping around `startTurnForChat` and `SubagentOrchestrator.spawnRun`; `claude-loop-commands.ts` and `claude-autocontinue-commands.ts` (also c3-210 dispatch modules) gained counter calls in `deliverSubagentToMain`, `recoverArmedLoopWakes`, and `fireAutoContinue` | c3-210#n9234@v1:sha256:a05654b71a70d17325200188f8d400c656f6367e092b22993a40c7406f366287 | Confirm every span/counter wrapper preserves the wrapped function's return value and rethrows on error unchanged — the `*Inner`/`*Outer` split pattern used here, not an inline try/catch that could swallow a result |
-| c3-202 | component | `server.ts` (c3-202-owned) calls `initObservability` right after constructing the `EventStore` and awaits `observability.shutdown()` in the existing stop sequence | c3-202#n8788@v1:sha256:4b6bc38cb5853617238dea8fe1682a26ea2f126b27eacbb9a6d3a482fb3dd4b6 | Confirm `initObservability` never throws (verified: the whole `KANNA_OTEL=enabled` branch is wrapped in try/catch that logs and continues) and never delays the HTTP/WS listener coming up |
+| c3-2 | container | observability.ts and otel.adapter.ts are new cross-cutting files with no owning component in code-map.yaml or any component's stated Purpose; named honestly at the container level rather than forced under an ill-fitting component | c3-2#n8693@v1:sha256:a150ce22160259313c47bc66940b905a9c2196924fd447f802cff12dbb1e9702 | Decide in a future change-unit whether sustained growth of this concern (more spans, more exporters, a dashboard) earns a dedicated component fact, e.g. c3-233 |
+| c3-210 | component | claude-turn-starter.ts and subagent-orchestrator.ts (both c3-210-owned files — the latter directly per code-map.yaml, the former per the same precedent adr-20260814-armed-loop-wake-recovery and the predecessor queued-message ADR already establish) gained withSpan/addCounter wrapping around startTurnForChat and SubagentOrchestrator.spawnRun; claude-loop-commands.ts and claude-autocontinue-commands.ts (also c3-210 dispatch modules) gained counter calls in deliverSubagentToMain, recoverArmedLoopWakes, and fireAutoContinue | c3-210#n9234@v1:sha256:a05654b71a70d17325200188f8d400c656f6367e092b22993a40c7406f366287 | Confirm every span/counter wrapper preserves the wrapped function's return value and rethrows on error unchanged — the *Inner/*Outer split pattern used here, not an inline try/catch that could swallow a result |
+| c3-202 | component | server.ts (c3-202-owned) calls initObservability right after constructing the EventStore and awaits observability.shutdown() in the existing stop sequence | c3-202#n8788@v1:sha256:4b6bc38cb5853617238dea8fe1682a26ea2f126b27eacbb9a6d3a482fb3dd4b6 | Confirm initObservability never throws (verified: the whole KANNA_OTEL=enabled branch is wrapped in try/catch that logs and continues) and never delays the HTTP/WS listener coming up |
 
 ## Compliance Refs
 
 | Ref | Why required | Evidence | Action |
 | --- | --- | --- | --- |
-| ref-local-first-data | OTLP export opens outbound sockets, which this repo's local-first posture requires be an explicit opt-in rather than a default; `KANNA_OTEL` defaults unset (disabled) and the endpoint is the standard `OTEL_EXPORTER_OTLP_ENDPOINT` env var, never a hardcoded remote host | ref-local-first-data#n10998@v1:sha256:6b71d8a9c2f48d47b9acda0a867f9936d76727141dc2efbbdfead90101e7fd49 | comply |
+| ref-local-first-data | OTLP export opens outbound sockets, which this repo's local-first posture requires be an explicit opt-in rather than a default; KANNA_OTEL defaults unset (disabled) and the endpoint is the standard OTEL_EXPORTER_OTLP_ENDPOINT env var, never a hardcoded remote host | ref-local-first-data#n10998@v1:sha256:6b71d8a9c2f48d47b9acda0a867f9936d76727141dc2efbbdfead90101e7fd49 | comply |
 
 ## Compliance Rules
 
 | Rule | Why required | Evidence | Action |
 | --- | --- | --- | --- |
-| rule-colocated-bun-test | Both new modules ship colocated suites: `observability.test.ts` (5 cases: pass-through, throw propagation, span handle, no-op safety for both metric helpers) and `otel.adapter.test.ts` (4 cases: disabled-by-default, idempotent shutdown, a real SIGUSR2 heap-snapshot write, and the opt-out flag) | rule-colocated-bun-test#n11234@v1:sha256:ce58e026c1076cb18ede38f3a4bd73793f28bf1392d299399571ba446985623f | comply |
+| rule-colocated-bun-test | Both new modules ship colocated suites: observability.test.ts (5 cases: pass-through, throw propagation, span handle, no-op safety for both metric helpers) and otel.adapter.test.ts (4 cases: disabled-by-default, idempotent shutdown, a real SIGUSR2 heap-snapshot write, and the opt-out flag) | rule-colocated-bun-test#n11234@v1:sha256:ce58e026c1076cb18ede38f3a4bd73793f28bf1392d299399571ba446985623f | comply |
 
 ## Work Breakdown
 
 | Area | Detail | Evidence |
 | --- | --- | --- |
-| Facade | `withSpan`, `addCounter`, `recordUpDown` — pure, `@opentelemetry/api`-only, no IO | src/server/observability.ts |
-| Adapter | `initObservability`/`ObservabilityHandle`; the sole SDK/exporter/IO import site | src/server/otel.adapter.ts |
-| Boot wiring | `initObservability({dataDir: store.dataDir})` called right after `EventStore` construction; `observability.shutdown()` in the stop path | src/server/server.ts |
-| Turn-start instrumentation | `kanna.turn.start` span wrapping the pre-existing `startTurnForChat` body (renamed `startTurnForChatOuter`) | src/server/claude-turn-starter.ts |
-| Subagent-run instrumentation | `kanna.subagent.run` span + `kanna.subagent.run.finished` counter wrapping the pre-existing `spawnRun` body (renamed `spawnRunInner`) | src/server/subagent-orchestrator.ts |
-| Loop-wake instrumentation | `kanna.loop.wake.deliver` span wrapping the pre-existing `deliverSubagentToMain` body (renamed `deliverSubagentToMainInner`); `kanna.loop.wake.recovered` counter in `recoverArmedLoopWakes` | src/server/claude-loop-commands.ts |
-| Auto-continue / queue counters | `kanna.autocontinue.fired` in `fireAutoContinue`; `kanna.queued_message.recovered` in `recoverQueuedMessages` | src/server/claude-autocontinue-commands.ts; src/server/queued-message-recovery.ts |
-| Dependencies | `@opentelemetry/api` 1.9.1, `sdk-trace-node` 2.10.0, `sdk-metrics` 2.10.0, `exporter-trace-otlp-http` 0.221.0, `exporter-metrics-otlp-http` 0.221.0, `resources` 2.10.0 | package.json |
+| Facade | withSpan, addCounter, recordUpDown — pure, @opentelemetry/api-only, no IO | src/server/observability.ts |
+| Adapter | initObservability/ObservabilityHandle; the sole SDK/exporter/IO import site | src/server/otel.adapter.ts |
+| Boot wiring | initObservability({dataDir: store.dataDir}) called right after EventStore construction; observability.shutdown() in the stop path | src/server/server.ts |
+| Turn-start instrumentation | kanna.turn.start span wrapping the pre-existing startTurnForChat body (renamed startTurnForChatOuter) | src/server/claude-turn-starter.ts |
+| Subagent-run instrumentation | kanna.subagent.run span + kanna.subagent.run.finished counter wrapping the pre-existing spawnRun body (renamed spawnRunInner) | src/server/subagent-orchestrator.ts |
+| Loop-wake instrumentation | kanna.loop.wake.deliver span wrapping the pre-existing deliverSubagentToMain body (renamed deliverSubagentToMainInner); kanna.loop.wake.recovered counter in recoverArmedLoopWakes | src/server/claude-loop-commands.ts |
+| Auto-continue / queue counters | kanna.autocontinue.fired in fireAutoContinue; kanna.queued_message.recovered in recoverQueuedMessages | src/server/claude-autocontinue-commands.ts; src/server/queued-message-recovery.ts |
+| Dependencies | @opentelemetry/api 1.9.1, sdk-trace-node 2.10.0, sdk-metrics 2.10.0, exporter-trace-otlp-http 0.221.0, exporter-metrics-otlp-http 0.221.0, resources 2.10.0 | package.json |
 | Tests | 5 + 4 new colocated cases | src/server/observability.test.ts; src/server/otel.adapter.test.ts |
 | Docs | New CLAUDE.md section "Observability (OTel traces + metrics, memlog, SIGUSR2 heap snapshot)" | CLAUDE.md |
 
@@ -73,7 +73,7 @@ Call sites instrumented so far, all additive (span/counter wrapping around an un
 
 | Surface | Behavior | Evidence |
 | --- | --- | --- |
-| observability.test.ts | "returns the wrapped function's value"; "propagates the wrapped function's throw"; "passes the span handle to the wrapped function"; "addCounter is a safe no-op without an SDK"; "recordUpDown is a safe no-op without an SDK" — asserts the no-SDK contract every production request depends on when `KANNA_OTEL` is off | bun test --conditions production src/server/observability.test.ts |
+| observability.test.ts | "returns the wrapped function's value"; "propagates the wrapped function's throw"; "passes the span handle to the wrapped function"; "addCounter is a safe no-op without an SDK"; "recordUpDown is a safe no-op without an SDK" — asserts the no-SDK contract every production request depends on when KANNA_OTEL is off | bun test --conditions production src/server/observability.test.ts |
 | otel.adapter.test.ts | "does not register an SDK when KANNA_OTEL is unset"; "shutdown is safe to call twice"; "SIGUSR2 writes a heap snapshot under dataDir/heap-snapshots" (asserts a real file >1000 bytes); "KANNA_HEAP_SNAPSHOT=disabled leaves SIGUSR2 alone" | bun test --conditions production src/server/otel.adapter.test.ts |
 | Full suite + typecheck + lint | Whole-repo regression gate before any push, per this repo's CLAUDE.md | bun run test; bun run typecheck; bun run lint |
 
@@ -81,18 +81,18 @@ Call sites instrumented so far, all additive (span/counter wrapping around an un
 
 | Alternative | Rejected because |
 | --- | --- |
-| `@opentelemetry/sdk-node` (`NodeSDK`) + `auto-instrumentations-node` | Auto-instrumentation monkey-patches Node built-ins (http, fs, dns, …) whose behavior under Bun's compatibility layer is not guaranteed; the two manual providers (`NodeTracerProvider`, `MeterProvider`) this ADR wires are the exact and only two pieces the server needs, with nothing implicit riding along |
+| @opentelemetry/sdk-node (NodeSDK) + auto-instrumentations-node | Auto-instrumentation monkey-patches Node built-ins (http, fs, dns, …) whose behavior under Bun's compatibility layer is not guaranteed; the two manual providers (NodeTracerProvider, MeterProvider) this ADR wires are the exact and only two pieces the server needs, with nothing implicit riding along |
 | Console/file-based tracing without OpenTelemetry | No trace tree (no span parenting, no cross-process correlation), no ecosystem (no OTLP collector, no existing dashboard tooling); the api-facade pattern this ADR uses already gives no-op-when-disabled for free, which a hand-rolled logger would have to reimplement |
-| Always-on OTLP export (no `KANNA_OTEL` gate) | Opens outbound sockets by default on a tool whose stated default posture is `127.0.0.1`-only (`ref-local-first-data`); an opt-in env var keeps the default behavior identical to before this ADR |
+| Always-on OTLP export (no KANNA_OTEL gate) | Opens outbound sockets by default on a tool whose stated default posture is 127.0.0.1-only (ref-local-first-data); an opt-in env var keeps the default behavior identical to before this ADR |
 
 ## Risks
 
 | Risk | Mitigation | Verification |
 | --- | --- | --- |
-| A broken/unreachable OTLP collector endpoint crashes or hangs server boot | The entire `KANNA_OTEL=enabled` branch is wrapped in try/catch that logs a warning and continues without export; `BatchSpanProcessor`/`PeriodicExportingMetricReader` buffer and retry asynchronously rather than blocking the caller | otel.adapter.test.ts: "does not register an SDK when KANNA_OTEL is unset" exercises the disabled path; the enabled path is deliberately NOT exercised in any test (see the file's own comment) because it would open real sockets in CI — accepted residual, see below |
-| The `KANNA_OTEL=enabled` code path itself is untested (no test sets that env var) | Deliberate: a test exercising it would attempt a real OTLP connection in CI. The try/catch wrapper is the only safety net for that path, and it is structurally simple (three SDK constructor calls, no branching) | Manual verification only; flagged here rather than silently uncovered |
-| A span/counter call site changes the wrapped function's behavior (e.g. swallows an error, changes a return value) | Every call site uses the `*Inner`/`*Outer` (or `spawnRun`/`spawnRunInner`) split: the original function body is renamed verbatim and called unmodified inside the wrapper, so the diff itself proves no logic moved | Diff inspection at each of the four call sites; `withSpan`'s own test asserts throw-propagation and value pass-through |
-| `SIGUSR2` heap-snapshot write blocks the event loop on a large heap | `Bun.generateHeapSnapshot` is synchronous by the runtime's own API surface; accepted because it fires only on an operator's explicit `kill -USR2`, never in the request path | otel.adapter.test.ts: "SIGUSR2 writes a heap snapshot" (30s test timeout headroom for a large heap) |
+| A broken/unreachable OTLP collector endpoint crashes or hangs server boot | The entire KANNA_OTEL=enabled branch is wrapped in try/catch that logs a warning and continues without export; BatchSpanProcessor/PeriodicExportingMetricReader buffer and retry asynchronously rather than blocking the caller | otel.adapter.test.ts: "does not register an SDK when KANNA_OTEL is unset" exercises the disabled path; the enabled path is deliberately NOT exercised in any test (see the file's own comment) because it would open real sockets in CI — accepted residual, see below |
+| The KANNA_OTEL=enabled code path itself is untested (no test sets that env var) | Deliberate: a test exercising it would attempt a real OTLP connection in CI. The try/catch wrapper is the only safety net for that path, and it is structurally simple (three SDK constructor calls, no branching) | Manual verification only; flagged here rather than silently uncovered |
+| A span/counter call site changes the wrapped function's behavior (e.g. swallows an error, changes a return value) | Every call site uses the *Inner/*Outer (or spawnRun/spawnRunInner) split: the original function body is renamed verbatim and called unmodified inside the wrapper, so the diff itself proves no logic moved | Diff inspection at each of the four call sites; withSpan's own test asserts throw-propagation and value pass-through |
+| SIGUSR2 heap-snapshot write blocks the event loop on a large heap | Bun.generateHeapSnapshot is synchronous by the runtime's own API surface; accepted because it fires only on an operator's explicit kill -USR2, never in the request path | otel.adapter.test.ts: "SIGUSR2 writes a heap snapshot" (30s test timeout headroom for a large heap) |
 
 ## Verification
 

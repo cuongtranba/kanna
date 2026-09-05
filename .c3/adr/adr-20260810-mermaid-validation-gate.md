@@ -1,6 +1,6 @@
 ---
 id: adr-20260810-mermaid-validation-gate
-c3-seal: 07b08f4b64fe4f4122f731b7b908aa371b7f1024381a00ec1231a2e24b160e21
+c3-seal: 0bb4a4f6d2b327acab60ee0fe25e16bec430d88c0478e1186bfb1ddf5a69882c
 title: mermaid-validation-gate
 type: adr
 goal: 'Stop invalid Mermaid the model writes from reaching the transcript, by validating every diagram against mermaid''s real parser at creation time and feeding the parse error back so the model self-corrects. Two enforcement points: a `mcp__kanna__validate_mermaid` MCP tool the model calls before it emits a fence (in-turn, no extra turn), and a server-side end-of-turn guard that re-reads the turn''s assistant text and enqueues one bounded correction prompt when the tool was skipped. Removes the need to keep growing a hand-maintained table of mermaid spellings on the client.'
@@ -119,6 +119,6 @@ The guard's bounds are the design, not defensiveness: it fires only when the rea
 | bun run lint | clean at --max-warnings=0 (no as casts, no unknown, seal respected) |
 | bunx ast-grep test | 14 passed, 0 failed |
 | bun run test | 5138 pass, 2 skip, 0 fail across 425 files |
-| bun run build:client | built; mermaid still a separate lazy chunk (mermaid-*.js, mermaid.core-*.js) |
+| bun run build:client | built; mermaid still a separate lazy chunk (mermaid-\*.js, mermaid.core-\*.js) |
 | bun -e 'await import("./src/server/kanna-mcp.ts")' | loads in ~109 ms with no DOM leaked — mermaid is not pulled in at server module load |
 | Live check | Ask for a diagram with filesystem-path labels; confirm validate_mermaid is called, the diagram renders with no correction banner and no extra turn. Force the backstop with the kiosk diagram; confirm exactly one correction turn and no second retry |

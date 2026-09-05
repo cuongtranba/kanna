@@ -1,6 +1,6 @@
 ---
 id: adr-20260813-queued-message-dequeue-on-commit
-c3-seal: cff10d4474fe9cccc157096ad226a30ba7b90c5f232bdb97b45a9b32736d0536
+c3-seal: 850245c7e6bde8f3ebde8da0dccc4a4b45c6a4fd56569c6b8afeb2096a943cc9
 title: queued-message-dequeue-on-commit
 type: adr
 goal: Stop a queued message — a chat's only durable "start this once idle" trigger, and for an autonomous loop its ONLY wake trigger — from being lost when the Kanna server dies between dequeuing the message and the turn it starts becoming durable. Move the removal of a queued message from `dequeueAndStartQueuedMessage`'s first statement to a callback (`StartTurnForChatArgs.onTurnRecorded`) fired the instant `recordTurnStarted` makes the turn replayable from the event log; add a boot-time recovery pass (`recoverQueuedMessages`) that restarts any chat still holding a queued message after a crash, since nothing previously drained the queue on boot; and make the restart idempotent (`isPromptAlreadyAppended`) so a turn that appended its prompt and then died is not double-appended on replay.
@@ -30,34 +30,34 @@ This wins over the rejected alternatives (below) because it closes the crash win
 
 | Entity | Type | Why affected | Evidence | Governance review |
 | --- | --- | --- | --- | --- |
-| c3-210 | component | Owns the turn-start/dequeue path this ADR changes: `StartTurnForChatArgs.onTurnRecorded` (claude-turn-starter.ts) fires the instant `turn_started` is durable; `dequeueAndStartQueuedMessage` and `runBuiltinCommand` (claude-send-command.ts) release the queued message there instead of up front; `isPromptAlreadyAppended` makes replay idempotent; the new `queued-message-recovery.ts` restarts turns for chats that crashed mid-spawn through this same component's `maybeStartNextQueuedMessage` entry point | c3-210#n8973@v1:sha256:ca6753652cc74facb772fe9c0b2c181c8ccf8285292b29d8bde2240ded58671b | Confirm every caller of `startTurnForChat` that holds a queued message threads `onTurnRecorded`, and that `dequeueAndStartQueuedMessage` remains the ONLY place a queued message is removed |
-| c3-206 | component | `EventStore.listChatsWithQueuedMessages()` is the new query boot recovery reads to find every chat whose queued-message trigger survived the crash; it is a read over already-replayed in-memory state (`state.queuedMessagesByChatId`), no new event kind or JSONL shape | c3-206#n8758@v1:sha256:e04d56e73404382bba111d31d12fd30ce75cd0fa5acbb6ba5811a68709533460 | Confirm the query adds no new persisted shape and stays consistent with replay-then-derive |
-| c3-202 | component | `server.ts`'s boot sequence calls `recoverQueuedMessages` detached, right after `rehydrateLoopTracking`, so a queued message that survived the crash (loop or user) restarts without delaying the HTTP/WS listener | c3-202#n8562@v1:sha256:2e868029505a294cb79ac3750f443e489fdca9fb37d30d865fbfc0e47ac582e0 | Confirm the call stays detached (`void … .then`) and a per-chat recovery failure can neither block nor crash boot |
+| c3-210 | component | Owns the turn-start/dequeue path this ADR changes: StartTurnForChatArgs.onTurnRecorded (claude-turn-starter.ts) fires the instant turn_started is durable; dequeueAndStartQueuedMessage and runBuiltinCommand (claude-send-command.ts) release the queued message there instead of up front; isPromptAlreadyAppended makes replay idempotent; the new queued-message-recovery.ts restarts turns for chats that crashed mid-spawn through this same component's maybeStartNextQueuedMessage entry point | c3-210#n8973@v1:sha256:ca6753652cc74facb772fe9c0b2c181c8ccf8285292b29d8bde2240ded58671b | Confirm every caller of startTurnForChat that holds a queued message threads onTurnRecorded, and that dequeueAndStartQueuedMessage remains the ONLY place a queued message is removed |
+| c3-206 | component | EventStore.listChatsWithQueuedMessages() is the new query boot recovery reads to find every chat whose queued-message trigger survived the crash; it is a read over already-replayed in-memory state (state.queuedMessagesByChatId), no new event kind or JSONL shape | c3-206#n8758@v1:sha256:e04d56e73404382bba111d31d12fd30ce75cd0fa5acbb6ba5811a68709533460 | Confirm the query adds no new persisted shape and stays consistent with replay-then-derive |
+| c3-202 | component | server.ts's boot sequence calls recoverQueuedMessages detached, right after rehydrateLoopTracking, so a queued message that survived the crash (loop or user) restarts without delaying the HTTP/WS listener | c3-202#n8562@v1:sha256:2e868029505a294cb79ac3750f443e489fdca9fb37d30d865fbfc0e47ac582e0 | Confirm the call stays detached (void … .then) and a per-chat recovery failure can neither block nor crash boot |
 | c3-2 | container | Server container holds all three components above; no responsibility moves across the container boundary, every change is internal to c3-210/c3-206/c3-202's own modules | c3-2#n8467@v1:sha256:87984e312939cc03eed326c220cafc5c1bc82c40e789678100477a162a4901ce | Verify no-delta at container level |
 
 ## Compliance Refs
 
 | Ref | Why required | Evidence | Action |
 | --- | --- | --- | --- |
-| ref-event-sourcing | The whole fix is choosing the event-sourcing boundary — `recordTurnStarted`'s append — as the release point, instead of an arbitrary earlier or later moment; `onTurnRecorded` fires exactly where the mutation becomes the durable fact derivations replay from | ref-event-sourcing#n10626@v1:sha256:1ff5f5fcbeeb85e1ccfe24b3e3e63babaec81436d2a50381b8e0b560132fd0aa | comply |
+| ref-event-sourcing | The whole fix is choosing the event-sourcing boundary — recordTurnStarted's append — as the release point, instead of an arbitrary earlier or later moment; onTurnRecorded fires exactly where the mutation becomes the durable fact derivations replay from | ref-event-sourcing#n10626@v1:sha256:1ff5f5fcbeeb85e1ccfe24b3e3e63babaec81436d2a50381b8e0b560132fd0aa | comply |
 
 ## Compliance Rules
 
 | Rule | Why required | Evidence | Action |
 | --- | --- | --- | --- |
-| rule-colocated-bun-test | New module `queued-message-recovery.ts` ships `queued-message-recovery.test.ts` beside it (4 tests); the touched module's existing colocated suite (`claude-send-command.test.ts`) gained the commit-ordering, replay-idempotency, and throw-keeps-queued cases | rule-colocated-bun-test#n10895@v1:sha256:ce58e026c1076cb18ede38f3a4bd73793f28bf1392d299399571ba446985623f | comply |
+| rule-colocated-bun-test | New module queued-message-recovery.ts ships queued-message-recovery.test.ts beside it (4 tests); the touched module's existing colocated suite (claude-send-command.test.ts) gained the commit-ordering, replay-idempotency, and throw-keeps-queued cases | rule-colocated-bun-test#n10895@v1:sha256:ce58e026c1076cb18ede38f3a4bd73793f28bf1392d299399571ba446985623f | comply |
 
 ## Work Breakdown
 
 | Area | Detail | Evidence |
 | --- | --- | --- |
-| Commit hook | `StartTurnForChatArgs.onTurnRecorded?: () => Promise<void>`, awaited immediately after `recordTurnStarted` | src/server/claude-turn-starter.ts |
-| Dequeue-on-commit | `dequeueAndStartQueuedMessage` builds a `release` closure over `store.removeQueuedMessage` instead of calling it up front; passes it as `onTurnRecorded` | src/server/claude-send-command.ts |
-| Builtin release parity | `runBuiltinCommand` gained `onCommitted?: () => Promise<void>`; `/clear` releases after `deps.clearChatContext`, `/compact` releases via the normal `onTurnRecorded` wiring | src/server/claude-send-command.ts |
-| Replay idempotency | New exported pure fn `isPromptAlreadyAppended(messages, queuedMessage)`; `dequeueAndStartQueuedMessage` passes `appendUserPrompt: !isRateLimitFallback && !alreadyAppended`, skipped for steered messages | src/server/claude-send-command.ts |
-| Boot-recovery index | `EventStore.listChatsWithQueuedMessages()` | src/server/event-store.ts |
-| Boot-recovery module | New `recoverQueuedMessages(deps)`: sequential drain, per-chat catch + log, never fatal to boot | src/server/queued-message-recovery.ts |
-| Boot wiring | `startKannaServer` calls `recoverQueuedMessages` detached, right after `rehydrateLoopTracking` | src/server/server.ts |
+| Commit hook | StartTurnForChatArgs.onTurnRecorded?: () => Promise<void>, awaited immediately after recordTurnStarted | src/server/claude-turn-starter.ts |
+| Dequeue-on-commit | dequeueAndStartQueuedMessage builds a release closure over store.removeQueuedMessage instead of calling it up front; passes it as onTurnRecorded | src/server/claude-send-command.ts |
+| Builtin release parity | runBuiltinCommand gained onCommitted?: () => Promise<void>; /clear releases after deps.clearChatContext, /compact releases via the normal onTurnRecorded wiring | src/server/claude-send-command.ts |
+| Replay idempotency | New exported pure fn isPromptAlreadyAppended(messages, queuedMessage); dequeueAndStartQueuedMessage passes appendUserPrompt: !isRateLimitFallback && !alreadyAppended, skipped for steered messages | src/server/claude-send-command.ts |
+| Boot-recovery index | EventStore.listChatsWithQueuedMessages() | src/server/event-store.ts |
+| Boot-recovery module | New recoverQueuedMessages(deps): sequential drain, per-chat catch + log, never fatal to boot | src/server/queued-message-recovery.ts |
+| Boot wiring | startKannaServer calls recoverQueuedMessages detached, right after rehydrateLoopTracking | src/server/server.ts |
 | Docs | New CLAUDE.md section "Queued messages are released on commit, not on dequeue" naming this ADR | CLAUDE.md |
 
 ## Enforcement Surfaces
@@ -72,17 +72,17 @@ This wins over the rejected alternatives (below) because it closes the crash win
 
 | Alternative | Rejected because |
 | --- | --- |
-| Keep the eager dequeue and add a boot heuristic that re-enqueues any chat whose last transcript entry is an unanswered `user_prompt` | A heuristic, not a durability guarantee — it infers intent from transcript shape instead of the event that actually recorded the turn, and it would re-fire turns for ordinary chats a user deliberately abandoned mid-prompt, which is indistinguishable from a crash under that heuristic |
-| Release the queued message only after the whole turn finishes | A crash mid-turn (after `recordTurnStarted`, before the result) would then re-run work the turn already completed on restart — trades the narrow pre-commit crash window for a much wider mid-turn one |
-| Persist the appended entry id onto the queued-message record for idempotency | Needs a new event/schema field for a case `isPromptAlreadyAppended`'s trailing-entry check already decides exactly, from data already in the transcript — no new persisted shape earns its keep here |
+| Keep the eager dequeue and add a boot heuristic that re-enqueues any chat whose last transcript entry is an unanswered user_prompt | A heuristic, not a durability guarantee — it infers intent from transcript shape instead of the event that actually recorded the turn, and it would re-fire turns for ordinary chats a user deliberately abandoned mid-prompt, which is indistinguishable from a crash under that heuristic |
+| Release the queued message only after the whole turn finishes | A crash mid-turn (after recordTurnStarted, before the result) would then re-run work the turn already completed on restart — trades the narrow pre-commit crash window for a much wider mid-turn one |
+| Persist the appended entry id onto the queued-message record for idempotency | Needs a new event/schema field for a case isPromptAlreadyAppended's trailing-entry check already decides exactly, from data already in the transcript — no new persisted shape earns its keep here |
 
 ## Risks
 
 | Risk | Mitigation | Verification |
 | --- | --- | --- |
-| A crash between `recordTurnStarted` and the provider spawn still loses the wake (accepted residual) | Narrowed from the entire spawn (seconds on a slow MCP boot) to two adjacent store writes; not closed further because closing it needs the spawn itself to become transactional with the event append, out of scope for this fix | Documented in CLAUDE.md and this ADR's Decision section as an explicit accepted residual, not a silent gap |
-| Boot-time recovery spawning provider sessions for every surviving chat delays server startup | `recoverQueuedMessages` runs detached (`void … .then`) after the listener-critical boot steps, and drains sequentially rather than fanning out, so it can never block `/health` coming up | src/server/server.ts (detached call site); queued-message-recovery.test.ts sequential-drain coverage |
-| A chat that repeatedly fails to start (bad provider config, deleted project) blocks recovery for every chat after it in the boot loop | `recoverQueuedMessages` catches and logs per-chat, continuing the loop — never propagates | queued-message-recovery.test.ts: "one failing chat does not abort the rest of boot" |
+| A crash between recordTurnStarted and the provider spawn still loses the wake (accepted residual) | Narrowed from the entire spawn (seconds on a slow MCP boot) to two adjacent store writes; not closed further because closing it needs the spawn itself to become transactional with the event append, out of scope for this fix | Documented in CLAUDE.md and this ADR's Decision section as an explicit accepted residual, not a silent gap |
+| Boot-time recovery spawning provider sessions for every surviving chat delays server startup | recoverQueuedMessages runs detached (void … .then) after the listener-critical boot steps, and drains sequentially rather than fanning out, so it can never block /health coming up | src/server/server.ts (detached call site); queued-message-recovery.test.ts sequential-drain coverage |
+| A chat that repeatedly fails to start (bad provider config, deleted project) blocks recovery for every chat after it in the boot loop | recoverQueuedMessages catches and logs per-chat, continuing the loop — never propagates | queued-message-recovery.test.ts: "one failing chat does not abort the rest of boot" |
 
 ## Verification
 

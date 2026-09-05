@@ -1,6 +1,6 @@
 ---
 id: adr-20260820-background-task-output-streaming
-c3-seal: 8cbdbee77f24f08956018e54be621f0a564a1d3085cbdd146ed212e3ff8d6145
+c3-seal: 80f655665d5a5a5561993f53296d42d141dce38a30d5fabe2b92febaa6543dab
 title: background-task-output-streaming
 type: adr
 goal: |-
@@ -68,9 +68,9 @@ without revealing the server-internal path to the client.
 
 | Entity | Type | Why affected |
 | --- | --- | --- |
-| c3-2 | container | New server registry + adapter wired in `server.ts` |
-| c3-1 | container | New `BackgroundTasksSection.store.ts`; `chatId` prop added to `BackgroundTasksSection` |
-| c3-3 | container | `ChatBackgroundTask.hasOutput`, `BackgroundTaskOutputSnapshot`, new WS topic + command |
+| c3-2 | container | New server registry + adapter wired in server.ts |
+| c3-1 | container | New BackgroundTasksSection.store.ts; chatId prop added to BackgroundTasksSection |
+| c3-3 | container | ChatBackgroundTask.hasOutput, BackgroundTaskOutputSnapshot, new WS topic + command |
 
 ## Verification
 
@@ -88,5 +88,5 @@ without revealing the server-internal path to the client.
 | --- | --- |
 | Global polling for all tracked tasks | Wastes server CPU on tasks no client is watching |
 | SSE / HTTP endpoint for output | Adds a new transport; WS subscription keeps the same back-pressure model the rest of Kanna uses |
-| Send full output on every poll tick | Large output would dominate WS bandwidth; `OutputRing` bounds at 256 KB and the signature check in `BroadcastManager` skips unchanged snapshots |
-| Expose `outputPath` on the client | Unnecessary; `hasOutput: boolean` is sufficient to decide whether the expand UI should appear |
+| Send full output on every poll tick | Large output would dominate WS bandwidth; OutputRing bounds at 256 KB and the signature check in BroadcastManager skips unchanged snapshots |
+| Expose outputPath on the client | Unnecessary; hasOutput: boolean is sufficient to decide whether the expand UI should appear |

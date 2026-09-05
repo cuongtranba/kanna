@@ -1,6 +1,6 @@
 ---
 id: adr-20260819-cron-run-tag-and-session-ownership
-c3-seal: 67813a2c82e887a1f51cd91d52ebccc4fcaa1e0c0562052a25c1380b5f3d6ab7
+c3-seal: 6bd18ab3b7ffa65b5753f7947ed864cd76258b515517bffc147144d8b71f4e24
 title: cron-run-tag-and-session-ownership
 type: adr
 goal: |-
@@ -108,8 +108,8 @@ residency rule, so a missing binding can never leave a turn unsettled.
 
 | Alternative | Rejected because |
 | --- | --- |
-| Add `cronRun` to the existing field list in buildEnqueueMessageResult | Fixes this instance and leaves the defect class: the next field added to QueuedChatMessage is lost the same silent way, with no compile or runtime signal. |
-| Have fireCronJob bypass the queue and start the turn directly | The queue is the chat's durable "start once idle" trigger and the only thing `recoverQueuedMessages` can replay after a crash; bypassing it trades a settled run for a lost one. |
+| Add cronRun to the existing field list in buildEnqueueMessageResult | Fixes this instance and leaves the defect class: the next field added to QueuedChatMessage is lost the same silent way, with no compile or runtime signal. |
+| Have fireCronJob bypass the queue and start the turn directly | The queue is the chat's durable "start once idle" trigger and the only thing recoverQueuedMessages can replay after a crash; bypassing it trades a settled run for a lost one. |
 | Re-derive cron ownership from the event log at terminal time instead of tagging the turn | Requires an unbounded event walk on every turn finalize, and still cannot tell which of several queued messages the finishing turn came from. |
 | Exempt cron-spawned sessions from the resident-session budget | Treats the symptom for one caller; the boot-window eviction hits any chat, and does nothing about the ghost ActiveTurn a teardown leaves behind. |
 | Have closeClaudeSession settle the turn itself before deleting the entry | It is a synchronous leaf with no store access; giving it transcript writes would put IO in a lifecycle helper and duplicate the runner's cancel/fail branching. |
@@ -118,8 +118,8 @@ residency rule, so a missing binding can never leave a turn unsettled.
 
 | Risk | Mitigation | Verification |
 | --- | --- | --- |
-| Ownership check leaves a turn unsettled when sessionId is absent | `ownsActiveTurn` falls back to the residency rule when `active.sessionId` is undefined, so behaviour is never worse than before the binding existed | bun test src/server/claude-session-runner.test.ts |
-| Runner settles a turn belonging to a newer session, wiping its bookkeeping | Settlement requires `active.sessionId === session.id`; a superseding session is left strictly alone, and pendingTools stands down for it | bun test src/server/claude-session-runner.test.ts |
+| Ownership check leaves a turn unsettled when sessionId is absent | ownsActiveTurn falls back to the residency rule when active.sessionId is undefined, so behaviour is never worse than before the binding existed | bun test src/server/claude-session-runner.test.ts |
+| Runner settles a turn belonging to a newer session, wiping its bookkeeping | Settlement requires active.sessionId === session.id; a superseding session is left strictly alone, and pendingTools stands down for it | bun test src/server/claude-session-runner.test.ts |
 | Sessions pile up past maxConcurrent because more chats are now protected | The budget was already a soft cap that skips protected sessions; startingTurns is bounded by turn boot, and the 60 s idle reaper still collects afterwards | bun test src/server/claude-session-lifecycle.test.ts |
 
 ## Verification

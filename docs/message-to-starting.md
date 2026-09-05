@@ -7,7 +7,7 @@ This documents the path from a user submitting a prompt to the transcript showin
 1. The composer calls `handleSend(...)` in `src/client/app/useKannaState.ts`.
 2. The client immediately inserts an optimistic `user_prompt` entry into local state.
 3. The client sends a `chat.send` websocket command.
-4. The server handles `chat.send` in `src/server/ws-router.ts`, which delegates to `AgentCoordinator.send(...)` in `src/server/agent.ts`.
+4. The server handles `chat.send` in `src/server/ws-router-chat.ts`, which delegates to `AgentCoordinator.send(...)` in `src/server/agent-coordinator.ts` (`src/server/agent.ts` is a barrel that re-exports it).
 5. If this is a new chat, the server creates the chat before starting the turn.
 6. `startTurnForChat(...)` runs the preflight work:
    - sets provider if missing
@@ -22,7 +22,7 @@ This documents the path from a user submitting a prompt to the transcript showin
    - Claude: `running`
    - Codex: `starting`
 9. `AgentCoordinator` calls `onStateChange()`.
-10. The server broadcasts fresh snapshots through `broadcastSnapshots()` in `src/server/ws-router.ts`.
+10. The server broadcasts fresh snapshots through `broadcastSnapshots()` in `src/server/ws-router-broadcast.ts`.
 11. `deriveChatSnapshot(...)` in `src/server/read-models.ts` merges persisted transcript data with the in-memory active runtime status.
 12. The client chat subscription receives the new `ChatSnapshot`.
 13. `useKannaState(...)` resolves `runtime.status` from that snapshot.
@@ -71,7 +71,7 @@ Reload after setting it. Logs appear in the browser console with the prefix:
 
 ### Server
 
-`src/server/agent.ts` and `src/server/ws-router.ts` now log the server-side checkpoints for the same `clientTraceId`:
+The server logs its checkpoints for the same `clientTraceId` from four modules: `chat_send.*` in `src/server/claude-send-command.ts`, `start_turn.*` in `src/server/claude-turn-starter.ts`, `ws.snapshot_sent` in `src/server/ws-router-broadcast.ts`, and `ws.chat_send_ack` in `src/server/ws-router-chat.ts`.
 
 - `chat_send.received`
 - `chat_send.chat_created`

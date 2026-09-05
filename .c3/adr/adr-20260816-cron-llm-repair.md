@@ -1,6 +1,6 @@
 ---
 id: adr-20260816-cron-llm-repair
-c3-seal: e3c22ca15c9e1586e9bb4bfb076e1acf08c1d04a5f99e8ba89591b488341f2a8
+c3-seal: e181e79e040aee896dc043e237f52259c2f398e29fedfd17cb833b1a21dca819
 title: cron-llm-repair
 type: adr
 goal: 'When a `/cron` line fails validation and Kanna has no deterministic fix for it, hand the line to the model instead of dead-ending: it repairs and arms the job through a new `arm_cron` tool, or asks the user with `AskUserQuestion` when their intent is genuinely ambiguous. Record the offending line on the error entry so both the reader and the model can see what was typed. Escalation happens only where the parser produced no suggestion, so the existing zero-cost error card stays the fast path.'
@@ -40,8 +40,8 @@ Fix: `CronParsePart` gained a distinct `"multiline"` variant (`src/shared/cron/t
 
 | Entity | Type | Why affected | Evidence | Governance review |
 | --- | --- | --- | --- | --- |
-| c3-311 | component | CronParseError gains a required `input` stamped in one place; parseCronFields gains validated short-cron padding; new repair-report.ts owns the words both the tool result and the repair prompt speak. CronParsePart later gained a distinct `multiline` variant (2026-08-17 addendum) so the newline guard's error is no longer tagged `subcommand` | c3-311#n11221@v1:sha256:e94d68a2b9211aeb708a47944f8f2f8f5048096cc20e74770a0eff2a83bde935 | Side-effect seal: repair-report.ts is pure, no IO; strong-typing on the Outcome/CronParseError split |
-| c3-233 | component | New repair.ts (escalation) and preview.ts (the shared validate/arm answer); runCronCommand refuses through one choke point that both cards and escalates. REPAIRABLE_PARTS later gained `multiline` (2026-08-17 addendum) so a wrapped /cron message escalates instead of dead-ending | c3-233#n10763@v1:sha256:a9c12235882a2f6a75fd2a2baaa9390ff047493e1c3a8f9d05c5386d2b9af2f1 | Side-effect seal: repair takes enqueue/drain/hasQueued as injected deps, no direct IO |
+| c3-311 | component | CronParseError gains a required input stamped in one place; parseCronFields gains validated short-cron padding; new repair-report.ts owns the words both the tool result and the repair prompt speak. CronParsePart later gained a distinct multiline variant (2026-08-17 addendum) so the newline guard's error is no longer tagged subcommand | c3-311#n11221@v1:sha256:e94d68a2b9211aeb708a47944f8f2f8f5048096cc20e74770a0eff2a83bde935 | Side-effect seal: repair-report.ts is pure, no IO; strong-typing on the Outcome/CronParseError split |
+| c3-233 | component | New repair.ts (escalation) and preview.ts (the shared validate/arm answer); runCronCommand refuses through one choke point that both cards and escalates. REPAIRABLE_PARTS later gained multiline (2026-08-17 addendum) so a wrapped /cron message escalates instead of dead-ending | c3-233#n10763@v1:sha256:a9c12235882a2f6a75fd2a2baaa9390ff047493e1c3a8f9d05c5386d2b9af2f1 | Side-effect seal: repair takes enqueue/drain/hasQueued as injected deps, no direct IO |
 | c3-226 | component | Publishes the two new mcp__kanna__ tools, validate_cron and arm_cron | c3-226#n10277@v1:sha256:c7f023a1e96fe0083d70efefaea470092cf828ab4d822b1ed1cc46c7c453f3bc | Tool surface contract: arm_cron gated on an injected capability supplied for main chats only |
 | c3-120 | component | CronCommandErrorMessage renders the typed line, the only surface on which it can appear | c3-120#n8876@v1:sha256:f7a5e141225fcbed4fe2f1b26d273f0216b3fcf3029dcfd5678f4767ee55cbf0 | Design-system gate: token classes only, no arbitrary hex, no backdrop-blur |
 | c3-0 | system | N.A - named only to complete the top-down descent | N.A - ancestor | N.A - ancestor |
@@ -71,23 +71,23 @@ Fix: `CronParsePart` gained a distinct `"multiline"` variant (`src/shared/cron/t
 
 | Surface | Behavior | Evidence |
 | --- | --- | --- |
-| Outcome type in parse-command.ts | A failure path that does not stamp `input` does not compile — the internal type omits it and only parseCronCommand adds it | src/shared/cron/parse-command.ts, bun run typecheck |
+| Outcome type in parse-command.ts | A failure path that does not stamp input does not compile — the internal type omits it and only parseCronCommand adds it | src/shared/cron/parse-command.ts, bun run typecheck |
 | refuseCronCommand | The single refusal path: appends the card and offers the line, so a new refusal cannot record one without the other | src/server/cron/commands.ts, src/server/cron/commands.test.ts |
 | previewCronCommand | validate_cron and arm_cron share one answer, so the two tools cannot disagree about a line | src/server/cron/preview.ts, src/server/kanna-mcp.test.ts |
 | repair-report.test.ts | Pins that the repair prompt names both tools, AskUserQuestion, the grammar, and the never-invent rule | src/shared/cron/repair-report.test.ts |
-| KANNA_CRON_REPAIR | `disabled` turns the escalation off; the tools stay | src/server/agent-deps-builders.ts |
-| REPAIRABLE_PARTS includes `multiline` | A `/cron` message split across lines escalates to the model instead of dead-ending with two silent `cron_command_error` cards | src/server/cron/repair.ts, src/server/cron/repair.test.ts "offers a multiline /cron message for repair", src/shared/cron/parse-command.test.ts "a multiline /cron message carries its own part, not subcommand" |
+| KANNA_CRON_REPAIR | disabled turns the escalation off; the tools stay | src/server/agent-deps-builders.ts |
+| REPAIRABLE_PARTS includes multiline | A /cron message split across lines escalates to the model instead of dead-ending with two silent cron_command_error cards | src/server/cron/repair.ts, src/server/cron/repair.test.ts "offers a multiline /cron message for repair", src/shared/cron/parse-command.test.ts "a multiline /cron message carries its own part, not subcommand" |
 
 ## Alternatives Considered
 
 | Alternative | Rejected because |
 | --- | --- |
-| Escalate every invalid /cron to the model | Spends a turn on cases the parser already solves instantly and for free — a typo'd `inlne` has one right answer and a Copy-fix card. The mermaid guard's equivalent bound (stand down when the client's repair saves the diagram) exists for the same reason. |
+| Escalate every invalid /cron to the model | Spends a turn on cases the parser already solves instantly and for free — a typo'd inlne has one right answer and a Copy-fix card. The mermaid guard's equivalent bound (stand down when the client's repair saves the diagram) exists for the same reason. |
 | Model proposes a corrected line, never arms | The user in 39b0d210 already failed to type the line three times; handing back a fourth line to retype is barely better than today's card. The value is in the model finishing the job. |
 | Model always confirms with AskUserQuestion before arming | Adds a click to every unambiguous repair. The model asks where intent is genuinely ambiguous, which is the case the confirmation was protecting against. |
-| Only fix the parser (padding, better suggestions) | Closes `0 9 *` but not `9am every day` or a missing mode with no parseable suffix — both of which the debugged chat actually hit. Deterministic coverage was widened anyway, as the cheap half. |
+| Only fix the parser (padding, better suggestions) | Closes 0 9 * but not 9am every day or a missing mode with no parseable suffix — both of which the debugged chat actually hit. Deterministic coverage was widened anyway, as the cheap half. |
 | Append a user_prompt for the failed line | Would make a rejected command look like a prompt the model received, and still leaves the entry unable to name its own input when read alone. |
-| Collapse multiline lines to one line deterministically (2026-08-17) | Rejoining with a space cannot invent a missing `inline`/`spawn` token or turn "run on every 2 mins" prose into `every 2m` — the observed chat 061b8856 line had neither, so a mechanical join would still fail with a worse, harder-to-explain error. Escalating to the model handles both the trivial wrap AND the free-form case with one mechanism. |
+| Collapse multiline lines to one line deterministically (2026-08-17) | Rejoining with a space cannot invent a missing inline/spawn token or turn "run on every 2 mins" prose into every 2m — the observed chat 061b8856 line had neither, so a mechanical join would still fail with a worse, harder-to-explain error. Escalating to the model handles both the trivial wrap AND the free-form case with one mechanism. |
 
 ## Risks
 
@@ -95,8 +95,8 @@ Fix: `CronParsePart` gained a distinct `"multiline"` variant (`src/shared/cron/t
 | --- | --- | --- |
 | The model arms a recurring job the user did not intend | arm_cron re-parses through the same grammar and refuses anything non-armable; the prompt requires AskUserQuestion when mode or time is ambiguous; every armed job is visible in the footer panel and removable with /cron remove | src/server/kanna-mcp.test.ts arm_cron refusal cases; src/shared/cron/repair-report.test.ts pins the ask-when-ambiguous instruction |
 | A repair turn triggers another repair turn | arm_cron never re-enters dispatch on failure (AgentCoordinator.armCron throws instead), the repair prompt's first token is not /cron so it cannot re-intercept, and each line is offered at most once per chat | src/server/cron/repair.test.ts "asks about a given line exactly once" |
-| The escalation spends turns on lines Kanna could fix | The repair stands down whenever error.suggestion is present; `subcommand` stays out of REPAIRABLE_PARTS as a defensive backstop for that shape, but every subcommand-part error the parser actually produces already carries a suggestion and is caught by the first check | src/server/cron/repair.test.ts "spends no turn when the parser produced a suggestion", "ignores management-subcommand failures" |
-| A wrapped or multi-line message never reaches the model (2026-08-17) | `multiline` was moved out of the `subcommand` tag into its own `CronParsePart` and added to `REPAIRABLE_PARTS`, so it escalates like any other arm-shaped failure with no suggestion | src/server/cron/repair.test.ts "offers a multiline /cron message for repair" |
+| The escalation spends turns on lines Kanna could fix | The repair stands down whenever error.suggestion is present; subcommand stays out of REPAIRABLE_PARTS as a defensive backstop for that shape, but every subcommand-part error the parser actually produces already carries a suggestion and is caught by the first check | src/server/cron/repair.test.ts "spends no turn when the parser produced a suggestion", "ignores management-subcommand failures" |
+| A wrapped or multi-line message never reaches the model (2026-08-17) | multiline was moved out of the subcommand tag into its own CronParsePart and added to REPAIRABLE_PARTS, so it escalates like any other arm-shaped failure with no suggestion | src/server/cron/repair.test.ts "offers a multiline /cron message for repair" |
 | Padding invents a schedule the user did not mean | Padding is offered only when the padded form parses, and every suggestion still passes the existing re-parse drift guard | src/shared/cron/parse-command.test.ts padding + drift-guard tests |
 | A repair failure breaks the send path | createCronRepair swallows enqueue and drain failures and logs | src/server/cron/repair.test.ts "swallows an enqueue failure" / "swallows a drain failure" |
 
@@ -108,7 +108,7 @@ Fix: `CronParsePart` gained a distinct `"multiline"` variant (`src/shared/cron/t
 | bun run typecheck | Clean on TS7 |
 | bun run lint | Clean at --max-warnings=0 (side-effect seal + design gate) |
 | bunx ast-grep test && bun run lint:usestate | 14 passed, 0 failed; scan clean |
-| Manual reproduction of chat 39b0d210 | `/cron check CI inline 9am every day` cards the typed line, then the model calls validate_cron and arm_cron and the job arms; `/cron ... inlne @daily` still cards instantly with no model turn |
-| bun run test (2026-08-17 addendum) | 6097 pass, 2 skip, 0 fail across 498 files, including the new `multiline` REPAIRABLE_PARTS coverage in repair.test.ts and parse-command.test.ts |
+| Manual reproduction of chat 39b0d210 | /cron check CI inline 9am every day cards the typed line, then the model calls validate_cron and arm_cron and the job arms; /cron ... inlne @daily still cards instantly with no model turn |
+| bun run test (2026-08-17 addendum) | 6097 pass, 2 skip, 0 fail across 498 files, including the new multiline REPAIRABLE_PARTS coverage in repair.test.ts and parse-command.test.ts |
 | bun run typecheck / bun run lint (2026-08-17 addendum) | Both clean |
-| Reproduction of chat 061b8856 | The exact multiline input from that chat now reaches `createCronRepair.offer` and enqueues a repair prompt instead of dying silently after two identical error cards |
+| Reproduction of chat 061b8856 | The exact multiline input from that chat now reaches createCronRepair.offer and enqueues a repair prompt instead of dying silently after two identical error cards |
