@@ -98,10 +98,9 @@ function UserMessageInner({ content, attachments = [], steered = false, autoCont
           <div className="flex w-full flex-col gap-0.5">
             {/* The speaker is set above the prompt, as a manuscript gloss, so
                 the words themselves start on the rail every other transcript
-                row is measured from. A side gutter reads well but is paid for
-                out of the measure: 48px of label plus a gap indented the one
-                entry this plate exists to bring back onto the rail. */}
-            <span className="flex items-center gap-1.5 select-none font-mono text-xs tracking-wide text-muted-foreground">
+                row is measured from. Size and weight make authorship clear
+                without spending a side gutter or adding per-entry chrome. */}
+            <span className="flex items-center gap-1.5 select-none text-15 font-semibold leading-snug text-foreground">
               <span aria-hidden>You</span>
               {steered ? <Zap aria-label="Sent mid-turn" className="size-3.5 shrink-0" /> : null}
             </span>
