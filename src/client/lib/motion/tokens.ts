@@ -110,6 +110,14 @@ export const MOTION_EASE_CSS = {
 export const MOTION_SPRING = {
   /** The composer landing at the end of the new-session sentence; press release. */
   landing: { stiffness: 190, damping: 17 },
+  /** The settings nav indicator travelling to the row you clicked (§06). */
+  indicator: { stiffness: 240, damping: 26 },
+  /** A board card travelling to the slot the data says it landed in (§05). */
+  cardTravel: { stiffness: 210, damping: 24 },
+  /** The mobile drawer settling after the finger lets go (§07). */
+  drawer: { stiffness: 210, damping: 22 },
+  /** The mobile chat-settings sheet rising from the bottom edge (§07). */
+  sheet: { stiffness: 200, damping: 21 },
 } as const satisfies Record<string, SpringParams>
 
 export type MotionSpringName = keyof typeof MOTION_SPRING

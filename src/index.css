@@ -629,6 +629,92 @@
     animation: kanna-transcript-row-in var(--motion-row) var(--motion-ease-arriving);
   }
 
+  /*
+    A settings section arriving. Twelve sections means the reader loses their
+    place twelve times an evening; the nav indicator leads the eye TO the row,
+    and this tells it the pane it landed on is new.
+
+    The stagger is done with `nth-child` rather than a per-row index because
+    the twelve section bodies are twelve unrelated JSX trees — threading an
+    index through all of them would be a large, invasive change for a subtle
+    effect, and would have to be repeated by every section added later.
+
+    Capped at the 8th child, matching STAGGER_LIMIT: past that every row shares
+    the last delay, so a long section never queues a visible wave.
+
+    User-triggered (a nav click), so opacity is legitimate here — the resting
+    state is visible and the gesture is repeatable. Still no fill-mode.
+  */
+  @keyframes kanna-settings-row-in {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .kanna-settings-section-in > * {
+    animation: kanna-settings-row-in var(--motion-row) var(--motion-ease-arriving);
+    animation-delay: calc(7 * var(--motion-stagger-row));
+  }
+
+  .kanna-settings-section-in > *:nth-child(1) { animation-delay: 0ms; }
+  .kanna-settings-section-in > *:nth-child(2) { animation-delay: calc(1 * var(--motion-stagger-row)); }
+  .kanna-settings-section-in > *:nth-child(3) { animation-delay: calc(2 * var(--motion-stagger-row)); }
+  .kanna-settings-section-in > *:nth-child(4) { animation-delay: calc(3 * var(--motion-stagger-row)); }
+  .kanna-settings-section-in > *:nth-child(5) { animation-delay: calc(4 * var(--motion-stagger-row)); }
+  .kanna-settings-section-in > *:nth-child(6) { animation-delay: calc(5 * var(--motion-stagger-row)); }
+  .kanna-settings-section-in > *:nth-child(7) { animation-delay: calc(6 * var(--motion-stagger-row)); }
+
+  /*
+    The heading is text, not a row, so it gets the treatment the app already
+    uses for new text — the empty state's blur-in. One idea of what "new text"
+    looks like, rather than a second one invented here.
+  */
+  .kanna-settings-section-in > *:nth-child(1) {
+    animation: kanna-empty-state-text-in var(--motion-quick) var(--motion-ease-arriving);
+  }
+
+  /*
+    The board's drop line draws itself toward where the card will land, rather
+    than blinking on. The line is the whole affordance — the brief forbids a
+    column tint on hover — so it has to read as an answer, not a flicker.
+
+    No fill-mode: the resting state is the drawn line, so an animation that
+    never runs still shows the target.
+  */
+  @keyframes kanna-drop-line-in {
+    from {
+      transform: scaleX(0);
+    }
+
+    to {
+      transform: scaleX(1);
+    }
+  }
+
+  @keyframes kanna-column-drop-line-in {
+    from {
+      transform: scaleY(0);
+    }
+
+    to {
+      transform: scaleY(1);
+    }
+  }
+
+  .kanna-drop-line-in {
+    animation: kanna-drop-line-in var(--motion-quick) var(--motion-ease-arriving);
+  }
+
+  .kanna-column-drop-line-in {
+    animation: kanna-column-drop-line-in var(--motion-quick) var(--motion-ease-arriving);
+  }
+
   @keyframes kanna-cursor-blink {
     0%,
     49% {

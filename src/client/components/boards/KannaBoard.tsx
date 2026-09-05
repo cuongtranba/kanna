@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react"
+import { motion } from "motion/react"
 import { MessageSquare } from "lucide-react"
+import { MOTION_SPRING } from "../../lib/motion"
 import { combine } from "@atlaskit/pragmatic-drag-and-drop/combine"
 import { draggable, dropTargetForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter"
 import { autoScrollForElements } from "@atlaskit/pragmatic-drag-and-drop-auto-scroll/element"
@@ -423,7 +425,22 @@ function BoardCard({
   const isNew = isNewCard(card, newSince)
 
   return (
-    <div ref={ref} className="relative">
+    /*
+      `layout` is the travel beat: when the drop resolves and the list
+      reorders, Motion measures the card's old and new rects and springs
+      between them — a real FLIP, so the card ends where the DATA says it went
+      rather than where the pointer was released.
+
+      Safe to put on the same element pragmatic-drag-and-drop binds: that
+      library uses native HTML5 drag and never writes a transform to the source
+      element, so nothing here is fighting it for the same property.
+    */
+    <motion.div
+      ref={ref}
+      layout
+      transition={{ type: "spring", ...MOTION_SPRING.cardTravel }}
+      className="relative"
+    >
       {dropBefore ? <CardDropLine /> : null}
       <ContextMenu>
         <ContextMenuTrigger asChild>
@@ -433,9 +450,11 @@ function BoardCard({
             className={cn(
               // Flat by default: 1px edge, no shadow, no left stripe.
               "w-full cursor-grab rounded-lg border border-border bg-card px-3 py-2 text-left",
-              "transition-colors duration-150 hover:bg-secondary",
+              "transition-[colors,transform,opacity] duration-[var(--motion-quick)] hover:bg-secondary",
               "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-              dragging && "opacity-40",
+              // The lift: the card is in your hand. Scale and fade together —
+              // what is left behind is the slot, not the card.
+              dragging && "scale-[1.02] opacity-40",
             )}
           >
             <span className="line-clamp-2 text-sm font-medium leading-snug text-foreground [text-wrap:pretty]">
@@ -475,7 +494,7 @@ function BoardCard({
           <ContextMenuItem onSelect={handleMoveToTop}>Move to top</ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
-    </div>
+    </motion.div>
   )
 }
 
@@ -510,13 +529,28 @@ function applyCardEdge(
   useBoardDragStore.getState().setCardDrop({ columnId, beforeCardId })
 }
 
-/** 1px line, only while dragging. Depth is a state response, not a resting style. */
+/**
+ * 1px line, only while dragging. Depth is a state response, not a resting style.
+ *
+ * It DRAWS itself from the left rather than blinking on, so the line reads as
+ * the board answering "here" instead of as a flicker the eye has to interpret.
+ */
 function CardDropLine() {
-  return <div aria-hidden className="pointer-events-none h-px w-full rounded-full bg-primary" />
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none h-px w-full origin-left rounded-full bg-primary kanna-drop-line-in"
+    />
+  )
 }
 
 function ColumnDropLine() {
-  return <div aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-px bg-primary" />
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none absolute inset-y-0 left-0 w-px origin-top bg-primary kanna-column-drop-line-in"
+    />
+  )
 }
 
 /**
