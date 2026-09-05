@@ -609,15 +609,23 @@ Each step is independently shippable and independently revertable.
 
 | File | What it is |
 | --- | --- |
-| `Kanna Shell.dc.html` | **Baseline.** Today's desktop chat screen, recreated from repo source with no motion. The before. |
-| `Kanna Motion.dc.html` | **The showcase.** Scroll-driven, chapters 01–06 and 08 (the spec chapter). Every sequence is playable. |
-| `Kanna Mobile.dc.html` | **Chapter 07.** The phone, in a device frame. The drawer is genuinely draggable — grab the left 60px band and pull. |
+| `README.md` | This spec. The implementation traces to it, and code comments cite it by section. |
 | `design-notes.md` | Every token, geometry value and existing-motion inventory lifted from `src/index.css` and friends. |
-| `icons.js` | Lucide glyphs, so the prototypes render offline. **Not for the app.** |
 | `github.md` | Source association and the screen → repo-file map. |
 
-Open `Kanna Motion.dc.html` first, and use the `speed` tweak to slow a sequence to 0.35× when you
-need to see what a beat actually does.
+**The `.dc.html` prototypes are not in the repo.** The bundle originally shipped
+three of them (`Kanna Shell`, `Kanna Motion`, `Kanna Mobile`) plus `icons.js`,
+`support.js` and `ios-frame.jsx` — ~324 KB of self-contained HTML whose own
+header says "do not port them into the app". They were reference material for
+reading the timing, and the timing now lives in `src/index.css` and
+`src/client/lib/motion/tokens.ts`, where it is machine-checked against this
+document's own table. Keeping a second, unversioned copy of the same numbers is
+the drift the token table exists to prevent.
+
+The prose below is unchanged from the handoff as delivered, so the sections it
+names still resolve. Where the implementation departs from it — the status-dot
+pulse, the FLIP title carry, the `height` animation, the finger-tracked drawer —
+the reason is recorded in the commit that made the decision and in `DESIGN.md`.
 
 ## Source of truth
 
