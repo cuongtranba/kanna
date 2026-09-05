@@ -1,4 +1,4 @@
-import { GitBranch, UserRound, X } from "lucide-react"
+import { GitBranch, Image as ImageIcon, UserRound, X } from "lucide-react"
 import { isRecord } from "../../../shared/errors"
 import type { ProcessedToolCall } from "./types"
 import { MetaRow, MetaLabel, MetaCodeBlock, ExpandableRow, VerticalLineContainer, getToolIcon, LucideIconWrapper } from "./shared"
@@ -8,6 +8,7 @@ import { stripWorkspacePath } from "../../lib/pathUtils"
 import { AnimatedShinyText } from "../ui/animated-shiny-text"
 import { formatBashCommandTitle, toTitleCase } from "../../lib/formatters"
 import { FileContentView } from "./FileContentView"
+import { ImageViewMessage } from "./ImageViewMessage"
 import { WorkflowMessage } from "./WorkflowMessage"
 import { SubagentTaskMessage } from "./SubagentTaskMessage"
 import { useWorkflowsStore, selectRuns } from "../../stores/workflowsStore"
@@ -116,6 +117,9 @@ export function ToolCallMessage({ message, isLoading = false, localPath, chatId 
     if (message.toolKind === "read_file") {
       return `Read ${stripWorkspacePath(message.input.filePath, localPath)}`
     }
+    if (message.toolKind === "image_view") {
+      return `View ${stripWorkspacePath(message.input.path, localPath) || message.input.path}`
+    }
     if (message.toolKind === "write_file") {
       return `Write ${stripWorkspacePath(message.input.filePath, localPath)}`
     }
@@ -149,6 +153,7 @@ export function ToolCallMessage({ message, isLoading = false, localPath, chatId 
   const isEditTool = message.toolKind === "edit_file"
   const isDeleteTool = message.toolKind === "delete_file"
   const isReadTool = message.toolKind === "read_file"
+  const isImageViewTool = message.toolKind === "image_view"
 
   const resultText = useMemo(() => {
     if (typeof message.result === "string") return message.result
@@ -222,7 +227,7 @@ export function ToolCallMessage({ message, isLoading = false, localPath, chatId 
     )
   } else if (isDeleteTool) {
     toolInputSection = <FileContentView content={message.input.content} />
-  } else if (!isReadTool && !isWriteTool) {
+  } else if (!isReadTool && !isWriteTool && !isImageViewTool) {
     toolInputSection = (
       <MetaCodeBlock label={inputBlockLabel} copyText={inputText}>
         {inputText}
@@ -266,6 +271,9 @@ export function ToolCallMessage({ message, isLoading = false, localPath, chatId 
             if (isAgent) {
               return <UserRound className="size-4 text-muted-icon" />
             }
+            if (message.toolKind === "image_view") {
+              return <ImageIcon className="size-4 text-muted-icon" />
+            }
             if (message.toolKind === "workflow") {
               return <GitBranch className="size-4 text-muted-icon" />
             }
@@ -305,12 +313,20 @@ export function ToolCallMessage({ message, isLoading = false, localPath, chatId 
                   />
                 )
               )}
+              {isImageViewTool && !message.isError && (
+                <ImageViewMessage
+                  toolId={message.toolId}
+                  path={message.input.path}
+                  contentUrl={message.input.contentUrl}
+                  mimeType={message.input.mimeType}
+                />
+              )}
               {isWriteTool && !message.isError && (
                 <FileContentView
                   content={message.input.content}
                 />
               )}
-              {hasResult && !isReadTool && !(isWriteTool && !message.isError) && !(isEditTool && !message.isError) && !(isDeleteTool && !message.isError) && (
+              {hasResult && !isReadTool && !(isImageViewTool && !message.isError) && !(isWriteTool && !message.isError) && !(isEditTool && !message.isError) && !(isDeleteTool && !message.isError) && (
                 <MetaCodeBlock label={message.isError ? "Error" : "Result"} copyText={resultText}>
                   {resultText}
                 </MetaCodeBlock>

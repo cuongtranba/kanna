@@ -93,12 +93,17 @@ export function parseLocalFileLink(
   return parseAbsoluteFileTarget(trimmed)
 }
 
-export function shouldOpenLocalFileLinkInEditor(filePath: string) {
+/** Last non-empty segment of a posix or windows path; the whole input if it has none. */
+export function fileNameOfPath(filePath: string): string {
   const segments = filePath.split(/[\\/]/)
   while (segments.length > 0 && segments[segments.length - 1] === "") {
     segments.pop()
   }
-  const fileName = segments.length > 0 ? segments[segments.length - 1] : filePath
+  return segments.length > 0 ? segments[segments.length - 1] : filePath
+}
+
+export function shouldOpenLocalFileLinkInEditor(filePath: string) {
+  const fileName = fileNameOfPath(filePath)
   if (EDITOR_OPEN_FILENAMES.has(fileName)) return true
   const extensionIndex = fileName.lastIndexOf(".")
   if (extensionIndex < 0) {
