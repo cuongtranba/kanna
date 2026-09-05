@@ -14,6 +14,7 @@ import {
   chatStatusIndicator,
   sessionStateBadge,
 } from "../../../lib/chatStatusIndicator"
+import { selectIsSpawning, useNewSessionStore } from "../../../stores/newSessionStore"
 import { ChatRowMenu } from "./Menus"
 
 interface Props {
@@ -63,6 +64,8 @@ function ChatRowImpl({
 
   const tone = chatStatusIndicator(chat)?.tone ?? null
   const minSlotWidth = chat.canFork ? "min-w-12" : "min-w-6"
+  // Scoped to THIS row's id, so a spawn elsewhere does not re-render every row.
+  const isSpawning = useNewSessionStore(selectIsSpawning(normalizedChatId))
 
   let rowBgClass: string
   if (onToggleSelect) {
@@ -161,10 +164,24 @@ function ChatRowImpl({
       key={chat._id}
       data-chat-id={normalizedChatId}
       className={cn(
-        "group flex items-center rounded-md pr-1 transition-colors duration-[var(--motion-quick)]",
-        rowBgClass
+        "group relative flex items-center rounded-md pr-1 transition-colors duration-[var(--motion-quick)]",
+        rowBgClass,
+        // Beat 2 of the new-session sentence: this row is the one being born.
+        isSpawning && "kanna-spawn-row-in",
       )}
     >
+      {/*
+        The rail — a 2px coral bar down the row's leading edge, and the one
+        "this is new" accent in the transition. Coral is the brand's alarm
+        colour and stays under 10% of any screen (DESIGN.md), so it marks
+        exactly one row for exactly the length of the arrival.
+      */}
+      {isSpawning ? (
+        <span
+          aria-hidden
+          className="kanna-spawn-rail-in pointer-events-none absolute inset-y-0 left-0 w-0.5 rounded-full bg-logo"
+        />
+      ) : null}
       {onToggleSelect ? (
         mainAction
       ) : (

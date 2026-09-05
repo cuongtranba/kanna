@@ -715,6 +715,156 @@
     animation: kanna-column-drop-line-in var(--motion-quick) var(--motion-ease-arriving);
   }
 
+  /*
+    ── The new-session sentence (§01) ──────────────────────────────────────
+    Five beats, 860ms end to end, no beat over 300ms. Each is its own
+    animation delayed to its offset rather than one imperative timeline: a
+    route change happens in the MIDDLE of this sequence, so a timeline built
+    over element refs would hold half-dead references by the time it ran.
+    All of them read one flag (`newSessionStore.spawnedChatId`), which is the
+    shared clock.
+
+    None of these carry a fill-mode. Every resting state is the visible,
+    settled one, so a beat that is throttled or never runs costs its movement
+    and nothing else.
+  */
+
+  /* Beat 2 — the row is born. The one `born` overshoot per transition. */
+  @keyframes kanna-spawn-row-in {
+    from {
+      opacity: 0;
+      transform: scaleY(0.4);
+    }
+
+    60% {
+      transform: scaleY(1.04);
+    }
+
+    to {
+      opacity: 1;
+      transform: scaleY(1);
+    }
+  }
+
+  .kanna-spawn-row-in {
+    transform-origin: top;
+    animation: kanna-spawn-row-in var(--motion-row) var(--motion-ease-arriving) 120ms;
+  }
+
+  /* Beat 2 — …and its rail, the "this is new" accent. */
+  @keyframes kanna-spawn-rail-in {
+    from {
+      transform: scaleY(0);
+    }
+
+    to {
+      transform: scaleY(1);
+    }
+  }
+
+  .kanna-spawn-rail-in {
+    transform-origin: top;
+    animation: kanna-spawn-rail-in var(--motion-row) var(--motion-ease-arriving) 140ms;
+  }
+
+  /* Beat 3 — the shell steps back, and comes back to rest. */
+  @keyframes kanna-shell-step-back {
+    0% {
+      transform: none;
+      opacity: 1;
+    }
+
+    50% {
+      transform: translateX(-8px) scale(0.972);
+      opacity: 0.55;
+    }
+
+    100% {
+      transform: none;
+      opacity: 1;
+    }
+  }
+
+  /*
+    Driven by `data-kanna-spawning` on the shell row in App.tsx rather than by
+    a class the sidebar computes for itself — KannaSidebar sits exactly on its
+    architecture-budget ceiling, and the shell already holds this flag.
+  */
+  [data-kanna-spawning] .kanna-sidebar-shell {
+    animation: kanna-shell-step-back calc(2 * var(--motion-carry)) var(--motion-ease-arriving) 260ms;
+  }
+
+  /* Beat 3 — …and the chat surface comes forward to meet it. */
+  @keyframes kanna-surface-forward {
+    from {
+      opacity: 0;
+      transform: scale(1.035);
+    }
+
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  .kanna-surface-forward {
+    animation: kanna-surface-forward var(--motion-carry) var(--motion-ease-arriving) 260ms;
+  }
+
+  /* Beat 4 — the composer arrives focused. */
+  @keyframes kanna-composer-arrive {
+    from {
+      opacity: 0;
+      transform: translateY(56px) scale(0.96);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  .kanna-composer-arrive {
+    animation: kanna-composer-arrive var(--motion-panel) var(--motion-ease-panel) 420ms;
+  }
+
+  /* On a phone the keyboard owns the space the composer would travel through. */
+  @media (max-width: 767px) {
+    @keyframes kanna-composer-arrive {
+      from {
+        opacity: 0;
+        transform: translateY(40px) scale(0.96);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+  }
+
+  /* Beat 4 — …and the focus rule sweeps along the composer's bottom edge. */
+  @keyframes kanna-composer-sweep {
+    from {
+      transform: scaleX(0);
+      opacity: 1;
+    }
+
+    80% {
+      opacity: 1;
+    }
+
+    to {
+      transform: scaleX(1);
+      opacity: 0;
+    }
+  }
+
+  .kanna-composer-sweep {
+    transform-origin: left;
+    animation: kanna-composer-sweep var(--motion-carry) var(--motion-ease-arriving) 480ms both;
+  }
+
   @keyframes kanna-cursor-blink {
     0%,
     49% {
@@ -737,8 +887,21 @@
     }
   }
 
+  /*
+    Beat 5 of the new-session sentence (§01): the transcript opens.
+
+    Retimed from 420ms to --motion-panel (280ms) so it is a beat inside the
+    sentence rather than the longest single movement in the app — the 300ms
+    ceiling applies here like everywhere else. The keyframe itself is
+    unchanged; this is a tempo change, not a restyle.
+
+    `both` is kept. The flower is the empty state's whole picture and it is
+    already covered by the typewriter that follows it, so its resting state is
+    visible either way; without the fill it would flash at full scale before
+    its delay elapsed.
+  */
   .kanna-empty-state-flower {
-    animation: kanna-empty-state-flower-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: kanna-empty-state-flower-in var(--motion-panel) var(--motion-ease-panel) both;
     transform-origin: center;
   }
 

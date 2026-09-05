@@ -13,6 +13,7 @@ import { type ChatNavigatorPort } from "./chatNavigator"
 import { type AppSettingsPatch, type AppSettingsSnapshot, type ClaudeAuthSettings, type KeybindingsSnapshot, type LlmProviderSnapshot, type LlmProviderValidationResult, type OpenRouterModel, type PushConfigSnapshot, type UpdateInstallResult, type UpdateSnapshot } from "../../shared/types"
 import type { AgentProvider, ChatDiffSnapshot, ChatSnapshot, CloudflareTunnelSettings, GitWorktree, LocalProjectsSnapshot, ProjectCommandsSnapshot, SidebarChatRow, SidebarData, StackSummary } from "../../shared/types"
 import { NEW_CHAT_COMPOSER_ID, useChatPreferencesStore } from "../stores/chatPreferencesStore"
+import { useNewSessionStore } from "../stores/newSessionStore"
 import { useRightSidebarStore } from "../stores/rightSidebarStore"
 import { useTerminalLayoutStore } from "../stores/terminalLayoutStore"
 import { selectEditorCommandTemplate, selectEditorPreset, useAppSettingsStore } from "../stores/appSettingsStore"
@@ -983,6 +984,10 @@ export function useAppGlobalState(
 
     const result = await socket.command<{ chatId: string }>({ type: "chat.create", projectId })
     chatPreferences.initializeComposerForChat(result.chatId, { sourceState: sourceComposerState, providerHint })
+    // Starts the arrival sentence (§01). Marked BEFORE the navigate so the
+    // chat surface and the composer are already spawning on their first
+    // render — set it after and they paint at rest, then jump.
+    useNewSessionStore.getState().markSpawned(result.chatId)
     const store = useKannaStateStore.getState()
     store.setSelectedProjectId(projectId)
     store.setPendingChatId(result.chatId)
