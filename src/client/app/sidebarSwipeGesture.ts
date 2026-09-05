@@ -2,6 +2,7 @@ import { useEffect } from "react"
 import type { DomPort } from "../ports/domPort"
 import { domAdapter } from "../adapters/dom.adapter"
 import { BREAKPOINT_MD } from "../lib/viewport"
+import type { DrawerVisual } from "./drawerVisual"
 
 /** Re-exported for existing callers; `lib/viewport` owns the value. */
 export const SIDEBAR_SWIPE_MOBILE_BREAKPOINT_PX = BREAKPOINT_MD
@@ -152,6 +153,12 @@ type UseSidebarSwipeGestureParams = {
   sidebarOpen: boolean
   onOpen: () => void
   onClose: () => void
+  /**
+   * Draws the drawer under the finger. Optional: without it the gesture keeps
+   * its shipped behaviour exactly — decide on release, no frames in between —
+   * which is what every existing test asserts.
+   */
+  visual?: DrawerVisual
   ports?: SidebarSwipeGesturePorts
 }
 
@@ -159,7 +166,7 @@ function startedInHorizontalScroller(target: EventTarget | null): boolean {
   return target instanceof Element && target.closest(HORIZONTAL_SCROLLER_SELECTOR) !== null
 }
 
-export function useSidebarSwipeGesture({ sidebarOpen, onOpen, onClose, ports = DEFAULT_PORTS }: UseSidebarSwipeGestureParams) {
+export function useSidebarSwipeGesture({ sidebarOpen, onOpen, onClose, visual, ports = DEFAULT_PORTS }: UseSidebarSwipeGestureParams) {
   const { dom } = ports
 
   useEffect(() => {
@@ -193,6 +200,18 @@ export function useSidebarSwipeGesture({ sidebarOpen, onOpen, onClose, ports = D
       // Claim the gesture from the native edge swipe-back so the move resolves
       // to opening/closing the sidebar instead of navigating history.
       if (prevent && event.cancelable) event.preventDefault()
+
+      // The frames between finger and result. 1:1 and un-eased — an easing
+      // curve describes what happens AFTER a release, and applying one to a
+      // tracked finger makes the panel lag the thumb holding it.
+      if (!visual) return
+      const progress = sidebarDragProgress(
+        startPoint,
+        { x: touch.clientX, y: touch.clientY, t: event.timeStamp },
+        dom.getInnerWidth(),
+        { sidebarOpen, viewportWidth: dom.getInnerWidth(), startedInHorizontalScroller: inScroller },
+      )
+      if (progress !== null) visual.track(progress)
     }
 
     function handleTouchEnd(event: TouchEvent) {
@@ -206,12 +225,32 @@ export function useSidebarSwipeGesture({ sidebarOpen, onOpen, onClose, ports = D
         { x: touch.clientX, y: touch.clientY, t: event.timeStamp },
         { sidebarOpen, viewportWidth: dom.getInnerWidth(), startedInHorizontalScroller: inScroller }
       )
-      if (outcome === "open") onOpen()
-      else if (outcome === "close") onClose()
+      if (!visual) {
+        if (outcome === "open") onOpen()
+        else if (outcome === "close") onClose()
+        return
+      }
+
+      // Order matters, and differently in each direction. Opening must render
+      // FIRST so React is already holding the drawer on screen when the class
+      // that was holding it there is released; closing must settle first, or
+      // React hides the drawer and the settle plays against nothing.
+      if (outcome === "open") {
+        onOpen()
+        void visual.settle(1)
+        return
+      }
+      if (outcome === "close") {
+        void visual.settle(0).then(onClose)
+        return
+      }
+      // Not enough travel: fall back to wherever the drawer already was.
+      void visual.settle(sidebarOpen ? 1 : 0)
     }
 
     function handleTouchCancel() {
       start = null
+      visual?.release()
     }
 
     const cleanupTouchStart = dom.addWindowListenerWithOptions("touchstart", handleTouchStart, { passive: true })
@@ -226,5 +265,5 @@ export function useSidebarSwipeGesture({ sidebarOpen, onOpen, onClose, ports = D
       cleanupTouchEnd()
       cleanupTouchCancel()
     }
-  }, [sidebarOpen, onOpen, onClose, dom])
+  }, [sidebarOpen, onOpen, onClose, visual, dom])
 }

@@ -30,6 +30,7 @@ import { useKannaState } from "./useKannaState"
 import { KannaSocketProvider } from "./KannaSocketProvider"
 import { AppGlobalProvider } from "./AppGlobalProvider"
 import { useSidebarSwipeGesture } from "./sidebarSwipeGesture"
+import { createDrawerVisual } from "./drawerVisual"
 import { useViewportStore, useViewportSubscription } from "../stores/viewportStore"
 import { isMobileViewport } from "../lib/viewport"
 import type { AppSettingsSnapshot } from "../../shared/types"
@@ -43,6 +44,14 @@ import { domAdapter } from "../adapters/dom.adapter"
 import { timerAdapter } from "../adapters/timer.adapter"
 import { localStorageAdapter } from "../adapters/storage.adapter"
 import { fetchAuthStatus, postAuthLogin } from "../api/auth"
+
+/*
+  One instance for the app's lifetime. It holds a little gesture state (armed,
+  current progress), and a module-level singleton keeps `useSidebarSwipeGesture`'s
+  effect deps stable — built per render it would re-register the touch listeners
+  on every render, which is the shape `no-unstable-hook-fn-arg` exists to catch.
+*/
+const drawerVisual = createDrawerVisual()
 
 const VERSION_SEEN_STORAGE_KEY = "kanna:last-seen-version"
 const AUTH_STATUS_RETRY_DELAY_MS = 500
@@ -275,6 +284,7 @@ function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
     sidebarOpen: state.sidebarOpen,
     onOpen: state.openSidebar,
     onClose: state.closeSidebar,
+    visual: drawerVisual,
   })
   const previousSidebarDataRef = useRef<ReturnType<typeof useKannaState>["sidebarData"] | null>(null)
   const {
