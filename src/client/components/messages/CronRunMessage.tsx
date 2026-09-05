@@ -8,16 +8,9 @@ import type { ProcessedCronRunMessage } from "./types"
 
 interface Props {
   message: ProcessedCronRunMessage
-  /** Live jobs from ChatSnapshot — the run's status is joined by runId. */
   cronJobs?: readonly CronJobSnapshot[]
 }
 
-/**
- * Spawn-mode run card in the arming (monitoring) chat: when the run fired,
- * what it does, a link to the spawned chat, and a LIVE status pill joined
- * from the snapshot by runId — the entry itself is immutable (the
- * WorkflowMessage pattern).
- */
 export function CronRunMessage({ message, cronJobs }: Props) {
   const job = cronJobs?.find((candidate) => candidate.jobId === message.jobId)
   const run = job?.recentRuns.find((candidate) => candidate.runId === message.runId)
@@ -50,19 +43,10 @@ export function CronRunMessage({ message, cronJobs }: Props) {
   )
 }
 
-/**
- * The run's status as a mark and its word.
- *
- * This was a pill: a rounded border, a tinted fill, AND a coloured dot inside
- * it — three devices saying one thing, two of them carrying it in hue alone.
- * The mark's shape is the signal now, so it survives greyscale, and the tinted
- * surface it no longer needs is one fewer entry riding the contrast catalog.
- */
 export function CronRunStatusPill({ status }: { status: CronRunStatus }) {
   return <StateMarkLabel tone={cronRunTone(status)} label={cronRunLabel(status)} />
 }
 
-/** Schedule-lifecycle indicator — distinct from run execution status. */
 export function CronPausedPill() {
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-xs font-medium text-muted-foreground">

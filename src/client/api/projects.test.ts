@@ -1,6 +1,3 @@
-/**
- * Tests for api/projects.ts — verifies the project paths queryFn.
- */
 
 import { describe, expect, test } from "bun:test"
 import { fetchProjectPaths } from "./projects"
@@ -34,7 +31,6 @@ describe("fetchProjectPaths", () => {
   })
 
   test("returns empty array on network error", async () => {
-    // No routes registered — throws inside, swallowed by the catch
     const http = makeFakeHttpPort()
     const result = await fetchProjectPaths("proj1", "y", { http })
     expect(result).toEqual([])

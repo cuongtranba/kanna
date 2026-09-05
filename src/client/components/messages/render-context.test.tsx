@@ -27,18 +27,12 @@ describe("TranscriptRenderOptionsProvider", () => {
     container.remove()
   })
 
-  // The provider used to spread into a fresh object on every render, so every
-  // consumer re-rendered on every parent render. With two consumers of this
-  // context on the transcript path that is the render-loop shape the project's
-  // stable-reference rule bans.
   test("publishes a referentially stable value when `value` is stable", async () => {
     const seen: unknown[] = []
     const container = document.createElement("div")
     document.body.appendChild(container)
     const root = createRoot(container)
 
-    // Fresh JSX elements each time so React actually re-renders rather than
-    // bailing out on identical element identity.
     const tree = () => (
       <TranscriptRenderOptionsProvider value={STABLE_OPTIONS}>
         <Probe seen={seen} />

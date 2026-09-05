@@ -1,7 +1,3 @@
-/**
- * Tests for makeFakePorts.ts — verifies that every fake port satisfies its
- * port interface and records observable side effects correctly.
- */
 
 import { describe, expect, test } from "bun:test"
 import {
@@ -15,9 +11,6 @@ import {
   makeAllFakePorts,
 } from "./makeFakePorts"
 
-// ---------------------------------------------------------------------------
-// FakeHttpPort
-// ---------------------------------------------------------------------------
 
 describe("makeFakeHttpPort", () => {
   test("getJson records call and returns registered route", async () => {
@@ -81,9 +74,6 @@ describe("makeFakeHttpPort", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// FakeStoragePort
-// ---------------------------------------------------------------------------
 
 describe("makeFakeStoragePort", () => {
   test("get/set/remove/clear round-trip", () => {
@@ -111,9 +101,6 @@ describe("makeFakeStoragePort", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// FakeTimerPort
-// ---------------------------------------------------------------------------
 
 describe("makeFakeTimerPort", () => {
   test("setTimeout registers a callback", () => {
@@ -160,9 +147,6 @@ describe("makeFakeTimerPort", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// FakeDomPort
-// ---------------------------------------------------------------------------
 
 describe("makeFakeDomPort", () => {
   test("getTitle / setTitle round-trip", () => {
@@ -208,9 +192,6 @@ describe("makeFakeDomPort", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// FakeNotificationPort
-// ---------------------------------------------------------------------------
 
 describe("makeFakeNotificationPort", () => {
   test("returns configured permission", () => {
@@ -230,9 +211,6 @@ describe("makeFakeNotificationPort", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// FakeSoundPort
-// ---------------------------------------------------------------------------
 
 describe("makeFakeSoundPort", () => {
   test("play records the src", async () => {
@@ -249,9 +227,6 @@ describe("makeFakeSoundPort", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// FakeClipboardPort
-// ---------------------------------------------------------------------------
 
 describe("makeFakeClipboardPort", () => {
   test("writeText stores text and readText returns it", async () => {
@@ -270,9 +245,6 @@ describe("makeFakeClipboardPort", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// makeAllFakePorts convenience helper
-// ---------------------------------------------------------------------------
 
 describe("makeAllFakePorts", () => {
   test("returns independent port instances", () => {
@@ -285,7 +257,6 @@ describe("makeAllFakePorts", () => {
     expect(ports.notification).toBeDefined()
     expect(ports.sound).toBeDefined()
     expect(ports.clipboard).toBeDefined()
-    // Verify independence: two calls produce different instances
     const ports2 = makeAllFakePorts()
     expect(ports.localStorage).not.toBe(ports2.localStorage)
   })

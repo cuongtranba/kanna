@@ -1,34 +1,10 @@
-/**
- * SocketBridge.tsx — react-use-websocket raw-transport mount point.
- *
- * This component:
- *   1. Calls useWebSocket with `filter: () => false` + `onMessage` so that incoming
- *      frames DO NOT trigger any React re-renders (no `lastJsonMessage` / `lastMessage`
- *      state updates). onMessage feeds Kanna's protocol layer instead.
- *   2. Writes sendMessage + readyState into socketStore (Zustand) so the rest of the
- *      client can send and observe connection state without touching the hook directly.
- *   3. Renders nothing — it is a pure effect component mounted once at the App root.
- *
- * IMPORTANT — protocol relocation is a LATER chunk (see plan .c3/adr/adr-20260715-...):
- *   The actual correlation/subscription/queue/heartbeat logic that today lives in
- *   socket.ts is NOT yet moved here. The onMessage handler below is a stub — when the
- *   burn-down chunk lands it will call into socket-protocol.ts.
- *
- * Architecture: see .c3/adr/adr-20260715-client-state-effect-architecture.md
- * Component: c3-101 (socket-client)
- */
 
 import { useEffect, useMemo } from "react"
-// NOT `import useWebSocket from "react-use-websocket"` — that package is transpiled
-// CommonJS, and rolldown (Vite 8+) binds its default export to `module.exports` rather
-// than `exports.default`, so calling it throws "(0, X.default) is not a function" and
-// white-screens the app. ../lib/useWebSocket owns that interop; see its header.
 import { useWebSocket } from "../lib/useWebSocket"
 import { domAdapter } from "../adapters/dom.adapter"
 import type { DomPort } from "../ports/domPort"
 import { useSocketStore } from "../stores/socketStore"
 
-/** Derive the WebSocket URL from the current page URL (ws: / wss: mirrors http: / https:). */
 function getWsUrl(dom: DomPort): string {
   const origin = dom.getOrigin()
   return `${origin.replace(/^https:/, "wss:").replace(/^http:/, "ws:")}/ws`
@@ -38,42 +14,24 @@ export interface SocketBridgePorts {
   dom?: DomPort
 }
 
-/**
- * SocketBridge mounts once at the App root (inside QueryClientProvider, before routes).
- * It is the ONLY component allowed to call useWebSocket — all other code reads from
- * socketStore or calls socketStore.getState().sendMessage(...).
- */
 export function SocketBridge({ dom = domAdapter }: SocketBridgePorts = {}): null {
   const setReadyState = useSocketStore((s) => s.setReadyState)
   const setSendMessage = useSocketStore((s) => s.setSendMessage)
 
-  // wsUrl MUST be a stable reference. useWebSocket's reconnect effect keys on the
-  // url argument (deps: [url, connect, ...]); a fresh `() => getWsUrl(dom)` arrow
-  // every render tore down + reopened the socket each render, and each open fires a
-  // flushSync setReadyState → re-render → new url → reopen. That runaway loop crashed
-  // with React error #185 (Maximum update depth exceeded) and a white page.
   const wsUrl = useMemo(() => getWsUrl(dom), [dom])
 
   const { sendMessage, readyState } = useWebSocket(wsUrl, {
     share: true,
-    // filter: () => false prevents re-renders from lastMessage / lastJsonMessage state.
-    // onMessage receives all frames without triggering React state updates.
     filter: () => false,
-    // TODO (later burn-down chunk): route the message into socket-protocol.ts dispatcher.
     onMessage: (_event: MessageEvent) => {
-      // Stub — full protocol relocation happens in a later chunk.
-      // The existing KannaSocket in socket.ts continues to handle the live connection
-      // until that chunk migrates correlation/subscription/queue/heartbeat logic here.
     },
     shouldReconnect: () => true,
   })
 
-  // Write readyState into socketStore whenever it changes.
   useEffect(() => {
     setReadyState(readyState)
   }, [readyState, setReadyState])
 
-  // Write the stable sendMessage function into socketStore once on mount.
   useEffect(() => {
     setSendMessage(sendMessage)
   }, [sendMessage, setSendMessage])

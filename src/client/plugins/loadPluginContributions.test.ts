@@ -1,11 +1,3 @@
-/**
- * The join between "what is installed" and "what the host renders". Both seams
- * are injected, so these cases drive the real collection logic with fakes.
- *
- * The command-center cases are the Phase 4 addition: a contributed `/` picker
- * entry has to survive the same containment rules as a sidebar item — collected
- * per plugin, and never lost because a DIFFERENT plugin threw.
- */
 import { describe, expect, test } from "bun:test"
 import { loadPluginContributions, type PluginListEntry } from "./loadPluginContributions"
 import type { PluginModule } from "./evaluatePlugin"
@@ -16,10 +8,6 @@ function listing(...entries: PluginListEntry[]) {
   return async () => entries
 }
 
-/** Narrows the loader's untyped context back to the shape it actually
- * passes, without an `as` cast: the loader hands over its own
- * `createPluginContext` result, so this is a check that cannot fail in
- * practice and a loud failure if the loader ever stops doing that. */
 function isPluginContext(value: unknown): value is PluginContext {
   return (
     isRecord(value) &&
@@ -35,8 +23,6 @@ function asPluginContext(value: unknown): PluginContext {
   return value
 }
 
-/** A plugin module whose default export runs `contribute` against the real
- * context object the loader builds. */
 function moduleThat(contribute: (plugin: PluginContext) => void): PluginModule {
   return { default: (context) => contribute(asPluginContext(context)) }
 }
@@ -88,8 +74,6 @@ describe("loadPluginContributions", () => {
   })
 
   test("items a plugin registered BEFORE it threw are kept", async () => {
-    // The registry is shared and written through as the plugin runs, so a throw
-    // partway is contained to what came after it.
     const loaded = await loadPluginContributions(
       listing({ id: "half", enabled: true }),
       async () =>

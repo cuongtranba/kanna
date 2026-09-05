@@ -15,9 +15,6 @@ import type { SidebarData } from "../../shared/types"
 type SidebarGroup = SidebarData["projectGroups"][number]
 type SidebarChat = SidebarGroup["chats"][number]
 
-// ---------------------------------------------------------------------------
-// Test helpers
-// ---------------------------------------------------------------------------
 
 function makeProjectGroup(groupKey: string, chatIds: string[] = []): SidebarGroup {
   return {
@@ -30,9 +27,6 @@ function makeProjectGroup(groupKey: string, chatIds: string[] = []): SidebarGrou
   }
 }
 
-// ---------------------------------------------------------------------------
-// applySidebarProjectOrder
-// ---------------------------------------------------------------------------
 
 describe("applySidebarProjectOrder", () => {
   test("returns original groups unchanged when no projectIds given", () => {
@@ -87,9 +81,6 @@ describe("applySidebarProjectOrder", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// getNewestRemainingChatId
-// ---------------------------------------------------------------------------
 
 describe("getNewestRemainingChatId", () => {
   test("returns null when activeChatId not found in any group", () => {
@@ -113,9 +104,6 @@ describe("getNewestRemainingChatId", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// getProjectIdForChat
-// ---------------------------------------------------------------------------
 
 describe("getProjectIdForChat", () => {
   test("returns null for null chatId", () => {
@@ -138,9 +126,6 @@ describe("getProjectIdForChat", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// getUiUpdateRestartReconnectAction
-// ---------------------------------------------------------------------------
 
 describe("getUiUpdateRestartReconnectAction", () => {
   test("returns awaiting_server_ready when phase=awaiting_disconnect and status=disconnected", () => {
@@ -164,9 +149,6 @@ describe("getUiUpdateRestartReconnectAction", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// deriveUiRestartActivity
-// ---------------------------------------------------------------------------
 
 describe("deriveUiRestartActivity", () => {
   test("inactive and empty label when phase=null and status=null", () => {
@@ -210,9 +192,6 @@ describe("deriveUiRestartActivity", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// shouldHandleUiUpdateReloadRequest
-// ---------------------------------------------------------------------------
 
 describe("shouldHandleUiUpdateReloadRequest", () => {
   test("returns false when reloadRequestedAt is null", () => {
@@ -240,9 +219,6 @@ describe("shouldHandleUiUpdateReloadRequest", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// resolveComposeIntent
-// ---------------------------------------------------------------------------
 
 describe("resolveComposeIntent", () => {
   test("returns project_id intent when selectedProjectId is set", () => {
@@ -274,9 +250,6 @@ describe("resolveComposeIntent", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// getUiUpdateReadinessPath
-// ---------------------------------------------------------------------------
 
 describe("getUiUpdateReadinessPath", () => {
   test("returns /auth/status", () => {
@@ -284,9 +257,6 @@ describe("getUiUpdateReadinessPath", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// getMostRecentProjectProvider
-// ---------------------------------------------------------------------------
 
 describe("getMostRecentProjectProvider", () => {
   test("returns null when project group is not found", () => {

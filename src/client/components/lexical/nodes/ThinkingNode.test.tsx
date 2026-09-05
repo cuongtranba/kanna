@@ -8,8 +8,6 @@ import {
   type SerializedThinkingNode,
 } from "./ThinkingNode"
 
-/** The guards narrow a real Lexical node; this reaches the runtime branch a
-  * caller could only hit with a value the type system already rejects. */
 function notALexicalNode(value: unknown): LexicalNode {
   return value as LexicalNode
 }

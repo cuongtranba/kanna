@@ -120,8 +120,6 @@ export function computeSessionTotals(
 
   if (input === 0 && output === 0 && cached === 0 && cost === 0) return null
 
-  // inputTokens already includes the cached portion (see normalizeClaudeUsageSnapshot),
-  // so the hit rate is cached / input, not cached / (input + cached).
   const cacheHitPercentage = input > 0 ? (cached / input) * 100 : null
   return { inputTokens: input, outputTokens: output, cachedTokens: cached, costUsd: cost, cacheHitPercentage }
 }

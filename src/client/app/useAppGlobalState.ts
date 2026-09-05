@@ -1,11 +1,3 @@
-/**
- * useAppGlobalState — app-wide socket subscriptions, UI-restart machinery,
- * focus/visibility listeners, and settings/MCP/LLM + sidebar/project/stack/
- * import handlers.
- *
- * Called exactly once by useKannaState; its result is spread into the
- * KannaState return. KannaState stays byte-identical; no consumer changes.
- */
 
 import { useCallback, useEffect, useMemo, useRef } from "react"
 import { useShallow } from "zustand/react/shallow"
@@ -46,18 +38,12 @@ import { useStackCommands, type StackCommands } from "./useStackCommands"
 import { sameDiffs, shouldPreserveExistingProjectDiffs, UpdateRestartRuntime } from "./appRuntime"
 import type { OpenLocalLinkTarget } from "../components/messages/shared"
 
-// ---------------------------------------------------------------------------
-// Storage keys (private)
-// ---------------------------------------------------------------------------
 
 const LEGACY_THEME_STORAGE_KEY = "lever-theme"
 const LEGACY_CHAT_SOUND_STORAGE_KEY = "chat-sound-preferences"
 const LEGACY_TERMINAL_STORAGE_KEY = "terminal-preferences"
 const LEGACY_CHAT_PREFERENCES_STORAGE_KEY = "chat-preferences"
 
-// ---------------------------------------------------------------------------
-// project-git / project-commands subscription helpers
-// ---------------------------------------------------------------------------
 
 function applyProjectCommandsSnapshotLocal(
   subscribedProjectId: string,
@@ -142,9 +128,6 @@ function clearLegacyBrowserSettings(storage: StoragePort) {
 }
 
 
-// ---------------------------------------------------------------------------
-// Exported pure helpers (consumers may import these)
-// ---------------------------------------------------------------------------
 
 export function applySidebarProjectOrder(
   projectGroups: SidebarData["projectGroups"],
@@ -188,7 +171,6 @@ export function getNewestRemainingChatId(projectGroups: SidebarData["projectGrou
   return projectGroup.chats.find((chat) => chat.chatId !== activeChatId)?.chatId ?? null
 }
 
-/** Which project a chat belongs to, per the sidebar grouping. */
 export function getProjectIdForChat(
   projectGroups: SidebarData["projectGroups"],
   chatId: string | null,
@@ -276,20 +258,9 @@ export function resolveComposeIntent(params: {
   return null
 }
 
-// ---------------------------------------------------------------------------
-// Return type
-// ---------------------------------------------------------------------------
 
 export interface AppGlobalState extends StackCommands {
   socket: KannaSocket
-  /**
-   * The chatId in the URL, from the provider's single useParams() call.
-   *
-   * Deliberately NOT named activeChatId: a useKannaState instance calls its own
-   * chatId parameter that, and conflating the two is what let the primary-tab
-   * gate be written as isPrimaryChatInstance(x, x) — always true, guarding
-   * nothing. This is the ROUTE's chat; an instance's is its own.
-   */
   routeChatId: string | null
   sidebarData: SidebarData
   localProjects: LocalProjectsSnapshot | null
@@ -354,9 +325,6 @@ export interface AppGlobalState extends StackCommands {
   chatNavigator: ChatNavigatorPort
 }
 
-// ---------------------------------------------------------------------------
-// Hook
-// ---------------------------------------------------------------------------
 
 export function useAppGlobalState(
   socket: KannaSocket,
@@ -371,7 +339,6 @@ export function useAppGlobalState(
 ): AppGlobalState {
   const dialog = useAppDialog()
 
-  // ---- store reads -------------------------------------------------------
 
   const sidebarData = useKannaStateStore((state) => state.sidebarData)
   const optimisticSidebarProjectOrder = useKannaStateStore((state) => state.optimisticSidebarProjectOrder)
@@ -390,12 +357,7 @@ export function useAppGlobalState(
   const addProjectModalOpen = useKannaStateStore((state) => state.addProjectModalOpen)
   const commandError = useKannaStateStore((state) => state.commandError)
   const startingLocalPath = useKannaStateStore((state) => state.startingLocalPath)
-  // Internal reads (not in return type):
   const selectedProjectId = useKannaStateStore((state) => state.selectedProjectId)
-  // Chats with an open tab in the workspace. The workspace is ONE tree shared by
-  // every project now, so the set of open projects is derived from the chat tabs
-  // themselves rather than from per-project layout keys — that is what keeps
-  // project A's subscriptions alive while you read a chat in project B.
   const openChatTabIds = usePaneLayoutStore(
     useShallow((state) =>
       collectPanes(state.layout.root)
@@ -405,7 +367,6 @@ export function useAppGlobalState(
   )
   const runtimeProjectId = runtime?.projectId ?? null
 
-  // ---- derived -----------------------------------------------------------
 
   const updateRestartRuntimeRef = useRef<UpdateRestartRuntime | null>(null)
 
@@ -484,7 +445,6 @@ export function useAppGlobalState(
 
   const fallbackLocalProjectPath = localProjects?.projects[0]?.localPath ?? null
 
-  // ---- socket subscriptions (global topics) ------------------------------
 
   useEffect(() => socket.onStatus((status) => useKannaStateStore.getState().setConnectionStatus(status)), [socket])
 
@@ -578,19 +538,9 @@ export function useAppGlobalState(
     })
   }, [socket])
 
-  // ---- project-level subscriptions (once per distinct open projectId) ------
-  //
-  // Subscribing in useAppGlobalState (rather than useKannaState) ensures that
-  // switching the active chat never tears down a subscription for a project
-  // that is still open in another pane/tab.  The set of open projectIds comes
-  // from three sources — all scalar or useShallow-stable — so the effect only
-  // fires when a project is actually added or removed.
 
   useEffect(() => {
     const ids = new Set<string>()
-    // Git state is subscribed per CHAT, because a chat can run in a worktree of
-    // its project and therefore have its own branch and its own dirty files.
-    // A project with no open chat still gets one subscription for its checkout.
     const gitTargets = new Map<string, { projectId: string; chatId?: string }>()
     for (const chatId of openChatTabIds) {
       const chatProjectId = getProjectIdForChat(sidebarProjectGroups, chatId)
@@ -626,9 +576,6 @@ export function useAppGlobalState(
     })
 
     ids.forEach((projectId) => {
-      // The composer picker's catalog is per project, so it is fetched once
-      // per project rather than per chat — opening another chat in the same
-      // project renders the list from cache with no round trip.
       cleanups.push(
         socket.subscribe<ProjectCommandsSnapshot>(
           { type: "project-commands", projectId },
@@ -640,7 +587,6 @@ export function useAppGlobalState(
     return () => { cleanups.forEach((fn) => fn()) }
   }, [openChatTabIds, sidebarProjectGroups, runtimeProjectId, selectedProjectId, socket])
 
-  // ---- update / UI-restart effects ---------------------------------------
 
   useEffect(() => {
     if (connectionStatus !== "connected") return
@@ -649,7 +595,6 @@ export function useAppGlobalState(
     })
   }, [connectionStatus, socket])
 
-  // ---- focus / visibility effects ----------------------------------------
 
   useEffect(() => {
     function handleWindowFocus() {
@@ -677,7 +622,6 @@ export function useAppGlobalState(
     }
   }, [dom])
 
-  // ---- settings / LLM on connection -------------------------------------
 
   const handleReadAppSettings = useCallback(async () => {
     try {
@@ -757,7 +701,6 @@ export function useAppGlobalState(
     void handleReadLlmProvider()
   }, [connectionStatus, handleReadLlmProvider])
 
-  // ---- sidebar: auto-select first project --------------------------------
 
   useEffect(() => {
     if (selectedProjectId) return
@@ -767,7 +710,6 @@ export function useAppGlobalState(
     }
   }, [selectedProjectId, sidebarProjectGroups])
 
-  // ---- settings / MCP / LLM handlers ------------------------------------
 
   const handleTestMcpServer = useCallback(async (id: string) => {
     try {
@@ -905,7 +847,6 @@ export function useAppGlobalState(
     }
   }, [dom])
 
-  // ---- update handlers --------------------------------------------------
 
   const handleCheckForUpdates = useCallback(async (options?: { force?: boolean }) => {
     try {
@@ -970,7 +911,6 @@ export function useAppGlobalState(
     }
   }, [clearUiRestartPhase, dialog, dom, markUiRestartPhase, socket])
 
-  // ---- sidebar / chat / project handlers ---------------------------------
 
   const createChatForProject = useCallback(async (projectId: string) => {
     const chatPreferences = useChatPreferencesStore.getState()
@@ -985,13 +925,7 @@ export function useAppGlobalState(
 
     const result = await socket.command<{ chatId: string }>({ type: "chat.create", projectId })
     chatPreferences.initializeComposerForChat(result.chatId, { sourceState: sourceComposerState, providerHint })
-    // Starts the arrival sentence (§01). Marked BEFORE the navigate so the
-    // chat surface and the composer are already spawning on their first
-    // render — set it after and they paint at rest, then jump.
     useNewSessionStore.getState().markSpawned(result.chatId)
-    // Beat 3's carry (§01). Detached: it waits for both the sidebar row and
-    // the tab to render, and a chat must never fail to open because a
-    // flourish could not find its two ends.
     void flyChatTitleToTab(result.chatId)
     const store = useKannaStateStore.getState()
     store.setSelectedProjectId(projectId)
@@ -1187,7 +1121,6 @@ export function useAppGlobalState(
     }
   }, [socket])
 
-  // ---- stack handlers (own module — see useStackCommands) ----------------
 
   const stackCommands = useStackCommands(socket)
 
@@ -1230,7 +1163,6 @@ export function useAppGlobalState(
     }
   }, [socket])
 
-  // ---- import handlers --------------------------------------------------
 
   const importClaudeSessions = useCallback(async () => {
     const result = await socket.command<{ imported: number; updated: number; skipped: number; failed: number; newProjects: number }>({ type: "sessions.importClaude" })
@@ -1241,7 +1173,6 @@ export function useAppGlobalState(
     return await socket.command<ImportSessionsByIdsResult>({ type: "sessions.importClaudeSession", sessionIds })
   }, [socket])
 
-  // ---- open-external helpers --------------------------------------------
 
   const openExternal = useCallback(async (command: {
     action: OpenExternalAction
@@ -1316,7 +1247,6 @@ export function useAppGlobalState(
     }
   }, [openExternal])
 
-  // ---- sidebar UI -------------------------------------------------------
 
   const openSidebar = useCallback(() => useKannaStateStore.getState().setSidebarOpen(true), [])
   const closeSidebar = useCallback(() => useKannaStateStore.getState().setSidebarOpen(false), [])
@@ -1325,7 +1255,6 @@ export function useAppGlobalState(
   const openAddProjectModal = useCallback(() => useKannaStateStore.getState().setAddProjectModalOpen(true), [])
   const closeAddProjectModal = useCallback(() => useKannaStateStore.getState().setAddProjectModalOpen(false), [])
 
-  // ---- compose ----------------------------------------------------------
 
   const handleCompose = useCallback(() => {
     const intent = resolveComposeIntent({
@@ -1341,11 +1270,9 @@ export function useAppGlobalState(
     chatNavigator.goHome()
   }, [chatNavigator, fallbackLocalProjectPath, selectedProjectId, sidebarProjectGroups, startChatFromIntent])
 
-  // ---- derive ui restart ------------------------------------------------
 
   const uiRestart = deriveUiRestartActivity(uiRestartPhase, updateSnapshot?.status)
 
-  // ---- return -----------------------------------------------------------
 
   return {
     socket,

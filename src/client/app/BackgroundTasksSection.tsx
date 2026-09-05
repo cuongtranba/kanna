@@ -106,14 +106,6 @@ function BackgroundTasksSectionContent({ chatId, tasks }: Props) {
   )
 }
 
-/**
- * Live list of Claude-Code background tasks (Bash run_in_background,
- * background Agent runs, workflows) on this chat's warm session — the
- * Kanna analog of Claude Code's /tasks view.
- *
- * Tasks with output files expose a chevron that subscribes to the
- * background-task-output WS topic and streams the file tail inline.
- */
 export function BackgroundTasksSection({ chatId, tasks }: Props) {
   if (tasks.length === 0) return null
   return (

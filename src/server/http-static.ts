@@ -2,12 +2,6 @@ import path from "node:path"
 import { APP_NAME } from "../shared/branding"
 import { getServerFile } from "./server-io.adapter"
 
-/**
- * True when the path names a build artifact rather than a client route. Every SPA
- * route is extensionless (`/`, `/chat/:chatId`, `/settings/:sectionId`), so an
- * extension is a reliable "this is a file" signal. `.html` is excluded: those are
- * navigation documents that fall back to the shell.
- */
 export function isAssetRequest(requestedPath: string): boolean {
   const lastSegment = requestedPath.slice(requestedPath.lastIndexOf("/") + 1)
   const dot = lastSegment.lastIndexOf(".")

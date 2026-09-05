@@ -1,10 +1,3 @@
-// Measures long-session performance baselines (KR1-KR3).
-// Run: bun scripts/perf/long-session-bench.ts [entryCount] [--uniform]
-//
-// --uniform reproduces the ORIGINAL ~1 KB-per-entry fixture, kept only so the
-// pre-2026-08 numbers in
-// docs/superpowers/specs/2026-07-18-long-session-perf-baseline.md stay
-// reproducible. Do not use it to judge a change.
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
@@ -26,7 +19,6 @@ const RECENT_LIMIT = 200
 const TICKS = 100
 const SEED = 0x5eed
 
-/** The legacy fixture: every entry ~1 KB, no tail. Retained for replay only. */
 function makeUniformEntry(i: number) {
   if (i % 3 === 0) {
     return {
@@ -67,14 +59,12 @@ async function main() {
     }
     await store.flush()
 
-    // KR3 proxy: cold open (fresh store re-reads JSONL from disk)
     const store2 = new EventStore(dir)
     await store2.initialize()
     const t0 = performance.now()
     const firstPage = store2.getRecentChatHistory(chat.id, RECENT_LIMIT)
     const coldOpenMs = performance.now() - t0
 
-    // KR1+KR2 proxy: full snapshot derive + signature + stringify per tick
     let deriveMs = 0
     let sigMs = 0
     let strMs = 0
@@ -104,8 +94,6 @@ async function main() {
       bytes = payload.length
       void sig
     }
-    // Ops path (post-change): per tick, one entry lands in the op-log and the
-    // broadcast serializes just the delta envelope.
     let opsMs = 0
     let opsBytes = 0
     let lastSeq = store2.chatOps.currentSeq(chat.id)
@@ -127,9 +115,6 @@ async function main() {
       opsBytes = payload.length
     }
 
-    // The fixture's own shape is part of the result: a number produced by a
-    // fixture with no tail is not comparable to one produced by a realistic
-    // one, and reporting it is what makes that visible at a glance.
     const fixture = summarizeSizes(emittedSizes)
 
     console.log(JSON.stringify({

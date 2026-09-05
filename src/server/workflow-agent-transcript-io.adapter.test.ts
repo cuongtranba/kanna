@@ -8,8 +8,6 @@ const dirs: string[] = []
 function tmp(): string { const d = mkdtempSync(join(tmpdir(), "wf-agent-io-")); dirs.push(d); return d }
 afterEach(() => { for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true }) })
 
-// Build a session layout: <root>/workflows (the registered sidecar dir) +
-// <root>/subagents/workflows/<runId>/agent-<id>.jsonl (the live transcript).
 function session(runId: string, agentId: string, body: string): string {
   const root = tmp()
   const workflowsDir = join(root, "workflows")

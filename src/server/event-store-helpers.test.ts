@@ -13,9 +13,6 @@ import {
   type TranscriptPageResult,
 } from "./event-store-helpers"
 
-// ---------------------------------------------------------------------------
-// normalizeSidebarProjectOrder
-// ---------------------------------------------------------------------------
 describe("normalizeSidebarProjectOrder", () => {
   test("returns empty array for non-array input", () => {
     expect(normalizeSidebarProjectOrder(null)).toEqual([])
@@ -40,9 +37,6 @@ describe("normalizeSidebarProjectOrder", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// encodeHistoryCursor / decodeCursor
-// ---------------------------------------------------------------------------
 describe("encodeHistoryCursor", () => {
   test("encodes index as idx: prefix string", () => {
     expect(encodeHistoryCursor(0)).toBe("idx:0")
@@ -66,9 +60,6 @@ describe("decodeCursor", () => {
 })
 
 
-// ---------------------------------------------------------------------------
-// coalesceContextWindowUpdates
-// ---------------------------------------------------------------------------
 
 function makeEntry(kind: TranscriptEntry["kind"], id: string): TranscriptEntry {
   return { _id: id, createdAt: 0, kind } as TranscriptEntry
@@ -116,9 +107,6 @@ describe("coalesceContextWindowUpdates", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// getHistorySnapshot
-// ---------------------------------------------------------------------------
 describe("getHistorySnapshot", () => {
   test("maps page fields and recentLimit into ChatHistorySnapshot", () => {
     const page: TranscriptPageResult = {
@@ -143,9 +131,6 @@ describe("getHistorySnapshot", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// getForkedChatTitle
-// ---------------------------------------------------------------------------
 describe("getForkedChatTitle", () => {
   test("prefixes non-fork titles", () => {
     expect(getForkedChatTitle("My Chat")).toBe("Fork: My Chat")
@@ -168,9 +153,6 @@ describe("getForkedChatTitle", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// getReplayEventPriority — spot-check priority buckets
-// ---------------------------------------------------------------------------
 describe("getReplayEventPriority", () => {
   function makeEvent(type: string): StoreEvent {
     return { type } as StoreEvent
@@ -197,10 +179,6 @@ describe("getReplayEventPriority", () => {
     expect(getReplayEventPriority(makeEvent("loop_armed"))).toBe(11)
   })
 
-  // Orchestration is retired (adr-20260802-retire-orchestration-core). These
-  // types are no longer in the union, so they take the unknown-type path —
-  // priced, not thrown. orch.jsonl is out of the replay set, so this is only
-  // reachable if such a line reappears in a replayed log.
   test("retired orch_* types are priced as unknown instead of throwing", () => {
     expect(getReplayEventPriority(makeEvent("orch_run_created")))
       .toBe(UNKNOWN_EVENT_PRIORITY)
@@ -208,11 +186,6 @@ describe("getReplayEventPriority", () => {
       .toBe(UNKNOWN_EVENT_PRIORITY)
   })
 
-  // Regression: a stray `turn_resume_attempted` row in turns.jsonl — written by
-  // PR #493 (v0.108.0), a branch that never landed on main — took the whole
-  // server down on boot. An unknown type is data written by a DIFFERENT code
-  // version; `applyStoreEvent` has no default case, so it is a no-op on apply
-  // either way. Throwing here converted an ignorable event into a dead server.
   test("an unknown event type from another code version is priced, not thrown", () => {
     expect(getReplayEventPriority(makeEvent("turn_resume_attempted")))
       .toBe(UNKNOWN_EVENT_PRIORITY)
@@ -220,17 +193,12 @@ describe("getReplayEventPriority", () => {
       .toBe(UNKNOWN_EVENT_PRIORITY)
   })
 
-  // The sort is a total order, so an unknown type still has to compare
-  // sanely against known ones rather than yielding NaN/undefined.
   test("the unknown priority is a finite number that orders deterministically", () => {
     const unknown = getReplayEventPriority(makeEvent("turn_resume_attempted"))
     expect(Number.isFinite(unknown)).toBe(true)
     expect(getReplayEventPriority(makeEvent("another_unknown"))).toBe(unknown)
   })
 
-  // Unlike orch_*, session_commands_loaded lives in turns.jsonl, which is still
-  // replayed — and STORE_VERSION is deliberately unchanged, so a shipped user's
-  // log still carries these lines. Throwing here would break their startup.
   test("retired session_commands_loaded is priced instead of throwing", () => {
     expect(getReplayEventPriority(makeEvent("session_commands_loaded"))).toBe(6)
   })

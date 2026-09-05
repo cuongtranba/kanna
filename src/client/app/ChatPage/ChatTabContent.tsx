@@ -38,15 +38,7 @@ import { useKannaStateStore } from "../../stores/kannaStateStore"
 const EMPTY_MUTED_CHAT_IDS: string[] = []
 const EMPTY_SUBAGENT_RUNS: Record<string, SubagentRunSnapshot> = {}
 
-// ─── Tab-local hooks (MUST run inside ChatTabRoot Provider) ──────────────────
 
-/**
- * Measures the chat input's rendered height and derives the transcript's
- * padding-bottom so the last message is never obscured by the composer.
- *
- * Reads `inputHeight` / `setInputHeight` from ChatTabScopedStore.
- * MUST be called inside a ChatTabRoot (i.e. inside the Provider).
- */
 function useTranscriptPaddingBottom() {
   const inputRef = useRef<HTMLDivElement>(null)
   const inputHeight = ChatTabScopedStore.useScopedStore((s) => s.inputHeight)
@@ -164,33 +156,20 @@ function usePageFileDrop(args: {
   }
 }
 
-// ─── ChatTabContent ───────────────────────────────────────────────────────────
 
 export interface ChatTabContentProps {
   timer: TimerPort
   dom: DomPort
-  /** Stable callback from the outer ChatPage shell to toggle the terminal pane. */
   onToggleEmbeddedTerminal: () => void
-  /** Stable callback from the outer ChatPage shell to toggle the right sidebar. */
   onToggleRightSidebar: () => void
 }
 
-/**
- * The chat card rendered inside ChatTabRoot.Provider.
- *
- * All hooks that read ChatTabScopedStore state MUST live here (or in
- * components rendered beneath this one), never in the outer ChatPage shell.
- * The Provider is only mounted when the registry's `chat:` factory fires,
- * so any hook placed above that point — i.e. in the outer ChatPage — would
- * crash with a missing-context error and produce a blank screen.
- */
 export function ChatTabContent({
   timer,
   dom,
   onToggleEmbeddedTerminal,
   onToggleRightSidebar,
 }: ChatTabContentProps) {
-  // This tab's OWN state, not the route's: two chat tabs each read their own.
   const state = useChatTabState()
 
   const transcriptListRef = useRef<LegendListRef | null>(null)
@@ -200,7 +179,6 @@ export function ChatTabContent({
   const chatInputElementRef = useRef<HTMLTextAreaElement>(null)
   const chatInputRef = useRef<ChatInputHandle | null>(null)
 
-  // Tab-scoped: MUST be inside ChatTabScopedStore.Provider (ChatTabRoot).
   const { inputRef, syncInputHeight, transcriptPaddingBottom } = useTranscriptPaddingBottom()
   const showScrollToBottom = ChatTabScopedStore.useScopedStore((s) => s.showScrollToBottom)
   const setShowScrollToBottom = ChatTabScopedStore.useScopedStore((s) => s.setShowScrollToBottom)
@@ -244,7 +222,6 @@ export function ChatTabContent({
     [state.chatSnapshot?.messages, state.chatSnapshot?.subagentRuns],
   )
 
-  // The session sigil reads the same measured durations the transcript shows.
   const turnDurationsMs = useMemo(
     () => turnDurationsFromMessages(state.messages),
     [state.messages],
@@ -252,7 +229,6 @@ export function ChatTabContent({
 
   const showEmptyState = state.messages.length === 0 && state.runtime?.title === "New Chat"
 
-  // ─── Scroll management ────────────────────────────────────────────────────
 
   const clearShowScrollTimeout = useCallback(() => {
     if (showScrollTimeoutRef.current !== null) {
@@ -299,9 +275,6 @@ export function ChatTabContent({
     await state.handleSend(content, options)
   }, [scrollToTranscriptEnd, state])
 
-  // Read through a ref so this callback is permanently stable: it reaches every
-  // memoized transcript row, and `state.messages` / `handleChatSubmit` both
-  // change on each streamed chunk, which would re-render the whole transcript.
   const retryContextRef = useRef({ messages: state.messages, submit: handleChatSubmit })
   useEffect(() => {
     retryContextRef.current = { messages: state.messages, submit: handleChatSubmit }
@@ -314,7 +287,6 @@ export function ChatTabContent({
     await submit(prompt.content, { attachments: prompt.attachments })
   }, [])
 
-  // ─── Auto-continue ────────────────────────────────────────────────────────
 
   const handleAutoContinueAccept = useCallback((scheduleId: string, scheduledAt: number) => {
     const chatId = state.activeChatId
@@ -328,8 +300,6 @@ export function ChatTabContent({
     void state.socket.command({ type: "autoContinue.reschedule", chatId, scheduleId, scheduledAt }).catch(() => {})
   }, [state.activeChatId, state.socket])
 
-  // Pause / resume / edit live on `CronJobRow`, which owns the socket itself.
-  // Remove stays here because the transcript's `cron_armed` card offers it too.
   const handleCronRemove = useCallback((jobId: string) => {
     const chatId = state.activeChatId
     if (!chatId) return
@@ -342,7 +312,6 @@ export function ChatTabContent({
     void state.socket.command({ type: "autoContinue.cancel", chatId, scheduleId }).catch(() => {})
   }, [state.activeChatId, state.socket])
 
-  // ─── Tunnels ──────────────────────────────────────────────────────────────
 
   const sendTunnelAccept = useCallback(async (tunnelId: string): Promise<void> => {
     const chatId = state.activeChatId
@@ -362,7 +331,6 @@ export function ChatTabContent({
     await state.socket.command({ type: "tunnel.retry", chatId, tunnelId })
   }, [state.activeChatId, state.socket])
 
-  // ─── Subagent runs ────────────────────────────────────────────────────────
 
   const handleCancelSubagentRun = useCallback((chatId: string, runId: string) => {
     void state.socket.command({ type: "chat.cancelSubagentRun", chatId, runId }).catch(() => {})
@@ -382,7 +350,6 @@ export function ChatTabContent({
     return state.socket.command<TranscriptEntry[]>({ type: "subagents.getRun", chatId, agentId })
   }, [state.activeChatId, state.socket])
 
-  // ─── Transcript actions context ──────────────────────────────────────────
 
   const transcriptActionsValue = useMemo<TranscriptActionsContextValue>(() => ({
     onAskUserQuestionSubmit: state.handleAskUserQuestion,
@@ -466,7 +433,6 @@ export function ChatTabContent({
     state.isProcessing,
   ])
 
-  // ─── Silent toggle ───────────────────────────────────────────────────────
 
   const mutedChatIds = useKannaStateStore((s) => s.pushConfig?.preferences.mutedChatIds ?? EMPTY_MUTED_CHAT_IDS)
   const isSilent = state.activeChatId != null && mutedChatIds.includes(state.activeChatId)
@@ -476,7 +442,6 @@ export function ChatTabContent({
     void state.socket.command({ type: "push.setChatMute", chatId, muted: !isSilent }).catch(() => {})
   }, [state.activeChatId, state.socket, isSilent])
 
-  // ─── Share ────────────────────────────────────────────────────────────────
 
   const shareShares = useShareStore((s) => s.listForChat(state.activeChatId ?? ""))
   const addShare = useShareStore((s) => s.addShare)
@@ -504,7 +469,6 @@ export function ChatTabContent({
     }
   }, [removeShare, state.activeChatId, state.socket])
 
-  // ─── Focus / drag ─────────────────────────────────────────────────────────
 
   useStickyChatFocus({
     rootRef: chatCardRef,
@@ -533,7 +497,6 @@ export function ChatTabContent({
 
   const { typedEmptyStateText, isEmptyStateTypingComplete } = useEmptyStateTyping(showEmptyState, state.activeChatId, timer)
 
-  // ─── Effects ──────────────────────────────────────────────────────────────
 
   useEffect(() => {
     return () => clearShowScrollTimeout()
@@ -590,7 +553,6 @@ export function ChatTabContent({
     timer,
   ])
 
-  // ─── Chat card JSX ────────────────────────────────────────────────────────
 
   return (
     <Card

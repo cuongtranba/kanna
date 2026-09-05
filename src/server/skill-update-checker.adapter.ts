@@ -9,7 +9,6 @@ import {
 } from "../shared/packages/skill-update-classifier"
 import { pickLatestSemverTag } from "../shared/packages/tag-order"
 
-// ─── Parsing helpers (type-guard based, no `as T` assertions) ───────────────
 
 function isGitEntryType(t: JsonValue): t is GitTreeEntry["type"] {
   return t === "tree" || t === "blob" || t === "commit"
@@ -48,16 +47,14 @@ function parseReleaseTagName(raw: JsonValue): string | null {
   return typeof raw.tag_name === "string" && raw.tag_name ? raw.tag_name : null
 }
 
-// ─── Dependencies ───────────────────────────────────────────────────────────
 
 export interface SkillCheckerDeps {
   fetchFn: (url: string | URL | Request, init?: RequestInit) => Promise<Response>
   token: string | null
-  rateLimitFloor?: number // default 5
-  tagScanLimit?: number // default 100 (one page of tags)
+  rateLimitFloor?: number
+  tagScanLimit?: number
 }
 
-// ─── Internal cache shapes ───────────────────────────────────────────────────
 
 interface CachedTree {
   etag: string
@@ -72,7 +69,6 @@ interface TreeFetchResult {
   error: string | null
 }
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
 
 function rateLimitRemaining(resp: Response): number {
   const raw = resp.headers.get("x-ratelimit-remaining")
@@ -91,16 +87,13 @@ function buildGitHubHeaders(token: string | null, etag: string | null): Record<s
   return headers
 }
 
-// ─── Factory ────────────────────────────────────────────────────────────────
 
 export function createSkillUpdateChecker(deps: SkillCheckerDeps): PackageUpdateChecker {
   const { fetchFn, token } = deps
   const rateLimitFloor = deps.rateLimitFloor ?? 5
   const tagScanLimit = deps.tagScanLimit ?? 100
 
-  // ETag cache per repo: key = owner/repo
   const treeCache = new Map<string, CachedTree>()
-  // Latest-release-tag cache: key = owner/repo. Holds null for "resolved, none".
   const latestTagCache = new Map<string, string | null>()
 
   async function fetchTree(repo: string, signal: AbortSignal): Promise<TreeFetchResult> {
@@ -180,18 +173,6 @@ export function createSkillUpdateChecker(deps: SkillCheckerDeps): PackageUpdateC
     }
   }
 
-  /**
-   * The newest release tag in `repo` — the ref a pinned skill would move to.
-   *
-   * Two sources, in order: the repo's latest RELEASE (authoritative when the
-   * project publishes releases), then the highest semver tag on the first page
-   * of tags. The tag list is ordered lexicographically by GitHub, so it is read
-   * only through `pickLatestSemverTag`, never by position.
-   *
-   * Resolved at most once per repo per check, and only for pinned packages that
-   * are actually behind — an unpinned skill is fixed by a plain `skills update`
-   * and needs no tag.
-   */
   async function resolveLatestTag(repo: string, signal: AbortSignal): Promise<string | null> {
     const cached = latestTagCache.get(repo)
     if (cached !== undefined) return cached
@@ -232,7 +213,6 @@ export function createSkillUpdateChecker(deps: SkillCheckerDeps): PackageUpdateC
       const skills = pkgs.filter((p) => p.kind === "skill")
       const checkedAt = Date.now()
 
-      // Group skills by resolved GitHub repo (null = non-GitHub / invalid)
       const byRepo = new Map<string, InstalledPackage[]>()
       const noRepo: InstalledPackage[] = []
 
@@ -249,14 +229,12 @@ export function createSkillUpdateChecker(deps: SkillCheckerDeps): PackageUpdateC
 
       const results: PackageUpdateStatus[] = []
 
-      // Skills with no valid GitHub source → classify directly (returns "unknown")
       for (const skill of noRepo) {
         results.push(classifySkillUpdate(buildTreeIndex([]), false, skill, checkedAt))
       }
 
       let rateLimited = false
 
-      // One tree fetch per repo
       for (const [repo, repoSkills] of byRepo) {
         if (rateLimited) {
           for (const skill of repoSkills) {
@@ -292,11 +270,6 @@ export function createSkillUpdateChecker(deps: SkillCheckerDeps): PackageUpdateC
         }
       }
 
-      // Resolve the re-pin target for PINNED packages that are behind. A pinned
-      // skill is the only kind `skills update` cannot fix — it resolves upstream
-      // at the pin and exits 0 unchanged — so it is the only kind that needs a
-      // tag to move to. Skipping the rest keeps this to one repo per pinned
-      // skill instead of one per outdated skill.
       if (!rateLimited) {
         for (const result of results) {
           if (result.availability !== "outdated") continue

@@ -1,9 +1,3 @@
-/**
- * Tests for the extracted loop-orchestration command handlers.
- *
- * Each test builds a minimal `LoopCommandDeps` fake and asserts the
- * correct behaviour of the function under test. No real IO or OS calls.
- */
 
 import { describe, test, expect } from "bun:test"
 import type { AutoContinueEvent } from "./auto-continue/events"
@@ -21,10 +15,6 @@ import {
 
 import { makeDeps, makeStore } from "./test-helpers/loop-command-fakes"
 
-// `orch` names two features in this repo. This module keeps the autonomous
-// loop + subagent delivery handlers; the multi-task orchestration engine is
-// retired (adr-20260802-retire-orchestration-core). Pinning the export shape
-// is the machine-checkable statement of which of the two survives.
 describe("module surface", () => {
   test("exports only the loop + delivery handlers", async () => {
     const mod = await import("./claude-loop-commands")
@@ -32,15 +22,11 @@ describe("module surface", () => {
       "MAX_CONSECUTIVE_LOOP_FAILURES",
       "clearClaudeSessionContext",
       "deliverSubagentToMain",
-      // Exported for `loop-wake-recovery.ts`: the host backstop that disarms a
-      // loop failing repeatedly is shared by the delivery and the failed-turn path.
       "disarmFailingLoop",
       "isLoopArmed",
       "listLiveSchedules",
       "setupLoop",
       "stopLoop",
-      // Narrows LoopState → the slice kanna-mcp needs; the single adapter
-      // between the read model and the MCP host, so both spawn paths agree.
       "toArmedLoopInfo",
     ])
   })
@@ -96,9 +82,6 @@ describe("isLoopArmed", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// listLiveSchedules
-// ---------------------------------------------------------------------------
 
 describe("listLiveSchedules", () => {
   test("returns empty array when no events", () => {
@@ -129,9 +112,6 @@ describe("listLiveSchedules", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// clearClaudeSessionContext
-// ---------------------------------------------------------------------------
 
 describe("clearClaudeSessionContext", () => {
   test("sets session token to null", async () => {
@@ -153,7 +133,7 @@ describe("clearClaudeSessionContext", () => {
       backgroundTaskDeadlineAt: 0,
     } as unknown as ClaudeSessionState
     const claudeSessions = new Map<string, ClaudeSessionState>([["chat-1", fakeSession]])
-    const activeTurns = new Map<string, unknown>() // no active turn
+    const activeTurns = new Map<string, unknown>()
 
     let closed = false
     const deps = makeDeps({
@@ -198,17 +178,7 @@ describe("clearClaudeSessionContext", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// setupLoop — which tree the loop arms in
-// ---------------------------------------------------------------------------
 
-/**
- * `board-start-work.ts` gives EVERY card-started chat a primary stack binding
- * pointing at a fresh worktree, so "the project's registered path" and "the
- * tree this chat edits" are routinely different directories. Arming against
- * the former ran the oracle and wrote the tracking-file skeleton in the main
- * checkout while the agent worked in the worktree.
- */
 describe("setupLoop — arms in the chat's own tree", () => {
   const validInput = {
     goal: "eslint --max-warnings=0 passes",
@@ -225,8 +195,6 @@ describe("setupLoop — arms in the chat's own tree", () => {
     const deps = makeDeps({
       store,
       getSubagents: () => [{ id: "sub-1", name: "Worker", triggerMode: "auto" } as never],
-      // The shared fake's default closes over its OWN store, so an injected
-      // store never sees the events. Capture them here instead.
       emitAutoContinueEvent: async (event) => {
         emitted.push(event)
         store.events.push(event)
@@ -259,8 +227,6 @@ describe("setupLoop — arms in the chat's own tree", () => {
     const armed = emitted.find((e) => e.kind === "loop_armed")
     expect(armed).toBeDefined()
     expect((armed as { workdirAbs?: string }).workdirAbs).toBe("/repo/.worktrees/feat")
-    // The arm-time oracle must run where the agent works, or it grades the
-    // wrong tree and the already-green refusal fires on the wrong evidence.
     expect(verifyCalls).toEqual([{ cwd: "/repo/.worktrees/feat" }])
   })
 
@@ -281,9 +247,6 @@ describe("setupLoop — arms in the chat's own tree", () => {
     expect(ensured).toEqual([{ absPath: "/repo/PROGRESS.md" }])
   })
 
-  // The same-repo guard still compares against the PROJECT path — that is the
-  // repository identity check, and widening it to the chat cwd would let a
-  // loop be pointed at any directory a binding happens to name.
   test("an explicit workdir outside the repo is still refused", async () => {
     const { deps } = depsForChat(worktreeChat)
     deps.isWorktreeOfSameRepo = async () => false
@@ -295,9 +258,6 @@ describe("setupLoop — arms in the chat's own tree", () => {
     expect(result.ok === false && result.errors[0]).toContain("not this project's checkout")
   })
 
-  // The chat's own cwd is host-derived (board-start-work created the worktree),
-  // so it needs no git round-trip. A MODEL-supplied workdir is not trusted and
-  // is still checked against the project checkout — the repository identity.
   test("the chat's own cwd is trusted without a git round-trip", async () => {
     const { deps } = depsForChat(worktreeChat)
     const asked: { projectCwd: string; workdir: string }[] = []
@@ -324,9 +284,6 @@ describe("setupLoop — arms in the chat's own tree", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// stopLoop
-// ---------------------------------------------------------------------------
 
 describe("stopLoop", () => {
   test("is a no-op when loop is not armed", async () => {
@@ -361,10 +318,6 @@ describe("stopLoop", () => {
     expect(emitted.some((e) => e.kind === "loop_disarmed")).toBe(true)
   })
 
-  // A disarm used to write NOTHING to the transcript. `user_send` is the case
-  // that matters: a takeover looked identical to the loop going quiet, so a
-  // user who typed one word to nudge a stalled loop had no way to see they had
-  // killed it.
   test("appends a visible card naming the plan and worktree", async () => {
     const store = makeStore()
     store.events.push(armedEvent())
@@ -386,7 +339,6 @@ describe("stopLoop", () => {
     expect(store.messages).toEqual([])
   })
 
-  // A deleted chat has no transcript left to read the card in.
   test("writes no card when the chat is being deleted", async () => {
     const store = makeStore()
     store.events.push(armedEvent())
@@ -423,11 +375,6 @@ function disarmedEvent(): AutoContinueEvent {
   }
 }
 
-// The un-armed delivery prompt used to hardcode "Read PROGRESS.md if present".
-// That is setup_loop's DEFAULT filename, so it names many different plans on a
-// machine with several worktrees, and it resolved against the chat cwd rather
-// than the loop's workdir — which sent a post-loop review to an unrelated
-// FINISHED loop's plan in the wrong checkout.
 describe("deliverSubagentToMain — naming the plan when no loop is armed", () => {
   async function deliver(events: AutoContinueEvent[]) {
     const store = makeStore()
@@ -447,8 +394,6 @@ describe("deliverSubagentToMain — naming the plan when no loop is armed", () =
   test("names the disarmed loop's real plan as an absolute path", async () => {
     const prompt = await deliver([armedEvent(), disarmedEvent()])
     expect(prompt).toContain("/repo/PROGRESS.md")
-    // The path must be absolute: the tracking-doc tools rebase to the chat cwd
-    // once no loop is armed, so a bare filename resolves in the wrong checkout.
     expect(prompt).toContain("/repo")
   })
 
@@ -459,9 +404,6 @@ describe("deliverSubagentToMain — naming the plan when no loop is armed", () =
   })
 })
 
-// ---------------------------------------------------------------------------
-// deliverSubagentToMain
-// ---------------------------------------------------------------------------
 
 describe("deliverSubagentToMain", () => {
   test("no-ops when chat not found", async () => {

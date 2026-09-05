@@ -35,8 +35,6 @@ describe("formatCronRepairRequest", () => {
     expect(request).toContain("expected 5")
   })
 
-  // The whole point is that the model acts. A line to retype is what the user
-  // already failed at three times.
   test("names both tools and the two ways out", () => {
     expect(request).toContain("mcp__kanna__validate_cron")
     expect(request).toContain("mcp__kanna__arm_cron")
@@ -49,7 +47,6 @@ describe("formatCronRepairRequest", () => {
     expect(request).toContain("every 5m")
   })
 
-  // A repaired cron must still be the user's cron.
   test("forbids inventing an instruction", () => {
     expect(request.toLowerCase()).toContain("never invent")
   })

@@ -12,7 +12,6 @@ import {
   type LoopSetupContext,
 } from "./loop-template"
 
-// A valid context most tests share: two auto-trigger subagents, first is default.
 const CTX: LoopSetupContext = {
   roster: [
     { id: "sub-1", name: "worker", triggerMode: "auto" },
@@ -40,9 +39,7 @@ describe("validateLoopSetup — happy path", () => {
     expect(result.resolved.trackingFileRel).toBe("PROGRESS.md")
     expect(result.resolved.trackingFileAbs).toBe(path.join(cwd, "PROGRESS.md"))
     expect(result.resolved.chunkHint).toBe("start with warnings in src/client/**")
-    // Defaulted worker resolved from context
     expect(result.resolved.subagentId).toBe("sub-1")
-    // Rendered prompt embeds every required clause verbatim
     expect(result.resolved.prompt).toContain("PROGRESS.md")
     expect(result.resolved.prompt).toContain("bun run lint")
     expect(result.resolved.prompt).toContain("delegate_subagent")
@@ -50,15 +47,11 @@ describe("validateLoopSetup — happy path", () => {
     expect(result.resolved.prompt).toContain("GOAL MET")
     expect(result.resolved.prompt).toContain("END THIS TURN")
     expect(result.resolved.prompt).toContain("/clear")
-    // Hardening: the concrete subagent id + stop_loop + no-self-edit rule
     expect(result.resolved.prompt).toContain("sub-1")
     expect(result.resolved.prompt).toContain("stop_loop")
     expect(result.resolved.prompt).toContain("NEVER edit code yourself")
-    // Per-chunk commit instruction (gap 1 from issue #1013)
     expect(result.resolved.prompt).toContain("git add -A")
-    // Loop-end summary instruction (gap 2 from issue #1013)
     expect(result.resolved.prompt).toContain("loop-end summary")
-    // Skeleton includes goal + verify command
     expect(result.resolved.skeleton).toContain("eslint --max-warnings=0 passes")
     expect(result.resolved.skeleton).toContain("bun run lint")
     expect(result.resolved.skeleton).toContain("start with warnings in src/client/**")
@@ -117,7 +110,6 @@ describe("validateLoopSetup — happy path", () => {
     )
     if (!result.ok) throw new Error(result.errors.join(", "))
     expect(result.resolved.chunkHint).toBeNull()
-    // Skeleton still renders the default placeholder line
     expect(result.resolved.skeleton).toContain("Describe the first chunk")
   })
 })
@@ -171,7 +163,6 @@ describe("validateLoopSetup — rejections", () => {
     const blank = validateLoopSetup({ goal: "   ", verifyCommand: "x" }, cwd, CTX)
     expect(blank.ok).toBe(false)
 
-    // Not-a-string via type cast simulates an SDK payload with the wrong shape.
     const notString = validateLoopSetup(
       { goal: 42 as unknown as string, verifyCommand: "x" },
       cwd,
@@ -318,10 +309,8 @@ describe("reconcileTrackingFile — deterministic schema reconcile", () => {
     const result = reconcileTrackingFile(existing, ARGS)
     expect(result.changed).toBe(true)
     expect(result.actions).toEqual(['inserted "## Next chunk"'])
-    // Loop-owned history preserved byte-for-byte
     expect(result.content).toContain("- 2026-07-13 chunk 1 DONE (run-abc)")
     expect(result.content).toContain("- naive regex broke on nested quotes")
-    // Inserted section carries the chunk hint
     expect(result.content).toContain("## Next chunk")
     expect(result.content).toContain("start with src/client/**")
   })
@@ -355,7 +344,6 @@ describe("reconcileTrackingFile — deterministic schema reconcile", () => {
     const result = reconcileTrackingFile(existing, ARGS)
     expect(result.content).toContain("## Notes")
     expect(result.content).toContain("keep me around")
-    // Canonical section order holds: Next chunk before the unknown section
     expect(result.content.indexOf("## Next chunk")).toBeLessThan(result.content.indexOf("## Notes"))
   })
 
@@ -393,7 +381,6 @@ describe("reconcileTrackingFile — deterministic schema reconcile", () => {
       "",
     ].join("\n")
     const result = reconcileTrackingFile(existing, ARGS)
-    // All five sections matched: nothing inserted, server-owned bodies already equal
     expect(result.actions).toEqual([])
     expect(result.changed).toBe(false)
     expect(result.content).toBe(existing)
@@ -422,25 +409,16 @@ describe("renderLoopPrompt structural invariants", () => {
     expect(prompt).toContain("subagent_id: \"sub-1\"")
   })
 
-  // Regression: the rendered tool calls used to omit `file:`, so a loop with a
-  // non-default tracking file had its worker silently write into PROGRESS.md.
-  // Observed in the wild: a worker polluted a COMMITTED PROGRESS.md belonging
-  // to a previous, finished loop.
   test("every rendered tracking-file tool call names the file explicitly", () => {
     const prompt = __testing.renderLoopPrompt({ ...BASE, trackingFileRel: "docs/PROGRESS-panes.md" })
     expect(prompt).not.toContain("PROGRESS.md\"")
-    // Both the orchestrator's own read and the delegated worker's calls
     for (const call of ["query_tracking_file", "append_tracking_row", "replace_tracking_section"]) {
       const idx = prompt.indexOf(call)
       expect(idx).toBeGreaterThan(-1)
     }
-    // The rendered worker prompt carries the path into each call it prescribes
     expect(prompt.match(/docs\/PROGRESS-panes\.md/g)?.length ?? 0).toBeGreaterThanOrEqual(4)
   })
 
-  // The oracle is a proxy; the plan is the authority. A verify command that
-  // passes while the plan still lists work means the oracle is too weak, not
-  // that the goal is met.
   test("GOAL MET is gated on the plan being exhausted, not the exit code alone", () => {
     const prompt = __testing.renderLoopPrompt(BASE)
     expect(prompt).toContain("Next chunk")
@@ -448,18 +426,11 @@ describe("renderLoopPrompt structural invariants", () => {
     expect(prompt).toContain("ORACLE TOO WEAK")
   })
 
-  // Regression: a worker wrote DONE into "Next chunk" while five undone chunks
-  // sat in a non-canonical "## Chunks" section nobody ever read, and a
-  // grep-shaped oracle was green — so the loop declared GOAL MET on an
-  // unfinished feature. GOAL MET must survive one whole-plan read, not one
-  // worker-authored section.
   test("GOAL MET requires a terminal whole-plan check across every section", () => {
     const prompt = __testing.renderLoopPrompt(BASE)
     expect(prompt).toContain("TERMINAL CHECK")
     expect(prompt).toContain("EVERY section")
-    // The terminal check reads the whole file: the call carries no sections filter.
     expect(prompt).toContain("with NO sections filter")
-    // Case (b) covers work found by the terminal check, not just "Next chunk".
     expect(prompt).toMatch(/ORACLE TOO WEAK[\s\S]*any other section|any other section[\s\S]*ORACLE TOO WEAK/)
   })
 
@@ -475,18 +446,12 @@ describe("renderLoopPrompt structural invariants", () => {
 
   test("the terminal-check reads name the tracking file explicitly", () => {
     const prompt = __testing.renderLoopPrompt({ ...BASE, trackingFileRel: "docs/PROGRESS-panes.md" })
-    // Neither the orchestrator's terminal check nor the worker's pre-DONE
-    // check may fall back to the default PROGRESS.md.
     expect(prompt).not.toContain("PROGRESS.md\"")
   })
 
-  // Regression: the worker prompt is identical every iteration, so without a
-  // marker naming the chunk, every Progress row read the same boilerplate
-  // ("Do the next chunk in PROGRESS-….md. All work happens in /home/…").
   test("worker prompt opens with a [chunk: …] marker the orchestrator substitutes", () => {
     const prompt = __testing.renderLoopPrompt(BASE)
     expect(prompt).toContain("prompt: \"[chunk: <one-line summary of the Next chunk you just read>]")
-    // And step 4 tells it that this is the one edit it makes.
     expect(prompt).toContain("only edit you make")
   })
 
@@ -525,9 +490,6 @@ describe("renderLoopPrompt structural invariants", () => {
 describe("validateLoopSetup — worker trigger mode", () => {
   const cwd = "/tmp/kanna-loop-test-project"
 
-  // Regression: the roster passed to validate used to be {id,name} only, so a
-  // manual-trigger subagent armed fine and the loop only discovered
-  // MANUAL_ONLY one full iteration later — after the context wipe.
   test("rejects a manual-trigger subagent instead of arming a loop that cannot delegate", () => {
     const result = validateLoopSetup({ goal: "g", verifyCommand: "true", subagentId: "manual-1" }, cwd, {
       roster: [
@@ -562,8 +524,6 @@ describe("validateLoopSetup — workdir + parallelism", () => {
     expect(result.resolved.parallelism).toBe(1)
   })
 
-  // The project rule is "always use a git worktree", so the work — and the
-  // tracking file describing it — routinely lives in a SIBLING directory.
   test("an explicit workdir becomes the tracking-file base and is echoed in the prompt", () => {
     const result = validateLoopSetup(
       { goal: "g", verifyCommand: "true", workdir: "/tmp/kanna-wt-feature", trackingFile: "PROGRESS.md" },
@@ -623,10 +583,6 @@ describe("extractOracleScriptPath", () => {
 })
 
 describe("auditOracle", () => {
-  // The false-green incident: an oracle of file-existence probes + greps armed
-  // silently, every marker was satisfied by files nothing called, and the loop
-  // declared GOAL MET on an unfinished feature. The audit exists to say so at
-  // arm time, while the operator can still tighten the command.
   test("warns when the oracle is only existence probes and greps", () => {
     const script = [
       "#!/usr/bin/env bash",
@@ -702,9 +658,6 @@ describe("auditOracle", () => {
 })
 
 describe("assertTrackingFileSafe", () => {
-  // Regression: setup_loop reconciled a COMMITTED PROGRESS.md belonging to a
-  // finished, unrelated loop — silently rewriting its Goal and Verify command
-  // sections. Committed history must not be clobbered without consent.
   const committed = "# Old loop\n\n## Goal\nship the old thing\n\n## Verify command\n```\nmake old\n```\n"
 
   test("refuses to rewrite the goal of a git-tracked file", () => {

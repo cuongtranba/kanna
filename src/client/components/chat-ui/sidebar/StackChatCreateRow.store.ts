@@ -7,7 +7,6 @@ export interface StackChatCreateRowState {
   isSubmitting: boolean
   errorMessage: string | null
 
-  /** Pick the worktree for one project; the Map is rebuilt inside the store. */
   selectWorktree: (projectId: string, worktreePath: string) => void
   setPrimaryProjectId: (id: string) => void
   setIsSubmitting: (submitting: boolean) => void

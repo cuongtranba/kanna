@@ -12,16 +12,8 @@ afterEach(async () => {
 
 async function startServer(port: number) {
   const projectDir = await mkdtemp(path.join(tmpdir(), "kanna-paths-route-"))
-  // Without an explicit dataDir the EventStore constructor falls back to
-  // getDataDir(homedir()) — the developer's real ~/.kanna/data — so every run
-  // of this file wrote `project_opened` events for its throwaway tmp dirs into
-  // the personal store, leaving dead projects in the sidebar forever (the
-  // afterEach below only reclaims the directories, never the events).
   const dataDir = await mkdtemp(path.join(tmpdir(), "kanna-paths-route-data-"))
   tempDirs.push(projectDir, dataDir)
-  // Stub project discovery so boot never scans the dev machine's real
-  // ~/.claude / ~/.codex session history — a multi-second, non-deterministic
-  // filesystem walk that pushed boot past the 5s default test timeout.
   const server = await startKannaServer({ port, strictPort: true, dataDir, discoverProjects: () => [] })
   return { server, projectDir, dataDir }
 }

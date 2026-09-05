@@ -1,7 +1,3 @@
-/**
- * Tests for the extracted chat management functions.
- * All deps are injected stubs — no IO, no Claude harness.
- */
 
 import { describe, it, expect, mock } from "bun:test"
 import {
@@ -15,9 +11,6 @@ import {
 } from "./claude-chat-management"
 import type { QueuedChatMessage } from "../shared/types"
 
-// ---------------------------------------------------------------------------
-// Minimal stub helpers
-// ---------------------------------------------------------------------------
 
 function makeQueuedMessage(overrides?: Partial<QueuedChatMessage>): QueuedChatMessage {
   return {
@@ -74,9 +67,6 @@ function makeDeps(overrides?: Partial<ChatManagementDeps>): ChatManagementDeps {
   }
 }
 
-// ---------------------------------------------------------------------------
-// stopDraining
-// ---------------------------------------------------------------------------
 
 describe("stopDraining", () => {
   it("is a no-op when no draining stream exists", async () => {
@@ -102,9 +92,6 @@ describe("stopDraining", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// closeChat
-// ---------------------------------------------------------------------------
 
 describe("closeChat", () => {
   it("stops draining, clears auto-resume, and emits state change", async () => {
@@ -130,9 +117,6 @@ describe("closeChat", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// steer
-// ---------------------------------------------------------------------------
 
 describe("steer", () => {
   it("throws when queued message not found", async () => {
@@ -144,16 +128,13 @@ describe("steer", () => {
 
   it("cancels active turn then dequeues when chat is active", async () => {
     const qm = makeQueuedMessage()
-    // steer() calls has() 4 times: (1) in the log object, (2) the real guard that
-    // triggers cancel, (3) in the after-cancel log, (4) the throw guard.
-    // We need calls 1+2 → true (chat is active), calls 3+4 → false (idle after cancel).
     let hasCallCount = 0
     const cancelFn = mock(async () => {})
     const dequeueStartFn = mock(async () => {})
     const deps: ChatManagementDeps = {
       ...makeDeps(),
       activeTurns: {
-        has: (_chatId: string) => hasCallCount++ < 2, // first 2 calls → active; rest → idle
+        has: (_chatId: string) => hasCallCount++ < 2,
         get: () => undefined,
       },
       store: {
@@ -174,7 +155,7 @@ describe("steer", () => {
     const deps: ChatManagementDeps = {
       ...makeDeps(),
       activeTurns: {
-        has: () => true, // always active — cancel didn't help
+        has: () => true,
         get: () => undefined,
       },
       store: {
@@ -188,9 +169,6 @@ describe("steer", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// dequeue
-// ---------------------------------------------------------------------------
 
 describe("dequeue", () => {
   it("throws when queued message not found", async () => {
@@ -236,9 +214,6 @@ describe("dequeue", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// forkChat
-// ---------------------------------------------------------------------------
 
 describe("forkChat", () => {
   it("throws when chat is active", async () => {
@@ -313,9 +288,6 @@ describe("forkChat", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// generateTitleInBackground
-// ---------------------------------------------------------------------------
 
 describe("generateTitleInBackground", () => {
   it("renames chat when title generation succeeds and title still matches", async () => {

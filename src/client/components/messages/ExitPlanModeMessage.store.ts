@@ -10,9 +10,7 @@ export interface ExitPlanModeMessageState {
   setExpanded: (expanded: boolean) => void
   setCopied: (copied: boolean) => void
   setEditMessage: (editMessage: string) => void
-  /** Reveal the edit textarea, keeping any draft already typed. */
   openEdit: () => void
-  /** Close the edit textarea and discard the draft — one transition, not two writes. */
   cancelEdit: () => void
 }
 

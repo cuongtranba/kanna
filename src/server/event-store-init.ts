@@ -1,20 +1,3 @@
-/**
- * EventStore initialization and snapshot/migration helpers extracted from
- * event-store.ts.
- *
- * Contains initialize, ensureFile, clearStorage, loadSnapshot, resetState,
- * clearLegacyTranscriptState, loadSidebarProjectOrder, replayLogs,
- * shouldSnapshotLogs, snapshotAndTruncateLogs, getLegacyTranscriptStats,
- * hasLegacyTranscriptData, and migrateLegacyTranscripts.
- *
- * This file does direct disk IO and must be suffixed .ts (not .adapter.ts)
- * because the side-effect seal only applies to files in src/server/** production
- * code that are NOT in an exempt glob. However, since this file performs IO and
- * is NOT an adapter, callers (EventStore) must be careful to only call these
- * from the class constructor / initialize flow.
- *
- * Must NOT import from event-store.ts (no circular deps).
- */
 import path from "node:path"
 import type { AgentProvider, TranscriptEntry } from "../shared/types"
 import type { StoreState } from "./events"
@@ -36,7 +19,6 @@ import {
 
 export type { LegacyTranscriptStats }
 
-// ─── Deps interface ────────────────────────────────────────────────────────
 
 export interface EventStoreInitDeps {
   readonly storage: StorageBackend
@@ -60,25 +42,16 @@ export interface EventStoreInitDeps {
   readonly tunnelEventsByChatId: Map<string, CloudflareTunnelEvent[]>
   readonly transcriptCache: TranscriptCache
   readonly sidebarProjectOrderRef: { value: string[] }
-  /** Gets the current legacySidebarProjectOrder array reference. */
   getLegacySidebarProjectOrder: () => string[]
-  /** Sets legacySidebarProjectOrder. */
   setLegacySidebarProjectOrder: (v: string[]) => void
-  /** Gets the current snapshotHasLegacyMessages value. */
   getSnapshotHasLegacyMessages: () => boolean
-  /** Sets snapshotHasLegacyMessages. */
   setSnapshotHasLegacyMessages: (v: boolean) => void
-  /** Gets the current storageReset flag. */
   getStorageReset: () => boolean
-  /** Sets the storageReset flag. */
   setStorageReset: (v: boolean) => void
-  /** The replayChatProvider map for log replay. */
   replayChatProvider: Map<string, AgentProvider | null>
-  /** Applies a store event (routes to applyStoreEvent). */
   applyEvent: (event: Parameters<typeof import("./event-store-apply").applyStoreEvent>[0]) => void
 }
 
-// ─── Internal helpers ──────────────────────────────────────────────────────
 
 function getLogPaths(deps: EventStoreInitDeps): SnapshotLogPaths {
   return {
@@ -176,7 +149,6 @@ export async function shouldSnapshotLogs(deps: EventStoreInitDeps): Promise<bool
   return calcShouldTruncateLogs(deps.storage, getLogPaths(deps))
 }
 
-// ─── Public API ────────────────────────────────────────────────────────────
 
 export async function initializeEventStore(
   deps: EventStoreInitDeps,
@@ -218,7 +190,6 @@ export function clearEventStoreLegacyTranscriptState(deps: EventStoreInitDeps): 
   clearLegacyTranscriptState(deps)
 }
 
-// ─── Snapshot / legacy migration ops ─────────────────────────────────────────
 
 export async function getLegacyTranscriptStats(
   deps: EventStoreInitDeps,

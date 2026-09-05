@@ -1,11 +1,3 @@
-/**
- * clipboard.adapter.ts — navigator.clipboard implementation of ClipboardPort.
- *
- * Thin wrapper that rejects gracefully when clipboard API is unavailable
- * (non-secure contexts, headless test environments without a stub).
- *
- * Architecture: .c3/adr/adr-20260715-client-state-effect-architecture.md
- */
 
 import type { ClipboardPort } from "../ports/clipboardPort"
 

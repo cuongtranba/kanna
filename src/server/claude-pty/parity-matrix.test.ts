@@ -9,19 +9,6 @@ import { startTranscriptStream } from "./tui-source.adapter"
 import type { HarnessEvent } from "../harness-types"
 import type { ModelPrice } from "../../shared/token-pricing"
 
-/**
- * Phase 6 — SDK ↔ PTY HarnessEvent equivalence matrix.
- *
- * Drives both paths with the same Claude-SDK message fixtures and
- * asserts they emit the same `HarnessEvent` sequence (after stripping
- * volatile fields like `_id` and `createdAt`). The claude CLI mirrors
- * SDKMessage shapes into the JSONL transcript verbatim, so a single
- * fixture stands in for both:
- * - SDK path: yielded from a fake `Query` iterable into
- *   `createClaudeHarnessStream`.
- * - PTY path: serialized to JSON and fed to `createJsonlEventParser`
- *   one line per message.
- */
 
 function fakeQuery(messages: unknown[]): AsyncGenerator<ClaudeRawSdkMessage> {
   return (async function* () {
@@ -333,7 +320,6 @@ describe("createClaudeHarnessStream cost attachment", () => {
     })
     const lastCwu = cwuEntries.at(-1)
     expect(lastCwu).toBeDefined()
-    // 1M input @ $3/M = $3; no cached, no output
     expect(lastCwu!.usage.costUsd).toBeCloseTo(3, 6)
   })
 })
@@ -389,7 +375,6 @@ describe("result entry usage + cost enrichment", () => {
         subtype: "success",
         session_id: "sess-oru",
         is_error: false,
-        // no total_cost_usd — OpenRouter doesn't provide it
         usage: { input_tokens: 1_000_000, output_tokens: 0 },
         duration_ms: 10,
         num_turns: 1,
@@ -408,11 +393,9 @@ describe("result entry usage + cost enrichment", () => {
     )
     expect(resultEntries).toHaveLength(1)
     const resultEntry = resultEntries[0]
-    // 1M input @ $3/M = $3
     expect(resultEntry.costUsd).toBeCloseTo(3, 6)
     expect(resultEntry.usage).toBeDefined()
     expect(resultEntry.usage?.inputTokens).toBe(1_000_000)
-    // outputTokens is omitted when 0 (normalizeClaudeUsageSnapshot skips zero values)
     expect(resultEntry.usage?.outputTokens).toBeUndefined()
   })
 })

@@ -233,10 +233,6 @@ describe("classifySkillUpdate", () => {
     expect(result.currentVersion).toBeNull()
   })
 
-  // Regression: pbakaus/impeccable vendors the same skill into 18 agent
-  // directories, all at depth 3. Matching by folder base name kept whichever
-  // tied first (`.agent/skills/impeccable`) and compared the installed hash
-  // against a sibling copy — a permanent, unfixable "Outdated".
   test("matches the folder named by installPath, not a same-named sibling", () => {
     const pkg = makePkg({
       name: "impeccable",

@@ -64,7 +64,6 @@ export class FsStorageBackend implements StorageBackend {
   }
 }
 
-// Convenience for prod callers and as default.
 export function createFsStorageBackend(): StorageBackend {
   return new FsStorageBackend()
 }

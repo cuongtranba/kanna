@@ -1,8 +1,4 @@
 import type { JsonObject } from "../shared/json"
-/**
- * Pure helper functions extracted from event-store.ts.
- * No EventStore class dependencies. No IO side effects.
- */
 import { log } from "../shared/log"
 import type { ChatHistorySnapshot, TranscriptEntry } from "../shared/types"
 import { cloneTranscriptEntries } from "./events"
@@ -14,37 +10,10 @@ export interface TranscriptPageResult {
   olderCursor: string | null
 }
 
-/**
- * Byte budget for the FIRST page a chat ships when a tab opens.
- *
- * `recentLimit` alone caps the page by entry COUNT, which says nothing about
- * its size: a chat whose last 200 entries are fat tool outputs serialized to
- * 3.89 MB and cost ~60 ms of blocking server work plus ~250 ms of client
- * main-thread blocking per open, while a 19 MB transcript whose entries are
- * small cost 6 ms. Cost tracks page BYTES, not entry count and not file size,
- * so the page is bounded by both.
- *
- * Entries trimmed here are not lost — the page reports `hasOlder` with a
- * cursor, and the client pages them back in on scrollback.
- */
 export const RECENT_PAGE_BYTE_BUDGET = 1024 * 1024
 
-/**
- * Never ship fewer than this many entries, even when they blow the budget —
- * an over-budget page beats an empty-looking chat. A single entry larger than
- * the whole budget is therefore still served whole; bounding THAT needs
- * entry-level truncation, which is a separate concern.
- */
 export const MIN_RECENT_PAGE_ENTRIES = 10
 
-/**
- * Returns how many of the NEWEST entries (capped at `limit`) fit in
- * `byteBudget`, never fewer than `minEntries`.
- *
- * Walks newest-first and stops as soon as the budget is spent, so it
- * serializes at most one budget's worth of entries — the measurement cost is
- * bounded by the budget, not by the transcript.
- */
 export function fitLimitToByteBudget(
   entries: readonly TranscriptEntry[],
   limit: number,
@@ -103,31 +72,8 @@ export function logSendToStartingProfile(stage: string, details?: JsonObject): v
   }))
 }
 
-/**
- * Event types that shipped in an earlier version and have since been retired.
- *
- * `STORE_VERSION` is deliberately NOT bumped when an event is retired — a
- * version mismatch is fail-closed and wipes the user's entire history — so an
- * existing `turns.jsonl` keeps carrying these lines until the next compaction.
- * They apply as no-ops (the apply switch simply has no case for them); listing
- * them here prices them at their historical bucket and keeps them off the
- * unknown-type warning, which is reserved for genuine version drift.
- *
- * - `session_commands_loaded`: the `/` picker's catalog, once persisted per
- *   chat, now derived per project and never stored.
- */
 const RETIRED_EVENT_TYPES = new Set<string>(["session_commands_loaded"])
 
-/**
- * Sort bucket for an event type this binary does not know.
- *
- * A replayed log can always carry a type from a DIFFERENT code version — a
- * branch that was run locally and never landed, or a downgrade after a newer
- * build wrote the log. `applyStoreEvent` has no `default` case, so such an
- * event is a no-op on apply regardless of where it sorts; the only job here is
- * to keep the comparator a total order. Priced last so an unknown event never
- * displaces a known one at the same timestamp.
- */
 export const UNKNOWN_EVENT_PRIORITY = 99
 
 export function getReplayEventPriority(event: StoreEvent): number {
@@ -203,20 +149,10 @@ export function getReplayEventPriority(event: StoreEvent): number {
     case "subagent_tool_pending":
     case "subagent_tool_resolved":
       return 5
-    // tool_request_put shares priority 5 with subagent_* events; sourceIndex
-    // tie-break orders them (tool-requests has sourceIndex 7, turns has 5).
     case "tool_request_put":
       return 5
     case "tool_request_resolved":
       return 6
-    // Compile-time exhaustiveness is preserved: adding a member to the
-    // StoreEvent union without a case above widens `discriminator` past
-    // `never` and fails the type check. At RUNTIME this branch is only
-    // reachable for a type outside the union — i.e. data written by another
-    // code version — so it warns and prices the event instead of throwing.
-    // Throwing here bricked boot on a single ignorable row (a stray
-    // `turn_resume_attempted` from unmerged PR #493), and it protected
-    // nothing: `applyStoreEvent` no-ops on unknown types anyway.
     default: {
       const _exhaustive: never = discriminator
       log.warn(
@@ -244,22 +180,12 @@ export function decodeCursor(cursor: string): number {
   throw new Error("Invalid history cursor")
 }
 
-// `context_window_updated` entries are token-readout noise emitted once per
-// stream tick — only the latest value matters. A single turn can emit hundreds
-// of them, and the bounded live window (getMessagesPageFromEntries) counts each
-// 1:1 against the limit, so a flood evicts real turns (e.g. the user_prompt)
-// out of the snapshot the client renders. Collapsing each maximal run of
-// consecutive cwu entries to its last entry keeps the latest readout while
-// freeing window budget for real turns. Applied only on the live-window read
-// path (not getMessages), so getLatestContextWindowUsage / full-transcript
-// export / importer still observe every persisted cwu.
 export function coalesceContextWindowUpdates(entries: readonly TranscriptEntry[]): TranscriptEntry[] {
   const result: TranscriptEntry[] = []
   for (let index = 0; index < entries.length; index += 1) {
     const entry = entries[index]!
     const next = entries[index + 1]
     if (entry.kind === "context_window_updated" && next?.kind === "context_window_updated") {
-      // Drop this cwu; the last of the run survives.
       continue
     }
     result.push(entry)
@@ -281,14 +207,6 @@ export function getForkedChatTitle(title: string): string {
   return trimmed.startsWith("Fork: ") ? trimmed : `Fork: ${trimmed}`
 }
 
-/**
- * Slice a page of transcript entries from a flat array.
- *
- * - `limit` controls page size; `beforeIndex` (from a cursor) is the
- *   exclusive upper bound of the window (undefined = latest page).
- * - Returns stable `TranscriptPageResult` with cloned entries so
- *   callers cannot mutate the in-memory transcript.
- */
 export function getMessagesPageFromEntries(
   entries: TranscriptEntry[],
   limit: number,

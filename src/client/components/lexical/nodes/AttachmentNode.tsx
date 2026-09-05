@@ -18,20 +18,17 @@ import {
   AttachmentImageCard,
 } from "../../messages/AttachmentCard"
 
-// ─── Serialized shape ───────────────────────────────────────────────────────
 
 export type SerializedAttachmentNode = Spread<
   { attachment: ChatAttachment },
   SerializedLexicalNode
 >
 
-// ─── Node ───────────────────────────────────────────────────────────────────
 
 export class AttachmentNode extends DecoratorNode<ReactNode> {
   __attachment: ChatAttachment
   readonly __dom: DomPort
 
-  // ── Static API ────────────────────────────────────────────────────────────
 
   static getType(): string {
     return "kanna-attachment"
@@ -45,7 +42,6 @@ export class AttachmentNode extends DecoratorNode<ReactNode> {
     return $createAttachmentNode(serializedNode.attachment)
   }
 
-  // ── Constructor ───────────────────────────────────────────────────────────
 
   constructor(attachment: ChatAttachment, key?: NodeKey, dom: DomPort = domAdapter) {
     super(key)
@@ -53,13 +49,11 @@ export class AttachmentNode extends DecoratorNode<ReactNode> {
     this.__dom = dom
   }
 
-  // ── Instance API ──────────────────────────────────────────────────────────
 
   getAttachment(): ChatAttachment {
     return this.getLatest().__attachment
   }
 
-  // ── Lexical behaviour ─────────────────────────────────────────────────────
 
   isInline(): boolean {
     return true
@@ -69,15 +63,10 @@ export class AttachmentNode extends DecoratorNode<ReactNode> {
     return true
   }
 
-  /**
-   * Attachments are not part of the wire text string. They are sent separately
-   * via the `attachments[]` payload, so they must contribute empty text.
-   */
   getTextContent(): string {
     return ""
   }
 
-  // ── DOM ───────────────────────────────────────────────────────────────────
 
   createDOM(_config: EditorConfig, _editor: LexicalEditor): HTMLElement {
     const span = this.__dom.createElement("span")
@@ -85,12 +74,9 @@ export class AttachmentNode extends DecoratorNode<ReactNode> {
   }
 
   updateDOM(): boolean {
-    // Return false — Lexical will call decorate() again when the node changes
-    // without unmounting / remounting the DOM container.
     return false
   }
 
-  // ── Serialisation ─────────────────────────────────────────────────────────
 
   exportJSON(): SerializedAttachmentNode {
     return {
@@ -100,7 +86,6 @@ export class AttachmentNode extends DecoratorNode<ReactNode> {
     }
   }
 
-  // ── React decorator ───────────────────────────────────────────────────────
 
   decorate(_editor: LexicalEditor, _config: EditorConfig): ReactNode {
     const attachment = this.getLatest().__attachment
@@ -118,7 +103,6 @@ export class AttachmentNode extends DecoratorNode<ReactNode> {
   }
 }
 
-// ─── Factory helpers ─────────────────────────────────────────────────────────
 
 export function $createAttachmentNode(attachment: ChatAttachment): AttachmentNode {
   return $applyNodeReplacement(new AttachmentNode(attachment))
@@ -130,10 +114,6 @@ export function $isAttachmentNode(
   return node instanceof AttachmentNode
 }
 
-/**
- * Returns all AttachmentNodes in the current editor root.
- * Must be called inside an editor.read() or editor.update() callback.
- */
 export function $getAttachmentNodes(): AttachmentNode[] {
   return $nodesOfType(AttachmentNode)
 }

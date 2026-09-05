@@ -28,7 +28,6 @@ function makeEntry(overrides: Partial<PendingToolRequestHydrated> = {}): Pending
   }
 }
 
-// ── ask_user_question ────────────────────────────────────────────────────────
 
 describe("PendingToolRequestMessage — ask_user_question", () => {
   test("renders question text and option buttons", async () => {
@@ -60,7 +59,6 @@ describe("PendingToolRequestMessage — ask_user_question", () => {
       )
     })
 
-    // Click "Option A"
     const optionA = Array.from(container.querySelectorAll("button")).find(
       (btn) => btn.textContent?.trim() === "Option A",
     )
@@ -69,7 +67,6 @@ describe("PendingToolRequestMessage — ask_user_question", () => {
       optionA!.click()
     })
 
-    // Submit
     const submitBtn = Array.from(container.querySelectorAll("button")).find(
       (btn) => btn.textContent?.trim() === "Submit",
     )
@@ -90,8 +87,6 @@ describe("PendingToolRequestMessage — ask_user_question", () => {
     const container = document.createElement("div")
     document.body.appendChild(container)
 
-    // Real-world payload from mcp__kanna__ask_user_question: items use
-    // `text` field (per its zod schema) instead of `question`.
     const entry: PendingToolRequestHydrated = makeEntry({
       arguments: {
         questions: [
@@ -161,7 +156,6 @@ describe("PendingToolRequestMessage — ask_user_question", () => {
   })
 })
 
-// ── multiSelect ─────────────────────────────────────────────────────────────
 
 describe("PendingToolRequestMessage — multiSelect question", () => {
   function makeMultiSelectEntry(): PendingToolRequestHydrated {
@@ -199,20 +193,16 @@ describe("PendingToolRequestMessage — multiSelect question", () => {
         (btn) => btn.textContent?.trim() === label,
       )
 
-    // Click Alpha
     await act(async () => {
       getBtn("Alpha")!.click()
     })
-    // onAnswer should NOT be called yet (multi-select waits for Submit).
     expect(onAnswer).toHaveBeenCalledTimes(0)
 
-    // Click Beta
     await act(async () => {
       getBtn("Beta")!.click()
     })
     expect(onAnswer).toHaveBeenCalledTimes(0)
 
-    // Click Submit
     await act(async () => {
       getBtn("Submit")!.click()
     })
@@ -245,11 +235,9 @@ describe("PendingToolRequestMessage — multiSelect question", () => {
         (btn) => btn.textContent?.trim() === label,
       )
 
-    // Select then deselect Alpha
     await act(async () => { getBtn("Alpha")!.click() })
     await act(async () => { getBtn("Alpha")!.click() })
 
-    // Select Beta
     await act(async () => { getBtn("Beta")!.click() })
 
     await act(async () => { getBtn("Submit")!.click() })
@@ -264,7 +252,6 @@ describe("PendingToolRequestMessage — multiSelect question", () => {
   })
 })
 
-// ── exit_plan_mode ───────────────────────────────────────────────────────────
 
 describe("PendingToolRequestMessage — exit_plan_mode", () => {
   function makePlanEntry(plan = "Step 1: Do the thing\nStep 2: Review") {
@@ -345,7 +332,6 @@ describe("PendingToolRequestMessage — exit_plan_mode", () => {
   })
 })
 
-// ── generic fallback ─────────────────────────────────────────────────────────
 
 describe("PendingToolRequestMessage — generic fallback", () => {
   test("renders tool name + Allow / Deny buttons for unknown tool", async () => {

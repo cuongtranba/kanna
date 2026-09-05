@@ -1,23 +1,3 @@
-/**
- * SQLite implementation of the {@link BoardStore} port.
- *
- * This is the ONLY server file that opens a board database handle, which is why
- * it carries the `.adapter.ts` suffix (see the side-effect seal in
- * `eslint.config.js`). Nothing above it imports `bun:sqlite`.
- *
- * ## Why SQLite here and JSONL everywhere else
- *
- * Kanna's other state is an append-only event log replayed into memory. Boards
- * are not, because two-way sync needs things a replay cannot give cheaply: an
- * indexed lookup by external ref, per-field watermarks, and above all a
- * TRANSACTIONAL OUTBOX — the card write and the intent to push it must commit
- * together, or a crash between them loses the push silently. See
- * `docs/kanban-boards-brainstorm.md` and the accompanying ADR.
- *
- * Ordering relies on SQLite's default BINARY collation sorting order keys the
- * same way JavaScript's `<` does. That parity is pinned by a test; do not add a
- * COLLATE clause to any `rank` column.
- */
 
 import { Database } from "bun:sqlite"
 import { mkdirSync } from "node:fs"
@@ -82,13 +62,11 @@ import {
 import { BUILTIN_BOARD_TEMPLATES } from "./board-templates"
 
 export interface CreateBoardStoreOptions {
-  /** Database file path, or ":memory:" in tests. */
   filePath: string
   now?: () => number
   newId?: () => string
 }
 
-// ── Row shapes ────────────────────────────────────────────────────────────────
 
 interface BoardRow {
   id: string
@@ -198,14 +176,8 @@ interface ConflictRow {
   detected_at: number
 }
 
-// ── Migrations ────────────────────────────────────────────────────────────────
 
-/**
- * Ordered, append-only. Each entry moves `PRAGMA user_version` forward by one;
- * never edit a shipped entry, add a new one.
- */
 const MIGRATIONS: readonly string[] = [
-  // 1 — boards, columns, cards, links, comments, templates, and the sync tables.
   `
   CREATE TABLE board (
     id TEXT PRIMARY KEY,
@@ -333,33 +305,13 @@ const MIGRATIONS: readonly string[] = [
   );
   CREATE INDEX sync_conflict_card_idx ON sync_conflict (card_id, detected_at);
   `,
-  // 2 — a binding remembers its checkout, and repos are searchable across boards.
-  //
-  // `project_id` is what lets a card pulled onto a STACK board know which
-  // worktree Start work should mint: the board spans several repos and names
-  // none of them, so the answer can only come from the binding that pulled it.
-  // Nullable because every binding written before this has no answer, and
-  // inventing one would be worse than admitting it.
-  //
-  // The index is on `source_ref` alone, NOT unique: one repo belongs to one
-  // board, but that rule is cross-board and has to distinguish "already yours"
-  // from "someone else's" before it can be enforced — a job for the connect
-  // screen, not for a constraint that can only say no.
   `
   ALTER TABLE sync_binding ADD COLUMN project_id TEXT;
   CREATE INDEX sync_binding_source_idx ON sync_binding (source_ref);
   `,
 ]
 
-// ── JSON helpers ──────────────────────────────────────────────────────────────
 
-/**
- * Parse stored JSON, or fail loudly.
- *
- * Shape validation is NOT done here — it lives in `shared/boards/decode.ts`, so
- * this adapter stays a leaf that moves bytes. Invalid JSON, though, means the
- * row itself is damaged, and silently substituting a default would hide that.
- */
 function parseJson(text: string, label: string): JsonValue {
   try {
     const parsed: JsonValue = JSON.parse(text)
@@ -369,7 +321,6 @@ function parseJson(text: string, label: string): JsonValue {
   }
 }
 
-// ── Row → domain ──────────────────────────────────────────────────────────────
 
 function toBoard(row: BoardRow): Board {
   return {
@@ -465,8 +416,6 @@ function decodeSourceRef(value: JsonValue): RemoteSourceRef {
       }
     }
   }
-  // A binding whose source is unreadable must not silently become a DIFFERENT
-  // repo, so it degrades to an obviously-empty one the engine will refuse.
   return { provider: "github-issues", owner: "", repo: "" }
 }
 
@@ -549,7 +498,6 @@ function toConflict(row: ConflictRow): SyncConflict {
   }
 }
 
-// ── Factory ───────────────────────────────────────────────────────────────────
 
 export function createBoardStore(options: CreateBoardStoreOptions): BoardStore {
   const now = options.now ?? (() => Date.now())
@@ -565,7 +513,6 @@ export function createBoardStore(options: CreateBoardStoreOptions): BoardStore {
   runMigrations(db)
   seedBuiltinTemplates(db, now)
 
-  // ── internals ───────────────────────────────────────────────────────────────
 
   function requireBoard(boardId: string): BoardRow {
     const row = db.query<BoardRow, [string]>("SELECT * FROM board WHERE id = ?").get(boardId)
@@ -585,13 +532,6 @@ export function createBoardStore(options: CreateBoardStoreOptions): BoardStore {
     return row
   }
 
-  /**
-   * The schema gate, on every path that writes card content.
-   *
-   * Here rather than at each caller because the store is what they have in
-   * common: the WS router checks the drawer's writes, and until this ran the
-   * sync engine and the board MCP tools were checked by nobody.
-   */
   function requireContentMatchesSchema(boardId: string, content: CardContent): void {
     const board = requireBoard(boardId)
     const fields = decodeFieldDefs(parseJson(board.card_fields, "card field schema"))
@@ -604,7 +544,6 @@ export function createBoardStore(options: CreateBoardStoreOptions): BoardStore {
     }
   }
 
-  /** The rank of the first live card strictly after `afterRank` in a column. */
   function nextCardRank(columnId: string, afterRank: string | null): string | null {
     const row = afterRank === null
       ? db
@@ -664,7 +603,6 @@ export function createBoardStore(options: CreateBoardStoreOptions): BoardStore {
     db.run("UPDATE board SET updated_at = ? WHERE id = ?", [now(), boardId])
   }
 
-  // ── boards ──────────────────────────────────────────────────────────────────
 
   const createBoardTx = db.transaction((input: CreateBoardInput): string => {
     const id = newId()
@@ -704,7 +642,6 @@ export function createBoardStore(options: CreateBoardStoreOptions): BoardStore {
     return id
   })
 
-  // ── cards ───────────────────────────────────────────────────────────────────
 
   const createCardTx = db.transaction((input: CreateCardInput): string => {
     const column = requireColumn(input.columnId)
@@ -773,7 +710,6 @@ export function createBoardStore(options: CreateBoardStoreOptions): BoardStore {
     touchBoard(card.board_id)
   })
 
-  // ── public surface ──────────────────────────────────────────────────────────
 
   return {
     listBoards(owner: BoardOwnerRef): Board[] {
@@ -1048,12 +984,6 @@ export function createBoardStore(options: CreateBoardStoreOptions): BoardStore {
     },
 
     listCardLinksForBoard(boardId: string, kind: CardLinkKind): CardLink[] {
-      // The subquery is what keeps this board-scoped: written as a plain join,
-      // SQLite drives from card_link_target_idx (kind=?) and walks every link
-      // of that kind in the store. Driving from the board's cards instead
-      // probes the card_link primary key per card, so no new index is needed.
-      // rowid breaks a created_at tie in insertion order — two links added in
-      // the same millisecond must still read newest-first.
       return db
         .query<CardLinkRow, [string, string]>(
           `SELECT * FROM card_link
@@ -1127,7 +1057,6 @@ export function createBoardStore(options: CreateBoardStoreOptions): BoardStore {
     },
 
 
-    // ── Sync ────────────────────────────────────────────────────────────────
 
     listBindings(boardId: string): SyncBinding[] {
       return db
@@ -1180,10 +1109,6 @@ export function createBoardStore(options: CreateBoardStoreOptions): BoardStore {
     deleteBinding(bindingId: string): void {
       const row = db.query<BindingRow, [string]>("SELECT * FROM sync_binding WHERE id = ?").get(bindingId)
       if (!row) throw new BoardStoreError("not_found", `binding ${bindingId} does not exist`)
-      // `sync_link`, `sync_outbox`, `sync_conflict` and `column_mapping` all
-      // declare ON DELETE CASCADE against this row, so one delete takes the
-      // whole binding with it. The CARDS stay: unbinding a repo is not
-      // deleting the work it produced.
       db.run("DELETE FROM sync_binding WHERE id = ?", [bindingId])
     },
 
@@ -1247,8 +1172,6 @@ export function createBoardStore(options: CreateBoardStoreOptions): BoardStore {
     },
 
     dueOutbox(bindingId: string, now: number, limit: number): SyncOutboxEntry[] {
-      // `held_reason IS NULL` is the agent-push guard: a held entry stays in the
-      // table, visible to the UI, and is never picked up by the drain.
       return db
         .query<OutboxRow, [string, number, number]>(
           `SELECT * FROM sync_outbox
@@ -1260,9 +1183,6 @@ export function createBoardStore(options: CreateBoardStoreOptions): BoardStore {
     },
 
     countHeldOutbox(bindingId: string): number {
-      // The complement of `dueOutbox`'s filter. Without it a drain can report
-      // "pushed 0" for a binding holding a queue of agent edits and a binding
-      // with nothing to say, which are not the same answer.
       const row = db
         .query<{ n: number }, [string]>(
           "SELECT COUNT(*) AS n FROM sync_outbox WHERE binding_id = ? AND held_reason IS NOT NULL",
@@ -1320,7 +1240,6 @@ export function createBoardStore(options: CreateBoardStoreOptions): BoardStore {
   }
 }
 
-// ── Boot ──────────────────────────────────────────────────────────────────────
 
 function runMigrations(db: Database): void {
   const current = db.query<{ user_version: number }, []>("PRAGMA user_version").get()?.user_version ?? 0
@@ -1339,11 +1258,6 @@ function runMigrations(db: Database): void {
   }
 }
 
-/**
- * Insert any built-in template missing from the database, keyed by its stable
- * id. Idempotent, so adding a template to the list ships it to existing installs
- * on next boot without a migration.
- */
 function seedBuiltinTemplates(db: Database, now: () => number): void {
   const insert = db.query<never, [string, string, string | null, string, number, number]>(
     `INSERT INTO board_template (id, name, description, builtin, definition, created_at, updated_at)

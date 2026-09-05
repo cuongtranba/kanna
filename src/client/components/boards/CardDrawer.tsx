@@ -41,14 +41,6 @@ import { onRejected } from "../../../shared/errors"
 import type { JsonValue } from "../../../shared/json"
 import type { ClientCommand } from "../../../shared/protocol"
 
-/**
- * Card detail, as a drawer INSIDE the board pane.
- *
- * Not a modal: the board is the thing the reader is reasoning about, and a
- * modal would hide it. The drawer overlays the rightmost columns so the card
- * keeps its spatial context; below ~720px it takes the pane, because a 400px
- * drawer on a pane split beside a chat leaves nothing readable on either side.
- */
 
 export interface CardDrawerSocket {
   command<TResult = JsonValue>(command: ClientCommand): Promise<TResult>
@@ -57,34 +49,15 @@ export interface CardDrawerSocket {
 export interface CardDrawerProps {
   cardId: string
   socket: CardDrawerSocket
-  /**
-   * Live facts for every chat the workspace knows about, keyed by chat id.
-   * Optional — without it the drawer lists the card's chat links as chats it
-   * cannot vouch for, which is exactly what an unknown chat is.
-   */
   chatFacts?: Readonly<Record<string, BoardChatFacts>>
-  /**
-   * The board's card schema — what this card HAS, as against the ids the
-   * built-in templates happen to use. Prop-drilled from the board's view for
-   * the same reason `chatFacts` is: the drawer is mounted inside a pane, not
-   * under the app's providers. Optional, and absent it renders no fields rather
-   * than guessing a schema.
-   */
   cardFields?: readonly FieldDef[]
-  /** Cards that may be waited on — the board's loaded pages, prop-drilled. */
   boardCards?: readonly BlockerCandidate[]
   onClose: () => void
-  /** Re-read after a write; the board's own snapshot arrives separately. */
   onChanged?: () => void
 }
 
 const NO_CANDIDATES: readonly BlockerCandidate[] = []
 
-/**
- * The one way this drawer puts a chat in front of the reader — shared by the
- * start-work button and the linked-chat list so "open the chat" cannot come to
- * mean two different things depending on which control was pressed.
- */
 function openChatTab(chatId: string) {
   usePaneLayoutStore.getState().openTab({ kind: "chat", chatId })
 }
@@ -96,7 +69,6 @@ const NO_BLOCKERS: readonly CardBlocker[] = []
 
 const GITHUB_SYNCED_FIELDS = new Set(["labels", "assignee"])
 
-/** Newest first, matching the order the card face picks its signal chat by. */
 function chatLinksOf(links: readonly CardLink[]): CardLink[] {
   return links.filter((entry) => entry.kind === "chat").sort((a, b) => b.createdAt - a.createdAt)
 }
@@ -182,11 +154,6 @@ export function CardDrawer({
       }))
   }, [cardId, onChanged, onClose, setError, socket])
 
-  /**
-   * One action, whatever state the card is in. The server re-derives that state
-   * from the same resolver the label came from, so a stale label costs a
-   * round-trip and never the wrong outcome.
-   */
   const handleStartWork = useCallback(() => {
     useCardDrawerStore.getState().beginStartWork()
     void socket
@@ -238,14 +205,6 @@ export function CardDrawer({
     [setDraft],
   )
 
-  /**
-   * One field, committed.
-   *
-   * The card's WHOLE content goes back, not the field that changed: the store
-   * replaces content rather than merging it. Nothing is applied optimistically
-   * — a refused write leaves the value the reader can see standing, and the
-   * reload is what makes the new one true.
-   */
   const handleFieldCommit = useCallback(
     (fieldId: string, value: FieldValue | null) => {
       const content = useCardDrawerStore.getState().detail?.card.content
@@ -284,8 +243,6 @@ export function CardDrawer({
   return (
     <aside
       className={cn(
-        // Overlays the columns rather than pushing them: the board must stay
-        // where the reader left it.
         "absolute inset-y-0 right-0 z-20 flex w-full flex-col border-l border-border bg-background",
         "sm:w-[400px]",
       )}
@@ -323,7 +280,6 @@ export function CardDrawer({
               >
                 {startingWork ? "Starting…" : startWorkLabel(startWork.status)}
               </Button>
-              {/* Derived, never asked — so it is shown, not offered as a field. */}
               <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">
                 {startWork.branch}
               </span>
@@ -370,7 +326,6 @@ export function CardDrawer({
                 Leave it
               </Button>
             </div>
-            {/* A refusal, not a confirmation: uncommitted work exists nowhere else. */}
             {discardBlocked ? <p className="text-13 text-muted-foreground">{discardBlocked}</p> : null}
             {mergeBlocked ? <p className="text-13 text-muted-foreground">{mergeBlocked}</p> : null}
           </section>
@@ -391,11 +346,6 @@ export function CardDrawer({
           </section>
         ) : null}
 
-        {/*
-          The board's own schema, walked in the order it declares — no id is
-          special here. A `longtext` is full width, which is why a description
-          still reads as prose without this code knowing what a description is.
-        */}
         {fields.length > 0 ? (
           <dl className="space-y-3 text-13">
             {fields.map((field) => (
@@ -447,19 +397,7 @@ export function CardDrawer({
   )
 }
 
-// ── Card fields ───────────────────────────────────────────────────────────────
 
-/**
- * The card schema, rendered.
- *
- * Editing is the drawer's own inline idiom — the value is what you see, one
- * click turns it into a control, and blur or Enter commits it. Nothing is a
- * form, so there is no save button to leave pending and nothing to abandon.
- *
- * `required` is MARKED and never enforced. It reads as a hint in the empty
- * value's place, which is the same posture the WIP limit and the sync panel
- * take: the board tells you what it expects and then lets you work.
- */
 
 interface CardFieldProps {
   field: FieldDef
@@ -469,8 +407,6 @@ interface CardFieldProps {
 }
 
 function CardFieldRow({ field, value, onCommit, readOnly }: CardFieldProps) {
-  // Prose needs the width; a name, a number or a date does not, and a label
-  // beside it keeps eight fields readable as a list rather than a stack.
   const stacked = field.kind === "longtext"
   return (
     <div className={stacked ? "space-y-1" : "flex gap-3"}>
@@ -503,7 +439,6 @@ function ReadOnlyFieldValue({ field, value }: Pick<CardFieldProps, "field" | "va
   )
 }
 
-/** The control a kind is edited with. Rendered, not called: each holds hooks. */
 function CardFieldControl({ readOnly, ...props }: CardFieldProps) {
   if (readOnly) return <ReadOnlyFieldValue field={props.field} value={props.value} />
   switch (props.field.kind) {
@@ -516,12 +451,10 @@ function CardFieldControl({ readOnly, ...props }: CardFieldProps) {
   }
 }
 
-/** What an unset field says, which is also where `required` is marked. */
 function emptyHint(field: FieldDef): string {
   return field.required ? "Required" : "Empty"
 }
 
-/** A token is a 6px dot beside the label, never a background wash. */
 function OptionDot({ token }: { token: ColumnColorToken | null }) {
   if (!token) return null
   return <span aria-hidden className={cn("size-1.5 shrink-0 rounded-full", COLUMN_DOT_CLASS[token])} />
@@ -529,10 +462,6 @@ function OptionDot({ token }: { token: ColumnColorToken | null }) {
 
 const TEXT_INPUT_TYPE: Readonly<Record<string, string>> = { url: "url", number: "number", date: "date" }
 
-/**
- * Every kind that is edited as one line of text — including a `label` list,
- * which is its values comma-separated, and a `longtext`, which grows instead.
- */
 function InlineFieldValue({ field, value, onCommit }: CardFieldProps) {
   const editing = useCardDrawerStore((state) => state.editingFieldId === field.id)
   const draft = useCardDrawerStore((state) => state.fieldDraft)
@@ -549,8 +478,6 @@ function InlineFieldValue({ field, value, onCommit }: CardFieldProps) {
   )
 
   const handleCommit = useCallback(() => {
-    // Null means the edit is already gone — Esc took it, and the blur that
-    // follows Esc must not put it back.
     const taken = useCardDrawerStore.getState().takeFieldDraft(field.id)
     if (taken === null) return
     onCommit(field.id, parseFieldDraft(field, taken))
@@ -559,7 +486,6 @@ function InlineFieldValue({ field, value, onCommit }: CardFieldProps) {
   const handleKey = useCallback(
     (event: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
       if (event.key === "Escape") useCardDrawerStore.getState().cancelFieldEdit()
-      // In a body, Enter is a newline; everywhere else it is the commit.
       else if (event.key === "Enter" && field.kind !== "longtext") handleCommit()
     },
     [field.kind, handleCommit],
@@ -578,8 +504,6 @@ function InlineFieldValue({ field, value, onCommit }: CardFieldProps) {
         ref={focusControl}
         value={draft}
         aria-label={field.label}
-        // Grows with what is in it: a description is prose, and a fixed two
-        // rows would make the drawer scroll a body it could simply show.
         rows={Math.min(20, Math.max(3, draft.split("\n").length + 1))}
         onChange={handleChange}
         onBlur={handleCommit}
@@ -621,8 +545,6 @@ function InlineFieldValue({ field, value, onCommit }: CardFieldProps) {
     </button>
   )
 
-  // A url is the one kind whose resting state is already an action, so the
-  // link keeps the whole value and editing gets its own small target beside it.
   if (field.kind === "url" && display !== "") {
     return (
       <span className="flex min-w-0 items-center gap-1">
@@ -650,14 +572,6 @@ function InlineFieldValue({ field, value, onCommit }: CardFieldProps) {
   return editButton
 }
 
-/**
- * Select values are namespaced so "cleared" cannot collide with a real option
- * id: every option carries an `o:` prefix, which leaves the bare `c` sentinel
- * unreachable by any id a board could define. Same trick as `buildTabId`'s
- * length-prefixing, and for the same reason — make forging impossible rather
- * than unlikely. A NUL sentinel is equally collision-proof and makes this file
- * binary to git and grep, so the diff stops being reviewable.
- */
 const CLEAR_SELECTION = "c"
 
 function optionValue(optionId: string): string {
@@ -697,13 +611,6 @@ function SelectFieldValue({ field, value, onCommit }: CardFieldProps) {
   )
 }
 
-/**
- * A multiselect is its options, pressed or not.
- *
- * Not the comma-separated line a `label` list edits as: those values are free
- * strings, while these are option IDS, and typing a label the board happens to
- * show would send an id the server is right to refuse.
- */
 function MultiSelectFieldValue({ field, value, onCommit }: CardFieldProps) {
   const held = selectedOptionIds(value)
 
@@ -735,8 +642,6 @@ function MultiSelectFieldValue({ field, value, onCommit }: CardFieldProps) {
             className={cn(
               "flex items-center gap-1.5 rounded-md border px-1.5 py-0.5",
               "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-              // Weight and edge carry the state; the dot is the board's colour,
-              // not the answer to whether this one is on.
               pressed
                 ? "border-border font-medium text-foreground"
                 : "border-transparent text-muted-foreground hover:bg-secondary",
@@ -751,13 +656,6 @@ function MultiSelectFieldValue({ field, value, onCommit }: CardFieldProps) {
   )
 }
 
-/**
- * One chat this card is being worked in.
- *
- * A card outlives its chats — the reaper deletes chats nobody wrote to — so a
- * link whose chat is unknown is stated rather than offered: a button that
- * opened an empty tab would be worse than no button.
- */
 function LinkedChat({ chatId, chat }: { chatId: string; chat: BoardChatFacts | undefined }) {
   const handleOpen = useCallback(() => {
     openChatTab(chatId)
@@ -777,14 +675,12 @@ function LinkedChat({ chatId, chat }: { chatId: string; chat: BoardChatFacts | u
         onClick={handleOpen}
         className="flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-left hover:bg-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       >
-        {/* A fixed slot whether or not a dot lands in it, so titles line up. */}
         <span aria-hidden className="flex h-3 w-1.5 shrink-0 items-center">
           {indicator ? (
             <span className={cn("size-1.5 rounded-full", chatDotBgClass(indicator.tone))} />
           ) : null}
         </span>
         <span className="min-w-0 flex-1 truncate text-13 text-foreground">{chat.title}</span>
-        {/* The word, always — colour never carries the state on its own. */}
         <span className="shrink-0 text-xs text-muted-foreground">
           {indicator?.label ?? statusLabel(chat.status)}
         </span>

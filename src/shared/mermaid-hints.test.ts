@@ -15,7 +15,6 @@ describe("hintForMermaidError", () => {
   })
 
   test("says nothing about parallelograms when the `[/` label does close", () => {
-    // `[/x/]` is a real shape; a failure on that line is something else.
     const source = ["flowchart TD", "  A --> B[/opt/app/releases/]"].join("\n")
 
     expect(hint(source, "Lexical error on line 2. Unrecognized text.")).toBeNull()

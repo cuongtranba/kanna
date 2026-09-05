@@ -10,9 +10,6 @@ import {
 import { POLICY_DEFAULT } from "../shared/permission-policy"
 import type { McpServerConfig, McpOAuthState } from "../shared/types"
 
-// ---------------------------------------------------------------------------
-// Helpers / stubs
-// ---------------------------------------------------------------------------
 
 function makeServer(overrides: Partial<McpServerConfig & { enabled: boolean }> = {}): McpServerConfig {
   return {
@@ -42,9 +39,6 @@ function makeDeps(overrides: Partial<ClaudeSessionConfigHelpersDeps> = {}): Clau
   }
 }
 
-// ---------------------------------------------------------------------------
-// resolveClaudeDriverPreference
-// ---------------------------------------------------------------------------
 
 describe("resolveClaudeDriverPreference", () => {
   const originalEnv = process.env.KANNA_CLAUDE_DRIVER
@@ -71,7 +65,6 @@ describe("resolveClaudeDriverPreference", () => {
     process.env.KANNA_CLAUDE_DRIVER = "pty"
     const deps = makeDeps({ getAppSettingsSnapshot: () => ({}) })
     expect(resolveClaudeDriverPreference(deps)).toBe("pty")
-    // restore
     process.env.KANNA_CLAUDE_DRIVER = originalEnv ?? ""
     if (!originalEnv) delete process.env.KANNA_CLAUDE_DRIVER
   })
@@ -82,9 +75,6 @@ describe("resolveClaudeDriverPreference", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// getEnabledCustomMcpServers
-// ---------------------------------------------------------------------------
 
 describe("getEnabledCustomMcpServers", () => {
   test("returns only enabled servers", () => {
@@ -113,9 +103,6 @@ describe("getEnabledCustomMcpServers", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// buildOAuthBearers
-// ---------------------------------------------------------------------------
 
 describe("buildOAuthBearers", () => {
   test("skips stdio servers", async () => {
@@ -179,9 +166,6 @@ describe("buildOAuthBearers", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// resolveChatPolicy
-// ---------------------------------------------------------------------------
 
 describe("resolveChatPolicy", () => {
   test("returns base chatPolicy when store has no state", () => {
@@ -226,9 +210,6 @@ describe("resolveChatPolicy", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// killPtyInstance
-// ---------------------------------------------------------------------------
 
 describe("killPtyInstance", () => {
   test("throws when no PTY instance found for chat", async () => {

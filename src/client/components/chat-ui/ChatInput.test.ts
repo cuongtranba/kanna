@@ -14,9 +14,6 @@ import {
   shouldRefreshPickerOnSelection,
 } from "./ChatInput"
 
-// ---------------------------------------------------------------------------
-// Clipboard item test helper
-// ---------------------------------------------------------------------------
 
 function createClipboardItem(args: {
   kind?: string
@@ -30,9 +27,6 @@ function createClipboardItem(args: {
   }
 }
 
-// ---------------------------------------------------------------------------
-// willExceedAttachmentLimit
-// ---------------------------------------------------------------------------
 
 describe("willExceedAttachmentLimit", () => {
   test("rejects a batch that would push the composer above the total attachment limit", () => {
@@ -80,9 +74,6 @@ describe("willExceedAttachmentLimit", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// getClipboardImageFiles
-// ---------------------------------------------------------------------------
 
 describe("getClipboardImageFiles", () => {
   test("returns image files from clipboard items", () => {
@@ -176,9 +167,6 @@ describe("getClipboardImageFiles", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// trimTrailingPastedNewlines
-// ---------------------------------------------------------------------------
 
 describe("trimTrailingPastedNewlines", () => {
   test("removes trailing unix newlines from pasted text", () => {
@@ -198,13 +186,9 @@ describe("trimTrailingPastedNewlines", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// Touch-device helpers (still exported from ChatInput)
-// ---------------------------------------------------------------------------
 
 describe("isTouchDeviceEnvironment", () => {
   test("returns a boolean", () => {
-    // In the test environment (Node/Bun), window may not have ontouchstart
     expect(typeof isTouchDeviceEnvironment()).toBe("boolean")
   })
 })
@@ -219,18 +203,8 @@ describe("shouldRefreshPickerOnSelection", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// ChatInput component (SSR smoke test)
-// ---------------------------------------------------------------------------
 
 describe("ChatInput", () => {
-  // ChatInput reads from ChatTabScopedStore (attachments, currentText, etc.)
-  // so every SSR render must be wrapped in the Provider.
-  //
-  // We inline `{ init: undefined as void }` because `createScopedStore<undefined,…>`
-  // makes the Provider accept `init: void`, and TS7's createElement overloads
-  // require `children` to be part of the props object (not a spread arg) when
-  // the component explicitly declares it.
   function renderInput(canCancel: boolean): string {
     const child = createElement(ChatInput, {
       onSubmit: async () => undefined,
@@ -249,13 +223,11 @@ describe("ChatInput", () => {
     expect(html).toContain('aria-label="Add attachment"')
     expect(html).toContain('type="file"')
     expect(html).toContain('class="sr-only"')
-    // Verify the old "absolute inset-0" hack is gone
     expect(html).not.toContain("absolute inset-0 cursor-pointer opacity-0")
   })
 
   test("renders the Lexical contenteditable editor (not a textarea)", () => {
     const html = renderInput(false)
-    // Lexical renders a contenteditable div, not a textarea
     expect(html).toContain("contentEditable")
     expect(html).toContain('aria-label="Chat input"')
     expect(html).toContain('role="textbox"')
@@ -277,9 +249,6 @@ describe("ChatInput", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// Send / Stop affordance
-// ---------------------------------------------------------------------------
 
 describe("isStopAffordance", () => {
   test("is Stop only while a turn is cancellable and the composer is empty", () => {
@@ -287,8 +256,6 @@ describe("isStopAffordance", () => {
   })
 
   test("is Send when text is staged, even mid-turn", () => {
-    // The click handler sends (queueing behind the running turn) in this
-    // state, so the label and icon must agree — they used to say "Stop".
     expect(isStopAffordance(true, true)).toBe(false)
   })
 
@@ -298,9 +265,6 @@ describe("isStopAffordance", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// Mention picker wiring (unchanged — tests the lib, not the component)
-// ---------------------------------------------------------------------------
 
 describe("mention picker wiring", () => {
   test("shouldShowMentionPicker trigger produces the expected shape for mid-input @", async () => {
@@ -313,9 +277,6 @@ describe("mention picker wiring", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// Agent mention pattern composer compatibility
-// ---------------------------------------------------------------------------
 
 describe("agent mention pattern composer compatibility", () => {
   test("plain text contains no agent mentions", () => {

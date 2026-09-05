@@ -1,5 +1,3 @@
-// Minimal typed subset vendored from `codex app-server generate-ts`.
-// Keep names and field shapes aligned with the official app-server protocol.
 
 import type { CodexReasoningEffort, ServiceTier } from "../shared/types"
 import type { CodexErrorInfo } from "../shared/codex-error-classification"
@@ -105,12 +103,6 @@ export interface ThreadStartResponse {
 export type ThreadResumeResponse = ThreadStartResponse
 export type ThreadForkResponse = ThreadStartResponse
 
-/**
- * `codexErrorInfo` / `additionalDetails` are optional here but required in the
- * generated protocol: an app-server older than a variant's introduction omits
- * them, and a newer one may send a variant this build does not know. Read the
- * tag through `codexErrorInfoTag`, which returns null for both cases.
- */
 export interface TurnError {
   message?: string
   codexErrorInfo?: CodexErrorInfo | null
@@ -212,12 +204,6 @@ export interface ToolRequestUserInputParams {
   questions: ToolRequestUserInputQuestion[]
 }
 
-/**
- * A type ALIAS, not an interface, deliberately: this value is written straight
- * back onto the JSON-RPC wire, and TypeScript grants an implicit index
- * signature to an alias but never to an interface — so an interface here would
- * be unassignable to `JsonValue` with no cast available to bridge it.
- */
 export type ToolRequestUserInputResponse = {
   answers: Record<string, { answers: string[] }>
 }
@@ -468,10 +454,6 @@ export interface ItemCompletedNotification {
 
 export interface ErrorNotification {
   error: TurnError & { message: string }
-  /**
-   * Codex is reconnecting on its own and the turn is still live. Optional
-   * because an older app-server omits it; absent must read as terminal.
-   */
   willRetry?: boolean
   threadId?: string
   turnId?: string

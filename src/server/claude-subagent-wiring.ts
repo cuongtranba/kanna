@@ -1,18 +1,3 @@
-/**
- * Subagent provider-run wiring — standalone extraction from AgentCoordinator.
- *
- * Responsibilities:
- *   - buildClaudeSubagentStarter — builds the startClaudeSession callback for
- *     subagent runs: PTY/SDK dispatch, OAuth, MCP config, pool wiring.
- *   - buildSubagentProviderRunForChat — constructs the full ProviderRunStart
- *     bundle for a subagent run bound to a specific chat.
- *
- * Side-effect seal: this module contains NO direct IO (no node:fs, no HTTP
- * calls, no Bun primitives). Every effectful operation is injected through
- * SubagentWiringDeps so the module remains testable without real drivers.
- * The `realpath` function is injected as a dep (RealpathFn) rather than
- * imported from `paths-fs.adapter` directly.
- */
 
 import type { JsonValue } from "../shared/json"
 import type {
@@ -42,14 +27,9 @@ import { toJsonObject } from "./json-boundary"
 import { resolveProjectInstructions, resolveSpawnPaths, resolveStackProjects } from "./claude-session-config"
 import { openrouterAuthReady, claudeAuthReady } from "./provider-catalog"
 import { OAuthPoolUnavailableError } from "./oauth-errors"
-// Type-only import — no IO is pulled in from the SDK session start module.
 import type { startClaudeSession as StartClaudeSessionFn } from "./claude-session-start"
 
-// ---------------------------------------------------------------------------
-// Structural sub-interfaces — only the operations this module calls.
-// ---------------------------------------------------------------------------
 
-/** Subset of EventStore used by subagent wiring. */
 interface SubagentWiringStore {
   requireChat(chatId: string): ChatRecord
   getProject(id: string): ProjectRecord | null | undefined
@@ -57,7 +37,6 @@ interface SubagentWiringStore {
   appendSubagentEvent(event: SubagentRunEvent): Promise<void>
 }
 
-/** Subset of OAuthTokenPool used by subagent wiring. */
 interface SubagentWiringOAuthPool {
   hasUsable(reservedFor?: string): boolean
   pickActive(chatId: string): { id: string; token: string; label: string } | null | undefined
@@ -65,24 +44,13 @@ interface SubagentWiringOAuthPool {
   hasAnyToken(): boolean
 }
 
-// ---------------------------------------------------------------------------
-// Dependency bundle
-// ---------------------------------------------------------------------------
 
-/**
- * All AgentCoordinator fields and methods accessed by the subagent wiring
- * functions. Passed as a single deps object so both functions stay testable
- * without a real coordinator.
- */
 export interface SubagentWiringDeps {
-  // Store (structural subset — no concrete EventStore import)
   store: SubagentWiringStore
 
-  // Session-start function references (injected so tests can stub them)
   startClaudeSessionFn: typeof StartClaudeSessionFn
   startClaudeSessionPTYFn: (args: StartClaudeSessionPtyArgs) => Promise<ClaudeSessionHandle>
 
-  // Opaque state passed through to the start functions
   toolCallback: ToolCallbackService | null
   tunnelGateway: TunnelGateway | null
   claudePtyRegistry: ClaudePtyRegistry | null
@@ -92,13 +60,10 @@ export interface SubagentWiringDeps {
   codexManager: CodexAppServerManager
   oauthPool: SubagentWiringOAuthPool | null
 
-  // Per-run pending resolver registry (shared with the coordinator's cancel paths)
   subagentPendingResolvers: Map<string, { resolve: (v: JsonValue) => void; reject: (e: Error) => void }>
 
-  // IO injection — realpath wraps realpathSync but is IO; inject via deps
   realpath: RealpathFn
 
-  // Method references for private AgentCoordinator helpers
   resolveClaudeDriverPreference: () => ClaudeDriverPreference
   getEnabledCustomMcpServers: () => readonly McpServerConfig[]
   buildOAuthBearers: (servers: readonly McpServerConfig[]) => Promise<Map<string, string>>
@@ -110,17 +75,9 @@ export interface SubagentWiringDeps {
   }
   readLlmProvider: () => Promise<LlmProviderSnapshot>
   subagentPendingKey: (chatId: string, runId: string, toolUseId: string) => string
-  /**
-   * Live armed-loop slice for the subagent's own kanna-mcp. A loop worker must
-   * resolve its tracking file against the LOOP's workdir (often a sibling
-   * worktree), not the chat cwd. Optional so existing test deps stay valid.
-   */
   getArmedLoop?: (chatId: string) => ArmedLoopInfo | null
 }
 
-// ---------------------------------------------------------------------------
-// Exported args type for buildSubagentProviderRunForChat
-// ---------------------------------------------------------------------------
 
 export interface BuildSubagentProviderRunForChatArgs {
   subagent: Subagent
@@ -134,20 +91,7 @@ export interface BuildSubagentProviderRunForChatArgs {
   parentUserMessageId: string
 }
 
-// ---------------------------------------------------------------------------
-// Core functions
-// ---------------------------------------------------------------------------
 
-/**
- * D6 — subagent Claude starter. When `KANNA_CLAUDE_DRIVER=pty` the subagent
- * turn runs through the PTY driver (subscription billing) instead of always
- * falling back to the SDK (API billing). Adapts the SDK-shaped
- * `startClaudeSession` arg to `StartClaudeSessionPtyArgs`, injecting the
- * coordinator-owned preflight / toolCallback / tunnel / policy context and
- * `oneShot: true` so the REPL closes after the single subagent turn.
- *
- * Extracted from AgentCoordinator.buildClaudeSubagentStarter.
- */
 export function buildClaudeSubagentStarter(
   deps: SubagentWiringDeps,
 ): NonNullable<BuildSubagentProviderRunArgs["startClaudeSession"]> {
@@ -190,13 +134,6 @@ export function buildClaudeSubagentStarter(
   }
 }
 
-/**
- * Constructs the full ProviderRunStart bundle for a subagent run bound to a
- * specific chat. Resolves the cwd, builds the delegation context, wires up the
- * interactive tool-request forwarder, and delegates to `buildSubagentProviderRun`.
- *
- * Extracted from AgentCoordinator.buildSubagentProviderRunForChat.
- */
 export function buildSubagentProviderRunForChat(
   deps: SubagentWiringDeps,
   args: BuildSubagentProviderRunForChatArgs,
@@ -220,8 +157,6 @@ export function buildSubagentProviderRunForChat(
       request.tool.toolKind !== "ask_user_question" &&
       request.tool.toolKind !== "exit_plan_mode"
     ) {
-      // Non-interactive tools (bash, read, write, ...) — SDK handles
-      // them via canUseTool wrapper. No forwarding needed.
       return null
     }
     const toolUseId = request.tool.toolId
@@ -239,9 +174,6 @@ export function buildSubagentProviderRunForChat(
     deps.emitStateChange(args.chatId)
     deps.subagentOrchestrator.notifySubagentToolPending(args.runId)
     return await new Promise<JsonValue>((resolve, reject) => {
-      // Defensive: if `canUseTool` somehow fires twice for the same
-      // (chatId, runId, toolUseId) — e.g. SDK retry — reject the previous
-      // resolver before overwriting so its Promise doesn't leak.
       const existing = deps.subagentPendingResolvers.get(key)
       if (existing) {
         existing.reject(new Error("superseded by retry"))
@@ -255,13 +187,7 @@ export function buildSubagentProviderRunForChat(
     parentRunId: args.runId,
     ancestorSubagentIds: [...args.ancestorSubagentIds, args.subagent.id],
     depth: args.depth + 1,
-    // For sub-spawn-sub, the parent_user_message_id stays anchored to the
-    // chat turn that started the whole chain — that's the attribution the
-    // run_started events use, and the orchestrator's depth/cycle checks
-    // protect against runaway chains.
     getParentUserMessageId: () => args.parentUserMessageId,
-    // Subagents cannot inherit the user's @-mention authority: manual-trigger
-    // gates are enforced only at the top-level turn where the user typed the mention.
     getMentionedSubagentIds: () => [],
   }
 
@@ -274,9 +200,6 @@ export function buildSubagentProviderRunForChat(
     abortSignal: args.abortSignal,
     cwd: restriction?.cwd ?? spawn.cwd,
     additionalDirectories: spawn.additionalDirectories,
-    // Only label stack projects for unrestricted runs — a path-restricted
-    // subagent cannot reach every root, so listing them all would mislead.
-    // The instruction blocks are suppressed for the same reason.
     stackProjects: restriction
       ? []
       : resolveStackProjects(chat, (id) => {
@@ -293,8 +216,6 @@ export function buildSubagentProviderRunForChat(
     allowedPaths: restriction?.allowedPaths,
     projectId: project.id,
     startClaudeSession: buildClaudeSubagentStarter(deps),
-    // PTY claude has no native maxTurns (interactive CLI) — the orchestrator
-    // applies a host-side tool-call-count backstop for PTY + Codex runs.
     claudeDriverIsPty: deps.resolveClaudeDriverPreference() === "pty",
     subagentOrchestrator: deps.subagentOrchestrator,
     delegationContext,
@@ -307,24 +228,11 @@ export function buildSubagentProviderRunForChat(
         return openrouterAuthReady(await deps.readLlmProvider())
       }
       if (provider === "claude") {
-        // Same gate the main chat uses (claudeAuthReady mirrors
-        // claude-session-spawner's `hasAnyToken() && !picked` refusal), so a
-        // user running on local claude CLI credentials with an empty OAuth
-        // pool can delegate exactly as they can chat.
-        //
-        // Pass parent chat id so a token already reserved by the parent
-        // counts as usable. Subagent runs are sequential under the parent
-        // (parent's turn is paused), so sharing the parent's reservation
-        // is correct — see oauth-token-pool isEligible.
         return claudeAuthReady(deps.oauthPool, args.chatId)
       }
       return true
     },
     pickOauthToken: () => {
-      // Subagent inherits the parent chat's reservation by re-picking under
-      // the same chatId. pickActive treats the parent's reservation as
-      // owned-by-self (drops + re-binds to chatId), so the lifecycle stays
-      // bound to the parent's close path — no separate subagent release.
       const picked = deps.oauthPool?.pickActive(args.chatId) ?? null
       if (deps.oauthPool && deps.oauthPool.hasAnyToken() && !picked) {
         throw new OAuthPoolUnavailableError(

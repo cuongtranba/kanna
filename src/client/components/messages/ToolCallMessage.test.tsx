@@ -59,7 +59,6 @@ describe("ToolCallMessage", () => {
       id: "msg-2",
       timestamp: new Date().toISOString(),
     }
-    // Without a matching run in the store, it renders with just the name (no live run)
     const r = await renderForLoopCheck(
       <ToolCallMessage message={message} isLoading={false} chatId="" />,
     )
@@ -76,7 +75,6 @@ describe("ToolCallMessage", () => {
   test("workflow card binds to a run by exact taskId (re-run row carries the prior taskId)", async () => {
     const chatId = "chat-bind"
     const runs: WorkflowRunSummary[] = [
-      // server override row: a re-run reused the runId; carries the launch's taskId
       { runId: "wf_x", taskId: "task_old", status: "running", agentCount: 3, phases: [], agents: [] },
     ]
     useWorkflowsStore.getState().setRuns(chatId, runs)
@@ -119,8 +117,6 @@ describe("ToolCallMessage", () => {
       expect(r.loopWarnings).toEqual([])
       expect(r.thrown).toBeNull()
       expect(document.body.textContent ?? "").toContain("assets/shot.png")
-      // The bytes are the point: a collapsed row must mount no image element,
-      // or every image in a transcript is fetched on load.
       expect(document.body.querySelector("img")).toBeNull()
 
       const toggle = document.body.querySelector("button")
@@ -138,7 +134,6 @@ describe("ToolCallMessage", () => {
 
   test("workflow card with a taskId absent from the snapshot shows the neutral 'started' pill, never a mismatched run", async () => {
     const chatId = "chat-nomatch"
-    // only an unrelated run exists; the card's taskId does not match it
     const runs: WorkflowRunSummary[] = [
       { runId: "wf_other", taskId: "task_unrelated", status: "failed", agentCount: 0, phases: [], agents: [] },
     ]

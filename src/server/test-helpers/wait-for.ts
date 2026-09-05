@@ -1,4 +1,3 @@
-/** Polls until `condition()` returns true or `timeoutMs` elapses. */
 export async function waitFor(
   condition: () => boolean,
   timeoutMs = 2000,

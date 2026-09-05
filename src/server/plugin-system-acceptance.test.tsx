@@ -1,23 +1,3 @@
-/**
- * ACCEPTANCE ORACLE for the Kanna plugin system.
- *
- * This file IS the definition of done. The autonomous loop implementing the
- * plugin system verifies against it, so two properties matter more than
- * coverage:
- *
- * 1. **It asserts terminal behaviour, not structure.** No `test -f`, no grep for
- *    an identifier, no "the module exports a function". Every assertion runs the
- *    thing. A stub cannot satisfy it, which is what stops the loop declaring
- *    GOAL MET at phase 4 of 10 (the failure adr-20260805-loop-oracle-hardening
- *    records).
- * 2. **Each phase imports dynamically inside its own test.** A module that does
- *    not exist yet fails exactly one test instead of erroring the whole file, so
- *    the loop gets per-phase signal and can see progress rather than a single
- *    opaque red.
- *
- * Keep assertions pinned to the small set of entry points named in the plan.
- * Internals are the implementer's choice; these names are the contract.
- */
 import { describe, expect, test } from "bun:test"
 import type { PluginSurfaceComponent, PluginSurfaceProps } from "../client/plugins/contributionRegistry"
 import type { PluginService } from "./plugins/plugin-service"
@@ -28,11 +8,9 @@ const HELLO = join(FIXTURES, "hello")
 const LEAKY = join(FIXTURES, "leaky")
 const THROWING = join(FIXTURES, "throwing")
 
-/** Marker strings that must never reach a browser bundle. */
 const LEAKED_MARKER = "LEAKY_SERVER_SECRET_MUST_NOT_REACH_BROWSER"
 const HELLO_SERVER_MARKER = "HELLO_SERVER_ONLY_MARKER"
 
-// ---------------------------------------------------------------- P0 settings
 
 describe("P0 — manifest, paths, settings collection", () => {
   test("a valid fixture manifest parses and a reserved id is refused", async () => {
@@ -72,7 +50,6 @@ describe("P0 — manifest, paths, settings collection", () => {
   })
 })
 
-// ------------------------------------------------------------- P1 compilation
 
 describe("P1 — compile pipeline", () => {
   test("the fixture builds a browser bundle with NO bare imports left", async () => {
@@ -81,17 +58,12 @@ describe("P1 — compile pipeline", () => {
     expect(result.ok).toBe(true)
     if (!result.ok) return
 
-    // Every host module must have been rewritten to go through the host
-    // registry; a surviving bare import is unresolvable in the browser.
     expect(result.client).not.toMatch(/from\s*["'](react|zod|@kanna\/plugin)["']/)
     expect(result.client).toContain("__KANNA_PLUGIN_HOST__")
     expect(result.server.length).toBeGreaterThan(0)
   }, 60_000)
 
   test("SECURITY: a *.server import is refused by the client build and never leaks", async () => {
-    // MEASURED regression: with the guard returning esbuild's {errors:[]} shape
-    // (which Bun silently ignores) the build SUCCEEDED and this marker string
-    // shipped to the browser. The guard must throw.
     const { buildPluginBundles } = await import("./plugins/plugin-build.adapter")
     const result = await buildPluginBundles({ sourceDir: LEAKY, entry: "index.ts" })
     expect(result.ok).toBe(false)
@@ -120,14 +92,12 @@ describe("P1 — compile pipeline", () => {
   }, 60_000)
 
   test("a bundler plugin that throws is reported, not surfaced as an unhandled rejection", async () => {
-    // Bun.build REJECTS when a plugin throws rather than returning {success:false}.
     const { buildPluginBundles } = await import("./plugins/plugin-build.adapter")
     const result = await buildPluginBundles({ sourceDir: join(FIXTURES, "does-not-exist"), entry: "index.ts" })
     expect(result.ok).toBe(false)
   }, 60_000)
 })
 
-// ----------------------------------------------------------- P2 server runtime
 
 describe("P2 — server runtime, RPC, logs", () => {
   test("the log ring honours all three Paseo bounds", async () => {
@@ -141,8 +111,8 @@ describe("P2 — server runtime, RPC, logs", () => {
     for (let i = 0; i < 600; i++) ring.append({ stream: "out", text: `line ${i}`, at: i })
     const entries = ring.tail()
     expect(entries.length).toBeLessThanOrEqual(PLUGIN_LOG_MAX_ENTRIES)
-    expect(entries[entries.length - 1].text).toBe("line 599") // newest retained
-    expect(entries[0].text).not.toBe("line 0") // oldest evicted
+    expect(entries[entries.length - 1].text).toBe("line 599")
+    expect(entries[0].text).not.toBe("line 0")
 
     ring.append({ stream: "err", text: "x".repeat(40_000), at: 1 })
     const long = ring.tail().at(-1)
@@ -179,12 +149,8 @@ describe("P2 — server runtime, RPC, logs", () => {
   }, 120_000)
 })
 
-// ------------------------------------------------------------- P3 HTTP surface
 
 describe("P3 — HTTP surface inherits the auth gate", () => {
-  // A fake rather than a real service: these assert ROUTING (status codes,
-  // method/path matching, the disabled gate), and a real one would spawn
-  // plugin child processes for every case.
   function fakeService(over: Partial<PluginService> = {}): PluginService {
     const base: PluginService = {
       install: async () => {},
@@ -221,7 +187,6 @@ describe("P3 — HTTP surface inherits the auth gate", () => {
   }
 
   test("every plugin route is 404 while plugins are globally disabled", async () => {
-    // 404, not 403: a disabled surface must not advertise that it exists.
     expect((await call("GET", "/api/plugins/hello/client.js", { enabled: false }))?.status).toBe(404)
     expect((await call("GET", "/api/plugins", { enabled: false }))?.status).toBe(404)
   })
@@ -243,8 +208,6 @@ describe("P3 — HTTP surface inherits the auth gate", () => {
   test("GET :id/client.js serves the compiled bundle uncached", async () => {
     const res = await call("GET", "/api/plugins/hello/client.js")
     expect(res?.status).toBe(200)
-    // no-store is load-bearing: the bundle is rebuilt in place at the same url,
-    // so a cached copy silently defeats `reload`.
     expect(res?.headers.get("cache-control")).toBe("no-store")
     expect(await res?.text()).toContain("export default")
   })
@@ -264,8 +227,6 @@ describe("P3 — HTTP surface inherits the auth gate", () => {
   })
 
   test("POST :id/rpc returns a FAILED call as 200 with ok:false", async () => {
-    // The transport succeeded; the caller needs the plugin's own message. Only
-    // a malformed REQUEST is a 4xx.
     const svc = fakeService({ call: async () => ({ ok: false, error: "boom" }) })
     const res = await call("POST", "/api/plugins/hello/rpc", { body: { method: "greeting.create" }, service: svc })
     expect(res?.status).toBe(200)
@@ -297,7 +258,6 @@ describe("P3 — HTTP surface inherits the auth gate", () => {
   })
 })
 
-// ------------------------------------------------------- P5/P6 client + RPC
 
 describe("P5/P6 — client runtime renders a contributed surface", () => {
   test("a compiled plugin surface renders through the host module registry", async () => {
@@ -324,8 +284,6 @@ describe("P5/P6 — client runtime renders a contributed surface", () => {
     expect(surfaces).toHaveLength(1)
     const { Component } = surfaces[0]
     const theme: PluginSurfaceProps["theme"] = { colors: { foreground: "var(--foreground)" } }
-    // Rendering proves React identity is shared: a second React copy throws
-    // "Invalid hook call" from the fixture's useState.
     const html = renderToStaticMarkup(<Component theme={theme} />)
     expect(html).toContain("hello-plugin-surface")
   }, 60_000)
@@ -337,14 +295,6 @@ describe("P5/P6 — client runtime renders a contributed surface", () => {
   })
 })
 
-// --------------------------------------------------------- P9a UI surfaces
-//
-// The four P5/P6 UI surfaces that still have no coverage: a sidebar item, a
-// chat-footer panel, the per-plugin error boundary, and the Settings page.
-// Test-first, per this file's own header comment — none of these modules
-// exist yet, so every test below is EXPECTED to fail red on "Cannot find
-// module", which is the point: it pins the entry points the next chunk
-// implements against, before any implementation exists to make it pass.
 
 describe("P9a — sidebar item surfaces installed plugins", () => {
   test("a contributed sidebar item renders through the plugin sidebar surface", async () => {
@@ -398,11 +348,8 @@ describe("P12 — a contributed command reaches the `/` picker as inserted promp
     const catalog = [{ name: "compact", description: "", argumentHint: "", scope: "builtin" as const }]
     const merged = mergePluginCommands(catalog, contributions.getCommandCenterItems())
 
-    // Namespaced by plugin id, at plugin scope, appended after the builtin.
     expect(merged.commands.map((c) => c.name)).toEqual(["compact", "hello:greet"])
     expect(merged.commands[1].scope).toBe("plugin")
-    // And what selecting it inserts is the item's prompt TEXT — a Kanna plugin
-    // command has no file on disk, so `/hello:greet` would not resolve.
     expect(merged.promptByName.get("hello:greet")).toBe("Greet the user warmly.")
   }, 60_000)
 })
@@ -436,9 +383,6 @@ describe("P9a — chat-footer panel mirrors the WorkflowsSection/SubagentsSectio
     const html = renderToStaticMarkup(
       <PluginsFooterSection panels={[{ pluginId: "hello", surfaceId: "main", Component }]} theme={theme} />,
     )
-    // Same rendered marker as the P5/P6 sidebar-page surface test above: proves
-    // the one contributed component is displayable from a second host shape
-    // (the chat footer, not the sidebar page) with no second React identity.
     expect(html).toContain("hello-plugin-surface")
   }, 60_000)
 })
@@ -480,11 +424,8 @@ describe("P9a — a throwing plugin panel is isolated by PluginBoundary", () => 
       )
     }).not.toThrow()
 
-    // The host tree around the boundary is untouched...
     expect(html).toContain("sibling content survives")
-    // ...the plugin's own error never reaches the rendered output...
     expect(html).not.toContain("THROWING_PANEL_DELIBERATE_FAILURE")
-    // ...and the fallback names the offending plugin, not a generic blank.
     expect(html).toContain("throwing")
   }, 60_000)
 })
@@ -502,9 +443,6 @@ describe("P9a — Settings → Plugins page", () => {
 
     const handlers = buildPluginsSectionHandlers(fakePostJsonBody)
     await handlers.onReload("hello")
-    // Same path shape `plugin-http-routes.ts` recognises as an auth-gated POST
-    // action (see the P3 describe block above) — proves the Settings UI is
-    // wired to the real HTTP contract, not a placeholder.
     expect(calls).toEqual([{ url: "/api/plugins/hello/reload", method: "POST" }])
 
     const plugin = { id: "hello", sourceDir: HELLO, enabled: false }
@@ -513,7 +451,6 @@ describe("P9a — Settings → Plugins page", () => {
   }, 30_000)
 })
 
-// ------------------------------------------------------------------ P8 MCP
 
 describe("P8 — MCP authoring tools", () => {
   const tool = (name: string) => ({ name })
@@ -540,7 +477,6 @@ describe("P8 — MCP authoring tools", () => {
   })
 })
 
-// ------------------------------------------------------------------ P7 CLI
 
 describe("P7 — CLI", () => {
   test("parses each subcommand and rejects an unknown one", async () => {
@@ -557,11 +493,7 @@ describe("P7 — CLI", () => {
   })
 })
 
-// ------------------------------------------- P10 service reads the CLI/MCP/HTTP share
 
-// `list`, `reload`, `clientBundle` and `recordClientError` were added so the
-// CLI, HTTP and MCP surfaces could stop being stubs. These run the REAL service
-// against the real fixture, rooted at a temp home so nothing touches ~/.kanna.
 describe("P10 — the shared service reads every surface drives", () => {
   test("install makes the plugin listable and serves a real compiled client bundle", async () => {
     const { mkdtemp, rm } = await import("node:fs/promises")
@@ -579,19 +511,14 @@ describe("P10 — the shared service reads every surface drives", () => {
         { id: "hello", sourceDir: HELLO, enabled: false, state: "stopped" },
       ])
 
-      // The browser bundle must be PERSISTED at install, not rebuilt on demand:
-      // GET /api/plugins/:id/client.js serves exactly these bytes.
       const bundle = await service.clientBundle("hello")
       expect(bundle).toBeTruthy()
       expect(bundle).toContain("hello-plugin-surface")
       expect(await service.clientBundle("not-installed")).toBeNull()
 
-      // A browser-side failure lands in the SAME log ring as the child's stdout,
-      // so `plugin logs <id>` answers "what went wrong" for either side.
       service.recordClientError("hello", "surface threw")
       expect(service.logs("hello").map((l) => l.text)).toContain("surface threw")
 
-      // reload on a DISABLED plugin leaves it stopped — only setEnabled starts it.
       await service.reload("hello")
       expect(service.status("hello")?.state).toBe("stopped")
     } finally {
@@ -600,12 +527,7 @@ describe("P10 — the shared service reads every surface drives", () => {
   }, 120_000)
 })
 
-// ------------------------------------------------- P11 an install survives a restart
 
-// The gap this closes: `createPluginService()` starts with an EMPTY in-memory
-// registry, so before the settings wire an install vanished on restart and a
-// CLI install was invisible to the running server — while its bundles sat on
-// disk the whole time.
 describe("P11 — installs persist across a restart", () => {
   test("a second service restores what the first installed, without recompiling", async () => {
     const { mkdtemp, rm } = await import("node:fs/promises")
@@ -615,8 +537,6 @@ describe("P11 — installs persist across a restart", () => {
 
     const homeDir = await mkdtemp(join(tmpdir(), "kanna-plugin-p11-"))
     try {
-      // Stands in for settings.json across the "restart": the same rows outlive
-      // both service instances, which is exactly what settings does.
       const rows: { id: string; sourceDir: string; enabled: boolean }[] = []
       const settings = {
         getSnapshot: () => ({ installedPlugins: rows }),
@@ -640,7 +560,6 @@ describe("P11 — installs persist across a restart", () => {
 
       expect(rows).toEqual([{ id: "hello", sourceDir: HELLO, enabled: true }])
 
-      // "Restart": a brand-new service with an empty registry.
       const second = createPluginService({ homeDir, installed })
       expect(second.list()).toEqual([])
 
@@ -649,11 +568,8 @@ describe("P11 — installs persist across a restart", () => {
       expect(second.list()).toEqual([
         { id: "hello", sourceDir: HELLO, enabled: true, state: "stopped" },
       ])
-      // Restored WITHOUT recompiling: the build output the first install wrote
-      // is still on disk and is served as-is.
       expect(await second.clientBundle("hello")).toContain("hello-plugin-surface")
 
-      // Restore is idempotent — a second call must not clobber a live record.
       second.restore()
       expect(second.list()).toHaveLength(1)
     } finally {

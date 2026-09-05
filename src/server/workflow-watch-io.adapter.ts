@@ -4,25 +4,11 @@ import { isJsonObject, safeJsonParse, type JsonValue } from "../shared/json"
 
 export interface WorkflowRawFile { runId: string; raw: JsonValue }
 
-/** Liveness probe for an in-flight run, derived from its live transcript dir. */
 export interface WorkflowRunDirInfo { runId: string; newestMtimeMs: number }
 
 function isWfFile(name: string): boolean { return name.startsWith("wf_") && name.endsWith(".json") }
 function isWfDir(name: string): boolean { return name.startsWith("wf_") }
 
-/**
- * List the LIVE run directories Claude writes under the sibling
- * `<session>/subagents/workflows/wf_<runId>/` (one per run, holding
- * `journal.jsonl` + per-agent `agent-*.jsonl`). These are written from the
- * first second of a run, UNLIKE the terminal `workflows/wf_<runId>.json`
- * sidecar which Claude only flushes at/near termination. `newestMtimeMs` is
- * the max mtime across the run dir's files — the run's last on-disk activity.
- *
- * `workflowsDir` is the sidecar dir the registry already tracks
- * (`<session>/workflows`); the live dirs are its `../subagents/workflows`
- * sibling. Returns [] if the sibling does not exist yet.
- */
-/** The sibling live-run-dir root for a registered sidecar `workflows` dir. */
 export function liveRunRoot(workflowsDir: string): string {
   return join(dirname(workflowsDir), "subagents", basename(workflowsDir))
 }
@@ -42,7 +28,7 @@ export function listWorkflowRunDirs(workflowsDir: string): WorkflowRunDirInfo[] 
         try {
           const m = statSync(join(runDir, f)).mtimeMs
           if (m > newest) newest = m
-        } catch { /* file vanished mid-scan — skip */ }
+        } catch { }
       }
     } catch { continue }
     out.push({ runId: name, newestMtimeMs: newest })
@@ -62,7 +48,6 @@ export function readWorkflowDir(dir: string): WorkflowRawFile[] {
       if (raw === null) continue
       out.push({ runId: name.slice(0, -".json".length), raw })
     } catch {
-      // partial write / corrupt file — skip this tick; next write re-fires the watch
     }
   }
   return out
@@ -79,11 +64,6 @@ function nearestExistingAncestor(dir: string): string | null {
   return null
 }
 
-/**
- * Watch the live run-dir root (`subagents/workflows`) so a newly-launched run
- * (which writes NO sidecar until termination) pushes a snapshot promptly. Same
- * parent-arming as watchWorkflowDir — the sibling appears lazily on first run.
- */
 export function watchWorkflowRunDirs(
   workflowsDir: string, onChange: () => void, opts?: { debounceMs?: number },
 ): () => void {
@@ -94,14 +74,6 @@ export interface WorkflowJournalEntry {
   type: "started" | "result"
   agentId: string
   key?: string
-  /**
-   * The agent's structured return value. Workflow scripts return arbitrary
-   * shapes via their StructuredOutput schema, so every field is optional and
-   * parsed defensively. The count fields (`fixed`/`stale`/`skipped`) are
-   * normalized from EITHER a bare number OR an array (the workflow returns
-   * `fixed: [1941]`, we surface the length) so the registry can build a
-   * uniform per-agent outcome summary.
-   */
   result?: {
     dir?: string
     fixed?: number
@@ -116,9 +88,6 @@ export interface WorkflowJournalEntry {
 
 const KNOWN_JOURNAL_KINDS: ReadonlySet<string> = new Set(["started", "result"])
 
-// Normalize a count-ish field: a bare number stays as-is, an array collapses to
-// its length (the workflow returns `fixed: [1941]`, we surface `1`). Anything
-// else is absent.
 function countOf(v: JsonValue | undefined): number | undefined {
   if (typeof v === "number") return v
   if (Array.isArray(v)) return v.length
@@ -166,13 +135,6 @@ export function readWorkflowRunJournal(workflowsDir: string, runId: string): Wor
   return out
 }
 
-/**
- * Injectable seam for {@link watchWorkflowDir}. Production uses the node:fs
- * `watch` + global timers (the defaults below). Tests inject fakes so debounce
- * coalescing can be asserted deterministically without depending on real
- * fs-event delivery latency or wall-clock timer scheduling — both of which are
- * load-sensitive and made the debounce test flaky under a busy suite.
- */
 export interface WatchWorkflowDeps {
   watch: typeof watch
   setTimeout: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>
@@ -189,14 +151,6 @@ const DEFAULT_WATCH_DEPS: WatchWorkflowDeps = {
   clearInterval: (handle) => clearInterval(handle),
 }
 
-/**
- * Watch a directory tree and call `onChange`, trailing-edge debounced.
- *
- * `filterBasename` narrows the watch to ONE file in `dir` — the way to follow
- * a single file without binding a watcher to its inode, which a rename-based
- * write would orphan. An event that reports no filename still fires: some
- * platforms omit it, and a missed change is worse than a redundant read.
- */
 export function watchWorkflowDir(
   dir: string,
   onChange: () => void,
@@ -208,13 +162,6 @@ export function watchWorkflowDir(
   let timer: ReturnType<typeof setTimeout> | null = null
   let disposed = false
   let watcher: ReturnType<typeof watch> | null = null
-  // Safety-net poll for the parent-arm phase. macOS FSEvents does not start
-  // delivering the instant `watch(ancestor)` returns, so a dir created in the
-  // race window between arming and first delivery is silently dropped and the
-  // watcher never promotes to the target — it then never fires at all. A small
-  // existence poll closes that gap (same "poll beats macOS fs.watch" rationale
-  // as the PTY transcript tail, adr-20260607-pty-transcript-pure-poll). It runs
-  // ONLY until the dir appears, then stops.
   let parentPoll: ReturnType<typeof setInterval> | null = null
   let promoted = false
 
@@ -225,7 +172,7 @@ export function watchWorkflowDir(
     timer = deps.setTimeout(() => { timer = null; if (!disposed) onChange() }, debounceMs)
   }
 
-  const closeWatcher = () => { try { watcher?.close() } catch { /* already closed */ } watcher = null }
+  const closeWatcher = () => { try { watcher?.close() } catch { } watcher = null }
   const stopParentPoll = () => { if (parentPoll) { deps.clearInterval(parentPoll); parentPoll = null } }
 
   const armTarget = () => {
@@ -237,31 +184,24 @@ export function watchWorkflowDir(
     if (disposed) return
     const ancestor = nearestExistingAncestor(dir)
     if (!ancestor) return
-    // Promote from watching the ancestor to watching the target dir, exactly
-    // once, whichever signal (FSEvents or the safety poll) observes it first.
     const promote = () => {
       if (disposed || promoted || !existsSync(dir)) return
       promoted = true
       stopParentPoll()
       closeWatcher()
       armTarget()
-      fire() // the dir just appeared — trigger an initial read
+      fire()
     }
     try {
       watcher = deps.watch(ancestor, { persistent: false }, promote)
     } catch { watcher = null }
     const pollMs = Math.max(20, Math.min(debounceMs, 100))
     parentPoll = deps.setInterval(promote, pollMs)
-    // Do not let the safety poll keep the event loop alive (persistent:false).
     parentPoll.unref?.()
   }
 
   if (existsSync(dir)) {
     armTarget()
-    // Safety-net: fire once after arming so writes that land before the first
-    // fs.watch event are not silently dropped. Mirrors the promote() call in
-    // armParent — same "poll beats arming window" rationale as
-    // adr-20260607-pty-transcript-pure-poll.
     deps.setTimeout(() => fire(), 0)
   } else {
     armParent()

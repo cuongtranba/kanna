@@ -33,12 +33,6 @@ export function createAskUserQuestionTool(deps: { toolCallback: ToolCallbackServ
         ctx,
         args: input,
         formatAnswer: (payload) => {
-          // Fail fast — silently coercing an undefined payload to `{}` would
-          // hide the real bug (an interactive tool being auto-allowed with
-          // no user answer). The policy gate is supposed to force "ask" for
-          // this tool (issue #215 follow-up); if we ever see an allow/answer
-          // with no payload here, surface it loudly so it gets reported and
-          // fixed instead of producing a silent empty UI answer downstream.
           if (payload === undefined || payload === null || typeof payload !== "object") {
             throw new Error(
               "mcp__kanna__ask_user_question: empty answer payload "

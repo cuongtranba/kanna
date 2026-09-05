@@ -1,18 +1,5 @@
 import type { ContextWindowUsageSnapshot, TranscriptEntry } from "../shared/types"
 
-// Mirrors anthropics/claude-code's `src/services/compact/autoCompact.ts`
-// constants so Kanna's proactive compact trigger matches the CLI's built-in
-// auto-compact strategy. The CLI runs auto-compact inside its REPL main loop,
-// but the SDK `query()` driver Kanna uses spawns a fresh subprocess per turn
-// and never enters that loop — so the CLI's compact never fires by itself.
-// Kanna therefore reads the latest `context_window_updated` usage snapshot
-// and injects a synthetic `/compact` prompt before the user's real turn
-// when usage crosses the same threshold the CLI would have tripped.
-//
-// PIN: these three values are hand-mirrored from upstream and have no
-// runtime link to it. proactive-compact.test.ts ("upstream constant pins")
-// locks each value so any edit fails CI, forcing a conscious re-check
-// against the upstream file above before the trigger point can move.
 export const MAX_OUTPUT_TOKENS_FOR_SUMMARY = 20_000
 export const AUTOCOMPACT_BUFFER_TOKENS = 13_000
 export const MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES = 3
@@ -25,10 +12,6 @@ export function getEffectiveContextWindow(
   return Math.max(0, maxContextWindow - reserved)
 }
 
-// Mirrors upstream claude-code's CLAUDE_AUTOCOMPACT_PCT_OVERRIDE env knob.
-// Returns a percentage in (0, 100], or undefined when unset/invalid. The
-// override can only LOWER the trigger (fire earlier); upstream caps it at the
-// default threshold via Math.min in kP_().
 export function getAutoCompactPctOverride(env: NodeJS.ProcessEnv = process.env): number | undefined {
   const raw = env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE
   if (!raw) return undefined
@@ -61,16 +44,6 @@ export function shouldProactivelyCompact(
   return used >= getAutoCompactThreshold(max, maxOutputTokens)
 }
 
-/**
- * Outcome of scanning a transcript WINDOW for the newest usage marker.
- *
- * `found: false` is not the same answer as `found: true, usage: null`, and
- * conflating them is what makes a windowed reader unsound: the first says
- * "nothing decisive in the bytes I looked at, a wider window may differ", the
- * second says "a compact_boundary is the newest marker, no wider window can
- * change that". A caller reading the transcript tail needs the difference to
- * know when it may stop widening.
- */
 export type LatestContextWindowUsageScan =
   | { found: true; usage: ContextWindowUsageSnapshot | null }
   | { found: false }
@@ -81,10 +54,6 @@ export function scanLatestContextWindowUsage(
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const entry = messages[i]
     if (entry.kind === "context_window_updated") return { found: true, usage: entry.usage }
-    // Treat a recent compact_boundary as "context already compacted" — its
-    // own usage snapshot will follow on the next turn's result. Stopping
-    // here keeps us from triggering another compact off the pre-compaction
-    // usage entries that linger before the boundary.
     if (entry.kind === "compact_boundary") return { found: true, usage: null }
   }
   return { found: false }

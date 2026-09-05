@@ -24,10 +24,6 @@ function OfferDownloadMessageInner({ message }: Props) {
     const controller = new AbortController()
     probeFileUrl(contentUrl, { signal: controller.signal }).then((probe) => {
       if (controller.signal.aborted) return
-      // Only 404 means the file is gone; 401/5xx (mapped to "error") are
-      // auth or proxy failures and must not disable the card, so they are
-      // intentionally left unhandled (probeState stays at its current
-      // value, matching the original code's swallowed-fetch-error behavior).
       if (probe.kind === "ready") setProbeState("ready")
       else if (probe.kind === "missing") setProbeState("missing")
     })

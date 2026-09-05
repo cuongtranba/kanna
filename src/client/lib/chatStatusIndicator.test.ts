@@ -22,19 +22,11 @@ describe("chatStatusIndicator", () => {
     expect(chatStatusIndicator({ status: "idle", unread: true })?.tone).toBe("success")
   })
 
-  /**
-   * A running chat is running whether or not its output has been read — showing
-   * the unread tone there would hide the fact that a turn is in flight.
-   */
   test("live state outranks unread", () => {
     expect(chatStatusIndicator({ status: "running", unread: true })?.tone).toBe("warning")
     expect(chatStatusIndicator({ status: "failed", unread: true })?.tone).toBe("destructive")
   })
 
-  /**
-   * The label is what keeps the dot legible without colour (DESIGN.md's
-   * Color-Plus Rule) — the tab reads it out to screen readers and tooltips.
-   */
   test("every indicator names its status", () => {
     expect(chatStatusIndicator({ status: "running", unread: false })?.label).toBe("Running")
     expect(chatStatusIndicator({ status: "waiting_for_user", unread: false })?.label).toBe("Waiting")
@@ -44,8 +36,6 @@ describe("chatStatusIndicator", () => {
 })
 
 describe("dot classes", () => {
-  // A FILL uses the raw token: those values are chosen to be legible as
-  // backgrounds, which is exactly what a dot is.
   test("a fill resolves to the raw theme token", () => {
     expect(chatDotBgClass("warning")).toBe("bg-warning")
     expect(chatDotBgClass("info")).toBe("bg-info")
@@ -53,10 +43,6 @@ describe("dot classes", () => {
     expect(chatDotBgClass("destructive")).toBe("bg-destructive")
   })
 
-  // INK is the opposite problem. The raw tokens fail WCAG AA as text, so the
-  // `-text` variants exist and are contrast-checked in tone-pairings.test.ts.
-  // This test's predecessor was named "never a raw colour" while asserting a
-  // raw colour; the claim is now the assertion.
   test("ink resolves to the AA-checked variant, never the raw token", () => {
     for (const tone of ["warning", "info", "success", "destructive"] as const) {
       expect(chatDotTextClass(tone)).toBe(`text-${tone}-text`)
@@ -64,8 +50,6 @@ describe("dot classes", () => {
     }
   })
 
-  // No tone means no dot, so the background class must contribute nothing —
-  // while the text variant still needs a colour for the stamp beside it.
   test("no tone paints no dot but still tints its text muted", () => {
     expect(chatDotBgClass(null)).toBe("")
     expect(chatDotTextClass(null)).toBe("text-muted-foreground")
@@ -74,10 +58,6 @@ describe("dot classes", () => {
 
 describe("sessionStateBadge", () => {
   test("gives each live lifecycle state a distinct drawn mark", () => {
-    // These were the literal characters ●◐○◌ set as text — a typeface's idea of
-    // a filled circle, at four different optical weights, next to real icons
-    // drawn at one. They are SVG now; the state must still be readable from
-    // shape alone, so the four kinds stay distinct.
     const kinds = (["active", "warming", "idle", "cooling"] as const).map(
       (state) => sessionStateBadge(state)?.kind,
     )
@@ -90,8 +70,6 @@ describe("sessionStateBadge", () => {
     expect(sessionStateBadge("warming")?.toneClass).toBe("text-warning-text")
   })
 
-  // A cold session is the resting state of every chat; drawing it would put a
-  // badge on every row and make the badge mean nothing.
   test("a cold or unknown session draws nothing", () => {
     expect(sessionStateBadge("cold")).toBeNull()
     expect(sessionStateBadge(undefined)).toBeNull()

@@ -34,7 +34,6 @@ function issue(overrides: Partial<RemoteItem> = {}): RemoteItem {
   }
 }
 
-/** A provider that serves a scripted page and records what was pushed. */
 function fakeProvider() {
   let page: RemoteItem[] = []
   let outcome: PushOutcome = { ok: true, externalId: "412", url: "u", remoteUpdatedAt: T0 + 10 * MINUTE }
@@ -194,7 +193,6 @@ describe("pull", () => {
   })
 
   test("an agent's edit is HELD when the binding forbids agent pushes", async () => {
-    // An agent moving a card must not silently close a real issue.
     fake.serve([issue()])
     await sync.pull(boardId)
     const card = cardsIn("Open")[0]!
@@ -204,7 +202,6 @@ describe("pull", () => {
     await sync.pull(boardId)
 
     const binding = store.listBindings(boardId)[0]!
-    // Held entries stay in the table — visible — but the drain never sees them.
     expect(store.dueOutbox(binding.id, clock, 10)).toHaveLength(0)
     expect((await sync.drain(boardId)).pushed).toBe(0)
   })
@@ -236,7 +233,6 @@ describe("pull", () => {
     const summary = await sync.pull(boardId)
 
     expect(summary.conflicts).toBe(1)
-    // Local edit was newer, so it stands — and is queued rather than lost.
     expect(cardsIn("Open")[0]?.title).toBe("Ours")
     expect(store.listConflicts(boardId, 10)[0]).toMatchObject({ field: "title", resolvedAs: "local" })
   })
@@ -244,9 +240,6 @@ describe("pull", () => {
   test("the cursor is stored so the next pull resumes", async () => {
     fake.serve([issue({ updatedAt: T0 + 5 * MINUTE })])
     const summary = await sync.pull(boardId)
-    // The cursor is reported PER BINDING: with N bindings there is no single
-    // cursor a summary could carry, and one that named the last binding's
-    // would be a number that belongs to nothing.
     expect(summary.bindings).toHaveLength(1)
     expect(store.listBindings(boardId)[0]?.cursor).toBe(summary.bindings[0]?.cursor ?? null)
     expect(store.listBindings(boardId)[0]?.lastPulledAt).toBe(clock)
@@ -276,7 +269,6 @@ describe("drain", () => {
   })
 
   test("after a push the next pull does NOT echo our own change back", async () => {
-    // The whole point of stamping the remote timestamp our write produced.
     fake.serve([issue()])
     await sync.pull(boardId)
     const card = cardsIn("Open")[0]!
@@ -286,7 +278,6 @@ describe("drain", () => {
     await sync.drain(boardId)
 
     clock = T0 + 20 * MINUTE
-    // The remote still serves its OLD title, at a timestamp below the watermark.
     fake.serve([issue({ title: "Theirs", updatedAt: T0 + 9 * MINUTE })])
     const summary = await sync.pull(boardId)
 
@@ -306,7 +297,6 @@ describe("drain", () => {
     expect(await sync.drain(boardId)).toEqual({ pushed: 0, failed: 1, held: 0 })
 
     const binding = store.listBindings(boardId)[0]!
-    // Not due yet, but still queued.
     expect(store.dueOutbox(binding.id, clock, 10)).toHaveLength(0)
     expect(store.dueOutbox(binding.id, clock + 60 * MINUTE, 10)).toHaveLength(1)
   })
@@ -473,12 +463,6 @@ describe("multiple bindings", () => {
     expect(b2.cursor).not.toBeNull()
   })
 
-  /**
-   * Isolating a failing binding must not mean HIDING it. Swallowing the throw
-   * makes a board whose token expired, whose repo was renamed, or whose adapter
-   * is missing report a clean zero — indistinguishable from "nothing to sync",
-   * which is the one answer that stops anyone looking.
-   */
   test("a binding that fails is reported on the summary, not silently swallowed", async () => {
     smart.serveFor("o2", "r2", [issue({ externalId: "201", title: "Repo-2 item" })])
     smart.blockOwner("o1")
@@ -496,9 +480,6 @@ describe("multiple bindings", () => {
   })
 
   test("a binding with no adapter is reported rather than dropped from the run", async () => {
-    // A board bound through a provider this server does not carry is a
-    // misconfiguration the user has to be told about; dropping the entry makes
-    // it look like the binding does not exist.
     multiStore.upsertBinding({
       boardId: multiBoardId,
       providerId: "github-projectv2",
@@ -516,13 +497,6 @@ describe("multiple bindings", () => {
     expect(summary.bindings.find((r) => r.bindingId === orphan.id)?.error).toContain("github-projectv2")
   })
 
-  /**
-   * The reason `projectId` is on a binding at all. A Stack board's cards come
-   * from several checkouts and the board names none of them, so the binding
-   * that pulled an issue is the ONLY thing that knows where its code lives —
-   * and `resolveStartWorkProjectId` reads the card, not the binding. Break the
-   * hand-off and Start work mints a worktree in the wrong repo, or refuses.
-   */
   test("a pulled card carries its binding's project, so Start work finds the right checkout", async () => {
     const stackStore = createBoardStore({
       filePath: ":memory:",
@@ -534,8 +508,6 @@ describe("multiple bindings", () => {
     })
     const stackRegistry = createBoardRegistry({ store: stackStore })
     const stackFake = smartFake()
-    // Stack-owned: `resolveStartWorkProjectId` has no board-level fallback
-    // here, so a card with a null project cannot be worked at all.
     const board = stackRegistry.createBoard({
       owner: { kind: "stack", id: "s1" },
       title: "Stack",
@@ -576,12 +548,6 @@ describe("multiple bindings", () => {
     expect(byTitle.get("Web item")).toBe("proj-web")
   })
 
-  /**
-   * A binding created before `projectId` existed reads back null, and a Stack
-   * board cannot fall back to an owner project — so Start work must REFUSE
-   * rather than guess a checkout. Pinned because the tempting "fall back to the
-   * first binding" fix would silently work in the wrong repo.
-   */
   test("a binding with no project leaves the card unattributed rather than guessing one", async () => {
     const board = multiRegistry.createBoard({
       owner: { kind: "stack", id: "s2" },
@@ -615,15 +581,12 @@ describe("multiple bindings", () => {
     const link = multiStore.getSyncLinkByExternal(b2.id, "201")!
 
     clock = T0 + 2 * MINUTE
-    // An agent edit against a binding that forbids agent pushes: held, never drained.
     multiRegistry.updateCard(link.cardId, { title: "Agent wrote this" }, { kind: "agent", chatId: "c1" })
     await multiSync.pull(multiBoardId)
 
     const summary = await multiSync.drain(multiBoardId)
 
     expect(summary.pushed).toBe(0)
-    // `held` used to be declared and never incremented — dueOutbox filters held
-    // rows out, so the drain could not see what it was not doing.
     expect(summary.held).toBe(1)
   })
 })

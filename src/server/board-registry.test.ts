@@ -54,8 +54,6 @@ function seed() {
 
 describe("change broadcasting", () => {
   test("every mutating method emits exactly one change carrying board and owner", () => {
-    // Structural gate: a write that does not broadcast leaves the UI stale and
-    // is invisible in review. Each entry here is one mutating method.
     const { board, columns, card } = seed()
     const owner: BoardOwnerRef = { kind: "project", id: "project-1" }
 
@@ -108,8 +106,6 @@ describe("change broadcasting", () => {
   })
 
   test("deleting a column still resolves its board, even though the row is gone after", () => {
-    // The board id must be read BEFORE the write, or the broadcast has nowhere
-    // to go.
     const { board, columns } = seed()
     registry.deleteColumn(columns[2]!.id)
     expect(changes).toEqual([{ boardId: board.id, owner: { kind: "project", id: "project-1" } }])
@@ -209,8 +205,6 @@ describe("read models", () => {
     expect(rest.cards).toHaveLength(12)
     expect(rest.nextCursor).toBeNull()
 
-    // A raised page size is how the client pages: one bigger read, complete
-    // prefix, nothing to merge on the way back.
     const grown = registry.boardView(board.id, DEFAULT_BOARD_PAGE_SIZE * 2)
     expect(grown?.cards[column.id]).toHaveLength(DEFAULT_BOARD_PAGE_SIZE + 12)
     expect(grown?.cursors[column.id]).toBeNull()
@@ -331,16 +325,6 @@ describe("read models", () => {
   })
 })
 
-/**
- * One repo binds to exactly ONE board.
- *
- * `sync_link_external_idx` is unique per `(binding_id, external_id)` — per
- * BINDING, not per issue — so two bindings on the same repo each hold every
- * issue as a SEPARATE card, with two sync links and two outbox entries, and the
- * two boards then race each other last-writer-wins onto the real tracker. The
- * rule is cross-board, so no index can express it; the registry is where it
- * lives.
- */
 describe("one repo, one board", () => {
   const REPO = { provider: "github-issues", owner: "acme", repo: "widgets" } as const
 
@@ -375,7 +359,6 @@ describe("one repo, one board", () => {
     bind(project.id)
 
     expect(() => bind(stack.id)).toThrow(BoardStoreError)
-    // Refused means nothing moved: the original binding is untouched.
     expect(registry.listBindings(project.id)).toHaveLength(1)
     expect(registry.listBindings(stack.id)).toHaveLength(0)
   })
@@ -418,9 +401,7 @@ describe("one repo, one board", () => {
     expect(moved.boardId).toBe(stack.id)
     expect(registry.listBindings(project.id)).toHaveLength(0)
     expect(registry.listBindings(stack.id).map((b) => b.sourceRef)).toEqual([REPO])
-    // The link went with the binding it belonged to...
     expect(store.getSyncLinkByExternal(original.id, "412")).toBeNull()
-    // ...but unbinding is not deleting the work: the card stays where it is.
     expect(store.getCard(card.id)?.title).toBe("Issue 412")
   })
 
@@ -452,7 +433,6 @@ describe("one repo, one board", () => {
       boardTitle: "Widgets",
       cardCount: 2,
     })
-    // The board already holding it is not a conflict with itself.
     expect(registry.repoBindingOwner("github-issues", REPO, project.id)).toBeNull()
   })
 
@@ -518,8 +498,6 @@ describe("blocked_by edges are validated as a DAG at write time", () => {
     }
     expect(message).toContain("Ship the API")
     expect(message).toContain("Regenerate the client")
-    // Refused means NOT written — a rejected edge that persisted would be worse
-    // than one that was never checked.
     expect(store.listCardLinks(api.id)).toEqual([])
   })
 
@@ -559,7 +537,6 @@ describe("blocked_by edges are validated as a DAG at write time", () => {
 
   test("other link kinds are untouched by the check", () => {
     const { client } = twoCards()
-    // A chat link may point anywhere; only blocked_by is a graph.
     expect(() => registry.addCardLink(client.id, "chat", client.id)).not.toThrow()
   })
 })

@@ -1,10 +1,3 @@
-/**
- * Cron command handler cluster — arm / list / remove / pause / resume plus
- * the single choke-point `emitCronEvent` (append event → scheduler.onEvent →
- * state broadcast → global topic push), mirroring `emitAutoContinueEvent`.
- *
- * Side-effect seal: no direct IO; everything effectful is injected.
- */
 
 import type { TranscriptEntry } from "../../shared/types"
 import { hasActiveRun, type CronArmSummary, type CronParseError, type CronParseResult } from "../../shared/cron/types"
@@ -26,45 +19,20 @@ export interface CronCommandStore {
 
 export interface CronCommandDeps {
   store: CronCommandStore
-  /** Timer registry; null in tests that only exercise event/entry output. */
   cronScheduler: { onEvent(event: AutoContinueEvent): void } | null
-  /**
-   * Skip-streak state, so a job that stops existing cannot leave one behind.
-   * Optional: dropping a streak is cleanup, and its absence can only lose a
-   * count — unlike on the fire path, where absence would restore a write per
-   * tick, so there it is required.
-   */
   skipCoalescer?: { forget(chatId: string, jobId: string): void }
   emitStateChange(chatId: string): void
-  /** Re-push the global cron-jobs topic. Optional: wired by the WS router. */
   pushCronJobsUpdate?: () => void
-  /**
-   * Hands a rejected line to the model when Kanna has no fix of its own.
-   * Optional so tests exercising event/entry output need not wire it.
-   */
   cronRepair?: CronRepair
-  /**
-   * Escalates a successful typed arm to a model review turn so the user can
-   * confirm, adjust, or disarm the job before it runs unchecked.
-   * Optional: absent on the arm_cron tool path (model already confirms
-   * in-turn) and in tests exercising event/entry output only.
-   */
   cronConfirm?: CronConfirm
   now?: () => number
   newJobId?: () => string
   resolveChatCwd?: (chatId: string) => string | undefined
 }
 
-/**
- * The one write path for cron events. Everything that arms, disarms, pauses,
- * or records a run goes through here so the scheduler, the per-chat snapshot,
- * and the global management page can never disagree.
- */
 export async function emitCronEvent(deps: CronCommandDeps, event: AutoContinueEvent): Promise<void> {
   await deps.store.appendAutoContinueEvent(event)
   deps.cronScheduler?.onEvent(event)
-  // A job that is gone, paused, or freshly re-armed owns no unreported skips:
-  // the streak dies with it rather than surfacing under the next arming.
   if (event.kind === "cron_armed" || event.kind === "cron_disarmed" || event.kind === "cron_paused") {
     deps.skipCoalescer?.forget(event.chatId, event.scheduleId)
   }
@@ -72,10 +40,6 @@ export async function emitCronEvent(deps: CronCommandDeps, event: AutoContinueEv
   deps.pushCronJobsUpdate?.()
 }
 
-/**
- * Dispatch a parsed `/cron` message. Never starts a turn; every outcome —
- * success or validation failure — lands as a visible transcript entry.
- */
 export async function runCronCommand(
   deps: CronCommandDeps,
   chatId: string,
@@ -251,12 +215,6 @@ export async function runCronCommand(
   return null
 }
 
-/**
- * The one way a `/cron` line is refused: the card the reader sees and the
- * offer to the model are a single step, so a new refusal cannot record one
- * without the other. The repair itself decides whether to spend a turn — a
- * failure Kanna already has a suggestion for is dropped there, not here.
- */
 async function refuseCronCommand(
   deps: CronCommandDeps,
   chatId: string,
@@ -271,11 +229,6 @@ async function refuseCronCommand(
   await deps.cronRepair?.offer(chatId, error)
 }
 
-/**
- * Disarm every cron job on a chat (chat deleted). Emits `cron_disarmed` per
- * job — which also clears its timer through the scheduler — but appends no
- * transcript entries: the chat is going away.
- */
 export async function disarmCronJobsForChat(deps: CronCommandDeps, chatId: string): Promise<void> {
   const now = deps.now?.() ?? Date.now()
   const jobs = deriveCronJobs(deps.store.getAutoContinueEvents(chatId), chatId, now)
@@ -291,10 +244,6 @@ export async function disarmCronJobsForChat(deps: CronCommandDeps, chatId: strin
   }
 }
 
-/**
- * `Omit` over the whole union collapses to the common keys and rejects
- * per-kind fields; distributing it per member keeps excess-property checks.
- */
 type NewTranscriptEntry = {
   [K in TranscriptEntry["kind"]]: Omit<Extract<TranscriptEntry, { kind: K }>, "_id" | "createdAt">
 }[TranscriptEntry["kind"]]
@@ -331,6 +280,5 @@ function pickJobId(deps: CronCommandDeps, chatId: string): string {
     const candidate = deps.newJobId?.() ?? `cron-${crypto.randomUUID().slice(0, 6)}`
     if (!taken.has(candidate)) return candidate
   }
-  // Injected generators that always collide fall through to a full UUID.
   return `cron-${crypto.randomUUID()}`
 }

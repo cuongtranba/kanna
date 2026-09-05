@@ -103,10 +103,6 @@ describe("createJsonlEventParser", () => {
     expect(events.find((e) => e.type === "session_token")).toBeUndefined()
   })
 
-  // Real on-disk transcript lines use camelCase `sessionId`; only SDK
-  // stream-json fixtures use snake_case `session_id`. The parser must accept
-  // both, otherwise PTY chats never persist a session token and the fork
-  // button stays disabled (canForkChat → false).
   test("D3: emits session_token for camelCase sessionId (real transcript shape)", () => {
     const parser = createJsonlEventParser()
     const realLine = JSON.stringify({
@@ -124,7 +120,6 @@ describe("createJsonlEventParser", () => {
       type: "rate_limit_event",
       rate_limit_info: {
         status: "rejected",
-        // Epoch seconds (detector coerces to ms).
         resetsAt: 1_748_800_000,
       },
     })
@@ -206,10 +201,6 @@ describe("createJsonlEventParser", () => {
 
   test("D1: on-disk transcript nests usage under message.usage → context_window_updated", () => {
     const parser = createJsonlEventParser()
-    // Claude's on-disk transcript nests the Anthropic message (id, content AND
-    // usage) under `.message`, unlike the SDK stream-json shape which keeps
-    // `usage` at the top level. The parser must read the nested location or it
-    // emits nothing for every real interactive session.
     const line = JSON.stringify({
       type: "assistant",
       message: {
@@ -293,12 +284,6 @@ describe("createJsonlEventParser", () => {
     expect(types[0]).toBe("session_token")
   })
 
-  // A Task subagent writes its own messages into the parent transcript with
-  // isSidechain:true. They must never reach the main turn stream: a sidechain
-  // `result` (or its TUI `turn_duration` synth) would shift the parent's
-  // pending prompt seq and finalize the user turn early (UI flips idle while
-  // the main turn is still streaming); a sidechain session_id would clobber
-  // the parent chat's claude session token.
   test("sidechain result → no transcript result entry and no session_token", () => {
     const parser = createJsonlEventParser()
     const line = JSON.stringify({
@@ -346,17 +331,6 @@ describe("createJsonlEventParser", () => {
     expect(resultEntries).toHaveLength(1)
   })
 
-  // Claude Code TUI's background task queue (`enqueuePendingNotification` +
-  // `useQueueProcessor`) can auto-spawn a follow-up turn after `end_turn` when
-  // a `run_in_background:true` bash exits. The wake injects a synthetic
-  // `<task-notification>` user message with `isMeta:true` and runs another
-  // model query. Kanna never sent a `chat_send` for this turn, so its
-  // `result`/`turn_duration` must NOT consume a queued `pendingPromptSeq`
-  // (which would steal a real user turn's seq) and must NOT alter Kanna's
-  // turn lifecycle. Drop both the synthetic user line and the wake's final
-  // result. Mid-turn `isMeta:true` injections (FileReadTool metadata, token
-  // budget continuation) are distinguished by arriving AFTER an assistant
-  // message in the same turn and must be left alone.
   describe("background auto-wake filtering", () => {
     function makeMetaUser(content: string): string {
       return JSON.stringify({
@@ -403,11 +377,9 @@ describe("createJsonlEventParser", () => {
 
     test("auto-wake: meta user at turn boundary → drop the synthetic user line", () => {
       const parser = createJsonlEventParser()
-      // First a real turn ends, putting parser in between-turns state.
       parser.parse(makeRealUser("hi"))
       parser.parse(makeAssistant("hello"))
       parser.parse(makeResult())
-      // Then a synthetic isMeta user arrives — the auto-wake.
       const events = parser.parse(makeMetaUser("<task-notification>bash done</task-notification>"))
       const userEntries = events.filter(
         (e) => e.type === "transcript" && (e.entry as { kind?: string }).kind === "user_prompt",
@@ -441,11 +413,9 @@ describe("createJsonlEventParser", () => {
       const parser = createJsonlEventParser()
       parser.parse(makeRealUser("read a file"))
       parser.parse(makeAssistant("calling FileRead"))
-      // Mid-turn isMeta injection — appears AFTER assistant.
       parser.parse(makeMetaUser("<file-metadata>...</file-metadata>"))
       parser.parse(makeAssistant("done"))
       const events = parser.parse(makeResult())
-      // The real turn-end result must still be emitted.
       expect(resultEntries(events).length).toBeGreaterThan(0)
     })
 
@@ -454,15 +424,12 @@ describe("createJsonlEventParser", () => {
       parser.parse(makeRealUser("hi"))
       parser.parse(makeAssistant("hello"))
       parser.parse(makeResult())
-      // First wake.
       parser.parse(makeMetaUser("<task-notification>A done</task-notification>"))
       parser.parse(makeAssistant("ack A"))
       expect(resultEntries(parser.parse(makeResult()))).toEqual([])
-      // Second wake immediately after.
       parser.parse(makeMetaUser("<task-notification>B done</task-notification>"))
       parser.parse(makeAssistant("ack B"))
       expect(resultEntries(parser.parse(makeResult()))).toEqual([])
-      // Next REAL user prompt → its result must emit.
       parser.parse(makeRealUser("status?"))
       parser.parse(makeAssistant("all good"))
       expect(resultEntries(parser.parse(makeResult())).length).toBeGreaterThan(0)
@@ -480,17 +447,6 @@ describe("createJsonlEventParser", () => {
     })
   })
 
-  // Claude CLI ≥ 2.1.x stopped writing `type:"system"` rows (turn_duration,
-  // init, compact_boundary) into the on-disk transcript JSONL. The only
-  // turn-end signal left is the final assistant message's
-  // `message.stop_reason` ("end_turn" / "stop_sequence" / "max_tokens" /
-  // "refusal" — NOT "tool_use", which means the turn continues). Each content
-  // block of that final message is persisted as its own row, all carrying the
-  // same id and stop_reason, followed by session-state checkpoint rows
-  // (`last-prompt` / `ai-title` / `mode` / `permission-mode`). The parser must
-  // synthesize exactly one `result` per turn, AFTER the final assistant row's
-  // transcript entries, and must not double-emit when an old CLI still writes
-  // `turn_duration` (or an SDK fixture writes `result`) right after.
   describe("stop_reason turn-end synthesis (claude ≥2.1.x, no system rows)", () => {
     function makeRealUser(text: string): string {
       return JSON.stringify({
@@ -565,7 +521,6 @@ describe("createJsonlEventParser", () => {
         block: { type: "tool_use", id: "tu_1", name: "Glob", input: { pattern: "*" } },
       })))).toEqual([])
       expect(resultEntries(parser.parse(makeToolResultUser("tu_1")))).toEqual([])
-      // Final message: thinking row + text row, both stop_reason end_turn.
       expect(resultEntries(parser.parse(makeAssistantRow({
         id: "msg_end",
         stopReason: "end_turn",
@@ -576,7 +531,6 @@ describe("createJsonlEventParser", () => {
         stopReason: "end_turn",
         block: { type: "text", text: "all done" },
       })))).toEqual([])
-      // Checkpoint row arrives → the pending turn-end flushes here.
       const flushed = parser.parse(makeLastPrompt())
       expect(resultEntries(flushed)).toHaveLength(1)
       const entry = resultEntries(flushed)[0]?.entry as { subtype?: string; isError?: boolean }
@@ -607,7 +561,6 @@ describe("createJsonlEventParser", () => {
       const results = resultEntries(events)
       expect(results).toHaveLength(1)
       expect((results[0]?.entry as { durationMs?: number }).durationMs).toBe(1234)
-      // Nothing pending afterwards — checkpoint row emits no second result.
       expect(resultEntries(parser.parse(makeLastPrompt()))).toEqual([])
     })
 
@@ -640,10 +593,7 @@ describe("createJsonlEventParser", () => {
         block: { type: "text", text: "first" },
       }))
       expect(resultEntries(parser.parse(makeLastPrompt()))).toHaveLength(1)
-      // An old CLI writing turn_duration after the checkpoint must not
-      // double-finalize the turn.
       expect(resultEntries(parser.parse(makeTurnDuration()))).toEqual([])
-      // Next real turn still produces its own result.
       parser.parse(makeRealUser("again"))
       parser.parse(makeAssistantRow({
         id: "msg_b",
@@ -655,7 +605,6 @@ describe("createJsonlEventParser", () => {
 
     test("auto-wake under new format: wake turn's synthesized result is dropped", () => {
       const parser = createJsonlEventParser()
-      // Real turn 1 ends via stop_reason flush → parser is between turns.
       parser.parse(makeRealUser("hi"))
       parser.parse(makeAssistantRow({
         id: "msg_1",
@@ -663,7 +612,6 @@ describe("createJsonlEventParser", () => {
         block: { type: "text", text: "hello" },
       }))
       expect(resultEntries(parser.parse(makeLastPrompt()))).toHaveLength(1)
-      // Background auto-wake at the boundary.
       const wakeEvents = parser.parse(makeMetaUser("<task-notification>bash done</task-notification>"))
       expect(wakeEvents.filter(
         (e) => e.type === "transcript" && (e.entry as { kind?: string }).kind === "user_prompt",
@@ -673,9 +621,7 @@ describe("createJsonlEventParser", () => {
         stopReason: "end_turn",
         block: { type: "text", text: "ack" },
       }))
-      // The wake turn's flush must be swallowed.
       expect(resultEntries(parser.parse(makeLastPrompt()))).toEqual([])
-      // Next REAL turn emits again.
       parser.parse(makeRealUser("status?"))
       parser.parse(makeAssistantRow({
         id: "msg_2",
@@ -704,8 +650,6 @@ describe("createJsonlEventParser", () => {
     test("synthesized result carries usage from the final assistant message (CLI ≥2.1.x path)", () => {
       const parser = createJsonlEventParser()
       parser.parse(makeRealUser("list files"))
-      // Final assistant row with terminal stop_reason and usage nested under message.usage
-      // (the real on-disk transcript shape).
       const assistantWithUsage = JSON.stringify({
         type: "assistant",
         sessionId: "sess-sr",
@@ -723,7 +667,6 @@ describe("createJsonlEventParser", () => {
         },
       })
       parser.parse(assistantWithUsage)
-      // Checkpoint row triggers the pending flush.
       const flushed = parser.parse(makeLastPrompt())
       const results = resultEntries(flushed)
       expect(results).toHaveLength(1)
@@ -733,8 +676,6 @@ describe("createJsonlEventParser", () => {
         usage?: { inputTokens?: number; outputTokens?: number; cachedInputTokens?: number }
       }
       expect(entry.subtype).toBe("success")
-      // normalizeClaudeUsageSnapshot sums direct + cache_creation + cache_read into inputTokens
-      // (1234 + 100 + 50 = 1384). cachedInputTokens = cache_read only (50).
       expect(entry.usage?.inputTokens).toBe(1384)
       expect(entry.usage?.outputTokens).toBe(42)
       expect(entry.usage?.cachedInputTokens).toBe(50)
@@ -742,7 +683,6 @@ describe("createJsonlEventParser", () => {
 
     test("synthesized result resets usage tracking; next turn starts clean", () => {
       const parser = createJsonlEventParser()
-      // Turn 1: assistant with usage → synthesized result.
       parser.parse(makeRealUser("turn 1"))
       const assistantRow = JSON.stringify({
         type: "assistant",
@@ -766,7 +706,6 @@ describe("createJsonlEventParser", () => {
       const t1Entry = turn1Results[0]?.entry as { usage?: { inputTokens?: number } }
       expect(t1Entry.usage?.inputTokens).toBe(99)
 
-      // Turn 2: assistant with no usage — synthesized result should have no usage field.
       parser.parse(makeRealUser("turn 2"))
       const assistantNoUsage = JSON.stringify({
         type: "assistant",
@@ -776,7 +715,6 @@ describe("createJsonlEventParser", () => {
           role: "assistant",
           stop_reason: "end_turn",
           content: [{ type: "text", text: "also done" }],
-          // No usage field at all.
         },
       })
       parser.parse(assistantNoUsage)
@@ -804,14 +742,6 @@ describe("createJsonlEventParser", () => {
     })
   })
 
-  // Keep-alive multi-turn subagents deliver EVERY turn (including turn 1) via a
-  // kanna channel push, which lands in the transcript as a `user isMeta:true`
-  // line whose content carries the `<channel source="kanna">` tag. Those lines
-  // arrive at a turn boundary (turnState === "between") and would be
-  // misclassified as background auto-wakes by the filter above, dropping the
-  // synthesized turn-end result and hanging `drainOneTurn` forever. A kanna
-  // channel push IS a real turn the main agent issued, so it must be exempted —
-  // genuine `<task-notification>` auto-wakes (no kanna tag) stay filtered.
   describe("keep-alive channel-push exemption", () => {
     function makeChannelUser(content: string): string {
       return JSON.stringify({
@@ -857,7 +787,6 @@ describe("createJsonlEventParser", () => {
 
     test("turn 1: channel push at boundary is NOT an auto-wake — its result emits", () => {
       const parser = createJsonlEventParser()
-      // Keep-alive turn 1 opens at the between-turns boundary via channel push.
       parser.parse(makeChannelUser('<channel source="kanna">do the task</channel>'))
       parser.parse(makeAssistant("DONE"))
       const events = parser.parse(makeTurnDuration())
@@ -869,7 +798,6 @@ describe("createJsonlEventParser", () => {
       parser.parse(makeChannelUser('<channel source="kanna">turn one</channel>'))
       parser.parse(makeAssistant("DONE A"))
       expect(resultEntries(parser.parse(makeTurnDuration())).length).toBeGreaterThan(0)
-      // Follow-up turn — another channel push at the new boundary.
       parser.parse(makeChannelUser('<channel source="kanna">turn two</channel>'))
       parser.parse(makeAssistant("DONE B"))
       expect(resultEntries(parser.parse(makeTurnDuration())).length).toBeGreaterThan(0)
@@ -884,11 +812,9 @@ describe("createJsonlEventParser", () => {
 
     test("regression: a genuine task-notification wake after a channel turn is still dropped", () => {
       const parser = createJsonlEventParser()
-      // Real channel-push turn.
       parser.parse(makeChannelUser('<channel source="kanna">turn one</channel>'))
       parser.parse(makeAssistant("DONE"))
       expect(resultEntries(parser.parse(makeTurnDuration())).length).toBeGreaterThan(0)
-      // Claude Code's own background auto-wake (no kanna tag) must stay filtered.
       parser.parse(makeMetaUser("<task-notification>bash done</task-notification>"))
       parser.parse(makeAssistant("ack"))
       expect(resultEntries(parser.parse(makeTurnDuration()))).toEqual([])

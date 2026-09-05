@@ -2,24 +2,14 @@ import type { KeybindingAction, KeybindingsSnapshot } from "../../../shared/app-
 import { findMatchingActionBinding } from "../../lib/keybindings"
 import type { PaneDirection, SplitPosition } from "../../lib/paneTree"
 
-/**
- * The one place a keyboard event becomes a pane intent.
- *
- * Pure on purpose: the ChatPage listener stays a thin adapter that asks this
- * module what the user meant and hands the answer to a store action, so the
- * whole keyboard surface is unit-testable without a DOM.
- */
 
 export type PaneCommand =
   | { kind: "focus"; direction: PaneDirection }
-  /** Nudge the divider beside the focused pane the way the arrow points. */
   | { kind: "resize"; direction: PaneDirection }
   | { kind: "split"; position: SplitPosition }
   | { kind: "closeTab" }
-  /** +1 is the next tab in the focused pane, -1 the previous; both wrap. */
   | { kind: "cycleTab"; delta: 1 | -1 }
 
-/** Ordered so the first match wins; bindings are expected to be disjoint. */
 const PANE_COMMANDS: ReadonlyArray<readonly [KeybindingAction, PaneCommand]> = [
   ["focusPaneLeft", { kind: "focus", direction: "left" }],
   ["focusPaneRight", { kind: "focus", direction: "right" }],
@@ -45,12 +35,6 @@ function bindingHasModifier(binding: string): boolean {
     .some((token) => MODIFIER_TOKENS.has(token))
 }
 
-/**
- * Anything whose keystrokes belong to the user, not to us.
- *
- * Takes the narrowed shape rather than an `EventTarget` so it stays testable
- * without a DOM; the caller does the `instanceof HTMLElement` narrowing.
- */
 export function isTypingTarget(
   target: { tagName?: string; isContentEditable?: boolean } | null,
 ): boolean {
@@ -61,15 +45,6 @@ export function isTypingTarget(
   return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT"
 }
 
-/**
- * Which pane command this event means, if any.
- *
- * `typing` only suppresses MODIFIER-LESS bindings. Every default is a modifier
- * combo, and a terminal or the composer holds focus most of the time — blanket
- * suppression would make pane navigation unreachable from precisely where it is
- * needed. But a user may rebind to a bare letter, and that must never eat their
- * keystrokes.
- */
 export function resolvePaneCommand(
   keybindings: KeybindingsSnapshot | null,
   event: KeyboardEvent,

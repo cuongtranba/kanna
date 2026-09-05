@@ -1,7 +1,6 @@
 import { create } from "zustand"
 import type { McpServerConfig, McpServerTransport } from "../../shared/types"
 
-// Stable empty ref to avoid fresh Set on every setState
 const EMPTY_TESTING_IDS: ReadonlySet<string> = new Set()
 
 export type EditingState =
@@ -63,16 +62,12 @@ function createEditorFormFromInitial(initial: McpServerConfig | null): EditorFor
 }
 
 interface McpServersSectionState {
-  // McpServersSettingsBranch
   editing: EditingState
 
-  // McpRow per-server test-in-progress tracking (replaces per-row useState(false))
   testingServerIds: ReadonlySet<string>
 
-  // McpServerEditor form state (ONE editor active at a time)
   editorForm: EditorFormState
 
-  // Actions
   setEditing: (editing: EditingState) => void
   setServerTesting: (id: string, testing: boolean) => void
   resetEditorForm: (initial: McpServerConfig | null) => void

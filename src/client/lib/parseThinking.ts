@@ -4,11 +4,6 @@ export type ThinkingSegment =
 
 const THINKING_TAG_REGEX = /<thinking>([\s\S]*?)<\/thinking>/gi
 
-// Split assistant text into thinking and non-thinking segments. Prompted
-// `<thinking>...</thinking>` blocks are emitted by some models alongside
-// their visible answer; the UI renders them collapsed instead of inline.
-// Unterminated `<thinking>` (still streaming) is treated as one open block
-// so the user sees the partial monologue, not the raw tag.
 export function parseThinkingSegments(text: string): ThinkingSegment[] {
   const segments: ThinkingSegment[] = []
   let cursor = 0

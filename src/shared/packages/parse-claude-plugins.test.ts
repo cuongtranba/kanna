@@ -94,7 +94,6 @@ describe("parseClaudePluginList", () => {
 })
 
 describe("parseClaudePluginsFile", () => {
-  // ─── v1 array format ─────────────────────────────────────────────────────
 
   test("v1: parses installed_plugins.json array (all entries treated as user-scoped)", () => {
     const entries = [
@@ -128,7 +127,6 @@ describe("parseClaudePluginsFile", () => {
     expect(packages[0]!.version).toBe("1.0.0")
   })
 
-  // ─── v2 dict format ───────────────────────────────────────────────────────
 
   const V2_FIXTURE = {
     "my-plugin@acme-marketplace": [

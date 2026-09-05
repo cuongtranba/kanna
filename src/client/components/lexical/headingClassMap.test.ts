@@ -1,11 +1,3 @@
-/**
- * The Lexical heading className map is triplicated across three files
- * (lexical/config.ts, markdown/renderMessage.tsx, markdown/lexicalToReact.tsx)
- * for reasons documented at renderMessage.tsx's file header (each walker is
- * maintained independently). This test pins all three copies equal to each
- * other so they can never silently drift apart again: editing one copy in
- * isolation must fail this test.
- */
 import { describe, expect, test } from "bun:test"
 import { HEADING_CLASS_MAP as configHeadingClassMap } from "./config"
 import { HEADING_CLASS_MAP as renderMessageHeadingClassMap } from "./markdown/renderMessage"

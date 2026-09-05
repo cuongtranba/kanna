@@ -5,9 +5,6 @@ import type { DomPort } from "../../../ports/domPort"
 import { domAdapter } from "../../../adapters/dom.adapter"
 import { cn } from "../../../lib/utils"
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
 
 export type MentionKind = "agent" | "path"
 
@@ -20,9 +17,6 @@ export type SerializedMentionNode = Spread<
   SerializedLexicalNode
 >
 
-// ---------------------------------------------------------------------------
-// Node
-// ---------------------------------------------------------------------------
 
 export class MentionNode extends DecoratorNode<ReactNode> {
   readonly __mentionKind: MentionKind
@@ -44,7 +38,6 @@ export class MentionNode extends DecoratorNode<ReactNode> {
     this.__dom = dom
   }
 
-  // ── Static interface ──────────────────────────────────────────────────────
 
   static getType(): string {
     return "kanna-mention"
@@ -68,7 +61,6 @@ export class MentionNode extends DecoratorNode<ReactNode> {
     })
   }
 
-  // ── Serialization ─────────────────────────────────────────────────────────
 
   exportJSON(): SerializedMentionNode {
     return {
@@ -80,7 +72,6 @@ export class MentionNode extends DecoratorNode<ReactNode> {
     }
   }
 
-  // ── DOM ───────────────────────────────────────────────────────────────────
 
   createDOM(_config: EditorConfig, _editor: LexicalEditor): HTMLElement {
     const span = this.__dom.createElement("span")
@@ -92,7 +83,6 @@ export class MentionNode extends DecoratorNode<ReactNode> {
     return false
   }
 
-  // ── Behaviour ─────────────────────────────────────────────────────────────
 
   isInline(): boolean {
     return true
@@ -102,12 +92,6 @@ export class MentionNode extends DecoratorNode<ReactNode> {
     return true
   }
 
-  /**
-   * Wire form used when serializing composer content back to the legacy
-   * chat.send string:
-   *   agent  →  @agent/<name>
-   *   path   →  @<path>
-   */
   getTextContent(): string {
     if (this.__mentionKind === "agent") {
       return `@agent/${this.__value}`
@@ -115,7 +99,6 @@ export class MentionNode extends DecoratorNode<ReactNode> {
     return `@${this.__value}`
   }
 
-  // ── Decorator ─────────────────────────────────────────────────────────────
 
   decorate(_editor: LexicalEditor, _config: EditorConfig): ReactNode {
     const label = this.__label
@@ -146,9 +129,6 @@ export class MentionNode extends DecoratorNode<ReactNode> {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Factory helpers
-// ---------------------------------------------------------------------------
 
 export interface CreateMentionNodeArgs {
   mentionKind: MentionKind

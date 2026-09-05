@@ -3,14 +3,6 @@ import { TerminalWorkspace } from "../../components/chat-ui/TerminalWorkspace"
 import { useTerminalLayoutStore } from "../../stores/terminalLayoutStore"
 import type { KannaState } from "../useKannaState"
 
-/**
- * The terminal workspace as a pane's content.
- *
- * There is deliberately no height prop. Before the pane tree this was a
- * fixed-height strip pinned under the transcript, so ChatPage measured and
- * passed a pixel height; now the pane owns the box and the workspace simply
- * fills it. A fixed height here would fight the resize handles.
- */
 interface TerminalWorkspaceShellProps {
   projectId: string
   terminalLayout: ReturnType<typeof useTerminalLayoutStore.getState>["projects"][string]

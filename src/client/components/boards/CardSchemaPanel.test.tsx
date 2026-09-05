@@ -25,11 +25,6 @@ interface Harness {
   unmount: () => void
 }
 
-/**
- * The draft is seeded when the panel OPENS, which is what `BoardPane` does, so
- * the test opens it the same way rather than through a prop the panel does not
- * have.
- */
 async function mount(fields: readonly FieldDef[] = FIELDS, fail?: string): Promise<Harness> {
   const commands: ClientCommand[] = []
   let closes = 0
@@ -96,7 +91,6 @@ async function click(element: HTMLElement) {
   })
 }
 
-/** The command the Save button produced, or null when it never ran. */
 function savedFields(commands: ClientCommand[]): FieldDef[] | null {
   const update = commands.find((command) => (command as { type?: string }).type === "board.update")
   return (update as { cardFields?: FieldDef[] } | undefined)?.cardFields ?? null
@@ -144,7 +138,6 @@ describe("CardSchemaPanel", () => {
     harness.unmount()
   })
 
-  /** The invariant: content is keyed by field id, so a rename must not move one. */
   test("renaming a field changes its label and keeps its id", async () => {
     const harness = await mount()
     await type(byLabel(harness.container, "Name of the description field"), "Summary")
@@ -176,11 +169,6 @@ describe("CardSchemaPanel", () => {
     harness.unmount()
   })
 
-  /**
-   * Removal is confirmed rather than immediate, and the confirmation is where
-   * the field's cost is stated — `description` is read by name by GitHub sync
-   * and by the Start work prompt.
-   */
   test("removing warns about a field the rest of Kanna reads, and still allows it", async () => {
     const harness = await mount()
     await click(byLabel(harness.container, "Remove Description"))

@@ -1,14 +1,5 @@
 import { describe, expect, it } from "bun:test"
 
-// Guards the recovery path added after the 1.31.0/1.32.0 incident: the npm
-// token expired, `npm publish` failed, and both versions were left tagged on
-// GitHub but absent from the registry with no way to retry. Re-running the
-// workflow could not help — release-please reports `release_created: false`
-// once the release already exists, so `publish` was skipped forever.
-//
-// These tests evaluate the workflow's real GitHub expressions against
-// simulated event contexts, so they assert *reachability* rather than the
-// spelling of a condition.
 
 const WORKFLOW_PATH = new URL("../.github/workflows/release-please.yml", import.meta.url)
 
@@ -24,16 +15,6 @@ type Workflow = {
 
 const workflow = Bun.YAML.parse(await Bun.file(WORKFLOW_PATH).text()) as Workflow
 
-/**
- * Evaluates a GitHub Actions expression against `context`.
- *
- * The grammar GitHub uses here is a subset of JS syntax, so the expression is
- * rewritten into JS and handed to the engine's own parser instead of a
- * hand-rolled one. Two rewrites are load-bearing: dotted paths are converted to
- * bracket access because job ids like `release-please` are not valid JS
- * property names, and `==` becomes `===` because unresolved operands surface as
- * "" rather than undefined — GitHub treats a missing context value as empty.
- */
 function evaluate(expression: string, context: Record<string, unknown>): unknown {
   const source = expression
     .replace(/\$\{\{|\}\}/g, "")
@@ -60,7 +41,6 @@ const pushEvent = (releaseCreated: boolean) => ({
 const dispatchEvent = (tag: string) => ({
   github: { event_name: "workflow_dispatch", sha: "deadbeef" },
   inputs: { tag },
-  // release-please does not run on dispatch, so its outputs are absent.
   needs: { "release-please": { outputs: {} } },
   cancelled: () => false,
   success: () => true,

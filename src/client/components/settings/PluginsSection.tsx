@@ -7,7 +7,6 @@ import { cn } from "../../lib/utils"
 import { useSettingsPageStore } from "../../stores/settingsPageStore"
 import type { KannaState } from "../../app/useKannaState"
 
-// Module-level stable empty refs
 const EMPTY_PACKAGES: InstalledPackage[] = []
 const EMPTY_ERRORS: Array<{ kind: PackageKind; message: string }> = []
 const EMPTY_UPDATE_ENTRIES: PackageUpdateEntry[] = []

@@ -91,8 +91,6 @@ describe("resolvePaneCommand", () => {
   })
 
   test("the unshifted arrows still mean focus, not resize", () => {
-    // Resize shares the arrows with focus and is separated only by Shift, so
-    // this pins that the modifier comparison stays exact rather than subset.
     const event = keyEvent({ key: "ArrowLeft", meta: true, ctrl: true })
     expect(resolvePaneCommand(KEYBINDINGS, event, false)).toEqual({ kind: "focus", direction: "left" })
   })
@@ -106,16 +104,12 @@ describe("resolvePaneCommand", () => {
   })
 
   test("still fires a modifier binding while the user is typing", () => {
-    // Every default is a modifier combo, and a terminal or composer holds focus
-    // most of the time. Suppressing these while typing would make pane
-    // navigation unreachable from exactly the place you need it.
     const event = keyEvent({ key: "ArrowRight", meta: true, ctrl: true })
 
     expect(resolvePaneCommand(KEYBINDINGS, event, true)).toEqual({ kind: "focus", direction: "right" })
   })
 
   test("suppresses a modifier-less rebind while the user is typing", () => {
-    // A user may rebind to a bare letter; that must not eat their keystrokes.
     const snapshot: KeybindingsSnapshot = {
       ...KEYBINDINGS,
       bindings: { ...DEFAULT_KEYBINDINGS, closePaneTab: ["q"] },

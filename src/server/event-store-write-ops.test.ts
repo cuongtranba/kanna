@@ -34,9 +34,6 @@ import {
   computeNewSidebarOrder,
 } from "./event-store-write-ops"
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 const TS = 1_700_000_000_000
 
@@ -95,9 +92,6 @@ function makeToolRequest(overrides?: Partial<ToolRequest>): ToolRequest {
   }
 }
 
-// ---------------------------------------------------------------------------
-// buildOpenProjectResult
-// ---------------------------------------------------------------------------
 
 describe("buildOpenProjectResult", () => {
   test("returns existing project when already known", () => {
@@ -139,9 +133,6 @@ describe("buildOpenProjectResult", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// buildRemoveProjectEvent
-// ---------------------------------------------------------------------------
 
 describe("buildRemoveProjectEvent", () => {
   test("returns project_removed event", () => {
@@ -155,9 +146,6 @@ describe("buildRemoveProjectEvent", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// buildSetProjectStarEvent
-// ---------------------------------------------------------------------------
 
 describe("buildSetProjectStarEvent", () => {
   test("returns project_star_set event with starredAt when starring", () => {
@@ -178,9 +166,6 @@ describe("buildSetProjectStarEvent", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// computeNewSidebarOrder
-// ---------------------------------------------------------------------------
 
 describe("computeNewSidebarOrder", () => {
   test("returns null when order is unchanged", () => {
@@ -211,9 +196,6 @@ describe("computeNewSidebarOrder", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// Stack builders
-// ---------------------------------------------------------------------------
 
 describe("buildCreateStackEvent", () => {
   test("builds stack_added event", () => {
@@ -258,9 +240,6 @@ describe("buildRenameStackEvent", () => {
   })
 })
 
-// Two builders, one contract (adr-20260904): trim, treat blank as a clear,
-// return null when unchanged, throw when the entity is missing or deleted,
-// and cap at the same budget the global prompt uses.
 describe("buildSetProjectInstructionsEvent", () => {
   test("returns the event with trimmed instructions", () => {
     const projectsById = makeProjectsById()
@@ -380,9 +359,6 @@ describe("buildRemoveProjectFromStackEvent", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// Chat builders
-// ---------------------------------------------------------------------------
 
 describe("buildCreateChatEvent", () => {
   test("builds chat_created event", () => {
@@ -400,9 +376,6 @@ describe("buildCreateChatEvent", () => {
     expect(() => buildCreateChatEvent(state, "missing")).toThrow()
   })
 
-  // A card's "Start work" chat runs in a worktree of ONE project. A Stack needs
-  // two, so binding a worktree cannot be expressed as a stack — the binding has
-  // to stand on its own.
   test("accepts stackBindings without a stackId", () => {
     const state = { projectsById: makeProjectsById(), stacksById: new Map<string, StackRecord>() }
     const event = buildCreateChatEvent(state, "proj-1", {
@@ -556,9 +529,6 @@ describe("buildChatSourceHashEvent", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// Queued message builders
-// ---------------------------------------------------------------------------
 
 describe("buildEnqueueMessageResult", () => {
   test("builds event and queuedMessage with generated id", () => {
@@ -586,14 +556,6 @@ describe("buildEnqueueMessageResult", () => {
     expect(queuedMessage.id).toBe("fixed-id")
   })
 
-  // The queued message is the ONLY durable carrier of a turn's dispatch
-  // metadata, and this builder copies fields one at a time — so a field it
-  // forgets is lost silently, because an omitted optional property in an
-  // object literal is not a type error. `cronRun` was lost exactly that way:
-  // every cron turn then ran with no tag on its ActiveTurn, `onTurnTerminal`
-  // had nothing to attribute, and the run's `cron_run_outcome` was never
-  // written. The run stayed "running" forever, so each later tick either
-  // orphan-healed it or skipped it as `previous_run_active`.
   test("carries every dispatch field through to the persisted message", () => {
     const chatsById = new Map([["chat-1", makeChat()]])
     const dispatch = {
@@ -637,9 +599,6 @@ describe("buildRemoveQueuedMessageEvent", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// Turn builders
-// ---------------------------------------------------------------------------
 
 describe("buildTurnStartedEvent", () => {
   test("builds turn_started", () => {
@@ -690,9 +649,6 @@ describe("buildPendingForkSessionTokenEvent", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// Tool-request builders
-// ---------------------------------------------------------------------------
 
 describe("buildPutToolRequestEvent", () => {
   test("builds tool_request_put", () => {

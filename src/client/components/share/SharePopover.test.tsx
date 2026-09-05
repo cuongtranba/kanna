@@ -34,8 +34,8 @@ async function mountBody(props: {
         chatId: props.chatId,
         shares: props.shares,
         now: FIXED_NOW,
-        onMint: props.onMint ?? (async () => { /* noop */ }),
-        onRevoke: props.onRevoke ?? (async () => { /* noop */ }),
+        onMint: props.onMint ?? (async () => { }),
+        onRevoke: props.onRevoke ?? (async () => { }),
       }),
     )
   })
@@ -156,8 +156,8 @@ describe("SharePopoverBody", () => {
             setOpen(next)
           },
           trigger: createElement(ShareButton),
-          onMint: async () => { /* noop */ },
-          onRevoke: async () => { /* noop */ },
+          onMint: async () => { },
+          onRevoke: async () => { },
         })
       }
       await act(async () => {
@@ -170,8 +170,6 @@ describe("SharePopoverBody", () => {
       })
       expect(openState).toBe(true)
     } finally {
-      // The open popover portals into `document.body`; only unmounting the root
-      // takes that node back.
       act(() => { root.unmount() })
       container.remove()
     }

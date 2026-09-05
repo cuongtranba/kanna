@@ -1,13 +1,3 @@
-/**
- * Markdown adapter for the structured-document engine (pure).
- *
- * mdast is used purely as a PARSER to locate section + list-item boundaries
- * via source `position` offsets; every slice is taken from the ORIGINAL
- * string, so queries and appends are byte-faithful (no reserialization of
- * untouched content). Only the inserted line changes on append, and only the
- * target section's body changes on replace. GFM parsing is enabled so tables
- * / task-lists tokenize correctly.
- */
 
 import type { List, Root } from "mdast"
 import { fromMarkdown } from "mdast-util-from-markdown"
@@ -25,16 +15,12 @@ import type {
   StructuredDocReplaceResult,
 } from "./types"
 
-/** Level-2 section boundaries computed from source offsets. */
 interface Section {
   headingRaw: string
   normalized: string
   depth: number
-  /** Offset of the `##` marker. */
   startOffset: number
-  /** Offset just past the heading text (before its newline). */
   bodyStart: number
-  /** Offset where the section ends (next `depth<=2` heading, or EOF). */
   endOffset: number
 }
 
@@ -45,7 +31,6 @@ function parse(content: string): Root {
   })
 }
 
-/** Strip the leading `#` marker, trim, lowercase — the matching key. */
 function normalizeHeading(raw: string): string {
   return raw.replace(/^#+\s*/, "").trim().toLowerCase()
 }
@@ -58,7 +43,6 @@ function offset(point: { offset?: number } | undefined, fallback: number): numbe
   return point?.offset ?? fallback
 }
 
-/** All level-2 sections, in document order, with source-offset boundaries. */
 function computeSections(content: string, root: Root): Section[] {
   const kids = root.children
   const out: Section[] = []
@@ -92,7 +76,6 @@ function matchesAny(sec: Section, wanted: readonly string[]): boolean {
   return wanted.some((w) => sec.normalized.startsWith(normalizeQuery(w)))
 }
 
-/** First top-level list wholly contained in a section's body, else null. */
 function firstListInSection(root: Root, sec: Section): List | null {
   for (const node of root.children) {
     if (node.type !== "list" || !node.position) continue
@@ -103,7 +86,6 @@ function firstListInSection(root: Root, sec: Section): List | null {
   return null
 }
 
-/** Section source text, with its first list trimmed to `limit` items. */
 function sectionText(content: string, root: Root, sec: Section, limit?: number): string {
   const full = content.slice(sec.startOffset, sec.endOffset)
   if (limit == null || limit < 1) return full
@@ -119,11 +101,6 @@ function sectionText(content: string, root: Root, sec: Section, limit?: number):
   return `${head}\n_(+${dropped} older entries omitted; query without listLimit to see all)_${tail}`
 }
 
-/**
- * Heading (already-trimmed source text, no newline) + body → one section
- * block: a blank line after the heading and a single trailing newline. An
- * empty body collapses to the bare heading line.
- */
 function renderSection(heading: string, body: string): string {
   return body.length > 0 ? `${heading}\n\n${body}\n` : `${heading}\n`
 }
@@ -205,7 +182,6 @@ export const markdownDoc: StructuredDoc = {
       return { content: `${before}\n\n${entry}${gap}${after}`, created: false }
     }
 
-    // bottom: append after the section body, trimming its trailing blanks.
     const body = content.slice(target.startOffset, target.endOffset).replace(/\s+$/, "")
     const rest = content.slice(target.endOffset).replace(/^\n+/, "")
     const tail = rest.length > 0 ? `\n\n${rest}` : "\n"
@@ -224,9 +200,6 @@ export const markdownDoc: StructuredDoc = {
       return { content: `${content}${sep}\n${renderSection(heading, body)}`, created: true }
     }
 
-    // Everything up to the heading text stays verbatim; only the body region
-    // (heading text → next `##`/EOF) is rewritten. An empty body clears the
-    // section down to its heading — the loop's "plan exhausted" marker.
     const before = content.slice(0, target.bodyStart)
     const rest = content.slice(target.endOffset).replace(/^\n+/, "")
     const tail = rest.length > 0 ? `\n${rest}` : ""
@@ -234,5 +207,4 @@ export const markdownDoc: StructuredDoc = {
   },
 }
 
-/** Exported for direct unit testing; production consumers use the registry. */
 export const __testing = { normalizeHeading }

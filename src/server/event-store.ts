@@ -103,18 +103,12 @@ export class EventStore implements PushEventStore {
   private readonly transcriptsDir: string
   private readonly sidebarProjectOrderPath: string
   private legacyMessagesByChatId = new Map<string, TranscriptEntry[]>()
-  // Track messageId per chat for dedupe in appendMessage. Populated lazily
-  // when transcripts are loaded from disk and on every append. Prevents
-  // duplicate persistence when the JSONL reader re-emits entries after a
-  // PTY respawn / server restart (Claude appends to the same JSONL via
-  // --resume; on cold-wake the reader starts at byte 0 and would re-emit).
   private seenMessageIdsByChatId = new Map<string, Set<string>>()
   private lastUserMessageIdByChatId = new Map<string, string>()
   private legacySidebarProjectOrder: string[] = []
   private readonly sidebarProjectOrderRef: { value: string[] } = { value: [] }
   private snapshotHasLegacyMessages = false
   private readonly transcriptCache = new MessageRead.TranscriptCache()
-  /** In-memory delta ring backing the `chat.ops` broadcast path. */
   readonly chatOps = new ChatOpLog()
   private readonly tunnelEventsByChatId = new Map<string, CloudflareTunnelEvent[]>()
   private shareEventsAll: ShareEvent[] = []
@@ -122,7 +116,6 @@ export class EventStore implements PushEventStore {
 
   private readonly storage: StorageBackend
 
-  // ─── Construction-time deps ─────────────────────────────────────────────────
 
   private readonly initDeps: EventStoreInitDeps
   private readonly msgReadDeps: MessageRead.MessageReadDeps
@@ -219,9 +212,6 @@ export class EventStore implements PushEventStore {
       getMessages: (chatId) => this.getMessages(chatId),
       ensureTranscriptLoaded: (chatId) => {
         if (!this.transcriptCache.isSeeded(chatId)) {
-          // Fast path: seed messageIds from the tail only, avoiding the full-file
-          // parse that spikes RSS ~524 MB for a 96 MB transcript. Falls back to
-          // the full load when the backend lacks slice APIs.
           if (!MessageRead.seedSeenMessageIdsFromTail(this.msgReadDeps, chatId)) {
             MessageRead.getMessagesView(this.msgReadDeps, chatId)
           }
@@ -288,7 +278,6 @@ export class EventStore implements PushEventStore {
     return this.writeChain
   }
 
-  /** Route a StoreEvent to its log file using LOG_OF_EVENT. */
   private commit(event: StoreEvent): Promise<void> {
     const key: StoreEventKind = "kind" in event ? event.kind : event.type
     const logName: LogName = LOG_OF_EVENT[key]
@@ -296,7 +285,6 @@ export class EventStore implements PushEventStore {
     return this.append(filePath, event)
   }
 
-  // ─── Private helpers ─────────────────────────────────────────────────────
 
   private getSeenMessageIds(chatId: string): Set<string> { return MessageRead.getSeenMessageIds(this.msgReadDeps, chatId) }
 
@@ -468,12 +456,6 @@ export class EventStore implements PushEventStore {
     await this.commit(buildTurnStartedEvent(this.state.chatsById, chatId, runConfig))
   }
 
-  /**
-   * Observer fired after a turn's terminal event persists — the ONE choke
-   * point every provider path funnels through (24 call sites feed these
-   * three methods). Currently consumed by the cron feature to attribute a
-   * cron-fired turn's outcome; assigned by AgentCoordinator at construction.
-   */
   onTurnTerminal: ((chatId: string, outcome: "finished" | "failed" | "cancelled", error?: string) => void) | null = null
 
   async recordTurnFinished(chatId: string) {
@@ -534,17 +516,9 @@ export class EventStore implements PushEventStore {
 
   getSidebarProjectOrder() { return [...this.sidebarProjectOrderRef.value] }
 
-  // ─── Message read methods (thin delegates) ────────────────────────────────
 
   getMessages(chatId: string) { return MessageRead.getMessages(this.msgReadDeps, chatId) }
 
-  /**
-   * Returns the `_id` of the most recent `user_prompt` entry for this chat.
-   *
-   * Hot path: served from the in-memory map that `appendMessage` keeps current.
-   * Cold-start fallback: tail-reads the transcript (avoids a full 96 MB load)
-   * and caches the result so the next call is free.
-   */
   getLastUserMessageId(chatId: string): string | null {
     const cached = this.lastUserMessageIdByChatId.get(chatId)
     if (cached !== undefined) return cached
@@ -611,7 +585,6 @@ export class EventStore implements PushEventStore {
       .map(([chatId]) => chatId)
   }
 
-  // ─── Peripheral event methods (thin delegates) ───────────────────────────
 
   async appendTunnelEvent(event: CloudflareTunnelEvent): Promise<void> { return PeripheralEvents.appendTunnelEvent(this.peripheralDeps, event) }
 

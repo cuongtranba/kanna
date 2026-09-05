@@ -1,17 +1,3 @@
-/**
- * api/files.ts — React Query queryFn wrappers for file content endpoints.
- *
- * Covers:
- *   HEAD <contentUrl>  — probe whether a file resource exists (OfferDownloadMessage,
- *                        LocalFileLinkCard, PreviewFileMessage)
- *   GET  <contentUrl>  — stream/fetch file bytes for preview (attachmentPreview.ts)
- *   DELETE <contentUrl> — delete an uploaded attachment (ChatInput.tsx)
- *
- * These wrap the same blob/content URLs served under /api/uploads/* and
- * /api/local-files/* by the Kanna server.
- *
- * Architecture: .c3/adr/adr-20260715-client-state-effect-architecture.md
- */
 
 import type { HttpPort } from "../ports/httpPort"
 import { httpAdapter } from "../adapters/http.adapter"
@@ -21,10 +7,6 @@ export type FileProbeResult =
   | { kind: "missing" }
   | { kind: "error" }
 
-/**
- * HEAD probe a content URL.
- * 404 → "missing"; any other failure (network, 5xx) → "error"; 2xx → "ready".
- */
 export async function probeFileUrl(
   url: string,
   options: { signal?: AbortSignal; http?: HttpPort } = {},
@@ -43,10 +25,6 @@ export async function probeFileUrl(
   }
 }
 
-/**
- * Delete an uploaded attachment by its content URL.
- * Swallows all errors (fire-and-forget semantics matching the existing call site).
- */
 export async function deleteUploadedFile(
   contentUrl: string,
   options: { http?: HttpPort } = {},
@@ -61,10 +39,6 @@ export interface TextPreviewResult {
   truncated: boolean
 }
 
-/**
- * Fetch a file as text for preview rendering. Streams up to `limitBytes` bytes.
- * Throws on network errors (let the caller decide how to surface them).
- */
 export async function fetchFileTextPreview(
   url: string,
   limitBytes: number,
@@ -83,7 +57,6 @@ export async function fetchFileTextPreview(
   }
 
   if (!body) {
-    // No streaming body — rare fallback path
     return { content: "", truncated: false }
   }
 

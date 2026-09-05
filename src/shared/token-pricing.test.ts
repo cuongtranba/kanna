@@ -37,22 +37,15 @@ describe("computeCostUsd", () => {
   })
 
   test("cached portion is not double-billed (input already includes cached)", () => {
-    // 1M total input of which 200k are cache reads, sonnet-like rates
     const cost = computeCostUsd(
       { inputTokens: 1_000_000, cachedInputTokens: 200_000, outputTokens: 0 },
       { inputPerMTok: 3, outputPerMTok: 15, cachedInputPerMTok: 0.3 },
     )
-    // 800k @ $3/M = 2.4 ; 200k @ $0.3/M = 0.06 ; total 2.46
     expect(cost).toBeCloseTo(2.46, 6)
   })
 })
 
 describe("splitBilledTokens", () => {
-  // The partition is the whole point: these counts become one metric split by
-  // `kind`, so a bare sum has to be the billable total. `inputTokens` already
-  // includes the cached reads (claude-usage-math sums direct + cacheCreation +
-  // cacheRead into it), which is why the same subtraction appears here and in
-  // computeCostUsd — reporting both whole would bill the cache twice.
   test("subtracts cached reads from input so the kinds partition", () => {
     expect(splitBilledTokens({
       inputTokens: 1_000_000,
@@ -76,9 +69,6 @@ describe("splitBilledTokens", () => {
     expect(splitBilledTokens({})).toEqual([])
   })
 
-  // A provider that reports cached >= input is contradicting itself; clamping
-  // to zero keeps the sum honest instead of emitting a negative counter delta,
-  // which OTel would reject outright.
   test("never yields a negative count when cached exceeds input", () => {
     expect(splitBilledTokens({ inputTokens: 100, cachedInputTokens: 500 })).toEqual([
       ["cached_input", 500],
@@ -95,8 +85,6 @@ describe("splitBilledTokens", () => {
 })
 
 describe("billedUsageOfResult", () => {
-  // Providers put the cost on the entry, inside usage, or nowhere. Both
-  // runners stash through here so a turn can never be attributed two amounts.
   test("prefers the entry-level cost over the one inside usage", () => {
     expect(billedUsageOfResult({
       usage: { inputTokens: 10, costUsd: 0.9 },
@@ -117,8 +105,6 @@ describe("billedUsageOfResult", () => {
     expect(billedUsageOfResult({ costUsd: 0.25 })).toEqual({ costUsd: 0.25 })
   })
 
-  // Nothing reported is not zero reported — the caller must be able to tell
-  // "no data" from "this turn was free".
   test("returns undefined when the entry reported neither", () => {
     expect(billedUsageOfResult({})).toBeUndefined()
   })

@@ -1,8 +1,3 @@
-/**
- * Tests for the armed-loop wake invariant — an ARMED loop always holds exactly
- * one pending wake. Covers both windows that can drop it: the boot pass
- * (`recoverArmedLoopWakes`) and the runtime pass (`handleFailedLoopTurn`).
- */
 
 import { describe, test, expect } from "bun:test"
 import type { AutoContinueEvent } from "./auto-continue/events"
@@ -81,10 +76,6 @@ describe("recoverArmedLoopWakes", () => {
     expect(emitted.map((e) => e.chatId)).toEqual(["chat-2"])
   })
 
-  // Boot recovery must IGNORE the running-subagent guard that the runtime path
-  // relies on: a run killed with the server never wrote a terminal event, so it
-  // replays as `running` forever. Honouring it here would re-break the exact
-  // incident this recovery exists for (chat c87ab0ad).
   test("recovers a chat whose subagent run is stuck in `running` after a crash", async () => {
     const store = makeStore()
     store.subagentRunsByChat.set("chat-1", { "run-1": { status: "running" } })
@@ -99,9 +90,6 @@ describe("recoverArmedLoopWakes", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// handleFailedLoopTurn — the runtime half of the armed-loop wake invariant
-// ---------------------------------------------------------------------------
 
 describe("handleFailedLoopTurn", () => {
   function collectDeps(overrides: Partial<LoopCommandDeps> = {}) {
@@ -133,18 +121,12 @@ describe("handleFailedLoopTurn", () => {
     const event = accepted[0]
     if (event?.kind !== "auto_continue_accepted") throw new Error("expected accepted event")
     expect(event.source).toBe("subagent_background")
-    // The full loop discipline must ride the wake, exactly as a normal
-    // background delivery does — a generic "decide next action" string is what
-    // drifted the orchestrator into self-implementation.
     expect(event.prompt).toContain("ORCHESTRATOR loop prompt")
     expect(event.prompt).toContain("error")
     expect(store.sessionTokensSet).toEqual([{ chatId: "chat-1", provider: "claude", token: null }])
     expect(store.messages.map((m) => m.entry.kind)).toEqual(["context_cleared"])
   })
 
-  // Without this the runtime re-arm turns a silent stall into a silent hot
-  // loop: the host backstop counts `loop_run_outcome`, and a crashing
-  // orchestrator previously contributed nothing to it.
   test("records the failed iteration so the host backstop can see it", async () => {
     const { emitted, deps, schedule } = collectDeps()
     await handleFailedLoopTurn(deps, "chat-1", schedule)
@@ -166,9 +148,6 @@ describe("handleFailedLoopTurn", () => {
     expect(pending).toHaveLength(0)
   })
 
-  // Runs from the store's turn-terminal observer, which EVERY provider path
-  // funnels through. An escape here would break the terminal path of turns that
-  // have nothing to do with a loop.
   test("never throws, whatever the store does", async () => {
     const { deps, schedule } = collectDeps({
       isLoopArmed: () => { throw new Error("store exploded") },
@@ -183,8 +162,6 @@ describe("handleFailedLoopTurn", () => {
     expect(pending).toHaveLength(0)
   })
 
-  // Each guard below proves the wake is already held by someone else, so
-  // re-arming would run two orchestrator turns against one plan.
   test("stands down when the chat became busy again", async () => {
     const { emitted, pending, deps, schedule } = collectDeps({ isChatBusy: () => true })
     await handleFailedLoopTurn(deps, "chat-1", schedule)
@@ -208,8 +185,6 @@ describe("handleFailedLoopTurn", () => {
     expect(emitted.some((e) => e.kind === "auto_continue_accepted")).toBe(false)
   })
 
-  // A rate-limited turn already schedules its own resume via
-  // handleLimitDetection; re-arming on top would double-wake at reset.
   test("stands down when a resume is already scheduled", async () => {
     const { store, emitted, pending, deps, schedule } = collectDeps()
     await handleFailedLoopTurn(deps, "chat-1", schedule)
@@ -229,9 +204,6 @@ describe("handleFailedLoopTurn", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// resumeLoop — undoing a disarm
-// ---------------------------------------------------------------------------
 
 describe("resumeLoop", () => {
   function armEvent(): AutoContinueEvent {
@@ -275,8 +247,6 @@ describe("resumeLoop", () => {
     })
     const armed = emitted.find((e) => e.kind === "loop_armed")
     if (armed?.kind !== "loop_armed") throw new Error("expected loop_armed")
-    // The spec must round-trip verbatim: a resume that loses the workdir or the
-    // tracking file re-arms a loop pointed at the wrong checkout.
     expect(armed.subagentId).toBe("sub-1")
     expect(armed.prompt).toBe("ORCHESTRATOR loop prompt")
     expect(armed.verifyCommand).toBe("sh verify.sh")

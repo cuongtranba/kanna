@@ -60,13 +60,6 @@ export interface CliRuntimeDeps {
   openUrl: (url: string) => void
   log: (message: string) => void
   warn: (message: string) => void
-  /**
-   * Boot step for the `plugin` subcommand: the CLI is its own process, so it
-   * must build the same settings-backed record store the server does, or
-   * `plugin install` writes bundles nothing remembers. Injectable because the
-   * default touches the real `settings.json` — a test drives the service it
-   * installed with `setPluginServiceForTest` and passes a no-op here.
-   */
   preparePluginService?: () => Promise<void>
   renderShareQr?: (url: string) => Promise<string>
   startShareTunnel?: (localUrl: string, shareMode: Exclude<ShareMode, false>) => Promise<StartedShareTunnel>
@@ -121,9 +114,6 @@ Options:
 }
 
 export function parseArgs(argv: string[]): ParsedArgs {
-  // The first subcommand this flag-only CLI has. It must be matched BEFORE the
-  // flag loop, which throws on any positional argument — so `plugin` and its
-  // own arguments never reach it.
   if (argv[0] === "plugin") {
     return { kind: "plugin", args: argv.slice(1) }
   }
@@ -277,7 +267,6 @@ async function maybeSelfUpdate(_argv: string[], deps: CliRuntimeDeps) {
   return "startup_update"
 }
 
-/** Default `preparePluginService`: the real settings-backed wiring. */
 async function preparePluginServiceFromSettings(): Promise<void> {
   const settings = new AppSettingsManager()
   await settings.initialize()
@@ -295,10 +284,6 @@ export async function runCli(argv: string[], deps: CliRuntimeDeps): Promise<CliR
     return { kind: "exited", code: 0 }
   }
   if (parsedArgs.kind === "plugin") {
-    // Short-circuits ahead of the Bun-version gate and the self-update check:
-    // both exist to protect the long-lived server this command never starts,
-    // and silently restarting the process mid-`plugin ls` would be worse than
-    // running it on an old Bun.
     await (deps.preparePluginService ?? preparePluginServiceFromSettings)()
     return { kind: "exited", code: await runPluginCli(parsedArgs.args, { log: deps.log, warn: deps.warn }) }
   }

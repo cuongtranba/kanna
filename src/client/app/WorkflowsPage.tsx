@@ -12,13 +12,11 @@ import { cn } from "../lib/utils"
 import type { WorkflowRun, WorkflowRunSummary } from "../../shared/workflow-types"
 import type { TranscriptEntry } from "../../shared/types"
 
-// ── View (props-driven, router-free → unit testable) ──────────────────────────
 
 export interface WorkflowsPageViewProps {
   runs: WorkflowRunSummary[]
   getRunDetail: (runId: string) => Promise<WorkflowRun | null>
   getAgentTranscript: (runId: string, agentId: string) => Promise<TranscriptEntry[]>
-  /** When provided, the header shows a "Back to chat" button wired to it. */
   onBackToChat?: () => void
 }
 
@@ -30,13 +28,7 @@ function WorkflowsPageViewInner({ runs, getRunDetail, getAgentTranscript, onBack
   const setSelectedRun = WorkflowsPageViewStore.useScopedStore((s) => s.setSelectedRun)
   const setSelectedAgentId = WorkflowsPageViewStore.useScopedStore((s) => s.setSelectedAgentId)
   const clearSelection = WorkflowsPageViewStore.useScopedStore((s) => s.clearSelection)
-  // The runs reference present when a row was last clicked. The push-refetch
-  // effect only fires once `runs` changes identity AFTER the selection.
   const runsAtSelectionRef = useRef<WorkflowRunSummary[] | null>(null)
-  // Monotone fetch counter shared by the click fetch AND the push-refetch:
-  // whichever detail fetch was dispatched LAST wins, regardless of the order
-  // its promise resolves in. Guards against a slow earlier fetch clobbering a
-  // fresher selection/refresh.
   const fetchSeqRef = useRef(0)
 
   const handleSelectRun = useCallback(async (runId: string) => {
@@ -46,7 +38,7 @@ function WorkflowsPageViewInner({ runs, getRunDetail, getAgentTranscript, onBack
     setSelectedRun("loading")
     const seq = ++fetchSeqRef.current
     const detail = await getRunDetail(runId)
-    if (fetchSeqRef.current !== seq) return // a newer fetch superseded this one
+    if (fetchSeqRef.current !== seq) return
     setSelectedRun(detail ?? "not-found")
   }, [getRunDetail, runs, setSelectedRunId, setSelectedAgentId, setSelectedRun])
 
@@ -55,9 +47,6 @@ function WorkflowsPageViewInner({ runs, getRunDetail, getAgentTranscript, onBack
     runsAtSelectionRef.current = null
   }, [clearSelection])
 
-  // Re-fetch the selected run in-place (no "loading" swap) when a snapshot push
-  // delivers a new `runs` reference AND the selected run is still running. Stops
-  // once the sidecar lands (status flips). Mirrors WorkflowsSectionWithDetail.
   useEffect(() => {
     if (selectedRunId === null) return
     if (runs === runsAtSelectionRef.current) return
@@ -67,8 +56,6 @@ function WorkflowsPageViewInner({ runs, getRunDetail, getAgentTranscript, onBack
     const seq = ++fetchSeqRef.current
     void getRunDetail(selectedRunId).then((detail) => {
       if (cancelled || fetchSeqRef.current !== seq || detail === null) return
-      // Don't collapse an open agent transcript: a live refresh may not have
-      // flushed the selected agent into the journal yet. Keep the prior detail.
       if (selectedAgentId !== null && !detail.agents.some((a) => a.agentId === selectedAgentId)) return
       setSelectedRun(detail)
     })
@@ -199,7 +186,6 @@ function WorkflowDetailPlaceholder({ text }: { text: string }) {
   )
 }
 
-// ── Route wrapper (reads outlet context + params + store) ─────────────────────
 
 export function WorkflowsPage() {
   const state = useOutletContext<KannaState>()

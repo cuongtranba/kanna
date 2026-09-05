@@ -1,33 +1,3 @@
-/**
- * Plugin authoring tools for the agent.
- *
- * Mirrors `buildBoardToolList` (`kanna-mcp-boards.ts`): `tool` is injected
- * rather than imported, so this module stays free of the MCP SDK's shape and
- * can be unit-tested by calling `buildPluginToolList` directly. Unlike the
- * board/tracking-doc tool families, this one takes POSITIONAL args
- * `(service, chatId, depth, tool)` rather than a deps object — see the
- * acceptance test in `plugin-system-acceptance.test.tsx`, describe
- * "P8 — MCP authoring tools".
- *
- * Depth mirrors the tracking-doc / board split: `plugin_scaffold`,
- * `plugin_install` and `plugin_reload` mutate host state (write plugin
- * source, install a bundle, restart a running plugin process), so they are
- * withheld from subagents (`depth > 0`) the same way board writes and loop
- * management are. `plugin_list`, `plugin_validate` and `plugin_logs` are
- * read-only and available at every depth.
- *
- * Every handler drives the SAME `PluginService` the CLI and the HTTP surface
- * drive (`plugins/plugin-service-host.ts`) — the wiring is not duplicated per
- * call site, because a second service would keep a second registry and a
- * plugin installed over one surface would be invisible to the others.
- *
- * `service` is typed `object | null`, not `PluginService`: the `unknown`
- * keyword is banned outside `shared/errors.ts`, and the acceptance test builds
- * the list with a bare `{}` to assert the depth rule without standing up a
- * runtime. `isPluginToolService` narrows it structurally with a type predicate
- * (never an `as` cast); a value that is not a service leaves every handler
- * answering `SERVICE_UNAVAILABLE` instead of throwing.
- */
 import { z } from "zod"
 import { errorMessage, isRecord } from "../shared/errors"
 import type { JsonValue } from "../shared/json"
@@ -58,16 +28,10 @@ const PLUGIN_INSTALL_DESCRIPTION = "Compile a plugin source directory and instal
 
 const PLUGIN_RELOAD_DESCRIPTION = "Stop and restart a running plugin, picking up a rebuilt bundle."
 
-/** How many log lines `plugin_logs` returns when the caller names no tail. */
 const DEFAULT_LOG_TAIL = 100
 
 const SERVICE_UNAVAILABLE = "The plugin runtime is not available in this session."
 
-/**
- * `tool` is injected rather than imported so this module stays free of the
- * MCP SDK's shape and can be unit-tested by calling the handlers directly.
- * Mirrors `BoardToolFactory` in `kanna-mcp-boards.ts`.
- */
 export type PluginToolFactory<TTool> = (
   name: string,
   description: string,
@@ -75,18 +39,15 @@ export type PluginToolFactory<TTool> = (
   handler: (input: ToolArgs) => Promise<ToolResult>,
 ) => TTool
 
-/** Exactly the `PluginService` surface these six tools reach — nothing wider. */
 type PluginToolService = Pick<PluginService, "install" | "list" | "logs" | "reload">
 
 const REQUIRED_SERVICE_METHODS: readonly string[] = ["install", "list", "logs", "reload"]
 
-/** Structural narrowing, because `service` arrives as `object` (see the module header). */
 function isPluginToolService(value: object): value is PluginToolService {
   if (!isRecord(value)) return false
   return REQUIRED_SERVICE_METHODS.every((method) => typeof value[method] === "function")
 }
 
-/** The schema already requires these; this is the runtime half of that promise. */
 function requireString(value: JsonValue | undefined, name: string): string {
   if (typeof value !== "string" || value.trim() === "") {
     throw new Error(`${name} is required`)
@@ -107,8 +68,6 @@ function formatPluginList(plugins: readonly PluginSummary[]): string {
 }
 
 function formatPluginLogs(id: string, entries: readonly PluginLogEntry[], tail: number): string {
-  // The tail is applied here rather than in the ring so `plugin_logs` and the
-  // CLI's `--tail` can never disagree about which end of the buffer is recent.
   const window = entries.slice(-tail)
   if (window.length === 0) return `No log lines recorded for plugin "${id}".`
   return window.map((entry) => `[${entry.stream}] ${entry.text}`).join("\n")
@@ -119,11 +78,6 @@ function describePlugin(service: PluginToolService, id: string): string {
   return summary ? `${summary.state} (${summary.enabled ? "enabled" : "disabled"})` : "not installed"
 }
 
-/**
- * Parse + compile a source directory WITHOUT installing it: nothing is written
- * to the build dir and no registry entry is created, so this is safe to run on
- * a directory the user is still editing.
- */
 async function validatePluginSource(sourceDir: string): Promise<ToolResult> {
   const parsed = parseKannaPluginManifest(await readManifestOrEmpty(sourceDir))
   if (!parsed.ok) {
@@ -137,11 +91,6 @@ async function validatePluginSource(sourceDir: string): Promise<ToolResult> {
   return ok(`Plugin "${id}" (${name} ${version}) is valid: manifest parsed and both bundles compiled.`)
 }
 
-/**
- * A missing manifest reads as an empty body, which the parser reports as
- * "not valid JSON" against the same filename — one message for one defect,
- * instead of a raw ENOENT the model has to interpret.
- */
 async function readManifestOrEmpty(sourceDir: string): Promise<string> {
   try {
     return await readPluginManifestText(sourceDir)
@@ -167,12 +116,6 @@ async function scaffoldPlugin(dir: string, id: string, name: string): Promise<To
   )
 }
 
-/**
- * Build the plugin authoring tool list.
- *
- * Absent a service or a chatId the family does not exist — a plugin tool with
- * no runtime behind it would advertise a capability every call then refuses.
- */
 export function buildPluginToolList<TTool>(
   service: object | null,
   chatId: string | null,
@@ -201,8 +144,6 @@ export function buildPluginToolList<TTool>(
       "plugin_validate",
       PLUGIN_VALIDATE_DESCRIPTION,
       { source_dir: z.string().describe("Absolute path to the plugin source directory to check.") },
-      // Validation needs no registry, so it deliberately does NOT require a
-      // live service: an author can check a directory before anything is installed.
       async (input) => {
         try {
           return await validatePluginSource(requireString(input.source_dir, "source_dir"))

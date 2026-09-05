@@ -12,10 +12,6 @@ interface MessageCodeBlockPorts {
   timer?: TimerPort
 }
 
-// Fenced code block for rendered message bodies: shiki syntax highlighting via
-// HighlightedCode plus a hover copy button. Mirrors the legacy PreBlock chrome
-// from messages/shared.tsx so the Lexical headless render matches the prior
-// react-markdown output.
 function MessageCodeBlockInner({
   source,
   lang,

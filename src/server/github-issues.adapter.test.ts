@@ -70,8 +70,6 @@ describe("pull", () => {
   })
 
   test("pull requests are filtered out", async () => {
-    // The issues endpoint serves PRs too; importing them fills a board with
-    // review noise.
     const { impl } = stubFetch([[issue({ number: 1, pull_request: { url: "x" } }), issue({ number: 2 })]])
     const result = await createGitHubIssuesProvider({ fetchImpl: impl }).pull({
       auth: AUTH,
@@ -83,10 +81,6 @@ describe("pull", () => {
   })
 
   test("the cursor advances even when EVERY entry was filtered", async () => {
-    // Regression: advancing only on kept items stalls the sync forever on a
-    // repo whose oldest-updated entries are all PRs — the next pull re-reads
-    // the same page and imports nothing, silently and permanently. Observed
-    // against cli/cli, whose first five oldest-updated entries are all PRs.
     const { impl } = stubFetch([
       [
         issue({ number: 1, pull_request: { url: "x" }, updated_at: "2019-10-10T10:00:00Z" }),
@@ -104,9 +98,6 @@ describe("pull", () => {
   })
 
   test("follows pages until it has real issues, not just the first page", async () => {
-    // A fork carries its upstream's PR history, so the oldest-updated page can
-    // be entirely pull requests. Stopping after one page imported NOTHING from
-    // a repo with 13 real issues (observed on cuongtranba/kanna).
     const prPage = Array.from({ length: 100 }, (_unused, index) =>
       issue({ number: index + 1, pull_request: { url: "x" }, updated_at: `2019-10-${String((index % 28) + 1).padStart(2, "0")}T00:00:00Z` }),
     )
@@ -125,8 +116,6 @@ describe("pull", () => {
   })
 
   test("stops instead of looping when a page brings nothing newer", async () => {
-    // `since` is inclusive, so a page whose newest entry equals the cursor
-    // would otherwise be requested forever.
     const page = [issue({ number: 1, updated_at: "2026-01-01T00:00:00Z" })]
     const { impl, calls } = stubFetch([page])
     const result = await createGitHubIssuesProvider({ fetchImpl: impl }).pull({
@@ -176,8 +165,6 @@ describe("pull", () => {
   })
 
   test("a failed request throws rather than reporting an empty page", async () => {
-    // Reporting [] would advance nothing but ALSO look like "nothing to do",
-    // hiding an outage behind a healthy-looking sync.
     const { impl } = stubFetch([{ message: "Bad credentials" }], { status: 401 })
     await expect(
       createGitHubIssuesProvider({ fetchImpl: impl }).pull({ auth: AUTH, source: SOURCE, cursor: null, limit: 30 }),
@@ -210,7 +197,6 @@ describe("push", () => {
       ok: true,
       externalId: "412",
       url: "https://github.com/o/r/issues/412",
-      // This is what the caller stamps into the watermark to suppress the echo.
       remoteUpdatedAt: Date.parse("2026-02-02T00:00:00Z"),
     })
   })

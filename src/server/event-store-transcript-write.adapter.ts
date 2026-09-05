@@ -1,13 +1,3 @@
-/**
- * Complex chat-transcript write operations extracted from event-store.ts.
- *
- * Contains methods that directly manipulate the transcript JSONL file or
- * perform multi-step chat mutations (fork, delete, prune, appendMessage).
- * All IO is performed through the injected StorageBackend.
- *
- * This module is an adapter (.adapter.ts) because it performs disk IO.
- * It must NOT import from event-store.ts (no circular deps).
- */
 import path from "node:path"
 import { LOG_PREFIX } from "../shared/branding"
 import { log } from "../shared/log"
@@ -33,7 +23,6 @@ import type { ChatOp } from "../shared/chat-ops"
 
 const STALE_EMPTY_CHAT_MAX_AGE_MS = 30 * 60 * 1000
 
-// ─── Deps interface ────────────────────────────────────────────────────────
 
 export interface ChatTranscriptWriteDeps {
   readonly storage: StorageBackend
@@ -45,27 +34,17 @@ export interface ChatTranscriptWriteDeps {
   readonly toolRequestsById: Map<string, ToolRequest>
   readonly chatsLogPath: string
   readonly turnsLogPath: string
-  /** Read the current write-chain promise. */
   getWriteChain: () => Promise<void>
-  /** Replace the write-chain promise. */
   setWriteChain: (p: Promise<void>) => void
-  /** Core append: writes event to disk + applies to in-memory state. */
   append: <T extends StoreEvent>(filePath: string, event: T) => Promise<void>
-  /** Returns transcript entries for a chat (from cache or disk). */
   getMessages: (chatId: string) => TranscriptEntry[]
-  /** Loads the transcript into cache (populating seen messageIds) without cloning. */
   ensureTranscriptLoaded: (chatId: string) => void
-  /** Returns (or lazily creates) the seen-messageId dedup set for a chat. */
   getSeenMessageIds: (chatId: string) => Set<string>
-  /** Returns pending tool requests for a chat. */
   listPendingToolRequests: (chatId: string) => ToolRequest[]
-  /** Records a delta op for the `chat.ops` broadcast path. */
   recordChatOp: (chatId: string, op: ChatOp) => void
-  /** Drops the chat's op-log (chat deleted/pruned). */
   clearChatOps: (chatId: string) => void
 }
 
-// ─── Private helpers ───────────────────────────────────────────────────────
 
 function transcriptPath(deps: ChatTranscriptWriteDeps, chatId: string): string {
   return path.join(deps.transcriptsDir, `${chatId}.jsonl`)
@@ -77,9 +56,7 @@ function requireChat(deps: ChatTranscriptWriteDeps, chatId: string): ChatRecord 
   return chat
 }
 
-// ─── Exported functions ────────────────────────────────────────────────────
 
-/** Removes the subagent-results directory for a deleted chat (best-effort). */
 export async function removeSubagentResultsDir(
   deps: ChatTranscriptWriteDeps,
   projectId: string,
@@ -95,7 +72,6 @@ export async function removeSubagentResultsDir(
   }
 }
 
-/** Forks a chat: creates a new chat sharing the source transcript and session. */
 export async function forkChat(
   deps: ChatTranscriptWriteDeps,
   sourceChatId: string,
@@ -150,8 +126,6 @@ export async function forkChat(
         chat.hasMessages = true
         chat.updatedAt = Math.max(chat.updatedAt, createdAt)
       }
-      // Wholesale rewrite: the tail cache is validated by byte size, which
-      // only implies "unchanged" for an append-only file.
       deps.transcriptCache.invalidateTail(chatId)
       if (deps.transcriptCache.has(chatId)) {
         deps.transcriptCache.set(chatId, cloneTranscriptEntries(sourceEntries))
@@ -164,7 +138,6 @@ export async function forkChat(
   return deps.chatsById.get(chatId)!
 }
 
-/** Deletes a chat: appends a delete event, clears tool requests, and removes the results dir. */
 export async function deleteChat(
   deps: ChatTranscriptWriteDeps,
   chatId: string,
@@ -183,7 +156,6 @@ export async function deleteChat(
   await removeSubagentResultsDir(deps, projectId, chatId)
 }
 
-/** Archives a chat. */
 export async function archiveChat(
   deps: ChatTranscriptWriteDeps,
   chatId: string,
@@ -191,7 +163,6 @@ export async function archiveChat(
   await deps.append(deps.chatsLogPath, buildArchiveChatEvent(deps.chatsById, chatId))
 }
 
-/** Unarchives a chat. */
 export async function unarchiveChat(
   deps: ChatTranscriptWriteDeps,
   chatId: string,
@@ -199,7 +170,6 @@ export async function unarchiveChat(
   await deps.append(deps.chatsLogPath, buildUnarchiveChatEvent(deps.chatsById, chatId))
 }
 
-/** Prunes empty chats that have been idle past the max age. Returns pruned chat IDs. */
 export async function pruneStaleEmptyChats(
   deps: ChatTranscriptWriteDeps,
   args?: {
@@ -246,7 +216,6 @@ export async function pruneStaleEmptyChats(
   return prunedChatIds
 }
 
-/** Appends a transcript entry for a chat, with deduplication by messageId. */
 export async function appendMessage(
   deps: ChatTranscriptWriteDeps,
   chatId: string,
@@ -271,10 +240,6 @@ export async function appendMessage(
         })
         return
       }
-      // Evict the oldest entry before adding when the cap is reached.
-      // Sets maintain insertion order, so the first value is the oldest.
-      // Active streaming uses fresh messageIds per Claude API response, so
-      // evicted historical ids will never repeat in new messages.
       if (seen.size >= MAX_SEEN_MESSAGE_IDS) {
         const oldest = seen.values().next().value
         if (oldest !== undefined) seen.delete(oldest)

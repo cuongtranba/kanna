@@ -15,9 +15,6 @@ import {
 } from "./claude-prompt-helpers"
 import type { ChatAttachment, NormalizedToolCall } from "../shared/types"
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function makeAttachment(overrides: Partial<ChatAttachment> = {}): ChatAttachment {
   return {
@@ -33,9 +30,6 @@ function makeAttachment(overrides: Partial<ChatAttachment> = {}): ChatAttachment
   }
 }
 
-// ---------------------------------------------------------------------------
-// buildAttachmentHintText
-// ---------------------------------------------------------------------------
 
 describe("buildAttachmentHintText", () => {
   test("returns empty string when no attachments", () => {
@@ -73,9 +67,6 @@ describe("buildAttachmentHintText", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// buildPromptText
-// ---------------------------------------------------------------------------
 
 describe("buildPromptText", () => {
   test("returns trimmed content when no attachments", () => {
@@ -95,16 +86,12 @@ describe("buildPromptText", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// buildSteeredMessageContent
-// ---------------------------------------------------------------------------
 
 describe("buildSteeredMessageContent", () => {
   test("prepends STEERED_MESSAGE_PREFIX to non-empty content", () => {
     const result = buildSteeredMessageContent("keep going")
     expect(result).toContain("<system-message>")
     expect(result).toContain("keep going")
-    // prefix appears before user content
     expect(result.indexOf("<system-message>")).toBeLessThan(result.indexOf("keep going"))
   })
 
@@ -112,7 +99,6 @@ describe("buildSteeredMessageContent", () => {
     const result = buildSteeredMessageContent("")
     expect(result).toContain("<system-message>")
     expect(result).toContain("</system-message>")
-    // no trailing content after closing tag
     const afterTag = result.slice(result.lastIndexOf("</system-message>") + "</system-message>".length)
     expect(afterTag.trim()).toBe("")
   })
@@ -125,9 +111,6 @@ describe("buildSteeredMessageContent", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// isPromptTooLongMessage
-// ---------------------------------------------------------------------------
 
 describe("isPromptTooLongMessage", () => {
   test("detects 'prompt is too long'", () => {
@@ -144,9 +127,6 @@ describe("isPromptTooLongMessage", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// isNoConversationFoundMessage
-// ---------------------------------------------------------------------------
 
 describe("isNoConversationFoundMessage", () => {
   test("detects the session-id error string", () => {
@@ -163,9 +143,6 @@ describe("isNoConversationFoundMessage", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// toSdkEffort
-// ---------------------------------------------------------------------------
 
 describe("toSdkEffort", () => {
   test.each(["low", "medium", "high", "xhigh", "max"] as const)("maps '%s' to itself", (effort) => {
@@ -182,9 +159,6 @@ describe("toSdkEffort", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// backgroundTaskIdsFromToolResult
-// ---------------------------------------------------------------------------
 
 describe("backgroundTaskIdsFromToolResult", () => {
   test("extracts id from string content", () => {
@@ -214,9 +188,6 @@ describe("backgroundTaskIdsFromToolResult", () => {
     expect(backgroundTaskIdsFromToolResult(42)).toEqual([])
   })
 
-  // Real AgentTool background-launch payload captured from a live 0.3.215
-  // transcript (chat dd05b76e, 2026-07-22): the reaper killed a session while
-  // this launch's agent was mid-flight because the id was never armed.
   test("extracts agentId from Agent background-launch result", () => {
     const text =
       "Async agent launched successfully. (This tool result is internal metadata — never quote or paste any part of it, including the agentId below, into a user-facing reply.)\n" +
@@ -242,9 +213,6 @@ describe("backgroundTaskIdsFromToolResult", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// backgroundTaskLaunchesFromToolResult
-// ---------------------------------------------------------------------------
 
 describe("backgroundTaskLaunchesFromToolResult", () => {
   test("extracts id and outputPath from full launch message", () => {
@@ -301,9 +269,6 @@ describe("backgroundTaskLaunchesFromToolResult", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// mergeBackgroundTaskSnapshot preserves outputPath
-// ---------------------------------------------------------------------------
 
 describe("mergeBackgroundTaskSnapshot outputPath preservation", () => {
   test("preserves outputPath from a previous entry when snapshot has no path", () => {
@@ -320,9 +285,6 @@ describe("mergeBackgroundTaskSnapshot outputPath preservation", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// positiveIntegerFromEnv
-// ---------------------------------------------------------------------------
 
 describe("positiveIntegerFromEnv", () => {
   test("returns fallback for undefined", () => {
@@ -356,9 +318,6 @@ describe("positiveIntegerFromEnv", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// toolCallDescription
-// ---------------------------------------------------------------------------
 
 describe("toolCallDescription", () => {
   test("bash: prefers description, falls back to command", () => {
@@ -403,9 +362,6 @@ describe("toolCallDescription", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// mergeBackgroundTaskSnapshot
-// ---------------------------------------------------------------------------
 
 describe("mergeBackgroundTaskSnapshot", () => {
   test("REPLACE semantics: absent ids drop, new ids appear with snapshot meta", () => {

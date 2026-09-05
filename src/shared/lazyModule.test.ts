@@ -93,7 +93,6 @@ describe("createLazyLoader", () => {
   })
 
   test("normalizes a non-Error rejection into an Error", async () => {
-    // Dynamic-import failures do not always arrive as Error instances.
     const reason: unknown = "plain string failure"
     const load = createLazyLoader(() => Promise.reject(reason))
 

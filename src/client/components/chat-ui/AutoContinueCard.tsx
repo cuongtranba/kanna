@@ -87,7 +87,6 @@ function AutoContinueCardContent({ schedule, onAccept, onReschedule, onCancel }:
     )
   }
 
-  // scheduled
   const displayAt = formatLocal(schedule.scheduledAt ?? schedule.resetAt, schedule.tz)
   const tzLabel = schedule.tz === "system" ? "local" : schedule.tz
 

@@ -1,10 +1,3 @@
-/**
- * Cron read model — folds the auto-continue event log into the chat's armed
- * cron jobs. Pure replay over the same durable stream `deriveLoopState`
- * uses, so cron state survives restart for free. Consumed by
- * `deriveChatSnapshot` (per-chat panel + run cards), the global cron-jobs
- * topic, the scheduler's rehydrate, and the fire path's overlap guard.
- */
 
 import {
   MAX_RECENT_CRON_RUNS,
@@ -16,7 +9,6 @@ import type { AutoContinueEvent } from "../auto-continue/events"
 
 interface JobAccum {
   job: Omit<CronJobSnapshot, "nextFireAt" | "lastRun" | "recentRuns">
-  /** Newest first, already bounded. */
   runs: CronRunSnapshot[]
 }
 
@@ -31,10 +23,6 @@ export function deriveCronJobs(
     if (event.chatId !== chatId) continue
     switch (event.kind) {
       case "cron_armed":
-        // Re-arming an existing id replaces the job wholesale — run history
-        // belongs to the arming, not the id. `event.paused` is set on
-        // update-in-place of a paused job so the paused state is preserved;
-        // absent means a fresh arm which always starts unpaused.
         jobs.set(event.scheduleId, {
           job: {
             jobId: event.scheduleId,
@@ -119,11 +107,6 @@ function pushRun(accum: JobAccum, run: CronRunSnapshot): void {
   if (accum.runs.length > MAX_RECENT_CRON_RUNS) accum.runs.length = MAX_RECENT_CRON_RUNS
 }
 
-/**
- * Whether the chat has at least one armed, unpaused cron job — a light fold
- * for the sidebar's `hasAutomation` badge that skips run bookkeeping (the
- * sidebar derives every chat on every broadcast).
- */
 export function hasUnpausedCronJob(events: readonly AutoContinueEvent[], chatId: string): boolean {
   const armed = new Set<string>()
   const paused = new Set<string>()
@@ -154,12 +137,6 @@ export function hasUnpausedCronJob(events: readonly AutoContinueEvent[], chatId:
   return false
 }
 
-/**
- * Scans the full, unbounded event log and returns every run that has a
- * `cron_run_started` but no `cron_run_outcome`. Used by boot reconciliation
- * instead of `job.recentRuns` (capped at `MAX_RECENT_CRON_RUNS`) so a running
- * run buried under many skip records cannot silently escape the orphan pass.
- */
 export function findRunningCronRuns(
   events: readonly AutoContinueEvent[],
   chatId: string,

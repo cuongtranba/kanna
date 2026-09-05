@@ -7,9 +7,6 @@ import { createEmptyState } from "./events"
 import type { TranscriptEntry } from "../shared/types"
 import { applyStoreEvent } from "./event-store-apply"
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 const TS = 1_700_000_000_000
 
@@ -51,9 +48,6 @@ function makeToolRequest(): ToolRequest {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Project events
-// ---------------------------------------------------------------------------
 
 describe("applyStoreEvent — project events", () => {
   test("project_opened populates projectsById and projectIdsByPath", () => {
@@ -90,9 +84,6 @@ describe("applyStoreEvent — project events", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// Chat lifecycle events
-// ---------------------------------------------------------------------------
 
 describe("applyStoreEvent — chat events", () => {
   test("chat_created populates chatsById and chatTimingsByChatId", () => {
@@ -141,9 +132,6 @@ describe("applyStoreEvent — chat events", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// message_appended
-// ---------------------------------------------------------------------------
 
 describe("applyStoreEvent — message_appended", () => {
   test("appends to legacyMessagesByChatId and marks hasMessages", () => {
@@ -193,9 +181,6 @@ describe("applyStoreEvent — message_appended", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// Stack events
-// ---------------------------------------------------------------------------
 
 describe("applyStoreEvent — stack events", () => {
   test("stack_added creates a stack", () => {
@@ -235,9 +220,6 @@ describe("applyStoreEvent — stack events", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// Auto-continue events (kind-based dispatch)
-// ---------------------------------------------------------------------------
 
 describe("applyStoreEvent — auto-continue events", () => {
   test("auto_continue_accepted is routed to autoContinueEventsByChatId", () => {
@@ -261,9 +243,6 @@ describe("applyStoreEvent — auto-continue events", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// Tool-request events
-// ---------------------------------------------------------------------------
 
 describe("applyStoreEvent — tool request events", () => {
   test("tool_request_put adds to toolRequestsById", () => {

@@ -1,15 +1,3 @@
-/**
- * "Start work" — one card becomes one worktree, one branch, one chat.
- *
- * This is what makes three agents on three cards safe: each has its own
- * checkout, so they cannot touch each other's files. The decisions
- * (what already exists, what to call the branch, what to say first) are pure
- * and live in `shared/boards/start-work.ts`; this module only sequences them
- * and performs the writes.
- *
- * Every effect is injected, so no IO is imported here and the module stays
- * inside the side-effect seal. `board-start-work-io.ts` binds the real adapters.
- */
 
 import { basename, join } from "node:path"
 import { cardBranchName, BoardStoreError } from "./board-store"
@@ -39,7 +27,6 @@ export interface StartWorkProject {
 export interface StartWorkDeps {
   registry: BoardRegistry
   getProject(projectId: string): StartWorkProject | null
-  /** A card's chat link outlives the chat; the stale-empty-chat reaper deletes it. */
   chatExists(chatId: string): boolean
   listWorktrees(repoRoot: string): Promise<GitWorktree[]>
   localBranchExists(repoRoot: string, branch: string): Promise<boolean>
@@ -48,28 +35,10 @@ export interface StartWorkDeps {
   sendPrompt(chatId: string, content: string): Promise<void>
 }
 
-/**
- * Where a card's worktrees live: a sibling of the checkout, namespaced by repo.
- *
- * Not inside the repo. A nested worktree is an untracked directory to the
- * parent, so it would dirty every `git status` — the Changes pane, and the
- * loop oracle's workspace digest. The repo-name segment keeps two projects
- * that happen to share a parent directory from colliding on a branch slug.
- */
 export function cardWorktreeDir(repoRoot: string): string {
   return join("..", ".kanna-worktrees", basename(repoRoot))
 }
 
-/**
- * Read the card's situation without changing it.
- *
- * The drawer renders this and the button acts on it, so both go through one
- * resolver: a label that says "Open chat" while the action would create one is
- * worse than either behaviour on its own.
- *
- * Blocking conditions are RETURNED, not thrown — the drawer needs to explain a
- * card it cannot start, and "no project" is a thing to say, not an error.
- */
 type ResolvedStartWork =
   | { view: StartWorkView; ready: false }
   | {
@@ -112,12 +81,6 @@ async function resolve(deps: StartWorkDeps, cardId: string): Promise<ResolvedSta
 
   const status = deriveStartWorkStatus({ links, liveChatIds, existingWorktreePaths })
 
-  // Checked after the status is known, and only when work has not already
-  // begun. Blocking DEFERS starting; it must never take away the way back into
-  // a chat that is already running, which is what a blocker added mid-flight
-  // would otherwise do. A leftover worktree is not work under way — resuming it
-  // starts the work — so that case still defers, and reports the worktree it
-  // found rather than reading as though it had vanished.
   if (status.kind !== "chat") {
     const reason = describeBlockedReason(
       blockers.filter((blocker) => !blocker.cleared).map((blocker) => blocker.title),
@@ -134,15 +97,6 @@ async function resolve(deps: StartWorkDeps, cardId: string): Promise<ResolvedSta
   }
 }
 
-/**
- * Read the card's situation without changing it.
- *
- * The drawer renders this and the button acts on it, so both go through one
- * resolver: a label reading "Open chat" while the action would create one is
- * worse than either behaviour alone. Blocking conditions are returned rather
- * than thrown — the drawer has to explain a card it cannot start, and "no
- * project" is a thing to say, not a failure.
- */
 export async function startWorkView(deps: StartWorkDeps, cardId: string): Promise<StartWorkView> {
   return (await resolve(deps, cardId)).view
 }
@@ -170,8 +124,6 @@ export async function startWork(deps: StartWorkDeps, cardId: string): Promise<St
   const worktreePath =
     status.kind === "worktree" ? status.worktreePath : await createWorktree(deps, project, branch, existingPaths)
 
-  // Linked BEFORE the chat exists: a crash between the two leaves a card that
-  // resumes into its checkout, not an orphan nothing points at.
   if (status.kind !== "worktree") registry.addCardLink(cardId, "worktree", worktreePath)
 
   const chat = await deps.createChat(projectId, {
@@ -179,9 +131,6 @@ export async function startWork(deps: StartWorkDeps, cardId: string): Promise<St
   })
   registry.addCardLink(cardId, "chat", chat.id)
 
-  // Moved BEFORE the prompt: the prompt names where the card advances to NEXT,
-  // which is the column after the one it is about to sit in. A prompt built
-  // from the pre-move column would send the agent one step behind the board.
   const columns = registry.listColumns(card.boardId)
   const movedToColumnId = moveToActiveColumn(registry, columns, cardId, card.columnId)
   await deps.sendPrompt(
@@ -199,7 +148,6 @@ export async function startWork(deps: StartWorkDeps, cardId: string): Promise<St
   }
 }
 
-/** The move to ask the agent for, or null when the board has nowhere to advance to. */
 function resolveAdvance(
   columns: readonly BoardColumn[],
   cardId: string,
@@ -222,8 +170,6 @@ async function createWorktree(
     branch,
     new Set(existingPaths),
   )
-  // A branch can outlive its worktree. Reattaching keeps the card's own history
-  // rather than failing on the name or minting a near-duplicate.
   const reattach = await deps.localBranchExists(project.localPath, branch)
   const created = await deps.addWorktree(
     project.localPath,
@@ -232,12 +178,6 @@ async function createWorktree(
   return created.path
 }
 
-/**
- * Move the card to the column the board marks `active`.
- *
- * A board that marks none says nothing about where work goes, so the card stays
- * where the user put it and the caller reports that rather than guessing.
- */
 function moveToActiveColumn(
   registry: BoardRegistry,
   columns: readonly BoardColumn[],

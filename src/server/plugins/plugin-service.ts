@@ -1,18 +1,3 @@
-/**
- * Domain state machine for the plugin server runtime: install (compile +
- * write to disk) → enable → start (spawn subprocess, RPC round trip) → stop.
- *
- * Deliberately separate from `plugin-settings.ts` (the persisted
- * `installedPlugins` settings collection): that module is pure CRUD over
- * user-facing config, replayed from `settings.json` on boot. This module is
- * the RUNTIME — in-memory only, one subprocess per running plugin, torn down
- * with the server. Do not route one through the other; see
- * PROGRESS-plugin-system.md's P2b chunk note.
- *
- * All process/socket/filesystem primitives live in
- * `plugin-service-io.adapter.ts` (side-effect seal) — this file is the
- * policy layer that decides what to do with them.
- */
 import { homedir } from "node:os"
 import { join } from "node:path"
 import { errorMessage } from "../../shared/errors"
@@ -63,7 +48,6 @@ interface PluginRuntimeRecord {
   nextCallId: number
 }
 
-/** One installed plugin as every read surface (CLI `ls`, `GET /api/plugins`, `plugin_list`) reports it. */
 export interface PluginSummary {
   readonly id: string
   readonly sourceDir: string
@@ -71,16 +55,6 @@ export interface PluginSummary {
   readonly state: PluginRuntimeState
 }
 
-/**
- * Where installed-plugin records live ACROSS restarts.
- *
- * The service's registry is in-memory, so without this a `kanna plugin install`
- * is invisible to the running server and every surface reports nothing after a
- * reboot — the bundles are still on disk, but nothing remembers they exist.
- * `settings.json` already models the record (`InstalledPluginConfig`), so this
- * port is deliberately thin: the service owns runtime state, settings own the
- * durable fact that a plugin is installed.
- */
 export interface InstalledPluginStore {
   list(): readonly InstalledPluginConfig[]
   upsert(entry: InstalledPluginConfig): Promise<void>
@@ -88,21 +62,11 @@ export interface InstalledPluginStore {
 
 export interface PluginService {
   install(args: { readonly sourceDir: string }): Promise<void>
-  /** Every installed plugin. The single read the CLI, HTTP and MCP surfaces share. */
   list(): readonly PluginSummary[]
-  /** Compiled browser bundle, or null when the plugin is unknown or its build dir is gone. */
   clientBundle(id: string): Promise<string | null>
-  /** Record a browser-side failure against the plugin's log ring (`POST /api/plugins/:id/client-error`). */
   recordClientError(id: string, text: string): void
-  /** Stop then start, so a rebuilt bundle is picked up. No-op start when disabled. */
   reload(id: string): Promise<void>
   setEnabled(id: string, enabled: boolean): Promise<void>
-  /**
-   * Re-register every plugin the store records, WITHOUT recompiling: the build
-   * output is already on disk from the install that produced the record. Called
-   * once at boot; safe to call again (an id already registered keeps its
-   * runtime state, so a restore never restarts a healthy child).
-   */
   restore(): void
   start(id: string): Promise<void>
   status(id: string): { readonly state: PluginRuntimeState } | undefined
@@ -183,7 +147,6 @@ export function createPluginService(
     await installed?.upsert({ id, sourceDir, enabled: existing?.enabled ?? false })
   }
 
-  /** Build paths are derived, never stored: they are a pure function of homeDir + id. */
   function buildPaths(id: string): { bundlePath: string; clientBundlePath: string } {
     const buildDir = getPluginBuildDir(homeDir, id)
     return {
@@ -194,8 +157,6 @@ export function createPluginService(
 
   function restore(): void {
     for (const entry of installed?.list() ?? []) {
-      // Never clobber a live record: a second restore must not drop a running
-      // child's process/connection handles on the floor.
       if (registry.has(entry.id)) continue
       registry.set(entry.id, {
         id: entry.id,
@@ -258,10 +219,6 @@ export function createPluginService(
       try {
         connection = await withTimeout(listener.ready, START_TIMEOUT_MS, `plugin "${id}" did not become ready in time`)
       } finally {
-        // Exactly one child connects per start(); once its socket is
-        // established (or the wait fails) the listener has nothing left to
-        // accept, so free the temp socket path immediately rather than
-        // holding it open for the process lifetime.
         listener.stop()
       }
       record.connection = connection
@@ -334,15 +291,10 @@ export function createPluginService(
   async function reload(id: string): Promise<void> {
     requireRecord(id)
     await stop(id)
-    // A disabled plugin reloads to "installed but not running" rather than
-    // being silently re-enabled — `setEnabled` is the only thing that flips it.
     if (requireRecord(id).enabled) await start(id)
   }
 
   function recordClientError(id: string, text: string): void {
-    // Client errors share the plugin's ONE log ring rather than a separate
-    // buffer: `plugin logs <id>` is meant to answer "what went wrong with this
-    // plugin", and a browser-side throw is the same question as a server-side one.
     registry.get(id)?.logRing.append({ stream: "err", text, at: Date.now() })
   }
 

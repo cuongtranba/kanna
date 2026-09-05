@@ -1,13 +1,3 @@
-/**
- * Chat-footer panel for contributed plugin surfaces. Mirrors the
- * card/header/row shape `LoopProgressSection.tsx` and
- * `BackgroundTasksSection.tsx` use (rounded-2xl card, `h3` header row with
- * icon + title, flat list of rows below) rather than `WorkflowsSection.tsx`'s
- * heavier run-detail-dialog shape, which has no analog here.
- *
- * Each panel is wrapped in `PluginBoundary` — a throw inside one contributed
- * surface must not take the rest of the footer, or the chat UI, down with it.
- */
 import { Blocks } from "lucide-react"
 import { cn } from "../lib/utils"
 import { PluginBoundary } from "../plugins/PluginBoundary"

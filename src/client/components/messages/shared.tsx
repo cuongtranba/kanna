@@ -65,7 +65,6 @@ export function OpenLocalLinkProvider({
   )
 }
 
-// Tool icon mapping - shared between ToolCallMessage and SystemMessage
 export const toolIcons: Record<string, LucideIcon> = {
   Task: ListTodo,
   TaskOutput: ListTodo,
@@ -89,7 +88,6 @@ export const toolIcons: Record<string, LucideIcon> = {
 
 export const defaultToolIcon: LucideIcon = ToyBrick
 
-// Get icon for a tool.
 export function getToolIcon(toolName: string): LucideIcon {
   if (toolIcons[toolName]) {
     return toolIcons[toolName]
@@ -97,14 +95,10 @@ export function getToolIcon(toolName: string): LucideIcon {
   return defaultToolIcon
 }
 
-// Stable wrapper for a dynamically-selected LucideIcon. Use this instead of
-// `const Icon = getX(...)` + `<Icon />` in render — the latter triggers the
-// react-hooks/static-components warning because the component type varies per call.
 export function LucideIconWrapper({ icon: Icon, className }: { icon: LucideIcon; className?: string }) {
   return <Icon className={className} />
 }
 
-// Container for meta-style messages (system, tool, result)
 export function MetaRow({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <div className={cn("flex gap-3 justify-start items-center", className)}>
@@ -113,7 +107,6 @@ export function MetaRow({ children, className }: { children: ReactNode; classNam
   )
 }
 
-// Content row with consistent text styling
 export function MetaContent({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <div className={cn("flex items-center gap-1.5 text-xs", className)}>
@@ -122,22 +115,18 @@ export function MetaContent({ children, className }: { children: ReactNode; clas
   )
 }
 
-// Separator pipe
 export function MetaSeparator() {
   return <span className="text-muted-foreground">|</span>
 }
 
-// Bold label text
 export function MetaLabel({ children, className }: { children: ReactNode; className?: string }) {
   return <span className={cn("font-medium text-foreground/80", className)}>{children}</span>
 }
 
-// Muted text
 export function MetaText({ children }: { children: ReactNode }) {
   return <span className="text-muted-foreground">{children}</span>
 }
 
-// Centered label flanked by horizontal rules — "—— Worked for 3s ——" footer style
 export function RuledLabel({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <MetaRow className={cn("px-0.5 text-xs tracking-wide", className)}>
@@ -150,7 +139,6 @@ export function RuledLabel({ children, className }: { children: ReactNode; class
   )
 }
 
-// Expandable row with chevron
 interface ExpandableRowProps {
   children: ReactNode
   expandedContent: ReactNode
@@ -236,7 +224,6 @@ function MetaCodeBlockInner({
   )
 }
 
-// Code block for expanded content
 export function MetaCodeBlock({
   label,
   children,
@@ -255,7 +242,6 @@ export function MetaCodeBlock({
   )
 }
 
-// Pill/badge for tags
 export function MetaPill({ children, icon: Icon, className }: { children: ReactNode; icon?: LucideIcon; className?: string }) {
   return (
     <span className={cn("inline-flex items-center gap-1 px-2 py-1 bg-muted border border-border  rounded-full", className)}>
@@ -265,7 +251,6 @@ export function MetaPill({ children, icon: Icon, className }: { children: ReactN
   )
 }
 
-// Container with vertical line on the left
 export function VerticalLineContainer({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <div className={cn("grid grid-cols-[auto_1fr] gap-2 min-w-0", className)}>
@@ -279,7 +264,6 @@ export function VerticalLineContainer({ children, className }: { children: React
   )
 }
 
-// Helper function to extract text content from ReactNode
 type NodeWithChildren = { props: { children?: ReactNode } }
 function hasChildren(v: ReactNode): v is NodeWithChildren & ReactNode {
   return typeof v === "object" && v !== null && "props" in v
@@ -309,9 +293,6 @@ function PreBlockInner({
 }: ComponentPropsWithoutRef<"pre"> & { ports?: SharedCopyPorts; copyText?: string }) {
   const copied = CopyStateStore.useScopedStore((s) => s.copied)
   const setCopied = CopyStateStore.useScopedStore((s) => s.setCopied)
-  // Decorated blocks (line-number gutters) must not leak their chrome into the
-  // clipboard, so the caller may state the payload instead of having it
-  // scraped back out of the rendered children.
   const textContent = copyText ?? extractText(children)
   const clipboard = ports.clipboard ?? clipboardAdapter
   const timer = ports.timer ?? timerAdapter
@@ -355,14 +336,6 @@ function PreBlock({
   )
 }
 
-/**
- * Raw mermaid source, shown when the diagram cannot be drawn (or on demand).
- *
- * `highlightLine` turns on a line-number gutter and marks that 1-based line —
- * without it a "Parse error on line 35" is unactionable, because the reader
- * has no way to count to 35. One grid owns every row so the gutter column
- * width is shared and the numbers stay aligned.
- */
 export function MermaidFallbackCodeBlock({
   source,
   ports,

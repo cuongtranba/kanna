@@ -1,16 +1,6 @@
 import { beforeAll, expect, test } from "bun:test"
 import { LINK_RULES_FOR_PARITY, repairMermaidSource } from "./mermaidRepair"
 
-/**
- * Pins every repair rule against mermaid's own grammar.
- *
- * A rule is only honest if BOTH halves hold: the `from` spelling must be one
- * mermaid rejects (otherwise the repair rewrites working diagrams) and the `to`
- * spelling must be one it accepts (otherwise the repair fixes nothing). Neither
- * can be settled by reading the docs — mermaid's grammar is the authority, so
- * this test asks it directly. A mermaid upgrade that starts accepting `-.x`
- * fails here, which is exactly when the rule should be retired.
- */
 
 interface MermaidParser {
   initialize: (config: { startOnLoad: boolean; securityLevel: "strict" }) => void
@@ -44,8 +34,6 @@ test("every rule rewrites a spelling mermaid rejects into one it accepts", async
 }, 30_000)
 
 test("the diagram from the audit that motivated this renders after repair", async () => {
-  // Verbatim from chat 02b439e1 ("Observable Tracing Audit"). Two `-.x` links;
-  // mermaid blamed line 4 while the first defect is on line 3.
   const original = [
     "flowchart LR",
     "  U[User sees<br/>WORK-ITEM_TECHNICAL_UNEXPECTED] -.->|no id| B[ErrorBoundary<br/>void error]",
@@ -70,8 +58,6 @@ test("the diagram from the audit that motivated this renders after repair", asyn
 }, 30_000)
 
 test("a diagram whose label contains the defect survives repair unparsed", async () => {
-  // Valid today, so the renderer never calls the repair on it — but if some
-  // other line broke, the repair must not rewrite the label.
   const source = 'flowchart LR\n  A["uses -.x here"] --> B[b]'
   expect(await parses(source)).toBe(true)
   expect(repairMermaidSource(source).repairs).toEqual([])

@@ -1,32 +1,3 @@
-/**
- * The `/cron` command grammar.
- *
- *   /cron                                          → help
- *   /cron list                                     → list armed jobs
- *   /cron remove <jobId>                           → disarm one job
- *   /cron pause <jobId> | resume <jobId>           → suspend / resume firing
- *   /cron update <jobId> schedule <schedule>       → change schedule in place
- *   /cron update <jobId> mode <inline|spawn>       → change mode in place
- *   /cron update <jobId> instruction <text…>       → change instruction in place
- *   /cron <instruction> <inline|spawn> <schedule>  → arm a job
- *
- * The arm form needs no quoting: the parser anchors on the LAST
- * `inline`/`spawn` token — everything before it (after `/cron`) is the
- * instruction verbatim, everything after is the schedule text. A
- * double-quoted instruction is also accepted as an escape hatch for
- * instructions that end with a literal mode word.
- *
- * Disambiguation for `update`: a line is treated as an `update` subcommand
- * only when tokens[3] is a recognised field name (`schedule`, `mode`,
- * `instruction`) AND no mode word (`inline`/`spawn`) appears after position 3
- * — or, for the `mode` field specifically, when the line is exactly five
- * tokens long (/cron update <id> mode <value>). Everything else falls through
- * to `parseArm`, so `/cron update the docs inline @daily` arms as usual.
- *
- * Unlike `/clear` (whole-message-or-fallthrough), `/cron` ALWAYS intercepts:
- * an invalid `/cron …` line must surface a precise error plus a ready-to-send
- * corrected suggestion, never get sent to the model as a prompt.
- */
 
 import {
   isCronMode,
@@ -44,11 +15,6 @@ interface Token {
   end: number
 }
 
-/**
- * What the grammar itself produces. `parseCronCommand` stamps `input` on the
- * way out, so no failure path can forget to record the line it rejected — and
- * a new one cannot be written without it.
- */
 type Outcome =
   | { ok: true; command: CronCommand }
   | { ok: false; error: Omit<CronParseError, "input"> }
@@ -56,10 +22,6 @@ type Outcome =
 const MODE_HINT = "`inline` (runs in this chat, cleared each cycle) or `spawn` (a new chat per run)"
 const ARM_SHAPE = "`/cron <instruction> <inline|spawn> <schedule>`"
 
-/**
- * Returns null when the message is not a `/cron` command at all; otherwise
- * always a result — success or a structured error, never a fallthrough.
- */
 export function parseCronCommand(content: string): CronParseResult | null {
   const line = content.trim()
   const firstToken = /^\S+/.exec(line)?.[0]
@@ -102,12 +64,6 @@ function tokenize(line: string): Token[] {
   return tokens
 }
 
-/**
- * Management subcommands only claim the line when no mode token follows —
- * `/cron remove old sessions inline @daily` is an arm whose instruction
- * happens to start with "remove". `update` has its own disambiguation
- * because the `mode` field takes a mode word as its value.
- */
 function parseSubcommand(line: string, tokens: Token[]): Outcome | null {
   const first = tokens[1]!.text.toLowerCase()
   const modeLater = tokens.slice(2).some((token) => isCronMode(token.text))
@@ -155,13 +111,6 @@ function parseSubcommand(line: string, tokens: Token[]): Outcome | null {
   return null
 }
 
-/**
- * `/cron update <jobId> <field> <value…>`
- *
- * Claims the line only when tokens[3] is a recognised field AND the line
- * cannot be an arm (no mode word after position 3, or exactly five tokens
- * for the `mode` field whose value IS a mode word).
- */
 function parseUpdate(line: string, tokens: Token[], modeLater: boolean): Outcome | null {
   const jobId = tokens[2]?.text
 
@@ -190,7 +139,6 @@ function parseUpdate(line: string, tokens: Token[], modeLater: boolean): Outcome
   const field = tokens[3]!.text.toLowerCase()
 
   if (field === "mode") {
-    // Mode value IS a mode word, so apply a tighter check: exactly 5 tokens.
     if (tokens.length !== 5) return null
     return parseUpdateMode(tokens)
   }
@@ -200,8 +148,6 @@ function parseUpdate(line: string, tokens: Token[], modeLater: boolean): Outcome
     return parseUpdateFieldValue(line, tokens, field)
   }
 
-  // Unknown field — fall through to arm when mode tokens are present; otherwise
-  // surface a helpful error so the user knows the shape.
   if (modeLater) return null
   return {
     ok: false,
@@ -368,12 +314,6 @@ function finishArm(instruction: string, mode: CronMode, scheduleText: string): O
   }
 }
 
-/**
- * No mode token anywhere. Two recovery heuristics, strongest first:
- * a near-miss token (edit distance ≤ 2 of inline/spawn) whose suffix parses
- * as a schedule, else a parseable schedule suffix with the mode simply
- * omitted (suggests `inline`).
- */
 function missingModeError(line: string, tokens: Token[]): Outcome {
   for (let i = tokens.length - 2; i >= 2; i--) {
     const token = tokens[i]!
@@ -430,7 +370,6 @@ function stripQuotes(text: string): string {
   return text
 }
 
-/** A suggestion is only worth offering when it re-parses cleanly. */
 function validateSuggestion(candidate: string): string | undefined {
   const reparsed = parseCronCommand(candidate)
   return reparsed?.ok === true ? candidate : undefined

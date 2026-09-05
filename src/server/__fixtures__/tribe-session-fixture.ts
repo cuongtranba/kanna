@@ -7,31 +7,6 @@ export interface TribeSessionFixture {
   appendLine: (line: object) => void
 }
 
-/**
- * Builds a Tribe-shaped Claude session fixture on disk: a main transcript
- * JSONL (a `system`/`init` record, one `user` turn, one `assistant` turn
- * carrying a native `Agent`/`Task` `tool_use` call) plus a sibling
- * `<sessionId>/subagents/agent-<agentId>.jsonl` sidecar — exactly what a
- * real Tribe campaign session leaves on disk.
- *
- * Fixes vs. plan-06-join.md's illustrative Task 1 Step 1 snippet, verified
- * against the real production sources:
- *
- * 1. `opts.cwd` is used as-is, never hardcoded — callers pass a real,
- *    existing directory (e.g. one made with `mkdtempSync`) so
- *    `importOneSession`'s `cwdExists()` check (`claude-session-importer.adapter.ts`)
- *    succeeds and a brand-new import can reach `status: "created"`.
- * 2. Every record carries `sessionId` + `cwd` directly on the record,
- *    camelCase (never `session_id`) — `parseClaudeSessionFile`
- *    (`claude-session-parser.adapter.ts`) reads `record.sessionId` /
- *    `record.cwd`, matching `ClaudeSessionRecordBase`
- *    (`claude-session-types.ts`). A record missing these would silently
- *    fail to carry session identity.
- * 3. Every user/assistant record carries a unique `uuid`. `applyDelta`
- *    (`claude-session-importer.adapter.ts`) treats a uuid-less record as
- *    ALWAYS new (`!record.uuid || !seen.has(record.uuid)`) — a fixture with
- *    no uuids would let a broken/no-op live-tail dedupe pass silently.
- */
 export function writeTribeSessionFixture(
   dir: string,
   opts: { sessionId: string; cwd: string },

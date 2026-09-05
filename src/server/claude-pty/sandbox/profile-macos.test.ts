@@ -3,10 +3,8 @@ import { realpathSync } from "node:fs"
 import path from "node:path"
 import { generateMacosProfile } from "./profile-macos.adapter"
 
-// Resolve paths the same way the profile generator does — /etc is /private/etc on macOS.
 function r(p: string): string {
-  try { return realpathSync(p) } catch { /* fall through */ }
-  // Path doesn't exist: resolve the parent and rejoin basename.
+  try { return realpathSync(p) } catch { }
   try { return path.join(realpathSync(path.dirname(p)), path.basename(p)) } catch { return p }
 }
 
@@ -39,7 +37,6 @@ describe("generateMacosProfile", () => {
       policy: { ...POLICY, readPathDeny: ['/tmp/with"quote'] },
       homeDir: "/Users/u",
     })
-    // Should not produce malformed quoting (test just asserts no naked unescaped quote inside the string literal).
     const match = profile.match(/subpath "[^"]*"/g) ?? profile.match(/literal "[^"]*"/g)
     expect(match).not.toBeNull()
   })
@@ -53,16 +50,10 @@ describe("generateMacosProfile", () => {
       },
       homeDir: "/Users/u",
     })
-    // The newline must be stripped: the whole crafted path collapses onto a
-    // single deny line with the inner quotes backslash-escaped, so the
-    // injected `(allow ...)` can never become a top-level clause.
     const denyLines = profile.split("\n").filter((l) => l.startsWith("(deny"))
     expect(denyLines).toHaveLength(1)
-    // No line is the bare injected allow clause.
     expect(profile.split("\n")).not.toContain(`(allow file-read* (subpath "/"))`)
-    // The injected text only survives inside an escaped string literal.
     expect(denyLines[0]).toContain('\\"/\\"')
-    // No raw control char anywhere in the generated profile.
     expect(/[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(profile)).toBe(false)
   })
 

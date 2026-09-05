@@ -46,7 +46,6 @@ function applyOne(tunnels: Record<string, CloudflareTunnelRecord>, event: Cloudf
       }
       return
     case "tunnel_accepted":
-      // transitional; state stays "proposed" until tunnel_active arrives
       return
     case "tunnel_active": {
       const existing = tunnels[event.tunnelId]

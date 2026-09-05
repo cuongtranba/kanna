@@ -1,13 +1,3 @@
-/**
- * Message and transcript read operations extracted from event-store.ts.
- *
- * `loadTranscriptFromDisk` performs synchronous disk IO, so this module is an
- * adapter (`.adapter.ts`). All other functions in this file are pure in-memory
- * reads — they are co-located here for cohesion because they share the same
- * deps interface and depend on `loadTranscriptFromDisk`.
- *
- * This module must NOT import from event-store.ts (no circular deps).
- */
 import path from "node:path"
 import type {
   ChatHistoryPage,
@@ -30,22 +20,11 @@ import {
   RECENT_PAGE_BYTE_BUDGET,
 } from "./event-store-helpers"
 
-// ─── Transcript LRU cache ──────────────────────────────────────────────────
 
-/**
- * Small LRU of fully loaded transcripts (Map insertion order = recency).
- * Replaces the former single-chat `cachedTranscriptRef` so switching between
- * a handful of chats does not re-read MB-scale JSONL files from disk.
- */
 export function estimateTranscriptBytes(entries: readonly TranscriptEntry[]): number {
   return JSON.stringify(entries).length
 }
 
-/**
- * Default budget, counted in SOURCE JSONL bytes rather than heap bytes.
- * Measured amplification from JSONL text to parsed JS objects is ~4.7x, so
- * 24 MiB of transcript costs on the order of 110 MB RSS.
- */
 const DEFAULT_TRANSCRIPT_CACHE_MAX_BYTES = 24 * 1024 * 1024
 
 export class TranscriptCache {
@@ -54,17 +33,11 @@ export class TranscriptCache {
   private totalBytes = 0
   private readonly seededChatIds = new Set<string>()
 
-  /**
-   * `maxChats` alone was never a memory bound: a transcript has no size limit
-   * (the JSONL is never compacted), so "4 chats" measured 220 MB RSS on this
-   * install's four largest. Both `maxChats` and `maxBytes` are enforced.
-   */
   constructor(
     private readonly maxChats: number = 4,
     private readonly maxBytes: number = DEFAULT_TRANSCRIPT_CACHE_MAX_BYTES,
   ) {}
 
-  /** Returns the cached entries (touching LRU recency), or undefined. */
   get(chatId: string): TranscriptEntry[] | undefined {
     const entries = this.byChat.get(chatId)
     if (!entries) return undefined
@@ -73,12 +46,6 @@ export class TranscriptCache {
     return entries
   }
 
-  /**
-   * `bytes` is the transcript's source size. Callers holding the file text
-   * pass its length for free; the rest fall back to measuring. Transcripts
-   * larger than `maxBytes` are never cached: the parsed heap cost (measured
-   * ~5x the JSONL size) would exceed the budget regardless of eviction order.
-   */
   set(chatId: string, entries: TranscriptEntry[], bytes?: number): void {
     const entryBytes = bytes ?? estimateTranscriptBytes(entries)
     if (entryBytes > this.maxBytes) return
@@ -88,7 +55,6 @@ export class TranscriptCache {
     this.evict()
   }
 
-  /** Appends to a cached transcript; no-op when the chat is not cached. */
   appendTo(chatId: string, entry: TranscriptEntry): void {
     const entries = this.byChat.get(chatId)
     if (!entries) return
@@ -101,18 +67,10 @@ export class TranscriptCache {
     return this.byChat.has(chatId)
   }
 
-  /**
-   * Marks that this chat's seenMessageIds have been seeded from its transcript.
-   * Persists even when the transcript itself is evicted from the LRU (too large
-   * to cache): a 96 MB transcript that can't fit in the 24 MiB budget would
-   * otherwise cause ensureTranscriptLoaded to reload from disk on every append
-   * that carries a messageId, spiking RSS ~524 MB per call.
-   */
   markSeeded(chatId: string): void {
     this.seededChatIds.add(chatId)
   }
 
-  /** True when seenMessageIds for this chat have been fully seeded from disk. */
   isSeeded(chatId: string): boolean {
     return this.byChat.has(chatId) || this.seededChatIds.has(chatId)
   }
@@ -150,36 +108,15 @@ export class TranscriptCache {
     }
   }
 
-  // ─── Tail-window cache ───────────────────────────────────────────────────
-  //
-  // The full-transcript cache above is only ever seeded when a tail read
-  // happens to reach the START of the file, so for any transcript larger than
-  // one tail chunk it stays permanently empty — and `getRecentMessagesPage`
-  // then takes the tail path on EVERY call, re-reading and re-parsing the file
-  // from disk each time (measured: 18.8 ms of a 20.7 ms call at 3k entries).
-  // That cost lands on every snapshot derive, i.e. every broadcast tick.
-  //
-  // Validity is keyed on the transcript's BYTE SIZE, not on invalidation
-  // hooks: the JSONL is append-only, so a byte size that has not moved
-  // guarantees the tail has not moved. A stat is orders of magnitude cheaper
-  // than the re-parse it replaces, and an append changes the size, which
-  // expires the entry with no wiring to forget.
 
   private readonly tailByChat = new Map<string, CachedTail>()
 
-  /** Returns the cached tail for this exact (size, limit), or undefined. */
   getTail(chatId: string, fileSize: number, limit: number): TranscriptTailResult | undefined {
     const hit = this.tailByChat.get(chatId)
     if (!hit || hit.fileSize !== fileSize || hit.limit !== limit) return undefined
     return hit.tail
   }
 
-  /**
-   * Drops only the tail window, keeping any full transcript cached.
-   * For a writer that REPLACES a transcript wholesale: size-keyed validity
-   * assumes append-only, and a rewrite can in principle land on the same byte
-   * size with different content.
-   */
   invalidateTail(chatId: string): void {
     this.tailByChat.delete(chatId)
   }
@@ -201,7 +138,6 @@ interface CachedTail {
   tail: TranscriptTailResult
 }
 
-// ─── Deps interface ────────────────────────────────────────────────────────
 
 export interface MessageReadDeps {
   readonly storage: StorageBackend
@@ -214,13 +150,11 @@ export interface MessageReadDeps {
   listPendingToolRequests: (chatId: string) => ToolRequest[]
 }
 
-// ─── Private helpers ───────────────────────────────────────────────────────
 
 function transcriptPath(deps: MessageReadDeps, chatId: string): string {
   return path.join(deps.transcriptsDir, `${chatId}.jsonl`)
 }
 
-// ─── Tail-read fast path ───────────────────────────────────────────────────
 
 const TAIL_CHUNK_BYTES = 256 * 1024
 const NEWLINE = 0x0a
@@ -228,9 +162,7 @@ const utf8Decoder = new TextDecoder()
 
 export interface TranscriptTailResult {
   entries: TranscriptEntry[]
-  /** Absolute byte offset of each entry's raw JSONL line, parallel to `entries`. */
   lineOffsets: number[]
-  /** True when the slice covered the start of the file (entries are complete up to the end offset). */
   reachedStart: boolean
 }
 
@@ -247,7 +179,6 @@ function parseJsonlSlice(
     const atEnd = i === buf.length
     if (!atEnd && buf[i] !== NEWLINE) continue
     if (!skippedPartialFirstLine) {
-      // The slice may begin mid-line; the first segment is untrustworthy.
       skippedPartialFirstLine = true
       lineStart = i + 1
       continue
@@ -260,7 +191,6 @@ function parseJsonlSlice(
           entries.push(entry)
           lineOffsets.push(sliceStart + lineStart)
         } catch {
-          // torn/partial final line — skip
         }
       }
     }
@@ -269,18 +199,8 @@ function parseJsonlSlice(
   return { entries, lineOffsets }
 }
 
-/**
- * Extra bytes read beyond `byteBudget` before the growth loop stops, so the
- * slice reliably holds a full budget's worth of entries once serialized.
- */
 const TAIL_BUDGET_MARGIN = 1.25
 
-/**
- * Reads only the tail of the transcript JSONL (growing backwards until more
- * than `minEntries` lines, or `byteBudget` worth of bytes, or BOF). Returns
- * null when the storage backend has no byte-slice APIs — callers must fall
- * back to the full-parse path.
- */
 export function readTranscriptTail(
   deps: MessageReadDeps,
   chatId: string,
@@ -302,11 +222,6 @@ export function readTranscriptTail(
   if (end <= 0) {
     return { entries: [], lineOffsets: [], reachedStart: true }
   }
-  // Each growth step re-reads and re-parses the whole slice, so the loop costs
-  // the SUM of every attempt: chasing 200 fat entries walks 256K→512K→1M→2M→4M
-  // and parses ~7.75 MB to build a page the byte budget then trims to 1 MB.
-  // When a budget is in play, stop as soon as the slice can fill it — every
-  // entry past that point is parsed only to be discarded.
   const budgetBytes = byteBudget === undefined ? undefined : byteBudget * TAIL_BUDGET_MARGIN
   let chunk = Math.max(chunkBytes, 64)
   for (;;) {
@@ -333,7 +248,6 @@ function decodeByteCursor(cursor: string): number | null {
   return value
 }
 
-/** Caches a COMPLETE transcript and seeds the messageId dedup set. */
 function seedFullTranscript(deps: MessageReadDeps, chatId: string, entries: TranscriptEntry[]): void {
   const seen = getSeenMessageIds(deps, chatId)
   for (const entry of entries) {
@@ -346,9 +260,6 @@ function seedFullTranscript(deps: MessageReadDeps, chatId: string, entries: Tran
   deps.transcriptCache.markSeeded(chatId)
 }
 
-/** Seeds seenMessageIds from the tail only — avoids the ~524 MB full-file parse for large chats.
- *  Active streaming always uses a fresh messageId per API message, so the tail covers dedup needs.
- *  Returns false when the backend lacks slice APIs; the caller falls back to getMessagesView. */
 export function seedSeenMessageIdsFromTail(deps: MessageReadDeps, chatId: string): boolean {
   const tail = readTranscriptTail(deps, chatId, 500)
   if (!tail) return false
@@ -362,11 +273,6 @@ export function seedSeenMessageIdsFromTail(deps: MessageReadDeps, chatId: string
   return true
 }
 
-/**
- * Parses the single JSONL line starting at `offset` (the first entry of the
- * already-served newer page). Used as a coalesce sentinel so a cwu run that
- * straddles the page boundary collapses exactly like the full-array path.
- */
 function readEntryAtOffset(deps: MessageReadDeps, chatId: string, offset: number): TranscriptEntry | null {
   const { storage } = deps
   if (typeof storage.readSliceSync !== "function" || typeof storage.sizeSync !== "function") return null
@@ -391,14 +297,9 @@ function pageFromTail(
   nextEntry?: TranscriptEntry | null,
   byteBudget?: number,
 ): ChatHistoryPage {
-  // The sentinel participates in coalescing (so a trailing cwu run collapses
-  // against the newer page's leading cwu) and is then removed.
   const coalesced = nextEntry
     ? coalesceContextWindowUpdates([...tail.entries, nextEntry]).slice(0, -1)
     : coalesceContextWindowUpdates(tail.entries)
-  // Callers that pass a budget bound the page by bytes as well as by count;
-  // hasOlder / olderCursor below derive from the trimmed page, so the entries
-  // dropped here stay reachable through normal scrollback paging.
   const effectiveLimit =
     byteBudget === undefined ? limit : fitLimitToByteBudget(coalesced, limit, byteBudget)
   const startIdx = Math.max(0, coalesced.length - effectiveLimit)
@@ -411,8 +312,6 @@ function pageFromTail(
     const offset = tail.lineOffsets[rawIdx]
     olderCursor = offset === undefined ? null : `byte:${offset}`
   } else if (hasOlder && tail.lineOffsets.length > 0) {
-    // Page fully absorbed by coalescing (pure cwu run) — continue paging
-    // from the start of this slice so pagination cannot stall.
     olderCursor = `byte:${tail.lineOffsets[0]}`
   }
   return {
@@ -422,21 +321,12 @@ function pageFromTail(
   }
 }
 
-/**
- * Serves the most recent page via tail-read, avoiding a full-file parse on
- * cold open. When the tail turns out to be the whole file, the transcript is
- * promoted into the cache (with seen-messageId seeding). Returns null when
- * the backend lacks slice APIs.
- */
 export function getRecentMessagesPageTail(
   deps: MessageReadDeps,
   chatId: string,
   limit: number,
   chunkBytes?: number,
 ): ChatHistoryPage | null {
-  // An append-only JSONL at an unchanged byte size has an unchanged tail, so a
-  // stat is a sound validity check for the parsed window — and replaces a full
-  // re-read + JSON.parse on every snapshot derive.
   const { storage } = deps
   const fileSize =
     typeof storage.sizeSync === "function" && storage.existsSync(transcriptPath(deps, chatId))
@@ -456,69 +346,33 @@ export function getRecentMessagesPageTail(
   return pageFromTail(tail, limit, undefined, RECENT_PAGE_BYTE_BUDGET)
 }
 
-// ─── Proactive-compact trigger read ────────────────────────────────────────
 
-/**
- * Window sizes for the usage scan. Deliberately smaller than the page tail's
- * 256 KiB: the answer is almost always in the last turn's entries, and the
- * cost that matters is the common case, not the outlier.
- */
 const USAGE_SCAN_MIN_ENTRIES = 32
 const USAGE_SCAN_FIRST_CHUNK_BYTES = 64 * 1024
 const USAGE_SCAN_GROWTH = 8
 const USAGE_SCAN_MAX_CHUNK_BYTES = 1024 * 1024
 
-// context_window_updated fires once per turn result, so a marker past 8 MiB
-// describes a stale window — returning null (no compact) is the correct answer.
-// Bound prevents re-scanning the whole file on the 241/264 chats (measured) with no marker.
 const USAGE_SCAN_MAX_LOOKBACK_BYTES = 8 * 1024 * 1024
 
-/**
- * Latest context-window usage for a chat, read from the transcript TAIL.
- *
- * `shouldInjectProactiveCompact` runs on every send and needs only the newest
- * `context_window_updated` / `compact_boundary`. Answering it via `getMessages`
- * parsed the whole transcript — MEASURED at 524 MB peak RSS on a 96 MB / 36k
- * entry chat, on every message. This reads backwards a window at a time and
- * stops at the first marker or `USAGE_SCAN_MAX_LOOKBACK_BYTES`.
- * Past that bound it reports `null` — a stale marker describes a replaced context
- * window, so null (no proactive compact) is correct rather than wrong.
- */
 export function getLatestChatContextWindowUsage(
   deps: MessageReadDeps,
   chatId: string,
 ): ContextWindowUsageSnapshot | null {
-  // Already in memory: the scan is free. The legacy map matters beyond speed —
-  // those chats have no file on disk at all, so a tail read would see an empty
-  // transcript and wrongly report no usage.
   if (deps.transcriptCache.has(chatId) || deps.legacyMessagesByChatId.has(chatId)) {
     return getLatestContextWindowUsage(getMessagesView(deps, chatId))
   }
 
-  // Walk backwards in NON-OVERLAPPING windows. Re-reading from EOF with an
-  // ever-growing window instead re-parses everything already seen, so a
-  // transcript holding no marker costs ~2x a flat read — measured slower AND
-  // heavier than the whole-file load this replaces.
   const fileSize = deps.storage.sizeSync?.(transcriptPath(deps, chatId)) ?? 0
   let windowEnd = fileSize
   let chunkBytes = USAGE_SCAN_FIRST_CHUNK_BYTES
   for (;;) {
-    // No byteBudget: a budget makes readTranscriptTail stop early and hand back
-    // an inconclusive window we would only have to read again. For the same
-    // reason this does not consult getTail/setTail — that cache is keyed on
-    // (fileSize, limit) and its entries were produced WITH the page byte
-    // budget, so a matching limit would serve a truncated window to this
-    // unbudgeted query.
     const tail = readTranscriptTail(deps, chatId, USAGE_SCAN_MIN_ENTRIES, windowEnd, chunkBytes)
     if (!tail) break
 
-    // Raw entries, never coalesced — coalescing is a live-window concern.
     const scan = scanLatestContextWindowUsage(tail.entries)
     if (scan.found) return scan.usage
     if (tail.reachedStart) return null
 
-    // The next window ends where this one's first COMPLETE line began, so the
-    // torn leading line is picked up by that window and no byte is read twice.
     const nextEnd = tail.lineOffsets[0]
     if (nextEnd === undefined || nextEnd <= 0) return null
 
@@ -527,16 +381,11 @@ export function getLatestChatContextWindowUsage(
     chunkBytes = Math.min(chunkBytes * USAGE_SCAN_GROWTH, USAGE_SCAN_MAX_CHUNK_BYTES)
   }
 
-  // Backend without byte-slice APIs — behave exactly as before. Unlike the page
-  // tail this never calls seedFullTranscript on reachedStart: promoting the
-  // transcript into the cache would re-introduce the memory this read avoids.
   return getLatestContextWindowUsage(getMessagesView(deps, chatId))
 }
 
-// ─── Exported functions ────────────────────────────────────────────────────
 
 export const MAX_SEEN_MESSAGE_IDS = 2000
-/** Returns (or lazily creates) the seen-messageId dedup set for a chat. */
 export function getSeenMessageIds(deps: MessageReadDeps, chatId: string): Set<string> {
   let set = deps.seenMessageIdsByChatId.get(chatId)
   if (!set) {
@@ -546,10 +395,6 @@ export function getSeenMessageIds(deps: MessageReadDeps, chatId: string): Set<st
   return set
 }
 
-/**
- * Reads transcript entries from disk synchronously.
- * Populates the seenMessageIds set as a side-effect.
- */
 export function loadTranscriptFromDisk(
   deps: MessageReadDeps,
   chatId: string,
@@ -557,11 +402,6 @@ export function loadTranscriptFromDisk(
   return loadTranscriptWithBytes(deps, chatId).entries
 }
 
-/**
- * Same load, also reporting the source byte size the cache budgets on — free
- * here (the text is already in hand), and far cheaper than re-measuring the
- * parsed entries.
- */
 export function loadTranscriptWithBytes(
   deps: MessageReadDeps,
   chatId: string,
@@ -589,11 +429,6 @@ export function loadTranscriptWithBytes(
   return { entries, bytes: text.length }
 }
 
-/**
- * Returns the cached transcript WITHOUT cloning (loads it on miss).
- * Do-not-mutate contract: callers must treat the array and its entries as
- * read-only; anything returned to mutation-prone callers must be cloned.
- */
 export function getMessagesView(deps: MessageReadDeps, chatId: string): readonly TranscriptEntry[] {
   const cached = deps.transcriptCache.get(chatId)
   if (cached) return cached
@@ -611,23 +446,10 @@ export function getMessagesView(deps: MessageReadDeps, chatId: string): readonly
   return entries
 }
 
-/**
- * Returns cloned transcript entries for `chatId`, using the in-memory cache
- * or loading from disk as needed.
- */
 export function getMessages(deps: MessageReadDeps, chatId: string): TranscriptEntry[] {
   return cloneTranscriptEntries(getMessagesView(deps, chatId))
 }
 
-/**
- * Returns the last `limit` raw transcript entries without cloning and without
- * loading the full transcript when it is not already cached.
- *
- * When the full transcript is cached, slices it in-place (O(1) bounds check).
- * Otherwise uses the tail-read path (readSliceSync) so a 96 MB transcript on
- * disk costs only a small chunk read, not a full 524 MB RSS spike.
- * Falls back to getMessagesView when slice reads are unsupported.
- */
 export function getRecentRawEntries(
   deps: MessageReadDeps,
   chatId: string,
@@ -648,7 +470,6 @@ export function getRecentRawEntries(
   return entries.length <= limit ? entries : entries.slice(-limit)
 }
 
-/** Returns queued messages for a chat, with attachment arrays cloned. */
 export function getQueuedMessages(
   deps: MessageReadDeps,
   chatId: string,
@@ -660,7 +481,6 @@ export function getQueuedMessages(
   }))
 }
 
-/** Returns a single queued message by id, or null. */
 export function getQueuedMessage(
   deps: MessageReadDeps,
   chatId: string,
@@ -669,7 +489,6 @@ export function getQueuedMessage(
   return getQueuedMessages(deps, chatId).find((entry) => entry.id === queuedMessageId) ?? null
 }
 
-/** Returns the most recent page of transcript messages. */
 export function getRecentMessagesPage(
   deps: MessageReadDeps,
   chatId: string,
@@ -694,7 +513,6 @@ export function getRecentMessagesPage(
   }
 }
 
-/** Returns a page of transcript messages before the given cursor. */
 export function getMessagesPageBefore(
   deps: MessageReadDeps,
   chatId: string,
@@ -705,8 +523,6 @@ export function getMessagesPageBefore(
     return { messages: [], hasOlder: false, olderCursor: null }
   }
 
-  // Byte cursors are only ever issued by the tail-read path, whose storage
-  // has slice APIs — so readTranscriptTail cannot return null here.
   const byteOffset = decodeByteCursor(beforeCursor)
   if (byteOffset !== null) {
     const tail = readTranscriptTail(deps, chatId, limit, byteOffset)
@@ -714,8 +530,6 @@ export function getMessagesPageBefore(
     return pageFromTail(tail, limit, readEntryAtOffset(deps, chatId, byteOffset))
   }
 
-  // Coalesce identically to getRecentMessagesPage so cursors (which index the
-  // coalesced array) stay consistent across recent + load-older paging.
   const beforeIndex = decodeCursor(beforeCursor)
   const entries = coalesceContextWindowUpdates(getMessagesView(deps, chatId))
   const page = getMessagesPageFromEntries(entries, limit, beforeIndex)
@@ -727,7 +541,6 @@ export function getMessagesPageBefore(
   }
 }
 
-/** Returns merged transcript + pending tool request entries, plus a history snapshot. */
 export function getRecentChatHistory(
   deps: MessageReadDeps,
   chatId: string,
@@ -757,7 +570,6 @@ export function getRecentChatHistory(
   }
 }
 
-/** Returns the count of active (non-deleted, non-archived) chats for a project. */
 export function getChatCount(deps: MessageReadDeps, projectId: string): number {
   return [...deps.chatsById.values()].filter(
     (chat) => chat.projectId === projectId && !chat.deletedAt && !chat.archivedAt,

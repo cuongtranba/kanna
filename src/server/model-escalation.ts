@@ -6,36 +6,20 @@ export interface ModelEscalationEnqueueOptions {
 }
 
 export interface ModelEscalationConfig {
-  /** Short identifier for log lines, e.g. "mermaid" or "cron/repair". */
   name: string
   enabled: boolean
-  /** True while a user message waits — their turn outranks this housekeeping. */
   hasQueuedMessage: (chatId: string) => boolean
   enqueueMessage: (
     chatId: string,
     content: string,
     options?: ModelEscalationEnqueueOptions,
   ) => Promise<void>
-  /**
-   * Start the queued prompt. Optional: the mermaid guard runs at a turn
-   * boundary where the drain follows automatically, whereas /cron starts no
-   * turn at all — without the drain the queued prompt would sit forever.
-   */
   drainQueue?: (chatId: string) => Promise<void>
-  /**
-   * Per-chat FIFO cap. Small on purpose: it only has to outlive the one
-   * correction turn, and forgetting early costs at most one extra ask.
-   */
   memoryPerChat?: number
 }
 
 export interface ModelEscalation {
-  /**
-   * Enqueue a model correction turn under the four shared bounds:
-   * disabled → queued-message stand-aside → once-per-key → try/catch swallow.
-   */
   offer(chatId: string, key: string, prompt: string, scheduleId: string): Promise<void>
-  /** Clear this chat's memory so every key can be offered again. */
   forget(chatId: string): void
 }
 

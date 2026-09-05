@@ -1,14 +1,5 @@
 import { type JsonObject, type JsonArray, type JsonValue } from "./json"
-/**
- * Tool call shapes (raw + hydrated) — extracted from shared/types.ts.
- * Completely self-contained: no imports from types.ts.
- * Imported via the re-export barrel in types.ts; all external consumers
- * continue to import from "../shared/types" unchanged.
- */
 
-// ---------------------------------------------------------------------------
-// AskUserQuestion / TodoWrite payload primitives
-// ---------------------------------------------------------------------------
 
 export interface AskUserQuestionOption {
   label: string
@@ -31,9 +22,6 @@ export interface TodoItem {
   activeForm: string
 }
 
-// ---------------------------------------------------------------------------
-// Raw tool call shapes
-// ---------------------------------------------------------------------------
 
 interface ToolCallBase<TKind extends string, TInput> {
   kind: "tool"
@@ -121,11 +109,6 @@ export interface ImageGenerationToolResult {
   fileName: string
 }
 
-/**
- * Codex's `view_image`. `contentUrl` and `mimeType` are resolved at translation
- * time, where the project id lives — the client renders the path it is given
- * and never re-derives a URL.
- */
 export interface ImageViewToolCall
   extends ToolCallBase<"image_view", { path: string; contentUrl: string; mimeType: string }> { }
 
@@ -157,9 +140,6 @@ export type NormalizedToolCall =
   | WorkflowToolCall
   | UnknownToolCall
 
-// ---------------------------------------------------------------------------
-// Hydrated tool call shapes
-// ---------------------------------------------------------------------------
 
 export interface HydratedToolCallBase<TKind extends string, TInput, TResult> {
   id: string
@@ -173,11 +153,6 @@ export interface HydratedToolCallBase<TKind extends string, TInput, TResult> {
   result?: TResult
   rawResult?: string | JsonObject | JsonArray | null
   isError?: boolean
-  /**
-   * Set when the underlying tool_result entry was persisted to disk
-   * via the subagent payload cap. Mirrored from
-   * ToolResultEntry.persisted during hydration.
-   */
   persisted?: {
     filePath: string
     originalSize: number
@@ -261,10 +236,6 @@ export interface SubagentToolStats {
   otherToolCount?: number
 }
 
-// Parsed from the `Agent`/`Task` tool_result's top-level `toolUseResult`
-// sidecar (camelCase, written by claude-code into the transcript JSONL and
-// preserved on the tool_result entry's debugRaw). All fields optional — the
-// SDK driver / older transcripts / in-flight calls may omit it entirely.
 export interface SubagentTaskResult {
   agentId?: string
   agentType?: string
@@ -291,7 +262,6 @@ export type HydratedPreviewFileToolCall =
 export type HydratedImageGenerationToolCall =
   HydratedToolCallBase<"image_generation", ImageGenerationToolCall["input"], ImageGenerationToolResult>
 
-/** The result restates the path the call already carries, so it is unused by the card. */
 export type HydratedImageViewToolCall =
   HydratedToolCallBase<"image_view", ImageViewToolCall["input"], string>
 

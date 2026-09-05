@@ -1,8 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { useKannaStateStore } from "./kannaStateStore"
 
-// applyChatOpsEvent, bumpChatResyncNonce, and chatResyncNonce moved to
-// chatStateStore. See chatStateStore.test.ts for those tests.
 
 describe("kannaStateStore", () => {
   test("initial state has expected defaults", () => {

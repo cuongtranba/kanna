@@ -11,23 +11,9 @@ export interface WorkflowAgentTranscriptPanelProps {
   runId: string
   agentId: string
   agentLabel: string
-  /** The truncated sidecar prompt preview, shown above the full transcript. */
   promptPreview?: string
-  /**
-   * When the agent is still running its transcript on disk is incomplete; the
-   * panel reads a one-shot snapshot, so it surfaces a hint + a manual Refresh.
-   */
   agentIsRunning?: boolean
   onClose: () => void
-  /**
-   * Fetches the agent's full transcript. Reuses the same machinery as the
-   * native-subagent viewer (server: readWorkflowAgentTranscriptLines →
-   * normalizeClaudeStreamMessage). The panel hydrates the entries with
-   * `processTranscriptMessages` and renders them with `SubagentEntryRow`.
-   *
-   * The parent should mount this panel with `key={agentId}` so switching agents
-   * remounts it fresh (re-fetches from the initial loading state).
-   */
   getTranscript: (runId: string, agentId: string) => Promise<TranscriptEntry[]>
 }
 
@@ -48,10 +34,6 @@ function WorkflowAgentTranscriptPanelInner({
   const setStoreError = WorkflowAgentTranscriptStore.useScopedStore((s) => s.setError)
   const refresh = WorkflowAgentTranscriptStore.useScopedStore((s) => s.refresh)
 
-  // The fetch never sets "loading" synchronously (that would be set-state-in-
-  // effect; initial state is already "loading", and Refresh sets it from the
-  // user handler). The `stale` flag invalidates the in-flight fetch on unmount,
-  // dep change, OR a refresh (the prior effect's cleanup runs first).
   useEffect(() => {
     let stale = false
     getTranscript(runId, agentId)
@@ -66,7 +48,6 @@ function WorkflowAgentTranscriptPanelInner({
     return () => { stale = true }
   }, [runId, agentId, getTranscript, reloadNonce, setLoaded, setStoreError])
 
-  // Manual refresh is a user event, so resetting to "loading" here is allowed.
   const handleRefresh = useCallback(() => {
     refresh()
   }, [refresh])

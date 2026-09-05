@@ -241,12 +241,6 @@ describe("createDelegateSubagentTool", () => {
   })
 })
 
-/**
- * Progress-row labelling. A loop's delegation prompt is server-rendered
- * boilerplate identical every iteration, so the label has to come from
- * somewhere else — the orchestrator's `[chunk: …]` marker, or failing that the
- * plan's `## Next chunk`.
- */
 describe("createDelegateSubagentTool — chunk label", () => {
   const LOOP_PROMPT =
     "[chunk: <one-line summary of the Next chunk you just read>]"

@@ -2,9 +2,6 @@ import { beforeEach, describe, expect, test } from "bun:test"
 import { useChatInputStore } from "./chatInputStore"
 import type { SerializedEditorState } from "lexical"
 
-// ---------------------------------------------------------------------------
-// Helper: a minimal SerializedEditorState fixture
-// ---------------------------------------------------------------------------
 
 function makeLexicalState(text: string): SerializedEditorState {
   return {
@@ -46,7 +43,6 @@ describe("chatInputStore", () => {
     })
   })
 
-  // ── Attachment drafts (unchanged behaviour) ────────────────────────────────
 
   test("stores attachment drafts per chat", () => {
     useChatInputStore.getState().setAttachmentDrafts("chat-1", [
@@ -84,7 +80,6 @@ describe("chatInputStore", () => {
     expect(useChatInputStore.getState().getAttachmentDrafts("chat-1")).toEqual([])
   })
 
-  // ── Text draft (new DraftEntry shape) ──────────────────────────────────────
 
   test("getDraft returns null when no draft exists", () => {
     expect(useChatInputStore.getState().getDraft("chat-no-draft")).toBeNull()
@@ -125,10 +120,8 @@ describe("chatInputStore", () => {
     expect(useChatInputStore.getState().getDraft("chat-2")).toBeNull()
   })
 
-  // ── Back-compat: legacy persisted string drafts hydrate correctly ──────────
 
   test("legacy string draft (from localStorage) is normalized to { text } by getDraft", () => {
-    // Simulate a legacy persisted value (plain string in the drafts map)
     useChatInputStore.setState({
       drafts: { "legacy-chat": "legacy plain text" as unknown as import("./chatInputStore").DraftEntry },
     })

@@ -1,30 +1,9 @@
-/**
- * Board domain types.
- *
- * Shared by client and server: the server persists these shapes into SQLite and
- * the client renders them. Pure types plus a handful of pure guards — no IO, so
- * this module is legal everywhere under the side-effect seal.
- */
 
 import type { CardBlocker } from "./dependencies"
 
-// ── Boards ────────────────────────────────────────────────────────────────────
 
-/**
- * A board hangs off a project or a Stack. The Stack case is why {@link Card}
- * carries its own `projectId`: on a Stack board the board itself cannot say
- * which checkout "Start work" should use.
- */
 export type BoardOwnerKind = "project" | "stack"
 
-/**
- * The role a column plays, independent of what the user named it.
- *
- * Only `active` and `done` drive behaviour ("Start work" moves a card to
- * `active`; reaching `done` prompts about the worktree), and both are optional —
- * a board with no `active` column simply does not move cards automatically. The
- * feature never guesses a column from its title.
- */
 export type ColumnSemantic = "start" | "active" | "review" | "done"
 
 export interface Board {
@@ -33,9 +12,7 @@ export interface Board {
   ownerId: string
   title: string
   description: string | null
-  /** The template this board was instantiated from, if it still exists. */
   templateId: string | null
-  /** The card schema for this board. Empty means title-only cards. */
   cardFields: readonly FieldDef[]
   createdAt: number
   updatedAt: number
@@ -46,27 +23,12 @@ export interface BoardColumn {
   id: string
   boardId: string
   title: string
-  /** Fractional index; see `./rank`. */
   rank: string
   semantic: ColumnSemantic | null
-  /** See {@link ColumnColorToken}. Null renders no dot at all. */
   colorToken: ColumnColorToken | null
   wipLimit: number | null
 }
 
-/**
- * The colours a column may carry — a CLOSED set of existing design tokens, not
- * a free-form string.
- *
- * Two reasons it is closed. Storing a hex would put an un-themeable value in the
- * database: a colour correct in exactly one of the two themes. And an open set
- * would reintroduce the rainbow-column look the design brief rules out — the
- * palette stays the product's, not the user's.
- *
- * Rendered as a 6px dot beside the column title, never as a background.
- * `destructive` is Kanna Coral and is subject to the One-Voice Rule: rare, and
- * for genuinely destructive or blocked meaning only.
- */
 export const COLUMN_COLOR_TOKENS = ["muted-icon", "info", "success", "warning", "destructive"] as const
 
 export type ColumnColorToken = (typeof COLUMN_COLOR_TOKENS)[number]
@@ -75,7 +37,6 @@ export function isColumnColorToken(value: string): value is ColumnColorToken {
   return COLUMN_COLOR_TOKENS.some((entry) => entry === value)
 }
 
-// ── Card fields ───────────────────────────────────────────────────────────────
 
 export type FieldKind =
   | "text"
@@ -97,36 +58,23 @@ export interface FieldDef {
   id: string
   label: string
   kind: FieldKind
-  /** Present only for `select` / `multiselect`. */
   options: readonly FieldOption[] | null
   required: boolean
 }
 
-/**
- * A field's value, discriminated by the same names as {@link FieldKind} so a
- * value can always be checked against its definition without a cast.
- */
 export type FieldValue =
   | { kind: "text"; value: string }
   | { kind: "longtext"; value: string }
   | { kind: "url"; value: string }
   | { kind: "number"; value: number }
-  /** Epoch milliseconds, UTC. */
   | { kind: "date"; value: number }
   | { kind: "select"; optionId: string | null }
   | { kind: "multiselect"; optionIds: readonly string[] }
   | { kind: "label"; values: readonly string[] }
 
-/** Field values keyed by {@link FieldDef.id}. */
 export type CardContent = Readonly<Record<string, FieldValue>>
 
-// ── Cards ─────────────────────────────────────────────────────────────────────
 
-/**
- * Who last touched a card. Attribution is not cosmetic: an agent-origin change
- * is held back from GitHub unless the binding opts in
- * ({@link SyncBinding.allowAgentPush}).
- */
 export type CardActor =
   | { kind: "user" }
   | { kind: "agent"; chatId: string }
@@ -136,13 +84,8 @@ export interface Card {
   id: string
   boardId: string
   columnId: string
-  /**
-   * Which project's checkout "Start work" uses. Always set on a Stack board;
-   * on a project board it mirrors the board owner.
-   */
   projectId: string | null
   title: string
-  /** Fractional index within the column; see `./rank`. */
   rank: string
   content: CardContent
   updatedBy: CardActor
@@ -151,22 +94,11 @@ export interface Card {
   archivedAt: number | null
 }
 
-/**
- * `cleanup_declined` is not a link to a thing but a remembered answer: the
- * user was asked what to do with that worktree and said "leave it". It lives
- * here because it is exactly a (card, worktree) pair, which is what this table
- * stores.
- *
- * `blocked_by` is an ordering edge — the card waits on `targetId` — and is the
- * one kind the store VALIDATES rather than merely records: see
- * `./dependencies` and the DAG check in `board-registry.ts`.
- */
 export type CardLinkKind = "chat" | "worktree" | "pr" | "card" | "cleanup_declined" | "blocked_by"
 
 export interface CardLink {
   cardId: string
   kind: CardLinkKind
-  /** Chat id, worktree path, PR url, or another card id, per `kind`. */
   targetId: string
   createdAt: number
 }
@@ -179,7 +111,6 @@ export interface CardComment {
   createdAt: number
 }
 
-// ── Templates ─────────────────────────────────────────────────────────────────
 
 export interface BoardTemplateColumn {
   title: string
@@ -204,25 +135,17 @@ export interface BoardTemplate {
   id: string
   name: string
   description: string | null
-  /** Seeded by migration; cannot be deleted, only copied. */
   builtin: boolean
   definition: BoardTemplateDefinition
   createdAt: number
   updatedAt: number
 }
 
-// ── Sync ──────────────────────────────────────────────────────────────────────
 
-/** How a column maps onto something the remote tracker understands. */
 export type RemoteKind = "state" | "label" | "projectField"
 
 export type SyncDirection = "pull" | "push" | "both"
 
-/**
- * Where a board's cards come from. One variant per provider adapter; adding a
- * tracker means adding a variant plus an adapter, and every exhaustive switch
- * over this union fails to compile until it is handled.
- */
 export type RemoteSourceRef =
   | { provider: "github-issues"; owner: string; repo: string }
   | { provider: "github-projectv2"; owner: string; projectNumber: number; projectId: string }
@@ -232,25 +155,11 @@ export type ProviderId = RemoteSourceRef["provider"]
 export interface SyncBinding {
   id: string
   boardId: string
-  /**
-   * The checkout this repo lives in, so a card pulled into a Stack board knows
-   * which worktree Start work should mint.
-   *
-   * A project board could infer it from the board's owner; a Stack board cannot
-   * — its cards come from several repos and the board itself names none of
-   * them. Null for a binding created before this was recorded, and for one the
-   * caller could not attribute to a project.
-   */
   projectId: string | null
   providerId: ProviderId
   sourceRef: RemoteSourceRef
   direction: SyncDirection
-  /**
-   * Whether a change an AGENT made may be pushed to the remote. Off by default:
-   * an agent dragging a card to "done" must not silently close a real issue.
-   */
   allowAgentPush: boolean
-  /** Provider-defined paging / `since` cursor. */
   cursor: string | null
   lastPulledAt: number | null
 }
@@ -267,13 +176,6 @@ export interface SyncLink {
   bindingId: string
   externalId: string
   externalUrl: string | null
-  /**
-   * Per-field remote `updatedAt` at the last reconcile, keyed by field id.
-   *
-   * After a successful push this records the remote timestamp OUR write
-   * produced — without that, the next pull reads our own change as a remote one
-   * and the two sides ping-pong forever.
-   */
   fieldWatermarks: Readonly<Record<string, number>>
   lastSyncedAt: number
 }
@@ -290,7 +192,6 @@ export interface SyncOutboxEntry {
   attempts: number
   nextAttemptAt: number
   lastError: string | null
-  /** Set when `origin` is an agent and the binding forbids agent pushes. */
   heldReason: "agent_push_disabled" | null
 }
 
@@ -307,7 +208,6 @@ export interface SyncConflict {
   detectedAt: number
 }
 
-// ── Guards ────────────────────────────────────────────────────────────────────
 
 const COLUMN_SEMANTICS: readonly ColumnSemantic[] = ["start", "active", "review", "done"]
 const FIELD_KINDS: readonly FieldKind[] = [
@@ -361,26 +261,14 @@ export function isCardLinkKind(value: string): value is CardLinkKind {
   return CARD_LINK_KINDS.some((entry) => entry === value)
 }
 
-/** The column a card should move to when work starts, or null if undefined. */
 export function findActiveColumn(columns: readonly BoardColumn[]): BoardColumn | null {
   return columns.find((column) => column.semantic === "active") ?? null
 }
 
-/** The column that triggers the worktree cleanup prompt, or null if undefined. */
 export function findDoneColumn(columns: readonly BoardColumn[]): BoardColumn | null {
   return columns.find((column) => column.semantic === "done") ?? null
 }
 
-/**
- * Where an incoming item of a given tracker state belongs.
- *
- * Open/closed is the one state every tracker has, and a board's columns are the
- * user's own, so the two meet through {@link ColumnSemantic} and nowhere else —
- * a board marking neither does not move cards at all rather than guessing a
- * column from its title. This is the single definition: the sync engine routes
- * by it and the sync screen shows it, so what the screen promises is what the
- * engine does.
- */
 export function columnForRemoteState(
   columns: readonly BoardColumn[],
   state: "open" | "closed",
@@ -388,12 +276,10 @@ export function columnForRemoteState(
   return state === "closed" ? findDoneColumn(columns) : findStartColumn(columns)
 }
 
-/** Where an incoming open item belongs, or null if the board has not said. */
 export function findStartColumn(columns: readonly BoardColumn[]): BoardColumn | null {
   return columns.find((column) => column.semantic === "start") ?? null
 }
 
-/** The state a card's column reads as to the tracker. */
 export function remoteStateOfColumn(
   columns: readonly BoardColumn[],
   columnId: string,
@@ -401,7 +287,6 @@ export function remoteStateOfColumn(
   return columns.find((column) => column.id === columnId)?.semantic === "done" ? "closed" : "open"
 }
 
-// ── Wire snapshots ─────────────────────────────────
 
 export interface BoardSummary {
   id: string
@@ -412,31 +297,13 @@ export interface BoardSummary {
   updatedAt: number
 }
 
-/**
- * Everything the board view needs for a first paint: the board, its columns,
- * per-column totals (so skeletons are sized before their cards arrive), and the
- * first page of each column.
- */
 export interface BoardViewSnapshot {
   board: Board
   columns: BoardColumn[]
   counts: Record<string, number>
   cards: Record<string, Card[]>
   cursors: Record<string, string | null>
-  /**
-   * Card id → the chats linked to it, newest first, and only for cards that
-   * have one — an empty array per card is payload the board never reads.
-   *
-   * Derived per read so a card face can show its chat's LIVE status; the card
-   * row's own `updatedBy` says who wrote last, which is attribution, not
-   * liveness.
-   */
   chatLinksByCard: Record<string, string[]>
-  /**
-   * The most recent `lastPulledAt` across all sync bindings, or null when the
-   * board has no bindings. Cards with `createdAt > newSince` are "new since
-   * last pull" and receive a quiet marker in the start column.
-   */
   newSince: number | null
 }
 
@@ -444,20 +311,6 @@ export interface CardDetail {
   card: Card
   links: CardLink[]
   comments: CardComment[]
-  /**
-   * The cards this one waits on, resolved to titles and to whether each still
-   * holds. Carried here rather than re-derived per caller for the same reason
-   * `externalRef` is: `links` names only ids, and a drawer that had to fetch
-   * each blocker to name it would fan out one request per edge.
-   */
   blockers: readonly CardBlocker[]
-  /**
-   * The tracker's own reference for this card — a GitHub issue number — or null
-   * when the card came from nowhere.
-   *
-   * Carried on the detail rather than re-derived per caller because the branch
-   * name is built from it: the drawer previews `card/412-…` and the server
-   * creates it, and the two must not be able to disagree.
-   */
   externalRef: string | null
 }

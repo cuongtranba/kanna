@@ -11,7 +11,6 @@ import type { ToolCallbackService } from "./tool-callback"
 import type { JsonValue } from "../shared/json"
 import type { HarnessToolRequest } from "./harness-types"
 
-// ── Minimal stubs ────────────────────────────────────────────────────────────
 
 function makeArgs(overrides: Partial<BuildCanUseToolArgs> = {}): BuildCanUseToolArgs {
   return {
@@ -25,7 +24,6 @@ function makeArgs(overrides: Partial<BuildCanUseToolArgs> = {}): BuildCanUseTool
 
 const TOOL_OPTIONS = { toolUseID: "tool-use-1", requestId: "req-1", signal: new AbortController().signal }
 
-// ── LOOP_BLOCKED_NATIVE_TOOLS ────────────────────────────────────────────────
 
 describe("LOOP_BLOCKED_NATIVE_TOOLS", () => {
   test("contains the expected blocked tool names", () => {
@@ -37,7 +35,6 @@ describe("LOOP_BLOCKED_NATIVE_TOOLS", () => {
   })
 })
 
-// ── buildCanUseTool ──────────────────────────────────────────────────────────
 
 describe("buildCanUseTool", () => {
   test("allows non-AskUserQuestion/ExitPlanMode tools unconditionally", async () => {
@@ -173,7 +170,6 @@ describe("buildCanUseTool", () => {
   })
 })
 
-// ── buildClaudeEnv ───────────────────────────────────────────────────────────
 
 describe("buildClaudeEnv", () => {
   test("strips CLAUDECODE and CLAUDE_CODE_OAUTH_TOKEN from base env when oauthToken provided", () => {
@@ -223,22 +219,13 @@ describe("buildClaudeEnv", () => {
   })
 })
 
-// ── withAdditionalDirectoryMemory ────────────────────────────────────────────
 
-/**
- * Claude Code does not load a `--add-dir` root's CLAUDE.md unless this is set,
- * so before it a stack chat could WRITE project B while knowing none of B's
- * conventions.
- */
 describe("withAdditionalDirectoryMemory", () => {
   test("sets the switch when the spawn has additional roots", () => {
     const env = withAdditionalDirectoryMemory({}, ["/repo-b"])
     expect(env[ADDITIONAL_DIRECTORY_MEMORY_ENV]).toBe("1")
   })
 
-  // A solo chat's context must be byte-for-byte what it was before this
-  // feature: extra memory files are only worth their tokens when there are
-  // extra roots to be correct about.
   test("leaves a single-root spawn untouched", () => {
     expect(withAdditionalDirectoryMemory({}, [])[ADDITIONAL_DIRECTORY_MEMORY_ENV]).toBeUndefined()
     expect(withAdditionalDirectoryMemory({}, undefined)[ADDITIONAL_DIRECTORY_MEMORY_ENV])

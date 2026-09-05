@@ -267,8 +267,6 @@ describe("ChangelogSection", () => {
 })
 
 test("AutoResumeToggleSection renders checked and unchecked based on props", () => {
-  // AutoResumeToggleSection is a pure prop-driven component exported from SettingsPage.
-  // SettingsPage wires it to usePreferencesStore; here we test the component directly.
   usePreferencesStore.setState({ autoResumeOnRateLimit: false })
   const stateOff = usePreferencesStore.getState()
   const htmlUnchecked = renderToStaticMarkup(

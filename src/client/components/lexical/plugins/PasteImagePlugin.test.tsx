@@ -14,7 +14,6 @@ import {
   type UploadFileFn,
 } from "./PasteImagePlugin"
 
-// ─── Fixtures ─────────────────────────────────────────────────────────────────
 
 const fakeAttachment: ChatAttachment = {
   id: "att-1",
@@ -27,7 +26,6 @@ const fakeAttachment: ChatAttachment = {
   size: 1024,
 }
 
-// ─── Editor factory ────────────────────────────────────────────────────────────
 
 function buildEditor() {
   const editor = createHeadlessEditor({
@@ -37,7 +35,6 @@ function buildEditor() {
       throw e
     },
   })
-  // Seed a paragraph so $insertNodes has a selection context
   editor.update(
     () => {
       const root = $getRoot()
@@ -49,7 +46,6 @@ function buildEditor() {
   return editor
 }
 
-// ─── Mock uploadFile factory ──────────────────────────────────────────────────
 
 function makeUploadFileMock(attachment: ChatAttachment = fakeAttachment): UploadFileFn {
   return mock(() => ({
@@ -58,7 +54,6 @@ function makeUploadFileMock(attachment: ChatAttachment = fakeAttachment): Upload
   })) as unknown as UploadFileFn
 }
 
-// ─── Tests: clipboard helpers ─────────────────────────────────────────────────
 
 describe("getClipboardImageFiles", () => {
   it("returns empty array when no image items", () => {
@@ -177,7 +172,6 @@ describe("hasClipboardTextPayload", () => {
   })
 })
 
-// ─── Tests: uploadAndInsertFiles ──────────────────────────────────────────────
 
 describe("uploadAndInsertFiles", () => {
   it("uploads a single image file and inserts an AttachmentNode", async () => {
@@ -281,7 +275,6 @@ describe("uploadAndInsertFiles", () => {
       promise: new Promise<{ attachments: ChatAttachment[] }>((resolve) => {
         current++
         if (current > maxConcurrent) maxConcurrent = current
-        // resolve in a microtask to allow concurrency tracking
         Promise.resolve().then(() => {
           current--
           resolve({ attachments: [fakeAttachment] })

@@ -1,13 +1,3 @@
-/**
- * ws-router-skills.ts
- *
- * Pure skill-management utilities extracted from ws-router.ts.
- * No closure dependencies from createWsRouter — safe to test in isolation.
- *
- * Covers: assertSafeSkill*, getGlobalSkillLockPath, parseInstalledSkillsLock,
- * listInstalledSkills, searchSkills, buildInstall/UninstallSkillCommand,
- * installSkill, uninstallSkill.
- */
 import os from "node:os"
 import path from "node:path"
 import { isJsonObject, safeJsonParse, type JsonObject, type JsonValue } from "../shared/json"

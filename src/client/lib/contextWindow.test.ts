@@ -79,10 +79,10 @@ describe("computeSessionTotals", () => {
       { usage: { inputTokens: 40, outputTokens: 10, cachedInputTokens: 5, costUsd: 0.005 } },
     ] as never
     const totals = computeSessionTotals(entries, subagentRuns)
-    expect(totals?.inputTokens).toBe(290)   // 100 + 150 + 40
-    expect(totals?.outputTokens).toBe(60)   // 20 + 30 + 10
-    expect(totals?.cachedTokens).toBe(15)   // 10 + 0 + 5
-    expect(totals?.costUsd).toBeCloseTo(0.035, 6) // 0.01 + 0.02 + 0.005
+    expect(totals?.inputTokens).toBe(290)
+    expect(totals?.outputTokens).toBe(60)
+    expect(totals?.cachedTokens).toBe(15)
+    expect(totals?.costUsd).toBeCloseTo(0.035, 6)
   })
 
   test("ignores context_window_updated entries (no double count)", () => {

@@ -1,10 +1,3 @@
-/**
- * Tests for KANNA_BUILTIN_TRANSFORMERS: verifies that the GFM transformer set
- * produces the expected Lexical node types from representative markdown inputs.
- *
- * All node inspection is done inside editor.getEditorState().read() callbacks
- * to respect Lexical's read-context requirement.
- */
 import { describe, expect, test } from "bun:test"
 import { createHeadlessEditor } from "@lexical/headless"
 import { $convertFromMarkdownString } from "@lexical/markdown"
@@ -47,9 +40,6 @@ import {
 import { KANNA_BUILTIN_TRANSFORMERS } from "./gfmTransformers"
 import { buildKannaEditorConfig } from "../config"
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 const ALL_NODES = [
   HeadingNode,
@@ -83,7 +73,6 @@ function parseMarkdown(markdown: string) {
   return editor
 }
 
-/** Deep-traverse all nodes, collecting those passing the predicate, within a read context. */
 function collectNodes<T extends LexicalNode>(
   editor: ReturnType<typeof makeEditor>,
   predicate: (node: LexicalNode) => node is T,
@@ -103,12 +92,8 @@ function collectNodes<T extends LexicalNode>(
   })
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 describe("KANNA_BUILTIN_TRANSFORMERS", () => {
-  // ---- Headings ------------------------------------------------------------
 
   test("h1 heading", () => {
     const editor = parseMarkdown("# Hello World")
@@ -147,7 +132,6 @@ describe("KANNA_BUILTIN_TRANSFORMERS", () => {
     })
   })
 
-  // ---- Blockquote ----------------------------------------------------------
 
   test("blockquote", () => {
     const editor = parseMarkdown("> This is a quote")
@@ -155,7 +139,6 @@ describe("KANNA_BUILTIN_TRANSFORMERS", () => {
     expect(quotes.length).toBeGreaterThan(0)
   })
 
-  // ---- Bold / italic / strikethrough / inline-code -------------------------
 
   test("bold text (** markers)", () => {
     const editor = parseMarkdown("**bold text**")
@@ -221,7 +204,6 @@ describe("KANNA_BUILTIN_TRANSFORMERS", () => {
     expect(codeFound).toBe(true)
   })
 
-  // ---- Code fence ----------------------------------------------------------
 
   test("fenced code block", () => {
     const md = "```typescript\nconst x = 1\n```"
@@ -234,7 +216,6 @@ describe("KANNA_BUILTIN_TRANSFORMERS", () => {
     })
   })
 
-  // ---- Link ----------------------------------------------------------------
 
   test("inline link", () => {
     const editor = parseMarkdown("[Kanna](https://example.com)")
@@ -246,7 +227,6 @@ describe("KANNA_BUILTIN_TRANSFORMERS", () => {
     })
   })
 
-  // ---- Unordered list ------------------------------------------------------
 
   test("unordered list produces bullet ListNode with 3 items", () => {
     const md = "- alpha\n- beta\n- gamma"
@@ -263,7 +243,6 @@ describe("KANNA_BUILTIN_TRANSFORMERS", () => {
     })
   })
 
-  // ---- Ordered list --------------------------------------------------------
 
   test("ordered list produces number ListNode with 3 items", () => {
     const md = "1. first\n2. second\n3. third"
@@ -280,7 +259,6 @@ describe("KANNA_BUILTIN_TRANSFORMERS", () => {
     })
   })
 
-  // ---- Checkbox / task list ------------------------------------------------
 
   test("task list with checked and unchecked items", () => {
     const md = "- [x] Done\n- [ ] Pending"
@@ -299,7 +277,6 @@ describe("KANNA_BUILTIN_TRANSFORMERS", () => {
     })
   })
 
-  // ---- GFM pipe table ------------------------------------------------------
 
   test("GFM pipe table produces TableNode with header and body rows", () => {
     const md = [
@@ -317,14 +294,12 @@ describe("KANNA_BUILTIN_TRANSFORMERS", () => {
 
       if (table && $isTableNode(table)) {
         const rows = table.getChildren<LexicalNode>().filter($isTableRowNode)
-        // header row + 2 body rows = 3
         expect(rows.length).toBe(3)
 
         const headerRow = rows[0]
         if (headerRow && $isTableRowNode(headerRow)) {
           const headerCells = headerRow.getChildren<LexicalNode>().filter($isTableCellNode)
           expect(headerCells.length).toBe(2)
-          // All header cells carry the ROW header state
           for (const cell of headerCells) {
             if ($isTableCellNode(cell)) {
               expect(cell.hasHeader()).toBe(true)
@@ -341,7 +316,6 @@ describe("KANNA_BUILTIN_TRANSFORMERS", () => {
     })
   })
 
-  // ---- Nested list ---------------------------------------------------------
 
   test("nested unordered list has at least one ListItemNode", () => {
     const md = "- parent\n  - child A\n  - child B"
@@ -350,7 +324,6 @@ describe("KANNA_BUILTIN_TRANSFORMERS", () => {
     expect(items.length).toBeGreaterThan(0)
   })
 
-  // ---- Paragraph -----------------------------------------------------------
 
   test("plain paragraph produces ParagraphNode", () => {
     const editor = parseMarkdown("Just a plain paragraph.")
@@ -360,11 +333,9 @@ describe("KANNA_BUILTIN_TRANSFORMERS", () => {
     })
   })
 
-  // ---- Transformer count ---------------------------------------------------
 
   test("KANNA_BUILTIN_TRANSFORMERS is longer than default TRANSFORMERS by exactly 2", async () => {
     const { TRANSFORMERS } = await import("@lexical/markdown")
-    // GFM_TABLE + CHECK_LIST (not in default TRANSFORMERS as of 0.45) + all default TRANSFORMERS
     expect(KANNA_BUILTIN_TRANSFORMERS.length).toBe(TRANSFORMERS.length + 2)
   })
 })

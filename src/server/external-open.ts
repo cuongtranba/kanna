@@ -124,8 +124,6 @@ export async function openExternal(command: OpenExternalCommand) {
     if (!windowsPath) {
       throw new Error(`Unable to resolve Windows path for: ${resolvedPath}`)
     }
-    // Windows dirs are often absent from the WSL $PATH (interop appendWindowsPath
-    // disabled), so resolve the binaries to absolute paths instead of bare names.
     const explorerBinary = resolveWindowsExecutable(WIN_EXPLORER) ?? "explorer.exe"
     const cmdBinary = command.action === "open_terminal" ? resolveWindowsExecutable(WIN_CMD) : null
     const wslCommand = buildWslOpenCommand({
@@ -217,15 +215,11 @@ export function buildWslOpenCommand(args: {
     if (!args.cmdBinary) {
       throw new Error("Unable to locate cmd.exe to launch a Windows terminal")
     }
-    // `start` resolves wt.exe on the Windows-side PATH (WindowsApps), which the
-    // WSL $PATH does not carry; -d sets the starting directory.
     return { command: args.cmdBinary, args: ["/c", "start", "", "wt.exe", "-d", args.windowsPath] }
   }
   if (args.action === "open_default") {
-    // explorer.exe opens a file with its default handler and a directory in Explorer.
     return { command: args.explorerBinary, args: [args.windowsPath] }
   }
-  // open_finder: reveal a file in its folder, or open the directory itself.
   if (args.isDirectory) {
     return { command: args.explorerBinary, args: [args.windowsPath] }
   }

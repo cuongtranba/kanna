@@ -1,4 +1,3 @@
-// src/shared/claude-session-id.test.ts
 import { describe, expect, test } from "bun:test"
 import { extractSessionId, extractSessionIds } from "./claude-session-id"
 

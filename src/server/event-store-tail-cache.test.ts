@@ -6,12 +6,6 @@ import { EventStore } from "./event-store"
 import type { TranscriptEntry } from "../shared/types"
 import { getRecentMessagesPageTail, MAX_SEEN_MESSAGE_IDS } from "./event-store-messages.adapter"
 
-/**
- * The tail window is cached against the transcript's BYTE SIZE, which is only
- * a sound validity token while the JSONL is append-only. These tests pin the
- * consequence that actually matters: a cached window must never hide a message
- * that has since been appended.
- */
 function entry(id: string, text: string): TranscriptEntry {
   return { _id: id, createdAt: Date.now(), kind: "assistant_text", text } as TranscriptEntry
 }
@@ -38,16 +32,12 @@ const lastText = (store: EventStore, chatId: string) => {
 describe("transcript tail cache", () => {
   test("a newly appended message is visible immediately after a cached read", async () => {
     await withStore(async (store, chatId) => {
-      // Enough entries that the tail read never reaches the start, which is
-      // exactly the case where the full-transcript cache stays empty and the
-      // tail cache is the only thing standing between us and a re-parse.
       for (let i = 0; i < 400; i += 1) {
         await store.appendMessage(chatId, entry(`e${i}`, `body ${i} ${"x".repeat(2000)}`))
       }
       await store.flush()
 
       expect(lastText(store, chatId)).toContain("body 399")
-      // Prime the cache, then append and read again.
       store.getRecentChatHistory(chatId, 200)
       await store.appendMessage(chatId, entry("fresh", "THE NEW ONE"))
       await store.flush()
@@ -68,12 +58,6 @@ describe("transcript tail cache", () => {
         const again = store.getRecentChatHistory(chatId, 200)
         expect(again.messages.length).toBe(first.messages.length)
         expect(again.history.hasOlder).toBe(first.history.hasOlder)
-        // Deliberately NOT asserting cursor equality across reads. Pre-existing
-        // behaviour (not introduced by the tail cache): when a transcript fits
-        // in one 256 KB tail chunk, the first read seeds the full-transcript
-        // cache and later reads take the array path, so the cursor flips from
-        // `byte:<offset>` to `idx:<n>`. Both decode correctly, so the contract
-        // is "a cursor that pages back", not "a stable cursor string".
         expect(again.history.olderCursor).toBeTruthy()
       }
     })
@@ -122,26 +106,14 @@ describe("transcript tail cache", () => {
   })
 })
 
-/**
- * The tail read grows its slice until it has enough entries OR enough bytes to
- * fill the byte budget. That early stop is a pure cost optimization: it must
- * never change the page that is served. Varying the chunk size changes how
- * many growth steps happen and where the loop stops, so a page that is
- * identical across chunk sizes is evidence the stop condition is not
- * observable from outside.
- */
 describe("byte-aware tail growth", () => {
   test("serves an identical page regardless of chunk size", async () => {
     await withStore(async (store, chatId) => {
-      // Fat entries, so 200 of them far exceed the byte budget and the growth
-      // loop actually has a decision to make.
       for (let i = 0; i < 300; i += 1) {
         await store.appendMessage(chatId, entry(`e${i}`, `body ${i} ${"x".repeat(20_000)}`))
       }
       await store.flush()
 
-      // Drive the tail read DIRECTLY so chunkBytes actually varies — going
-      // through getRecentChatHistory would ignore it and make this tautological.
       type Deps = Parameters<typeof getRecentMessagesPageTail>[0]
       const deps = (store as unknown as { msgReadDeps: Deps }).msgReadDeps
       const cache = (deps as unknown as { transcriptCache: { invalidateTail: (id: string) => void } })
@@ -154,7 +126,6 @@ describe("byte-aware tail growth", () => {
 
       for (const page of pages) expect(page).toBe(pages[0])
       const parsed = JSON.parse(pages[0]!) as { messages: unknown[] }
-      // Bounded by bytes, so well under the 200 asked for, and over the floor.
       expect(parsed.messages.length).toBeLessThan(200)
       expect(parsed.messages.length).toBeGreaterThanOrEqual(10)
     })
@@ -189,25 +160,21 @@ describe("seenMessageIds Set is bounded", () => {
 
       const seen = (store as unknown as StoreInternals).seenMessageIdsByChatId.get(chatId)!
       expect(seen.size).toBeLessThanOrEqual(MAX_SEEN_MESSAGE_IDS)
-      // Recent messageIds are retained for dedup
       expect(seen.has(`mid-${overCap - 1}`)).toBe(true)
-      // Oldest messageIds are evicted
       expect(seen.has("mid-0")).toBe(false)
     })
   })
 
   test("dedup still prevents duplicate messageIds after eviction", async () => {
     await withStore(async (store, chatId) => {
-      // Fill past the cap so eviction starts
       for (let i = 0; i < MAX_SEEN_MESSAGE_IDS + 50; i += 1) {
         await store.appendMessage(chatId, entryWithId(`e${i}`, `mid-${i}`))
       }
-      // Re-append a RECENT messageId — must be deduped (not written again)
       const recentMid = `mid-${MAX_SEEN_MESSAGE_IDS + 49}`
       const countBefore = (store as unknown as StoreInternals).seenMessageIdsByChatId.get(chatId)!.size
       await store.appendMessage(chatId, entryWithId("duplicate", recentMid))
       const countAfter = (store as unknown as StoreInternals).seenMessageIdsByChatId.get(chatId)!.size
-      expect(countAfter).toBe(countBefore) // no new entry added
+      expect(countAfter).toBe(countBefore)
     })
   })
 })

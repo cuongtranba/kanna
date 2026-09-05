@@ -5,15 +5,6 @@ import {
   validateCommitMessage,
 } from "./commit-message"
 
-/**
- * The real message that was lost.
- *
- * Reduced from commit 164d91a3 (#1057) to the smallest form that still
- * reproduces release-please's verdict. Keeping a REAL failing message here is
- * what stops this gate from silently becoming inert: a parser upgrade that
- * stopped rejecting this would fail loudly instead of quietly passing
- * everything.
- */
 const LOST_COMMIT = [
   "feat(motion): a motion layer for Kanna — eight surfaces, one vocabulary (#1057)",
   "",
@@ -30,7 +21,6 @@ describe("validateCommitMessage", () => {
     expect(verdict.ok).toBe(false)
     if (verdict.ok) return
 
-    // The parser's own words — this is the string release-please logged.
     expect(verdict.reason).toContain("unexpected token '('")
     expect(verdict.offendingLine).toContain("calc(2 * var(--motion-carry))")
   })
@@ -53,8 +43,6 @@ describe("validateCommitMessage", () => {
   })
 
   test("the same nested-paren text is fine once something precedes it", () => {
-    // Proves the gate is not banning nested parentheses as a spelling — it is
-    // reporting exactly what the parser rejects, which is narrower.
     const inline = "feat(x): y\n\nsee `calc(2 * var(--a))` here\n"
     expect(validateCommitMessage(inline).ok).toBe(true)
 
@@ -82,8 +70,6 @@ describe("looksLikeLineInitialNesting", () => {
   test("does not claim the shape when the line merely contains parens", () => {
     expect(looksLikeLineInitialNesting("see `calc(2 * var(--a))` here")).toBe(false)
     expect(looksLikeLineInitialNesting("calc(2) is fine")).toBe(false)
-    // Verified against the parser: a bulleted line is accepted, so claiming
-    // this shape would point the author at a line that is not the problem.
     expect(looksLikeLineInitialNesting("- calc(2 * var(--a))")).toBe(false)
     expect(looksLikeLineInitialNesting("* fix(x): calc(2 * var(--a))")).toBe(false)
     expect(looksLikeLineInitialNesting("ordinary prose")).toBe(false)
@@ -99,7 +85,6 @@ describe("formatCommitMessageFailure", () => {
 
     expect(report).toContain("HEAD: release-please cannot parse")
     expect(report).toContain("calc(2 * var(--motion-carry))")
-    // The consequence is stated, because the failure is otherwise invisible.
     expect(report).toContain("silently")
   })
 

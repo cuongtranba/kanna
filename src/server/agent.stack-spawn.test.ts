@@ -69,16 +69,7 @@ describe("resolveStackProjects", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// resolveProjectInstructions
-// ---------------------------------------------------------------------------
 
-/**
- * The solo-chat case is the one that decides whether this feature works at
- * all: `instructions` is edited from the ordinary project menu, but a solo
- * chat has no `stackBindings`, so sourcing the blocks from bindings alone
- * would ship a field that only takes effect inside a stack (adr-20260904 D5).
- */
 describe("resolveProjectInstructions", () => {
   const projects: Record<string, { title: string; instructions?: string }> = {
     p1: { title: "Backend API", instructions: "never edit generated/" },
@@ -113,8 +104,6 @@ describe("resolveProjectInstructions", () => {
     expect(out.map((b) => b.projectTitle)).toEqual(["Backend API", "Web Client"])
   })
 
-  // A root with no rules contributes no block — rendering an empty heading
-  // would spend tokens to say nothing.
   test("bound projects without instructions are omitted", () => {
     const out = resolveProjectInstructions(
       {

@@ -51,8 +51,6 @@ describe("redistributeToMinimum", () => {
     expect(result[1]).toBeCloseTo(0.5, 10)
   })
 
-  // With an 0.1 floor, 11 children cannot all be satisfied (11 * 0.1 > 1), so the
-  // floor is abandoned in favour of an even split rather than producing a sum > 1.
   test("goes uniform when the floor is unsatisfiable", () => {
     const result = redistributeToMinimum(Array.from({ length: 11 }, (_, i) => i + 1))
     expect(sum(result)).toBeCloseTo(1, 10)
@@ -83,8 +81,6 @@ describe("redistributeToMinimum", () => {
 })
 
 describe("clampPairSizes", () => {
-  // A drag only ever moves the boundary between two adjacent children, so the
-  // pair's combined share is invariant and the whole array still sums to 1.
   test("moves the boundary and preserves the pair's total", () => {
     const result = clampPairSizes([0.5, 0.5], 0, 0.2)
     expect(result[0]).toBeCloseTo(0.7, 10)
@@ -111,9 +107,6 @@ describe("clampPairSizes", () => {
     expect(result[1]).toBeCloseTo(1 - MIN_PANE_FRACTION, 10)
   })
 
-  // When the pair's own share is already under 2x the floor, a fixed 0.1 clamp
-  // would be unsatisfiable and the handle would freeze. Halving the pair keeps
-  // the boundary draggable.
   test("stays draggable when the pair is already smaller than twice the floor", () => {
     const result = clampPairSizes([0.05, 0.05, 0.9], 0, 0.5)
     expect(result[0] + result[1]).toBeCloseTo(0.1, 10)

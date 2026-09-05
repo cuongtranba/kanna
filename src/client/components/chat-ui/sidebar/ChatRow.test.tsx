@@ -108,9 +108,7 @@ describe("ChatRow", () => {
         onDeleteChat={() => undefined}
       />
     )
-    // Full word "Running" not abbreviated "run"
     expect(html).toContain("Running")
-    // Elapsed time in M:SS format
     expect(html).toContain("0:12")
   })
 
@@ -131,9 +129,6 @@ describe("ChatRow", () => {
     )
     expect(html).toContain("Running")
     expect(html).toContain('aria-label="Silenced"')
-    // After fix: label span is in-flow (no `absolute`), so only the action-buttons
-    // div has `absolute inset-0`. Before fix: both the label span AND the action-buttons
-    // div carry `absolute inset-0`, causing the label to overflow left onto the BellOff.
     const absoluteInset0Count = (html.match(/absolute\s+inset-0/g) ?? []).length
     expect(absoluteInset0Count).toBe(0)
   })

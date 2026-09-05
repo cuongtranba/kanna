@@ -7,13 +7,6 @@ import { useBoardsStore } from "../../stores/boardsStore"
 import { useBoardsPageStore } from "./BoardsPage.store"
 import type { BoardsSnapshot, ClientCommand, SubscriptionTopic } from "../../../shared/protocol"
 
-/**
- * `BoardsPage` is the same component for a project owner and a Stack owner —
- * `ownerKind` decides everything it reads and writes. These pin that a Stack
- * owner never leaks a "project" assumption: the subscription topic, the
- * `board.create` command, and the store key it reads from must all carry the
- * owner it was actually given.
- */
 
 async function mount(props: {
   ownerKind: "project" | "stack"
@@ -34,7 +27,6 @@ async function mount(props: {
       return Promise.resolve((type === "board.templates.list" ? [] : undefined) as TResult)
     },
   }
-  // Deliberately NOT attached to `document.body` — see BoardPane.rename.test.tsx.
   const container = document.createElement("div")
   const root = createRoot(container)
   await act(async () => {

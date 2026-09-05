@@ -52,7 +52,6 @@ describe("fieldDraftText", () => {
     expect(fieldDraftText(DATE, undefined)).toBe("")
   })
 
-  /** Content can outlive a schema change; a mismatched value must not throw. */
   test("a value of the wrong kind reads as unset rather than crashing", () => {
     expect(fieldDraftText(NUMBER, { kind: "text", value: "3" })).toBe("")
   })
@@ -69,7 +68,6 @@ describe("parseFieldDraft", () => {
     expect(parseFieldDraft(SELECT, "high")).toEqual({ kind: "select", optionId: "high" })
   })
 
-  /** Emptying a field clears it, rather than storing an empty string forever. */
   test("an empty draft clears the field", () => {
     expect(parseFieldDraft(TEXT, "   ")).toBeNull()
     expect(parseFieldDraft(NUMBER, "")).toBeNull()
@@ -83,7 +81,6 @@ describe("parseFieldDraft", () => {
     expect(parseFieldDraft(DATE, "next tuesday")).toBeNull()
   })
 
-  /** The server rejects an unknown option, so offering one here would only be a round-trip to an error. */
   test("refuses an option the field does not offer", () => {
     expect(parseFieldDraft(SELECT, "urgent")).toBeNull()
     expect(parseFieldDraft(MULTI, "ui, database")).toEqual({ kind: "multiselect", optionIds: ["ui"] })
@@ -91,7 +88,6 @@ describe("parseFieldDraft", () => {
 })
 
 describe("fieldDisplayText", () => {
-  /** An id is storage; a reader is owed the label the board gave it. */
   test("a chosen option reads as its label, never its id", () => {
     expect(fieldDisplayText(SELECT, { kind: "select", optionId: "high" })).toBe("High")
     expect(fieldDisplayText(MULTI, { kind: "multiselect", optionIds: ["api", "ui"] })).toBe("API, UI")
@@ -114,10 +110,6 @@ describe("nextCardContent", () => {
     assignee: { kind: "text", value: "Ada" },
   }
 
-  /**
-   * The store REPLACES a card's content rather than merging it, so every commit
-   * has to carry the fields it did not touch or they are erased.
-   */
   test("carries the fields the edit did not touch", () => {
     expect(nextCardContent(CONTENT, "assignee", { kind: "text", value: "Grace" })).toEqual({
       description: { kind: "longtext", value: "body" },

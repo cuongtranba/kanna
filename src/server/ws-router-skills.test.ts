@@ -98,7 +98,6 @@ describe("ws-router-skills", () => {
       }, "/tmp/.skill-lock.json")
 
       expect(snapshot.lockFilePath).toBe("/tmp/.skill-lock.json")
-      // Skills are sorted alphabetically
       expect(snapshot.skills.map((s) => s.name)).toEqual(["alpha", "zeta"])
       expect(snapshot.skills[0]).toMatchObject({
         name: "alpha",
@@ -182,7 +181,6 @@ describe("ws-router-skills", () => {
   describe("buildInstallSkillCommand", () => {
     test("builds global install command with default agents (universal, claude-code, codex)", () => {
       const cmd = buildInstallSkillCommand("owner/repo", "my-skill")
-      // First element is the binary (platform-dependent), skip it
       expect(cmd.slice(1)).toEqual([
         "skills",
         "add",

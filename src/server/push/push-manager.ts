@@ -10,7 +10,6 @@ import type {
 import type { PushEvent, PushEventStore } from "./events"
 import type { VapidKeypair } from "./vapid.adapter"
 
-// Re-exported for Task 8+ consumers (transition detection, payload building).
 export type { PushPayload, PushTransitionKind } from "../../shared/types"
 
 export interface ObservedChat {
@@ -44,11 +43,6 @@ export interface PushManagerArgs {
   store: PushEventStore
   sender: WebPushSender
   vapid: VapidKeypair
-  /**
-   * Resolves the VAPID `sub` (JWT subject) claim at send time, so a change to
-   * the user's `push.contactSubject` setting takes effect without a restart.
-   * Falls back to `vapid.subject` when omitted (tests / legacy callers).
-   */
   getContactSubject?: () => string
   now?: () => number
 }
@@ -325,7 +319,6 @@ export class PushManager {
   }
 
   private async fanOut(payload: PushPayload): Promise<void> {
-    // snapshot: deliver() may call removeSubscription() during iteration
     for (const sub of [...this.subscriptions.values()]) {
       if (this.focusedByDevice.get(sub.id) === payload.chatId) continue
       await this.deliver(sub, payload)
@@ -368,14 +361,8 @@ export class PushManager {
         message: error instanceof Error ? error.message : String(error),
       })
       if (status === 410 || status === 404) {
-        // The push service says this subscription is truly gone (Not Found /
-        // Gone) — safe to drop it.
         await this.removeSubscription(sub.id, "expired")
       } else if (status === 401 || status === 403) {
-        // Auth/JWT rejection (e.g. Apple `403 BadJwtToken`) — a SERVER VAPID
-        // misconfiguration, NOT a dead subscription. Deleting the device here
-        // is the bug that made every subscribe self-destruct. Keep it and warn
-        // loudly so the operator fixes the contact subject in Settings → Push.
         log.error(
           "[kanna/push] VAPID auth rejected — check push contact subject in Settings; subscription kept",
           { id: sub.id, endpoint: endpointHost, status, vapidSubject: subject },

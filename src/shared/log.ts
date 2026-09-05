@@ -1,6 +1,3 @@
-// Sanctioned console chokepoint. This is the ONLY module allowed to call
-// `console` (see eslint.config.js `no-console: off` override). Everywhere else
-// imports `log` instead so `no-console` stays enforced repo-wide.
 
 type LogArg = string | number | boolean | null | undefined | object
 

@@ -6,21 +6,10 @@ type TerminalMetadata = Pick<TerminalSnapshot, "cwd" | "shell" | "status" | "exi
 interface TerminalPaneState {
   metadata: TerminalMetadata | null
   error: string | null
-  /** Direct set — use null to clear */
   setMetadata: (next: TerminalMetadata | null) => void
-  /**
-   * Conditional set: only updates if any of the four fields differ from the
-   * current metadata (equivalent to the `sameTerminalMetadata` guard in the
-   * old useState functional-update pattern).
-   */
   setMetadataConditional: (next: TerminalMetadata) => void
-  /**
-   * Derives exit metadata from current state: keeps existing cwd/shell and
-   * stamps status="exited" with the given exitCode.
-   */
   setMetadataFromExit: (exitCode: number) => void
   setError: (error: string | null) => void
-  /** Clears both metadata and error in one commit (used by clearVersion effect). */
   resetTerminal: () => void
 }
 

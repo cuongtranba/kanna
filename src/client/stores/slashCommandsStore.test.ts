@@ -23,8 +23,6 @@ describe("slashCommandsStore", () => {
     ])
   })
 
-  // The whole point of keying by project: every chat in a project shares one
-  // list, so opening a new chat renders on the first keystroke with no load.
   test("setForProject keeps entries for other projects", () => {
     useSlashCommandsStore.getState().setForProject("p1", [{ name: "a", description: "", argumentHint: "" }])
     useSlashCommandsStore.getState().setForProject("p2", [{ name: "b", description: "", argumentHint: "" }])

@@ -43,10 +43,7 @@ describe("StackCreatePanel", () => {
       { id: "p1", title: "Project A" },
       { id: "p2", title: "Project B" },
     ])
-    // With no initialTitle, title state is "", Save must be disabled
-    // Find Save button and check it has disabled attribute
     const saveIndex = html.indexOf("Save")
-    // The disabled attribute appears in the button tag before "Save"
     const buttonChunk = html.slice(0, saveIndex)
     const lastButtonStart = buttonChunk.lastIndexOf("<button")
     const buttonTag = html.slice(lastButtonStart, saveIndex)
@@ -54,7 +51,6 @@ describe("StackCreatePanel", () => {
   })
 
   test("Save button is disabled when fewer than 2 projects are selected", () => {
-    // No initialProjectIds means 0 selected, even with a title
     const html = renderPanel({ initialTitle: "My Stack", initialProjectIds: [] }, [
       { id: "p1", title: "Project A" },
       { id: "p2", title: "Project B" },
@@ -72,12 +68,9 @@ describe("StackCreatePanel", () => {
       initialTitle: "My Stack",
       initialProjectIds: ["p1"],
     })
-    // Input should have value="My Stack"
     expect(html).toContain('value="My Stack"')
-    // The chip for p1 should have the active class (bg-primary)
     const p1ChipIndex = html.indexOf("Project A")
     expect(p1ChipIndex).toBeGreaterThan(-1)
-    // Grab the chip button tag around Project A
     const beforeChip = html.slice(0, p1ChipIndex)
     const lastButtonStart = beforeChip.lastIndexOf("<button")
     const chipTag = html.slice(lastButtonStart, p1ChipIndex)
@@ -91,14 +84,12 @@ describe("StackCreatePanel", () => {
 
   test("submit button has type=submit and cancel has type=button", () => {
     const html = renderPanel({ initialTitle: "A Stack", initialProjectIds: ["p1", "p2"] })
-    // Save button should have type="submit"
     const saveIndex = html.indexOf("Save")
     const beforeSave = html.slice(0, saveIndex)
     const lastButtonStart = beforeSave.lastIndexOf("<button")
     const saveButtonTag = html.slice(lastButtonStart, saveIndex)
     expect(saveButtonTag).toContain('type="submit"')
 
-    // Cancel button should have type="button"
     const cancelIndex = html.indexOf("Cancel")
     const beforeCancel = html.slice(0, cancelIndex)
     const lastCancelButtonStart = beforeCancel.lastIndexOf("<button")
@@ -115,7 +106,6 @@ describe("StackCreatePanel", () => {
     const html = renderPanel({
       initialProjectIds: ["p1"],
     })
-    // p1 chip (Project A) should have aria-pressed="true"
     const p1Index = html.indexOf("Project A")
     expect(p1Index).toBeGreaterThan(-1)
     const beforeP1 = html.slice(0, p1Index)
@@ -123,7 +113,6 @@ describe("StackCreatePanel", () => {
     const p1ChipTag = html.slice(p1ButtonStart, p1Index)
     expect(p1ChipTag).toContain('aria-pressed="true"')
 
-    // p2 chip (Project B) should have aria-pressed="false"
     const p2Index = html.indexOf("Project B")
     expect(p2Index).toBeGreaterThan(-1)
     const beforeP2 = html.slice(0, p2Index)

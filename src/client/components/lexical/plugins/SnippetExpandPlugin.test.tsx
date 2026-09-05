@@ -1,15 +1,3 @@
-/**
- * Tests for SnippetExpandPlugin.
- *
- * Mounting a full React+Lexical tree headlessly is brittle (see SubmitPlugin.test),
- * so we test the independently-verifiable contracts:
- *
- *   1. findSnippetForCaret — the pure matching function (exported).
- *   2. The Tab decision tree — modifiers / typeahead / empty-list guards.
- *   3. The expansion mutation — via a headless editor, applying the same
- *      spliceText + insertText/insertLineBreak steps the plugin runs, asserting
- *      the resulting wire text (single- and multi-line).
- */
 import { describe, expect, it } from "bun:test"
 import { createHeadlessEditor } from "@lexical/headless"
 import {
@@ -47,7 +35,6 @@ function buildEditor() {
 
 const TRAILING_TOKEN_RE = /(\S+)$/
 
-/** Mirrors the plugin's editor.update body — the exact expansion algorithm. */
 function expandInEditor(editor: ReturnType<typeof buildEditor>, snippets: readonly TextSnippet[]): boolean {
   let handled = false
   editor.update(
@@ -97,7 +84,6 @@ function seedText(editor: ReturnType<typeof buildEditor>, text: string) {
   )
 }
 
-// ─── findSnippetForCaret ──────────────────────────────────────────────────────
 
 describe("findSnippetForCaret", () => {
   it("matches the trailing token exactly", () => {
@@ -121,7 +107,6 @@ describe("findSnippetForCaret", () => {
   })
 })
 
-// ─── Tab decision tree ────────────────────────────────────────────────────────
 
 describe("SnippetExpandPlugin — Tab guard", () => {
   function shouldAttempt(
@@ -165,15 +150,6 @@ describe("SnippetExpandPlugin — Tab guard", () => {
   })
 })
 
-// ─── decideTab (regression: caret lost to Tab auto-repeat, issue re-reported
-// after #524) ─────────────────────────────────────────────────────────────────
-//
-// Holding Tab slightly long fires OS auto-repeat keydowns (`event.repeat`).
-// The first keydown expands the snippet; the repeat keydown no longer finds a
-// matching trailing token, fell through to the browser's default Tab focus
-// traversal, and moved focus to the Send button — the caret vanished from the
-// composer even though the expansion succeeded. Repeat keydowns must inherit
-// the initial press's decision: if the press expanded, repeats are swallowed.
 
 describe("decideTab", () => {
   const plainTab = { shiftKey: false, ctrlKey: false, metaKey: false, altKey: false, repeat: false }
@@ -210,7 +186,6 @@ describe("decideTab", () => {
   })
 })
 
-// ─── Expansion mutation ───────────────────────────────────────────────────────
 
 describe("SnippetExpandPlugin — expansion", () => {
   it("replaces a matching shortcut in place with the expansion", () => {
@@ -242,21 +217,7 @@ describe("SnippetExpandPlugin — expansion", () => {
   })
 })
 
-// ─── Caret placement (regression: invisible/lost caret) ───────────────────────
-//
-// These assertions guard the MUTATION shape: the caret always ends on an
-// ATTACHED TextNode at the end of the expansion (spliceText never empties the
-// node, so nothing gets pruned). They run against a headless editor and drive
-// the expansion algorithm directly, so they can NOT observe the real cause of
-// the "invisible caret after Tab" report — that the KEY_TAB_COMMAND handler
-// must call event.preventDefault() SYNCHRONOUSLY. Because Lexical defers the
-// expand `editor.update` callback (KEY_TAB_COMMAND dispatches inside an active
-// update), gating preventDefault on the callback let Tab's default focus
-// traversal steal focus to the Send button, hiding the caret. The plugin now
-// decides via a synchronous state read and preventDefaults up front; that
-// ordering is verified in a real browser, not here.
 
-/** Reads the collapsed selection anchor after an expansion. */
 function anchorAfterExpand(editor: ReturnType<typeof buildEditor>): {
   isText: boolean
   attached: boolean
@@ -322,8 +283,6 @@ describe("SnippetExpandPlugin — caret placement", () => {
     const editor = buildEditor()
     seedText(editor, "trail")
     expect(expandInEditor(editor, CARET_SNIPPETS)).toBe(true)
-    // The wire serializer trims a trailing soft line break, so the sent text is
-    // the first line; the caret still sits on the fresh line, node attached.
     expect(serializeEditorToWire(editor).text).toBe("line then newline")
     expect(anchorAfterExpand(editor).attached).toBe(true)
   })

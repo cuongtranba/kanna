@@ -3,7 +3,6 @@ import { useShallow } from "zustand/react/shallow"
 import { useSidebarSelectionStore } from "../stores/sidebarSelectionStore"
 import { FocusScope } from "@radix-ui/react-focus-scope"
 
-/** Returns CSS custom properties as a React-compatible style object via Object.assign. */
 function cssVars(vars: Record<`--${string}`, string>): CSSProperties {
   return Object.assign({} satisfies CSSProperties, vars)
 }
@@ -152,15 +151,12 @@ function KannaSidebarImpl({
 
   const location = useLocation()
   const navigate = useNavigate()
-  // The project context menu's only navigating item.
   const handleOpenBoards = useCallback(
     (projectId: string) => {
       navigate(`/boards/${projectId}`)
     },
     [navigate],
   )
-  // Mirrors handleOpenBoards, one owner kind over: a Stack row's Boards
-  // affordance opens the Stack's own board list, not any one member project's.
   const handleOpenStackBoards = useCallback(
     (stackId: string) => {
       navigate(`/boards/stack/${stackId}`)
@@ -176,13 +172,10 @@ function KannaSidebarImpl({
   const expandedGroups = useKannaSidebarStore((s) => s.expandedGroups)
   const nowMs = useKannaSidebarStore((s) => s.nowMs)
   const showNumberJumpHints = useKannaSidebarStore((s) => s.showNumberJumpHints)
-  // Module-level selector, not an inline `?? []` — see pluginContributionsStore.
   const pluginSidebarItems = usePluginContributionsStore(selectPluginSidebarItems)
   const requestedSidebarWidth = useKannaSidebarStore((s) => s.sidebarWidth)
   const viewportWidth = useViewportStore((s) => s.width)
   const mobileModalOpen = open && isMobileViewport(viewportWidth)
-  // Settings is a two-column split, so it needs a wider content minimum than a
-  // chat transcript before the sidebar is allowed to take the space.
   const sidebarWidth = resolveSidebarWidth({
     requestedWidth: requestedSidebarWidth,
     viewportWidth,
@@ -305,8 +298,6 @@ function KannaSidebarImpl({
     }
   }, [data.stacks, onListStackWorktrees, beginStackChatCreate, finishStackChatCreate, endStackChatCreateLoading])
 
-  // Each of these closes over a PROP (or a ref), so it stays in the component;
-  // only the state transitions live in kannaSidebarStore.
   const handleCreateStackChat = useCallback(async (
     stackId: string,
     { primaryProjectId, stackBindings }: { primaryProjectId: string; stackBindings: StackBinding[] },
@@ -342,15 +333,12 @@ function KannaSidebarImpl({
     if (!dialogOpen) setArchivedProjectId(null)
   }, [setArchivedProjectId])
 
-  // Writes resizeStartRef: a ref, deliberately not store state — the drag
-  // origin must not trigger a render on every pointer move.
   const handleResizeStart = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault()
     resizeStartRef.current = { pointerX: event.clientX, width: sidebarWidth }
     setIsResizingSidebar(true)
   }, [sidebarWidth, setIsResizingSidebar])
 
-  // Maps a key to a width intent; the clamping lives in the store.
   const handleResizeKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (event.key === "ArrowLeft") nudgeSidebarWidth(-16)
     else if (event.key === "ArrowRight") nudgeSidebarWidth(16)
@@ -479,8 +467,6 @@ function KannaSidebarImpl({
 
       if (isSidebarModifierShortcut(resolvedKeybindings, "newStackChat", event)) {
         event.preventDefault()
-        // TODO: open stack chat creation for the first stack if any
-        // For now just ensure the binding is registered
         return
       }
 

@@ -1,11 +1,3 @@
-/**
- * The compaction seam: what `runTurn` writes for a Codex summarize turn is
- * what `buildHistoryPrimer` reads to build the next turn's context.
- *
- * These two are wired only through the transcript, so nothing in either unit
- * suite catches an ordering mistake between them — and getting the order wrong
- * is silent: the compaction spends a full turn and hands Codex nothing.
- */
 
 import { describe, test, expect, mock } from "bun:test"
 import { runTurn, type RunTurnDeps } from "./claude-turn-runner"

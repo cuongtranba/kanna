@@ -737,8 +737,6 @@ describe("applyProjectCommandsSnapshot", () => {
     ])
   })
 
-  // An in-flight frame from the project we just left must not clobber the
-  // project we just switched to.
   test("ignores a snapshot for a different project", () => {
     useSlashCommandsStore.setState({ byProjectId: {} })
     applyProjectCommandsSnapshot("p1", {

@@ -62,11 +62,9 @@ function opsEvent(chatId: string, fromSeq: number, toSeq: number): ChatOpsEvent 
 
 describe("chatStateStore", () => {
   beforeEach(() => {
-    // Reset to empty state before each test
     useChatStateStore.setState({ chats: {}, optimisticProcessing: {} })
   })
 
-  // ─── mandatory test 1: isolation ────────────────────────────────────────────
   test("updating chatA does not affect chatB slice reference", () => {
     useChatStateStore.getState().setChatSnapshot("chatB", makeSnapshot("chatB", 1))
     const sliceB = selectChatSlice(useChatStateStore.getState(), "chatB")
@@ -76,7 +74,6 @@ describe("chatStateStore", () => {
     expect(selectChatSlice(useChatStateStore.getState(), "chatB")).toBe(sliceB)
   })
 
-  // ─── mandatory test 2: releaseChat ──────────────────────────────────────────
   test("releaseChat removes chatA while chatB remains", () => {
     useChatStateStore.getState().setChatSnapshot("chatA", makeSnapshot("chatA", 1))
     useChatStateStore.getState().setChatSnapshot("chatB", makeSnapshot("chatB", 1))
@@ -87,7 +84,6 @@ describe("chatStateStore", () => {
     expect("chatB" in useChatStateStore.getState().chats).toBe(true)
   })
 
-  // ─── mandatory test 3: selectChatSlice stable ref for nonexistent chat ──────
   test("selectChatSlice returns the same EMPTY_CHAT_SLICE reference for unknown chatId", () => {
     const a = selectChatSlice(useChatStateStore.getState(), "does-not-exist")
     const b = selectChatSlice(useChatStateStore.getState(), "also-missing")
@@ -95,7 +91,6 @@ describe("chatStateStore", () => {
     expect(b).toBe(EMPTY_CHAT_SLICE)
   })
 
-  // ─── applyChatOpsEvent (migrated from kannaStateStore.test.ts) ──────────────
   describe("applyChatOpsEvent", () => {
     beforeEach(() => {
       useChatStateStore.getState().setChatSnapshot("chat-1", makeSnapshot("chat-1", 5))
@@ -154,7 +149,6 @@ describe("chatStateStore", () => {
     })
   })
 
-  // ─── adoptServerHistory: the scrollback bookmark ────────────────────────────
   describe("adoptServerHistory", () => {
     test("adopts the snapshot bookmark before the user has paged back", () => {
       useChatStateStore.getState().adoptServerHistory("chat-1", {
@@ -169,14 +163,10 @@ describe("chatStateStore", () => {
 
     test("keeps the scrolled-back cursor when a later snapshot arrives", () => {
       const store = useChatStateStore.getState()
-      // Cold open: adopt the newest page's bookmark.
       store.adoptServerHistory("chat-1", { olderCursor: "byte:14350553", hasOlder: true })
-      // User scrolls up once: a page merges in and the bookmark advances backwards.
       store.setOlderHistoryEntries("chat-1", [textEntry("older-1")])
       store.setHistoryCursor("chat-1", "byte:13608529")
 
-      // A full snapshot push (ring gap / reconnect) re-ships the NEWEST page's
-      // bookmark — adopting it would rewind scrollback to the bottom.
       store.adoptServerHistory("chat-1", { olderCursor: "byte:14350553", hasOlder: true })
 
       const slice = selectChatSlice(useChatStateStore.getState(), "chat-1")

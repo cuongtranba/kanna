@@ -150,8 +150,6 @@ describe("runCronCommand escalation to the model", () => {
     expect(offered[0]?.input).toBe("/cron check CI inline 9am every day")
   })
 
-  // A parseable schedule with no occurrence is still an invalid setup the user
-  // meant something by, so it escalates on a reconstructed line.
   test("offers a schedule that parses but never fires", async () => {
     const { deps, offered } = makeDeps()
     await runCronCommand(deps, CHAT, parsed("/cron impossible inline 0 0 30 2 *"))
@@ -166,7 +164,6 @@ describe("runCronCommand escalation to the model", () => {
     expect(offered).toEqual([])
   })
 
-  // The repair module owns the suggestion / part bounds; dispatch just forwards.
   test("forwards the error verbatim, bounds included", async () => {
     const { deps, offered } = makeDeps()
     await runCronCommand(deps, CHAT, parsed("/cron check ci spwan @daily"))
@@ -200,7 +197,6 @@ describe("runCronCommand escalation to the model", () => {
     expect(events.at(-1)).toMatchObject({ kind: "cron_paused", scheduleId: "cron-abc" })
     expect(entries.at(-1)).toMatchObject({ kind: "cron_job_change", change: "paused" })
 
-    // Pausing again is a visible no-op error.
     await runCronCommand(deps, CHAT, parsed("/cron pause cron-abc"))
     expect(entries.at(-1)).toMatchObject({ kind: "cron_command_error" })
 
@@ -208,7 +204,6 @@ describe("runCronCommand escalation to the model", () => {
     expect(events.at(-1)).toMatchObject({ kind: "cron_resumed" })
     expect(entries.at(-1)).toMatchObject({ kind: "cron_job_change", change: "resumed" })
 
-    // Resuming an unpaused job is a visible no-op error.
     await runCronCommand(deps, CHAT, parsed("/cron resume cron-abc"))
     expect(entries.at(-1)).toMatchObject({ kind: "cron_command_error" })
 

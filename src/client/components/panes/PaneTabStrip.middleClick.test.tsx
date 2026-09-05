@@ -5,15 +5,6 @@ import { renderClientMarkup } from "../../lib/testing/renderClientMarkup"
 import { TooltipProvider } from "../ui/tooltip"
 import { PaneTabStrip } from "./PaneTabStrip"
 
-/**
- * Middle-click closes a tab, the way it does in every browser and editor.
- *
- * These assertions need a real DOM rather than the static markup the rest of
- * the strip's tests read: the behaviour lives entirely in a React synthetic
- * handler, and the one thing worth proving is that the `auxclick` a wheel press
- * actually emits reaches it — while the `click` a left press emits still
- * selects rather than closes.
- */
 
 const chat = createTab({ kind: "chat", chatId: "c1" }, 0)
 const terminal = createTab({ kind: "terminal", terminalId: "t1" }, 1)
@@ -49,7 +40,6 @@ function tabElement(container: HTMLElement, tabId: string): HTMLElement {
   return element
 }
 
-/** What a wheel press emits: a mousedown, then `auxclick` — never `click`. */
 async function middleClick(element: HTMLElement) {
   const down = new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 1 })
   const aux = new MouseEvent("auxclick", { bubbles: true, cancelable: true, button: 1 })
@@ -70,8 +60,6 @@ describe("PaneTabStrip middle-click", () => {
     expect(harness.closed).toEqual([terminal.tabId])
   })
 
-  // The close is the whole gesture: a middle press must not also drag the tab
-  // into the pane's focus on its way out.
   test("does not select the tab it closes", async () => {
     const { container, harness, cleanup } = await mount(createPane("p", [chat, terminal], chat.tabId))
 
@@ -81,8 +69,6 @@ describe("PaneTabStrip middle-click", () => {
     expect(harness.selected).toEqual([])
   })
 
-  // A middle press on a scrollable region arms the browser's autoscroll, and
-  // the strip scrolls. Closing a tab must not leave the user panning.
   test("suppresses the browser's autoscroll on the press", async () => {
     const { container, cleanup } = await mount(createPane("p", [chat, terminal], chat.tabId))
 
@@ -106,8 +92,6 @@ describe("PaneTabStrip middle-click", () => {
     expect(harness.closed).toEqual([])
   })
 
-  // A right-click carries the same `auxclick` as the wheel does; only button 1
-  // may close, or every context menu would take a tab with it.
   test("a right click leaves the tab alone", async () => {
     const { container, harness, cleanup } = await mount(createPane("p", [chat, terminal], chat.tabId))
 

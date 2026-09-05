@@ -229,8 +229,6 @@ describe("resolveSidebarWidth", () => {
     )
   })
 
-  // The defect this function exists to fix: clampSidebarWidth ignored the
-  // viewport, so a 900px window with a 520px sidebar left 380px of chat.
   test("gives the content column its minimum before the sidebar gets its wish", () => {
     expect(resolveSidebarWidth({ requestedWidth: MAX_SIDEBAR_WIDTH, viewportWidth: 900 })).toBe(
       900 - SIDEBAR_CONTENT_MIN_WIDTH,
@@ -246,8 +244,6 @@ describe("resolveSidebarWidth", () => {
     )
   })
 
-  // Hydration renders before any measurement; collapsing to the floor here
-  // would show a narrow sidebar that visibly jumps wider on the first frame.
   test("passes the stored width through when the viewport is unmeasured", () => {
     expect(resolveSidebarWidth({ requestedWidth: MAX_SIDEBAR_WIDTH, viewportWidth: 0 })).toBe(
       MAX_SIDEBAR_WIDTH,

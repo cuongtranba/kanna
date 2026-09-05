@@ -1,10 +1,3 @@
-/**
- * The store is read by the sidebar, the chat footer, and — since Phase 4 — the
- * composer's `/` picker. The picker read is the one with teeth: it feeds a
- * `useMemo` the option list is derived from, so an unstable selector value
- * rebuilds that list on every render (React error #185's shape, which
- * `rules/no-unstable-selector-fallback` bans in the source).
- */
 import { afterEach, describe, expect, test } from "bun:test"
 import {
   selectPluginCommandCenterItems,
@@ -38,8 +31,6 @@ describe("selectPluginCommandCenterItems", () => {
   test("a clear over an already-empty store is a no-op on state identity", () => {
     const before = usePluginContributionsStore.getState()
     usePluginContributionsStore.getState().clearContributions()
-    // Same state object, so no subscriber re-renders — the reason
-    // clearContributions restores the shared EMPTY identities.
     expect(usePluginContributionsStore.getState()).toBe(before)
   })
 

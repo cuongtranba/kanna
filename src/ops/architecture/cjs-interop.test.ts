@@ -60,7 +60,6 @@ describe("findDefaultImports", () => {
   })
 
   test("ignores an import that only appears inside a comment", () => {
-    // The gate's own prose has to be able to name the pattern it bans.
     expect(sitesFor(`// NOT \`import useWebSocket from "react-use-websocket"\`\n`)).toEqual([])
     expect(sitesFor(` * import Big from "pkg"\n`)).toEqual([])
     expect(sitesFor(`  // import Big from "pkg"\n`)).toEqual([])
@@ -171,7 +170,6 @@ describe("the bundled client survives rolldown's CommonJS interop", () => {
   })
 
   test("react-use-websocket is still the transpiled-CommonJS package this gate was built for", () => {
-    // If this ever flips to `safe` the package started shipping ESM and the chokepoint can go.
     const site = scan.imports.find((entry) => entry.specifier === "react-use-websocket")
     expect(site?.interop.kind).toBe("transpiled_cjs")
     expect(site?.path).toBe("src/client/lib/useWebSocket.ts")

@@ -2,8 +2,6 @@ import { describe, test, expect } from "bun:test"
 import { buildRepinSkillCommand } from "./skill-update-applier.adapter"
 
 describe("buildRepinSkillCommand", () => {
-  // The CLI's own source syntax is `owner/repo[/folder]#ref` (its
-  // `appendFolderAndRef`). `@ref` is npm syntax and is silently misread.
   test("appends the skill folder and the ref with #", () => {
     expect(buildRepinSkillCommand("cuongtranba/c3-skill", "skills/c3/SKILL.md", "v11.13.4")).toEqual([
       expect.stringContaining("npx"),

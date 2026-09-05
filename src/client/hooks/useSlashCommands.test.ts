@@ -17,8 +17,6 @@ describe("useSlashCommands", () => {
     ])
   })
 
-  // A fresh array per call would re-render the picker on every store tick
-  // (React error #185); the selector must hand back one shared empty array.
   test("selector returns stable empty array for a missing projectId", () => {
     const state = useSlashCommandsStore.getState()
     const a = selectSlashCommands(state, "missing")

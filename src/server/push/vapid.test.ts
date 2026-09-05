@@ -65,7 +65,6 @@ describe("loadOrGenerateVapidKeys", () => {
   test("self-heals an invalid stored subject, keeping the keypair", async () => {
     const dir = await tempDir()
     const { writeFile } = await import("node:fs/promises")
-    // Legacy poison subject that makes Apple return 403 BadJwtToken.
     const original = {
       publicKey: "BExamplePublicKey_000000000000000000000000000000000000000000000000000000000000000000",
       privateKey: "ExamplePrivateKey_00000000000000000000000",
@@ -74,12 +73,12 @@ describe("loadOrGenerateVapidKeys", () => {
     await writeFile(join(dir, "vapid.json"), JSON.stringify(original))
 
     const result = await loadOrGenerateVapidKeys(dir)
-    expect(result.publicKey).toBe(original.publicKey) // keypair preserved
+    expect(result.publicKey).toBe(original.publicKey)
     expect(result.privateKey).toBe(original.privateKey)
-    expect(result.subject).toBe(DEFAULT_VAPID_SUBJECT) // subject healed
+    expect(result.subject).toBe(DEFAULT_VAPID_SUBJECT)
 
     const onDisk = JSON.parse(await readFile(join(dir, "vapid.json"), "utf8"))
-    expect(onDisk.subject).toBe(DEFAULT_VAPID_SUBJECT) // re-persisted
+    expect(onDisk.subject).toBe(DEFAULT_VAPID_SUBJECT)
     expect(onDisk.publicKey).toBe(original.publicKey)
   })
 

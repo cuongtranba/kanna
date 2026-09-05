@@ -7,50 +7,26 @@ export interface LocalCatalogScanner {
   (args: { cwd: string; homeDir?: string }): RawCatalogEntry[]
 }
 
-/** Injected port: mtime in ms per path, `0` when the path cannot be stat'ed. */
 export interface LocalCatalogStatMtimes {
   (paths: readonly string[]): number[]
 }
 
 export interface LocalCatalogServiceOptions {
   scan: LocalCatalogScanner
-  /**
-   * Freshness port. Without it the service cannot tell a stale cache row from a
-   * fresh one, so it deliberately caches nothing — always correct, never stale.
-   */
   statMtimes?: LocalCatalogStatMtimes
-  /** Backstop ceiling for changes mtime stamps cannot see. */
   cacheTtlMs?: number
   now?: () => number
-  /** Required: the personal-scope roots are derived from it, for both the scan and its stamps. */
   homeDir: string
 }
 
 interface CacheRow {
   entries: SlashCommand[]
-  /**
-   * The same winners `entries` was projected from, keyed by lowercased name.
-   *
-   * `SlashCommand` drops `filePath`, which is precisely what a provider with no
-   * slash-command machinery of its own needs — Kanna opens the file and sends
-   * its contents. Kept beside the projection rather than rescanned, so a
-   * resolve and the picker can never answer from different scans.
-   */
   winners: Map<string, RawCatalogEntry>
-  /** Roster projection — skills only, INCLUDING ones the picker hides. */
   skills: SkillRosterEntry[]
-  /** path → mtime at scan time; a single mismatch invalidates the row. */
   stamps: Map<string, number>
   expiresAt: number
 }
 
-/**
- * Everything `scanLocalCatalog` consults but does not return an entry for.
- * Stamping the directories catches skills being added or removed; stamping the
- * settings files catches a plugin being enabled or disabled. An existing
- * SKILL.md edited in place bumps none of these, which is why
- * `LocalCatalogService.list` stamps each scanned file as well.
- */
 export function catalogRootDirs(args: { cwd: string; homeDir: string }): string[] {
   return [
     path.join(args.cwd, ".claude", "skills"),
@@ -99,14 +75,6 @@ function toSlashCommand(entry: RawCatalogEntry): SlashCommand {
   }
 }
 
-/**
- * Resolve scope/kind precedence to one entry per name.
- *
- * `requireUserInvocable` is the ONE difference between the two readers, and it
- * is the difference `user-invocable: false` was invented for: such a skill is
- * hidden from the `/` picker but still auto-triggerable, so the roster the
- * model reads must list it while `resolve` must refuse it.
- */
 function pickWinners(
   raw: readonly RawCatalogEntry[],
   opts: { requireUserInvocable: boolean },
@@ -158,20 +126,10 @@ export class LocalCatalogService {
     return this.row(cwd).entries
   }
 
-  /**
-   * The catalog entry a typed `/name` resolves to, including the `filePath`
-   * `list` drops. Restricted to what the picker offers, so an invocation and
-   * the picker cannot disagree about which names exist.
-   */
   resolve(cwd: string, name: string): RawCatalogEntry | null {
     return this.row(cwd).winners.get(normaliseKey(name)) ?? null
   }
 
-  /**
-   * Every local skill, for the roster a provider without skill machinery of its
-   * own is told about at session start. Commands are excluded: a command
-   * template is something the user invokes, not something a model reaches for.
-   */
   skills(cwd: string): SkillRosterEntry[] {
     return this.row(cwd).skills
   }
@@ -192,7 +150,6 @@ export class LocalCatalogService {
     return row
   }
 
-  /** Empty stamps mean "unstampable" — the row can never be trusted again. */
   private stampsUnchanged(stamps: Map<string, number>): boolean {
     if (!this.statMtimes || stamps.size === 0) return false
     const paths = [...stamps.keys()]

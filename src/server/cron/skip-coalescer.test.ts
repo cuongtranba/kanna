@@ -5,11 +5,6 @@ const CHAT = "chat-1"
 const JOB = "cron-abc"
 
 describe("CronSkipCoalescer", () => {
-  /**
-   * The property a slow schedule depends on: a `@daily` job skipped at 09:00
-   * says so at 09:00. Holding the first skip for a window would delay that
-   * notice until the next tick — a day later.
-   */
   test("the first skip after a quiet stretch is written immediately", () => {
     const coalescer = new CronSkipCoalescer()
     expect(coalescer.record(CHAT, JOB, "chat_busy", 1_000)).toEqual({
@@ -21,7 +16,6 @@ describe("CronSkipCoalescer", () => {
   test("a sparse second skip is written immediately too", () => {
     const coalescer = new CronSkipCoalescer()
     coalescer.record(CHAT, JOB, "chat_busy", 0)
-    // A day later — nothing to fold, so it leads its own window.
     expect(coalescer.record(CHAT, JOB, "chat_busy", 86_400_000)).toEqual({
       reason: "chat_busy",
       count: 1,
@@ -45,7 +39,6 @@ describe("CronSkipCoalescer", () => {
       reason: "chat_busy",
       count: 3,
     })
-    // The window restarts from the write, so no tick is ever reported twice.
     expect(coalescer.record(CHAT, JOB, "chat_busy", SKIP_FLUSH_WINDOW_MS + 5_000)).toBeNull()
   })
 
@@ -53,7 +46,6 @@ describe("CronSkipCoalescer", () => {
     const coalescer = new CronSkipCoalescer()
     coalescer.record(CHAT, JOB, "chat_busy", 0)
     coalescer.record(CHAT, JOB, "chat_busy", 5_000)
-    // Still inside the window: the run does not earn its own card.
     expect(coalescer.flushPending(CHAT, JOB, 10_000)).toBeNull()
     expect(coalescer.flushPending(CHAT, JOB, SKIP_FLUSH_WINDOW_MS)).toEqual({
       reason: "chat_busy",
@@ -98,7 +90,6 @@ describe("CronSkipCoalescer", () => {
     coalescer.record(CHAT, JOB, "chat_busy", 0)
     coalescer.record("chat-2", JOB, "chat_busy", 0)
     coalescer.clearChat(CHAT)
-    // A cleared job leads its own window again; an untouched one keeps folding.
     expect(coalescer.record(CHAT, JOB, "chat_busy", 5_000)).toEqual({
       reason: "chat_busy",
       count: 1,
@@ -121,20 +112,11 @@ describe("CronSkipCoalescer", () => {
     expect(coalescer.flushPending(CHAT, "cron-other", SKIP_FLUSH_WINDOW_MS)).toBeNull()
   })
 
-  /**
-   * Documents the accepted trade-off: state is process-local, so a hard kill
-   * (SIGKILL, OOM) discards any pending count that was never written. A clean
-   * shutdown drains in-flight fires (which flush streaks before the run
-   * record), so this only affects hard kills. The next boot's `server_offline`
-   * count covers fires missed WHILE the server was down, not the pre-kill tail.
-   */
   test("pending skip count is process-local and is silently dropped on process exit", () => {
     const coalescer = new CronSkipCoalescer()
     coalescer.record(CHAT, JOB, "chat_busy", 0)
     coalescer.record(CHAT, JOB, "chat_busy", 1_000)
     coalescer.record(CHAT, JOB, "chat_busy", 2_000)
-    // Simulate process exit: the coalescer object is garbage-collected.
-    // A NEW coalescer (next boot) has no memory of the 2 pending counts.
     const nextBootCoalescer = new CronSkipCoalescer()
     expect(nextBootCoalescer.flushPending(CHAT, JOB, 0)).toBeNull()
     expect(nextBootCoalescer.record(CHAT, JOB, "chat_busy", 0)).toEqual({

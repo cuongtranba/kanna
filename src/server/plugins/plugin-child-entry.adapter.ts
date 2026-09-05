@@ -1,29 +1,3 @@
-/**
- * Subprocess entry point for one running Kanna plugin instance. Spawned by
- * `plugin-service-io.adapter.ts` as
- * `<bun> plugin-child-entry.adapter.ts <bundlePath> <socketPath>` and runs as
- * its OWN OS process by design — plugin code is unsandboxed, and a crash
- * here must never take the Kanna daemon down (PLUGIN-SYSTEM-PLAN.md "Server
- * runtime").
- *
- * Wires the runtime half of the plugin ABI (`@kanna/plugin/server`, `zod`)
- * that the compiled server bundle's rewritten `require(...)` calls resolve
- * against — see `../../shared/plugins/host-modules.ts` and
- * `plugin-build.adapter.ts`'s `hostModulePlugin`, which turns every bare
- * import into `globalThis.__KANNA_PLUGIN_HOST__.require(name)`. That require
- * MUST be synchronous: Bun bundles the whole plugin into one file, so the
- * shimmed `require()` call runs during the bundle's own top-level module
- * evaluation, not lazily — `zod` is therefore imported up front, before the
- * bundle is ever loaded.
- *
- * Connects to the host's ALREADY-LISTENING Unix socket (the host binds
- * before spawning this process — see `plugin-service.ts`'s `start` — so this
- * side never has to retry a connection race) and answers RPC calls: zod
- * validates input, runs the registered handler, zod validates output, then
- * replies. A rejected schema resolves `{ok:false}` rather than throwing —
- * the security contract this file exists to hold (acceptance test "a
- * rejected output schema fails the call rather than returning bad data").
- */
 import { createConnection } from "node:net"
 import { createInterface } from "node:readline"
 import * as zod from "zod"
@@ -48,16 +22,6 @@ interface RegisteredRpc {
 
 interface PluginContext {
   handle(contract: PluginRpcContract, handler: PluginRpcHandler): void
-  // No-ops on the server target — UI contribution is a client-only concept.
-  // See PLUGIN-SYSTEM-PLAN.md "Registration stripping without Babel": both
-  // bundles compile from the same entry, and the OTHER side's calls are
-  // meant to be harmless here, not reachable.
-  //
-  // EVERY client-side `add*` must appear here. The entry runs whole in the
-  // child, so a method missing from this mirror is not an inert call — it is a
-  // TypeError inside `contribute`, and the child then never reports ready. A
-  // plugin that contributes UI *and* an RPC handler dies at startup with a
-  // timeout that names nothing.
   addSurface(): void
   addSidebarItem(): void
   addCommandCenterItem(): void

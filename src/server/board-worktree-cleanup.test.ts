@@ -137,10 +137,6 @@ describe("resolveWorktreeCleanup", () => {
     expect(registry.cardDetail(card.id)!.links.some((link) => link.kind === "worktree")).toBe(false)
   })
 
-  /**
-   * The rule the whole module exists for. Uncommitted work in a worktree
-   * exists nowhere else, and a column drag must not be able to end it.
-   */
   test("discard refuses while the worktree still holds work", async () => {
     const { card } = seed()
 
@@ -152,7 +148,6 @@ describe("resolveWorktreeCleanup", () => {
       ),
     ).rejects.toThrow(/2 uncommitted files/u)
 
-    // Unmerged commits block it too, with nothing uncommitted.
     await expect(resolveWorktreeCleanup(makeDeps(), card.id, "discard")).rejects.toThrow(/2 commits/u)
 
     expect(recorder.removed).toEqual([])
@@ -190,7 +185,6 @@ describe("resolveWorktreeCleanup", () => {
     expect(recorder.merged).toEqual([])
   })
 
-  /** A merge that succeeded is not undone by a checkout that would not go. */
   test("a failed removal does not turn a successful merge into a failure", async () => {
     const { card } = seed()
     const outcome = await resolveWorktreeCleanup(

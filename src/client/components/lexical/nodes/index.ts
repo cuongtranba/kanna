@@ -13,14 +13,12 @@ export * from "./MermaidNode"
 export * from "./LocalFileLinkNode"
 export * from "./ThinkingNode"
 
-// Composer-side nodes: the editable chat input registers these.
 export const KANNA_COMPOSER_NODES: ReadonlyArray<Klass<LexicalNode>> = [
   MentionNode,
   SlashCommandNode,
   AttachmentNode,
 ]
 
-// Message-render nodes: the read-only headless render registers these.
 export const KANNA_MESSAGE_NODES: ReadonlyArray<Klass<LexicalNode>> = [
   MermaidNode,
   LocalFileLinkNode,

@@ -30,12 +30,6 @@ describe("loadBearingFieldNote", () => {
     expect(loadBearingFieldNote("")).toBeNull()
   })
 
-  /**
-   * The table is a claim about other modules, so it is checked against one
-   * rather than trusted: every id `buildStartWorkPrompt` reads by name must
-   * warn, or the editor lets a user delete a field and silently shrink the
-   * agent's first prompt.
-   */
   test("covers every id the start-work prompt reads by name", () => {
     const probes: Readonly<Record<string, FieldValue>> = {
       description: { kind: "longtext", value: "PROBE_DESCRIPTION" },
@@ -47,8 +41,6 @@ describe("loadBearingFieldNote", () => {
     for (const [fieldId, value] of Object.entries(probes)) {
       const prompt = buildStartWorkPrompt(cardWith({ [fieldId]: value }), "card/1-fix", null)
       const bare = buildStartWorkPrompt(cardWith({}), "card/1-fix", null)
-      // Guards the probe itself: a field the prompt ignores would pass a
-      // containment check that never ran.
       expect(prompt).not.toEqual(bare)
       expect(loadBearingFieldNote(fieldId)).not.toBeNull()
     }

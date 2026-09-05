@@ -14,10 +14,6 @@ export async function writeSpawnSettings(args: {
     spinnerTipsEnabled: false,
     showTurnDuration: false,
     syntaxHighlightingDisabled: true,
-    // Auto-allow every mcp__kanna__* tool at the claude CLI permission gate.
-    // Approval still flows through kanna's toolCallback (durable + auditable)
-    // when KANNA_MCP_TOOL_CALLBACKS=1; this just stops the CLI from blocking
-    // tool_call before our MCP server sees the request.
     permissions: {
       allow: ["mcp__kanna__*"],
     },

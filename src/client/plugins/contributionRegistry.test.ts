@@ -1,9 +1,3 @@
-/**
- * The registry is what a plugin's `default` export writes into. These cases pin
- * the command-center surface added in Phase 4 — everything a plugin contributes
- * has to arrive tagged with the plugin id, because the id is what the `/`
- * picker namespaces the command name by.
- */
 import { describe, expect, test } from "bun:test"
 import { createPluginContext, createPluginContributionRegistry } from "./contributionRegistry"
 

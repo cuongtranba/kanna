@@ -10,8 +10,6 @@ describe("pickLatestSemverTag", () => {
     expect(pickLatestSemverTag(["v11.9.0", "v11.13.0"])).toBe("v11.13.0")
   })
 
-  // The real cuongtranba/c3-skill tag list: date tags sort above `v11.*`
-  // lexicographically, which is why "GitHub's first tag" is the wrong answer.
   test("ignores non-semver tags that would otherwise sort first", () => {
     expect(
       pickLatestSemverTag([

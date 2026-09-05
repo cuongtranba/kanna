@@ -7,9 +7,7 @@ export type CatalogKind = "skill" | "command"
 export type CatalogScope = "project" | "personal" | "plugin"
 
 export interface RawCatalogEntry {
-  /** The literal `/name` users type, without the leading slash. */
   name: string
-  /** Display label from frontmatter `name`, else falls back to `name`. */
   displayName: string
   description: string
   argumentHint: string
@@ -18,7 +16,6 @@ export interface RawCatalogEntry {
   scope: CatalogScope
   pluginName: string | null
   filePath: string
-  /** File mtime in ms; used by the cache layer. */
   mtimeMs: number
 }
 
@@ -96,21 +93,8 @@ function parseFrontmatter(filePath: string): ParsedFrontmatter {
   return { name, description, argumentHint, userInvocable }
 }
 
-/**
- * Ceiling on a skill/command file Kanna will inline into a prompt.
- *
- * The scan reads only {@link FRONTMATTER_BUDGET_BYTES}; an expansion needs the
- * whole body, and the body goes straight into a turn's context. 256 KiB is far
- * past any hand-written `SKILL.md` and far short of anything that would blow a
- * context window on its own.
- */
 export const CATALOG_FILE_MAX_BYTES = 256 * 1024
 
-/**
- * Full text of a catalog file, or `null` when it cannot be used — missing,
- * unreadable, or past the cap. Null rather than a throw: this is read on the
- * send path, where the fallback is to treat the line as an ordinary prompt.
- */
 export function readCatalogFileBody(filePath: string): string | null {
   try {
     if (statSync(filePath).size > CATALOG_FILE_MAX_BYTES) return null
@@ -128,15 +112,10 @@ function safeStatMtime(filePath: string): number {
   }
 }
 
-/** The home directory the scanner falls back to when none is injected. */
 export function defaultHomeDir(): string {
   return homedir()
 }
 
-/**
- * Freshness stamps for the cache layer: mtime in ms per path, `0` for anything
- * that cannot be stat'ed (missing, unreadable). Order matches the input.
- */
 export function statMtimes(paths: readonly string[]): number[] {
   return paths.map(safeStatMtime)
 }
@@ -264,22 +243,6 @@ function scanCommandsDir(args: {
   return entries
 }
 
-// ---------------------------------------------------------------------------
-// Plugin discovery
-//
-// A plugin's skills are invocable only while the plugin is enabled, and their
-// command names come from the *plugin* name — never the marketplace folder. So
-// discovery is driven by the three files that decide both, rather than by
-// walking whatever happens to sit under `~/.claude/plugins`:
-//
-//   settings.json          `enabledPlugins`: which `<plugin>@<marketplace>` are live
-//   installed_plugins.json `installPath`:    where each plugin's files actually are
-//   marketplace.json       `plugins[].skills[]`: the subset a plugin exposes
-//
-// Walking the tree instead surfaces disabled plugins and a marketplace's own
-// test fixtures, and mislabels every skill in a marketplace whose plugins all
-// declare `source: "./"` — emitting `/name`s the CLI rejects.
-// ---------------------------------------------------------------------------
 
 function readJsonFile(filePath: string): JsonValue | null {
   if (!existsSync(filePath)) return null
@@ -290,11 +253,6 @@ function readJsonFile(filePath: string): JsonValue | null {
   }
 }
 
-/**
- * `<plugin>@<marketplace>` keys enabled for this cwd. Project settings layer
- * over personal ones, so a repo can enable a plugin its owner has switched off
- * globally (and `settings.local.json` wins over the committed file).
- */
 function readEnabledPluginKeys(args: { cwd: string; homeDir: string }): Set<string> {
   const enabled = new Set<string>()
   const sources = [
@@ -313,11 +271,6 @@ function readEnabledPluginKeys(args: { cwd: string; homeDir: string }): Set<stri
   return enabled
 }
 
-/**
- * `<plugin>@<marketplace>` → the directory its files were installed to. A
- * plugin can be installed at both user and project scope; the user-scope
- * install wins, matching how the CLI resolves a plugin outside its project.
- */
 function readInstalledPluginPaths(homeDir: string): Map<string, string> {
   const parsed = readJsonFile(path.join(homeDir, ".claude", "plugins", "installed_plugins.json"))
   const out = new Map<string, string>()
@@ -339,11 +292,6 @@ function readInstalledPluginPaths(homeDir: string): Map<string, string> {
   return out
 }
 
-/**
- * The skill directories a marketplace manifest declares for one plugin,
- * resolved against its install root. `null` means the manifest says nothing, in
- * which case every `skills/*` directory counts.
- */
 function readDeclaredSkillDirs(args: {
   homeDir: string
   marketplace: string
@@ -365,12 +313,6 @@ function readDeclaredSkillDirs(args: {
   return null
 }
 
-/**
- * Unlike a personal or project skill — where frontmatter `name` is only a
- * display label — a plugin skill's `name` replaces the last segment of the
- * command, keeping the plugin prefix (`my-plugin/skills/review` with
- * `name: fancy` → `/my-plugin:fancy`).
- */
 function buildPluginSkillEntry(skillFile: string, pluginName: string, fallbackSegment: string): RawCatalogEntry {
   const fm = parseFrontmatter(skillFile)
   const commandName = `${pluginName}:${fm.name ?? fallbackSegment}`
@@ -424,8 +366,6 @@ function scanEnabledPlugins(args: { cwd: string; homeDir: string }): RawCatalogE
     const pluginName = key.slice(0, separator)
     const marketplace = key.slice(separator + 1)
     const installPath = installPaths.get(key)
-    // An enabled plugin with no install on disk is skipped, never guessed at:
-    // a wrong root would emit `/name`s the CLI rejects.
     if (!installPath || !existsSync(installPath)) continue
 
     const declared = readDeclaredSkillDirs({ homeDir: args.homeDir, marketplace, pluginName, installPath })

@@ -1,9 +1,3 @@
-// Core primitive types shared across all domain modules.
-// Extracted from types.ts to break circular-import chains between
-// domain-specific type files (e.g. app-settings-types, subagent-types).
-//
-// Do NOT add complex interfaces here — keep this file to simple
-// union types, string-literal unions, and small constants.
 
 export const STORE_VERSION = 3 as const
 export const PROTOCOL_VERSION = 1 as const

@@ -103,9 +103,6 @@ function keybindingActionKeys(): KeybindingAction[] {
 }
 
 export function getResolvedKeybindings(snapshot: KeybindingsSnapshot | null): KeybindingsSnapshot {
-  // Seeded from the defaults so the record is complete by construction —
-  // `Object.fromEntries` returns a plain index signature that only a cast
-  // could claim covers every action.
   const bindings: Record<KeybindingAction, string[]> = { ...DEFAULT_KEYBINDINGS }
   for (const action of keybindingActionKeys()) {
     bindings[action] = snapshot?.bindings[action] ?? DEFAULT_KEYBINDINGS[action]

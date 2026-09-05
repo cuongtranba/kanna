@@ -134,7 +134,6 @@ function SnippetRow({
   )
 }
 
-// ── Editor form ─────────────────────────────────────────────────────────────
 
 function SnippetEditor({
   initial,
@@ -230,7 +229,6 @@ function SnippetEditor({
   )
 }
 
-// ── Settings page wrapper ─────────────────────────────────────────────────
 
 export function TextSnippetsSettingsBranch(props: {
   state: Pick<KannaState, "handleWriteAppSettings">

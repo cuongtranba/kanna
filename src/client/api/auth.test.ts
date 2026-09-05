@@ -1,6 +1,3 @@
-/**
- * Tests for api/auth.ts — verifies queryFn wrappers for auth endpoints.
- */
 
 import { describe, expect, test } from "bun:test"
 import { fetchAuthStatus, postAuthLogin, postAuthLogout } from "./auth"

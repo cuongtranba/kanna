@@ -282,7 +282,6 @@ function providerDefaultsEqual(a: ChatProviderPreferences, b: ChatProviderPrefer
   )
 }
 
-/** Debug payloads are domain objects, not JSON — `log` takes them as-is. */
 function logChatPreferences(message: string, details?: object) {
   if (details === undefined) {
     log.info(`[chat-preferences] ${message}`)

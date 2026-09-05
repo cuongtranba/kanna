@@ -101,7 +101,6 @@ describe("local-catalog-io.adapter", () => {
   test("plugin dirs on disk are ignored unless an enabled plugin claims them", () => {
     const cwd = tmp("lci-")
     const home = tmp("lci-home-")
-    // A marketplace checkout with skills, but nothing enabled and nothing installed.
     const skillDir = join(home, ".claude", "plugins", "marketplaces", "acme", "skills", "lint")
     mkdirSync(skillDir, { recursive: true })
     writeFileSync(join(skillDir, "SKILL.md"), "---\ndescription: lint stuff\n---\n")
@@ -127,15 +126,6 @@ describe("local-catalog-io.adapter", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// Plugin discovery
-//
-// A plugin's slash commands are only invocable when the plugin is *enabled*,
-// and their names come from the plugin name — not the marketplace folder. These
-// tests pin the three files that decide both: settings.json (`enabledPlugins`),
-// installed_plugins.json (`installPath`), and the marketplace manifest's
-// per-plugin `skills[]` subset.
-// ---------------------------------------------------------------------------
 
 function writeJson(file: string, value: unknown): void {
   mkdirSync(join(file, ".."), { recursive: true })
@@ -143,20 +133,14 @@ function writeJson(file: string, value: unknown): void {
 }
 
 interface PluginFixture {
-  /** `<plugin>@<marketplace>` */
   key: string
   enabled?: boolean
-  /** Skill dir name → frontmatter body, created under `<installPath>/skills/`. */
   skills?: Record<string, string>
-  /** Command file name (without `.md`) → body, under `<installPath>/commands/`. */
   commands?: Record<string, string>
-  /** Frontmatter for a plugin-root SKILL.md. */
   rootSkill?: string
-  /** Manifest `skills[]` paths, relative to the plugin root. */
   declaredSkills?: string[]
 }
 
-/** Lays out a `~/.claude` tree the way `claude plugin install` leaves it. */
 function writePluginHome(home: string, plugins: PluginFixture[]): void {
   const enabledPlugins: Record<string, boolean> = {}
   const installed: Record<string, unknown[]> = {}
@@ -295,7 +279,6 @@ describe("local-catalog-io.adapter plugin discovery", () => {
     const cwd = tmp("lci-")
     const home = tmp("lci-home-")
     writePluginHome(home, [{ key: "skill-stack@skill-stack-marketplace", skills: { real: "description: r\n" } }])
-    // A marketplace checkout carries test fixtures the CLI never surfaces.
     const fixture = join(
       home, ".claude", "plugins", "marketplaces", "skill-stack-marketplace",
       "tests", "fixtures", "mocks", "skills", "mock-skill-alpha",
@@ -321,10 +304,6 @@ describe("local-catalog-io.adapter plugin discovery", () => {
   })
 })
 
-/**
- * The scan reads only the frontmatter prefix; expanding a `/name` for a
- * provider that cannot needs the whole file.
- */
 describe("readCatalogFileBody", () => {
   test("returns the file's full text", () => {
     const cwd = tmp("lci-")

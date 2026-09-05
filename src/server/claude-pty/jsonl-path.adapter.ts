@@ -12,9 +12,6 @@ function djb2Hash(str: string): number {
 }
 
 function hashSuffix(name: string): string {
-  // Mirror claude-code/src/utils/sessionStoragePortable.ts: prefer Bun.hash
-  // (wyhash) when running under Bun, fall back to djb2 elsewhere. Both encode
-  // base36. Cross-runtime stability matters only for paths >200 chars.
   const globalWithBun: { Bun?: { hash: (s: string) => number | bigint } } = globalThis
   const maybeBun = globalWithBun.Bun
   if (maybeBun && typeof maybeBun.hash === "function") {
@@ -30,10 +27,6 @@ function sanitizePath(name: string): string {
 }
 
 export function encodeCwd(cwd: string): string {
-  // Ported verbatim from claude-code v2.1.146:
-  // bootstrap/state.ts realpath + NFC normalize, then sessionStoragePortable.ts
-  // sanitizePath. Throws ENOENT if cwd is missing — callers guarantee an
-  // existing directory.
   const real = realpathSync(cwd)
   const normalized = real.normalize("NFC")
   return sanitizePath(normalized)

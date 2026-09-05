@@ -1,17 +1,3 @@
-/**
- * Schedule-text parser for the `/cron` command.
- *
- * Accepts three syntaxes, all normalized to `CronSchedule`:
- * - cron with 5 fields (minute hour day-of-month month day-of-week), e.g.
- *   star-slash-5 star star star star for "every 5 minutes", or 6 fields with a
- *   LEADING second — the shape node-cron itself uses for sub-minute schedules
- * - shortcuts: `@hourly` `@daily` `@weekly` `@monthly`
- * - interval sugar: `every 30s`, `every 5m`, `every 2h`
- *
- * Every failure names the exact part that is wrong and, when the fix is
- * unambiguous, carries a corrected schedule fragment the command parser
- * assembles into a full ready-to-send `/cron` suggestion.
- */
 
 import type { CronField, CronSchedule } from "./types"
 
@@ -21,7 +7,6 @@ export type ScheduleParse =
       ok: false
       part: "schedule" | "schedule_field"
       message: string
-      /** Corrected schedule text (fragment, not a full /cron line). */
       correctedSchedule?: string
     }
 
@@ -59,7 +44,6 @@ const FIELD_SPECS: readonly FieldSpec[] = [
   { name: "day-of-week", min: 0, max: 7, names: DOW_NAMES, normalize: (v) => (v === 7 ? 0 : v) },
 ]
 
-/** Prepended when a cron line carries six fields — node-cron's seconds slot. */
 const SECOND_SPEC: FieldSpec = { name: "second", min: 0, max: 59 }
 
 const SECOND_MS = 1_000
@@ -122,7 +106,6 @@ function parseInterval(tokens: string[]): ScheduleParse {
   if (tokens.length === 1) {
     return { ok: false, part: "schedule", message: "missing interval after `every` — expected e.g. `every 30s`, `every 5m`, or `every 2h`" }
   }
-  // `every 5 m` typed with a space: try re-joining before failing.
   const raw = tokens.length === 3 ? tokens[1]! + tokens[2]! : tokens[1]!
   if (tokens.length > 3 || (tokens.length === 3 && !isIntervalToken(raw))) {
     return {
@@ -158,7 +141,6 @@ function parseInterval(tokens: string[]): ScheduleParse {
         correctedSchedule: "@daily",
       }
     }
-    // Every verbose unit still starts with the letter its short form uses.
     const short = unit[0]!
     return {
       ok: false,
@@ -175,11 +157,6 @@ function isIntervalToken(raw: string): boolean {
   return /^\d+\s*[a-z]+$/i.test(raw)
 }
 
-/**
- * Five fields is the classic form; six adds a LEADING second, which is what
- * node-cron itself reads and therefore the only sub-minute cron shape Kanna
- * can honour without inventing semantics the engine would not agree with.
- */
 function parseCronFields(tokens: string[]): ScheduleParse {
   const withSeconds = tokens.length === 6
   if (tokens.length !== 5 && !withSeconds) {
@@ -216,14 +193,6 @@ function parseCronFields(tokens: string[]): ScheduleParse {
   }
 }
 
-/**
- * A wrong-length cron line is usually a truncated or over-long one. Short
- * (2–4) means the trailing wildcards were left off — `0 3` is 03:00 daily.
- * Seven is Quartz, whose extra field is a TRAILING year, so the fix drops the
- * last token rather than the first. Either way the candidate is only offered
- * once it actually parses, so English like "9am every day" produces no
- * suggestion and falls through to the model rather than being guessed at.
- */
 function reshapeToCron(tokens: string[]): string | undefined {
   if (tokens.length >= 2 && tokens.length <= 4) {
     const padded = [...tokens, ...Array<string>(5 - tokens.length).fill("*")]
@@ -318,7 +287,6 @@ function badValueMessage(spec: FieldSpec, raw: string): string {
   return `${spec.name} field "${raw}" is not a number`
 }
 
-/** Bounded Levenshtein distance — bails out once `limit` is exceeded. */
 export function levenshtein(a: string, b: string, limit: number): number {
   if (Math.abs(a.length - b.length) > limit) return limit + 1
   let previous = Array.from({ length: b.length + 1 }, (_, i) => i)

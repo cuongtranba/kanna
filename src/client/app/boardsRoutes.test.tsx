@@ -4,18 +4,6 @@ import { createRoot } from "react-dom/client"
 import "../lib/testing/setupHappyDom"
 import { MemoryRouter, Route, Routes } from "react-router-dom"
 
-/**
- * Pins the boards route table's disambiguation invariant from `App.tsx`.
- *
- * `/boards/stack/:stackId` and `/boards/:projectId` are both two dynamic-or-
- * literal segments after `/boards`, and `/boards/stack/:stackId/:boardId` and
- * `/boards/:projectId/:boardId` are both three — same segment COUNT, so an
- * ambiguous router could read a Stack path as a project id. react-router
- * scores a literal segment ("stack") above a dynamic one at the same
- * position, so the Stack routes win on their own path space; this test
- * exercises the real `<Routes>` shape from `App.tsx` rather than trusting
- * that scoring by inspection.
- */
 
 function ProjectList() {
   return <div data-testid="project-list" />

@@ -35,18 +35,10 @@ import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import type { ModelPrice } from "../shared/token-pricing"
 import type { JsonValue } from "../shared/json"
 
-/**
- * Injectable collaborators for startClaudeSession.
- *
- * Kept as a second parameter (with a production default via
- * buildStartClaudeSessionDeps) so tests can supply fakes for the modules that
- * would otherwise pollute Bun's global module registry via mock.module().
- */
 export type StartClaudeSessionDeps = {
   readonly buildCanUseTool: typeof buildCanUseTool
   readonly buildClaudeEnv: typeof buildClaudeEnv
   readonly loopBlockedNativeTools: readonly string[]
-  /** Structural constructor type so both AsyncMessageQueue and test fakes satisfy it. */
   readonly AsyncMessageQueueCtor: { new <T>(): { push(value: T): void; close(): void } & AsyncIterable<T> }
   readonly toClaudeMessageStream: typeof toClaudeMessageStream
   readonly createClaudeHarnessStream: typeof createClaudeHarnessStream
@@ -56,7 +48,6 @@ export type StartClaudeSessionDeps = {
   readonly sdkRestrictedFsNativeTools: readonly string[]
 }
 
-/** Returns the real (production) dep implementations. */
 export function buildStartClaudeSessionDeps(): StartClaudeSessionDeps {
   return {
     buildCanUseTool,
@@ -81,7 +72,6 @@ export async function startClaudeSession(args: {
   sessionToken: string | null
   forkSession: boolean
   oauthToken: string | null
-  /** When set, redirect the SDK to OpenRouter instead of Anthropic. */
   openrouterApiKey?: string | null
   additionalDirectories?: string[]
   chatId?: string
@@ -90,52 +80,24 @@ export async function startClaudeSession(args: {
   systemPromptAppend?: string
   systemPromptOverride?: string
   initialPrompt?: string
-  /** Routes AskUserQuestion/ExitPlanMode through tool-callback when KANNA_MCP_TOOL_CALLBACKS=1. */
   toolCallback?: ToolCallbackService
-  /** Per-chat permission policy. Defaults to POLICY_DEFAULT if omitted. */
   chatPolicy?: ChatPermissionPolicy
-  /** Orchestrator for delegate_subagent. Omit to hide the tool. */
   subagentOrchestrator?: SubagentOrchestrator
-  /** Per-spawn delegation context (depth / ancestor chain / parentUserMessageId resolver). */
   delegationContext?: KannaMcpDelegationContext
-  /** Enabled user MCP servers, merged into the SDK's mcpServers map. */
   customMcpServers?: readonly McpServerConfig[]
-  /** Pre-resolved oauth bearer tokens keyed by server id (from ensureFreshMcpToken). */
   oauthBearers?: ReadonlyMap<string, string>
-  /** Folder-restricted subagent: disallow native FS tools, allowlist mcp__kanna__*, per-run path-deny. */
   restrictedAllowedPaths?: string[]
-  /** Backs the `setup_loop` MCP tool. Omit to hide the tool. */
   setupLoop?: (input: LoopSetupInput) => Promise<SetupLoopHandlerResult>
-  /** Backs the `arm_cron` MCP tool; main chats only. */
   armCron?: (command: string) => Promise<{ jobId: string }>
-  /** Backs the `update_cron` MCP tool; main chats only. */
   updateCron?: (jobId: string, patch: import("../shared/cron/types").CronJobPatch) => Promise<void>
-  /** Backs the `stop_loop` MCP tool. Omit to hide the tool. */
   stopLoop?: () => Promise<void>
-  /** Backs the `resume_loop` MCP tool. Main chats only (depth 0). */
   resumeLoop?: () => Promise<import("./loop-wake-recovery").ResumeLoopResult>
-  /** Live check: true while an autonomous loop is armed — blocks direct-edit native tools. */
   isLoopArmed?: () => boolean
-  /**
-   * Live armed-loop slice for the kanna-mcp tools: the workdir the tracking
-   * file resolves against, the oracle command `run_verify` runs, and the
-   * tracking file the chunk-label fallback reads. Unlike `isLoopArmed` this is
-   * NOT gated to main-agent spawns — a loop's worker subagent needs the same
-   * workdir, or it writes its progress into the wrong checkout.
-   */
   getArmedLoop?: (chatId: string) => ArmedLoopInfo | null
   boardRegistry?: BoardRegistry
-  /**
-   * Agentic-turn bound passed natively to the SDK query() (Claude Code's
-   * per-agent frontmatter maxTurns analog): the SDK stops gracefully and
-   * keeps the accumulated output. Used by subagent spawns.
-   */
   maxTurns?: number
-  /** When true, leave the prompt queue open after initialPrompt and expose pushChannelPrompt on the handle. */
   keepAlive?: boolean
-  /** Per-turn price for computing cost when the provider doesn't report it (OpenRouter). */
   turnPrice?: ModelPrice | null
-  /** Overrides the configured context window (OpenRouter model contextLength). */
   contextWindowOverride?: number
 },
   _deps: StartClaudeSessionDeps = buildStartClaudeSessionDeps(),
@@ -165,15 +127,7 @@ export async function startClaudeSession(args: {
       forkSession: args.forkSession,
       permissionMode: args.planMode ? "plan" : "acceptEdits",
       canUseTool,
-      // Filter-at-spawn (Claude Code's filterToolsForAgent pattern): while a
-      // loop is armed the direct-edit tools are removed from the tool list the
-      // model sees, so it cannot even attempt them. The dynamic canUseTool
-      // deny stays as belt-and-suspenders; an armed-state flip respawns the
-      // session (see loopArmedAtSpawn in startClaudeTurn).
       ...(args.isLoopArmed?.() ? { disallowedTools: [..._deps.loopBlockedNativeTools] } : {}),
-      // Per-agent turn bound, threaded from Subagent.maxTurns. The SDK emits
-      // a graceful stop at the limit — accumulated output is preserved,
-      // matching Claude Code's max_turns_reached semantics.
       ...(args.maxTurns !== undefined ? { maxTurns: args.maxTurns } : {}),
       tools: args.restrictedAllowedPaths && args.restrictedAllowedPaths.length > 0
         ? _deps.claudeToolset.filter((t) => !new Set<string>(_deps.sdkRestrictedFsNativeTools).has(t))
@@ -209,9 +163,6 @@ export async function startClaudeSession(args: {
           },
       settingSources: ["user", "project", "local"],
       pathToClaudeCodeExecutable: process.env.CLAUDE_EXECUTABLE?.replace(/^~(?=\/|$)/, homedir()) || undefined,
-      // A stack spawn passes `additionalDirectories` to the SDK, which grants
-      // write access to each root; the memory switch is what makes it also
-      // READ each root's conventions. See `withAdditionalDirectoryMemory`.
       env: withAdditionalDirectoryMemory(
         _deps.buildClaudeEnv(process.env, args.oauthToken, args.openrouterApiKey ? { apiKey: args.openrouterApiKey } : null),
         args.additionalDirectories,
@@ -219,8 +170,6 @@ export async function startClaudeSession(args: {
     },
   })
 
-  // Follow-up turns (sendPrompt + keep-alive pushChannelPrompt) share one
-  // queue-push policy so the two transports cannot drift apart.
   const enqueueUserPrompt = (content: string) => {
     promptQueue.push({
       type: "user",
@@ -289,19 +238,12 @@ export async function startClaudeSession(args: {
     close: () => {
       promptQueue.close()
       q.close()
-      // Do NOT cancel pending tool-callback records here. close() also fires
-      // on token rotation and idle-session sweep — both of which preserve
-      // the model's logical turn (it will resume / re-emit). Denying
-      // mid-turn used to mask the question prompt as a silent drop. Pending
-      // records are now reaped by the explicit chat.cancel / chat.delete
-      // paths in ws-router.ts and by recoverOnStartup on server boot.
       resolveSessionClosed()
     },
     closed: sessionClosed,
   }
 }
 
-/** Creates a promise/resolver pair for tracking session close completion. */
 function makeSessionClosedSignal(): { sessionClosed: Promise<void>; resolveSessionClosed: () => void } {
   let resolveSessionClosed!: () => void
   const sessionClosed = new Promise<void>((resolve) => { resolveSessionClosed = resolve })

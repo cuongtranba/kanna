@@ -485,10 +485,6 @@ describe("envWithoutParentClaudeCode", () => {
 
 describe("runClaudeStructured pool guard", () => {
   test("refuses to spawn (returns null) when pool has tokens but none usable", async () => {
-    // All tokens errored → pickActive returns null, hasAnyToken returns true.
-    // Without the guard, the SDK would spawn the CLI with no token in env
-    // and fall back to the user's keychain login (typically expired),
-    // producing opaque 401 loops instead of a quick provider fallthrough.
     const erroredToken: OAuthTokenEntry = {
       id: "a", label: "a", token: "sk-ant-bad",
       status: "error", limitedUntil: null,
@@ -505,7 +501,6 @@ describe("runClaudeStructured pool guard", () => {
         prompt: "hi",
         schema: { type: "object", properties: { x: { type: "string" } }, required: ["x"], additionalProperties: false },
       })
-      // Must return null immediately — no Claude binary spawn.
       expect(result).toBe(null)
       expect(Date.now() - start).toBeLessThan(500)
     } finally {

@@ -1,23 +1,3 @@
-/**
- * The slash commands Kanna implements itself, rather than forwarding to a
- * provider as prompt text.
- *
- * This module is the single source of truth for both halves: the parser the
- * send pipeline dispatches on, and the catalog the composer's `/` picker
- * offers. A drift guard in the colocated test asserts every catalog entry
- * parses, so a command can never be advertised without being dispatchable.
- *
- * A builtin must be the WHOLE message. `/clear` with trailing words does not
- * match — silently discarding what the user typed is worse than treating the
- * line as an ordinary prompt.
- *
- * `/cron` is the deliberate exception: ANY message whose first token is
- * `/cron` is intercepted, valid or not. Its arm form carries a schedule that
- * must hard-validate, and sending a mistyped schedule to the model as prompt
- * text would silently arm nothing — so invalid `/cron` lines surface a
- * structured error (with a ready-to-send corrected suggestion) instead of
- * falling through.
- */
 
 import type { SlashCommand } from "./types"
 import { parseCronCommand } from "./cron/parse-command"
@@ -34,7 +14,6 @@ export interface BuiltinCompactCommand {
 
 export interface BuiltinCronCommand {
   name: "cron"
-  /** Success or structured validation error — either way `/cron` intercepts. */
   result: CronParseResult
 }
 
@@ -44,8 +23,6 @@ const CLEAR_PATTERN = /^\/clear$/
 const COMPACT_PATTERN = /^\/compact(?:[ \t]+(.*))?$/
 
 export function parseBuiltinCommand(content: string): BuiltinCommand | null {
-  // Before the newline guard: a multiline /cron message must intercept as an
-  // error, not fall through as a prompt.
   const cron = parseCronCommand(content)
   if (cron) return { name: "cron", result: cron }
 
@@ -84,14 +61,6 @@ export const BUILTIN_SLASH_COMMANDS: readonly SlashCommand[] = [
   },
 ]
 
-/**
- * The prompt Kanna sends when the user asks Codex to compact.
- *
- * Codex's app-server protocol has no compaction request, so Kanna performs the
- * compaction as an ordinary turn and reshapes the reply into a
- * `compact_summary` entry. The reply therefore has to be prose and nothing
- * else — a tool call or a preamble would end up rendered as the summary.
- */
 export function buildCodexCompactPrompt(instructions: string): string {
   const focus = instructions
     ? `\n\nThe user asked you to focus the summary on: ${instructions}`

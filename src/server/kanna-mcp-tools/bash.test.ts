@@ -11,8 +11,6 @@ async function newStore() {
   const dir = await mkdtemp(path.join(tmpdir(), "kanna-mcp-bash-"))
   const store = createTestEventStore(dir)
   await store.initialize()
-  // Delay before removing dir so background persist tasks (fired by auto-allow/auto-deny)
-  // have time to complete before the tmpdir is removed.
   const cleanup = async () => {
     await new Promise<void>((r) => setTimeout(r, 50))
     await rm(dir, { recursive: true, force: true })
@@ -36,7 +34,6 @@ describe("mcp__kanna__bash", () => {
       const tool = createBashTool({ toolCallback: svc })
       const result = await tool.handler({ command: "pwd" }, ctx(dir))
       expect(result.isError).toBeFalsy()
-      // pwd resolves symlinks; use realpath comparison
       const realDir = await Bun.spawn(["realpath", dir], { stdout: "pipe" })
       const realDirStr = (await new Response(realDir.stdout).text()).trim()
       const resultText = result.content[0].text

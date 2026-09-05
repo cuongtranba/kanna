@@ -11,12 +11,6 @@ import type { KannaState } from "./useKannaState"
 import type { StackSummary } from "../../shared/types"
 import type { JsonValue } from "../../shared/json"
 
-/**
- * Mirrors `BoardsRoutePage.test.tsx`, one owner kind over: a Stack board has
- * no single project checkout to imply, so the list is keyed off the Stack
- * itself and opening a board hands off to `/boards/stack/:stackId/:boardId`
- * rather than `/boards/:projectId/:boardId`.
- */
 
 const BOARD = {
   id: "board-1",
@@ -121,11 +115,6 @@ describe("StackBoardsRoutePage", () => {
     harness.unmount()
   })
 
-  /**
-   * Same discipline as the project route: opening a board hands it to its own
-   * address and creates no tab or chat on the way there — the workspace at
-   * that address is what opens the tab.
-   */
   test("opening a board navigates to /boards/stack/:stackId/:boardId and creates nothing", async () => {
     const harness = await mount([STACK])
     await act(async () => {

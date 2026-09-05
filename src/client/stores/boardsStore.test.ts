@@ -49,11 +49,6 @@ describe("board paging", () => {
     expect(selectBoardPageSize("board-1")(state())).toBe(BOARD_PAGE_STEP * 3)
   })
 
-  /**
-   * A null cursor means the column delivered everything. Without this the
-   * library's own loadMore at the end of a short column would climb the page
-   * size to the server's cap for nothing.
-   */
   test("an exhausted board stops growing", () => {
     state().setBoardView("board-1", view({ c1: null, c2: null }))
     const before = state()
@@ -68,7 +63,6 @@ describe("board paging", () => {
     expect(selectBoardPageSize("board-1")(state())).toBe(BOARD_PAGE_STEP * 2)
   })
 
-  /** A board with no snapshot yet must still be able to page. */
   test("growing before the first snapshot is allowed", () => {
     state().growPage("board-1")
     expect(selectBoardPageSize("board-1")(state())).toBe(BOARD_PAGE_STEP * 2)

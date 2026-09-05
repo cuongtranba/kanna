@@ -10,15 +10,7 @@ import type { KannaSocket } from "./socket"
 import { makeFakeDomPort, makeFakeStoragePort, makeFakeTimerPort } from "../lib/testing/fakePorts"
 import type { WebSocketLike, WebSocketPort, WsEventPayload } from "../ports/webSocketPort"
 
-/**
- * The connection count is the whole point of this provider.
- *
- * `useKannaState` used to build its own `KannaSocket`, which was fine only
- * while it mounted once. These tests pin the invariant that makes one chat tab
- * per session possible: N consumers, ONE WebSocket.
- */
 
-// ─── Fakes ──────────────────────────────────────────────────────────────────
 
 class FakeWebSocket implements WebSocketLike {
   static readonly CONNECTING = 0
@@ -29,9 +21,9 @@ class FakeWebSocket implements WebSocketLike {
   readyState = FakeWebSocket.CONNECTING
   closed = false
 
-  send(_data: string): void { /* no-op */ }
+  send(_data: string): void { }
   close(): void { this.closed = true }
-  addEventListener(_type: string, _handler: (event?: WsEventPayload) => void): void { /* no-op */ }
+  addEventListener(_type: string, _handler: (event?: WsEventPayload) => void): void { }
 }
 
 function makeCountingWebSocketPort() {
@@ -59,7 +51,6 @@ function makePorts(webSocket: WebSocketPort, href = "http://localhost:5174/chat/
   }
 }
 
-// ─── wsUrl ──────────────────────────────────────────────────────────────────
 
 describe("wsUrl", () => {
   test("upgrades to wss for an https page", () => {
@@ -73,7 +64,6 @@ describe("wsUrl", () => {
   })
 })
 
-// ─── One connection for N consumers ─────────────────────────────────────────
 
 describe("KannaSocketProvider", () => {
   test("opens exactly ONE connection for two consumers", async () => {
@@ -94,10 +84,8 @@ describe("KannaSocketProvider", () => {
 
     expect(result.thrown).toBeNull()
     expect(result.loopWarnings).toEqual([])
-    // The invariant: two mounted consumers, one socket.
     expect(created.length).toBe(1)
     expect(created[0]).toBe("ws://localhost:5174/ws")
-    // ...and both consumers got the SAME instance, not two wrappers.
     expect(seen.length).toBeGreaterThanOrEqual(2)
     expect(seen.every((socket) => socket === seen[0])).toBe(true)
     expect(seen[0]).not.toBeNull()
@@ -107,9 +95,7 @@ describe("KannaSocketProvider", () => {
 
   test("an injected socket is used as-is and none is created", async () => {
     const { port, created } = makeCountingWebSocketPort()
-    const injected = { start() { /* no-op */ }, dispose() { /* no-op */ } } as unknown as KannaSocket
-    // Collected into an array, not a `let`: TS narrows a closure-assigned
-    // `let` back to its initializer type at the assertion.
+    const injected = { start() { }, dispose() { } } as unknown as KannaSocket
     const seen: KannaSocket[] = []
 
     function Consumer() {
@@ -125,7 +111,6 @@ describe("KannaSocketProvider", () => {
 
     expect(result.thrown).toBeNull()
     expect(seen[0]).toBe(injected)
-    // A caller-owned socket must not cause the provider to build a second one.
     expect(created.length).toBe(0)
 
     await result.cleanup()

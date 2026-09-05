@@ -15,21 +15,10 @@ import { KANNA_MCP_SERVER_NAME } from "../../shared/tools"
 import { isRecord } from "../../shared/errors"
 import type { JsonObject } from "../../shared/json"
 
-// Keep-alive subagent turns are delivered via a kanna channel push, which
-// claude records as a `user isMeta:true` line tagged with this marker. Such a
-// line is a real turn the main agent issued, NOT a background auto-wake.
 const KANNA_CHANNEL_TAG = `<channel source="${KANNA_MCP_SERVER_NAME}"`
 
-// On-disk JSONL messages include JSONL-specific fields (isSidechain, isMeta,
-// attachment, sessionId camelCase) that are not in the SDK's ClaudeRawSdkMessage
-// interface. Using an intersection gives us both typed SDK fields and index
-// access for JSONL-specific fields without casts.
 type JsonlMessage = ClaudeRawSdkMessage & JsonObject
 
-// Real on-disk transcript lines carry the session id as camelCase `sessionId`;
-// SDK stream-json messages use snake_case `session_id`. Accept either so PTY
-// chats persist a session token (without it, canForkChat stays false and the
-// fork button is disabled).
 function extractSessionId(message: JsonlMessage): string | null {
   const snake = message.session_id
   if (typeof snake === "string" && snake.length > 0) return snake
@@ -38,10 +27,6 @@ function extractSessionId(message: JsonlMessage): string | null {
   return null
 }
 
-// Claude Code records each auto-loaded memory/rule file (CLAUDE.md, nested
-// CLAUDE.md, `.claude/rules/*.md`) as a `type:"nested_memory"` transcript line
-// carrying `attachment.path`. Returns the path when present + non-empty, else
-// null (malformed / future-shape lines drop silently — never throw).
 function extractNestedMemoryPath(message: JsonlMessage): string | null {
   if (message.type !== "nested_memory") return null
   const attachment = message.attachment
@@ -51,12 +36,6 @@ function extractNestedMemoryPath(message: JsonlMessage): string | null {
   return null
 }
 
-// Claude CLI ≥ 2.1.x stopped writing `type:"system"` rows (turn_duration,
-// init, compact_boundary) into the on-disk transcript JSONL. The only turn-end
-// signal left is the final assistant message's `stop_reason` — every persisted
-// row of that message (one row per content block) carries the same terminal
-// value. "tool_use" / "pause_turn" mean the turn continues; null appears on
-// synthetic API-error rows.
 const TERMINAL_STOP_REASONS = new Set(["end_turn", "stop_sequence", "max_tokens", "refusal"])
 
 function assistantMessageId(message: JsonlMessage): string | undefined {
@@ -91,57 +70,23 @@ function userMessageContainsKannaChannel(message: JsonlMessage): boolean {
 }
 
 export interface JsonlEventParser {
-  /** Parse one JSONL line; returns zero or more harness events. Stateful — updates internal usage / context-window tracking across calls. */
   parse(rawLine: string): HarnessEvent[]
 }
 
 export interface CreateJsonlEventParserOptions {
-  /** Per-model context-window floor (e.g. 1_000_000 for `[1m]` models). */
   configuredContextWindow?: number
 }
 
-/**
- * Stateful JSONL → HarnessEvent parser. One instance per PTY session so
- * usage snapshots can be diffed across `assistant` → `result` messages,
- * matching the SDK driver's `createClaudeHarnessStream` shape.
- */
 export function createJsonlEventParser(opts: CreateJsonlEventParserOptions = {}): JsonlEventParser {
   let seenAssistantUsageIds = new Set<string>()
   let latestUsageSnapshot: ContextWindowUsageSnapshot | null = null
   let lastKnownContextWindow: number | undefined = opts.configuredContextWindow
   const detector = new ClaudeLimitDetector()
-  // Track turn-boundary state to filter Claude Code's background auto-wake
-  // turns. After a real turn ends, `useQueueProcessor` (claude-code/src/hooks/
-  // useQueueProcessor.ts) may auto-spawn a follow-up turn by injecting a
-  // synthetic `<task-notification>` user message with `isMeta:true`. Kanna
-  // never issued a `chat_send` for this turn, so its `result` MUST NOT
-  // consume a `pendingPromptSeq` (would steal a real user turn's seq) or
-  // alter Kanna's turn lifecycle. Mid-turn `isMeta:true` injections
-  // (FileReadTool metadata, token-budget continuation) appear AFTER an
-  // assistant message and are NOT auto-wakes — their final result is real.
   let turnState: "between" | "inTurn" | "inAutoWake" = "between"
-  // Pending turn-end from a terminal `stop_reason` assistant row (claude
-  // ≥ 2.1.x format, see hasTerminalStopReason). The synthesized `result` is
-  // flushed on the NEXT line that doesn't belong to the same assistant
-  // message, so it lands after every transcript entry of the turn (the final
-  // message's blocks are persisted as several rows sharing one id). In
-  // practice claude writes session-state checkpoint rows (`last-prompt` /
-  // `ai-title` / `mode` / `permission-mode`) immediately after the final
-  // assistant rows, so the flush is prompt. A real `result` /
-  // `system/turn_duration` row (SDK fixtures, older CLIs) supersedes the
-  // pending flush; one arriving just after a flush is swallowed so a turn
-  // never finalizes twice.
   let pendingTurnEnd: { messageId: string | undefined } | null = null
   let suppressNextResultRow = false
-  // Rate-limit / api-error turns emit BOTH a synthetic assistant
-  // `isApiErrorMessage` (→ `api_error` entry) AND a `result` whose body
-  // repeats the same text. Track per-turn api_error emission so the trailing
-  // result entry's body can be scrubbed; the duration footer still renders.
   let apiErrorEmittedInTurn = false
 
-  // Per-turn billed token usage and cost to attach to the result entry.
-  // Mirrors the SDK driver's pendingResultUsage/pendingResultCost pattern in
-  // createClaudeHarnessStream so both drivers produce identical result entries.
   let pendingResultUsage: ProviderUsage | undefined
   let pendingResultCost: number | undefined
 
@@ -167,15 +112,12 @@ export function createJsonlEventParser(opts: CreateJsonlEventParserOptions = {})
         || (message.type === "system" && message.subtype === "turn_duration")
       )
 
-      // Flush (or supersede) a pending stop_reason turn-end before anything
-      // else so the synthesized result precedes the current line's events.
       const events: HarnessEvent[] = []
       if (pendingTurnEnd) {
         const sameFinalMessage = !isSidechain
           && message.type === "assistant"
           && assistantMessageId(message) === pendingTurnEnd.messageId
         if (isRealResultRow) {
-          // The real turn-end row wins — it produces the result below.
           pendingTurnEnd = null
         } else if (!sameFinalMessage) {
           const flushedMessageId = pendingTurnEnd.messageId
@@ -206,10 +148,6 @@ export function createJsonlEventParser(opts: CreateJsonlEventParserOptions = {})
               }),
             })
           }
-          // Mirror the real-result branch: reset per-turn usage tracking so the
-          // next turn starts clean (the result branch that normally does this
-          // never runs on CLI >= 2.1.x). Clear the pending result vars too so a
-          // future code path can never carry one turn's cost into the next.
           seenAssistantUsageIds = new Set<string>()
           latestUsageSnapshot = null
           pendingResultUsage = undefined
@@ -217,34 +155,20 @@ export function createJsonlEventParser(opts: CreateJsonlEventParserOptions = {})
         }
       }
 
-      // Task subagents write their messages into the parent transcript with
-      // isSidechain:true. They are not part of the main turn: a sidechain
-      // `result` (or its TUI `turn_duration` synth) would shift the parent's
-      // pending prompt seq and finalize the user turn early, and a sidechain
-      // session_id would clobber the parent chat's claude session token.
-      // (A sidechain line still triggers the pending flush above — the main
-      // turn already ended; its result must not wait on subagent traffic.)
       if (isSidechain) return events
 
-      // A new main-turn row means any swallowed-duplicate window is over.
       if (message.type === "user" || message.type === "assistant") {
         if (!isRealResultRow && suppressNextResultRow && !pendingTurnEnd) {
           suppressNextResultRow = false
         }
       }
-      // Arm the pending turn-end on terminal stop_reason rows (refreshed for
-      // each row of the same final message).
       if (hasTerminalStopReason(message)) {
         pendingTurnEnd = { messageId: assistantMessageId(message) }
       }
 
-      // Auto-wake detection — see turnState comment above.
       const isResultLine = message.type === "result"
         || (message.type === "system" && message.subtype === "turn_duration")
       if (message.type === "user") {
-        // A kanna channel push is a real turn (keep-alive multi-turn), even
-        // though it arrives isMeta:true at a turn boundary. Only genuine
-        // background auto-wakes (no kanna tag) get filtered.
         const isKannaChannelPush = userMessageContainsKannaChannel(message)
         if (message.isMeta === true && turnState === "between" && !isKannaChannelPush) {
           turnState = "inAutoWake"
@@ -253,11 +177,7 @@ export function createJsonlEventParser(opts: CreateJsonlEventParserOptions = {})
         if (message.isMeta !== true || isKannaChannelPush) {
           turnState = "inTurn"
         }
-        // Mid-turn isMeta user (turnState === "inTurn") falls through — emit
-        // normally; downstream consumers already handle synthetic user lines.
       } else if (message.type === "assistant" && turnState === "between") {
-        // Defensive: assistant without a preceding user line — treat as the
-        // start of a real turn so the upcoming result is emitted.
         turnState = "inTurn"
       } else if (isResultLine) {
         if (turnState === "inAutoWake") {
@@ -267,19 +187,11 @@ export function createJsonlEventParser(opts: CreateJsonlEventParserOptions = {})
         turnState = "between"
       }
 
-      // D3 — emit session_token for any message carrying a session_id, not
-      // just `system/init`. Matches the SDK driver loop in
-      // createClaudeHarnessStream (agent.ts).
       const sessionId = extractSessionId(message)
       if (sessionId) {
         events.push({ type: "session_token", sessionToken: sessionId })
       }
 
-      // PTY-only: surface Claude Code's auto-loaded memory/rule files as a
-      // `memory_loaded` transcript entry (the "Loaded CLAUDE.md / rule" lines a
-      // native TUI prints). `normalizeClaudeStreamMessage` has no nested_memory
-      // case, so this branch is the only emitter — keeping the SDK driver
-      // unchanged (scope = PTY only).
       const memoryPath = extractNestedMemoryPath(message)
       if (memoryPath) {
         events.push({
@@ -288,11 +200,6 @@ export function createJsonlEventParser(opts: CreateJsonlEventParserOptions = {})
         })
       }
 
-      // D2 — recognise both shapes:
-      //   (a) the SDK-native `rate_limit_event` message Claude Code mirrors
-      //       into JSONL when running under the agent SDK
-      //   (b) legacy `system/rate_limit` shape kept for any older CLI build
-      //       that emits it (existing kanna call sites).
       if (message.type === "rate_limit_event") {
         const detection = detector.detectFromSdkRateLimitInfo(
           "",
@@ -307,13 +214,8 @@ export function createJsonlEventParser(opts: CreateJsonlEventParserOptions = {})
         events.push({ type: "rate_limit", rateLimit: { resetAt, tz } })
       }
 
-      // D1 — assistant message usage delta → context_window_updated.
       if (message.type === "assistant") {
         const usageId = getClaudeAssistantMessageUsageId(message)
-        // Claude's on-disk transcript nests the Anthropic message — id, content
-        // AND usage — under `.message`. The SDK stream-json shape keeps `usage`
-        // at the top level. Prefer the nested location (real interactive
-        // sessions) and fall back to the flat one (SDK fixtures / parity).
         const innerMessage = isRecord(message.message) ? message.message : undefined
         const usageSnapshot = normalizeClaudeUsageSnapshot(
           (innerMessage?.usage) ?? message.usage,
@@ -329,9 +231,6 @@ export function createJsonlEventParser(opts: CreateJsonlEventParserOptions = {})
         }
       }
 
-      // D1 — turn-end context window emit. Preserves the configured-window
-      // floor so the SDK-internal `modelUsage.contextWindow` of 200_000
-      // can't silently override a 1M-beta opt-in.
       if (message.type === "result") {
         const resultContextWindow = maxClaudeContextWindowFromModelUsage(
           message.modelUsage,
@@ -349,9 +248,6 @@ export function createJsonlEventParser(opts: CreateJsonlEventParserOptions = {})
           lastKnownContextWindow,
         )
 
-        // Stash billed token figures for the result entry (populated below in
-        // the entry loop). Mirrors createClaudeHarnessStream so both drivers
-        // produce identical result entries. Prefer accumulatedUsage for tokens.
         const billed = accumulatedUsage ?? finalUsage
         pendingResultUsage = billed
           ? {
@@ -381,9 +277,6 @@ export function createJsonlEventParser(opts: CreateJsonlEventParserOptions = {})
       try {
         const entries = normalizeClaudeStreamMessage(message)
         for (const entry of entries) {
-          // An old CLI writing `turn_duration` (or an SDK `result`) right
-          // after a stop_reason flush is a duplicate turn-end — swallow it so
-          // the turn never finalizes twice.
           if (isRealResultRow && suppressNextResultRow && entry.kind === "result") {
             pendingResultUsage = undefined
             pendingResultCost = undefined
@@ -423,11 +316,6 @@ export function createJsonlEventParser(opts: CreateJsonlEventParserOptions = {})
   }
 }
 
-/**
- * Stateless wrapper kept for callers that don't need usage tracking.
- * Behaves the same as before D1/D2/D3 landed: no usage diff, no per-message
- * session_token. New callers should use `createJsonlEventParser` instead.
- */
 export function parseJsonlLine(rawLine: string): HarnessEvent[] {
   const trimmed = rawLine.trim()
   if (!trimmed) return []
@@ -442,7 +330,6 @@ export function parseJsonlLine(rawLine: string): HarnessEvent[] {
   }
   if (!messageOrNull) return []
   const message = messageOrNull
-  // Sidechain (Task subagent) lines never belong to the main turn stream.
   if (message.isSidechain === true) return []
   const events: HarnessEvent[] = []
 

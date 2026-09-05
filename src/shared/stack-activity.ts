@@ -1,29 +1,13 @@
-/**
- * "What is running across this stack right now?"
- *
- * `ChatActivity` is already computed per chat and every stack chat carries its
- * `stackId`, so the rollup is a fold — no new events, no new state. It exists
- * because a stack's own row is the only place the question can be asked: the
- * member chats may be scattered across several collapsed project groups.
- *
- * Pure, and deliberately COUNTS rather than re-describing: a stack row has one
- * line of space, so "3 agents, 1 loop" is the useful answer and the per-chat
- * detail stays on the chat rows.
- */
 
 import type { ChatActivity } from "./types"
 
 export interface StackActivity {
-  /** Member chats with anything happening at all. Drives whether to render. */
   activeChats: number
   agents: number
-  /** Member chats with an armed loop. */
   loops: number
   workflows: number
   backgroundTasks: number
-  /** Member chats blocked on an AskUserQuestion — the only one the user must act on. */
   awaitingAnswer: number
-  /** Member chats whose last subagent run failed. */
   failing: number
 }
 
@@ -37,7 +21,6 @@ export const EMPTY_STACK_ACTIVITY: StackActivity = {
   failing: 0,
 }
 
-/** True when a chat contributes anything to its stack's rollup. */
 function isActive(a: ChatActivity): boolean {
   return a.agents > 0
     || a.loop !== null
@@ -62,12 +45,6 @@ export function aggregateStackActivity(activities: readonly ChatActivity[]): Sta
   return total
 }
 
-/**
- * The rollup as a short label, or null when there is nothing to report.
- *
- * Ordered by what the user would act on first: a question blocks progress, a
- * failure needs a decision, and the rest is just work in flight.
- */
 export function formatStackActivity(activity: StackActivity): string | null {
   if (activity.activeChats === 0) return null
   const parts: string[] = []
@@ -77,8 +54,6 @@ export function formatStackActivity(activity: StackActivity): string | null {
   if (activity.loops > 0) parts.push(`${activity.loops} loop${activity.loops === 1 ? "" : "s"}`)
   if (activity.workflows > 0) parts.push(`${activity.workflows} workflow${activity.workflows === 1 ? "" : "s"}`)
   if (activity.backgroundTasks > 0) parts.push(`${activity.backgroundTasks} task${activity.backgroundTasks === 1 ? "" : "s"}`)
-  // Every counted dimension was zero but a chat was still "active" — that
-  // cannot happen given isActive, but returning the chat count beats "".
   if (parts.length === 0) return `${activity.activeChats} active`
   return parts.join(", ")
 }

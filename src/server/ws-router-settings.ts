@@ -1,15 +1,3 @@
-/**
- * ws-router-settings.ts
- *
- * Command handlers for the settings, subagent, MCP, LLM-provider, and
- * skills command groups extracted from ws-router.ts.  No closure
- * dependencies on createWsRouter's local variables — every dep is injected
- * via SettingsCommandDeps, making these handlers testable in isolation.
- *
- * Covers: settings.*, appSettings.*, subagent.*, settings.testMcpServer,
- *   settings.startMcpOAuth, settings.completeMcpOAuth, settings.*LlmProvider,
- *   settings.getChangelog, skills.*
- */
 import { PROTOCOL_VERSION } from "../shared/types"
 import type {
   AppSettingsPatch,
@@ -39,9 +27,6 @@ import {
 import { readPackageInventory } from "./package-inventory-io.adapter"
 import type { PackageUpdateManager } from "./package-update-manager"
 
-// ---------------------------------------------------------------------------
-// Dep interfaces (duck-typed; avoids circular imports with ws-router.ts)
-// ---------------------------------------------------------------------------
 
 export interface ResolvedAppSettings {
   getSnapshot(): AppSettingsSnapshot
@@ -67,13 +52,9 @@ export interface SettingsCommandDeps {
   resolvedLlmProvider: ResolvedLlmProvider
   listOpenRouterModels: (() => Promise<OpenRouterModel[]>) | undefined
   packageUpdateManager?: PackageUpdateManager
-  /** Pre-bound to the current WebSocket; called to ack the command. */
   send: (envelope: ServerEnvelope) => void
 }
 
-// ---------------------------------------------------------------------------
-// Internal helpers (previously at the bottom of ws-router.ts)
-// ---------------------------------------------------------------------------
 
 export function isSubagentValidationError(
   value: Subagent | SubagentValidationError,
@@ -111,14 +92,6 @@ export async function testOAuthToken(token: string): Promise<{ ok: boolean; erro
   }
 }
 
-/**
- * For an OAuth-authenticated network server, resolve a fresh access token to
- * inject as a Bearer when probing it — the manual "Test" / auto-test path is
- * otherwise tokenless and a healthy OAuth server 401s.  Returns undefined for
- * stdio, static-header, or not-yet-authenticated servers (the probe runs with
- * stored headers only).  A refresh failure also yields undefined, so the probe
- * surfaces the unauthorized error that correctly signals re-auth is needed.
- */
 export async function resolveMcpTestBearer<TWriteResult>(
   entry: McpServerConfig,
   appSettings: { writePatch(p: AppSettingsPatch): Promise<TWriteResult> },
@@ -150,23 +123,11 @@ export async function runMcpAutoTest<TWriteResult>(
     const result = await validateMcpServer(entry, bearer ? { bearer } : {})
     await appSettings.writePatch({ customMcpServers: { setTestResult: { id, result } } })
   } catch (err) {
-    // Auto-test must never throw; log + swallow.
     log.warn("[kanna/ws-router] runMcpAutoTest failed", String(err))
   }
 }
 
-// ---------------------------------------------------------------------------
-// Command dispatcher
-// ---------------------------------------------------------------------------
 
-/**
- * Handle one settings-domain WS command.
- *
- * Returns `true` when the command was handled (caller should `return`).
- * Returns `false` when the command type falls outside this module's scope
- * (should not happen in practice once all cases are wired up, but keeps the
- * type-system honest).
- */
 export async function handleSettingsCommand(
   deps: SettingsCommandDeps,
   command: ClientCommand,
@@ -222,14 +183,11 @@ export async function handleSettingsCommand(
       const snapshot = await resolvedAppSettings.writePatch(command.patch)
       send({ v: PROTOCOL_VERSION, type: "ack", id, result: snapshot })
 
-      // Fire-and-forget auto-test for newly created or updated MCP server.
       const targetId = (() => {
         const ops = command.patch.customMcpServers
         if (!ops) return null
         if (ops.update) return ops.update.id
         if (ops.create) {
-          // The created entry is the one with no prior match by name —
-          // simplest: pick the entry with the latest createdAt.
           const list = snapshot.customMcpServers
           if (list.length === 0) return null
           return list.reduce((latest, e) => (e.createdAt > latest.createdAt ? e : latest), list[0]!).id
@@ -293,7 +251,6 @@ export async function handleSettingsCommand(
         })
         return true
       }
-      // Mark pending so the UI sees a spinner while we connect.
       await resolvedAppSettings.writePatch({
         customMcpServers: {
           setTestResult: { id: entry.id, result: { status: "pending", startedAt: new Date().toISOString() } },

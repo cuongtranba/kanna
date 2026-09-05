@@ -1,17 +1,9 @@
-/**
- * Pure, IO-free helpers that configure a Claude session:
- * MCP server wiring, spawn paths, tool constants, and task notifications.
- * Extracted from agent.ts — no dependency on AgentCoordinator or agent.ts.
- */
 
 import type { McpServerConfig, ProjectInstructionBlock, ResolvedStackBinding } from "../shared/types"
 import { KANNA_MCP_SERVER_NAME } from "../shared/tools"
 import type { ChatRecord } from "./events"
 import type { BackgroundRunOutcome } from "./subagent-orchestrator"
 
-// ---------------------------------------------------------------------------
-// MCP server wiring
-// ---------------------------------------------------------------------------
 
 type SdkMcpEntry =
   | { type: "stdio"; command: string; args: string[]; env: Record<string, string>; cwd?: string }
@@ -48,9 +40,6 @@ export function buildUserMcpServers(
   return out
 }
 
-// ---------------------------------------------------------------------------
-// Spawn path resolution
-// ---------------------------------------------------------------------------
 
 export function resolveSpawnPaths(
   chat: Pick<ChatRecord, "id" | "stackBindings">,
@@ -69,20 +58,11 @@ export function resolveSpawnPaths(
   return { cwd: primary.worktreePath, additionalDirectories }
 }
 
-/** The two lookups {@link resolveChatCwd} needs, so it takes no whole EventStore. */
 export interface ChatCwdStore {
   getChat(chatId: string): Pick<ChatRecord, "id" | "projectId" | "stackBindings"> | null | undefined
   getProject(projectId: string): { localPath: string } | null | undefined
 }
 
-/**
- * The working directory a chat's turns run in — its stack primary, else its
- * project's path. `undefined` when the chat or its project is gone.
- *
- * The ONE resolver: cron fires, slash-command expansion and the skill roster
- * all key on this, and a copy that disagreed would let one of them read a
- * different project's `.claude` directory than the turn actually runs in.
- */
 export function resolveChatCwd(store: ChatCwdStore, chatId: string): string | undefined {
   const chat = store.getChat(chatId)
   if (!chat) return undefined
@@ -91,23 +71,6 @@ export function resolveChatCwd(store: ChatCwdStore, chatId: string): string | un
   return resolveSpawnPaths(chat, project.localPath).cwd
 }
 
-/**
- * Resolve a chat's stack bindings into named entries.
- *
- * The ONE resolver: both the spawn path (system prompt) and the read model
- * (`deriveChatSnapshot`'s `resolvedBindings`, which the client renders) call
- * this. `read-models.ts` used to carry an inline copy that agreed with it only
- * because `store.getProject` filters `deletedAt`; the two are now the same
- * function, so a caller cannot see a different set of roots than the model does.
- *
- * `lookupProject` reports `active: false` for a project that still has a record
- * but is deleted — the title is kept, because the last known name plus a
- * "missing" status is more use than `(missing)` twice. Returning undefined
- * means no record at all, which is the only case that loses the name.
- *
- * Solo chats (no `stackBindings`) resolve to an empty list — for the
- * instruction blocks a solo chat DOES get, see `resolveProjectInstructions`.
- */
 export function resolveStackProjects(
   chat: Pick<ChatRecord, "stackBindings">,
   lookupProject: (projectId: string) => { title: string; active: boolean } | undefined,
@@ -125,20 +88,6 @@ export function resolveStackProjects(
   })
 }
 
-/**
- * Which projects' instructions apply to this chat's turns.
- *
- * NOT derivable from `resolveStackProjects`: that answers "which roots can
- * this chat reach", and a SOLO chat reaches its project without having a
- * binding for it. Sourcing the blocks from bindings alone would ship a field
- * that is edited from the ordinary project menu but only takes effect inside a
- * stack — so the solo case is synthesized here, once, rather than at each of
- * the three prompt call sites (adr-20260904 D5).
- *
- * `lookupProject` returns undefined for a missing or deleted project, which
- * contributes no block: there is no title to head it with and no rules to
- * state. Projects with no instructions are omitted for the same reason.
- */
 export function resolveProjectInstructions(
   chat: Pick<ChatRecord, "projectId" | "stackBindings">,
   lookupProject: (projectId: string) => { title: string; instructions?: string } | undefined,
@@ -157,9 +106,6 @@ export function resolveProjectInstructions(
   return blocks
 }
 
-// ---------------------------------------------------------------------------
-// Tool constants
-// ---------------------------------------------------------------------------
 
 export const CLAUDE_TOOLSET = [
   "Skill",
@@ -181,23 +127,11 @@ export const CLAUDE_TOOLSET = [
   "ExitPlanMode",
 ] as const
 
-/** Native FS tools the SDK driver disallows when a subagent is folder-restricted. */
 export const SDK_RESTRICTED_FS_NATIVE_TOOLS = ["Read", "Edit", "Write", "Bash", "Glob", "Grep", "WebFetch"] as const
 
-// ---------------------------------------------------------------------------
-// Task notification
-// ---------------------------------------------------------------------------
 
-/** Cap on the <result> body inside a task-notification — bounds re-entry prompt size. */
 const TASK_NOTIFICATION_RESULT_MAX_CHARS = 4_000
 
-/**
- * Render a background-subagent outcome as the `<task-notification>` XML that
- * Claude Code's own LocalAgentTask uses for background-agent completion, so
- * the model parses task identity/status with a format it natively knows.
- * `includeResult: false` (armed loops) omits the result body — PROGRESS.md is
- * the loop's durability contract, not the re-entry prompt.
- */
 export function buildTaskNotification(
   runId: string,
   outcome: BackgroundRunOutcome,

@@ -46,13 +46,6 @@ export interface SmokeTestGate {
 
 export function createSmokeTestGate(args: SmokeTestGateArgs): SmokeTestGate {
   const { probe, cache, ttlMs, now } = args
-  // Per-(binarySha256, model) singleflight. Under
-  // adr-20260522-oauth-token-share-cap a single OAuth token may back N
-  // concurrent PTY spawns; on cold cache they would each fire an
-  // independent claude TUI probe against Anthropic on the same token,
-  // which is the easiest way to provoke a concurrent-stream 429 right at
-  // boot. Collapse concurrent probe calls onto a shared promise so only
-  // one live probe runs per (binary, model).
   const inFlight = new Map<string, Promise<{ ok: true } | { ok: false; reason: string }>>()
   return {
     async canSpawn(spawnArgs: CanSpawnArgs) {
@@ -116,14 +109,8 @@ export function buildLiveSmokeProbe(args: BuildLiveSmokeProbeArgs): SmokeTestPro
     try {
       await waitForTuiReadyWithTrustDismiss(pty, ring, { hardCapMs: 15_000 })
       const projectDir = computeProjectDir({ homeDir: args.homeDir, cwd: tmpCwd })
-      // Start watching before sending so the watcher is in place when claude
-      // creates the JSONL after the first user turn.
       const stream = await startTranscriptStream({ projectDir, firstFileTimeoutMs: 20_000 })
       try {
-        // The probe must end its turn within the waitForResultEntry budget.
-        // An open-ended ask invites capable models to hunt for Bash
-        // alternatives (ToolSearch / Agent / Glob) for the whole window, so
-        // explicitly forbid fallbacks and give a fixed no-tool reply path.
         await sendUserPrompt(
           pty,
           ring,
@@ -148,16 +135,14 @@ export function buildLiveSmokeProbe(args: BuildLiveSmokeProbeArgs): SmokeTestPro
         stream.close()
       }
     } catch (err) {
-      // Rate-limit errors must not be cached as "fail" — they're transient.
-      // Re-throw so the gate propagates the error without poisoning the cache.
       const errWithCode: { code?: string } = isRecord(err) ? err : {}
       if (err instanceof Error && errWithCode.code === "rate_limited") throw err
       log.warn("[kanna/pty] smoke probe errored, treating as FAIL", String(err))
       probeResult = "fail"
     } finally {
-      try { await sendExitCommand(pty) } catch { /* swallow */ }
-      try { pty.close() } catch { /* swallow */ }
-      try { await rmDirRecursive(tmpCwd) } catch { /* swallow */ }
+      try { await sendExitCommand(pty) } catch { }
+      try { pty.close() } catch { }
+      try { await rmDirRecursive(tmpCwd) } catch { }
     }
     return probeResult
   }
@@ -185,7 +170,7 @@ export function createFileSmokeTestCache(args: { cacheDir: string }): SmokeTestC
       await writeFile0600(fileFor(key), JSON.stringify(entry))
     },
     async invalidate() {
-      try { await rmDirRecursive(dir) } catch { /* swallow */ }
+      try { await rmDirRecursive(dir) } catch { }
     },
   }
 }

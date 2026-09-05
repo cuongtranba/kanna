@@ -142,11 +142,6 @@ export const selectTextSnippets = (state: AppSettingsStoreState): readonly TextS
 
 const EMPTY_INSTALLED_PLUGINS: readonly InstalledPluginConfig[] = []
 
-/**
- * The Kanna plugin system's global switch. Off by default and off while the
- * settings snapshot is still hydrating, so a surface gated on this never
- * flashes into view before the server has spoken.
- */
 export const selectPluginsEnabled = (state: AppSettingsStoreState): boolean =>
   state.settings?.plugins.enabled ?? false
 

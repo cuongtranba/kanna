@@ -69,9 +69,6 @@ describe("SubagentMessage", () => {
   })
 
   test("card root is a chat selection zone so text stays selectable", () => {
-    // Regression: subagent cards lacked data-chat-selection-zone, so the
-    // sticky-focus pointerup handler restored composer focus and cleared the
-    // user's text selection inside a subagent run card.
     const html = renderToStaticMarkup(
       <SubagentMessage
         run={makeRunSnapshot({ status: "completed", finalText: "selectable subagent text" })}
@@ -133,7 +130,6 @@ describe("SubagentMessage", () => {
       ] as TranscriptEntry[],
     })
     const html = renderToStaticMarkup(<SubagentMessage run={run} indentDepth={0} localPath="/tmp" />)
-    // ToolCallMessage renders the bash command as the label; the terminal icon also appears
     expect(html).toContain("lucide-terminal")
     expect(html).toContain("ls")
   })
@@ -151,7 +147,6 @@ describe("SubagentMessage", () => {
       ] as TranscriptEntry[],
     })
     const html = renderToStaticMarkup(<SubagentMessage run={run} indentDepth={0} localPath="/tmp" />)
-    // AnimatedShinyText activates only when isLoading=true AND no result — class applied via animate prop
     expect(html).toContain("animate-shiny-pulse")
   })
 
@@ -280,9 +275,6 @@ describe("SubagentMessage", () => {
   })
 
   test("renders persisted tool_result with View Full Output link", () => {
-    // processTranscriptMessages folds tool_result INTO the preceding tool_call,
-    // propagating `persisted` onto the hydrated tool message. Test the same
-    // pairing the real flow produces.
     const html = renderToStaticMarkup(
       <SubagentMessage
         run={makeRunSnapshot({
@@ -327,8 +319,6 @@ describe("SubagentMessage", () => {
   })
 
   test("renders X button while running with correct testid + aria-label", () => {
-    // Static markup can't simulate clicks; dispatch path is covered
-    // end-to-end by agent.test.ts cancelSubagentRun routing test.
     const html = renderToStaticMarkup(
       <SubagentMessage
         run={makeRunSnapshot({ status: "running", runId: "r-running", chatId: "c1" })}

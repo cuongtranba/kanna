@@ -92,8 +92,6 @@ describe("moveCardInView", () => {
   })
 
   test("prefers the above anchor when both neighbours are reported", () => {
-    // The two can disagree once the moved card is removed from the list, and
-    // `above` is the one the user actually dropped beneath.
     const next = moveCardInView(view(), move({ cardId: "d1", toColumnId: "todo", aboveCardId: "t1", belowCardId: "t3" }))
     expect(ids(next, "todo")).toEqual(["t1", "d1", "t2", "t3"])
   })
@@ -109,7 +107,6 @@ describe("moveCardInView", () => {
 
   test("returns the view unchanged for an unknown card or column", () => {
     const base = view()
-    // An optimistic update must never invent state; the server snapshot settles it.
     expect(moveCardInView(base, move({ cardId: "ghost", toColumnId: "doing" }))).toBe(base)
     expect(moveCardInView(base, move({ cardId: "t1", toColumnId: "nowhere" }))).toBe(base)
   })

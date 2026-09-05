@@ -17,8 +17,6 @@ interface Props {
   onSave: (patch: CronJobPatch) => void
 }
 
-// No tooltips: the consequence of the SELECTED mode is spelled out in full
-// under the control, where it is read rather than hovered for.
 const MODE_OPTIONS: SegmentedOption<CronMode>[] = [
   { value: "inline", label: "inline" },
   { value: "spawn", label: "spawn" },
@@ -40,9 +38,6 @@ function CronJobEditForm({ job, open, onOpenChange, onSave }: Props) {
     if (trimmedInstruction && trimmedInstruction !== job.instruction) next.instruction = trimmedInstruction
     if (mode !== job.mode) next.mode = mode
     const trimmedSchedule = scheduleText.trim()
-    // `schedule` and `scheduleText` are one decision: the server merges the
-    // parsed schedule and renders the text, so a patch carrying either alone
-    // would leave the row describing a schedule it does not run.
     if (parsed.ok && trimmedSchedule !== job.scheduleText) {
       next.schedule = parsed.schedule
       next.scheduleText = trimmedSchedule
@@ -133,23 +128,6 @@ function CronJobEditForm({ job, open, onOpenChange, onSave }: Props) {
   )
 }
 
-/**
- * Everything about an armed cron job that can be changed: instruction,
- * schedule, and run mode. Saves as ONE `CronJobPatch` — the WS `cron.update`
- * command merges a whole patch and emits a single `cron_armed`, so all three
- * fields move together rather than one re-arm per field the way the typed
- * `/cron update <field>` does.
- *
- * The schedule is validated here with `parseSchedule`, the very function the
- * server runs on a typed line, so the dialog cannot offer to save something the
- * server would refuse. Fire TIMES are deliberately not previewed: those are
- * computed server-side from the `cron` package, and the row shows the
- * recomputed "next in …" as soon as the update broadcasts back.
- *
- * The draft is seeded from the job at Provider mount. The caller mounts this
- * only while open and keys it by the job's arming, so every opening starts from
- * the current job with no effect to resynchronize.
- */
 export function CronJobEditDialog(props: Props) {
   return (
     <CronJobEditStore.Provider init={props.job}>

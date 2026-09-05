@@ -2,7 +2,6 @@ import { chatStatusIndicator, type ChatDotTone } from "../chatStatusIndicator"
 import { statusLabel } from "../statusLabel"
 import type { ChatActivity, KannaStatus } from "../../../shared/types"
 
-/** The live facts a card reads. A structural subset of `SidebarChatRow`. */
 export interface CardChatFacts {
   status: KannaStatus
   unread: boolean

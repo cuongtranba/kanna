@@ -6,17 +6,6 @@ import { makeFakeDomPort } from "../lib/testing/fakePorts"
 import type { DrawerVisual } from "./drawerVisual"
 import { useSidebarSwipeGesture } from "./sidebarSwipeGesture"
 
-/**
- * Drives the REAL hook through synthetic touch events.
- *
- * The release ordering is the part of this feature that is easy to get subtly
- * wrong and impossible to notice in review: the class that holds a CLOSED
- * drawer on screen is released when the settle finishes, so opening must hand
- * over to React BEFORE that (or the drawer blinks out mid-settle) and closing
- * must settle BEFORE React hides it (or the settle plays against an element
- * that is already `display: none`). Asserting a hand-rolled recorder would
- * prove nothing about the hook, so this dispatches through it.
- */
 
 const VIEWPORT_WIDTH = 390
 
@@ -25,7 +14,6 @@ type TouchHandlers = Partial<Record<string, (event: TouchEvent) => void>>
 interface Harness {
   calls: string[]
   touch(points: Array<{ x: number; t: number }>): void
-  /** Drag, then let the OS take the gesture instead of releasing it. */
   cancelAfter(points: Array<{ x: number; t: number }>): void
   finishSettle(): Promise<void>
   cleanup(): Promise<void>
@@ -76,7 +64,7 @@ function mountGesture(sidebarOpen: boolean): Harness {
     const event = {
       timeStamp: t,
       cancelable: true,
-      preventDefault: () => { /* claimed from native back-swipe */ },
+      preventDefault: () => { },
       target: null,
       touches: changed ? [] : [point],
       changedTouches: [point],
@@ -115,7 +103,6 @@ function mountGesture(sidebarOpen: boolean): Harness {
 describe("the drawer under a finger", () => {
   test("a committed open hands over to React BEFORE the settle releases the class", async () => {
     const harness = mountGesture(false)
-    // Starts inside the 60px edge band and travels past the 60px threshold.
     harness.touch([{ x: 10, t: 0 }, { x: 120, t: 60 }, { x: 200, t: 120 }])
 
     expect(harness.calls).toContain("track:0.49")
@@ -130,7 +117,6 @@ describe("the drawer under a finger", () => {
     const harness = mountGesture(true)
     harness.touch([{ x: 300, t: 0 }, { x: 200, t: 60 }, { x: 100, t: 120 }])
 
-    // The settle is in flight and nothing has closed yet.
     expect(harness.calls).toContain("settle:0")
     expect(harness.calls).not.toContain("onClose")
 
@@ -141,7 +127,6 @@ describe("the drawer under a finger", () => {
 
   test("a drag too short to commit springs back to where it was", async () => {
     const harness = mountGesture(false)
-    // 40px: drawn, but under SIDEBAR_SWIPE_MIN_HORIZONTAL_PX (60).
     harness.touch([{ x: 10, t: 0 }, { x: 50, t: 80 }])
 
     expect(harness.calls).toContain("track:0.10")
@@ -151,10 +136,6 @@ describe("the drawer under a finger", () => {
   })
 
   test("a cancelled gesture releases the visual and opens nothing", async () => {
-    // touchcancel fires when the OS takes the gesture (a call arriving, a
-    // system edge swipe winning). Without the release the class stays on and a
-    // closed drawer is left covering the whole viewport with nothing to
-    // dismiss it.
     const harness = mountGesture(false)
     harness.cancelAfter([{ x: 10, t: 0 }, { x: 200, t: 60 }])
 

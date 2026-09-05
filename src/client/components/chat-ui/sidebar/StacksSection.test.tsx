@@ -173,8 +173,6 @@ describe("StacksSection", () => {
   })
 })
 
-// The member chats of a stack can sit under several collapsed project groups,
-// so the stack row is the only place "what is running here" can be answered.
 describe("StacksSection — activity rollup", () => {
   test("renders the rollup label when the stack is busy", () => {
     const stack: StackSummary = {

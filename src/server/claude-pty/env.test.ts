@@ -1,7 +1,3 @@
-/**
- * Tests for the PTY spawn environment. The multi-root memory switch both
- * drivers share is asserted in `claude-spawn-helpers.test.ts`, where it lives.
- */
 
 import { describe, test, expect } from "bun:test"
 import { buildPtyEnv } from "./env"

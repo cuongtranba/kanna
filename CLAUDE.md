@@ -208,6 +208,59 @@ React 19 rules: `rules-of-hooks`, `purity`, `globals` are errors;
 `set-state-in-effect`, `refs`, `immutability`, `preserve-manual-memoization`,
 `exhaustive-deps` are warnings.
 
+# No Code Comments (MANDATORY — `bun run lint:comments`)
+
+**First-party TypeScript under `src/`, `scripts/` and `e2e/` carries no
+comments.** Not a leading `//`, not a trailing one, not a `/* */` block, not a
+`/** */` JSDoc, not a `{/* */}` JSX container. The code is the documentation:
+say it in a name, a type, or a small named function. If a fact genuinely cannot
+live in code, it belongs in `CLAUDE.md`, a `.c3/` fact, an ADR, or the wiki —
+places a reader can search, and that `c3x check` and the docs build can hold to
+account. A comment is none of those: nothing verifies it, so it rots in place
+and outlives the code it describes.
+
+**The only survivors are comments a TOOL executes.** These are not prose; they
+change what the compiler, the linter or the bundler does, and deleting one is a
+behavior change rather than a cleanup:
+
+| Kept | Why |
+| --- | --- |
+| `eslint-disable`, `eslint-disable-next-line`, `eslint-disable-line`, `eslint-enable` | Suppression is ESLint's own syntax; removing it fails `bun run lint` |
+| `/// <reference ... />` | A TS triple-slash directive — part of the program's type graph |
+| `@ts-expect-error`, `@ts-ignore`, `@ts-nocheck` | Read by `tsc`; none exist today and none should be added, but the stripper must never eat one |
+| `@vite-ignore`, `webpackChunkName` | Bundler magic comments inside `import()`; they steer chunking and dynamic resolution |
+| `prettier-ignore`, `biome-ignore`, `ast-grep-ignore`, `istanbul ignore`, `c8 ignore` | Other tools' suppression syntax |
+| `@license`, `@preserve`, `SPDX-` | Legal text a minifier is required to keep |
+| A `#!` shebang on line 1 | Not a comment — it is how the kernel picks the interpreter |
+
+An `eslint-disable` still needs its rationale. Put it on the same line after
+`--`, which is ESLint's own description syntax and therefore part of the
+directive rather than a second comment:
+
+```ts
+// eslint-disable-next-line react-hooks/refs -- render-time sync write so an
+// async completion between render and commit refuses to overwrite a stale key.
+```
+
+**Out of scope, deliberately:** `wiki/` (its own package, and a docs site is
+prose by definition), `rules/*.yml` and `rule-tests/` (ast-grep fixtures —
+several PIN a comment as the thing under test), `.c3/`, `.github/`, and root
+config files including `eslint.config.js`, whose comments are the only record of
+why each design gate exists.
+
+**Enforced.** `bun run lint:comments` (`scripts/check-no-comments.ts`) parses
+every in-scope file with the TypeScript scanner — never a regex, which cannot
+tell a comment from `"https://…"` inside a string — and fails with
+`file:line` for each survivor. It runs inside `bun run check`. Re-strip an
+offending tree with `bun run strip:comments`.
+
+**Two facts the stripper had to learn, and any replacement will too.** A JSX
+comment is a `JsxExpression` with no expression, so deleting only the comment
+leaves `{}` — which is a syntax error as a JSX child, not an empty node; the
+whole container has to go. And `/** */` on an `export`ed symbol is still a
+comment: editors lose the hover text when it goes, which is the accepted cost
+of this rule and not a bug to route around by reintroducing JSDoc.
+
 # Type Strictness — an untyped value has no legal spelling
 
 `bun run lint` bans `any` (`@typescript-eslint/no-explicit-any`), BOTH cast

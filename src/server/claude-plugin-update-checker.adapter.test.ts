@@ -179,7 +179,6 @@ describe("createClaudePluginUpdateChecker", () => {
     ]
     const deps = makeDeps({
       spawnFn: async (cmd) => {
-        // Return different sha based on the subpath being queried
         const subpath = cmd[cmd.length - 1] ?? ""
         return { stdout: subpath === "plugin-a" ? "sha-a\n" : "sha-new-b\n", exitCode: 0 }
       },
@@ -217,7 +216,6 @@ describe("createClaudePluginUpdateChecker", () => {
     const pkg = makePlugin({ revision: "same-sha" })
     await checker.check([pkg], makeAbortSignal())
     await checker.check([pkg], makeAbortSignal())
-    // fetch should be called exactly once (throttled on second call)
     expect(fetchCallCount).toBe(1)
   })
 

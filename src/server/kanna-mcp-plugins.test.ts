@@ -10,7 +10,6 @@ import type { ToolResult } from "./kanna-mcp-tool"
 import { buildPluginScaffoldFiles } from "./plugins/plugin-scaffold"
 import type { PluginSummary } from "./plugins/plugin-service"
 
-// ------------------------------------------------------------------ harness
 
 interface CapturedTool {
   readonly name: string
@@ -33,7 +32,6 @@ interface FakeCalls {
   readonly reloaded: string[]
 }
 
-/** Only the four methods the tools reach; `isPluginToolService` narrows on exactly these. */
 function fakeService(plugins: PluginSummary[], logs: Record<string, { stream: "out" | "err"; text: string; at: number }[]> = {}) {
   const calls: FakeCalls = { installed: [], reloaded: [] }
   const service = {
@@ -66,7 +64,6 @@ afterAll(async () => {
   for (const dir of tempDirs) await rm(dir, { recursive: true, force: true })
 })
 
-// ------------------------------------------------------------------ list shape
 
 describe("buildPluginToolList — shape", () => {
   test("the family is absent without a service or a chatId", () => {
@@ -101,7 +98,6 @@ describe("buildPluginToolList — shape", () => {
   })
 })
 
-// ------------------------------------------------------------------ read-only tools
 
 describe("plugin_list", () => {
   test("reports id, state, enabled flag and source dir", async () => {
@@ -197,7 +193,6 @@ describe("plugin_validate", () => {
   })
 })
 
-// ------------------------------------------------------------------ mutating tools
 
 describe("plugin_install", () => {
   test("drives the service and names the resulting plugin", async () => {
@@ -283,7 +278,6 @@ describe("plugin_scaffold", () => {
   })
 })
 
-// ------------------------------------------------------------------ pure skeleton
 
 describe("buildPluginScaffoldFiles", () => {
   test("returns exactly the three skeleton files, all relative paths", () => {

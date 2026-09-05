@@ -1,38 +1,7 @@
-/**
- * The architecture budget: a ratchet over the structural-defect populations
- * that #889 is driving down.
- *
- * It exists because the previous complexity program (#674-#681) closed every
- * workstream as COMPLETED while its own metrics moved the wrong way — modules
- * over 700 lines went 18 -> 21 -> 23, and production LOC rose from ~121,700 to
- * ~125,779. Nothing in CI could observe that, so nothing objected.
- *
- * A pin here is a defect count, never a style preference. Raising one is a
- * visible diff that says "this PR made a filed issue worse".
- *
- * A budget GRADUATES rather than settling at a residue: once its issue lands and
- * the type system or a lint rule enforces the property permanently, delete the
- * entry. harness-optional-payload-guards was removed when #890 shipped the
- * HarnessEvent discriminated union (#908) — narrowing is now a compile error, so
- * a regex pin would only have counted false positives and implied a defect that
- * no longer exists.
- */
 
 export const MODULE_LINE_THRESHOLD = 700
 
-/**
- * Ceiling per oversized module — a listed module may shrink freely but never
- * grow past its pin, and a module that falls back under the threshold must be
- * delisted so the allowance cannot be reclaimed later.
- *
- * Deliberately a ceiling rather than an exact pin: this repo routinely has 15+
- * live worktrees, and exact line pins would turn every parallel edit to a large
- * module into a manifest merge conflict. The trade is that a module may shrink
- * and regrow within its allowance without objection; growth beyond it, and the
- * arrival of a new oversized module, are both still blocked.
- */
 export const MODULE_ALLOWANCES: Readonly<Record<string, number>> = {
-  "src/client/app/ChatPage/index.tsx": 738,
   "src/client/app/ChatPage/useChatPageSidebarActions.ts": 701,
   "src/client/app/KannaSidebar.tsx": 987,
   "src/client/app/KannaTranscript.tsx": 1053,
@@ -40,7 +9,6 @@ export const MODULE_ALLOWANCES: Readonly<Record<string, number>> = {
   "src/client/app/SubagentsSection.tsx": 939,
   "src/client/app/useAppGlobalState.ts": 1421,
   "src/client/app/useKannaState.ts": 1447,
-  "src/client/components/boards/CardDrawer.tsx": 799,
   "src/client/components/chat-ui/ChatInput.tsx": 1369,
   "src/client/components/chat-ui/RightSidebar.tsx": 2075,
   "src/client/stores/chatPreferencesStore.ts": 810,
@@ -50,13 +18,11 @@ export const MODULE_ALLOWANCES: Readonly<Record<string, number>> = {
   "src/server/claude-pty/driver.ts": 1095,
   "src/server/codex-app-server.ts": 1023,
   "src/server/codex-transcript-translator.ts": 767,
-  "src/server/event-store-messages.adapter.ts": 765,
   "src/server/kanna-mcp.ts": 1326,
   "src/server/server.ts": 808,
   "src/server/subagent-orchestrator.ts": 1375,
 }
 
-/** Paths excluded from the module scan: tests, fixtures and test doubles are not production surface. */
 export const PRODUCTION_EXCLUDES: readonly string[] = [
   ".test.ts",
   ".test.tsx",
@@ -68,12 +34,9 @@ export const PRODUCTION_EXCLUDES: readonly string[] = [
 
 export interface PatternBudget {
   readonly id: string
-  /** Path prefixes the scan reads; a prefix ending in `/` matches a subtree. */
   readonly include: readonly string[]
-  /** Regex source, applied per line. */
   readonly pattern: string
   readonly max: number
-  /** The issue that drives this population down. A breach names it. */
   readonly issue: number
   readonly rationale: string
 }
@@ -82,10 +45,6 @@ export const PATTERN_BUDGETS: readonly PatternBudget[] = [
   {
     id: "deps-bundles",
     include: ["src/server/"],
-    // Counts the CONCEPT, not one keyword: a named interface, a named type
-    // alias, and an inline anonymous `deps: {` parameter are the same bundle.
-    // The first version counted only `interface`, and #914 evaded it by
-    // respelling one bundle as an inline type — renaming, not removing.
     pattern: "interface [A-Za-z]*Deps\\b|type [A-Za-z]*Deps\\b *=|deps: \\{$",
     max: 84,
     issue: 893,
@@ -150,7 +109,7 @@ export const PATTERN_BUDGETS: readonly PatternBudget[] = [
     id: "loop-prompt-tool-literals",
     include: ["src/server/loop-template.ts"],
     pattern: "mcp__kanna__",
-    max: 1,
+    max: 0,
     issue: 902,
     rationale:
       "MCP tool names written as bare strings inside the rendered loop prompt, with no link to their registration. A rename passes requiredSubstrings, ships a prompt instructing a nonexistent tool, and burns a background subagent per iteration.",
@@ -182,16 +141,6 @@ export interface EslintLimitPin {
   readonly rationale: string
 }
 
-/**
- * ESLint measures per-function complexity far better than a regex can, so the
- * budget does not re-implement it — it owns the DIRECTION instead. Each pin must
- * EQUAL what eslint.config.js configures: raising the ceiling is a regression,
- * and lowering it without lowering the pin would leave slack to creep back into.
- *
- * Ceilings sit at today's production maxima, so they are unbreached but hard.
- * `bun run lint:limits` proves a ceiling is still TIGHT — a ceiling nothing
- * reaches is a ceiling that gates nothing.
- */
 export const ESLINT_LIMIT_PINS: readonly EslintLimitPin[] = [
   {
     rule: "complexity",
@@ -223,7 +172,6 @@ export const ESLINT_LIMIT_PINS: readonly EslintLimitPin[] = [
   },
 ]
 
-/** This module and its scanner quote every budget regex as a string literal, so a budget that scanned them would count itself. */
 export const SELF_EXCLUDED_PATHS: readonly string[] = [
   "src/ops/architecture/budget.ts",
   "src/ops/architecture/budget-scan.adapter.ts",
@@ -241,11 +189,6 @@ export interface PatternMeasurement {
   readonly id: string
   readonly count: number
   readonly sites: readonly string[]
-  /**
-   * How many files the include paths actually reached. Zero means the gate read
-   * nothing — a renamed target would otherwise report as a population that shrank
-   * to zero, inviting someone to pin it at 0 and silently disable the check.
-   */
   readonly filesScanned: number
 }
 

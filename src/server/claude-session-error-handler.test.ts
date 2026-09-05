@@ -1,9 +1,3 @@
-/**
- * Tests for the extracted session error-response handlers.
- *
- * Each test builds a minimal `SessionErrorHandlerDeps` fake and asserts the
- * correct behaviour of the function under test. No real IO or OS calls.
- */
 
 import { describe, test, expect } from "bun:test"
 import { AUTO_CONTINUE_EVENT_VERSION } from "./auto-continue/events"
@@ -24,9 +18,6 @@ import type { AutoContinueEvent } from "./auto-continue/events"
 import type { LimitDetection, LimitDetector } from "./auto-continue/limit-detector"
 import type { AuthErrorDetection } from "./auto-continue/auth-error-detector"
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function makeHandle() {
   return {
@@ -95,12 +86,10 @@ function makeActiveTurn(chatId = "chat-1"): ActiveTurn {
   }
 }
 
-/** Fake LimitDetection */
 function makeLimitDetection(resetAt = Date.now() + 60_000): LimitDetection {
   return { chatId: "chat-1", resetAt, tz: "system", raw: {} }
 }
 
-/** Fake loop_armed event — arms chatId with the given rendered loop prompt. */
 function makeLoopArmed(chatId: string, prompt: string): AutoContinueEvent {
   return {
     v: AUTO_CONTINUE_EVENT_VERSION,
@@ -113,7 +102,6 @@ function makeLoopArmed(chatId: string, prompt: string): AutoContinueEvent {
   }
 }
 
-/** Build a minimal SessionErrorHandlerDeps. Override fields as needed. */
 function makeDeps(overrides: Partial<SessionErrorHandlerDeps> = {}): SessionErrorHandlerDeps {
   const emittedEvents: AutoContinueEvent[] = []
   const appendedMessages: Array<{ chatId: string; entry: unknown }> = []
@@ -137,9 +125,6 @@ function makeDeps(overrides: Partial<SessionErrorHandlerDeps> = {}): SessionErro
   }
 }
 
-// ---------------------------------------------------------------------------
-// acquireRotationSlot
-// ---------------------------------------------------------------------------
 
 describe("acquireRotationSlot", () => {
   test("null tokenId → always returns isFirst:true and 0 delay", () => {
@@ -157,8 +142,8 @@ describe("acquireRotationSlot", () => {
 
   test("second call within window → isFirst:false, extra delay = 1 × HERD_STAGGER", () => {
     const deps = makeDeps()
-    acquireRotationSlot(deps, "tok-1") // first
-    const result = acquireRotationSlot(deps, "tok-1") // second
+    acquireRotationSlot(deps, "tok-1")
+    const result = acquireRotationSlot(deps, "tok-1")
     expect(result.isFirst).toBe(false)
     expect(result.extraDelayMs).toBe(TOKEN_ROTATION_HERD_STAGGER_MS)
   })
@@ -173,7 +158,6 @@ describe("acquireRotationSlot", () => {
 
   test("call after dedupe window expires → treated as first again", () => {
     const deps = makeDeps()
-    // Seed an entry that's already expired
     deps.tokenRotationDedupe.set("tok-1", {
       firstSeenAt: Date.now() - TOKEN_ROTATION_DEDUPE_WINDOW_MS - 100,
       staggerCount: 5,
@@ -190,9 +174,6 @@ describe("acquireRotationSlot", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// handleLimitError
-// ---------------------------------------------------------------------------
 
 describe("handleLimitError", () => {
   test("returns false when detector returns null (not a rate-limit error)", async () => {
@@ -215,9 +196,6 @@ describe("handleLimitError", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// handleLimitDetection
-// ---------------------------------------------------------------------------
 
 describe("handleLimitDetection", () => {
   test("returns true early when a live schedule already exists (deduplication guard)", async () => {
@@ -245,7 +223,6 @@ describe("handleLimitDetection", () => {
 
     const result = await handleLimitDetection(deps, "chat-1", makeLimitDetection())
     expect(result).toBe(true)
-    // No new event should be emitted — the guard bailed early
     expect(emitted.length).toBe(0)
   })
 
@@ -306,7 +283,6 @@ describe("handleLimitDetection", () => {
       expect(emitted[0].scheduledAt).toBeGreaterThanOrEqual(Date.now() + TOKEN_ROTATION_SCHEDULE_DELAY_MS - 1)
     }
     expect(closedSessions).toContain("chat-1")
-    // No active turn → recordTurnFailed not called
     expect(turnsFailed).toHaveLength(0)
   })
 
@@ -447,9 +423,6 @@ describe("handleLimitDetection", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// handleAuthFailure
-// ---------------------------------------------------------------------------
 
 describe("handleAuthFailure", () => {
   const fakeDetection: AuthErrorDetection = { chatId: "chat-1", reason: "401 Unauthorized", raw: {} }
@@ -490,7 +463,6 @@ describe("handleAuthFailure", () => {
       oauthPool: {
         markLimited: () => {},
         markError: () => {},
-        // pool has no other token
         pickActive: () => ({ id: "tok-dead" } as never),
         earliestUnlimit: () => null,
       },
@@ -566,7 +538,6 @@ describe("handleAuthFailure", () => {
       oauthPool: {
         markLimited: () => {},
         markError: () => {},
-        // same token id → no rotation
         pickActive: () => ({ id: "tok-dead" } as never),
         earliestUnlimit: () => null,
       },
@@ -598,8 +569,8 @@ describe("handleAuthFailure", () => {
     })
     deps.emitAutoContinueEvent = async () => {}
 
-    await handleAuthFailure(deps, session, fakeDetection) // first → calls markError
-    await handleAuthFailure(deps, session, fakeDetection) // second → skipped
+    await handleAuthFailure(deps, session, fakeDetection)
+    await handleAuthFailure(deps, session, fakeDetection)
     expect(markErrorCalls).toHaveLength(1)
   })
 })

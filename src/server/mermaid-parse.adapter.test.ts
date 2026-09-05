@@ -1,10 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { installDomShim, parseMermaid } from "./mermaid-parse.adapter"
 
-// The diagram from the report that motivated the validation gate (a kiosk
-// deployment flow). Line 5 closes `[/` with `/]` by accident, so it parses;
-// line 6 closes with a bare `]` and mermaid's trapText state has no rule for
-// it. Keep it verbatim — it is the regression this whole gate exists for.
 const KIOSK_DIAGRAM = [
   "flowchart TD",
   "  CI[CI build kiosk-app] --> Artifact[Signed AppImage + sha256 + version]",
@@ -44,9 +40,6 @@ describe("installDomShim", () => {
     expect(bag.window).toBe(sentinel)
   })
 
-  // Under `bun test` the happy-dom preload has already registered a real
-  // document. Clobbering it would break every client render test sharing the
-  // process, so a present document means the shim stands down entirely.
   test("stands down when a real document is already present", () => {
     const realDocument = { nodeType: 9 }
     const bag: Record<string, unknown> = { document: realDocument }
@@ -93,10 +86,6 @@ describe("parseMermaid", () => {
     expect(result.raw).toContain("No diagram type detected")
   }, 30_000)
 
-  // The tests above run under the happy-dom preload, so they exercise
-  // mermaid but NOT the shim. Production has no happy-dom — this spawns a bun
-  // with no preload, which is the only way to prove the server can validate at
-  // all. Without it a broken shim would pass CI and silently disable the gate.
   test("works in a process with no DOM at all", async () => {
     const script = `
       const { parseMermaid } = await import(${JSON.stringify(

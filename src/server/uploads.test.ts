@@ -21,13 +21,7 @@ async function startIsolatedServer(options: { port: number; strictPort?: boolean
   return startKannaServer({
     dataDir,
     port: options.port,
-    // Let the server's built-in port retry find a free port. Pinning the port
-    // (strictPort) makes the suite fail with EADDRINUSE whenever anything else
-    // — a locally-running Kanna, or a parallel test — already holds it.
     strictPort: options.strictPort ?? false,
-    // Stub project discovery so boot never scans the dev machine's real
-    // ~/.claude / ~/.codex session history — a multi-second, non-deterministic
-    // filesystem walk that pushed boot past the 5s default test timeout.
     discoverProjects: () => [],
   })
 }

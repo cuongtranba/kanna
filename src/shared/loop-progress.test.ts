@@ -57,8 +57,6 @@ describe("deriveChunkLabel", () => {
   })
 
   test("prefers the [chunk: …] marker over the boilerplate that follows it", () => {
-    // The exact shape a loop delegation arrives in: one line, marker first,
-    // then the identical server-rendered worker brief.
     const prompt =
       "[chunk: Wire session tabs to the store] Do the next chunk in PROGRESS-session-tabs.md."
       + " All work happens in /home/cuong/repo/kanna."
@@ -130,7 +128,7 @@ describe("buildLoopProgress", () => {
     })
     expect(snapshot.rows.map((r) => [r.runId, r.status, r.label])).toEqual([
       ["r1", "done", "chunk one"],
-      ["r2", "running", "worker"], // label fallback to subagentName
+      ["r2", "running", "worker"],
       ["r3", "failed", "chunk three"],
     ])
   })
@@ -142,8 +140,8 @@ describe("buildLoopProgress", () => {
       loopArmedAt: 100,
       rateLimit: null,
       runs: [
-        run({ runId: "pre", startedAt: 50 }), // before arm → excluded
-        run({ runId: "nested", startedAt: 150, depth: 1 }), // sub-spawn → excluded
+        run({ runId: "pre", startedAt: 50 }),
+        run({ runId: "nested", startedAt: 150, depth: 1 }),
         run({ runId: "keep", startedAt: 200 }),
       ],
     })

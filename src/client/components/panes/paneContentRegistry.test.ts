@@ -44,8 +44,6 @@ describe("renderPaneContent", () => {
     expect(seenIds).toEqual(["p1", "p1", "p1"])
   })
 
-  // The type system enforces this, but verify the runtime dispatch too: each
-  // renderer only fires for its own kind.
   test("does not call other renderers when dispatching to chat", () => {
     const called: string[] = []
     const reg: PaneContentRegistry = {

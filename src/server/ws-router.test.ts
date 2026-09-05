@@ -293,7 +293,6 @@ const NOOP_PUSH_MANAGER = {
   sendTest: async () => {},
 } as never
 
-/** The non-agent deps every router test needs, so a test only spells out what it exercises. */
 function baseRouterDeps(state: ReturnType<typeof createEmptyState>) {
   return {
     store: {
@@ -1123,11 +1122,6 @@ describe("ws-router", () => {
     })
   })
 
-  // The composer picker's catalog is a property of the project's cwd, not of a
-  // chat. Delivering it as chat state meant the first snapshot always went out
-  // empty-and-loading and the real list arrived later as a chat.ops delta the
-  // picker's store never reads — a skeleton that never resolved. These two
-  // tests pin the replacement: the data is in the FIRST frame, or it is empty.
   test("subscribing to project-commands returns the local catalog in the first snapshot", async () => {
     const state = createEmptyState()
     state.projectsById.set("project-1", {
@@ -2490,7 +2484,6 @@ describe("ws-router", () => {
     })
   })
 
-  // ── autoContinue WS command tests ────────────────────────────────────────
 
   function makeAutoContinueAgent(overrides: Record<string, unknown> = {}) {
     const appendedEvents: unknown[] = []
@@ -2970,7 +2963,6 @@ test("ws-router: chat.toolRequestAnswer broadcasts chat snapshot after answering
 
     const ws = new FakeWebSocket()
     router.handleOpen(ws as never)
-    // Subscribe to the chat to receive broadcast snapshots.
     ws.data.subscriptions.set("chat-sub-1", { type: "chat", chatId: chat.id })
 
     await router.handleMessage(
@@ -2988,7 +2980,6 @@ test("ws-router: chat.toolRequestAnswer broadcasts chat snapshot after answering
       })
     )
 
-    // Ack followed by a chat snapshot from broadcastChatAndSidebar.
     expect(ws.sent).toHaveLength(2)
     const ack = ws.sent[0] as { type: string; id: string }
     expect(ack.type).toBe("ack")
@@ -3055,7 +3046,6 @@ test("ws-router: chat.toolRequestAnswer throws when toolRequestId belongs to dif
     const ws = new FakeWebSocket()
     router.handleOpen(ws as never)
 
-    // Send with wrong chatId — "chat-attacker" instead of "chat-owner".
     await router.handleMessage(
       ws as never,
       JSON.stringify({
@@ -3075,7 +3065,6 @@ test("ws-router: chat.toolRequestAnswer throws when toolRequestId belongs to dif
     const errMsg = (ws.sent[0] as { message: string }).message
     expect(errMsg).toContain("does not belong to this chat")
 
-    // Cancel the pending promise to avoid unresolved promise warning.
     await toolCallbackSvc.cancel(toolRequestId, "test_done")
     await pendingPromise
   } finally {
@@ -3173,7 +3162,6 @@ test("ws-router: chat.toolRequestAnswer resolves a pending tool request", async 
       now: () => 1_000,
     })
 
-    // Submit a request that requires user approval ("ask" verdict).
     const pendingPromise = toolCallbackSvc.submit({
       chatId: "chat-1",
       sessionId: "sess-1",
@@ -3233,21 +3221,16 @@ test("ws-router: chat.toolRequestAnswer resolves a pending tool request", async 
       { v: PROTOCOL_VERSION, type: "ack", id: "tool-answer-1" },
     ])
 
-    // The pending submit() should have resolved with the answered decision.
     const result = await pendingPromise
     expect(result.status).toBe("answered")
     expect(result.decision.payload).toEqual({ ok: true })
 
-    // The store record should reflect the answered status.
     expect(store.getToolRequest(toolRequestId)?.status).toBe("answered")
   } finally {
     await rm(dir, { recursive: true, force: true })
   }
 })
 
-// ---------------------------------------------------------------------------
-// settings.testMcpServer + customMcpServers end-to-end
-// ---------------------------------------------------------------------------
 
 function makeAppSettingsStub(initial?: Partial<AppSettingsSnapshot>) {
   let snapshot: AppSettingsSnapshot = { ...DEFAULT_APP_SETTINGS_SNAPSHOT, ...initial }
@@ -3265,7 +3248,6 @@ function makeAppSettingsStub(initial?: Partial<AppSettingsSnapshot>) {
       return snapshot
     },
     writePatch: async (patch: import("../shared/types").AppSettingsPatch) => {
-      // Handle customMcpServers mutations
       if (patch.customMcpServers?.create) {
         const input = patch.customMcpServers.create
         const now = new Date().toISOString()
@@ -3392,7 +3374,6 @@ describe("settings.testMcpServer", () => {
     const ws = new FakeWebSocket()
     router.handleOpen(ws as never)
 
-    // Create an MCP server entry with a command that definitely doesn't exist.
     await router.handleMessage(
       ws as never,
       JSON.stringify({
@@ -3420,7 +3401,7 @@ describe("settings.testMcpServer", () => {
     expect(createdEntry).toBeDefined()
     const entryId = createdEntry!.id
 
-    ws.sent.length = 0 // clear prior messages
+    ws.sent.length = 0
 
     await router.handleMessage(
       ws as never,
@@ -3441,10 +3422,8 @@ describe("settings.testMcpServer", () => {
     expect(ack.id).toBe("test-mcp-2")
     expect(ack.result.ok).toBe(false)
     expect(ack.result.message).toBeDefined()
-    // Validator formatError maps ENOENT → "command not found: <cmd>"
     expect(ack.result.message).toContain("command not found")
 
-    // The persisted lastTest should reflect the error.
     const persisted = appSettings.getSnapshot().customMcpServers.find((s) => s.id === entryId)
     expect(persisted?.lastTest.status).toBe("error")
   }, 15_000)
@@ -3490,7 +3469,6 @@ describe("settings.testMcpServer", () => {
         }),
       )
 
-      // The stored access token must reach the server as a Bearer header.
       expect(received).toBe("Bearer tok-123")
     } finally {
       server.stop()
@@ -3607,14 +3585,11 @@ describe("settings.startMcpOAuth + settings.completeMcpOAuth", () => {
     const router = makeTestRouter(appSettings)
     const ws = new FakeWebSocket()
     router.handleOpen(ws as never)
-    // The real adapter will try to probe https://api.example/mcp which will ECONNREFUSED.
-    // That maps to ok:false with an error. We verify the router passes through the error correctly.
     await router.handleMessage(ws as never, JSON.stringify({
       v: 1, type: "command", id: "oauth-start-3",
       command: { type: "settings.startMcpOAuth", id: "http-1" },
     }))
     const ack = ws.sent[0] as { result: { ok: boolean } }
-    // ECONNREFUSED → adapter throws → router sends ok:false error
     expect(typeof ack.result.ok).toBe("boolean")
   })
 })
@@ -3653,17 +3628,12 @@ describe("settings.writeAppSettingsPatch customMcpServers", () => {
     expect(ack.type).toBe("ack")
     expect(ack.id).toBe("patch-create-1")
 
-    // Use the ack result (snapshot captured before auto-test runs) to check the initial state.
     expect(ack.result.customMcpServers).toHaveLength(1)
     expect(ack.result.customMcpServers[0]!.name).toBe("my-server")
-    // At ack time the entry is freshly created — lastTest is untested before auto-test fires.
     expect(ack.result.customMcpServers[0]!.lastTest.status).toBe("untested")
   })
 })
 
-// ---------------------------------------------------------------------------
-// Auto-test on create / update
-// ---------------------------------------------------------------------------
 
 async function waitForLastTest(
   settings: { getSnapshot(): { customMcpServers: McpServerConfig[] } },
@@ -3687,7 +3657,6 @@ describe("settings.writeAppSettingsPatch auto-test", () => {
     const ws = new FakeWebSocket()
     router.handleOpen(ws as never)
 
-    // 1) Send writeAppSettingsPatch.customMcpServers.create with command: "/does/not/exist"
     await router.handleMessage(
       ws as never,
       JSON.stringify({
@@ -3711,14 +3680,12 @@ describe("settings.writeAppSettingsPatch auto-test", () => {
       }),
     )
 
-    // 2) Wait for ack (auto-test is fire-and-forget, runs after).
     const ack = ws.sent[ws.sent.length - 1] as { type: string; id: string }
     expect(ack.type).toBe("ack")
     expect(ack.id).toBe("auto-create-1")
 
     const entryId = appSettings.getSnapshot().customMcpServers[0]!.id
 
-    // 3) Poll until lastTest.status !== "untested" AND lastTest.status !== "pending".
     const lastTest = await waitForLastTest(
       appSettings,
       entryId,
@@ -3726,7 +3693,6 @@ describe("settings.writeAppSettingsPatch auto-test", () => {
       5_000,
     )
 
-    // 4) Assert lastTest.status === "error" and message lowercase contains "command not found".
     expect(lastTest.status).toBe("error")
     expect((lastTest as { status: "error"; message: string }).message.toLowerCase()).toContain("command not found")
   }, 10_000)
@@ -3737,7 +3703,6 @@ describe("settings.writeAppSettingsPatch auto-test", () => {
     const ws = new FakeWebSocket()
     router.handleOpen(ws as never)
 
-    // Create an entry first (auto-test fires, ignore it).
     await router.handleMessage(
       ws as never,
       JSON.stringify({
@@ -3763,10 +3728,8 @@ describe("settings.writeAppSettingsPatch auto-test", () => {
 
     const entryId = appSettings.getSnapshot().customMcpServers[0]!.id
 
-    // Wait until first test finishes.
     await waitForLastTest(appSettings, entryId, (lt) => lt.status !== "untested" && lt.status !== "pending", 5_000)
 
-    // Then update with a new command — should re-fire.
     await router.handleMessage(
       ws as never,
       JSON.stringify({
@@ -3787,7 +3750,6 @@ describe("settings.writeAppSettingsPatch auto-test", () => {
       }),
     )
 
-    // Wait until the second result lands (status goes back through pending → error).
     const lastTest = await waitForLastTest(
       appSettings,
       entryId,
@@ -3795,7 +3757,6 @@ describe("settings.writeAppSettingsPatch auto-test", () => {
       5_000,
     )
 
-    // Assert lastTest.status === "error" with new message.
     expect(lastTest.status).toBe("error")
     expect((lastTest as { status: "error"; message: string }).message.toLowerCase()).toContain("command not found")
   }, 15_000)
@@ -3806,7 +3767,6 @@ describe("settings.writeAppSettingsPatch auto-test", () => {
     const ws = new FakeWebSocket()
     router.handleOpen(ws as never)
 
-    // Create an entry (with command that gives a known error fast).
     await router.handleMessage(
       ws as never,
       JSON.stringify({
@@ -3832,13 +3792,10 @@ describe("settings.writeAppSettingsPatch auto-test", () => {
 
     const entryId = appSettings.getSnapshot().customMcpServers[0]!.id
 
-    // Wait for first lastTest to finish.
     await waitForLastTest(appSettings, entryId, (lt) => lt.status !== "untested" && lt.status !== "pending", 5_000)
 
-    // Capture lastTest snapshot.
     const capturedLastTest = appSettings.getSnapshot().customMcpServers.find((s) => s.id === entryId)!.lastTest
 
-    // Send setEnabled patch.
     await router.handleMessage(
       ws as never,
       JSON.stringify({
@@ -3854,10 +3811,8 @@ describe("settings.writeAppSettingsPatch auto-test", () => {
       }),
     )
 
-    // Wait ~200ms (no test should fire).
     await new Promise((r) => setTimeout(r, 200))
 
-    // Assert lastTest still equals the captured value.
     const currentLastTest = appSettings.getSnapshot().customMcpServers.find((s) => s.id === entryId)!.lastTest
     expect(currentLastTest).toEqual(capturedLastTest)
   })

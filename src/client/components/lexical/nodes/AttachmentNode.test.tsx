@@ -10,7 +10,6 @@ import {
   type SerializedAttachmentNode,
 } from "./AttachmentNode"
 
-// ─── Fixtures ────────────────────────────────────────────────────────────────
 
 const fakeImageAttachment: ChatAttachment = {
   id: "att-img-1",
@@ -34,7 +33,6 @@ const fakeFileAttachment: ChatAttachment = {
   size: 1_048_576,
 }
 
-// ─── Editor factory ──────────────────────────────────────────────────────────
 
 function buildEditor() {
   return createHeadlessEditor({
@@ -46,7 +44,6 @@ function buildEditor() {
   })
 }
 
-// ─── Tests ───────────────────────────────────────────────────────────────────
 
 describe("AttachmentNode", () => {
   it("getType() returns 'kanna-attachment'", () => {

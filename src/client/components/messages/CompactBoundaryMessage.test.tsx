@@ -13,9 +13,6 @@ describe("transcript boundary rules", () => {
   })
 
   test("draws the rule at a full device pixel, not a sub-pixel hairline", () => {
-    // The rule was in the DOM the whole time and invisible: a 0.5 stroke inside
-    // a viewBox squashed by preserveAspectRatio="none" landed under one device
-    // pixel. DESIGN.md sizes a divider at 1px, so that is what it strokes.
     const html = renderToStaticMarkup(<ContextClearedMessage />)
     expect(html).toContain('stroke-width="1"')
     expect(html).not.toContain('stroke-width="0.5"')
@@ -29,9 +26,6 @@ describe("transcript boundary rules", () => {
   })
 
   test("gives every rule its own pattern id", () => {
-    // Two rules render per boundary and a transcript holds many boundaries.
-    // A shared id makes every rect resolve to whichever pattern happens to be
-    // first in the document, so one unmount can restyle the rest.
     const ids = patternIds(
       renderToStaticMarkup(
         <>
@@ -45,7 +39,6 @@ describe("transcript boundary rules", () => {
   })
 
   test("hides the decorative rule from screen readers", () => {
-    // The label carries the meaning; the rule is ornament either side of it.
     const html = renderToStaticMarkup(<ContextClearedMessage />)
     expect(html.match(/aria-hidden="true"/g) ?? []).toHaveLength(2)
   })

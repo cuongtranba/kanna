@@ -20,7 +20,6 @@ import { DEFAULT_PANE_ID, type PaneNode } from "./types"
 const term = (id: string) => createTab({ kind: "terminal", terminalId: id }, 0)
 const chat = () => createTab({ kind: "chat", chatId: "c1" }, 0)
 
-/** pane(a) | pane(b) — a simple two-child horizontal group. */
 function twoPanes(): PaneNode {
   return createGroup("g1", "horizontal", [
     createPane("pa", [term("a")]),
@@ -51,8 +50,6 @@ describe("createGroup", () => {
     expect(group.sizes).toEqual([0.75, 0.25])
   })
 
-  // Invariant: a group never wraps a single child, because such a group has no
-  // boundary to drag and would render an inert handle.
   test("collapses to the child when given only one", () => {
     const only = createPane("solo")
     expect(createGroup("g", "horizontal", [only])).toBe(only)
@@ -131,8 +128,6 @@ describe("replaceNodeAtPath", () => {
 })
 
 describe("removePaneByPath", () => {
-  // Invariant: the tree always holds at least one pane. Removing the root pane
-  // empties it rather than leaving nothing to render into.
   test("removing the root pane yields an empty pane with the same id", () => {
     const root = createPane("only", [term("a")])
     const next = removePaneByPath(root, [])
@@ -142,8 +137,6 @@ describe("removePaneByPath", () => {
     expect(next.tabs).toEqual([])
   })
 
-  // Invariant: no single-child groups. Removing one of two siblings must unwrap
-  // the group, not leave a group wrapping one child.
   test("removing one of two siblings collapses the group to the survivor", () => {
     const next = removePaneByPath(twoPanes(), [0])
     expect(next.kind).toBe("pane")
@@ -165,7 +158,6 @@ describe("removePaneByPath", () => {
 
   test("collapse cascades when an inner split reduces to one child", () => {
     const root = createGroup("outer", "vertical", [twoPanes(), createPane("pc")])
-    // Remove pa: the inner group collapses to pb, and outer keeps two children.
     const next = removePaneByPath(root, [0, 0])
     expect(next.kind).toBe("group")
     if (next.kind !== "group") return
@@ -187,7 +179,6 @@ describe("detachTab", () => {
     expect(result.root.id).toBe("pb")
   })
 
-  // Splitting a pane's own last tab must not delete the pane being split out of.
   test("preserveEmptyPaneId keeps an emptied pane alive", () => {
     const result = detachTab(twoPanes(), term("a").tabId, { preserveEmptyPaneId: "pa" })
     expect(result.root.kind).toBe("group")

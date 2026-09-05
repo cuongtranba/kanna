@@ -26,7 +26,7 @@ function resolvePath(p: string, cwd: string): string {
 
 const SKIP_DIRS = new Set(["node_modules", ".git"])
 const MAX_LINES = 500
-const MAX_FILE_SIZE = 1_000_000 // 1 MB
+const MAX_FILE_SIZE = 1_000_000
 
 async function grepDir(root: string, re: RegExp, results: string[]): Promise<void> {
   if (results.length >= MAX_LINES) return
@@ -41,7 +41,6 @@ async function grepDir(root: string, re: RegExp, results: string[]): Promise<voi
     const fullPath = path.join(root, entry.name)
     if (entry.isDirectory()) {
       if (SKIP_DIRS.has(entry.name)) continue
-      // Symlink guard: skip symlinked directories to prevent traversal loops
       try {
         const st = await lstat(fullPath)
         if (st.isSymbolicLink()) continue
@@ -50,7 +49,6 @@ async function grepDir(root: string, re: RegExp, results: string[]): Promise<voi
       }
       await grepDir(fullPath, re, results)
     } else {
-      // Skip large files to prevent memory issues
       try {
         const fileStat = await stat(fullPath)
         if (fileStat.size > MAX_FILE_SIZE) continue

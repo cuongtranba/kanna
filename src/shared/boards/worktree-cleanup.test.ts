@@ -59,7 +59,6 @@ describe("pendingCleanupWorktree", () => {
     ).toBeNull()
   })
 
-  /** The old answer was about the old checkout. */
   test("a later worktree is asked about again", () => {
     expect(
       pendingCleanupWorktree({

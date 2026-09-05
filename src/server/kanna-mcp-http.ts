@@ -9,13 +9,6 @@ import { buildKannaMcpTools, type KannaMcpArgs } from "./kanna-mcp"
 import type { McpServerConfig } from "../shared/types"
 import type { JsonObject } from "../shared/json"
 
-/**
- * `notifications/claude/channel` is a Claude-CLI extension: the MCP SDK's
- * `ServerNotification` union does not name it, and the SDK exposes no way to
- * widen that union without re-declaring the whole server generic. This
- * predicate is the ONE place the bridge is claimed, and it claims only what is
- * structurally true — the payload is a `{method, params}` notification.
- */
 function isServerNotification(
   value: ChannelNotification,
 ): value is ChannelNotification & ServerNotification {
@@ -27,10 +20,6 @@ export interface ChannelNotification {
   params: { content: string; meta: JsonObject; _meta?: JsonObject }
 }
 
-/**
- * Builds the channel push payload. `source` is pinned to the kanna server
- * name so claude tags the injected prompt `<channel source="kanna">`.
- */
 export function buildChannelNotification(
   content: string,
   meta: JsonObject = {},
@@ -42,35 +31,19 @@ export function buildChannelNotification(
 }
 
 export interface KannaMcpHttpHandle {
-  /** Full URL including path the claude CLI must POST/GET against. */
   url: string
-  /** Bearer token the CLI must present in Authorization header. */
   bearerToken: string
-  /** Tear down HTTP listener + MCP transport. Idempotent. */
   close: () => Promise<void>
-  /** Resolves once the claude MCP client completes the initialize handshake. */
   channelClientReady: Promise<void>
-  /** Push a prompt into the live claude session via the channel capability. */
   pushChannelPrompt: (content: string, meta?: JsonObject) => Promise<void>
 }
 
 export interface StartKannaMcpHttpServerOptions {
   args: KannaMcpArgs
-  /** Override host. Defaults to 127.0.0.1 (loopback-only). */
   host?: string
-  /** Optional fixed port for tests. 0 = pick ephemeral. Defaults to 0. */
   port?: number
 }
 
-/**
- * Starts an in-process HTTP MCP server bound to loopback. The claude CLI
- * subprocess (PTY driver) reaches kanna's tool-callback / tunnel-gateway /
- * permission-policy state by connecting over HTTP. Bearer token in
- * Authorization header gates each request — random per spawn, never reused.
- *
- * Loopback-only bind by design: tokens live in process memory and the
- * --mcp-config JSON passed to the CLI; both are scoped to this machine.
- */
 export async function startKannaMcpHttpServer(
   opts: StartKannaMcpHttpServerOptions,
 ): Promise<KannaMcpHttpHandle> {
@@ -118,7 +91,6 @@ export async function startKannaMcpHttpServer(
         await mcp.server.notification(notification)
       }
     } catch (err) {
-      // Before a client connects there is no peer; swallow that case.
       if (mcp.isConnected()) throw err
     }
   }
@@ -142,7 +114,7 @@ export async function startKannaMcpHttpServer(
   try {
     address = await listen(httpServer, port, host)
   } catch (err) {
-    try { await transport.close() } catch { /* swallow */ }
+    try { await transport.close() } catch { }
     throw err
   }
 
@@ -155,7 +127,6 @@ export async function startKannaMcpHttpServer(
     try {
       await transport.close()
     } catch {
-      /* swallow */
     }
     await closeHttpServer(httpServer)
   }
@@ -182,15 +153,6 @@ function constantTimeEqual(a: string, b: string): boolean {
 }
 
 
-/**
- * Builds the --mcp-config JSON string the PTY driver passes to the claude
- * CLI. Encodes the HTTP MCP server URL + bearer token under the kanna
- * server name so the model sees tools as `mcp__kanna__<name>`.
- *
- * Optional `userServers` merges enabled user-configured MCP entries into
- * the JSON. Disabled entries and any whose name collides with
- * KANNA_MCP_SERVER_NAME are silently dropped.
- */
 export function buildMcpConfigJson(
   handle: { url: string; bearerToken: string },
   userServers: readonly McpServerConfig[] = [],

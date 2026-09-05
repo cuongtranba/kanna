@@ -17,14 +17,6 @@ import type { BoardSnapshot, ClientCommand, SubscriptionTopic } from "../../../s
 import { onRejected } from "../../../shared/errors"
 import type { JsonValue } from "../../../shared/json"
 
-/**
- * One board, live.
- *
- * Subscribes to the board topic and renders whatever the server last sent. A
- * drag applies locally first (so the card lands under the cursor) and is then
- * sent as a command; the server's snapshot push replaces the optimistic state a
- * round-trip later, which is also how a rejected move self-corrects.
- */
 
 export interface BoardPaneSocket {
   subscribe(topic: SubscriptionTopic, onSnapshot: (snapshot: BoardSnapshot) => void): () => void
@@ -36,19 +28,8 @@ const EMPTY_CANDIDATES: readonly BlockerCandidate[] = []
 export interface BoardPaneProps {
   boardId: string
   socket: BoardPaneSocket
-  /**
-   * Live facts for every chat the workspace knows about, keyed by chat id —
-   * prop-drilled rather than read from context so the board can be mounted
-   * without the app's providers. Optional: absent, a card says nothing, which
-   * is what a card with no live chat says anyway.
-   */
   chatFacts?: Readonly<Record<string, BoardChatFacts>>
   onOpenCard?: (cardId: string) => void
-  /**
-   * Go to this board's project list. Takes the owner because the board's view
-   * is the only place the pane learns which project it belongs to — the tab
-   * carries a board id and nothing else.
-   */
   onOpenBoards?: (projectId: string) => void
 }
 
@@ -56,9 +37,6 @@ export function BoardPane({ boardId, socket, chatFacts, onOpenCard, onOpenBoards
   const view = useBoardsStore(selectBoardView(boardId))
   const pageSize = useBoardsStore(selectBoardPageSize(boardId))
 
-  // Re-subscribing on a raised page size IS the paging: the server rebuilds
-  // every board broadcast from this topic, so each push carries a complete
-  // prefix of each column and nothing has to be merged.
   useEffect(() => {
     return socket.subscribe({ type: "board", boardId, pageSize }, (snapshot) => {
       useBoardsStore.getState().setBoardView(snapshot.boardId, snapshot.view)
@@ -78,8 +56,6 @@ export function BoardPane({ boardId, socket, chatFacts, onOpenCard, onOpenBoards
           belowCardId: move.belowCardId,
         })
         .catch(() => {
-          // The authoritative snapshot is the correction: ask for it rather
-          // than guessing how to undo a move the server refused.
         })
     },
     [boardId, socket],
@@ -111,12 +87,6 @@ export function BoardPane({ boardId, socket, chatFacts, onOpenCard, onOpenBoards
 
   const schemaPanelOpen = useBoardSyncStore((state) => state.schemaPanelOpen)
 
-  /**
-   * The draft is seeded HERE, at the moment the panel opens, rather than by the
-   * panel reading the board. A board broadcast arrives with a freshly decoded
-   * `cardFields` array on every card move, so a panel that re-seeded from it
-   * would lose an edit in progress the first time anyone dragged a card.
-   */
   const handleOpenSchemaPanel = useCallback(() => {
     const current = useBoardsStore.getState().viewByBoard[boardId]
     if (!current) return
@@ -146,25 +116,16 @@ export function BoardPane({ boardId, socket, chatFacts, onOpenCard, onOpenBoards
           `Synced · ${String(summary.created)} new, ${String(summary.updated)} updated${conflicts}`,
         )
       })
-      // The reason is shown inline on the header, not as a toast: the user may
-      // not be looking when a sync fails.
       .catch(onRejected((error) => {
         sync.finishSync(boardId, error.message)
       }))
   }, [boardId, socket])
 
-  /**
-   * Column edits are not optimistic except for the reorder, which must land
-   * under the cursor. A rename or a delete is a deliberate act with a visible
-   * outcome, so waiting one round-trip for the authoritative snapshot is
-   * honest; guessing would only be able to disagree with it.
-   */
   const handleColumnMove = useCallback(
     (columnId: string, afterColumnId: string | null) => {
       const current = useBoardsStore.getState().viewByBoard[boardId]
       if (current) useBoardsStore.getState().setBoardView(boardId, moveColumnInView(current, columnId, afterColumnId))
       void socket.command({ type: "board.column.move", columnId, afterColumnId }).catch(() => {
-        // The authoritative snapshot is the correction.
       })
     },
     [boardId, socket],
@@ -190,7 +151,6 @@ export function BoardPane({ boardId, socket, chatFacts, onOpenCard, onOpenBoards
 
   const handleColumnDelete = useCallback(
     (columnId: string) => {
-      // The store refuses while cards remain; surfacing its reason is the point.
       void socket.command({ type: "board.column.delete", columnId }).catch(onRejected((error) => {
         useBoardSyncStore.getState().finishSync(boardId, error.message)
       }))
@@ -227,7 +187,6 @@ export function BoardPane({ boardId, socket, chatFacts, onOpenCard, onOpenBoards
           belowCardId: topCard?.id ?? null,
         })
         .catch(() => {
-          // The authoritative snapshot is the correction.
         })
     },
     [boardId, socket],
@@ -236,7 +195,6 @@ export function BoardPane({ boardId, socket, chatFacts, onOpenCard, onOpenBoards
   const handleCardAdd = useCallback(
     (columnId: string, title: string) => {
       const current = useBoardsStore.getState().viewByBoard[boardId]
-      // Append: a card typed at the foot of a column belongs at the foot of it.
       const afterCardId = current?.cards[columnId]?.at(-1)?.id ?? null
       void socket
         .command({ type: "board.card.create", boardId, columnId, title, afterCardId })
@@ -259,10 +217,6 @@ export function BoardPane({ boardId, socket, chatFacts, onOpenCard, onOpenBoards
     useBoardSyncStore.getState().setTitleDraft(event.currentTarget.value)
   }, [])
 
-  /**
-   * Commit on Enter or on losing focus; an empty name is a cancel, not a board
-   * with no name.
-   */
   const handleCommitRename = useCallback(() => {
     const { titleDraft: draft } = useBoardSyncStore.getState()
     const current = useBoardsStore.getState().viewByBoard[boardId]
@@ -282,7 +236,6 @@ export function BoardPane({ boardId, socket, chatFacts, onOpenCard, onOpenBoards
     [handleCommitRename],
   )
 
-  // Focus and select on mount so typing replaces the old name outright.
   const focusTitle = useCallback((element: HTMLInputElement | null) => {
     element?.select()
   }, [])
@@ -291,8 +244,6 @@ export function BoardPane({ boardId, socket, chatFacts, onOpenCard, onOpenBoards
     useBoardsStore.getState().growPage(boardId)
   }, [boardId])
 
-  // A stack board has no single project list to go back to, so it shows no
-  // breadcrumb rather than a link that would have to pick one.
   const ownerProjectId =
     view && view.board.ownerKind === "project" && onOpenBoards ? view.board.ownerId : null
 
@@ -300,12 +251,6 @@ export function BoardPane({ boardId, socket, chatFacts, onOpenCard, onOpenBoards
     if (ownerProjectId) onOpenBoards?.(ownerProjectId)
   }, [onOpenBoards, ownerProjectId])
 
-  /**
-   * Every card the board has actually shipped, in column order.
-   *
-   * Memoized because the drawer filters it on every render, and a fresh array
-   * per board push would defeat that for no reason.
-   */
   const blockerCandidates = useMemo<readonly BlockerCandidate[]>(() => {
     if (!view) return EMPTY_CANDIDATES
     return view.columns.flatMap((column) =>
@@ -323,12 +268,6 @@ export function BoardPane({ boardId, socket, chatFacts, onOpenCard, onOpenBoards
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
-      {/*
-        A second-level bar, under the pane's tab strip — which already carries
-        this board's identity and is how the reader moves to a chat. So it stays
-        quieter than the strip above it: a breadcrumb back to the list, the name,
-        and the two actions that belong to the board itself.
-      */}
       <header className="flex items-center gap-2 border-b border-border px-3 py-1.5">
         {ownerProjectId ? (
           <>
@@ -395,11 +334,7 @@ export function BoardPane({ boardId, socket, chatFacts, onOpenCard, onOpenBoards
             cardId={openCardId}
             socket={socket}
             chatFacts={chatFacts}
-            // The card's detail does not carry the board's schema, and the
-            // drawer needs it to know what a card even has.
             cardFields={view.board.cardFields}
-            // Nor does it carry the board's other cards, which is what the
-            // "Blocked by" picker offers.
             boardCards={blockerCandidates}
             onClose={handleCloseCard}
           />

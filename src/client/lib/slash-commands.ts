@@ -2,13 +2,6 @@ import type { SlashCommand } from "../../shared/types"
 
 const SLASH_TOKEN_PATTERN = /^\/(\S*)$/
 
-/**
- * Strip any leading `/` from a slash-command name. Canonical form (claude's
- * own system_init.slash_commands wire format) has no prefix slash; the UI
- * adds it. Older kanna chat records sometimes persisted names that already
- * carried a `/`, which then double-rendered as `//clear`. Normalising at
- * display + replacement time tolerates both shapes.
- */
 export function normalizeCommandName(name: string): string {
   return name.replace(/^\/+/, "")
 }
@@ -43,11 +36,6 @@ export function shouldShowPicker(
   return { open: true, query: match[1] ?? "" }
 }
 
-/**
- * Skills the user wrote (project, personal) rank above ones that arrived with a
- * plugin. Plugin scope is the bulk of the catalog, so without this a `/` press
- * buries the handful of commands the user actually authored.
- */
 const SCOPE_RANK: Record<string, number> = { project: 0, personal: 0, builtin: 1, plugin: 2 }
 
 function byScopeThenName(a: SlashCommand, b: SlashCommand): number {
@@ -66,6 +54,5 @@ export function filterCommands(list: SlashCommand[], query: string): SlashComman
     if (name.startsWith(q)) prefix.push(cmd)
     else if (name.includes(q)) substring.push(cmd)
   }
-  // Match tier wins over scope: a prefix hit is always more relevant.
   return [...prefix.sort(byScopeThenName), ...substring.sort(byScopeThenName)]
 }

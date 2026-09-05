@@ -1,15 +1,3 @@
-/**
- * Standalone session-lifecycle helpers for AgentCoordinator.
- *
- * Extracted from agent.ts so the eight related private methods live in their
- * own testable module. The coordinator delegates to these functions by passing
- * an object literal that satisfies `SessionLifecycleDeps`.
- *
- * Side-effect seal: this module contains NO direct IO (no node:fs, no HTTP
- * calls, no Bun primitives). Every effectful operation is injected through
- * the deps interface, including the `homeDir` used by computeWorkflowsDir so
- * tests can control it without real OS calls.
- */
 
 import type { ClaudeDriverPreference } from "../shared/types"
 import type { ClaudeSessionState, ActiveTurn } from "./claude-session-state"
@@ -23,34 +11,24 @@ import {
 
 export { hasPendingBackgroundTask, backgroundTaskGuardExpired }
 
-// ---------------------------------------------------------------------------
-// Structural sub-interfaces — only the operations this module calls.
-// ---------------------------------------------------------------------------
 
-/** Subset of OAuthTokenPool used by the lifecycle helpers. */
 interface LifecycleOAuthPool {
   release(chatId: string): void
   describeUnavailability(reservedFor?: string): TokenUnavailability[]
 }
 
-/** Subset of WorkflowRegistry used by the lifecycle helpers. */
 interface LifecycleWorkflowRegistry {
   hasActiveRun(chatId: string, freshnessMs: number, now: number): boolean
   register(chatId: string, workflowsDir: string): void
   unregister(chatId: string): void
 }
 
-/** Subset of EventStore used by buildPoolUnavailableMessage. */
 interface LifecycleStore {
   getChat(id: string): { title?: string | null } | null | undefined
 }
 
-// ---------------------------------------------------------------------------
-// Dependency bundle injected by AgentCoordinator
-// ---------------------------------------------------------------------------
 
 export interface SessionLifecycleDeps {
-  /** Returns the current app settings snapshot. Only lifecycle + driver slices are read. */
   getAppSettingsSnapshot(): {
     claudeDriver?: {
       lifecycle?: {
@@ -60,51 +38,28 @@ export interface SessionLifecycleDeps {
     }
   }
 
-  /** Default idle timeout (from claudeSessionLifecycle.idleMs constructor arg). */
   defaultIdleMs: number
-  /** Default max resident sessions (from claudeSessionLifecycle.maxResidentSessions). */
   defaultMaxResidentSessions: number
 
-  /** The live claudeSessions map owned by the coordinator. */
   claudeSessions: Map<string, ClaudeSessionState>
-  /** Active turns map — only `.has()` is called. */
   activeTurns: Pick<Map<string, ActiveTurn>, "has">
-  /**
-   * Turns whose provider session is still booting. A turn registers its
-   * ActiveTurn only once the spawn resolves, so this is the only signal that
-   * a chat is live during the boot window.
-   */
   startingTurns: { has(chatId: string): boolean }
-  /** Parked tool continuations — only `.has()` is called. */
   pendingTools: { has(chatId: string): boolean }
 
-  /** OAuth token pool, or null when no pool is configured. */
   oauthPool: LifecycleOAuthPool | null
 
-  /** Workflow registry, or null when not configured. */
   workflowRegistry: LifecycleWorkflowRegistry | null
 
-  /** Returns the currently resolved Claude driver preference. */
   resolveClaudeDriverPreference(): ClaudeDriverPreference
 
-  /** Emit a state-change event for a chat (called after evictions). */
   emitStateChange(chatId: string): void
 
-  /** Store — used by buildPoolUnavailableMessage to resolve chat titles. */
   store: LifecycleStore
 
-  /** Home directory — injected so tests do not need a real OS call. */
   homeDir: string
 }
 
-// ---------------------------------------------------------------------------
-// Exported standalone functions
-// ---------------------------------------------------------------------------
 
-/**
- * Resolve the effective Claude idle timeout. Prefers the user-configured
- * override in app settings; falls back to the constructor default.
- */
 export function resolveClaudeIdleMs(deps: SessionLifecycleDeps): number {
   const fromSettings = deps.getAppSettingsSnapshot().claudeDriver?.lifecycle?.idleTimeoutMs
   if (typeof fromSettings === "number" && Number.isFinite(fromSettings) && fromSettings > 0) {
@@ -113,10 +68,6 @@ export function resolveClaudeIdleMs(deps: SessionLifecycleDeps): number {
   return deps.defaultIdleMs
 }
 
-/**
- * Resolve the effective max-resident-sessions cap. Prefers the user-configured
- * override in app settings; falls back to the constructor default.
- */
 export function resolveClaudeMaxResident(deps: SessionLifecycleDeps): number {
   const fromSettings = deps.getAppSettingsSnapshot().claudeDriver?.lifecycle?.maxConcurrent
   if (typeof fromSettings === "number" && Number.isFinite(fromSettings) && fromSettings > 0) {
@@ -125,35 +76,10 @@ export function resolveClaudeMaxResident(deps: SessionLifecycleDeps): number {
   return deps.defaultMaxResidentSessions
 }
 
-/**
- * True when the chat is hosting an in-flight background Workflow. A live
- * workflow runs inside the warm PTY claude process but registers no
- * activeTurn, pendingPromptSeq, or lastUsedAt bump, so without this signal
- * the idle reaper / budget enforcer would tear the process down mid-run and
- * abort the workflow.
- *
- * Liveness comes from the registry's live-run-dir probe, NOT the terminal
- * `wf_<runId>.json` sidecar: Claude only flushes that sidecar at/near
- * termination, so a sidecar-only check is blind for the entire run (the
- * window the guard must cover). `hasActiveRun` reads the live
- * `subagents/workflows/wf_*` transcript dirs (written from second one) and
- * requires activity within one idle window so a stalled/crashed run still
- * eventually reaps.
- */
 export function hasLiveWorkflow(deps: SessionLifecycleDeps, chatId: string): boolean {
   return deps.workflowRegistry?.hasActiveRun(chatId, resolveClaudeIdleMs(deps), Date.now()) ?? false
 }
 
-/**
- * Tear down a Claude session and (by default) release the OAuth-pool
- * reservation owned by the chat.
- *
- * `keepReservation: true` — used by rate-limit / auth-error rotation
- * paths that have ALREADY claimed a fresh token via `pickActive(chatId)`
- * before calling close. Without this flag, `release(chatId)` would
- * scan reservedBy for `owner === chatId` and drop the *new* token the
- * rotation just claimed, leaking the rotation's reservation (audit #9d).
- */
 export function closeClaudeSession(
   deps: SessionLifecycleDeps,
   chatId: string,
@@ -167,26 +93,17 @@ export function closeClaudeSession(
     deps.oauthPool?.release(chatId)
   }
   session.session.close()
-  // For SDK sessions, unregister the workflow dir here. PTY sessions unregister
-  // inside the driver's cleanupResources (driver.ts) — do not double-fire.
   if (deps.resolveClaudeDriverPreference() !== "pty") {
     deps.workflowRegistry?.unregister(chatId)
   }
 }
 
-/**
- * Register the workflow disk-watch dir for an SDK session once the session
- * token is known. No-op if the registry is absent, already registered, or
- * the driver preference is PTY (the PTY driver registers from its own
- * resolved transcript path in driver.ts cleanup and must not be double-fired).
- */
 export function maybeRegisterSdkWorkflowsDir(
   deps: SessionLifecycleDeps,
   session: ClaudeSessionState,
 ): void {
   if (!deps.workflowRegistry) return
   if (session.workflowsDirRegistered) return
-  // PTY registers from its own resolved transcript path; SDK derives from session_token.
   if (deps.resolveClaudeDriverPreference() === "pty") return
   if (!session.sessionToken) return
   const dir = computeWorkflowsDir({
@@ -198,12 +115,6 @@ export function maybeRegisterSdkWorkflowsDir(
   session.workflowsDirRegistered = true
 }
 
-/**
- * Evict LRU idle sessions when the resident count exceeds the configured cap.
- * Never evicts: the protected chat, chats with an active turn, chats with
- * queued prompts, chats with a live workflow, or chats with a pending
- * background task.
- */
 export function enforceClaudeSessionBudget(
   deps: SessionLifecycleDeps,
   protectedChatId?: string,
@@ -236,13 +147,6 @@ export function enforceClaudeSessionBudget(
   }
 }
 
-/**
- * Format a refusal message when `pickActive(chatId)` returned null but the
- * pool has tokens. Names the offending tokens so the user knows which
- * chat to close or which token to add a quota to, instead of seeing the
- * generic "all tokens unavailable" line that doesn't say what's holding
- * them. `scopeSuffix` lets the subagent path tag its variant.
- */
 export function buildPoolUnavailableMessage(
   deps: SessionLifecycleDeps,
   reservedFor: string,

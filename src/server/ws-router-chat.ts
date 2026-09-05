@@ -1,27 +1,11 @@
 import type { JsonObject } from "../shared/json"
-/**
- * ws-router-chat.ts
- *
- * WS command handlers for chat lifecycle operations:
- *   chat.create, chat.fork, chat.rename, chat.archive, chat.unarchive,
- *   chat.delete, chat.markRead, chat.setPolicyOverride, chat.setDraftProtection,
- *   chat.send, chat.cancel, chat.stopDraining, chat.loadHistory,
- *   chat.respondTool, chat.toolRequestAnswer,
- *   chat.respondSubagentTool, chat.cancelSubagentRun
- *
- * Extracted from ws-router.ts.
- */
 import { PROTOCOL_VERSION } from "../shared/types"
 import type { ChatHistoryPage, StackBinding } from "../shared/types"
 import { isRecord } from "../shared/errors"
 import type { ClientCommand, ServerEnvelope } from "../shared/protocol"
 import type { ChatPermissionPolicyOverride, ToolRequestDecision } from "../shared/permission-policy"
 
-// ---------------------------------------------------------------------------
-// Dep interfaces (duck-typed; avoids circular imports with ws-router.ts)
-// ---------------------------------------------------------------------------
 
-/** Subset of EventStore methods consumed by chat WS commands. */
 export interface ChatStoreDep {
   createChat(
     projectId: string,
@@ -38,13 +22,11 @@ export interface ChatStoreDep {
   getToolRequest(toolRequestId: string): { chatId: string } | undefined | null
 }
 
-/** Subset of ToolCallbackService methods consumed by chat WS commands. */
 export interface ChatToolCallbackServiceDep {
   cancelAllForChat(chatId: string, reason: string): Promise<void>
   answer(toolRequestId: string, decision: ToolRequestDecision): Promise<void>
 }
 
-/** Subset of AgentCoordinator methods consumed by chat WS commands. */
 export interface ChatAgentDep {
   send(command: Extract<ClientCommand, { type: "chat.send" }>): Promise<{ chatId?: string | null }>
   forkChat(chatId: string): Promise<{ chatId: string }>
@@ -67,56 +49,29 @@ export interface ChatAgentDep {
   toolCallbackService?: ChatToolCallbackServiceDep | null
 }
 
-/** Analytics subset consumed by chat WS commands. */
 export interface ChatAnalyticsDep {
   track(event: string): void
 }
 
-/** Full deps bundle for chat WS commands. */
 export interface ChatCommandDeps {
   store: ChatStoreDep
   agent: ChatAgentDep
   analytics: ChatAnalyticsDep
-  /**
-   * Mutate per-connection draft protection — wraps
-   * `ws.data.protectedDraftChatIds = new Set(chatIds)` at the call site.
-   */
   setDraftProtection: (chatIds: string[]) => void
-  /**
-   * Send-to-starting profiling hook (no-op when profiling is disabled).
-   * Wraps `logSendToStartingProfile` at the call site.
-   */
   logSendProfilingFn: (
     traceId: string | null | undefined,
     startedAt: number | null | undefined,
     stage: string,
     details?: JsonObject,
   ) => void
-  /** Pre-bound to the current WebSocket; returns the byte count sent. */
   send: (envelope: ServerEnvelope) => number
-  /** Broadcast a chat-specific snapshot + sidebar snapshot. */
   broadcastChatAndSidebar: (chatId: string) => Promise<void>
-  /** Broadcast sidebar snapshot to all connected clients. */
   broadcastSidebar: () => Promise<void>
-  /**
-   * Broadcast ALL snapshots to all connected clients.
-   * Used for the chat.setDraftProtection fall-through broadcast.
-   */
   broadcastAll: () => Promise<void>
-  /** Stops the live-tail follow for a chat (user takeover or chat deletion). */
   followedSessionRegistry?: { stop(chatId: string, reason: "user_takeover" | "chat_deleted"): void }
 }
 
-// ---------------------------------------------------------------------------
-// Command dispatcher
-// ---------------------------------------------------------------------------
 
-/**
- * Handle one chat WS command.
- *
- * Returns `true` when the command was handled (caller should `return`).
- * Returns `false` when the command type is outside this module's scope.
- */
 export async function handleChatCommand(
   deps: ChatCommandDeps,
   command: ClientCommand,
@@ -202,7 +157,6 @@ export async function handleChatCommand(
     case "chat.setDraftProtection": {
       setDraftProtection(command.chatIds)
       send({ v: PROTOCOL_VERSION, type: "ack", id })
-      // Preserves the original break→broadcastSnapshots fall-through behavior.
       await broadcastAll()
       return true
     }
@@ -224,11 +178,6 @@ export async function handleChatCommand(
     }
     case "chat.cancel": {
       await agent.cancel(command.chatId)
-      // Resolve any open ask-style tool-callback prompts for this chat
-      // so the model's tool_use does not hang on a stranded pending. The
-      // session-close path no longer fires this cascade because it also
-      // ran on transparent respawns (rotation / idle sweep) — see
-      // makeClaudeSessionHandle.close() in agent.ts.
       if (agent.toolCallbackService) {
         await agent.toolCallbackService.cancelAllForChat(command.chatId, "chat_cancelled")
       }

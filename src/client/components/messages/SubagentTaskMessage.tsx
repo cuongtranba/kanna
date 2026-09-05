@@ -25,8 +25,6 @@ function toneFor(status: string | undefined, isError: boolean | undefined): Stat
   return "muted"
 }
 
-// Compact "1 read · 3 edits" summary of the subagent's tool usage; only
-// non-zero categories are shown, omitted entirely when nothing ran.
 function summarizeToolStats(stats: SubagentToolStats | undefined): string {
   if (!stats) return ""
   const parts: string[] = []

@@ -9,7 +9,6 @@ export type { GithubRelease }
 
 export type ChangelogStatus = "idle" | "loading" | "success" | "error"
 
-// Module-level stable empty refs to avoid inline `?? []` / `?? {}`
 const EMPTY_SKILL_RESULTS: SkillSearchResult[] = []
 const EMPTY_INSTALLED_SKILLS: InstalledSkillSummary[] = []
 const EMPTY_RELEASES: GithubRelease[] = []
@@ -17,10 +16,8 @@ const EMPTY_KEYBINDING_DRAFTS: Record<string, string> = {}
 const EMPTY_INSTALL_MESSAGES: Record<string, string> = {}
 
 interface SettingsPageState {
-  // ChangelogSection
   changelogPendingAction: string | null
 
-  // SkillsSection
   skillQuery: string
   skillResults: SkillSearchResult[]
   skillSearchLoading: boolean
@@ -35,18 +32,15 @@ interface SettingsPageState {
   installMessages: Record<string, string>
   packageUpdateSnapshot: PackageUpdateSnapshot | null
 
-  // PluginsSection
   pluginInventory: PackageInventorySnapshot | null
   pluginInventoryLoading: boolean
   pluginInventoryError: string | null
 
-  // GlobalInstructionsSection
   globalInstructionsDraft: string
   globalInstructionsPersistedAtMount: string
   globalInstructionsSaving: boolean
   globalInstructionsError: string | null
 
-  // SettingsPage
   changelogStatus: ChangelogStatus
   signingOut: boolean
   authEnabled: boolean
@@ -75,10 +69,8 @@ interface SettingsPageState {
   llmValidationError: JsonValue | null
   llmValidationDialogOpen: boolean
 
-  // Actions — ChangelogSection
   setChangelogPendingAction: (action: string | null) => void
 
-  // Actions — SkillsSection
   setSkillQuery: (query: string) => void
   setSkillResults: (results: SkillSearchResult[]) => void
   setSkillSearchLoading: (loading: boolean) => void
@@ -98,18 +90,15 @@ interface SettingsPageState {
   clearInstallMessagesForSkill: (skillName: string) => void
   setPackageUpdateSnapshot: (snapshot: PackageUpdateSnapshot | null) => void
 
-  // Actions — PluginsSection
   setPluginInventory: (inventory: PackageInventorySnapshot | null) => void
   setPluginInventoryLoading: (loading: boolean) => void
   setPluginInventoryError: (error: string | null) => void
 
-  // Actions — GlobalInstructionsSection
   setGlobalInstructionsDraft: (draft: string) => void
   setGlobalInstructionsPersistedAtMount: (value: string) => void
   setGlobalInstructionsSaving: (saving: boolean) => void
   setGlobalInstructionsError: (error: string | null) => void
 
-  // Actions — SettingsPage
   setChangelogStatus: (status: ChangelogStatus) => void
   setSigningOut: (signingOut: boolean) => void
   setAuthEnabled: (enabled: boolean) => void
@@ -125,7 +114,6 @@ interface SettingsPageState {
   setClaudeMaxConcurrentDraft: (draft: string) => void
   setEditorCommandDraft: (draft: string) => void
   setKeybindingDrafts: (drafts: Record<string, string>) => void
-  /** Set one action's draft; the map is rebuilt inside the store. */
   setKeybindingDraft: (action: string, value: string) => void
   setKeybindingsError: (error: string | null) => void
   setAppSettingsError: (error: string | null) => void
@@ -142,10 +130,8 @@ interface SettingsPageState {
 }
 
 export const useSettingsPageStore = create<SettingsPageState>()((set, get) => ({
-  // ChangelogSection initial state
   changelogPendingAction: null,
 
-  // SkillsSection initial state
   skillQuery: "",
   skillResults: EMPTY_SKILL_RESULTS,
   skillSearchLoading: false,
@@ -160,18 +146,15 @@ export const useSettingsPageStore = create<SettingsPageState>()((set, get) => ({
   installMessages: EMPTY_INSTALL_MESSAGES,
   packageUpdateSnapshot: null,
 
-  // PluginsSection initial state
   pluginInventory: null,
   pluginInventoryLoading: false,
   pluginInventoryError: null,
 
-  // GlobalInstructionsSection initial state
   globalInstructionsDraft: "",
   globalInstructionsPersistedAtMount: "",
   globalInstructionsSaving: false,
   globalInstructionsError: null,
 
-  // SettingsPage initial state — lazy initializers evaluated once at module load time
   changelogStatus: "idle",
   signingOut: false,
   authEnabled: false,
@@ -205,10 +188,8 @@ export const useSettingsPageStore = create<SettingsPageState>()((set, get) => ({
   llmValidationError: null,
   llmValidationDialogOpen: false,
 
-  // Actions — ChangelogSection
   setChangelogPendingAction: (action) => set({ changelogPendingAction: action }),
 
-  // Actions — SkillsSection
   setSkillQuery: (query) => set({ skillQuery: query }),
   setSkillResults: (results) => set({ skillResults: results }),
   setSkillSearchLoading: (loading) => set({ skillSearchLoading: loading }),
@@ -255,18 +236,15 @@ export const useSettingsPageStore = create<SettingsPageState>()((set, get) => ({
   },
   setPackageUpdateSnapshot: (snapshot) => set({ packageUpdateSnapshot: snapshot }),
 
-  // Actions — PluginsSection
   setPluginInventory: (inventory) => set({ pluginInventory: inventory }),
   setPluginInventoryLoading: (loading) => set({ pluginInventoryLoading: loading }),
   setPluginInventoryError: (error) => set({ pluginInventoryError: error }),
 
-  // Actions — GlobalInstructionsSection
   setGlobalInstructionsDraft: (draft) => set({ globalInstructionsDraft: draft }),
   setGlobalInstructionsPersistedAtMount: (value) => set({ globalInstructionsPersistedAtMount: value }),
   setGlobalInstructionsSaving: (saving) => set({ globalInstructionsSaving: saving }),
   setGlobalInstructionsError: (error) => set({ globalInstructionsError: error }),
 
-  // Actions — SettingsPage
   setChangelogStatus: (status) => set({ changelogStatus: status }),
   setSigningOut: (signingOut) => set({ signingOut }),
   setAuthEnabled: (enabled) => set({ authEnabled: enabled }),

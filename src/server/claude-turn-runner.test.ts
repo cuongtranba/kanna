@@ -1,16 +1,9 @@
-/**
- * Tests for the extracted turn runner (claude-turn-runner.ts).
- * Covers the key branches of runTurn without touching agent.ts internals.
- */
 import { describe, test, expect, mock } from "bun:test"
 import { runTurn, type RunTurnDeps } from "./claude-turn-runner"
 import type { ActiveTurn } from "./claude-session-state"
 import type { HarnessTurn, HarnessEvent } from "./harness-types"
 import type { TranscriptEntry } from "../shared/types"
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function makeFakeTurn(events: HarnessEvent[] = []): HarnessTurn {
   return {
@@ -103,9 +96,6 @@ function makeDeps(overrides: Partial<RunTurnDeps> = {}): RunTurnDeps {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 describe("runTurn", () => {
   test("calls recordTurnFinished on successful result entry", async () => {
@@ -219,7 +209,7 @@ describe("runTurn", () => {
     const errorTurn = makeErrorTurn(new Error("rate limit hit"))
     const active = makeActiveTurn({}, errorTurn)
     const deps = makeDeps({
-      handleLimitError: mock(async () => false), // not a limit error
+      handleLimitError: mock(async () => false),
     })
 
     await runTurn(deps, active)
@@ -235,7 +225,7 @@ describe("runTurn", () => {
     const errorTurn = makeErrorTurn(new Error("quota exceeded"))
     const active = makeActiveTurn({}, errorTurn)
     const deps = makeDeps({
-      handleLimitError: mock(async () => true), // handled as limit
+      handleLimitError: mock(async () => true),
     })
 
     await runTurn(deps, active)
@@ -280,7 +270,6 @@ describe("runTurn", () => {
     expect(deps.store.setSessionTokenForProvider).toHaveBeenCalledWith(
       "chat-1", "codex", "new-token"
     )
-    // pendingForkSessionToken.token differs from event.sessionToken → cleared
     expect(deps.store.setPendingForkSessionToken).toHaveBeenCalledWith("chat-1", null)
   })
 
@@ -310,9 +299,6 @@ describe("runTurn", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// Codex summarize turn (`/compact` on a provider with no compaction request)
-// ---------------------------------------------------------------------------
 
 describe("runTurn — codex summarize turn", () => {
   function makeAssistantEntry(id: string, text: string): TranscriptEntry {

@@ -1,34 +1,3 @@
-/**
- * Single source of truth for parked AskUserQuestion / ExitPlanMode requests,
- * keyed by chatId and independent of any ActiveTurn.
- *
- * A parked request is nothing but an in-memory promise: `resolve` IS the
- * provider worker's `canUseTool` continuation. Before this module the resolve
- * lived on `ActiveTurn.pendingTool`, which forced the coordinator to fabricate
- * a ghost ActiveTurn whenever the SDK called `canUseTool` outside a Kanna turn
- * (background-task self-wake). Ghost turns leaked into every consumer of
- * `activeTurns` — send gate, status query, idle reaper, result matcher — and
- * each consumer that forgot to special-case them produced a new wedge
- * (adr-20260804-main-agent-pending-question-wedge and its successors).
- *
- * The slot decouples the parked promise from turn lifetime. Exactly three
- * transitions exist:
- *
- * - `park`           — a `canUseTool` continuation arrives. An occupied slot
- *                      is discarded first, so at most one request is parked
- *                      per chat.
- * - `take`/`takeAny` — removes the request WITHOUT settling; the caller MUST
- *                      resolve it (after any transcript append that has to
- *                      precede the worker resuming). `take` matches a
- *                      toolUseId, `takeAny` is for cancel paths.
- * - `discard`        — removes AND settles with the discarded payload
- *                      (terminal result, session death). `buildCanUseTool`
- *                      short-circuits `discarded: true` to `behavior:
- *                      "deny"`, so the tool never executes with empty
- *                      answers.
- *
- * Side-effect seal: no IO. Resolving a promise is pure continuation passing.
- */
 import type { AgentProvider, NormalizedToolCall } from "../shared/types"
 import type { JsonObject, JsonValue } from "../shared/json"
 import { discardedToolResult } from "./claude-sdk-queue"

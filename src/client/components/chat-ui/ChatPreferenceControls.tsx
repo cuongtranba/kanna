@@ -220,7 +220,6 @@ function SearchableModelPopoverContent({
   const setQuery = SearchableModelPopoverStore.useScopedStore((state) => state.setQuery)
   const closeAndClearQuery = SearchableModelPopoverStore.useScopedStore((state) => state.closeAndClearQuery)
 
-  // Closes over the onSelect prop, so it stays in the component.
   const handleSelectModel = useCallback((id: string) => {
     onSelect(id)
     closeAndClearQuery()

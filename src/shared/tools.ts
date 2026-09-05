@@ -68,9 +68,6 @@ export function normalizeToolCall(args: {
         rawInput: input,
       }
     case "mcp__kanna__ask_user_question": {
-      // MCP shim schema uses `text` for the question body; SDK native uses
-      // `question`. Normalise to AskUserQuestionItem so renderers and answer
-      // key generation work identically regardless of which path fired.
       const questions: AskUserQuestionItem[] = Array.isArray(input.questions)
         ? input.questions.flatMap((q) => {
             if (!isJsonObject(q)) return []
@@ -407,8 +404,6 @@ export function hydrateToolResult(tool: NormalizedToolCall, raw: JsonValue): Hyd
 
   switch (tool.toolKind) {
     case "ask_user_question": {
-      // MCP shim returns CallToolResult shape ({content: [{type:"text", text:"<JSON>"}]}).
-      // Peel envelope when present so we can read the real {questions, answers} payload.
       const innerText = extractMcpTextContent(parsed)
       const payload = innerText !== null ? parseJsonValue(innerText) : parsed
       const record = asRecord(payload)

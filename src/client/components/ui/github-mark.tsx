@@ -1,11 +1,5 @@
 import type { SVGProps } from "react"
 
-/**
- * GitHub's brand mark. Hand-rolled because lucide-react 1.x dropped every brand
- * icon, and a generic glyph would not read as "GitHub" on a publish button.
- * Traced at lucide's 24x24 viewBox so it lines up with the lucide icons it sits
- * beside; filled rather than stroked, which is how the mark is specified.
- */
 export function GithubMark({ className, ...props }: SVGProps<SVGSVGElement>) {
   return (
     <svg

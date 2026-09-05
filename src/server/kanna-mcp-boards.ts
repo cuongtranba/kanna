@@ -1,21 +1,3 @@
-/**
- * Board tools for the agent.
- *
- * The board is the agent's work queue, so it must be able to read its column
- * and advance a card. Two disciplines carried over from the tracking-doc tools,
- * for the same reasons:
- *
- * 1. **Context is bounded.** `board_get` returns COUNTS plus a window, never a
- *    whole board. A 5k-issue import would otherwise blow up a single turn — the
- *    same failure `query_tracking_file` exists to prevent.
- * 2. **Everything is scoped to the chat's project.** Every id is resolved
- *    against it before any write, the way `confinePathToDir` scopes the
- *    tracking-doc tools. An agent must not be able to reach another project's
- *    board by guessing an id.
- *
- * Writes are attributed `{kind:"agent", chatId}`, which is what holds an
- * agent-origin change back from a remote tracker unless the binding opts in.
- */
 
 import { z } from "zod"
 import type { BoardRegistry } from "./board-registry"
@@ -25,7 +7,6 @@ import type { JsonValue } from "../shared/json"
 import type { CardActor } from "../shared/boards/types"
 import { ok, fail, type ToolArgs, type ToolResult } from "./kanna-mcp-tool"
 
-/** How many cards one `board_get` may return per column. */
 const CARD_WINDOW = 20
 
 const BOARD_LIST_DESCRIPTION =
@@ -49,11 +30,9 @@ const CARD_COMMENT_DESCRIPTION =
 export interface BoardToolDeps {
   boardRegistry?: BoardRegistry
   chatId: string | null
-  /** The project this chat belongs to. Every board id is checked against it. */
   projectId: string | null
 }
 
-/** The schema already requires these; this is the runtime half of that promise. */
 function requireString(value: JsonValue | undefined, name: string): string {
   if (typeof value !== "string" || value.trim() === "") {
     throw new BoardStoreError("invalid_input", `${name} is required`)
@@ -61,12 +40,6 @@ function requireString(value: JsonValue | undefined, name: string): string {
   return value
 }
 
-/**
- * Build the board tool list.
- *
- * `tool` is injected rather than imported so this module stays free of the MCP
- * SDK's shape and can be unit-tested by calling the handlers directly.
- */
 export type BoardToolFactory<TTool> = (
   name: string,
   description: string,
@@ -78,12 +51,10 @@ export function buildBoardToolList<TTool>(deps: BoardToolDeps, tool: BoardToolFa
   const { boardRegistry, chatId, projectId } = deps
   if (!boardRegistry || !chatId || !projectId) return []
 
-  // Bound here so the closures below carry non-optional references.
   const registry = boardRegistry
   const owner = projectId
   const actor: CardActor = { kind: "agent", chatId }
 
-  /** Refuse any board that is not this chat's project's. */
   function requireBoard(boardId: string) {
     const board = registry.boardView(boardId)
     if (!board) throw new BoardStoreError("not_found", `board ${boardId} does not exist`)
@@ -146,8 +117,6 @@ export function buildBoardToolList<TTool>(deps: BoardToolDeps, tool: BoardToolFa
             const total = view.counts[column.id] ?? 0
             const cards = (view.cards[column.id] ?? []).slice(0, CARD_WINDOW)
             const shown = cards.map((card) => `    ${card.id}  ${card.title}`).join("\n")
-            // The count is stated even when the window truncates, so the model
-            // knows what it has NOT been shown rather than assuming it saw all.
             const elision = total > cards.length ? `\n    … ${String(total - cards.length)} more` : ""
             return `${column.title}${column.semantic ? ` [${column.semantic}]` : ""} — ${String(total)} cards\n${shown}${elision}`
           })

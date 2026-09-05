@@ -69,7 +69,6 @@ describe("SplitContainer drop indicator", () => {
   })
 
   test("the indicator never swallows pointer events", async () => {
-    // A drop target that captured the pointer would cancel the drag it previews.
     usePaneDragStore.getState().beginDrag(term("a").tabId)
     usePaneDragStore.getState().hoverPane("pa", { kind: "merge" })
 
@@ -82,8 +81,6 @@ describe("SplitContainer drop indicator", () => {
 
 describe("paneDragStore", () => {
   test("an unchanged hover does not publish a new snapshot", () => {
-    // A drag fires move events continuously; a fresh snapshot per pixel would
-    // re-render every pane in the tree for the duration of the drag.
     usePaneDragStore.getState().hoverPane("pa", { kind: "split", position: "left" })
     const before = usePaneDragStore.getState()
 

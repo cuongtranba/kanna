@@ -28,8 +28,6 @@ class FakeClock implements Clock {
 
   advance(ms: number) {
     this.current += ms
-    // Fire in order; a fired callback may schedule follow-up timers that are
-    // themselves already due, so loop until quiescent.
     for (;;) {
       const due = this.scheduled.filter((entry) => entry.fireAt <= this.current).sort((a, b) => a.fireAt - b.fireAt)
       if (due.length === 0) return
@@ -88,7 +86,6 @@ describe("CronScheduler", () => {
     await settle()
     expect(fires).toEqual([{ chatId: "c1", jobId: "j1", at: 300_000 }])
 
-    // Re-armed for the next grid slot.
     expect(scheduler.nextFireFor("c1", "j1")).toBe(600_000)
     clock.advance(300_000)
     await settle()
@@ -101,7 +98,6 @@ describe("CronScheduler", () => {
     const { scheduler, fires } = makeScheduler(clock)
     scheduler.onEvent(armedEvent({ scheduleText: "every 24h", schedule: scheduleOf("every 24h") }))
 
-    // First chunk is 6h, not 24h.
     clock.advance(6 * 3_600_000)
     await settle()
     expect(fires).toHaveLength(0)
@@ -125,7 +121,6 @@ describe("CronScheduler", () => {
     expect(fires).toHaveLength(0)
 
     scheduler.onEvent({ v: AUTO_CONTINUE_EVENT_VERSION, kind: "cron_resumed", chatId: "c1", scheduleId: "j1", timestamp: 600_000 })
-    // Anchor grid: next slot after 600000 on the armedAt=0 grid is 900000.
     expect(scheduler.nextFireFor("c1", "j1")).toBe(900_000)
     clock.advance(300_000)
     await settle()
@@ -182,7 +177,6 @@ describe("CronScheduler", () => {
     ]
     const missed = scheduler.rehydrate(events)
 
-    // Fires at 600k…1.8M were missed while the server was down: 5 of them.
     expect(missed).toEqual([{ chatId: "c1", jobId: "j1", missedCount: 5 }])
     expect(fires).toHaveLength(0)
     expect(scheduler.nextFireFor("c1", "j1")).toBe(2_100_000)
@@ -193,9 +187,6 @@ describe("CronScheduler", () => {
     scheduler.shutdown()
   })
 
-  // `rehydrate` derives `lastSeen` from the newest run record, so retention
-  // dropping the wrong end would make boot claim fires were missed that were
-  // not — a visible `server_offline` card, on every boot.
   test("rehydrate reports the same missed count over a compacted log", () => {
     const full: AutoContinueEvent[] = [armedEvent()]
     for (let i = 0; i < 120; i += 1) {
@@ -271,7 +262,6 @@ describe("CronScheduler", () => {
     })
     scheduler.onEvent(armedEvent())
     clock.advance(300_000)
-    // runFire is now in flight, awaiting the barrier
     const shutdownPromise = scheduler.shutdown()
     expect(fired).toEqual([])
     resolveFireFn()
@@ -289,11 +279,8 @@ describe("CronScheduler", () => {
       },
     })
     scheduler.onEvent(armedEvent())
-    // Shutdown before the timer fires — no in-flight work.
     await scheduler.shutdown()
-    // Timer is gone.
     expect(clock.pending()).toBe(0)
-    // Advancing clock fires nothing.
     clock.advance(300_000)
     await settle()
     expect(fires).toHaveLength(0)
@@ -316,15 +303,10 @@ describe("CronScheduler", () => {
     })
     scheduler.onEvent(armedEvent())
     clock.advance(300_000)
-    // First fire is in flight. Advance again to queue the re-arm timer.
-    // (won't actually re-arm since stopped will be true)
     const shutdownPromise = scheduler.shutdown()
-    // Resolve the first fire so shutdown can drain.
     resolveFireFn()
     await shutdownPromise
-    // Only the one fire that was already in flight completed.
     expect(fires).toEqual(["j1"])
-    // No re-arm happened after the fire because stopped=true.
     expect(clock.pending()).toBe(0)
   }, 15_000)
 })

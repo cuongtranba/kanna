@@ -4,12 +4,6 @@ import type { TimerPort } from "../ports/timerPort"
 import { makeFakeDomPort, makeFakeTimerPort } from "../lib/testing/fakePorts"
 import { createDrawerVisual } from "./drawerVisual"
 
-/**
- * The drawer visual's contract is what it writes to the document element, and
- * — above all — that it ALWAYS lets go. A visual that keeps its class on a
- * closed drawer leaves a full-screen panel covering the app with no gesture
- * that recovers it, which is the worst outcome this feature can produce.
- */
 
 interface Recorded {
   dom: DomPort
@@ -75,8 +69,6 @@ describe("drawerVisual", () => {
 
     visual.track(0.6)
     const settled = visual.settle(1)
-    // The spring may still be running; the watchdog is what guarantees this
-    // resolves rather than hanging the release path forever.
     ports.runTimers()
     await settled
 
@@ -85,8 +77,6 @@ describe("drawerVisual", () => {
   })
 
   test("reduced motion jumps to the end state in one write", async () => {
-    // The end state is what the UI must look like; reduced motion removes the
-    // travel, never the destination.
     const ports = recordingPorts({ reduceMotion: true })
     const visual = createDrawerVisual(ports.dom, ports.timer)
 

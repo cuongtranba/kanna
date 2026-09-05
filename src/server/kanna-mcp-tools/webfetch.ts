@@ -15,9 +15,6 @@ export interface WebFetchTool {
   handler: (input: WebFetchInput, ctx: ToolHandlerContext) => Promise<ToolHandlerResult>
 }
 
-// Blocked patterns: cloud metadata endpoints and link-local ranges.
-// Loopback/RFC1918 are intentionally allowed since Kanna runs locally and
-// tests use localhost. Cloud metadata endpoints are the real SSRF risk.
 const BLOCKED_HOST_PATTERNS = [
   /^169\.254\./,
   /^metadata\.google\.internal$/,

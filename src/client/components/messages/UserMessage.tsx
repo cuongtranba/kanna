@@ -20,11 +20,6 @@ interface Props {
   attachments?: ChatAttachment[]
   steered?: boolean
   autoContinue?: { scheduleId: string }
-  /**
-   * Kanna resolved this line against the local catalog and sent the file's
-   * instructions instead. `content` is still the typed line, so without saying
-   * so "the skill ran" and "your text was sent verbatim" look identical.
-   */
   expandedCommand?: { name: string; kind: SlashCommandKind }
   ports?: UserMessagePorts
 }
@@ -102,10 +97,6 @@ function UserMessageInner({ content, attachments = [], steered = false, autoCont
         ) : null}
         {(parsedContent.body || (!parsedContent.body && attachments.length === 0 && content && !parsedContent.systemMessage)) ? (
           <div className="flex w-full flex-col gap-0.5">
-            {/* The speaker is set above the prompt, as a manuscript gloss, so
-                the words themselves start on the rail every other transcript
-                row is measured from. Size and weight make authorship clear
-                without spending a side gutter or adding per-entry chrome. */}
             <span className="flex items-center gap-1.5 select-none text-15 font-semibold leading-snug text-foreground">
               <span aria-hidden>You</span>
               {steered ? <Zap aria-label="Sent mid-turn" className="size-3.5 shrink-0" /> : null}

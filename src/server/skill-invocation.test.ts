@@ -9,7 +9,6 @@ const SKILLS: SkillRosterEntry[] = [
   { name: "kanna-test", description: "Run the gates.", filePath: SKILL_FILE },
 ]
 
-/** Case-insensitive, matching `LocalCatalogService.resolve`. */
 const CATALOG: SkillCatalog = {
   resolve: (_cwd, name) => {
     const key = name.toLowerCase()
@@ -59,9 +58,6 @@ describe("expandSlashCommand", () => {
     expect(makeAccess().expandSlashCommand("chat-1", "how do I test?")).toBeNull()
   })
 
-  // A slash line Kanna cannot resolve must still reach the model as text: the
-  // user may be talking about a path, and swallowing the message is worse than
-  // answering it literally.
   test("an unknown name falls through rather than failing the send", () => {
     expect(makeAccess().expandSlashCommand("chat-1", "/nope arg")).toBeNull()
   })
@@ -70,8 +66,6 @@ describe("expandSlashCommand", () => {
     expect(makeAccess({ read: () => null }).expandSlashCommand("chat-1", "/review x")).toBeNull()
   })
 
-  // A file that is nothing but frontmatter expands to an empty prompt, which
-  // would start a turn saying nothing at all.
   test("an empty body falls through", () => {
     const access = makeAccess({ read: () => "---\nname: x\n---\n" })
     expect(access.expandSlashCommand("chat-1", "/review")).toBeNull()
@@ -103,7 +97,6 @@ describe("expandSlashCommand", () => {
     expect(makeAccess({ cwd: () => undefined }).expandSlashCommand("chat-1", "/review")).toBeNull()
   })
 
-  // Losing a skill is recoverable; losing the turn is not.
   test("a throwing catalog degrades instead of failing the send", () => {
     const catalog: SkillCatalog = {
       resolve: () => { throw new Error("EACCES") },

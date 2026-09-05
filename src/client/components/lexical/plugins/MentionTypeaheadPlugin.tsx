@@ -17,29 +17,13 @@ import { cn } from "../../../lib/utils"
 import { ChatTabScopedStore } from "../../../stores/chatTabScopedStore"
 import { useTypeaheadHoverHighlight } from "./typeahead-hover-highlight"
 
-// ---------------------------------------------------------------------------
-// Custom trigger: matches `@` at start of text or after whitespace, allows
-// `/` and other path characters in the query string.
-//
-// Mirrors shouldShowMentionPicker from src/client/lib/mention-suggestions.ts:
-// scans backward from caret to find an `@` not preceded by a non-whitespace
-// character, then returns everything after `@` as the query.
-// ---------------------------------------------------------------------------
 
-// Safe subset of characters that can appear in agent names or file paths
-// after the `@` trigger.  Excludes whitespace (menu closes on space) and
-// the literal `@` (would start a new mention).
-// Whitespace terminates the match; everything else (including `/`, `.`, `-`)
-// is valid so `@agent/builder` and `@src/file.ts` keep the menu open.
 const MENTION_TRIGGER_RE = /(?:^|\s)(@((?:[^@\s]){0,200}))$/
 
 function useMentionTrigger(): TriggerFn {
   return useCallback((text: string, _editor: LexicalEditor): MenuTextMatch | null => {
     const match = MENTION_TRIGGER_RE.exec(text)
     if (match === null) return null
-    // match.index = start of the full match (may include a leading space)
-    // match[1] = "@query" (no leading whitespace), match[2] = "query"
-    // leadOffset = position of `@` in the text
     const leadOffset = match.index + (match[0].length - match[1].length)
     return {
       leadOffset,
@@ -49,9 +33,6 @@ function useMentionTrigger(): TriggerFn {
   }, [])
 }
 
-// ---------------------------------------------------------------------------
-// MenuOption subclass
-// ---------------------------------------------------------------------------
 
 export type MentionOption =
   | { kind: "agent"; subagent: SubagentSuggestion["subagent"] }
@@ -70,17 +51,11 @@ export class MentionMenuOption extends MenuOption {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Plugin props
-// ---------------------------------------------------------------------------
 
 export interface MentionTypeaheadPluginProps {
   projectId: string | null
 }
 
-// ---------------------------------------------------------------------------
-// Plugin component
-// ---------------------------------------------------------------------------
 
 export function MentionTypeaheadPlugin({
   projectId,
@@ -88,9 +63,6 @@ export function MentionTypeaheadPlugin({
   const query = ChatTabScopedStore.useScopedStore((state) => state.mentionQuery)
   const setQuery = ChatTabScopedStore.useScopedStore((state) => state.setMentionQuery)
 
-  // Custom trigger: allows `/` and `.` in path queries (e.g., `@agent/builder`
-  // or `@src/file.ts`).  useBasicTypeaheadTriggerMatch treats `/` as
-  // punctuation and would close the menu after the first `/`.
   const triggerFn = useMentionTrigger()
 
   const enabled = query !== null
@@ -105,7 +77,6 @@ export function MentionTypeaheadPlugin({
     enabled,
   })
 
-  // Subagents first (mirrors ChatInput.tsx line ~314–317)
   const options = useMemo<MentionMenuOption[]>(() => {
     const agentOpts = subagentState.items.map(
       (s) => new MentionMenuOption({ kind: "agent", subagent: s.subagent }),
@@ -128,10 +99,6 @@ export function MentionTypeaheadPlugin({
       textNodeContainingQuery: TextNode | null,
       closeMenu: () => void,
     ) => {
-      // Replace the trigger text (`@query`) with the mention node.
-      // textNodeContainingQuery is the TextNode that Lexical split for us;
-      // `.replace()` preserves the caret position (a prior `.remove()` +
-      // `$insertNodes` corrupted the selection and wiped the composer).
       const data = option.data
       const mentionNode =
         data.kind === "agent"
@@ -152,8 +119,6 @@ export function MentionTypeaheadPlugin({
         $insertNodes([mentionNode])
       }
 
-      // Inline decorator node can't hold the caret; drop a trailing space
-      // text node after it and place the caret there so typing continues.
       const trailingSpace = $createTextNode(" ")
       mentionNode.insertAfter(trailingSpace)
       trailingSpace.select()
@@ -181,9 +146,6 @@ export function MentionTypeaheadPlugin({
       if (anchorElementRef.current == null) return null
       if (menuOptions.length === 0 && !mentionState.loading) return null
 
-      // Plain function, not a hook: menuRenderFn is itself a callback.
-      // Keeps the handler out of the JSX attribute (selectOptionAndCleanUp
-      // is a Lexical callback, not a store action).
       const handleOptionMouseDown = (
         event: ReactMouseEvent<HTMLLIElement>,
         option: MentionMenuOption,
@@ -192,10 +154,6 @@ export function MentionTypeaheadPlugin({
         selectOptionAndCleanUp(option)
       }
 
-      // Hover follows the POINTER, not the hit test — see
-      // useTypeaheadHoverHighlight. `mouseenter` here made every arrow key
-      // press hand the highlight straight back to the row the scroll had just
-      // moved under a resting cursor (#1019).
       const handleOptionMouseMove = (
         event: ReactMouseEvent<HTMLLIElement>,
         index: number,

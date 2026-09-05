@@ -148,7 +148,6 @@ describe("WorkflowsPageView", () => {
     })
     await act(async () => { container.querySelector<HTMLButtonElement>("[data-testid='workflow-row:run-a']")!.click() })
     await act(async () => { container.querySelector<HTMLButtonElement>("[data-testid='workflow-row:run-b']")!.click() })
-    // run-b (clicked last) resolves first, then the slower run-a resolves.
     await act(async () => { dB.resolve(fullRun({ runId: "run-b", agents: [{ index: 1, label: "agent-from-B", state: "completed" }] })) })
     await act(async () => { dA.resolve(fullRun({ runId: "run-a", agents: [{ index: 1, label: "agent-from-A", state: "completed" }] })) })
     expect(container.textContent).toContain("agent-from-B")
@@ -177,7 +176,6 @@ describe("WorkflowsPageView", () => {
     expect(container.textContent).toContain("pkg-alpha")
     expect(container.textContent).not.toContain("pkg-bravo")
 
-    // snapshot push: new runs reference, still running → triggers the re-fetch
     await act(async () => {
       root.render(<WorkflowsPageView runs={[{ ...runRow }]} getRunDetail={getRunDetail} getAgentTranscript={async () => []} />)
     })

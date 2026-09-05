@@ -3,9 +3,6 @@ import type { DiffCommandDeps, DiffStoreDep } from "./ws-router-diff"
 import { handleDiffCommand } from "./ws-router-diff"
 import type { ClientCommand } from "../shared/protocol"
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function makeStore(overrides: Partial<DiffStoreDep> = {}): DiffStoreDep {
   return {
@@ -55,9 +52,6 @@ function makeDeps(storeOverrides?: Partial<DiffStoreDep>): DiffCommandDeps & { s
   }
 }
 
-// ---------------------------------------------------------------------------
-// Unrecognized command
-// ---------------------------------------------------------------------------
 
 describe("handleDiffCommand", () => {
   test("returns false for a non-diff command", async () => {
@@ -67,9 +61,6 @@ describe("handleDiffCommand", () => {
     expect(deps.sent).toHaveLength(0)
   })
 
-  // ---------------------------------------------------------------------------
-  // chat.refreshDiffs
-  // ---------------------------------------------------------------------------
 
   test("chat.refreshDiffs — acks and does NOT broadcast when unchanged", async () => {
     const deps = makeDeps({ refreshSnapshot: mock(async () => false) })
@@ -86,9 +77,6 @@ describe("handleDiffCommand", () => {
     expect(deps.broadcastCount).toBe(1)
   })
 
-  // ---------------------------------------------------------------------------
-  // chat.initGit
-  // ---------------------------------------------------------------------------
 
   test("chat.initGit — acks with result", async () => {
     const deps = makeDeps()
@@ -104,9 +92,6 @@ describe("handleDiffCommand", () => {
     expect(deps.broadcastCount).toBe(1)
   })
 
-  // ---------------------------------------------------------------------------
-  // chat.getGitHubPublishInfo — no broadcast ever
-  // ---------------------------------------------------------------------------
 
   test("chat.getGitHubPublishInfo — acks and never broadcasts", async () => {
     const deps = makeDeps()
@@ -115,9 +100,6 @@ describe("handleDiffCommand", () => {
     expect(deps.broadcastCount).toBe(0)
   })
 
-  // ---------------------------------------------------------------------------
-  // chat.checkGitHubRepoAvailability — does not need chatId
-  // ---------------------------------------------------------------------------
 
   test("chat.checkGitHubRepoAvailability — acks without project lookup", async () => {
     const resolveSpy = mock((chatId: string) => `/tmp/${chatId}`)
@@ -128,13 +110,9 @@ describe("handleDiffCommand", () => {
       "r6",
     )
     expect(handled).toBe(true)
-    // resolveChatRepoPath should NOT have been called — this command doesn't need a chatId
     expect(resolveSpy).not.toHaveBeenCalled()
   })
 
-  // ---------------------------------------------------------------------------
-  // chat.commitDiffs — broadcasts on snapshotChanged
-  // ---------------------------------------------------------------------------
 
   test("chat.commitDiffs — broadcasts when snapshot changed", async () => {
     const deps = makeDeps({
@@ -148,9 +126,6 @@ describe("handleDiffCommand", () => {
     expect(deps.broadcastCount).toBe(1)
   })
 
-  // ---------------------------------------------------------------------------
-  // chat.discardDiffFile / chat.ignoreDiffFile — no broadcast when unchanged
-  // ---------------------------------------------------------------------------
 
   test("chat.discardDiffFile — does not broadcast when snapshotChanged is false", async () => {
     const deps = makeDeps({ discardFile: mock(async () => ({ snapshotChanged: false })) })

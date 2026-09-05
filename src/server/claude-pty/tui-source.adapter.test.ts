@@ -112,11 +112,9 @@ describe("startTranscriptStream (dir-watch)", () => {
     })
     const iter = stream.lines[Symbol.asyncIterator]()
     let resolved = false
-    // Capture the first pending promise — it should not resolve yet (partial line)
     const firstPromise = iter.next().then((r: IteratorResult<string>) => { resolved = true; return r })
     await new Promise((r) => setTimeout(r, 200))
     expect(resolved).toBe(false)
-    // Overwrite the file with a complete line — poller should pick it up
     await writeFile(filePath, '{"type":"one"}\n')
     const first = await firstPromise
     expect(first.value).toBe('{"type":"one"}')
@@ -170,7 +168,6 @@ describe("startTranscriptStream (poll follower)", () => {
     const iter = stream.lines[Symbol.asyncIterator]()
     expect((await iter.next()).value).toBe('{"type":"one"}')
     stream.close()
-    // After close, appends must NOT surface — the only timer is cleared.
     await appendFile(filePath, '{"type":"two"}\n')
     await new Promise((r) => setTimeout(r, 120))
     const next = await Promise.race([
@@ -182,15 +179,8 @@ describe("startTranscriptStream (poll follower)", () => {
 })
 
 describe("startTranscriptStream (registry resolution)", () => {
-  // Regression: claude-code's per-pid session registry pins the JSONL path
-  // to the live child. When the registry-resolved JSONL never appears (e.g.
-  // claude was spawned but no prompt sent), older builds fell back to the
-  // newest mtime in the project dir — which is another concurrent chat's
-  // JSONL. That caused cross-session transcript bleed. The fix removed the
-  // fallback: registry path is authoritative, poll until close.
   test("registry resolves but JSONL missing — never falls back to other JSONL in same dir", async () => {
     const pid = 99001
-    // Real cwd dir so `encodeCwd` (which realpaths) doesn't ENOENT.
     const realCwd = await mkdtemp(path.join(workHome, "real-cwd-"))
     const encoded = encodeCwd(realCwd)
     const ownProjectDir = path.join(workHome, ".claude", "projects", encoded)
@@ -202,9 +192,6 @@ describe("startTranscriptStream (registry resolution)", () => {
       path.join(sessionsDir, `${pid}.json`),
       JSON.stringify({ pid, sessionId: ownSessionId, cwd: realCwd, kind: "interactive", startedAt: Date.now() }),
     )
-    // Tempt the bug: drop a NEWER unrelated JSONL into the same project dir.
-    // Under the old mtime fallback this would have been picked up after
-    // `firstFileTimeoutMs` elapsed with no own-JSONL present.
     const strangerFile = path.join(ownProjectDir, "stranger-session.jsonl")
     await writeFile(strangerFile, '{"type":"assistant","message":{"content":[{"type":"text","text":"NOT OURS"}]}}\n')
 
@@ -213,14 +200,10 @@ describe("startTranscriptStream (registry resolution)", () => {
       homeDir: workHome,
       claudeChildPid: pid,
       sessionRegistryTimeoutMs: 300,
-      // High timeout so the registry-poll timeout cannot fire during the
-      // 600 ms pending check below — this test guards bleed isolation, not
-      // timeout behaviour (covered separately).
       firstFileTimeoutMs: 5_000,
       pollIntervalMs: 20,
     })
 
-    // filePath must NOT resolve to the stranger file even after timeouts.
     const beforeWrite = await Promise.race([
       stream.filePath
         .then((fp) => ({ kind: "resolved" as const, fp }))
@@ -229,7 +212,6 @@ describe("startTranscriptStream (registry resolution)", () => {
     ])
     expect(beforeWrite.kind).toBe("pending")
 
-    // Now the registry-pointed JSONL appears — filePath should resolve to it.
     const ownFile = path.join(ownProjectDir, `${ownSessionId}.jsonl`)
     await writeFile(ownFile, '{"type":"assistant","message":{"content":[{"type":"text","text":"ours"}]}}\n')
     const resolved = await stream.filePath
@@ -238,12 +220,6 @@ describe("startTranscriptStream (registry resolution)", () => {
     stream.close()
   }, 5000)
 
-  // Regression: when claude TUI rendered the input box but the first prompt
-  // never reached it (input-handler mount race, splash banner swallow, etc.),
-  // the registry-resolved JSONL was never created and the driver waited
-  // forever inside locateFirstFile. firstFileTimeoutMs now bounds that wait;
-  // the rejection surfaces as a failure event and the user can retry instead
-  // of seeing a wedged session.
   test("registry resolved but JSONL never appears — filePath rejects after firstFileTimeoutMs", async () => {
     const pid = 99003
     const realCwd = await mkdtemp(path.join(workHome, "real-cwd-"))
@@ -270,7 +246,6 @@ describe("startTranscriptStream (registry resolution)", () => {
     const start = Date.now()
     await expect(stream.filePath).rejects.toThrow(/did not appear in 150ms/)
     const elapsed = Date.now() - start
-    // Allow scheduler slack but ensure we did not wait orders of magnitude longer.
     expect(elapsed).toBeLessThan(1_500)
     stream.close()
   }, 5000)
@@ -290,7 +265,6 @@ describe("startTranscriptStream (registry resolution)", () => {
       path.join(sessionsDir, `${pid}.json`),
       JSON.stringify({ pid, sessionId: ownSessionId, cwd: realCwd, kind: "interactive", startedAt: Date.now() }),
     )
-    // Newer stranger JSONL must not win — registry path is authoritative.
     await new Promise((r) => setTimeout(r, 20))
     await writeFile(path.join(ownProjectDir, "stranger.jsonl"), "{}\n")
 
@@ -306,12 +280,6 @@ describe("startTranscriptStream (registry resolution)", () => {
 })
 
 describe("startTranscriptStream (rapid turn-end appends)", () => {
-  // Regression: fs.watch (kqueue/inotify under Bun) was observed to coalesce
-  // or drop events when claude appended `assistant` + `system/turn_duration`
-  // rows in rapid succession at the end of a turn — the stream would silently
-  // stop reading at ~52k bytes while the JSONL grew to ~55k. The pure tail-poll
-  // (adr-20260607-pty-transcript-pure-poll) reads by stat-size diff and so
-  // delivers every appended row regardless of append timing.
   test("delivers all rows appended in rapid succession after stream setup", async () => {
     const filePath = path.join(projectDir, "watched.jsonl")
     await writeFile(filePath, '{"type":"system","subtype":"init"}\n')
@@ -324,9 +292,6 @@ describe("startTranscriptStream (rapid turn-end appends)", () => {
     const first = await iter.next()
     expect(first.value).toContain('"system"')
 
-    // Append multiple rows AFTER the follower is set up. The tail-poll must
-    // pick up every row by stat-size diff within the test timeout — no append
-    // may be lost to event coalescing.
     await appendFile(filePath, '{"type":"assistant","message":{"content":[{"type":"text","text":"a"}]}}\n')
     await appendFile(filePath, '{"type":"assistant","message":{"content":[{"type":"text","text":"b"}]}}\n')
     await appendFile(filePath, '{"type":"system","subtype":"turn_duration","durationMs":42}\n')
@@ -360,10 +325,6 @@ describe("waitForResultEntry", () => {
     stream.close()
   }, 5000)
 
-  // Claude CLI ≥ 2.1.x writes no `system/turn_duration` (nor any system) rows
-  // to the transcript — the only turn-end marker left is the final assistant
-  // row's `message.stop_reason`. Without this, every PTY smoke probe times
-  // out and the gate refuses all spawns.
   test("resolves on assistant row with terminal stop_reason (new CLI format)", async () => {
     const filePath = path.join(projectDir, "stop-reason.jsonl")
     await writeFile(filePath, '{"type":"user","message":{"role":"user","content":"hi"}}\n')

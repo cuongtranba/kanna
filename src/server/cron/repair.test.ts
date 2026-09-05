@@ -11,11 +11,8 @@ function errorOf(line: string): CronParseError {
   return parsed.error
 }
 
-/** No deterministic fix — English where a schedule belongs. */
 const UNFIXABLE = errorOf("/cron check CI inline 9am every day")
-/** The parser already knows the answer to this one. */
 const FIXABLE = errorOf("/cron check ci spwan @daily")
-/** Arm-shaped, but split across lines — no mechanical way to collapse it. */
 const MULTILINE = errorOf(
   "/cron pull github issues and fix them, run every 2 mins\nwhen done mark the issue closed",
 )
@@ -58,15 +55,12 @@ describe("createCronRepair", () => {
     expect(sent[0]?.scheduleId).toBeTruthy()
   })
 
-  // `/cron` starts no turn, so unlike the mermaid guard there is no drain
-  // coming — without this the repair prompt would sit in the queue forever.
   test("drains the queue so the repair turn actually starts", async () => {
     const { drained, repair } = harness()
     await repair.offer("c1", UNFIXABLE)
     expect(drained).toEqual(["c1"])
   })
 
-  // The error card already renders a copy-and-send fix. A turn buys nothing.
   test("spends no turn when the parser produced a suggestion", async () => {
     const { sent, drained, repair } = harness()
     await repair.offer("c1", FIXABLE)
@@ -74,10 +68,6 @@ describe("createCronRepair", () => {
     expect(drained).toEqual([])
   })
 
-  // `/cron remove badid` is a typo with a deterministic answer, not an intent
-  // to interpret. Every real subcommand-shape failure the parser produces
-  // already carries a suggestion (caught by the check above this one), so
-  // this exercises the REPAIRABLE_PARTS gate directly as a defensive backstop.
   test("ignores management-subcommand failures", async () => {
     const { sent, repair } = harness()
     const subcommandFailure: CronParseError = {
@@ -89,9 +79,6 @@ describe("createCronRepair", () => {
     expect(sent).toEqual([])
   })
 
-  // A message split across lines is still arm-shaped — often a verbose
-  // instruction the user wrapped — and the parser has no mechanical way to
-  // collapse it, so it must reach the model like any other unfixable arm.
   test("offers a multiline /cron message for repair", async () => {
     const { sent, repair } = harness()
     await repair.offer("c1", MULTILINE)
@@ -100,7 +87,6 @@ describe("createCronRepair", () => {
     expect(sent[0]?.content).toContain(MULTILINE.input)
   })
 
-  // A model that cannot repair a line must not be asked about it forever.
   test("asks about a given line exactly once", async () => {
     const { sent, repair } = harness()
 
@@ -140,7 +126,6 @@ describe("createCronRepair", () => {
     expect(sent).toEqual([])
   })
 
-  // An unarmed cron is recoverable; a thrown error out of the send path is not.
   test("swallows an enqueue failure", async () => {
     const { repair } = harness({ enqueueMessage: () => Promise.reject(new Error("boom")) })
     await repair.offer("c1", UNFIXABLE)

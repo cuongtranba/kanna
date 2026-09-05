@@ -6,11 +6,6 @@ import { useViewportFetch } from "./useViewportFetch"
 import type { PreviewSource } from "./types"
 import type { JsonValue } from "../../../../shared/json"
 
-/**
- * The snippet cache is shared by every `useViewportFetch` caller, so an entry
- * comes back as JSON. This card only ever writes a string into it; module
- * scope keeps the reference stable for the hook's effect deps.
- */
 function cachedSnippet(value: JsonValue): string | undefined {
   return typeof value === "string" ? value : undefined
 }

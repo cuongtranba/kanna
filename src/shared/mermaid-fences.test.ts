@@ -29,9 +29,6 @@ describe("extractMermaidFences", () => {
     expect(extractMermaidFences(markdown)).toEqual([{ source: "graph LR", startLine: 1 }])
   })
 
-  // A 4-backtick fence is how a diagram containing a 3-backtick block is
-  // written. The closer must match the OPENER's length, so a bare ``` inside
-  // the body is content, not the end of the diagram.
   test("a longer opener is only closed by a fence at least as long", () => {
     const markdown = ["````mermaid", "flowchart TD", '  A["```"] --> B', "````", "after"].join("\n")
     expect(extractMermaidFences(markdown)).toEqual([
@@ -63,8 +60,6 @@ describe("extractMermaidFences", () => {
 })
 
 describe("scanFenceBody", () => {
-  // The Lexical MERMAID_FENCE transformer drives this directly, so the shared
-  // scanner and the editor can never disagree about where a diagram ends.
   test("returns the body and the index of the closing fence line", () => {
     const lines = ["```mermaid", "graph LR", "```", "after"]
     expect(scanFenceBody(lines, 0, "```")).toEqual({ source: "graph LR", lastLineIndex: 2 })

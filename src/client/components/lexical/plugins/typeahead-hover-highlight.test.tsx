@@ -1,15 +1,3 @@
-/**
- * Regression tests for #1019 — keyboard navigation of the composer's `/` and
- * `@` pickers.
- *
- * The defect these pin: hover-to-highlight bound to `mouseenter` fights the
- * arrow keys. Each ArrowDown scrolls the menu, the browser re-hit-tests under a
- * cursor that never moved, and the hover event snaps the highlight back to the
- * row that slid beneath it. Measured in Chrome against the real composer with
- * the pointer resting on the list: twelve ArrowDown presses moved the selection
- * three rows and the list scrolled 66px instead of 384px, so the catalog past
- * the first visible page was unreachable by keyboard.
- */
 import { describe, expect, it } from "bun:test"
 import { act, useState } from "react"
 import type { MouseEvent as ReactMouseEvent } from "react"
@@ -19,14 +7,9 @@ import {
   useTypeaheadHoverHighlight,
 } from "./typeahead-hover-highlight"
 
-// ---------------------------------------------------------------------------
-// isPointerDisplacement
-// ---------------------------------------------------------------------------
 
 describe("isPointerDisplacement", () => {
   it("treats the first observed position as no displacement", () => {
-    // Nothing to compare against yet: a menu that opens under a resting cursor
-    // must not claim the highlight from the keyboard.
     expect(isPointerDisplacement(null, { x: 10, y: 20 })).toBe(false)
   })
 
@@ -41,14 +24,10 @@ describe("isPointerDisplacement", () => {
   })
 
   it("accepts a return to the origin after a move away", () => {
-    // Each move re-seeds the origin, so coming back is still a displacement.
     expect(isPointerDisplacement({ x: 11, y: 21 }, { x: 10, y: 20 })).toBe(true)
   })
 })
 
-// ---------------------------------------------------------------------------
-// useTypeaheadHoverHighlight — the same wiring both pickers use
-// ---------------------------------------------------------------------------
 
 const ROWS = ["alpha", "beta", "gamma", "delta"]
 
@@ -96,8 +75,6 @@ async function sendMouseMove(
 
 describe("useTypeaheadHoverHighlight", () => {
   it("ignores a hover the pointer did not cause", async () => {
-    // Keyboard put the highlight on "delta"; the menu then scrolls and
-    // re-dispatches hover at coordinates the user never changed.
     const { container, cleanup } = await renderClientMarkup(<HoverList initialIndex={3} />)
     try {
       await sendMouseMove(container, "beta", 100, 100)
@@ -129,7 +106,6 @@ describe("useTypeaheadHoverHighlight", () => {
       await sendMouseMove(container, "beta", 100, 108)
       expect(selectedRow(container)).toBe("beta")
 
-      // Pointer at rest, rows scrolling under it: the highlight stays put.
       await sendMouseMove(container, "gamma", 100, 108)
       await sendMouseMove(container, "delta", 100, 108)
 

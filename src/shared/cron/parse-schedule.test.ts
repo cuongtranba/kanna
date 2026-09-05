@@ -35,7 +35,6 @@ describe("5-field cron", () => {
     expect(schedule.hour).toEqual({ kind: "values", values: [9, 10, 11] })
     expect(schedule.dom).toEqual({ kind: "values", values: [1, 15] })
     expect(schedule.dow).toEqual({ kind: "values", values: [1, 2, 3, 4, 5] })
-    // The occurrence engine (node-cron) evaluates the expression verbatim.
     expect(schedule.expression).toBe("*/15 9-11 1,15 * 1-5")
   })
 

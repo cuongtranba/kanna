@@ -12,11 +12,6 @@ describe("card adder drafts", () => {
     expect(selectCardDraft("col-1")(state())).toBe("")
   })
 
-  /**
-   * The reason this is keyed rather than a single slot: a reader can start
-   * typing in one column, look away, and add a card in another. A shared draft
-   * would move their half-typed title to the wrong column.
-   */
   test("each column keeps its own draft", () => {
     state().setDraft("col-1", "Fix login")
     state().setDraft("col-2", "Write docs")

@@ -4,14 +4,6 @@ import type { SessionMarkKind } from "../../lib/chatStatusIndicator"
 const R = 4
 const C = 6
 
-/**
- * A session's warmth, drawn.
- *
- * Fill-based on purpose: `stateMark.tsx` owns the stroke vocabulary for what a
- * turn is doing, and these answer a different question — how warm the provider
- * session is. Keeping the two families visually apart means a reader never has
- * to work out which question a given mark is answering.
- */
 export function SessionMark({
   kind,
   className,
@@ -30,7 +22,6 @@ export function SessionMark({
       {kind === "half" ? (
         <>
           <circle cx={C} cy={C} r={R} fill="none" stroke="currentColor" strokeWidth={1.25} />
-          {/* The left half filled — the same reading ◐ carried, at our own weight. */}
           <path d={`M ${C} ${C - R} A ${R} ${R} 0 0 0 ${C} ${C + R} Z`} fill="currentColor" />
         </>
       ) : null}

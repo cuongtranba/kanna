@@ -1,8 +1,3 @@
-/**
- * P11: an install must survive a restart, and a CLI install must become visible
- * to the server. Before this wire the service's registry was in-memory only —
- * the bundles were on disk but nothing remembered they existed.
- */
 import { describe, expect, test } from "bun:test"
 import { createInstalledPluginStore, type InstalledPluginSettings } from "./installed-plugin-store"
 import type { InstalledPluginConfig } from "../../shared/plugins/settings"
@@ -57,8 +52,6 @@ describe("createInstalledPluginStore", () => {
     expect(rows).toEqual([{ id: "hello", sourceDir: "/src/hello", enabled: false }])
   })
 
-  // `create` carries no `enabled`, so an install that is somehow already
-  // enabled needs the follow-up update or the flag would be silently dropped.
   test("a first install that is enabled also writes the flag", async () => {
     const { settings, writes } = fakeSettings()
     await createInstalledPluginStore(settings).upsert({ id: "hello", sourceDir: "/src/hello", enabled: true })
@@ -71,8 +64,6 @@ describe("createInstalledPluginStore", () => {
     const { settings, writes } = fakeSettings([{ id: "hello", sourceDir: "/src/hello", enabled: true }])
     await createInstalledPluginStore(settings).upsert({ id: "hello", sourceDir: "/src/hello", enabled: true })
 
-    // Idempotent: `plugin reload` and repeated installs are routine, and each
-    // settings write costs a disk round-trip plus a change notification.
     expect(writes).toEqual([])
   })
 

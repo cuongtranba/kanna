@@ -1,8 +1,3 @@
-/**
- * Anti-goal wall: after every mutation batch, the ops-applied client state
- * must deep-equal a freshly derived server snapshot. Divergence here means
- * the delta path would silently drift from the snapshot path.
- */
 import { describe, expect, test } from "bun:test"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
@@ -74,14 +69,11 @@ describe("chat ops parity (snapshot path vs ops path)", () => {
         return snapshot
       }
 
-      // Baseline: full snapshot + seed meta signatures (first diff emits no ops)
       let metaSigs: ChatMetaSignatures = diffChatMeta(undefined, deriveMeta()).next
       let lastSeq = store.chatOps.currentSeq(chat.id)
       let clientState: ChatSnapshot = { ...deriveFull(), seq: lastSeq }
 
       async function assertParityAfterBatch(): Promise<void> {
-        // Meta diff mirrors BroadcastManager.recordMetaOps ordering: record
-        // meta ops into the log, then drain everything since lastSeq.
         const { ops: metaOps, next } = diffChatMeta(metaSigs, deriveMeta())
         metaSigs = next
         for (const op of metaOps) store.chatOps.record(chat.id, op)
@@ -95,14 +87,12 @@ describe("chat ops parity (snapshot path vs ops path)", () => {
         expect(clientState).toEqual(expected)
       }
 
-      // Batch 1: mixed appends
       for (let i = 0; i < 10; i++) {
         await store.appendMessage(chat.id, i % 3 === 0 ? toolCallEntry(i) : textEntry(i))
       }
       await store.flush()
       await assertParityAfterBatch()
 
-      // Batch 2: tool results + consecutive context_window_updated runs
       await store.appendMessage(chat.id, toolResultEntry(0))
       await store.appendMessage(chat.id, cwuEntry(100, 1000))
       await store.appendMessage(chat.id, cwuEntry(101, 2000))
@@ -110,25 +100,21 @@ describe("chat ops parity (snapshot path vs ops path)", () => {
       await store.flush()
       await assertParityAfterBatch()
 
-      // Batch 3: runtime status flip (agent map) + user prompt
       activeStatuses.set(chat.id, "running")
       await store.appendMessage(chat.id, userEntry(200))
       await store.flush()
       await assertParityAfterBatch()
 
-      // Batch 4: queued message (sections change) + status back to idle
       activeStatuses.delete(chat.id)
       await store.enqueueMessage(chat.id, { content: "queued later", attachments: [] })
       await assertParityAfterBatch()
 
-      // Batch 5: many appends in one batch
       for (let i = 300; i < 340; i++) {
         await store.appendMessage(chat.id, textEntry(i))
       }
       await store.flush()
       await assertParityAfterBatch()
 
-      // Ring gap contract: overflow the ring, since() must demand a resync
       for (let i = 0; i < 600; i++) {
         store.chatOps.record(chat.id, { kind: "entries.append", entries: [textEntry(1000 + i)] })
       }

@@ -9,9 +9,6 @@ import {
 } from "./claude-steer-log"
 import { log } from "../shared/log"
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function withEnv(key: string, value: string | undefined, fn: () => void) {
   const previous = process.env[key]
@@ -31,9 +28,6 @@ function withEnv(key: string, value: string | undefined, fn: () => void) {
   }
 }
 
-// ---------------------------------------------------------------------------
-// isClaudeSteerLoggingEnabled
-// ---------------------------------------------------------------------------
 
 describe("isClaudeSteerLoggingEnabled", () => {
   it("returns false when env var is unset", () => {
@@ -61,9 +55,6 @@ describe("isClaudeSteerLoggingEnabled", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// isSendToStartingProfilingEnabled
-// ---------------------------------------------------------------------------
 
 describe("isSendToStartingProfilingEnabled", () => {
   it("returns false when env var is unset", () => {
@@ -85,9 +76,6 @@ describe("isSendToStartingProfilingEnabled", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// elapsedProfileMs
-// ---------------------------------------------------------------------------
 
 describe("elapsedProfileMs", () => {
   it("returns a non-negative number", () => {
@@ -103,7 +91,6 @@ describe("elapsedProfileMs", () => {
 
   it("returns a value with at most 1 decimal place", () => {
     const elapsed = elapsedProfileMs(performance.now() - 100)
-    // toFixed(1) means at most one decimal digit
     expect(elapsed.toString()).toMatch(/^\d+(\.\d)?$/)
   })
 
@@ -114,9 +101,6 @@ describe("elapsedProfileMs", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// logClaudeSteer
-// ---------------------------------------------------------------------------
 
 describe("logClaudeSteer", () => {
   it("does not call log.info when logging is disabled", () => {
@@ -170,9 +154,6 @@ describe("logClaudeSteer", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// logSendToStartingProfile
-// ---------------------------------------------------------------------------
 
 describe("logSendToStartingProfile", () => {
   it("is a no-op when profile is null", () => {

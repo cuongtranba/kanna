@@ -9,9 +9,6 @@ import {
   scanAllToolRequests,
 } from "./event-store-tool-requests"
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 const TS = 1_700_000_000_000
 
@@ -51,9 +48,6 @@ function resolvedEvent(
   }
 }
 
-// ---------------------------------------------------------------------------
-// applyToolRequestEvent — tool_request_put
-// ---------------------------------------------------------------------------
 
 describe("applyToolRequestEvent / tool_request_put", () => {
   test("inserts a defensive copy into the map", () => {
@@ -62,7 +56,6 @@ describe("applyToolRequestEvent / tool_request_put", () => {
     applyToolRequestEvent(map, putEvent(req))
     expect(map.size).toBe(1)
     expect(map.get("req-1")).toEqual(req)
-    // defensive copy — mutation of the original must not affect the stored value
     req.status = "canceled"
     expect(map.get("req-1")?.status).toBe("pending")
   })
@@ -78,9 +71,6 @@ describe("applyToolRequestEvent / tool_request_put", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// applyToolRequestEvent — tool_request_resolved
-// ---------------------------------------------------------------------------
 
 describe("applyToolRequestEvent / tool_request_resolved", () => {
   test("updates status, decision, resolvedAt, and mismatchReason", () => {
@@ -113,9 +103,6 @@ describe("applyToolRequestEvent / tool_request_resolved", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// getToolRequest
-// ---------------------------------------------------------------------------
 
 describe("getToolRequest", () => {
   test("returns a defensive copy when found", () => {
@@ -124,7 +111,6 @@ describe("getToolRequest", () => {
     map.set("req-1", req)
     const result = getToolRequest(map, "req-1")
     expect(result).toEqual(req)
-    // defensive copy
     result!.status = "canceled"
     expect(map.get("req-1")?.status).toBe("pending")
   })
@@ -135,9 +121,6 @@ describe("getToolRequest", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// listPendingToolRequests
-// ---------------------------------------------------------------------------
 
 describe("listPendingToolRequests", () => {
   test("returns only pending requests for the given chatId", () => {
@@ -165,9 +148,6 @@ describe("listPendingToolRequests", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// scanAllToolRequests
-// ---------------------------------------------------------------------------
 
 describe("scanAllToolRequests", () => {
   test("returns defensive copies of every entry in the map", () => {
@@ -176,7 +156,6 @@ describe("scanAllToolRequests", () => {
     map.set("r2", makeRequest({ id: "r2", chatId: "chat-2", status: "answered" }))
     const all = scanAllToolRequests(map)
     expect(all).toHaveLength(2)
-    // defensive copy
     all[0].status = "canceled"
     expect(map.get("r1")?.status).toBe("pending")
   })
@@ -186,9 +165,6 @@ describe("scanAllToolRequests", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// deleteToolRequestsForChat
-// ---------------------------------------------------------------------------
 
 describe("deleteToolRequestsForChat", () => {
   test("removes all entries belonging to the chat", () => {

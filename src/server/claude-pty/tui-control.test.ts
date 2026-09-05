@@ -20,10 +20,10 @@ function fakePty(): PtyProcess & { sent: string[] } {
     sent,
     pid: 99997,
     async sendInput(data: string) { sent.push(data) },
-    resize() { /* noop */ },
-    exited: new Promise<number>(() => { /* never */ }),
-    close() { /* noop */ },
-    kill() { /* noop */ },
+    resize() { },
+    exited: new Promise<number>(() => { }),
+    close() { },
+    kill() { },
   } as PtyProcess & { sent: string[] }
 }
 
@@ -31,7 +31,6 @@ describe("sendUserPrompt", () => {
   test("writes bracketed-paste wrapped text then separate carriage return once ring grows", async () => {
     const pty = fakePty()
     const ring = new OutputRing()
-    // Simulate the TUI rendering the paste preview shortly after the paste write.
     setTimeout(() => ring.append("[Pasted text #1 +56 lines]"), 5)
     await sendUserPrompt(pty, ring, "say hi", { commitTimeoutMs: 500, pollMs: 1 })
     expect(pty.sent).toEqual(["\x1b[200~say hi\x1b[201~", "\r"])
@@ -47,7 +46,7 @@ describe("sendUserPrompt", () => {
 
   test("sends Enter after commitTimeoutMs even if the ring never grows (degraded fallback)", async () => {
     const pty = fakePty()
-    const ring = new OutputRing() // never grows
+    const ring = new OutputRing()
     const start = Date.now()
     await sendUserPrompt(pty, ring, "no echo", { commitTimeoutMs: 50, pollMs: 5 })
     const elapsed = Date.now() - start
@@ -112,24 +111,15 @@ describe("waitForTuiReady", () => {
     expect(elapsed).toBeLessThan(300)
   })
 
-  // Regression: claude TUI v2.1.146 leaks `❯ ` during splash/trust/MCP render
-  // before Ink mounts the keyboard handler. Returning "marker" on first hit
-  // makes the driver send the first prompt into a TUI that discards stdin.
-  // The quiet-period gate waits for ring growth to settle as a proxy for
-  // "input handler attached" — drops the race that causes PTY chats to hang
-  // with no transcript file ever created.
   test("waits for ring to stay quiet for quietPeriodMs after marker hit", async () => {
     const ring = new OutputRing()
     ring.append("splash banner ❯ ")
-    // Keep appending bytes for 200 ms after the marker first appears — the
-    // gate must NOT resolve while the TUI is still rendering.
     const interval = setInterval(() => ring.append("."), 30)
     setTimeout(() => clearInterval(interval), 200)
     const start = Date.now()
     const result = await waitForTuiReady(ring, { hardCapMs: 2000, pollMs: 10, quietPeriodMs: 150 })
     const elapsed = Date.now() - start
     expect(result).toBe("marker")
-    // Render bursts (200 ms) + quiet period (150 ms) = at least 350 ms.
     expect(elapsed).toBeGreaterThanOrEqual(300)
   })
 
@@ -150,7 +140,6 @@ describe("waitForTuiReady", () => {
 
   test("returns 'marker' when TUI renders ❯ with \\x1b[1C instead of space", async () => {
     const ring = new OutputRing()
-    // Real TUI output: space after ❯ is cursor-forward-1, not a literal space
     ring.append("❯\x1b[1C")
     const result = await waitForTuiReady(ring, { hardCapMs: 1000, pollMs: 10 })
     expect(result).toBe("marker")
@@ -158,7 +147,6 @@ describe("waitForTuiReady", () => {
 
   test("returns 'marker' when TUI renders ❯ followed by U+00A0 (non-breaking space)", async () => {
     const ring = new OutputRing()
-    // Real TUI output: ❯ is followed by NBSP (U+00A0), not a regular space
     ring.append("❯ ")
     const result = await waitForTuiReady(ring, { hardCapMs: 1000, pollMs: 10 })
     expect(result).toBe("marker")
@@ -169,7 +157,6 @@ describe("dismissTrustDialogIfPresent (ANSI-encoded ring)", () => {
   test("detects trust dialog when words separated by \\x1b[1C (TUI rendering)", async () => {
     const pty = fakePty()
     const ring = new OutputRing()
-    // Real TUI output: spaces rendered as cursor-forward-1 escape sequences
     ring.append("\x1b[1C❯\x1b[1C1.\x1b[1CYes,\x1b[1CI\x1b[1Ctrust\x1b[1Cthis\x1b[1Cfolder\r\n")
     const dismissed = await dismissTrustDialogIfPresent(pty, ring)
     expect(dismissed).toBe(true)
@@ -199,9 +186,7 @@ describe("waitForTuiReadyWithTrustDismiss", () => {
   test("dismisses ANSI trust dialog then resolves when input box appears", async () => {
     const pty = fakePty()
     const ring = new OutputRing()
-    // Trust dialog with ANSI-encoded text appears first
     ring.append("\x1b[1Ctrust\x1b[1Cthis\x1b[1Cfolder")
-    // After 50ms simulate TUI loading: input box appears after dismiss sends \r
     setTimeout(() => ring.append("❯ "), 80)
     const result = await waitForTuiReadyWithTrustDismiss(pty, ring, { hardCapMs: 1000, pollMs: 10 })
     expect(result).toBe("ready")
@@ -226,10 +211,6 @@ describe("waitForTuiReadyWithTrustDismiss", () => {
   })
 
   test("does not false-trigger on trust dialog's own ❯ selection cursor", async () => {
-    // Trust dialog renders "❯ 1. Yes, I trust this folder" as ANSI:
-    // "❯\x1b[1C1.\x1b[1CYes,...trust\x1b[1Cthis\x1b[1Cfolder"
-    // stripAnsi gives "❯ 1. Yes, I trust this folder" which contains "❯ "
-    // → must NOT trigger "ready" while trust dialog is present
     const pty = fakePty()
     const ring = new OutputRing()
     ring.append("\x1b[1C❯\x1b[1C1.\x1b[1CYes,\x1b[1CI\x1b[1Ctrust\x1b[1Cthis\x1b[1Cfolder\r\n")
@@ -267,19 +248,13 @@ describe("dismissDevChannelsDialogIfPresent", () => {
     ring.append("\x1b[1Ctrust\x1b[1Cthis\x1b[1Cfolder")
     setTimeout(() => ring.append("❯ "), 80)
     await waitForTuiReadyWithTrustDismiss(pty, ring, { hardCapMs: 1000, pollMs: 10 })
-    // \r should appear exactly once (dismiss sent once, not repeated each poll)
     expect(pty.sent.filter((s) => s === "\r")).toHaveLength(1)
   })
 
-  // Regression: same race as waitForTuiReady — after trust dismiss the input
-  // box marker can render before Ink's keyboard handler mounts. Quiet-period
-  // gate must apply on this path too so prompts don't land into a discarding
-  // TUI under load.
   test("waits for ring to stay quiet for quietPeriodMs after post-dismiss marker hit", async () => {
     const pty = fakePty()
     const ring = new OutputRing()
     ring.append("\x1b[1Ctrust\x1b[1Cthis\x1b[1Cfolder")
-    // After dismiss, marker arrives at t=50, then more bytes for 200 ms.
     setTimeout(() => ring.append("❯ "), 50)
     const interval = setInterval(() => ring.append("."), 30)
     setTimeout(() => clearInterval(interval), 250)
@@ -291,7 +266,6 @@ describe("dismissDevChannelsDialogIfPresent", () => {
     })
     const elapsed = Date.now() - start
     expect(result).toBe("ready")
-    // Bursts end ~250 ms + quiet 150 ms.
     expect(elapsed).toBeGreaterThanOrEqual(350)
   })
 })
@@ -316,15 +290,11 @@ describe("waitForTuiReadyDismissingDialogs", () => {
   test("does not return ready on the trust dialog's leftover ❯ before the dev dialog appears", async () => {
     const pty = fakePty()
     const ring = new OutputRing()
-    // Trust dialog with its own "❯ 1. Yes, I trust this folder" line.
     ring.append("Is this a project you trust this folder? ❯ 1. Yes, I trust this folder")
-    // Dev-channels dialog appears LATER (after trust is dismissed), with its own ❯ line.
     setTimeout(() => ring.append(" WARNING for local channel development only ❯ 1. I am using this for local development"), 15)
-    // The real input box appears only after the dev dialog is dismissed.
     setTimeout(() => ring.append("\n❯ "), 40)
     const res = await waitForTuiReadyDismissingDialogs(pty, ring, { hardCapMs: 2000, pollMs: 2 })
     expect(res).toBe("marker")
-    // Must have dismissed BOTH dialogs (2 carriage returns), not bailed early after trust.
     expect(pty.sent.filter((s) => s === "\r").length).toBe(2)
   })
 })

@@ -1,11 +1,5 @@
 import type { AgentProvider, TranscriptEntry } from "../shared/types"
 
-// Policy: renderEntry handles message-shaped TranscriptEntry kinds only
-// (user_prompt, assistant_text, tool_call). All other kinds — slash-command
-// echoes, errors, autocontinue markers, status, etc. — are intentionally
-// omitted. The primer is a context bridge, not a full transcript replay.
-// TODO: PRIMER_MAX_CHARS is provider-blind; per-provider tuning + telemetry
-// are phase-1 follow-ups.
 export const PRIMER_MAX_CHARS = 60_000
 
 export function shouldInjectPrimer(
@@ -42,19 +36,6 @@ function renderEntry(entry: TranscriptEntry): RenderedEntry | null {
   return null
 }
 
-/**
- * The slice of a chat that still counts as context.
- *
- * Everything before the most recent `context_cleared` / `compact_boundary` was
- * deliberately dropped — by the user, by a loop iteration, or by the provider's
- * own compaction. Replaying it here would silently undo that, and the primer is
- * injected precisely when the session token is null, which is exactly the state
- * a clear leaves behind.
- *
- * A `compact_summary` IS the carried context, so it is hoisted across its own
- * boundary when it sits on the older side — the SDK and the CLI are free to
- * emit the two in either order.
- */
 function selectPrimerEntries(entries: readonly TranscriptEntry[]): TranscriptEntry[] {
   let resetIndex = -1
   let lastClearedIndex = -1
@@ -124,8 +105,6 @@ export function extractPreviousAssistantReply(entries: readonly TranscriptEntry[
     const entry = entries[i]
     if (entry.kind !== "tool_call") continue
     const tool = entry.tool
-    // Only a Bash call carries a command worth naming; the union's other
-    // members have no `command` member at all, so this is a narrow, not a probe.
     const cmd = tool.toolKind === "bash" ? tool.input.command : ""
     const suffix = cmd ? `: ${cmd}` : ""
     return `${tool.toolName}${suffix}`.trim()

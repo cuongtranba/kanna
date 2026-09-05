@@ -25,16 +25,6 @@ export function statusTone(status: KannaStatus): StatusTone {
   }
 }
 
-/**
- * Tone colours, drawn only from the design tokens.
- *
- * These were `emerald-500` and `amber-500` — raw Tailwind palette values that
- * appear nowhere in DESIGN.md's warm rose system, so every status in the app was
- * painted off-palette. They are also no longer load-bearing: state is carried by
- * the mark's shape (see `stateMark.ts`), and colour is only allowed to agree.
- * `active` is therefore full ink rather than a hue — a live session is the one
- * thing on screen that should read at full strength.
- */
 export function statusToneClass(tone: StatusTone): string {
   switch (tone) {
     case "active": return "text-foreground"
@@ -66,13 +56,6 @@ export function workflowStatusTone(status: WorkflowStatus): StatusTone {
   }
 }
 
-/**
- * Cron run status, in the same label + tone pair the other two enums use.
- *
- * `skipped` takes the half-height mark rather than the completed one: a run
- * that never happened is less than a turn, and reading it as "done" would be
- * a lie the shape tells.
- */
 export function cronRunLabel(status: CronRunStatus): string {
   switch (status) {
     case "running": return "Running"

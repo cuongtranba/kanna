@@ -15,12 +15,6 @@ export interface EvaluateArgs {
   args: JsonObject
   chatPolicy: ChatPermissionPolicy
   cwd: string
-  /**
-   * Folder-restricted subagent: per-run absolute path-root allowlist. When
-   * set, any path resolving outside ALL roots returns auto-deny BEFORE the
-   * chat-level readPathDeny / writePathDeny checks. Empty / unset = no extra
-   * restriction (legacy behaviour).
-   */
   restrictedAllowedPaths?: readonly string[]
 }
 
@@ -60,7 +54,7 @@ function parseSimpleBash(
 ): ParsedSimpleCommand | null {
   const tokens = shellParse(command)
   for (const t of tokens) {
-    if (isShellOp(t)) return null  // pipe/redirect/subshell/glob/etc.
+    if (isShellOp(t)) return null
   }
   const stringTokens = tokens.filter((t): t is string => typeof t === "string")
   if (stringTokens.length === 0) return null
@@ -123,7 +117,6 @@ function pathMatchesDeny(absPath: string, deny: string[]): string | null {
     let expanded = pattern.startsWith("~")
       ? path.join(homedir(), pattern.slice(1).replace(/^\//, ""))
       : pattern
-    // Normalize trailing slash so "/some/dir/" matches the same as "/some/dir"
     if (expanded.endsWith("/") && expanded !== "/") expanded = expanded.slice(0, -1)
     const matchPattern = expanded.endsWith("/**") || expanded.includes("*")
       ? expanded
@@ -135,16 +128,6 @@ function pathMatchesDeny(absPath: string, deny: string[]): string | null {
   return null
 }
 
-/**
- * Tools whose entire purpose is to surface a question / plan to the user
- * and wait for an answer. They MUST always go through the "ask" path so
- * the durable approval protocol renders UI and the model receives the
- * user's actual response. Auto-allow/auto-deny would resolve the request
- * with no payload, leaving the shim's `formatAnswer` with an undefined
- * payload — producing an empty `text` field and an MCP -32602
- * "Invalid tools/call result" validation error (issue #215 follow-up).
- * No `chatPolicy.defaultAction` value can override this.
- */
 const INTERACTIVE_TOOLS = new Set([
   "mcp__kanna__ask_user_question",
   "mcp__kanna__exit_plan_mode",
@@ -200,18 +183,12 @@ export const policy = {
       }
     }
 
-    // Bash path: single block handles all bash decisions.
-    // Path-deny + tool-deny always run; the only thing chatPolicy.defaultAction
-    // changes is the fallback for "didn't hit a deny rule and didn't hit the
-    // verb allowlist". For personal-use (defaultAction: auto-allow) that's
-    // auto-allow; for shared sessions (defaultAction: ask) it's ask.
     if (args.toolName === "mcp__kanna__bash") {
       const command = typeof args.args.command === "string" ? args.args.command : ""
       const parsed = parseSimpleBash(command, args.cwd, args.chatPolicy.bash.autoAllowVerbs)
       const fallback: PolicyVerdict = args.chatPolicy.defaultAction === "ask"
         ? "ask"
         : args.chatPolicy.defaultAction
-      // Deny-list applies regardless of shell-feature parsing.
       for (const rule of args.chatPolicy.toolDenyList) {
         if (rule.tool !== args.toolName) continue
         let re: RegExp
@@ -246,8 +223,6 @@ export const policy = {
       return { verdict: fallback, reason: "bash verb not on autoAllowVerbs" }
     }
 
-    // Non-bash path: deny-list, allow-list, default.
-    // 1. Deny list wins over everything.
     for (const rule of args.chatPolicy.toolDenyList) {
       if (rule.tool !== args.toolName) continue
       let re: RegExp
@@ -262,7 +237,6 @@ export const policy = {
       }
     }
 
-    // 2. Allow list
     for (const rule of args.chatPolicy.toolAllowList) {
       if (rule.tool !== args.toolName) continue
       let re: RegExp
@@ -277,7 +251,6 @@ export const policy = {
       }
     }
 
-    // 4. Default action.
     return { verdict: args.chatPolicy.defaultAction === "ask" ? "ask" : args.chatPolicy.defaultAction }
   },
 }

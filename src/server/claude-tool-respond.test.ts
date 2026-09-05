@@ -1,10 +1,3 @@
-/**
- * Tests for claude-tool-respond.ts — the extracted respondTool handler.
- *
- * The parked continuation lives in PendingToolSlots (turn-independent); the
- * ActiveTurn only carries UI status. Both shapes are covered: a request
- * parked mid-turn and one parked with NO active turn (SDK self-wake).
- */
 import { describe, it, expect, mock } from "bun:test"
 import {
   respondTool,
@@ -16,9 +9,6 @@ import { PendingToolSlots, type ParkedTool } from "./pending-tool-slot"
 import type { JsonValue } from "../shared/json"
 import type { AgentProvider, AskUserQuestionToolCall, ExitPlanModeToolCall } from "../shared/types"
 
-// ---------------------------------------------------------------------------
-// Minimal tool call stubs that satisfy the ParkedTool.tool type
-// ---------------------------------------------------------------------------
 
 function askUserQuestionTool(toolId: string): AskUserQuestionToolCall {
   return {
@@ -40,9 +30,6 @@ function exitPlanModeTool(toolId: string): ExitPlanModeToolCall {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function makeActiveTurn(overrides: Partial<ActiveTurn> = {}): ActiveTurn {
   return {
@@ -118,9 +105,6 @@ function parkTool(
   })
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 describe("respondTool", () => {
   it("throws when nothing is parked for the chat", async () => {

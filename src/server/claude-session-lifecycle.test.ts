@@ -1,9 +1,3 @@
-/**
- * Tests for the extracted session-lifecycle standalone functions.
- *
- * Each test builds a minimal `SessionLifecycleDeps` fake and asserts the
- * correct behaviour of the function under test. No real IO or OS calls.
- */
 
 import { describe, test, expect, beforeEach } from "bun:test"
 import {
@@ -21,11 +15,7 @@ import {
 import { ClaudeSessionState } from "./claude-session-state"
 import type { TokenUnavailability } from "./oauth-pool/oauth-token-pool"
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
-/** Build a minimal fake ClaudeSessionHandle. */
 function makeFakeHandle() {
   return {
     provider: "claude" as const,
@@ -40,7 +30,6 @@ function makeFakeHandle() {
   }
 }
 
-/** Build a minimal ClaudeSessionState. Override fields as needed. */
 function makeSession(overrides: Partial<ConstructorParameters<typeof ClaudeSessionState>[0]> = {}): ClaudeSessionState {
   return new ClaudeSessionState({
     id: "sess-1",
@@ -76,7 +65,6 @@ function makeSession(overrides: Partial<ConstructorParameters<typeof ClaudeSessi
   })
 }
 
-/** Build a minimal SessionLifecycleDeps. Override fields as needed. */
 function makeDeps(overrides: Partial<SessionLifecycleDeps> = {}): SessionLifecycleDeps {
   return {
     getAppSettingsSnapshot: () => ({}),
@@ -98,9 +86,6 @@ function makeDeps(overrides: Partial<SessionLifecycleDeps> = {}): SessionLifecyc
   }
 }
 
-// ---------------------------------------------------------------------------
-// resolveClaudeIdleMs
-// ---------------------------------------------------------------------------
 
 describe("resolveClaudeIdleMs", () => {
   test("returns default when settings has no lifecycle override", () => {
@@ -159,9 +144,6 @@ describe("resolveClaudeIdleMs", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// resolveClaudeMaxResident
-// ---------------------------------------------------------------------------
 
 describe("resolveClaudeMaxResident", () => {
   test("returns default when no override in settings", () => {
@@ -190,9 +172,6 @@ describe("resolveClaudeMaxResident", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// hasLiveWorkflow
-// ---------------------------------------------------------------------------
 
 describe("hasLiveWorkflow", () => {
   test("returns false when workflowRegistry is null", () => {
@@ -240,9 +219,6 @@ describe("hasLiveWorkflow", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// hasPendingBackgroundTask
-// ---------------------------------------------------------------------------
 
 describe("hasPendingBackgroundTask", () => {
   test("returns false when backgroundTaskIds is empty", () => {
@@ -260,9 +236,6 @@ describe("hasPendingBackgroundTask", () => {
   })
 
   test("returns false when deadline expired WITHOUT clearing state", () => {
-    // The expired guard is escalation input for the sweep
-    // (adr-20260801-background-task-wake-escalation) — a pure query must not
-    // destroy it, or the wake path never sees which tasks were pending.
     const now = Date.now()
     const session = makeSession({
       backgroundTasks: new Map([["task-1", { taskType: null, description: null, startedAt: 0, outputPath: null }]]),
@@ -275,15 +248,6 @@ describe("hasPendingBackgroundTask", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// Level-sourced background tasks (adr-20260808-...-level-signal-authoritative)
-//
-// Once the SDK has sent a background_tasks_changed snapshot, set membership is
-// authoritative and no clock may expire it. A `vite dev` server prints its
-// banner and then goes silent for hours, so ANY timer reads a healthy task as
-// dead: in chat 1ed924dd the last output byte landed at 12:45:04 and the
-// watchdog woke the user at 13:14:39.
-// ---------------------------------------------------------------------------
 
 describe("background-task guard with an SDK level signal", () => {
   const oneTask = () =>
@@ -310,8 +274,6 @@ describe("background-task guard with an SDK level signal", () => {
   })
 
   test("the flag does not resurrect a guard once the set is empty", () => {
-    // Sticky across an emptied set, but an empty set still means "no pending
-    // work" — otherwise a settled session could never be reaped.
     const now = Date.now()
     const session = makeSession({
       backgroundTasks: new Map(),
@@ -334,9 +296,6 @@ describe("background-task guard with an SDK level signal", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// closeClaudeSession
-// ---------------------------------------------------------------------------
 
 describe("closeClaudeSession", () => {
   test("removes session from claudeSessions map", () => {
@@ -416,21 +375,16 @@ describe("closeClaudeSession", () => {
     const differentSession = makeSession({ chatId: "chat-1" })
     const claudeSessions = new Map([["chat-1", differentSession]])
     const deps = makeDeps({ claudeSessions })
-    // session !== claudeSessions.get("chat-1"), so map entry should survive
     closeClaudeSession(deps, "chat-1", session)
     expect(claudeSessions.has("chat-1")).toBe(true)
   })
 })
 
-// ---------------------------------------------------------------------------
-// maybeRegisterSdkWorkflowsDir
-// ---------------------------------------------------------------------------
 
 describe("maybeRegisterSdkWorkflowsDir", () => {
   test("no-ops when workflowRegistry is null", () => {
     const session = makeSession({ sessionToken: "tok-abc" })
     const deps = makeDeps({ workflowRegistry: null })
-    // Should not throw
     maybeRegisterSdkWorkflowsDir(deps, session)
     expect(session.workflowsDirRegistered).toBeFalsy()
   })
@@ -487,7 +441,6 @@ describe("maybeRegisterSdkWorkflowsDir", () => {
     const session = makeSession({
       chatId: "chat-7",
       sessionToken: "session-abc123",
-      // Use /tmp — an existing directory that realpathSync can resolve
       localPath: "/tmp",
       workflowsDirRegistered: false,
     })
@@ -506,14 +459,10 @@ describe("maybeRegisterSdkWorkflowsDir", () => {
     maybeRegisterSdkWorkflowsDir(deps, session)
     expect(session.workflowsDirRegistered).toBe(true)
     expect(registeredChat).toBe("chat-7")
-    // The dir should include the session token
     expect(registeredDir).toContain("session-abc123")
   })
 })
 
-// ---------------------------------------------------------------------------
-// enforceClaudeSessionBudget
-// ---------------------------------------------------------------------------
 
 describe("enforceClaudeSessionBudget", () => {
   let emitted: string[]
@@ -535,12 +484,6 @@ describe("enforceClaudeSessionBudget", () => {
     })
   }
 
-  // A turn registers its ActiveTurn only AFTER the provider session spawns,
-  // so for the whole boot window the chat is live but invisible to every
-  // clause here except this one. Evicting there kills the session the spawn
-  // is still using — and because closeClaudeSession removes the map entry,
-  // the runner's fail-close is skipped, leaving a ghost ActiveTurn that
-  // reports the chat busy forever.
   test("never evicts a chat whose turn is still booting", () => {
     const now = Date.now()
     const sessions = new Map<string, ClaudeSessionState>([
@@ -642,11 +585,6 @@ describe("enforceClaudeSessionBudget", () => {
     expect(sessions.size).toBe(3)
   })
 
-  // The regression test for adr-20260808-...-level-signal-authoritative.
-  // A level-sourced session whose deadline has expired must be protected because
-  // the SDK's REPLACE semantics — not a deadline — governs when its task set
-  // clears. Using `backgroundTasks.size === 0` instead of `hasPendingBackgroundTask`
-  // would evict this session mid-run.
   test("never evicts a level-sourced session with a non-empty task set even when deadline is past", () => {
     const now = Date.now()
     const levelSourced = makeSession({
@@ -667,9 +605,6 @@ describe("enforceClaudeSessionBudget", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// buildPoolUnavailableMessage
-// ---------------------------------------------------------------------------
 
 describe("buildPoolUnavailableMessage", () => {
   test("returns simple message when no pool configured", () => {

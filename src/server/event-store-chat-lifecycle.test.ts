@@ -12,15 +12,9 @@ import {
   updateChatTiming,
 } from "./event-store-chat-lifecycle"
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
 
 const TS = 1_700_000_000_000
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function makeProjectState(): Pick<StoreState, "projectsById" | "projectIdsByPath" | "sidebarProjectOrder"> {
   return {
@@ -55,9 +49,6 @@ function makeReplayChatProvider(): Map<string, AgentProvider | null> {
   return new Map()
 }
 
-// ---------------------------------------------------------------------------
-// applyProjectEvent
-// ---------------------------------------------------------------------------
 
 describe("applyProjectEvent", () => {
   test("project_opened creates project and maps localPath", () => {
@@ -90,7 +81,6 @@ describe("applyProjectEvent", () => {
 
   test("project_removed is a no-op for unknown project", () => {
     const state = makeProjectState()
-    // Should not throw
     applyProjectEvent(state, { v: 3, type: "project_removed", timestamp: TS, projectId: "nope" })
     expect(state.projectsById.size).toBe(0)
   })
@@ -115,9 +105,6 @@ describe("applyProjectEvent", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// applyStackEvent
-// ---------------------------------------------------------------------------
 
 describe("applyStackEvent", () => {
   test("stack_added creates stack", () => {
@@ -166,13 +153,10 @@ describe("applyStackEvent", () => {
     const s: StackRecord = { id: "s1", title: "S", projectIds: ["p1"], createdAt: TS, updatedAt: TS, deletedAt: TS }
     m.set("s1", s)
     applyStackEvent(m, { v: 3, type: "stack_project_added", timestamp: TS + 1, stackId: "s1", projectId: "p2" })
-    expect(s.projectIds).toEqual(["p1"]) // no change
+    expect(s.projectIds).toEqual(["p1"])
   })
 })
 
-// ---------------------------------------------------------------------------
-// updateChatTiming
-// ---------------------------------------------------------------------------
 
 describe("updateChatTiming", () => {
   test("seeds initial timing on first call (chat_created path)", () => {
@@ -204,9 +188,6 @@ describe("updateChatTiming", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// applyChatLifecycleEvent
-// ---------------------------------------------------------------------------
 
 describe("applyChatLifecycleEvent — chat events", () => {
   test("chat_created sets initial fields and seeds maps", () => {
@@ -333,9 +314,6 @@ describe("applyChatLifecycleEvent — queued message events", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// applyAutoContinueToState
-// ---------------------------------------------------------------------------
 
 describe("applyAutoContinueToState", () => {
   test("appends event to list", () => {
@@ -358,8 +336,6 @@ describe("applyAutoContinueToState", () => {
     expect(m.get("c1")?.length).toBe(2)
   })
 
-  // This seam is shared by live append and boot replay, so bounding it here is
-  // what keeps a chat's cron history from growing without limit in memory.
   test("keeps cron run history bounded as events arrive one at a time", () => {
     const m = new Map<string, AutoContinueEvent[]>()
     applyAutoContinueToState(m, {
@@ -401,9 +377,6 @@ describe("applyAutoContinueToState", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// applyChatMessageMetadata
-// ---------------------------------------------------------------------------
 
 describe("applyChatMessageMetadata", () => {
   test("sets hasMessages and lastMessageAt for user_prompt", () => {
@@ -442,7 +415,6 @@ describe("applyChatMessageMetadata", () => {
 
   test("is a no-op for unknown chatId", () => {
     const chatsById = new Map<string, ChatRecord>()
-    // should not throw
     applyChatMessageMetadata(chatsById, "ghost", {
       _id: "msg-3", kind: "user_prompt", createdAt: TS, content: "hi", attachments: [],
     })

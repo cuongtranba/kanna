@@ -12,7 +12,6 @@ describe("gitleaks pre-commit hook", () => {
 
   test("hook file is executable", () => {
     const mode = statSync(HOOK_PATH).mode
-    // owner execute bit (0o100)
     expect(mode & 0o100).toBe(0o100)
   })
 

@@ -5,13 +5,8 @@ import type { ClientCommand } from "../shared/protocol"
 import type { ChatRecord, ProjectRecord } from "./events"
 import { encodeCwd } from "./claude-pty/jsonl-path.adapter"
 
-// encodeCwd() realpath()s the cwd, so the project fixture below must be a
-// path that actually exists on whatever machine runs the test.
 const REAL_CWD = process.cwd()
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function makeDeps(
   wfOverride?: ObservabilityCommandDeps["workflowRegistry"],
@@ -28,9 +23,6 @@ function makeDeps(
   }
 }
 
-// ---------------------------------------------------------------------------
-// Unrecognized command
-// ---------------------------------------------------------------------------
 
 describe("handleObservabilityCommand", () => {
   test("returns false for a non-orch command", async () => {
@@ -44,9 +36,6 @@ describe("handleObservabilityCommand", () => {
     expect(deps.sent).toHaveLength(0)
   })
 
-  // The orchestration feature is retired: these command types are no longer
-  // part of the protocol, so a client that still sends one must fall through
-  // to the router's unknown-command path rather than be silently acked.
   test("orch.* commands are unroutable (hard-break per adr-20260802-retire-orchestration-core)", async () => {
     for (const type of ["orch.run", "orch.cancelRun", "orch.getRun"]) {
       const deps = makeDeps()
@@ -56,9 +45,6 @@ describe("handleObservabilityCommand", () => {
     }
   })
 
-  // ---------------------------------------------------------------------------
-  // workflows.getRun
-  // ---------------------------------------------------------------------------
 
   test("workflows.getRun — returns run from registry", async () => {
     const run = { runId: "wf-1", taskId: "t-1", workflowName: "test" } as unknown as ReturnType<
@@ -91,9 +77,6 @@ describe("handleObservabilityCommand", () => {
     expect((deps.sent[0] as { result: unknown }).result).toBeNull()
   })
 
-  // ---------------------------------------------------------------------------
-  // workflows.getAgentTranscript
-  // ---------------------------------------------------------------------------
 
   test("workflows.getAgentTranscript — returns entries", async () => {
     const entries = [{ type: "assistant", content: "hi" }] as unknown as ReturnType<
@@ -114,9 +97,6 @@ describe("handleObservabilityCommand", () => {
     expect((deps.sent[0] as { result: unknown }).result).toBe(entries)
   })
 
-  // ---------------------------------------------------------------------------
-  // subagents.getRun
-  // ---------------------------------------------------------------------------
 
   test("subagents.getRun — returns entries from transcript registry", async () => {
     const entries = [{ type: "assistant", content: "hello" }] as unknown as ReturnType<

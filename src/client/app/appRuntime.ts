@@ -6,9 +6,6 @@ import type { SocketStatus } from "./socket"
 import type { UpdateSnapshot } from "../../shared/types"
 import { sameDiffs } from "../../shared/equality"
 
-// ---------------------------------------------------------------------------
-// Diff preservation (extracted from useAppGlobalState for testability)
-// ---------------------------------------------------------------------------
 
 export { sameDiffs }
 
@@ -25,18 +22,6 @@ export function shouldPreserveExistingProjectDiffs(
   )
 }
 
-// ---------------------------------------------------------------------------
-// UpdateRestartRuntime — explicit state machine for update/restart lifecycle
-//
-// Replaces three tangled useEffects in useAppGlobalState. The pure transition
-// function is testable without React or side effects.
-//
-// State diagram:
-//   idle ──(reload_requested)──► awaiting_disconnect
-//   awaiting_disconnect ──(disconnected)──► awaiting_server_ready
-//   awaiting_server_ready ──(server_ready)──► idle  [+ dom.reload()]
-//   any ──(aborted)──► idle
-// ---------------------------------------------------------------------------
 
 export type UpdateRestartPhase =
   | "idle"
@@ -180,7 +165,6 @@ export class UpdateRestartRuntime {
         return
       }
     } catch {
-      // Server not yet reachable — keep polling
     }
     if (this.pollCancelled) return
     this.pollTimeoutId = this.deps.timer.setTimeout(() => {

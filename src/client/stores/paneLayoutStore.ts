@@ -24,30 +24,11 @@ import { isRecord } from "../../shared/errors"
 import { asJsonValue } from "../lib/asJsonValue"
 import { buildLayoutFromLegacy, type LegacyProjectLayout } from "./paneLayoutMigration"
 
-/**
- * The workspace pane layout — ONE tree for the whole app.
- *
- * It used to be one tree per project, which meant the workspace you saw was
- * whichever project the selected chat happened to belong to: opening a chat in
- * project B swapped the whole arrangement out, and chats from two projects
- * could never sit side by side. Since a chat tab addresses its own chatId and
- * renders its own live transcript, there is nothing project-shaped left about
- * the arrangement itself — so the project axis is gone rather than re-keyed.
- * What a tab needs from a project it resolves at render time from that tab's
- * own target (see ChatPage's terminal renderer).
- *
- * The tree itself is pure (`lib/paneTree`); this store owns only what the
- * engine deliberately does not: the ids for newly created nodes. Every action
- * funnels through `apply`, so a pure operation returning null becomes an
- * untouched state object rather than a pointless re-render.
- */
 
 interface PaneLayoutState {
   layout: PaneLayout
-  /** Monotonic source of unique node ids. Persisted so ids never collide across reloads. */
   nodeSequence: number
 
-  /** Read the current tree without subscribing — for effects and callbacks. */
   getLayout: () => PaneLayout
   openTab: (target: PaneTabTarget) => void
   closeTab: (tabId: string) => void
@@ -55,21 +36,14 @@ interface PaneLayoutState {
   focusPane: (paneId: string) => void
   splitPane: (args: { tabId: string; targetPaneId: string; position: SplitPosition }) => void
   moveTabToPane: (tabId: string, toPaneId: string, index?: number) => void
-  /** Keyboard: move focus to the nearest pane in a direction. */
   focusAdjacentPane: (direction: PaneDirection) => void
-  /** Keyboard: nudge the divider beside the focused pane the way the arrow points. */
   resizeFocusedPane: (direction: PaneDirection) => void
-  /** Keyboard: step the focused pane's active tab, wrapping at both ends. */
   cycleFocusedPaneTab: (delta: number) => void
-  /** Keyboard: close the focused pane's active tab. */
   closeFocusedTab: () => void
-  /** Keyboard: split around the focused pane's active tab. */
   splitFocusedPane: (position: SplitPosition) => void
   reorderPaneTabs: (paneId: string, orderedTabIds: readonly string[]) => void
   resizeGroup: (groupId: string, index: number, deltaRatio: number) => void
-  /** Commit a finished drag: absolute fractions, in child order. */
   setGroupSizes: (groupId: string, sizes: readonly number[]) => void
-  /** Install a layout derived from the pre-tabs stores, unless one already exists. */
   seedFromLegacy: (legacy: LegacyProjectLayout) => void
 }
 
@@ -80,11 +54,6 @@ function hasAnyTab(layout: PaneLayout): boolean {
 export const usePaneLayoutStore = create<PaneLayoutState>()(
   persist(
     (set, get) => {
-      /**
-       * Run a pure operation against the layout. A null result means "nothing
-       * changed", and the state object is returned untouched so zustand skips
-       * notifying subscribers.
-       */
       function apply(operation: (layout: PaneLayout) => PaneLayout | null): void {
         set((state) => {
           const next = operation(state.layout)
@@ -93,7 +62,6 @@ export const usePaneLayoutStore = create<PaneLayoutState>()(
         })
       }
 
-      /** Unique ids for the nodes an operation may create. */
       function takeNodeIds() {
         const sequence = get().nodeSequence + 1
         set({ nodeSequence: sequence })
@@ -123,9 +91,6 @@ export const usePaneLayoutStore = create<PaneLayoutState>()(
         moveTabToPane: (tabId, toPaneId, index) =>
           apply((layout) => moveTabInLayout(layout, tabId, toPaneId, index)),
 
-        // ─── Keyboard commands ────────────────────────────────────────────────
-        // Each derives its subject (the focused pane, its active tab) INSIDE the
-        // store, so a caller only has to say what the user pressed.
 
         focusAdjacentPane: (direction) =>
           apply((layout) => {
@@ -149,7 +114,6 @@ export const usePaneLayoutStore = create<PaneLayoutState>()(
 
             const current = pane.tabs.findIndex((tab) => tab.tabId === pane.focusedTabId)
             const from = current === -1 ? 0 : current
-            // Wrap in both directions; `%` alone goes negative for delta -1.
             const next = (((from + delta) % pane.tabs.length) + pane.tabs.length) % pane.tabs.length
             return focusTabInLayout(layout, pane.tabs[next].tabId)
           }),
@@ -182,10 +146,6 @@ export const usePaneLayoutStore = create<PaneLayoutState>()(
         setGroupSizes: (groupId, sizes) =>
           apply((layout) => setGroupSizesInLayout(layout, groupId, sizes)),
 
-        // Seeds the ONE workspace, so it fires for whichever project the user
-        // opens first and is a no-op forever after — the arrangement is no
-        // longer per project, and re-seeding from a second project would blow
-        // away tabs the user has since arranged.
         seedFromLegacy: (legacy) =>
           set((state) => {
             if (hasAnyTab(state.layout)) return state
@@ -196,33 +156,15 @@ export const usePaneLayoutStore = create<PaneLayoutState>()(
     {
       name: "pane-layouts",
       version: 2,
-      /**
-       * v1 persisted one tree PER PROJECT under `layouts`. There is no honest
-       * mapping from N project trees to the single workspace tree, so the
-       * arrangement is dropped rather than guessed at: ChatPage's reconcile
-       * effect re-opens a tab for the chat in the URL, for the active project's
-       * terminals, and for the changes panel when it is showing, so the only
-       * thing actually lost is hand-made splits and sizes — once.
-       *
-       * `nodeSequence` is carried over so ids minted after the migration cannot
-       * collide with ids still referenced by per-pane state.
-       */
       migrate: (persisted, version) => {
         if (version >= 2) return persisted
         const rawSequence = isRecord(persisted) ? persisted.nodeSequence : undefined
         return { nodeSequence: typeof rawSequence === "number" ? rawSequence : 0 }
       },
-      /**
-       * The persisted layout is rebuilt through `normalizeLayout` on read, so a
-       * tree written by an older release — or hand-edited — is repaired rather
-       * than trusted. This is why the tree needs no structural migrations.
-       */
       merge: (persisted, current) => {
         if (!isRecord(persisted)) return current
 
         const normalized = normalizeLayout(asJsonValue(persisted.layout))
-        // A tree with no tabs carries no information; keep the default so a
-        // stale empty entry cannot suppress the legacy seed.
         const layout = hasAnyTab(normalized) ? normalized : current.layout
 
         const rawSequence = persisted.nodeSequence

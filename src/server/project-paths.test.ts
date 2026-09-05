@@ -86,7 +86,7 @@ describe("listProjectPaths", () => {
     await writeFile(path.join(root, "a.txt"), "")
 
     const first = await listProjectPaths({ projectId: "p6", localPath: root, query: "a" })
-    await writeFile(path.join(root, "b.txt"), "") // added after first call
+    await writeFile(path.join(root, "b.txt"), "")
     const second = await listProjectPaths({ projectId: "p6", localPath: root, query: "b" })
 
     expect(first.map((p) => p.path)).toContain("a.txt")

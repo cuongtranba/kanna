@@ -11,7 +11,6 @@ import {
   type UploadFileFn,
 } from "./DropAttachmentPlugin"
 
-// ─── Fixtures ─────────────────────────────────────────────────────────────────
 
 const fakeAttachment: ChatAttachment = {
   id: "drop-att-1",
@@ -24,7 +23,6 @@ const fakeAttachment: ChatAttachment = {
   size: 4096,
 }
 
-// ─── Editor factory ────────────────────────────────────────────────────────────
 
 function buildEditor() {
   const editor = createHeadlessEditor({
@@ -34,7 +32,6 @@ function buildEditor() {
       throw e
     },
   })
-  // Seed a paragraph so $insertNodes has a selection context
   editor.update(
     () => {
       const root = $getRoot()
@@ -46,7 +43,6 @@ function buildEditor() {
   return editor
 }
 
-// ─── Mock uploadFile factory ──────────────────────────────────────────────────
 
 function makeUploadFileMock(attachment: ChatAttachment = fakeAttachment): UploadFileFn {
   return mock(() => ({
@@ -55,10 +51,8 @@ function makeUploadFileMock(attachment: ChatAttachment = fakeAttachment): Upload
   })) as unknown as UploadFileFn
 }
 
-// ─── Helper: build a minimal DragEvent-like object ──────────────────────────
 
 function makeDragEvent(files: File[]): DragEvent {
-  // Build an array-like DataTransferItemList with integer-indexed items
   const itemObjs = files.map((file) => ({
     kind: "file" as const,
     type: file.type,
@@ -79,7 +73,6 @@ function makeDragEvent(files: File[]): DragEvent {
   } as unknown as DragEvent
 }
 
-// ─── Tests: getDroppedFiles ────────────────────────────────────────────────────
 
 describe("getDroppedFiles", () => {
   it("extracts files from dataTransfer.items", () => {
@@ -122,7 +115,6 @@ describe("getDroppedFiles", () => {
 
   it("falls back to dataTransfer.files when items is absent", () => {
     const file = new File(["x"], "fallback.txt", { type: "text/plain" })
-    // Build a mock FileList-like object
     const fileList = {
       length: 1,
       0: file,
@@ -140,7 +132,6 @@ describe("getDroppedFiles", () => {
   })
 })
 
-// ─── Tests: uploadDroppedFiles ─────────────────────────────────────────────────
 
 describe("uploadDroppedFiles", () => {
   it("uploads a single file and inserts an AttachmentNode", async () => {

@@ -189,10 +189,6 @@ describe("runPluginCli", () => {
   })
 
   test("a non-Error rejection still yields one readable line", async () => {
-    // A rejected NON-Error: `errorMessage` is what keeps this from printing
-    // `[object Object]` or a stack. Held in a variable so the rejection reason
-    // is opaque to `prefer-promise-reject-errors` — rejecting with a literal
-    // string is exactly the case under test, not a mistake to lint away.
     const nonError: unknown = "compile blew up"
     const fake = createFakeService({
       install: () => Promise.reject(nonError),
@@ -272,8 +268,6 @@ describe("runCli plugin arm", () => {
       },
       log: (message) => log.push(message),
       warn: (message) => warn.push(message),
-      // The suite installs its own service via `setPluginServiceForTest`; the
-      // real boot step would replace it with one backed by the real settings.json.
       preparePluginService: async () => {},
     }
   }

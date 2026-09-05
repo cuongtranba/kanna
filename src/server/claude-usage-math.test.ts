@@ -6,9 +6,6 @@ import {
   resolveFinalTurnUsage,
 } from "./claude-usage-math"
 
-// ---------------------------------------------------------------------------
-// normalizeClaudeUsageSnapshot
-// ---------------------------------------------------------------------------
 
 describe("normalizeClaudeUsageSnapshot", () => {
   test("returns null for null input", () => {
@@ -52,7 +49,6 @@ describe("normalizeClaudeUsageSnapshot", () => {
       cache_read_input_tokens: 30,
     })
     expect(result).not.toBeNull()
-    // usedTokens includes cached tokens (which are part of total input)
     expect(result!.cachedInputTokens).toBe(30)
   })
 
@@ -82,9 +78,6 @@ describe("normalizeClaudeUsageSnapshot", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// resolveFinalTurnUsage
-// ---------------------------------------------------------------------------
 
 describe("resolveFinalTurnUsage", () => {
   test("returns null when latestUsageSnapshot is null", () => {
@@ -117,9 +110,6 @@ describe("resolveFinalTurnUsage", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// maxClaudeContextWindowFromModelUsage
-// ---------------------------------------------------------------------------
 
 describe("maxClaudeContextWindowFromModelUsage", () => {
   test("returns undefined for null", () => {
@@ -151,9 +141,6 @@ describe("maxClaudeContextWindowFromModelUsage", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// parseConfiguredContextWindowFromModelId
-// ---------------------------------------------------------------------------
 
 describe("parseConfiguredContextWindowFromModelId", () => {
   test("returns 1_000_000 for model ids ending with [1m]", () => {

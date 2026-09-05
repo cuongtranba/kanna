@@ -1,10 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { parseMermaidError } from "./mermaidError"
 
-// Verbatim mermaid 11.15 output for an erDiagram block whose last attribute
-// has a type but no name — the parser blames the closing brace, not the line
-// that is actually wrong, which is exactly why the line number must survive
-// into the UI.
 const JISON_PARSE_ERROR = [
   "Parse error on line 35:",
   "... jsonb quotas  }  TENANT_SECRETS {",

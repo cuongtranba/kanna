@@ -1,9 +1,3 @@
-/**
- * The only file allowed to touch process/socket/filesystem primitives for the
- * plugin server runtime (side-effect seal: `.adapter.ts`). `plugin-service.ts`
- * holds the domain state machine (install/enable/start/call/stop) and drives
- * these functions; nothing here decides plugin lifecycle policy.
- */
 import { spawn } from "node:child_process"
 import { randomUUID } from "node:crypto"
 import { createServer, type Socket } from "node:net"
@@ -28,23 +22,15 @@ export async function writePluginServerBundle(bundlePath: string, code: string):
   await Bun.write(bundlePath, code)
 }
 
-/** Compiled browser bundle, written beside `server.js` so `GET /api/plugins/:id/client.js` can serve it. */
 export async function writePluginClientBundle(bundlePath: string, code: string): Promise<void> {
   await Bun.write(bundlePath, code)
 }
 
-/** Null when the plugin was never installed on this machine, or its build dir was removed. */
 export async function readPluginClientBundle(bundlePath: string): Promise<string | null> {
   const file = Bun.file(bundlePath)
   return (await file.exists()) ? file.text() : null
 }
 
-/**
- * MEASURED (`../../shared/plugins/paths.ts`): a build-dir-rooted socket path
- * overflows macOS's 104-byte `sun_path` cap for a long plugin id, so the
- * socket lives in the system temp dir under a short RANDOM name — never
- * derived from the plugin id, which is unbounded up to 64 bytes on its own.
- */
 export function allocatePluginSocketPath(): string {
   for (let attempt = 0; attempt < 5; attempt++) {
     const candidate = join(tmpdir(), `kanna-plugin-${randomUUID().replace(/-/g, "").slice(0, 12)}.sock`)
@@ -59,19 +45,10 @@ export interface PluginHostConnection {
 }
 
 export interface PluginSocketListener {
-  /**
-   * Resolves once the child both connects AND sends its `"ready"` message —
-   * a bare accept does not mean `contribute()` has finished registering RPC
-   * handlers yet.
-   */
   readonly ready: Promise<PluginHostConnection>
   stop(): void
 }
 
-/**
- * Listens BEFORE the child spawns (`plugin-service.ts`'s `start`), so the
- * child never races a connection attempt against a not-yet-bound socket.
- */
 export function listenForPluginChild(
   socketPath: string,
   onMessage: (message: PluginChildMessage) => void,
@@ -133,7 +110,6 @@ export interface SpawnedPluginChild {
   kill(): void
 }
 
-/** The subprocess entry script, resolved relative to this adapter's own directory. */
 const CHILD_ENTRY_PATH = join(import.meta.dir, "plugin-child-entry.adapter.ts")
 
 function pipeLines(
@@ -145,15 +121,6 @@ function pipeLines(
   createInterface({ input: stream }).on("line", (text) => onLog({ stream: streamName, text }))
 }
 
-/**
- * Spawns the compiled plugin's own OS process. Runs the SAME `bun` binary
- * currently executing the Kanna daemon (`process.execPath`) rather than a
- * `"bun"` lookup on `$PATH`, so the child is never accidentally a different
- * installed Bun version. stdout/stderr are piped line-by-line into `onLog`
- * (destined for `createPluginLogRing()` on the domain side) — the RPC
- * protocol itself rides the Unix socket, never stdio, so a plugin's own
- * `console.log` can never corrupt an RPC frame.
- */
 export function spawnPluginChild(args: {
   readonly bundlePath: string
   readonly socketPath: string

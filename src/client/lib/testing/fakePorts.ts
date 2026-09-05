@@ -2,21 +2,6 @@ import type { DomPort, ServiceWorkerRegistrationLike } from "../../ports/domPort
 import type { StoragePort } from "../../ports/storagePort"
 import type { TimerPort } from "../../ports/timerPort"
 
-/**
- * Cast-free fakes for the browser ports.
- *
- * Declared as `DomPort` / `TimerPort` / `StoragePort` rather than built with an
- * `as unknown as` cast on purpose: a cast silently hides a method the real port
- * gained, and the test then fails at runtime deep inside the code under test
- * (that is exactly how the first draft of the socket-provider test broke, on a
- * missing `addServiceWorkerMessageListener`). Typed this way, a new port member
- * is a compile error here instead.
- *
- * Behaviour is inert by design — every listener returns a no-op unsubscribe and
- * nothing dispatches. Tests that need to DRIVE events should build a recording
- * fake locally; these exist so a test can mount a tree without caring about the
- * DOM at all.
- */
 
 export interface FakeDomPortOptions {
   href?: string
@@ -25,7 +10,7 @@ export interface FakeDomPortOptions {
   visibilityState?: DocumentVisibilityState
 }
 
-const noopUnsubscribe = (): void => { /* no-op */ }
+const noopUnsubscribe = (): void => { }
 
 export function makeFakeDomPort(options: FakeDomPortOptions = {}): DomPort {
   const {
@@ -46,12 +31,12 @@ export function makeFakeDomPort(options: FakeDomPortOptions = {}): DomPort {
     getHref: () => currentHref,
     getPathname: () => new URL(currentHref).pathname,
     getSearch: () => new URL(currentHref).search,
-    reload: () => { /* no-op */ },
+    reload: () => { },
     getUserAgent: () => "FakeBrowser/1.0",
     isSecureContext: () => true,
     getInnerWidth: () => innerWidth,
     getInnerHeight: () => innerHeight,
-    setBodyStyle: () => { /* no-op */ },
+    setBodyStyle: () => { },
     getBodyStyle: () => "",
     addWindowListener: () => noopUnsubscribe,
     addDocumentListener: () => noopUnsubscribe,
@@ -70,18 +55,18 @@ export function makeFakeDomPort(options: FakeDomPortOptions = {}): DomPort {
       Promise.reject(new Error("fake DomPort: service workers are not supported")),
     getReadyServiceWorkerRegistration: (): Promise<ServiceWorkerRegistrationLike> =>
       Promise.reject(new Error("fake DomPort: service workers are not supported")),
-    upsertHeadMeta: () => { /* no-op */ },
+    upsertHeadMeta: () => { },
     getComputedBackgroundColor: () => "",
-    setDocumentElementColorScheme: () => { /* no-op */ },
-    setDocumentElementStyleProperty: () => { /* no-op */ },
-    toggleDocumentElementClass: () => { /* no-op */ },
+    setDocumentElementColorScheme: () => { },
+    setDocumentElementStyleProperty: () => { },
+    toggleDocumentElementClass: () => { },
     matchesMediaQuery: () => false,
     addMediaQueryListener: () => noopUnsubscribe,
     addWindowListenerWithOptions: () => noopUnsubscribe,
     isWebShareSupported: () => false,
     webShare: () => Promise.resolve(),
     getBaseURI: () => currentHref,
-    triggerDownload: () => { /* no-op */ },
+    triggerDownload: () => { },
     getCssVar: (_name, fallback) => fallback,
     getComputedStyle: () => ({
       getPropertyValue: () => "",
@@ -90,37 +75,33 @@ export function makeFakeDomPort(options: FakeDomPortOptions = {}): DomPort {
       paddingTop: "0px",
       paddingBottom: "0px",
     }),
-    openWindow: () => { /* no-op */ },
-    dispatchContextMenuEvent: () => { /* no-op */ },
+    openWindow: () => { },
+    dispatchContextMenuEvent: () => { },
     isTouchDevice: () => false,
     hasTypeaheadMenuOpen: () => false,
     isIOSStandalone: () => false,
-    // happy-dom is set up by the renderer helpers, so a real element exists.
     getBodyElement: () => document.body,
-    // Never silently "confirm" a destructive prompt in a test.
     confirmDialog: () => false,
-    dispatchCustomWindowEvent: () => { /* no-op */ },
+    dispatchCustomWindowEvent: () => { },
     createElement: (tagName) => document.createElement(tagName),
   }
 
   return dom
 }
 
-/** Timers that never fire — callers assert on scheduling, not on elapsed time. */
 export function makeFakeTimerPort(): TimerPort {
   let nextId = 1
   const timer: TimerPort = {
     setTimeout: () => nextId++,
-    clearTimeout: () => { /* no-op */ },
+    clearTimeout: () => { },
     setInterval: () => nextId++,
-    clearInterval: () => { /* no-op */ },
+    clearInterval: () => { },
     requestAnimationFrame: () => nextId++,
-    cancelAnimationFrame: () => { /* no-op */ },
+    cancelAnimationFrame: () => { },
   }
   return timer
 }
 
-/** In-memory storage; each call gets its own map, so tests cannot leak state. */
 export function makeFakeStoragePort(): StoragePort {
   const store = new Map<string, string>()
   const storage: StoragePort = {

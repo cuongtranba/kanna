@@ -4,11 +4,6 @@ import os from "node:os"
 import path from "node:path"
 import { initObservability, type ObservabilityHandle } from "./otel.adapter"
 
-// KANNA_OTEL is deliberately NOT set to "enabled" in any test: the enabled
-// path opens sockets to an OTLP collector, and its shutdown would fire a
-// final flush against a collector that does not exist in CI. The contracts
-// tested here are the ones a broken environment depends on: disabled-by-
-// default, idempotent shutdown, and the SIGUSR2 heap snapshot.
 
 let handle: ObservabilityHandle | null = null
 const savedEnv = { ...process.env }
@@ -25,7 +20,6 @@ describe("initObservability", () => {
     process.env.KANNA_MEMLOG_MS = "0"
     process.env.KANNA_HEAP_SNAPSHOT = "disabled"
     handle = initObservability({ dataDir: os.tmpdir() })
-    // No provider registered → the api stays no-op; shutdown must still resolve.
     await handle.shutdown()
     handle = null
   })
@@ -46,7 +40,6 @@ describe("initObservability", () => {
     handle = initObservability({ dataDir })
 
     process.emit("SIGUSR2")
-    // The handler is synchronous; the file exists as soon as emit returns.
     const dir = path.join(dataDir, "heap-snapshots")
     const files = fs.readdirSync(dir)
     expect(files).toHaveLength(1)

@@ -1,16 +1,8 @@
-/**
- * Subagent run read-model and write-path layers extracted from event-store.ts.
- *
- * Read functions are pure folds over the in-memory `subagentRunsByChatId` map.
- * `appendSubagentEvent` has IO via injected deps (enqueueDiskAppend) and
- * calls capTranscriptEntry for tool_result capping.
- */
 import { MAX_SUBAGENT_ENTRIES_PER_RUN, MAX_SUBAGENT_RUNS_PER_CHAT } from "../shared/subagent-types"
 import type { SubagentRunSnapshot, TranscriptEntry } from "../shared/types"
 import type { ChatRecord, SubagentRunEvent } from "./events"
 import { capTranscriptEntry } from "./subagent-entry-cap.adapter"
 
-// ─── Write-path deps ──────────────────────────────────────────────────────
 
 export interface AppendSubagentDeps {
   readonly chatsById: Map<string, ChatRecord>
@@ -20,16 +12,8 @@ export interface AppendSubagentDeps {
   enqueueDiskAppend: (filePath: string, payload: string) => void
 }
 
-/** Alias for the per-chat inner map type used throughout this module. */
 export type SubagentRunMap = Map<string, SubagentRunSnapshot>
 
-/**
- * Apply a single `SubagentRunEvent` to the in-memory
- * `subagentRunsByChatId` map (mutates in place).
- *
- * Mirrors the eight `case "subagent_*"` branches that previously lived
- * inside `EventStore.applyEvent`.
- */
 export function applySubagentEvent(
   subagentRunsByChatId: Map<string, SubagentRunMap>,
   event: SubagentRunEvent,
@@ -90,9 +74,6 @@ export function applySubagentEvent(
       run.status = "completed"
       run.finishedAt = event.timestamp
       run.finalText = event.finalContent
-      // Prefer event.usage if present; otherwise keep what subagent_entry_appended
-      // already mirrored — without this guard a streaming run whose completion
-      // event omits usage would silently erase it.
       run.usage = event.usage ?? run.usage ?? null
       evictSettledRuns(chatMap)
       break
@@ -166,10 +147,6 @@ function evictSettledRuns(map: SubagentRunMap): void {
   }
 }
 
-/**
- * Return all subagent runs for a chat as a plain record keyed by runId.
- * Returns `{}` if the chat has no subagent map (e.g. was never started).
- */
 export function getSubagentRuns(
   subagentRunsByChatId: Map<string, SubagentRunMap>,
   chatId: string,
@@ -179,9 +156,6 @@ export function getSubagentRuns(
   return Object.fromEntries(map.entries())
 }
 
-/**
- * Yield every subagent run whose status is `"running"`, across all chats.
- */
 export function* runningSubagentRuns(
   subagentRunsByChatId: Map<string, SubagentRunMap>,
 ): Iterable<SubagentRunSnapshot> {
@@ -192,13 +166,7 @@ export function* runningSubagentRuns(
   }
 }
 
-// ─── Write-path ────────────────────────────────────────────────────────────
 
-/**
- * Cap tool_result entries, apply in-memory synchronously (so the UI sees the
- * update immediately), then enqueue the disk append on the write-chain.
- * Mirrors the ephemeral-event optimisation in the original EventStore method.
- */
 export async function appendSubagentEvent(
   deps: AppendSubagentDeps,
   event: SubagentRunEvent,

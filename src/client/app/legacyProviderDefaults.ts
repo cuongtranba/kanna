@@ -1,11 +1,3 @@
-/**
- * legacyProviderDefaults — decode helpers for the pre-migration browser
- * settings a client persisted into localStorage.
- *
- * Extracted from useAppGlobalState so the one-way migration decode does not
- * count against that module's architecture-budget ceiling. Pure: every entry
- * point takes a value (or a StoragePort) and returns a typed patch fragment.
- */
 
 import type { AppSettingsPatch } from "../../shared/types"
 import { isJsonObject, safeJsonParse, type JsonObject, type JsonValue } from "../../shared/json"
@@ -20,12 +12,6 @@ export function readPersistedZustandState(key: string, storage: StoragePort): Js
   return isJsonObject(parsed.state) ? parsed.state : null
 }
 
-/**
- * Decode the `providerDefaults` blob a pre-migration client persisted into
- * localStorage. The blob is JSON, so every field is read back one guard at a
- * time rather than forwarded wholesale — the patch it becomes is a typed
- * contract, and the legacy writer is no longer around to keep its end of it.
- */
 export function decodeLegacyProviderDefaults(value: JsonValue): AppSettingsPatch["providerDefaults"] {
   if (!isJsonObject(value)) return undefined
   const decoded: NonNullable<AppSettingsPatch["providerDefaults"]> = {}

@@ -5,13 +5,6 @@ interface Props {
   message: ProcessedMemoryLoadedMessage
 }
 
-/**
- * Quiet single-line transcript row for a Claude Code memory/rule file that was
- * auto-loaded into context ("Loaded CLAUDE.md", "Loaded .claude/rules/*.md").
- * PTY-only; emitted from the transcript's `nested_memory` lines. Low-emphasis
- * by design — Margin Gray muted, mono path with the directory dimmed and the
- * filename carrying the weight, so a wall of rule loads stays legible.
- */
 export function MemoryLoadedMessage({ message }: Props) {
   const lastSlash = message.path.lastIndexOf("/")
   const dir = lastSlash >= 0 ? message.path.slice(0, lastSlash + 1) : ""

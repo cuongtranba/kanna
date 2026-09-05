@@ -69,8 +69,6 @@ describe("CLAUDE_AUTOCOMPACT_PCT_OVERRIDE", () => {
   })
 
   test("pct override caps below default threshold (upstream Math.min)", () => {
-    // 200k window: default threshold = 167_000. pct=70 of 180_000 effective = 126_000.
-    // min(126_000, 167_000) = 126_000.
     const env = { CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: "70" }
     expect(getAutoCompactThreshold(200_000, MAX_OUTPUT_TOKENS_FOR_SUMMARY, env))
       .toBe(Math.floor(180_000 * 0.7))
@@ -108,9 +106,6 @@ describe("shouldProactivelyCompact", () => {
   })
 
   test("1M window: 200k used is well below threshold (regression for SDK#238)", () => {
-    // Pre-fix: SDK reported contextWindow=200_000 even on 1m beta → threshold=167k
-    // → compacted at ~17% of real 1M window. With maxTokens correctly seeded
-    // from the [1m] model id, 200k used is far below the 967k threshold.
     expect(
       shouldProactivelyCompact({ usedTokens: 200_000, maxTokens: 1_000_000 }),
     ).toBe(false)
@@ -151,8 +146,6 @@ describe("getLatestContextWindowUsage", () => {
   })
 
   test("returns null when a more recent compact_boundary precedes any usage", () => {
-    // A boundary between earlier usage and now means context was compacted —
-    // we must not trigger another compact off the pre-compaction usage entry.
     const messages = [
       usageEntry(180_000, 200_000, 1),
       compactBoundary(2),
@@ -171,11 +164,6 @@ describe("getLatestContextWindowUsage", () => {
 })
 
 describe("scanLatestContextWindowUsage", () => {
-  // getLatestContextWindowUsage answers null for two different reasons, and a
-  // caller reading only a WINDOW of the transcript has to tell them apart: a
-  // boundary hit is conclusive, running off the front of the window is not.
-  // Without the distinction a tail reader cannot know whether widening the
-  // window would change the answer.
   test("reports found:false on an empty window", () => {
     expect(scanLatestContextWindowUsage([])).toEqual({ found: false })
   })
@@ -195,18 +183,12 @@ describe("scanLatestContextWindowUsage", () => {
     ]
     const scan = scanLatestContextWindowUsage(messages)
     expect(scan.found).toBe(true)
-    // Identity, not equality — the scan hands back the entry's own usage
-    // object rather than a copy.
     expect(scan.found ? scan.usage : undefined).toBe(
       (messages[1] as Extract<TranscriptEntry, { kind: "context_window_updated" }>).usage,
     )
   })
 
   test("reports found:true with a null usage for a newer compact_boundary", () => {
-    // The case the tri-state exists for. A boundary stays the newest marker
-    // for the rest of a chat's life after any compact, so a scanner that read
-    // this as "not found" would widen its window to the start of the file on
-    // every send from then on.
     const messages = [
       usageEntry(180_000, 200_000, 1),
       compactBoundary(2),
@@ -223,11 +205,6 @@ describe("scanLatestContextWindowUsage", () => {
   })
 })
 
-// Upstream-sync lock. These constants are hand-mirrored from
-// anthropics/claude-code src/services/compact/autoCompact.ts. If upstream
-// changes them, Kanna's proactive trigger silently drifts from the CLI's
-// real auto-compact point. This test fails on any local edit, forcing a
-// conscious re-check against upstream before the value can move.
 describe("upstream constant pins", () => {
   test("MAX_OUTPUT_TOKENS_FOR_SUMMARY matches upstream", () => {
     expect(MAX_OUTPUT_TOKENS_FOR_SUMMARY).toBe(20_000)
@@ -242,10 +219,6 @@ describe("upstream constant pins", () => {
   })
 })
 
-// Cache-token misfire guard. The trigger keys off the snapshot's
-// `usedTokens` (the real in-context size). Prompt-cache growth surfaces in
-// `cachedInputTokens`, NOT `usedTokens`, so a cache-heavy turn must never
-// trip a compact on its own; only true context growth may.
 describe("cache tokens do not drive the trigger", () => {
   test("huge cachedInputTokens with low usedTokens does NOT trigger", () => {
     const usage = {

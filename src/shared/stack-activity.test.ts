@@ -15,7 +15,6 @@ describe("aggregateStackActivity", () => {
     expect(aggregateStackActivity([])).toEqual(EMPTY_STACK_ACTIVITY)
   })
 
-  // An idle chat must not inflate activeChats, or a quiet stack reads as busy.
   test("idle chats contribute nothing", () => {
     expect(aggregateStackActivity([activity(), activity()])).toEqual(EMPTY_STACK_ACTIVITY)
   })
@@ -57,7 +56,6 @@ describe("formatStackActivity", () => {
       .toBe("2 agents")
   })
 
-  // What the user must act on comes first; work in flight is just context.
   test("leads with what blocks the user", () => {
     const label = formatStackActivity({
       activeChats: 3,

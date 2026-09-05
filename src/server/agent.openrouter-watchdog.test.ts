@@ -5,8 +5,6 @@ import type { LlmProviderSnapshot, SlashCommand, TranscriptEntry } from "../shar
 import { AsyncEventQueue } from "./test-helpers/async-event-queue"
 import { waitFor } from "./test-helpers/wait-for"
 
-// Minimal store (trimmed copy from agent.openrouter-model.test.ts — do NOT
-// modify agent.test.ts).
 function createFakeStore() {
   const chat = {
     id: "chat-1",
@@ -133,9 +131,6 @@ describe("AgentCoordinator OpenRouter first-entry watchdog", () => {
             setModel: async () => {},
             setPermissionMode: async () => {},
             getSupportedCommands: async () => [],
-            // Never emit an entry — reproduces session a71516d4's silent stall
-            // where the SDK connected (account_info) but no system_init/result
-            // ever arrived.
             sendPrompt: async () => {},
           }
         },
@@ -173,8 +168,6 @@ describe("AgentCoordinator OpenRouter first-entry watchdog", () => {
         readLlmProvider: async () => openrouterSnapshot(),
         openrouterFirstEntryTimeoutMs: 200,
         startClaudeSession: async () => {
-          // Emit a result entry promptly — the watchdog must be cleared and
-          // never fire.
           events.push({
             type: "transcript",
             entry: {
@@ -210,7 +203,6 @@ describe("AgentCoordinator OpenRouter first-entry watchdog", () => {
         model: "moonshotai/kimi-k2.5:nitro",
       })
 
-      // Wait past the watchdog window; the timely entry must keep it disarmed.
       await new Promise((resolve) => setTimeout(resolve, 500))
 
       expect(store.turnFailedCount).toBe(0)
@@ -227,10 +219,6 @@ describe("AgentCoordinator OpenRouter SDK-session prompt delivery", () => {
   test(
     "delivers the user prompt to the SDK session for openrouter (regression: prompt-delivery gate)",
     async () => {
-      // Regression for the gate that delivered prompts only when
-      // `provider === "claude"`. OpenRouter rides the same SDK session but was
-      // excluded, so its prompt never reached `sendPrompt` and every turn hung
-      // until the watchdog. `providerUsesSdkSession` now covers both.
       const events = new AsyncEventQueue<HarnessEvent>()
       const store = createFakeStore()
       const sentPrompts: string[] = []
@@ -252,8 +240,6 @@ describe("AgentCoordinator OpenRouter SDK-session prompt delivery", () => {
             getSupportedCommands: async () => [],
             sendPrompt: async (content: string) => {
               sentPrompts.push(content)
-              // A real upstream would now stream a turn; emit a success result
-              // so the turn completes cleanly and the watchdog never fires.
               events.push({
                 type: "transcript",
                 entry: {

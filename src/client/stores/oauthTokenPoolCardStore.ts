@@ -6,21 +6,17 @@ export interface TokenRowState {
 }
 
 interface OAuthTokenPoolCardState {
-  // AddTokenForm state
   addLabel: string
   addToken: string
   addSubmitting: boolean
 
-  // TokenRow per-row test state, keyed by token entry id
   tokenRowStates: Record<string, TokenRowState>
 
-  // Actions — AddTokenForm
   setAddLabel: (label: string) => void
   setAddToken: (token: string) => void
   setAddSubmitting: (submitting: boolean) => void
   resetAddForm: () => void
 
-  // Actions — TokenRow
   setTokenRowTesting: (id: string, testing: boolean) => void
   setTokenRowTestResult: (id: string, testResult: string | null) => void
   clearTokenRowState: (id: string) => void

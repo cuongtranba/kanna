@@ -12,12 +12,6 @@ export interface PtyInstanceRegistry {
   snapshot(): PtyInstanceState[]
   subscribe(listener: PtyInstanceListener, options?: PtyInstanceSubscribeOptions): () => void
   upsert(chatId: string, patch: Partial<Omit<PtyInstanceState, "chatId">>): void
-  /**
-   * Apply `patch` to the chat's entry ONLY if its live `pid` still equals
-   * `pid`. Used by the driver's teardown so a stale re-spawn handle (whose
-   * pid was already overwritten by the replacement spawn) cannot flip the
-   * live entry to `exited`. No entry, or a different pid → no-op.
-   */
   markExitedIfCurrent(
     chatId: string,
     pid: number,
@@ -27,12 +21,7 @@ export interface PtyInstanceRegistry {
 }
 
 export interface CreatePtyInstanceRegistryOptions {
-  /** Trailing-edge coalesce window for "updated" deltas, in ms. 0 disables. */
   coalesceMs?: number
-  /**
-   * TTL after which entries that enter `phase: "exited"` are auto-removed
-   * to bound in-memory growth. 0 disables auto-prune.
-   */
   exitedTtlMs?: number
 }
 

@@ -120,8 +120,6 @@ describe("evaluateSidebarSwipe", () => {
   })
 })
 
-// The pane tab strip scrolls horizontally and sits under the left-edge band, so
-// swiping it back toward its first tab would otherwise fling the sidebar open.
 describe("swipes that start inside a horizontal scroller", () => {
   const IN_SCROLLER: SwipeGestureContext = {
     ...MOBILE_CTX_CLOSED,
@@ -253,7 +251,6 @@ describe("sidebarDragProgress", () => {
   })
 
   test("a drag in the exhausted direction is not the drawer's to draw", () => {
-    // Pulling right on an already-open drawer, or left on a closed one.
     expect(sidebarDragProgress(at(300), at(360), 300, open)).toBeNull()
     expect(sidebarDragProgress(at(0), at(-60), 300, mobile)).toBeNull()
   })
@@ -270,9 +267,6 @@ describe("sidebarDragProgress", () => {
   })
 
   test("tracking does not change what a release MEANS", () => {
-    // The thresholds are the gesture users already learned. Progress is a
-    // separate question, and a drag that draws must still be judged by
-    // evaluateSidebarSwipe alone — here, 40px is drawn but does not open.
     const start = at(10, 0)
     const end = at(50, 100)
     expect(sidebarDragProgress(start, end, 300, mobile)).toBeCloseTo(40 / 300)

@@ -107,9 +107,6 @@ describe("MermaidDiagram", () => {
   })
 })
 
-// Regression suite for the stale-chunk incident: a tab left open across a deploy
-// requests a hashed mermaid chunk the new build no longer ships, so `import("mermaid")`
-// rejects. See src/shared/lazyModule.ts.
 describe("MermaidDiagram — stale chunk after a deploy", () => {
   const STALE_CHUNK_MESSAGE =
     "Failed to fetch dynamically imported module: http://localhost:3210/assets/mermaid.core-BxJivhhJ.js"
@@ -128,7 +125,6 @@ describe("MermaidDiagram — stale chunk after a deploy", () => {
     )
 
     expect(container!.textContent).toContain("latest version")
-    // The raw module-loader message is noise for the user.
     expect(container!.textContent).not.toContain("Failed to fetch dynamically imported module")
   })
 
@@ -163,8 +159,6 @@ describe("MermaidDiagram — stale chunk after a deploy", () => {
   })
 
   test("a rejected load is not cached — a later diagram retries and renders", async () => {
-    // The core defect: the old loader cached the rejected promise, so once one chunk
-    // load failed every later diagram in the tab stayed broken for the life of the tab.
     let calls = 0
     const loadMermaid = async () => {
       calls += 1
@@ -175,7 +169,6 @@ describe("MermaidDiagram — stale chunk after a deploy", () => {
     await renderAndSettle(<MermaidDiagram source={"graph TD\nA-->B"} ports={{ loadMermaid }} />)
     expect(container!.textContent).toContain("latest version")
 
-    // A second diagram mounts later (new message arrives, or the user scrolls).
     await act(async () => { root?.unmount() })
     container?.remove()
     await renderAndSettle(<MermaidDiagram source={"graph TD\nC-->D"} ports={{ loadMermaid }} />)
@@ -212,10 +205,6 @@ describe("MermaidDiagram — stale chunk after a deploy", () => {
   })
 })
 
-// A parse error is only useful if the reader can find the offending line. The
-// raw jison message is three lines with a caret ruler; flattened into prose in
-// a proportional font it pointed at nothing and named a line the reader had no
-// way to count to.
 describe("MermaidDiagram — parse-error diagnostics", () => {
   const ER_SOURCE = [
     "erDiagram",
@@ -255,7 +244,6 @@ describe("MermaidDiagram — parse-error diagnostics", () => {
     expect(excerpt).toBeDefined()
     expect(excerpt!.className).toContain("font-mono")
     expect(excerpt!.className).toContain("whitespace-pre")
-    // Both excerpt lines survive as real newlines — collapsing them is the bug.
     expect(excerpt!.textContent).toBe(
       "... jsonb quotas  }  TENANT_SECRETS {\n--------------------^"
     )
@@ -287,14 +275,9 @@ describe("MermaidDiagram — parse-error diagnostics", () => {
   })
 })
 
-// A model asked for a dotted crossed edge writes `-.x`; mermaid spells it
-// `-.-x` and rejects the whole diagram over the missing dash. Rendering the
-// repaired copy beats showing the reader a parse error for a typo — provided
-// the UI still says the source it is showing is not what was rendered.
 describe("MermaidDiagram — link repair", () => {
   const BROKEN = "flowchart LR\n  B -.x|discarded| N[nothing]"
 
-  /** Rejects the invalid spelling; `-.-x` does not contain `-.x`, so the repair passes. */
   const strictMermaid = async () => ({
     initialize: () => {},
     render: async (_id: string, text: string) => {
@@ -326,8 +309,6 @@ describe("MermaidDiagram — link repair", () => {
   })
 
   test("reports the ORIGINAL error when the repaired copy fails too", async () => {
-    // The reported line and caret refer to the authored source shown below the
-    // message; surfacing the repaired copy's error would point at a phantom.
     const alwaysFails = async () => ({
       initialize: () => {},
       render: async (_id: string, text: string) => {

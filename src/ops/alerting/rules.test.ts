@@ -13,13 +13,8 @@ import { PROCESS_RSS_BYTES, TURN_DURATION_MS } from "../../server/observability"
 
 const REPO_ROOT = join(import.meta.dir, "../../..")
 
-// This suite is the gate that keeps a rule honest. A rule is only useful if it
-// queries a metric Kanna really exports, breaches on a number someone chose on
-// purpose, and carries enough context for the ticket it opens to be actionable.
 
 describe("promMetricName", () => {
-  // Pinned against names observed on the live collector, which is the only
-  // authority on how the OTLP receiver mangles an instrument name.
   test("matches the mangling the collector actually applies", () => {
     expect(promMetricName(PROCESS_RSS_BYTES)).toBe("kanna_process_rss_bytes")
     expect(promMetricName(TURN_DURATION_MS)).toBe("kanna_turn_duration_ms")
@@ -42,8 +37,6 @@ describe("ALERT_RULES", () => {
     expect(new Set(ALERT_RULES.map((r) => r.title)).size).toBe(ALERT_RULES.length)
   })
 
-  // A short `for` turns a transient spike — one oversized transcript parse —
-  // into a GitHub issue. Every rule here describes a SUSTAINED condition.
   test("every rule requires the condition to persist", () => {
     for (const rule of ALERT_RULES) {
       const minutes = Number.parseInt(rule.forDuration, 10)
@@ -52,9 +45,6 @@ describe("ALERT_RULES", () => {
     }
   })
 
-  // The drift guard: rename an instrument in observability.ts and the rule that
-  // queries it stops matching anything — silently, forever, because a rule that
-  // selects no series simply never fires.
   test("every metric referenced by a query is one Kanna exports", () => {
     for (const rule of ALERT_RULES) {
       for (const referenced of rule.promql.match(/kanna_[a-z_0-9]+/g) ?? []) {
@@ -64,9 +54,6 @@ describe("ALERT_RULES", () => {
     }
   })
 
-  // Scoping a ticket per release only means something if the query can tell
-  // releases apart. If it cannot, the version in the dedup key is noise that
-  // files a fresh ticket on every deploy.
   test("a release-scoped rule actually distinguishes releases", () => {
     for (const rule of ALERT_RULES.filter((r) => r.ticketScope === "release")) {
       expect(rule.promql, rule.title).toContain("service_version")
@@ -83,8 +70,6 @@ describe("ALERT_RULES", () => {
     expect(ALERT_RULES.some((r) => r.armed)).toBe(true)
   })
 
-  // A code hint pointing to a non-existent file is worse than no hint: an agent
-  // wastes a turn looking for a file that never existed, then reports nothing.
   test("every src/ path in a code hint refers to a file that exists", () => {
     for (const rule of ALERT_RULES) {
       for (const hint of rule.codeHints) {
@@ -96,10 +81,6 @@ describe("ALERT_RULES", () => {
     }
   })
 
-  // PR #829 fixed two TranscriptCache bugs: set() now returns early for oversized
-  // transcripts (never admitted) and evict() no longer guards on size > 1. A hint
-  // describing the old "degrades to re-reads rather than eviction" phrasing implies
-  // the eviction bug still exists, misdirecting agents on fresh alerts.
   test("KannaMemoryPressure TranscriptCache hint reflects post-PR-829 behaviour", () => {
     const rule = ALERT_RULES.find((r) => r.uid === "kanna-perf-memory")
     expect(rule).toBeDefined()
@@ -121,9 +102,6 @@ describe("buildRuleGroup", () => {
     }
   })
 
-  // Grafana's rule-group endpoint takes SECONDS here and rejects a duration
-  // string with a bare "bad request data" that names nothing — the individual
-  // rules validate fine, so the failure looks like it is anywhere but here.
   test("the evaluation interval is seconds, not a duration string", () => {
     expect(typeof group.interval).toBe("number")
     expect(group.interval).toBeGreaterThanOrEqual(60)
@@ -136,9 +114,6 @@ describe("buildRuleGroup", () => {
     expect(query?.model.expr).toBe(ALERT_RULES[0]?.promql)
   })
 
-  // An unarmed rule is still PUT to Grafana, paused: the threshold and the
-  // query stay visible and reviewable, and arming is one flag rather than a
-  // rediscovery of what the rule was supposed to be.
   test("unarmed rules are applied paused, not withheld", () => {
     expect(group.rules.length).toBe(ALERT_RULES.length)
     for (const rule of group.rules) {
@@ -147,18 +122,12 @@ describe("buildRuleGroup", () => {
     }
   })
 
-  // The notification policy routes on this label alone. A rule missing it is
-  // evaluated by Grafana and then goes nowhere.
   test("every rule is routable to the GitHub contact point", () => {
     for (const rule of group.rules) {
       expect(rule.labels.kanna_alert, rule.title).toBe("perf")
     }
   })
 
-  // The scope decides the ticket's dedup key and whether a resolve closes it,
-  // and it reaches the pipeline ONLY through this annotation — the workflow
-  // cannot import the rule table. Drop it here and every rule silently reverts
-  // to per-release tickets that mute for a week.
   test("every rule ships the scope its ticket is deduped by", () => {
     for (const rule of group.rules) {
       const spec = ALERT_RULES.find((s) => s.title === rule.title) as AlertRuleSpec
@@ -166,8 +135,6 @@ describe("buildRuleGroup", () => {
     }
   })
 
-  // noData must not ticket: an install going quiet is not a performance
-  // regression, and every laptop in the fleet goes quiet nightly.
   test("absent data never fires", () => {
     for (const rule of group.rules) expect(rule.noDataState).toBe("OK")
   })

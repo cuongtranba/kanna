@@ -6,7 +6,6 @@ import { AskUserQuestionInteractiveStore } from "./AskUserQuestionInteractive.st
 import type { TimerPort } from "../../ports"
 import { timerAdapter } from "../../adapters"
 
-// ─── Slide-card sub-components (module-private) ─────────────────────────────
 
 function QuestionCard({
   question,
@@ -57,7 +56,6 @@ function QuestionCard({
           )}
           <h3 className="font-medium text-foreground text-sm text-pretty">{question}</h3>
         </div>
-        {/* Progress bar */}
         {totalQuestions > 1 && (
           <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-border">
             <div

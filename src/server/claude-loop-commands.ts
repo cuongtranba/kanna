@@ -1,16 +1,3 @@
-/**
- * Standalone autonomous-loop + subagent-delivery command handlers for
- * AgentCoordinator.
- *
- * Extracted from agent.ts so the related private/public methods live in
- * their own testable module. The coordinator delegates to these functions by
- * passing an object literal that satisfies `LoopCommandDeps`.
- *
- * Side-effect seal: this module contains NO direct IO (no node:fs, no HTTP
- * calls, no Bun primitives). Every effectful operation is injected through
- * the deps interface — including `ensureTrackingFile` which is the sole IO
- * operation used by `setupLoop`.
- */
 
 import type { TranscriptEntry } from "../shared/types"
 import type { Subagent, AgentProvider } from "../shared/types"
@@ -40,163 +27,69 @@ import type { ChatRecord } from "./events"
 import { log } from "../shared/log"
 import { withSpan } from "./observability"
 
-// ---------------------------------------------------------------------------
-// Structural sub-interfaces — only the operations this module calls.
-// ---------------------------------------------------------------------------
 
-/** Subset of EventStore used by these handlers. */
 interface LoopCommandStore {
-  /**
-   * `stackBindings` is carried because `setupLoop` resolves the chat's real
-   * working directory through `resolveSpawnPaths`. Narrowing it back out means
-   * the loop arms in the project checkout while the agent edits a worktree.
-   */
   getChat(chatId: string): Pick<ChatRecord, "id" | "projectId" | "stackBindings"> | null
   getProject(projectId: string): { localPath: string; id: string } | null
   getAutoContinueEvents(chatId: string): AutoContinueEvent[]
   setSessionTokenForProvider(chatId: string, provider: AgentProvider, token: string | null): Promise<void>
   appendMessage(chatId: string, entry: TranscriptEntry): Promise<void>
-  /** Chats that have ever recorded an auto-continue event — the armed-loop candidates. */
   listAutoContinueChats(): string[]
-  /** Queued messages for a chat; a survivor here means queue recovery owns the wake. */
   getQueuedMessages(chatId: string): readonly { id: string }[]
-  /**
-   * Subagent runs for a chat, keyed by runId. A `running` entry means the wake
-   * is already held by a background delegation. Consulted ONLY on the runtime
-   * re-arm path — at boot a run killed with the server replays as `running`
-   * forever, so honouring it there would defeat `recoverArmedLoopWakes`.
-   */
   getSubagentRuns(chatId: string): Record<string, { status: string }>
 }
 
-// ---------------------------------------------------------------------------
-// Dependency bundle injected by AgentCoordinator
-// ---------------------------------------------------------------------------
 
 export interface LoopCommandDeps {
-  /** EventStore — subset used by these handlers. */
   store: LoopCommandStore
 
-  /** Live Claude sessions map owned by the coordinator (read-only). */
   claudeSessions: Pick<Map<string, ClaudeSessionState>, "get">
 
-  /** Active turns map — `.has()` to check existence. */
   activeTurns: { has(chatId: string): boolean }
 
-  /**
-   * Turns whose provider session is still booting. A booting turn owns its
-   * session as much as a registered one, so both block a context teardown.
-   */
   startingTurns: { has(chatId: string): boolean }
 
-  /** Parked AskUserQuestion / ExitPlanMode continuations keyed by chatId. */
   pendingTools: { has(chatId: string): boolean }
 
-  /** Returns true when the chat has an in-flight Workflow. */
   hasLiveWorkflow: (chatId: string) => boolean
 
-  /** Returns true when the session has a pending Claude-Code background task. */
   hasPendingBackgroundTask: (session: ClaudeSessionState, now: number) => boolean
 
-  /** Returns all configured subagents. */
   getSubagents(): Subagent[]
 
-  /** Returns the current app settings snapshot for subagentRuntime config. */
   getAppSettingsSnapshot(): {
     subagentRuntime?: {
       defaultLoopSubagentId?: string | null
     } | null
   }
 
-  /**
-   * Tears down the given Claude session. No permit semantics here — caller
-   * must ensure the session is in a stable state before calling.
-   */
   closeClaudeSession(chatId: string, session: ClaudeSessionState): void
 
-  /**
-   * Appends an AutoContinueEvent to the store, notifies the schedule manager,
-   * and emits a state-change event for the chat.
-   */
   emitAutoContinueEvent(event: AutoContinueEvent): Promise<void>
 
-  /**
-   * IO adapter: create or reconcile the loop tracking file on disk. Injected
-   * so this module stays IO-free. See `loop-template-io.adapter.ts`.
-   */
   ensureTrackingFile(args: EnsureTrackingFileArgs): Promise<EnsureTrackingFileResult>
 
-  /**
-   * IO adapter: read the tracking file + ask git whether it is tracked, so
-   * `assertTrackingFileSafe` can refuse to clobber committed history.
-   */
   inspectTrackingFile(absPath: string): Promise<TrackingFileInspection>
 
-  /**
-   * IO adapter: true when `workdir` is the project checkout or a git worktree
-   * of the same repository. Bounds where a loop may be pointed.
-   */
   isWorktreeOfSameRepo(projectCwd: string, workdir: string): Promise<boolean>
 
-  /**
-   * IO adapter: run the loop's verify command (the oracle). Used at arm time
-   * to prove the oracle can fail before the loop is armed.
-   */
   runVerifyCommand(args: RunVerifyArgs): Promise<RunVerifyResult>
 
-  /**
-   * IO adapter: read the shell script the verify command references, confined
-   * to the loop's workdir, for the arm-time oracle audit. Null when missing,
-   * unreadable, or escaping the workdir.
-   */
   readOracleScript(workdirAbs: string, scriptPath: string): Promise<string | null>
 
-  /**
-   * Returns the current armed-loop state for a chat, or null if disarmed.
-   * Injected (rather than calling the module-level `isLoopArmed` fn) so
-   * AgentCoordinator can be monkey-patched in tests via
-   * `coordinator.isLoopArmed = () => ({...})`.
-   */
   isLoopArmed(chatId: string): LoopState | null
 
-  /**
-   * Single busy predicate (active turn, booting turn, parked tool, self-wake).
-   * Wired to `isChatBusy` in claude-session-state-queries — never re-derive
-   * from the underlying maps here.
-   */
   isChatBusy(chatId: string): boolean
 }
 
-// ---------------------------------------------------------------------------
-// Exported standalone functions
-// ---------------------------------------------------------------------------
 
-// ── Loop + background delivery ──────────────────────────────────────────────
 
 export { clearClaudeSessionContext } from "./claude-context-commands"
 
-/**
- * Consecutive failed iterations after which the host disarms the loop itself.
- * A backstop, not a tuning knob: three back-to-back failures means the loop is
- * not making progress, and re-firing it only burns tokens. The model is told
- * (in the rendered prompt) to retry infra failures rather than stop, so
- * something has to bound that retry.
- */
 export const MAX_CONSECUTIVE_LOOP_FAILURES = 3
 
-/**
- * Budget for the one-shot oracle run at arm time. Generous — a real gate is
- * lint + typecheck + the full suite — but bounded, so a hanging verify command
- * fails `setup_loop` fast instead of wedging the arming turn.
- */
 const ARM_VERIFY_TIMEOUT_MS = 300_000
 
-/**
- * Disarm a loop that has failed `MAX_CONSECUTIVE_LOOP_FAILURES` times running,
- * and hand the chat back to the user with the reason. Deliberately still fires
- * an auto-continue so the failure surfaces in the transcript rather than the
- * chat simply going quiet.
- */
 export async function disarmFailingLoop(
   deps: LoopCommandDeps,
   chatId: string,
@@ -215,8 +108,6 @@ export async function disarmFailingLoop(
       scheduleId: crypto.randomUUID(),
       reason: "repeated_failures",
     })
-    // Same visibility contract as `stopLoop`: a disarm is always readable in
-    // the transcript, not only inferable from the wake prompt below.
     await deps.store.appendMessage(chatId, timestamped({
       kind: "loop_disarmed",
       reason: "repeated_failures",
@@ -247,20 +138,6 @@ export async function disarmFailingLoop(
   }
 }
 
-/**
- * Deliver a finished `run_in_background` subagent's result back into the
- * main chat as a fresh turn AND clear the main-agent's Claude session so the
- * next turn starts with a fresh context window. Wired as the orchestrator's
- * `onBackgroundRunComplete` hook.
- *
- * Loop-orchestration invariant: main is stateless-in-context / stateful-in-file.
- * The tracking file is the durability contract; every delivery re-reads it.
- * Subagent output is NOT carried forward as prompt content — the subagent is
- * expected to have written its findings into the tracking file before
- * terminating.
- *
- * See adr-20260711-notification-driven-loop-orchestration.
- */
 export async function deliverSubagentToMain(
   deps: LoopCommandDeps,
   chatId: string,
@@ -275,22 +152,6 @@ export async function deliverSubagentToMain(
   )
 }
 
-/**
- * Point a context-cleared main agent at the plan its last loop actually used.
- *
- * This branch used to say "Read PROGRESS.md if present". `PROGRESS.md` is
- * `setup_loop`'s DEFAULT tracking filename, so it names as many plans as there
- * are loops — 26 files with exactly that name on the install where this was
- * found, across 54 `PROGRESS*.md` in sibling worktrees. Worse, nothing resolved
- * it: once no loop is armed the tracking-doc tools rebase from the loop's
- * `workdirAbs` to the chat cwd, so the sentence pointed at the MAIN checkout's
- * `PROGRESS.md` — an unrelated, already-finished loop's plan. A post-loop review
- * read it and graded the wrong feature.
- *
- * So name the real file, absolute, from the `loop_armed` tombstone; and when
- * there is no tombstone, name nothing. A confident wrong filename is worse than
- * silence — the model can still see the run's result in the notification.
- */
 function describeLastPlan(spec: LoopSpec | null): string {
   const file = spec?.trackingFileRel
   if (!file) return ""
@@ -307,25 +168,9 @@ async function deliverSubagentToMainInner(
   outcome: BackgroundRunOutcome,
 ): Promise<void> {
 
-  // Structured re-entry: the completion is delivered as the same
-  // <task-notification> XML Claude Code's own background agents use
-  // (LocalAgentTask), so the model parses task identity/status with the
-  // format it already knows from native training.
-  //
-  // When a loop is armed, the FULL loop discipline prompt follows the
-  // notification on every wake — not a generic "decide next action" string,
-  // which drifted into self-implementation (the 7.5h marathon-turn bug).
-  // Armed notifications carry NO <result> body: PROGRESS.md is the loop's
-  // only durability contract. Non-loop deliveries include the (truncated)
-  // result since ad-hoc background delegations have no tracking file.
   const armed = isLoopArmed(deps, chatId)
   const notification = buildTaskNotification(runId, outcome, { includeResult: !armed })
 
-  // Record the iteration's outcome so a loop that cannot make progress is
-  // disarmed by the HOST rather than by the model's judgement. Previously a
-  // single transient AUTH_REQUIRED was enough for the orchestrator to call
-  // stop_loop and park the run until a human noticed; now the prompt tells it
-  // to retry infra failures, and this counter is what stops an infinite retry.
   let failuresAfterThisRun = 0
   if (armed) {
     const ok = outcome.status === "completed"
@@ -341,7 +186,6 @@ async function deliverSubagentToMainInner(
         errorCode: outcome.status === "failed" ? outcome.errorCode : undefined,
       })
     } catch (err) {
-      // Non-fatal: losing one outcome row only weakens the backstop.
       log.warn(`[kanna] loop_run_outcome emit failed`, { chatId, runId, err })
     }
   }
@@ -365,8 +209,6 @@ async function deliverSubagentToMainInner(
   }
 
   try {
-    // Wipe the main-agent's Claude session token so the next spawn starts
-    // fresh (the /clear equivalent). Codex path is unaffected.
     await clearClaudeSessionContext(deps, chatId)
     await deps.store.appendMessage(chatId, timestamped({ kind: "context_cleared" }))
 
@@ -390,13 +232,6 @@ async function deliverSubagentToMainInner(
   }
 }
 
-/**
- * Arm an autonomous loop on the main chat. Validates the loop spec, ensures
- * the tracking file exists (writes a skeleton if absent), then /clears the
- * main-agent Claude session and enqueues the templated recurring prompt so
- * the next turn starts the loop. Backs `mcp__kanna__setup_loop`. See
- * adr-20260711-setup-loop-template.
- */
 export async function setupLoop(
   deps: LoopCommandDeps,
   args: {
@@ -409,17 +244,9 @@ export async function setupLoop(
   const project = deps.store.getProject(chat.projectId)
   if (!project) return { ok: false, errors: [`project ${chat.projectId} not found`] }
 
-  // The tree this chat actually edits, not the project's registered path.
-  // `board-start-work.ts` gives every card-started chat a primary binding
-  // pointing at a fresh worktree, so defaulting to `project.localPath` ran the
-  // oracle and wrote the tracking-file skeleton in the main checkout — a
-  // different tree from the one the agent works in. Cron (`resolveChatCwd`)
-  // and the tracking-doc MCP tools already resolve it this way.
   const chatCwd = resolveSpawnPaths(chat, project.localPath).cwd
 
   const validation = validateLoopSetup(args.input, chatCwd, {
-    // triggerMode MUST be carried: dropping it here is what let a
-    // manual-trigger subagent arm a loop that could never delegate.
     roster: deps.getSubagents().map((s) => ({ id: s.id, name: s.name, triggerMode: s.triggerMode })),
     defaultLoopSubagentId: deps.getAppSettingsSnapshot().subagentRuntime?.defaultLoopSubagentId ?? null,
   })
@@ -427,10 +254,6 @@ export async function setupLoop(
 
   const resolved = validation.resolved
 
-  // A workdir the caller CHOSE must still be the same repository — a sibling
-  // worktree is the supported case, an arbitrary directory is not. The chat's
-  // own cwd needs no check: Kanna created that worktree itself. The comparison
-  // stays against `project.localPath` because that is the repository identity.
   if (resolved.workdirAbs !== chatCwd) {
     const sameRepo = await deps.isWorktreeOfSameRepo(project.localPath, resolved.workdirAbs)
     if (!sameRepo) {
@@ -443,8 +266,6 @@ export async function setupLoop(
     }
   }
 
-  // Refuse to reconcile a COMMITTED tracking file that records a different
-  // goal — that is a previous loop's record, and rewriting it is data loss.
   const inspection = await deps.inspectTrackingFile(resolved.trackingFileAbs)
   if (inspection.content !== null) {
     const safety = assertTrackingFileSafe(inspection.content, {
@@ -455,10 +276,6 @@ export async function setupLoop(
     if (!safety.ok) return { ok: false, errors: [safety.error] }
   }
 
-  // Prove the oracle can FAIL before arming. A verify command that already
-  // exits 0 means either the goal is done or the oracle is too weak to define
-  // it — arming on that produces an instant, meaningless "GOAL MET" and wipes
-  // the context for nothing. This is the check a careful operator does by hand.
   const armCheck = await deps.runVerifyCommand({
     command: resolved.verifyCommand,
     cwd: resolved.workdirAbs,
@@ -476,9 +293,6 @@ export async function setupLoop(
     }
   }
 
-  // Static oracle-strength audit — the already-green refusal above proves the
-  // oracle can FAIL; this asks whether it can only pass for the right reason.
-  // Non-fatal: warnings ride the ok result into the tool reply.
   const scriptPath = extractOracleScriptPath(resolved.verifyCommand)
   const scriptContent = scriptPath === null
     ? null
@@ -495,9 +309,6 @@ export async function setupLoop(
     const ensureResult = await deps.ensureTrackingFile({
       absPath: resolved.trackingFileAbs,
       skeleton: resolved.skeleton,
-      // Deterministic schema reconcile of an EXISTING tracking file: pure
-      // string transform — server-owned sections rewritten to the inputs,
-      // loop history preserved. No model judgement involved.
       reconcile: (existing) =>
         reconcileTrackingFile(existing, {
           goal: resolved.goal,
@@ -516,18 +327,10 @@ export async function setupLoop(
   }
 
   try {
-    // Wipe main-agent Claude session so the next turn starts fresh with the
-    // rendered loop prompt. Codex untouched. setup_loop runs from INSIDE a
-    // live turn, so the suppression half of clearClaudeSessionContext is
-    // what keeps the wipe from being overwritten by the in-flight stream.
     await clearClaudeSessionContext(deps, args.chatId)
     await deps.store.appendMessage(args.chatId, timestamped({ kind: "context_cleared" }))
 
     const now = Date.now()
-    // Arm the loop durably: every subsequent background-completion wake
-    // re-injects THIS prompt (not the generic one) and loop turns are
-    // tool-blocked. Superseded by a later setup_loop or cleared by stop_loop
-    // / a real user send. Replays from the auto-continue log on restart.
     await deps.emitAutoContinueEvent({
       v: AUTO_CONTINUE_EVENT_VERSION,
       kind: "loop_armed",
@@ -573,16 +376,10 @@ export async function setupLoop(
   }
 }
 
-/** Current armed-loop state for a chat, or null. Pure replay of the auto-continue log. */
 export function isLoopArmed(deps: LoopCommandDeps, chatId: string): LoopState | null {
   return deriveLoopState(deps.store.getAutoContinueEvents(chatId), chatId)
 }
 
-/**
- * Narrow the armed loop to the slice the kanna-mcp tools need. Pure, and the
- * single adapter between the read model and the MCP host so the two spawn
- * paths (main turn + subagent run) cannot drift.
- */
 export function toArmedLoopInfo(state: LoopState | null): ArmedLoopInfo | null {
   if (!state) return null
   return {
@@ -592,11 +389,6 @@ export function toArmedLoopInfo(state: LoopState | null): ArmedLoopInfo | null {
   }
 }
 
-/**
- * Disarm an armed loop (restores tools + stops prompt re-injection). Backs
- * the `stop_loop` MCP tool (called by the model on GOAL MET) and the
- * user-send takeover path. No-op when no loop is armed.
- */
 export async function stopLoop(
   deps: LoopCommandDeps,
   chatId: string,
@@ -613,12 +405,6 @@ export async function stopLoop(
     reason,
   })
 
-  // A disarm must never be silent. `user_send` was the worst case: a takeover
-  // wrote NOTHING to the transcript, so a user who typed one word to nudge a
-  // stalled loop saw only the "Loop running" pill disappear, which reads as the
-  // loop being between chunks. `chat_deleted` is skipped — there is no
-  // transcript left to read it in. The card names the plan and worktree so the
-  // loop stays identifiable after `deriveLoopState` stops reporting it.
   if (reason === "chat_deleted") return
   try {
     await deps.store.appendMessage(chatId, timestamped({
@@ -629,13 +415,10 @@ export async function stopLoop(
       ...(armed.workdirAbs !== null ? { workdirAbs: armed.workdirAbs } : {}),
     }))
   } catch (err) {
-    // Non-fatal: the durable disarm already landed; losing the card only costs
-    // visibility, and throwing here would fail the user's send.
     log.warn("[kanna] loop_disarmed card append failed", { chatId, err })
   }
 }
 
-/** Returns live schedule IDs (proposed or scheduled) for the given chat. */
 export function listLiveSchedules(deps: LoopCommandDeps, chatId: string): string[] {
   const { schedules } = deriveChatSchedules(deps.store.getAutoContinueEvents(chatId), chatId)
   return Object.values(schedules)

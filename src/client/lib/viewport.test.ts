@@ -8,9 +8,6 @@ describe("BREAKPOINT_MD", () => {
 })
 
 describe("isMobileViewport", () => {
-  // Load-bearing: every class-string test renders via renderToStaticMarkup with no
-  // layout, so measured widths are 0. If 0 classified as mobile, the rendered markup
-  // of every consumer would flip and break unrelated suites.
   test("treats an unmeasured viewport as not-mobile", () => {
     expect(isMobileViewport(0)).toBe(false)
   })

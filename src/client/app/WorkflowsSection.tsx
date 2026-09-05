@@ -16,16 +16,13 @@ import {
   DialogBody,
 } from "../components/ui/dialog"
 
-// ── Props ─────────────────────────────────────────────────────────────────────
 
 export interface WorkflowsSectionProps {
   runs: WorkflowRunSummary[]
   onSelectRun: (runId: string) => void
-  /** Highlights the matching row. The in-chat panel omits it (dialog detail). */
   selectedRunId?: string | null
 }
 
-// ── WorkflowsSection ──────────────────────────────────────────────────────────
 
 export function WorkflowsSection({ runs, onSelectRun, selectedRunId }: WorkflowsSectionProps) {
   if (runs.length === 0) {
@@ -56,7 +53,6 @@ export function WorkflowsSection({ runs, onSelectRun, selectedRunId }: Workflows
   )
 }
 
-// ── Empty state ───────────────────────────────────────────────────────────────
 
 function WorkflowEmptyState() {
   return (
@@ -73,7 +69,6 @@ function WorkflowEmptyState() {
   )
 }
 
-// ── WorkflowRunRow ────────────────────────────────────────────────────────────
 
 function WorkflowRunRow(props: {
   run: WorkflowRunSummary
@@ -127,7 +122,6 @@ function WorkflowRunRow(props: {
   )
 }
 
-// ── WorkflowRunDetailDialog ───────────────────────────────────────────────────
 
 interface WorkflowRunDetailDialogProps {
   run: WorkflowRun | null
@@ -142,9 +136,6 @@ export function agentStateTone(state: string): StatusTone {
   return "muted"
 }
 
-// Pretty-print an overall workflow result. parseWorkflowRunFile stringifies
-// object results to JSON, so re-indent when it parses as JSON; otherwise show
-// the raw string.
 export function formatWorkflowResult(result: string): string {
   const trimmed = result.trim()
   if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return result
@@ -174,7 +165,6 @@ export function WorkflowRunDetailDialog({ run, open, onClose }: WorkflowRunDetai
   )
 }
 
-// ── Agent row + phase group (the progress tree) ───────────────────────────────
 
 function AgentPreviewBlock({ label, text }: { label: string; text: string }) {
   return (
@@ -236,20 +226,10 @@ function WorkflowAgentRow({
   )
 }
 
-// ── Run detail (shared by the in-chat dialog and the dedicated page) ───────────
 
 export interface WorkflowRunDetailProps {
   run: WorkflowRun
-  /**
-   * When provided, each agent that has an `agentId` shows a "Transcript" button
-   * that opens the full per-agent transcript. The in-chat dialog omits this
-   * (previews only); the dedicated page wires it to the drill-in panel.
-   */
   onSelectAgent?: (agentId: string) => void
-  /**
-   * Heading rendered above the meta row. The dedicated page passes the run
-   * name; the in-chat dialog omits it (DialogTitle already shows the name).
-   */
   title?: string
 }
 
@@ -259,7 +239,6 @@ export function WorkflowRunDetail({ run, onSelectAgent, title }: WorkflowRunDeta
 
   return (
     <div className="flex flex-col gap-5">
-      {/* Header: optional title + meta row */}
       <div className="flex flex-col gap-1.5">
         {title ? <h3 className="truncate text-base font-semibold text-foreground">{title}</h3> : null}
         <div className="flex flex-wrap items-center gap-3">
@@ -287,7 +266,6 @@ export function WorkflowRunDetail({ run, onSelectAgent, title }: WorkflowRunDeta
         </div>
       </div>
 
-      {/* Summary */}
       {run.summary ? (
         <section className="flex flex-col gap-1">
           <h4 className="text-xs font-medium tracking-wide text-muted-foreground">Summary</h4>
@@ -295,7 +273,6 @@ export function WorkflowRunDetail({ run, onSelectAgent, title }: WorkflowRunDeta
         </section>
       ) : null}
 
-      {/* Progress tree: agents nested under their phase */}
       {groups.length > 0 ? (
         <section className="flex flex-col gap-4" data-testid="workflow-progress-tree">
           {groups.map((group) => (
@@ -333,7 +310,6 @@ export function WorkflowRunDetail({ run, onSelectAgent, title }: WorkflowRunDeta
         </section>
       ) : null}
 
-      {/* Result */}
       {run.result ? (
         <section className="flex flex-col gap-1">
           <h4 className="text-xs font-medium tracking-wide text-muted-foreground">Result</h4>
@@ -343,7 +319,6 @@ export function WorkflowRunDetail({ run, onSelectAgent, title }: WorkflowRunDeta
         </section>
       ) : null}
 
-      {/* Script (collapsed by default) */}
       {run.script ? (
         <details className="flex flex-col gap-1">
           <summary className="cursor-pointer text-xs font-medium tracking-wide text-muted-foreground hover:text-foreground">
@@ -355,7 +330,6 @@ export function WorkflowRunDetail({ run, onSelectAgent, title }: WorkflowRunDeta
         </details>
       ) : null}
 
-      {/* Error */}
       {run.error && run.status !== "completed" ? (
         <section className="flex flex-col gap-1">
           <h4 className={cn("text-xs font-medium tracking-wide", statusToneClass(tone))}>
@@ -370,9 +344,6 @@ export function WorkflowRunDetail({ run, onSelectAgent, title }: WorkflowRunDeta
   )
 }
 
-// ── WorkflowsSectionWithDetail ────────────────────────────────────────────────
-// Self-contained version that manages its own dialog state.
-// Used when the parent provides a getRunDetail fetcher.
 
 export interface WorkflowsSectionWithDetailProps {
   runs: WorkflowRunSummary[]
@@ -386,9 +357,6 @@ function WorkflowsSectionWithDetailInner({ runs, getRunDetail }: WorkflowsSectio
   const setSelectedRunId = WorkflowsSectionDetailStore.useScopedStore((s) => s.setSelectedRunId)
   const clearSelection = WorkflowsSectionDetailStore.useScopedStore((s) => s.clearSelection)
   const isOpen = selectedRun !== null
-  // Track the runs reference that was present when the run was last selected
-  // via a click. The push-refetch effect only fires when runs changes identity
-  // AFTER the selection has already been established.
   const runsAtSelectionRef = useRef<WorkflowRunSummary[] | null>(null)
 
   const handleSelectRun = useCallback(async (runId: string) => {
@@ -404,11 +372,6 @@ function WorkflowsSectionWithDetailInner({ runs, getRunDetail }: WorkflowsSectio
     runsAtSelectionRef.current = null
   }, [clearSelection])
 
-  // Re-fetch the selected run's detail in-place (no "loading" swap) whenever
-  // the snapshot push delivers a new `runs` reference AND the selected run is
-  // still running. Stops naturally once the sidecar lands (status flips).
-  // Guard: skip when `runs` is the same reference as when the row was clicked
-  // (that click already initiated the initial fetch).
   useEffect(() => {
     if (selectedRunId === null) return
     if (runs === runsAtSelectionRef.current) return

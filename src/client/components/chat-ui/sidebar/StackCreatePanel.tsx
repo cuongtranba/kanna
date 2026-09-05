@@ -72,14 +72,12 @@ function StackCreatePanelInner({
     })
   }, [setSelectedIds])
 
-  // Fix 2: form submit handler receives FormEvent
   const handleFormSubmit = useCallback(async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (isSaveDisabled) return
     await onSubmit(title.trim(), Array.from(selectedIds), instructions.trim())
   }, [isSaveDisabled, onSubmit, title, instructions, selectedIds])
 
-  // Fix 2: only handle Escape on the form wrapper (no double-fire with input)
   const handleEscapeKey = useCallback(
     (e: KeyboardEvent<HTMLFormElement>) => {
       if (e.key === "Escape") {
@@ -90,7 +88,6 @@ function StackCreatePanelInner({
     [onCancel]
   )
 
-  // Fix 2: title input only needs Escape (Enter is handled natively by the form)
   const handleTitleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLInputElement>) => {
       if (e.key === "Escape") {
@@ -100,7 +97,6 @@ function StackCreatePanelInner({
     [onCancel]
   )
 
-  // Fix 3 & 4: chip keyboard handler — Cmd/Ctrl+Enter to submit, ArrowLeft/Right to navigate
   const handleChipKeyDown = useCallback(
     (e: KeyboardEvent<HTMLButtonElement>, index: number) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
@@ -123,13 +119,11 @@ function StackCreatePanelInner({
   )
 
   return (
-    // Fix 1 & 2: root element is now <form>, handleWrapperKeyDown removed
     <form
       onSubmit={handleFormSubmit}
       onKeyDown={handleEscapeKey}
       className="flex flex-col gap-2 px-2.5 py-2 border border-border rounded-lg bg-background"
     >
-      {/* Title input — Fix 5: aria-label added */}
       <input
         type="text"
         value={title}
@@ -141,7 +135,6 @@ function StackCreatePanelInner({
         className="w-full text-sm px-2 py-1 rounded border border-border bg-background focus:outline-none focus:ring-1 focus:ring-ring"
       />
 
-      {/* Project chip list */}
       <div ref={chipContainerRef} className="flex flex-wrap gap-1">
         {projects.map((project, index) => {
           const isSelected = selectedIds.has(project.id)
@@ -165,8 +158,6 @@ function StackCreatePanelInner({
         })}
       </div>
 
-      {/* Stack instructions — how these projects relate. Rendered as its own
-          prompt block for every chat bound to the stack. */}
       <textarea
         value={instructions}
         onChange={(e) => setInstructions(e.target.value)}
@@ -176,14 +167,12 @@ function StackCreatePanelInner({
         className="w-full text-sm px-2 py-1 rounded border border-border bg-background focus:outline-none focus:ring-1 focus:ring-ring"
       />
 
-      {/* Single-project disabled banner */}
       {!hasEnoughProjects && (
         <p className="text-xs text-muted-foreground">
           Register a second project to create a stack
         </p>
       )}
 
-      {/* Action row */}
       <div className="flex gap-2 pt-1">
         <Button
           type="submit"

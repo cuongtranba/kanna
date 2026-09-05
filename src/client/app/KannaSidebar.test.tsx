@@ -83,8 +83,6 @@ describe("KannaSidebar section headings", () => {
 
     expect(stacksCopyIndex).toBeGreaterThan(-1)
     expect(starredHeadingIndex).toBeGreaterThan(-1)
-    // The starred project must sit under its own heading, which comes after the
-    // Stacks copy — otherwise it reads as a member of the Stacks section.
     expect(stacksCopyIndex).toBeLessThan(starredHeadingIndex)
     expect(starredHeadingIndex).toBeLessThan(alphaIndex)
   })
@@ -101,7 +99,6 @@ describe("KannaSidebar section headings", () => {
 
     expect(projectsHeadingIndex).toBeGreaterThan(-1)
     expect(projectsHeadingIndex).toBeLessThan(betaIndex)
-    // "alpha" is starred, so it belongs above the Projects heading.
     expect(html.indexOf("alpha")).toBeLessThan(projectsHeadingIndex)
   })
 
@@ -118,10 +115,6 @@ describe("KannaSidebar section headings", () => {
 })
 
 describe("KannaSidebar Stacks Boards affordance", () => {
-  // KannaSidebar owns navigation (handleOpenStackBoards → `/boards/stack/:id`)
-  // and hands it to StacksSection as a plain prop; this pins that wiring the
-  // whole way down without throwing, mirroring the project row's own Boards
-  // item which is exercised the same way (structural render, not a click sim).
   test("renders a Stack row's actions menu without throwing", () => {
     expect(() =>
       renderSidebar({
@@ -143,10 +136,6 @@ describe("KannaSidebar Stacks Boards affordance", () => {
 })
 
 describe("KannaSidebar top chrome band", () => {
-  // The other half of the shell's top-band contract (the pane tab strip side is
-  // asserted in PaneTabStrip.test.tsx). Both bands must read their height from
-  // the shared token; a literal height on either one is what put the brand
-  // header and the tab strip on different lines.
   test("the brand header takes its height from the shared top-band token", () => {
     const html = renderSidebar({ starredProjectGroups: [], projectGroups: [], stacks: [] })
 

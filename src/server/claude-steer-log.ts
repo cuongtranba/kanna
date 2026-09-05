@@ -2,10 +2,6 @@ import type { JsonObject } from "../shared/json"
 import { log } from "../shared/log"
 import type { AgentProvider, ModelOptions } from "../shared/types"
 
-// ---------------------------------------------------------------------------
-// Steer-logging and send-to-starting profiling helpers
-// Extracted from agent.ts — pure env/math utilities, no AgentCoordinator dep.
-// ---------------------------------------------------------------------------
 
 export interface SendToStartingProfile {
   traceId: string

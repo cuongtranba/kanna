@@ -1,15 +1,3 @@
-/**
- * "Is this line an armable cron job, and what does it actually mean?"
- *
- * The one answer both cron MCP tools give: `validate_cron` shows it to the
- * model, `arm_cron` acts on it. Sharing it is what stops the model from being
- * told a line is valid by one tool and refused by the other — and keeps both
- * on the same parser the send pipeline uses, so a model can never arm
- * something a user could not have typed.
- *
- * Server-side because the fire times come from `nextFireAt`, which the client
- * deliberately never computes.
- */
 
 import { cronModeConsequence } from "../../shared/cron/arm-summary"
 import { humanizeSchedule } from "../../shared/cron/humanize"
@@ -24,7 +12,6 @@ export type CronPreview =
   | { ok: true; command: ArmCommand; summary: CronArmSummary }
   | { ok: false; reason: string }
 
-/** How many upcoming fires to show. Enough to reveal the cadence, not a calendar. */
 const PREVIEW_FIRES = 3
 
 export function previewCronCommand(line: string, nowMs: number): CronPreview {

@@ -32,9 +32,6 @@ describe("interception boundary", () => {
     expect(parsed?.ok).toBe(false)
   })
 
-  // Distinct from "subcommand" so the repair escalation can treat it as
-  // arm-shaped (repairable) without also opening up real subcommand typos
-  // like `/cron list extra`, which already carry a mechanical suggestion.
   test("a multiline /cron message carries its own part, not subcommand", () => {
     const error = errorOf("/cron check ci inline @daily\nsecond line")
     expect(error.part).toBe("multiline")
@@ -151,8 +148,6 @@ describe("validation errors and suggestions", () => {
     )
   })
 
-  // Padding only helps when the fields themselves are cron. "9am every day" is
-  // English, and guessing at it is exactly the job the model picks up.
   test("a short schedule that is not cron at all offers no suggestion", () => {
     const error = errorOf("/cron check ci inline 9am every day")
     expect(error.part).toBe("schedule")
@@ -160,8 +155,6 @@ describe("validation errors and suggestions", () => {
   })
 })
 
-// The offending line is the one thing the old error entry did not keep, which
-// left both the user and the model with nothing to work from.
 describe("the offending line is recorded", () => {
   test("every parse error carries the line it came from", () => {
     for (const line of ["/cron remove", "/cron check ci inline 9am every day", "/cron nonsense"]) {

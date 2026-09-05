@@ -19,27 +19,24 @@ describe("plugin id rules", () => {
     ["a1", true],
     ["a".repeat(64), true],
     ["", false],
-    ["a", false], // needs 2+ chars
-    ["A".repeat(4), false], // uppercase
-    ["1hello", false], // must start with a letter
+    ["a", false],
+    ["A".repeat(4), false],
+    ["1hello", false],
     ["-hello", false],
-    ["hello_kanna", false], // underscore
+    ["hello_kanna", false],
     ["hello.kanna", false],
-    ["hello/../etc", false], // path traversal can never be an id
+    ["hello/../etc", false],
     ["a".repeat(65), false],
   ])("isValidPluginId(%p) === %p", (id, expected) => {
     expect(isValidPluginId(id)).toBe(expected)
   })
 
   test("the pattern is anchored on both ends", () => {
-    // An unanchored pattern would accept "bad id!" via a partial match, and the
-    // id is used as an HTTP path segment and a directory name.
     expect(PLUGIN_ID_PATTERN.source.startsWith("^")).toBe(true)
     expect(PLUGIN_ID_PATTERN.source.endsWith("$")).toBe(true)
   })
 
   test("the reserved host id is refused", () => {
-    // `kanna` is the MCP server name; a plugin claiming it would shadow the host.
     expect(ok({ id: "kanna", name: "X", version: "1.0.0", kannaPluginApi: 1 })).toMatchObject({
       ok: false,
       code: "reserved_id",
@@ -104,13 +101,10 @@ describe("parseKannaPluginManifest", () => {
   })
 
   test("the api version constant matches what a v1 manifest declares", () => {
-    // Drift here silently refuses every plugin ever scaffolded.
     expect(KANNA_PLUGIN_API_VERSION).toBe(1)
   })
 
   test("the manifest filename does not collide with Claude Code's plugin catalog", () => {
-    // src/server/local-catalog-io.adapter.ts already scans `.claude-plugin/marketplace.json`
-    // and `installed_plugins.json` for a DIFFERENT plugin concept.
     expect(KANNA_PLUGIN_MANIFEST_FILENAME).toBe("kanna-plugin.json")
   })
 })

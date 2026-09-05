@@ -1,11 +1,3 @@
-/**
- * Pure read-model functions for project, stack, chat-lifecycle, turn, queued-
- * message, and auto-continue event application.
- *
- * Extracted from event-store.ts to reduce file size. All functions are pure
- * state mutations — no IO, no side effects (side-effect seal: IO lives in
- * *.adapter.ts files).
- */
 
 import type { AgentProvider, SubagentRunSnapshot, TranscriptEntry } from "../shared/types"
 import type {
@@ -26,15 +18,9 @@ import { compactLoopWakeEvents } from "./auto-continue/compact-loop-wakes"
 import { ACTIVE_SESSION_IDLE_GAP_MS } from "./read-models"
 import { resolveLocalPath } from "./paths"
 
-// ─── Project read-model ────────────────────────────────────────────────────
 
 type ProjectLifecycleState = Pick<StoreState, "projectsById" | "projectIdsByPath" | "sidebarProjectOrder">
 
-/**
- * Apply a single ProjectEvent to the in-memory project maps. Mutates the
- * maps in-place; reassigns `state.sidebarProjectOrder` for the
- * `sidebar_project_order_set` case.
- */
 export function applyProjectEvent(state: ProjectLifecycleState, event: ProjectEvent): void {
   switch (event.type) {
     case "project_opened": {
@@ -76,7 +62,6 @@ export function applyProjectEvent(state: ProjectLifecycleState, event: ProjectEv
     case "project_instructions_set": {
       const project = state.projectsById.get(event.projectId)
       if (!project) break
-      // Empty clears: absent and blank are the same state (adr-20260904 D4).
       if (event.instructions === "") {
         delete project.instructions
       } else {
@@ -88,11 +73,7 @@ export function applyProjectEvent(state: ProjectLifecycleState, event: ProjectEv
   }
 }
 
-// ─── Stack read-model ──────────────────────────────────────────────────────
 
-/**
- * Apply a single StackEvent to the in-memory stacks map. Mutates in-place.
- */
 export function applyStackEvent(stacksById: Map<string, StackRecord>, event: StackEvent): void {
   switch (event.type) {
     case "stack_added": {
@@ -149,19 +130,7 @@ export function applyStackEvent(stacksById: Map<string, StackRecord>, event: Sta
   }
 }
 
-// ─── Chat timing ───────────────────────────────────────────────────────────
 
-/**
- * Update the ChatTimingState for a given chat in response to a status
- * transition. Seeds the entry on first call (chat_created path).
- *
- * @param chatTimingsByChatId - mutable timing map from StoreState
- * @param chatId              - target chat
- * @param eventTs             - event timestamp (ms epoch)
- * @param nextStatus          - status to transition into
- * @param onTurnStart         - true when this event marks turn start
- * @param onTurnFinish        - true when this event marks turn end
- */
 export function updateChatTiming(
   chatTimingsByChatId: Map<string, ChatTimingState>,
   chatId: string,
@@ -172,7 +141,6 @@ export function updateChatTiming(
 ): void {
   const prev = chatTimingsByChatId.get(chatId)
   if (!prev) {
-    // chat_created path: seed initial timing entry
     chatTimingsByChatId.set(chatId, {
       status: nextStatus,
       stateEnteredAt: eventTs,
@@ -188,7 +156,6 @@ export function updateChatTiming(
   let activeSessionStartedAt = prev.activeSessionStartedAt
   let cumulativeMs = { ...prev.cumulativeMs }
 
-  // Detect long idle gap when leaving idle → something else
   if (prev.status === "idle" && nextStatus !== "idle" && segmentMs > ACTIVE_SESSION_IDLE_GAP_MS) {
     activeSessionStartedAt = eventTs
     cumulativeMs = { idle: 0, starting: 0, running: 0, failed: 0 }
@@ -211,25 +178,12 @@ export function updateChatTiming(
   })
 }
 
-// ─── Chat / Turn / QueuedMessage lifecycle ─────────────────────────────────
 
 type ChatLifecycleState = Pick<
   StoreState,
   "chatsById" | "queuedMessagesByChatId" | "autoContinueEventsByChatId" | "chatTimingsByChatId" | "subagentRunsByChatId"
 >
 
-/**
- * Apply a single ChatEvent, TurnEvent, or QueuedMessageEvent to the in-memory
- * chat state. Mutates maps in-place.
- *
- * NOTE: `MessageEvent` (`message_appended`) is intentionally excluded because
- * it also mutates `legacyMessagesByChatId` — a class field not in StoreState.
- * That case remains inline in EventStore.applyEvent().
- *
- * @param state               - chat-related maps from StoreState
- * @param replayChatProvider  - class-level provider-replay map (not in StoreState)
- * @param event               - the event to apply
- */
 export function applyChatLifecycleEvent(
   state: ChatLifecycleState,
   replayChatProvider: Map<string, AgentProvider | null>,
@@ -423,17 +377,7 @@ export function applyChatLifecycleEvent(
   }
 }
 
-// ─── Auto-continue read-model ──────────────────────────────────────────────
 
-/**
- * Push an AutoContinueEvent onto the per-chat event list. Pure map mutation.
- *
- * Live append and boot replay both land here, so the retention passes applied
- * on the way in are what keep this list bounded — the log itself never expires.
- * `compactCronRunEvents` caps recurring-job run history. `compactLoopWakeEvents`
- * drops fired/cancelled loop-wake accepted events whose large prompts would
- * otherwise accumulate unboundedly over many iterations.
- */
 export function applyAutoContinueToState(
   autoContinueEventsByChatId: Map<string, AutoContinueEvent[]>,
   event: AutoContinueEvent,
@@ -446,13 +390,7 @@ export function applyAutoContinueToState(
   )
 }
 
-// ─── Transcript message metadata ───────────────────────────────────────────
 
-/**
- * Update chat metadata fields derived from a newly appended transcript entry.
- * Called for `message_appended` events (which also mutate legacyMessagesByChatId
- * and therefore stay partially inline in EventStore).
- */
 export function applyChatMessageMetadata(
   chatsById: Map<string, ChatRecord>,
   chatId: string,

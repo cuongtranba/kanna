@@ -48,10 +48,6 @@ describe("shouldAutoFollowTranscriptResize", () => {
 describe("CHAT_PAGE_LAYOUT_ROOT_CLASS", () => {
   const classes = CHAT_PAGE_LAYOUT_ROOT_CLASS.split(/\s+/)
 
-  // Regression: a flex item's automatic min-height is its content size, so
-  // without min-h-0 a long transcript expands the layout root past 100dvh.
-  // That makes the LegendList scroll container clientHeight === scrollHeight,
-  // killing scroll (most visible on mobile). Keep min-h-0.
   test("constrains vertical size so the transcript can scroll", () => {
     expect(classes).toContain("min-h-0")
   })

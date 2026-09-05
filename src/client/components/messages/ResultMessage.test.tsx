@@ -36,8 +36,6 @@ describe("ResultMessage", () => {
     expect(html).toContain("Other Chat")
     expect(html).toContain("href=\"/chat/abcdef12-3456-7890-abcd-ef1234567890\"")
     expect(html).toContain("All OAuth tokens are unavailable")
-    // durationMs === 0 means refusal never started; hide the "Failed after"
-    // footer so the UI doesn't lie with "Failed after 0ms".
     expect(html).not.toContain("Failed after")
   })
 
@@ -63,8 +61,6 @@ describe("ResultMessage", () => {
   })
 
   test("does not crash when result is missing (aborted-stream error entry)", () => {
-    // Aborted-stream error results persist with no `result` key (the SDK error
-    // frame carries none). The render must not call `.trim()` on undefined.
     const message = makeMessage({ durationMs: 3000 })
     delete (message as { result?: string }).result
     const html = renderToStaticMarkup(

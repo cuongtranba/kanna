@@ -58,14 +58,12 @@ describe("StackChatCreateRow", () => {
 
   test("each project row has a worktree select dropdown", () => {
     const html = renderRow()
-    // Should have at least two <select elements for the two projects
     const selectCount = (html.match(/<select/g) ?? []).length
     expect(selectCount).toBeGreaterThanOrEqual(2)
   })
 
   test("each project row has a primary radio input", () => {
     const html = renderRow()
-    // Should have radio inputs for both projects
     expect(html).toContain('type="radio"')
     const radioCount = (html.match(/type="radio"/g) ?? []).length
     expect(radioCount).toBeGreaterThanOrEqual(2)
@@ -73,7 +71,6 @@ describe("StackChatCreateRow", () => {
 
   test("first project is selected as primary by default", () => {
     const html = renderRow()
-    // React SSR renders defaultChecked as checked="" on the first radio
     expect(html).toContain("checked")
   })
 

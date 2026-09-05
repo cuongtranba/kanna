@@ -26,9 +26,6 @@ describe("statusTone", () => {
 const ALL_TONES = ["muted", "active", "attention", "destructive"] as const
 
 describe("statusToneClass draws only from the design tokens", () => {
-  // These returned `emerald-500` and `amber-500`, which are nowhere in
-  // DESIGN.md's warm rose palette. State is carried by the mark's shape now, so
-  // colour only has to agree — and it has to agree in the project's own inks.
   const OFF_PALETTE = /emerald|amber-\d|sky|violet|slate|zinc|gray|green-\d|red-\d/
 
   test("no tone returns a raw Tailwind palette colour", () => {

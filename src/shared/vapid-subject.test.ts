@@ -12,7 +12,7 @@ describe("isValidVapidSubject", () => {
     "mailto:a.b+c@sub.domain.co.uk",
     "https://github.com/cuongtranba/kanna",
     "https://kanna.lowbit.link",
-    "  mailto:kanna@example.com  ", // trimmed
+    "  mailto:kanna@example.com  ",
   ]
   for (const s of valid) {
     test(`accepts ${JSON.stringify(s)}`, () => {
@@ -21,18 +21,18 @@ describe("isValidVapidSubject", () => {
   }
 
   const invalid: string[] = [
-    "mailto:kanna@localhost", // the real-world poison → Apple 403 BadJwtToken
-    "mailto:kanna@nodot", // domain without a dot
-    "mailto:no-at-sign.com", // missing @
-    "mailto:kanna@.com", // leading-dot domain
-    "mailto:kanna@example.", // trailing-dot domain
-    "mailto:", // empty
-    "http://example.com", // not https
-    "https://localhost", // non-routable host
-    "https://nodot", // host without a dot
-    "kanna@example.com", // no scheme
-    "example.com", // bare
-    "", // empty
+    "mailto:kanna@localhost",
+    "mailto:kanna@nodot",
+    "mailto:no-at-sign.com",
+    "mailto:kanna@.com",
+    "mailto:kanna@example.",
+    "mailto:",
+    "http://example.com",
+    "https://localhost",
+    "https://nodot",
+    "kanna@example.com",
+    "example.com",
+    "",
   ]
   for (const s of invalid) {
     test(`rejects ${JSON.stringify(s)}`, () => {

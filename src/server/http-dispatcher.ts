@@ -38,32 +38,11 @@ function deriveOriginFromUpgrade(req: Request, url: URL): string {
   return `${scheme}://${host}`
 }
 
-/**
- * Assembles the Bun `fetch` handler for the Kanna HTTP server.
- *
- * Route ownership:
- * - /auth/* — auth status, login, logout
- * - /api/share/* — public share API (before auth gate)
- * - /ws — WebSocket upgrade (after origin + auth check when password set)
- * - /health — liveness probe
- * - /api/projects/:id/uploads — file upload CRUD
- * - /api/projects/:id/files/* — project file content
- * - /api/local-file — local filesystem read
- * - /api/projects/:id/paths — fuzzy path list
- * - /api/plugins/* — plugin system HTTP surface (inherits the /api/ auth
- *   gate above; 404s whole when plugins are globally disabled)
- * - /* — static SPA shell + hashed assets
- */
 export function createHttpDispatcher(
   deps: HttpDispatcherDeps,
 ): (req: Request, server: Server<ClientState>) => Promise<Response | undefined> {
   const { store, appSettings, auth, sessionShare, distDir } = deps
 
-  // Boot-time composition: give the process's PluginService its durable record
-  // store and re-register what is already installed. This factory runs once and
-  // is the only boot path that holds `appSettings`, so it is where the wire
-  // goes — without it the registry is in-memory only and every install vanishes
-  // on restart while its bundles sit on disk.
   configurePluginService(createInstalledPluginStore(appSettings))
 
   return async function dispatch(req: Request, server: Server<ClientState>): Promise<Response | undefined> {

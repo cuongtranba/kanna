@@ -1,15 +1,9 @@
 export interface PtyProcess {
-  /** OS pid of the spawned child (== pgid because Bun.Terminal setsid). */
   pid: number
   sendInput(data: string): Promise<void>
   resize(cols: number, rows: number): void
   exited: Promise<number>
-  /** Default terminate: SIGTERM (gives the child a chance to flush). */
   close(): void
-  /**
-   * Force kill (SIGKILL) — use after SIGTERM has had a grace window and
-   * the process still hasn't exited. Bypasses any child cleanup.
-   */
   kill(signal?: NodeJS.Signals | number): void
 }
 
@@ -55,12 +49,12 @@ export async function spawnPtyProcess(opts: SpawnPtyProcessArgs): Promise<PtyPro
     resize(newCols, newRows) { terminal.resize(newCols, newRows) },
     exited: proc.exited,
     close() {
-      try { terminal.close() } catch { /* swallow */ }
-      try { proc.kill("SIGTERM") } catch { /* swallow */ }
+      try { terminal.close() } catch { }
+      try { proc.kill("SIGTERM") } catch { }
     },
     kill(signal) {
-      try { terminal.close() } catch { /* swallow */ }
-      try { proc.kill(signal ?? "SIGKILL") } catch { /* swallow */ }
+      try { terminal.close() } catch { }
+      try { proc.kill(signal ?? "SIGKILL") } catch { }
     },
   }
 }

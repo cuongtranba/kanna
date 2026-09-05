@@ -32,7 +32,7 @@ describe("FollowedSessionRegistry", () => {
     reg.consider(INFO)
     expect(reg.isFollowing("chat-1")).toBe(true)
     const { reg: reg2, deps } = makeRegistry()
-    reg2.consider({ ...INFO, sourceMtimeMs: 1_000_000 - 700_000 }) // older than activeWindowMs
+    reg2.consider({ ...INFO, sourceMtimeMs: 1_000_000 - 700_000 })
     expect(reg2.isFollowing("chat-1")).toBe(false)
     expect(deps.onChange).not.toHaveBeenCalled()
   })
@@ -42,7 +42,7 @@ describe("FollowedSessionRegistry", () => {
     stat.size = 250
     await reg.tick()
     expect(deps.runDelta).toHaveBeenCalledTimes(1)
-    await reg.tick() // no further growth
+    await reg.tick()
     expect(deps.runDelta).toHaveBeenCalledTimes(1)
   })
   test("tick pauses while a Kanna turn is active (still following)", async () => {
@@ -62,7 +62,7 @@ describe("FollowedSessionRegistry", () => {
   test("idle beyond idleMs stops following; missing file stops too", async () => {
     const { reg, advance } = makeRegistry()
     reg.consider(INFO)
-    advance(700_000) // no growth for > idleMs
+    advance(700_000)
     await reg.tick()
     expect(reg.isFollowing("chat-1")).toBe(false)
     const { reg: reg2 } = makeRegistry({ statFile: mock(() => null) })

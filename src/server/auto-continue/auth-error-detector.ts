@@ -3,26 +3,15 @@ import type { JsonValue } from "../../shared/json"
 export interface AuthErrorDetection {
   chatId: string
   reason: string
-  /** Diagnostic only: the throwable, or the result text it was read from. */
   raw: Error | JsonValue
 }
 
-/**
- * The auth-failure fields an SDK/CLI error may carry beyond `Error`'s own.
- * `Error` is assignable to this (every member is optional and `message`
- * overlaps), so widening needs no cast.
- */
 interface ErrorLike {
   readonly message?: string
   readonly status?: JsonValue
   readonly api_error_status?: JsonValue
 }
 
-// Strings the Claude CLI / Anthropic API emit when an OAuth token is
-// rejected. Covers both the JSON error envelope (`authentication_error`)
-// and the CLI's surfaced result text (`Failed to authenticate.`). The
-// `api_error_status: 401` form appears in JSONL `result` entries from
-// the CLI when subscription auth fails.
 const AUTH_ERROR_PATTERNS = [
   /api_error_status[^,}]*\s*:\s*401/i,
   /401\s+Invalid authentication credentials/i,
@@ -36,12 +25,6 @@ function isAuthErrorText(text: string): boolean {
 }
 
 export class ClaudeAuthErrorDetector {
-  /**
-   * Inspect a thrown error (from the SDK `query()` stream) for OAuth/auth
-   * failure signals. Returns a detection when the token used for the
-   * spawn has been rejected by the API — caller should mark the token as
-   * errored and rotate.
-   */
   detect(chatId: string, error: Error): AuthErrorDetection | null {
     const e: ErrorLike = error
     if (e.status === 401 || e.api_error_status === 401) {
@@ -54,12 +37,6 @@ export class ClaudeAuthErrorDetector {
     return null
   }
 
-  /**
-   * Inspect the textual `result` field of a CLI JSONL `result` entry
-   * (Claude Code's subprocess-level error surface). The CLI emits
-   * `"api_error_status":401` and `"Failed to authenticate. API Error: 401
-   * Invalid authentication credentials"` for OAuth rejection.
-   */
   detectFromResultText(chatId: string, text: string): AuthErrorDetection | null {
     if (typeof text !== "string" || text.length === 0) return null
     if (!isAuthErrorText(text)) return null

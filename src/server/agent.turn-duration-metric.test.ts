@@ -5,19 +5,12 @@ import { startMetricRecorder, type MetricRecorder } from "./test-helpers/metric-
 import type { ActiveTurn } from "./claude-session-state"
 import type { HarnessTurn } from "./harness-types"
 
-// The turn-duration histogram is recorded from the store's turn-terminal
-// observer — the one choke point every provider path funnels through. These
-// tests drive that observer directly: no session is spawned, because what is
-// under test is the enrichment (duration + provider/model off the ActiveTurn),
-// not the turn machinery around it.
 
 interface TerminalStore {
   onTurnTerminal:
     | ((chatId: string, outcome: "finished" | "failed" | "cancelled", error?: string) => void)
     | null
   runningSubagentRuns?: () => never[]
-  // The observer also drives the armed-loop wake re-arm on a `failed` outcome,
-  // which replays this log. Empty = no loop armed, so that path no-ops here.
   getAutoContinueEvents?: () => never[]
 }
 
@@ -94,9 +87,6 @@ describe("kanna.turn.duration_ms", () => {
     expect(outcomes).toEqual(["failed", "finished"])
   })
 
-  // A background-task self-wake streams entries with no ActiveTurn registered.
-  // It is not a Kanna turn and has no start time, so it must record nothing
-  // rather than a fabricated duration.
   test("records nothing when no turn is active", async () => {
     recorder = startMetricRecorder()
     const store: TerminalStore = { onTurnTerminal: null }

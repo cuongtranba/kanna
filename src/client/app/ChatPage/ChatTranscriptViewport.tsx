@@ -61,29 +61,14 @@ export type PendingQuestionRun = SubagentRunSnapshot & {
 
 export type PendingMainQuestion = Extract<ProcessedToolCall, { toolKind: "ask_user_question" }>
 
-/** The one field the scroll handler reads — LegendList's DOM event and the
- * synthetic `{currentTarget}` the resize effect fabricates both satisfy it. */
 interface ScrollEventLike {
-  /** Present on the DOM event LegendList actually forwards on web. */
   readonly currentTarget?: EventTarget | null
-  /** Declared only so LegendList's React-Native-shaped event type matches. */
   readonly nativeEvent?: object
 }
 
-/** Stable option objects — the render-context memo keys on reference identity. */
 const FOOTER_SURFACE_OPTIONS = { askUserQuestionSurface: "footer" } as const
 const INLINE_SURFACE_OPTIONS = { askUserQuestionSurface: "inline" } as const
 
-/**
- * The main agent's own AskUserQuestion still awaiting an answer, or null.
- *
- * `latestToolIds.AskUserQuestion` is already "latest UNRESOLVED" — but that
- * means latest in the transcript, NOT last on screen: background tasks stream
- * hundreds of entries below a parked question, burying it. Selecting it here
- * lets the viewport re-render the actionable card in the footer.
- *
- * Pure so it can be unit-tested without rendering the virtualized list.
- */
 export function selectPendingMainQuestion(
   messages: readonly KannaState["messages"][number][],
   latestToolIds: Record<string, string | null>,
@@ -94,16 +79,11 @@ export function selectPendingMainQuestion(
     const message = messages[index]
     if (message.id !== id) continue
     if (message.kind !== "tool" || message.toolKind !== "ask_user_question") return null
-    // Guard a latestToolIds prop one tick staler than `messages`.
     return message.result ? null : message
   }
   return null
 }
 
-/**
- * Select every subagent run awaiting a user response, oldest request first.
- * Pure so it can be unit-tested without rendering the virtualized list.
- */
 export function collectPendingQuestionRuns(
   subagentRuns: Record<string, SubagentRunSnapshot> | undefined,
 ): PendingQuestionRun[] {
@@ -207,9 +187,6 @@ export const ChatTranscriptViewport = memo(({
     latestToolIds,
   }), [isProcessing, latestToolIds, localPath, messages])
   const resolvedRows = useStableResolvedRows(rawRows)
-  // Kept beside the rows rather than written onto them: useStableResolvedRows
-  // reuses unchanged row objects, so a gap stored on a row would go stale
-  // whenever only its neighbour changed.
   const gapClassByRowId = useMemo(() => buildTranscriptGapClassMap(resolvedRows), [resolvedRows])
 
   useEffect(() => {
@@ -250,9 +227,6 @@ export const ChatTranscriptViewport = memo(({
     return { runsByDelegateToolId: matched, childrenByParentRunId: byParent }
   }, [messages, subagentRuns])
 
-  // Any subagent run (top-level or nested) awaiting a user response. Surfaced
-  // at the footer so a question never stays buried under its historical
-  // user_prompt anchor. See adr-20260618-subagent-pending-question-footer-surface.
   const pendingQuestionRuns = useMemo(() => collectPendingQuestionRuns(subagentRuns), [subagentRuns])
   const pendingMainQuestion = useMemo(
     () => selectPendingMainQuestion(messages, latestToolIds),
@@ -323,13 +297,6 @@ export const ChatTranscriptViewport = memo(({
     }
   }, [activeChatId, handleScroll, listRef, resolvedRows.length, timer])
 
-  // LegendList's maintainVisibleContentPosition corrects scroll position by
-  // calling scrollBy() whenever an off-screen row's measured height differs
-  // from its estimate. On a long chat that fires every frame of a drag, and
-  // a programmatic scrollBy mid-gesture aborts native touch momentum on iOS/
-  // Android — making long chats impossible to scroll by touch (desktop wheel
-  // unaffected). Suppress only those corrections while a finger gesture and
-  // its inertia own the scroll; MVCP stays fully enabled for non-touch updates.
   useEffect(() => {
     let cleanup: (() => void) | undefined
     const frameId = timer.requestAnimationFrame(() => {
@@ -450,7 +417,6 @@ export const ChatTranscriptViewport = memo(({
   const liveTunnelRecord = liveTunnelId && tunnels ? tunnels[liveTunnelId] : undefined
 
   const listFooter = (
-    // pt-4 replaces the trailing air the last row used to provide via pb-5.
     <div className="mx-auto w-full max-w-[800px] pt-4">
       <PluginsFooterSlot />
       {loopProgress && (loopProgress.armed || loopProgress.rows.length > 0) ? (
@@ -513,8 +479,6 @@ export const ChatTranscriptViewport = memo(({
             <MessageCircleQuestion className="h-3.5 w-3.5 shrink-0" />
             <span><span className="text-foreground">Claude</span> needs your input</span>
           </div>
-          {/* Reset to "inline" so this instance renders the actionable card;
-              the transcript row above degrades to a pointer. */}
           <TranscriptRenderOptionsProvider value={INLINE_SURFACE_OPTIONS}>
             <AskUserQuestionMessage
               message={pendingMainQuestion}
@@ -556,9 +520,6 @@ export const ChatTranscriptViewport = memo(({
     <>
       <SubagentTranscriptFetchProvider value={getSubagentTranscript ?? null}>
       <OpenLocalLinkProvider onOpenLocalLink={handleOpenLocalLinkClick}>
-      {/* Always mounted — only the VALUE flips. Mounting conditionally would
-          change the tree shape and remount every row, resetting per-row
-          scoped stores (tool-group expansion, in-progress answer drafts). */}
       <TranscriptRenderOptionsProvider
         value={pendingMainQuestion ? FOOTER_SURFACE_OPTIONS : INLINE_SURFACE_OPTIONS}
       >
@@ -577,8 +538,6 @@ export const ChatTranscriptViewport = memo(({
           onStartReached={handleStartReached}
           onStartReachedThreshold={0.1}
           className="h-full flex-1 overflow-x-hidden overscroll-y-contain touch-pan-y px-3 scroll-pt-[72px] [scrollbar-gutter:auto]"
-          // Rows now pad above rather than below, so the last row contributes no
-          // trailing air of its own; make up the difference here.
           contentContainerStyle={{ paddingBottom: transcriptPaddingBottom + 30 }}
           ListHeaderComponent={listHeader}
           ListFooterComponent={listFooter}

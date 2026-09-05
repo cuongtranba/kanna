@@ -1,24 +1,6 @@
-/**
- * Turn a mermaid parse failure into advice the model can act on.
- *
- * A jison message names the token it choked on, which is rarely the thing the
- * author got wrong: `Unrecognized text` for a path label, `got 'PS'` for an
- * unquoted parenthesis. Handing that back raw asks the model to re-derive
- * mermaid's grammar from a token name. These rules say what to change instead.
- *
- * Advice only — never a rewritten diagram. A wrong hint costs one reading; a
- * wrong rewrite would silently change what the author meant.
- *
- * Pure — no DOM, no mermaid import.
- */
 
 import type { MermaidErrorDetail } from "./mermaidError"
 
-/**
- * mermaid's `text` lexer state has exactly one plain-text rule,
- * `/^(?:[^\[\]\(\)\{\}\|\"]+)/` — so an unquoted label is readable only while
- * it holds none of these. The parser reports the token, this names the glyph.
- */
 const TOKEN_CHARACTERS: Readonly<Record<string, string>> = {
   PS: "(",
   PE: ")",
@@ -33,7 +15,6 @@ const TOKEN_CHARACTERS: Readonly<Record<string, string>> = {
 const QUOTE_ADVICE =
   "Wrap the whole label in double quotes — a quoted label may contain anything. Write a literal `\"` as `#quot;`."
 
-/** `[/` or `[\` opened on this line with no `/]` or `\]` to close it. */
 function opensUnclosedShape(line: string): boolean {
   return /\[[/\\]/.test(line) && !/[/\\]\]/.test(line)
 }

@@ -46,11 +46,6 @@ describe("board.card.startWork", () => {
     expect(sent).toEqual([{ v: 1, type: "ack", id: "req-1", result: RESULT }])
   })
 
-  /**
-   * The dep is optional on the router, so an unwired server would otherwise
-   * accept the command and answer nothing — the failure mode that hid the board
-   * MCP tools for a whole phase.
-   */
   test("says so when the server has no start-work wiring", async () => {
     const { deps, sent } = setup({ startWork: undefined })
     await handleBoardCommand(deps, { type: "board.card.startWork", cardId: "card-1" }, "req-1")
@@ -64,12 +59,6 @@ describe("board.card.startWork", () => {
   })
 })
 
-/**
- * `board.card.update` is the only path by which a user-defined field is ever
- * written, so what it refuses is the whole guarantee: the store REPLACES a
- * card's content with whatever it is handed, and it does not check that against
- * the board's schema.
- */
 describe("board.card.update content", () => {
   const FIELDS: FieldDef[] = [
     { id: "description", label: "Description", kind: "longtext", options: null, required: false },
@@ -147,7 +136,6 @@ describe("board.card.update content", () => {
     expect(sent[0]).toMatchObject({ type: "error", id: "req-1" })
   })
 
-  /** A title-only update predates this and must keep working untouched. */
   test("a title-only update never consults the schema", async () => {
     const { deps, sent } = setup()
     const card = boardWithCard(deps)
@@ -167,12 +155,6 @@ describe("board.card.update content", () => {
   })
 })
 
-/**
- * `board.update` is the only path by which a board's card schema is ever
- * written. The store writes `cardFields` whole and checks nothing, so what this
- * refuses is the whole guarantee — a duplicate field id would leave two fields
- * fighting over one card value with no way back.
- */
 describe("board.update cardFields", () => {
   function newBoard(deps: BoardCommandDeps) {
     const registry = deps.boardRegistry
@@ -255,11 +237,6 @@ describe("board.update cardFields", () => {
   })
 })
 
-/**
- * `board.sync.status` is the ONLY way `BoardSyncStatus` reaches the client —
- * a plain request/ack, not a broadcast topic — so nothing else would catch a
- * shape change here.
- */
 describe("board.sync", () => {
   function boundBoard(registry: ReturnType<typeof createBoardRegistry>) {
     return registry.createBoard({ owner: { kind: "project", id: "project-1" }, title: "Board" })
@@ -296,8 +273,6 @@ describe("board.sync", () => {
       suggestSyncRepos: () =>
         Promise.resolve([
           { projectId: "p1", projectName: "kanna", repo: { owner: "cuongtranba", repo: "kanna" }, boundTo: null },
-          // Listed, not dropped: the connect screen has to SAY "no remote"
-          // about it, and silence would read as "already handled".
           { projectId: "p2", projectName: "scratch", repo: null, boundTo: null },
         ]),
     })
@@ -413,10 +388,6 @@ describe("board.card.block / board.card.unblock", () => {
     expect(registry.cardDetail(client.id)!.blockers).toEqual([])
   })
 
-  /**
-   * The refusal has to reach the user as a sentence naming the cards, not as a
-   * socket that dropped the command — the drawer renders whatever comes back.
-   */
   test("a cycle becomes an error envelope naming both cards", async () => {
     const { deps, sent, registry } = setup()
     const { api, client } = twoCards(registry)

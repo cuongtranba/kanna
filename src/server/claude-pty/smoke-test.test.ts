@@ -103,7 +103,6 @@ describe("createSmokeTestGate singleflight (adr-20260522-oauth-token-share-cap)"
       gate.canSpawn({ binarySha256: "fff", model: "m1" }),
       gate.canSpawn({ binarySha256: "fff", model: "m1" }),
     ]
-    // Give the event loop one tick so each promise registers with inFlight.
     await Promise.resolve()
     expect(probeStartCount).toBe(1)
     expect(resolvers).toHaveLength(1)
@@ -117,15 +116,13 @@ describe("createSmokeTestGate singleflight (adr-20260522-oauth-token-share-cap)"
     let probeStartCount = 0
     const probe: SmokeTestProbeFn = async () => { probeStartCount += 1; return "pass" }
     const cache: SmokeTestCache = {
-      // Read-only cache: every get returns null so the gate must probe each time.
       async get() { return null },
-      async set() { /* discard */ },
-      async invalidate() { /* noop */ },
+      async set() { },
+      async invalidate() { },
     }
     const gate = createSmokeTestGate({ probe, cache, ttlMs: 24 * 3600 * 1000, now: () => Date.now() })
     await gate.canSpawn({ binarySha256: "ggg", model: "m1" })
     await gate.canSpawn({ binarySha256: "ggg", model: "m1" })
-    // Two sequential cache-miss calls → two probes (singleflight only collapses concurrent ones).
     expect(probeStartCount).toBe(2)
   })
 

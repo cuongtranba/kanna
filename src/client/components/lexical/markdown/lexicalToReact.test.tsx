@@ -1,10 +1,3 @@
-/**
- * Tests for lexicalToReact.tsx — verifies that renderMarkdownToReact produces
- * the expected HTML tags and className strings for representative markdown inputs.
- *
- * Strategy: renderToStaticMarkup (matching the existing test pattern in this repo)
- * on a wrapper element to assert tag presence / class presence.
- */
 import { describe, expect, test } from "bun:test"
 import { renderToStaticMarkup } from "react-dom/server"
 import { renderMarkdownToReact } from "./lexicalToReact"
@@ -16,7 +9,6 @@ function render(markdown: string): string {
 }
 
 describe("renderMarkdownToReact", () => {
-  // ---- Headings ------------------------------------------------------------
 
   test("renders h1 with correct class", () => {
     const html = render("# Hello")
@@ -52,7 +44,6 @@ describe("renderMarkdownToReact", () => {
     expect(h6).toContain("<h6")
   })
 
-  // ---- Paragraph -----------------------------------------------------------
 
   test("renders paragraph with break-words class", () => {
     const html = render("Just a plain paragraph.")
@@ -61,7 +52,6 @@ describe("renderMarkdownToReact", () => {
     expect(html).toContain("Just a plain paragraph.")
   })
 
-  // ---- Blockquote ----------------------------------------------------------
 
   test("renders blockquote with border-l-2 class", () => {
     const html = render("> A quoted line")
@@ -71,7 +61,6 @@ describe("renderMarkdownToReact", () => {
     expect(html).toContain("A quoted line")
   })
 
-  // ---- Inline text formats -------------------------------------------------
 
   test("renders bold as <strong> with font-semibold", () => {
     const html = render("This is **bold** text")
@@ -100,7 +89,6 @@ describe("renderMarkdownToReact", () => {
     expect(html).toContain("console.log()")
   })
 
-  // ---- Code fence ----------------------------------------------------------
 
   test("renders fenced code block with <pre><code> and language class", () => {
     const md = "```typescript\nconst x = 1\n```"
@@ -119,7 +107,6 @@ describe("renderMarkdownToReact", () => {
     expect(html).not.toContain("language-")
   })
 
-  // ---- Link ----------------------------------------------------------------
 
   test("renders link as <a> with underline and target=_blank", () => {
     const html = render("[Example](https://example.com)")
@@ -130,7 +117,6 @@ describe("renderMarkdownToReact", () => {
     expect(html).toContain("Example")
   })
 
-  // ---- Unordered list ------------------------------------------------------
 
   test("renders unordered list as <ul> with list-disc", () => {
     const html = render("- alpha\n- beta\n- gamma")
@@ -142,7 +128,6 @@ describe("renderMarkdownToReact", () => {
     expect(html).toContain("gamma")
   })
 
-  // ---- Ordered list --------------------------------------------------------
 
   test("renders ordered list as <ol> with list-decimal", () => {
     const html = render("1. first\n2. second")
@@ -153,7 +138,6 @@ describe("renderMarkdownToReact", () => {
     expect(html).toContain("second")
   })
 
-  // ---- Task list -----------------------------------------------------------
 
   test("renders task list with checkboxes", () => {
     const html = render("- [x] Done\n- [ ] Pending")
@@ -164,12 +148,10 @@ describe("renderMarkdownToReact", () => {
 
   test("checked task item has checked attribute", () => {
     const html = render("- [x] Done")
-    // renderToStaticMarkup renders checked boolean prop as checked=""
     expect(html).toContain("checked")
     expect(html).toContain("Done")
   })
 
-  // ---- GFM table -----------------------------------------------------------
 
   test("renders GFM table with <table>, <thead>, <tbody>", () => {
     const md = [
@@ -206,7 +188,6 @@ describe("renderMarkdownToReact", () => {
     expect(html).toContain("border-border")
   })
 
-  // ---- Mixed content -------------------------------------------------------
 
   test("renders mixed markdown: heading + paragraph + code fence", () => {
     const md = "# Heading\n\nA paragraph.\n\n```js\nconsole.log('hi')\n```"
@@ -225,7 +206,6 @@ describe("renderMarkdownToReact", () => {
     expect(html).toContain("<em")
   })
 
-  // ---- Empty / edge cases --------------------------------------------------
 
   test("renders empty string without throwing", () => {
     expect(() => render("")).not.toThrow()
@@ -234,7 +214,6 @@ describe("renderMarkdownToReact", () => {
   test("renders plain text without any special wrappers beyond paragraph", () => {
     const html = render("plain text")
     expect(html).toContain("plain text")
-    // Should not have heading, list, etc.
     expect(html).not.toContain("<h1")
     expect(html).not.toContain("<ul")
   })
@@ -244,7 +223,6 @@ describe("renderMarkdownToReact", () => {
     const html2 = render("# Second")
     expect(html1).toContain("First")
     expect(html2).toContain("Second")
-    // Both should render correctly regardless of order
     expect(html1).toContain("<h1")
     expect(html2).toContain("<h1")
   })

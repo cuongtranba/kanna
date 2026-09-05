@@ -10,21 +10,7 @@ import {
   type SplitDirection,
 } from "./types"
 
-/**
- * Rebuild a layout from untrusted input.
- *
- * Persisted state is the main caller, and it is genuinely untrusted: it may
- * come from an older release, a hand-edited localStorage entry, or a
- * half-written value. Reconstructing defensively on every read — rather than
- * trusting the shape and migrating it — is what lets the tree evolve without
- * migration code. Anything unusable is dropped; the result is always valid.
- */
 
-/**
- * A node missing its id gets one derived from its position in the tree, so
- * normalizing the same input twice yields identical ids — otherwise React keys
- * would churn on every read and remount the panes.
- */
 function fallbackId(prefix: string, path: string): string {
   return `${prefix}-recovered-${path || "root"}`
 }
@@ -50,8 +36,6 @@ function readTabs(value: JsonValue): PaneTab[] {
     const target = normalizeTabTarget(entry.target)
     if (!target) continue
 
-    // Re-derive the id rather than trusting the stored one, so a tab whose id
-    // disagrees with its own target cannot poison dedup or React keys.
     tabs.push(createTab(target, readNumber(entry.createdAt) ?? 0))
   }
   return tabs
@@ -79,8 +63,6 @@ function readNode(value: JsonValue | undefined, depth: number, path: string): Pa
   if (value.kind !== "group") return null
   if (!Array.isArray(value.children)) return null
 
-  // Past the cap, flatten the remaining subtree into the panes it contains
-  // rather than discarding the user's tabs.
   if (depth >= MAX_TREE_DEPTH) {
     const panes = value.children
       .map((child, index) => readNode(child, depth, `${path}.${index}`))
@@ -96,8 +78,6 @@ function readNode(value: JsonValue | undefined, depth: number, path: string): Pa
     .filter((child): child is PaneNode => child !== null)
   if (children.length === 0) return null
 
-  // createGroup upholds the structural invariants: sizes are renormalized to
-  // the real child count, and a single child collapses rather than staying wrapped.
   return createGroup(
     id ?? fallbackId("group", path),
     readDirection(value.direction),
@@ -107,8 +87,6 @@ function readNode(value: JsonValue | undefined, depth: number, path: string): Pa
 }
 
 function resolveFocusedPaneId(value: JsonValue, panes: readonly PaneNode[]): string | null {
-  // null is a meaningful state ("nothing focused"), so it is preserved; an id
-  // that no longer resolves falls back to the first pane.
   if (value === null) return null
   const requested = readString(value)
   if (requested && panes.some((pane) => pane.id === requested)) return requested

@@ -96,7 +96,6 @@ interface PendingTurn {
   todoSequence: number
   pendingWebSearchResultToolId: string | null
   resolved: boolean
-  /** Most recent token usage snapshot for the turn; stashed to enrich the result entry. */
   lastUsageSnapshot?: ContextWindowUsageSnapshot
   onToolRequest: (request: HarnessToolRequest) => Promise<JsonValue>
   onApprovalRequest?: (
@@ -138,11 +137,6 @@ export interface StartCodexSessionArgs {
   serviceTier?: ServiceTier
   sessionToken: string | null
   pendingForkSessionToken?: string | null
-  /**
-   * Forwarded into `ThreadStartParams.developerInstructions` on `thread/start`.
-   * Empty / whitespace-only sends `null`. Mirrors the Claude `--append-system-prompt`
-   * channel. Setting this mid-chat requires a thread restart to take effect.
-   */
   developerInstructions?: string
 }
 
@@ -468,12 +462,10 @@ export class CodexAppServerManager {
     try {
       context.child.kill("SIGKILL")
     } catch {
-      // ignore kill failures
     }
   }
 
   stopAll() {
-    // Snapshot the values first because stopSession mutates the map.
     const contexts = Array.from(this.sessions.values())
     for (const ctx of contexts) {
       this.stopSession(ctx.chatId, ctx.scope)
@@ -745,8 +737,6 @@ export class CodexAppServerManager {
         this.handleContextCompacted(pendingTurn, notification.params)
         return
       case "error":
-        // `willRetry` means codex is reconnecting on its own and the turn is
-        // still alive; failing it here kills a turn that would have recovered.
         if (notification.params.willRetry === true) return
         this.failContext(
           context,
@@ -784,8 +774,6 @@ export class CodexAppServerManager {
     }
 
     if (notification.item.type === "dynamicToolCall" && DEFERRED_DYNAMIC_TOOLS.has(notification.item.tool)) {
-      // Defer emission to item/completed — `started` args carry placeholders
-      // (e.g. ImageGeneration's `{revisedPrompt:null, status:"in_progress"}`).
       return
     }
 
@@ -894,7 +882,6 @@ export class CodexAppServerManager {
       return
     }
 
-    // Stash the latest snapshot so handleTurnCompleted can enrich the result entry.
     pendingTurn.lastUsageSnapshot = usage
 
     pendingTurn.queue.push({
@@ -985,19 +972,6 @@ export class CodexAppServerManager {
     context.closed = true
   }
 
-  /**
-   * Send one JSON-RPC request and resolve with the reply EXACTLY as the wire
-   * describes it: a `JsonValue`.
-   *
-   * It used to be `sendRequest<TResult>`, where `TResult` was the caller's
-   * claim about one method's reply shape and two angle-bracket assertions
-   * bridged it to the `JsonValue` the transport actually stores — the single
-   * unchecked step in this transport, and unfixable in place, because no type
-   * guard can be written generically over `TResult`. The claim now lives where
-   * it can be CHECKED: each caller decodes the reply into the fields it reads
-   * (`decodeThreadId`, `decodeTurnId`), so a protocol change surfaces as a
-   * thrown error naming the method instead of an `undefined` two frames later.
-   */
   private async sendRequest(context: SessionContext, method: string, params: CodexRequestParams): Promise<JsonValue> {
     const id = randomUUID()
     const promise = new Promise<JsonValue>((resolve, reject) => {

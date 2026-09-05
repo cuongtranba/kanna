@@ -195,8 +195,6 @@ describe("CronCommandErrorMessage", () => {
     expect(html).not.toContain("Copy fix")
   })
 
-  // `/cron` starts no turn, so this card is the only place the typed line can
-  // appear — without it the reader is told a line is wrong but not which one.
   test("shows the line that failed", () => {
     const html = renderToStaticMarkup(
       <CronCommandErrorMessage

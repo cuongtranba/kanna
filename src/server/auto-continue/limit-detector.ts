@@ -4,7 +4,6 @@ export interface LimitDetection {
   chatId: string
   resetAt: number
   tz: string
-  /** Diagnostic only: the throwable, the result text, or the SDK payload. */
   raw: Error | JsonValue
 }
 
@@ -14,11 +13,6 @@ export interface LimitDetector {
   detectFromSdkRateLimitInfo?(chatId: string, info: JsonValue): LimitDetection | null
 }
 
-/**
- * The transport fields a rate-limit throwable may carry beyond `Error`'s own.
- * Every member is optional and `message` overlaps `Error`, so an `Error`
- * widens to this without a cast.
- */
 interface RateLimitErrorLike {
   readonly message?: string
   readonly headers?: JsonValue
@@ -134,10 +128,6 @@ export class ClaudeLimitDetector implements LimitDetector {
       }
     }
 
-    // Fallback: the Claude Code SDK rethrows CLI result errors as
-    // `Error("Claude Code returned an error result: <text>")`. Parse the
-    // text directly for "You've hit your limit · resets ..." / "usage limit
-    // reached|<unix>" forms.
     return this.detectFromResultText(chatId, error.message)
   }
 
@@ -154,15 +144,12 @@ export class ClaudeLimitDetector implements LimitDetector {
     if (info.status !== "rejected") return null
     const raw = info.resetsAt
     if (typeof raw !== "number" || !Number.isFinite(raw) || raw <= 0) return null
-    // SDK emits `resetsAt` as epoch seconds for claude.ai subscription limits;
-    // coerce to ms defensively (anything below year 5138 in ms is below 1e14).
     const resetAt = raw < 1e12 ? Math.round(raw * 1000) : raw
     return { chatId, resetAt, tz: "system", raw: info }
   }
 }
 
 export function parseClaudeUsageLimitPipe(text: string): number | null {
-  // Claude CLI sometimes returns "Claude AI usage limit reached|<unix-seconds>".
   if (typeof text !== "string") return null
   const match = text.match(/usage limit reached\|(\d{9,13})/i)
   if (!match) return null

@@ -64,7 +64,6 @@ import { BroadcastManager } from "./ws-router-broadcast"
 import type { RepoSuggestion } from "../shared/boards/sync-types"
 import type { PackageUpdateManager } from "./package-update-manager"
 
-// Re-export skill utilities so existing callers (tests, server.ts, etc.) keep working.
 export {
   assertSafeSkillId,
   assertSafeSkillSource,
@@ -78,10 +77,8 @@ export {
   uninstallSkill,
 } from "./ws-router-skills"
 
-// Re-export settings helpers that tests import from this module.
 export { resolveMcpTestBearer } from "./ws-router-settings"
 
-// Re-export for backwards compatibility — callers import these from ws-router.
 export type { ClientState } from "./ws-router-utils"
 export { isBenignStaleStateMessage } from "./ws-router-utils"
 
@@ -111,7 +108,6 @@ interface CreateWsRouterArgs {
   workflowRegistry?: WorkflowRegistry
   boardRegistry?: BoardRegistry
   boardSync?: BoardSync
-  /** Card → worktree → chat. Built in `server.ts`, where git and the chat store are reachable. */
   startWork?: (cardId: string) => Promise<StartWorkResult>
   startWorkView?: (cardId: string) => Promise<StartWorkView>
   cleanupView?: (cardId: string) => Promise<WorktreeCleanupView | null>
@@ -199,12 +195,6 @@ export function createWsRouter({
     envelopeBuilder,
   })
 
-  /**
-   * The tree a chat's git commands operate in: its worktree when it has one,
-   * its project's checkout otherwise. The same resolution the agent's cwd uses,
-   * so the Changes panel can never describe a different tree than the one the
-   * agent is editing.
-   */
   function resolveChatRepoPath(chatId: string): string {
     const { chat, project } = resolveChatProject(chatId)
     return resolveSpawnPaths(chat, project.localPath).cwd

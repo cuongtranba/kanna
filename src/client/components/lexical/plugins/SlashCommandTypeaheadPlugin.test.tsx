@@ -1,17 +1,3 @@
-/**
- * Tests for SlashCommandTypeaheadPlugin.
- *
- * Same strategy as MentionTypeaheadPlugin.test.tsx: we test the independently-
- * testable pieces without mounting a full React+DOM+Lexical tree.
- *
- *   1. SlashCommandMenuOption — key derivation, command storage.
- *   2. Node-insertion logic — headless editor verifies SlashCommandNode
- *      text-content serialisation for both argument and no-argument variants.
- *   3. The custom trigger regex (SLASH_TRIGGER_RE) — fires at start-of-input
- *      OR after whitespace, mirroring the mention trigger.
- *   4. filterCommands integration — verifies that the plugin's filtering
- *      logic (reused from slash-commands.ts) produces sorted results.
- */
 import { describe, expect, it } from "bun:test"
 import { createHeadlessEditor } from "@lexical/headless"
 import { $createParagraphNode, $createTextNode, $getRoot } from "lexical"
@@ -24,9 +10,6 @@ import {
 import { filterCommands, normalizeCommandName } from "../../../lib/slash-commands"
 import type { SlashCommand } from "../../../../shared/types"
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function buildEditor() {
   return createHeadlessEditor({
@@ -56,9 +39,6 @@ function makeCmd(
   }
 }
 
-// ---------------------------------------------------------------------------
-// dedupeCommandsByName (regression — duplicate React keys / selection breakage)
-// ---------------------------------------------------------------------------
 
 describe("dedupeCommandsByName", () => {
   it("drops later commands sharing a normalized name, keeping the first", () => {
@@ -69,7 +49,7 @@ describe("dedupeCommandsByName", () => {
       makeCmd("help"),
     ])
     expect(result.map((c) => c.name)).toEqual(["c3", "model", "help"])
-    expect(result[0]?.scope).toBe("personal") // first occurrence kept
+    expect(result[0]?.scope).toBe("personal")
   })
 
   it("yields unique option keys (no duplicate React keys)", () => {
@@ -85,9 +65,6 @@ describe("dedupeCommandsByName", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// SlashCommandMenuOption
-// ---------------------------------------------------------------------------
 
 describe("SlashCommandMenuOption", () => {
   it("uses command name as the key", () => {
@@ -111,10 +88,6 @@ describe("SlashCommandMenuOption", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// Node insertion — wire-form text content
-// (mirrors what onSelectOption inserts via $insertNodes)
-// ---------------------------------------------------------------------------
 
 describe("SlashCommandNode wire-form text — no argument (insertion target)", () => {
   it("inserts /clear without trailing space", () => {
@@ -141,8 +114,6 @@ describe("SlashCommandNode wire-form text — no argument (insertion target)", (
   })
 
   it("normalizeCommandName strips a leading slash when the command name already has one", () => {
-    // Some older records persist names like "/clear"; normalizeCommandName prevents
-    // double-slash rendering ("//clear").
     expect(normalizeCommandName("/clear")).toBe("clear")
     expect(normalizeCommandName("clear")).toBe("clear")
     expect(normalizeCommandName("//clear")).toBe("clear")
@@ -175,18 +146,13 @@ describe("SlashCommandNode wire-form text — with argument (insertion target)",
 
   it("hasArgument is derived from argumentHint presence — Boolean(cmd.argumentHint)", () => {
     const withHint = makeCmd("model", { argumentHint: "<model-name>" })
-    const withoutHint = makeCmd("clear") // argumentHint defaults to ""
+    const withoutHint = makeCmd("clear")
 
     expect(Boolean(withHint.argumentHint)).toBe(true)
     expect(Boolean(withoutHint.argumentHint)).toBe(false)
   })
 })
 
-// ---------------------------------------------------------------------------
-// Slash trigger (SLASH_TRIGGER_RE) — start-of-input OR after whitespace
-// Mirrors the mention trigger so `/cmd` opens the picker anywhere, not only at
-// the very beginning. match[1] = "/query", match[2] = "query".
-// ---------------------------------------------------------------------------
 
 describe("slash trigger (SLASH_TRIGGER_RE — start or after whitespace)", () => {
   const SLASH_TRIGGER_RE = /(?:^|\s)(\/(\S*))$/
@@ -217,7 +183,6 @@ describe("slash trigger (SLASH_TRIGGER_RE — start or after whitespace)", () =>
     const m = match("hello /clear")
     expect(m).not.toBeNull()
     expect(m![2]).toBe("clear")
-    // replaceableString is the `/clear` portion without the leading space.
     expect(m![1]).toBe("/clear")
   })
 
@@ -230,8 +195,6 @@ describe("slash trigger (SLASH_TRIGGER_RE — start or after whitespace)", () =>
   })
 
   it("does NOT match `/model ` — trailing space closes the query", () => {
-    // \S* stops at the first space so the typeahead closes once the user starts
-    // typing the argument.
     expect(match("/model ")).toBeNull()
   })
 
@@ -241,9 +204,6 @@ describe("slash trigger (SLASH_TRIGGER_RE — start or after whitespace)", () =>
   })
 })
 
-// ---------------------------------------------------------------------------
-// filterCommands integration
-// ---------------------------------------------------------------------------
 
 describe("filterCommands (used by the plugin to derive options)", () => {
   const commands: SlashCommand[] = [
@@ -262,14 +222,12 @@ describe("filterCommands (used by the plugin to derive options)", () => {
   it("prefix match ranks before substring match", () => {
     const result = filterCommands(commands, "c")
     const names = result.map((c) => c.name)
-    // "clear" starts with "c"; no others — just one result
     expect(names[0]).toBe("clear")
   })
 
   it("filters out non-matching commands", () => {
     const result = filterCommands(commands, "xit")
     const names = result.map((c) => c.name)
-    // "exit" contains "xit" (substring match)
     expect(names).toContain("exit")
     expect(names).not.toContain("clear")
   })
@@ -291,14 +249,6 @@ describe("filterCommands (used by the plugin to derive options)", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// $applySlashCommandSelection — the plugin command-center decision
-//
-// A catalog entry becomes a SlashCommandNode (`/name`, resolved downstream by
-// a builtin arm or by a file on disk). A Kanna plugin entry has neither, so it
-// becomes plain TEXT: the item's own prompt. These cases pin that split — the
-// whole point of the feature is that the two are NOT interchangeable.
-// ---------------------------------------------------------------------------
 
 const NO_PROMPTS: ReadonlyMap<string, string> = new Map()
 
@@ -313,8 +263,6 @@ function applySelectionOverQuery(
       const root = $getRoot()
       root.clear()
       const para = $createParagraphNode()
-      // What the typeahead hands `onSelectOption`: the text node holding the
-      // `/query` the user typed.
       const queryNode = $createTextNode(`/${normalizeCommandName(command.name)}`)
       para.append(queryNode)
       root.append(para)
@@ -344,8 +292,6 @@ describe("$applySlashCommandSelection", () => {
     const text = applySelectionOverQuery(command, prompts)
 
     expect(text).toBe("Greet the user warmly.")
-    // The regression this guards: `/my-plugin:greet` has no file on disk and no
-    // builtin arm, so sending it would reach the CLI as an unresolvable command.
     expect(text).not.toContain("/my-plugin:greet")
   })
 
@@ -376,8 +322,6 @@ describe("$applySlashCommandSelection", () => {
     editor.getEditorState().read(() => {
       nodeCount = $getRoot().getAllTextNodes().length
     })
-    // No decorator node at all, and no trailing-space node either: the entry is
-    // prose the user edits, not a command with an argument to type after it.
     expect(JSON.stringify(editor.getEditorState().toJSON())).not.toContain("kanna-slash-command")
     expect(nodeCount).toBe(1)
   })

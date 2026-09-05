@@ -1,8 +1,3 @@
-/**
- * The submit lifecycle every Settings CRUD editor shares: mark the form busy and
- * clear the previous error atomically, save, leave the editor on success, and
- * surface the failure in the form itself rather than throwing at the user.
- */
 export interface EditorSubmitState {
   submitting?: boolean
   error?: string | null

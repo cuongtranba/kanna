@@ -1,19 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { PausableTimeout } from "./subagent-orchestrator"
 
-/**
- * The idle-watchdog invariant used to be covered only by an orchestrator test
- * that burned real wall-clock against a 900 ms budget and then asserted the
- * timer had fired by a fixed deadline. Under full-suite load the event loop
- * delays timers past that deadline, so the test failed for scheduling reasons
- * rather than logic ones — it flaked 2 runs in 3, and widening the budget 4x
- * did not fix it.
- *
- * Every `PausableTimeout` method already accepts `now`, so the arithmetic that
- * actually encodes the invariant is testable with an injected clock and no
- * timers at all. These tests own the logic; the orchestrator test is left to
- * prove only the wiring.
- */
 const noop = () => {}
 
 describe("PausableTimeout", () => {
@@ -26,8 +13,6 @@ describe("PausableTimeout", () => {
   })
 
   test("reset() while PAUSED is a no-op — the residual survives", () => {
-    // The bug this guards: a chunk streaming in during an approval gate used to
-    // re-arm the full window, so a hung run got a fresh deadline for free.
     const t = new PausableTimeout(900, noop)
     t.start(1_000)
     t.pause(1_500)
@@ -74,7 +59,6 @@ describe("PausableTimeout", () => {
     const t = new PausableTimeout(900, noop)
     t.start(1_000)
     t.resume(1_800)
-    // Still the original window — resume must not behave like reset.
     expect(t.remainingMs).toBe(900)
     t.clear()
   })

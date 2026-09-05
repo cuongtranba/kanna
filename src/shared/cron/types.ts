@@ -1,14 +1,3 @@
-/**
- * Cron feature domain types — pure, shared between server and client.
- *
- * A cron job is armed from a chat via the `/cron` builtin command and fires
- * on a schedule. Two run modes:
- * - `inline`: every fire runs in the arming chat itself; the chat's context
- *   is cleared before each run so every cycle starts fresh and the chat
- *   becomes a monitoring view.
- * - `spawn`: every fire creates a brand-new chat and runs there; the arming
- *   chat collects one run card per fire.
- */
 
 export type CronMode = "inline" | "spawn"
 
@@ -18,35 +7,12 @@ export function isCronMode(token: string): token is CronMode {
   return token === "inline" || token === "spawn"
 }
 
-/**
- * One parsed cron field, post-expansion: ranges, steps and lists are
- * flattened to the concrete sorted value set. `any` is a plain `*`.
- */
 export type CronField = { kind: "any" } | { kind: "values"; values: readonly number[] }
 
-/**
- * A normalized schedule. `every Ns|Nm` sugar stays an interval — it anchors at
- * arm time (`every 7m` = every 7 minutes from arming), which is NOT the same
- * as the star-slash-7 cron minute field (that snaps to the hour) — so it is
- * deliberately not rewritten to cron fields.
- *
- * Occurrence SEMANTICS (day-of-month/day-of-week interplay, DST, next-fire
- * math) are owned by the `cron` package (kelektiv/node-cron) on the server —
- * `expression` is what it evaluates. The parsed `CronField`s exist for the
- * field-level validation UX and for `humanizeSchedule`; they never drive
- * scheduling.
- */
 export type CronSchedule =
   | {
       type: "cron"
-      /** Canonical 5- or 6-field cron expression (shortcuts already expanded). */
       expression: string
-      /**
-       * Present only on a 6-field expression, where it is the LEADING field.
-       * Optional because `cron_armed` persists this whole object on the
-       * auto-continue log: every job armed before sub-minute schedules existed
-       * replays without it, and absent reads as the 5-field "at second 0".
-       */
       second?: CronField
       minute: CronField
       hour: CronField
@@ -56,7 +22,6 @@ export type CronSchedule =
     }
   | { type: "interval"; ms: number }
 
-/** Which part of a `/cron` line failed validation. */
 export type CronParsePart =
   | "subcommand"
   | "multiline"
@@ -68,34 +33,14 @@ export type CronParsePart =
 export interface CronParseError {
   part: CronParsePart
   message: string
-  /**
-   * The `/cron` line that failed, trimmed. `/cron` starts no turn, so nothing
-   * else in the transcript records what the user typed — without this the
-   * error entry names a defect in a line no one can see, and the model has
-   * nothing to repair.
-   */
   input: string
-  /**
-   * A complete, ready-to-send corrected `/cron …` line. Only present when a
-   * correction is unambiguous; every suggestion is guaranteed to re-parse
-   * cleanly (drift guard in the colocated test).
-   *
-   * Its absence is also the escalation signal: a failure Kanna cannot fix on
-   * its own is the one the model is asked to repair.
-   */
   suggestion?: string
 }
 
-/**
- * A partial update to an armed cron job. Exactly one field is set per command;
- * the other two remain at their existing values. The server merges the patch
- * over the existing job and emits a single `cron_armed` event.
- */
 export interface CronJobPatch {
   instruction?: string
   mode?: CronMode
   schedule?: CronSchedule
-  /** Present when `schedule` is set — the user-typed text for display. */
   scheduleText?: string
 }
 
@@ -110,7 +55,6 @@ export type CronCommand =
       instruction: string
       mode: CronMode
       schedule: CronSchedule
-      /** The schedule exactly as the user typed it, for display. */
       scheduleText: string
     }
   | { sub: "update"; jobId: string; patch: CronJobPatch }
@@ -119,7 +63,6 @@ export type CronParseResult =
   | { ok: true; command: CronCommand }
   | { ok: false; error: CronParseError }
 
-/** Why a scheduled tick was skipped instead of run. */
 export type CronSkipReason = "chat_busy" | "previous_run_active" | "server_offline"
 
 export type CronRunStatus = "running" | "completed" | "failed" | "skipped"
@@ -128,19 +71,12 @@ export interface CronRunSnapshot {
   runId: string
   firedAt: number
   status: CronRunStatus
-  /** Spawn mode: the chat this run executed in. */
   spawnedChatId?: string
   skipReason?: CronSkipReason
-  /** For `server_offline` skips: how many fires were missed. */
   missedCount?: number
   errorCode?: string
 }
 
-/**
- * One armed cron job, projected from the auto-continue event log. Flows
- * server → client on `ChatSnapshot.cronJobs` (per-chat footer panel, run-card
- * status joins) and on the global cron-jobs topic (management page).
- */
 export interface CronJobSnapshot {
   jobId: string
   instruction: string
@@ -149,29 +85,14 @@ export interface CronJobSnapshot {
   schedule: CronSchedule
   paused: boolean
   armedAt: number
-  /**
-   * Model resolved at arm time (e.g. "claude-sonnet-5"). Optional for
-   * backward compat: jobs armed before this field existed have none.
-   */
   model?: string
-  /** Next fire time, or null when paused or the schedule has no future occurrence. */
   nextFireAt: number | null
   lastRun: CronRunSnapshot | null
-  /** Newest first, bounded (`MAX_RECENT_CRON_RUNS`). */
   recentRuns: readonly CronRunSnapshot[]
 }
 
 export const MAX_RECENT_CRON_RUNS = 20
 
-/**
- * The job's most recent real run is still in flight (overlap guard).
- *
- * Shared rather than server-only because the client needs the same answer: the
- * `update` handler refuses while a run is live, and it reports that refusal as
- * a `cron_command_error` in the ARMING chat — invisible from the global cron
- * page. The edit affordance is disabled from this predicate so the click
- * cannot fail somewhere the user is not looking.
- */
 export function hasActiveRun(job: CronJobSnapshot): boolean {
   for (const run of job.recentRuns) {
     if (run.status === "skipped") continue
@@ -180,10 +101,8 @@ export function hasActiveRun(job: CronJobSnapshot): boolean {
   return false
 }
 
-/** One row of the global cron management page — a job joined to its chat + project. */
 export interface CronJobsGlobalRow {
   projectId: string
-  /** The project's local path; the UI renders its basename. */
   projectPath: string
   chatId: string
   chatTitle: string
@@ -194,29 +113,12 @@ export interface CronJobsGlobalSnapshot {
   rows: readonly CronJobsGlobalRow[]
 }
 
-/**
- * Rides the queued message and the ActiveTurn of a cron-fired run, so the
- * store's turn-terminal observer can attribute the outcome to its job.
- */
 export interface CronRunTag {
   jobId: string
   runId: string
-  /**
-   * The arming (monitoring) chat — where run events land. Equals the run
-   * chat in inline mode; the spawned chat differs in spawn mode.
-   */
   originChatId: string
 }
 
-/**
- * Structured payload describing one armed (or previewed) cron job. Every
- * surface that describes a cron job — the `cron_armed` transcript card, the
- * `validate_cron` / `arm_cron` tool results, the confirmation prompt — derives
- * from this one type, so they can never disagree about the job they describe.
- *
- * `upcomingFires` are epoch-ms timestamps computed server-side; the client
- * never computes fire times.
- */
 export interface CronArmSummary {
   jobId: string | null
   instruction: string

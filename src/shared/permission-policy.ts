@@ -24,7 +24,6 @@ export interface BashGateConfig {
 
 export interface ToolRule {
   tool: string
-  /** ECMAScript regex source — no delimiters or flags, passed to `new RegExp(pattern)`. */
   pattern: string
 }
 
@@ -32,20 +31,11 @@ export interface ChatPermissionPolicy {
   defaultAction: "ask" | "auto-allow" | "auto-deny"
   bash: BashGateConfig
   readPathDeny: string[]
-  /** Paths the model cannot write or edit. Enforced for mcp__kanna__write and mcp__kanna__edit. */
   writePathDeny: string[]
   toolDenyList: ToolRule[]
   toolAllowList: ToolRule[]
 }
 
-/**
- * Per-chat policy override. Only set fields override the global policy
- * defaults. Persisted on `ChatRecord.policyOverride` and merged in
- * `AgentCoordinator` before forwarding to the session.
- *
- * `readPathDeny` / `writePathDeny` REPLACE the default list when provided
- * (so the user can both add and remove entries deliberately).
- */
 export interface ChatPermissionPolicyOverride {
   defaultAction?: ChatPermissionPolicy["defaultAction"]
   readPathDeny?: string[]
@@ -77,7 +67,7 @@ export interface ToolRequest {
   sessionId: string
   toolUseId: string
   toolName: string
-  arguments: JsonObject  // MCP tool arguments — arbitrary MCP tool args, unknown shape by design
+  arguments: JsonObject
   canonicalArgsHash: string
   policyVerdict: PolicyVerdict
   status: ToolRequestStatus

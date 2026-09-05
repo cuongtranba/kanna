@@ -46,16 +46,12 @@ describe("AskUserQuestionMessage.store", () => {
     expect(store.getState().isSubmitted).toBe(true)
   })
 
-  // markSubmitted is optimistic — it flips the card to "Answers" before the
-  // server has accepted anything. Without a rollback a failed chat.respondTool
-  // leaves the card looking answered while the turn is still parked.
   test("markSubmitFailed rolls isSubmitted back and records the error", () => {
     store.getState().markSubmitted(ANSWERS)
     store.getState().markSubmitFailed("No pending tool request")
 
     expect(store.getState().isSubmitted).toBe(false)
     expect(store.getState().submitError).toBe("No pending tool request")
-    // The user's picks are kept so the card can be re-submitted as-is.
     expect(store.getState().submittedAnswers).toEqual(ANSWERS)
   })
 

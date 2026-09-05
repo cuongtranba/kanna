@@ -49,8 +49,6 @@ describe("rankBetween", () => {
   })
 
   test("adjacent keys still yield a key between them", () => {
-    // Two consecutive appends are as close as two keys can be; the midpoint
-    // has to grow a character rather than fail.
     const first = initialRank()
     const second = rankBetween(first, null)
     const middle = rankBetween(first, second)
@@ -61,7 +59,6 @@ describe("rankBetween", () => {
   test("keys sharing a long prefix still separate", () => {
     let lower = initialRank()
     let upper = rankBetween(lower, null)
-    // Drive both bounds into a deep shared prefix.
     for (let index = 0; index < 8; index += 1) {
       upper = rankBetween(lower, upper)
     }
@@ -73,7 +70,6 @@ describe("rankBetween", () => {
   })
 
   test("repeated insertion into the same gap stays ordered 200 deep", () => {
-    // The pathological case: always insert directly above the same lower bound.
     const lower = initialRank()
     let upper = rankBetween(lower, null)
     for (let index = 0; index < 200; index += 1) {
@@ -85,10 +81,6 @@ describe("rankBetween", () => {
   })
 
   test("sequential appends stay sorted AND stay short", () => {
-    // Regression guard. A midpoint-only implementation passes the ordering half
-    // of this test and fails the length half: it grew to 100 characters here,
-    // where an order key with an integer part stays at 3. Silent, and only
-    // visible as index bloat months later.
     const ranks: string[] = []
     let previous: string | null = null
     for (let index = 0; index < 500; index += 1) {
@@ -111,8 +103,6 @@ describe("rankBetween", () => {
   })
 
   test("simulating a real drag keeps the column order consistent", () => {
-    // Build a column, then move the last card between the 2nd and 3rd, the way
-    // a drop reports taskAbove / taskBelow.
     const column = ranksBetween(null, null, 5)
     expect(isAscending(column)).toBe(true)
 
@@ -123,8 +113,6 @@ describe("rankBetween", () => {
   test("rejects bounds that are out of order", () => {
     const lower = initialRank()
     const upper = rankBetween(lower, null)
-    // The library tolerates swapped bounds; Kanna must not, because a swap
-    // always means the caller read its neighbours backwards.
     expect(() => rankBetween(upper, lower)).toThrow(InvalidRankError)
   })
 
@@ -138,7 +126,6 @@ describe("rankBetween", () => {
   })
 
   test("rejects a malformed order key", () => {
-    // "Z" declares a long integer part it does not have.
     expect(() => rankBetween("Z", null)).toThrow(InvalidRankError)
   })
 })

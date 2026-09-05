@@ -1,22 +1,8 @@
-/**
- * Turning a drop into a move the store will accept.
- *
- * Pragmatic drag-and-drop tells us WHERE the pointer let go — a target element
- * and which of its edges was closest. The board store takes neighbours instead:
- * "put this card between these two". Neighbours are what let the store resolve
- * a rank inside the same transaction as the write, so a drag cannot race
- * another writer the way a client-computed index would.
- *
- * This module is the whole translation, and it is pure: the drag machinery
- * decides nothing about ordering, and ordering can be tested without a pointer.
- */
 
 import type { BoardColumn, BoardViewSnapshot } from "../../../shared/boards/types"
 
-/** Where a drag currently wants to land: above a card, or at the end of a column. */
 export interface CardDropTarget {
   columnId: string
-  /** The card the indicator sits above; null means the end of the column. */
   beforeCardId: string | null
 }
 
@@ -29,17 +15,9 @@ export interface CardMoveRequest {
 
 export interface ColumnMoveRequest {
   columnId: string
-  /** The column it should follow; null means first. */
   afterColumnId: string | null
 }
 
-/**
- * The move a card drop means, or null when it means nothing.
- *
- * Null covers both the unknown target and — importantly — the drop that changes
- * nothing. Sending that would spend a round-trip and a broadcast to rewrite a
- * card's rank to the value it already had.
- */
 export function resolveCardDrop(
   view: BoardViewSnapshot,
   cardId: string,
@@ -79,7 +57,6 @@ function findCardColumn(
   return null
 }
 
-/** The move a column drop means, or null when it means nothing. */
 export function resolveColumnDrop(
   columns: readonly BoardColumn[],
   columnId: string,
@@ -99,14 +76,6 @@ export function resolveColumnDrop(
   return { columnId, afterColumnId }
 }
 
-/**
- * Which card the drop indicator sits above, given the card hovered and the edge
- * the pointer is nearest.
- *
- * The bottom edge of a card means "after it", which is the same position as
- * "before the next one" — expressing both as `beforeCardId` keeps one shape for
- * the indicator and one for the resolver.
- */
 export function dropTargetForCardEdge(
   cardsInColumn: readonly { id: string }[],
   hoveredCardId: string,
@@ -118,7 +87,6 @@ export function dropTargetForCardEdge(
   return cardsInColumn[index + 1]?.id ?? null
 }
 
-/** The same, for columns: which column the vertical indicator sits before. */
 export function dropTargetForColumnEdge(
   columns: readonly BoardColumn[],
   hoveredColumnId: string,

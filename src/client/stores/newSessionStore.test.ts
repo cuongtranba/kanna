@@ -3,10 +3,6 @@ import type { TimerPort } from "../ports/timerPort"
 import { MOTION_DURATION } from "../lib/motion"
 import { selectIsAnySpawning, selectIsSpawning, useNewSessionStore } from "./newSessionStore"
 
-/**
- * A timer whose pending callbacks fire only when the test says so, so the
- * clearing behaviour can be asserted without waiting 860ms of real time.
- */
 function controllableTimer() {
   const pending = new Map<number, () => void>()
   let nextId = 1
@@ -54,8 +50,6 @@ describe("newSessionStore", () => {
   })
 
   test("the flag clears itself, so the next spawn is a fresh arrival", () => {
-    // A CSS animation plays on class arrival and would never play again while
-    // the class stayed. Clearing is what makes the sentence repeatable.
     const timer = controllableTimer()
     useNewSessionStore.getState().markSpawned("chat-a", timer.port)
     expect(selectIsAnySpawning(useNewSessionStore.getState())).toBe(true)
@@ -65,15 +59,12 @@ describe("newSessionStore", () => {
   })
 
   test("a second spawn supersedes the first and cancels its clear", () => {
-    // The user creating a second chat mid-transition wants the second one —
-    // and the first spawn's pending clear must not later wipe it.
     const timer = controllableTimer()
     useNewSessionStore.getState().markSpawned("chat-a", timer.port)
     useNewSessionStore.getState().markSpawned("chat-b", timer.port)
 
     expect(selectIsSpawning("chat-b")(useNewSessionStore.getState())).toBe(true)
     expect(selectIsSpawning("chat-a")(useNewSessionStore.getState())).toBe(false)
-    // Only the live spawn's clear is still armed.
     expect(timer.pendingCount()).toBe(1)
 
     timer.runAll()
@@ -88,9 +79,6 @@ describe("newSessionStore", () => {
   })
 
   test("the sequence is the documented 860ms", () => {
-    // Pins the clear against the token rather than a retyped literal: if the
-    // sentence is retimed, the flag has to be retimed with it or the surfaces
-    // sit at their end state after the animation has finished.
     expect(MOTION_DURATION.sequence).toBe(860)
   })
 })

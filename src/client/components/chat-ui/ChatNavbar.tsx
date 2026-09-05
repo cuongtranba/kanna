@@ -17,10 +17,6 @@ import { Reduction } from "../ui/reduction"
 
 const EMPTY_DURATIONS: readonly number[] = []
 
-/**
- * The session sigil, shown once a session has any turn to show — including a
- * first turn that is still running, which draws only the live tick.
- */
 function SessionSigil({
   durationsMs,
   status,
@@ -159,7 +155,6 @@ interface Props {
   silent?: boolean
   onToggleSilent?: () => void
   dom?: DomPort
-  /** Measured turn durations for this chat, oldest first. Drives the session sigil. */
   turnDurationsMs?: readonly number[]
 }
 
@@ -210,10 +205,6 @@ export function ChatNavbar({
   return (
     <CardHeader
       className={cn(
-        // A solid ground, not a translucent wash. The gradient let prompt text
-        // render THROUGH the toolbar on mobile, where `md:pt-3` reserved no
-        // height for it — the first thing a phone reader saw was the first
-        // paragraph struck across the status row.
         "absolute top-0 left-0 right-0 z-10 pt-2 md:pt-3 px-3 border-border/0 md:pb-0 flex items-center justify-center",
         "bg-background"
       )}
@@ -263,7 +254,6 @@ export function ChatNavbar({
             <Tooltip>
               <TooltipTrigger asChild>
                 <div className="flex items-center gap-2 cursor-default min-w-0">
-                  {/* Mobile: state pill + live duration only */}
                   <span className="flex md:hidden items-center gap-1">
                     <StateMark tone={statusTone(status)} className={statusToneClass(statusTone(status))} />
                     <span className="text-xs font-medium text-foreground">{statusLabel(status)}</span>
@@ -271,7 +261,6 @@ export function ChatNavbar({
                       {formatLiveDuration(timings.derivedAtMs - timings.stateEnteredAt)}
                     </span>
                   </span>
-                  {/* Desktop: full row */}
                   <span className="hidden md:flex items-center gap-2">
                     <span className="flex items-center gap-1">
                       <StateMark tone={statusTone(status)} className={statusToneClass(statusTone(status))} />

@@ -28,8 +28,6 @@ describe("isJsonObject", () => {
   test("narrows so indexing yields JsonValue, not unknown", () => {
     const value: JsonValue = { name: "kanna", count: 2 }
     if (!isJsonObject(value)) throw new Error("expected object")
-    // The point of JsonObject over Record<string, unknown>: the member is
-    // usable in a further guard without leaving the type system.
     const name: JsonValue = value.name
     expect(typeof name === "string" ? name : null).toBe("kanna")
   })

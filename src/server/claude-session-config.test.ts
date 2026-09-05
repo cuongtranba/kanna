@@ -10,9 +10,6 @@ import {
 import type { McpServerConfig } from "../shared/types"
 import type { BackgroundRunOutcome } from "./subagent-orchestrator"
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function makeStdioServer(overrides: Partial<McpServerConfig & { enabled: boolean }> = {}): McpServerConfig {
   return {
@@ -45,9 +42,6 @@ function makeHttpServer(overrides: Partial<Record<string, unknown>> = {}): McpSe
   } as McpServerConfig
 }
 
-// ---------------------------------------------------------------------------
-// buildUserMcpServers
-// ---------------------------------------------------------------------------
 
 describe("buildUserMcpServers", () => {
   test("skips disabled servers", () => {
@@ -102,9 +96,6 @@ describe("buildUserMcpServers", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// resolveSpawnPaths
-// ---------------------------------------------------------------------------
 
 describe("resolveSpawnPaths", () => {
   test("returns fallback path when chat has no stackBindings", () => {
@@ -142,9 +133,6 @@ describe("resolveSpawnPaths", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// resolveStackProjects
-// ---------------------------------------------------------------------------
 
 describe("resolveStackProjects", () => {
   test("returns empty list for solo chat (no stackBindings)", () => {
@@ -182,9 +170,6 @@ describe("resolveStackProjects", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// buildTaskNotification
-// ---------------------------------------------------------------------------
 
 describe("buildTaskNotification", () => {
   test("includes result body when includeResult is true (completed)", () => {
@@ -219,16 +204,12 @@ describe("buildTaskNotification", () => {
     const outcome: BackgroundRunOutcome = { status: "completed", runId: "run-3", text: longText }
     const xml = buildTaskNotification("run-3", outcome, { includeResult: true })
     expect(xml).toContain("[... truncated]")
-    // result section should be capped
     const match = xml.match(/<result>([\s\S]*?)<\/result>/)
     expect(match).not.toBeNull()
     expect((match?.[1] ?? "").length).toBeLessThan(4_100)
   })
 })
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
 
 describe("CLAUDE_TOOLSET", () => {
   test("includes core tools", () => {

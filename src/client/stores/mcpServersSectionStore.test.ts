@@ -87,8 +87,6 @@ describe("mcpServersSectionStore — setServerTesting", () => {
     expect(useMcpServersSectionStore.getState().testingServerIds).not.toBe(empty)
 
     useMcpServersSectionStore.getState().setServerTesting("fs", false)
-    // Stable identity, not merely an equal empty Set — a fresh one on every
-    // clear would re-render every subscribed row.
     expect(useMcpServersSectionStore.getState().testingServerIds).toBe(empty)
   })
 })

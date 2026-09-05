@@ -5,7 +5,6 @@ import type { InstalledPackage, PackageInventorySnapshot, PackageUpdateApplier, 
 import type { PackageUpdateSettings } from "../shared/app-settings-types"
 import { PACKAGE_UPDATE_SETTINGS_DEFAULTS } from "../shared/app-settings-types"
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
 
 function makePkg(id: string, kind: "skill" | "claude-plugin" | "codex-plugin" = "skill"): InstalledPackage {
   return {
@@ -98,7 +97,6 @@ function makeDeps(overrides?: Partial<PackageUpdateManagerDeps>): PackageUpdateM
   }
 }
 
-// ── Tests ──────────────────────────────────────────────────────────────────────
 
 describe("PackageUpdateManager", () => {
   test("getSnapshot() returns idle initially", () => {
@@ -151,10 +149,8 @@ describe("PackageUpdateManager", () => {
       settings: makeSettings({ checkIntervalMs: 60_000 }),
     })
     const mgr = new PackageUpdateManager(deps)
-    // first call runs
     await mgr.checkUpdates()
     expect(callCount).toBe(1)
-    // second call within TTL should be a no-op
     await mgr.checkUpdates()
     expect(callCount).toBe(1)
   })
@@ -201,7 +197,7 @@ describe("PackageUpdateManager", () => {
     })
     const mgr = new PackageUpdateManager(deps)
     const [a, b] = await Promise.all([mgr.checkUpdates({ force: true }), mgr.checkUpdates({ force: true })])
-    expect(a).toBe(b) // same promise result
+    expect(a).toBe(b)
     expect(callCount).toBe(1)
   })
 
@@ -236,9 +232,7 @@ describe("PackageUpdateManager", () => {
     })
     const mgr = new PackageUpdateManager(deps)
     const snap = await mgr.checkUpdates()
-    // good checker's result survives
     expect(snap.packages.some((p) => p.id === "skill:a")).toBe(true)
-    // bad checker's pkg has no update entry → excluded from packages
     expect(snap.packages.every((p) => p.id !== "claude-plugin:b")).toBe(true)
     expect(snap.error).toBeNull()
   })
@@ -256,9 +250,7 @@ describe("PackageUpdateManager", () => {
     const mgr = new PackageUpdateManager(deps)
     mgr.start()
     expect(timer.ticks).toHaveLength(1)
-    // Simulate a tick
     timer.ticks[0]()
-    // Give microtasks a chance to run
     await new Promise<void>((r) => setTimeout(r, 0))
     expect(callCount).toBe(1)
   })
@@ -294,7 +286,7 @@ describe("PackageUpdateManager", () => {
     const before = calls.length
     unsub()
     await mgr.checkUpdates({ force: true })
-    expect(calls.length).toBe(before) // no new calls after unsub
+    expect(calls.length).toBe(before)
   })
 
   test("markApplying/markApplyDone transitions status", () => {
@@ -309,7 +301,6 @@ describe("PackageUpdateManager", () => {
 
   test("packages without a checker are excluded from results", async () => {
     const pkg = makePkg("codex-plugin:x", "codex-plugin")
-    // no checker for codex-plugin
     const deps = makeDeps({
       inventory: makeInventory([pkg]),
       checkers: [makeChecker("skill", [])],
@@ -355,7 +346,6 @@ describe("PackageUpdateManager", () => {
       await mgr.checkUpdates()
       mgr.onChange((s) => statuses.push(s.status))
       const applyPromise = mgr.applyUpdates(["skill:foo"])
-      // yield so the applying state is set
       await new Promise<void>((r) => setTimeout(r, 0))
       expect(mgr.getSnapshot().status).toBe("applying")
       resolveApply()
@@ -392,7 +382,7 @@ describe("PackageUpdateManager", () => {
       const deps = makeDeps({
         inventory: makeInventory([pkg]),
         checkers: [makeChecker("skill", [status])],
-        appliers: [], // no appliers registered
+        appliers: [],
       })
       const mgr = new PackageUpdateManager(deps)
       await mgr.checkUpdates()
@@ -451,12 +441,10 @@ describe("PackageUpdateManager", () => {
       mgr.start()
       expect(timer.ticks).toHaveLength(1)
 
-      // tick while enabled — should check
       timer.ticks[0]()
       await new Promise<void>((r) => setTimeout(r, 0))
       expect(callCount).toBe(1)
 
-      // disable and tick again — should skip
       enabled = false
       timer.ticks[0]()
       await new Promise<void>((r) => setTimeout(r, 0))
@@ -509,7 +497,6 @@ describe("PackageUpdateManager", () => {
             return { id: p.id, ok: true, fromRevision: null, toRevision: null, command: [], stdout: "", stderr: "", error: null }
           },
         }],
-        // PACKAGE_UPDATE_SETTINGS_DEFAULTS has autoApply: false
         settings: makeSettings(),
       })
       const mgr = new PackageUpdateManager(deps)
@@ -558,8 +545,6 @@ describe("PackageUpdateManager", () => {
       expect(snap.autoApplyHistory[0].ok).toBe(true)
     })
 
-    // Satisfying a pinned package means REPLACING the pin — an explicit choice
-    // about which version to run. Auto-apply must never make it silently.
     test("never auto-applies a pinned package", async () => {
       const pkg = { ...makePkg("skill:c3"), pinnedRef: "v11.12.0" }
       const deps = makeDeps({
@@ -655,16 +640,13 @@ describe("PackageUpdateManager", () => {
       })
       const mgr = new PackageUpdateManager(deps)
 
-      // First check — applies (fails) → records backoff
       await mgr.checkUpdates({ force: true })
       expect(applied).toHaveLength(1)
 
-      // Second check immediately — backoff window not elapsed → skip
       tick += 100
       await mgr.checkUpdates({ force: true })
       expect(applied).toHaveLength(1)
 
-      // Third check after > 10 min (600_000 ms) — window elapsed → retry
       tick += 700_000
       await mgr.checkUpdates({ force: true })
       expect(applied).toHaveLength(2)
@@ -691,14 +673,12 @@ describe("PackageUpdateManager", () => {
       })
       const mgr = new PackageUpdateManager(deps)
 
-      // Fail 3 times (MAX_FAILURES), each time skipping the backoff window
       for (let i = 0; i < 3; i++) {
-        tick += 86_400_001 // past max backoff
+        tick += 86_400_001
         await mgr.checkUpdates({ force: true })
       }
       expect(applyCalls).toBe(3)
 
-      // After 3 failures → permanently skipped (notify-only)
       tick += 86_400_001
       await mgr.checkUpdates({ force: true })
       expect(applyCalls).toBe(3)
@@ -727,17 +707,14 @@ describe("PackageUpdateManager", () => {
       })
       const mgr = new PackageUpdateManager(deps)
 
-      // First: fails, sets backoff
       await mgr.checkUpdates({ force: true })
       expect(applied).toHaveLength(1)
 
-      // Skip past backoff, this time succeed
       failNext = false
       tick += 700_000
       await mgr.checkUpdates({ force: true })
       expect(applied).toHaveLength(2)
 
-      // Immediately again — backoff cleared, so apply runs again
       tick += 1
       await mgr.checkUpdates({ force: true })
       expect(applied).toHaveLength(3)
@@ -769,7 +746,6 @@ describe("PackageUpdateManager", () => {
       await mgr.checkUpdates()
       const history = mgr.getSnapshot().autoApplyHistory
       expect(history).toHaveLength(2)
-      // Snapshot history carries both entries with correct ok flags
       const aEntry = history.find((e) => e.id === "skill:a")
       const bEntry = history.find((e) => e.id === "skill:b")
       expect(aEntry?.ok).toBe(true)

@@ -167,7 +167,6 @@ test("feature flag on → all 8 new mcp__kanna__* tools registered", () => {
   }
 })
 
-// ── Issue #215: PTY forces interactive shims without the env flag ──────────
 
 const callbackStub = (): Parameters<typeof buildKannaMcpTools>[0]["toolCallback"] => ({
   submit: async () => ({ status: "answered", decision: { kind: "deny" as const, reason: "test" } }),
@@ -263,13 +262,11 @@ describe("buildDelegateProgressEmitter", () => {
       },
     })
     expect(emit).toBeDefined()
-    // Should not throw synchronously and the unhandled rejection is swallowed by .catch().
     expect(() => emit!(makeEntry())).not.toThrow()
     await new Promise((r) => setTimeout(r, 5))
   })
 })
 
-// ── keep_alive / send_subagent_message / close_subagent ───────────────────
 
 interface FakeOrchestratorState {
   lastDelegate: {
@@ -368,7 +365,6 @@ describe("keep_alive delegate + send_subagent_message + close_subagent", () => {
     expect(res.isError).toBeUndefined()
     const parsed = JSON.parse(res.content[0].text) as { status: string; run_id: string }
     expect(parsed.status).toBe("completed")
-    // No keep-alive hint appended (text is just the JSON)
     expect(res.content[0].text).not.toContain("session kept alive")
   })
 
@@ -426,14 +422,9 @@ describe("schedule_wakeup tool removed", () => {
 })
 
 describe("orchestration tools removed", () => {
-  // `orch` names two unrelated features here. The multi-task orchestration
-  // engine is retired; SubagentOrchestrator (delegate_subagent) and the
-  // autonomous loop are NOT — hence the positive guards at the end.
   test("no orch_* registered even when every orch handler is supplied (hard-break per adr-20260802-retire-orchestration-core)", () => {
     const { tools } = buildKannaMcpForTest({
       withDelegation: true,
-      // The three orch handlers are passed deliberately, cast through the
-      // removed shape: a build that still registered the tools would light up.
       extraArgs: {
         setupLoop: async () => ({ ok: true }) as unknown as SetupLoopHandlerResult,
         stopLoop: async () => {},
@@ -449,7 +440,6 @@ describe("orchestration tools removed", () => {
     expect(tools.has("orch_run_status")).toBe(false)
     expect(tools.has("orch_cancel_run")).toBe(false)
 
-    // Surviving features must still register from the very same call.
     expect(tools.has("delegate_subagent")).toBe(true)
     expect(tools.has("send_subagent_message")).toBe(true)
     expect(tools.has("close_subagent")).toBe(true)
@@ -762,12 +752,6 @@ describe("query_tracking_file + append_tracking_row tools", () => {
     expect(res.content[0].text).toContain("run setup_loop")
   })
 
-  /**
-   * The deterministic half of the Progress-row label. A loop's delegation
-   * prompt is identical every iteration, so when the orchestrator leaves the
-   * `[chunk: …]` marker unsubstituted the host reads the chunk out of the
-   * plan itself.
-   */
   describe("delegate_subagent chunk-label fallback", () => {
     const LOOP_PROMPT =
       "[chunk: <one-line summary of the Next chunk you just read>]"
@@ -931,8 +915,6 @@ describe("resolveWorkspaceFile", () => {
 })
 
 describe("validate_mermaid", () => {
-  // A fake parser keeps this suite off the real mermaid bundle; the adapter's
-  // own suite drives the real parser.
   const fakeParse: MermaidParsePort = (source) =>
     Promise.resolve(
       source.includes("[/opt")
@@ -959,8 +941,6 @@ describe("validate_mermaid", () => {
     expect(result.content[0]?.text).toBe("VALID")
   })
 
-  // isError is what makes the model treat the reply as work to redo rather
-  // than a note it can read past.
   test("rejects with isError, the offending line and an actionable hint", async () => {
     const result = await invoke({ source: "flowchart TD\n  A --> B[/opt/x sym]" })
 
@@ -986,8 +966,6 @@ describe("validate_cron", () => {
     expect(tools.map((t) => t.name)).not.toContain("validate_cron")
   })
 
-  // The next fire times are the point: they are how the model confirms that
-  // `0 9 * * *` is the 09:00-daily the user asked for.
   test("accepts a valid line and answers in words plus real fire times", async () => {
     const result = await invoke({ command: "/cron check ci inline 0 9 * * *" })
     expect(result.isError).toBeUndefined()
@@ -1015,8 +993,6 @@ describe("validate_cron", () => {
     expect(result.isError).toBe(true)
   })
 
-  // A management line validates but schedules nothing — saying VALID would
-  // invite the model to arm it and report success over a no-op.
   test("refuses a line that would not arm anything", async () => {
     const result = await invoke({ command: "/cron list" })
     expect(result.isError).toBe(true)
@@ -1068,8 +1044,6 @@ describe("arm_cron", () => {
     expect(text).toContain("update_cron")
   })
 
-  // The model must never be able to arm something the send pipeline would
-  // have rejected — same parser, same answer.
   test("refuses an invalid line without arming", async () => {
     armed.length = 0
     const result = await invoke({ command: "/cron check ci inline 9am every day" })

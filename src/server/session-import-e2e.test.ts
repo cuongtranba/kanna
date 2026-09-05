@@ -60,9 +60,6 @@ describe("session import E2E (Tribe-shaped fixture)", () => {
       const after = store.getMessages(chatId)
       expect(after.length).toBeGreaterThan(before.length)
 
-      // Second tick with no further file growth: the delta path must be
-      // idempotent (uuid-dedupe means re-parsing the same file never
-      // re-appends already-seen rows), not just "always re-import everything".
       await registry.tick()
       expect(store.getMessages(chatId).length).toBe(after.length)
     },

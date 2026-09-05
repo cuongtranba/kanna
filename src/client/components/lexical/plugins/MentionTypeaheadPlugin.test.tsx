@@ -1,19 +1,3 @@
-/**
- * Tests for MentionTypeaheadPlugin.
- *
- * Strategy: the plugin delegates rendering to LexicalTypeaheadMenuPlugin which
- * requires a real DOM and a running React+Lexical tree — wiring that up just
- * to test the plugin would be extremely brittle.  Instead we test the two
- * independently-testable pieces:
- *
- *   1. MentionMenuOption — key derivation, data storage.
- *   2. Node-insertion logic — use a headless editor to verify that
- *      $createMentionNode produces the correct wire-form text content for both
- *      agent and path mentions (this is what onSelectOption inserts).
- *   3. Trigger semantics — useBasicTypeaheadTriggerMatch matches `@` preceded
- *      by whitespace or start-of-text, but NOT mid-word.  We verify this via
- *      the same regex the hook uses internally.
- */
 import { describe, expect, it } from "bun:test"
 import { createHeadlessEditor } from "@lexical/headless"
 import { $createParagraphNode, $createTextNode, $getRoot } from "lexical"
@@ -22,14 +6,10 @@ import { MentionMenuOption } from "./MentionTypeaheadPlugin"
 import type { MentionOption } from "./MentionTypeaheadPlugin"
 import type { Subagent } from "../../../../shared/types"
 
-// Minimal Subagent stub for testing — only the fields we need in these tests.
 function makeSubagent(id: string, name: string, description?: string): Subagent {
   return { id, name, description } as unknown as Subagent
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function buildEditor() {
   return createHeadlessEditor({
@@ -41,9 +21,6 @@ function buildEditor() {
   })
 }
 
-// ---------------------------------------------------------------------------
-// MentionMenuOption
-// ---------------------------------------------------------------------------
 
 describe("MentionMenuOption — agent", () => {
   it("derives a stable key from agent id", () => {
@@ -97,10 +74,6 @@ describe("MentionMenuOption — path", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// Node insertion — wire-form text content
-// (mirrors what onSelectOption inserts via $insertNodes)
-// ---------------------------------------------------------------------------
 
 describe("MentionNode wire-form text — agent (insertion target)", () => {
   it("inserted agent node serialises to @agent/<name>", () => {
@@ -205,15 +178,6 @@ describe("MentionNode wire-form text — path (insertion target)", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// onSelectOption insertion behaviour (regression)
-//
-// The bug: onSelectOption used `textNodeContainingQuery.remove()` followed by
-// `$insertNodes(...)`, which corrupted the selection and wiped the whole
-// composer. The fix uses `.replace(node)` + a trailing-space text node. These
-// tests lock that contract: surrounding text is preserved, a mention node is
-// inserted, and a trailing space follows it.
-// ---------------------------------------------------------------------------
 
 describe("onSelectOption insertion (regression — must not clear composer)", () => {
   it("replaces the @query text node with a mention node + trailing space, keeping prior text", () => {
@@ -231,8 +195,6 @@ describe("onSelectOption insertion (regression — must not clear composer)", ()
         para.append(queryNode)
         root.append(para)
 
-        // Mirror the fixed onSelectOption: replace the query node, then drop a
-        // trailing space and move the caret after it.
         const mentionNode = $createMentionNode({
           mentionKind: "agent",
           value: "builder",
@@ -250,20 +212,12 @@ describe("onSelectOption insertion (regression — must not clear composer)", ()
       rootText = $getRoot().getTextContent()
     })
 
-    // Composer NOT cleared: lead text + mention wire-form + trailing space.
     expect(rootText).toBe("hello @agent/builder ")
   })
 })
 
-// ---------------------------------------------------------------------------
-// Trigger pattern — custom MENTION_TRIGGER_RE
-// Mirrors shouldShowMentionPicker: `@` at start or after whitespace, query
-// includes `/` and `.` so `@agent/builder` and `@src/file.ts` keep the menu
-// open throughout typing.
-// ---------------------------------------------------------------------------
 
 describe("@ trigger pattern (custom MENTION_TRIGGER_RE semantics)", () => {
-  // Mirror the plugin's internal constant.
   const MENTION_TRIGGER_RE = /(?:^|\s)(@((?:[^@\s]){0,200}))$/
 
   function match(text: string) {
@@ -281,8 +235,6 @@ describe("@ trigger pattern (custom MENTION_TRIGGER_RE semantics)", () => {
   })
 
   it("matches `@agent/builder` — slash is allowed in the query", () => {
-    // `/` is NOT in the excluded set for MENTION_TRIGGER_RE so the menu stays
-    // open as the user types `@agent/builder`.
     const m = match("@agent/builder")
     expect(m).not.toBeNull()
     expect(m![2]).toBe("agent/builder")
@@ -300,18 +252,15 @@ describe("@ trigger pattern (custom MENTION_TRIGGER_RE semantics)", () => {
   })
 
   it("does NOT match mid-word @", () => {
-    // `no@trigger` — `@` is not preceded by whitespace or start
     expect(match("no@trigger")).toBeNull()
   })
 
   it("does NOT match when query contains whitespace (space terminates the token)", () => {
-    // After `@foo bar`, the space terminates the `[^@\s]*` group so no match.
     expect(match("@foo bar")).toBeNull()
   })
 
   it("replaceableString is the full `@query` text to replace", () => {
     const m = match("@agent/builder")
-    // match[1] is the full `@query` portion
     expect(m![1]).toBe("@agent/builder")
   })
 })

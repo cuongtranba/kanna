@@ -108,9 +108,6 @@ export function StacksSection({
                   <span className="truncate min-w-0 text-13 font-semibold text-foreground/80">
                     {stack.title}
                   </span>
-                  {/* What is running across the whole stack — the member chats
-                      may sit under several collapsed project groups, so this
-                      row is the only place the question can be answered. */}
                   {activityLabel ? (
                     <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
                       {activityLabel}

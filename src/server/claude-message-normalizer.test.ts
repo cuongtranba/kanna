@@ -6,9 +6,6 @@ import {
   type ClaudeRawSdkMessage,
 } from "./claude-message-normalizer"
 
-// ---------------------------------------------------------------------------
-// getClaudeAssistantMessageUsageId
-// ---------------------------------------------------------------------------
 
 describe("getClaudeAssistantMessageUsageId", () => {
   test("returns uuid when present on message", () => {
@@ -35,14 +32,10 @@ describe("getClaudeAssistantMessageUsageId", () => {
       type: "assistant",
       message: { id: "inner", content: [] },
     }
-    // message.id is checked first
     expect(getClaudeAssistantMessageUsageId(msg)).toBe("inner")
   })
 })
 
-// ---------------------------------------------------------------------------
-// normalizeToolContent
-// ---------------------------------------------------------------------------
 
 describe("normalizeToolContent", () => {
   test("returns null for null input", () => {
@@ -68,9 +61,6 @@ describe("normalizeToolContent", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// normalizeClaudeStreamMessage
-// ---------------------------------------------------------------------------
 
 describe("normalizeClaudeStreamMessage", () => {
   test("returns [] for unrecognized message type", () => {
@@ -207,14 +197,10 @@ describe("normalizeClaudeStreamMessage", () => {
     expect(si.model).toBe("claude-opus-4-5")
     expect(si.tools).toEqual(["Bash", "Read"])
     expect(si.agents).toEqual(["my-agent"])
-    // Internal slash commands prefixed with '._' are filtered
     expect(si.slashCommands).toEqual(["help"])
   })
 })
 
-// ---------------------------------------------------------------------------
-// system/background_tasks_changed (SDK level signal — keep-alive guard source)
-// ---------------------------------------------------------------------------
 
 describe("normalizeClaudeStreamMessage background_tasks_changed", () => {
   test("produces hidden status entry with REPLACE snapshot of task ids", () => {

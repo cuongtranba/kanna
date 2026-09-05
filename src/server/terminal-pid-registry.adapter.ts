@@ -98,6 +98,5 @@ function killPgroup(pid: number) {
   try {
     process.kill(-pid, "SIGKILL")
   } catch {
-    // ESRCH (already gone) and EPERM (race with kernel reap) are fine.
   }
 }

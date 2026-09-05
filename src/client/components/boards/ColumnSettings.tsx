@@ -11,18 +11,6 @@ import {
   type ColumnSemantic,
 } from "../../../shared/boards/types"
 
-/**
- * Editing one column.
- *
- * A popover on the column header rather than a settings screen: the thing being
- * renamed is right there, and a board's columns are edited while looking at the
- * board.
- *
- * `semantic` is offered as a labelled choice, not as jargon, because it is
- * load-bearing — "Start work" moves cards to the `active` column and sync
- * routes pulled issues by `start` / `done`, so the copy says what each role
- * DOES rather than naming the enum.
- */
 
 export interface ColumnSettingsValue {
   title: string
@@ -34,7 +22,6 @@ export interface ColumnSettingsValue {
 export interface ColumnSettingsProps {
   columnId: string
   value: ColumnSettingsValue
-  /** Empty columns only; the store refuses while cards remain. */
   canDelete: boolean
   onSave: (columnId: string, patch: ColumnSettingsValue) => void
   onDelete: (columnId: string) => void

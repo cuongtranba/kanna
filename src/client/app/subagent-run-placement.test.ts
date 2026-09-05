@@ -89,7 +89,6 @@ describe("matchRunsToDelegateCalls", () => {
     ]
     const r1 = makeRun({ runId: "run-1", subagentId: "sub-a", startedAt: 1000 })
     const r2 = makeRun({ runId: "run-2", subagentId: "sub-a", startedAt: 2000 })
-    // pass out of order to prove startedAt ordering, not array order
     const { matched, orphans } = matchRunsToDelegateCalls(delegateCalls, [r2, r1])
     expect(matched.get("tool-1")).toBe(r1)
     expect(matched.get("tool-2")).toBe(r2)

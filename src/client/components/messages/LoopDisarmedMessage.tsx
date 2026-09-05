@@ -15,10 +15,6 @@ interface DisarmCopy {
   detail: string | null
 }
 
-/**
- * Keyed over the reason union so a new reason is a typecheck failure rather
- * than a card that renders a blank headline.
- */
 const DISARM_COPY: Record<ProcessedLoopDisarmedMessage["reason"], DisarmCopy> = {
   user_send: {
     Icon: Hand,
@@ -48,15 +44,6 @@ const DISARM_COPY: Record<ProcessedLoopDisarmedMessage["reason"], DisarmCopy> = 
   },
 }
 
-/**
- * A loop leaves this card behind when it is disarmed. Any user message
- * disarms an armed loop, and that used to happen with no transcript entry at
- * all — the chat simply went quiet, so a user who typed "resume" to restart a
- * stalled loop had in fact killed it and had no way to tell.
- *
- * The tracking file and workdir are shown whenever the disarm recorded them: a
- * review that has to guess reads the wrong plan in the wrong worktree.
- */
 export function LoopDisarmedMessage({ message }: Props) {
   const { Icon, iconClass, title, detail } = DISARM_COPY[message.reason]
   const hasLocation = message.trackingFileRel !== undefined || message.workdirAbs !== undefined

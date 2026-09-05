@@ -22,10 +22,7 @@ describe("ContextWindowMeter", () => {
     )
     expect(html).toContain("cursor-pointer")
     expect(html).toContain("touch-manipulation")
-    // h-9 w-9 -> 36px, meeting touch target minimum without disturbing the
-    // existing 24px visual circle (kept as an inner span).
     expect(html).toContain("h-9 w-9")
-    // Radix popover trigger annotates the button with aria-expanded / data-state.
     expect(html).toMatch(/aria-expanded=/)
     expect(html).toMatch(/data-state="closed"/)
   })

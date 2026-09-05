@@ -5,12 +5,6 @@ import { startMetricRecorder, type MetricRecorder } from "./test-helpers/metric-
 import type { ActiveTurn } from "./claude-session-state"
 import type { HarnessTurn } from "./harness-types"
 
-// Token spend rides the same turn-terminal observer the duration histogram
-// uses, enriched from the ActiveTurn — the runner stashes the result entry's
-// usage there because `onTurnTerminal` carries only (chatId, outcome) and
-// widening it would ripple through 24 call sites to serve one observer.
-// These tests drive the observer directly: what is under test is the
-// enrichment, not the turn machinery around it.
 
 interface TerminalStore {
   onTurnTerminal:
@@ -80,9 +74,6 @@ describe("kanna.turn.tokens", () => {
     })
   })
 
-  // The split has to partition: this metric's whole use is `sum(...)` as a
-  // billable total, so counting the cached reads inside `input` as well would
-  // overstate every install's spend.
   test("the recorded kinds sum to the tokens actually billed", async () => {
     recorder = startMetricRecorder()
     const store: TerminalStore = { onTurnTerminal: null }
@@ -112,9 +103,6 @@ describe("kanna.turn.tokens", () => {
     expect(point?.attributes).toEqual({ provider: "claude", model: "claude-opus-5" })
   })
 
-  // PTY-mode turns have no price resolver wired, so an unknown cost is the
-  // common case, not an edge one. Recording zero there would read as "this
-  // turn was free" and drag any fleet total toward it.
   test("records no cost point when the provider reported none", async () => {
     recorder = startMetricRecorder()
     const store: TerminalStore = { onTurnTerminal: null }
@@ -128,8 +116,6 @@ describe("kanna.turn.tokens", () => {
     expect(await recorder.counter(TURN_COST_USD)).toEqual([])
   })
 
-  // A cancelled turn never produces a result entry, so nothing was stashed —
-  // and a zero would be indistinguishable from a turn that really cost nothing.
   test("records nothing when the turn carried no usage", async () => {
     recorder = startMetricRecorder()
     const store: TerminalStore = { onTurnTerminal: null }

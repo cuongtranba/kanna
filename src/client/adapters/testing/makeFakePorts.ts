@@ -1,11 +1,3 @@
-/**
- * makeFakePorts.ts — In-memory fake implementations of every client port.
- *
- * Used in tests for stores, hooks, and React Query queryFns that will
- * consume ports once burn-down chunks 6-N migrate the call sites.
- *
- * Architecture: .c3/adr/adr-20260715-client-state-effect-architecture.md
- */
 
 import type { JsonValue } from "../../../shared/json"
 import type { HttpPort, HttpRequestOptions, HttpResponse } from "../../ports/httpPort"
@@ -17,9 +9,6 @@ import type { SoundPort } from "../../ports/soundPort"
 import type { ClipboardPort } from "../../ports/clipboardPort"
 import type { WebSocketPort, WebSocketLike, WsEventPayload } from "../../ports/webSocketPort"
 
-// ---------------------------------------------------------------------------
-// FakeHttpPort
-// ---------------------------------------------------------------------------
 
 export interface FakeHttpRoute {
   method: string
@@ -30,17 +19,12 @@ export interface FakeHttpRoute {
 export interface FakeHttpResponse {
   ok: boolean
   status: number
-  // ReturnType<typeof JSON.parse> resolves to `any`, which allows implicit
-  // widening to the generic T parameter in buildFakeResponse without a banned
-  // `as T` cast. Test authors set this to their expected response shape.
   body: ReturnType<typeof JSON.parse>
   headers?: Record<string, string>
 }
 
 export interface FakeHttpPort extends HttpPort {
-  /** Registered routes. Test authors push entries here before calling code under test. */
   routes: FakeHttpRoute[]
-  /** Record of all calls made (method + url). */
   calls: Array<{ method: string; url: string }>
 }
 
@@ -49,8 +33,6 @@ function matchRoute(routes: FakeHttpRoute[], method: string, url: string): FakeH
 }
 
 function buildFakeResponse<T>(route: FakeHttpRoute): HttpResponse<T> {
-  // route.response.body is typed as `any` (ReturnType<typeof JSON.parse>),
-  // so assigning it to `data: T` is implicit widening — no banned `as T` cast needed.
   const data: T = route.response.body
   return {
     ok: route.response.ok,
@@ -132,9 +114,6 @@ export function makeFakeHttpPort(): FakeHttpPort {
   }
 }
 
-// ---------------------------------------------------------------------------
-// FakeStoragePort
-// ---------------------------------------------------------------------------
 
 export interface FakeStoragePort extends StoragePort {
   store: Map<string, string>
@@ -159,9 +138,6 @@ export function makeFakeStoragePort(): FakeStoragePort {
   }
 }
 
-// ---------------------------------------------------------------------------
-// FakeTimerPort
-// ---------------------------------------------------------------------------
 
 export interface FakeTimerCallback {
   id: number
@@ -173,9 +149,7 @@ export interface FakeTimerCallback {
 
 export interface FakeTimerPort extends TimerPort {
   callbacks: FakeTimerCallback[]
-  /** Flush all pending timeout callbacks once (does not loop). */
   flushTimeouts(): void
-  /** Flush all pending interval callbacks once. */
   flushIntervals(): void
 }
 
@@ -241,9 +215,6 @@ export function makeFakeTimerPort(): FakeTimerPort {
   }
 }
 
-// ---------------------------------------------------------------------------
-// FakeDomPort
-// ---------------------------------------------------------------------------
 
 export interface FakeDomPort extends DomPort {
   title: string
@@ -257,51 +228,28 @@ export interface FakeDomPort extends DomPort {
   innerWidth: number
   innerHeight: number
   reloaded: boolean
-  /** Maps CSS property name → current value set via setBodyStyle. */
   bodyStyles: Map<string, string>
-  /** Maps CSS property name → current value set via setDocumentElementStyleProperty. */
   documentElementStyles: Map<string, string>
-  /** Maps event type → count of currently-registered handlers. */
   eventListenerCounts: Map<string, number>
-  /** Settable active element for tests. */
   activeElement: Element | null
-  /** Settable selection for tests. */
   selection: Selection | null
-  /** Settable focus-overlay presence for tests. */
   focusOverlay: boolean
-  /** Settable typeahead-menu-open presence for tests (SubmitPlugin / SnippetExpandPlugin). */
   typeaheadMenuOpen: boolean
-  /** Settable hostname for tests (push support checks). */
   hostname: string
-  /** Settable service-worker support flag for tests. */
   serviceWorkerSupported: boolean
-  /** Settable PushManager support flag for tests. */
   pushManagerSupported: boolean
-  /** Registration returned by registerServiceWorker/getReadyServiceWorkerRegistration. */
   serviceWorkerRegistration: ServiceWorkerRegistrationLike
-  /** Settable touch-device flag for tests. */
   touchDevice: boolean
-  /** Settable Web Share API support flag for tests. */
   webShareSupported: boolean
-  /** Set to make webShare() reject (e.g. simulate AbortError). */
   webShareError: Error | null
-  /** Recorded calls to webShare(). */
   webShareCalls: Array<{ title?: string; url?: string }>
-  /** Settable document.baseURI for tests. */
   baseURI: string
-  /** Recorded calls to triggerDownload(). */
   downloadCalls: Array<{ url: string; filename: string }>
-  /** Settable window.location.origin for tests. */
   origin: string
-  /** Recorded calls to openWindow(). */
   openWindowCalls: Array<{ url: string; target: string; features: string }>
-  /** Recorded calls to dispatchContextMenuEvent(). */
   contextMenuEventCalls: Array<{ target: EventTarget; clientX: number; clientY: number }>
-  /** Settable iOS standalone (Add to Home Screen) flag for tests. */
   iosStandalone: boolean
-  /** Settable return value for confirmDialog() (default true). */
   confirmResult: boolean
-  /** Recorded messages passed to confirmDialog(). */
   confirmCalls: string[]
 }
 
@@ -335,8 +283,6 @@ export function makeFakeDomPort(overrides: Partial<{
   const openWindowCalls: Array<{ url: string; target: string; features: string }> = []
   const contextMenuEventCalls: Array<{ target: EventTarget; clientX: number; clientY: number }> = []
   const confirmCalls: string[] = []
-  // Tracks how many handlers are registered per event type (no stored refs to
-  // avoid TypeScript's function-parameter contravariance — tests only need counts).
   const eventListenerCounts = new Map<string, number>()
 
   const defaultRegistration: ServiceWorkerRegistrationLike = {
@@ -495,22 +441,22 @@ export function makeFakeDomPort(overrides: Partial<{
       return fake.serviceWorkerRegistration
     },
 
-    upsertHeadMeta(_name: string, _content: string): void { /* no-op */ },
+    upsertHeadMeta(_name: string, _content: string): void { },
 
     getComputedBackgroundColor(): string { return "" },
 
-    setDocumentElementColorScheme(_scheme: "light" | "dark"): void { /* no-op */ },
+    setDocumentElementColorScheme(_scheme: "light" | "dark"): void { },
 
     setDocumentElementStyleProperty(property: string, value: string): void {
       documentElementStyles.set(property, value)
     },
 
-    toggleDocumentElementClass(_className: string, _force: boolean): void { /* no-op */ },
+    toggleDocumentElementClass(_className: string, _force: boolean): void { },
 
     matchesMediaQuery(_query: string): boolean { return false },
 
     addMediaQueryListener(_query: string, _handler: (matches: boolean) => void): () => void {
-      return () => { /* no-op */ }
+      return () => { }
     },
 
     addWindowListenerWithOptions<K extends keyof WindowEventMap>(
@@ -578,7 +524,7 @@ export function makeFakeDomPort(overrides: Partial<{
       return fake.confirmResult
     },
 
-    dispatchCustomWindowEvent(_type: string): void { /* no-op */ },
+    dispatchCustomWindowEvent(_type: string): void { },
 
     createElement<K extends keyof HTMLElementTagNameMap>(tagName: K): HTMLElementTagNameMap[K] {
       return document.createElement(tagName)
@@ -588,9 +534,6 @@ export function makeFakeDomPort(overrides: Partial<{
   return fake
 }
 
-// ---------------------------------------------------------------------------
-// FakeNotificationPort
-// ---------------------------------------------------------------------------
 
 export interface FakeNotificationPort extends NotificationPort {
   _permission: NotificationPermission
@@ -614,9 +557,6 @@ export function makeFakeNotificationPort(
   }
 }
 
-// ---------------------------------------------------------------------------
-// FakeSoundPort
-// ---------------------------------------------------------------------------
 
 export interface FakeSoundPort extends SoundPort {
   played: string[]
@@ -632,9 +572,6 @@ export function makeFakeSoundPort(): FakeSoundPort {
   }
 }
 
-// ---------------------------------------------------------------------------
-// FakeClipboardPort
-// ---------------------------------------------------------------------------
 
 export interface FakeClipboardPort extends ClipboardPort {
   clipboard: string
@@ -661,25 +598,15 @@ export function makeFakeClipboardPort(): FakeClipboardPort {
   }
 }
 
-// ---------------------------------------------------------------------------
-// FakeWebSocketPort
-// ---------------------------------------------------------------------------
 
-/** Minimal in-memory WebSocket-like object for testing. */
 export interface FakeWebSocketLike extends WebSocketLike {
-  /** Frames that have been sent via send(). */
   readonly sent: string[]
-  /** Simulate the connection opening. */
   open(): void
-  /** Simulate receiving a raw string message. */
   receiveRaw(data: string): void
-  /** Simulate the connection closing. */
   serverClose(): void
 }
 
-/** Extends WebSocketPort with test helpers. */
 export interface FakeWebSocketPort extends WebSocketPort {
-  /** All WebSocket-like instances created via create(). */
   readonly instances: FakeWebSocketLike[]
 }
 
@@ -700,14 +627,14 @@ export function makeFakeWebSocketPort(): FakeWebSocketPort {
       for (const h of listeners.get(type) ?? []) h(event)
     }
 
-    let readyState = 0 // CONNECTING
+    let readyState = 0
 
     const ws: FakeWebSocketLike = {
       get readyState() { return readyState },
       sent,
       send(data: string) { sent.push(data) },
       close() {
-        if (readyState === 3) return // already CLOSED
+        if (readyState === 3) return
         readyState = 3
         emit("close")
       },
@@ -736,9 +663,6 @@ export function makeFakeWebSocketPort(): FakeWebSocketPort {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Convenience: make all fake ports at once
-// ---------------------------------------------------------------------------
 
 export interface AllFakePorts {
   http: FakeHttpPort

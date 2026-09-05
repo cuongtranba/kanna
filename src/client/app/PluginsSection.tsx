@@ -1,16 +1,3 @@
-/**
- * Settings → Plugins page: lists installed plugins and drives the
- * auth-gated actions `plugin-http-routes.ts` recognises (`POST
- * /api/plugins/:id/reload` today; `/logs`, `/rpc`, `/client-error` stay
- * server-side 501 stubs until `plugin-service.ts` is wired into the HTTP
- * surface, a later chunk).
- *
- * `buildPluginsSectionHandlers` takes an injectable POST-JSON primitive
- * rather than the full `HttpPort` — the same DI shape `api/auth.ts`'s
- * `postAuthLogin` uses, narrowed to the one call this page makes — so the
- * acceptance oracle can assert the exact URL/method it hits with a bare fake.
- * A real caller wires it to `httpAdapter.postJson`.
- */
 import { Blocks } from "lucide-react"
 import { Button } from "../components/ui/button"
 import { StatusPill } from "../components/ui/status-pill"

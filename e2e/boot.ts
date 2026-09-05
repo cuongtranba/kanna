@@ -7,18 +7,6 @@ import { dirname, join } from "node:path"
 import { setTimeout as sleep } from "node:timers/promises"
 import { fileURLToPath } from "node:url"
 
-// Deliberately NOT `PROD_SERVER_PORT` (3210, see src/shared/ports.ts) — using a distinct port
-// means this harness can never accidentally attach to (and report false success against) a
-// developer's already-running `bun run start`/`kanna` instance.
-//
-// Why the production server, not `bun run dev`: Vite's dev-server WebSocket proxy leg
-// (`vite.config.ts` `"/ws": { ws: true }`) never completes the upgrade under Bun in this
-// environment (verified with raw `curl`: through Vite `/ws` -> hangs / http_code=000; direct to
-// the Bun backend `/ws` -> 101 Switching Protocols). Under `bun run dev` the app therefore never
-// leaves the "Connecting to workspace" bootstrap splash, and no real-browser layout can be
-// observed. `bun run start` serves the SPA and `/ws` from ONE Bun process with no proxy hop
-// (same origin), which does reach the real UI. See the Warchief amendment in
-// docs/tribe/planning/typography-scale-preference-plan.md (Wave 1 audit) for the full record.
 const TEST_PORT = 3299
 const READY_TIMEOUT_MS = 60_000
 const READY_POLL_INTERVAL_MS = 250
@@ -30,39 +18,15 @@ const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..")
 const distClientDir = join(repoRoot, "dist", "client")
 
 export interface KannaBoot {
-  /** Base URL of the booted production server, e.g. http://localhost:3299 */
   baseUrl: string
-  /**
-   * The temp directory this boot uses as `HOME`. Kanna's own data root is
-   * `<kannaHome>/.kanna` (see `getDataRootDir` in src/shared/branding.ts), so a
-   * spec that needs to inspect what the server persisted — settings.json, an
-   * installed plugin's build output — reads it from under here.
-   */
   kannaHome: string
-  /** Kills the `bun run start` process tree and removes the seeded temp KANNA_HOME. */
   stop: () => Promise<void>
 }
 
 export interface BootKannaOptions {
-  /**
-   * Runs against the freshly created temp `HOME` AFTER it exists and BEFORE the
-   * server process is spawned.
-   *
-   * This hook exists because `AppSettingsManager` does not watch `settings.json`
-   * (see CLAUDE.md's note on the CLI preferring a running daemon): a spec that
-   * writes settings while the server is up has that write clobbered by the
-   * daemon's next write, and `plugins.enabled` is read from the in-memory
-   * snapshot the daemon loaded at boot. Any state a spec needs the server to
-   * come up WITH therefore has to be laid down before the spawn, not after it.
-   *
-   * A throw here is not swallowed: the temp home is removed and the error is
-   * rethrown, so a broken seed fails the spec instead of quietly booting an
-   * unseeded server that then fails its assertions for the wrong reason.
-   */
   seed?: (kannaHome: string) => Promise<void>
 }
 
-/** A rolling tail of a child process's combined stdout+stderr, kept for failure diagnostics. */
 class OutputTail {
   private lines: string[] = []
 
@@ -78,11 +42,6 @@ class OutputTail {
   }
 }
 
-/**
- * Mirrors the readiness-polling shape of `waitForLocalUrl` at scripts/dev.ts:110-127: poll a
- * URL until it answers `ok`, or throw once `deadline` (an absolute `Date.now()` timestamp) has
- * passed.
- */
 async function waitForLocalUrl(url: string, deadline: number): Promise<void> {
   while (Date.now() < deadline) {
     try {
@@ -91,7 +50,6 @@ async function waitForLocalUrl(url: string, deadline: number): Promise<void> {
         return
       }
     } catch {
-      // Keep polling until the URL answers or the deadline passes.
     }
 
     await sleep(READY_POLL_INTERVAL_MS)
@@ -100,11 +58,6 @@ async function waitForLocalUrl(url: string, deadline: number): Promise<void> {
   throw new Error(`Timed out waiting for ${url}`)
 }
 
-/**
- * Rejects the moment `child` exits, with a message naming the exit code/signal. Boot races this
- * against readiness polling so a backend that fails to bind (e.g. `--strict-port` hitting an
- * occupied port) is reported immediately instead of only after the full readiness timeout.
- */
 function waitForChildExit(child: ChildProcess): Promise<never> {
   return new Promise((_resolve, reject) => {
     child.once("exit", (code, signal) => {
@@ -113,7 +66,6 @@ function waitForChildExit(child: ChildProcess): Promise<never> {
   })
 }
 
-/** Resolves to `true` once a TCP connection to `127.0.0.1:port` succeeds, i.e. the port is occupied. */
 function isPortOccupied(port: number): Promise<boolean> {
   return new Promise((resolve) => {
     const socket = createConnection({ port, host: "127.0.0.1" })
@@ -129,11 +81,6 @@ function isPortOccupied(port: number): Promise<boolean> {
   })
 }
 
-/**
- * Refuses to boot if the port this harness needs is already bound — attaching to a pre-existing
- * process on that port would silently exercise a stranger's server, not this harness's own
- * seeded, temp-`KANNA_HOME` instance.
- */
 async function assertPortFree(port: number): Promise<void> {
   if (await isPortOccupied(port)) {
     throw new Error(
@@ -143,10 +90,6 @@ async function assertPortFree(port: number): Promise<void> {
   }
 }
 
-/**
- * Reports whether any process in the group led by `pgid` is still alive, via the POSIX
- * convention that signal 0 performs no-op existence/permission checks.
- */
 function processGroupExists(pgid: number): boolean {
   try {
     process.kill(-pgid, 0)
@@ -156,14 +99,6 @@ function processGroupExists(pgid: number): boolean {
   }
 }
 
-/**
- * Kills the ENTIRE process group `child` leads (not just `child` itself) and waits until every
- * member has actually exited.
- *
- * The post-SIGKILL poll is bounded: if the group is somehow still alive `KILL_HARD_TIMEOUT_MS`
- * after SIGKILL (a kernel wedged the process, a permission issue, etc.), this warns loudly and
- * returns rather than hanging the test run forever.
- */
 async function killChildTree(child: ChildProcess): Promise<void> {
   const pgid = child.pid
   if (pgid === undefined || !processGroupExists(pgid)) {
@@ -196,26 +131,6 @@ async function killChildTree(child: ChildProcess): Promise<void> {
   }
 }
 
-/**
- * Boots the real Kanna **production** server (`bun run start`, i.e. `src/server/cli.ts`) against
- * a seeded temp `KANNA_HOME` — never the developer's real `~/.kanna` — on a port distinct from
- * the real production default, and waits for `/health` on that same port to answer before
- * resolving. Unlike the dev-server pair, the production server serves the SPA and `/ws` from ONE
- * Bun process with no proxy hop, so a single readiness probe is sufficient — see the module
- * header comment for why `bun run dev` cannot be used here.
- *
- * Requires `dist/client` to already exist (built via `bun run build`) — this function only boots
- * the server, it never builds, so calling it against a missing/stale build fails loudly instead
- * of silently serving nothing.
- *
- * `options.seed` runs against the temp home before the spawn, for state the server must boot WITH
- * rather than be told about afterwards — see `BootKannaOptions.seed`.
- *
- * Both the child process tree and the temp home are guaranteed to be cleaned up: if readiness
- * polling fails (timeout, or the child exiting early), `stop()` runs before the error is
- * rethrown, with the child's captured stdout+stderr tail attached for diagnostics; on success,
- * the caller owns calling `stop()` (e.g. from `test.afterAll`).
- */
 export async function bootKanna(options: BootKannaOptions = {}): Promise<KannaBoot> {
   if (!existsSync(distClientDir)) {
     throw new Error(
@@ -239,33 +154,17 @@ export async function bootKanna(options: BootKannaOptions = {}): Promise<KannaBo
 
   const outputTail = new OutputTail()
 
-  // `detached: true` makes `child` the leader of its own process group, so `killChildTree` can
-  // signal the whole tree via `-pgid`. stdout/stderr are piped (rather than "ignore") so a boot
-  // failure leaves a diagnostic trail instead of vanishing silently; stdin is explicitly
-  // "ignore" (not piped) so a hung prompt on the child's stdin can never exhaust the test
-  // timeout — see CLAUDE.md § Tests.
   const child = spawn(
     "bun",
     ["run", "start", "--port", String(TEST_PORT), "--no-open", "--strict-port"],
     {
       cwd: repoRoot,
-      // KANNA_DISABLE_SELF_UPDATE mirrors the same flag scripts/dev-server.ts and
-      // scripts/dev-fake-limit.ts already set (see src/server/cli-runtime.ts's
-      // maybeSelfUpdate): without it, a fresh temp HOME with network access reachable makes
-      // the CLI attempt an in-place self-update on every boot, then re-exec with a restart
-      // exit code (75) this harness's simple readiness race does not know how to follow —
-      // turning an unrelated npm-registry roundtrip into a boot failure.
       env: { ...process.env, HOME: kannaHome, KANNA_DISABLE_SELF_UPDATE: "1" },
       stdio: ["ignore", "pipe", "pipe"],
       detached: true,
     },
   )
 
-  // Prevent an unhandled-error crash on spawn failure (ENOENT, EACCES). Node does not reliably
-  // follow an 'error' event with an 'exit' event (verified: a spawn ENOENT fires 'error' but
-  // never 'exit'), so `waitForChildExit` cannot race this failure in — capture it into the
-  // output tail instead of discarding it, so the diagnostic thrown below (readiness timeout)
-  // names the real cause instead of an empty tail.
   child.once("error", (error) => outputTail.append(`${String(error)}\n`))
 
   child.stdout?.on("data", (chunk: Buffer) => outputTail.append(chunk))

@@ -13,7 +13,6 @@ import {
 } from "../nodes"
 import { serializeEditorToWire } from "./editorToWireString"
 
-// ─── Editor factory ──────────────────────────────────────────────────────────
 
 function buildEditor() {
   return createHeadlessEditor({
@@ -25,7 +24,6 @@ function buildEditor() {
   })
 }
 
-// ─── Fixtures ────────────────────────────────────────────────────────────────
 
 const fakeImageAttachment: ChatAttachment = {
   id: "att-img-1",
@@ -49,7 +47,6 @@ const fakeFileAttachment: ChatAttachment = {
   size: 1_048_576,
 }
 
-// ─── Tests ───────────────────────────────────────────────────────────────────
 
 describe("serializeEditorToWire — plain text", () => {
   it("returns the plain text and empty attachments for a simple paragraph", () => {
@@ -347,7 +344,6 @@ describe("serializeEditorToWire — exact legacy string", () => {
   })
 })
 
-// Ensure we're using all three node types from KANNA_COMPOSER_NODES
 describe("serializeEditorToWire — KANNA_COMPOSER_NODES coverage", () => {
   it("includes MentionNode, SlashCommandNode, and AttachmentNode", () => {
     expect(KANNA_COMPOSER_NODES).toContain(MentionNode)

@@ -3,18 +3,9 @@ import { parseAgentTranscriptLines } from "./agent-transcript-parse"
 import { readAgentTranscriptLines as defaultRead } from "./subagent-transcript-io.adapter"
 
 export interface SubagentTranscriptRegistry {
-  /** Bind a chat to the `<projectDir>/<claude-uuid>/subagents` dir. */
   register(chatId: string, subagentsDir: string): void
   unregister(chatId: string): void
-  /** Whether a chat currently has a registered subagents dir (live or lazily derived). */
   has(chatId: string): boolean
-  /**
-   * Read + parse `subagents/agent-<agentId>.jsonl` into transcript entries.
-   * Returns [] for an unknown chat or a missing file. Parses each line with
-   * `normalizeClaudeStreamMessage` directly — NOT `createJsonlEventParser`,
-   * which drops `isSidechain:true` lines (the agent files are entirely
-   * sidechain), and never feeds the turn/event pipeline (c3-225).
-   */
   getAgentTranscript(chatId: string, agentId: string): TranscriptEntry[]
 }
 

@@ -40,20 +40,6 @@ export function getLatestToolIds(messages: HydratedTranscriptMessage[]) {
   return ids
 }
 
-/**
- * Returns true only when `chatId` matches the route chatId (`activeChatId`).
- *
- * Gate all route-affecting side effects (navigation bounce, setSelectedProjectId,
- * chat.markRead) behind this predicate so that background tabs — instances whose
- * own chatId differs from the current URL route — never yank the app to a
- * different route or steal push focus.
- *
- * In the current single-tab world both arguments are the same value, so the
- * predicate is always true for non-null chatIds (no behaviour change). Once
- * multiple `useKannaState` instances run in parallel (one per open tab), the
- * first argument becomes each instance's own chatId while the second remains the
- * route chatId, and only the primary instance passes the gate.
- */
 export function isPrimaryChatInstance(chatId: string | null, activeChatId: string | null): boolean {
   return chatId !== null && chatId === activeChatId
 }

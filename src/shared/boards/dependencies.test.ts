@@ -46,7 +46,6 @@ describe("findBlockerCycle", () => {
   })
 
   test("names the two-card cycle it would close", () => {
-    // b already waits on a, so a waiting on b closes the loop.
     const graph = buildBlockerGraph([link("b", "a")])
     expect(findBlockerCycle(graph, "a", "b")).toEqual(["a", "b", "a"])
   })
@@ -57,15 +56,11 @@ describe("findBlockerCycle", () => {
   })
 
   test("a diamond is not a cycle", () => {
-    // d waits on b and c, both of which wait on a. Adding a second path to a
-    // shared ancestor must stay legal — this is a DAG, not a tree.
     const graph = buildBlockerGraph([link("d", "b"), link("b", "a"), link("c", "a")])
     expect(findBlockerCycle(graph, "d", "c")).toBeNull()
   })
 
   test("terminates on a graph that already holds a cycle", () => {
-    // Defensive: a database edited by hand could hold one. The walk must not
-    // hang, and an unrelated edge must still be judged on its own merits.
     const graph = buildBlockerGraph([link("x", "y"), link("y", "x")])
     expect(findBlockerCycle(graph, "a", "x")).toBeNull()
   })
@@ -127,7 +122,6 @@ describe("resolveBlockers", () => {
     return (id: string) => cards.find((entry) => entry.id === id) ?? null
   }
 
-  /** A card that was waiting on something is worth showing what it waited on. */
   test("lists cleared blockers as well as unmet ones", () => {
     const cards = [card("a", TODO), card("b", DONE), card("c", TODO, 9)]
     expect(resolveBlockers(["a", "b", "c"], lookupOf(cards), DONE)).toEqual([

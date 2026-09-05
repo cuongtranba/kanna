@@ -23,7 +23,6 @@ const DOC = [
   "",
 ].join("\n")
 
-/** A section body holding a nested list + a fence whose text mimics a heading. */
 const FENCED = [
   "## Next chunk",
   "Run these steps:",
@@ -114,7 +113,6 @@ describe("markdownDoc.append", () => {
     const idxOld = res.content.indexOf("chunk 3 DONE")
     expect(idxNew).toBeGreaterThan(-1)
     expect(idxNew).toBeLessThan(idxOld)
-    // untouched sections survive verbatim
     expect(res.content).toContain("## Next chunk")
     expect(res.content).toContain("bun run lint")
   })
@@ -125,7 +123,6 @@ describe("markdownDoc.append", () => {
       entry: "- generic noop broke variance",
       position: "bottom",
     })
-    // section absent → created at EOF
     expect(res.created).toBe(true)
     expect(res.content).toContain("## failed approaches")
     expect(res.content).toContain("generic noop broke variance")
@@ -140,7 +137,6 @@ describe("markdownDoc.append", () => {
     expect(res.created).toBe(false)
     expect(res.content).toContain("chunk 1 DONE")
     expect(res.content).toContain("chunk 4 DONE")
-    // Next chunk section still intact after the Progress section
     expect(res.content).toContain("## Next chunk")
   })
 
@@ -230,7 +226,6 @@ describe("markdownDoc.replace", () => {
   })
 })
 
-/** A Progress log whose entries carry continuation lines and a nested list. */
 const MULTILINE_PROGRESS = [
   "## Progress (latest first)",
   "",

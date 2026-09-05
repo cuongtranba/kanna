@@ -1,11 +1,3 @@
-/**
- * Snapshot persistence, log-replay, sidebar-order, and event-log-load helpers
- * for EventStore.
- *
- * Extracted from event-store.ts to reduce file size. All IO is performed
- * through the injected StorageBackend abstraction; the sealed side-effect
- * lives in FsStorageBackend.adapter.ts, not here.
- */
 
 import path from "node:path"
 import { LOG_PREFIX } from "../shared/branding"
@@ -32,7 +24,6 @@ import {
   normalizeSidebarProjectOrder,
 } from "./event-store-helpers"
 
-// ─── Types ─────────────────────────────────────────────────────────────────
 
 export interface LegacyTranscriptStats {
   hasLegacyData: boolean
@@ -41,7 +32,6 @@ export interface LegacyTranscriptStats {
   entryCount: number
 }
 
-/** Paths for the log files involved in snapshot/replay. */
 export interface SnapshotLogPaths {
   snapshotPath: string
   projectsLogPath: string
@@ -54,28 +44,18 @@ export interface SnapshotLogPaths {
   toolRequestsLogPath: string
 }
 
-/** Returned by {@link loadSnapshotIntoState}. */
 export interface LoadSnapshotResult {
   snapshotHasLegacyMessages: boolean
   legacySidebarProjectOrder: string[]
 }
 
-// Internal only — used by loadAndReplayLogs.
 interface ParsedReplayEvent {
   event: StoreEvent
   sourceIndex: number
   lineIndex: number
 }
 
-// ─── Snapshot loading ──────────────────────────────────────────────────────
 
-/**
- * Read `snapshotPath` and populate the in-memory state maps from its content.
- * Calls `clearStorage` when the snapshot version does not match STORE_VERSION
- * or when parsing fails (fail-closed reset).
- *
- * @returns scalar fields that cannot be set through the mutated Maps.
- */
 export async function loadSnapshotIntoState(
   storage: StorageBackend,
   snapshotPath: string,
@@ -104,7 +84,6 @@ export async function loadSnapshotIntoState(
     }
 
     for (const chat of parsed.chats) {
-      // Access legacy fields from old snapshot data via Reflect.get (avoids `as` casts).
       const legacySessionToken: string | null | undefined = Reflect.get(chat, "sessionToken")
       const legacyPendingFork: string | null | { provider: AgentProvider; token: string } | undefined =
         Reflect.get(chat, "pendingForkSessionToken")
@@ -134,9 +113,6 @@ export async function loadSnapshotIntoState(
         sessionTokensByProvider,
         pendingForkSessionToken,
       })
-      // Mirror the chat_created handler: every live chat needs a subagent-run
-      // map, or subagent_run_started events after a reboot are silently
-      // dropped from the read model (the runs never reach the UI).
       if (!chat.deletedAt) {
         state.subagentRunsByChatId.set(chat.id, new Map())
       }
@@ -171,10 +147,6 @@ export async function loadSnapshotIntoState(
 
     if (parsed.autoContinueEvents?.length) {
       for (const entry of parsed.autoContinueEvents) {
-        // This path replaces the array wholesale rather than going through
-        // `applyAutoContinueToState`, so retention has to be applied here too
-        // — otherwise a snapshot written before retention existed, or one for
-        // a chat that never appends again, stays bloated forever.
         state.autoContinueEventsByChatId.set(
           entry.chatId,
           compactLoopWakeEvents(compactCronRunEvents([...entry.events])),
@@ -196,11 +168,7 @@ export async function loadSnapshotIntoState(
   }
 }
 
-// ─── Snapshot persistence ──────────────────────────────────────────────────
 
-/**
- * Build a `SnapshotFile` from the current in-memory state (pure — no IO).
- */
 export function buildSnapshotFile(
   state: StoreState,
   projects: ProjectRecord[],
@@ -228,11 +196,6 @@ export function buildSnapshotFile(
   }
 }
 
-/**
- * Write `snapshotJson` to disk and truncate all compactable log files to empty.
- * (tunnels.jsonl, push.jsonl, tool-requests.jsonl are intentionally excluded;
- * see comments in the original EventStore implementation.)
- */
 export async function truncateLogsAfterSnapshot(
   storage: StorageBackend,
   paths: SnapshotLogPaths,
@@ -253,10 +216,6 @@ export async function truncateLogsAfterSnapshot(
 
 const SNAPSHOT_THRESHOLD_BYTES = 2 * 1024 * 1024
 
-/**
- * Returns true when the combined size of compactable log files exceeds
- * {@link SNAPSHOT_THRESHOLD_BYTES} (2 MiB).
- */
 export async function calcShouldTruncateLogs(
   storage: StorageBackend,
   paths: SnapshotLogPaths,
@@ -274,15 +233,7 @@ export async function calcShouldTruncateLogs(
   return sizes.reduce((total, size) => total + size, 0) >= SNAPSHOT_THRESHOLD_BYTES
 }
 
-// ─── Log replay ────────────────────────────────────────────────────────────
 
-/**
- * Load a single JSONL log file and return the parsed events, skipping
- * `sidebar_project_order_set` events (handled separately). On a corrupt
- * trailing line, returns whatever was parsed so far. On an incompatible
- * store version or a corrupt mid-file line, calls `clearStorage` and returns
- * an empty array.
- */
 export async function loadReplayEventsFromFile(
   storage: StorageBackend,
   filePath: string,
@@ -335,12 +286,6 @@ export async function loadReplayEventsFromFile(
   return parsedEvents
 }
 
-/**
- * Load all log files, sort events by timestamp, and apply them in order.
- * Short-circuits if `isStorageReset()` returns true before or after loading
- * (a version mismatch in any file triggers `clearStorage` in
- * {@link loadReplayEventsFromFile}).
- */
 export async function loadAndReplayLogs(
   storage: StorageBackend,
   paths: SnapshotLogPaths,
@@ -377,11 +322,7 @@ export async function loadAndReplayLogs(
   onReplayChatProviderClear()
 }
 
-// ─── Sidebar project order ─────────────────────────────────────────────────
 
-/**
- * Write `projectIds` as JSON to the sidebar order file.
- */
 export async function writeSidebarOrderFile(
   storage: StorageBackend,
   dataDir: string,
@@ -392,11 +333,6 @@ export async function writeSidebarOrderFile(
   await storage.writeText(sidebarProjectOrderPath, `${JSON.stringify(projectIds, null, 2)}\n`)
 }
 
-/**
- * Scan `projectsLogPath` for the latest `sidebar_project_order_set` event and
- * return the project IDs from it. Returns `[]` if the file is absent, empty,
- * or corrupt.
- */
 export async function readSidebarOrderFromProjectsLog(
   storage: StorageBackend,
   projectsLogPath: string,
@@ -443,19 +379,6 @@ export async function readSidebarOrderFromProjectsLog(
   return projectIds
 }
 
-/**
- * Load the authoritative sidebar project order from disk.
- *
- * Resolution order:
- * 1. Dedicated `sidebar-order.json` file.
- * 2. Latest `sidebar_project_order_set` event from `projects.jsonl`.
- * 3. `legacySidebarProjectOrder` from the last loaded snapshot.
- *
- * If the dedicated file does not exist but a legacy order is found, the
- * legacy order is written to the dedicated file as a one-time migration.
- *
- * Returns the resolved project IDs array.
- */
 export async function loadSidebarOrder(
   storage: StorageBackend,
   sidebarProjectOrderPath: string,
@@ -477,7 +400,6 @@ export async function loadSidebarOrder(
     }
   }
 
-  // No dedicated file yet — migrate from the legacy source.
   const fromProjectsLog = await readSidebarOrderFromProjectsLog(storage, projectsLogPath)
   const order = fromProjectsLog.length > 0 ? fromProjectsLog : [...legacySidebarProjectOrder]
 
@@ -487,12 +409,7 @@ export async function loadSidebarOrder(
   return order
 }
 
-// ─── Legacy transcript helpers ─────────────────────────────────────────────
 
-/**
- * Compute legacy-transcript statistics from the current in-memory legacy
- * maps and the storage size of `messages.jsonl`.
- */
 export async function computeLegacyTranscriptStats(
   storage: StorageBackend,
   messagesLogPath: string,
@@ -521,12 +438,6 @@ export async function computeLegacyTranscriptStats(
   }
 }
 
-/**
- * Write per-chat transcript files from `legacyMessagesByChatId`, clear
- * the legacy state, snapshot + truncate logs, and invalidate the cache.
- *
- * Returns `false` if no legacy data exists; `true` on success.
- */
 export async function migrateLegacyTranscripts(
   storage: StorageBackend,
   transcriptsDir: string,
@@ -573,11 +484,7 @@ export async function migrateLegacyTranscripts(
   return true
 }
 
-// ─── Tunnel event apply + load ─────────────────────────────────────────────
 
-/**
- * Apply a single CloudflareTunnelEvent to the in-memory map (pure, no IO).
- */
 export function applyTunnelEventToMap(
   tunnelEventsByChatId: Map<string, CloudflareTunnelEvent[]>,
   event: CloudflareTunnelEvent,
@@ -587,10 +494,6 @@ export function applyTunnelEventToMap(
   tunnelEventsByChatId.set(event.chatId, existing)
 }
 
-/**
- * Load `tunnels.jsonl` from disk and populate `tunnelEventsByChatId`.
- * Malformed lines are skipped with a warning.
- */
 export async function loadTunnelEventsFromLog(
   storage: StorageBackend,
   tunnelLogPath: string,
@@ -611,12 +514,7 @@ export async function loadTunnelEventsFromLog(
   }
 }
 
-// ─── Share event load ──────────────────────────────────────────────────────
 
-/**
- * Load `shares.jsonl` from disk and append to `shareEventsAll`.
- * Malformed lines are skipped with a warning.
- */
 export async function loadShareEventsFromLog(
   storage: StorageBackend,
   sharesLogPath: string,
@@ -637,12 +535,7 @@ export async function loadShareEventsFromLog(
   }
 }
 
-// ─── Push event load ───────────────────────────────────────────────────────
 
-/**
- * Load `push.jsonl` from disk and return all parsed PushEvents.
- * Malformed lines are skipped with a warning.
- */
 export async function loadPushEventsFromLog(
   storage: StorageBackend,
   pushLogPath: string,

@@ -82,7 +82,6 @@ describe("buildKannaSystemPromptAppend", () => {
     )
     const out = buildKannaSystemPromptAppend(many)
     expect(out).toContain("5 more subagents omitted")
-    // Newest 20 kept (indices 24..5), oldest 5 (4..0) omitted.
     expect(out).toContain("sub24")
     expect(out).not.toContain("sub4]:")
   })
@@ -128,9 +127,6 @@ describe("buildKannaSystemPromptAppend", () => {
       expect(out).toContain("Always TDD.")
     })
 
-    // The global setting is workspace-wide. Leaving it called "Project
-    // instructions" while a per-project block exists under the same words is
-    // the comprehension hazard adr-20260802 was written about.
     test("the global block is NOT headed 'Project instructions'", () => {
       const out = buildKannaSystemPromptAppend([], { globalPromptAppend: "Always TDD." })
       expect(out).not.toContain("## Project instructions")
@@ -183,8 +179,6 @@ describe("buildKannaSystemPromptAppend", () => {
       expect(out.indexOf("Backend API")).toBeLessThan(out.indexOf("Web Client"))
     })
 
-    // Broad to narrow: workspace rules, then how the projects relate, then
-    // each project's own rules, then the paths those names map to.
     test("ordering is BASE, workspace, stack, per-project, roots, roster", () => {
       const out = buildKannaSystemPromptAppend([fakeSubagent({ name: "rev" })], {
         globalPromptAppend: "Always TDD.",
@@ -212,9 +206,6 @@ describe("buildKannaSystemPromptAppend", () => {
     expect(KANNA_SYSTEM_PROMPT_BASE).toContain("pasting or summarizing its content")
   })
 
-  // Kanna auto-repairs `-.x` at render time, but a repaired diagram still
-  // carries a correction notice the reader has to reconcile — the prompt is
-  // what stops the defect being written in the first place.
   test("KANNA_SYSTEM_PROMPT_BASE names the mermaid link spellings that parse", () => {
     expect(KANNA_SYSTEM_PROMPT_BASE).toContain("`-.-x` and `-.-o`")
     expect(KANNA_SYSTEM_PROMPT_BASE).toContain("never `-.x` / `-.o`")
@@ -301,15 +292,7 @@ describe("buildKannaSystemPromptAppend", () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// buildCodexDeveloperInstructions
-// ---------------------------------------------------------------------------
 
-/**
- * Codex used to receive `globalPromptAppend` and nothing else, so switching a
- * stack chat's provider silently downgraded it to a single-project chat — no
- * refusal, no UI signal, and the model simply unaware the peer roots existed.
- */
 describe("buildCodexDeveloperInstructions", () => {
   test("returns undefined when there is nothing to say", () => {
     expect(buildCodexDeveloperInstructions({})).toBeUndefined()
@@ -317,9 +300,6 @@ describe("buildCodexDeveloperInstructions", () => {
       .toBeUndefined()
   })
 
-  // Headed, not raw: with workspace / stack / per-project instructions all
-  // possible, an unlabelled blob next to labelled blocks would be ambiguous
-  // about which scope it came from. Same headings as the Claude suffix.
   test("heads the global prompt as Workspace instructions", () => {
     expect(buildCodexDeveloperInstructions({ globalPromptAppend: "Always TDD." }))
       .toBe("## Workspace instructions\n\nAlways TDD.")
@@ -358,10 +338,6 @@ describe("buildCodexDeveloperInstructions", () => {
     expect(out.indexOf("Always TDD.")).toBeLessThan(out.indexOf("## Stack projects"))
   })
 
-  // Kanna starts every Codex thread with `approvalPolicy: "never"` and
-  // `sandbox: "danger-full-access"` (codex-app-server.ts), so a peer root IS
-  // reachable — what Codex lacked was knowledge of it, not permission. The
-  // note must say that and not promise a workspace it does not have.
   test("tells Codex its cwd is the primary but peer roots are reachable", () => {
     const out = buildCodexDeveloperInstructions({
       stackProjects: [
@@ -373,7 +349,6 @@ describe("buildCodexDeveloperInstructions", () => {
     expect(out).not.toContain("grantRoot")
   })
 
-  // A lone primary is not a cross-root situation, so the caveat would be noise.
   test("omits the reach note when there is only one root", () => {
     const out = buildCodexDeveloperInstructions({ stackProjects: [fakeBinding()] }) ?? ""
     expect(out).toContain("## Stack projects")
@@ -381,13 +356,6 @@ describe("buildCodexDeveloperInstructions", () => {
   })
 })
 
-/**
- * A provider that cannot expand `/name` also cannot DISCOVER a skill: the
- * catalog is a Kanna read-model the model never sees. `thread/start`'s
- * `developerInstructions` is the only injection point Codex's app-server
- * exposes, so the roster rides it — and reading the named SKILL.md is the
- * invocation, since Codex has file tools and runs with full filesystem access.
- */
 describe("renderSkillRosterBlock", () => {
   const skill = (over: Partial<SkillRosterEntry> = {}): SkillRosterEntry => ({
     name: "kanna-test",

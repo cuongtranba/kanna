@@ -4,18 +4,12 @@ import { domAdapter } from "../adapters/dom.adapter"
 import { BREAKPOINT_MD } from "../lib/viewport"
 import type { DrawerVisual } from "./drawerVisual"
 
-/** Re-exported for existing callers; `lib/viewport` owns the value. */
 export const SIDEBAR_SWIPE_MOBILE_BREAKPOINT_PX = BREAKPOINT_MD
-// Open gesture may start at the very left edge (x = 0): we suppress the
-// browser/PWA native back gesture in this band via shouldPreventNativeBack,
-// so the edge swipe opens the panel instead of navigating back.
 export const SIDEBAR_SWIPE_OPEN_START_MIN_X = 0
 export const SIDEBAR_SWIPE_OPEN_START_MAX_X = 60
 export const SIDEBAR_SWIPE_MIN_HORIZONTAL_PX = 60
 export const SIDEBAR_SWIPE_HORIZONTAL_RATIO = 1.5
 export const SIDEBAR_SWIPE_MAX_DURATION_MS = 500
-// Horizontal travel (px) at which an in-progress move is committed enough to
-// claim the gesture from the native back/forward swipe via preventDefault().
 export const SIDEBAR_SWIPE_PREVENT_MIN_DX = 8
 
 export type SwipePoint = {
@@ -29,16 +23,9 @@ export type SwipeGestureOutcome = "open" | "close" | null
 export type SwipeGestureContext = {
   sidebarOpen: boolean
   viewportWidth: number
-  /**
-   * The gesture began inside a surface that scrolls horizontally under the
-   * finger (the pane tab strip). That swipe belongs to the surface, not to the
-   * sidebar — and a surface only marks itself while it actually has something
-   * to scroll, so the gesture is untouched everywhere else.
-   */
   startedInHorizontalScroller?: boolean
 }
 
-/** Marks a surface that owns horizontal swipes; set by the pane tab strip. */
 export const HORIZONTAL_SCROLLER_SELECTOR = "[data-swipe-scroll-x]"
 
 export function evaluateSidebarSwipe(
@@ -70,23 +57,6 @@ export function evaluateSidebarSwipe(
   return null
 }
 
-/**
- * How far along its travel the drawer is, right now, under the finger.
- *
- * `0` is fully closed, `1` fully open. While the finger is DOWN this is the
- * only thing that should position the drawer, and it is deliberately linear and
- * un-eased: an easing curve describes what happens after a release, and applying
- * one to a tracked finger makes the panel lag the thumb that is holding it.
- *
- * Separate from `evaluateSidebarSwipe`, which decides the OUTCOME and whose
- * thresholds this must not touch: a gesture the user has already learned must
- * not change meaning because it also got frames. This only answers "where is
- * the panel mid-drag", and the release still resolves through `evaluateSidebarSwipe`.
- *
- * Returns null when the gesture is not the drawer's to draw — a desktop
- * viewport, a horizontal scroller, a drag in the direction that is already
- * exhausted, or a drawer width that cannot be measured.
- */
 export function sidebarDragProgress(
   start: SwipePoint,
   current: SwipePoint,
@@ -98,7 +68,6 @@ export function sidebarDragProgress(
   if (!(drawerWidth > 0)) return null
 
   const dx = current.x - start.x
-  // Opening starts at 0 and pulls right; closing starts at 1 and pushes left.
   const base = ctx.sidebarOpen ? 1 : 0
   if (ctx.sidebarOpen ? dx > 0 : dx < 0) return null
 
@@ -111,13 +80,6 @@ function clamp01(value: number): number {
   return value
 }
 
-/**
- * Decide, mid-gesture, whether to call preventDefault() on the touchmove so the
- * browser/PWA native edge swipe-back (or swipe-forward) does not steal the
- * gesture. Returns true only for the same horizontal motions evaluateSidebarSwipe
- * would later resolve to "open" / "close", so vertical scrolling and unrelated
- * swipes keep their default behaviour.
- */
 export function shouldPreventNativeBack(
   start: SwipePoint,
   current: SwipePoint,
@@ -132,12 +94,10 @@ export function shouldPreventNativeBack(
   if (Math.abs(dx) < SIDEBAR_SWIPE_PREVENT_MIN_DX) return false
   if (Math.abs(dx) <= Math.abs(dy)) return false
 
-  // Opening: rightward swipe from the left-edge band claims the native back.
   if (!ctx.sidebarOpen) {
     return dx > 0 && start.x <= SIDEBAR_SWIPE_OPEN_START_MAX_X
   }
 
-  // Closing: leftward swipe while the sidebar is open claims native forward/back.
   return dx < 0
 }
 
@@ -153,11 +113,6 @@ type UseSidebarSwipeGestureParams = {
   sidebarOpen: boolean
   onOpen: () => void
   onClose: () => void
-  /**
-   * Draws the drawer under the finger. Optional: without it the gesture keeps
-   * its shipped behaviour exactly — decide on release, no frames in between —
-   * which is what every existing test asserts.
-   */
   visual?: DrawerVisual
   ports?: SidebarSwipeGesturePorts
 }
@@ -171,8 +126,6 @@ export function useSidebarSwipeGesture({ sidebarOpen, onOpen, onClose, visual, p
 
   useEffect(() => {
     let start: SwipePoint | null = null
-    // Resolved once, at touchstart: the element under the finger later in the
-    // gesture is whatever the scroll moved there.
     let inScroller = false
 
     function handleTouchStart(event: TouchEvent) {
@@ -197,13 +150,8 @@ export function useSidebarSwipeGesture({ sidebarOpen, onOpen, onClose, visual, p
         { x: touch.clientX, y: touch.clientY, t: event.timeStamp },
         { sidebarOpen, viewportWidth: dom.getInnerWidth(), startedInHorizontalScroller: inScroller }
       )
-      // Claim the gesture from the native edge swipe-back so the move resolves
-      // to opening/closing the sidebar instead of navigating history.
       if (prevent && event.cancelable) event.preventDefault()
 
-      // The frames between finger and result. 1:1 and un-eased — an easing
-      // curve describes what happens AFTER a release, and applying one to a
-      // tracked finger makes the panel lag the thumb holding it.
       if (!visual) return
       const progress = sidebarDragProgress(
         startPoint,
@@ -231,10 +179,6 @@ export function useSidebarSwipeGesture({ sidebarOpen, onOpen, onClose, visual, p
         return
       }
 
-      // Order matters, and differently in each direction. Opening must render
-      // FIRST so React is already holding the drawer on screen when the class
-      // that was holding it there is released; closing must settle first, or
-      // React hides the drawer and the settle plays against nothing.
       if (outcome === "open") {
         onOpen()
         void visual.settle(1)
@@ -244,7 +188,6 @@ export function useSidebarSwipeGesture({ sidebarOpen, onOpen, onClose, visual, p
         void visual.settle(0).then(onClose)
         return
       }
-      // Not enough travel: fall back to wherever the drawer already was.
       void visual.settle(sidebarOpen ? 1 : 0)
     }
 
@@ -254,7 +197,6 @@ export function useSidebarSwipeGesture({ sidebarOpen, onOpen, onClose, visual, p
     }
 
     const cleanupTouchStart = dom.addWindowListenerWithOptions("touchstart", handleTouchStart, { passive: true })
-    // Non-passive so preventDefault() can suppress the native edge swipe-back.
     const cleanupTouchMove = dom.addWindowListenerWithOptions("touchmove", handleTouchMove, { passive: false })
     const cleanupTouchEnd = dom.addWindowListenerWithOptions("touchend", handleTouchEnd, { passive: true })
     const cleanupTouchCancel = dom.addWindowListenerWithOptions("touchcancel", handleTouchCancel, { passive: true })

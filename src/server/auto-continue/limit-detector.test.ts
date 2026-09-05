@@ -65,14 +65,12 @@ describe("ClaudeLimitDetector", () => {
   })
 
   test("detects SDK-wrapped CLI result-error text in Error.message", () => {
-    // Real format observed in pm2 logs from @anthropic-ai/claude-agent-sdk.
     const now = Date.parse("2026-04-23T05:00:00Z")
     const err = new Error("Claude Code returned an error result: You've hit your limit · resets 1:50pm (Asia/Saigon)")
     const detection = (detector as ClaudeLimitDetector & {
       detect(chatId: string, error: unknown, nowMs?: number): unknown
     }).detect("c1", err)
     expect(detection).not.toBeNull()
-    // detectFromResultText uses real Date.now(); the regex match is what we care about.
     expect((detection as { tz: string }).tz).toBe("Asia/Saigon")
     void now
   })
@@ -122,7 +120,7 @@ describe("CodexLimitDetector", () => {
 
 describe("parseResetFromText", () => {
   test("parses 'resets 2pm (Asia/Saigon)' for later-same-day", () => {
-    const now = Date.parse("2026-04-23T05:00:00Z") // 12:00 Saigon
+    const now = Date.parse("2026-04-23T05:00:00Z")
     const parsed = parseResetFromText("You've hit your limit · resets 2pm (Asia/Saigon)", now)
     expect(parsed).not.toBeNull()
     expect(parsed!.tz).toBe("Asia/Saigon")
@@ -130,7 +128,7 @@ describe("parseResetFromText", () => {
   })
 
   test("parses 'resets 2pm (Asia/Saigon)' wraps to next day if past", () => {
-    const now = Date.parse("2026-04-23T08:00:00Z") // 15:00 Saigon
+    const now = Date.parse("2026-04-23T08:00:00Z")
     const parsed = parseResetFromText("You've hit your limit · resets 2pm (Asia/Saigon)", now)
     expect(new Date(parsed!.resetAt).toISOString()).toBe("2026-04-24T07:00:00.000Z")
   })
@@ -146,7 +144,7 @@ describe("parseResetFromText", () => {
   })
 
   test("parses 'resets 2:40pm (Asia/Saigon)' with minutes", () => {
-    const now = Date.parse("2026-04-23T05:00:00Z") // 12:00 Saigon
+    const now = Date.parse("2026-04-23T05:00:00Z")
     const parsed = parseResetFromText("You've hit your limit · resets 2:40pm (Asia/Saigon)", now)
     expect(parsed).not.toBeNull()
     expect(parsed!.tz).toBe("Asia/Saigon")

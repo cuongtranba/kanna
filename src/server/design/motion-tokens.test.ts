@@ -10,31 +10,14 @@ import {
   type MotionDurationName,
 } from "../../client/lib/motion/tokens"
 
-/**
- * The motion vocabulary is defined twice — once as CSS custom properties in
- * src/index.css (for rules) and once as numbers in
- * src/client/lib/motion/tokens.ts (because anime.js and Motion take numbers,
- * not `var()`). Two definitions of one value drift, and a drifted duration is
- * invisible: nothing breaks, the app just animates two panels at two speeds.
- *
- * This is the gate that makes "the token table is the only timing values any
- * component may use" a fact rather than a note. It is the same discipline
- * shellChrome.ts applies to --shell-top-band, enforced instead of documented.
- *
- * It lives under src/server/design/ because the client seal bans node:fs from
- * src/client/** — including its tests — so a suite that reads source files has
- * to sit here, next to raw-ink-guard and tone-pairings.
- */
 
 const CSS_PATH = join(import.meta.dir, "../../..", "src/index.css")
 const css = readFileSync(CSS_PATH, "utf8")
 
-/** `staggerTight` → `--motion-stagger-tight`. */
 function durationVarName(token: MotionDurationName): string {
   return `--motion-${token.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}`
 }
 
-/** Every `--motion-*: <n>ms` declaration in index.css, by property name. */
 function declaredDurations(): Map<string, number> {
   const found = new Map<string, number>()
   for (const match of css.matchAll(/^\s*(--motion-[a-z-]+):\s*(\d+)ms;/gm)) {
@@ -43,7 +26,6 @@ function declaredDurations(): Map<string, number> {
   return found
 }
 
-/** Every `--motion-ease-*` declaration in index.css, by property name. */
 function declaredEasings(): Map<string, string> {
   const found = new Map<string, string>()
   for (const match of css.matchAll(/^\s*(--motion-ease-[a-z-]+):\s*([^;]+);/gm)) {
@@ -104,21 +86,12 @@ describe("motion tokens agree between CSS and TypeScript", () => {
   })
 
   test("the anime.js and CSS spellings of `panel` describe the same curve", () => {
-    // anime.js: "cubicBezier(0.22, 1, 0.36, 1)" — CSS: "cubic-bezier(0.22, 1, 0.36, 1)".
-    // Same four control points, two syntaxes; a change to one must change both.
     const controlPoints = (spelling: string) => spelling.replace(/^[a-zA-Z-]+\(|\)$/g, "")
     expect(controlPoints(MOTION_EASE.panel)).toBe(controlPoints(MOTION_EASE_CSS.panel))
   })
 })
 
 describe("DESIGN.md documents the real table", () => {
-  /**
-   * DESIGN.md is the mandatory source of truth for the visual system, so its
-   * motion table is read as authority. A documented duration that no longer
-   * matches the shipped one is worse than no table at all — it is a value a
-   * reader will confidently type at a call site. This makes the doc a CHECKED
-   * source rather than a third place to drift.
-   */
   const design = readFileSync(join(import.meta.dir, "../../..", "DESIGN.md"), "utf8")
 
   test("every token in the DESIGN.md table matches src/index.css", () => {
@@ -128,9 +101,6 @@ describe("DESIGN.md documents the real table", () => {
       ),
     )
 
-    // A table that matched nothing would pass every comparison below, so the
-    // absence of a table is itself the failure — the same reasoning as
-    // `filesScanned` in the architecture budget.
     expect(documented.size).toBeGreaterThan(0)
 
     const declared = declaredDurations()
@@ -149,9 +119,6 @@ describe("no single beat exceeds the ceiling", () => {
   })
 
   test("a sequence token is a sum, so it may exceed the ceiling", () => {
-    // Pins the exemption to something real: if `sequence` ever drops under the
-    // ceiling the exemption is dead weight and should be deleted, not kept as
-    // a hole a future beat can be parked in.
     for (const token of SEQUENCE_DURATIONS) {
       expect(MOTION_DURATION[token]).toBeGreaterThan(MAX_BEAT_MS)
     }

@@ -3,11 +3,6 @@ import { COLUMN_DOT_CLASS, isOverWipLimit } from "./columnStyle"
 import { COLUMN_COLOR_TOKENS } from "../../../shared/boards/types"
 
 describe("COLUMN_DOT_CLASS", () => {
-  /**
-   * Every token needs a LITERAL class: Tailwind scans source for complete class
-   * names, so a token added without a row here renders a transparent dot rather
-   * than failing.
-   */
   test("covers every colour token in the closed set", () => {
     for (const token of COLUMN_COLOR_TOKENS) {
       expect(COLUMN_DOT_CLASS[token]).toBe(`bg-${token}`)

@@ -13,11 +13,6 @@ export interface ModelEditorDraft {
   label: string
   modelProvider: ModelProvider
   supportedEfforts: readonly ClaudeReasoningEffort[]
-  /**
-   * Whether this model offers the 1M context window. The form always records
-   * the answer explicitly on save, so an entry edited here never falls back to
-   * the built-in's options and never silently loses the 1M it was offering.
-   */
   offersOneMillionContext: boolean
 }
 
@@ -42,10 +37,8 @@ interface ModelsSectionState {
   editing: ModelsEditingState
   editorForm: ModelEditorFormState
 
-  // Actions — navigation
   setEditing: (editing: ModelsEditingState) => void
 
-  // Actions — editor form
   resetEditorForm: (draft: ModelEditorDraft) => void
   patchEditorForm: (patch: Partial<ModelEditorFormState>) => void
   toggleSupportedEffort: (effortId: ClaudeReasoningEffort) => void

@@ -20,8 +20,6 @@ describe("humanizeSchedule", () => {
   test("sub-minute intervals read in seconds", () => {
     expect(humanized("every 1s")).toBe("every second")
     expect(humanized("every 30s")).toBe("every 30 seconds")
-    // 90s divides into no whole minute, so it stays in seconds rather than
-    // becoming "every 1.5 minutes".
     expect(humanized("every 90s")).toBe("every 90 seconds")
     expect(humanized("every 120s")).toBe("every 2 minutes")
   })

@@ -80,10 +80,6 @@ describe("resolveCardDrop", () => {
     })
   })
 
-  /**
-   * The dragged card is not its own neighbour: moving `b` to the top makes `a`
-   * the card BELOW it, not the card above.
-   */
   test("the card being moved is excluded from the neighbours", () => {
     expect(resolveCardDrop(view(), "b", { columnId: "c1", beforeCardId: "a" })).toEqual({
       cardId: "b",
@@ -93,16 +89,10 @@ describe("resolveCardDrop", () => {
     })
   })
 
-  /**
-   * Sending this would spend a round-trip and a broadcast rewriting a rank to
-   * the value it already had.
-   */
   test("a drop that changes nothing resolves to nothing", () => {
-    // `b` already sits between `a` and `c`, so "drop before c" is where it is.
     expect(resolveCardDrop(view(), "b", { columnId: "c1", beforeCardId: "c" })).toBeNull()
     expect(resolveCardDrop(view(), "a", { columnId: "c1", beforeCardId: "b" })).toBeNull()
     expect(resolveCardDrop(view(), "c", { columnId: "c1", beforeCardId: null })).toBeNull()
-    // Moving to a different column is never a no-op, even from the same slot.
     expect(resolveCardDrop(view(), "c", { columnId: "c2", beforeCardId: null })).not.toBeNull()
   })
 
@@ -132,7 +122,6 @@ describe("resolveColumnDrop", () => {
 describe("edge to insertion point", () => {
   const cards = [{ id: "a" }, { id: "b" }, { id: "c" }]
 
-  /** "After this card" and "before the next" are the same place, said once. */
   test("a bottom edge is the next card's top edge", () => {
     expect(dropTargetForCardEdge(cards, "a", "top")).toBe("a")
     expect(dropTargetForCardEdge(cards, "a", "bottom")).toBe("b")

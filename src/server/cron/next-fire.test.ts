@@ -9,11 +9,6 @@ function scheduleOf(text: string): CronSchedule {
   return parsed.schedule
 }
 
-/**
- * Expectations are built from local Date fields (never hard-coded epochs) so
- * the suite passes in any timezone — cron matching itself runs on local
- * wall-clock fields.
- */
 function local(year: number, month: number, day: number, hour = 0, minute = 0, second = 0): number {
   return new Date(year, month - 1, day, hour, minute, second).getTime()
 }
@@ -35,7 +30,6 @@ describe("cron next fire", () => {
   })
 
   test("weekday schedule skips the weekend", () => {
-    // 2026-08-14 is a Friday.
     const at = nextFireAt(scheduleOf("0 9 * * 1-5"), local(2026, 8, 14, 10, 0), 0)
     expect(at).toBe(local(2026, 8, 17, 9, 0))
   })
@@ -60,18 +54,16 @@ describe("cron next fire", () => {
   })
 
   test("vixie OR rule: both dom and dow restricted fires on either", () => {
-    // 2026-08-16 is a Sunday; `0 0 20 * 1` = day 20 OR Monday.
     const schedule = scheduleOf("0 0 20 * 1")
     const first = nextFireAt(schedule, local(2026, 8, 16, 1, 0), 0)
-    expect(first).toBe(local(2026, 8, 17, 0, 0)) // Monday the 17th
+    expect(first).toBe(local(2026, 8, 17, 0, 0))
     const second = nextFireAt(schedule, first!, 0)
-    expect(second).toBe(local(2026, 8, 20, 0, 0)) // the 20th (a Thursday)
+    expect(second).toBe(local(2026, 8, 20, 0, 0))
   })
 
   test("stepped dom with plain-star dow still constrains the day (AND)", () => {
-    // */2 in dom is unrestricted for the OR rule but its values still apply.
     const at = nextFireAt(scheduleOf("0 0 */2 * *"), local(2026, 8, 16, 1, 0), 0)
-    expect(at).toBe(local(2026, 8, 17, 0, 0)) // days 1,3,…,17 — next odd day
+    expect(at).toBe(local(2026, 8, 17, 0, 0))
   })
 
   test("restricted dom with unrestricted dow is a plain dom match", () => {
@@ -80,12 +72,6 @@ describe("cron next fire", () => {
   })
 })
 
-/**
- * Seconds are the engine's own 6-field mode, so these rows pin the library the
- * same way the calendar rows above do — a node-cron upgrade that changed
- * sub-minute matching or lost strictly-after at second granularity would let a
- * job compute its own fire time again and fire in a tight loop.
- */
 describe("6-field cron next fire (seconds)", () => {
   test("every-30-seconds lands on the next half minute", () => {
     const at = nextFireAt(scheduleOf("*/30 * * * * *"), local(2026, 8, 16, 10, 0, 5), 0)
@@ -132,7 +118,7 @@ describe("interval next fire", () => {
 
   test("stays on the anchor grid after missed time", () => {
     const armedAt = local(2026, 8, 16, 10, 2)
-    const from = armedAt + 12 * 60_000 + 1 // 12m01s later, mid-grid
+    const from = armedAt + 12 * 60_000 + 1
     expect(nextFireAt(schedule, from, armedAt)).toBe(armedAt + 15 * 60_000)
   })
 

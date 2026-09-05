@@ -1,19 +1,9 @@
-/**
- * Tests for claude-slash-commands.ts
- *
- * The `/` picker is populated from Kanna's own builtins plus the local disk
- * catalog — the Claude CLI is never consulted and no session is spawned. All
- * IO is injected via the deps.
- */
 
 import { describe, test, expect } from "bun:test"
 import { localCommandsForCwd, type SlashCommandsDeps } from "./claude-slash-commands"
 import { BUILTIN_SLASH_COMMANDS } from "../shared/builtin-commands"
 import type { SlashCommand, SlashCommandScope } from "../shared/types"
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 const BUILTIN_NAMES = BUILTIN_SLASH_COMMANDS.map((c) => c.name)
 
@@ -25,9 +15,6 @@ function makeDeps(overrides: Partial<SlashCommandsDeps> = {}): SlashCommandsDeps
   return { localCatalog: null, ...overrides }
 }
 
-// ---------------------------------------------------------------------------
-// localCommandsForCwd
-// ---------------------------------------------------------------------------
 
 describe("localCommandsForCwd", () => {
   test("returns the builtins when localCatalog is null", () => {

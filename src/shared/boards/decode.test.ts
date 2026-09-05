@@ -39,7 +39,6 @@ describe("decodeFieldValue", () => {
   })
 
   test("rejects a non-finite number and a fractional date", () => {
-    // JSON has no Infinity, but a hand-edited row or a future writer might.
     expect(decodeFieldValue({ kind: "number", value: Number.POSITIVE_INFINITY })).toBeNull()
     expect(decodeFieldValue({ kind: "date", value: 1.5 })).toBeNull()
   })
@@ -65,7 +64,6 @@ describe("decodeFieldValue", () => {
 
 describe("decodeCardContent", () => {
   test("keeps the readable fields and drops the corrupt ones", () => {
-    // One damaged field must never make a whole card unreadable.
     expect(
       decodeCardContent({
         good: { kind: "text", value: "kept" },
@@ -93,8 +91,6 @@ describe("decodeActor", () => {
   })
 
   test("falls back to user for anything unreadable", () => {
-    // Conservative on purpose: an unreadable actor must never be treated as an
-    // agent, because agent-origin writes are the ones held back from a push.
     expect(decodeActor({ kind: "agent" })).toEqual({ kind: "user" })
     expect(decodeActor({ kind: "sync", providerId: 5 })).toEqual({ kind: "user" })
     expect(decodeActor(null)).toEqual({ kind: "user" })
@@ -122,8 +118,6 @@ describe("decodeFieldDef", () => {
   })
 
   test("nulls a colour token that is not in the closed set", () => {
-    // An open colour set is exactly what the design rules out, so an
-    // unrecognised token degrades to "no dot" rather than leaking through.
     const decoded = decodeFieldDef({
       id: "f",
       label: "F",
@@ -201,7 +195,6 @@ describe("decodeTemplate", () => {
   })
 })
 
-// ── Strict, schema-aware decode ───────────────────────────────────────────────
 
 const FIELDS: FieldDef[] = [
   { id: "description", label: "Description", kind: "longtext", options: null, required: false },
@@ -249,11 +242,6 @@ describe("decodeContentForFields", () => {
     expect(decodeContentForFields(FIELDS, {})).toEqual({})
   })
 
-  /**
-   * The lenient storage decoder drops what it cannot read so one bad row stays
-   * readable. A write must do the opposite: dropping a field here would ack a
-   * change that never landed.
-   */
   test("rejects, rather than drops, a field the schema does not declare", () => {
     expect(decodeContentForFields(FIELDS, { nope: { kind: "text", value: "x" } })).toBeNull()
   })
@@ -284,10 +272,6 @@ describe("decodeContentForFields", () => {
     })
   })
 
-  /**
-   * A patch names one field at a time, so completeness cannot be judged here —
-   * and `required` is advisory anyway: it marks a field, it never refuses a save.
-   */
   test("says nothing about a required field the patch omits", () => {
     expect(decodeContentForFields(FIELDS, { labels: { kind: "label", values: [] } })).toEqual({
       labels: { kind: "label", values: [] },
@@ -306,11 +290,6 @@ describe("decodeContentForFields", () => {
   })
 })
 
-/**
- * `board.update` is the only path by which a board's schema is ever written, so
- * what it refuses is the whole guarantee: the store writes `cardFields` whole
- * and checks nothing.
- */
 describe("decodeFieldDefsForWrite", () => {
   const FIELD = { id: "priority", label: "Priority", kind: "select", required: false, options: [] }
 
@@ -336,7 +315,6 @@ describe("decodeFieldDefsForWrite", () => {
     expect(decodeFieldDefsForWrite([])).toEqual([])
   })
 
-  /** Content is keyed by field id, so two fields sharing one fight over a value. */
   test("rejects a duplicate field id", () => {
     expect(
       decodeFieldDefsForWrite([
@@ -381,7 +359,6 @@ describe("decodeFieldDefsForWrite", () => {
     ).toBeNull()
   })
 
-  /** An open colour set would put a value in the database correct in one theme. */
   test("rejects an option colour outside the board palette", () => {
     expect(
       decodeFieldDefsForWrite([{ ...FIELD, options: [{ id: "high", label: "High", colorToken: "chartreuse" }] }]),
@@ -414,11 +391,6 @@ describe("decodeFieldDefsForWrite", () => {
     expect(decodeFieldDefsForWrite(["priority"])).toBeNull()
   })
 
-  /**
-   * The half of the contract the lenient decoder answers the other way: storage
-   * drops what it cannot read so the rest of the row survives, a write refuses
-   * so the sender learns its change did not land.
-   */
   test("refuses where decodeFieldDefs would drop", () => {
     const ragged: JsonValue = [{ id: "ok", label: "Ok", kind: "text", options: null, required: false }, { id: 7 }]
     expect(decodeFieldDefs(ragged)).toHaveLength(1)

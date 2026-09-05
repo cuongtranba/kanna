@@ -15,8 +15,6 @@ describe("plugin directories", () => {
   })
 
   test("follow the dev runtime profile", () => {
-    // Same rule getKeybindingsFilePath follows, so a dev server never touches
-    // the prod install's plugins.
     expect(getPluginsRootDir("/home/u", DEV)).toBe("/home/u/.kanna-dev/plugins")
   })
 
@@ -31,10 +29,6 @@ describe("socket path length (macOS sun_path)", () => {
   })
 
   test("a home-rooted path with a max-length id does NOT fit", () => {
-    // MEASURED: `${HOME}/.kanna/plugins/${"a".repeat(64)}/run/host.sock` is 110
-    // bytes against a 104-byte cap. This is why the runtime socket lives in the
-    // system temp dir, not beside the build output. Without this the failure
-    // appears only for long plugin ids, as an opaque bind error.
     const longId = "a".repeat(64)
     const homeRooted = `${getPluginsRootDir("/Users/cuongtran", PROD)}/${longId}/run/host.sock`
     expect(new TextEncoder().encode(homeRooted).length).toBeGreaterThan(PLUGIN_SOCKET_PATH_MAX_BYTES)
@@ -46,8 +40,6 @@ describe("socket path length (macOS sun_path)", () => {
   })
 
   test("counts BYTES, not characters", () => {
-    // A multi-byte id would pass a `.length` check and still overflow the
-    // kernel's byte-counted buffer.
     const multiByte = `/tmp/${"é".repeat(60)}.sock`
     expect(multiByte.length).toBeLessThan(PLUGIN_SOCKET_PATH_MAX_BYTES)
     expect(pluginSocketPathFits(multiByte)).toBe(false)

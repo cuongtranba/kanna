@@ -1,27 +1,3 @@
-/**
- * Observability bootstrap — the ONLY file that may import the OTel SDK,
- * exporters, or perform observability IO. Domain code imports the pure
- * facade in `observability.ts`; with this adapter never initialized every
- * facade call is an api-package no-op.
- *
- * Three independent concerns, each with its own switch, because they answer
- * different incidents:
- *
- * 1. OTel traces + metrics — full-system tracing to an OTLP collector.
- *    Gated by the user-facing telemetry setting (Settings → telemetry.enabled,
- *    runtime-applied via applyTelemetrySettings) with KANNA_OTEL as the env
- *    override in both directions; precedence lives in otel-config.ts. Each
- *    install reports under `kanna-<machine name>` so distinct distributions
- *    stay distinguishable at the collector.
- * 2. Memory log line (KANNA_MEMLOG_MS, default 60000, 0 disables) — one
- *    rss/heap line per minute in the server log. This is what correlates the
- *    NEXT OOM kill with what the process was doing; three OOMs at 1.06-2.43 GB
- *    went undiagnosed for lack of exactly this.
- * 3. Heap snapshot on SIGUSR2 (KANNA_HEAP_SNAPSHOT=disabled opts out) —
- *    `kill -USR2 <pid>` writes a Chrome-DevTools-loadable snapshot under
- *    <dataDir>/heap-snapshots. The only way to answer "WHAT is holding the
- *    bytes" on a live process.
- */
 
 import fs from "node:fs"
 import path from "node:path"
@@ -42,13 +18,7 @@ import {
 import { resolveOtelConfig, type ResolvedOtelConfig, type TelemetrySettingsInput } from "./otel-config"
 
 export interface ObservabilityHandle {
-  /** Flushes and tears down whatever was started. Safe to call once. */
   shutdown(): Promise<void>
-  /**
-   * Re-resolves OTel export against the new telemetry setting and restarts or
-   * stops the providers accordingly — the Settings toggle applies without a
-   * server restart. Serialized internally; safe to call at any time.
-   */
   applyTelemetrySettings(telemetry: TelemetrySettingsInput): void
 }
 
@@ -79,9 +49,6 @@ function startOtel(config: ResolvedOtelConfig): () => Promise<void> {
   tracerProvider.register()
   const meterProvider = new MeterProvider({
     resource,
-    // Without these the duration histograms inherit OTel's default boundaries,
-    // which stop at 10s — every turn would land in the +Inf bucket and no
-    // quantile could be computed from them. See DURATION_BUCKETS_MS.
     views: [TURN_DURATION_MS, SUBAGENT_RUN_DURATION_MS].map((instrumentName) => ({
       instrumentName,
       aggregation: {
@@ -108,25 +75,16 @@ function startOtel(config: ResolvedOtelConfig): () => Promise<void> {
   return async () => {
     await tracerProvider.shutdown()
     await meterProvider.shutdown()
-    // Clear the api globals so a later start can register fresh providers
-    // (the api setter refuses to overwrite an existing registration).
     trace.disable()
     metrics.disable()
     resetMetricInstrumentCache()
   }
 }
 
-/**
- * Starts every enabled observability concern. Called once from server boot.
- * Never throws: a broken collector endpoint must not take the server down —
- * observability failing closed means flying blind, not crashing.
- */
 export function initObservability(args: InitObservabilityArgs): ObservabilityHandle {
   const teardowns: Array<() => Promise<void> | void> = []
   let otelTeardown: (() => Promise<void>) | null = null
   let otelConfig: ResolvedOtelConfig | null = null
-  // Serializes start/stop transitions so a rapid toggle cannot interleave a
-  // provider shutdown with the next registration.
   let transition: Promise<void> = Promise.resolve()
 
   const startFromConfig = (config: ResolvedOtelConfig | null) => {
@@ -173,7 +131,6 @@ export function initObservability(args: InitObservabilityArgs): ObservabilityHan
         fs.mkdirSync(dir, { recursive: true })
         const stamp = new Date().toISOString().replace(/[:.]/g, "-")
         const file = path.join(dir, `kanna-${stamp}.heapsnapshot`)
-        // v8 format loads directly in Chrome DevTools' Memory tab.
         fs.writeFileSync(file, Bun.generateHeapSnapshot("v8"))
         log.info("[kanna/mem] heap snapshot written", { file })
       } catch (err) {
@@ -232,10 +189,6 @@ export function initObservability(args: InitObservabilityArgs): ObservabilityHan
   }
 }
 
-/**
- * Observable gauges read process.memoryUsage at each metric collection —
- * the OTel-side twin of the memlog line, for dashboards instead of grep.
- */
 function registerMemoryGauges(): void {
   const meter = metrics.getMeter("kanna")
   const rss = meter.createObservableGauge(PROCESS_RSS_BYTES)

@@ -35,7 +35,6 @@ async function mount(value = VALUE, canDelete = true): Promise<Harness> {
       />,
     )
   })
-  // The popover is portalled, so open it and read from the document.
   const trigger = container.querySelector("button")
   if (!trigger) throw new Error("no trigger")
   await act(async () => {
@@ -77,9 +76,6 @@ function typeInto(id: string, value: string) {
 
 beforeEach(() => {
   useColumnSettingsStore.getState().close()
-  // NOT `document.body.innerHTML = ""`: the document is shared across test
-  // files in one process, so wiping it detaches another file's mounted
-  // container and its unmount then throws. Each harness closes its own popover.
 })
 
 describe("ColumnSettings", () => {
@@ -91,7 +87,6 @@ describe("ColumnSettings", () => {
     harness.unmount()
   })
 
-  /** The role is load-bearing, so it is described by what it does. */
   test("names the role by its behaviour, not the enum", async () => {
     const harness = await mount()
     expect(document.body.textContent).toContain("Start work moves a card here.")
@@ -117,7 +112,6 @@ describe("ColumnSettings", () => {
     harness.unmount()
   })
 
-  /** A half-typed limit must never become a limit of 0 that silences the badge. */
   test("a WIP limit that is not a positive whole number means none", async () => {
     const harness = await mount()
     typeInto("column-wip-col-1", "0")
@@ -158,7 +152,6 @@ describe("ColumnSettings", () => {
     harness.unmount()
   })
 
-  /** Dismissing is a cancel: the draft must not survive to the next open. */
   test("closing discards the draft", async () => {
     const harness = await mount()
     typeInto("column-title-col-1", "Scratch")

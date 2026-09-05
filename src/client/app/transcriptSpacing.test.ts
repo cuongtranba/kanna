@@ -20,8 +20,6 @@ describe("getTranscriptGapAboveForTones", () => {
     }
   })
 
-  // The headline rule: a run of tool activity should read as one block rather
-  // than as N stacked items.
   test("consecutive tool activity collapses to zero", () => {
     expect(getTranscriptGapAboveForTones("tool", "tool")).toBe(0)
   })
@@ -45,8 +43,6 @@ describe("getTranscriptGapAboveForTones", () => {
     expect(getTranscriptGapAboveForTones("assistant", "assistant")).toBe(12)
   })
 
-  // Chrome rows (result, status, context_cleared, …) are ~40px dividers. Giving
-  // them the same air as a full turn was the main thing the uniform 20px got wrong.
   test("chrome dividers get their own reduced air on both sides", () => {
     expect(getTranscriptGapAboveForTones("assistant", "chrome")).toBe(8)
     expect(getTranscriptGapAboveForTones("chrome", "assistant")).toBe(8)
@@ -74,8 +70,6 @@ describe("getTranscriptGapAboveForTones", () => {
 })
 
 describe("TRANSCRIPT_GAP_CLASS", () => {
-  // Tailwind's JIT scanner cannot see `pt-[${n}px]`, so the mapping must be a
-  // static table of literal class names.
   test("maps every gap value to a literal static class", () => {
     expect(TRANSCRIPT_GAP_CLASS[0]).toBe("pt-0")
     expect(TRANSCRIPT_GAP_CLASS[4]).toBe("pt-1")
@@ -130,10 +124,6 @@ describe("buildTranscriptGapClassMap over real resolved rows", () => {
   }
 
   test("the plate rule never introduces a gap below", () => {
-    // A bottom border or bottom padding changes the height of a row that is
-    // already painted, forcing a re-measure mid-stream. The whole rhythm is
-    // expressed above each row precisely to avoid that, and the rule must obey
-    // the same constraint it was added under.
     expect(TRANSCRIPT_RULE_CLASS).not.toMatch(/\bborder-b\b/)
     expect(TRANSCRIPT_RULE_CLASS).not.toMatch(/\bpb-/)
     expect(TRANSCRIPT_RULE_CLASS).not.toMatch(/\bmb-/)
@@ -159,12 +149,9 @@ describe("buildTranscriptGapClassMap over real resolved rows", () => {
       bashTool("t2"),
       bashTool("t3"),
     ])
-    // u1 first, a1 opens the turn, then the tool run hugs the prose. The three
-    // bash calls fold into one tool-group row, so only one gap remains for them.
     expect(gaps[0]).toBe("pt-0")
     expect(gaps[1]).toContain("pt-8")
     expect(gaps[2]).toBe("pt-1")
-    // The turn opens with a plate rule; the tool run inside it does not.
     expect(gaps[1]).toContain("before:bg-border")
     expect(gaps[2]).not.toContain("before:bg-border")
   })
@@ -189,8 +176,6 @@ describe("buildTranscriptGapClassMap over real resolved rows", () => {
 })
 
 describe("TRANSCRIPT_ROW_TONE_BY_MESSAGE_KIND", () => {
-  // The Record is typed over the full union, so a newly added message kind is a
-  // typecheck error rather than a silent default. This guards the runtime side.
   const EVERY_KIND: HydratedTranscriptMessage["kind"][] = [
     "user_prompt",
     "system_init",

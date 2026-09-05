@@ -1,8 +1,3 @@
-/**
- * Vendored from `codex app-server generate-ts` (v2/CodexErrorInfo.ts). The
- * app-server exposes these in camelCase; the snake_case spellings in Codex's
- * own rollout JSONL are a different, internal format — do not mix them.
- */
 export type CodexErrorInfo =
   | "contextWindowExceeded"
   | "sessionBudgetExceeded"
@@ -68,13 +63,6 @@ export function codexErrorInfoTag(info: CodexErrorInfo | null | undefined): Code
   return OBJECT_VARIANT_TAGS.has(key) && isKnownTag(key) ? key : null
 }
 
-/**
- * Accepts either a raw protocol payload or a tag already flattened by
- * `codexErrorInfoTag` and persisted on a transcript entry. The stricter
- * `codexErrorInfoTag` rejects an object variant spelled as a bare string,
- * which is right when parsing the wire and wrong when reading back a tag we
- * wrote ourselves.
- */
 export type CodexFailureInput = CodexErrorInfo | CodexErrorInfoTag
 
 function resolveTag(value: CodexFailureInput | null | undefined): CodexErrorInfoTag | null {

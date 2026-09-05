@@ -25,7 +25,6 @@ interface RightSidebarState {
   setViewMode: (projectId: string, viewMode: ProjectRightSidebarUiState["viewMode"]) => void
   setCommitDraft: (projectId: string, draft: Pick<ProjectRightSidebarUiState, "summary" | "description">) => void
   clearCommitDraft: (projectId: string) => void
-  /** Set one commit field without the caller re-passing its sibling. */
   setCommitSummary: (projectId: string, summary: string) => void
   setCommitDescription: (projectId: string, description: string) => void
   clearProject: (projectId: string) => void
@@ -62,11 +61,6 @@ function getProjectVisibilityState(
   return projects[projectId] ?? createDefaultProjectVisibilityState()
 }
 
-/**
- * The persisted blob is a JSON boundary — written by an older build, possibly
- * hand-edited — so every field is read through a guard rather than asserted
- * into the current shape.
- */
 function firstFiniteProjectSize(projects: JsonObject): number | null {
   for (const layout of Object.values(projects)) {
     if (isJsonObject(layout) && typeof layout.size === "number" && Number.isFinite(layout.size)) {

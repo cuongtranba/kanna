@@ -17,7 +17,6 @@ const DEFINITION: BoardTemplateDefinition = {
   mappingDefaults: [],
 }
 
-/** A stage between `active` and `done` — the only shape that advances anywhere. */
 const PIPELINE: BoardTemplateDefinition = {
   columns: [
     { title: "Todo", semantic: "start", colorToken: null, wipLimit: null },
@@ -107,12 +106,6 @@ beforeEach(() => {
 })
 
 describe("cardWorktreeDir", () => {
-  /**
-   * Not inside the checkout: a nested worktree shows up as an untracked
-   * directory, which would dirty every `git status` the Changes pane and the
-   * loop oracle read. Namespaced by repo so two projects cannot collide on a
-   * shared parent.
-   */
   test("is a sibling of the repo, namespaced by repo name", () => {
     expect(cardWorktreeDir("/repo/kanna")).toBe("../.kanna-worktrees/kanna")
   })
@@ -132,7 +125,6 @@ describe("startWorkView", () => {
     expect(registry.cardDetail(card.id)!.links).toEqual([])
   })
 
-  /** The drawer has to explain a card it cannot start, so this is not a throw. */
   test("reports a card with no project instead of failing", async () => {
     let counter = 0
     store = createBoardStore({ filePath: ":memory:", now: () => 1, newId: () => `id-${(counter += 1).toString()}` })
@@ -155,7 +147,6 @@ describe("startWorkView", () => {
     expect(view.status).toEqual({ kind: "idle" })
   })
 
-  /** The label and the action share one resolver, so they cannot disagree. */
   test("agrees with what startWork then does", async () => {
     const { card } = seed()
     const existing = "/repo/.kanna-worktrees/kanna/card-old"
@@ -178,12 +169,10 @@ describe("startWork", () => {
     expect(recorder.added).toEqual([
       { kind: "new-branch", branch: result.branch, path: result.worktreePath! },
     ])
-    // A sibling of the checkout, not a child of it.
     expect(result.worktreePath).toBe(
       `/repo/.kanna-worktrees/kanna/card-${card.id.slice(0, 8)}-fix-login-redirect-loop`,
     )
 
-    // The chat's cwd IS the worktree — that is the whole point of the binding.
     expect(recorder.chats).toEqual([
       {
         projectId: "project-1",
@@ -201,10 +190,6 @@ describe("startWork", () => {
     expect(result.reused).toBe(false)
   })
 
-  /**
-   * The prompt is built AFTER the move, so the column it names is the one after
-   * where the card now sits — not the one after where the user left it.
-   */
   test("the prompt names the column after the one the card lands in", async () => {
     const { columns, card } = seed(PIPELINE)
     await startWork(makeDeps(), card.id)
@@ -216,17 +201,12 @@ describe("startWork", () => {
     expect(prompt).toContain("Test")
   })
 
-  /**
-   * Closing a card raises the merge/discard/leave question and reports closed to
-   * a connected tracker. The agent is never handed that.
-   */
   test("the prompt asks for no move when the only next column is done", async () => {
     const { card } = seed()
     await startWork(makeDeps(), card.id)
     expect(recorder.prompts[0]!.content).not.toContain("card_move")
   })
 
-  /** No active column means the card never moved, so it advances from where it is. */
   test("advances from the card's own column when the board marks none active", async () => {
     const { columns, card } = seed(NO_SEMANTICS)
     await startWork(makeDeps(), card.id)
@@ -256,7 +236,6 @@ describe("startWork", () => {
     expect(result.branch).toBe("card/412-fix-login-redirect-loop")
   })
 
-  /** No column marked active means the board never said where work goes. */
   test("moves nothing when the board marks no column active", async () => {
     const { columns, card } = seed(NO_SEMANTICS)
     const result = await startWork(makeDeps(), card.id)
@@ -317,10 +296,6 @@ describe("startWork", () => {
     expect(recorder.prompts).toEqual([])
   })
 
-  /**
-   * The worktree was removed but the branch survived. `-b` would fail on the
-   * name; reattaching keeps the card's own history instead of minting `-2`.
-   */
   test("reattaches an existing branch when its worktree is gone", async () => {
     const { card } = seed()
     const result = await startWork(makeDeps({ localBranchExists: () => Promise.resolve(true) }), card.id)
@@ -363,11 +338,6 @@ describe("startWork", () => {
     await expect(startWork(makeDeps(), "missing")).rejects.toThrow(/does not exist/u)
   })
 
-  /**
-   * The worktree is linked before the chat exists, so a crash between the two
-   * leaves a card that resumes rather than an orphaned checkout nothing knows
-   * about.
-   */
   test("keeps the worktree link when chat creation fails", async () => {
     const { card } = seed()
     await expect(
@@ -379,7 +349,6 @@ describe("startWork", () => {
 })
 
 describe("a card waits on its blockers", () => {
-  /** Two cards on one board, the second waiting on the first. */
   function blockedPair(definition = DEFINITION) {
     const { board, columns, card } = seed(definition)
     const blocker = registry.createCard({
@@ -434,11 +403,6 @@ describe("a card waits on its blockers", () => {
     expect((await startWorkView(makeDeps(), blocker.id)).blockedReason).toBeNull()
   })
 
-  /**
-   * Blocking defers STARTING work, never reaching work already under way. A
-   * blocker added after the fact must not strip the user's way back into a
-   * live chat.
-   */
   test("a card whose chat is already live still opens it", async () => {
     const { card } = blockedPair()
     const deps = makeDeps({ chatExists: () => true })
@@ -452,7 +416,6 @@ describe("a card waits on its blockers", () => {
     expect(result).toMatchObject({ chatId: "chat-live", reused: true })
   })
 
-  /** A worktree from an earlier attempt is not work under way; resuming STARTS it. */
   test("a blocked card with a leftover worktree still defers, and says so", async () => {
     const { card } = blockedPair()
     const path = "/repo/.kanna-worktrees/kanna/card"
@@ -462,8 +425,6 @@ describe("a card waits on its blockers", () => {
       card.id,
     )
     expect(view.blockedReason).toBe('Waiting on "Ship the API schema".')
-    // The status still reports what exists — a blocked card must not read as
-    // though its worktree had vanished.
     expect(view.status).toEqual({ kind: "worktree", worktreePath: path })
   })
 })

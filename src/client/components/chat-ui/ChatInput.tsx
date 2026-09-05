@@ -89,9 +89,6 @@ import type { HttpPort } from "../../ports/httpPort"
 import { domAdapter } from "../../adapters/dom.adapter"
 import { httpAdapter } from "../../adapters/http.adapter"
 
-// ---------------------------------------------------------------------------
-// Clipboard helpers (exported — ChatInput.test.ts imports them)
-// ---------------------------------------------------------------------------
 
 const CLIPBOARD_EXTENSION_BY_MIME_TYPE: Record<string, string> = {
   "image/gif": "gif",
@@ -143,13 +140,6 @@ export function trimTrailingPastedNewlines(text: string): string {
   return text.replace(/(?:\r\n|\r|\n)+$/, "")
 }
 
-/**
- * Send and Stop share one button. It only acts as Stop when a turn is
- * cancellable AND the composer is empty — with text staged it sends, queueing
- * behind the running turn. The label, the icon and the click handler all
- * derive from this so they cannot drift (the label used to ignore the staged
- * text and announce "Stop" while the button would actually send).
- */
 export function isStopAffordance(canCancel: boolean, hasTextToSend: boolean): boolean {
   return canCancel && !hasTextToSend
 }
@@ -167,49 +157,28 @@ export function willExceedAttachmentLimit(args: {
   )
 }
 
-// ---------------------------------------------------------------------------
-// Touch-device helpers (exported — cursorJump test imports them)
-// ---------------------------------------------------------------------------
 
 export function isTouchDeviceEnvironment(dom: DomPort = domAdapter): boolean {
   return dom.isTouchDevice()
 }
 
-/**
- * On touch devices, suppress caret-version bumps to avoid iOS Safari caret
- * jumps during the hold-space cursor-drag gesture.
- * No longer used for the textarea (Lexical handles selection internally),
- * but kept as an exported utility for back-compat with existing tests.
- */
 export function shouldRefreshPickerOnSelection(isTouchDevice: boolean): boolean {
   return !isTouchDevice
 }
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
 
 const EMPTY_SUBAGENTS: Subagent[] = []
 const MAX_FILES_PER_DROP = 50
 const MAX_CONCURRENT_UPLOADS = 3
 
-// ---------------------------------------------------------------------------
-// Attachment types — re-export from composerStore for local use
-// ---------------------------------------------------------------------------
 
 type ComposerAttachment = StoreComposerAttachment
 
-// ---------------------------------------------------------------------------
-// MentionChip type (for @agent/<name> chips row above editor)
-// ---------------------------------------------------------------------------
 
 type MentionChip =
   | { kind: "ok"; label: string; id: string }
   | { kind: "missing"; label: string }
 
-// ---------------------------------------------------------------------------
-// External Props (unchanged contract)
-// ---------------------------------------------------------------------------
 
 export interface ChatInputPorts {
   dom?: DomPort
@@ -233,10 +202,6 @@ interface Props {
   canCancel?: boolean
   chatId?: string | null
   projectId?: string | null
-  /**
-   * Kept for API back-compat. The Lexical editor uses a contenteditable div,
-   * not a textarea. This ref is accepted but not connected to any DOM node.
-   */
   inputElementRef?: React.Ref<HTMLTextAreaElement>
   activeProvider: AgentProvider | null
   availableProviders: ProviderCatalogEntry[]
@@ -251,9 +216,6 @@ export interface ChatInputHandle {
   enqueueFiles: (files: File[]) => void
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function withNormalizedContextWindow(
   state: ComposerState,
@@ -306,24 +268,11 @@ async function deleteUploadedAttachment(attachment: ChatAttachment, http?: HttpP
   await deleteUploadedFile(attachment.contentUrl, { http })
 }
 
-// ---------------------------------------------------------------------------
-// LexicalEditorBridge – exposes imperative editor methods to parent
-// ---------------------------------------------------------------------------
 
 interface LexicalEditorBridgeHandle {
-  /** Clear the editor to a single empty paragraph. */
   clearEditor: () => void
-  /**
-   * Hydrate the editor from a serialized state or fall back to plain text.
-   * Prefer lexicalState; use text only if lexicalState is absent/invalid.
-   */
   hydrateFromDraft: (lexicalState: SerializedEditorState | null, text: string | null) => void
-  /**
-   * Read the current wire payload synchronously.
-   * Returns `{ text, attachments }` (the same shape as serializeEditorToWire).
-   */
   readCurrentPayload: () => SubmitPayload
-  /** Focus the editor. */
   focusEditor: () => void
 }
 
@@ -351,7 +300,6 @@ function LexicalEditorBridgePlugin({
             editor.setEditorState(parsed)
             return
           } catch {
-            // Fall through to plain-text hydration
           }
         }
         if (text) {
@@ -386,9 +334,6 @@ function LexicalEditorBridgePlugin({
   return null
 }
 
-// ---------------------------------------------------------------------------
-// EditorEditabilityPlugin – syncs disabled→editable
-// ---------------------------------------------------------------------------
 
 function EditorEditabilityPlugin({ isDisabled }: { isDisabled: boolean }): null {
   const [editor] = useLexicalComposerContext()
@@ -400,9 +345,6 @@ function EditorEditabilityPlugin({ isDisabled }: { isDisabled: boolean }): null 
   return null
 }
 
-// ---------------------------------------------------------------------------
-// EditorTextTracker – derives live wire text for canSubmit / button state
-// ---------------------------------------------------------------------------
 
 function EditorTextTracker({
   onTextChange,
@@ -412,7 +354,6 @@ function EditorTextTracker({
   const [editor] = useLexicalComposerContext()
 
   useEffect(() => {
-    // Fire once synchronously on mount to pick up any hydrated state
     const initial = serializeEditorToWire(editor)
     onTextChange(initial.text)
 
@@ -425,9 +366,6 @@ function EditorTextTracker({
   return null
 }
 
-// ---------------------------------------------------------------------------
-// LexicalErrorBoundary – required by RichTextPlugin (ErrorBoundaryType compat)
-// ---------------------------------------------------------------------------
 
 function LexicalErrorBoundary({
   children,
@@ -436,14 +374,9 @@ function LexicalErrorBoundary({
   children: React.ReactNode
   onError: (error: Error) => void
 }): React.ReactNode {
-  // Simple passthrough; Lexical will call onError on uncaught decorator errors.
-  // Actual error propagation is handled by the kannaEditorOnError config hook.
   return children
 }
 
-// ---------------------------------------------------------------------------
-// Main component
-// ---------------------------------------------------------------------------
 
 const ChatInputInner = forwardRef<ChatInputHandle, Props>((
   {
@@ -454,7 +387,6 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
     canCancel,
     chatId,
     projectId,
-    // inputElementRef accepted for API compat but not connected to a DOM textarea
     inputElementRef: _inputElementRef,
     activeProvider,
     availableProviders,
@@ -493,7 +425,6 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
   const composerState = storedComposerState ?? getComposerState(composerChatId)
   const isStandalone = useIsStandalone()
 
-  // ------ Composer store (one per chat tab via ChatTabScopedStore) ------
   const attachments = ChatTabScopedStore.useScopedStore((state) => state.attachments)
   const setAttachments = ChatTabScopedStore.useScopedStore((state) => state.setAttachments)
   const selectedAttachmentId = ChatTabScopedStore.useScopedStore((state) => state.selectedAttachmentId)
@@ -514,7 +445,6 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
   const previousProjectIdRef = useRef<string | null>(projectId ?? null)
   const latestChatIdRef = useRef<string | null>(chatId ?? null)
 
-  // ------ Lexical bridge ref ------
   const bridgeRef = useRef<LexicalEditorBridgeHandle | null>(null)
 
   const providerPrefs = getEffectiveComposerState(composerState, activeProvider, providerDefaults)
@@ -553,7 +483,6 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
   })
   const selectedAttachment = attachments.find((a) => a.id === selectedAttachmentId) ?? null
 
-  // ------ Subagent mention chips above the editor ------
   const subagentsForChips = useAppSettingsStore(
     (state) => state.settings?.subagents ?? EMPTY_SUBAGENTS,
   )
@@ -576,7 +505,6 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
     return chips
   }, [currentText, subagentsForChips])
 
-  // ------ Attachment cleanup helpers ------
   const cleanupAttachmentPreview = useCallback((attachment: ComposerAttachment) => {
     if (attachment.previewUrl) {
       URL.revokeObjectURL(attachment.previewUrl)
@@ -602,8 +530,6 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
     [cleanupAttachmentPreview, setAttachments, setSelectedAttachmentId, setUploadError],
   )
 
-  // ------ Upload queue ------
-  // Ref breaks the self-reference cycle so the React Compiler can analyze this callback.
   const processUploadQueueRef = useRef<(() => void) | undefined>(undefined)
   const processUploadQueue = useCallback(() => {
     if (!projectId) return
@@ -710,8 +636,6 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
       })()
     }
   }, [http, projectId, setAttachments, setUploadError])
-  // Keep ref pointing to the latest version so the async IIFE can recurse without
-  // capturing a stale closure.
   useEffect(() => {
     processUploadQueueRef.current = processUploadQueue
   }, [processUploadQueue])
@@ -747,7 +671,6 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
     [enqueueFiles],
   )
 
-  // ------ Core submit implementation ------
   const buildSubmitOptions = useCallback(() => {
     let modelOptions: ModelOptions
     if (providerPrefs.provider === "claude") {
@@ -776,7 +699,6 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
 
       const submitOptions = { ...buildSubmitOptions(), attachments: allAttachments }
 
-      // Eagerly clear
       bridgeRef.current?.clearEditor()
       setCurrentText("")
       if (chatId) clearDraft(chatId)
@@ -813,7 +735,6 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
     ],
   )
 
-  // Called by SubmitPlugin (Enter key) — editor already cleared by the plugin
   const handlePluginSubmit = useCallback(
     async (payload: SubmitPayload) => {
       if (!canSubmit || hasPendingUploads) return
@@ -822,28 +743,21 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
     [canSubmit, hasPendingUploads, doSubmit],
   )
 
-  // Called by the Send button / onPointerDown
   const handleManualSubmit = useCallback(async () => {
     if (!canSubmit || hasPendingUploads) return
     const payload = bridgeRef.current?.readCurrentPayload() ?? { text: currentText, attachments: [] }
     await doSubmit(payload.text, payload.attachments)
   }, [canSubmit, hasPendingUploads, currentText, doSubmit])
 
-  // ------ DraftPersistencePlugin onChange ------
   const handleDraftChange = useCallback(
     (state: SerializedEditorState, text: string) => {
       if (chatId) {
-        // `text` from DraftPersistencePlugin is $getRoot().getTextContent(),
-        // which includes MentionNode/SlashCommandNode text content.
-        // We persist both the Lexical state (for full hydration) and the
-        // plain text (for back-compat getDraft().text reads).
         setDraft(chatId, state, text)
       }
     },
     [chatId, setDraft],
   )
 
-  // ------ Effects ------
 
   useEffect(() => {
     initializeComposerForChat(composerChatId, { providerHint: activeProvider })
@@ -853,7 +767,6 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
     latestChatIdRef.current = chatId ?? null
   }, [chatId])
 
-  // Hydrate editor and focus when chatId changes (mirrors original textarea focus + draft effect)
   useEffect(() => {
     if (!chatId) {
       bridgeRef.current?.clearEditor()
@@ -865,10 +778,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
         bridgeRef.current?.clearEditor()
       }
     }
-    // Focus the editor whenever the chat changes (mirrors original autoFocus on chatId)
     bridgeRef.current?.focusEditor()
-    // setCurrentText is handled by EditorTextTracker via registerUpdateListener.
-    // We intentionally only re-run when chatId changes, not on every getDraft call.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatId])
 
@@ -877,7 +787,6 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
     uploadQueueRef.current = []
     activeUploadsRef.current = 0
     removedAttachmentIdsRef.current.clear()
-    // Reset attachment selection and upload error when chatId changes.
     setSelectedAttachmentId(null)
     setUploadError(null)
     startTransition(() => {
@@ -947,7 +856,6 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
     return dom.addWindowListener("resize", handleResize)
   }, [dom, onLayoutChange])
 
-  // ------ Composer state helpers ------
   function updateComposerState(transform: (state: ComposerState) => ComposerState) {
     useChatPreferencesStore.getState().setComposerState(composerChatId, transform(providerPrefs))
   }
@@ -984,7 +892,6 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
     setEffectivePlanMode(!providerPrefs.planMode)
   }
 
-  // ------ Attachment handlers ------
   function handleAttachmentPreview(attachment: ComposerAttachment) {
     const target = classifyAttachmentPreview(attachment)
     if (target.openInNewTab) {
@@ -1017,9 +924,6 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
     }
   }
 
-  // ------ Keyboard: Escape, ShiftTab (plan mode), ArrowUp (previousPrompt) ------
-  // The SubmitPlugin handles Enter. These keys need to be intercepted at the
-  // wrapper div level since they affect state outside the editor.
   function handleKeyDown(event: React.KeyboardEvent) {
     if (event.nativeEvent.isComposing) return
 
@@ -1052,12 +956,10 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
     }
   }
 
-  // ------ Upload error handler for plugins ------
   const handleUploadError = useCallback((msg: string) => {
     setUploadError(msg)
   }, [setUploadError])
 
-  // ------ Editor config (memoized; LexicalComposer reads config only once) ------
   const editorConfig = useMemo(
     () =>
       buildKannaEditorConfig({
@@ -1107,7 +1009,6 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
     <div>
       <div className={cn("px-3 pt-0", isStandalone && "px-5")}>
         <div className="max-w-[840px] mx-auto">
-          {/* @agent/<name> mention chips */}
           {mentionChips.length > 0 ? (
             <div className="flex flex-wrap gap-1 px-2 pt-2">
               {mentionChips.map((chip, i) => (
@@ -1130,7 +1031,6 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
             </div>
           ) : null}
 
-          {/* Attachment strip */}
           {attachments.length > 0 ? (
             <ScrollArea className="overflow-x-auto overflow-y-hidden whitespace-nowrap px-2 pb-2">
               <div className="flex items-end gap-2 pt-2">
@@ -1191,13 +1091,11 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
             </ScrollArea>
           ) : null}
 
-          {/* Input row */}
           <div
             className={cn("relative flex items-end max-w-[840px] mx-auto rounded-xl border border-border bg-background pr-1.5 transition-colors focus-within:border-ring/60 focus-within:ring-2 focus-within:ring-ring/30 dark:bg-card/90", composerArrival.className)}
             onKeyDown={handleKeyDown}
           >
             {composerArrival.sweep}
-            {/* Attachment button */}
             <Button
               type="button"
               variant="ghost"
@@ -1227,12 +1125,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
               }}
             />
 
-            {/* Lexical editor */}
             <LexicalComposer initialConfig={editorConfig}>
-              {/*
-                CHAT_INPUT_ATTRIBUTE marks this element for the chatFocusPolicy.
-                The original textarea carried it; now the contenteditable wrapper does.
-              */}
               <div
                 {...{ [CHAT_INPUT_ATTRIBUTE]: "" }}
                 className="relative flex-1 min-w-0"
@@ -1268,7 +1161,6 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
               </div>
             </LexicalComposer>
 
-            {/* Send / Cancel button */}
             <Button
               type="button"
               onPointerDown={(event) => {
@@ -1302,7 +1194,6 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
         ) : null}
       </div>
 
-      {/* Preference controls row */}
       <div className={cn("relative py-3 max-w-[840px] mx-auto", isStandalone && "p-5 pt-3")}>
         <div className="flex items-center gap-2">
           <div className="min-w-0 flex-1">
@@ -1352,7 +1243,6 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
         ) : null}
       </div>
 
-      {/* File preview sheet */}
       <FilePreviewSheet
         source={
           selectedAttachment

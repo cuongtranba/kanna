@@ -1,17 +1,3 @@
-/**
- * Resolving a card's worktree once the card reaches `done`.
- *
- * The rule this module exists to enforce: Kanna never deletes a worktree that
- * still holds work. A column drag is one gesture with no undo, and uncommitted
- * changes in a worktree exist nowhere else — so `discard` refuses while there
- * is anything to lose and says what, rather than asking "are you sure?".
- *
- * Merging reuses Kanna's existing branch machinery (`previewMergeBranch` /
- * `mergeBranch`), so a card's branch merges by exactly the same rules, and with
- * the same conflict detection, as one merged from the Changes panel.
- *
- * All IO is injected; this module imports none.
- */
 
 import { BoardStoreError } from "./board-store"
 import type { BoardRegistry } from "./board-registry"
@@ -75,8 +61,6 @@ async function locate(deps: WorktreeCleanupDeps, cardId: string): Promise<Resolv
   })
   if (!worktreePath) return null
 
-  // The worktree knows its own branch; the derived name is only the fallback
-  // for a checkout git reports as detached.
   const branch = worktrees.find((entry) => entry.path === worktreePath)?.branch
   return {
     worktreePath,
@@ -88,7 +72,6 @@ async function locate(deps: WorktreeCleanupDeps, cardId: string): Promise<Resolv
   }
 }
 
-/** What merging would bring, and what discarding would destroy. */
 async function price(deps: WorktreeCleanupDeps, found: Resolved): Promise<WorktreeCleanupView> {
   const [dirty, preview] = await Promise.all([
     deps.isDirty(found.worktreePath),
@@ -103,7 +86,6 @@ async function price(deps: WorktreeCleanupDeps, found: Resolved): Promise<Worktr
   }
 }
 
-/** The pending question, priced. Null when there is nothing to ask. */
 export async function worktreeCleanupView(
   deps: WorktreeCleanupDeps,
   cardId: string,
@@ -119,8 +101,6 @@ export async function resolveWorktreeCleanup(
 ): Promise<WorktreeCleanupOutcome> {
   const found = await locate(deps, cardId)
   if (!found) throw new BoardStoreError("not_found", "That card has no worktree awaiting a decision.")
-  // Priced again at the moment of acting: the drawer's numbers may be minutes
-  // old, and a refusal has to be about the worktree as it is now.
   const view = await price(deps, found)
 
   switch (decision) {
@@ -142,8 +122,6 @@ export async function resolveWorktreeCleanup(
       if (blocked) throw new BoardStoreError("conflict", blocked)
       const merged = await deps.mergeBranch(found.project.id, found.project.localPath, view.branch)
       if (!merged.ok) throw new BoardStoreError("conflict", merged.message)
-      // Merged work is safe elsewhere, so the checkout has served its purpose.
-      // A removal failure must not read as a failed merge — the merge stands.
       await deps.removeWorktree(found.project.localPath, view.worktreePath, { force: false }).catch(() => undefined)
       deps.registry.removeCardLink(cardId, "worktree", view.worktreePath)
       return { decision, worktreePath: view.worktreePath, message: merged.message }

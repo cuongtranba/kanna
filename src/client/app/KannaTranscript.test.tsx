@@ -17,9 +17,6 @@ import {
   DELEGATE_SUBAGENT_TOOL_NAME,
 } from "./subagent-run-placement"
 
-// Count rows by their stable identity attribute, not by their spacing classes:
-// these tests assert how many rows render, which is independent of how much air
-// sits between them.
 const ROW_WRAPPER_MARKER = "data-transcript-row-id="
 
 const NOOP = () => undefined
@@ -192,9 +189,6 @@ describe("KannaTranscript", () => {
       },
     ])
 
-    // Ordering is the claim: images, then files, then the prompt body. Asserted
-    // by position rather than by a layout class, so the next alignment change
-    // cannot fail a test that is not about alignment.
     const imageAt = html.indexOf("mock.png")
     const fileAt = html.indexOf("spec.pdf")
     const bodyAt = html.indexOf("Please review these.")
@@ -786,8 +780,6 @@ describe("KannaTranscript subagent runs", () => {
       { r1: makeRun({ runId: "r1", parentUserMessageId: "u1", subagentId: "sa-1" }) },
     )
     expect(html).toContain("data-testid=\"subagent-message:r1\"")
-    // Run must render after the delegate call (below the marker), not at the
-    // top under the user prompt.
     expect(html.indexOf("data-testid=\"subagent-message:r1\"")).toBeGreaterThan(
       html.indexOf("BEFORE_DELEGATE_MARKER"),
     )
@@ -843,7 +835,6 @@ describe("KannaTranscript subagent runs", () => {
         r2: makeRun({ runId: "r2", parentUserMessageId: "u1", subagentId: "sa-2", startedAt: 2 }),
       },
     )
-    // r1 (sa-1) renders before the marker; r2 (sa-2) renders after it.
     expect(html.indexOf("data-testid=\"subagent-message:r1\"")).toBeLessThan(
       html.indexOf("BETWEEN_DELEGATES_MARKER"),
     )
@@ -881,9 +872,7 @@ describe("KannaTranscript subagent runs", () => {
       createToolMessage("bash-2"),
     ]
     const html = renderTranscript(messages as HydratedTranscriptMessage[])
-    // preview-file-card must appear in the output — not be absorbed into a CollapsedToolGroup
     expect(html).toContain('data-testid="preview-file-card"')
-    // The bash calls before/after should not pull the preview card into a group
     expect(html).not.toContain("tool calls")
   })
 

@@ -44,7 +44,6 @@ export function ProjectSectionMenu({
   onOpenInFinder: () => void
   onOpenInEditor: () => void
   onToggleStar: () => void
-  /** Omitted where the host has no dialog to open (e.g. a read-only surface). */
   onEditInstructions?: () => void
   onHide: () => void
   children: ReactNode
@@ -55,10 +54,6 @@ export function ProjectSectionMenu({
         {children}
       </ContextMenuTrigger>
       <ContextMenuContent>
-        {/* Boards is the only item that NAVIGATES; everything under the rule
-            acts on the project in place. Deliberately not a submenu of
-            individual boards — a project may own many, and a menu that grows
-            with the data stops being a menu. */}
         {onOpenBoards ? (
           <>
             <ContextMenuItem

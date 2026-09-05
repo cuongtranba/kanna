@@ -3,8 +3,6 @@ import { buildTabId, isSingletonTabKind, normalizeTabTarget, tabTargetsEqual } f
 import type { PaneTabTarget } from "./types"
 
 describe("buildTabId", () => {
-  // Deriving the id from the target is what makes "open" idempotent: asking for
-  // a target that is already open resolves to the same tab rather than a duplicate.
   test("is deterministic for the same target", () => {
     expect(buildTabId({ kind: "terminal", terminalId: "t1" })).toBe(
       buildTabId({ kind: "terminal", terminalId: "t1" }),
@@ -24,19 +22,12 @@ describe("buildTabId", () => {
     )
   })
 
-  /**
-   * THE tab-per-chat invariant. Two chats must resolve to two ids, or `openTab`
-   * dedups the second one onto the first and the app shows a single tab no
-   * matter how many chats are open — the exact bug this addressing change fixes.
-   */
   test("distinguishes chats, so a second open chat is a second tab", () => {
     expect(buildTabId({ kind: "chat", chatId: "a" })).not.toBe(
       buildTabId({ kind: "chat", chatId: "b" }),
     )
   })
 
-  // Length-prefixing each component means a separator inside an id cannot forge
-  // a different target's key.
   test("cannot be collided by a separator inside an id", () => {
     expect(buildTabId({ kind: "terminal", terminalId: "a_b" })).not.toBe(
       `${buildTabId({ kind: "terminal", terminalId: "a" })}_b`,
@@ -46,7 +37,6 @@ describe("buildTabId", () => {
     )
   })
 
-  // A chat id and a terminal id of the same text address different things.
   test("does not collide a chat with a terminal of the same id", () => {
     expect(buildTabId({ kind: "chat", chatId: "x" })).not.toBe(
       buildTabId({ kind: "terminal", terminalId: "x" }),
@@ -55,8 +45,6 @@ describe("buildTabId", () => {
 })
 
 describe("isSingletonTabKind", () => {
-  // chat left the singleton set when chat tabs gained a chatId: N open chats
-  // must produce N tabs, each with its own live transcript.
   test("marks only changes as a singleton", () => {
     expect(isSingletonTabKind("chat")).toBe(false)
     expect(isSingletonTabKind("changes")).toBe(true)
@@ -88,8 +76,6 @@ describe("normalizeTabTarget", () => {
     })
   })
 
-  // Persisted layouts are untrusted input; anything unusable is dropped rather
-  // than carried into the tree, so no structural migration is ever needed.
   test("rejects anything unusable", () => {
     expect(normalizeTabTarget({ kind: "terminal", terminalId: "" })).toBeNull()
     expect(normalizeTabTarget({ kind: "terminal", terminalId: "   " })).toBeNull()
@@ -102,12 +88,6 @@ describe("normalizeTabTarget", () => {
     expect(normalizeTabTarget({})).toBeNull()
   })
 
-  /**
-   * This IS the migration for layouts saved before chat tabs were addressable.
-   * Such a tab has no chatId to recover, so it is dropped on read; ChatPage then
-   * opens a tab for the chat in the URL. Guessing an id here would resurrect a
-   * tab pointing at the wrong chat.
-   */
   test("drops a legacy chat tab that carries no chatId", () => {
     expect(normalizeTabTarget({ kind: "chat" })).toBeNull()
     expect(normalizeTabTarget({ kind: "chat", chatId: "" })).toBeNull()

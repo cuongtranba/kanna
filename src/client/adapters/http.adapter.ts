@@ -1,11 +1,3 @@
-/**
- * http.adapter.ts — Browser fetch implementation of HttpPort.
- *
- * This is the ONLY file in src/client/** allowed to call the raw browser
- * `fetch` global once the ESLint client-adapter seal is in place.
- *
- * Architecture: .c3/adr/adr-20260715-client-state-effect-architecture.md
- */
 
 import type { JsonValue } from "../../shared/json"
 import type { HttpPort, HttpRequestOptions, HttpResponse } from "../ports/httpPort"
@@ -18,8 +10,6 @@ function extractHeaders(headers: Headers): Record<string, string> {
   return result
 }
 
-// JSON.parse returns `any`; assigning to a typed variable is the idiomatic
-// narrowing path without a banned `as T` cast.
 async function parseJsonText(response: Response): Promise<ReturnType<typeof JSON.parse>> {
   const text = await response.text()
   if (!text) return null

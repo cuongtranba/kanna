@@ -2,15 +2,9 @@ import { describe, expect, test } from "bun:test"
 import { renderToStaticMarkup } from "react-dom/server"
 import { PaneScopedStore } from "./paneScopedStore"
 
-/**
- * Render a consumer inside a PaneScopedStore.Provider and capture the
- * selected value synchronously (renderToStaticMarkup is synchronous).
- */
 function readInitial<T>(selector: (state: Parameters<typeof PaneScopedStore.useScopedStore>[0] extends (state: infer S) => unknown ? S : never) => T): T {
   let captured!: T
   function Consumer() {
-    // useContext is called inside renderToStaticMarkup, which is synchronous.
-    // The scoped store's Provider sets up the context, so the hook works.
     captured = PaneScopedStore.useScopedStore(selector)
     return null
   }
@@ -23,8 +17,6 @@ function readInitial<T>(selector: (state: Parameters<typeof PaneScopedStore.useS
 }
 
 describe("PaneScopedStore initial state", () => {
-  // toolGroupExpanded and inputHeight were moved to ChatTabScopedStore; those
-  // fields are no longer part of PaneScopedState and are tested separately.
 
   test("layoutWidth starts at 0", () => {
     expect(readInitial((s) => s.layoutWidth)).toBe(0)
@@ -98,8 +90,6 @@ describe("PaneScopedStore setters", () => {
     expect(store.getState().localLinkMenuTarget).not.toBeNull()
   })
 
-  // Each Provider instance gets its own store — state in one never leaks
-  // to another, which is the whole point of the scoped pattern.
   test("two Provider instances are independent", () => {
     let apiA: ReturnType<typeof PaneScopedStore.useScopedStoreApi> | null = null
     let apiB: ReturnType<typeof PaneScopedStore.useScopedStoreApi> | null = null

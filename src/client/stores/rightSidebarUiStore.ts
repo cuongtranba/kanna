@@ -7,15 +7,7 @@ import type {
   GitHubRepoAvailabilityResult,
 } from "../../shared/types"
 
-/**
- * Non-persisted transient UI state for RightSidebar and its sub-components
- * (BranchSwitcher, MergeBranchModal, GitHubPublishModal).
- *
- * Mirrors chatPageStore.ts in intent: ephemeral UI state that resets on reload,
- * kept out of the persisted rightSidebarStore.
- */
 
-// ─── RightSidebarImpl slice ───────────────────────────────────────────────────
 
 interface RightSidebarImplSlice {
   isGenerating: boolean
@@ -29,7 +21,6 @@ interface RightSidebarImplSlice {
   setCommitModeInFlight: (v: DiffCommitMode | null) => void
   setIsSyncing: (v: boolean) => void
   setIsGitHubPublishModalOpen: (v: boolean) => void
-  /** Remove stale patches when the diff file list changes. */
   reconcilePatches: (filePaths: string[], isCurrentDigest: (path: string) => boolean) => void
   setPatchLoading: (path: string) => void
   clearPatchLoading: (path: string) => void
@@ -38,7 +29,6 @@ interface RightSidebarImplSlice {
   setPatchError: (path: string, message: string) => void
 }
 
-// ─── BranchSwitcher slice ─────────────────────────────────────────────────────
 
 interface BranchSwitcherSlice {
   branchSwitcherOpen: boolean
@@ -59,7 +49,6 @@ interface BranchSwitcherSlice {
   setBranchSwitcherError: (v: string | null) => void
 }
 
-// ─── MergeBranchModal slice ───────────────────────────────────────────────────
 
 interface MergeBranchModalSlice {
   mergeBranchQuery: string
@@ -74,13 +63,10 @@ interface MergeBranchModalSlice {
   setMergePreviewError: (v: string | null) => void
   setIsMergePreviewLoading: (v: boolean) => void
   setIsMergeBranching: (v: boolean) => void
-  /** Reset all state when the modal closes. */
   resetMergeBranchModal: () => void
-  /** Reset only the preview (when selected branch changes or modal re-opens). */
   resetMergePreview: () => void
 }
 
-// ─── GitHubPublishModal slice ─────────────────────────────────────────────────
 
 interface GitHubPublishModalSlice {
   publishInfo: GitHubPublishInfo | null
@@ -103,7 +89,6 @@ interface GitHubPublishModalSlice {
   setIsPublishing: (v: boolean) => void
 }
 
-// ─── Combined store ───────────────────────────────────────────────────────────
 
 type RightSidebarUiState = RightSidebarImplSlice
   & BranchSwitcherSlice
@@ -111,7 +96,6 @@ type RightSidebarUiState = RightSidebarImplSlice
   & GitHubPublishModalSlice
 
 export const useRightSidebarUiStore = create<RightSidebarUiState>()((set) => ({
-  // ── RightSidebarImpl ──────────────────────────────────────────────────────
   isGenerating: false,
   commitModeInFlight: null,
   isSyncing: false,
@@ -155,7 +139,6 @@ export const useRightSidebarUiStore = create<RightSidebarUiState>()((set) => ({
     patchErrorsByPath: { ...state.patchErrorsByPath, [path]: message },
   })),
 
-  // ── BranchSwitcher ────────────────────────────────────────────────────────
   branchSwitcherOpen: false,
   mergeModalOpen: false,
   branchSwitcherIsLoading: false,
@@ -174,7 +157,6 @@ export const useRightSidebarUiStore = create<RightSidebarUiState>()((set) => ({
   setBranchList: (v) => set({ branchList: v }),
   setBranchSwitcherError: (v) => set({ branchSwitcherError: v }),
 
-  // ── MergeBranchModal ──────────────────────────────────────────────────────
   mergeBranchQuery: "",
   mergeBranchSelectedName: null,
   mergePreview: null,
@@ -202,7 +184,6 @@ export const useRightSidebarUiStore = create<RightSidebarUiState>()((set) => ({
     isMergePreviewLoading: false,
   }),
 
-  // ── GitHubPublishModal ────────────────────────────────────────────────────
   publishInfo: null,
   isLoadingPublishInfo: false,
   publishOwner: "",

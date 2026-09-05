@@ -21,8 +21,6 @@ describe("isSandboxEnabledAsync", () => {
 
   test("linux: depends on bwrap detection (sync no, async maybe yes)", async () => {
     resetBwrapCacheForTest()
-    // The actual return depends on whether bwrap is installed on the test machine.
-    // We just assert the function is async and returns boolean.
     const r = await isSandboxEnabledAsync({ platform: "linux", env: undefined })
     expect(typeof r).toBe("boolean")
   })

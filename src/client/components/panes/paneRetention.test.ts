@@ -32,8 +32,6 @@ describe("selectRetainedTabIds", () => {
   })
 
   test("retains every terminal tab regardless of recency or cap", () => {
-    // A terminal holds a live PTY and its scrollback; unmounting one destroys
-    // state the server cannot replay. Tier 2 is uncapped for exactly this.
     const tabs = [
       tab("chat", "chat"),
       tab("t1", "terminal"),
@@ -62,13 +60,10 @@ describe("selectRetainedTabIds", () => {
       cap: 2,
     })
 
-    // active "a" (tier 1) + the two most recent of b/c/d → d, c. "b" is evicted.
     expect(retained).toEqual(["a", "c", "d"])
   })
 
   test("returns retained ids in tab order, not recency order", () => {
-    // Render order must follow the tab strip so React children stay positionally
-    // stable; a recency-ordered result would reorder the DOM on every switch.
     const tabs = [tab("a", "chat"), tab("b", "changes"), tab("c", "chat")]
 
     const retained = selectRetainedTabIds({
@@ -113,7 +108,6 @@ describe("selectRetainedTabIds", () => {
       cap: 2,
     })
 
-    // "a" is tier 1; the cap applies to b and c only, so both survive.
     expect(retained).toEqual(["a", "b", "c"])
   })
 
@@ -157,8 +151,6 @@ describe("noteTabActivated", () => {
   })
 
   test("returns the same reference when the tab is already most recent", () => {
-    // Reference stability matters: this feeds a store write, and a fresh array
-    // on every activation would publish a new snapshot for a no-op.
     const recency = ["a", "b"]
 
     expect(noteTabActivated(recency, "a")).toBe(recency)

@@ -37,7 +37,6 @@ describe("StackChatCreateRow.store", () => {
     const before = store.getState().selectedWorktrees
     store.getState().selectWorktree("proj-a", "/wt/a-feature")
     expect(store.getState().selectedWorktrees).not.toBe(before)
-    // the previous Map is not mutated
     expect(before.get("proj-a")).toBe("/wt/a-main")
   })
 

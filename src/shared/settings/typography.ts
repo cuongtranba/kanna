@@ -9,7 +9,6 @@ export const TYPOGRAPHY_DEFAULTS: TypographySettings = {
   scale: DEFAULT_FONT_SCALE_STEP,
 }
 
-/** Untrusted on-disk input -> valid settings; pushes a human message per rejected field. */
 export function normalizeTypographySettings<T>(value: T, warnings: string[]): TypographySettings {
   const source = isPlainObject(value) ? value : null
   if (value !== undefined && !source) {
