@@ -50,3 +50,32 @@ jobs:
         env:
           GIT_TERMINAL_PROMPT: "0"
           HANG_AFTER: "170"
+
+  # A commit message release-please cannot parse is dropped from the changelog
+  # AND from the version bump, silently, with a green build (#1057, #1047). This
+  # job is the only thing that observes it. PR-only: it needs the PR's own
+  # commit range, and the squash message it predicts is the PR title plus those
+  # commits.
+  commit-messages:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The gate reads every commit in the range, so the shallow default
+          # would leave it with nothing to check and pass vacuously.
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - uses: oven-sh/setup-bun@v2
+
+      - run: bun install --frozen-lockfile
+
+      - name: Commit messages parse for release-please
+        # The title rides an env var rather than a `${{ }}` interpolation: it is
+        # attacker-controlled on a fork PR, and interpolating it into `run:`
+        # would put it in the shell.
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: bun run check:commits --range "$BASE_SHA..HEAD" --title "$PR_TITLE"

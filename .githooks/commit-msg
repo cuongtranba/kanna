@@ -1,0 +1,18 @@
+#!/bin/sh
+set -e
+
+# Refuse a commit message release-please cannot parse.
+#
+# An unparseable message is dropped from the changelog AND from the version
+# bump, silently, with a green build — so the earliest place to catch it is
+# before the commit exists. CI checks every commit in a PR as well, because a
+# hook can be skipped and a squash message is written on GitHub.
+#
+# Skipped when bun is unavailable rather than blocking a commit on tooling;
+# CI still enforces it.
+if ! command -v bun >/dev/null 2>&1; then
+  echo "bun not installed - skipping commit-message check (CI will still enforce)" >&2
+  exit 0
+fi
+
+bun run "$(dirname "$0")/../scripts/check-commit-messages.ts" --file "$1"
