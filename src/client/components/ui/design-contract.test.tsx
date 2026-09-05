@@ -9,8 +9,18 @@ describe("shared interaction design contract", () => {
     const rendered = await renderForLoopCheck(<Button>Continue</Button>)
     try {
       const button = document.querySelector("button")
-      expect(button?.className).toContain("transition-colors")
+      // The contract is that a button ENUMERATES what it animates. It used to
+      // read `transition-colors`; it now also carries the press scale, so the
+      // list is explicit rather than a single property — `transition-all`
+      // stays banned, which is the part that was ever load-bearing.
+      expect(button?.className).toContain("transition-[colors,transform]")
       expect(button?.className).not.toContain("transition-all")
+      // The press feedback itself, and its reduced-motion opt-out. On a phone
+      // this is the only acknowledgement a 44px target gives.
+      expect(button?.className).toContain("active:scale-[0.955]")
+      expect(button?.className).toContain("motion-reduce:active:scale-100")
+      // A disabled control must not appear to respond to a press.
+      expect(button?.className).toContain("disabled:active:scale-100")
       expect(button?.className).toContain("rounded-md")
       expect(button?.className).toContain("max-md:min-h-11")
     } finally {

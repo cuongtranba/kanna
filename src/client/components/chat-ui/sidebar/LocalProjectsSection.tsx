@@ -23,6 +23,8 @@ import { CSS } from "@dnd-kit/utilities"
 import { Button } from "../../ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../ui/tooltip"
 import { HoverHint } from "../../ui/truncated-text"
+import { AnimatePresence, MotionReveal } from "../../ui/motion-reveal"
+import { MOTION_DURATION } from "../../../lib/motion"
 import type { SidebarChatRow, SidebarProjectGroup } from "../../../../shared/types"
 import { APP_NAME } from "../../../../shared/branding"
 import { getPathBasename } from "../../../lib/formatters"
@@ -203,6 +205,8 @@ const SortableProjectGroup = memo(({
   const isExpanded = expandedGroups.has(groupKey)
   const isEmptyProject = group.chats.length === 0
   const hasMore = group.olderChats.length > 0
+  /** Rows in the open cascade, so the collapse can fold from the far end. */
+  const cascadeCount = group.previewChats.length + (isExpanded ? group.olderChats.length : 0)
   const hasProjectMenu = Boolean(onHideProject && onCopyPath && onOpenExternalPath)
   // Dialog openness lives in the sidebar store, one project at a time — the
   // same shape as the stack panels, and `useState` is banned in src/client.
@@ -261,7 +265,9 @@ const SortableProjectGroup = memo(({
       >
         <ChevronRight
           className={cn(
-            "size-3.5 shrink-0 text-muted-foreground transition-transform duration-150 motion-reduce:transition-none",
+            // duration-[--motion-quick]: the chevron and the cascade it opens
+            // are one gesture, so they read from one token.
+            "size-3.5 shrink-0 text-muted-foreground transition-transform duration-[var(--motion-quick)] motion-reduce:transition-none",
             !collapsedSections.has(groupKey) && "rotate-90"
           )}
         />
@@ -368,39 +374,70 @@ const SortableProjectGroup = memo(({
         />
       ) : null}
 
-      {!collapsedSections.has(groupKey) && (isEmptyProject ? Boolean(onNewLocalChat) : group.previewChats.length > 0 || hasMore) && (
-        <div className="flex flex-col gap-px pl-1">
-          {isEmptyProject && onNewLocalChat ? (
-            <EmptyProjectChatButton
-              localPath={localPath}
-              onNewLocalChat={onNewLocalChat}
-              isConnected={isConnected}
-              startingLocalPath={startingLocalPath}
-            />
-          ) : (
-            <>
-              {group.previewChats.map(renderChatRow)}
-              {hasMore && isExpanded ? (
-                <button
-                  onClick={() => onToggleExpandedGroup(groupKey)}
-                  className="ml-6 mt-1 self-start px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground rounded-md transition-colors duration-150"
-                >
-                  Show less
-                </button>
-              ) : null}
-              {isExpanded ? group.olderChats.map(renderChatRow) : null}
-              {hasMore && !isExpanded ? (
-                <button
-                  onClick={() => onToggleExpandedGroup(groupKey)}
-                  className="ml-6 mt-1 self-start px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground rounded-md transition-colors duration-150"
-                >
-                  Show more
-                </button>
-              ) : null}
-            </>
-          )}
-        </div>
-      )}
+      {/*
+        The cascade. Opening staggers from the header downwards; closing folds
+        back towards it (MotionReveal's `count` reverses the exit delay), which
+        is what makes a collapse read as folding shut rather than toppling over.
+
+        AnimatePresence sits OUTSIDE the mount condition so the rows survive
+        long enough to play that exit — inside it, React would have unmounted
+        them before the first frame.
+      */}
+      <AnimatePresence initial={false}>
+        {!collapsedSections.has(groupKey) && (isEmptyProject ? Boolean(onNewLocalChat) : group.previewChats.length > 0 || hasMore) && (
+          <div key="project-rows" className="flex flex-col gap-px pl-1">
+            {isEmptyProject && onNewLocalChat ? (
+              <EmptyProjectChatButton
+                localPath={localPath}
+                onNewLocalChat={onNewLocalChat}
+                isConnected={isConnected}
+                startingLocalPath={startingLocalPath}
+              />
+            ) : (
+              <>
+                {group.previewChats.map((chat, index) => (
+                  <MotionReveal
+                    key={chat._id}
+                    index={index}
+                    count={cascadeCount}
+                    step={MOTION_DURATION.staggerRow}
+                    y={-8}
+                  >
+                    {renderChatRow(chat)}
+                  </MotionReveal>
+                ))}
+                {hasMore && isExpanded ? (
+                  <button
+                    onClick={() => onToggleExpandedGroup(groupKey)}
+                    className="ml-6 mt-1 self-start px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground rounded-md transition-colors duration-150"
+                  >
+                    Show less
+                  </button>
+                ) : null}
+                {isExpanded ? group.olderChats.map((chat, index) => (
+                  <MotionReveal
+                    key={chat._id}
+                    index={group.previewChats.length + index}
+                    count={cascadeCount}
+                    step={MOTION_DURATION.staggerRow}
+                    y={-8}
+                  >
+                    {renderChatRow(chat)}
+                  </MotionReveal>
+                )) : null}
+                {hasMore && !isExpanded ? (
+                  <button
+                    onClick={() => onToggleExpandedGroup(groupKey)}
+                    className="ml-6 mt-1 self-start px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground rounded-md transition-colors duration-150"
+                  >
+                    Show more
+                  </button>
+                ) : null}
+              </>
+            )}
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   )
 })

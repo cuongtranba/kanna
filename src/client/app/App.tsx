@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, type ReactNode } from "react"
 import { QueryClientProvider } from "@tanstack/react-query"
+import { MotionConfig } from "motion/react"
 import { Navigate, Outlet, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom"
 import { queryClient } from "../query/queryClient"
 import { SocketBridge } from "./SocketBridge"
@@ -21,6 +22,7 @@ import { playChatNotificationSound, shouldPlayChatSound } from "../lib/chatSound
 import { getChatSoundBurstCount, getNotificationTitleCount } from "./chatNotifications"
 import { cn } from "../lib/utils"
 import { SHELL_CONTENT_CARD_CLASS } from "../lib/shellChrome"
+import { selectIsAnySpawning, useNewSessionStore } from "../stores/newSessionStore"
 import { KannaSidebar } from "./KannaSidebar"
 import { AppBootstrap } from "./AppBootstrap"
 import { SharePage } from "./share-view/SharePage"
@@ -267,6 +269,7 @@ function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
   const currentVersion = SDK_CLIENT_APP.split("/")[1] ?? "unknown"
   const viewportWidth = useViewportStore((viewport) => viewport.width)
   const mobileSidebarModalOpen = state.sidebarOpen && isMobileViewport(viewportWidth)
+  const isSpawningChat = useNewSessionStore(selectIsAnySpawning)
   useViewportSubscription()
   useSidebarSwipeGesture({
     sidebarOpen: state.sidebarOpen,
@@ -496,7 +499,17 @@ function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
           </span>
         </NoticeBanner>
       ) : null}
-      <div className="flex flex-1 min-h-0 overflow-hidden">
+      {/*
+        `data-kanna-spawning` is beat 3's switch. The sidebar's own root reads
+        it through a descendant rule (`.kanna-sidebar-shell` in index.css)
+        rather than subscribing to the store itself: KannaSidebar sits exactly
+        on its architecture-budget ceiling, and a flag the shell already owns
+        does not need to be re-derived one component deeper.
+      */}
+      <div
+        className="flex flex-1 min-h-0 overflow-hidden"
+        data-kanna-spawning={isSpawningChat ? "true" : undefined}
+      >
         {sidebarElement}
         {/*
           The outlet is a card inset to match the sidebar's own md:my-2 card, so
@@ -510,7 +523,15 @@ function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
           content below the fold — issue #772.
         */}
         <div
-          className={cn("flex flex-1 flex-col overflow-hidden", SHELL_CONTENT_CARD_CLASS)}
+          className={cn(
+            "flex flex-1 flex-col overflow-hidden",
+            SHELL_CONTENT_CARD_CLASS,
+            // Beat 3 of the new-session sentence (§01), the half that comes
+            // FORWARD. Its partner — the sidebar stepping back — lives on
+            // KannaSidebar's own root, because `display: contents` on a
+            // wrapper here would generate no box for a transform to apply to.
+            isSpawningChat && "kanna-surface-forward",
+          )}
           inert={mobileSidebarModalOpen ? true : undefined}
           aria-hidden={mobileSidebarModalOpen ? "true" : undefined}
         >
@@ -592,17 +613,27 @@ function AuthedApp() {
 
 export function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <SocketBridge />
-      <TooltipProvider>
-        <AppDialogProvider>
-          <Routes>
-            <Route path="/share/:token" element={<SharePage />} />
-            <Route path="*" element={<AuthedApp />} />
-          </Routes>
-          <Toaster />
-        </AppDialogProvider>
-      </TooltipProvider>
-    </QueryClientProvider>
+    /*
+      `reducedMotion="user"` is the single gate for every Motion component in
+      the app: Motion drops the transform and keeps the end state, so a reveal
+      still arrives — it just does not travel. Declared once here rather than
+      per component, because a component that forgets it is a component whose
+      motion nobody asked for. anime.js has no equivalent and is gated by
+      `prefersReducedMotion()` at each timeline instead.
+    */
+    <MotionConfig reducedMotion="user">
+      <QueryClientProvider client={queryClient}>
+        <SocketBridge />
+        <TooltipProvider>
+          <AppDialogProvider>
+            <Routes>
+              <Route path="/share/:token" element={<SharePage />} />
+              <Route path="*" element={<AuthedApp />} />
+            </Routes>
+            <Toaster />
+          </AppDialogProvider>
+        </TooltipProvider>
+      </QueryClientProvider>
+    </MotionConfig>
   )
 }

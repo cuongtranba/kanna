@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, type KeyboardEvent, type ReactNode } from "react"
+import { motion } from "motion/react"
+import { MOTION_SPRING } from "../lib/motion"
 import type { DomPort } from "../ports/domPort"
 import { domAdapter } from "../adapters/dom.adapter"
 import { fetchAuthStatus } from "../api/auth"
@@ -1447,13 +1449,31 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
                   key={item.label}
                   type="button"
                   onClick={() => navigate(`/settings/${item.id}`)}
-                  className={`cursor-pointer rounded-lg px-3 py-2 text-sm ${
+                  className={`relative cursor-pointer rounded-lg px-3 py-2 text-sm ${
                     item.id === selectedPage
-                      ? "bg-muted font-medium text-foreground"
+                      ? "font-medium text-foreground"
                       : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
                   }`}
                 >
-                  <div className="flex items-center gap-2.5">
+                  {/*
+                    ONE node that travels, rather than a highlight that blinks
+                    from row to row. `layoutId` is what makes it the same
+                    element across renders, so Motion animates the position
+                    change instead of unmounting one box and mounting another.
+
+                    A crossfade was the alternative and cannot do this job: it
+                    has no direction, so it does not lead the eye to the new
+                    section — it only resets it. Twelve sections an evening is
+                    twelve times the reader loses their place.
+                  */}
+                  {item.id === selectedPage ? (
+                    <motion.span
+                      layoutId="settings-nav-indicator"
+                      className="absolute inset-0 rounded-lg bg-muted"
+                      transition={{ type: "spring", ...MOTION_SPRING.indicator }}
+                    />
+                  ) : null}
+                  <div className="relative flex items-center gap-2.5">
                     <item.icon className="h-4 w-4 shrink-0" />
                     <span>{item.label}</span>
                     {showUpdateBadge ? (
@@ -1533,7 +1553,14 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
                 </div>
               </div>
             ) : (
-              <div className="mx-auto max-w-4xl">
+              /*
+                Keyed on the section so the arrival replays when the reader
+                changes section — a CSS animation only runs on a fresh mount,
+                and without the key this wrapper is the same element all
+                evening. The subtree already unmounts wholesale on a section
+                change, so the key costs no state that was not already lost.
+              */
+              <div className="mx-auto max-w-4xl kanna-settings-section-in" key={selectedPage}>
                 <div className="pb-6">
                   <div className="flex items-center justify-between gap-4 min-h-[34px]">
                     <div className="text-lg font-semibold tracking-[-0.2px] text-foreground">

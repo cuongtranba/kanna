@@ -3,7 +3,11 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "../../lib/utils"
 
 const buttonVariants = cva(
-  "touch-manipulation inline-flex items-center justify-center whitespace-nowrap cursor-pointer rounded-md text-sm font-medium ring-offset-background transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none",
+  // `active:scale` is the press: on a phone it is the only acknowledgement a
+  // 44px target gives before whatever it triggers happens, and on a mis-tap it
+  // is forgiving rather than punishing. `--motion-instant` because feedback
+  // that lags the finger reads as lag, not as feedback.
+  "touch-manipulation inline-flex items-center justify-center whitespace-nowrap cursor-pointer rounded-md text-sm font-medium ring-offset-background transition-[colors,transform] duration-[var(--motion-instant)] active:scale-[0.955] motion-reduce:transition-none motion-reduce:active:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:active:scale-100",
   {
     variants: {
       variant: {

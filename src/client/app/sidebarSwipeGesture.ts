@@ -70,6 +70,47 @@ export function evaluateSidebarSwipe(
 }
 
 /**
+ * How far along its travel the drawer is, right now, under the finger.
+ *
+ * `0` is fully closed, `1` fully open. While the finger is DOWN this is the
+ * only thing that should position the drawer, and it is deliberately linear and
+ * un-eased: an easing curve describes what happens after a release, and applying
+ * one to a tracked finger makes the panel lag the thumb that is holding it.
+ *
+ * Separate from `evaluateSidebarSwipe`, which decides the OUTCOME and whose
+ * thresholds this must not touch: a gesture the user has already learned must
+ * not change meaning because it also got frames. This only answers "where is
+ * the panel mid-drag", and the release still resolves through `evaluateSidebarSwipe`.
+ *
+ * Returns null when the gesture is not the drawer's to draw — a desktop
+ * viewport, a horizontal scroller, a drag in the direction that is already
+ * exhausted, or a drawer width that cannot be measured.
+ */
+export function sidebarDragProgress(
+  start: SwipePoint,
+  current: SwipePoint,
+  drawerWidth: number,
+  ctx: SwipeGestureContext,
+): number | null {
+  if (ctx.viewportWidth >= SIDEBAR_SWIPE_MOBILE_BREAKPOINT_PX) return null
+  if (ctx.startedInHorizontalScroller) return null
+  if (!(drawerWidth > 0)) return null
+
+  const dx = current.x - start.x
+  // Opening starts at 0 and pulls right; closing starts at 1 and pushes left.
+  const base = ctx.sidebarOpen ? 1 : 0
+  if (ctx.sidebarOpen ? dx > 0 : dx < 0) return null
+
+  return clamp01(base + dx / drawerWidth)
+}
+
+function clamp01(value: number): number {
+  if (value < 0) return 0
+  if (value > 1) return 1
+  return value
+}
+
+/**
  * Decide, mid-gesture, whether to call preventDefault() on the touchmove so the
  * browser/PWA native edge swipe-back (or swipe-forward) does not steal the
  * gesture. Returns true only for the same horizontal motions evaluateSidebarSwipe

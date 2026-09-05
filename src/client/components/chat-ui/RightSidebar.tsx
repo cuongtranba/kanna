@@ -1979,7 +1979,7 @@ function RightSidebarImpl({
           <div className="h-full min-h-0">
             {mainContent}
             {diffs.status !== "no_repo" && viewMode !== "history" && diffs.files.length > 0 && (
-              <div className="relative h-full min-h-0">
+              <div className="relative h-full min-h-0 kanna-panel-content-in">
                 <LegendList<DiffFile>
                   ref={filesListRef}
                   data={diffs.files}

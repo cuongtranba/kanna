@@ -14,6 +14,7 @@ import {
   chatStatusIndicator,
   sessionStateBadge,
 } from "../../../lib/chatStatusIndicator"
+import { selectIsSpawning, useNewSessionStore } from "../../../stores/newSessionStore"
 import { ChatRowMenu } from "./Menus"
 
 interface Props {
@@ -63,6 +64,8 @@ function ChatRowImpl({
 
   const tone = chatStatusIndicator(chat)?.tone ?? null
   const minSlotWidth = chat.canFork ? "min-w-12" : "min-w-6"
+  // Scoped to THIS row's id, so a spawn elsewhere does not re-render every row.
+  const isSpawning = useNewSessionStore(selectIsSpawning(normalizedChatId))
 
   let rowBgClass: string
   if (onToggleSelect) {
@@ -117,7 +120,12 @@ function ChatRowImpl({
   const mainAction = (
     <button
       type="button"
-      className="flex min-w-0 flex-1 items-center gap-2 py-1.5 pl-2 text-left"
+      /*
+        Press feedback. Forgiving on a mis-tap, and on a phone it is the only
+        acknowledgement a 44px target gives before the route changes — without
+        it a tap on a slow connection looks like it missed.
+      */
+      className="flex min-w-0 flex-1 items-center gap-2 py-1.5 pl-2 text-left origin-left transition-transform duration-[var(--motion-instant)] ease-[var(--motion-ease-arriving)] active:scale-[0.985] motion-reduce:transition-none motion-reduce:active:scale-100"
       onClick={() => onToggleSelect ? onToggleSelect() : onSelectChat(chat.chatId)}
       aria-pressed={onToggleSelect ? isSelected : undefined}
     >
@@ -156,10 +164,24 @@ function ChatRowImpl({
       key={chat._id}
       data-chat-id={normalizedChatId}
       className={cn(
-        "group flex items-center rounded-md pr-1 transition-colors duration-150",
-        rowBgClass
+        "group relative flex items-center rounded-md pr-1 transition-colors duration-[var(--motion-quick)]",
+        rowBgClass,
+        // Beat 2 of the new-session sentence: this row is the one being born.
+        isSpawning && "kanna-spawn-row-in",
       )}
     >
+      {/*
+        The rail — a 2px coral bar down the row's leading edge, and the one
+        "this is new" accent in the transition. Coral is the brand's alarm
+        colour and stays under 10% of any screen (DESIGN.md), so it marks
+        exactly one row for exactly the length of the arrival.
+      */}
+      {isSpawning ? (
+        <span
+          aria-hidden
+          className="kanna-spawn-rail-in pointer-events-none absolute inset-y-0 left-0 w-0.5 rounded-full bg-logo"
+        />
+      ) : null}
       {onToggleSelect ? (
         mainAction
       ) : (
@@ -176,7 +198,32 @@ function ChatRowImpl({
         </ChatRowMenu>
       )}
       {!onToggleSelect && (
-        <div className={cn("flex h-8 shrink-0 items-center justify-end gap-0", minSlotWidth)}>
+        /*
+          The row's actions slide in from the right on hover instead of sitting
+          there permanently. The trailing timestamp already fades out on
+          `group-hover`, so the two read as one exchange: the stamp leaves, the
+          actions take its place.
+
+          Gated at `md:` on purpose. A touch device never fires hover, so the
+          reveal would leave the actions permanently invisible — and below md
+          the timestamp is `hidden`, making these the row's only trailing
+          content. Mobile therefore keeps them shown, which is the same shape
+          `LocalProjectsSection`'s section actions already use.
+
+          CSS rather than Motion's spring (which the handoff asks for): this
+          renders once per chat row, and a Motion component per row buys a
+          spring's reversal-smoothness over 8px of travel at the cost of a
+          runtime instance in a list that can run to hundreds. The token
+          duration is the same gesture at a fraction of the price.
+        */
+        <div
+          className={cn(
+            "flex h-8 shrink-0 items-center justify-end gap-0",
+            "transition-[opacity,transform] duration-[var(--motion-quick)] ease-[var(--motion-ease-arriving)] motion-reduce:transition-none",
+            "md:translate-x-2 md:opacity-0 md:group-hover:translate-x-0 md:group-hover:opacity-100 md:focus-within:translate-x-0 md:focus-within:opacity-100",
+            minSlotWidth
+          )}
+        >
           {chat.canFork ? (
             <Button
               variant="ghost"

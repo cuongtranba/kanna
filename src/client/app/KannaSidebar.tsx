@@ -665,7 +665,7 @@ function KannaSidebarImpl({
         aria-label={mobileModalOpen ? "Workspace navigation" : undefined}
         className={cn(
           "fixed inset-0 z-50 bg-background dark:bg-card flex flex-col h-[100dvh] select-none",
-          "md:relative md:inset-auto md:w-[var(--sidebar-width)] md:mr-0 md:h-[calc(100%-16px)] md:my-2 md:ml-2 md:border md:border-border md:rounded-2xl",
+          "kanna-sidebar-shell md:relative md:inset-auto md:w-[var(--sidebar-width)] md:mr-0 md:h-[calc(100%-16px)] md:my-2 md:ml-2 md:border md:border-border md:rounded-2xl",
           open ? "flex" : "hidden md:flex",
           collapsed && "md:hidden"
         )}

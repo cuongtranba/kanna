@@ -85,6 +85,37 @@
     --kanna-font-body: "Body", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     --kanna-font-logo: "Bricolage Grotesque Variable", "Bricolage Grotesque", sans-serif;
     --kanna-font-mono: "Roboto Mono", monospace;
+
+    /*
+      Motion timing. These are the ONLY durations and easings the app animates
+      with; a literal `280ms` typed into a rule is drift no reviewer can see.
+
+      Every value here is mirrored in src/client/lib/motion/tokens.ts for the
+      JS-driven half (anime.js and Motion take numbers, not var()), and
+      src/server/design/motion-tokens.test.ts fails if the two disagree. Read
+      the token, never the number — the same discipline --shell-top-band gets
+      above.
+
+      No single beat exceeds 300ms. --motion-sequence is the one exception and
+      is a SUM: the new-session transition is five beats totalling 860ms.
+    */
+    --motion-instant: 80ms;
+    --motion-quick: 160ms;
+    --motion-row: 180ms;
+    --motion-carry: 240ms;
+    --motion-panel: 280ms;
+    --motion-stagger-tight: 14ms;
+    --motion-stagger-row: 26ms;
+    --motion-stagger-loose: 40ms;
+    --motion-sequence: 860ms;
+
+    /*
+      Easings with a CSS spelling. `born` (anime.js `outBack(1.6)`) has no
+      cubic-bezier equivalent, so a rule that wants the overshoot has to move
+      to JS rather than approximate it here.
+    */
+    --motion-ease-arriving: cubic-bezier(0.22, 0.61, 0.36, 1);
+    --motion-ease-panel: cubic-bezier(0.22, 1, 0.36, 1);
   }
 
   /* Tailwind `md:` — the one responsive pivot (BREAKPOINT_MD in lib/viewport.ts). */
@@ -373,10 +404,26 @@
     overflow: hidden;
   }
 
+  /*
+    Panels arrive from the edge they live on.
+
+    The 4px nudge these carried was too small to say anything: a panel appeared
+    with no sense of which edge it came from, so opening one read as a repaint
+    rather than a movement. The travel is now a full panel dimension, which
+    composes with the box growth `useTerminalToggleAnimation` /
+    `useRightSidebarToggleAnimation` already drive through
+    react-resizable-panels — the box opens and the content rides in behind it.
+
+    `--terminal-toggle-duration` and the `data-*-animated="false"` escape hatch
+    are both kept: the hatch is what lets a layout restore land without playing
+    an animation nobody asked for. The literal 280ms fallback and cubic-bezier
+    are now the motion tokens, so these read from the same table as everything
+    else.
+  */
   [data-terminal-visual] {
     transition:
-      opacity var(--terminal-toggle-duration, 280ms) cubic-bezier(0.22, 1, 0.36, 1),
-      transform var(--terminal-toggle-duration, 280ms) cubic-bezier(0.22, 1, 0.36, 1);
+      opacity var(--terminal-toggle-duration, var(--motion-panel)) var(--motion-ease-panel),
+      transform var(--terminal-toggle-duration, var(--motion-panel)) var(--motion-ease-panel);
     will-change: opacity, transform;
   }
 
@@ -384,9 +431,10 @@
     transition: none;
   }
 
+  /* Opens upward from the bottom edge. */
   [data-terminal-visual][data-terminal-open="false"] {
     opacity: 0;
-    transform: translateY(4px);
+    transform: translateY(100%);
   }
 
   [data-terminal-visual][data-terminal-open="true"] {
@@ -396,8 +444,8 @@
 
   [data-right-sidebar-visual] {
     transition:
-      opacity var(--terminal-toggle-duration, 280ms) cubic-bezier(0.22, 1, 0.36, 1),
-      transform var(--terminal-toggle-duration, 280ms) cubic-bezier(0.22, 1, 0.36, 1);
+      opacity var(--terminal-toggle-duration, var(--motion-panel)) var(--motion-ease-panel),
+      transform var(--terminal-toggle-duration, var(--motion-panel)) var(--motion-ease-panel);
     will-change: opacity, transform;
   }
 
@@ -405,9 +453,10 @@
     transition: none;
   }
 
+  /* Slides in from the right edge. */
   [data-right-sidebar-visual][data-right-sidebar-open="false"] {
     opacity: 0;
-    transform: translateX(4px);
+    transform: translateX(100%);
   }
 
   [data-right-sidebar-visual][data-right-sidebar-open="true"] {
@@ -498,6 +547,324 @@
     }
   }
 
+  /*
+    The git panel's contents arrive AFTER the panel has landed, not with it —
+    a panel and its payload moving together read as one slab, and the reader
+    cannot tell the frame from what it holds.
+
+    Deliberately no `animation-fill-mode`. The resting state is the visible
+    one, so an animation that is throttled, frozen or never runs leaves the
+    diff list simply static — motion is lost, content is not (handoff pitfall
+    #1). A `forwards`/`both` fill here would strand the panel blank.
+
+    Applied to the list CONTAINER rather than each row: the file list is a
+    virtualized LegendList that recycles rows on scroll, so a per-row stagger
+    would replay every time a row came back into view.
+  */
+  @keyframes kanna-panel-content-in {
+    from {
+      opacity: 0;
+      transform: translateX(10px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  .kanna-panel-content-in {
+    animation: kanna-panel-content-in var(--motion-row) var(--motion-ease-arriving) 120ms;
+  }
+
+  /*
+    The session sigil's newest tick grows up out of the baseline — the session's
+    history being written live rather than a stroke that was simply always
+    there. `transform-origin` is set inline from the real baseline, because it
+    is a viewBox coordinate this stylesheet cannot know.
+
+    No fill-mode, for the same reason as above: the resting state is the full
+    tick, so an animation that never runs costs the growth and not the tick.
+  */
+  @keyframes kanna-reduction-tick-in {
+    from {
+      transform: scaleY(0);
+    }
+
+    to {
+      transform: scaleY(1);
+    }
+  }
+
+  .kanna-reduction-tick-in {
+    animation: kanna-reduction-tick-in var(--motion-carry) var(--motion-ease-arriving);
+  }
+
+  /*
+    Work arriving in the transcript, rather than appearing.
+
+    TRANSFORM ONLY — no opacity, deliberately, and this is the one place in the
+    app where that rule is not negotiable. Rows arrive on their own while the
+    model streams, so the user did not ask for this animation and cannot retry
+    it; a frozen or throttled opacity tween would leave a row of real work
+    permanently invisible with no gesture that recovers it (handoff pitfall #1).
+    6px of travel and no fill-mode: if the animation never runs, the row is
+    simply already in place.
+
+    6px and no scale is also what keeps a 400-row transcript cheap — both
+    properties are compositor-only, and no measured height changes, so
+    LegendList's maintainVisibleContentPosition has nothing to correct.
+  */
+  @keyframes kanna-transcript-row-in {
+    from {
+      transform: translateY(6px);
+    }
+
+    to {
+      transform: translateY(0);
+    }
+  }
+
+  .kanna-transcript-row-in {
+    animation: kanna-transcript-row-in var(--motion-row) var(--motion-ease-arriving);
+  }
+
+  /*
+    A settings section arriving. Twelve sections means the reader loses their
+    place twelve times an evening; the nav indicator leads the eye TO the row,
+    and this tells it the pane it landed on is new.
+
+    The stagger is done with `nth-child` rather than a per-row index because
+    the twelve section bodies are twelve unrelated JSX trees — threading an
+    index through all of them would be a large, invasive change for a subtle
+    effect, and would have to be repeated by every section added later.
+
+    Capped at the 8th child, matching STAGGER_LIMIT: past that every row shares
+    the last delay, so a long section never queues a visible wave.
+
+    User-triggered (a nav click), so opacity is legitimate here — the resting
+    state is visible and the gesture is repeatable. Still no fill-mode.
+  */
+  @keyframes kanna-settings-row-in {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .kanna-settings-section-in > * {
+    animation: kanna-settings-row-in var(--motion-row) var(--motion-ease-arriving);
+    animation-delay: calc(7 * var(--motion-stagger-row));
+  }
+
+  .kanna-settings-section-in > *:nth-child(1) { animation-delay: 0ms; }
+  .kanna-settings-section-in > *:nth-child(2) { animation-delay: calc(1 * var(--motion-stagger-row)); }
+  .kanna-settings-section-in > *:nth-child(3) { animation-delay: calc(2 * var(--motion-stagger-row)); }
+  .kanna-settings-section-in > *:nth-child(4) { animation-delay: calc(3 * var(--motion-stagger-row)); }
+  .kanna-settings-section-in > *:nth-child(5) { animation-delay: calc(4 * var(--motion-stagger-row)); }
+  .kanna-settings-section-in > *:nth-child(6) { animation-delay: calc(5 * var(--motion-stagger-row)); }
+  .kanna-settings-section-in > *:nth-child(7) { animation-delay: calc(6 * var(--motion-stagger-row)); }
+
+  /*
+    The heading is text, not a row, so it gets the treatment the app already
+    uses for new text — the empty state's blur-in. One idea of what "new text"
+    looks like, rather than a second one invented here.
+  */
+  .kanna-settings-section-in > *:nth-child(1) {
+    animation: kanna-empty-state-text-in var(--motion-quick) var(--motion-ease-arriving);
+  }
+
+  /*
+    The board's drop line draws itself toward where the card will land, rather
+    than blinking on. The line is the whole affordance — the brief forbids a
+    column tint on hover — so it has to read as an answer, not a flicker.
+
+    No fill-mode: the resting state is the drawn line, so an animation that
+    never runs still shows the target.
+  */
+  @keyframes kanna-drop-line-in {
+    from {
+      transform: scaleX(0);
+    }
+
+    to {
+      transform: scaleX(1);
+    }
+  }
+
+  @keyframes kanna-column-drop-line-in {
+    from {
+      transform: scaleY(0);
+    }
+
+    to {
+      transform: scaleY(1);
+    }
+  }
+
+  .kanna-drop-line-in {
+    animation: kanna-drop-line-in var(--motion-quick) var(--motion-ease-arriving);
+  }
+
+  .kanna-column-drop-line-in {
+    animation: kanna-column-drop-line-in var(--motion-quick) var(--motion-ease-arriving);
+  }
+
+  /*
+    ── The new-session sentence (§01) ──────────────────────────────────────
+    Five beats, 860ms end to end, no beat over 300ms. Each is its own
+    animation delayed to its offset rather than one imperative timeline: a
+    route change happens in the MIDDLE of this sequence, so a timeline built
+    over element refs would hold half-dead references by the time it ran.
+    All of them read one flag (`newSessionStore.spawnedChatId`), which is the
+    shared clock.
+
+    None of these carry a fill-mode. Every resting state is the visible,
+    settled one, so a beat that is throttled or never runs costs its movement
+    and nothing else.
+  */
+
+  /* Beat 2 — the row is born. The one `born` overshoot per transition. */
+  @keyframes kanna-spawn-row-in {
+    from {
+      opacity: 0;
+      transform: scaleY(0.4);
+    }
+
+    60% {
+      transform: scaleY(1.04);
+    }
+
+    to {
+      opacity: 1;
+      transform: scaleY(1);
+    }
+  }
+
+  .kanna-spawn-row-in {
+    transform-origin: top;
+    animation: kanna-spawn-row-in var(--motion-row) var(--motion-ease-arriving) 120ms;
+  }
+
+  /* Beat 2 — …and its rail, the "this is new" accent. */
+  @keyframes kanna-spawn-rail-in {
+    from {
+      transform: scaleY(0);
+    }
+
+    to {
+      transform: scaleY(1);
+    }
+  }
+
+  .kanna-spawn-rail-in {
+    transform-origin: top;
+    animation: kanna-spawn-rail-in var(--motion-row) var(--motion-ease-arriving) 140ms;
+  }
+
+  /* Beat 3 — the shell steps back, and comes back to rest. */
+  @keyframes kanna-shell-step-back {
+    0% {
+      transform: none;
+      opacity: 1;
+    }
+
+    50% {
+      transform: translateX(-8px) scale(0.972);
+      opacity: 0.55;
+    }
+
+    100% {
+      transform: none;
+      opacity: 1;
+    }
+  }
+
+  /*
+    Driven by `data-kanna-spawning` on the shell row in App.tsx rather than by
+    a class the sidebar computes for itself — KannaSidebar sits exactly on its
+    architecture-budget ceiling, and the shell already holds this flag.
+  */
+  [data-kanna-spawning] .kanna-sidebar-shell {
+    animation: kanna-shell-step-back calc(2 * var(--motion-carry)) var(--motion-ease-arriving) 260ms;
+  }
+
+  /* Beat 3 — …and the chat surface comes forward to meet it. */
+  @keyframes kanna-surface-forward {
+    from {
+      opacity: 0;
+      transform: scale(1.035);
+    }
+
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  .kanna-surface-forward {
+    animation: kanna-surface-forward var(--motion-carry) var(--motion-ease-arriving) 260ms;
+  }
+
+  /* Beat 4 — the composer arrives focused. */
+  @keyframes kanna-composer-arrive {
+    from {
+      opacity: 0;
+      transform: translateY(56px) scale(0.96);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  .kanna-composer-arrive {
+    animation: kanna-composer-arrive var(--motion-panel) var(--motion-ease-panel) 420ms;
+  }
+
+  /* On a phone the keyboard owns the space the composer would travel through. */
+  @media (max-width: 767px) {
+    @keyframes kanna-composer-arrive {
+      from {
+        opacity: 0;
+        transform: translateY(40px) scale(0.96);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+  }
+
+  /* Beat 4 — …and the focus rule sweeps along the composer's bottom edge. */
+  @keyframes kanna-composer-sweep {
+    from {
+      transform: scaleX(0);
+      opacity: 1;
+    }
+
+    80% {
+      opacity: 1;
+    }
+
+    to {
+      transform: scaleX(1);
+      opacity: 0;
+    }
+  }
+
+  .kanna-composer-sweep {
+    transform-origin: left;
+    animation: kanna-composer-sweep var(--motion-carry) var(--motion-ease-arriving) 480ms both;
+  }
+
   @keyframes kanna-cursor-blink {
     0%,
     49% {
@@ -520,8 +887,21 @@
     }
   }
 
+  /*
+    Beat 5 of the new-session sentence (§01): the transcript opens.
+
+    Retimed from 420ms to --motion-panel (280ms) so it is a beat inside the
+    sentence rather than the longest single movement in the app — the 300ms
+    ceiling applies here like everywhere else. The keyframe itself is
+    unchanged; this is a tempo change, not a restyle.
+
+    `both` is kept. The flower is the empty state's whole picture and it is
+    already covered by the typewriter that follows it, so its resting state is
+    visible either way; without the fill it would flash at full scale before
+    its delay elapsed.
+  */
   .kanna-empty-state-flower {
-    animation: kanna-empty-state-flower-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: kanna-empty-state-flower-in var(--motion-panel) var(--motion-ease-panel) both;
     transform-origin: center;
   }
 

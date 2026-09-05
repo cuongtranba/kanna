@@ -336,6 +336,35 @@ State is carried by the **shape of a drawn mark**, not by hue. A dot that change
 - **Route boundaries:** non-chat routes and the diff renderer load behind lazy feature boundaries. The initial client entry must remain at or below **350,000 gzip bytes**, enforced by `bun run check:bundle` as part of `bun run check`.
 - **Source contracts:** `transition-all`, sub-12 px utility type, operational all-caps, hidden-scrollbar utilities, and raw black/white interaction surfaces are build-blocking regressions.
 
+### Motion
+
+Motion in Kanna exists to answer one question — *where did that go?* — and nothing else. It never decorates, never signals status, and never introduces colour. A state change that already reads clearly is left alone; stillness is a legitimate design choice and is the correct one for a resting status dot.
+
+**Every duration and easing comes from the token table.** It is defined twice by necessity: as `--motion-*` custom properties in `src/index.css` for CSS rules, and as numbers in `src/client/lib/motion/tokens.ts` because anime.js and Motion take numbers rather than `var()`. `src/server/design/motion-tokens.test.ts` fails when the two disagree in either direction. A literal duration at a call site is drift no reviewer can see, in exactly the way `--shell-top-band` exists to prevent.
+
+| Token | Value | Used for |
+| --- | --- | --- |
+| `--motion-instant` | 80 ms | Press feedback, checkbox fill |
+| `--motion-quick` | 160 ms | Hover, chevron rotate, colour change |
+| `--motion-row` | 180 ms | List rows, tool cards, diff rows, board cards |
+| `--motion-carry` | 240 ms | One element being carried somewhere — a travelling indicator, a growing sigil tick |
+| `--motion-panel` | 280 ms | Terminal, git panel, drawer, sheet, empty state |
+| `--motion-stagger-tight` | 14 ms | Sidebar rows making room |
+| `--motion-stagger-row` | 26 ms | Project expand cascade, settings rows |
+| `--motion-stagger-loose` | 40 ms | Transcript tool rows |
+| `--motion-sequence` | 860 ms | The whole new-session sentence — a SUM, not one tween |
+
+Easings: `--motion-ease-arriving` for anything entering the screen (~90% of all motion) and `--motion-ease-panel` for panels. anime.js adds `outBack(1.6)` for the ONE newly-created element per transition — never more than one, or the overshoot reads as bounce rather than birth.
+
+**Named rules.**
+
+- **No beat exceeds 300 ms.** A sequence may total more; one movement may not. Machine-checked.
+- **A stagger caps at 8 elements** (`STAGGER_LIMIT`). Element 9 onward shares element 8's delay, so a 200-row list never queues a wave whose tail arrives after the reader has scrolled past it.
+- **A reveal that fires on ARRIVAL animates transform only, never opacity.** The user did not ask for it and cannot retry it, so an animation that is throttled, frozen or never runs must cost the movement and not the content. Opacity is legitimate in user-triggered motion — opening a panel, changing a settings section — where the resting state is visible and the gesture repeats. CSS reveals therefore carry no `animation-fill-mode` unless the resting state is *invisible* (the composer's focus sweep).
+- **Reduced motion is one gate, applied once.** The `prefers-reduced-motion` block in `src/index.css` covers CSS only; it cannot reach a library that writes `element.style` frame by frame. `<MotionConfig reducedMotion="user">` at the App root covers every Motion component, and `prefersReducedMotion()` (`src/client/lib/motion`) gates each anime.js timeline. Jump to the END state — never skip the animation, which leaves whatever initial styles it wrote.
+- **Only `opacity`, `transform` and `filter` are animated**, which restates the layout-property ban below with teeth: nothing inside the transcript may animate a measured height, because `LegendList`'s `maintainVisibleContentPosition` corrects scroll whenever one changes and would fight it every frame.
+- **Live values swap text; they never animate.** A running duration, a token pill, a board column count. They are already `tabular-nums`, so the container cannot reflow.
+
 ## 6. Do's and Don'ts
 
 ### Do:
@@ -361,6 +390,7 @@ State is carried by the **shape of a drawn mark**, not by hue. A dot that change
 - **Don't** clip text inside a gradient (`background-clip: text` with a gradient). Use a solid color; emphasis via weight or size.
 - **Don't** open a modal on top of a modal. Inline confirm or step the existing dialog.
 - **Don't** animate layout properties (`width`, `height`, `top`, `left`, `padding`). Animate `transform` and `opacity` only.
-- **Don't** pulse status dots. A pulsing dot reads as anxiety; the warm coral is alarming enough on its own when it appears.
+- **Don't** pulse status dots. A pulsing dot reads as anxiety; the warm coral is alarming enough on its own when it appears. This holds in the sidebar too, where a "halo behind the live dot" is a recurring proposal — a chat's liveness is already carried by its label, its stamp and the transcript beside it.
+- **Don't** type a duration or an easing curve at a call site. Read the `--motion-*` token, or add one; see **Motion** above.
 - **Don't** use `outline: none` on focusable elements without a clear replacement focus indicator.
 - **Don't** rely on color alone for status; pair with icon, label, or weight.

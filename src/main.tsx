@@ -5,8 +5,14 @@ import "@fontsource-variable/bricolage-grotesque"
 import { App } from "./client/app/App"
 import { ThemeProvider } from "./client/hooks/useTheme"
 import { TypographyProvider } from "./client/hooks/useTypography"
+import { configureMotionEngine } from "./client/lib/motion"
 import "@xterm/xterm/css/xterm.css"
 import "./index.css"
+
+// Before the first render: anime.js otherwise freezes running timelines when
+// the tab is backgrounded, stranding whatever was mid-transition. See the
+// function's own note.
+configureMotionEngine()
 
 const container = document.getElementById("root")
 

@@ -51,6 +51,7 @@ import {
   type ComposerState,
   useChatPreferencesStore,
 } from "../../stores/chatPreferencesStore"
+import { useComposerArrival } from "./ComposerArrival"
 import { CHAT_INPUT_ATTRIBUTE } from "../../app/chatFocusPolicy"
 import { ChatPreferenceControls } from "./ChatPreferenceControls"
 import { ContextWindowMeter } from "./ContextWindowMeter"
@@ -485,6 +486,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
   } = useChatPreferencesStore()
 
   const composerChatId = chatId ?? NEW_CHAT_COMPOSER_ID
+  const composerArrival = useComposerArrival(chatId ?? null)
   const storedComposerState = useChatPreferencesStore(
     (state) => state.chatStates[composerChatId],
   )
@@ -1191,9 +1193,10 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
 
           {/* Input row */}
           <div
-            className="relative flex items-end max-w-[840px] mx-auto rounded-xl border border-border bg-background pr-1.5 transition-colors focus-within:border-ring/60 focus-within:ring-2 focus-within:ring-ring/30 dark:bg-card/90"
+            className={cn("relative flex items-end max-w-[840px] mx-auto rounded-xl border border-border bg-background pr-1.5 transition-colors focus-within:border-ring/60 focus-within:ring-2 focus-within:ring-ring/30 dark:bg-card/90", composerArrival.className)}
             onKeyDown={handleKeyDown}
           >
+            {composerArrival.sweep}
             {/* Attachment button */}
             <Button
               type="button"
