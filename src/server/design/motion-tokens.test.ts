@@ -111,6 +111,33 @@ describe("motion tokens agree between CSS and TypeScript", () => {
   })
 })
 
+describe("DESIGN.md documents the real table", () => {
+  /**
+   * DESIGN.md is the mandatory source of truth for the visual system, so its
+   * motion table is read as authority. A documented duration that no longer
+   * matches the shipped one is worse than no table at all — it is a value a
+   * reader will confidently type at a call site. This makes the doc a CHECKED
+   * source rather than a third place to drift.
+   */
+  const design = readFileSync(join(import.meta.dir, "../../..", "DESIGN.md"), "utf8")
+
+  test("every token in the DESIGN.md table matches src/index.css", () => {
+    const documented = new Map(
+      [...design.matchAll(/\|\s*`(--motion-[a-z-]+)`\s*\|\s*(\d+)\s*ms\s*\|/g)].map(
+        (match) => [match[1], Number(match[2])] as const,
+      ),
+    )
+
+    // A table that matched nothing would pass every comparison below, so the
+    // absence of a table is itself the failure — the same reasoning as
+    // `filesScanned` in the architecture budget.
+    expect(documented.size).toBeGreaterThan(0)
+
+    const declared = declaredDurations()
+    expect([...documented.entries()].sort()).toEqual([...declared.entries()].sort())
+  })
+})
+
 describe("no single beat exceeds the ceiling", () => {
   test("every duration but a declared sequence stays within MAX_BEAT_MS", () => {
     const overruns = Object.entries(MOTION_DURATION)
