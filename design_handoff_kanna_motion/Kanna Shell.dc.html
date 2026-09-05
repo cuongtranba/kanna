@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+html,body{height:100%;margin:0;overflow:hidden;color-scheme:light dark}
+@keyframes kanna-shiny-pulse{0%,100%{opacity:.55}50%{opacity:1}}
+@keyframes kanna-spin{to{transform:rotate(360deg)}}
+@keyframes kanna-cursor-blink{0%,49%{opacity:1}50%,100%{opacity:0}}
+@media (prefers-reduced-motion: reduce){*,*::before,*::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important}}
+</style>
+</helmet>
+
+<div ref="{{ rootRef }}" style="color-scheme:light dark;display:flex;flex-direction:column;height:100dvh;min-height:100dvh;overflow:hidden;background:light-dark(oklch(99.5% 0.003 13),oklch(20% 0.01 13));color:light-dark(oklch(16% 0.01 13),oklch(98% 0.003 13));font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;-webkit-font-smoothing:antialiased;font-size:16px">
+
+<svg width="0" height="0" style="position:absolute;overflow:hidden" aria-hidden="true"><symbol id="i-archive" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="5" x="2" y="3" rx="1"></rect><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"></path><path d="M10 12h4"></path></symbol><symbol id="i-arrow-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"></path><path d="m19 12-7 7-7-7"></path></symbol><symbol id="i-arrow-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 7-7 7 7"></path><path d="M12 19V5"></path></symbol><symbol id="i-bell-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.268 21a2 2 0 0 0 3.464 0"></path><path d="M17 17H4a1 1 0 0 1-.74-1.673C4.59 13.956 6 12.499 6 8a6 6 0 0 1 .258-1.742"></path><path d="m2 2 20 20"></path><path d="M8.668 3.01A6 6 0 0 1 18 8c0 2.687.77 4.653 1.707 6.05"></path></symbol><symbol id="i-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.268 21a2 2 0 0 0 3.464 0"></path><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"></path></symbol><symbol id="i-bot" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"></path><rect width="16" height="12" x="4" y="8" rx="2"></rect><path d="M2 14h2"></path><path d="M20 14h2"></path><path d="M15 13v2"></path><path d="M9 13v2"></path></symbol><symbol id="i-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"></path><path d="m3.3 7 8.7 5 8.7-5"></path><path d="M12 22V12"></path></symbol><symbol id="i-brain" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 18V5"></path><path d="M15 13a4.17 4.17 0 0 1-3-4 4.17 4.17 0 0 1-3 4"></path><path d="M17.598 6.5A3 3 0 1 0 12 5a3 3 0 1 0-5.598 1.5"></path><path d="M17.997 5.125a4 4 0 0 1 2.526 5.77"></path><path d="M18 18a4 4 0 0 0 2-7.464"></path><path d="M19.967 17.483A4 4 0 1 1 12 18a4 4 0 1 1-7.967-.517"></path><path d="M6 18a4 4 0 0 1-2-7.464"></path><path d="M6.003 5.125a4 4 0 0 0-2.526 5.77"></path></symbol><symbol id="i-calendar-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 14v2.2l1.6 1"></path><path d="M16 2v3"></path><path d="M21 7.338V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2h2.338"></path><path d="M3 9h5.859"></path><path d="M8 2v3"></path><circle cx="16" cy="16" r="6"></circle></symbol><symbol id="i-check-line" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 4L9 15"></path><path d="M21 19L3 19"></path><path d="M9 15L4 10"></path></symbol><symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></symbol><symbol id="i-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"></path></symbol><symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></symbol><symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"></path><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><path d="m7 10 5 5 5-5"></path></symbol><symbol id="i-ellipsis" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></symbol><symbol id="i-file-pen" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.659 22H18a2 2 0 0 0 2-2V8a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 14 2H6a2 2 0 0 0-2 2v9.34"></path><path d="M14 2v5a1 1 0 0 0 1 1h5"></path><path d="M10.378 12.622a1 1 0 0 1 3 3.003L8.36 20.637a2 2 0 0 1-.854.506l-2.867.837a.5.5 0 0 1-.62-.62l.836-2.869a2 2 0 0 1 .506-.853z"></path></symbol><symbol id="i-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"></path><path d="M14 2v5a1 1 0 0 0 1 1h5"></path></symbol><symbol id="i-flower" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 16.5A4.5 4.5 0 1 1 7.5 12 4.5 4.5 0 1 1 12 7.5a4.5 4.5 0 1 1 4.5 4.5 4.5 4.5 0 1 1-4.5 4.5"></path><path d="M12 7.5V9"></path><path d="M7.5 12H9"></path><path d="M16.5 12H15"></path><path d="M12 16.5V15"></path><path d="m8 8 1.88 1.88"></path><path d="M14.12 9.88 16 8"></path><path d="m8 16 1.88-1.88"></path><path d="M14.12 14.12 16 16"></path></symbol><symbol id="i-fold-vertical" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22v-6"></path><path d="M12 8V2"></path><path d="M4 12H2"></path><path d="M10 12H8"></path><path d="M16 12h-2"></path><path d="M22 12h-2"></path><path d="m15 19-3-3-3 3"></path><path d="m15 5-3 3-3-3"></path></symbol><symbol id="i-gauge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 14 4-4"></path><path d="M3.34 19a10 10 0 1 1 17.32 0"></path></symbol><symbol id="i-git-branch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6a9 9 0 0 0-9 9V3"></path><circle cx="18" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle></symbol><symbol id="i-grip-vertical" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="12" r="1"></circle><circle cx="9" cy="5" r="1"></circle><circle cx="9" cy="19" r="1"></circle><circle cx="15" cy="12" r="1"></circle><circle cx="15" cy="5" r="1"></circle><circle cx="15" cy="19" r="1"></circle></symbol><symbol id="i-list-todo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 5h8"></path><path d="M13 12h8"></path><path d="M13 19h8"></path><path d="m3 17 2 2 4-4"></path><rect x="3" y="4" width="6" height="6" rx="1"></rect></symbol><symbol id="i-loader-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></symbol><symbol id="i-lock-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></symbol><symbol id="i-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16"></path><path d="M4 12h16"></path><path d="M4 19h16"></path></symbol><symbol id="i-message-circle-question-mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719"></path><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><path d="M12 17h.01"></path></symbol><symbol id="i-panel-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="M9 3v18"></path></symbol><symbol id="i-panel-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="M15 3v18"></path></symbol><symbol id="i-paperclip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551"></path></symbol><symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"></path><path d="M12 5v14"></path></symbol><symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 21-4.34-4.34"></path><circle cx="11" cy="11" r="8"></circle></symbol><symbol id="i-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"></path><circle cx="12" cy="12" r="3"></circle></symbol><symbol id="i-shield-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"></path><path d="M12 8v4"></path><path d="M12 16h.01"></path></symbol><symbol id="i-sliders-horizontal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 5H3"></path><path d="M12 19H3"></path><path d="M14 3v4"></path><path d="M16 17v4"></path><path d="M21 12h-9"></path><path d="M21 19h-5"></path><path d="M21 5h-7"></path><path d="M8 10v4"></path><path d="M8 12H3"></path></symbol><symbol id="i-sparkles" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"></path><path d="M20 2v4"></path><path d="M22 4h-4"></path><circle cx="4" cy="20" r="2"></circle></symbol><symbol id="i-split" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5"></path><path d="M8 3H3v5"></path><path d="M12 22v-8.3a4 4 0 0 0-1.172-2.872L3 3"></path><path d="m15 9 6-6"></path></symbol><symbol id="i-square-check-big" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10.656V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12.344"></path><path d="m9 11 3 3L22 4"></path></symbol><symbol id="i-square-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="M7 8h10"></path><path d="M7 12h10"></path><path d="M7 16h10"></path></symbol><symbol id="i-square-pen" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z"></path></symbol><symbol id="i-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"></path></symbol><symbol id="i-terminal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19h8"></path><path d="m4 17 6-6-6-6"></path></symbol><symbol id="i-toy-brick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="12" x="3" y="8" rx="1"></rect><path d="M10 8V5c0-.6-.4-1-1-1H6a1 1 0 0 0-1 1v3"></path><path d="M19 8V5c0-.6-.4-1-1-1h-3a1 1 0 0 0-1 1v3"></path></symbol><symbol id="i-unfold-vertical" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22v-6"></path><path d="M12 8V2"></path><path d="M4 12H2"></path><path d="M10 12H8"></path><path d="M16 12h-2"></path><path d="M22 12h-2"></path><path d="m15 19-3 3-3-3"></path><path d="m15 5-3-3-3 3"></path></symbol><symbol id="i-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"></path><path d="m17 8-5-5-5 5"></path><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path></symbol><symbol id="i-user-round" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"></circle><path d="M20 21a8 8 0 0 0-16 0"></path></symbol><symbol id="i-workflow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="8" x="3" y="3" rx="2"></rect><path d="M7 11v4a2 2 0 0 0 2 2h4"></path><rect width="8" height="8" x="13" y="13" rx="2"></rect></symbol><symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></symbol><symbol id="i-zap" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15.914 4a1.5 1.5 0 00-2.474-1.561l-9 9A1.5 1.5 0 005.5 14h4.002a.5.5 0 01.471.666L8.086 20a1.5 1.5 0 002.475 1.56l9-9A1.5 1.5 0 0018.5 10h-3.997a.5.5 0 01-.472-.667z"></path></symbol><symbol id="i-book-text" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"></path><path d="M8 11h8"></path><path d="M8 7h6"></path></symbol><symbol id="i-command" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3"></path></symbol><symbol id="i-cpu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20v2"></path><path d="M12 2v2"></path><path d="M17 20v2"></path><path d="M17 2v2"></path><path d="M2 12h2"></path><path d="M2 17h2"></path><path d="M2 7h2"></path><path d="M20 12h2"></path><path d="M20 17h2"></path><path d="M20 7h2"></path><path d="M7 20v2"></path><path d="M7 2v2"></path><rect x="4" y="4" width="16" height="16" rx="2"></rect><rect x="8" y="8" width="8" height="8" rx="1"></rect></symbol><symbol id="i-plug" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22v-5"></path><path d="M15 8V2"></path><path d="M17 8a1 1 0 0 1 1 1v4a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1z"></path><path d="M9 8V2"></path></symbol><symbol id="i-type" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v16"></path><path d="M4 7V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2"></path><path d="M9 20h6"></path></symbol></svg>
+
+<div style="display:flex;flex:1;min-height:0;overflow:hidden">
+
+  <!-- ── Sidebar (KannaSidebar.tsx) ────────────────────────────────── -->
+  <div style="position:relative;flex:0 0 275px;width:275px;height:calc(100% - 16px);margin:8px 0 8px 8px;display:flex;flex-direction:column;user-select:none;background:light-dark(oklch(99.5% 0.003 13),oklch(23% 0.01 13));border:1px solid light-dark(oklch(91% 0.008 13),oklch(29% 0.008 13));border-radius:16px">
+
+    <div style="display:flex;align-items:center;justify-content:space-between;height:55px;max-height:55px;padding:0 7px 0 12px;border-bottom:1px solid light-dark(oklch(91% 0.008 13),oklch(29% 0.008 13))">
+      <div style="display:flex;align-items:center;gap:8px">
+        <button type="button" aria-label="Collapse sidebar" style="position:relative;display:flex;align-items:center;justify-content:center;height:24px;width:24px;background:none;border:0;padding:0;cursor:pointer">
+          <svg style="position:absolute;inset:2px;height:20px;width:20px" viewBox="0 0 24 24" fill="none" stroke="oklch(71.2% 0.194 13.428)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 16.5A4.5 4.5 0 1 1 7.5 12 4.5 4.5 0 1 1 12 7.5a4.5 4.5 0 1 1 4.5 4.5 4.5 4.5 0 1 1-4.5 4.5"></path><path d="M12 7.5V9"></path><path d="M7.5 12H9"></path><path d="M16.5 12H15"></path><path d="M12 16.5V15"></path><path d="m8 8 1.88 1.88"></path><path d="M14.12 9.88 16 8"></path><path d="m8 16 1.88-1.88"></path><path d="M14.12 14.12 16 16"></path></svg>
+        </button>
+        <span style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:16px;color:light-dark(oklch(16% 0.01 13),oklch(98% 0.003 13))">Kanna</span>
+      </div>
+      <div style="display:flex;align-items:center">
+        <button type="button" title="Import Claude Code sessions" aria-label="Import Claude Code sessions" style="display:inline-flex;align-items:center;justify-content:center;height:40px;width:40px;border-radius:8px;border:1px solid transparent;background:none;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13));cursor:pointer">
+          <svg viewBox="0 0 24 24" style="height:16px;width:16px"><use href="#i-download"></use></svg>
+        </button>
+        <button type="button" title="New project" aria-label="New project" style="display:inline-flex;align-items:center;justify-content:center;height:40px;width:40px;border-radius:8px;border:1px solid transparent;background:none;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13));cursor:pointer">
+          <svg viewBox="0 0 24 24" style="height:16px;width:16px"><use href="#i-plus"></use></svg>
+        </button>
+      </div>
+    </div>
+
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 8px 4px;flex-shrink:0">
+      <button type="button" style="display:inline-flex;align-items:center;gap:6px;border-radius:9999px;border:1px solid light-dark(oklch(91% 0.008 13 / .5),oklch(29% 0.008 13 / .5));background:transparent;padding:4px 10px;font-size:12px;font-weight:500;letter-spacing:.005em;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13));cursor:pointer;font-family:inherit">
+        <svg viewBox="0 0 24 24" style="height:14px;width:14px"><use href="#i-square-check-big"></use></svg>Select
+      </button>
+      <button type="button" style="display:inline-flex;align-items:center;gap:6px;border-radius:9999px;border:1px solid light-dark(oklch(91% 0.008 13 / .5),oklch(29% 0.008 13 / .5));background:transparent;padding:4px 10px;font-size:12px;font-weight:500;letter-spacing:.005em;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13));cursor:pointer;font-family:inherit">
+        <svg viewBox="0 0 24 24" style="height:14px;width:14px;color:light-dark(oklch(46% 0.013 13 / .8),oklch(72% 0.012 13 / .8))"><use href="#i-fold-vertical"></use></svg>Collapse all
+      </button>
+    </div>
+
+    <div style="flex:1;min-height:0;overflow-y:auto;overflow-x:hidden">
+      <div style="padding:7px">
+
+        <div style="padding:8px 8px 4px;display:flex;align-items:center;gap:4px">
+          <span style="flex:1;min-width:0;font-size:12px;font-weight:600;letter-spacing:.025em;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13))">Projects</span>
+        </div>
+
+        <sc-for list="{{ groups }}" as="group" hint-placeholder-count="3">
+          <div style="margin-bottom:12px">
+            <div style="position:sticky;top:0;z-index:10;background:light-dark(oklch(99.5% 0.003 13),oklch(23% 0.01 13));padding:4px 8px;display:flex;align-items:center;gap:4px">
+              <button type="button" onClick="{{ group.onToggle }}" style="display:flex;align-items:center;gap:6px;min-width:0;flex:1;border-radius:6px;padding:2px 0;text-align:left;background:none;border:0;cursor:pointer;font-family:inherit">
+                <svg viewBox="0 0 24 24" style="height:14px;width:14px;flex-shrink:0;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13));transition:transform 150ms;transform:rotate({{ group.chevron }}deg)"><use href="#i-chevron-right"></use></svg>
+                <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;font-size:13px;font-weight:600;color:light-dark(oklch(16% 0.01 13 / .8),oklch(98% 0.003 13 / .8))">{{ group.name }}</span>
+              </button>
+              <div style="display:flex;align-items:center;gap:1px">
+                <button type="button" aria-label="Project options" style="display:inline-flex;align-items:center;justify-content:center;height:32px;width:32px;border-radius:4px;border:0;background:none;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13));cursor:pointer">
+                  <svg viewBox="0 0 24 24" style="height:14px;width:14px"><use href="#i-ellipsis"></use></svg>
+                </button>
+                <button type="button" aria-label="New chat in this project" style="display:inline-flex;align-items:center;justify-content:center;height:32px;width:32px;border-radius:4px;border:0;background:none;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13));cursor:pointer">
+                  <svg viewBox="0 0 24 24" style="height:14px;width:14px"><use href="#i-square-pen"></use></svg>
+                </button>
+              </div>
+            </div>
+
+            <sc-if value="{{ group.open }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;flex-direction:column;gap:1px;padding-left:4px">
+              <sc-for list="{{ group.chats }}" as="chat" hint-placeholder-count="3">
+                <div style="display:flex;align-items:center;border-radius:6px;padding-right:4px;transition:background-color 150ms;background:{{ chat.rowBg }}">
+                  <button type="button" onClick="{{ chat.onSelect }}" style="display:flex;min-width:0;flex:1;align-items:center;gap:8px;padding:6px 0 6px 8px;text-align:left;background:none;border:0;cursor:pointer;font-family:inherit">
+                    <span style="position:relative;display:flex;height:14px;width:14px;flex-shrink:0;align-items:center;justify-content:center">
+                      <sc-if value="{{ chat.dot }}" hint-placeholder-val="{{ true }}">
+                        <span style="height:8px;width:8px;border-radius:9999px;background:{{ chat.dot }}"></span>
+                      </sc-if>
+                    </span>
+                    <sc-if value="{{ chat.sessionMark }}" hint-placeholder-val="{{ false }}">
+                      <span style="display:flex;flex-shrink:0;align-items:center;color:light-dark(oklch(37% 0.1 155),oklch(76% 0.14 155))">
+                        <svg viewBox="0 0 12 12" style="height:12px;width:12px"><circle cx="6" cy="6" r="4" fill="currentColor"></circle></svg>
+                      </span>
+                    </sc-if>
+                    <span style="min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px;font-weight:{{ chat.weight }};color:{{ chat.titleColor }}">{{ chat.title }}</span>
+                    <span style="display:flex;align-items:center;justify-content:flex-end;padding-right:4px;font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap;color:{{ chat.stampColor }}">{{ chat.stamp }}</span>
+                  </button>
+                  <div style="display:flex;height:32px;flex-shrink:0;align-items:center;justify-content:flex-end;min-width:48px">
+                    <button type="button" title="Fork chat" style="display:inline-flex;align-items:center;justify-content:center;height:32px;width:32px;border-radius:4px;border:0;background:none;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13));cursor:pointer">
+                      <svg viewBox="0 0 24 24" style="height:14px;width:14px"><use href="#i-split"></use></svg>
+                    </button>
+                    <button type="button" title="Archive chat" style="display:inline-flex;align-items:center;justify-content:center;height:32px;width:32px;border-radius:4px;border:0;background:none;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13));cursor:pointer">
+                      <svg viewBox="0 0 24 24" style="height:14px;width:14px"><use href="#i-archive"></use></svg>
+                    </button>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+            </sc-if>
+          </div>
+        </sc-for>
+
+      </div>
+    </div>
+
+    <div style="border-top:1px solid light-dark(oklch(91% 0.008 13),oklch(29% 0.008 13))">
+      <button type="button" style="width:100%;display:flex;align-items:center;gap:8px;padding:10px 12px;text-align:left;background:none;border:0;cursor:pointer;font-family:inherit;color:inherit">
+        <svg viewBox="0 0 24 24" style="height:16px;width:16px;flex-shrink:0;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13))"><use href="#i-workflow"></use></svg>
+        <span style="font-size:14px;flex:1">Workflows</span>
+      </button>
+      <button type="button" style="width:100%;display:flex;align-items:center;gap:8px;padding:10px 12px;text-align:left;background:none;border:0;cursor:pointer;font-family:inherit;color:inherit">
+        <svg viewBox="0 0 24 24" style="height:16px;width:16px;flex-shrink:0;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13))"><use href="#i-calendar-clock"></use></svg>
+        <span style="font-size:14px;flex:1">Cron jobs</span>
+      </button>
+      <button type="button" style="width:100%;display:flex;align-items:center;gap:8px;padding:10px 12px;text-align:left;background:none;border:0;cursor:pointer;font-family:inherit;color:inherit">
+        <svg viewBox="0 0 24 24" style="height:16px;width:16px;flex-shrink:0;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13))"><use href="#i-settings"></use></svg>
+        <span style="font-size:14px;flex:1">Settings</span>
+      </button>
+      <div style="display:flex;align-items:center;gap:8px;padding:2px 12px 10px">
+        <span style="height:6px;width:6px;border-radius:9999px;flex-shrink:0;background:light-dark(oklch(68% 0.15 155),oklch(72% 0.14 155))"></span>
+        <span style="font-size:12px;font-variant-numeric:tabular-nums;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13))">Connected</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Content outlet (App.tsx SHELL_CONTENT_CARD_CLASS) ─────────── -->
+  <div style="display:flex;flex:1;flex-direction:column;overflow:hidden;margin:8px 8px 8px 0;border:1px solid light-dark(oklch(91% 0.008 13),oklch(29% 0.008 13));border-radius:16px">
+    <div style="position:relative;display:flex;flex-direction:column;height:100%;overflow:hidden;background:light-dark(oklch(99.5% 0.003 13),oklch(20% 0.01 13))">
+
+      <!-- ChatNavbar -->
+      <div style="position:absolute;top:0;left:0;right:0;z-index:10;display:flex;flex-direction:column;padding:12px 12px 0;background:light-dark(oklch(99.5% 0.003 13),oklch(20% 0.01 13))">
+        <div style="position:relative;display:flex;align-items:center;gap:8px;width:100%">
+          <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;border:1px solid transparent;border-radius:16px;padding:4px">
+            <button type="button" title="Compose" aria-label="New chat" style="display:inline-flex;align-items:center;justify-content:center;height:36px;width:36px;border-radius:6px;border:1px solid transparent;background:none;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13));cursor:pointer">
+              <svg viewBox="0 0 24 24" style="height:18px;width:18px"><use href="#i-square-pen"></use></svg>
+            </button>
+          </div>
+
+          <div style="flex:1;min-width:0;display:flex;align-items:center;justify-content:center;user-select:none">
+            <div style="display:flex;align-items:center;gap:8px;min-width:0">
+              <span style="display:flex;align-items:center;gap:4px">
+                <svg viewBox="0 0 9 13" aria-hidden="true" style="display:inline-block;height:14px;width:9px;flex-shrink:0;vertical-align:-2px;color:light-dark(oklch(16% 0.01 13),oklch(98% 0.003 13))">
+                  <line x1="2.5" y1="1" x2="2.5" y2="12" stroke="currentColor" stroke-width="1.5"></line>
+                  <line x1="6.5" y1="1" x2="6.5" y2="12" stroke="currentColor" stroke-width="1.5"></line>
+                </svg>
+                <span style="font-size:12px;font-weight:500;color:light-dark(oklch(16% 0.01 13),oklch(98% 0.003 13))">Running</span>
+              </span>
+              <span style="font-family:'Roboto Mono',monospace;font-size:12px;font-variant-numeric:tabular-nums;color:light-dark(oklch(16% 0.01 13 / .8),oklch(98% 0.003 13 / .8))">{{ liveDuration }}</span>
+              <svg role="img" aria-label="Session shape: 5 turns, running" viewBox="0 0 26 26" style="height:26px;width:26px;flex-shrink:0">
+                <line x1="1" y1="19" x2="25" y2="19" stroke="currentColor" stroke-width="1" style="color:light-dark(oklch(91% 0.008 13),oklch(29% 0.008 13))"></line>
+                <g style="color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13))">
+                  <line x1="4" y1="18.5" x2="4" y2="11" stroke="currentColor" stroke-width="1.4"></line>
+                  <line x1="8" y1="18.5" x2="8" y2="6" stroke="currentColor" stroke-width="1.4"></line>
+                  <line x1="12" y1="18.5" x2="12" y2="13" stroke="currentColor" stroke-width="1.4"></line>
+                  <line x1="16" y1="18.5" x2="16" y2="8" stroke="currentColor" stroke-width="1.4"></line>
+                </g>
+                <g style="color:oklch(71.2% 0.194 13.428)">
+                  <line x1="20" y1="18.5" x2="20" y2="4" stroke="currentColor" stroke-width="1.4"></line>
+                  <line x1="22" y1="18.5" x2="22" y2="4" stroke="currentColor" stroke-width="1.4"></line>
+                </g>
+              </svg>
+              <span style="height:12px;width:1px;background:light-dark(oklch(91% 0.008 13 / .6),oklch(29% 0.008 13 / .6))"></span>
+              <span style="font-size:12px;font-variant-numeric:tabular-nums;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13))">14m</span>
+              <span style="height:12px;width:1px;background:light-dark(oklch(91% 0.008 13 / .6),oklch(29% 0.008 13 / .6))"></span>
+              <span style="font-size:12px;font-variant-numeric:tabular-nums;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13))">1m 48s</span>
+            </div>
+          </div>
+
+          <div style="display:flex;align-items:center;flex-shrink:0;border:1px solid light-dark(oklch(91% 0.008 13),oklch(29% 0.008 13));border-radius:16px">
+            <button type="button" aria-label="Silence notifications" style="display:flex;align-items:center;justify-content:center;border:1px solid transparent;padding:0 6px;height:36px;background:none;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13));cursor:pointer">
+              <svg viewBox="0 0 24 24" style="height:18px;width:18px"><use href="#i-bell"></use></svg>
+            </button>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+            <div style="padding:2px 0;border:1px solid light-dark(oklch(91% 0.008 13),oklch(29% 0.008 13));border-radius:16px;display:flex;align-items:center">
+              <button type="button" style="display:flex;align-items:center;gap:6px;height:36px;padding:0 10px;border:0;background:none;font-size:13px;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13));cursor:pointer;font-family:inherit">
+                <svg viewBox="0 0 24 24" style="height:16px;width:16px"><use href="#i-file"></use></svg>Cursor
+              </button>
+            </div>
+            <div style="display:flex;align-items:center;border:1px solid light-dark(oklch(91% 0.008 13),oklch(29% 0.008 13));border-radius:16px;padding:2px 8px">
+              <button type="button" aria-label="Toggle terminal" style="display:flex;align-items:center;justify-content:center;border:1px solid transparent;padding:0 6px;height:36px;background:none;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13));cursor:pointer">
+                <svg viewBox="0 0 24 24" style="height:18px;width:18px"><use href="#i-terminal"></use></svg>
+              </button>
+              <button type="button" style="display:flex;flex-direction:row;align-items:center;gap:6px;height:36px;border:1px solid transparent;padding-left:6px;padding-right:8px;background:none;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13));cursor:pointer;font-family:inherit">
+                <svg viewBox="0 0 24 24" style="height:16px;width:16px"><use href="#i-git-branch"></use></svg>
+                <span style="font-size:13px;font-family:'Roboto Mono',monospace;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">feat/pty-smoke-gate</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Transcript -->
+      <div style="height:100%;flex:1;overflow-y:auto;overflow-x:hidden;padding:0 12px">
+        <div style="margin:0 auto;width:100%;max-width:800px;padding-top:72px"></div>
+
+        <div style="margin:0 auto;width:100%;max-width:800px;padding-top:16px">
+          <div style="display:flex;flex-direction:column;align-items:flex-start;gap:8px">
+            <div style="display:flex;width:100%;flex-direction:column;gap:2px">
+              <span style="display:flex;align-items:center;gap:6px;user-select:none;font-size:15px;font-weight:600;line-height:1.375;color:light-dark(oklch(16% 0.01 13),oklch(98% 0.003 13))">You</span>
+              <div style="min-width:0;font-size:14px;line-height:1.7;color:light-dark(oklch(16% 0.01 13),oklch(98% 0.003 13))">The PTY smoke-test gate is re-running on every spawn. Cache it per spawn and keep the failure-mode parity.</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin:0 auto;width:100%;max-width:800px;padding-top:16px">
+          <div style="font-size:14px;line-height:1.7;max-width:70ch;padding:0 2px;color:light-dark(oklch(16% 0.01 13),oklch(98% 0.003 13))">Looking at the driver now — the gate lives in the spawn path, so every <code style="font-family:'Roboto Mono',monospace;font-size:.875em;padding:1px 3px;border-radius:4px;background:light-dark(oklch(97% 0.005 13),oklch(25% 0.01 13))">claude</code> launch pays for it. I'll read the current implementation first.</div>
+        </div>
+
+        <sc-for list="{{ toolRows }}" as="tool" hint-placeholder-count="3">
+          <div style="margin:0 auto;width:100%;max-width:800px;padding-top:16px">
+            <div style="display:flex;gap:12px;justify-content:flex-start;align-items:center;width:100%">
+              <div style="display:flex;flex-direction:column;width:100%">
+                <button type="button" style="display:grid;grid-template-columns:auto 1fr;align-items:center;gap:4px;font-size:14px;background:none;border:0;padding:0;cursor:pointer;text-align:left;font-family:inherit;color:inherit">
+                  <div style="display:grid;grid-template-columns:auto 1fr;align-items:center;gap:6px">
+                    <div style="width:20px;height:20px;position:relative;display:flex;align-items:center;justify-content:center">
+                      <svg viewBox="0 0 24 24" style="height:16px;width:16px;color:light-dark(oklch(82% 0.008 13),oklch(55% 0.01 13))"><use href="{{ tool.icon }}"></use></svg>
+                    </div>
+                    <span style="font-weight:500;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:light-dark(oklch(16% 0.01 13 / .8),oklch(98% 0.003 13 / .8))">{{ tool.label }}</span>
+                  </div>
+                  <svg viewBox="0 0 24 24" style="height:18px;width:18px;opacity:0;color:light-dark(oklch(82% 0.008 13),oklch(55% 0.01 13))"><use href="#i-chevron-right"></use></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </sc-for>
+
+        <div style="margin:0 auto;width:100%;max-width:800px;padding-top:16px">
+          <div style="display:flex;gap:12px;justify-content:flex-start;align-items:center;margin-left:1px">
+            <div style="display:flex;align-items:center;gap:6px;font-size:12px">
+              <svg viewBox="0 0 24 24" style="height:18px;width:18px;color:light-dark(oklch(82% 0.008 13),oklch(55% 0.01 13));animation:kanna-spin 1s linear infinite"><use href="#i-loader-circle"></use></svg>
+              <span style="margin-left:1px;font-size:14px;color:light-dark(oklch(16% 0.01 13 / .6),oklch(98% 0.003 13 / .6));animation:kanna-shiny-pulse 1.6s ease-in-out infinite">Running...</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="height:220px"></div>
+      </div>
+
+      <!-- Composer (ChatInput.tsx) -->
+      <div style="position:absolute;bottom:0;left:0;right:0;z-index:20;pointer-events:none">
+        <div style="pointer-events:auto;background:linear-gradient(to top,light-dark(oklch(99.5% 0.003 13),oklch(20% 0.01 13)),light-dark(oklch(99.5% 0.003 13),oklch(20% 0.01 13)) 60%,transparent)">
+          <div style="padding:0 12px">
+            <div style="max-width:840px;margin:0 auto">
+              <div style="position:relative;display:flex;align-items:flex-end;max-width:840px;margin:0 auto;border-radius:12px;border:1px solid light-dark(oklch(91% 0.008 13),oklch(29% 0.008 13));background:light-dark(oklch(99.5% 0.003 13),oklch(23% 0.01 13 / .9));padding-right:6px">
+                <button type="button" aria-label="Add attachment" style="position:relative;flex-shrink:0;margin-left:4px;margin-bottom:4px;height:44px;width:44px;border-radius:9999px;border:1px solid transparent;background:none;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13));display:inline-flex;align-items:center;justify-content:center;cursor:pointer">
+                  <svg viewBox="0 0 24 24" style="height:20px;width:20px"><use href="#i-paperclip"></use></svg>
+                </button>
+                <div style="position:relative;flex:1;min-width:0">
+                  <div style="pointer-events:none;position:absolute;top:16px;left:24px;font-size:16px;white-space:nowrap;user-select:none;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13))">Build something...</div>
+                  <div role="textbox" aria-label="Chat input" style="flex:1;font-size:16px;padding:16px 8px 16px 24px;min-height:44px;max-height:200px;outline:none;background:transparent;border:0;overflow:auto"></div>
+                </div>
+                <button type="button" aria-label="Send message" style="flex-shrink:0;background:light-dark(oklch(20% 0.012 13),oklch(98% 0.003 13));color:light-dark(oklch(99.5% 0.003 13),oklch(20% 0.01 13));border:0;border-radius:9999px;height:44px;width:44px;margin-bottom:6px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;opacity:.5">
+                  <svg viewBox="0 0 24 24" style="height:24px;width:24px"><use href="#i-arrow-up"></use></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div style="position:relative;padding:12px 0;max-width:840px;margin:0 auto">
+            <div style="display:flex;align-items:center;gap:8px">
+              <div style="min-width:0;flex:1">
+                <div style="display:flex;justify-content:center;align-items:center;gap:2px;margin:0 auto;max-width:840px;min-width:0;overflow:hidden">
+                  <button type="button" style="display:flex;min-height:36px;align-items:center;gap:6px;padding:4px 8px;font-size:14px;border-radius:6px;border:0;background:none;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13));cursor:pointer;font-family:inherit">
+                    <svg viewBox="0 0 24 24" fill="currentColor" stroke="none" style="height:14px;width:14px;flex-shrink:0"><path d="M17.3041 3.541h-3.6718l6.696 16.918H24Zm-10.6082 0L0 20.459h3.7442l1.3693-3.5527h7.0052l1.3693 3.5528h3.7442L10.5363 3.5409Zm-.3712 10.2232 2.2914-5.9456 2.2914 5.9456Z"></path></svg>
+                    <span style="white-space:nowrap">Claude</span>
+                  </button>
+                  <button type="button" style="display:flex;min-height:36px;align-items:center;gap:6px;padding:4px 8px;font-size:14px;border-radius:6px;border:0;background:none;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13));cursor:pointer;font-family:inherit">
+                    <svg viewBox="0 0 24 24" style="height:14px;width:14px;flex-shrink:0"><use href="#i-box"></use></svg>
+                    <span style="white-space:nowrap">Sonnet 4.6</span>
+                  </button>
+                  <button type="button" style="display:flex;min-height:36px;align-items:center;gap:6px;padding:4px 8px;font-size:14px;border-radius:6px;border:0;background:none;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13));cursor:pointer;font-family:inherit">
+                    <svg viewBox="0 0 24 24" style="height:14px;width:14px;flex-shrink:0"><use href="#i-brain"></use></svg>
+                    <span style="white-space:nowrap">Medium</span>
+                  </button>
+                  <button type="button" style="display:flex;min-height:36px;align-items:center;gap:6px;padding:4px 8px;font-size:14px;border-radius:6px;border:0;background:none;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13));cursor:pointer;font-family:inherit">
+                    <svg viewBox="0 0 24 24" style="height:14px;width:14px;flex-shrink:0"><use href="#i-square-menu"></use></svg>
+                    <span style="white-space:nowrap">1M</span>
+                  </button>
+                  <button type="button" style="display:flex;min-height:36px;align-items:center;gap:6px;padding:4px 8px;font-size:14px;border-radius:6px;border:0;background:none;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13));cursor:pointer;font-family:inherit">
+                    <svg viewBox="0 0 24 24" style="height:14px;width:14px;flex-shrink:0"><use href="#i-lock-open"></use></svg>
+                    <span style="white-space:nowrap">Full Access</span>
+                  </button>
+                </div>
+              </div>
+              <div style="display:flex;flex-shrink:0;align-items:center;gap:8px;padding-right:12px;min-width:0">
+                <button type="button" style="display:inline-flex;min-height:36px;align-items:center;gap:6px;border-radius:6px;background:light-dark(oklch(97% 0.005 13 / .3),oklch(25% 0.01 13 / .3));padding:6px 10px;font-size:12px;font-variant-numeric:tabular-nums;border:0;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13));cursor:pointer;font-family:inherit">
+                  <span style="display:inline-flex;align-items:baseline;gap:4px"><span style="font-weight:500;color:light-dark(oklch(16% 0.01 13),oklch(98% 0.003 13))">41.2k</span><span>in</span></span>
+                  <span aria-hidden="true" style="color:light-dark(oklch(46% 0.013 13 / .5),oklch(72% 0.012 13 / .5))">·</span>
+                  <span style="display:inline-flex;align-items:baseline;gap:4px"><span style="font-weight:500;color:light-dark(oklch(16% 0.01 13),oklch(98% 0.003 13))">6.8k</span><span>out</span></span>
+                  <span aria-hidden="true" style="color:light-dark(oklch(46% 0.013 13 / .5),oklch(72% 0.012 13 / .5))">·</span>
+                  <span style="display:inline-flex;align-items:baseline;gap:4px"><span style="font-weight:500;color:light-dark(oklch(16% 0.01 13),oklch(98% 0.003 13))">87%</span><span>cache</span></span>
+                  <span aria-hidden="true" style="color:light-dark(oklch(46% 0.013 13 / .5),oklch(72% 0.012 13 / .5))">·</span>
+                  <span style="font-variant-numeric:tabular-nums">$0.14</span>
+                </button>
+                <button type="button" aria-label="Context window 23% used" style="display:inline-flex;height:36px;width:36px;align-items:center;justify-content:center;border-radius:9999px;border:0;background:none;cursor:pointer">
+                  <span style="position:relative;display:flex;height:24px;width:24px;align-items:center;justify-content:center">
+                    <svg viewBox="0 0 24 24" aria-hidden="true" style="position:absolute;inset:0;height:100%;width:100%;transform:rotate(-90deg)">
+                      <circle cx="12" cy="12" r="9.75" fill="none" stroke="currentColor" stroke-width="2" style="color:light-dark(oklch(46% 0.013 13 / .2),oklch(72% 0.012 13 / .2))"></circle>
+                      <circle cx="12" cy="12" r="9.75" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="61.26" stroke-dashoffset="47.17" style="color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13))"></circle>
+                    </svg>
+                    <span style="position:relative;display:flex;height:20px;width:20px;align-items:center;justify-content:center;border-radius:9999px;background:light-dark(oklch(99.5% 0.003 13),oklch(20% 0.01 13));font-size:12px;font-weight:500;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13))">23</span>
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;system&quot;,&quot;light&quot;,&quot;dark&quot;],&quot;default&quot;:&quot;system&quot;,&quot;tsType&quot;:&quot;\&quot;system\&quot; | \&quot;light\&quot; | \&quot;dark\&quot;&quot;}}">
+class Component extends DCLogic {
+  state = {
+    activeChatId: "c1",
+    open: { kanna: true, wiki: true, portfolio: true },
+    elapsedMs: 108000,
+  }
+
+  rootRef = React.createRef()
+
+  componentDidMount() {
+    const theme = this.props.theme ?? "system"
+    if (this.rootRef.current && theme !== "system") {
+      this.rootRef.current.style.colorScheme = theme
+    }
+    this.tick = setInterval(() => this.setState((s) => ({ elapsedMs: s.elapsedMs + 1000 })), 1000)
+  }
+
+  componentDidUpdate(prev) {
+    if (prev.theme !== this.props.theme && this.rootRef.current) {
+      this.rootRef.current.style.colorScheme = (this.props.theme ?? "system") === "system" ? "light dark" : this.props.theme
+    }
+  }
+
+  componentWillUnmount() { clearInterval(this.tick) }
+
+  static DATA = [
+    {
+      key: "kanna", name: "kanna",
+      chats: [
+        { id: "c1", title: "Fix PTY smoke-test gate", status: "running", stamp: "Running 1m 48s", canFork: true, session: true },
+        { id: "c2", title: "OAuth pool fallover", status: "waiting_for_user", stamp: "Waiting 22s", canFork: true },
+        { id: "c3", title: "Bump legend-list to 3.3.10", status: "idle", stamp: "3h", unread: false },
+        { id: "c4", title: "Import ~/.claude sessions", status: "idle", stamp: "1d", unread: true },
+      ],
+    },
+    {
+      key: "wiki", name: "kanna-wiki",
+      chats: [
+        { id: "c5", title: "Rewrite the PTY driver page", status: "idle", stamp: "2d" },
+        { id: "c6", title: "Add expose_port walkthrough", status: "failed", stamp: "Failed 4d" },
+      ],
+    },
+    {
+      key: "portfolio", name: "lowbit-link",
+      chats: [{ id: "c7", title: "Star-history embed", status: "idle", stamp: "6d" }],
+    },
+  ]
+
+  dotFor(chat) {
+    if (chat.status === "running" || chat.status === "starting") return "light-dark(oklch(76% 0.14 78),oklch(80% 0.13 78))"
+    if (chat.status === "waiting_for_user") return "light-dark(oklch(66% 0.13 235),oklch(72% 0.12 235))"
+    if (chat.status === "failed") return "oklch(71.2% 0.194 13.428)"
+    if (chat.unread) return "light-dark(oklch(68% 0.15 155),oklch(72% 0.14 155))"
+    return null
+  }
+
+  stampColorFor(chat) {
+    if (chat.status === "running" || chat.status === "starting") return "light-dark(oklch(42% 0.09 78),oklch(80% 0.13 78))"
+    if (chat.status === "waiting_for_user") return "light-dark(oklch(38% 0.09 235),oklch(72% 0.12 235))"
+    return "light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13))"
+  }
+
+  renderVals() {
+    const active = this.state.activeChatId
+    const groups = Component.DATA.map((g) => {
+      const open = this.state.open[g.key] !== false
+      return {
+        name: g.name,
+        open,
+        chevron: open ? 90 : 0,
+        onToggle: () => this.setState((s) => ({ open: { ...s.open, [g.key]: !open } })),
+        chats: g.chats.map((c) => {
+          const isActive = c.id === active
+          let titleColor = "light-dark(oklch(16% 0.01 13 / .9),oklch(98% 0.003 13 / .9))"
+          if (isActive) titleColor = "light-dark(oklch(16% 0.01 13),oklch(98% 0.003 13))"
+          else if (c.status === "idle" && !c.unread) titleColor = "light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13))"
+          return {
+            title: c.title,
+            stamp: c.stamp,
+            dot: this.dotFor(c),
+            sessionMark: Boolean(c.session),
+            weight: isActive ? 500 : 400,
+            titleColor,
+            stampColor: this.stampColorFor(c),
+            rowBg: isActive ? "light-dark(oklch(97% 0.005 13),oklch(25% 0.01 13))" : "transparent",
+            onSelect: () => this.setState({ activeChatId: c.id }),
+          }
+        }),
+      }
+    })
+
+    const total = Math.floor(this.state.elapsedMs / 1000)
+    const liveDuration = `${Math.floor(total / 60)}m ${String(total % 60).padStart(2, "0")}s`
+
+    return {
+      rootRef: this.rootRef,
+      groups,
+      liveDuration,
+      toolRows: [
+        { icon: "#i-file", label: "Read src/server/claude-pty/spawn.ts" },
+        { icon: "#i-search", label: "Find `smokeTest` in files" },
+        { icon: "#i-file-pen", label: "Edit src/server/claude-pty/spawn.ts" },
+        { icon: "#i-terminal", label: "bun test claude-pty" },
+      ],
+    }
+  }
+}
+</script>
+</body>
+</html>

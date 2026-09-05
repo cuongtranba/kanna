@@ -85,6 +85,36 @@
     --kanna-font-body: "Body", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     --kanna-font-logo: "Bricolage Grotesque Variable", "Bricolage Grotesque", sans-serif;
     --kanna-font-mono: "Roboto Mono", monospace;
+
+    /*
+      Motion timing. These are the ONLY durations and easings the app animates
+      with; a literal `280ms` typed into a rule is drift no reviewer can see.
+
+      Every value here is mirrored in src/client/lib/motion/tokens.ts for the
+      JS-driven half (anime.js and Motion take numbers, not var()), and
+      src/server/design/motion-tokens.test.ts fails if the two disagree. Read
+      the token, never the number — the same discipline --shell-top-band gets
+      above.
+
+      No single beat exceeds 300ms. --motion-sequence is the one exception and
+      is a SUM: the new-session transition is five beats totalling 860ms.
+    */
+    --motion-instant: 80ms;
+    --motion-quick: 160ms;
+    --motion-row: 180ms;
+    --motion-panel: 280ms;
+    --motion-stagger-tight: 14ms;
+    --motion-stagger-row: 26ms;
+    --motion-stagger-loose: 40ms;
+    --motion-sequence: 860ms;
+
+    /*
+      Easings with a CSS spelling. `born` (anime.js `outBack(1.6)`) has no
+      cubic-bezier equivalent, so a rule that wants the overshoot has to move
+      to JS rather than approximate it here.
+    */
+    --motion-ease-arriving: cubic-bezier(0.22, 0.61, 0.36, 1);
+    --motion-ease-panel: cubic-bezier(0.22, 1, 0.36, 1);
   }
 
   /* Tailwind `md:` — the one responsive pivot (BREAKPOINT_MD in lib/viewport.ts). */

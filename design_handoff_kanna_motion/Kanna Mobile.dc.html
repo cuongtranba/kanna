@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script async src="https://cdn.jsdelivr.net/npm/animejs@4/lib/anime.iife.min.js"></script>
+<style>
+  html { color-scheme: light dark; }
+  body { margin:0; background: light-dark(oklch(99.5% 0.003 13), oklch(20% 0.01 13)); }
+  a { color: oklch(71.2% 0.194 13.428); text-decoration: none; }
+  a:hover { color: light-dark(oklch(56% 0.18 13), oklch(82% 0.14 13)); }
+  @keyframes km-caret { 0%,49%{opacity:1} 50%,100%{opacity:0} }
+  @keyframes km-shiny { 0%,100%{opacity:.5} 50%{opacity:1} }
+  @keyframes km-spin { to { transform: rotate(360deg) } }
+  @media (prefers-reduced-motion: reduce) { *,*::before,*::after { animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important } }
+</style>
+</helmet>
+
+<svg width="0" height="0" style="position:absolute;overflow:hidden" aria-hidden="true"><symbol id="i-archive" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="5" x="2" y="3" rx="1"></rect><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"></path><path d="M10 12h4"></path></symbol><symbol id="i-arrow-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"></path><path d="m19 12-7 7-7-7"></path></symbol><symbol id="i-arrow-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 7-7 7 7"></path><path d="M12 19V5"></path></symbol><symbol id="i-bell-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.268 21a2 2 0 0 0 3.464 0"></path><path d="M17 17H4a1 1 0 0 1-.74-1.673C4.59 13.956 6 12.499 6 8a6 6 0 0 1 .258-1.742"></path><path d="m2 2 20 20"></path><path d="M8.668 3.01A6 6 0 0 1 18 8c0 2.687.77 4.653 1.707 6.05"></path></symbol><symbol id="i-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.268 21a2 2 0 0 0 3.464 0"></path><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"></path></symbol><symbol id="i-bot" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"></path><rect width="16" height="12" x="4" y="8" rx="2"></rect><path d="M2 14h2"></path><path d="M20 14h2"></path><path d="M15 13v2"></path><path d="M9 13v2"></path></symbol><symbol id="i-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"></path><path d="m3.3 7 8.7 5 8.7-5"></path><path d="M12 22V12"></path></symbol><symbol id="i-brain" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 18V5"></path><path d="M15 13a4.17 4.17 0 0 1-3-4 4.17 4.17 0 0 1-3 4"></path><path d="M17.598 6.5A3 3 0 1 0 12 5a3 3 0 1 0-5.598 1.5"></path><path d="M17.997 5.125a4 4 0 0 1 2.526 5.77"></path><path d="M18 18a4 4 0 0 0 2-7.464"></path><path d="M19.967 17.483A4 4 0 1 1 12 18a4 4 0 1 1-7.967-.517"></path><path d="M6 18a4 4 0 0 1-2-7.464"></path><path d="M6.003 5.125a4 4 0 0 0-2.526 5.77"></path></symbol><symbol id="i-calendar-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 14v2.2l1.6 1"></path><path d="M16 2v3"></path><path d="M21 7.338V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2h2.338"></path><path d="M3 9h5.859"></path><path d="M8 2v3"></path><circle cx="16" cy="16" r="6"></circle></symbol><symbol id="i-check-line" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 4L9 15"></path><path d="M21 19L3 19"></path><path d="M9 15L4 10"></path></symbol><symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></symbol><symbol id="i-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"></path></symbol><symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></symbol><symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"></path><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><path d="m7 10 5 5 5-5"></path></symbol><symbol id="i-ellipsis" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></symbol><symbol id="i-file-pen" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.659 22H18a2 2 0 0 0 2-2V8a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 14 2H6a2 2 0 0 0-2 2v9.34"></path><path d="M14 2v5a1 1 0 0 0 1 1h5"></path><path d="M10.378 12.622a1 1 0 0 1 3 3.003L8.36 20.637a2 2 0 0 1-.854.506l-2.867.837a.5.5 0 0 1-.62-.62l.836-2.869a2 2 0 0 1 .506-.853z"></path></symbol><symbol id="i-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"></path><path d="M14 2v5a1 1 0 0 0 1 1h5"></path></symbol><symbol id="i-flower" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 16.5A4.5 4.5 0 1 1 7.5 12 4.5 4.5 0 1 1 12 7.5a4.5 4.5 0 1 1 4.5 4.5 4.5 4.5 0 1 1-4.5 4.5"></path><path d="M12 7.5V9"></path><path d="M7.5 12H9"></path><path d="M16.5 12H15"></path><path d="M12 16.5V15"></path><path d="m8 8 1.88 1.88"></path><path d="M14.12 9.88 16 8"></path><path d="m8 16 1.88-1.88"></path><path d="M14.12 14.12 16 16"></path></symbol><symbol id="i-fold-vertical" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22v-6"></path><path d="M12 8V2"></path><path d="M4 12H2"></path><path d="M10 12H8"></path><path d="M16 12h-2"></path><path d="M22 12h-2"></path><path d="m15 19-3-3-3 3"></path><path d="m15 5-3 3-3-3"></path></symbol><symbol id="i-gauge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 14 4-4"></path><path d="M3.34 19a10 10 0 1 1 17.32 0"></path></symbol><symbol id="i-git-branch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6a9 9 0 0 0-9 9V3"></path><circle cx="18" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle></symbol><symbol id="i-grip-vertical" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="12" r="1"></circle><circle cx="9" cy="5" r="1"></circle><circle cx="9" cy="19" r="1"></circle><circle cx="15" cy="12" r="1"></circle><circle cx="15" cy="5" r="1"></circle><circle cx="15" cy="19" r="1"></circle></symbol><symbol id="i-list-todo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 5h8"></path><path d="M13 12h8"></path><path d="M13 19h8"></path><path d="m3 17 2 2 4-4"></path><rect x="3" y="4" width="6" height="6" rx="1"></rect></symbol><symbol id="i-loader-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></symbol><symbol id="i-lock-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></symbol><symbol id="i-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16"></path><path d="M4 12h16"></path><path d="M4 19h16"></path></symbol><symbol id="i-message-circle-question-mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719"></path><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><path d="M12 17h.01"></path></symbol><symbol id="i-panel-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="M9 3v18"></path></symbol><symbol id="i-panel-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="M15 3v18"></path></symbol><symbol id="i-paperclip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551"></path></symbol><symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"></path><path d="M12 5v14"></path></symbol><symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 21-4.34-4.34"></path><circle cx="11" cy="11" r="8"></circle></symbol><symbol id="i-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"></path><circle cx="12" cy="12" r="3"></circle></symbol><symbol id="i-shield-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"></path><path d="M12 8v4"></path><path d="M12 16h.01"></path></symbol><symbol id="i-sliders-horizontal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 5H3"></path><path d="M12 19H3"></path><path d="M14 3v4"></path><path d="M16 17v4"></path><path d="M21 12h-9"></path><path d="M21 19h-5"></path><path d="M21 5h-7"></path><path d="M8 10v4"></path><path d="M8 12H3"></path></symbol><symbol id="i-sparkles" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"></path><path d="M20 2v4"></path><path d="M22 4h-4"></path><circle cx="4" cy="20" r="2"></circle></symbol><symbol id="i-split" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5"></path><path d="M8 3H3v5"></path><path d="M12 22v-8.3a4 4 0 0 0-1.172-2.872L3 3"></path><path d="m15 9 6-6"></path></symbol><symbol id="i-square-check-big" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10.656V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12.344"></path><path d="m9 11 3 3L22 4"></path></symbol><symbol id="i-square-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="M7 8h10"></path><path d="M7 12h10"></path><path d="M7 16h10"></path></symbol><symbol id="i-square-pen" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z"></path></symbol><symbol id="i-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"></path></symbol><symbol id="i-terminal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19h8"></path><path d="m4 17 6-6-6-6"></path></symbol><symbol id="i-toy-brick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="12" x="3" y="8" rx="1"></rect><path d="M10 8V5c0-.6-.4-1-1-1H6a1 1 0 0 0-1 1v3"></path><path d="M19 8V5c0-.6-.4-1-1-1h-3a1 1 0 0 0-1 1v3"></path></symbol><symbol id="i-unfold-vertical" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22v-6"></path><path d="M12 8V2"></path><path d="M4 12H2"></path><path d="M10 12H8"></path><path d="M16 12h-2"></path><path d="M22 12h-2"></path><path d="m15 19-3 3-3-3"></path><path d="m15 5-3-3-3 3"></path></symbol><symbol id="i-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"></path><path d="m17 8-5-5-5 5"></path><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path></symbol><symbol id="i-user-round" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"></circle><path d="M20 21a8 8 0 0 0-16 0"></path></symbol><symbol id="i-workflow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="8" x="3" y="3" rx="2"></rect><path d="M7 11v4a2 2 0 0 0 2 2h4"></path><rect width="8" height="8" x="13" y="13" rx="2"></rect></symbol><symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></symbol><symbol id="i-zap" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15.914 4a1.5 1.5 0 00-2.474-1.561l-9 9A1.5 1.5 0 005.5 14h4.002a.5.5 0 01.471.666L8.086 20a1.5 1.5 0 002.475 1.56l9-9A1.5 1.5 0 0018.5 10h-3.997a.5.5 0 01-.472-.667z"></path></symbol><symbol id="i-book-text" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"></path><path d="M8 11h8"></path><path d="M8 7h6"></path></symbol><symbol id="i-command" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3"></path></symbol><symbol id="i-cpu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20v2"></path><path d="M12 2v2"></path><path d="M17 20v2"></path><path d="M17 2v2"></path><path d="M2 12h2"></path><path d="M2 17h2"></path><path d="M2 7h2"></path><path d="M20 12h2"></path><path d="M20 17h2"></path><path d="M20 7h2"></path><path d="M7 20v2"></path><path d="M7 2v2"></path><rect x="4" y="4" width="16" height="16" rx="2"></rect><rect x="8" y="8" width="8" height="8" rx="1"></rect></symbol><symbol id="i-plug" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22v-5"></path><path d="M15 8V2"></path><path d="M17 8a1 1 0 0 1 1 1v4a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1z"></path><path d="M9 8V2"></path></symbol><symbol id="i-type" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v16"></path><path d="M4 7V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2"></path><path d="M9 20h6"></path></symbol></svg>
+
+<div ref="{{ pageRef }}" style="position:relative;width:100%;padding:56px 24px 96px;box-sizing:border-box;font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;-webkit-font-smoothing:antialiased;color:light-dark(oklch(16% 0.01 13),oklch(98% 0.003 13));background:light-dark(oklch(99.5% 0.003 13),oklch(20% 0.01 13))">
+
+<div style="max-width:1240px;margin:0 auto">
+
+  <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:36px">
+    <span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:oklch(71.2% 0.194 13.428)">07 &nbsp;/&nbsp; Mobile &amp; PWA</span>
+    <h2 style="margin:0;font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:clamp(28px,4vw,46px);line-height:1.05;letter-spacing:-.02em;max-width:24ch">On a phone, motion is the only navigation you have</h2>
+    <p style="margin:0;max-width:66ch;font-size:16px;line-height:1.65;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13));text-wrap:pretty">Below <code style="font-family:'Roboto Mono',monospace;font-size:.9em">768px</code> Kanna already swaps to one column: the sidebar becomes a full-screen overlay you can swipe in from the left edge, the status row shrinks to a pill, and the composer&rsquo;s preference pills collapse into a <em>Chat settings</em> dialog. All of that is real today &mdash; what&rsquo;s missing is that every one of those changes is instant, so the phone gives you no sense of where anything went. This is the same five-beat vocabulary, re-timed for a thumb. <a href="Kanna Motion.dc.html">Back to the desktop showcase</a></p>
+  </div>
+
+  <div style="display:grid;grid-template-columns:minmax(0,auto) minmax(280px,1fr);gap:36px;align-items:start">
+
+    <!-- ── the phone ─────────────────────────────────────────────── -->
+    <div data-m="phone" style="position:relative">
+      <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" width="{{ 402 }}" height="{{ 800 }}" dark="{{ isDark }}" hint-size="402px,800px">
+
+        <div style="position:relative;width:100%;height:100%;overflow:hidden;box-sizing:border-box;padding:59px 0 34px;background:light-dark(oklch(99.5% 0.003 13),oklch(20% 0.01 13));color:light-dark(oklch(16% 0.01 13),oklch(98% 0.003 13));display:flex;flex-direction:column">
+
+          <!-- ChatNavbar, mobile row -->
+          <div style="flex-shrink:0;display:flex;align-items:center;gap:8px;padding:4px 12px 0;height:52px;box-sizing:border-box">
+            <button data-m="hamburger" type="button" onClick="{{ openDrawer }}" aria-label="Open sidebar" style="display:inline-flex;align-items:center;justify-content:center;height:44px;width:44px;border-radius:6px;border:1px solid transparent;background:none;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13))">
+              <svg viewBox="0 0 24 24" style="height:18px;width:18px"><use href="#i-menu"></use></svg>
+            </button>
+            <div style="flex:1;min-width:0;display:flex;align-items:center;justify-content:center">
+              <span style="display:flex;align-items:center;gap:4px">
+                <span style="position:relative;display:inline-flex;align-items:center">
+                  <span data-m="pill-halo" style="position:absolute;inset:-4px -5px;border-radius:9999px;background:light-dark(oklch(76% 0.14 78),oklch(80% 0.13 78));opacity:.12"></span>
+                  <svg viewBox="0 0 9 13" aria-hidden="true" style="position:relative;height:14px;width:9px;color:light-dark(oklch(16% 0.01 13),oklch(98% 0.003 13))">
+                    <line x1="2.5" y1="1" x2="2.5" y2="12" stroke="currentColor" stroke-width="1.5"></line>
+                    <line x1="6.5" y1="1" x2="6.5" y2="12" stroke="currentColor" stroke-width="1.5"></line>
+                  </svg>
+                </span>
+                <span style="font-size:12px;font-weight:500;white-space:nowrap">Running</span>
+              </span>
+            </div>
+            <button type="button" aria-label="Silence notifications" style="display:inline-flex;align-items:center;justify-content:center;height:44px;width:44px;border-radius:6px;border:1px solid transparent;background:none;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13))">
+              <svg viewBox="0 0 24 24" style="height:18px;width:18px"><use href="#i-bell"></use></svg>
+            </button>
+          </div>
+
+          <!-- transcript -->
+          <div style="flex:1;min-height:0;overflow:hidden;padding:0 12px">
+            <div data-m="m-transcript" style="display:flex;flex-direction:column;gap:16px;padding-top:8px">
+              <div style="display:flex;flex-direction:column;gap:2px">
+                <span style="font-size:15px;font-weight:600">You</span>
+                <span style="font-size:14px;line-height:1.7">Cache the smoke-test gate per spawn.</span>
+              </div>
+              <div style="font-size:14px;line-height:1.7">The gate lives in the spawn path, so every launch pays for it.</div>
+              <sc-for list="{{ mobileTools }}" as="tool" hint-placeholder-count="3">
+                <div style="display:grid;grid-template-columns:20px minmax(0,1fr);align-items:center;gap:7px">
+                  <svg viewBox="0 0 24 24" style="height:16px;width:16px;color:light-dark(oklch(82% 0.008 13),oklch(55% 0.01 13))"><use href="{{ tool.icon }}"></use></svg>
+                  <span style="font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:light-dark(oklch(16% 0.01 13 / .8),oklch(98% 0.003 13 / .8))">{{ tool.label }}</span>
+                </div>
+              </sc-for>
+              <div style="display:flex;align-items:center;gap:7px">
+                <svg viewBox="0 0 24 24" style="height:18px;width:18px;color:light-dark(oklch(82% 0.008 13),oklch(55% 0.01 13));animation:km-spin 1s linear infinite"><use href="#i-loader-circle"></use></svg>
+                <span style="font-size:14px;color:light-dark(oklch(16% 0.01 13 / .6),oklch(98% 0.003 13 / .6));animation:km-shiny 1.6s ease-in-out infinite">Running...</span>
+              </div>
+            </div>
+
+            <!-- empty state, for the new-session beat -->
+            <div data-m="m-empty" style="position:absolute;inset:112px 16px 230px;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none">
+              <div style="display:flex;flex-direction:column;align-items:center;gap:14px;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13))">
+                <svg data-m="m-flower" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="height:32px;width:32px"><circle cx="12" cy="12" r="3"></circle><path d="M12 16.5A4.5 4.5 0 1 1 7.5 12 4.5 4.5 0 1 1 12 7.5a4.5 4.5 0 1 1 4.5 4.5 4.5 4.5 0 1 1-4.5 4.5"></path><path d="M12 7.5V9"></path><path d="M7.5 12H9"></path><path d="M16.5 12H15"></path><path d="M12 16.5V15"></path><path d="m8 8 1.88 1.88"></path><path d="M14.12 9.88 16 8"></path><path d="m8 16 1.88-1.88"></path><path d="M14.12 14.12 16 16"></path></svg>
+                <span style="display:inline-flex;align-items:center;font-size:15px;white-space:nowrap"><span data-m="m-empty-text"></span><span style="display:inline-block;width:1px;height:1.05em;margin-left:2px;background:currentColor;animation:km-caret .9s step-end infinite"></span></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- composer, mobile -->
+          <div data-m="m-composer" style="flex-shrink:0;padding:0 12px 8px">
+            <div style="position:relative;display:flex;align-items:flex-end;border-radius:12px;border:1px solid light-dark(oklch(91% 0.008 13),oklch(29% 0.008 13));background:light-dark(oklch(99.5% 0.003 13),oklch(23% 0.01 13 / .9));padding-right:6px;overflow:hidden">
+              <span data-m="m-sweep" style="position:absolute;left:0;right:0;bottom:0;height:1.5px;background:oklch(71.2% 0.194 13.428);transform:scaleX(0);transform-origin:left"></span>
+              <span style="display:inline-flex;align-items:center;justify-content:center;height:44px;width:44px;margin:0 0 4px 4px;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13))"><svg viewBox="0 0 24 24" style="height:20px;width:20px"><use href="#i-paperclip"></use></svg></span>
+              <div style="position:relative;flex:1;min-width:0;padding:12px 8px 12px 4px;font-size:16px;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13))">
+                <span>Build something...</span><span data-m="m-caret" style="display:inline-block;width:2px;height:1.1em;margin-left:1px;vertical-align:-2px;background:oklch(71.2% 0.194 13.428);opacity:0"></span>
+              </div>
+              <span style="display:inline-flex;align-items:center;justify-content:center;height:44px;width:44px;margin-bottom:4px;border-radius:9999px;background:light-dark(oklch(20% 0.012 13),oklch(98% 0.003 13));color:light-dark(oklch(99.5% 0.003 13),oklch(20% 0.01 13));opacity:.5"><svg viewBox="0 0 24 24" style="height:20px;width:20px"><use href="#i-arrow-up"></use></svg></span>
+            </div>
+
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:12px">
+              <button data-m="settings-trigger" type="button" onClick="{{ openSheet }}" style="display:inline-flex;align-items:center;gap:8px;height:44px;padding:0 14px;border-radius:6px;border:1px solid light-dark(oklch(91% 0.008 13),oklch(29% 0.008 13));background:light-dark(oklch(99.5% 0.003 13),oklch(23% 0.01 13));font-family:inherit;font-size:14px;font-weight:500;color:inherit">
+                <svg viewBox="0 0 24 24" style="height:16px;width:16px"><use href="#i-sliders-horizontal"></use></svg>Chat settings
+              </button>
+              <div style="display:flex;align-items:center;gap:8px;min-width:0">
+                <span style="display:inline-flex;align-items:center;gap:5px;border-radius:6px;background:light-dark(oklch(97% 0.005 13 / .4),oklch(25% 0.01 13 / .4));padding:6px 8px;font-size:11px;font-variant-numeric:tabular-nums;white-space:nowrap;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13))"><span style="font-weight:500;color:light-dark(oklch(16% 0.01 13),oklch(98% 0.003 13))">41.2k</span> in</span>
+                <span style="position:relative;display:inline-flex;height:24px;width:24px;align-items:center;justify-content:center;flex-shrink:0">
+                  <svg viewBox="0 0 24 24" aria-hidden="true" style="position:absolute;inset:0;height:100%;width:100%;transform:rotate(-90deg)">
+                    <circle cx="12" cy="12" r="9.75" fill="none" stroke="currentColor" stroke-width="2" style="color:light-dark(oklch(46% 0.013 13 / .2),oklch(72% 0.012 13 / .2))"></circle>
+                    <circle cx="12" cy="12" r="9.75" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="61.26" stroke-dashoffset="47.17" style="color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13))"></circle>
+                  </svg>
+                  <span style="position:relative;font-size:11px;font-weight:500;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13))">23</span>
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <!-- The open gesture's edge band: 0–60px of the SCREEN, exactly the
+               window sidebarSwipeGesture.ts accepts a rightward swipe in. -->
+          <div data-m="edge-band" style="position:absolute;left:0;top:59px;bottom:34px;width:60px;z-index:45;cursor:grab;touch-action:none"></div>
+
+          <!-- ── drawer scrim + panel (KannaSidebar mobile overlay) ── -->
+          <div data-m="scrim" onClick="{{ closeDrawer }}" style="position:absolute;inset:0;z-index:40;background:light-dark(oklch(20% 0.01 13 / .4),oklch(12% 0.008 13 / .4));backdrop-filter:blur(0px);opacity:0;pointer-events:none"></div>
+
+          <div data-m="drawer" style="position:absolute;inset:0;z-index:50;display:flex;flex-direction:column;background:light-dark(oklch(99.5% 0.003 13),oklch(23% 0.01 13));transform:translateX(-100%);will-change:transform">
+            <div style="flex-shrink:0;height:52px;margin-top:59px;padding:0 5px;border-bottom:1px solid light-dark(oklch(91% 0.008 13),oklch(29% 0.008 13));display:grid;grid-template-columns:40px minmax(0,1fr) 40px;align-items:center">
+              <button type="button" onClick="{{ closeDrawer }}" aria-label="Close sidebar" style="display:inline-flex;align-items:center;justify-content:center;height:40px;width:40px;border-radius:8px;border:1px solid transparent;background:none;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13))">
+                <svg viewBox="0 0 24 24" style="height:20px;width:20px"><use href="#i-x"></use></svg>
+              </button>
+              <div style="display:flex;align-items:center;justify-self:center;gap:8px">
+                <svg viewBox="0 0 24 24" fill="none" stroke="oklch(71.2% 0.194 13.428)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="height:20px;width:20px"><circle cx="12" cy="12" r="3"></circle><path d="M12 16.5A4.5 4.5 0 1 1 7.5 12 4.5 4.5 0 1 1 12 7.5a4.5 4.5 0 1 1 4.5 4.5 4.5 4.5 0 1 1-4.5 4.5"></path><path d="M12 7.5V9"></path><path d="M7.5 12H9"></path><path d="M16.5 12H15"></path><path d="M12 16.5V15"></path><path d="m8 8 1.88 1.88"></path><path d="M14.12 9.88 16 8"></path><path d="m8 16 1.88-1.88"></path><path d="M14.12 14.12 16 16"></path></svg>
+                <span style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:16px">Kanna</span>
+              </div>
+              <button type="button" aria-label="New project" style="display:inline-flex;align-items:center;justify-content:center;height:40px;width:40px;border-radius:8px;border:1px solid transparent;background:none;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13));justify-self:end">
+                <svg viewBox="0 0 24 24" style="height:20px;width:20px"><use href="#i-plus"></use></svg>
+              </button>
+            </div>
+
+            <div style="flex:1;min-height:0;overflow:hidden;padding:7px">
+              <div style="padding:8px 8px 4px;font-size:12px;font-weight:600;letter-spacing:.025em;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13))">Projects</div>
+              <div style="padding:4px 8px;display:flex;align-items:center;gap:6px">
+                <svg viewBox="0 0 24 24" style="height:14px;width:14px;transform:rotate(90deg);color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13))"><use href="#i-chevron-right"></use></svg>
+                <span style="font-size:13px;font-weight:600;color:light-dark(oklch(16% 0.01 13 / .8),oklch(98% 0.003 13 / .8))">kanna</span>
+              </div>
+
+              <div data-m="drawer-spawn" style="position:relative;display:flex;align-items:center;gap:8px;margin:0 4px;padding:0 8px;border-radius:6px;background:light-dark(oklch(97% 0.005 13),oklch(25% 0.01 13));overflow:hidden;height:0;opacity:0">
+                <span data-m="drawer-rail" style="position:absolute;left:0;top:4px;bottom:4px;width:2px;border-radius:2px;background:oklch(71.2% 0.194 13.428);transform:scaleY(0);transform-origin:top"></span>
+                <span style="height:8px;width:8px;border-radius:9999px;flex-shrink:0;background:light-dark(oklch(76% 0.14 78),oklch(80% 0.13 78))"></span>
+                <span style="font-size:14px;font-weight:500;white-space:nowrap">New Chat</span>
+              </div>
+
+              <sc-for list="{{ drawerRows }}" as="row" hint-placeholder-count="4">
+                <div data-m="drawer-row" style="display:flex;align-items:center;gap:9px;margin:0 4px;padding:11px 8px;border-radius:6px;background:{{ row.bg }}">
+                  <span style="height:8px;width:8px;border-radius:9999px;flex-shrink:0;background:{{ row.dot }}"></span>
+                  <span style="flex:1;min-width:0;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:{{ row.color }}">{{ row.title }}</span>
+                  <span style="font-size:12px;white-space:nowrap;font-variant-numeric:tabular-nums;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13))">{{ row.stamp }}</span>
+                </div>
+              </sc-for>
+            </div>
+
+            <div data-m="close-handle" style="position:absolute;top:59px;right:0;bottom:34px;width:24px;z-index:2;cursor:grab;touch-action:none"></div>
+            <div style="flex-shrink:0;padding-bottom:34px;border-top:1px solid light-dark(oklch(91% 0.008 13),oklch(29% 0.008 13))">
+              <sc-for list="{{ drawerNav }}" as="item" hint-placeholder-count="3">
+                <div style="display:flex;align-items:center;gap:10px;padding:13px 12px">
+                  <svg viewBox="0 0 24 24" style="height:16px;width:16px;flex-shrink:0;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13))"><use href="{{ item.icon }}"></use></svg>
+                  <span style="font-size:14px">{{ item.label }}</span>
+                </div>
+              </sc-for>
+              <div style="display:flex;align-items:center;gap:8px;padding:2px 12px 12px">
+                <span style="height:6px;width:6px;border-radius:9999px;background:light-dark(oklch(68% 0.15 155),oklch(72% 0.14 155))"></span>
+                <span style="font-size:12px;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13))">Connected</span>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- ── chat-settings bottom sheet ────────────────────────── -->
+          <div data-m="sheet-scrim" onClick="{{ closeSheet }}" style="position:absolute;inset:0;z-index:60;background:light-dark(oklch(20% 0.01 13 / .35),oklch(12% 0.008 13 / .45));opacity:0;pointer-events:none"></div>
+          <div data-m="sheet" style="position:absolute;left:0;right:0;bottom:0;z-index:70;border-radius:20px 20px 0 0;border-top:1px solid light-dark(oklch(91% 0.008 13),oklch(29% 0.008 13));background:light-dark(oklch(99.5% 0.003 13),oklch(23% 0.01 13));padding:10px 16px 46px;transform:translateY(100%);will-change:transform">
+            <div style="display:flex;justify-content:center;padding-bottom:10px"><span style="height:4px;width:38px;border-radius:9999px;background:light-dark(oklch(91% 0.008 13),oklch(29% 0.008 13))"></span></div>
+            <span style="display:block;font-size:17px;font-weight:600;margin-bottom:4px">Chat settings</span>
+            <span style="display:block;font-size:13px;line-height:1.5;margin-bottom:14px;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13))">Provider, model, reasoning, context and permission mode for this chat.</span>
+            <sc-for list="{{ sheetRows }}" as="row" hint-placeholder-count="4">
+              <div data-m="sheet-row" style="display:flex;align-items:center;gap:12px;padding:12px 10px;border-radius:10px;border:1px solid {{ row.border }};background:{{ row.bg }};margin-bottom:6px">
+                <svg viewBox="0 0 24 24" style="height:18px;width:18px;flex-shrink:0;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13))"><use href="{{ row.icon }}"></use></svg>
+                <span style="min-width:0"><span style="display:block;font-size:14px;font-weight:500">{{ row.label }}</span><span style="display:block;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13))">{{ row.desc }}</span></span>
+              </div>
+            </sc-for>
+          </div>
+
+        </div>
+      </x-import>
+    </div>
+
+    <!-- ── controls + spec ──────────────────────────────────────── -->
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <button type="button" onClick="{{ playMobileSession }}" style="display:inline-flex;align-items:center;justify-content:center;gap:8px;height:42px;border-radius:10px;border:0;background:light-dark(oklch(20% 0.012 13),oklch(98% 0.003 13));color:light-dark(oklch(98% 0.005 13),oklch(18% 0.01 13));font-family:inherit;font-size:14px;font-weight:600;cursor:pointer">
+          <svg viewBox="0 0 24 24" style="height:15px;width:15px"><use href="#i-zap"></use></svg>New session
+        </button>
+        <button type="button" onClick="{{ toggleDrawer }}" style="display:inline-flex;align-items:center;justify-content:center;gap:8px;height:42px;border-radius:10px;border:1px solid light-dark(oklch(91% 0.008 13),oklch(29% 0.008 13));background:none;color:inherit;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer">
+          <svg viewBox="0 0 24 24" style="height:15px;width:15px"><use href="#i-panel-left"></use></svg>Drawer
+        </button>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13))">The drawer is draggable both ways &mdash; press anywhere in the phone&rsquo;s left <strong>60px edge band</strong> and pull right to open, or drag the open panel&rsquo;s right edge to close. Release past 60px of travel and it commits; short of that it snaps back. Those are <code style="font-family:'Roboto Mono',monospace">SIDEBAR_SWIPE_OPEN_START_MAX_X</code> and <code style="font-family:'Roboto Mono',monospace">SIDEBAR_SWIPE_MIN_HORIZONTAL_PX</code> as shipped.</p>
+
+      <sc-for list="{{ mobileBeats }}" as="beat" hint-placeholder-count="5">
+        <div style="display:grid;grid-template-columns:26px minmax(0,1fr);gap:10px;padding:12px 13px;border-radius:12px;border:1px solid color-mix(in oklch, currentColor 16%, transparent);background:light-dark(oklch(99.5% 0.003 13),oklch(23% 0.01 13));transition:opacity 160ms,border-color 160ms,box-shadow 160ms;opacity:{{ beat.opacity }};border-color:{{ beat.border }};box-shadow:{{ beat.ring }}">
+          <span style="font-family:'Roboto Mono',monospace;font-size:11px;padding-top:2px;color:oklch(71.2% 0.194 13.428)">{{ beat.n }}</span>
+          <span style="min-width:0">
+            <span style="display:block;font-size:13px;font-weight:600">{{ beat.name }}</span>
+            <span style="display:block;font-size:12px;line-height:1.5;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13))">{{ beat.desc }}</span>
+            <span style="display:block;margin-top:5px;font-family:'Roboto Mono',monospace;font-size:10.5px;color:light-dark(oklch(46% 0.013 13 / .85),oklch(72% 0.012 13 / .85))">{{ beat.spec }}</span>
+          </span>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <!-- ── mobile-specific rules ─────────────────────────────────── -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px;margin-top:44px">
+    <div style="border:1px solid light-dark(oklch(91% 0.008 13),oklch(29% 0.008 13));border-radius:18px;overflow:hidden">
+      <div style="padding:14px 18px;border-bottom:1px solid light-dark(oklch(91% 0.008 13),oklch(29% 0.008 13));font-size:14px;font-weight:600">What changes below 768px</div>
+      <sc-for list="{{ mobileDeltas }}" as="d" hint-placeholder-count="6">
+        <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:baseline;padding:11px 18px;border-bottom:1px solid light-dark(oklch(91% 0.008 13 / .5),oklch(29% 0.008 13 / .5))">
+          <span style="min-width:0"><span style="display:block;font-size:13px;font-weight:500">{{ d.what }}</span><span style="display:block;font-size:12px;margin-top:2px;line-height:1.5;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13))">{{ d.how }}</span></span>
+          <span style="font-family:'Roboto Mono',monospace;font-size:11px;white-space:nowrap;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13))">{{ d.token }}</span>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="border:1px solid light-dark(oklch(91% 0.008 13),oklch(29% 0.008 13));border-radius:18px;overflow:hidden">
+      <div style="padding:14px 18px;border-bottom:1px solid light-dark(oklch(91% 0.008 13),oklch(29% 0.008 13));font-size:14px;font-weight:600">Finger-tracked drawer &mdash; the gesture, then the spring</div>
+      <pre style="margin:0;padding:16px 18px;overflow-x:auto;font-family:'Roboto Mono',monospace;font-size:11.5px;line-height:1.75;background:light-dark(oklch(97% 0.005 13),oklch(23% 0.01 13));color:light-dark(oklch(16% 0.01 13),oklch(98% 0.003 13))">{{ gestureSnippet }}</pre>
+    </div>
+  </div>
+
+  <div style="border:1px solid light-dark(oklch(91% 0.008 13),oklch(29% 0.008 13));border-radius:18px;padding:18px 20px;margin-top:20px">
+    <span style="display:block;font-size:14px;font-weight:600;margin-bottom:10px">Mobile non-negotiables</span>
+    <sc-for list="{{ mobileRules }}" as="rule" hint-placeholder-count="6">
+      <div style="display:grid;grid-template-columns:16px minmax(0,1fr);gap:10px;align-items:start;padding:6px 0">
+        <svg viewBox="0 0 24 24" style="height:14px;width:14px;margin-top:3px;color:light-dark(oklch(37% 0.1 155),oklch(76% 0.14 155))"><use href="#i-check"></use></svg>
+        <span style="font-size:13px;line-height:1.55;color:light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13))">{{ rule }}</span>
+      </div>
+    </sc-for>
+  </div>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;system&quot;,&quot;light&quot;,&quot;dark&quot;],&quot;default&quot;:&quot;dark&quot;,&quot;tsType&quot;:&quot;\&quot;system\&quot; | \&quot;light\&quot; | \&quot;dark\&quot;&quot;,&quot;section&quot;:&quot;Presentation&quot;}}">
+const DRAWER_W = 402
+const COMMIT_PX = 60          // SIDEBAR_SWIPE_MIN_HORIZONTAL_PX
+const EDGE_MAX_X = 60         // SIDEBAR_SWIPE_OPEN_START_MAX_X
+
+class Component extends DCLogic {
+  state = { drawer: false, sheet: false, beat: -1 }
+  pageRef = React.createRef()
+
+  q(sel) { return this.pageRef.current ? this.pageRef.current.querySelector(`[data-m="${sel}"]`) : null }
+  all(sel) { return this.pageRef.current ? Array.from(this.pageRef.current.querySelectorAll(`[data-m="${sel}"]`)) : [] }
+  get reduce() { return window.matchMedia("(prefers-reduced-motion: reduce)").matches }
+  get A() { return window.anime || null }
+
+  componentDidMount() {
+    this.applyTheme()
+    this.boot = setInterval(() => {
+      if (this.A && this.q("drawer")) { clearInterval(this.boot); this.wire() }
+    }, 80)
+  }
+
+  componentDidUpdate(prev) {
+    if (prev.theme !== this.props.theme) this.applyTheme()
+  }
+
+  componentWillUnmount() {
+    clearInterval(this.boot); clearInterval(this.typer)
+    for (const id of this.beatTimers || []) clearTimeout(id)
+    if (this.detachDrag) this.detachDrag()
+  }
+
+  applyTheme() {
+    const el = this.pageRef.current
+    if (!el) return
+    const t = this.props.theme ?? "system"
+    el.style.colorScheme = t === "system" ? "light dark" : t
+  }
+
+  // ── drawer, finger-tracked ─────────────────────────────────────────
+  setDrawerProgress(p) {
+    const drawer = this.q("drawer")
+    const scrim = this.q("scrim")
+    if (!drawer) return
+    const clamped = Math.max(0, Math.min(1, p))
+    this.A.utils.set(drawer, { x: `${(clamped - 1) * 100}%` })
+    if (scrim) {
+      this.A.utils.set(scrim, { opacity: clamped })
+      scrim.style.backdropFilter = `blur(${(clamped * 6).toFixed(2)}px)`
+      scrim.style.pointerEvents = clamped > 0.02 ? "auto" : "none"
+    }
+  }
+
+  settleDrawer(open) {
+    const drawer = this.q("drawer")
+    const scrim = this.q("scrim")
+    this.setState({ drawer: open })
+    if (!drawer) return
+    if (this.reduce) { this.setDrawerProgress(open ? 1 : 0); return }
+    this.A.animate(drawer, {
+      x: open ? "0%" : "-100%",
+      duration: 280,
+      ease: this.A.createSpring({ stiffness: 210, damping: 22 }),
+    })
+    if (scrim) {
+      scrim.style.pointerEvents = open ? "auto" : "none"
+      this.A.animate(scrim, { opacity: open ? 1 : 0, duration: 240, ease: "out(3)" })
+      this.A.animate(scrim, {
+        backdropFilter: open ? ["blur(0px)", "blur(6px)"] : ["blur(6px)", "blur(0px)"],
+        duration: 240, ease: "out(3)",
+      })
+    }
+    if (open && !this.reduce) {
+      this.A.animate(this.all("drawer-row"), {
+        opacity: [0, 1], x: [-14, 0], duration: 190, ease: "out(3)",
+        delay: this.A.stagger(22, { start: 70 }),
+      })
+    }
+  }
+
+  openDrawer = () => this.settleDrawer(true)
+  closeDrawer = () => this.settleDrawer(false)
+  toggleDrawer = () => this.settleDrawer(!this.state.drawer)
+
+  wireDrag() {
+    // Two grab surfaces, because the two directions start in different places:
+    // opening begins in the screen's 0–60px edge band (the panel is off-screen
+    // and clipped by the bezel); closing begins on the open panel's own edge.
+    const surfaces = [this.q("edge-band"), this.q("close-handle")].filter(Boolean)
+    if (!surfaces.length) return
+    let startX = null
+    let base = 0
+
+    const onDown = (e) => {
+      startX = e.clientX
+      base = this.state.drawer ? 1 : 0
+      e.currentTarget.setPointerCapture?.(e.pointerId)
+      e.preventDefault()
+    }
+    const onMove = (e) => {
+      if (startX === null) return
+      const dx = e.clientX - startX
+      this.setDrawerProgress(base + dx / DRAWER_W)
+    }
+    const onUp = (e) => {
+      if (startX === null) return
+      const dx = e.clientX - startX
+      startX = null
+      // Same commit rule the app's touch gesture uses: 60px of travel decides.
+      if (base === 1) this.settleDrawer(dx > -COMMIT_PX)
+      else this.settleDrawer(dx > COMMIT_PX)
+    }
+
+    for (const s of surfaces) s.addEventListener("pointerdown", onDown)
+    window.addEventListener("pointermove", onMove)
+    window.addEventListener("pointerup", onUp)
+    window.addEventListener("pointercancel", onUp)
+    this.detachDrag = () => {
+      for (const s of surfaces) s.removeEventListener("pointerdown", onDown)
+      window.removeEventListener("pointermove", onMove)
+      window.removeEventListener("pointerup", onUp)
+      window.removeEventListener("pointercancel", onUp)
+    }
+  }
+
+  // ── bottom sheet ───────────────────────────────────────────────────
+  openSheet = () => {
+    this.setState({ sheet: true })
+    const sheet = this.q("sheet")
+    const scrim = this.q("sheet-scrim")
+    if (!sheet) return
+    if (scrim) scrim.style.pointerEvents = "auto"
+    if (this.reduce) {
+      this.A.utils.set(sheet, { y: "0%" })
+      if (scrim) this.A.utils.set(scrim, { opacity: 1 })
+      return
+    }
+    this.A.animate(sheet, {
+      y: ["100%", "0%"], duration: 280,
+      ease: this.A.createSpring({ stiffness: 200, damping: 21 }),
+    })
+    if (scrim) this.A.animate(scrim, { opacity: [0, 1], duration: 200, ease: "out(3)" })
+    this.A.animate(this.all("sheet-row"), {
+      opacity: [0, 1], y: [10, 0], duration: 180, ease: "out(3)",
+      delay: this.A.stagger(30, { start: 90 }),
+    })
+  }
+
+  closeSheet = () => {
+    this.setState({ sheet: false })
+    const sheet = this.q("sheet")
+    const scrim = this.q("sheet-scrim")
+    if (scrim) scrim.style.pointerEvents = "none"
+    if (!sheet) return
+    if (this.reduce) {
+      this.A.utils.set(sheet, { y: "100%" })
+      if (scrim) this.A.utils.set(scrim, { opacity: 0 })
+      return
+    }
+    this.A.animate(sheet, { y: "100%", duration: 240, ease: "cubicBezier(0.22, 1, 0.36, 1)" })
+    if (scrim) this.A.animate(scrim, { opacity: 0, duration: 200 })
+  }
+
+  // ── the mobile new-session sentence ────────────────────────────────
+  typeEmpty() {
+    const el = this.q("m-empty-text")
+    if (!el) return
+    const full = "What are we building?"
+    let i = 0
+    clearInterval(this.typer)
+    if (this.reduce) { el.textContent = full; return }
+    this.typer = setInterval(() => {
+      i += 1
+      el.textContent = full.slice(0, i)
+      if (i >= full.length) clearInterval(this.typer)
+    }, 19)
+  }
+
+  playMobileSession = () => {
+    if (!this.A) return
+    const { createTimeline, createSpring, utils } = this.A
+    const wasOpen = this.state.drawer
+
+    // start from the drawer open — that is where a phone user taps "new chat"
+    if (!wasOpen) this.setDrawerProgress(1)
+    this.setState({ drawer: true })
+    utils.set(this.q("drawer-spawn"), { height: 0, opacity: 0 })
+    utils.set(this.q("drawer-rail"), { scaleY: 0 })
+    utils.set(this.all("drawer-row"), { y: 0, opacity: 1, x: 0 })
+    utils.set(this.q("m-transcript"), { opacity: 1 })
+    utils.set(this.q("m-empty"), { opacity: 0 })
+    utils.set(this.q("m-composer"), { y: 0, opacity: 1 })
+    utils.set(this.q("m-sweep"), { scaleX: 0 })
+    utils.set(this.q("m-caret"), { opacity: 0 })
+    const et = this.q("m-empty-text"); if (et) et.textContent = ""
+    clearInterval(this.typer)
+
+    for (const id of this.beatTimers || []) clearTimeout(id)
+    this.beatTimers = [0, 110, 300, 480, 660].map((at, i) => setTimeout(() => this.setState({ beat: i }), at))
+
+    if (this.reduce) {
+      utils.set(this.q("drawer-spawn"), { height: 40, opacity: 1 })
+      utils.set(this.q("drawer-rail"), { scaleY: 1 })
+      this.setDrawerProgress(0)
+      this.setState({ drawer: false, beat: 4 })
+      utils.set(this.q("m-transcript"), { opacity: 0 })
+      utils.set(this.q("m-empty"), { opacity: 1 })
+      this.typeEmpty()
+      return
+    }
+
+    const tl = createTimeline({ defaults: { ease: "out(3)" } })
+
+    // 1 · the list makes room
+    tl.add(this.all("drawer-row"), { y: [0, 40], duration: 180, delay: this.A.stagger(14) }, 0)
+    // 2 · the row is born
+    tl.add(this.q("drawer-spawn"), { height: [0, 40], opacity: [0, 1], duration: 200, ease: "outBack(1.6)" }, 110)
+    tl.add(this.q("drawer-rail"), { scaleY: [0, 1], duration: 200 }, 130)
+    // 3 · the drawer hands you back the chat — it slides out, the scrim clears
+    tl.add(this.q("drawer"), { x: ["0%", "-100%"], duration: 280, ease: "cubicBezier(0.22, 1, 0.36, 1)" }, 300)
+    tl.add(this.q("scrim"), { opacity: [1, 0], duration: 240 }, 300)
+    tl.add(this.q("m-transcript"), { opacity: [1, 0], duration: 160 }, 300)
+    // 4 · the composer rises where the keyboard would put it
+    tl.add(this.q("m-composer"), {
+      y: [40, 0], opacity: [0.4, 1], duration: 260,
+      ease: createSpring({ stiffness: 200, damping: 18 }),
+    }, 480)
+    tl.add(this.q("m-sweep"), { scaleX: [0, 1], duration: 220, ease: "out(4)" }, 530)
+    tl.add(this.q("m-caret"), { opacity: [0, 1, 0, 1, 0, 1], duration: 280, ease: "steps(6)" }, 560)
+    // 5 · the transcript opens
+    tl.add(this.q("m-empty"), { opacity: [0, 1], duration: 200 }, 660)
+    tl.add(this.q("m-flower"), {
+      scale: [0.1, 1], filter: ["blur(12px)", "blur(0px)"], duration: 280, ease: "out(4)",
+      onComplete: () => {
+        this.setState({ drawer: false })
+        const scrim = this.q("scrim"); if (scrim) scrim.style.pointerEvents = "none"
+        this.typeEmpty()
+      },
+    }, 660)
+  }
+
+  wire() {
+    const { animate } = this.A
+    // Keep running when the tab is backgrounded: anime pauses its engine on
+    // document.hidden by default, which strands a transition mid-travel and
+    // leaves the UI in a state no user action produced.
+    if (this.A.engine) {
+      this.A.engine.pauseOnDocumentHidden = false
+      // Flipping the flag is not enough: if the engine ALREADY paused (the tab
+      // was backgrounded before this ran) it stays paused, and every animation
+      // is frozen — including the ones that reveal content. Resume explicitly.
+      this.A.engine.resume?.()
+      this.A.engine.paused = false
+    }
+    this.setDrawerProgress(0)
+    this.wireDrag()
+    if (!this.reduce) {
+      animate(this.q("pill-halo"), { scale: [1, 1.5], opacity: [0.2, 0], duration: 1600, ease: "out(2)", loop: true })
+    }
+  }
+
+  renderVals() {
+    const rose = "oklch(71.2% 0.194 13.428)"
+    const active = this.state.beat
+    const dotWarn = "light-dark(oklch(76% 0.14 78),oklch(80% 0.13 78))"
+    const dotInfo = "light-dark(oklch(66% 0.13 235),oklch(72% 0.12 235))"
+    const dotOk = "light-dark(oklch(68% 0.15 155),oklch(72% 0.14 155))"
+    const dotIdle = "light-dark(oklch(91% 0.008 13),oklch(29% 0.008 13))"
+    const fg = "light-dark(oklch(16% 0.01 13),oklch(98% 0.003 13))"
+    const mfg = "light-dark(oklch(46% 0.013 13),oklch(72% 0.012 13))"
+
+    const q = String.fromCharCode(123), p = String.fromCharCode(125)
+    const gestureSnippet = [
+      "// sidebarSwipeGesture.ts already decides the outcome —",
+      "// this only adds the frames between finger and result.",
+      "",
+      "const DRAWER_W = el.offsetWidth",
+      "",
+      "onTouchMove: (dx) => {                  // 1:1, no easing",
+      "  const t = clamp(base + dx / DRAWER_W, 0, 1)",
+      "  drawer.style.transform = `translateX(${(t - 1) * 100}%)`",
+      "  scrim.style.opacity = t",
+      "  scrim.style.backdropFilter = `blur(${t * 6}px)`",
+      "}",
+      "",
+      "onTouchEnd: (outcome) => {              // evaluateSidebarSwipe()",
+      "  animate(drawer, {",
+      '    x: outcome === "open" ? "0%" : "-100%",',
+      "    duration: 280,",
+      `    ease: createSpring(${q} stiffness: 210, damping: 22 ${p}),`,
+      "  })",
+      "}",
+      "",
+      "// Committing threshold stays SIDEBAR_SWIPE_MIN_HORIZONTAL_PX (60),",
+      "// so the gesture a user has already learned still means the same thing.",
+    ].join("\n")
+
+    return {
+      pageRef: this.pageRef,
+      isDark: (this.props.theme ?? "system") === "dark",
+      openDrawer: this.openDrawer,
+      closeDrawer: this.closeDrawer,
+      toggleDrawer: this.toggleDrawer,
+      openSheet: this.openSheet,
+      closeSheet: this.closeSheet,
+      playMobileSession: this.playMobileSession,
+      gestureSnippet,
+
+      mobileTools: [
+        { icon: "#i-file", label: "Read claude-pty/spawn.ts" },
+        { icon: "#i-search", label: "Find `smokeTest` in files" },
+        { icon: "#i-file-pen", label: "Edit claude-pty/spawn.ts" },
+      ],
+
+      drawerRows: [
+        { title: "Fix PTY smoke-test gate", stamp: "1m 48s", dot: dotWarn, color: fg, bg: "light-dark(oklch(97% 0.005 13),oklch(25% 0.01 13))" },
+        { title: "OAuth pool fallover", stamp: "22s", dot: dotInfo, color: mfg, bg: "transparent" },
+        { title: "Bump legend-list", stamp: "3h", dot: dotIdle, color: mfg, bg: "transparent" },
+        { title: "Import ~/.claude sessions", stamp: "1d", dot: dotOk, color: mfg, bg: "transparent" },
+      ],
+
+      drawerNav: [
+        { icon: "#i-workflow", label: "Workflows" },
+        { icon: "#i-calendar-clock", label: "Cron jobs" },
+        { icon: "#i-settings", label: "Settings" },
+      ],
+
+      sheetRows: [
+        { icon: "#i-box", label: "Sonnet 4.6", desc: "claude-sonnet-4-6", bg: "light-dark(oklch(97% 0.005 13),oklch(25% 0.01 13))", border: "light-dark(oklch(91% 0.008 13),oklch(29% 0.008 13))" },
+        { icon: "#i-brain", label: "Medium", desc: "Reasoning effort", bg: "transparent", border: "transparent" },
+        { icon: "#i-square-menu", label: "1M", desc: "Expanded context window", bg: "transparent", border: "transparent" },
+        { icon: "#i-lock-open", label: "Full Access", desc: "Execution without approval", bg: "transparent", border: "transparent" },
+      ],
+
+      mobileBeats: [
+        { n: "01", name: "The list makes room", desc: "Inside the open drawer, rows slide down one 40px row — taller than desktop, because the target is a thumb.", spec: "y 0→40px · 180ms · out(3) · stagger 14ms" },
+        { n: "02", name: "The row is born", desc: "Same growth and same rose rail. On a phone this is the only confirmation the tap registered, so it never gets shortened.", spec: "height 0→40px · 200ms · outBack(1.6)" },
+        { n: "03", name: "The drawer hands the chat back", desc: "It slides out to the left while the scrim's blur clears — the reverse of how you opened it, so the mental model survives.", spec: "x 0→-100% · 280ms · cubicBezier(.22,1,.36,1)" },
+        { n: "04", name: "The composer rises to the keyboard", desc: "Only 40px of travel, matched to where the software keyboard will push it, then a spring and the caret pulse.", spec: "y 40→0 · spring(200, 18) · sweep 220ms" },
+        { n: "05", name: "The transcript opens", desc: "Identical bloom and 19ms/char typing as desktop. The one beat that is deliberately the same everywhere.", spec: "scale .1→1 · blur 12→0 · 280ms · out(4)" },
+      ].map((b, i) => ({
+        ...b,
+        opacity: i <= active ? 1 : 0.5,
+        border: i === active ? rose : "color-mix(in oklch, currentColor 16%, transparent)",
+        ring: i === active ? `0 0 0 3px color-mix(in oklch, ${rose} 18%, transparent)` : "none",
+      })),
+
+      mobileDeltas: [
+        { what: "Sidebar becomes a full-screen overlay", how: "fixed inset-0 z-50 over a 40% overlay scrim — now finger-tracked, with the scrim's blur tied to travel", token: "z-50" },
+        { what: "Status row shrinks to a pill", how: "StateMark + label only; the live duration reappears at ≥430px. The mark now carries a breathing halo while running", token: "min-[430px]" },
+        { what: "Preference pills become a sheet", how: "The Chat settings dialog is a bottom sheet with a spring entrance and a 30ms row stagger, not a centred modal", token: "md:hidden" },
+        { what: "Every target reaches 44px", how: "icon-mobile is 44×44 below md; press feedback scales to .955 and springs back so a mis-tap feels forgiving", token: "icon-mobile" },
+        { what: "Composer travel drops to 40px", how: "Desktop rises 56px from the row; on a phone the keyboard owns that space, so the entrance is shorter and faster to settle", token: "40px" },
+        { what: "Safe area is respected", how: "The sheet and the composer both pad by env(safe-area-inset-bottom); nothing animates into the home indicator", token: "env()" },
+      ],
+
+      mobileRules: [
+        "Gestures are tracked 1:1 with no easing while the finger is down — easing only ever describes what happens after release.",
+        "The commit threshold stays 60px with a 1.5 horizontal ratio, exactly as evaluateSidebarSwipe already decides, so no learned gesture changes meaning.",
+        "Native edge swipe-back is claimed only after 8px of committed horizontal travel — vertical scrolling is never intercepted.",
+        "Nothing animates while the transcript is scrolling under a finger: the existing scrollBy guard in ChatTranscriptViewport stays authoritative.",
+        "backdrop-filter is used on one element at a time and only during a 240ms transition — never left running behind a static overlay.",
+        "prefers-reduced-motion: reduce drops every gesture to an instant state change, including the drawer, the sheet and the typing.",
+      ],
+    }
+  }
+}
+</script>
+</body>
+</html>
