@@ -12,8 +12,8 @@
     "capture": "bun run scripts/capture-all.sh"
   },
   "dependencies": {
-    "@astrojs/starlight": "^0.41.10",
-    "astro": "^7.2.9",
+    "@astrojs/starlight": "^0.42.0",
+    "astro": "^7.3.1",
     "sharp": "^0.35.4"
   },
   "devDependencies": {
