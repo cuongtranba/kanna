@@ -42,7 +42,7 @@ function makeSession(overrides: Partial<ConstructorParameters<typeof ClaudeSessi
     lastUsedAt: 0,
     backgroundTasks: new Map(),
     selfWakeActive: false,
-    recentToolDescriptions: new Map(),
+    recentToolCalls: new Map(),
     backgroundLaunchToolIds: new Set<string>(),
     backgroundTaskDeadlineAt: 0,
     backgroundTaskWakeCount: 0,
@@ -562,7 +562,7 @@ describe("runClaudeSession", () => {
   })
 
   test("status entry with backgroundTaskIdsSnapshot REPLACES the guard set", async () => {
-    const session = makeSession({ backgroundTasks: new Map([["stale1", { taskType: null, description: null, startedAt: 0, outputPath: null }]]) })
+    const session = makeSession({ backgroundTasks: new Map([["stale1", { taskType: null, description: null, startedAt: 0, outputPath: null, command: null }]]) })
 
     const snapshotEntry = {
       _id: "status-snap-1",
@@ -585,7 +585,7 @@ describe("runClaudeSession", () => {
 
   test("empty backgroundTaskIdsSnapshot clears the guard set and deadline", async () => {
     const session = makeSession({
-      backgroundTasks: new Map([["a1", { taskType: null, description: null, startedAt: 0, outputPath: null }], ["b2", { taskType: null, description: null, startedAt: 0, outputPath: null }]]),
+      backgroundTasks: new Map([["a1", { taskType: null, description: null, startedAt: 0, outputPath: null, command: null }], ["b2", { taskType: null, description: null, startedAt: 0, outputPath: null, command: null }]]),
       backgroundTaskDeadlineAt: Date.now() + 100_000,
     })
 
@@ -755,7 +755,7 @@ describe("runClaudeSession", () => {
 
   test("backgroundTasksSnapshot meta labels tasks; surviving ids keep startedAt", async () => {
     const session = makeSession({
-      backgroundTasks: new Map([["keep1", { taskType: null, description: "old label", startedAt: 111, outputPath: null }]]),
+      backgroundTasks: new Map([["keep1", { taskType: null, description: "old label", startedAt: 111, outputPath: null, command: null }]]),
     })
     const snapshotEntry = {
       _id: "status-meta-1",
@@ -866,7 +866,7 @@ describe("runClaudeSession", () => {
 
   test("SDK ordering: onBackgroundTaskLaunch not fired again when outputPath already known", async () => {
     const session = makeSession({
-      backgroundTasks: new Map([["known1", { taskType: "local_bash", description: "existing", startedAt: 100, outputPath: "/tmp/known1.output" }]]),
+      backgroundTasks: new Map([["known1", { taskType: "local_bash", description: "existing", startedAt: 100, outputPath: "/tmp/known1.output", command: null }]]),
     })
     const toolCallEntry = {
       _id: "tc-no-double",
@@ -1288,6 +1288,49 @@ describe("runClaudeSession — mermaid guard", () => {
     await runClaudeSession(harness.deps, harness.session)
 
     expect(harness.order).toEqual(["guard", "drain"])
+  })
+
+  test("the background-task guard sees the session, after mermaid and before the drain", async () => {
+    const session = makeSession({ pendingPromptSeqs: [1] })
+    const active = makeActiveTurn(session.chatId, { claudePromptSeq: 1 })
+    const order: string[] = []
+    const seen: string[] = []
+    const deps = makeDeps(session, {
+      activeTurns: new Map([[session.chatId, active]]),
+      maybeStartNextQueuedMessage: async () => { order.push("drain") },
+      mermaidGuard: { check: async () => { order.push("mermaid") } },
+      backgroundTaskGuard: {
+        check: async (s) => {
+          order.push("background")
+          seen.push(s.chatId)
+        },
+      },
+    })
+    session.session.stream = fakeStream([
+      { type: "transcript" as const, entry: fakeResultEntry(false) },
+    ])
+
+    await runClaudeSession(deps, session)
+
+    expect(order).toEqual(["mermaid", "background", "drain"])
+    expect(seen).toEqual([session.chatId])
+  })
+
+  test("the background-task guard stays out of a failed turn", async () => {
+    const session = makeSession({ pendingPromptSeqs: [1] })
+    const active = makeActiveTurn(session.chatId, { claudePromptSeq: 1 })
+    const calls: string[] = []
+    const deps = makeDeps(session, {
+      activeTurns: new Map([[session.chatId, active]]),
+      backgroundTaskGuard: { check: async (s) => { calls.push(s.chatId) } },
+    })
+    session.session.stream = fakeStream([
+      { type: "transcript" as const, entry: fakeResultEntry(true, "boom") },
+    ])
+
+    await runClaudeSession(deps, session)
+
+    expect(calls).toEqual([])
   })
 
   test("stays out of a failed turn", async () => {

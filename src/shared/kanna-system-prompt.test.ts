@@ -206,6 +206,13 @@ describe("buildKannaSystemPromptAppend", () => {
     expect(KANNA_SYSTEM_PROMPT_BASE).toContain("pasting or summarizing its content")
   })
 
+  test("KANNA_SYSTEM_PROMPT_BASE requires background-task results to be harvested", () => {
+    expect(KANNA_SYSTEM_PROMPT_BASE).toContain("`TaskOutput`")
+    expect(KANNA_SYSTEM_PROMPT_BASE).toContain("`run_in_background`")
+    expect(KANNA_SYSTEM_PROMPT_BASE).toContain("`block: false`")
+    expect(KANNA_SYSTEM_PROMPT_BASE).toContain("`local_agent`")
+  })
+
   test("KANNA_SYSTEM_PROMPT_BASE names the mermaid link spellings that parse", () => {
     expect(KANNA_SYSTEM_PROMPT_BASE).toContain("`-.-x` and `-.-o`")
     expect(KANNA_SYSTEM_PROMPT_BASE).toContain("never `-.x` / `-.o`")

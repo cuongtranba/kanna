@@ -174,6 +174,7 @@ import { runVerifyCommand } from "./loop-verify-io.adapter"
 import { homedir } from "node:os"
 import { isClaudeSdkProvider } from "./provider-catalog"
 import { createMermaidGuard, type MermaidGuard } from "./mermaid-guard"
+import { createBackgroundTaskGuard, type BackgroundTaskGuard } from "./background-task-guard"
 import { createCronRepair, type CronRepair } from "./cron/repair"
 import { createCronConfirm, type CronConfirm } from "./cron/confirm"
 import { createModelEscalation, type ModelEscalation } from "./model-escalation"
@@ -240,6 +241,7 @@ export class AgentCoordinator {
   private readonly _cronRepair: CronRepair
   private readonly _cronConfirm: CronConfirm
   private readonly _mermaidGuard: MermaidGuard
+  private readonly _backgroundTaskGuard: BackgroundTaskGuard
   readonly getAutoResumePreference: () => boolean
   readonly getSubagents: () => Subagent[]
   readonly getAppSettingsSnapshot: NonNullable<AgentCoordinatorArgs["getAppSettingsSnapshot"]>
@@ -314,6 +316,13 @@ export class AgentCoordinator {
         const result = repairMermaidSource(source)
         return { source: result.source, repaired: result.repairs.length > 0 }
       },
+    })
+    this._backgroundTaskGuard = createBackgroundTaskGuard({
+      escalation: this._buildModelEscalation({
+        name: "background-task",
+        enabled: process.env.KANNA_BACKGROUND_TASK_GUARD !== "disabled",
+      }),
+      isLoopArmed: (chatId) => this.isLoopArmed(chatId) !== null,
     })
     this.store.onTurnTerminal = (chatId, outcome) => {
       const active = this.activeTurns.get(chatId)
@@ -1044,6 +1053,7 @@ export class AgentCoordinator {
       maybeStartNextQueuedMessage: (chatId) => this.maybeStartNextQueuedMessage(chatId),
       resolveClaudeDriverPreference: () => this.resolveClaudeDriverPreference(),
       mermaidGuard: this._mermaidGuard,
+      backgroundTaskGuard: this._backgroundTaskGuard,
       onBackgroundTaskLaunch: this.backgroundTaskOutputRegistry
         ? (chatId, taskId, outputPath) => {
             this.backgroundTaskOutputRegistry!.trackTask(chatId, taskId, outputPath)

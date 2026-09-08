@@ -10,6 +10,8 @@ import {
   backgroundTaskLaunchesFromToolResult,
   mergeBackgroundTaskSnapshot,
   toolCallDescription,
+  toolCallCommand,
+  MAX_BACKGROUND_TASK_COMMAND_CHARS,
   positiveIntegerFromEnv,
   findLastUserMessageId,
 } from "./claude-prompt-helpers"
@@ -273,7 +275,7 @@ describe("backgroundTaskLaunchesFromToolResult", () => {
 describe("mergeBackgroundTaskSnapshot outputPath preservation", () => {
   test("preserves outputPath from a previous entry when snapshot has no path", () => {
     const previous = new Map([
-      ["t1", { taskType: null, description: null, startedAt: 100, outputPath: "/tmp/t1.out" }],
+      ["t1", { taskType: null, description: null, startedAt: 100, outputPath: "/tmp/t1.out", command: null }],
     ])
     const result = mergeBackgroundTaskSnapshot(previous, ["t1"], undefined, 200)
     expect(result.get("t1")?.outputPath).toBe("/tmp/t1.out")
@@ -282,6 +284,72 @@ describe("mergeBackgroundTaskSnapshot outputPath preservation", () => {
   test("new task not in previous gets null outputPath from snapshot alone", () => {
     const result = mergeBackgroundTaskSnapshot(new Map(), ["t2"], undefined, 200)
     expect(result.get("t2")?.outputPath).toBeNull()
+  })
+
+  test("preserves command from a previous entry — the level snapshot never carries one", () => {
+    const previous = new Map([
+      ["t1", { taskType: null, description: null, startedAt: 100, outputPath: null, command: "until false; do sleep 5; done" }],
+    ])
+    const meta = [{ id: "t1", taskType: "local_bash", description: "Watch CI" }]
+    const result = mergeBackgroundTaskSnapshot(previous, ["t1"], meta, 200)
+    expect(result.get("t1")?.command).toBe("until false; do sleep 5; done")
+    expect(result.get("t1")?.description).toBe("Watch CI")
+  })
+
+  test("new task not in previous gets null command", () => {
+    const result = mergeBackgroundTaskSnapshot(new Map(), ["t2"], undefined, 200)
+    expect(result.get("t2")?.command).toBeNull()
+  })
+})
+
+
+describe("toolCallCommand", () => {
+  test("bash: returns the raw command, not the description", () => {
+    const call = {
+      kind: "tool",
+      toolKind: "bash",
+      toolName: "Bash",
+      toolId: "t1",
+      input: { command: "until false; do sleep 5; done", description: "Watch CI checks" },
+    } as unknown as NormalizedToolCall
+    expect(toolCallCommand(call)).toBe("until false; do sleep 5; done")
+  })
+
+  test("bash without a command reads null", () => {
+    const call = {
+      kind: "tool",
+      toolKind: "bash",
+      toolName: "Bash",
+      toolId: "t2",
+      input: { description: "no command here" },
+    } as unknown as NormalizedToolCall
+    expect(toolCallCommand(call)).toBeNull()
+  })
+
+  test("non-bash tools have no command", () => {
+    const agentCall = {
+      kind: "tool",
+      toolKind: "subagent_task",
+      toolName: "Agent",
+      toolId: "t3",
+      input: { subagentType: "general-purpose" },
+      rawInput: { description: "Summarise benchmark", prompt: "..." },
+    } as unknown as NormalizedToolCall
+    expect(toolCallCommand(agentCall)).toBeNull()
+  })
+
+  test("a command longer than the cap is truncated with an ellipsis", () => {
+    const long = "x".repeat(MAX_BACKGROUND_TASK_COMMAND_CHARS + 500)
+    const call = {
+      kind: "tool",
+      toolKind: "bash",
+      toolName: "Bash",
+      toolId: "t4",
+      input: { command: long },
+    } as unknown as NormalizedToolCall
+    const result = toolCallCommand(call)
+    expect(result?.length).toBe(MAX_BACKGROUND_TASK_COMMAND_CHARS + 1)
+    expect(result?.endsWith("…")).toBe(true)
   })
 })
 
@@ -366,8 +434,8 @@ describe("toolCallDescription", () => {
 describe("mergeBackgroundTaskSnapshot", () => {
   test("REPLACE semantics: absent ids drop, new ids appear with snapshot meta", () => {
     const previous = new Map([
-      ["gone", { taskType: null, description: "stale", startedAt: 1, outputPath: null }],
-      ["kept", { taskType: null, description: null, startedAt: 2, outputPath: null }],
+      ["gone", { taskType: null, description: "stale", startedAt: 1, outputPath: null, command: null }],
+      ["kept", { taskType: null, description: null, startedAt: 2, outputPath: null, command: null }],
     ])
     const next = mergeBackgroundTaskSnapshot(
       previous,
@@ -379,16 +447,16 @@ describe("mergeBackgroundTaskSnapshot", () => {
       1_000,
     )
     expect(next.has("gone")).toBe(false)
-    expect(next.get("kept")).toEqual({ taskType: "local_bash", description: "CI watch", startedAt: 2, outputPath: null })
-    expect(next.get("fresh")).toEqual({ taskType: "local_agent", description: null, startedAt: 1_000, outputPath: null })
+    expect(next.get("kept")).toEqual({ taskType: "local_bash", description: "CI watch", startedAt: 2, outputPath: null, command: null })
+    expect(next.get("fresh")).toEqual({ taskType: "local_agent", description: null, startedAt: 1_000, outputPath: null, command: null })
   })
 
   test("snapshot without meta preserves previously learned labels", () => {
     const previous = new Map([
-      ["t1", { taskType: "local_bash", description: "Watch deploy", startedAt: 5, outputPath: null }],
+      ["t1", { taskType: "local_bash", description: "Watch deploy", startedAt: 5, outputPath: null, command: null }],
     ])
     const next = mergeBackgroundTaskSnapshot(previous, ["t1"], undefined, 999)
-    expect(next.get("t1")).toEqual({ taskType: "local_bash", description: "Watch deploy", startedAt: 5, outputPath: null })
+    expect(next.get("t1")).toEqual({ taskType: "local_bash", description: "Watch deploy", startedAt: 5, outputPath: null, command: null })
   })
 })
 

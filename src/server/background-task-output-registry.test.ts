@@ -47,6 +47,24 @@ describe("BackgroundTaskOutputRegistry", () => {
     expect(reg.getOutput("chat1", "task1")).toEqual({ content: "", truncated: false })
   })
 
+  test("addWatcher reads what the file already holds before the first interval tick", () => {
+    const deps = makeDeps(new Map([["/tmp/t.out", "already here"]]))
+    const reg = createBackgroundTaskOutputRegistry(deps)
+    reg.trackTask("chat1", "task1", "/tmp/t.out")
+    const dispose = reg.addWatcher("chat1", "task1")
+    expect(reg.getOutput("chat1", "task1")).toEqual({ content: "already here", truncated: false })
+    dispose()
+  })
+
+  test("addWatcher on an empty file leaves content empty", () => {
+    const deps = makeDeps(new Map([["/tmp/t.out", ""]]))
+    const reg = createBackgroundTaskOutputRegistry(deps)
+    reg.trackTask("chat1", "task1", "/tmp/t.out")
+    const dispose = reg.addWatcher("chat1", "task1")
+    expect(reg.getOutput("chat1", "task1")).toEqual({ content: "", truncated: false })
+    dispose()
+  })
+
   test("polling starts on first watcher and reads content", () => {
     const deps = makeDeps()
     const reg = createBackgroundTaskOutputRegistry(deps)

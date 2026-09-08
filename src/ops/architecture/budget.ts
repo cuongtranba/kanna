@@ -46,7 +46,7 @@ export const PATTERN_BUDGETS: readonly PatternBudget[] = [
     id: "deps-bundles",
     include: ["src/server/"],
     pattern: "interface [A-Za-z]*Deps\\b|type [A-Za-z]*Deps\\b *=|deps: \\{$",
-    max: 84,
+    max: 85,
     issue: 893,
     rationale:
       "Each deps bundle is a hand-maintained slice of the coordinator's fields. Every field is optional, so a builder that omits one compiles and the consumer's fallback is indistinguishable from the feature being off — this is how getArmedLoop shipped declared-but-never-passed. Respelling a bundle as a type alias or an inline parameter object removes nothing, so all three spellings count.",
@@ -144,10 +144,10 @@ export interface EslintLimitPin {
 export const ESLINT_LIMIT_PINS: readonly EslintLimitPin[] = [
   {
     rule: "complexity",
-    max: 131,
+    max: 125,
     issue: 893,
     rationale:
-      "Cyclomatic complexity per function. The peak is runClaudeSession in claude-session-runner.ts (131) — down from 132 when the untyped-value migration removed a narrowing branch there. handleCommand dropped from 138 → 116 after the settings pre-dispatch refactor (#951).",
+      "Cyclomatic complexity per function. The peak is runClaudeSession in claude-session-runner.ts (125) — down from 131 when its tool_call bookkeeping moved to ClaudeSessionState.noteToolCall, which is where that state lives. handleCommand dropped from 138 → 116 after the settings pre-dispatch refactor (#951).",
   },
   {
     rule: "max-params",
