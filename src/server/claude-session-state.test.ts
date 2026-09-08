@@ -40,7 +40,7 @@ function makeSession(overrides?: Partial<ConstructorParameters<typeof ClaudeSess
     backgroundTaskWakeCount: 0,
     backgroundTasksLevelSourced: false,
     selfWakeActive: false,
-    recentToolDescriptions: new Map(),
+    recentToolCalls: new Map(),
     backgroundLaunchToolIds: new Set(),
     loopArmedAtSpawn: false,
     cancelledResultPending: 0,
@@ -61,7 +61,7 @@ describe("ClaudeSessionState.isHoldingWork", () => {
 
   it("returns false when deadline has lapsed and not level-sourced", () => {
     const s = makeSession({
-      backgroundTasks: new Map([["t1", { taskType: null, description: null, startedAt: NOW, outputPath: null }]]),
+      backgroundTasks: new Map([["t1", { taskType: null, description: null, startedAt: NOW, outputPath: null, command: null }]]),
       backgroundTaskDeadlineAt: NOW - 1,
       backgroundTasksLevelSourced: false,
     })
@@ -70,7 +70,7 @@ describe("ClaudeSessionState.isHoldingWork", () => {
 
   it("returns true when deadline is in the future and not level-sourced", () => {
     const s = makeSession({
-      backgroundTasks: new Map([["t1", { taskType: null, description: null, startedAt: NOW, outputPath: null }]]),
+      backgroundTasks: new Map([["t1", { taskType: null, description: null, startedAt: NOW, outputPath: null, command: null }]]),
       backgroundTaskDeadlineAt: NOW + 1,
       backgroundTasksLevelSourced: false,
     })
@@ -79,7 +79,7 @@ describe("ClaudeSessionState.isHoldingWork", () => {
 
   it("returns true when level-sourced regardless of deadline", () => {
     const s = makeSession({
-      backgroundTasks: new Map([["t1", { taskType: null, description: null, startedAt: NOW, outputPath: null }]]),
+      backgroundTasks: new Map([["t1", { taskType: null, description: null, startedAt: NOW, outputPath: null, command: null }]]),
       backgroundTaskDeadlineAt: 0,
       backgroundTasksLevelSourced: true,
     })
@@ -95,7 +95,7 @@ describe("ClaudeSessionState.guardExpired", () => {
 
   it("returns false when level-sourced (held indefinitely)", () => {
     const s = makeSession({
-      backgroundTasks: new Map([["t1", { taskType: null, description: null, startedAt: NOW, outputPath: null }]]),
+      backgroundTasks: new Map([["t1", { taskType: null, description: null, startedAt: NOW, outputPath: null, command: null }]]),
       backgroundTaskDeadlineAt: 0,
       backgroundTasksLevelSourced: true,
     })
@@ -104,7 +104,7 @@ describe("ClaudeSessionState.guardExpired", () => {
 
   it("returns false when deadline is in the future", () => {
     const s = makeSession({
-      backgroundTasks: new Map([["t1", { taskType: null, description: null, startedAt: NOW, outputPath: null }]]),
+      backgroundTasks: new Map([["t1", { taskType: null, description: null, startedAt: NOW, outputPath: null, command: null }]]),
       backgroundTaskDeadlineAt: NOW + 1,
       backgroundTasksLevelSourced: false,
     })
@@ -113,7 +113,7 @@ describe("ClaudeSessionState.guardExpired", () => {
 
   it("returns true when deadline has lapsed and not level-sourced", () => {
     const s = makeSession({
-      backgroundTasks: new Map([["t1", { taskType: null, description: null, startedAt: NOW, outputPath: null }]]),
+      backgroundTasks: new Map([["t1", { taskType: null, description: null, startedAt: NOW, outputPath: null, command: null }]]),
       backgroundTaskDeadlineAt: NOW - 1,
       backgroundTasksLevelSourced: false,
     })
@@ -124,7 +124,7 @@ describe("ClaudeSessionState.guardExpired", () => {
 describe("ClaudeSessionState.noteUserSend", () => {
   it("refreshes deadline when tasks are pending", () => {
     const s = makeSession({
-      backgroundTasks: new Map([["t1", { taskType: null, description: null, startedAt: NOW, outputPath: null }]]),
+      backgroundTasks: new Map([["t1", { taskType: null, description: null, startedAt: NOW, outputPath: null, command: null }]]),
       backgroundTaskDeadlineAt: NOW + 1,
       backgroundTaskWakeCount: 5,
       backgroundTaskWakeSuppressed: true,
@@ -154,6 +154,45 @@ describe("ClaudeSessionState.noteUserSend", () => {
   })
 })
 
+describe("ClaudeSessionState.noteToolCall", () => {
+  function bashCall(
+    toolId: string,
+    input: { command?: string; description?: string; runInBackground?: boolean },
+  ) {
+    return { kind: "tool", toolKind: "bash", toolName: "Bash", toolId, input } as never
+  }
+
+  it("records the description and the command separately", () => {
+    const s = makeSession()
+    s.noteToolCall(bashCall("t1", { command: "until false; do sleep 5; done", description: "Watch CI" }))
+    expect(s.recentToolCalls.get("t1")).toEqual({
+      description: "Watch CI",
+      command: "until false; do sleep 5; done",
+    })
+  })
+
+  it("arms a background launch only for a run_in_background bash call", () => {
+    const s = makeSession()
+    s.noteToolCall(bashCall("fg", { command: "ls" }))
+    s.noteToolCall(bashCall("bg", { command: "ls", runInBackground: true }))
+    expect([...s.backgroundLaunchToolIds]).toEqual(["bg"])
+  })
+
+  it("evicts the oldest entry past the cap", () => {
+    const s = makeSession()
+    for (let i = 0; i < 70; i++) s.noteToolCall(bashCall(`t${String(i)}`, { command: `echo ${String(i)}` }))
+    expect(s.recentToolCalls.size).toBe(64)
+    expect(s.recentToolCalls.has("t0")).toBe(false)
+    expect(s.recentToolCalls.has("t69")).toBe(true)
+  })
+
+  it("records nothing for a call carrying neither a description nor a command", () => {
+    const s = makeSession()
+    s.noteToolCall({ kind: "tool", toolKind: "glob", toolName: "Glob", toolId: "g1", input: {} } as never)
+    expect(s.recentToolCalls.size).toBe(0)
+  })
+})
+
 describe("ClaudeSessionState.noteLaunch", () => {
   it("returns empty array when launches is empty", () => {
     const s = makeSession()
@@ -163,7 +202,7 @@ describe("ClaudeSessionState.noteLaunch", () => {
 
   it("adds a new task and refreshes deadline", () => {
     const s = makeSession()
-    const added = s.noteLaunch([{ id: "task-1", outputPath: "/tmp/out" }], "some cmd", MAX_MS, NOW)
+    const added = s.noteLaunch([{ id: "task-1", outputPath: "/tmp/out" }], { description: "some cmd", command: "some cmd" }, MAX_MS, NOW)
     expect(added).toEqual([{ id: "task-1", outputPath: "/tmp/out" }])
     expect(s.backgroundTasks.has("task-1")).toBe(true)
     expect(s.backgroundTasks.get("task-1")?.description).toBe("some cmd")
@@ -179,7 +218,7 @@ describe("ClaudeSessionState.noteLaunch", () => {
 
   it("does not reset wakeCount when already non-empty", () => {
     const s = makeSession({
-      backgroundTasks: new Map([["existing", { taskType: null, description: null, startedAt: NOW, outputPath: null }]]),
+      backgroundTasks: new Map([["existing", { taskType: null, description: null, startedAt: NOW, outputPath: null, command: null }]]),
       backgroundTaskWakeCount: 7,
     })
     s.noteLaunch([{ id: "task-new", outputPath: null }], null, MAX_MS, NOW)
@@ -187,17 +226,17 @@ describe("ClaudeSessionState.noteLaunch", () => {
   })
 
   it("does not re-add existing task, does not include it in returned array", () => {
-    const existing = { taskType: null, description: "old", startedAt: NOW - 1, outputPath: null }
+    const existing = { taskType: null, description: "old", startedAt: NOW - 1, outputPath: null, command: null }
     const s = makeSession({
       backgroundTasks: new Map([["task-1", existing]]),
     })
-    const added = s.noteLaunch([{ id: "task-1", outputPath: null }], "new", MAX_MS, NOW)
+    const added = s.noteLaunch([{ id: "task-1", outputPath: null }], { description: "new", command: null }, MAX_MS, NOW)
     expect(added).toEqual([])
     expect(s.backgroundTasks.get("task-1")?.description).toBe("old")
   })
 
   it("updates outputPath when existing entry has null outputPath", () => {
-    const existing = { taskType: null, description: null, startedAt: NOW - 1, outputPath: null }
+    const existing = { taskType: null, description: null, startedAt: NOW - 1, outputPath: null, command: null }
     const s = makeSession({
       backgroundTasks: new Map([["task-1", existing]]),
     })
@@ -207,7 +246,7 @@ describe("ClaudeSessionState.noteLaunch", () => {
   })
 
   it("skips update when existing outputPath is already set", () => {
-    const existing = { taskType: null, description: null, startedAt: NOW - 1, outputPath: "/old/path" }
+    const existing = { taskType: null, description: null, startedAt: NOW - 1, outputPath: "/old/path", command: null }
     const s = makeSession({
       backgroundTasks: new Map([["task-1", existing]]),
     })
@@ -217,7 +256,7 @@ describe("ClaudeSessionState.noteLaunch", () => {
 
   it("returns empty when launches has entries but none are new or updated", () => {
     const s = makeSession({
-      backgroundTasks: new Map([["t1", { taskType: null, description: "desc", startedAt: NOW, outputPath: "/out" }]]),
+      backgroundTasks: new Map([["t1", { taskType: null, description: "desc", startedAt: NOW, outputPath: "/out", command: null }]]),
     })
     const added = s.noteLaunch([{ id: "t1", outputPath: "/out" }], null, MAX_MS, NOW)
     expect(added).toEqual([])
@@ -228,8 +267,8 @@ describe("ClaudeSessionState.noteSettle", () => {
   it("removes the settled task", () => {
     const s = makeSession({
       backgroundTasks: new Map([
-        ["t1", { taskType: null, description: null, startedAt: NOW, outputPath: null }],
-        ["t2", { taskType: null, description: null, startedAt: NOW, outputPath: null }],
+        ["t1", { taskType: null, description: null, startedAt: NOW, outputPath: null, command: null }],
+        ["t2", { taskType: null, description: null, startedAt: NOW, outputPath: null, command: null }],
       ]),
     })
     s.noteSettle("t1", MAX_MS, NOW)
@@ -240,8 +279,8 @@ describe("ClaudeSessionState.noteSettle", () => {
   it("refreshes deadline when tasks still remain", () => {
     const s = makeSession({
       backgroundTasks: new Map([
-        ["t1", { taskType: null, description: null, startedAt: NOW, outputPath: null }],
-        ["t2", { taskType: null, description: null, startedAt: NOW, outputPath: null }],
+        ["t1", { taskType: null, description: null, startedAt: NOW, outputPath: null, command: null }],
+        ["t2", { taskType: null, description: null, startedAt: NOW, outputPath: null, command: null }],
       ]),
       backgroundTaskDeadlineAt: 1,
     })
@@ -251,7 +290,7 @@ describe("ClaudeSessionState.noteSettle", () => {
 
   it("clears deadline when no tasks remain", () => {
     const s = makeSession({
-      backgroundTasks: new Map([["t1", { taskType: null, description: null, startedAt: NOW, outputPath: null }]]),
+      backgroundTasks: new Map([["t1", { taskType: null, description: null, startedAt: NOW, outputPath: null, command: null }]]),
       backgroundTaskDeadlineAt: NOW + 1000,
     })
     s.noteSettle("t1", MAX_MS, NOW)
@@ -268,7 +307,7 @@ describe("ClaudeSessionState.applyLevelSnapshot", () => {
 
   it("replaces backgroundTasks with snapshot content", () => {
     const s = makeSession({
-      backgroundTasks: new Map([["old-id", { taskType: null, description: null, startedAt: NOW, outputPath: null }]]),
+      backgroundTasks: new Map([["old-id", { taskType: null, description: null, startedAt: NOW, outputPath: null, command: null }]]),
     })
     s.applyLevelSnapshot(["new-id"], [{ id: "new-id", taskType: "bash", description: "watch" }], MAX_MS, NOW)
     expect(s.backgroundTasks.has("old-id")).toBe(false)
@@ -285,7 +324,7 @@ describe("ClaudeSessionState.applyLevelSnapshot", () => {
 
   it("does not reset wakeCount when was already non-empty", () => {
     const s = makeSession({
-      backgroundTasks: new Map([["t1", { taskType: null, description: null, startedAt: NOW, outputPath: null }]]),
+      backgroundTasks: new Map([["t1", { taskType: null, description: null, startedAt: NOW, outputPath: null, command: null }]]),
       backgroundTaskWakeCount: 5,
     })
     s.applyLevelSnapshot(["t1", "t2"], undefined, MAX_MS, NOW)
@@ -300,7 +339,7 @@ describe("ClaudeSessionState.applyLevelSnapshot", () => {
 
   it("clears deadline when snapshot is empty", () => {
     const s = makeSession({
-      backgroundTasks: new Map([["t1", { taskType: null, description: null, startedAt: NOW, outputPath: null }]]),
+      backgroundTasks: new Map([["t1", { taskType: null, description: null, startedAt: NOW, outputPath: null, command: null }]]),
       backgroundTaskDeadlineAt: NOW + 1000,
     })
     s.applyLevelSnapshot([], undefined, MAX_MS, NOW)
@@ -309,7 +348,7 @@ describe("ClaudeSessionState.applyLevelSnapshot", () => {
 
   it("preserves startedAt from previous map", () => {
     const s = makeSession({
-      backgroundTasks: new Map([["t1", { taskType: null, description: null, startedAt: 123, outputPath: null }]]),
+      backgroundTasks: new Map([["t1", { taskType: null, description: null, startedAt: 123, outputPath: null, command: null }]]),
     })
     s.applyLevelSnapshot(["t1"], undefined, MAX_MS, NOW)
     expect(s.backgroundTasks.get("t1")?.startedAt).toBe(123)
@@ -324,7 +363,7 @@ describe("ClaudeSessionState.hasBackgroundTasks", () => {
 
   it("returns true when map has entries", () => {
     const s = makeSession({
-      backgroundTasks: new Map([["t1", { taskType: null, description: null, startedAt: NOW, outputPath: null }]]),
+      backgroundTasks: new Map([["t1", { taskType: null, description: null, startedAt: NOW, outputPath: null, command: null }]]),
     })
     expect(s.hasBackgroundTasks()).toBe(true)
   })
@@ -337,7 +376,7 @@ describe("ClaudeSessionState.getBackgroundTaskEntries", () => {
   })
 
   it("returns [id, meta] pairs matching the map", () => {
-    const meta = { taskType: "bash" as const, description: "watch", startedAt: NOW, outputPath: "/out" }
+    const meta = { taskType: "bash" as const, description: "watch", startedAt: NOW, outputPath: "/out", command: null }
     const s = makeSession({ backgroundTasks: new Map([["t1", meta]]) })
     const entries = s.getBackgroundTaskEntries()
     expect(entries).toHaveLength(1)
@@ -355,8 +394,8 @@ describe("ClaudeSessionState.getBackgroundTaskIds", () => {
   it("returns all task ids", () => {
     const s = makeSession({
       backgroundTasks: new Map([
-        ["t1", { taskType: null, description: null, startedAt: NOW, outputPath: null }],
-        ["t2", { taskType: null, description: null, startedAt: NOW, outputPath: null }],
+        ["t1", { taskType: null, description: null, startedAt: NOW, outputPath: null, command: null }],
+        ["t2", { taskType: null, description: null, startedAt: NOW, outputPath: null, command: null }],
       ]),
     })
     const ids = s.getBackgroundTaskIds()
@@ -376,8 +415,8 @@ describe("ClaudeSessionState.abandonBackgroundTasks", () => {
   it("returns the ids of all tasks that were cleared", () => {
     const s = makeSession({
       backgroundTasks: new Map([
-        ["t1", { taskType: null, description: null, startedAt: NOW, outputPath: null }],
-        ["t2", { taskType: null, description: null, startedAt: NOW, outputPath: null }],
+        ["t1", { taskType: null, description: null, startedAt: NOW, outputPath: null, command: null }],
+        ["t2", { taskType: null, description: null, startedAt: NOW, outputPath: null, command: null }],
       ]),
       backgroundTaskDeadlineAt: NOW + 1000,
     })
@@ -389,7 +428,7 @@ describe("ClaudeSessionState.abandonBackgroundTasks", () => {
 
   it("clears the task map", () => {
     const s = makeSession({
-      backgroundTasks: new Map([["t1", { taskType: null, description: null, startedAt: NOW, outputPath: null }]]),
+      backgroundTasks: new Map([["t1", { taskType: null, description: null, startedAt: NOW, outputPath: null, command: null }]]),
     })
     s.abandonBackgroundTasks()
     expect(s.backgroundTasks.size).toBe(0)
@@ -397,7 +436,7 @@ describe("ClaudeSessionState.abandonBackgroundTasks", () => {
 
   it("resets the deadline to 0", () => {
     const s = makeSession({
-      backgroundTasks: new Map([["t1", { taskType: null, description: null, startedAt: NOW, outputPath: null }]]),
+      backgroundTasks: new Map([["t1", { taskType: null, description: null, startedAt: NOW, outputPath: null, command: null }]]),
       backgroundTaskDeadlineAt: NOW + 5000,
     })
     s.abandonBackgroundTasks()

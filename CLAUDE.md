@@ -1932,12 +1932,63 @@ is the real filename, a `c3x add adr` defect, not a typo here).
   `taskType`/`description` from the `background_tasks_changed` snapshot —
   the normalizer now emits `backgroundTasksSnapshot` meta alongside the ids —
   with the launch-regex fallback enriched from the launching tool_call's
-  description via `session.recentToolDescriptions`). Per-chat task lists
+  description AND command via `session.recentToolCalls`). Per-chat task lists
   flow `getBackgroundTasksByChatId` → `deriveChatSnapshot` →
   `ChatRuntime.backgroundTasks` → `BackgroundTasksSection` (chat footer,
   /tasks-style: type icon + description + id + live elapsed). Budget
   eviction skips `selfWakeActive` sessions; the idle reaper still keys on
   `lastUsedAt`, so a wedged flag cannot pin a session forever.
+
+## The panel shows the COMMAND, because the description explains nothing
+
+`ChatBackgroundTask` carries `command` and `outputPath` beside `description`.
+The `background_tasks_changed` snapshot has neither — its `description` is the
+Bash tool's own label, so two rows reading "Wait for CI to finish" and
+"Wait for all CI checks to settle" were the entire diagnostic surface for two
+tasks whose output files were, correctly, **0 bytes**. The command is captured
+at the launching `tool_call` (`toolCallCommand`, capped at
+`MAX_BACKGROUND_TASK_COMMAND_CHARS` — it rides every chat broadcast) and
+preserved across level snapshots by `mergeBackgroundTaskSnapshot`, exactly as
+`outputPath` is: the snapshot carries no command and, per #811, can arrive
+BEFORE the launch tool_result, so `prev?.command ?? null` is load-bearing.
+`outputPath` reaching the client reverses one line of
+`adr-20260820-background-task-output-streaming` — `hasOutput` is still enough
+to decide the expander, but it is not enough to let a user `tail` the file
+themselves when the panel is empty.
+
+**`Waiting for output…` now means only "no snapshot has arrived yet", which is
+one frame.** `addWatcher` polls ONCE before scheduling its interval, so the
+first pushed snapshot already carries whatever the file holds; an empty
+`content` therefore means an empty file and reads `No output yet`. Without that
+first read, a task with megabytes of output shows `Waiting for output…` for a
+full second, and one with an empty file shows it forever — indistinguishable
+from a broken stream, which is how this was reported.
+
+## The end-of-turn harvest guard (`KANNA_BACKGROUND_TASK_GUARD`)
+
+`createBackgroundTaskGuard` (`background-task-guard.ts`) runs at the runner's
+success finalize, right after the mermaid guard and before
+`maybeStartNextQueuedMessage` so the existing drain picks it up. It offers ONE
+prompt per task id naming the id, command and output path and asking the model
+to retrieve and report it. Same `createModelEscalation` machinery as the
+mermaid and cron guards — no new escalation path.
+
+**It fires only when `backgroundTasksLevelSourced` is true, and that is the
+whole point.** The repo already had a wake mechanism —
+`escalateExpiredBackgroundTaskGuard` → `buildBackgroundTaskWakePrompt` — but
+`guardExpired()` returns false for a level-sourced session, so on the SDK
+driver it is unreachable. Chat `6fe3e20c` is what that costs: an SDK turn
+launched two `until …; do sleep 20; done` CI watches, its blocking `TaskOutput`
+timed out at 600 s, the turn ended, and nothing ever woke the model again. The
+guard fills exactly that gap and stands down where the ladder already owns the
+task, so no session gets two nudges.
+
+Its other bounds mirror the mermaid guard's: once per task id per chat (a task
+the model cannot resolve must not be re-asked every turn), success branch only,
+stands aside on a queued user message, skipped while a loop is armed (a loop
+enqueues its own wake each iteration), and it swallows its own failures.
+`KANNA_BACKGROUND_TASK_GUARD=disabled` turns it off; the prompt rule in
+`KANNA_SYSTEM_PROMPT_BASE` stays either way.
 
 # Workflow Status Panel (disk-watch, read-only — SDK + PTY)
 

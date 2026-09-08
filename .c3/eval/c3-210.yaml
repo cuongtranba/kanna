@@ -29,3 +29,9 @@ code:
   - src/server/claude-turn-starter-types.ts
   - src/server/loop-wake-recovery.test.ts
   - src/server/loop-wake-recovery.ts
+  - src/server/background-task-guard.ts
+  - src/server/background-task-guard.test.ts
+  - src/server/background-task-output-registry.ts
+  - src/server/background-task-output-registry.test.ts
+  - src/server/background-task-output-io.adapter.ts
+  - src/server/claude-session-state.test.ts

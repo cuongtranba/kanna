@@ -72,7 +72,7 @@ function makeSession(overrides: Partial<ConstructorParameters<typeof ClaudeSessi
     lastUsedAt: Date.now(),
     backgroundTasks: new Map(),
     selfWakeActive: false,
-    recentToolDescriptions: new Map(),
+    recentToolCalls: new Map(),
     backgroundLaunchToolIds: new Set<string>(),
     backgroundTaskDeadlineAt: 0,
     backgroundTaskWakeCount: 0,
@@ -612,7 +612,7 @@ describe("backgroundTaskWakeSuppressed", () => {
     const activeTurns = new Map([["chat-1", active]])
     const session = makeSession({
       backgroundTasks: new Map([
-        ["task-1", { taskType: null, description: null, startedAt: Date.now(), outputPath: null }],
+        ["task-1", { taskType: null, description: null, startedAt: Date.now(), outputPath: null, command: null }],
       ]),
     })
     const deps = makeDeps({ activeTurns, claudeSessions: new Map([["chat-1", session]]) })
@@ -637,7 +637,7 @@ describe("backgroundTaskWakeSuppressed", () => {
     const session = makeSession({
       selfWakeActive: true,
       backgroundTasks: new Map([
-        ["task-2", { taskType: null, description: null, startedAt: Date.now(), outputPath: null }],
+        ["task-2", { taskType: null, description: null, startedAt: Date.now(), outputPath: null, command: null }],
       ]),
     })
     session.session = { ...session.session, interrupt: async () => {} }

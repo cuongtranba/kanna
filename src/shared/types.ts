@@ -349,6 +349,8 @@ export interface ChatBackgroundTask {
   id: string
   taskType: string | null
   description: string | null
+  command: string | null
+  outputPath: string | null
   startedAt: number
   hasOutput: boolean
 }

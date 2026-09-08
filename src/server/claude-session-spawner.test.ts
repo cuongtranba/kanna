@@ -61,7 +61,7 @@ function makeSession(overrides: Partial<ConstructorParameters<typeof ClaudeSessi
     lastUsedAt: 0,
     backgroundTasks: new Map(),
     selfWakeActive: false,
-    recentToolDescriptions: new Map(),
+    recentToolCalls: new Map(),
     backgroundLaunchToolIds: new Set<string>(),
     backgroundTaskDeadlineAt: 0,
     backgroundTaskWakeCount: 0,

@@ -10,7 +10,6 @@ import {
   isPromptTooLongMessage,
   isNoConversationFoundMessage,
   backgroundTaskLaunchesFromToolResult,
-  toolCallDescription,
 } from "./claude-prompt-helpers"
 import { timestamped } from "./claude-message-normalizer"
 import { logClaudeSteer } from "./claude-steer-log"
@@ -18,8 +17,7 @@ import type { ClaudeSessionState, ActiveTurn } from "./claude-session-state"
 import { isCliCompactTurn, isProactiveCompactTurn } from "./claude-session-state"
 import type { PendingToolSlots } from "./pending-tool-slot"
 import type { MermaidGuard } from "./mermaid-guard"
-
-const RECENT_TOOL_DESCRIPTION_LIMIT = 64
+import type { BackgroundTaskGuard } from "./background-task-guard"
 
 const SELF_WAKE_ARMING_KINDS: ReadonlySet<TranscriptEntry["kind"]> = new Set([
   "assistant_text",
@@ -76,6 +74,7 @@ export interface RunClaudeSessionDeps {
   maybeStartNextQueuedMessage(chatId: string): Promise<boolean | void>
   resolveClaudeDriverPreference(): ClaudeDriverPreference
   mermaidGuard?: MermaidGuard
+  backgroundTaskGuard?: BackgroundTaskGuard
   onBackgroundTaskLaunch?(chatId: string, taskId: string, outputPath: string | null): void
   onBackgroundTaskSettle?(chatId: string, taskId: string): void
 }
@@ -192,23 +191,7 @@ export async function runClaudeSession(
         turnAssistantText.push(event.entry.text)
       }
       if (event.entry.kind === "tool_call") {
-        const description = toolCallDescription(event.entry.tool)
-        if (description) {
-          session.recentToolDescriptions.set(event.entry.tool.toolId, description)
-          while (session.recentToolDescriptions.size > RECENT_TOOL_DESCRIPTION_LIMIT) {
-            const oldest = session.recentToolDescriptions.keys().next().value
-            if (oldest === undefined) break
-            session.recentToolDescriptions.delete(oldest)
-          }
-        }
-        const tool = event.entry.tool
-        if (
-          (tool.toolKind === "bash" && tool.input.runInBackground === true) ||
-          tool.toolKind === "subagent_task" ||
-          tool.toolKind === "workflow"
-        ) {
-          session.backgroundLaunchToolIds.add(tool.toolId)
-        }
+        session.noteToolCall(event.entry.tool)
       }
       if (!deps.activeTurns.has(session.chatId)) {
         if (event.entry.kind === "result") {
@@ -231,8 +214,8 @@ export async function runClaudeSession(
         if (isLaunchResult) {
           const launches = backgroundTaskLaunchesFromToolResult(event.entry.content)
           if (launches.length > 0) {
-            const launchDescription = session.recentToolDescriptions.get(event.entry.toolId) ?? null
-            const added = session.noteLaunch(launches, launchDescription, deps.resolveBackgroundTaskMaxMs(), Date.now())
+            const launchedBy = session.recentToolCalls.get(event.entry.toolId) ?? null
+            const added = session.noteLaunch(launches, launchedBy, deps.resolveBackgroundTaskMaxMs(), Date.now())
             for (const { id, outputPath } of added) {
               deps.onBackgroundTaskLaunch?.(session.chatId, id, outputPath)
             }
@@ -358,6 +341,7 @@ export async function runClaudeSession(
             await deps.store.setCompactFailureCount(session.chatId, 0)
           }
           await deps.mermaidGuard?.check(session.chatId, turnAssistantText)
+          await deps.backgroundTaskGuard?.check(session)
         }
         deps.pendingTools.discard(session.chatId)
         deps.activeTurns.delete(session.chatId)
