@@ -2,7 +2,7 @@ import { LegendList, type LegendListRef } from "@legendapp/list/react"
 import { memo, useCallback, useEffect, useMemo, useRef } from "react"
 import { useChatPageStore } from "../../stores/chatPageStore"
 import { ChatTabScopedStore } from "../../stores/chatTabScopedStore"
-import { ArrowDown, Bot, Flower, MessageCircleQuestion, Upload } from "lucide-react"
+import { ArrowDown, Bot, ChevronDown, ChevronUp, Flower, MessageCircleQuestion, Upload } from "lucide-react"
 import { AnimatedShinyText } from "../../components/ui/animated-shiny-text"
 import { DrainingIndicator } from "../../components/messages/DrainingIndicator"
 import { QueuedUserMessage } from "../../components/messages/QueuedUserMessage"
@@ -232,6 +232,33 @@ export const ChatTranscriptViewport = memo(({
     () => selectPendingMainQuestion(messages, latestToolIds),
     [messages, latestToolIds],
   )
+
+  const userPromptIndices = useMemo(
+    () => resolvedRows.flatMap((row, i) => row.kind === "single" && row.message.kind === "user_prompt" ? [i] : []),
+    [resolvedRows],
+  )
+
+  const promptCursorRef = useRef(-1)
+
+  useEffect(() => {
+    promptCursorRef.current = -1
+  }, [activeChatId])
+
+  const navigatePrompt = useCallback((dir: "prev" | "next") => {
+    if (!userPromptIndices.length) return
+    const cur = promptCursorRef.current
+    let next: number
+    if (dir === "next") {
+      next = cur < 0 ? 0 : Math.min(cur + 1, userPromptIndices.length - 1)
+    } else {
+      next = cur < 0 ? userPromptIndices.length - 1 : Math.max(cur - 1, 0)
+    }
+    promptCursorRef.current = next
+    const rowIndex = userPromptIndices[next]
+    if (rowIndex !== undefined) {
+      listRef.current?.scrollToIndex({ index: rowIndex, animated: true, viewPosition: 0 })
+    }
+  }, [listRef, userPromptIndices])
 
   const renderRunTree = useMemo(
     () =>
@@ -640,6 +667,25 @@ export const ChatTranscriptViewport = memo(({
           <ArrowDown aria-hidden="true" className="h-5 w-5" />
         </button>
       </div>
+
+      {userPromptIndices.length > 0 ? (
+        <div style={{ bottom: transcriptPaddingBottom - 20 }} className="absolute right-4 z-10 flex flex-col gap-1">
+          <button
+            onClick={() => navigatePrompt("prev")}
+            aria-label="Jump to previous prompt"
+            className="flex size-9 cursor-pointer items-center justify-center rounded-md border border-border bg-card text-sm text-foreground transition-colors hover:bg-muted"
+          >
+            <ChevronUp aria-hidden="true" className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => navigatePrompt("next")}
+            aria-label="Jump to next prompt"
+            className="flex size-9 cursor-pointer items-center justify-center rounded-md border border-border bg-card text-sm text-foreground transition-colors hover:bg-muted"
+          >
+            <ChevronDown aria-hidden="true" className="h-4 w-4" />
+          </button>
+        </div>
+      ) : null}
     </>
   )
 })
