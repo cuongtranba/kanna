@@ -25,14 +25,24 @@ describe("UserMessage plate", () => {
     expect(html).not.toContain("items-end")
   })
 
-  test("makes the speaker gloss immediately scannable without adding a second rule", () => {
+  test("makes the speaker gloss immediately scannable", () => {
     const html = render("hi")
 
     expect(html).toContain("text-15")
     expect(html).toContain("font-semibold")
     expect(html).toContain("text-foreground")
-    expect(html).not.toContain("border-l")
-    expect(html).not.toContain("pl-")
+  })
+
+  test("carries a left-border accent to anchor the prompt on the rail", () => {
+    const html = render("hi")
+    expect(html).toContain("border-l-2")
+    expect(html).toContain("border-foreground/25")
+    expect(html).toContain("pl-3")
+  })
+
+  test("exposes a data-user-prompt marker for navigation", () => {
+    const html = render("hi")
+    expect(html).toContain('data-user-prompt="true"')
   })
 
   test("carries no box, radius, or fill", () => {

@@ -72,7 +72,7 @@ function UserMessageInner({ content, attachments = [], steered = false, autoCont
 
   return (
     <>
-      <div className="flex flex-col items-start gap-2">
+      <div className="flex flex-col items-start gap-2 border-l-2 border-foreground/25 pl-3" data-user-prompt="true">
         {imageAttachments.length > 0 ? (
           <div className="flex max-w-[85%] flex-wrap gap-3 sm:max-w-[80%]">
             {imageAttachments.map((attachment) => (
