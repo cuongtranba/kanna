@@ -44,7 +44,7 @@ function BackgroundTasksSectionContent({ chatId, tasks }: Props) {
   return (
     <div className="rounded-2xl border border-border overflow-hidden">
       <h3 className="font-medium text-foreground text-sm p-3 px-4 bg-card border-b border-border flex items-center gap-2">
-        <Activity className="h-4 w-4 text-muted-foreground" />
+        <Activity className="h-4 w-4 text-warning-text motion-safe:animate-kanna-heartbeat" />
         Background tasks
         <span className="ml-auto inline-flex items-center gap-1.5 text-xs font-normal text-muted-foreground">
           <span className="h-1.5 w-1.5 rounded-full bg-warning" />

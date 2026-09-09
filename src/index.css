@@ -966,6 +966,36 @@
 @theme inline {
   --animate-shiny-pulse: shiny-pulse 1.6s ease-in-out infinite;
   --animate-kanna-bootstrap-sweep: kanna-bootstrap-sweep 1.4s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+  --animate-kanna-heartbeat: kanna-heartbeat 1.6s var(--motion-ease-arriving) infinite;
+
+  /*
+    Lub-dub. Two contractions inside the first third of the cycle, then a full
+    second of rest — the rest is what separates a heartbeat from a throb, and
+    what keeps an always-on loop beside a body of text from reading as alarm.
+    Transform only: the glyph beats, the row it sits in never reflows.
+  */
+  @keyframes kanna-heartbeat {
+    0% {
+      transform: scale(1);
+    }
+
+    8% {
+      transform: scale(1.18);
+    }
+
+    17% {
+      transform: scale(1);
+    }
+
+    25% {
+      transform: scale(1.11);
+    }
+
+    34%,
+    100% {
+      transform: scale(1);
+    }
+  }
 
   @keyframes shiny-pulse {
     0%, 100% {
