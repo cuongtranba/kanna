@@ -90,10 +90,7 @@ export function createBackgroundTaskOutputRegistry(
       const state = tasks.get(key)
       if (!state) return () => {}
       state.watcherCount++
-      if (state.watcherCount === 1) {
-        poll(chatId, taskId, state)
-        startPoll(chatId, taskId, state)
-      }
+      if (state.watcherCount === 1) startPoll(chatId, taskId, state)
       return () => {
         state.watcherCount--
         if (state.watcherCount <= 0) {

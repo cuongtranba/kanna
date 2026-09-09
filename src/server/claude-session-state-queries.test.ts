@@ -55,7 +55,7 @@ function makeSession(overrides?: Partial<ConstructorParameters<typeof ClaudeSess
     backgroundTaskWakeCount: 0,
     backgroundTasksLevelSourced: false,
     selfWakeActive: false,
-    recentToolCalls: new Map(),
+    recentToolDescriptions: new Map(),
     backgroundLaunchToolIds: new Set(),
     loopArmedAtSpawn: false,
     cancelledResultPending: 0,
@@ -183,15 +183,15 @@ describe("getBackgroundTasksByChatId", () => {
   it("maps task metadata to UI shape sorted oldest-first", () => {
     const session = makeSession({
       backgroundTasks: new Map([
-        ["b2", { taskType: "local_agent", description: "Later task", startedAt: 200, outputPath: null, command: null }],
-        ["a1", { taskType: "local_bash", description: "Earlier task", startedAt: 100, outputPath: null, command: null }],
+        ["b2", { taskType: "local_agent", description: "Later task", startedAt: 200, outputPath: null }],
+        ["a1", { taskType: "local_bash", description: "Earlier task", startedAt: 100, outputPath: null }],
       ]),
     })
     const deps = makeDeps({ claudeSessions: new Map([["chat-1", session]]) })
     const tasks = getBackgroundTasksByChatId(deps).get("chat-1")
     expect(tasks).toEqual([
-      { id: "a1", taskType: "local_bash", description: "Earlier task", startedAt: 100, hasOutput: false, command: null, outputPath: null },
-      { id: "b2", taskType: "local_agent", description: "Later task", startedAt: 200, hasOutput: false, command: null, outputPath: null },
+      { id: "a1", taskType: "local_bash", description: "Earlier task", startedAt: 100, hasOutput: false },
+      { id: "b2", taskType: "local_agent", description: "Later task", startedAt: 200, hasOutput: false },
     ])
   })
 })
@@ -475,7 +475,7 @@ describe("isSessionInUse", () => {
     const session = makeSession({
       selfWakeActive: false,
       pendingPromptSeqs: [],
-      backgroundTasks: new Map([["t1", { taskType: "local_bash", description: null, startedAt: now - 60_000, outputPath: null, command: null }]]),
+      backgroundTasks: new Map([["t1", { taskType: "local_bash", description: null, startedAt: now - 60_000, outputPath: null }]]),
       backgroundTaskDeadlineAt: now - 1,
       backgroundTasksLevelSourced: true,
     })
@@ -529,7 +529,7 @@ describe("sweepIdleClaudeSessions background-task escalation", () => {
       chatId: "chat-1",
       lastUsedAt: 0,
       pendingPromptSeqs: [],
-      backgroundTasks: new Map([["bsh1", { taskType: null, description: null, startedAt: 0, outputPath: null, command: null }]]),
+      backgroundTasks: new Map([["bsh1", { taskType: null, description: null, startedAt: 0, outputPath: null }]]),
       backgroundTaskDeadlineAt: Date.now() - 1,
       backgroundTaskWakeCount: 0,
       ...overrides,
@@ -540,7 +540,7 @@ describe("sweepIdleClaudeSessions background-task escalation", () => {
     const now = Date.now()
     const session = makeExpiredSession({
       backgroundTasks: new Map([
-        ["ba35e96q4", { taskType: "local_bash", description: "task dev", startedAt: now - 32 * 60_000, outputPath: null, command: null }],
+        ["ba35e96q4", { taskType: "local_bash", description: "task dev", startedAt: now - 32 * 60_000, outputPath: null }],
       ]),
       backgroundTaskDeadlineAt: now - 2 * 60_000,
       lastUsedAt: now - 32 * 60_000,

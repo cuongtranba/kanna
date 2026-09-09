@@ -73,8 +73,6 @@ export function getBackgroundTasksByChatId(
         id,
         taskType: meta.taskType,
         description: meta.description,
-        command: meta.command,
-        outputPath: meta.outputPath,
         startedAt: meta.startedAt,
         hasOutput: meta.outputPath != null,
       }))
