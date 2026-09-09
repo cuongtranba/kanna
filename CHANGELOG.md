@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.51.0](https://github.com/cuongtranba/kanna/compare/v1.50.0...v1.51.0) (2026-09-09)
+
+
+### Features
+
+* **transcript:** drop the prompt prev/next chevrons ([#1075](https://github.com/cuongtranba/kanna/issues/1075)) ([7683505](https://github.com/cuongtranba/kanna/commit/768350564040b83706f0dceba9f6efb33975c44e))
+
 ## [1.50.0](https://github.com/cuongtranba/kanna/compare/v1.49.1...v1.50.0) (2026-09-09)
 
 
