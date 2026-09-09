@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.49.1](https://github.com/cuongtranba/kanna/compare/v1.49.0...v1.49.1) (2026-09-09)
+
+
+### Reverts
+
+* "feat(background-tasks): show the command, and harvest a task the turn left running ([#1068](https://github.com/cuongtranba/kanna/issues/1068))" ([#1070](https://github.com/cuongtranba/kanna/issues/1070)) ([f27bc60](https://github.com/cuongtranba/kanna/commit/f27bc60d85e7cd03c6d66867555feef2a5427438))
+
 ## [1.49.0](https://github.com/cuongtranba/kanna/compare/v1.48.0...v1.49.0) (2026-09-08)
 
 
