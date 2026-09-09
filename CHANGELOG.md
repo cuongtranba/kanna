@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.50.0](https://github.com/cuongtranba/kanna/compare/v1.49.1...v1.50.0) (2026-09-09)
+
+
+### Features
+
+* **background-tasks:** beat the header glyph like a heartbeat ([#1072](https://github.com/cuongtranba/kanna/issues/1072)) ([7a09a2e](https://github.com/cuongtranba/kanna/commit/7a09a2e8d98fe9850e603b848262c55d705da191))
+
 ## [1.49.1](https://github.com/cuongtranba/kanna/compare/v1.49.0...v1.49.1) (2026-09-09)
 
 
