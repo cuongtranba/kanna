@@ -287,7 +287,7 @@ export async function spawnClaudeTurn(
       backgroundTaskWakeCount: 0,
       backgroundTasksLevelSourced: false,
       selfWakeActive: false,
-      recentToolCalls: new Map(),
+      recentToolDescriptions: new Map<string, string>(),
       backgroundLaunchToolIds: new Set<string>(),
       loopArmedAtSpawn: loopArmedNow,
       cancelledResultPending: 0,

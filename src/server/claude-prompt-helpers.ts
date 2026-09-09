@@ -130,17 +130,6 @@ export function toolCallDescription(tool: NormalizedToolCall): string | null {
   return typeof raw === "string" && raw.length > 0 ? raw : null
 }
 
-export const MAX_BACKGROUND_TASK_COMMAND_CHARS = 2000
-
-export function toolCallCommand(tool: NormalizedToolCall): string | null {
-  if (tool.toolKind !== "bash") return null
-  const command = tool.input.command
-  if (typeof command !== "string" || command.length === 0) return null
-  return command.length > MAX_BACKGROUND_TASK_COMMAND_CHARS
-    ? `${command.slice(0, MAX_BACKGROUND_TASK_COMMAND_CHARS)}…`
-    : command
-}
-
 export function mergeBackgroundTaskSnapshot(
   previous: ReadonlyMap<string, SessionBackgroundTask>,
   ids: readonly string[],
@@ -157,7 +146,6 @@ export function mergeBackgroundTaskSnapshot(
       description: snapshotMeta?.description ?? prev?.description ?? null,
       startedAt: prev?.startedAt ?? now,
       outputPath: prev?.outputPath ?? null,
-      command: prev?.command ?? null,
     })
   }
   return next

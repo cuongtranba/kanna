@@ -1,5 +1,5 @@
 # C3 Structural Index
-<!-- hash: sha256:a9ac254054d0a763b3b1852bc0056bc78194ad9fa6540d6886fdcd87917cd2e0 -->
+<!-- hash: sha256:7a9a4e62470cb377986b20e54e4733bf2027704fed4e35c222117c860a08069a -->
 
 ## c3-0 — Kanna (system)
 
@@ -28,7 +28,7 @@ refs: ref-colocated-bun-test, ref-strong-typing, ref-zustand-store
 ## c3-110 — app-shell (component)
 container: c3-1 | context: c3-0
 refs: ref-cqrs-read-models, ref-ws-subscription
-files: src/client/app/App.test.tsx, src/client/app/App.tsx, src/client/app/AppBootstrap.tsx, src/client/app/AppGlobalProvider.tsx, src/client/app/PageHeader.tsx, src/client/app/appRuntime.test.ts, src/client/app/appRuntime.ts, src/client/app/chatFocusPolicy.test.ts, src/client/app/chatFocusPolicy.ts, src/client/app/chatNotifications.ts, src/client/app/derived.ts, src/client/app/sidebarSwipeGesture.ts, src/client/app/useAppGlobalState.test.ts, src/client/app/useAppGlobalState.ts, src/client/app/useKannaState.scrollback.test.tsx, src/client/app/useKannaState.test.ts, src/client/app/useKannaState.ts, src/client/app/usePushFocus.test.ts, src/client/app/usePushFocus.ts, src/client/components/LocalDev.tsx, src/client/hooks/**/*.ts, src/client/hooks/**/*.tsx, src/client/lib/**/*.ts, src/main.tsx
+files: src/client/app/App.test.tsx, src/client/app/App.tsx, src/client/app/AppBootstrap.tsx, src/client/app/AppGlobalProvider.tsx, src/client/app/PageHeader.tsx, src/client/app/appRuntime.test.ts, src/client/app/appRuntime.ts, src/client/app/chatFocusPolicy.test.ts, src/client/app/chatFocusPolicy.ts, src/client/app/chatNotifications.ts, src/client/app/derived.ts, src/client/app/sidebarSwipeGesture.ts, src/client/app/useAppGlobalState.test.ts, src/client/app/useAppGlobalState.ts, src/client/app/useKannaState.test.ts, src/client/app/useKannaState.ts, src/client/app/usePushFocus.test.ts, src/client/app/usePushFocus.ts, src/client/components/LocalDev.tsx, src/client/hooks/**/*.ts, src/client/hooks/**/*.tsx, src/client/lib/**/*.ts, src/main.tsx
 
 ## c3-111 — sidebar (component)
 container: c3-1 | context: c3-0
@@ -38,7 +38,7 @@ files: src/client/app/KannaSidebar.tsx, src/client/app/sidebarNumberJump.test.ts
 ## c3-112 — chat-page (component)
 container: c3-1 | context: c3-0
 refs: ref-cqrs-read-models, ref-ws-subscription
-files: src/client/app/BackgroundTasksSection.store.ts, src/client/app/BackgroundTasksSection.test.tsx, src/client/app/BackgroundTasksSection.tsx, src/client/app/ChatPage.test.ts, src/client/app/ChatPage/**/*.ts, src/client/app/ChatPage/**/*.tsx, src/client/app/LoopProgressSection.test.tsx, src/client/app/LoopProgressSection.tsx, src/client/app/chatNavigator.ts, src/client/app/useRightSidebarToggleAnimation.ts, src/client/app/useStickyChatFocus.ts, src/client/app/useTerminalToggleAnimation.ts, src/client/components/messages/LoopDisarmedMessage.test.tsx, src/client/components/messages/LoopDisarmedMessage.tsx
+files: src/client/app/BackgroundTasksSection.test.tsx, src/client/app/BackgroundTasksSection.tsx, src/client/app/ChatPage.test.ts, src/client/app/ChatPage/**/*.ts, src/client/app/ChatPage/**/*.tsx, src/client/app/LoopProgressSection.test.tsx, src/client/app/LoopProgressSection.tsx, src/client/app/chatNavigator.ts, src/client/app/useRightSidebarToggleAnimation.ts, src/client/app/useStickyChatFocus.ts, src/client/app/useTerminalToggleAnimation.ts, src/client/components/messages/LoopDisarmedMessage.test.tsx, src/client/components/messages/LoopDisarmedMessage.tsx
 
 ## c3-113 — transcript (component)
 container: c3-1 | context: c3-0
@@ -142,7 +142,7 @@ files: src/server/process-utils.adapter.ts, src/server/process-utils.test.ts
 container: c3-2 | context: c3-0
 refs: ref-colocated-bun-test, ref-event-sourcing, ref-provider-adapter, ref-tool-hydration, rule-colocated-bun-test
 reverse deps: adr-20260617-subagent-id-or-name-resolution, adr-20260617-subagent-trigger-mode
-files: src/server/agent.test.ts, src/server/agent.ts, src/server/background-task-guard.test.ts, src/server/background-task-guard.ts, src/server/background-task-output-io.adapter.ts, src/server/background-task-output-registry.test.ts, src/server/background-task-output-registry.ts, src/server/claude-context-commands.test.ts, src/server/claude-context-commands.ts, src/server/claude-send-command.test.ts, src/server/claude-send-command.ts, src/server/claude-session-lifecycle.test.ts, src/server/claude-session-lifecycle.ts, src/server/claude-session-runner.test.ts, src/server/claude-session-runner.ts, src/server/claude-session-state-queries.test.ts, src/server/claude-session-state-queries.ts, src/server/claude-session-state.test.ts, src/server/claude-session-state.ts, src/server/claude-turn-starter-types.ts, src/server/claude-turn-starter.ts, src/server/history-primer.test.ts, src/server/history-primer.ts, src/server/loop-wake-recovery.test.ts, src/server/loop-wake-recovery.ts, src/server/mention-parser.test.ts, src/server/mention-parser.ts, src/server/proactive-compact.test.ts, src/server/proactive-compact.ts, src/server/subagent-entry-cap.test.ts, src/server/subagent-orchestrator.test.ts, src/server/subagent-orchestrator.ts, src/server/subagent-provider-run.test.ts, src/server/subagent-provider-run.ts
+files: src/server/agent.test.ts, src/server/agent.ts, src/server/claude-context-commands.test.ts, src/server/claude-context-commands.ts, src/server/claude-send-command.test.ts, src/server/claude-send-command.ts, src/server/claude-session-lifecycle.test.ts, src/server/claude-session-lifecycle.ts, src/server/claude-session-runner.test.ts, src/server/claude-session-runner.ts, src/server/claude-session-state-queries.test.ts, src/server/claude-session-state-queries.ts, src/server/claude-session-state.ts, src/server/claude-turn-starter-types.ts, src/server/claude-turn-starter.ts, src/server/history-primer.test.ts, src/server/history-primer.ts, src/server/loop-wake-recovery.test.ts, src/server/loop-wake-recovery.ts, src/server/mention-parser.test.ts, src/server/mention-parser.ts, src/server/proactive-compact.test.ts, src/server/proactive-compact.ts, src/server/subagent-entry-cap.test.ts, src/server/subagent-orchestrator.test.ts, src/server/subagent-orchestrator.ts, src/server/subagent-provider-run.test.ts, src/server/subagent-provider-run.ts
 
 ## c3-211 — codex-app-server (component)
 container: c3-2 | context: c3-0
@@ -432,7 +432,6 @@ src/client/app/derived.ts → c3-110
 src/client/app/sidebarSwipeGesture.ts → c3-110
 src/client/app/useAppGlobalState.test.ts → c3-110
 src/client/app/useAppGlobalState.ts → c3-110
-src/client/app/useKannaState.scrollback.test.tsx → c3-110
 src/client/app/useKannaState.test.ts → c3-110
 src/client/app/useKannaState.ts → c3-110
 src/client/app/usePushFocus.test.ts → c3-110
@@ -445,7 +444,6 @@ src/main.tsx → c3-110
 src/client/app/KannaSidebar.tsx → c3-111
 src/client/app/sidebarNumberJump.test.ts → c3-111
 src/client/app/sidebarNumberJump.ts → c3-111
-src/client/app/BackgroundTasksSection.store.ts → c3-112
 src/client/app/BackgroundTasksSection.test.tsx → c3-112
 src/client/app/BackgroundTasksSection.tsx → c3-112
 src/client/app/ChatPage.test.ts → c3-112
@@ -567,11 +565,6 @@ src/server/process-utils.adapter.ts → c3-209
 src/server/process-utils.test.ts → c3-209
 src/server/agent.test.ts → c3-210
 src/server/agent.ts → c3-210
-src/server/background-task-guard.test.ts → c3-210
-src/server/background-task-guard.ts → c3-210
-src/server/background-task-output-io.adapter.ts → c3-210
-src/server/background-task-output-registry.test.ts → c3-210
-src/server/background-task-output-registry.ts → c3-210
 src/server/claude-context-commands.test.ts → c3-210
 src/server/claude-context-commands.ts → c3-210
 src/server/claude-send-command.test.ts → c3-210
@@ -582,7 +575,6 @@ src/server/claude-session-runner.test.ts → c3-210
 src/server/claude-session-runner.ts → c3-210
 src/server/claude-session-state-queries.test.ts → c3-210
 src/server/claude-session-state-queries.ts → c3-210
-src/server/claude-session-state.test.ts → c3-210
 src/server/claude-session-state.ts → c3-210
 src/server/claude-turn-starter-types.ts → c3-210
 src/server/claude-turn-starter.ts → c3-210

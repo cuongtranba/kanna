@@ -1,20 +1,11 @@
-import type { AgentProvider, KannaStatus, NormalizedToolCall, SlashCommand } from "../shared/types"
+import type { AgentProvider, KannaStatus, SlashCommand } from "../shared/types"
 import type { ClaudeSessionHandle, HarnessTurn } from "./harness-types"
-import { mergeBackgroundTaskSnapshot, toolCallCommand, toolCallDescription } from "./claude-prompt-helpers"
-
-const RECENT_TOOL_CALL_LIMIT = 64
 
 export interface SessionBackgroundTask {
   taskType: string | null
   description: string | null
   startedAt: number
   outputPath: string | null
-  command: string | null
-}
-
-export interface RecentToolCall {
-  description: string | null
-  command: string | null
 }
 
 export interface StartingTurn {
@@ -83,7 +74,7 @@ export interface ClaudeSessionStateInit {
   backgroundTaskWakeCount: number
   backgroundTasksLevelSourced: boolean
   selfWakeActive: boolean
-  recentToolCalls: Map<string, RecentToolCall>
+  recentToolDescriptions: Map<string, string>
   backgroundLaunchToolIds: Set<string>
   loopArmedAtSpawn: boolean
   cancelledResultPending: number
@@ -118,7 +109,7 @@ export class ClaudeSessionState {
   backgroundTaskWakeCount: number
   backgroundTasksLevelSourced: boolean
   selfWakeActive: boolean
-  recentToolCalls: Map<string, RecentToolCall>
+  recentToolDescriptions: Map<string, string>
   backgroundLaunchToolIds: Set<string>
   loopArmedAtSpawn: boolean
   workflowsDirRegistered?: boolean
@@ -150,7 +141,7 @@ export class ClaudeSessionState {
     this.backgroundTaskWakeCount = init.backgroundTaskWakeCount
     this.backgroundTasksLevelSourced = init.backgroundTasksLevelSourced
     this.selfWakeActive = init.selfWakeActive
-    this.recentToolCalls = init.recentToolCalls
+    this.recentToolDescriptions = init.recentToolDescriptions
     this.backgroundLaunchToolIds = init.backgroundLaunchToolIds
     this.loopArmedAtSpawn = init.loopArmedAtSpawn
     this.workflowsDirRegistered = init.workflowsDirRegistered
@@ -180,29 +171,9 @@ export class ClaudeSessionState {
     this.backgroundTaskWakeSuppressed = false
   }
 
-  noteToolCall(tool: NormalizedToolCall): void {
-    const description = toolCallDescription(tool)
-    const command = toolCallCommand(tool)
-    if (description !== null || command !== null) {
-      this.recentToolCalls.set(tool.toolId, { description, command })
-      while (this.recentToolCalls.size > RECENT_TOOL_CALL_LIMIT) {
-        const oldest = this.recentToolCalls.keys().next().value
-        if (oldest === undefined) break
-        this.recentToolCalls.delete(oldest)
-      }
-    }
-    if (
-      (tool.toolKind === "bash" && tool.input.runInBackground === true)
-      || tool.toolKind === "subagent_task"
-      || tool.toolKind === "workflow"
-    ) {
-      this.backgroundLaunchToolIds.add(tool.toolId)
-    }
-  }
-
   noteLaunch(
     launches: Array<{ id: string; outputPath: string | null }>,
-    launchedBy: RecentToolCall | null,
+    launchDescription: string | null,
     maxMs: number,
     now: number,
   ): Array<{ id: string; outputPath: string | null }> {
@@ -216,23 +187,14 @@ export class ClaudeSessionState {
       if (!existing) {
         this.backgroundTasks.set(id, {
           taskType: null,
-          description: launchedBy?.description ?? null,
+          description: launchDescription,
           startedAt: now,
           outputPath,
-          command: launchedBy?.command ?? null,
         })
         added.push({ id, outputPath })
-      } else {
-        const command = existing.command ?? launchedBy?.command ?? null
-        const enrichedPath = existing.outputPath === null && outputPath !== null
-        if (enrichedPath || command !== existing.command) {
-          this.backgroundTasks.set(id, {
-            ...existing,
-            outputPath: existing.outputPath ?? outputPath,
-            command,
-          })
-        }
-        if (enrichedPath) added.push({ id, outputPath })
+      } else if (existing.outputPath === null && outputPath !== null) {
+        this.backgroundTasks.set(id, { ...existing, outputPath })
+        added.push({ id, outputPath })
       }
     }
 
@@ -283,6 +245,27 @@ export class ClaudeSessionState {
     this.backgroundTaskDeadlineAt = 0
     return ids
   }
+}
+
+function mergeBackgroundTaskSnapshot(
+  previous: ReadonlyMap<string, SessionBackgroundTask>,
+  ids: readonly string[],
+  meta: readonly { id: string; taskType: string | null; description: string | null }[] | undefined,
+  now: number,
+): Map<string, SessionBackgroundTask> {
+  const metaById = new Map((meta ?? []).map((entry) => [entry.id, entry]))
+  const next = new Map<string, SessionBackgroundTask>()
+  for (const id of ids) {
+    const prev = previous.get(id)
+    const snapshotMeta = metaById.get(id)
+    next.set(id, {
+      taskType: snapshotMeta?.taskType ?? prev?.taskType ?? null,
+      description: snapshotMeta?.description ?? prev?.description ?? null,
+      startedAt: prev?.startedAt ?? now,
+      outputPath: prev?.outputPath ?? null,
+    })
+  }
+  return next
 }
 
 export type { SlashCommand }

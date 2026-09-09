@@ -16,14 +16,6 @@ function taskIcon(taskType: string | null): typeof Bot {
   return CircleDashed
 }
 
-type TaskOutput = Pick<BackgroundTaskOutputSnapshot, "content" | "truncated">
-
-export function outputBodyText(task: ChatBackgroundTask, output: TaskOutput | null): string {
-  if (!task.hasOutput) return "This task writes no output file."
-  if (output === null) return "Waiting for output…"
-  return output.content || "No output yet — nothing has been written to this file."
-}
-
 interface Props {
   chatId: string
   tasks: ChatBackgroundTask[]
@@ -41,18 +33,13 @@ function BackgroundTasksSectionContent({ chatId, tasks }: Props) {
     setOutput({ taskId: snapshot.taskId, content: snapshot.content, truncated: snapshot.truncated })
   }, [setOutput])
 
-  const streamingTaskId = expandedTaskId !== null
-      && tasks.some((task) => task.id === expandedTaskId && task.hasOutput)
-    ? expandedTaskId
-    : null
-
   useEffect(() => {
-    if (!streamingTaskId || !socket) return
+    if (!expandedTaskId || !socket) return
     return socket.subscribe<BackgroundTaskOutputSnapshot>(
-      { type: "background-task-output", chatId, taskId: streamingTaskId },
+      { type: "background-task-output", chatId, taskId: expandedTaskId },
       handleOutput,
     )
-  }, [streamingTaskId, chatId, socket, handleOutput])
+  }, [expandedTaskId, chatId, socket, handleOutput])
 
   return (
     <div className="rounded-2xl border border-border overflow-hidden">
@@ -70,7 +57,6 @@ function BackgroundTasksSectionContent({ chatId, tasks }: Props) {
           const isLast = index === tasks.length - 1
           const isExpanded = expandedTaskId === task.id
           const taskOutput = output?.taskId === task.id ? output : null
-          const canExpand = task.hasOutput || task.command !== null
           return (
             <div key={task.id}>
               <div
@@ -88,7 +74,7 @@ function BackgroundTasksSectionContent({ chatId, tasks }: Props) {
                   <span className="text-xs text-muted-foreground tabular-nums">
                     {formatLiveDuration(Math.max(0, now - task.startedAt))}
                   </span>
-                  {canExpand && (
+                  {task.hasOutput && (
                     <button
                       type="button"
                       onClick={() => setExpandedTaskId(isExpanded ? null : task.id)}
@@ -104,24 +90,11 @@ function BackgroundTasksSectionContent({ chatId, tasks }: Props) {
               </div>
               {isExpanded && (
                 <div className={cn("bg-card", !isLast && "border-b border-border")}>
-                  {task.command !== null && (
-                    <div className="px-4 pt-3">
-                      <p className="text-xs text-muted-foreground">Command</p>
-                      <pre className="mt-1 font-mono text-xs text-foreground whitespace-pre-wrap break-all max-h-40 overflow-y-auto">
-                        {task.command}
-                      </pre>
-                    </div>
-                  )}
-                  {task.outputPath !== null && (
-                    <p className="px-4 pt-3 font-mono text-xs text-muted-foreground break-all">
-                      {task.outputPath}
-                    </p>
-                  )}
                   {taskOutput?.truncated && (
                     <p className="px-4 pt-2 text-xs text-muted-foreground">Earlier output was truncated.</p>
                   )}
                   <pre className="px-4 py-3 font-mono text-xs text-foreground whitespace-pre-wrap break-all max-h-64 overflow-y-auto">
-                    {outputBodyText(task, taskOutput)}
+                    {taskOutput?.content || "Waiting for output…"}
                   </pre>
                 </div>
               )}

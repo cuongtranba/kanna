@@ -51,7 +51,7 @@ function makeSession(overrides: Partial<ConstructorParameters<typeof ClaudeSessi
     lastUsedAt: Date.now(),
     backgroundTasks: new Map(),
     selfWakeActive: false,
-    recentToolCalls: new Map(),
+    recentToolDescriptions: new Map(),
     backgroundLaunchToolIds: new Set<string>(),
     backgroundTaskDeadlineAt: 0,
     backgroundTaskWakeCount: 0,
@@ -229,7 +229,7 @@ describe("hasPendingBackgroundTask", () => {
   test("returns true when task ids present and deadline not expired", () => {
     const now = Date.now()
     const session = makeSession({
-      backgroundTasks: new Map([["task-1", { taskType: null, description: null, startedAt: 0, outputPath: null, command: null }]]),
+      backgroundTasks: new Map([["task-1", { taskType: null, description: null, startedAt: 0, outputPath: null }]]),
       backgroundTaskDeadlineAt: now + 60_000,
     })
     expect(hasPendingBackgroundTask(session, now)).toBe(true)
@@ -238,7 +238,7 @@ describe("hasPendingBackgroundTask", () => {
   test("returns false when deadline expired WITHOUT clearing state", () => {
     const now = Date.now()
     const session = makeSession({
-      backgroundTasks: new Map([["task-1", { taskType: null, description: null, startedAt: 0, outputPath: null, command: null }]]),
+      backgroundTasks: new Map([["task-1", { taskType: null, description: null, startedAt: 0, outputPath: null }]]),
       backgroundTaskDeadlineAt: now - 1,
     })
     const result = hasPendingBackgroundTask(session, now)
@@ -251,7 +251,7 @@ describe("hasPendingBackgroundTask", () => {
 
 describe("background-task guard with an SDK level signal", () => {
   const oneTask = () =>
-    new Map([["ba35e96q4", { taskType: "local_bash", description: "task dev", startedAt: 0, outputPath: null, command: null }]])
+    new Map([["ba35e96q4", { taskType: "local_bash", description: "task dev", startedAt: 0, outputPath: null }]])
 
   test("hasPendingBackgroundTask stays true long after the deadline lapsed", () => {
     const now = Date.now()
@@ -590,7 +590,7 @@ describe("enforceClaudeSessionBudget", () => {
     const levelSourced = makeSession({
       chatId: "c1",
       lastUsedAt: now - 10_000,
-      backgroundTasks: new Map([["t1", { taskType: "local_bash", description: null, startedAt: now - 1800_000, outputPath: null, command: null }]]),
+      backgroundTasks: new Map([["t1", { taskType: "local_bash", description: null, startedAt: now - 1800_000, outputPath: null }]]),
       backgroundTaskDeadlineAt: now - 1,
       backgroundTasksLevelSourced: true,
     })

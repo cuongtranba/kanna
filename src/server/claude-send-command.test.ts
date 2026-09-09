@@ -67,7 +67,7 @@ function makeTestSession(overrides: Partial<ConstructorParameters<typeof ClaudeS
     backgroundTaskWakeCount: 0,
     backgroundTasksLevelSourced: false,
     selfWakeActive: false,
-    recentToolCalls: new Map(),
+    recentToolDescriptions: new Map(),
     backgroundLaunchToolIds: new Set(),
     loopArmedAtSpawn: false,
     cancelledResultPending: 0,
@@ -549,7 +549,7 @@ describe("sendCommand", () => {
 
   test("re-arms (not clears) background task keep-alive on user send", async () => {
     const session = makeTestSession({
-      backgroundTasks: new Map([["task-1", { taskType: null, description: null, startedAt: 0, outputPath: null, command: null }]]),
+      backgroundTasks: new Map([["task-1", { taskType: null, description: null, startedAt: 0, outputPath: null }]]),
       backgroundTaskDeadlineAt: 9999,
       backgroundTaskWakeCount: 2,
       selfWakeActive: false,
