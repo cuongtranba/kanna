@@ -1,6 +1,6 @@
 ---
 id: c3-224
-c3-seal: 563cb3af5377c129478fb73a25c3c86f46ed31f9076863034c0025fb0914f257
+c3-seal: 5d9cd2377b2951e0907a38c582495b9a84b34acf0bd485f5abaf6776c0d4d973
 title: oauth-token-pool
 type: component
 category: feature
@@ -47,7 +47,7 @@ Maintains an in-memory refcounted reservation index (Map<tokenId, Set<chatId>>) 
 | Aspect | Detail | Reference |
 | --- | --- | --- |
 | Outcome | Claude turns run on the right subscription account; rate-limit on one token rotates to the next without user intervention | c3-210 |
-| Primary path | pickActive(chatId) → markUsed → spawn subprocess with CLAUDE_CODE_OAUTH_TOKEN | c3-210 |
+| Primary path | pickActive(chatId) → markUsed → spawn subprocess with CLAUDE_CODE_OAUTH_TOKEN, plus ANTHROPIC_BASE_URL when the picked entry declares one | c3-210 |
 | Alternate — rotation | Rate-limit/auth-error detected → markLimited/markError drops reservation → pickActive picks next → token_rotation auto_continue event | c3-210 |
 | Failure — refusal | No usable token + pool non-empty → OAuthPoolUnavailableError is caught in startTurnForChat and persisted to the chat transcript as a kind:"result", subtype:"error" entry whose result body is the describeUnavailability output (chat references rendered as /chat/<id> markdown links). Replaces the prior throw → commandError banner path, which flickered when the next snapshot tick wiped commandError. | c3-114 |
 
@@ -65,7 +65,7 @@ Maintains an in-memory refcounted reservation index (Map<tokenId, Set<chatId>>) 
 
 | Surface | Direction | Contract | Boundary | Evidence |
 | --- | --- | --- | --- | --- |
-| pickActive(reservedFor?) | OUT | Returns the LRU-eligible token for caller, binds reservation under refcounted Set<chatId>. A token admits up to tokenCap(token) distinct chats (per-token maxConcurrent or ClaudeAuthSettings.concurrencyDefault, routed through the shared clampTokenConcurrency — rounded, floored at 1, no ceiling). Re-entrant pickActive returns the caller's already-owned token; otherwise spreads load by owner-count ASC then LRU. Revives expired-limited tokens. Null when none eligible. | c3-210 | src/server/oauth-pool/oauth-token-pool.ts |
+| pickActive(reservedFor?) | OUT | Returns the LRU-eligible token for caller, binds reservation under refcounted Set<chatId>. A token admits up to tokenCap(token) distinct chats (per-token maxConcurrent or ClaudeAuthSettings.concurrencyDefault, routed through the shared clampTokenConcurrency — rounded, floored at 1, no ceiling). Re-entrant pickActive returns the caller's already-owned token; otherwise spreads load by owner-count ASC then LRU. Revives expired-limited tokens. Null when none eligible. The returned entry also carries the token's OPTIONAL baseUrl, the Anthropic endpoint that credential authenticates against; callers narrowing this port must carry it beside the token, since the endpoint belongs to the credential and one pool may hold both direct and proxied tokens. Absent baseUrl means the spawn inherits whatever ANTHROPIC_BASE_URL is ambient. | c3-210 | src/server/oauth-pool/oauth-token-pool.ts |
 | pickEphemeral() | OUT | Returns EphemeralLease under synthetic key so concurrent ephemeral callers (quick-response, subagent oneShot) do not collide. Counts against the picked token's cap; release() frees the slot. | c3-213 | src/server/oauth-pool/oauth-token-pool.ts |
 | markLimited(id, resetAt) | IN | Marks token limited until resetAt; clears the local owner set. Caller MUST invoke takeStaleOwners(id) BEFORE markLimited to drive coordinated rotation for all shared owners. | c3-210 | src/server/oauth-pool/oauth-token-pool.ts |
 | markError(id, message) | IN | Marks token errored (401); clears the local owner set. Same takeStaleOwners precondition as markLimited. | c3-210 | src/server/oauth-pool/oauth-token-pool.ts |
