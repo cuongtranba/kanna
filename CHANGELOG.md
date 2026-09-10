@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.52.0](https://github.com/cuongtranba/kanna/compare/v1.51.0...v1.52.0) (2026-09-10)
+
+
+### Features
+
+* **oauth-pool:** let each Claude OAuth token carry its own base URL ([#1079](https://github.com/cuongtranba/kanna/issues/1079)) ([2895a86](https://github.com/cuongtranba/kanna/commit/2895a86c21e95ab41a44c4aa439b0f6420eec434))
+
 ## [1.51.0](https://github.com/cuongtranba/kanna/compare/v1.50.0...v1.51.0) (2026-09-09)
 
 
