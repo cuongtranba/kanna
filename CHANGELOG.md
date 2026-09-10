@@ -8,6 +8,19 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.53.0](https://github.com/cuongtranba/kanna/compare/v1.52.0...v1.53.0) (2026-09-10)
+
+
+### Features
+
+* **compaction:** type SDK compaction metadata, register hooks, keep the primer whole ([#1083](https://github.com/cuongtranba/kanna/issues/1083)) ([a2de9b2](https://github.com/cuongtranba/kanna/commit/a2de9b221c59ff87b15c973617df96b2c9fb39e2))
+* **tools:** expose the native LSP tool on both drivers ([#1084](https://github.com/cuongtranba/kanna/issues/1084)) ([19fd66d](https://github.com/cuongtranba/kanna/commit/19fd66d9421e2144982293d4b890859616e615dd))
+
+
+### Bug Fixes
+
+* **settings:** stop the Changelog update badge overrunning its rail ([#1081](https://github.com/cuongtranba/kanna/issues/1081)) ([25deacd](https://github.com/cuongtranba/kanna/commit/25deacd4fb9f5aca052dd5721cc0031c6d835957))
+
 ## [1.52.0](https://github.com/cuongtranba/kanna/compare/v1.51.0...v1.52.0) (2026-09-10)
 
 
