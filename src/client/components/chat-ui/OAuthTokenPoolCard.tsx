@@ -2,8 +2,10 @@ import { Trash2, FlaskConical, Power, PowerOff } from "lucide-react"
 import {
   type ClaudeAuthSettings,
   type OAuthTokenEntry,
+  OAUTH_TOKEN_BASE_URL_MAX,
   OAUTH_TOKEN_MAX_CONCURRENT_MIN,
   clampTokenConcurrency,
+  normalizeAnthropicBaseUrl,
 } from "../../../shared/types"
 import { maskToken } from "../../lib/oauthTokenMask"
 import { Input } from "../ui/input"
@@ -34,7 +36,7 @@ export interface OAuthTokenPoolCardProps {
   tokens: OAuthTokenEntry[]
   concurrencyDefault: number
   onWrite: (patch: Partial<ClaudeAuthSettings>) => Promise<void>
-  onTest: (token: string) => Promise<{ ok: boolean; error: string | null }>
+  onTest: (token: string, baseUrl?: string) => Promise<{ ok: boolean; error: string | null }>
   now?: number
   ports?: TokenRowPorts
 }
@@ -103,6 +105,7 @@ function TokenRow({
   onToggleDisabled,
   onTest,
   onChangeMaxConcurrent,
+  onChangeBaseUrl,
   ports,
 }: {
   entry: OAuthTokenEntry
@@ -111,8 +114,9 @@ function TokenRow({
   concurrencyDefault: number
   onRemove: () => void
   onToggleDisabled: () => void
-  onTest: (token: string) => Promise<{ ok: boolean; error: string | null }>
+  onTest: (token: string, baseUrl?: string) => Promise<{ ok: boolean; error: string | null }>
   onChangeMaxConcurrent: (id: string, value: number) => void
+  onChangeBaseUrl: (id: string, value: string) => void
   ports?: TokenRowPorts
 }) {
   const timer = ports?.timer ?? timerAdapter
@@ -120,16 +124,27 @@ function TokenRow({
   const tokenRowStates = useOAuthTokenPoolCardStore((state) => state.tokenRowStates)
   const setTokenRowTesting = useOAuthTokenPoolCardStore((state) => state.setTokenRowTesting)
   const setTokenRowTestResult = useOAuthTokenPoolCardStore((state) => state.setTokenRowTestResult)
+  const baseUrlDrafts = useOAuthTokenPoolCardStore((state) => state.baseUrlDrafts)
+  const setBaseUrlDraft = useOAuthTokenPoolCardStore((state) => state.setBaseUrlDraft)
 
   const rowState = tokenRowStates[entry.id]
   const testResult = rowState?.testResult ?? null
   const testing = rowState?.testing ?? false
+  const baseUrlValue = baseUrlDrafts[entry.id] ?? entry.baseUrl ?? ""
+  const baseUrlInvalid =
+    baseUrlValue.trim().length > 0 && normalizeAnthropicBaseUrl(baseUrlValue) === null
+
+  const commitBaseUrl = () => onChangeBaseUrl(entry.id, baseUrlValue)
+
+  const handleBaseUrlKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter") event.currentTarget.blur()
+  }
 
   const handleTest = async () => {
     setTokenRowTesting(entry.id, true)
     setTokenRowTestResult(entry.id, null)
     try {
-      const res = await onTest(entry.token)
+      const res = await onTest(entry.token, entry.baseUrl)
       const label = res.ok ? "OK" : (res.error ?? "Error")
       setTokenRowTestResult(entry.id, label)
       timer.setTimeout(() => setTokenRowTestResult(entry.id, null), 3000)
@@ -145,7 +160,8 @@ function TokenRow({
   const effectiveCap = entry.maxConcurrent ?? concurrencyDefault
 
   return (
-    <div className="flex items-center justify-between gap-3 border-t border-border py-3">
+    <div className="border-t border-border py-3">
+    <div className="flex items-center justify-between gap-3">
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-3">
           <span className={`text-sm font-medium ${isDisabled ? "text-muted-foreground/60" : "text-foreground"}`}>{entry.label}</span>
@@ -218,6 +234,29 @@ function TokenRow({
         </button>
       </div>
     </div>
+
+    <HoverHint label="Anthropic API endpoint this token authenticates against. Leave empty for the default api.anthropic.com; set it to route this credential through a proxy.">
+    <label className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+      <span className="shrink-0">Base URL</span>
+      <Input
+        value={baseUrlValue}
+        onChange={(e) => setBaseUrlDraft(entry.id, e.target.value)}
+        onBlur={commitBaseUrl}
+        onKeyDown={handleBaseUrlKeyDown}
+        placeholder="(default)"
+        maxLength={OAUTH_TOKEN_BASE_URL_MAX}
+        aria-label={`Anthropic base URL for ${entry.label}`}
+        className="h-7 flex-1 text-xs font-mono"
+        disabled={isDisabled}
+      />
+    </label>
+    </HoverHint>
+    {baseUrlInvalid && (
+      <div className="mt-1 text-xs text-destructive">
+        Must start with http:// or https://
+      </div>
+    )}
+    </div>
   )
 }
 
@@ -231,13 +270,18 @@ function AddTokenForm({
 }) {
   const addLabel = useOAuthTokenPoolCardStore((state) => state.addLabel)
   const addToken = useOAuthTokenPoolCardStore((state) => state.addToken)
+  const addBaseUrl = useOAuthTokenPoolCardStore((state) => state.addBaseUrl)
   const addSubmitting = useOAuthTokenPoolCardStore((state) => state.addSubmitting)
   const setAddLabel = useOAuthTokenPoolCardStore((state) => state.setAddLabel)
   const setAddToken = useOAuthTokenPoolCardStore((state) => state.setAddToken)
+  const setAddBaseUrl = useOAuthTokenPoolCardStore((state) => state.setAddBaseUrl)
   const setAddSubmitting = useOAuthTokenPoolCardStore((state) => state.setAddSubmitting)
   const resetAddForm = useOAuthTokenPoolCardStore((state) => state.resetAddForm)
 
-  const canSubmit = addLabel.trim().length > 0 && addToken.trim().length > 0 && !addSubmitting
+  const normalizedAddBaseUrl = normalizeAnthropicBaseUrl(addBaseUrl)
+  const addBaseUrlInvalid = addBaseUrl.trim().length > 0 && normalizedAddBaseUrl === null
+  const canSubmit =
+    addLabel.trim().length > 0 && addToken.trim().length > 0 && !addBaseUrlInvalid && !addSubmitting
 
   const handleAdd = async () => {
     if (!canSubmit) return
@@ -253,6 +297,7 @@ function AddTokenForm({
         lastErrorAt: null,
         lastErrorMessage: null,
         addedAt: Date.now(),
+        ...(normalizedAddBaseUrl !== null ? { baseUrl: normalizedAddBaseUrl } : {}),
       }
       await onWrite({ tokens: [...tokens, newEntry] })
       resetAddForm()
@@ -294,6 +339,21 @@ function AddTokenForm({
           Add token
         </button>
       </div>
+      <div className="mt-2">
+        <Input
+          value={addBaseUrl}
+          onChange={(e) => setAddBaseUrl(e.target.value)}
+          placeholder="Base URL — leave empty for api.anthropic.com"
+          maxLength={OAUTH_TOKEN_BASE_URL_MAX}
+          className="text-sm font-mono"
+          aria-label="Anthropic base URL"
+        />
+        {addBaseUrlInvalid && (
+          <div className="mt-1 text-xs text-destructive">
+            Must start with http:// or https://
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -309,6 +369,8 @@ export function OAuthTokenPoolCard({
 }: OAuthTokenPoolCardProps) {
   // eslint-disable-next-line react-hooks/purity
   const now = nowProp ?? Date.now()
+
+  const clearBaseUrlDraft = useOAuthTokenPoolCardStore((state) => state.clearBaseUrlDraft)
 
   const currentId = tokens.reduce<OAuthTokenEntry | null>(
     (m, t) => (t.lastUsedAt !== null && (m === null || t.lastUsedAt > (m.lastUsedAt ?? 0)) ? t : m),
@@ -334,6 +396,22 @@ export function OAuthTokenPoolCard({
       tokens: tokens.map((t) =>
         t.id === id ? { ...t, maxConcurrent: value } : t,
       ),
+    })
+  }
+
+  const handleChangeBaseUrl = (id: string, value: string) => {
+    const entry = tokens.find((t) => t.id === id)
+    if (!entry) return
+    const normalized = normalizeAnthropicBaseUrl(value)
+    if (normalized === null && value.trim().length > 0) return
+    clearBaseUrlDraft(id)
+    if (normalized === (entry.baseUrl ?? null)) return
+    void onWrite({
+      tokens: tokens.map((t) => {
+        if (t.id !== id) return t
+        const { baseUrl: _dropped, ...withoutBaseUrl } = t
+        return normalized === null ? withoutBaseUrl : { ...t, baseUrl: normalized }
+      }),
     })
   }
 
@@ -370,6 +448,7 @@ export function OAuthTokenPoolCard({
           onToggleDisabled={() => handleToggleDisabled(entry.id)}
           onTest={onTest}
           onChangeMaxConcurrent={handleChangeMaxConcurrent}
+          onChangeBaseUrl={handleChangeBaseUrl}
           ports={ports}
         />
       ))}

@@ -96,6 +96,7 @@ export interface OAuthTokenEntry {
   lastErrorMessage: string | null
   addedAt: number
   maxConcurrent?: number
+  baseUrl?: string
 }
 
 export interface ClaudeAuthSettings {
@@ -122,6 +123,14 @@ export const CLAUDE_AUTH_DEFAULTS: ClaudeAuthSettings = {
 
 export const OAUTH_TOKEN_LABEL_MAX = 64
 export const OAUTH_TOKEN_VALUE_MAX = 1024
+export const OAUTH_TOKEN_BASE_URL_MAX = 512
+
+export function normalizeAnthropicBaseUrl(raw: string): string | null {
+  const trimmed = raw.trim().slice(0, OAUTH_TOKEN_BASE_URL_MAX)
+  if (!trimmed) return null
+  if (!/^https?:\/\/\S+$/.test(trimmed)) return null
+  return trimmed.replace(/\/+$/, "")
+}
 
 
 export const GLOBAL_PROMPT_APPEND_MAX_CHARS = 8_000

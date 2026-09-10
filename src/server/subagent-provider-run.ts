@@ -39,6 +39,7 @@ export interface BuildSubagentProviderRunArgs {
     sessionToken: string | null
     forkSession: boolean
     oauthToken: string | null
+    oauthBaseUrl?: string | null
     openrouterApiKey?: string | null
     additionalDirectories?: string[]
     chatId?: string
@@ -59,7 +60,7 @@ export interface BuildSubagentProviderRunArgs {
   codexManager: CodexAppServerManager
   onToolRequest: (request: HarnessToolRequest) => Promise<JsonValue>
   authReady: (provider: AgentProvider) => Promise<boolean>
-  pickOauthToken: () => string | null
+  pickOauthToken: () => { token: string; baseUrl?: string } | null
   readOpenRouterKey?: () => Promise<string | null>
   projectId: string
   globalPromptAppend?: string
@@ -134,6 +135,7 @@ async function runClaudeSubagent(opts: {
   openrouterApiKey: string | null
 }): Promise<{ text: string; usage?: ProviderUsage; live?: LiveTurnSource }> {
   const { args, initialPrompt, onChunk, onEntry, keepAlive, openrouterApiKey } = opts
+  const oauth = openrouterApiKey ? null : args.pickOauthToken()
   const session = await args.startClaudeSession({
     projectId: args.projectId,
     localPath: args.cwd,
@@ -143,7 +145,8 @@ async function runClaudeSubagent(opts: {
     planMode: false,
     sessionToken: null,
     forkSession: false,
-    oauthToken: openrouterApiKey ? null : args.pickOauthToken(),
+    oauthToken: oauth?.token ?? null,
+    oauthBaseUrl: oauth?.baseUrl ?? null,
     openrouterApiKey,
     chatId: args.chatId,
     onToolRequest: args.onToolRequest,

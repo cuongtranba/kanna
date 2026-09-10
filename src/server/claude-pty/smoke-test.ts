@@ -8,6 +8,7 @@ import {
   writeFile0600,
 } from "./smoke-test-io.adapter"
 import { isRecord } from "../../shared/errors"
+import { buildPtyEnv } from "./env"
 import { OutputRing } from "./output-ring"
 import { spawnPtyProcess as defaultSpawnPtyProcess } from "./pty-process.adapter"
 import { waitForTuiReadyWithTrustDismiss, sendUserPrompt, sendExitCommand } from "./tui-control"
@@ -38,6 +39,7 @@ export interface SmokeTestGateArgs {
 export interface CanSpawnArgs {
   binarySha256: string
   model: string
+  baseUrl?: string | null
 }
 
 export interface SmokeTestGate {
@@ -49,7 +51,9 @@ export function createSmokeTestGate(args: SmokeTestGateArgs): SmokeTestGate {
   const inFlight = new Map<string, Promise<{ ok: true } | { ok: false; reason: string }>>()
   return {
     async canSpawn(spawnArgs: CanSpawnArgs) {
-      const key = `${spawnArgs.binarySha256}|${spawnArgs.model}`
+      const key = spawnArgs.baseUrl
+        ? `${spawnArgs.binarySha256}|${spawnArgs.model}|${spawnArgs.baseUrl}`
+        : `${spawnArgs.binarySha256}|${spawnArgs.model}`
       const cached = await cache.get(key)
       const currentTs = now()
       if (cached && currentTs - cached.ts < ttlMs) {
@@ -79,6 +83,7 @@ export interface BuildLiveSmokeProbeArgs {
   model: string
   oauthToken: string
   homeDir: string
+  baseUrl?: string | null
   spawnPtyProcess?: typeof defaultSpawnPtyProcess
 }
 
@@ -93,11 +98,12 @@ export function buildLiveSmokeProbe(args: BuildLiveSmokeProbeArgs): SmokeTestPro
       "--dangerously-skip-permissions",
       "--disallowedTools", "Bash",
     ]
-    const spawnEnv: NodeJS.ProcessEnv = { ...process.env }
-    delete spawnEnv.ANTHROPIC_API_KEY
-    spawnEnv.HOME = args.homeDir
-    spawnEnv.DISABLE_AUTOUPDATER = "1"
-    spawnEnv.CLAUDE_CODE_OAUTH_TOKEN = args.oauthToken
+    const spawnEnv = buildPtyEnv({
+      baseEnv: process.env,
+      homeDir: args.homeDir,
+      oauthToken: args.oauthToken,
+      baseUrl: args.baseUrl,
+    })
     const pty = await spawnPty({
       command: args.claudeBinPath,
       args: cliArgs,

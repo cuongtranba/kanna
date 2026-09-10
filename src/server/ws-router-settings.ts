@@ -1,4 +1,4 @@
-import { PROTOCOL_VERSION } from "../shared/types"
+import { PROTOCOL_VERSION, normalizeAnthropicBaseUrl } from "../shared/types"
 import type {
   AppSettingsPatch,
   AppSettingsSnapshot,
@@ -62,11 +62,18 @@ export function isSubagentValidationError(
   return "code" in value && "message" in value
 }
 
-export async function testOAuthToken(token: string): Promise<{ ok: boolean; error: string | null }> {
+export const ANTHROPIC_DEFAULT_BASE_URL = "https://api.anthropic.com"
+
+export async function testOAuthToken(
+  token: string,
+  baseUrl?: string,
+): Promise<{ ok: boolean; error: string | null }> {
   const trimmed = typeof token === "string" ? token.trim() : ""
   if (!trimmed) return { ok: false, error: "Token is empty" }
+  const endpoint = (typeof baseUrl === "string" ? normalizeAnthropicBaseUrl(baseUrl) : null)
+    ?? ANTHROPIC_DEFAULT_BASE_URL
   try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
+    const res = await fetch(`${endpoint}/v1/messages`, {
       method: "POST",
       headers: {
         "anthropic-version": "2023-06-01",
@@ -174,7 +181,7 @@ export async function handleSettingsCommand(
       return true
     }
     case "appSettings.testOAuthToken": {
-      const result = await testOAuthToken(command.token)
+      const result = await testOAuthToken(command.token, command.baseUrl)
       send({ v: PROTOCOL_VERSION, type: "ack", id, result })
       return true
     }

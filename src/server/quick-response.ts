@@ -141,6 +141,7 @@ export async function runClaudeStructured(args: Omit<StructuredQuickResponseArgs
   if (picked && pool) pool.markUsed(picked.id)
   const env = envWithoutParentClaudeCode(process.env)
   if (picked) env.CLAUDE_CODE_OAUTH_TOKEN = picked.token
+  if (picked?.baseUrl) env.ANTHROPIC_BASE_URL = picked.baseUrl
 
   const detector = new ClaudeLimitDetector()
   let detectedLimit: { resetAt: number; tz: string } | null = null

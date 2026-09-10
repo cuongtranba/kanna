@@ -153,6 +153,7 @@ export function buildClaudeEnv(
   baseEnv: NodeJS.ProcessEnv,
   oauthToken: string | null,
   openrouter?: { apiKey: string } | null,
+  anthropicBaseUrl?: string | null,
 ): NodeJS.ProcessEnv {
   const { CLAUDECODE: _unused, CLAUDE_CODE_OAUTH_TOKEN: _oauth, ...rest } = baseEnv
   if (openrouter) {
@@ -163,10 +164,13 @@ export function buildClaudeEnv(
       ANTHROPIC_API_KEY: "",
     }
   }
+  const scoped = anthropicBaseUrl
+    ? { ...rest, ANTHROPIC_BASE_URL: anthropicBaseUrl }
+    : rest
   if (!oauthToken) {
     return baseEnv.CLAUDE_CODE_OAUTH_TOKEN
-      ? { ...rest, CLAUDE_CODE_OAUTH_TOKEN: baseEnv.CLAUDE_CODE_OAUTH_TOKEN }
-      : rest
+      ? { ...scoped, CLAUDE_CODE_OAUTH_TOKEN: baseEnv.CLAUDE_CODE_OAUTH_TOKEN }
+      : scoped
   }
-  return { ...rest, CLAUDE_CODE_OAUTH_TOKEN: oauthToken }
+  return { ...scoped, CLAUDE_CODE_OAUTH_TOKEN: oauthToken }
 }
