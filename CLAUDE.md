@@ -1131,6 +1131,56 @@ still uses its native built-ins and these shims sit unused.
 `websearch` is a stub that always returns `isError: true` — real web search
 needs an external API integration which is out of scope for P3a.
 
+# The `LSP` tool — one tool, every language
+
+`CLAUDE_TOOLSET` (`claude-session-config.ts`) is an **exclusive allowlist**, not
+a hint. The SDK documents its `tools` option as "the **base set** of available
+built-in tools" (`sdk.d.ts`), and `claude-session-start.ts` passes the array
+rather than `{type:"preset", preset:"claude_code"}` — so a native tool absent
+from that list is not merely unadvertised, it is **unreachable**, and asking for
+it by name is a silent no-op. `LSP` was missing for exactly that reason, which
+read from inside a session as "the SDK does not support LSP" (upstream
+`claude-agent-sdk-typescript#123`, filed against SDK 0.2.2 / CLI 2.1.2). It does:
+the CLI this repo ships registers `LSP` with `goToDefinition`, `findReferences`
+and `goToImplementation`. Verify the gate on a live session by reading the
+spawned process's own argv — `ps -ww -o command= -p <pid>` prints the `--tools`
+list verbatim.
+
+**`LSP` is ONE tool covering every language.** There is no per-language tool and
+no Kanna-side language list: the CLI picks a server from whichever `*-lsp`
+plugin is installed, matching the file's extension through the plugin's
+`extensionToLanguage` map. **Adding a language is therefore never a code change
+here** — install the plugin, then put its `command` on PATH:
+
+| Plugin | `command` on PATH | Install |
+| --- | --- | --- |
+| typescript-lsp | typescript-language-server | `npm i -g typescript-language-server typescript` |
+| pyright-lsp | pyright-langserver | `npm i -g pyright` |
+| gopls-lsp | gopls | `go install golang.org/x/tools/gopls@latest` |
+| rust-analyzer-lsp | rust-analyzer | `brew install rust-analyzer` |
+| jdtls-lsp | jdtls | `brew install jdtls` |
+
+The marketplace also ships clangd, csharp, kotlin, lua, php, ruby and swift; all
+work the same way. **The plugin is pure config — it declares the command and the
+extension map, and ships no binary.** A plugin whose server is missing fails at
+`lsp_server_start` and the tool simply never answers for that language, so an
+install is only half done until the binary resolves. It must resolve on the PATH
+of the process that spawns claude, which is not necessarily your shell's:
+`go install` and Homebrew write to `~/go/bin` and `/opt/homebrew/bin`, and a
+server launched from a profile-less context may see neither.
+
+**Both restricted paths deliberately strip `LSP`** — it is in
+`SDK_RESTRICTED_FS_NATIVE_TOOLS` and in the PTY `RESTRICTED_FS_NATIVE_TOOLS`.
+Restricted mode exists to confine a subagent to `restrictedAllowedPaths`, and it
+does that by removing the native FS tools so the `mcp__kanna__*` shims can route
+every read through `permission-gate.ts`. **`LSP` is a file-read primitive that
+gate cannot see**: `goToDefinition` returns file locations and contents, so a
+native `LSP` in a confined subagent would read straight past its allowed roots.
+The CLI's own boundary is no substitute — it enforces cwd + `--add-dir`, which is
+broader than `restrictedAllowedPaths` by construction. The CLI classifies `LSP`
+the same way, listing it beside Read/Grep/Glob as a file tool subject to
+working-directory checks.
+
 # Custom MCP Servers
 
 Users register MCP servers via Settings → "MCP servers". Entries persist
