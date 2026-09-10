@@ -112,7 +112,7 @@ export interface StartClaudeSessionPtyArgs {
 }
 
 export const RESTRICTED_FS_NATIVE_TOOLS = [
-  "Read", "Edit", "Write", "Bash", "Glob", "Grep", "WebFetch",
+  "Read", "Edit", "Write", "Bash", "Glob", "Grep", "LSP", "WebFetch",
 ] as const
 
 export function deriveAccountInfoFromOauth(args: { label?: string; oauthKeyMasked?: string }): AccountInfo | null {

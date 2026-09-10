@@ -117,6 +117,7 @@ export const CLAUDE_TOOLSET = [
   "Bash",
   "Glob",
   "Grep",
+  "LSP",
   "Read",
   "Edit",
   "Write",
@@ -127,7 +128,7 @@ export const CLAUDE_TOOLSET = [
   "ExitPlanMode",
 ] as const
 
-export const SDK_RESTRICTED_FS_NATIVE_TOOLS = ["Read", "Edit", "Write", "Bash", "Glob", "Grep", "WebFetch"] as const
+export const SDK_RESTRICTED_FS_NATIVE_TOOLS = ["Read", "Edit", "Write", "Bash", "Glob", "Grep", "LSP", "WebFetch"] as const
 
 
 const TASK_NOTIFICATION_RESULT_MAX_CHARS = 4_000

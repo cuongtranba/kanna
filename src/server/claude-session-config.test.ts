@@ -219,6 +219,10 @@ describe("CLAUDE_TOOLSET", () => {
     expect(set.has("AskUserQuestion")).toBe(true)
     expect(set.has("ExitPlanMode")).toBe(true)
   })
+
+  test("includes LSP so code navigation reaches the model on every language", () => {
+    expect(new Set<string>(CLAUDE_TOOLSET).has("LSP")).toBe(true)
+  })
 })
 
 describe("SDK_RESTRICTED_FS_NATIVE_TOOLS", () => {
@@ -227,5 +231,9 @@ describe("SDK_RESTRICTED_FS_NATIVE_TOOLS", () => {
     for (const t of SDK_RESTRICTED_FS_NATIVE_TOOLS) {
       expect(full.has(t)).toBe(true)
     }
+  })
+
+  test("strips LSP — permission-gate cannot see native LSP reads, so a path-confined subagent must not get it", () => {
+    expect(new Set<string>(SDK_RESTRICTED_FS_NATIVE_TOOLS).has("LSP")).toBe(true)
   })
 })
