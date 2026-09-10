@@ -14,5 +14,7 @@ code:
   - src/shared/permission-policy.ts
   - src/shared/projectFileUrl.test.ts
   - src/shared/projectFileUrl.ts
+  - src/shared/task-doc.test.ts
+  - src/shared/task-doc.ts
   - src/shared/types.test.ts
   - src/shared/types.ts

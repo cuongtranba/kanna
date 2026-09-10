@@ -128,6 +128,7 @@ function makeDeps(overrides: Partial<SpawnClaudeTurnDeps> = {}): SpawnClaudeTurn
     resolveChatPolicy: () => POLICY_DEFAULT,
     runClaudeSession: () => {},
     emitStateChange: () => {},
+    onCompaction: () => {},
     ...overrides,
   }
 }
@@ -382,5 +383,38 @@ describe("spawnClaudeTurn", () => {
       }
       expect(events).toHaveLength(0)
     })
+  })
+})
+
+describe("compaction observer wiring", () => {
+  test("the SDK branch forwards onCompaction so the hooks can be registered", async () => {
+    let forwarded: unknown = "unset"
+    const deps = makeDeps({
+      resolveClaudeDriverPreference: () => "sdk",
+      startClaudeSessionFn: async (a) => {
+        forwarded = a.onCompaction
+        return makeFakeHandle()
+      },
+    })
+
+    await spawnClaudeTurn(deps, makeArgs())
+
+    expect(typeof forwarded).toBe("function")
+  })
+
+  test("the PTY branch never receives it, since hooks are an SDK transport feature", async () => {
+    let sdkCalled = false
+    const deps = makeDeps({
+      resolveClaudeDriverPreference: () => "pty",
+      startClaudeSessionFn: async () => { sdkCalled = true; return makeFakeHandle() },
+      startClaudeSessionPTYFn: async (a) => {
+        expect("onCompaction" in a).toBe(false)
+        return makeFakeHandle()
+      },
+    })
+
+    await spawnClaudeTurn(deps, makeArgs())
+
+    expect(sdkCalled).toBe(false)
   })
 })

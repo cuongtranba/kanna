@@ -11,6 +11,8 @@ code:
   - src/server/mention-parser.ts
   - src/server/proactive-compact.test.ts
   - src/server/proactive-compact.ts
+  - src/server/compaction.test.ts
+  - src/server/compaction.ts
   - src/server/subagent-entry-cap.test.ts
   - src/server/subagent-orchestrator.test.ts
   - src/server/subagent-orchestrator.ts

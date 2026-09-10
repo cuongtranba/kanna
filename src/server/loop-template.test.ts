@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import path from "node:path"
+import { TASK_DOC_SECTIONS, renderTaskDocSkeleton } from "../shared/task-doc"
 import {
   assertTrackingFileSafe,
   auditOracle,
@@ -675,6 +676,20 @@ describe("assertTrackingFileSafe", () => {
 
   test("an untracked file is fair game — nothing committed is at risk", () => {
     const result = assertTrackingFileSafe(committed, { goal: "ship the NEW thing", gitTracked: false, force: false })
+    expect(result.ok).toBe(true)
+  })
+
+  test("a committed task document does not block a later setup_loop", () => {
+    const seeded = renderTaskDocSkeleton()
+    const withContent = seeded.replace(
+      `## ${TASK_DOC_SECTIONS.objective}`,
+      `## ${TASK_DOC_SECTIONS.objective}\n\nfix the auth refresh race`,
+    )
+    const result = assertTrackingFileSafe(withContent, {
+      goal: "eslint passes",
+      gitTracked: true,
+      force: false,
+    })
     expect(result.ok).toBe(true)
   })
 

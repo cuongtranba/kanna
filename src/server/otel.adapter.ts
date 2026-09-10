@@ -10,12 +10,23 @@ import { resourceFromAttributes } from "@opentelemetry/resources"
 import { log } from "../shared/log"
 import {
   resetMetricInstrumentCache,
+  COMPACTION_POST_TOKENS,
+  COMPACTION_PRE_TOKENS,
+  COMPACTION_TOKEN_BUCKETS,
   DURATION_BUCKETS_MS,
   PROCESS_RSS_BYTES,
   SUBAGENT_RUN_DURATION_MS,
   TURN_DURATION_MS,
 } from "./observability"
 import { resolveOtelConfig, type ResolvedOtelConfig, type TelemetrySettingsInput } from "./otel-config"
+
+const HISTOGRAM_BUCKETS: readonly {
+  instrumentNames: readonly string[]
+  boundaries: readonly number[]
+}[] = [
+  { instrumentNames: [TURN_DURATION_MS, SUBAGENT_RUN_DURATION_MS], boundaries: DURATION_BUCKETS_MS },
+  { instrumentNames: [COMPACTION_PRE_TOKENS, COMPACTION_POST_TOKENS], boundaries: COMPACTION_TOKEN_BUCKETS },
+]
 
 export interface ObservabilityHandle {
   shutdown(): Promise<void>
@@ -49,13 +60,15 @@ function startOtel(config: ResolvedOtelConfig): () => Promise<void> {
   tracerProvider.register()
   const meterProvider = new MeterProvider({
     resource,
-    views: [TURN_DURATION_MS, SUBAGENT_RUN_DURATION_MS].map((instrumentName) => ({
-      instrumentName,
-      aggregation: {
-        type: AggregationType.EXPLICIT_BUCKET_HISTOGRAM as const,
-        options: { boundaries: [...DURATION_BUCKETS_MS] },
-      },
-    })),
+    views: HISTOGRAM_BUCKETS.flatMap(({ instrumentNames, boundaries }) =>
+      instrumentNames.map((instrumentName) => ({
+        instrumentName,
+        aggregation: {
+          type: AggregationType.EXPLICIT_BUCKET_HISTOGRAM as const,
+          options: { boundaries: [...boundaries] },
+        },
+      })),
+    ),
     readers: [
       new PeriodicExportingMetricReader({
         exporter: new OTLPMetricExporter(config.metricUrl ? { url: config.metricUrl } : {}),

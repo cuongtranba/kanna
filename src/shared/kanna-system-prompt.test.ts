@@ -1,5 +1,11 @@
 import { describe, test, expect } from "bun:test"
 import {
+  APPEND_TRACKING_ROW_TOOL_NAME,
+  DELEGATE_SUBAGENT_TOOL_NAME,
+  QUERY_TRACKING_FILE_TOOL_NAME,
+  REPLACE_TRACKING_SECTION_TOOL_NAME,
+} from "./tools"
+import {
   KANNA_SKILL_ROSTER_LIMIT,
   KANNA_SUBAGENT_ROSTER_LIMIT,
   KANNA_SYSTEM_PROMPT_APPEND,
@@ -215,6 +221,30 @@ describe("buildKannaSystemPromptAppend", () => {
     expect(KANNA_SYSTEM_PROMPT_BASE).toContain("resumeFromRunId")
     expect(KANNA_SYSTEM_PROMPT_BASE).toContain("`args`")
     expect(KANNA_SYSTEM_PROMPT_BASE).toContain("verbatim")
+  })
+
+  test("KANNA_SYSTEM_PROMPT_BASE names the three tracking-doc tools it tells the model to use", () => {
+    for (const tool of [
+      QUERY_TRACKING_FILE_TOOL_NAME,
+      APPEND_TRACKING_ROW_TOOL_NAME,
+      REPLACE_TRACKING_SECTION_TOOL_NAME,
+    ]) {
+      expect(KANNA_SYSTEM_PROMPT_BASE).toContain(tool)
+    }
+  })
+
+  test("KANNA_SYSTEM_PROMPT_BASE makes durable state conditional, so no doc is created unasked", () => {
+    expect(KANNA_SYSTEM_PROMPT_BASE).toContain("when a tracking document already exists")
+    expect(KANNA_SYSTEM_PROMPT_BASE).toContain("working memory, not the record")
+  })
+
+  test("KANNA_SYSTEM_PROMPT_BASE puts repository truth above the document and the summary", () => {
+    expect(KANNA_SYSTEM_PROMPT_BASE).toContain("outrank both that document and any summary")
+    expect(KANNA_SYSTEM_PROMPT_BASE).toContain("re-run the checks against the current tree")
+  })
+
+  test("KANNA_SYSTEM_PROMPT_BASE does not duplicate the delegation guidance", () => {
+    expect(KANNA_SYSTEM_PROMPT_BASE).not.toContain(DELEGATE_SUBAGENT_TOOL_NAME)
   })
 
   describe("stackProjects option", () => {
