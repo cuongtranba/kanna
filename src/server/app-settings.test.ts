@@ -478,6 +478,34 @@ describe("AppSettingsManager.setClaudeAuth", () => {
     expect(snapshot.warning).toMatch(/maxConcurrent/)
   })
 
+  test("normalizer round-trips a token baseUrl and strips its trailing slash", async () => {
+    const filePath = await writeSettingsFile({
+      claudeAuth: {
+        concurrencyDefault: 1,
+        tokens: [
+          { id: "t1", label: "proxy", token: "sk-ant-abc", baseUrl: "https://proxy.example/", addedAt: 1 },
+          { id: "t2", label: "direct", token: "sk-ant-def", addedAt: 2 },
+        ],
+      },
+    })
+    const snapshot = await readAppSettingsSnapshot(filePath)
+    expect(snapshot.claudeAuth.tokens[0]?.baseUrl).toBe("https://proxy.example")
+    expect(snapshot.claudeAuth.tokens[1]).not.toHaveProperty("baseUrl")
+    expect(snapshot.warning ?? "").not.toMatch(/baseUrl/)
+  })
+
+  test("normalizer drops a non-URL token baseUrl and warns", async () => {
+    const filePath = await writeSettingsFile({
+      claudeAuth: {
+        concurrencyDefault: 1,
+        tokens: [{ id: "t1", label: "proxy", token: "sk-ant-abc", baseUrl: "proxy.example", addedAt: 1 }],
+      },
+    })
+    const snapshot = await readAppSettingsSnapshot(filePath)
+    expect(snapshot.claudeAuth.tokens[0]).not.toHaveProperty("baseUrl")
+    expect(snapshot.warning).toMatch(/baseUrl/)
+  })
+
   test("mutateTokenStatus updates one field without disturbing others", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "kanna-settings-"))
     const filePath = path.join(dir, "settings.json")

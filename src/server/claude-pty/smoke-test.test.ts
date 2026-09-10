@@ -36,6 +36,34 @@ describe("createSmokeTestGate", () => {
     expect(probeRan).toBe(false)
   })
 
+  test("a cached result for one endpoint is not reused for another", async () => {
+    let probeRan = 0
+    const probe: SmokeTestProbeFn = async () => { probeRan += 1; return "pass" }
+    const cache = inMemoryCache()
+    const gate = createSmokeTestGate({ probe, cache, ttlMs: 24 * 3600 * 1000, now: () => Date.now() })
+
+    await gate.canSpawn({ binarySha256: "aaa", model: "m1" })
+    expect(probeRan).toBe(1)
+
+    await gate.canSpawn({ binarySha256: "aaa", model: "m1", baseUrl: "https://proxy.example" })
+    expect(probeRan).toBe(2)
+
+    await gate.canSpawn({ binarySha256: "aaa", model: "m1", baseUrl: "https://proxy.example" })
+    expect(probeRan).toBe(2)
+  })
+
+  test("an absent endpoint keeps the legacy cache key, so existing entries still hit", async () => {
+    let probeRan = false
+    const probe: SmokeTestProbeFn = async () => { probeRan = true; return "pass" }
+    const cache = inMemoryCache()
+    await cache.set("ccc|m1", { result: "pass", ts: Date.now() })
+    const gate = createSmokeTestGate({ probe, cache, ttlMs: 24 * 3600 * 1000, now: () => Date.now() })
+
+    expect((await gate.canSpawn({ binarySha256: "ccc", model: "m1" })).ok).toBe(true)
+    expect((await gate.canSpawn({ binarySha256: "ccc", model: "m1", baseUrl: null })).ok).toBe(true)
+    expect(probeRan).toBe(false)
+  })
+
   test("cached FAIL refuses spawn without running probe", async () => {
     let probeRan = false
     const probe: SmokeTestProbeFn = async () => { probeRan = true; return "pass" }

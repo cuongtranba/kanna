@@ -39,7 +39,7 @@ interface SubagentWiringStore {
 
 interface SubagentWiringOAuthPool {
   hasUsable(reservedFor?: string): boolean
-  pickActive(chatId: string): { id: string; token: string; label: string } | null | undefined
+  pickActive(chatId: string): { id: string; token: string; label: string; baseUrl?: string } | null | undefined
   markUsed(tokenId: string): void
   hasAnyToken(): boolean
 }
@@ -109,6 +109,7 @@ export function buildClaudeSubagentStarter(
         sessionToken: a.sessionToken,
         forkSession: a.forkSession,
         oauthToken: a.oauthToken,
+        oauthBaseUrl: a.oauthBaseUrl,
         additionalDirectories: a.additionalDirectories,
         onToolRequest: a.onToolRequest,
         systemPromptOverride: a.systemPromptOverride,
@@ -240,7 +241,8 @@ export function buildSubagentProviderRunForChat(
         )
       }
       if (picked) deps.oauthPool!.markUsed(picked.id)
-      return picked?.token ?? null
+      if (!picked) return null
+      return { token: picked.token, baseUrl: picked.baseUrl }
     },
     readOpenRouterKey: async () => {
       const provider = await deps.readLlmProvider()

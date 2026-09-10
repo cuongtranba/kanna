@@ -46,6 +46,7 @@ import {
   OAUTH_TOKEN_VALUE_MAX,
   clampTokenConcurrency,
   isTokenConcurrency,
+  normalizeAnthropicBaseUrl,
   normalizeClaudeReasoningEffort,
   PROVIDERS,
   UPLOAD_MAX_FILE_SIZE_MB_MAX,
@@ -698,6 +699,19 @@ function normalizeTokenEntry<T>(value: T, warnings: string[]): OAuthTokenEntry |
       maxConcurrent = Math.round(src.maxConcurrent)
     }
   }
+  let baseUrl: string | undefined
+  if (src.baseUrl !== undefined && src.baseUrl !== null && src.baseUrl !== "") {
+    if (typeof src.baseUrl !== "string") {
+      warnings.push("claudeAuth.tokens entry baseUrl must be a string")
+    } else {
+      const normalized = normalizeAnthropicBaseUrl(src.baseUrl)
+      if (normalized === null) {
+        warnings.push("claudeAuth.tokens entry baseUrl must be an http(s) URL")
+      } else {
+        baseUrl = normalized
+      }
+    }
+  }
   return {
     id,
     label,
@@ -709,6 +723,7 @@ function normalizeTokenEntry<T>(value: T, warnings: string[]): OAuthTokenEntry |
     lastErrorMessage: typeof src.lastErrorMessage === "string" ? src.lastErrorMessage : null,
     addedAt: typeof src.addedAt === "number" && Number.isFinite(src.addedAt) ? src.addedAt : Date.now(),
     ...(maxConcurrent !== undefined ? { maxConcurrent } : {}),
+    ...(baseUrl !== undefined ? { baseUrl } : {}),
   }
 }
 

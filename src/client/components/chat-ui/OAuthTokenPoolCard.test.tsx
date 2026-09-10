@@ -1,7 +1,10 @@
-import { describe, expect, test, mock } from "bun:test"
+import { describe, expect, test, mock, beforeEach } from "bun:test"
+import { act } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { OAuthTokenPoolCard } from "./OAuthTokenPoolCard"
-import type { OAuthTokenEntry } from "../../../shared/types"
+import { renderClientMarkup } from "../../lib/testing/renderClientMarkup"
+import { useOAuthTokenPoolCardStore } from "../../stores/oauthTokenPoolCardStore"
+import type { ClaudeAuthSettings, OAuthTokenEntry } from "../../../shared/types"
 
 function makeToken(overrides: Partial<OAuthTokenEntry> = {}): OAuthTokenEntry {
   return {
@@ -243,6 +246,23 @@ describe("OAuthTokenPoolCard", () => {
     expect(html).toContain("Disabled")
   })
 
+  test("renders the token's base URL, and an empty field when it has none", () => {
+    const html = renderToStaticMarkup(
+      <OAuthTokenPoolCard
+        concurrencyDefault={1}
+        tokens={[
+          makeToken({ id: "a", label: "proxied", baseUrl: "https://proxy.example" }),
+          makeToken({ id: "b", label: "direct" }),
+        ]}
+        onWrite={async () => {}}
+        onTest={async () => ({ ok: true, error: null })}
+      />,
+    )
+    expect(html).toContain('value="https://proxy.example"')
+    expect(html).toContain('placeholder="(default)"')
+    expect(html).not.toContain("Must start with")
+  })
+
   test("renders Enable button for disabled, Disable button for active", () => {
     const disabledHtml = renderToStaticMarkup(
       <OAuthTokenPoolCard
@@ -263,5 +283,93 @@ describe("OAuthTokenPoolCard", () => {
       />,
     )
     expect(activeHtml).toContain('aria-label="Disable"')
+  })
+})
+
+
+function type(el: HTMLInputElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set
+  setter?.call(el, value)
+  el.dispatchEvent(new Event("input", { bubbles: true }))
+}
+
+describe("OAuthTokenPoolCard base URL editing", () => {
+  beforeEach(() => {
+    useOAuthTokenPoolCardStore.setState({ baseUrlDrafts: {}, addBaseUrl: "" })
+  })
+
+  async function renderWithToken(entry: OAuthTokenEntry) {
+    const writes: Array<Partial<ClaudeAuthSettings>> = []
+    const rendered = await renderClientMarkup(
+      <OAuthTokenPoolCard
+        concurrencyDefault={1}
+        tokens={[entry]}
+        onWrite={async (patch) => { writes.push(patch) }}
+        onTest={async () => ({ ok: true, error: null })}
+      />,
+    )
+    const input = rendered.container.querySelector<HTMLInputElement>(
+      `input[aria-label="Anthropic base URL for ${entry.label}"]`,
+    )
+    expect(input).not.toBeNull()
+    return { writes, rendered, input: input! }
+  }
+
+  test("writes the normalized base URL on blur, not on every keystroke", async () => {
+    const { writes, rendered, input } = await renderWithToken(makeToken())
+    await act(async () => { type(input, "https://proxy.example/") })
+    expect(writes).toHaveLength(0)
+
+    await act(async () => { input.dispatchEvent(new Event("focusout", { bubbles: true })) })
+    expect(writes).toHaveLength(1)
+    expect(writes[0]?.tokens?.[0]?.baseUrl).toBe("https://proxy.example")
+    await rendered.cleanup()
+  })
+
+  test("an invalid URL keeps the draft, shows a hint, and writes nothing", async () => {
+    const { writes, rendered, input } = await renderWithToken(makeToken())
+    await act(async () => { type(input, "proxy.example") })
+    await act(async () => { input.dispatchEvent(new Event("focusout", { bubbles: true })) })
+
+    expect(writes).toHaveLength(0)
+    expect(input.value).toBe("proxy.example")
+    expect(rendered.container.innerHTML).toContain("Must start with")
+    await rendered.cleanup()
+  })
+
+  test("clearing the field removes baseUrl from the entry entirely", async () => {
+    const entry = makeToken({ baseUrl: "https://proxy.example" })
+    const { writes, rendered, input } = await renderWithToken(entry)
+    await act(async () => { type(input, "") })
+    await act(async () => { input.dispatchEvent(new Event("focusout", { bubbles: true })) })
+
+    expect(writes).toHaveLength(1)
+    expect(writes[0]?.tokens?.[0]).not.toHaveProperty("baseUrl")
+    await rendered.cleanup()
+  })
+
+  test("an unchanged value writes nothing", async () => {
+    const entry = makeToken({ baseUrl: "https://proxy.example" })
+    const { writes, rendered, input } = await renderWithToken(entry)
+    await act(async () => { input.dispatchEvent(new Event("focusout", { bubbles: true })) })
+    expect(writes).toHaveLength(0)
+    await rendered.cleanup()
+  })
+
+  test("Test passes the token's endpoint so a proxy credential is probed correctly", async () => {
+    const onTest = mock(async () => ({ ok: true, error: null }))
+    const rendered = await renderClientMarkup(
+      <OAuthTokenPoolCard
+        concurrencyDefault={1}
+        tokens={[makeToken({ baseUrl: "https://proxy.example" })]}
+        onWrite={async () => {}}
+        onTest={onTest}
+      />,
+    )
+    const testButton = rendered.container.querySelector<HTMLButtonElement>('button[aria-label="Test"]')
+    await act(async () => { testButton?.click() })
+
+    expect(onTest).toHaveBeenCalledWith("sk-ant-abcdefghijklmnopqrstuvwxyz", "https://proxy.example")
+    await rendered.cleanup()
   })
 })

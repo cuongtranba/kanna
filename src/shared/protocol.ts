@@ -154,7 +154,7 @@ export type ClientCommand =
   | { type: "settings.writeAppSettings"; analyticsEnabled: boolean }
   | { type: "appSettings.setCloudflareTunnel"; patch: Partial<CloudflareTunnelSettings> }
   | { type: "appSettings.setClaudeAuth"; patch: Partial<ClaudeAuthSettings> }
-  | { type: "appSettings.testOAuthToken"; token: string }
+  | { type: "appSettings.testOAuthToken"; token: string; baseUrl?: string }
   | { type: "settings.writeAppSettingsPatch"; patch: AppSettingsPatch }
   | { type: "subagent.create"; input: SubagentInput }
   | { type: "subagent.update"; id: string; patch: SubagentPatch }

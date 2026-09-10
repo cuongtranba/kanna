@@ -72,6 +72,7 @@ export async function startClaudeSession(args: {
   sessionToken: string | null
   forkSession: boolean
   oauthToken: string | null
+  oauthBaseUrl?: string | null
   openrouterApiKey?: string | null
   additionalDirectories?: string[]
   chatId?: string
@@ -164,7 +165,12 @@ export async function startClaudeSession(args: {
       settingSources: ["user", "project", "local"],
       pathToClaudeCodeExecutable: process.env.CLAUDE_EXECUTABLE?.replace(/^~(?=\/|$)/, homedir()) || undefined,
       env: withAdditionalDirectoryMemory(
-        _deps.buildClaudeEnv(process.env, args.oauthToken, args.openrouterApiKey ? { apiKey: args.openrouterApiKey } : null),
+        _deps.buildClaudeEnv(
+          process.env,
+          args.oauthToken,
+          args.openrouterApiKey ? { apiKey: args.openrouterApiKey } : null,
+          args.oauthBaseUrl,
+        ),
         args.additionalDirectories,
       ),
     },

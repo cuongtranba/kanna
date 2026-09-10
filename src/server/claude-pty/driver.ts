@@ -69,6 +69,7 @@ export interface StartClaudeSessionPtyArgs {
   planMode: boolean
   forkSession: boolean
   oauthToken: string | null
+  oauthBaseUrl?: string | null
   sessionToken: string | null
   additionalDirectories?: string[]
   onToolRequest: (request: HarnessToolRequest) => Promise<JsonValue>
@@ -264,12 +265,17 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
       model: args.model,
       oauthToken: args.oauthToken ?? "",
       homeDir: home,
+      baseUrl: args.oauthBaseUrl,
     }),
     cache: createFileSmokeTestCache({ cacheDir: path.join(home, ".kanna", "cache", "smoke-test") }),
     ttlMs: 24 * 3600 * 1000,
     now: () => Date.now(),
   })
-  const smoke = await smokeGate.canSpawn({ binarySha256, model: args.model })
+  const smoke = await smokeGate.canSpawn({
+    binarySha256,
+    model: args.model,
+    baseUrl: args.oauthBaseUrl,
+  })
   if (!smoke.ok) {
     log.error("[kanna/pty] smoke-test refused spawn", { chatId: args.chatId, reason: smoke.reason })
     throw new Error(`PTY smoke-test refused spawn: ${smoke.reason}`)
@@ -280,6 +286,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
       baseEnv: env,
       homeDir: home,
       oauthToken: args.oauthToken,
+      baseUrl: args.oauthBaseUrl,
     }),
     args.additionalDirectories,
   )

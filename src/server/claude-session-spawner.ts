@@ -36,7 +36,7 @@ import type { startClaudeSession as StartClaudeSessionFn } from "./claude-sessio
 
 
 interface SpawnOAuthPool {
-  pickActive(chatId: string): { id: string; token: string; label: string } | null | undefined
+  pickActive(chatId: string): { id: string; token: string; label: string; baseUrl?: string } | null | undefined
   hasAnyToken(): boolean
   markUsed(tokenId: string): void
   release(chatId: string): void
@@ -177,6 +177,7 @@ export async function spawnClaudeTurn(
             sessionToken: args.sessionToken,
             forkSession: args.forkSession,
             oauthToken: picked?.token ?? null,
+            oauthBaseUrl: picked?.baseUrl ?? null,
             oauthLabel: picked?.label,
             oauthKeyMasked: picked ? maskOauthKey(picked.token) : undefined,
             additionalDirectories: args.additionalDirectories,
@@ -223,6 +224,7 @@ export async function spawnClaudeTurn(
             sessionToken: args.sessionToken,
             forkSession: args.forkSession,
             oauthToken: picked?.token ?? null,
+            oauthBaseUrl: picked?.baseUrl ?? null,
             openrouterApiKey,
             additionalDirectories: args.additionalDirectories,
             chatId: args.chatId,

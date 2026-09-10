@@ -798,10 +798,11 @@ export function useAppGlobalState(
     }
   }, [handleReadAppSettings, socket])
 
-  const handleTestOAuthToken = useCallback(async (token: string) => {
+  const handleTestOAuthToken = useCallback(async (token: string, baseUrl?: string) => {
     return await socket.command<{ ok: boolean; error: string | null }>({
       type: "appSettings.testOAuthToken",
       token,
+      baseUrl,
     })
   }, [socket])
 

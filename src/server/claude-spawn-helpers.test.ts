@@ -217,6 +217,42 @@ describe("buildClaudeEnv", () => {
     const result = buildClaudeEnv(base, null)
     expect(result.CLAUDE_CODE_OAUTH_TOKEN).toBe("existing")
   })
+
+  test("sets ANTHROPIC_BASE_URL from the token's endpoint, alongside the token", () => {
+    const result = buildClaudeEnv({ PATH: "/bin" }, "tok", null, "https://proxy.example")
+    expect(result.ANTHROPIC_BASE_URL).toBe("https://proxy.example")
+    expect(result.CLAUDE_CODE_OAUTH_TOKEN).toBe("tok")
+  })
+
+  test("a token's endpoint overrides an ambient ANTHROPIC_BASE_URL", () => {
+    const base: NodeJS.ProcessEnv = { ANTHROPIC_BASE_URL: "https://ambient.example" }
+    const result = buildClaudeEnv(base, "tok", null, "https://proxy.example")
+    expect(result.ANTHROPIC_BASE_URL).toBe("https://proxy.example")
+  })
+
+  test("a token with no endpoint inherits the ambient ANTHROPIC_BASE_URL", () => {
+    const base: NodeJS.ProcessEnv = { ANTHROPIC_BASE_URL: "https://ambient.example" }
+    expect(buildClaudeEnv(base, "tok").ANTHROPIC_BASE_URL).toBe("https://ambient.example")
+    expect(buildClaudeEnv(base, "tok", null, null).ANTHROPIC_BASE_URL).toBe("https://ambient.example")
+  })
+
+  test("carries the endpoint on the no-oauth-token paths too", () => {
+    const withInherited = buildClaudeEnv(
+      { CLAUDE_CODE_OAUTH_TOKEN: "existing" }, null, null, "https://proxy.example",
+    )
+    expect(withInherited.ANTHROPIC_BASE_URL).toBe("https://proxy.example")
+    expect(withInherited.CLAUDE_CODE_OAUTH_TOKEN).toBe("existing")
+
+    const bare = buildClaudeEnv({ PATH: "/bin" }, null, null, "https://proxy.example")
+    expect(bare.ANTHROPIC_BASE_URL).toBe("https://proxy.example")
+  })
+
+  test("OpenRouter still owns its endpoint and ignores a token endpoint", () => {
+    const result = buildClaudeEnv(
+      { PATH: "/bin" }, null, { apiKey: "sk-or-key" }, "https://proxy.example",
+    )
+    expect(result.ANTHROPIC_BASE_URL).toBe("https://openrouter.ai/api")
+  })
 })
 
 
