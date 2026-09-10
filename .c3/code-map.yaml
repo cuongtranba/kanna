@@ -141,6 +141,8 @@ c3-210:
   - src/server/agent.ts
   - src/server/claude-context-commands.test.ts
   - src/server/claude-context-commands.ts
+  - src/server/compaction.test.ts
+  - src/server/compaction.ts
   - src/server/claude-send-command.test.ts
   - src/server/claude-send-command.ts
   - src/server/claude-session-lifecycle.test.ts
@@ -290,6 +292,8 @@ c3-301:
   - src/shared/permission-policy.ts
   - src/shared/projectFileUrl.test.ts
   - src/shared/projectFileUrl.ts
+  - src/shared/task-doc.test.ts
+  - src/shared/task-doc.ts
   - src/shared/types.test.ts
   - src/shared/types.ts
 c3-302:

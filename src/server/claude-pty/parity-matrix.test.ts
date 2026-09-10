@@ -7,6 +7,7 @@ import type { ClaudeRawSdkMessage } from "../agent"
 import { createJsonlEventParser } from "./jsonl-to-event"
 import { startTranscriptStream } from "./tui-source.adapter"
 import type { HarnessEvent } from "../harness-types"
+import type { CompactBoundaryMetadata } from "../../shared/transcript-types"
 import type { ModelPrice } from "../../shared/token-pricing"
 
 
@@ -247,6 +248,41 @@ describe("SDK ↔ PTY HarnessEvent equivalence matrix", () => {
         uuid: "r-c",
       },
     ])
+  })
+
+  test("both wire spellings of compact metadata reach the entry identically", async () => {
+    const snakeCaseFromSdkStream = {
+      type: "system",
+      subtype: "compact_boundary",
+      session_id: "sess-d",
+      compact_metadata: { trigger: "auto", pre_tokens: 206978, post_tokens: 7509, duration_ms: 143806 },
+      uuid: "cb-snake",
+    }
+    const camelCaseFromCliTranscript = {
+      type: "system",
+      subtype: "compact_boundary",
+      session_id: "sess-d",
+      compactMetadata: { trigger: "auto", preTokens: 206978, postTokens: 7509, durationMs: 143806 },
+      uuid: "cb-camel",
+    }
+    const expected: CompactBoundaryMetadata = {
+      trigger: "auto",
+      preTokens: 206978,
+      postTokens: 7509,
+      durationMs: 143806,
+    }
+    const boundaryMetadata = (events: HarnessEvent[]): (CompactBoundaryMetadata | undefined)[] =>
+      events.flatMap((event) =>
+        event.type === "transcript" && event.entry.kind === "compact_boundary"
+          ? [event.entry.compactMetadata]
+          : [],
+      )
+
+    for (const message of [snakeCaseFromSdkStream, camelCaseFromCliTranscript]) {
+      await assertSameEvents([message])
+      expect(boundaryMetadata(await collectSdk([message]))).toEqual([expected])
+      expect(boundaryMetadata(await ptyEventsViaTranscriptStream([message]))).toEqual([expected])
+    }
   })
 })
 

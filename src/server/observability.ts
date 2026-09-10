@@ -34,9 +34,22 @@ export const PACKAGE_CHECK_DURATION_MS = "kanna.packages.check_duration_ms"
 
 export const PACKAGE_APPLY_DURATION_MS = "kanna.packages.apply_duration_ms"
 
+export const COMPACTION_STARTED = "kanna.compaction.started"
+
+export const COMPACTION_FINISHED = "kanna.compaction.finished"
+
+export const COMPACTION_PRE_TOKENS = "kanna.compaction.pre_tokens"
+
+export const COMPACTION_POST_TOKENS = "kanna.compaction.post_tokens"
+
 export const DURATION_BUCKETS_MS: readonly number[] = [
   1_000, 2_000, 5_000, 10_000, 20_000, 30_000,
   60_000, 120_000, 300_000, 600_000, 1_200_000, 1_800_000,
+]
+
+export const COMPACTION_TOKEN_BUCKETS: readonly number[] = [
+  1_000, 5_000, 10_000, 25_000, 50_000, 100_000,
+  150_000, 200_000, 300_000, 500_000, 800_000, 1_200_000,
 ]
 
 const SCOPE = "kanna"

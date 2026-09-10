@@ -32,7 +32,7 @@ import type { ClaudePtyRegistry } from "./claude-pty/pid-registry.adapter"
 import type { PtyInstanceRegistry } from "./claude-pty/pty-instance-registry"
 import type { WorkflowRegistry } from "./workflow-registry"
 import type { SubagentTranscriptRegistry } from "./subagent-transcript-registry"
-import type { startClaudeSession as StartClaudeSessionFn } from "./claude-session-start"
+import type { startClaudeSession as StartClaudeSessionFn, CompactionEvent } from "./claude-session-start"
 
 
 interface SpawnOAuthPool {
@@ -98,6 +98,7 @@ export interface SpawnClaudeTurnDeps {
   resolveChatPolicy: (chatId: string) => ChatPermissionPolicy
   runClaudeSession: (session: ClaudeSessionState) => void
   emitStateChange: (chatId: string) => void
+  onCompaction: (event: CompactionEvent) => void
 }
 
 
@@ -259,6 +260,7 @@ export async function spawnClaudeTurn(
             oauthBearers,
             turnPrice: openrouterTurnPrice,
             contextWindowOverride: openrouterContextWindow,
+            onCompaction: delegationContext.depth === 0 ? deps.onCompaction : undefined,
           })
     } catch (err) {
       if (picked) deps.oauthPool?.release(args.chatId)

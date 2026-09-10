@@ -1,4 +1,12 @@
-import { query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
+import {
+  query,
+  type HookCallbackMatcher,
+  type HookEvent,
+  type HookInput,
+  type HookJSONOutput,
+  type SDKUserMessage,
+} from "@anthropic-ai/claude-agent-sdk"
+import type { CompactionTrigger } from "../shared/transcript-types"
 import type { BoardRegistry } from "./board-registry"
 import {
   createKannaMcpServer,
@@ -34,6 +42,47 @@ import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import type { ModelPrice } from "../shared/token-pricing"
 import type { JsonValue } from "../shared/json"
+
+export interface CompactionEvent {
+  phase: "pre" | "post"
+  chatId: string
+  sessionId: string
+  trigger?: CompactionTrigger
+  summary?: string
+}
+
+function compactionTriggerOf(value: string | undefined): CompactionTrigger | undefined {
+  return value === "auto" || value === "manual" ? value : undefined
+}
+
+function buildCompactionHooks(
+  chatId: string,
+  onCompaction: (event: CompactionEvent) => void,
+): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
+  const observe = (phase: "pre" | "post") => async (input: HookInput): Promise<HookJSONOutput> => {
+    if (input.agent_id !== undefined) return {}
+    const trigger = "trigger" in input ? compactionTriggerOf(input.trigger) : undefined
+    const summary = "compact_summary" in input && typeof input.compact_summary === "string"
+      ? input.compact_summary
+      : undefined
+    try {
+      onCompaction({
+        phase,
+        chatId,
+        sessionId: input.session_id,
+        ...(trigger !== undefined ? { trigger } : {}),
+        ...(summary !== undefined ? { summary } : {}),
+      })
+    } catch (error) {
+      log.warn("[kanna/claude] onCompaction observer failed", String(error))
+    }
+    return {}
+  }
+  return {
+    PreCompact: [{ hooks: [observe("pre")] }],
+    PostCompact: [{ hooks: [observe("post")] }],
+  }
+}
 
 export type StartClaudeSessionDeps = {
   readonly buildCanUseTool: typeof buildCanUseTool
@@ -100,6 +149,7 @@ export async function startClaudeSession(args: {
   keepAlive?: boolean
   turnPrice?: ModelPrice | null
   contextWindowOverride?: number
+  onCompaction?: (event: CompactionEvent) => void
 },
   _deps: StartClaudeSessionDeps = buildStartClaudeSessionDeps(),
 ): Promise<ClaudeSessionHandle> {
@@ -129,6 +179,9 @@ export async function startClaudeSession(args: {
       permissionMode: args.planMode ? "plan" : "acceptEdits",
       canUseTool,
       ...(args.isLoopArmed?.() ? { disallowedTools: [..._deps.loopBlockedNativeTools] } : {}),
+      ...(args.onCompaction && args.chatId
+        ? { hooks: buildCompactionHooks(args.chatId, args.onCompaction) }
+        : {}),
       ...(args.maxTurns !== undefined ? { maxTurns: args.maxTurns } : {}),
       tools: args.restrictedAllowedPaths && args.restrictedAllowedPaths.length > 0
         ? _deps.claudeToolset.filter((t) => !new Set<string>(_deps.sdkRestrictedFsNativeTools).has(t))

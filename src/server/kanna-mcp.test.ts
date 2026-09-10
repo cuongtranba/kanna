@@ -1,10 +1,11 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises"
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 import os from "node:os"
 import type { TranscriptEntry } from "../shared/types"
 import { buildDelegateProgressEmitter, buildKannaMcpTools, resolveOfferDownload, resolveWorkspaceFile } from "./kanna-mcp"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
+import { TASK_DOC_SECTIONS } from "../shared/task-doc"
 import type { SubagentOrchestrator } from "./subagent-orchestrator"
 import type { ArmedLoopInfo, KannaMcpDelegationContext, SetupLoopHandlerResult } from "./kanna-mcp"
 import type { MermaidParsePort } from "../shared/mermaid-validation"
@@ -741,15 +742,55 @@ describe("query_tracking_file + append_tracking_row tools", () => {
     await rm(scratch, { recursive: true, force: true })
   })
 
-  test("append on a missing file → isError", async () => {
-    const tools = toolMap(buildKannaMcpTools(argsFor(dir)))
+  test("outside a loop, append seeds a task document instead of dead-ending", async () => {
+    const scratch = await mkdtemp(path.join(os.tmpdir(), "kanna-trackdoc-seed-"))
+    const tools = toolMap(buildKannaMcpTools(argsFor(scratch)))
+
     const res = await tools.get("append_tracking_row")!.handler({
-      file: "GONE.md",
+      section: TASK_DOC_SECTIONS.decisions,
+      entry: "- single-flight refresh, because it needs no API change",
+    })
+
+    expect(res.isError).toBeUndefined()
+    expect(res.content[0].text).toContain("created PROGRESS.md")
+    const onDisk = await readFile(path.join(scratch, "PROGRESS.md"), "utf8")
+    expect(onDisk).toContain(`## ${TASK_DOC_SECTIONS.objective}`)
+    expect(onDisk).toContain("single-flight refresh")
+    await rm(scratch, { recursive: true, force: true })
+  })
+
+  test("outside a loop, replace seeds the same document", async () => {
+    const scratch = await mkdtemp(path.join(os.tmpdir(), "kanna-trackdoc-seed2-"))
+    const tools = toolMap(buildKannaMcpTools(argsFor(scratch)))
+
+    const res = await tools.get("replace_tracking_section")!.handler({
+      section: TASK_DOC_SECTIONS.status,
+      body: "in_progress — implementation",
+    })
+
+    expect(res.isError).toBeUndefined()
+    const onDisk = await readFile(path.join(scratch, "PROGRESS.md"), "utf8")
+    expect(onDisk).toContain("in_progress — implementation")
+    expect(onDisk).toContain(`## ${TASK_DOC_SECTIONS.remaining}`)
+    await rm(scratch, { recursive: true, force: true })
+  })
+
+  test("inside an armed loop, a missing file still errors so a typo cannot become a phantom", async () => {
+    const armed = {
+      ...argsFor(dir),
+      getArmedLoop: () => ({ verifyCommand: "bun run lint", workdirAbs: dir, trackingFileRel: "PROGRESS.md" }),
+    }
+    const tools = toolMap(buildKannaMcpTools(armed))
+
+    const res = await tools.get("append_tracking_row")!.handler({
+      file: "PROGESS.md",
       section: "progress",
       entry: "- x",
     })
+
     expect(res.isError).toBe(true)
     expect(res.content[0].text).toContain("run setup_loop")
+    expect(readFile(path.join(dir, "PROGESS.md"), "utf8")).rejects.toThrow()
   })
 
   describe("delegate_subagent chunk-label fallback", () => {

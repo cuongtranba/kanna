@@ -69,6 +69,8 @@ import {
 } from "./claude-turn-starter"
 import { runTurn as runTurnFn, type RunTurnDeps } from "./claude-turn-runner"
 import { spawnClaudeTurn, type SpawnClaudeTurnArgs, type SpawnClaudeTurnDeps } from "./claude-session-spawner"
+import type { CompactionEvent } from "./claude-session-start"
+import { buildCompactSummaryEntry, recordCompactionStarted } from "./compaction"
 import {
   resolveClaudeIdleMs as resolveClaudeIdleMsFn,
   hasLiveWorkflow as hasLiveWorkflowFn,
@@ -981,7 +983,25 @@ export class AgentCoordinator {
       resolveChatPolicy: (chatId) => this.resolveChatPolicy(chatId),
       runClaudeSession: (session) => { void this.runClaudeSession(session) },
       emitStateChange: (chatId) => { this.emitStateChange(chatId) },
+      onCompaction: (event) => { this.handleCompaction(event) },
     }
+  }
+
+  private handleCompaction(event: CompactionEvent): void {
+    const provider = this.store.getChat(event.chatId)?.provider
+    if (event.phase === "pre") {
+      recordCompactionStarted(provider, event.trigger)
+      return
+    }
+    if (event.summary === undefined) return
+    const entry = buildCompactSummaryEntry({ sessionId: event.sessionId, summary: event.summary })
+    if (!entry) return
+    this.store
+      .appendMessage(event.chatId, entry)
+      .then(() => { this.emitStateChange(event.chatId) })
+      .catch((error: Error) => {
+        log.warn("[kanna/compaction] failed to persist the compaction summary", String(error))
+      })
   }
 
   startClaudeTurn(args: SpawnClaudeTurnArgs): Promise<HarnessTurn> {

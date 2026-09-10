@@ -145,8 +145,18 @@ export interface ContextWindowUpdatedEntry extends TranscriptEntryBase {
   usage: ContextWindowUsageSnapshot
 }
 
+export type CompactionTrigger = "auto" | "manual"
+
+export interface CompactBoundaryMetadata {
+  trigger?: CompactionTrigger
+  preTokens?: number
+  postTokens?: number
+  durationMs?: number
+}
+
 export interface CompactBoundaryEntry extends TranscriptEntryBase {
   kind: "compact_boundary"
+  compactMetadata?: CompactBoundaryMetadata
 }
 
 export interface CompactSummaryEntry extends TranscriptEntryBase {
@@ -289,7 +299,7 @@ export type HydratedTranscriptMessage =
   | ({ kind: "result"; success: boolean; cancelled?: boolean; result: string; durationMs: number; costUsd?: number; codexErrorInfo?: CodexErrorInfoTag; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "status"; status: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "context_window_updated"; usage: ContextWindowUsageSnapshot; id: string; messageId?: string; timestamp: string; hidden?: boolean })
-  | ({ kind: "compact_boundary"; id: string; messageId?: string; timestamp: string; hidden?: boolean })
+  | ({ kind: "compact_boundary"; compactMetadata?: CompactBoundaryMetadata; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "compact_summary"; summary: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "context_cleared"; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "interrupted"; id: string; messageId?: string; timestamp: string; hidden?: boolean })

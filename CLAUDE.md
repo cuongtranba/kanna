@@ -827,6 +827,128 @@ because dispatch intercepts that name first; rename it.
 
 See `adr-20260811-builtin-clear-compact-commands`.
 
+## Compaction preservation requirements
+
+When summarizing this conversation, preserve:
+
+- Current task objective and acceptance criteria.
+- Explicit user constraints and requested behavior.
+- Current implementation status.
+- Files created, modified, deleted, or investigated.
+- Important functions, symbols, APIs, interfaces, schemas, and data structures.
+- Architectural decisions and the reason for each decision.
+- Failed approaches that should not be repeated, and why they failed.
+- Exact unresolved errors when they are still relevant.
+- Test, lint, type-check, build, and validation commands and their latest results.
+- Current branch/worktree and relevant git state.
+- Remaining work required before the task is complete.
+- Assumptions that still require validation.
+
+Do not report a task as complete unless all acceptance criteria and required
+validation have been satisfied — and re-run the validation against the current
+tree rather than trusting a recorded result, which may predate a compaction.
+
+These are project-root rules on purpose. A nested `CLAUDE.md` or a path-scoped
+rule may drop out of context during compaction and only reload when a matching
+path is next accessed, so a global invariant must not live only there.
+
+## Compaction observability — typed metadata, SDK hooks, the `appendMessage` seam
+
+`compact_metadata` was always on the wire and never read: `trigger` and
+`pre_tokens` sat inside `debugRaw` as untyped text. `CompactBoundaryEntry` now
+carries a typed `compactMetadata` (`transcript-types.ts`), parsed by
+`parseCompactMetadata` in the normalizer — so it covers the SDK **and** PTY
+drivers, which share that function.
+
+**Both wire spellings are real, and neither is defensive.** The SDK stream emits
+`compact_metadata` / `pre_tokens`; the CLI's on-disk transcript JSONL, which PTY
+reads through `claude-pty/jsonl-to-event.ts`, emits `compactMetadata` /
+`preTokens`. `parseCompactMetadata` reads both per field, exactly as
+`ClaudeRawUsage` already does for `input_tokens` / `inputTokens`. Dropping
+either spelling silently disables one driver.
+
+**`PostCompact` exists to keep the primer whole, not for diagnostics.**
+`selectPrimerEntries` scopes from the newest `compact_boundary` and carries
+pre-boundary history forward only when a `compact_summary` entry exists.
+SDK auto-compaction emits the boundary and no summary — measured on one install:
+**19 boundaries across 4 chats, zero summaries** — so every compaction silently
+truncated the primer to nothing. The `"This session is being continued"` branch
+in the normalizer never fires here; that text is a CLI artifact, not an SDK
+stream message. `PostCompact` is the only place the summary is available, so
+`AgentCoordinator.handleCompaction` appends it as a `compact_summary` entry.
+`history-primer.test.ts` pins the loss case, so deleting the hook fails a test
+rather than quietly costing every long chat its history.
+
+**The hooks are observational and must stay that way.** `SyncHookJSONOutput`
+has no `PreCompact`/`PostCompact`-specific output, so they cannot steer
+compaction; both return `{}`. Three bounds are load-bearing:
+
+- **`input.agent_id` returns early.** The SDK's own Task-tool workers fire these
+  hooks (`sdk.d.ts` documents `agent_id` as the way to tell them apart).
+  Without the guard a worker's compaction is counted as a main-session one and
+  its internal summary is written into the user's transcript.
+- **Registration is conditional on `onCompaction`,** and subagent sessions never
+  pass it — `claude-subagent-wiring.ts` forwards the *parent* chatId, so a
+  subagent's summary would land in the user's chat and then feed back into the
+  parent's next cold start.
+- **The append is fire-and-forget.** `requireChat` throws synchronously before
+  the store's write chain and `HookCallbackMatcher` carries a `timeout`, so
+  awaiting it turns a cold chat or a backed-up transcript flush into a rejected
+  hook. Ordering is safe either way: appends serialise through the write chain,
+  and the primer already hoists a summary sitting on the older side of its
+  boundary. The entry's `messageId` is derived from the session id plus the
+  summary, so a re-fire dedupes.
+
+**Telemetry is recorded at `EventStore.appendMessage`, not in the runner**, and
+both reasons matter. `runClaudeSession` sits at the `complexity` ceiling pinned
+in `budget.ts` (131) with zero headroom, so one added `if` fails lint. And it is
+Claude-only: Codex's synthesized boundary (`claude-turn-runner.ts`) and its
+native one (`codex-app-server.ts`) never reach it, while every producer funnels
+through `appendMessage`. Attributes are `{provider, trigger}` only — at that
+seam the chat's `model` is the *current* one rather than the compacted turn's,
+so it would be wrong as well as unbounded.
+
+`COMPACTION_TOKEN_BUCKETS` needs its own view in `otel.adapter.ts`: OTel's
+default boundaries stop at 10 000 and real `pre_tokens` is ~207 000, so without
+it every observation lands in `+Inf` and `histogram_quantile` returns garbage —
+the same failure `DURATION_BUCKETS_MS` exists to prevent. No alert rule is armed
+yet; the names are in `EXPORTED_PROM_METRICS` so one can be added from observed
+data, which `rules.test.ts` requires a paused rule to justify.
+
+**`PreCompact` deliberately does not checkpoint task state.** The harness cannot
+author it — only the model knows the task — so the hook records
+`kanna.compaction.started` and returns. The checkpointing discipline is carried
+by the durable-state paragraph in `KANNA_SYSTEM_PROMPT_BASE` instead, which is
+why that paragraph is part of this feature rather than optional polish.
+
+## A tracking document is durable task state, and works outside a loop
+
+`append_tracking_row` / `replace_tracking_section` used to dead-end on a missing
+file with `run setup_loop to create it first`, so outside a loop there was
+nowhere durable to put task state. They now create the file, seeded from
+`renderTaskDocSkeleton` (`shared/task-doc.ts`): Objective, Acceptance criteria,
+Status, Completed, Remaining, Decisions, Failed approaches, Unresolved errors.
+No new store and no new IO — `writeDoc` already `mkdir -p`s, and the same
+`StructuredDoc` engine reads it back by section.
+
+**Creation is gated on no loop being armed, and that gate is the whole safety
+story.** Inside an armed loop the loud error must stay: create-on-missing would
+turn a worker's typo (`PROGESS.md`) into a silently-successful write while the
+orchestrator kept reading the real file, and the loop would redo the same chunk
+forever with a green tool result every iteration.
+
+**The skeleton says `## Objective`, never `## Goal`.** `assertTrackingFileSafe`
+refuses `setup_loop` on a git-tracked file whose `## Goal` body differs from the
+new goal, so a seeded `## Goal` would later block the user's own loop and demand
+`force: true` — which would then rewrite their document. `## Failed approaches`
+matching `LOOP_SECTIONS.failedApproaches` is the opposite case, and deliberate:
+same meaning, same tool call.
+
+The default filename stays `PROGRESS.md`. Outside a loop the tracking registry is
+never registered, so a stray file cannot reach the Progress panel; and if a loop
+is later armed on it, `reconcileTrackingFile` preserves unclaimed sections
+verbatim.
+
 # Local skills on every provider — `/name` expansion + the Codex roster
 
 The claude CLI resolves `/name` against `.claude/skills` + `.claude/commands`
@@ -1507,9 +1629,12 @@ Instrumented so far: `kanna.turn.start` (spawn pipeline), `kanna.subagent.run`
 (whole run, the loop's unit of work), `kanna.loop.wake.deliver`, counters
 `kanna.subagent.run.finished`, `kanna.autocontinue.fired`,
 `kanna.queued_message.recovered`, `kanna.loop.wake.recovered`,
-`kanna.turn.tokens`, `kanna.turn.cost_usd`, `kanna.subagent.tokens`, and
-process-memory gauges. Spans nest via AsyncLocalStorage — add depth with a
-one-line `withSpan` at the call site, no handle threading.
+`kanna.turn.tokens`, `kanna.turn.cost_usd`, `kanna.subagent.tokens`,
+`kanna.compaction.started` / `kanna.compaction.finished` with the
+`kanna.compaction.pre_tokens` / `.post_tokens` histograms (see **Compaction
+observability** above), and process-memory gauges. Spans nest via
+AsyncLocalStorage — add depth with a one-line `withSpan` at the call site, no
+handle threading.
 
 **Token spend — `kanna.turn.tokens`, `kanna.turn.cost_usd`,
 `kanna.subagent.tokens`.** Turn and run COUNTS cannot answer "what is this

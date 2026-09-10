@@ -36,6 +36,7 @@ import {
   resolveToolRequest as resolveToolRequestFn,
   type ToolRequestWriteDeps,
 } from "./event-store-tool-requests"
+import { recordCompactionFinished } from "./compaction"
 import { applyStoreEvent } from "./event-store-apply"
 import { ChatOpLog } from "./chat-op-log"
 import * as PeripheralEvents from "./event-store-peripheral-events.adapter"
@@ -436,6 +437,9 @@ export class EventStore implements PushEventStore {
     await TranscriptWrite.appendMessage(this.chatTranscriptDeps, chatId, entry)
     if (entry.kind === "user_prompt") {
       this.lastUserMessageIdByChatId.set(chatId, entry._id)
+    }
+    if (entry.kind === "compact_boundary") {
+      recordCompactionFinished(this.state.chatsById.get(chatId)?.provider, entry.compactMetadata)
     }
   }
 

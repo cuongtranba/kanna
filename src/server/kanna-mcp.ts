@@ -39,6 +39,7 @@ import type { LoopSetupInput } from "./loop-template"
 import { confinePathToDir } from "./input-validation"
 import { resolveStructuredDoc } from "../shared/structured-doc/registry"
 import { chunkLabelFromSection, LOOP_SECTIONS } from "../shared/loop-progress"
+import { renderTaskDocSkeleton } from "../shared/task-doc"
 import { readDoc, writeDoc } from "./structured-doc-io.adapter"
 import { computeWorkspaceDigest, runVerifyCommand } from "./loop-verify-io.adapter"
 import { getCachedVerify, setCachedVerify } from "./loop-verify-cache"
@@ -570,7 +571,12 @@ const APPEND_TRACKING_ROW_DESCRIPTION =
   + "(e.g. add a Progress row to PROGRESS.md) WITHOUT reading the whole file "
   + "first. Prefer this over Edit/Write for the loop tracking file — it keeps "
   + "the append off your context. Use position 'top' for newest-first logs "
-  + "like Progress."
+  + "like Progress. Outside a loop this is also how you keep durable task "
+  + "state: if the file does not exist yet it is created from a task-state "
+  + "skeleton (Objective, Acceptance criteria, Status, Completed, Remaining, "
+  + "Decisions, Failed approaches, Unresolved errors), so state survives a "
+  + "context compaction. Inside an armed loop a missing file is an error "
+  + "instead, so a mistyped name cannot silently become a second document."
 
 const REPLACE_TRACKING_SECTION_DESCRIPTION =
   "Replace a section's ENTIRE body in a structured markdown tracking file, "
@@ -579,7 +585,9 @@ const REPLACE_TRACKING_SECTION_DESCRIPTION =
   + "which must describe exactly one next step. Appending there instead makes "
   + "completed chunks pile up, and a later iteration re-reads a finished chunk "
   + "and redoes the work. Use append_tracking_row for true logs (Progress, "
-  + "Failed approaches); use this for Next chunk."
+  + "Failed approaches); use this for Next chunk, and for a task document's "
+  + "Status / Remaining. Outside a loop a missing file is created from the "
+  + "task-state skeleton, as with append_tracking_row."
 
 const RUN_VERIFY_DESCRIPTION =
   "Run the armed loop's verify command (the oracle) and return its exit code "
@@ -621,6 +629,12 @@ function buildTrackingDocToolList(args: {
   const chatId = args.chatId
   const getArmedLoop = args.getArmedLoop
   const baseDir = (): string => getArmedLoop?.(chatId)?.workdirAbs ?? args.cwd
+  const loadOrSeed = async (abs: string): Promise<{ content: string; created: boolean } | null> => {
+    const existing = await readDoc(abs)
+    if (existing !== null) return { content: existing, created: false }
+    if (getArmedLoop?.(chatId)) return null
+    return { content: renderTaskDocSkeleton(), created: true }
+  }
   return [
     tool(
       "query_tracking_file",
@@ -687,25 +701,32 @@ function buildTrackingDocToolList(args: {
         if (!doc) {
           return fail(`structured append supports .md files only (got ${confined.rel})`)
         }
-        const content = await readDoc(confined.abs)
-        if (content === null) {
+        const loaded = await loadOrSeed(confined.abs)
+        if (loaded === null) {
           return fail(`file not found: ${confined.rel} (run setup_loop to create it first)`)
         }
-        const result = doc.append(content, {
+        const result = doc.append(loaded.content, {
           section: input.section,
           entry: input.entry,
           position: input.position,
         })
         await writeDoc(confined.abs, result.content)
-        const note = result.created ? " (section created)" : ""
-        return ok(`Appended to "${input.section}" in ${confined.rel}${note}.`)
+        return ok(`Appended to "${input.section}" in ${confined.rel}${writeNote(loaded.created, result.created, confined.rel)}.`)
       },
     ),
-    ...buildReplaceTrackingSectionTool(baseDir),
+    ...buildReplaceTrackingSectionTool(baseDir, loadOrSeed),
   ]
 }
 
-function buildReplaceTrackingSectionTool(baseDir: () => string): KannaSdkToolList {
+function writeNote(fileCreated: boolean, sectionCreated: boolean, rel: string): string {
+  if (fileCreated) return ` (created ${rel} from the task-state skeleton)`
+  return sectionCreated ? " (section created)" : ""
+}
+
+function buildReplaceTrackingSectionTool(
+  baseDir: () => string,
+  loadOrSeed: (abs: string) => Promise<{ content: string; created: boolean } | null>,
+): KannaSdkToolList {
   return [
     tool(
       "replace_tracking_section",
@@ -730,14 +751,13 @@ function buildReplaceTrackingSectionTool(baseDir: () => string): KannaSdkToolLis
         if (!doc) {
           return fail(`structured replace supports .md files only (got ${confined.rel})`)
         }
-        const content = await readDoc(confined.abs)
-        if (content === null) {
+        const loaded = await loadOrSeed(confined.abs)
+        if (loaded === null) {
           return fail(`file not found: ${confined.rel} (run setup_loop to create it first)`)
         }
-        const result = doc.replace(content, { section: input.section, body: input.body })
+        const result = doc.replace(loaded.content, { section: input.section, body: input.body })
         await writeDoc(confined.abs, result.content)
-        const note = result.created ? " (section created)" : ""
-        return ok(`Replaced "${input.section}" in ${confined.rel}${note}.`)
+        return ok(`Replaced "${input.section}" in ${confined.rel}${writeNote(loaded.created, result.created, confined.rel)}.`)
       },
     ),
   ]

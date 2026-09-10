@@ -35,7 +35,11 @@ mock.module("./kanna-mcp", () => ({
 
 
 
-import { startClaudeSession, type StartClaudeSessionDeps } from "./claude-session-start"
+import {
+  startClaudeSession,
+  type CompactionEvent,
+  type StartClaudeSessionDeps,
+} from "./claude-session-start"
 
 
 class FakeQueue<T> implements AsyncIterable<T> {
@@ -191,5 +195,102 @@ describe("startClaudeSession", () => {
   test("a solo spawn does not", async () => {
     await startClaudeSession(BASE_ARGS, isolatedEnvDeps())
     expect(envOfSpawn().CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD).toBeUndefined()
+  })
+})
+
+describe("startClaudeSession compaction hooks", () => {
+  type HookFn = (
+    input: Record<string, string | undefined>,
+    toolUseId: string | undefined,
+    options: { signal: AbortSignal },
+  ) => Promise<Record<string, never>>
+
+  const hooksOf = (): Record<string, { hooks: HookFn[] }[]> | undefined =>
+    (capturedQueryArgs as { options: { hooks?: Record<string, { hooks: HookFn[] }[]> } }).options.hooks
+
+  const fire = async (event: "PreCompact" | "PostCompact", input: Record<string, string | undefined>) => {
+    const hook = hooksOf()?.[event]?.[0]?.hooks?.[0]
+    if (!hook) throw new Error(`no ${event} hook registered`)
+    return hook(input, undefined, { signal: AbortSignal.timeout(1_000) })
+  }
+
+  test("no hooks are registered when the caller supplies no onCompaction", async () => {
+    await startClaudeSession(BASE_ARGS, makeFakeDeps())
+    expect(hooksOf()).toBeUndefined()
+  })
+
+  test("both compaction hooks are registered when onCompaction is supplied", async () => {
+    await startClaudeSession({ ...BASE_ARGS, chatId: "chat-1", onCompaction: () => {} }, makeFakeDeps())
+    expect(Object.keys(hooksOf() ?? {}).sort()).toEqual(["PostCompact", "PreCompact"])
+  })
+
+  test("PreCompact forwards the trigger and returns an empty output so compaction proceeds", async () => {
+    const seen: CompactionEvent[] = []
+    await startClaudeSession(
+      { ...BASE_ARGS, chatId: "chat-1", onCompaction: (event) => seen.push(event) },
+      makeFakeDeps(),
+    )
+
+    const output = await fire("PreCompact", { trigger: "auto", session_id: "sess-9" })
+
+    expect(output).toEqual({})
+    expect(seen).toEqual([{ phase: "pre", chatId: "chat-1", sessionId: "sess-9", trigger: "auto" }])
+  })
+
+  test("PostCompact forwards the generated summary", async () => {
+    const seen: CompactionEvent[] = []
+    await startClaudeSession(
+      { ...BASE_ARGS, chatId: "chat-1", onCompaction: (event) => seen.push(event) },
+      makeFakeDeps(),
+    )
+
+    const output = await fire("PostCompact", {
+      trigger: "manual",
+      session_id: "sess-9",
+      compact_summary: "The task so far: wire the hooks.",
+    })
+
+    expect(output).toEqual({})
+    expect(seen).toEqual([{
+      phase: "post",
+      chatId: "chat-1",
+      sessionId: "sess-9",
+      trigger: "manual",
+      summary: "The task so far: wire the hooks.",
+    }])
+  })
+
+  test("a compaction inside an SDK subagent is ignored, not attributed to the parent chat", async () => {
+    const seen: CompactionEvent[] = []
+    await startClaudeSession(
+      { ...BASE_ARGS, chatId: "chat-1", onCompaction: (event) => seen.push(event) },
+      makeFakeDeps(),
+    )
+
+    await fire("PreCompact", { trigger: "auto", session_id: "sess-9", agent_id: "worker-3" })
+    await fire("PostCompact", { trigger: "auto", session_id: "sess-9", compact_summary: "x", agent_id: "worker-3" })
+
+    expect(seen).toEqual([])
+  })
+
+  test("an unrecognized trigger is forwarded as undefined rather than invented", async () => {
+    const seen: CompactionEvent[] = []
+    await startClaudeSession(
+      { ...BASE_ARGS, chatId: "chat-1", onCompaction: (event) => seen.push(event) },
+      makeFakeDeps(),
+    )
+
+    await fire("PreCompact", { trigger: "sideways", session_id: "sess-9" })
+
+    expect(seen[0]?.trigger).toBeUndefined()
+  })
+
+  test("a throwing onCompaction never rejects the hook, so compaction is not blocked", async () => {
+    await startClaudeSession(
+      { ...BASE_ARGS, chatId: "chat-1", onCompaction: () => { throw new Error("observer exploded") } },
+      makeFakeDeps(),
+    )
+
+    expect(await fire("PreCompact", { trigger: "auto", session_id: "sess-9" })).toEqual({})
   })
 })

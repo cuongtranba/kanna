@@ -1,5 +1,9 @@
 
 import {
+  COMPACTION_FINISHED,
+  COMPACTION_POST_TOKENS,
+  COMPACTION_PRE_TOKENS,
+  COMPACTION_STARTED,
   PACKAGE_APPLY_DURATION_MS,
   PACKAGE_APPLY_FINISHED,
   PACKAGE_CHECK_DURATION_MS,
@@ -45,6 +49,13 @@ export const EXPORTED_PROM_METRICS: readonly string[] = [
   `${promMetricName(PACKAGE_APPLY_FINISHED)}_total`,
   `${promMetricName(PACKAGE_UPDATE_RATE_LIMITED)}_total`,
   ...[promMetricName(PACKAGE_CHECK_DURATION_MS), promMetricName(PACKAGE_APPLY_DURATION_MS)].flatMap((base) => [
+    `${base}_bucket`,
+    `${base}_count`,
+    `${base}_sum`,
+  ]),
+  `${promMetricName(COMPACTION_STARTED)}_total`,
+  `${promMetricName(COMPACTION_FINISHED)}_total`,
+  ...[promMetricName(COMPACTION_PRE_TOKENS), promMetricName(COMPACTION_POST_TOKENS)].flatMap((base) => [
     `${base}_bucket`,
     `${base}_count`,
     `${base}_sum`,

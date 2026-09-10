@@ -152,6 +152,15 @@ describe("buildHistoryPrimer — context resets", () => {
     expect(primer).not.toContain("old reply")
   })
 
+  test("a boundary with no summary loses every turn before it — why PostCompact must append one", () => {
+    const entries: TranscriptEntry[] = [
+      userEntry("old", 1000),
+      assistantEntry("old reply", 2000),
+      boundaryEntry(3000),
+    ]
+    expect(buildHistoryPrimer(entries, "codex" as AgentProvider, "tail")).toBeNull()
+  })
+
   test("a context_cleared after a summary discards the summary too", () => {
     const entries: TranscriptEntry[] = [
       summaryEntry("THE SUMMARY", 1000),

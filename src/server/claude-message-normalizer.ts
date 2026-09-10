@@ -1,5 +1,6 @@
 
 import type { TranscriptEntry } from "../shared/types"
+import type { CompactBoundaryMetadata } from "../shared/transcript-types"
 import { isRecord } from "../shared/errors"
 import { toJsonArray, toJsonObject } from "./json-boundary"
 import { isJsonObject, type JsonArray, type JsonObject, type JsonValue } from "../shared/json"
@@ -59,6 +60,16 @@ export interface ClaudeRawModelUsage {
   context_window?: number
 }
 
+export interface ClaudeRawCompactMetadata {
+  trigger?: JsonValue
+  pre_tokens?: JsonValue
+  preTokens?: JsonValue
+  post_tokens?: JsonValue
+  postTokens?: JsonValue
+  duration_ms?: JsonValue
+  durationMs?: JsonValue
+}
+
 interface ClaudeRawContentBlock {
   type?: string
   text?: string
@@ -111,6 +122,33 @@ export interface ClaudeRawSdkMessage {
   task_id?: string
   output_file?: string
   tool_use_id?: string
+  compact_metadata?: ClaudeRawCompactMetadata
+  compactMetadata?: ClaudeRawCompactMetadata
+}
+
+function numberOrUndefined(...candidates: readonly (JsonValue | undefined)[]): number | undefined {
+  for (const candidate of candidates) {
+    if (typeof candidate === "number" && Number.isFinite(candidate)) return candidate
+  }
+  return undefined
+}
+
+export function parseCompactMetadata(
+  message: ClaudeRawSdkMessage,
+): CompactBoundaryMetadata | undefined {
+  const raw = message.compact_metadata ?? message.compactMetadata
+  if (!raw) return undefined
+  const trigger = raw.trigger === "auto" || raw.trigger === "manual" ? raw.trigger : undefined
+  const preTokens = numberOrUndefined(raw.pre_tokens, raw.preTokens)
+  const postTokens = numberOrUndefined(raw.post_tokens, raw.postTokens)
+  const durationMs = numberOrUndefined(raw.duration_ms, raw.durationMs)
+  const metadata: CompactBoundaryMetadata = {
+    ...(trigger !== undefined ? { trigger } : {}),
+    ...(preTokens !== undefined ? { preTokens } : {}),
+    ...(postTokens !== undefined ? { postTokens } : {}),
+    ...(durationMs !== undefined ? { durationMs } : {}),
+  }
+  return Object.keys(metadata).length > 0 ? metadata : undefined
 }
 
 
@@ -274,14 +312,6 @@ export function normalizeClaudeStreamMessage(message: ClaudeRawSdkMessage): Tran
           debugRaw,
         }))
       }
-      if (message.message.role === "user" && typeof message.message.content === "string") {
-        entries.push(timestamped({
-          kind: "compact_summary",
-          messageId,
-          summary: message.message.content,
-          debugRaw,
-        }))
-      }
     }
     return entries
   }
@@ -377,7 +407,13 @@ export function normalizeClaudeStreamMessage(message: ClaudeRawSdkMessage): Tran
   }
 
   if (message.type === "system" && message.subtype === "compact_boundary") {
-    return [timestamped({ kind: "compact_boundary", messageId, debugRaw })]
+    const compactMetadata = parseCompactMetadata(message)
+    return [timestamped({
+      kind: "compact_boundary",
+      messageId,
+      ...(compactMetadata !== undefined ? { compactMetadata } : {}),
+      debugRaw,
+    })]
   }
 
   if (message.type === "system" && message.subtype === "context_cleared") {

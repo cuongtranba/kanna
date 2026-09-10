@@ -5,6 +5,7 @@ import {
   normalizeToolContent,
   type ClaudeRawSdkMessage,
 } from "./claude-message-normalizer"
+import type { CompactBoundaryEntry } from "../shared/transcript-types"
 
 
 describe("getClaudeAssistantMessageUsageId", () => {
@@ -277,5 +278,63 @@ describe("normalizeClaudeStreamMessage background_tasks_changed", () => {
       { id: "a6de6ce841521b5df", taskType: "local_agent", description: "Task 3 implementer" },
       { id: "bsh42", taskType: "local_bash", description: null },
     ])
+  })
+})
+
+describe("normalizeClaudeStreamMessage compact_boundary", () => {
+  const boundary = (msg: ClaudeRawSdkMessage): CompactBoundaryEntry =>
+    normalizeClaudeStreamMessage(msg)[0] as CompactBoundaryEntry
+
+  test("reads the SDK stream's snake_case compact_metadata", () => {
+    const entry = boundary({
+      type: "system",
+      subtype: "compact_boundary",
+      compact_metadata: { trigger: "auto", pre_tokens: 206978, post_tokens: 7509, duration_ms: 143806 },
+    })
+    expect(entry.kind).toBe("compact_boundary")
+    expect(entry.compactMetadata).toEqual({
+      trigger: "auto",
+      preTokens: 206978,
+      postTokens: 7509,
+      durationMs: 143806,
+    })
+  })
+
+  test("reads the CLI transcript's camelCase compactMetadata", () => {
+    const entry = boundary({
+      type: "system",
+      subtype: "compact_boundary",
+      compactMetadata: { trigger: "manual", preTokens: 186796, postTokens: 12602, durationMs: 165736 },
+    })
+    expect(entry.compactMetadata).toEqual({
+      trigger: "manual",
+      preTokens: 186796,
+      postTokens: 12602,
+      durationMs: 165736,
+    })
+  })
+
+  test("omits the field entirely when the message carries no metadata", () => {
+    const entry = boundary({ type: "system", subtype: "compact_boundary" })
+    expect(entry.kind).toBe("compact_boundary")
+    expect(entry.compactMetadata).toBeUndefined()
+  })
+
+  test("an unrecognized trigger is dropped rather than passed through", () => {
+    const entry = boundary({
+      type: "system",
+      subtype: "compact_boundary",
+      compact_metadata: { trigger: "sideways", pre_tokens: 10 },
+    })
+    expect(entry.compactMetadata).toEqual({ preTokens: 10 })
+  })
+
+  test("non-numeric token counts are omitted, never coerced to zero", () => {
+    const entry = boundary({
+      type: "system",
+      subtype: "compact_boundary",
+      compact_metadata: { trigger: "auto", pre_tokens: "206978", post_tokens: null },
+    })
+    expect(entry.compactMetadata).toEqual({ trigger: "auto" })
   })
 })
