@@ -8,6 +8,7 @@ import {
   Blocks,
   BookText,
   Bot,
+  CircleArrowUp,
   Command,
   Code,
   Cpu,
@@ -1441,11 +1442,12 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
                   ) : null}
                   <div className="relative flex items-center gap-2.5">
                     <item.icon className="h-4 w-4 shrink-0" />
-                    <span>{item.label}</span>
+                    <span className="min-w-0 truncate">{item.label}</span>
                     {showUpdateBadge ? (
-                      <span className="ml-auto inline-flex items-center rounded-full bg-logo/20 px-2 py-0.5 text-xs font-bold tracking-wider text-logo">
-                        UPDATE
-                      </span>
+                      <>
+                        <CircleArrowUp className="ml-auto size-3.5 shrink-0 text-warning-text" aria-hidden="true" />
+                        <span className="sr-only">Update available</span>
+                      </>
                     ) : null}
                   </div>
                 </button>
