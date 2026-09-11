@@ -1,5 +1,5 @@
 import { StateMark } from "../components/ui/state-mark"
-import { Check, CircleDashed, Clock, ListChecks, Loader2, TriangleAlert } from "lucide-react"
+import { Check, CircleDashed, Clock, ListChecks, Loader2, Lock, TriangleAlert } from "lucide-react"
 import type { LoopProgressSnapshot, LoopRowStatus } from "../../shared/types"
 import { formatLocal } from "../lib/autoContinueTime"
 import { Button } from "../components/ui/button"
@@ -12,7 +12,13 @@ const ROW_STATUS_CONFIG: Record<
   done: { Icon: Check, iconClass: "text-success-text", textClass: "text-muted-foreground" },
   running: { Icon: Loader2, iconClass: "text-foreground animate-spin", textClass: "text-foreground font-medium" },
   pending: { Icon: CircleDashed, iconClass: "text-muted-foreground", textClass: "text-muted-foreground" },
+  blocked: { Icon: Lock, iconClass: "text-muted-foreground/60", textClass: "text-muted-foreground/60" },
   failed: { Icon: TriangleAlert, iconClass: "text-destructive", textClass: "text-muted-foreground line-through decoration-destructive/40" },
+}
+
+function liveWorkerLabel(rows: LoopProgressSnapshot["rows"]): string {
+  const live = rows.filter((row) => row.status === "running").length
+  return live > 1 ? `${live} workers running` : "Loop running"
 }
 
 interface Props {
@@ -33,7 +39,7 @@ export function LoopProgressSection({ loopProgress, onResume }: Props) {
           {armed ? (
             <span className="ml-auto inline-flex items-center gap-1.5 text-xs font-normal text-muted-foreground">
               <StateMark tone="active" className="text-foreground" />
-              Loop running
+              {liveWorkerLabel(rows)}
             </span>
           ) : null}
         </h3>

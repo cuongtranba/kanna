@@ -41,6 +41,18 @@ import { resolveStructuredDoc } from "../shared/structured-doc/registry"
 import { chunkLabelFromSection, LOOP_SECTIONS } from "../shared/loop-progress"
 import { renderTaskDocSkeleton } from "../shared/task-doc"
 import { readDoc, writeDoc } from "./structured-doc-io.adapter"
+import { withFileLock } from "./tracking-file-lock"
+import {
+  CLAIM_TRACKING_TASK_DESCRIPTION,
+  COMPLETE_TRACKING_TASK_DESCRIPTION,
+  INTEGRATE_TRACKING_TASKS_DESCRIPTION,
+  bindClaimToRun as bindClaimToRunFn,
+  claimTrackingTask,
+  completeTrackingTask,
+  integrateTrackingTasks,
+  type TaskQueueToolDeps,
+} from "./kanna-mcp-tools/task-queue"
+import { mergeLoopBranch } from "./loop-integrate-io.adapter"
 import { computeWorkspaceDigest, runVerifyCommand } from "./loop-verify-io.adapter"
 import { getCachedVerify, setCachedVerify } from "./loop-verify-cache"
 import { parseMermaid } from "./mermaid-parse.adapter"
@@ -82,6 +94,7 @@ export interface KannaMcpArgs extends OfferDownloadArgs {
   stopLoop?: () => Promise<void>
   resumeLoop?: () => Promise<ResumeLoopResult>
   getArmedLoop?: (chatId: string) => ArmedLoopInfo | null
+  isRunAlive?: (chatId: string, runId: string) => boolean
   parseMermaid?: MermaidParsePort
   armCron?: (command: string) => Promise<{ jobId: string }>
   updateCron?: (jobId: string, patch: import("../shared/cron/types").CronJobPatch) => Promise<void>
@@ -311,12 +324,33 @@ export function buildDelegateProgressEmitter<TExtra>(
   }
 }
 
+function buildTaskQueueDeps(args: {
+  chatId: string
+  cwd: string
+  getArmedLoop?: (chatId: string) => ArmedLoopInfo | null
+  isRunAlive?: (chatId: string, runId: string) => boolean
+}): TaskQueueToolDeps | null {
+  const isRunAlive = args.isRunAlive
+  if (!isRunAlive) return null
+  const chatId = args.chatId
+  return {
+    chatId,
+    baseDir: () => args.getArmedLoop?.(chatId)?.workdirAbs ?? args.cwd,
+    readDoc,
+    writeDoc,
+    withFileLock,
+    confinePath: confinePathToDir,
+    isRunAlive,
+  }
+}
+
 function buildDelegateSubagentToolList(args: {
   orchestrator?: SubagentOrchestrator
   delegationContext?: KannaMcpDelegationContext
   chatId: string | null
   cwd: string
   getArmedLoop?: (chatId: string) => ArmedLoopInfo | null
+  isRunAlive?: (chatId: string, runId: string) => boolean
 }): KannaSdkToolList {
   if (!args.orchestrator || !args.delegationContext || !args.chatId) return []
   const ctx = args.delegationContext
@@ -328,6 +362,22 @@ function buildDelegateSubagentToolList(args: {
     chatId,
     getArmedLoop: args.getArmedLoop,
   })
+  const queueDeps = buildTaskQueueDeps({
+    chatId,
+    cwd: args.cwd,
+    getArmedLoop: args.getArmedLoop,
+    isRunAlive: args.isRunAlive,
+  })
+  const bindClaimToRun = queueDeps
+    ? async (claimId: string, runId: string): Promise<void> => {
+      const loop = args.getArmedLoop?.(chatId)
+      await bindClaimToRunFn(queueDeps, {
+        claimId,
+        runId,
+        ...(loop?.trackingFileRel ? { file: loop.trackingFileRel } : {}),
+      })
+    }
+    : undefined
 
   return [
     tool(
@@ -352,6 +402,7 @@ function buildDelegateSubagentToolList(args: {
           getMentionedSubagentIds: ctx.getMentionedSubagentIds,
           onEntry,
           resolveLoopChunkLabel,
+          ...(bindClaimToRun ? { bindClaimToRun } : {}),
         }
         const result = await delegate.handler(input, handlerCtx)
         if (input.keep_alive && !result.isError && result.content.length > 0) {
@@ -624,11 +675,18 @@ function buildTrackingDocToolList(args: {
   cwd: string
   chatId: string | null
   getArmedLoop?: (chatId: string) => ArmedLoopInfo | null
+  isRunAlive?: (chatId: string, runId: string) => boolean
 }): KannaSdkToolList {
   if (!args.chatId) return []
   const chatId = args.chatId
   const getArmedLoop = args.getArmedLoop
   const baseDir = (): string => getArmedLoop?.(chatId)?.workdirAbs ?? args.cwd
+  const queueDeps = buildTaskQueueDeps({
+    chatId,
+    cwd: args.cwd,
+    getArmedLoop,
+    isRunAlive: args.isRunAlive,
+  })
   const loadOrSeed = async (abs: string): Promise<{ content: string; created: boolean } | null> => {
     const existing = await readDoc(abs)
     if (existing !== null) return { content: existing, created: false }
@@ -701,20 +759,79 @@ function buildTrackingDocToolList(args: {
         if (!doc) {
           return fail(`structured append supports .md files only (got ${confined.rel})`)
         }
-        const loaded = await loadOrSeed(confined.abs)
-        if (loaded === null) {
-          return fail(`file not found: ${confined.rel} (run setup_loop to create it first)`)
-        }
-        const result = doc.append(loaded.content, {
-          section: input.section,
-          entry: input.entry,
-          position: input.position,
+        return withFileLock(confined.abs, async () => {
+          const loaded = await loadOrSeed(confined.abs)
+          if (loaded === null) {
+            return fail(`file not found: ${confined.rel} (run setup_loop to create it first)`)
+          }
+          const result = doc.append(loaded.content, {
+            section: input.section,
+            entry: input.entry,
+            position: input.position,
+          })
+          await writeDoc(confined.abs, result.content)
+          return ok(`Appended to "${input.section}" in ${confined.rel}${writeNote(loaded.created, result.created, confined.rel)}.`)
         })
-        await writeDoc(confined.abs, result.content)
-        return ok(`Appended to "${input.section}" in ${confined.rel}${writeNote(loaded.created, result.created, confined.rel)}.`)
       },
     ),
     ...buildReplaceTrackingSectionTool(baseDir, loadOrSeed),
+    ...buildTaskQueueToolList(queueDeps),
+  ]
+}
+
+function buildTaskQueueToolList(deps: TaskQueueToolDeps | null): KannaSdkToolList {
+  if (!deps) return []
+  return [
+    tool(
+      "claim_tracking_task",
+      CLAIM_TRACKING_TASK_DESCRIPTION,
+      {
+        file: z
+          .string()
+          .optional()
+          .describe("Path relative to the loop workdir. Defaults to PROGRESS.md."),
+      },
+      async (input) => {
+        const result = await claimTrackingTask(deps, { file: input.file })
+        return result.isError ? fail(result.text) : ok(result.text)
+      },
+    ),
+    tool(
+      "complete_tracking_task",
+      COMPLETE_TRACKING_TASK_DESCRIPTION,
+      {
+        file: z
+          .string()
+          .optional()
+          .describe("Path relative to the loop workdir. Defaults to PROGRESS.md."),
+        claim_id: z.string().min(1).describe("The claim_id claim_tracking_task returned."),
+        outcome: z
+          .enum(["done", "release"])
+          .describe("'done' marks the task finished; 'release' returns it to the queue for a retry."),
+      },
+      async (input) => {
+        const result = await completeTrackingTask(deps, {
+          file: input.file,
+          claim_id: input.claim_id,
+          outcome: input.outcome,
+        })
+        return result.isError ? fail(result.text) : ok(result.text)
+      },
+    ),
+    tool(
+      "integrate_tracking_tasks",
+      INTEGRATE_TRACKING_TASKS_DESCRIPTION,
+      {
+        file: z
+          .string()
+          .optional()
+          .describe("Path relative to the loop workdir. Defaults to PROGRESS.md."),
+      },
+      async (input) => {
+        const result = await integrateTrackingTasks(deps, mergeLoopBranch, { file: input.file })
+        return result.isError ? fail(result.text) : ok(result.text)
+      },
+    ),
   ]
 }
 
@@ -751,13 +868,15 @@ function buildReplaceTrackingSectionTool(
         if (!doc) {
           return fail(`structured replace supports .md files only (got ${confined.rel})`)
         }
-        const loaded = await loadOrSeed(confined.abs)
-        if (loaded === null) {
-          return fail(`file not found: ${confined.rel} (run setup_loop to create it first)`)
-        }
-        const result = doc.replace(loaded.content, { section: input.section, body: input.body })
-        await writeDoc(confined.abs, result.content)
-        return ok(`Replaced "${input.section}" in ${confined.rel}${writeNote(loaded.created, result.created, confined.rel)}.`)
+        return withFileLock(confined.abs, async () => {
+          const loaded = await loadOrSeed(confined.abs)
+          if (loaded === null) {
+            return fail(`file not found: ${confined.rel} (run setup_loop to create it first)`)
+          }
+          const result = doc.replace(loaded.content, { section: input.section, body: input.body })
+          await writeDoc(confined.abs, result.content)
+          return ok(`Replaced "${input.section}" in ${confined.rel}${writeNote(loaded.created, result.created, confined.rel)}.`)
+        })
       },
     ),
   ]
@@ -987,9 +1106,10 @@ export function buildKannaMcpTools(args: KannaMcpArgs): KannaSdkToolList {
       chatId,
       cwd,
       getArmedLoop: args.getArmedLoop,
+      isRunAlive: args.isRunAlive,
     }),
     ...buildSetupLoopToolList({ setupLoop: args.setupLoop, stopLoop: args.stopLoop, resumeLoop: args.resumeLoop, chatId }),
-    ...buildTrackingDocToolList({ cwd, chatId, getArmedLoop: args.getArmedLoop }),
+    ...buildTrackingDocToolList({ cwd, chatId, getArmedLoop: args.getArmedLoop, isRunAlive: args.isRunAlive }),
     ...buildBoardToolList({ boardRegistry: args.boardRegistry, chatId, projectId: args.projectId ?? null }, tool),
     ...buildPluginToolList(getPluginService(), chatId, args.delegationContext?.depth ?? 0, tool),
     ...buildRunVerifyToolList({ chatId, cwd, getArmedLoop: args.getArmedLoop }),

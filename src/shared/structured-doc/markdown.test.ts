@@ -276,3 +276,50 @@ describe("markdownDoc.listItems", () => {
     expect(markdownDoc.listItems(FENCED, "next chunk")).toEqual(["- outer item\n  - nested item"])
   })
 })
+
+describe("markdownDoc.replaceItem", () => {
+  test("rewrites one item and leaves every other byte of the document alone", () => {
+    const result = markdownDoc.replaceItem(DOC, {
+      section: "Progress",
+      index: 1,
+      text: "- 2026-07-20 chunk 2 REDONE",
+    })
+    expect(result.replaced).toBe(true)
+    expect(markdownDoc.listItems(result.content, "Progress")).toEqual([
+      "- 2026-07-21 chunk 3 DONE",
+      "- 2026-07-20 chunk 2 REDONE",
+      "- 2026-07-19 chunk 1 DONE",
+    ])
+    expect(result.content.replace("- 2026-07-20 chunk 2 REDONE", "- 2026-07-20 chunk 2 DONE")).toBe(
+      DOC,
+    )
+  })
+
+  test("replacing the first and last items keeps the list intact", () => {
+    const first = markdownDoc.replaceItem(DOC, { section: "Progress", index: 0, text: "- A" })
+    expect(markdownDoc.listItems(first.content, "Progress")[0]).toBe("- A")
+    const last = markdownDoc.replaceItem(DOC, { section: "Progress", index: 2, text: "- Z" })
+    expect(markdownDoc.listItems(last.content, "Progress")[2]).toBe("- Z")
+    expect(markdownDoc.query(last.content, { sections: ["Next chunk"] }).content).toContain(
+      "chunk 4: src/foo",
+    )
+  })
+
+  test("an out-of-range index, a missing section, and a section with no list all no-op", () => {
+    for (const req of [
+      { section: "Progress", index: 9, text: "- nope" },
+      { section: "nonexistent", index: 0, text: "- nope" },
+      { section: "goal", index: 0, text: "- nope" },
+    ]) {
+      const result = markdownDoc.replaceItem(DOC, req)
+      expect(result.replaced).toBe(false)
+      expect(result.content).toBe(DOC)
+    }
+  })
+
+  test("a multi-line item is replaced whole, not just its first line", () => {
+    const doc = ["## Task queue", "", "- a", "  continued", "- b", ""].join("\n")
+    const result = markdownDoc.replaceItem(doc, { section: "Task queue", index: 0, text: "- a2" })
+    expect(markdownDoc.listItems(result.content, "Task queue")).toEqual(["- a2", "- b"])
+  })
+})

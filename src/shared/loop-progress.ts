@@ -7,7 +7,10 @@ import type {
 } from "./types"
 import {
   APPEND_TRACKING_ROW_TOOL_NAME,
+  CLAIM_TRACKING_TASK_TOOL_NAME,
+  COMPLETE_TRACKING_TASK_TOOL_NAME,
   DELEGATE_SUBAGENT_TOOL_NAME,
+  INTEGRATE_TRACKING_TASKS_TOOL_NAME,
   QUERY_TRACKING_FILE_TOOL_NAME,
   REPLACE_TRACKING_SECTION_TOOL_NAME,
   STOP_LOOP_TOOL_NAME,
@@ -17,13 +20,39 @@ export const LOOP_SECTIONS = {
   nextChunk: "Next chunk",
   progress: "Progress",
   failedApproaches: "Failed approaches",
+  taskQueue: "Task queue",
 } as const
+
+export const MAX_CONSECUTIVE_LOOP_FAILURES = 3
+
+export function loopFailureBudget(parallelism: number): number {
+  return MAX_CONSECUTIVE_LOOP_FAILURES + Math.max(0, parallelism - 1)
+}
 
 export type LoopOracleExit = 0 | "nonzero"
 export type LoopChunkState = "empty" | "has_work"
-export type LoopAction = "GOAL_MET" | "ORACLE_TOO_WEAK" | "DELEGATE" | "WRITE_CHUNK"
+export type LoopQueueState = "claimable" | "waiting" | "blocked" | "exhausted"
+export type LoopAction =
+  | "GOAL_MET"
+  | "ORACLE_TOO_WEAK"
+  | "DELEGATE"
+  | "WRITE_CHUNK"
+  | "WAIT"
+  | "QUEUE_BLOCKED"
 
-export function decideLoopAction(oracleExit: LoopOracleExit, nextChunk: LoopChunkState): LoopAction {
+function decideQueueAction(oracleExit: LoopOracleExit, queue: LoopQueueState): LoopAction {
+  if (oracleExit === 0) return queue === "exhausted" ? "GOAL_MET" : "ORACLE_TOO_WEAK"
+  if (queue === "claimable") return "DELEGATE"
+  if (queue === "waiting") return "WAIT"
+  return queue === "blocked" ? "QUEUE_BLOCKED" : "WRITE_CHUNK"
+}
+
+export function decideLoopAction(
+  oracleExit: LoopOracleExit,
+  nextChunk: LoopChunkState,
+  queue?: LoopQueueState,
+): LoopAction {
+  if (queue !== undefined) return decideQueueAction(oracleExit, queue)
   if (oracleExit === 0) {
     return nextChunk === "empty" ? "GOAL_MET" : "ORACLE_TOO_WEAK"
   }
@@ -36,6 +65,41 @@ export const LOOP_STEP_INVARIANTS: readonly { readonly id: string; readonly requ
   { id: "delegate", requires: [DELEGATE_SUBAGENT_TOOL_NAME, "run_in_background: true", "[chunk:", "END THIS TURN"] },
   { id: "stop", requires: [STOP_LOOP_TOOL_NAME] },
   { id: "worker", requires: [APPEND_TRACKING_ROW_TOOL_NAME, REPLACE_TRACKING_SECTION_TOOL_NAME, "Before writing DONE", "git add -A"] },
+  { id: "hard-rules", requires: ["NEVER edit code yourself", "/clear"] },
+  { id: "retry", requires: ["AUTH_REQUIRED", "do NOT call stop_loop", LOOP_SECTIONS.failedApproaches] },
+]
+
+export const LOOP_PARALLEL_STEP_INVARIANTS: readonly {
+  readonly id: string
+  readonly requires: readonly string[]
+}[] = [
+  { id: "read-plan", requires: [QUERY_TRACKING_FILE_TOOL_NAME] },
+  { id: "integrate", requires: [INTEGRATE_TRACKING_TASKS_TOOL_NAME, "BEFORE you claim"] },
+  { id: "claim", requires: [CLAIM_TRACKING_TASK_TOOL_NAME, LOOP_SECTIONS.taskQueue, "claim_id"] },
+  {
+    id: "decide",
+    requires: [
+      "GOAL MET",
+      "ORACLE TOO WEAK",
+      "TERMINAL CHECK",
+      "EVERY section",
+      "with NO sections filter",
+      "loop-end summary",
+      "WAIT",
+      "QUEUE BLOCKED",
+      "do NOT delegate",
+    ],
+  },
+  {
+    id: "delegate",
+    requires: [DELEGATE_SUBAGENT_TOOL_NAME, "run_in_background: true", "[chunk:", "END THIS TURN"],
+  },
+  { id: "stop", requires: [STOP_LOOP_TOOL_NAME] },
+  {
+    id: "worker-settle",
+    requires: [COMPLETE_TRACKING_TASK_TOOL_NAME, "release", APPEND_TRACKING_ROW_TOOL_NAME],
+  },
+  { id: "worktree", requires: ["its OWN git worktree", "git -C"] },
   { id: "hard-rules", requires: ["NEVER edit code yourself", "/clear"] },
   { id: "retry", requires: ["AUTH_REQUIRED", "do NOT call stop_loop", LOOP_SECTIONS.failedApproaches] },
 ]
@@ -93,9 +157,16 @@ function rowStatusFor(run: SubagentRunSnapshot): LoopRowStatus {
   }
 }
 
+export interface LoopQueueItem {
+  id: string
+  label: string
+  blocked: boolean
+}
+
 export interface LoopTrackingSnapshot {
   doneEntries: readonly string[]
   nextChunkSection: string
+  queueItems?: readonly LoopQueueItem[] | null
 }
 
 export interface BuildLoopProgressInput {
@@ -139,16 +210,30 @@ function trackedRows(
   )
 
   const live = runs.filter((run) => run.status === "running")
-  if (live.length > 0) {
-    rows.push(...live.map(runRow))
+  rows.push(...live.map(runRow))
+
+  const queue = tracking.queueItems
+  if (queue) {
+    if (armed) rows.push(...queue.map(queueRow))
     return rows
   }
+  if (live.length > 0) return rows
 
   const nextLabel = armed ? chunkLabelFromSection(tracking.nextChunkSection) : ""
   if (nextLabel.length > 0) {
     rows.push({ runId: "next", label: nextLabel, status: "pending", startedAt: 0, finishedAt: null })
   }
   return rows
+}
+
+function queueRow(item: LoopQueueItem): LoopRow {
+  return {
+    runId: `queue:${item.id}`,
+    label: item.label,
+    status: item.blocked ? "blocked" : "pending",
+    startedAt: 0,
+    finishedAt: null,
+  }
 }
 
 export function buildLoopProgress(input: BuildLoopProgressInput): LoopProgressSnapshot {

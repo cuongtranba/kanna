@@ -2,14 +2,17 @@
 import path from "node:path"
 
 import { APPEND_TRACKING_ROW_TOOL_NAME, DELEGATE_SUBAGENT_TOOL_NAME, QUERY_TRACKING_FILE_TOOL_NAME, REPLACE_TRACKING_SECTION_TOOL_NAME, STOP_LOOP_TOOL_NAME } from "../shared/tools"
-import { LOOP_SECTIONS, LOOP_STEP_INVARIANTS } from "../shared/loop-progress"
+import { LOOP_PARALLEL_STEP_INVARIANTS, LOOP_SECTIONS, LOOP_STEP_INVARIANTS } from "../shared/loop-progress"
 import { confinePathToDir, shellCommandIsParseable } from "./input-validation"
+import { renderParallelLoopPrompt } from "./loop-prompt-parallel"
 
 export { decideLoopAction, LOOP_SECTIONS, type LoopAction, type LoopChunkState, type LoopOracleExit } from "../shared/loop-progress"
 
 const DEFAULT_TRACKING_FILE = "PROGRESS.md"
 
-export const MAX_PARALLELISM = 4
+export const MAX_PARALLELISM = 3
+
+export const DEFAULT_INTEGRATION_BRANCH = "HEAD"
 
 export interface LoopSetupInput {
   goal: string
@@ -19,6 +22,7 @@ export interface LoopSetupInput {
   subagentId?: string
   workdir?: string
   parallelism?: number
+  integrationBranch?: string
   force?: boolean
 }
 
@@ -37,6 +41,7 @@ export interface ResolvedLoopSetup {
   chunkHint: string | null
   subagentId: string
   parallelism: number
+  integrationBranch: string
   prompt: string
   skeleton: string
 }
@@ -75,7 +80,9 @@ function renderLoopPrompt(args: {
   subagentId: string
   parallelism: number
   workdirRel: string
+  integrationBranch?: string
 }): string {
+  if (args.parallelism > 1) return renderParallelLoopPrompt(args)
   const { goal, verifyCommand, trackingFileRel, subagentId, parallelism, workdirRel } = args
   const f = `file: "${trackingFileRel}"`
   const workdirPhrase = workdirRel === "." ? "the project root" : workdirRel
@@ -185,16 +192,31 @@ interface SkeletonArgs {
   goal: string
   verifyCommand: string
   chunkHint: string | null
+  parallelism?: number
 }
 
 const DEFAULT_PREAMBLE_LINES: readonly string[] = ["# Loop tracking file", ""]
 
-const CANONICAL_SECTIONS: readonly {
+interface CanonicalSection {
   heading: string
   serverOwned: boolean
   matches: (normalizedHeading: string) => boolean
   canonicalBodyLines: (args: SkeletonArgs) => string[]
-}[] = [
+}
+
+const TASK_QUEUE_SECTION: CanonicalSection = {
+  heading: `## ${LOOP_SECTIONS.taskQueue}`,
+  serverOwned: false,
+  matches: (h) => h.startsWith("task queue"),
+  canonicalBodyLines: (args) => [
+    "",
+    args.chunkHint
+      ?? "- [ ] t1 <first task> | worktree: <path to its own git worktree> | branch: <branch name>",
+    "",
+  ],
+}
+
+const CANONICAL_SECTIONS: readonly CanonicalSection[] = [
   {
     heading: "## Goal",
     serverOwned: true,
@@ -227,10 +249,18 @@ const CANONICAL_SECTIONS: readonly {
   },
 ]
 
+function canonicalSections(parallelism: number | undefined): readonly CanonicalSection[] {
+  if ((parallelism ?? 1) <= 1) return CANONICAL_SECTIONS
+  return [
+    ...CANONICAL_SECTIONS.filter((s) => s.heading !== `## ${LOOP_SECTIONS.nextChunk}`),
+    TASK_QUEUE_SECTION,
+  ]
+}
+
 function renderSkeleton(args: SkeletonArgs): string {
   return [
     ...DEFAULT_PREAMBLE_LINES,
-    ...CANONICAL_SECTIONS.flatMap((s) => [s.heading, ...s.canonicalBodyLines(args)]),
+    ...canonicalSections(args.parallelism).flatMap((s) => [s.heading, ...s.canonicalBodyLines(args)]),
   ].join("\n")
 }
 
@@ -272,7 +302,7 @@ export function reconcileTrackingFile(existing: string, args: SkeletonArgs): Tra
     ? [...preamble]
     : [...DEFAULT_PREAMBLE_LINES]
 
-  for (const spec of CANONICAL_SECTIONS) {
+  for (const spec of canonicalSections(args.parallelism)) {
     const match = sections.find((s) => !claimed.has(s) && spec.matches(s.normalizedHeading))
     if (!match) {
       out.push(spec.heading, ...spec.canonicalBodyLines(args))
@@ -455,6 +485,9 @@ export function validateLoopSetup(
   const chunkHint = input.chunkHint?.trim() ? input.chunkHint.trim() : null
   const goal = input.goal.trim()
   const verifyCommand = input.verifyCommand.trim()
+  const integrationBranch = isNonBlankString(input.integrationBranch)
+    ? input.integrationBranch.trim()
+    : DEFAULT_INTEGRATION_BRANCH
   const prompt = renderLoopPrompt({
     goal,
     verifyCommand,
@@ -462,13 +495,15 @@ export function validateLoopSetup(
     subagentId,
     parallelism,
     workdirRel,
+    integrationBranch,
   })
 
+  const invariants = parallelism > 1 ? LOOP_PARALLEL_STEP_INVARIANTS : LOOP_STEP_INVARIANTS
   const requiredSubstrings: readonly string[] = [
     resolved.rel,
     verifyCommand,
     subagentId,
-    ...LOOP_STEP_INVARIANTS.flatMap((step) => step.requires),
+    ...invariants.flatMap((step) => step.requires),
   ]
   const missing = requiredSubstrings.filter((s) => !prompt.includes(s))
   if (missing.length > 0) {
@@ -490,8 +525,9 @@ export function validateLoopSetup(
       chunkHint,
       subagentId,
       parallelism,
+      integrationBranch,
       prompt,
-      skeleton: renderSkeleton({ goal, verifyCommand, chunkHint }),
+      skeleton: renderSkeleton({ goal, verifyCommand, chunkHint, parallelism }),
     },
   }
 }

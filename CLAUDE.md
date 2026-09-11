@@ -2023,6 +2023,47 @@ lost-wake recovery passes, and the disarm/resume tombstone.
 Read it before editing the rendered loop prompt — `validateLoopSetup` asserts a
 list of exact substrings, so an edit that drops one fails validation.
 
+## Parallel loops — a lease belongs to a RUN, never to a clock
+
+`parallelism > 1` swaps `## Next chunk` for a `## Task queue` whose
+`[ ]`/`[~]`/`[x]` boxes are the concurrency control. A task is claimable only when
+it is `[ ]`, every id in its `needs:` is `[x]`, and its worktree is not held by a
+lease whose run is still alive. That one rule is the entire scheduler, and is what
+makes "build the user model before authentication" work without one.
+
+**The recovery model is the part that is easy to get catastrophically wrong.** A
+worker that FAILS never releases its lease, so the lease is still fresh when its
+own failure-wake arrives. An orchestrator that reads "a live lease exists" as "a
+worker is coming back" ends its turn — and **nothing ever wakes that chat again**,
+because only a run completion produces a wake. A lease TTL cannot rescue this:
+TTL expiry generates no wake, so the timer is never read. `delegate_subagent`
+therefore takes a `claim_id`, the server stamps `run: <runId>` onto the item, and
+`claim_tracking_task` reclaims every `[~]` whose run is gone from
+`store.getSubagentRuns(chatId)`. The 2-minute `TASK_QUEUE_CLAIM_GRACE_MS` covers
+only a claim that never bound a run. **Do not reintroduce a TTL as the primary
+recovery path.**
+
+**`withFileLock` fixes a defect that predates parallelism.** Every tracking tool
+is a read-modify-write with an `await` in the middle, so two concurrent writes
+silently lost one. `writeDoc` is write-then-`rename` for the same reason.
+
+`MAX_PARALLELISM` is **3**, not 4: `DEFAULT_MAX_PARALLEL` is the whole server's
+subagent permit pool, and exhausting it does not fail — it queues silently, so one
+loop would stall every other chat with no error anywhere.
+
+**A skipped `/clear` is now deferred, not dropped.** `clearClaudeSessionContext`
+only closed the session when `!isSessionInUse`, so a worker finishing during a
+sibling's wake-turn made the next orchestrator turn reuse the previous turn's
+context — breaking the "file is the only state" invariant exactly where the claim
+design depends on it. It sets `session.contextClearPending`, which
+`spawnClaudeTurn` honours as a respawn trigger beside `loopArmedAtSpawn`.
+
+Integration is a server tool (`integrate_tracking_tasks`), not prompt-level git:
+the orchestrator is a fresh context every turn, the worst place for a multi-step
+stateful git operation. A parallel loop refuses to arm on a git-tracked tracking
+file — a merge that rolls back claim state is a merge that puts two workers in one
+worktree.
+
 # Background Task Keep-Alive (Bash + Agent + Workflow — KANNA_PTY_BACKGROUND_TASK_MAX_MS)
 
 Claude-Code background tasks (`Bash(run_in_background: true)`, background

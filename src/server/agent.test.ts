@@ -3696,7 +3696,7 @@ describe("AgentCoordinator claude integration", () => {
       },
     })
 
-    coordinator.isLoopArmed = () => (armed ? { subagentId: "sa-1", prompt: "loop prompt", armedAt: 0, consecutiveFailures: 0, verifyCommand: null, workdirAbs: null, trackingFileRel: null } : null)
+    coordinator.isLoopArmed = () => (armed ? { subagentId: "sa-1", prompt: "loop prompt", armedAt: 0, consecutiveFailures: 0, verifyCommand: null, workdirAbs: null, trackingFileRel: null, parallelism: 1 } : null)
 
     const sendTurn = async (content: string, expectedFinished: number) => {
       await coordinator.send({
@@ -3770,7 +3770,7 @@ describe("AgentCoordinator claude integration", () => {
       },
     })
 
-    coordinator.isLoopArmed = () => (armed ? { subagentId: "sa-1", prompt: "loop prompt", armedAt: 0, consecutiveFailures: 0, verifyCommand: null, workdirAbs: null, trackingFileRel: null } : null)
+    coordinator.isLoopArmed = () => (armed ? { subagentId: "sa-1", prompt: "loop prompt", armedAt: 0, consecutiveFailures: 0, verifyCommand: null, workdirAbs: null, trackingFileRel: null, parallelism: 1 } : null)
 
     const sendTurn = async (content: string, expectedFinished: number) => {
       await coordinator.send({

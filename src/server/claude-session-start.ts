@@ -144,6 +144,7 @@ export async function startClaudeSession(args: {
   resumeLoop?: () => Promise<import("./loop-wake-recovery").ResumeLoopResult>
   isLoopArmed?: () => boolean
   getArmedLoop?: (chatId: string) => ArmedLoopInfo | null
+  isRunAlive?: (chatId: string, runId: string) => boolean
   boardRegistry?: BoardRegistry
   maxTurns?: number
   keepAlive?: boolean
@@ -204,6 +205,7 @@ export async function startClaudeSession(args: {
           stopLoop: args.stopLoop,
           resumeLoop: args.resumeLoop,
           getArmedLoop: args.getArmedLoop,
+          isRunAlive: args.isRunAlive,
           boardRegistry: args.boardRegistry,
         }),
         ..._deps.buildUserMcpServers(args.customMcpServers ?? [], args.oauthBearers),

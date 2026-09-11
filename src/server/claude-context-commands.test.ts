@@ -178,6 +178,24 @@ describe("clearClaudeSessionContext", () => {
     expect(h.session?.suppressSessionTokenPersist).toBe(true)
   })
 
+  test("a clear that cannot close now is deferred, never dropped", async () => {
+    const h = makeHarness({ session: {}, hasActiveTurn: true })
+
+    await clearClaudeSessionContext(h.deps, "chat-1")
+
+    expect(h.closedChatIds).toEqual([])
+    expect(h.session?.contextClearPending).toBe(true)
+  })
+
+  test("a clear that closes the session leaves nothing deferred", async () => {
+    const h = makeHarness({ session: {} })
+
+    await clearClaudeSessionContext(h.deps, "chat-1")
+
+    expect(h.closedChatIds).toEqual(["chat-1"])
+    expect(h.session?.contextClearPending).toBeFalsy()
+  })
+
   test("does not close when the chat has a live workflow", async () => {
     const h = makeHarness({ session: {}, hasLiveWorkflow: true })
 

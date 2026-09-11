@@ -1,6 +1,7 @@
 
 import type { TranscriptEntry } from "../shared/types"
 import type { Subagent, AgentProvider } from "../shared/types"
+import { loopFailureBudget } from "../shared/loop-progress"
 import { AUTO_CONTINUE_EVENT_VERSION, type AutoContinueEvent } from "./auto-continue/events"
 import { deriveChatSchedules, deriveLastLoopSpec, deriveLoopState, type LoopSpec, type LoopState } from "./auto-continue/read-model"
 import { clearClaudeSessionContext } from "./claude-context-commands"
@@ -73,6 +74,8 @@ export interface LoopCommandDeps {
 
   isWorktreeOfSameRepo(projectCwd: string, workdir: string): Promise<boolean>
 
+  currentBranchName(workdir: string): Promise<string | null>
+
   runVerifyCommand(args: RunVerifyArgs): Promise<RunVerifyResult>
 
   readOracleScript(workdirAbs: string, scriptPath: string): Promise<string | null>
@@ -86,7 +89,7 @@ export interface LoopCommandDeps {
 
 export { clearClaudeSessionContext } from "./claude-context-commands"
 
-export const MAX_CONSECUTIVE_LOOP_FAILURES = 3
+export { MAX_CONSECUTIVE_LOOP_FAILURES } from "../shared/loop-progress"
 
 const ARM_VERIFY_TIMEOUT_MS = 300_000
 
@@ -190,7 +193,7 @@ async function deliverSubagentToMainInner(
     }
   }
 
-  if (armed && failuresAfterThisRun >= MAX_CONSECUTIVE_LOOP_FAILURES) {
+  if (armed && failuresAfterThisRun >= loopFailureBudget(armed.parallelism)) {
     await disarmFailingLoop(deps, chatId, runId, failuresAfterThisRun, notification)
     return
   }
@@ -232,6 +235,17 @@ async function deliverSubagentToMainInner(
   }
 }
 
+async function withResolvedIntegrationBranch(
+  deps: LoopCommandDeps,
+  input: LoopSetupInput,
+  chatCwd: string,
+): Promise<LoopSetupInput> {
+  if ((input.parallelism ?? 1) <= 1) return input
+  if (input.integrationBranch && input.integrationBranch.trim().length > 0) return input
+  const branch = await deps.currentBranchName(input.workdir ?? chatCwd)
+  return branch === null ? input : { ...input, integrationBranch: branch }
+}
+
 export async function setupLoop(
   deps: LoopCommandDeps,
   args: {
@@ -246,7 +260,9 @@ export async function setupLoop(
 
   const chatCwd = resolveSpawnPaths(chat, project.localPath).cwd
 
-  const validation = validateLoopSetup(args.input, chatCwd, {
+  const input = await withResolvedIntegrationBranch(deps, args.input, chatCwd)
+
+  const validation = validateLoopSetup(input, chatCwd, {
     roster: deps.getSubagents().map((s) => ({ id: s.id, name: s.name, triggerMode: s.triggerMode })),
     defaultLoopSubagentId: deps.getAppSettingsSnapshot().subagentRuntime?.defaultLoopSubagentId ?? null,
   })
@@ -274,6 +290,19 @@ export async function setupLoop(
       force: args.input.force === true,
     })
     if (!safety.ok) return { ok: false, errors: [safety.error] }
+  }
+
+  if (resolved.parallelism > 1 && inspection.gitTracked && args.input.force !== true) {
+    return {
+      ok: false,
+      errors: [
+        `${resolved.trackingFileRel} is git-tracked, and a parallel loop integrates task`
+        + " branches by merging them into this checkout. The queue's claim state is the only"
+        + " thing stopping two workers sharing a worktree, and a merge can roll it back."
+        + " Git-ignore the tracking file (or put it outside the repo), or pass force: true if"
+        + " you accept that risk.",
+      ],
+    }
   }
 
   const armCheck = await deps.runVerifyCommand({
@@ -342,6 +371,7 @@ export async function setupLoop(
       verifyCommand: resolved.verifyCommand,
       workdirAbs: resolved.workdirAbs,
       trackingFileRel: resolved.trackingFileRel,
+      parallelism: resolved.parallelism,
     })
 
     const scheduleId = crypto.randomUUID()

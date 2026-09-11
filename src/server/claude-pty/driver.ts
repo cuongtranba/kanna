@@ -90,6 +90,7 @@ export interface StartClaudeSessionPtyArgs {
   resumeLoop?: () => Promise<import("../loop-wake-recovery").ResumeLoopResult>
   isLoopArmed?: () => boolean
   getArmedLoop?: (chatId: string) => ArmedLoopInfo | null
+  isRunAlive?: (chatId: string, runId: string) => boolean
   boardRegistry?: BoardRegistry
   customMcpServers?: readonly McpServerConfig[]
   oauthBearers?: ReadonlyMap<string, string>
@@ -318,6 +319,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
         updateCron: args.updateCron,
         stopLoop: args.stopLoop,
         getArmedLoop: args.getArmedLoop,
+        isRunAlive: args.isRunAlive,
         boardRegistry: args.boardRegistry,
         forceInteractiveToolCallbacks: true,
         restrictedAllowedPaths: args.restrictedAllowedPaths,

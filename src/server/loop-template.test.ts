@@ -2,6 +2,11 @@ import { describe, expect, test } from "bun:test"
 import path from "node:path"
 import { TASK_DOC_SECTIONS, renderTaskDocSkeleton } from "../shared/task-doc"
 import {
+  CLAIM_TRACKING_TASK_TOOL_NAME,
+  COMPLETE_TRACKING_TASK_TOOL_NAME,
+  INTEGRATE_TRACKING_TASKS_TOOL_NAME,
+} from "../shared/tools"
+import {
   assertTrackingFileSafe,
   auditOracle,
   decideLoopAction,
@@ -475,11 +480,38 @@ describe("renderLoopPrompt structural invariants", () => {
     expect(prompt).not.toContain("[parallel]")
   })
 
-  test("parallelism > 1 opts in to marked chunks, each in its own worktree", () => {
-    const prompt = __testing.renderLoopPrompt({ ...BASE, parallelism: 3 })
-    expect(prompt).toContain("[parallel]")
-    expect(prompt).toContain("up to 3")
+  test("parallelism > 1 renders the claim protocol over the task queue", () => {
+    const prompt = __testing.renderLoopPrompt({
+      ...BASE,
+      parallelism: 3,
+      integrationBranch: "main",
+    })
+    expect(prompt).toContain("at most 3 workers")
     expect(prompt).toContain("its OWN git worktree")
+    expect(prompt).toContain(CLAIM_TRACKING_TASK_TOOL_NAME)
+    expect(prompt).toContain(COMPLETE_TRACKING_TASK_TOOL_NAME)
+    expect(prompt).toContain(INTEGRATE_TRACKING_TASKS_TOOL_NAME)
+    expect(prompt).toContain("Task queue")
+    expect(prompt).not.toContain(LOOP_SECTIONS.nextChunk)
+  })
+
+  test("the parallel prompt names WAIT and QUEUE BLOCKED as distinct, non-stopping outcomes", () => {
+    const prompt = __testing.renderLoopPrompt({ ...BASE, parallelism: 2 })
+    expect(prompt).toContain("do NOT delegate")
+    expect(prompt).toMatch(/\(d\)[\s\S]*WAIT/)
+    expect(prompt).toContain("QUEUE BLOCKED")
+  })
+
+  test("the parallel worker is told to bind its claim and to release it on failure", () => {
+    const prompt = __testing.renderLoopPrompt({ ...BASE, parallelism: 2 })
+    expect(prompt).toContain("claim_id is REQUIRED")
+    expect(prompt).toContain("outcome: \\\"release\\\"")
+    expect(prompt).toContain("git -C <worktree>")
+  })
+
+  test("an unset integration branch never reaches the prompt as undefined", () => {
+    const prompt = __testing.renderLoopPrompt({ ...BASE, parallelism: 2 })
+    expect(prompt).not.toContain("undefined")
   })
 
   test("a non-default workdir is named as the verify + work directory", () => {
@@ -552,7 +584,7 @@ describe("validateLoopSetup — workdir + parallelism", () => {
     expect(result.errors.some((e) => e.includes("workdir"))).toBe(true)
   })
 
-  test.each([0, -1, 1.5, 99])("rejects parallelism %p", (parallelism) => {
+  test.each([0, -1, 1.5, 4, 99])("rejects parallelism %p", (parallelism) => {
     const result = validateLoopSetup({ goal: "g", verifyCommand: "true", parallelism }, cwd, CTX)
     expect(result.ok).toBe(false)
     if (result.ok) throw new Error("expected reject")
@@ -560,9 +592,9 @@ describe("validateLoopSetup — workdir + parallelism", () => {
   })
 
   test("accepts parallelism within the permit bound", () => {
-    const result = validateLoopSetup({ goal: "g", verifyCommand: "true", parallelism: 4 }, cwd, CTX)
+    const result = validateLoopSetup({ goal: "g", verifyCommand: "true", parallelism: 3 }, cwd, CTX)
     if (!result.ok) throw new Error(result.errors.join(", "))
-    expect(result.resolved.parallelism).toBe(4)
+    expect(result.resolved.parallelism).toBe(3)
   })
 })
 

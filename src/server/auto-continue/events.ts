@@ -49,6 +49,7 @@ export type AutoContinueEvent =
       verifyCommand?: string
       workdirAbs?: string
       trackingFileRel?: string
+      parallelism?: number
     })
   | (AutoContinueEventBase & {
       kind: "loop_run_outcome"

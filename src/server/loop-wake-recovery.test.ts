@@ -218,6 +218,7 @@ describe("resumeLoop", () => {
       verifyCommand: "sh verify.sh",
       workdirAbs: "/repo/worktree",
       trackingFileRel: "PROGRESS-plugin.md",
+      parallelism: 1,
     }
   }
 

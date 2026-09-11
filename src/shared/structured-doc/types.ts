@@ -39,6 +39,17 @@ export interface StructuredDocReplaceResult {
   created: boolean
 }
 
+export interface ReplaceItemRequest {
+  section: string
+  index: number
+  text: string
+}
+
+export interface StructuredDocReplaceItemResult {
+  content: string
+  replaced: boolean
+}
+
 export interface StructuredDoc {
   readonly format: DocFormat
   sections(content: string): readonly SectionInfo[]
@@ -46,4 +57,5 @@ export interface StructuredDoc {
   listItems(content: string, section: string): readonly string[]
   append(content: string, req: AppendRequest): StructuredDocAppendResult
   replace(content: string, req: ReplaceRequest): StructuredDocReplaceResult
+  replaceItem(content: string, req: ReplaceItemRequest): StructuredDocReplaceItemResult
 }

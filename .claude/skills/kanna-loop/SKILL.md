@@ -174,9 +174,92 @@ makes worktrees of one repo compare equal while an unrelated repo does not).
 The tracking-doc MCP tools resolve their base dir from the armed loop **per
 call**, not per spawn — tools are built at spawn and `setup_loop` arms mid-turn.
 
-**`parallelism`** (default 1) renders a fan-out rule, but only for chunks the
-plan explicitly marks `[parallel]`, each naming its OWN worktree. Independence
-is never inferred — two workers in one checkout corrupt each other's edits.
+**`parallelism`** (default 1, max `MAX_PARALLELISM` = 3) switches the loop to the
+claim protocol below. The cap is 3, not 4, because `DEFAULT_MAX_PARALLEL` is the
+whole server's subagent permit pool — a loop allowed to take all 4 starves every
+other chat, and exhaustion does not fail, it queues silently.
+
+## Parallel loops — the tracking file IS the lock
+
+For `parallelism > 1` the skeleton drops `## Next chunk` and gains `## Task queue`,
+which is both the plan and the concurrency control:
+
+```markdown
+- [x] t1 User model | worktree: ../w1 | branch: loop/t1 | integrated
+- [~] t2 Authentication | needs: t1 | worktree: ../w2 | branch: loop/t2 | claim: 7f3a @2026-09-11T10:02:31Z | run: 3c91e0
+- [ ] t3 Settings page | worktree: ../w3 | branch: loop/t3
+```
+
+`[ ]` available, `[~]` leased, `[x]` done. First token after the box is the task
+id; text runs to the first ` | `; metadata rides trailing ` | key: value` pairs.
+
+**A task is claimable only when it is `[ ]`, every id in `needs:` is `[x]`, and
+its worktree is not held by a lease whose run is still alive.** That one rule is
+the whole scheduler: with `t2 needs: t1`, `t1` and an independent `t3` run in
+parallel while `t2` waits, and a pure foundation phase degenerates to one worker.
+
+**Reclaim is keyed on run liveness, NEVER on a wall clock** — this is the defect
+that made the first design unshippable. A worker that FAILS never calls
+`complete_tracking_task`, so its lease is still fresh when its own failure-wake
+arrives; an orchestrator that reads "a live lease exists" then takes WAIT, ends
+the turn, and **nothing ever wakes that chat again**, because only a run
+completion produces a wake. A TTL cannot save this: TTL expiry generates no wake.
+So `delegate_subagent` takes a `claim_id` and the server writes `run: <runId>`
+into the item, and `claim_tracking_task` releases every `[~]` whose run is absent
+from `store.getSubagentRuns(chatId)` or not `running`. A wall-clock grace
+(`TASK_QUEUE_CLAIM_GRACE_MS`, 2 min) survives ONLY for a claim that never bound a
+run — the orchestrator dying between claiming and delegating, a one-tool-call
+window. Do not reintroduce a lease TTL as the primary recovery path.
+
+**Tools** (`kanna-mcp-tools/task-queue.ts`, all under `withFileLock`):
+`claim_tracking_task`, `complete_tracking_task` (`done` | `release`), and
+`integrate_tracking_tasks`, which merges each `[x] && !integrated` task's branch
+into the integration branch and marks it. Integration is a SERVER tool, not
+prompt-level git: the orchestrator is a fresh context every turn, and a
+multi-step stateful git operation driven by prompt discipline is the least
+reliable place to put it.
+
+**`withFileLock` (`tracking-file-lock.ts`) is required, not defensive.** Every
+tracking tool is a read-modify-write with an `await` between read and write, so
+two workers finishing together silently lost one write — a live defect before any
+parallelism. `writeDoc` is also write-then-`rename` now; the watcher already
+watches the parent dir by basename, so rename-based writes were already expected.
+
+**Decision table gains two rows.** `WAIT` (nothing claimable, a live run holds a
+lease) ends the turn without delegating or stopping — the finishing worker wakes
+it. `QUEUE BLOCKED` (nothing claimable, no live run, unfinished tasks) stops for
+a human: a cycle, an unknown `needs:` id, or a task with no `worktree:`.
+
+**Arm-time refusals:** `parallelism > 1` requires the tracking file to be
+git-ignored or outside the repo — a parallel loop merges into this checkout, and
+a merge that rolls back the claim state is a merge that puts two workers in one
+worktree. The integration branch defaults to the branch checked out in `workdir`
+at arm time. A task naming the loop workdir as its worktree is refused at claim.
+
+**The failure budget scales** — `loopFailureBudget(parallelism)` is
+`MAX_CONSECUTIVE_LOOP_FAILURES + parallelism - 1`. At a flat 3 with three
+workers, one correlated failure (expired token, bad worktree set) burns the whole
+budget in a single round, where in serial it covers three independent attempts.
+Both consumers — `deliverSubagentToMain` and `handleFailedLoopTurn` — share it,
+because they increment one counter.
+
+**`/clear` during a parallel loop had to be fixed to work at all.**
+`clearClaudeSessionContext` only closed the session when `!isSessionInUse`, so a
+worker completing during another worker's wake-turn silently no-opped the clear
+and the next orchestrator turn ran inside the previous turn's context — breaking
+"fresh context, the file is the only state" exactly where the claim design needs
+it. It now sets `session.contextClearPending`, which `spawnClaudeTurn` reads as a
+respawn trigger beside `loopArmedAtSpawn`.
+
+**Workers never call `run_verify`** — it resolves its cwd from the armed loop, so
+a worker would verify the INTEGRATION tree rather than its own worktree, and
+could be served a sibling's cached result. The worker prompt tells it to run the
+verify command with Bash inside its own worktree instead.
+
+**`LOOP_PARALLEL_STEP_INVARIANTS` is a SEPARATE, complete list** from
+`LOOP_STEP_INVARIANTS`. Adding the parallel phrases to the serial list would
+require them in the serial prompt too; `parallelism: 1` must keep rendering
+byte-identically, because `loop-template.test.ts` asserts exact skeleton bytes.
 
 **Host-owned failure backstop.** A `loop_run_outcome` auto-continue event
 records each iteration; `deriveLoopState` folds it into `consecutiveFailures`

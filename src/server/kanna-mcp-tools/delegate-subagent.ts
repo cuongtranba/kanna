@@ -16,6 +16,9 @@ const InputSchema = z.object({
   run_in_background: z.boolean().optional().describe(
     "Launch the subagent without blocking your turn. Returns immediately with {status:'async_launched', run_id}; the subagent's final reply is delivered back to you as a new turn when it finishes. Use for long jobs you don't need to wait on. Mutually exclusive with keep_alive.",
   ),
+  claim_id: z.string().optional().describe(
+    "In a parallel loop, the claim_id that claim_tracking_task returned for the task this worker is being given. It binds the task's lease to this run, which is what lets Kanna return the task to the queue if the run dies instead of leaving it parked.",
+  ),
 })
 
 export type DelegateSubagentInput = z.infer<typeof InputSchema>
@@ -30,6 +33,7 @@ export interface DelegateSubagentContext {
   getMentionedSubagentIds: () => string[]
   onEntry?: (entry: TranscriptEntry) => void
   resolveLoopChunkLabel?: () => Promise<string | null>
+  bindClaimToRun?: (claimId: string, runId: string) => Promise<void>
 }
 
 export interface DelegateSubagentTool {
@@ -55,6 +59,15 @@ async function resolveRunLabel(
   } catch {
     return undefined
   }
+}
+
+async function bindClaim(
+  ctx: DelegateSubagentContext,
+  claimId: string | undefined,
+  runId: string,
+): Promise<void> {
+  if (!claimId || !ctx.bindClaimToRun) return
+  await ctx.bindClaimToRun(claimId, runId).catch(() => undefined)
 }
 
 export function createDelegateSubagentTool(deps: {
@@ -110,6 +123,7 @@ export function createDelegateSubagentTool(deps: {
         background: input.run_in_background,
       })
       if (outcome.status === "async_launched") {
+        await bindClaim(ctx, input.claim_id, outcome.runId)
         return {
           content: [{
             type: "text" as const,

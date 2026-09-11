@@ -46,10 +46,10 @@ export const PATTERN_BUDGETS: readonly PatternBudget[] = [
     id: "deps-bundles",
     include: ["src/server/"],
     pattern: "interface [A-Za-z]*Deps\\b|type [A-Za-z]*Deps\\b *=|deps: \\{$",
-    max: 84,
+    max: 85,
     issue: 893,
     rationale:
-      "Each deps bundle is a hand-maintained slice of the coordinator's fields. Every field is optional, so a builder that omits one compiles and the consumer's fallback is indistinguishable from the feature being off — this is how getArmedLoop shipped declared-but-never-passed. Respelling a bundle as a type alias or an inline parameter object removes nothing, so all three spellings count.",
+      "Each deps bundle is a hand-maintained slice of the coordinator's fields. Every field is optional, so a builder that omits one compiles and the consumer's fallback is indistinguishable from the feature being off — this is how getArmedLoop shipped declared-but-never-passed. Respelling a bundle as a type alias or an inline parameter object removes nothing, so all three spellings count. TaskQueueToolDeps (85) is the parallel-loop claim tools' bundle: every collaborator on it is REQUIRED, and the registration is gated on the whole bundle rather than falling back per field, so the omit-one-field failure this budget tracks is a compile error there rather than a silent stall.",
   },
   {
     id: "coordinator-passthroughs",
