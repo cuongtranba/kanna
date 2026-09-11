@@ -16,6 +16,7 @@ export interface LoopState {
   verifyCommand: string | null
   workdirAbs: string | null
   trackingFileRel: string | null
+  parallelism: number
 }
 
 export function deriveLoopState(
@@ -34,6 +35,7 @@ export function deriveLoopState(
         verifyCommand: event.verifyCommand ?? null,
         workdirAbs: event.workdirAbs ?? null,
         trackingFileRel: event.trackingFileRel ?? null,
+        parallelism: event.parallelism ?? 1,
       }
       failures = 0
     } else if (event.kind === "loop_disarmed") {
@@ -61,6 +63,7 @@ export function deriveLastLoopSpec(
       verifyCommand: event.verifyCommand ?? null,
       workdirAbs: event.workdirAbs ?? null,
       trackingFileRel: event.trackingFileRel ?? null,
+      parallelism: event.parallelism ?? 1,
     }
   }
   return spec

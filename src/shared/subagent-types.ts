@@ -129,7 +129,7 @@ export interface SubagentRunSnapshot {
   pendingTool: SubagentPendingTool | null
 }
 
-export type LoopRowStatus = "pending" | "running" | "done" | "failed"
+export type LoopRowStatus = "pending" | "blocked" | "running" | "done" | "failed"
 
 export interface LoopRow {
   runId: string

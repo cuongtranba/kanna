@@ -5,9 +5,9 @@ import { clearClaudeSessionContext } from "./claude-context-commands"
 import { timestamped } from "./claude-message-normalizer"
 import {
   disarmFailingLoop,
-  MAX_CONSECUTIVE_LOOP_FAILURES,
   type LoopCommandDeps,
 } from "./claude-loop-commands"
+import { loopFailureBudget } from "../shared/loop-progress"
 import { log } from "../shared/log"
 import { addCounter } from "./observability"
 
@@ -108,7 +108,7 @@ export async function handleFailedLoopTurn(
       log.warn("[kanna] loop_run_outcome emit failed", { chatId, err })
     }
 
-    if (failures >= MAX_CONSECUTIVE_LOOP_FAILURES) {
+    if (failures >= loopFailureBudget(armed.parallelism)) {
       await disarmFailingLoop(
         deps,
         chatId,

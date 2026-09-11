@@ -97,6 +97,7 @@ function makeDeps(overrides: Partial<SpawnClaudeTurnDeps> = {}): SpawnClaudeTurn
   const fakeHandle = makeFakeHandle()
 
   return {
+    isRunAlive: () => false,
     claudeSessions,
     activeTurns,
     mentionedSubagentIdsByChat,
@@ -301,7 +302,7 @@ describe("spawnClaudeTurn", () => {
       let closedSession: ClaudeSessionState | undefined
       const deps = makeDeps({
         closeClaudeSession: (_, session) => { closedSession = session },
-        isLoopArmed: () => ({ subagentId: "sa-1", prompt: "loop", armedAt: 0, scheduleId: "s", consecutiveFailures: 0, verifyCommand: null, workdirAbs: null, trackingFileRel: null }),
+        isLoopArmed: () => ({ subagentId: "sa-1", prompt: "loop", armedAt: 0, scheduleId: "s", consecutiveFailures: 0, verifyCommand: null, workdirAbs: null, trackingFileRel: null, parallelism: 1 }),
       })
       const existingSession = makeSession({ loopArmedAtSpawn: false })
       deps.claudeSessions.set("chat-1", existingSession)

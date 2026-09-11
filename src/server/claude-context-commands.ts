@@ -40,7 +40,9 @@ export async function clearClaudeSessionContext(
   session.suppressSessionTokenPersist = true
   if (!isSessionInUse(deps, chatId, session, Date.now())) {
     deps.closeClaudeSession(chatId, session)
+    return
   }
+  session.contextClearPending = true
 }
 
 export async function clearChatContext(

@@ -116,6 +116,7 @@ export class ClaudeSessionState {
   cancelledResultPending: number
   suppressSessionTokenPersist: boolean
   backgroundTaskWakeSuppressed: boolean
+  contextClearPending = false
 
   constructor(init: ClaudeSessionStateInit) {
     this.id = init.id

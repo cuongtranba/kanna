@@ -72,7 +72,30 @@ describe("createLoopTrackingRegistry", () => {
     expect(h.registry.snapshot("c1")).toEqual({
       doneEntries: ["- 2026-08-06 chunk two DONE", "- 2026-08-05 chunk one DONE"],
       nextChunkSection: "## Next chunk\nchunk three",
+      queueItems: null,
     })
+  })
+
+  test("a parallel plan's queue becomes rows, with dependency-blocked tasks marked", () => {
+    const h = harness()
+    h.contentByPath.set(
+      "/w/PROGRESS.md",
+      [
+        "## Task queue",
+        "",
+        "- [x] t1 Foundation | worktree: ../w1",
+        "- [ ] t2 Dependent | needs: t1 | worktree: ../w2",
+        "- [ ] t3 Blocked | needs: t9 | worktree: ../w3",
+        "",
+      ].join("\n"),
+    )
+
+    h.registry.register("c1", "/w/PROGRESS.md")
+
+    expect(h.registry.snapshot("c1")?.queueItems).toEqual([
+      { id: "t2", label: "Dependent", blocked: false },
+      { id: "t3", label: "Blocked", blocked: true },
+    ])
   })
 
   test("re-registering the same file does not re-arm the watcher", () => {

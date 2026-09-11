@@ -6,12 +6,14 @@ import { gfm } from "micromark-extension-gfm"
 
 import type {
   AppendRequest,
+  ReplaceItemRequest,
   ReplaceRequest,
   SectionInfo,
   SectionQuery,
   StructuredDoc,
   StructuredDocAppendResult,
   StructuredDocQueryResult,
+  StructuredDocReplaceItemResult,
   StructuredDocReplaceResult,
 } from "./types"
 
@@ -204,6 +206,31 @@ export const markdownDoc: StructuredDoc = {
     const rest = content.slice(target.endOffset).replace(/^\n+/, "")
     const tail = rest.length > 0 ? `\n${rest}` : ""
     return { content: `${renderSection(before, body)}${tail}`, created: false }
+  },
+
+  replaceItem(content: string, req: ReplaceItemRequest): StructuredDocReplaceItemResult {
+    const root = parse(content)
+    const sections = computeSections(content, root)
+    const target = findSection(sections, req.section)
+    if (!target) return { content, replaced: false }
+
+    const list = firstListInSection(root, target)
+    if (!list || req.index < 0 || req.index >= list.children.length) {
+      return { content, replaced: false }
+    }
+
+    const item = list.children[req.index]
+    if (!item?.position) return { content, replaced: false }
+    const start = offset(item.position.start, -1)
+    const end = offset(item.position.end, -1)
+    if (start < 0 || end < start) return { content, replaced: false }
+
+    const raw = content.slice(start, end)
+    const trailing = raw.slice(raw.replace(/\s+$/, "").length)
+    return {
+      content: `${content.slice(0, start)}${req.text}${trailing}${content.slice(end)}`,
+      replaced: true,
+    }
   },
 }
 

@@ -21,7 +21,7 @@ describe("deriveLoopState", () => {
 
   test("loop_armed → armed state with subagentId + prompt", () => {
     const state = deriveLoopState([armed("c1", "sub-1", "LOOP PROMPT")], "c1")
-    expect(state).toEqual({ subagentId: "sub-1", prompt: "LOOP PROMPT", armedAt: 1_000, consecutiveFailures: 0, verifyCommand: null, workdirAbs: null, trackingFileRel: null })
+    expect(state).toEqual({ subagentId: "sub-1", prompt: "LOOP PROMPT", armedAt: 1_000, consecutiveFailures: 0, verifyCommand: null, workdirAbs: null, trackingFileRel: null, parallelism: 1 })
   })
 
   test("carries trackingFileRel through; legacy events without it replay as null", () => {
@@ -34,6 +34,7 @@ describe("deriveLoopState", () => {
       subagentId: "sub-1",
       prompt: "P",
       trackingFileRel: "PROGRESS-session-tabs.md",
+      parallelism: 1,
       workdirAbs: "/tmp/wt",
       verifyCommand: "bun run lint",
     }
@@ -52,7 +53,7 @@ describe("deriveLoopState", () => {
       disarmed("c1", 2_000),
       armed("c1", "sub-2", "P2", 3_000),
     ], "c1")
-    expect(state).toEqual({ subagentId: "sub-2", prompt: "P2", armedAt: 3_000, consecutiveFailures: 0, verifyCommand: null, workdirAbs: null, trackingFileRel: null })
+    expect(state).toEqual({ subagentId: "sub-2", prompt: "P2", armedAt: 3_000, consecutiveFailures: 0, verifyCommand: null, workdirAbs: null, trackingFileRel: null, parallelism: 1 })
   })
 
   test("consecutive failures accumulate across iterations", () => {

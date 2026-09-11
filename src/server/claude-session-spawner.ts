@@ -80,6 +80,7 @@ export interface SpawnClaudeTurnDeps {
 
   resolveClaudeDriverPreference: () => ClaudeDriverPreference
   isLoopArmed: (chatId: string) => LoopState | null
+  isRunAlive: (chatId: string, runId: string) => boolean
   boardRegistry?: BoardRegistry
   closeClaudeSession: (chatId: string, session: ClaudeSessionState) => void
   enforceClaudeSessionBudget: (protectedChatId?: string) => void
@@ -118,7 +119,8 @@ export async function spawnClaudeTurn(
     session.effort !== args.effort ||
     args.forkSession ||
     session.additionalDirectories.join("|") !== (args.additionalDirectories ?? []).join("|") ||
-    session.loopArmedAtSpawn !== loopArmedNow
+    session.loopArmedAtSpawn !== loopArmedNow ||
+    session.contextClearPending
   ) {
     if (session) {
       deps.closeClaudeSession(args.chatId, session)
@@ -205,6 +207,7 @@ export async function spawnClaudeTurn(
               ? () => deps.isLoopArmed(chatIdForCtx) !== null
               : undefined,
             getArmedLoop: (id) => toArmedLoopInfo(deps.isLoopArmed(id)),
+            isRunAlive: deps.isRunAlive,
             boardRegistry: deps.boardRegistry,
             toolCallback: deps.toolCallback ?? undefined,
             tunnelGateway: deps.tunnelGateway,
@@ -253,6 +256,7 @@ export async function spawnClaudeTurn(
               ? () => deps.isLoopArmed(chatIdForCtx) !== null
               : undefined,
             getArmedLoop: (id) => toArmedLoopInfo(deps.isLoopArmed(id)),
+            isRunAlive: deps.isRunAlive,
             boardRegistry: deps.boardRegistry,
             toolCallback: deps.toolCallback ?? undefined,
             chatPolicy: deps.resolveChatPolicy(args.chatId),

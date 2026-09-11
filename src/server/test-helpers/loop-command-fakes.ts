@@ -95,6 +95,7 @@ export function makeDeps(overrides: Partial<LoopCommandDeps> = {}): LoopCommandD
       overrides.inspectTrackingFile
       ?? (async () => ({ exists: false, content: null, gitTracked: false })),
     isWorktreeOfSameRepo: overrides.isWorktreeOfSameRepo ?? (async () => true),
+    currentBranchName: overrides.currentBranchName ?? (async () => "main"),
     runVerifyCommand:
       overrides.runVerifyCommand
       ?? (async () => ({ exitCode: 1, output: "not done", timedOut: false, durationMs: 1 })),
@@ -113,5 +114,6 @@ export function armedLoop(prompt = "ORCHESTRATOR loop prompt") {
     verifyCommand: "sh verify.sh",
     workdirAbs: "/repo",
     trackingFileRel: "PROGRESS.md",
+    parallelism: 1,
   }
 }

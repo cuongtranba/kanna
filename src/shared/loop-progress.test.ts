@@ -188,6 +188,47 @@ function tracking(overrides: Partial<BuildLoopProgressInput> = {}): BuildLoopPro
   }
 }
 
+describe("buildLoopProgress with a parallel task queue", () => {
+  const QUEUE = [
+    { id: "t1", label: "User model", blocked: false },
+    { id: "t2", label: "Authentication", blocked: true },
+    { id: "t3", label: "Settings page", blocked: false },
+  ]
+
+  test("every queued task gets a row, so a parallel plan is not reduced to one pending step", () => {
+    const rows = buildLoopProgress(tracking({ tracking: tracked({ queueItems: QUEUE }) })).rows
+    expect(rows.map((r) => [r.runId, r.status, r.label]).slice(-3)).toEqual([
+      ["queue:t1", "pending", "User model"],
+      ["queue:t2", "blocked", "Authentication"],
+      ["queue:t3", "pending", "Settings page"],
+    ])
+  })
+
+  test("live workers and still-queued tasks are shown together", () => {
+    const rows = buildLoopProgress(
+      tracking({
+        tracking: tracked({ queueItems: [QUEUE[1], QUEUE[2]] }),
+        runs: [run({ runId: "r1", status: "running", label: "User model", startedAt: 200 })],
+      }),
+    ).rows
+    expect(rows.map((r) => [r.runId, r.status])).toEqual([
+      ["progress:0", "done"],
+      ["progress:1", "done"],
+      ["progress:2", "done"],
+      ["r1", "running"],
+      ["queue:t2", "blocked"],
+      ["queue:t3", "pending"],
+    ])
+  })
+
+  test("a disarmed loop shows no queued rows", () => {
+    const rows = buildLoopProgress(
+      tracking({ armed: false, tracking: tracked({ queueItems: QUEUE }) }),
+    ).rows
+    expect(rows.every((r) => !r.runId.startsWith("queue:"))).toBe(true)
+  })
+})
+
 describe("buildLoopProgress with a tracking file", () => {
   test("the plan's completed chunks become done rows, oldest first, ahead of the pending step", () => {
     const rows = buildLoopProgress(tracking()).rows

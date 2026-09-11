@@ -172,6 +172,7 @@ import {
   isWorktreeOfSameRepo,
   readOracleScript,
 } from "./loop-template-io.adapter"
+import { currentBranchName } from "./loop-integrate-io.adapter"
 import { runVerifyCommand } from "./loop-verify-io.adapter"
 import { homedir } from "node:os"
 import { isClaudeSdkProvider } from "./provider-catalog"
@@ -578,6 +579,7 @@ export class AgentCoordinator {
       ensureTrackingFile,
       inspectTrackingFile,
       isWorktreeOfSameRepo,
+      currentBranchName,
       runVerifyCommand,
       readOracleScript,
       isLoopArmed: (chatId) => this.isLoopArmed(chatId),
@@ -947,8 +949,13 @@ export class AgentCoordinator {
     return this.store.getLastUserMessageId(chatId)
   }
 
+  private isRunAlive(chatId: string, runId: string): boolean {
+    return this.store.getSubagentRuns(chatId)[runId]?.status === "running"
+  }
+
   private spawnClaudeTurnDeps(): SpawnClaudeTurnDeps {
     return {
+      isRunAlive: (chatId, runId) => this.isRunAlive(chatId, runId),
       claudeSessions: this.claudeSessions,
       activeTurns: this.activeTurns,
       mentionedSubagentIdsByChat: this.mentionedSubagentIdsByChat,
