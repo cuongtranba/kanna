@@ -25,21 +25,6 @@ export interface AgentCtrlCommandDeps {
 }
 
 
-export const AGENT_CTRL_COMMAND_TYPES = [
-  "autoContinue.accept",
-  "autoContinue.reschedule",
-  "autoContinue.cancel",
-  "cron.remove",
-  "cron.pause",
-  "cron.resume",
-  "cron.update",
-  "tunnel.accept",
-  "tunnel.stop",
-  "tunnel.retry",
-  "pty.cancel",
-  "pty.kill",
-] as const satisfies readonly ClientCommand["type"][]
-
 export async function handleAgentCtrlCommand(
   deps: AgentCtrlCommandDeps,
   command: ClientCommand,

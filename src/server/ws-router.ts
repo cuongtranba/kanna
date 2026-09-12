@@ -57,9 +57,9 @@ import {
   isBenignStaleStateMessage,
   logSendToStartingProfile,
   send,
+  unhandledCommandMessage,
 } from "./ws-router-utils"
 import type { ClientState } from "./ws-router-utils"
-import { routeGroupOf, unhandledRoutedCommandMessage } from "./ws-router-routes"
 import { createEnvelopeBuilder } from "./ws-router-envelope"
 import { BroadcastManager } from "./ws-router-broadcast"
 import type { RepoSuggestion } from "../shared/boards/sync-types"
@@ -279,124 +279,105 @@ export function createWsRouter({
     id: string,
   ): Promise<boolean> {
     const sendToClient = (envelope: ServerEnvelope) => send(ws, envelope)
-    switch (routeGroupOf(command.type)) {
-      case "settings":
-        return handleSettingsCommand(
-          {
-            keybindings,
-            resolvedAppSettings,
-            resolvedAnalytics,
-            resolvedLlmProvider,
-            listOpenRouterModels,
-            packageUpdateManager,
-            send: sendToClient,
-          },
-          command,
-          id,
-        )
-      case "chat":
-        return handleChatCommand(buildChatDeps(ws), command, id)
-      case "agentCtrl":
-        return handleAgentCtrlCommand(buildAgentCtrlDeps(ws), command, id)
-      case "misc":
-        return handleMiscCommand(buildMiscDeps(ws), command, id)
-      case "diff":
-        return handleDiffCommand(
-          {
-            resolvedDiffStore,
-            resolveChatRepoPath,
-            send: sendToClient,
-            broadcastSnapshots: () => broadcast.broadcastSnapshots(),
-          },
-          command,
-          id,
-        )
-      case "push":
-        return handlePushCommand(
-          {
-            pushManager,
-            getPushDeviceId: () => ws.data.pushDeviceId,
-            setPushDeviceId: (did) => { ws.data.pushDeviceId = did },
-            send: sendToClient,
-            broadcastPushConfig: () => broadcast.broadcastFilteredSnapshots({ includePushConfig: true }),
-          },
-          command,
-          id,
-        )
-      case "board":
-        return handleBoardCommand(
-          {
-            boardRegistry,
-            boardSync,
-            startWork,
-            startWorkView,
-            cleanupView,
-            resolveCleanup,
-            suggestSyncRepos,
-            send: sendToClient,
-          },
-          command,
-          id,
-        )
-      case "observability":
-        return handleObservabilityCommand(
-          { workflowRegistry, subagentTranscriptRegistry, store, send: sendToClient },
-          command,
-          id,
-        )
-      case "project":
-        return handleProjectCommand(
-          {
+    const handlers: readonly (() => Promise<boolean> | boolean)[] = [
+      () => handleChatCommand(buildChatDeps(ws), command, id),
+      () => handleMiscCommand(buildMiscDeps(ws), command, id),
+      () => handleDiffCommand(
+        {
+          resolvedDiffStore,
+          resolveChatRepoPath,
+          send: sendToClient,
+          broadcastSnapshots: () => broadcast.broadcastSnapshots(),
+        },
+        command,
+        id,
+      ),
+      () => handleAgentCtrlCommand(buildAgentCtrlDeps(ws), command, id),
+      () => handleSettingsCommand(
+        {
+          keybindings,
+          resolvedAppSettings,
+          resolvedAnalytics,
+          resolvedLlmProvider,
+          listOpenRouterModels,
+          packageUpdateManager,
+          send: sendToClient,
+        },
+        command,
+        id,
+      ),
+      () => handleBoardCommand(
+        {
+          boardRegistry,
+          boardSync,
+          startWork,
+          startWorkView,
+          cleanupView,
+          resolveCleanup,
+          suggestSyncRepos,
+          send: sendToClient,
+        },
+        command,
+        id,
+      ),
+      () => handleProjectCommand(
+        {
+          store,
+          updateManager,
+          diffStore: resolvedDiffStore,
+          analytics: resolvedAnalytics,
+          refreshDiscovery,
+          ensureProjectDirectory,
+          resolveLocalPath,
+          importClaudeSessionsFn: () => importClaudeSessions({ store }),
+          importSessionsByIdsFn: (sessionIds) => importSessionsByIds({
             store,
-            updateManager,
-            diffStore: resolvedDiffStore,
-            analytics: resolvedAnalytics,
-            refreshDiscovery,
-            ensureProjectDirectory,
-            resolveLocalPath,
-            importClaudeSessionsFn: () => importClaudeSessions({ store }),
-            importSessionsByIdsFn: (sessionIds) => importSessionsByIds({
-              store,
-              sessionIds,
-              onSessionImported: (info) => followedSessionRegistry?.consider(info),
-            }),
-            openExternalFn: openExternal,
-            terminals,
-            send: sendToClient,
-            broadcastSidebar: () => broadcast.broadcastFilteredSnapshots({ includeSidebar: true }),
-          },
-          command,
-          id,
-        )
-      case "backgroundTasks":
-        return command.type === "backgroundTasks.getOutput"
-          ? sendBackgroundTaskOutput(ws, command, id)
-          : false
-      default:
-        return false
+            sessionIds,
+            onSessionImported: (info) => followedSessionRegistry?.consider(info),
+          }),
+          openExternalFn: openExternal,
+          terminals,
+          send: sendToClient,
+          broadcastSidebar: () => broadcast.broadcastFilteredSnapshots({ includeSidebar: true }),
+        },
+        command,
+        id,
+      ),
+      () => handlePushCommand(
+        {
+          pushManager,
+          getPushDeviceId: () => ws.data.pushDeviceId,
+          setPushDeviceId: (did) => { ws.data.pushDeviceId = did },
+          send: sendToClient,
+          broadcastPushConfig: () => broadcast.broadcastFilteredSnapshots({ includePushConfig: true }),
+        },
+        command,
+        id,
+      ),
+      () => handleObservabilityCommand(
+        { workflowRegistry, subagentTranscriptRegistry, store, send: sendToClient },
+        command,
+        id,
+      ),
+      () => command.type === "backgroundTasks.getOutput" && sendBackgroundTaskOutput(ws, command, id),
+    ]
+    for (const runHandler of handlers) {
+      if (await runHandler()) return true
     }
+    return false
   }
 
-  async function reportUnhandledCommand(
+  function reportUnhandledCommand(
     ws: ServerWebSocket<ClientState>,
     command: ClientCommand,
     id: string,
   ) {
-    const group = routeGroupOf(command.type)
-    if (!group) {
-      await broadcast.broadcastSnapshots()
-      return
-    }
-    log.error("[ws-router] routed command was not handled by its group", {
-      id,
-      type: command.type,
-      group,
-    })
+    log.error("[ws-router] no handler claimed command", { id, type: command.type })
     send(ws, {
       v: PROTOCOL_VERSION,
       type: "error",
       id,
-      message: unhandledRoutedCommandMessage(command.type, group),
+      message: unhandledCommandMessage(command.type),
     })
   }
 

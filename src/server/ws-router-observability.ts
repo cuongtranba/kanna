@@ -28,12 +28,6 @@ function ensureSubagentDirRegistered(
 }
 
 
-export const OBSERVABILITY_COMMAND_TYPES = [
-  "workflows.getRun",
-  "workflows.getAgentTranscript",
-  "subagents.getRun",
-] as const satisfies readonly ClientCommand["type"][]
-
 export async function handleObservabilityCommand(
   deps: ObservabilityCommandDeps,
   command: ClientCommand,
