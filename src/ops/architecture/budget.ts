@@ -73,10 +73,10 @@ export const PATTERN_BUDGETS: readonly PatternBudget[] = [
     id: "ws-router-dispatch-arms",
     include: ["src/server/ws-router.ts"],
     pattern: '^\\s*case "',
-    max: 106,
+    max: 10,
     issue: 899,
     rationale:
-      "A flat switch that must be edited to add a command, with no exhaustiveness check — an unrouted variant falls through to broadcastSnapshots() silently. A route table makes the same omission a compile error.",
+      "Was 106 per-command arms with no exhaustiveness check, which silently dropped six real commands (stack.setInstructions, cron.update, project.setInstructions, board.card.block/unblock, board.sync.unbind) to broadcastSnapshots(). Now 10 arms, one per route group, with each group's command list owned by the module that handles it and RequireNever<UnroutedCommandType> in ws-router-routes.ts making an unrouted command a compile error. The entry is pinned rather than retired because one residue survives: a type listed in a group whose module switch lacks a case still returns false and falls through. Growth past one arm per group means per-command routing is creeping back into the router.",
   },
   {
     id: "untyped-command-results",

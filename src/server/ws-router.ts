@@ -2,7 +2,7 @@ import { safeJsonParse, type JsonValue } from "../shared/json"
 import { log } from "../shared/log"
 import type { ServerWebSocket } from "bun"
 import { PROTOCOL_VERSION } from "../shared/types"
-import type { ClientEnvelope } from "../shared/protocol"
+import type { ClientCommand, ClientEnvelope, ServerEnvelope } from "../shared/protocol"
 import { isClientEnvelope } from "../shared/protocol"
 import type { AgentCoordinator } from "./agent"
 import type { AnalyticsReporter } from "./analytics"
@@ -59,6 +59,7 @@ import {
   send,
 } from "./ws-router-utils"
 import type { ClientState } from "./ws-router-utils"
+import { routeGroupOf, unhandledRoutedCommandMessage } from "./ws-router-routes"
 import { createEnvelopeBuilder } from "./ws-router-envelope"
 import { BroadcastManager } from "./ws-router-broadcast"
 import type { RepoSuggestion } from "../shared/boards/sync-types"
@@ -208,9 +209,8 @@ export function createWsRouter({
     return { chat, project }
   }
 
-  async function handleCommand(ws: ServerWebSocket<ClientState>, message: Extract<ClientEnvelope, { type: "command" }>) {
-    const { command, id } = message
-    const chatDeps: ChatCommandDeps = {
+  function buildChatDeps(ws: ServerWebSocket<ClientState>): ChatCommandDeps {
+    return {
       store,
       agent,
       analytics: resolvedAnalytics,
@@ -222,14 +222,20 @@ export function createWsRouter({
       broadcastAll: () => broadcast.broadcastSnapshots(),
       followedSessionRegistry,
     }
-    const agentCtrlDeps: AgentCtrlCommandDeps = {
+  }
+
+  function buildAgentCtrlDeps(ws: ServerWebSocket<ClientState>): AgentCtrlCommandDeps {
+    return {
       agent,
       tunnelGateway,
       killPtyInstance,
       send: (envelope) => send(ws, envelope),
       broadcastChatAndSidebar: (chatId) => broadcast.broadcastChatAndSidebar(chatId),
     }
-    const miscDeps: MiscCommandDeps = {
+  }
+
+  function buildMiscDeps(ws: ServerWebSocket<ClientState>): MiscCommandDeps {
+    return {
       store,
       terminals,
       agent,
@@ -242,9 +248,40 @@ export function createWsRouter({
       broadcastChatAndSidebar: (chatId) => broadcast.broadcastChatAndSidebar(chatId),
       pushTerminalSnapshot: (terminalId) => broadcast.pushTerminalSnapshot(terminalId),
     }
-    try {
-      if (
-        await handleSettingsCommand(
+  }
+
+  function sendBackgroundTaskOutput(
+    ws: ServerWebSocket<ClientState>,
+    command: Extract<ClientCommand, { type: "backgroundTasks.getOutput" }>,
+    id: string,
+  ): boolean {
+    const output = backgroundTaskOutputRegistry?.getOutput(command.chatId, command.taskId)
+    send(ws, {
+      v: PROTOCOL_VERSION,
+      type: "snapshot",
+      id,
+      snapshot: {
+        type: "background-task-output",
+        data: {
+          chatId: command.chatId,
+          taskId: command.taskId,
+          content: output?.content ?? "",
+          truncated: output?.truncated ?? false,
+        },
+      },
+    })
+    return true
+  }
+
+  async function routeCommand(
+    ws: ServerWebSocket<ClientState>,
+    command: ClientCommand,
+    id: string,
+  ): Promise<boolean> {
+    const sendToClient = (envelope: ServerEnvelope) => send(ws, envelope)
+    switch (routeGroupOf(command.type)) {
+      case "settings":
+        return handleSettingsCommand(
           {
             keybindings,
             resolvedAppSettings,
@@ -252,239 +289,122 @@ export function createWsRouter({
             resolvedLlmProvider,
             listOpenRouterModels,
             packageUpdateManager,
-            send: (envelope) => send(ws, envelope),
+            send: sendToClient,
           },
           command,
           id,
         )
-      )
-        return
-      switch (command.type) {
-        case "chat.create":
-        case "chat.fork":
-        case "chat.rename":
-        case "chat.archive":
-        case "chat.unarchive":
-        case "chat.delete": {
-          await handleChatCommand(chatDeps, command, id)
-          return
-        }
-        case "autoContinue.accept":
-        case "autoContinue.reschedule":
-        case "autoContinue.cancel":
-        case "cron.remove":
-        case "cron.pause":
-        case "cron.resume":
-        case "tunnel.accept":
-        case "tunnel.stop":
-        case "tunnel.retry": {
-          await handleAgentCtrlCommand(agentCtrlDeps, command, id)
-          return
-        }
-        case "chat.markRead":
-        case "chat.setPolicyOverride":
-        case "chat.setDraftProtection":
-        case "chat.send": {
-          await handleChatCommand(chatDeps, command, id)
-          return
-        }
-        case "chat.refreshDiffs":
-        case "chat.initGit":
-        case "chat.getGitHubPublishInfo":
-        case "chat.checkGitHubRepoAvailability":
-        case "chat.publishToGitHub":
-        case "chat.listBranches":
-        case "chat.previewMergeBranch":
-        case "chat.mergeBranch":
-        case "chat.checkoutBranch":
-        case "chat.syncBranch":
-        case "chat.createBranch":
-        case "chat.generateCommitMessage":
-        case "chat.commitDiffs":
-        case "chat.discardDiffFile":
-        case "chat.ignoreDiffFile": {
-          await handleDiffCommand(
-            {
-              resolvedDiffStore,
-              resolveChatRepoPath,
-              send: (envelope) => send(ws, envelope),
-              broadcastSnapshots: () => broadcast.broadcastSnapshots(),
-            },
-            command,
-            id,
-          )
-          return
-        }
-        case "chat.cancel":
-        case "chat.stopDraining":
-        case "chat.loadHistory":
-        case "chat.respondTool":
-        case "chat.toolRequestAnswer":
-        case "chat.respondSubagentTool":
-        case "chat.cancelSubagentRun": {
-          await handleChatCommand(chatDeps, command, id)
-          return
-        }
-        case "message.enqueue":
-        case "message.steer":
-        case "message.dequeue":
-        case "terminal.create":
-        case "terminal.input":
-        case "terminal.resize":
-        case "terminal.close": {
-          await handleMiscCommand(miscDeps, command, id)
-          return
-        }
-        case "push.identifyDevice":
-        case "push.subscribe":
-        case "push.unsubscribe":
-        case "push.test":
-        case "push.setProjectMute":
-        case "push.setChatMute":
-        case "push.setFocusedChat": {
-          await handlePushCommand(
-            {
-              pushManager,
-              getPushDeviceId: () => ws.data.pushDeviceId,
-              setPushDeviceId: (did) => { ws.data.pushDeviceId = did },
-              send: (envelope) => send(ws, envelope),
-              broadcastPushConfig: () => broadcast.broadcastFilteredSnapshots({ includePushConfig: true }),
-            },
-            command,
-            id,
-          )
-          return
-        }
-        case "pty.cancel":
-        case "pty.kill": {
-          await handleAgentCtrlCommand(agentCtrlDeps, command, id)
-          return
-        }
-        case "stack.create":
-        case "stack.rename":
-        case "stack.remove":
-        case "stack.addProject":
-        case "stack.removeProject":
-        case "stack.listWorktrees":
-        case "share.mint":
-        case "share.revoke":
-        case "share.list": {
-          await handleMiscCommand(miscDeps, command, id)
-          return
-        }
-        case "board.create":
-        case "board.archive":
-        case "board.update":
-        case "board.duplicate":
-        case "board.saveAsTemplate":
-        case "board.column.create":
-        case "board.column.update":
-        case "board.column.move":
-        case "board.column.delete":
-        case "board.card.create":
-        case "board.card.move":
-        case "board.card.archive":
-        case "board.card.detail":
-        case "board.card.comment":
-        case "board.card.update":
-        case "board.card.startWork":
-        case "board.card.resolveWorktree":
-        case "board.cards.page":
-        case "board.templates.list":
-        case "board.sync.bind":
-        case "board.sync.pull":
-        case "board.sync.push":
-        case "board.sync.status": {
-          await handleBoardCommand(
-            {
-              boardRegistry,
-              boardSync,
-              startWork,
-              startWorkView,
-              cleanupView,
-              resolveCleanup,
-              suggestSyncRepos,
-              send: (envelope) => send(ws, envelope),
-            },
-            command,
-            id,
-          )
-          return
-        }
-        case "workflows.getRun":
-        case "workflows.getAgentTranscript":
-        case "subagents.getRun": {
-          await handleObservabilityCommand(
-            {
-              workflowRegistry,
-              subagentTranscriptRegistry,
+      case "chat":
+        return handleChatCommand(buildChatDeps(ws), command, id)
+      case "agentCtrl":
+        return handleAgentCtrlCommand(buildAgentCtrlDeps(ws), command, id)
+      case "misc":
+        return handleMiscCommand(buildMiscDeps(ws), command, id)
+      case "diff":
+        return handleDiffCommand(
+          {
+            resolvedDiffStore,
+            resolveChatRepoPath,
+            send: sendToClient,
+            broadcastSnapshots: () => broadcast.broadcastSnapshots(),
+          },
+          command,
+          id,
+        )
+      case "push":
+        return handlePushCommand(
+          {
+            pushManager,
+            getPushDeviceId: () => ws.data.pushDeviceId,
+            setPushDeviceId: (did) => { ws.data.pushDeviceId = did },
+            send: sendToClient,
+            broadcastPushConfig: () => broadcast.broadcastFilteredSnapshots({ includePushConfig: true }),
+          },
+          command,
+          id,
+        )
+      case "board":
+        return handleBoardCommand(
+          {
+            boardRegistry,
+            boardSync,
+            startWork,
+            startWorkView,
+            cleanupView,
+            resolveCleanup,
+            suggestSyncRepos,
+            send: sendToClient,
+          },
+          command,
+          id,
+        )
+      case "observability":
+        return handleObservabilityCommand(
+          { workflowRegistry, subagentTranscriptRegistry, store, send: sendToClient },
+          command,
+          id,
+        )
+      case "project":
+        return handleProjectCommand(
+          {
+            store,
+            updateManager,
+            diffStore: resolvedDiffStore,
+            analytics: resolvedAnalytics,
+            refreshDiscovery,
+            ensureProjectDirectory,
+            resolveLocalPath,
+            importClaudeSessionsFn: () => importClaudeSessions({ store }),
+            importSessionsByIdsFn: (sessionIds) => importSessionsByIds({
               store,
-              send: (envelope) => send(ws, envelope),
-            },
-            command,
-            id,
-          )
-          return
-        }
-        case "backgroundTasks.getOutput": {
-          const output = backgroundTaskOutputRegistry?.getOutput(command.chatId, command.taskId)
-          send(ws, {
-            v: PROTOCOL_VERSION,
-            type: "snapshot",
-            id,
-            snapshot: {
-              type: "background-task-output",
-              data: {
-                chatId: command.chatId,
-                taskId: command.taskId,
-                content: output?.content ?? "",
-                truncated: output?.truncated ?? false,
-              },
-            },
-          })
-          return
-        }
-        case "system.ping":
-        case "system.openExternal":
-        case "update.check":
-        case "update.install":
-        case "update.reload":
-        case "project.open":
-        case "project.create":
-        case "project.remove":
-        case "project.setStar":
-        case "project.readDiffPatch":
-        case "sessions.importClaude":
-        case "sessions.importClaudeSession":
-        case "sidebar.reorderProjectGroups": {
-          await handleProjectCommand(
-            {
-              store,
-              updateManager,
-              diffStore: resolvedDiffStore,
-              analytics: resolvedAnalytics,
-              refreshDiscovery,
-              ensureProjectDirectory,
-              resolveLocalPath,
-              importClaudeSessionsFn: () => importClaudeSessions({ store }),
-              importSessionsByIdsFn: (sessionIds) => importSessionsByIds({
-                store,
-                sessionIds,
-                onSessionImported: (info) => followedSessionRegistry?.consider(info),
-              }),
-              openExternalFn: openExternal,
-              terminals,
-              send: (envelope) => send(ws, envelope),
-              broadcastSidebar: () => broadcast.broadcastFilteredSnapshots({ includeSidebar: true }),
-            },
-            command,
-            id,
-          )
-          return
-        }
-      }
+              sessionIds,
+              onSessionImported: (info) => followedSessionRegistry?.consider(info),
+            }),
+            openExternalFn: openExternal,
+            terminals,
+            send: sendToClient,
+            broadcastSidebar: () => broadcast.broadcastFilteredSnapshots({ includeSidebar: true }),
+          },
+          command,
+          id,
+        )
+      case "backgroundTasks":
+        return command.type === "backgroundTasks.getOutput"
+          ? sendBackgroundTaskOutput(ws, command, id)
+          : false
+      default:
+        return false
+    }
+  }
 
+  async function reportUnhandledCommand(
+    ws: ServerWebSocket<ClientState>,
+    command: ClientCommand,
+    id: string,
+  ) {
+    const group = routeGroupOf(command.type)
+    if (!group) {
       await broadcast.broadcastSnapshots()
+      return
+    }
+    log.error("[ws-router] routed command was not handled by its group", {
+      id,
+      type: command.type,
+      group,
+    })
+    send(ws, {
+      v: PROTOCOL_VERSION,
+      type: "error",
+      id,
+      message: unhandledRoutedCommandMessage(command.type, group),
+    })
+  }
+
+  async function handleCommand(ws: ServerWebSocket<ClientState>, message: Extract<ClientEnvelope, { type: "command" }>) {
+    const { command, id } = message
+    try {
+      if (await routeCommand(ws, command, id)) return
+      await reportUnhandledCommand(ws, command, id)
     } catch (error) {
       const messageText = error instanceof Error ? error.message : String(error)
       const benign = isBenignStaleStateMessage(messageText)

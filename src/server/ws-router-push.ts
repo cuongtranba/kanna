@@ -26,6 +26,16 @@ export interface PushCommandDeps {
 }
 
 
+export const PUSH_COMMAND_TYPES = [
+  "push.identifyDevice",
+  "push.subscribe",
+  "push.unsubscribe",
+  "push.test",
+  "push.setProjectMute",
+  "push.setChatMute",
+  "push.setFocusedChat",
+] as const satisfies readonly ClientCommand["type"][]
+
 export async function handlePushCommand(
   deps: PushCommandDeps,
   command: ClientCommand,

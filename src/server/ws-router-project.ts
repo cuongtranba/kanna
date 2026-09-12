@@ -53,6 +53,23 @@ export interface ProjectCommandDeps {
 }
 
 
+export const PROJECT_COMMAND_TYPES = [
+  "system.ping",
+  "system.openExternal",
+  "update.check",
+  "update.install",
+  "update.reload",
+  "project.open",
+  "project.create",
+  "project.remove",
+  "project.setStar",
+  "project.setInstructions",
+  "project.readDiffPatch",
+  "sessions.importClaude",
+  "sessions.importClaudeSession",
+  "sidebar.reorderProjectGroups",
+] as const satisfies readonly ClientCommand["type"][]
+
 export async function handleProjectCommand(
   deps: ProjectCommandDeps,
   command: ClientCommand,
