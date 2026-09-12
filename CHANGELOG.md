@@ -8,6 +8,18 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.54.0](https://github.com/cuongtranba/kanna/compare/v1.53.0...v1.54.0) (2026-09-12)
+
+
+### Features
+
+* **loop:** parallel workers claim tasks under a run-bound lease ([#1088](https://github.com/cuongtranba/kanna/issues/1088)) ([e52ab6e](https://github.com/cuongtranba/kanna/commit/e52ab6e959ffceb5b5a34ef94da9145d18e3f54b))
+
+
+### Bug Fixes
+
+* **ws-router:** route every client command through a typed table ([#1092](https://github.com/cuongtranba/kanna/issues/1092)) ([c1f4738](https://github.com/cuongtranba/kanna/commit/c1f4738434bc8627b93ea47bf4d4c2b031c86507))
+
 ## [1.53.0](https://github.com/cuongtranba/kanna/compare/v1.52.0...v1.53.0) (2026-09-10)
 
 
