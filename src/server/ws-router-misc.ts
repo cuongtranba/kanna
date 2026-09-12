@@ -64,6 +64,26 @@ export interface MiscCommandDeps {
 }
 
 
+export const MISC_COMMAND_TYPES = [
+  "message.enqueue",
+  "message.steer",
+  "message.dequeue",
+  "terminal.create",
+  "terminal.input",
+  "terminal.resize",
+  "terminal.close",
+  "stack.create",
+  "stack.rename",
+  "stack.setInstructions",
+  "stack.remove",
+  "stack.addProject",
+  "stack.removeProject",
+  "stack.listWorktrees",
+  "share.mint",
+  "share.revoke",
+  "share.list",
+] as const satisfies readonly ClientCommand["type"][]
+
 export async function handleMiscCommand(
   deps: MiscCommandDeps,
   command: ClientCommand,

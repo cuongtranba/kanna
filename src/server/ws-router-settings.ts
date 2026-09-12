@@ -135,6 +135,36 @@ export async function runMcpAutoTest<TWriteResult>(
 }
 
 
+export const SETTINGS_COMMAND_TYPES = [
+  "settings.readKeybindings",
+  "settings.writeKeybindings",
+  "settings.readAppSettings",
+  "settings.writeAppSettings",
+  "settings.writeAppSettingsPatch",
+  "appSettings.setCloudflareTunnel",
+  "appSettings.setClaudeAuth",
+  "appSettings.testOAuthToken",
+  "subagent.create",
+  "subagent.update",
+  "subagent.delete",
+  "settings.testMcpServer",
+  "settings.startMcpOAuth",
+  "settings.completeMcpOAuth",
+  "settings.readLlmProvider",
+  "settings.listOpenRouterModels",
+  "settings.getChangelog",
+  "settings.writeLlmProvider",
+  "settings.validateLlmProvider",
+  "skills.search",
+  "skills.install",
+  "skills.uninstall",
+  "skills.listInstalled",
+  "packages.listInstalled",
+  "packages.checkUpdates",
+  "packages.update",
+  "packages.updateAll",
+] as const satisfies readonly ClientCommand["type"][]
+
 export async function handleSettingsCommand(
   deps: SettingsCommandDeps,
   command: ClientCommand,

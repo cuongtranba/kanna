@@ -27,7 +27,7 @@ export interface BoardCommandDeps {
   send: (envelope: ServerEnvelope) => void
 }
 
-const BOARD_COMMAND_TYPES = new Set<string>([
+export const BOARD_COMMAND_TYPES = [
   "board.create",
   "board.archive",
   "board.update",
@@ -54,10 +54,12 @@ const BOARD_COMMAND_TYPES = new Set<string>([
   "board.sync.pull",
   "board.sync.push",
   "board.sync.status",
-])
+] as const satisfies readonly ClientCommand["type"][]
+
+const BOARD_COMMAND_TYPE_SET = new Set<string>(BOARD_COMMAND_TYPES)
 
 export function isBoardCommand(command: ClientCommand): boolean {
-  return BOARD_COMMAND_TYPES.has(command.type)
+  return BOARD_COMMAND_TYPE_SET.has(command.type)
 }
 
 export async function handleBoardCommand(

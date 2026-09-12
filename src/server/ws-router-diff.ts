@@ -30,6 +30,24 @@ export interface DiffCommandDeps {
 }
 
 
+export const DIFF_COMMAND_TYPES = [
+  "chat.refreshDiffs",
+  "chat.initGit",
+  "chat.getGitHubPublishInfo",
+  "chat.checkGitHubRepoAvailability",
+  "chat.publishToGitHub",
+  "chat.listBranches",
+  "chat.previewMergeBranch",
+  "chat.mergeBranch",
+  "chat.checkoutBranch",
+  "chat.syncBranch",
+  "chat.createBranch",
+  "chat.generateCommitMessage",
+  "chat.commitDiffs",
+  "chat.discardDiffFile",
+  "chat.ignoreDiffFile",
+] as const satisfies readonly ClientCommand["type"][]
+
 export async function handleDiffCommand(
   deps: DiffCommandDeps,
   command: ClientCommand,
