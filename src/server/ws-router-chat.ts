@@ -72,26 +72,6 @@ export interface ChatCommandDeps {
 }
 
 
-export const CHAT_COMMAND_TYPES = [
-  "chat.create",
-  "chat.fork",
-  "chat.rename",
-  "chat.archive",
-  "chat.unarchive",
-  "chat.delete",
-  "chat.markRead",
-  "chat.setPolicyOverride",
-  "chat.setDraftProtection",
-  "chat.send",
-  "chat.cancel",
-  "chat.stopDraining",
-  "chat.loadHistory",
-  "chat.respondTool",
-  "chat.toolRequestAnswer",
-  "chat.respondSubagentTool",
-  "chat.cancelSubagentRun",
-] as const satisfies readonly ClientCommand["type"][]
-
 export async function handleChatCommand(
   deps: ChatCommandDeps,
   command: ClientCommand,

@@ -73,10 +73,10 @@ export const PATTERN_BUDGETS: readonly PatternBudget[] = [
     id: "ws-router-dispatch-arms",
     include: ["src/server/ws-router.ts"],
     pattern: '^\\s*case "',
-    max: 10,
+    max: 0,
     issue: 899,
     rationale:
-      "Was 106 per-command arms with no exhaustiveness check, which silently dropped six real commands (stack.setInstructions, cron.update, project.setInstructions, board.card.block/unblock, board.sync.unbind) to broadcastSnapshots(). Now 10 arms, one per route group, with each group's command list owned by the module that handles it and RequireNever<UnroutedCommandType> in ws-router-routes.ts making an unrouted command a compile error. The entry is pinned rather than retired because one residue survives: a type listed in a group whose module switch lacks a case still returns false and falls through. Growth past one arm per group means per-command routing is creeping back into the router.",
+      "Was 106 per-command arms with no exhaustiveness check, which silently dropped six real commands (stack.setInstructions, cron.update, project.setInstructions, board.card.block/unblock, board.sync.unbind) to broadcastSnapshots(). The router now dispatches by chaining the handlers over the Promise<boolean> contract they already implement, so it enumerates no command at all and any arm here means per-command routing is creeping back in. The first fix enumerated every command a second time in per-module lists, which cost 213 net lines to buy compile-time detection; ws-router-coverage.test.ts replaces that for 55 lines by reading each handler's ACTUAL case labels against the ClientCommand union, which also catches the case the lists could not - a command listed for a group whose module has no case for it.",
   },
   {
     id: "untyped-command-results",

@@ -27,7 +27,7 @@ export interface BoardCommandDeps {
   send: (envelope: ServerEnvelope) => void
 }
 
-export const BOARD_COMMAND_TYPES = [
+const BOARD_COMMAND_TYPES = [
   "board.create",
   "board.archive",
   "board.update",

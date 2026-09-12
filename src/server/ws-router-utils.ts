@@ -7,6 +7,11 @@ import type { ServerEnvelope, SubscriptionTopic } from "../shared/protocol"
 import type { EventStore } from "./event-store"
 
 
+export function unhandledCommandMessage(commandType: string): string {
+  return `Command "${commandType}" was not handled by any ws-router handler. `
+    + `Add a case for it in the ws-router-*.ts module that owns it.`
+}
+
 export interface ClientState {
   subscriptions: Map<string, SubscriptionTopic>
   snapshotSignatures: Map<string, string>
