@@ -1,6 +1,38 @@
 import type { ReactNode } from "react"
 import { Pencil, Trash2, type LucideIcon } from "lucide-react"
 import { Button } from "../ui/button"
+import { cn } from "../../lib/utils"
+
+export function SettingsRow({
+  title,
+  description,
+  children,
+  bordered = true,
+  alignStart = false,
+}: {
+  title: string
+  description: ReactNode
+  children: ReactNode
+  bordered?: boolean
+  alignStart?: boolean
+}) {
+  return (
+    <div className={bordered ? "border-t border-border" : undefined}>
+      <div
+        className={cn(
+          "flex flex-col gap-4 py-5 md:flex-row md:justify-between md:gap-8",
+          alignStart ? "md:items-start" : "md:items-center"
+        )}
+      >
+        <div className="min-w-0 max-w-xl">
+          <div className="text-sm font-medium text-foreground">{title}</div>
+          <div className="mt-1 text-13 text-muted-foreground">{description}</div>
+        </div>
+        <div className="flex items-center justify-start md:shrink-0 md:justify-end">{children}</div>
+      </div>
+    </div>
+  )
+}
 
 export function SettingsEmptyState({ icon: Icon, message }: { icon: LucideIcon; message: string }) {
   return (

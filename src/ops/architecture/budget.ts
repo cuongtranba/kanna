@@ -5,7 +5,7 @@ export const MODULE_ALLOWANCES: Readonly<Record<string, number>> = {
   "src/client/app/ChatPage/useChatPageSidebarActions.ts": 701,
   "src/client/app/KannaSidebar.tsx": 987,
   "src/client/app/KannaTranscript.tsx": 1053,
-  "src/client/app/SettingsPage.tsx": 2787,
+  "src/client/app/SettingsPage.tsx": 2300,
   "src/client/app/SubagentsSection.tsx": 939,
   "src/client/app/useAppGlobalState.ts": 1421,
   "src/client/app/useKannaState.ts": 1447,
