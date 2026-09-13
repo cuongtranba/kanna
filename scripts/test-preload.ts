@@ -12,6 +12,8 @@ if (process.env.NODE_ENV === "production") {
   const nativeFormData = globalThis.FormData
   const nativeBlob = globalThis.Blob
   const nativeFile = globalThis.File
+  const nativeAbortController = globalThis.AbortController
+  const nativeAbortSignal = globalThis.AbortSignal
 
   const { GlobalRegistrator } =
     require("@happy-dom/global-registrator") as typeof import("@happy-dom/global-registrator")
@@ -27,6 +29,8 @@ if (process.env.NODE_ENV === "production") {
     globalThis.FormData = nativeFormData
     globalThis.Blob = nativeBlob
     globalThis.File = nativeFile
+    globalThis.AbortController = nativeAbortController
+    globalThis.AbortSignal = nativeAbortSignal
   }
 
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true

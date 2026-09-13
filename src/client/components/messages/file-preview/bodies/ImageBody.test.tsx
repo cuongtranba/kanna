@@ -9,7 +9,7 @@ const SRC: PreviewSource = {
 }
 
 describe("ImageBody", () => {
-  test("renders <img> with contentUrl, alt=displayName, pinch-zoom touch-action, object-contain", () => {
+  test("renders an image with contentUrl, display-name alt text, pinch zoom, and containment", () => {
     const html = renderToStaticMarkup(<ImageBody source={SRC} />)
     expect(html).toContain('src="/u/a.png"')
     expect(html).toContain('alt="a.png"')

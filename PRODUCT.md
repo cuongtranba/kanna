@@ -1,45 +1,59 @@
 # Product
 
-## Register
+<!-- impeccable:product-schema 1 -->
 
-product
+## Platform
+
+web
 
 ## Users
 
-Solo developers running Claude Code or Codex CLIs on their own machine for focused, multi-hour sessions. They jump between many chats and projects, expect keyboard-first navigation with mouse fallbacks, and watch agents work for long stretches while occasionally steering. Context is a quiet desk on a real monitor, not a phone. They came to Kanna because the raw CLI made long sessions hard to track; they stay because the UI makes the work legible without getting in the way.
+Solo developers run Claude Code or Codex CLIs on their own machines for focused, multi-hour sessions. They move between many chats and projects, prefer keyboard-first navigation with mouse fallbacks, and watch agents work for long stretches while occasionally steering. Their usual setting is a quiet desk and a real monitor, not a phone.
 
 ## Product Purpose
 
-Kanna is a web UI for the Claude Code and Codex CLIs that makes long agent sessions tractable. It surfaces project structure, chat status, transcripts, tool calls, plan-mode prompts, and background work as a single calm, navigable workspace. Success looks like: a developer running three agents across two projects can tell at a glance what each is doing, jump in to steer any of them, never lose work to a forgotten background process, and trust what the transcript shows.
+Kanna is a web UI for the Claude Code and Codex CLIs that makes long agent sessions tractable. It surfaces project structure, chat status, transcripts, tool calls, plan-mode prompts, and background work as one calm, navigable workspace. Success is a developer running three agents across two projects who can tell what each is doing, steer any of them, avoid losing work to a forgotten background process, and trust the transcript.
 
-## Brand Personality
+## Positioning
 
-Editorial, thoughtful, warm. Voice: confident without swagger; explains state, never performs it. Closer to a well-edited document than a control panel. Quiet typography does the heavy lifting. Color is restrained and tinted toward warm neutrals, never the icy grays of generic devtools.
+Kanna turns otherwise opaque CLI agent work into a local, navigable workspace: project and session state, agent output, background work, and intervention controls stay visible together instead of being spread across terminal windows and forgotten processes.
 
-## Anti-references
+## Operating Context
 
-- **Generic AI SaaS gradient** — purple-blue hero gradients, glassmorphism cards, glow accents, ChatGPT-clone chrome.
-- **Marketing-heavy SaaS-cream** — cream backgrounds, hero illustrations, "feature card" grids, oversized CTA buttons.
-- **Neon terminal cyberpunk** — black background plus saturated green/cyan accents; hacker-aesthetic chrome.
-- **Cluttered devtool dashboards** — Datadog/Grafana density: every pixel a panel, no breathing room, no hierarchy.
+The product is used during real software work, often across several local repositories and long-running agent sessions. A developer watches live state, reads transcripts and tool activity, jumps between chats, and intervenes when an agent needs direction. Worktree isolation and local project context let active work continue without disturbing a developer's primary checkout.
 
-Reference for the right feel: **Notion**. Warm neutrals, content-first, calm density, editorial type discipline.
+## Capabilities and Constraints
 
-## Design Principles
+The following implementation facts are inferred from the repository and README and should be confirmed before they become a new product commitment:
 
-1. **Workflow over wow.** Design serves the developer's task; it never performs. If a flourish does not help someone steer an agent faster, cut it.
-2. **Calm density.** Show a lot of state at once, but with breathing room, weighted hierarchy, and warmth. Density without rhythm is clutter.
-3. **Editorial typography earns hierarchy.** Scale, weight, and spacing carry meaning. No decorative gradients, no glow, no chrome substituting for type.
-4. **Keyboard-first, mouse-friendly.** Every action reachable from the keyboard. Every keyboard action also reachable from a clear mouse target. No dead-ends in either direction.
-5. **Trust via legibility.** Agent output, tool calls, and background processes read like documents you can audit — not log dumps, not loading spinners. The user must always be able to verify what is happening.
+- The app supports Claude, Codex, and OpenRouter-backed chats, real-time WebSocket updates, local project discovery, transcript export, worktree isolation, and responsive PWA use.
+- It provides agent steering, plan-mode prompts, background-task visibility, subagent orchestration, OAuth token pooling, custom MCP servers, and configurable notifications.
+- The app is local-first and may be password-protected; it preserves subscription billing for the optional Claude PTY driver.
+
+Open product decisions: no pricing, licensing, deployment, customer, benchmark, or external proof claims are recorded here.
+
+## Brand Commitments
+
+Kanna is editorial, thoughtful, and warm. Its voice is confident without swagger: it explains state rather than performing it. It is closer to a well-edited document than a control panel, with quiet typography and restrained warm neutrals.
+
+The product rejects generic AI-SaaS gradient chrome, marketing-heavy cream landing-page treatment, neon terminal cyberpunk, and cluttered devtool dashboards. Notion is a reference for warm neutrals, content-first presentation, and calm density.
+
+## Evidence on Hand
+
+- The runnable product and source live in this repository; `README.md` documents its implemented capabilities and operating model.
+- `assets/screenshot.png` and `assets/screenshot-light.png` are current product screenshots.
+- `DESIGN.md` records the incumbent visual system.
+
+No customer testimonials, case studies, pricing evidence, or performance benchmarks are supplied. Future work must not fabricate them.
+
+## Product Principles
+
+1. **Workflow over spectacle.** The interface serves agent supervision and intervention; decoration that does not make that work easier does not belong.
+2. **Calm density.** The product can show substantial live state without collapsing hierarchy or rhythm.
+3. **Keyboard-first, mouse-friendly.** Every important action is reachable by keyboard and has a clear mouse affordance.
+4. **Trust through legibility.** Transcripts, tool calls, and background state must be inspectable rather than opaque or ornamental.
+5. **Local work stays under the developer's control.** Project context and concurrent work should remain visible and isolated from the primary checkout when needed.
 
 ## Accessibility & Inclusion
 
-Target WCAG 2.1 AAA where feasible, AA as the floor. Specifically:
-
-- Contrast ≥ 7:1 for body text and ≥ 4.5:1 for large text where the design allows; never below AA.
-- Full keyboard navigation including all destructive actions (e.g. stopping background tasks).
-- Visible focus rings on every interactive element; never `outline: none` without a replacement.
-- Respect `prefers-reduced-motion`: disable non-essential transitions and any directional motion.
-- Color is never the only signal — pair with icon, label, or weight (status, errors, running/stopped states).
-- Tabular numerics (`font-variant-numeric: tabular-nums`) for any timing, count, or status duration.
+Target WCAG 2.1 AAA where feasible and AA as the floor. Body text targets at least 7:1 contrast where the design allows and never falls below AA. Every interactive element needs a visible focus ring, destructive actions must remain keyboard-accessible, and reduced-motion preferences must be respected. Color never carries state alone; labels, icons, shape, or weight accompany it. Durations, counts, ages, and status timings use tabular numerics to avoid reflow.

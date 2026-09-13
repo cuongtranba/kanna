@@ -24,7 +24,7 @@ function buildMessage(overrides: Partial<HydratedImageGenerationToolCall> = {}):
 }
 
 describe("ImageGenerationMessage", () => {
-  test("renders <img> with contentUrl and revisedPrompt caption when completed", () => {
+  test("renders an image with contentUrl and revisedPrompt caption when completed", () => {
     const html = renderToStaticMarkup(<ImageGenerationMessage message={buildMessage()} />)
     expect(html).toContain('data-testid="image-generation"')
     expect(html).toContain('src="/api/projects/p1/files/generated_images/abc.png/content"')

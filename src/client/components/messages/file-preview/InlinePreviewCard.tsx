@@ -37,7 +37,7 @@ export function InlinePreviewCard({ source, onOpen, variant }: Props) {
         type="button"
         onClick={onOpen}
         aria-label={`Preview ${source.displayName}`}
-        className="overflow-hidden rounded-xl border border-border bg-background"
+        className="touch-manipulation overflow-hidden rounded-xl border border-border bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
       >
         <img
           src={source.contentUrl}
