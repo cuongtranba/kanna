@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-05-07T00:00:00Z",
+  "generatedAt": "2026-09-13T05:38:21Z",
   "title": "Design System: Kanna",
   "extensions": {
     "colorMeta": {
@@ -43,7 +43,7 @@
       "margin-gray-light": {
         "role": "neutral",
         "displayName": "Margin Gray (light)",
-        "canonical": "oklch(55% 0.013 13)"
+        "canonical": "oklch(46% 0.013 13)"
       },
       "soft-edge-light": {
         "role": "neutral",
@@ -75,20 +75,24 @@
       "mono": { "displayName": "Mono", "purpose": "Commands, durations, ages, pids, tabular numerics." }
     },
     "shadows": [
-      { "name": "focus-ring", "value": "0 0 0 2px var(--ring)", "purpose": "Keyboard focus indicator on every interactive element." }
+      { "name": "focus-ring", "value": "outline: 2px solid var(--ring); outline-offset: 2px", "purpose": "Keyboard focus indicator on every interactive element." }
     ],
     "motion": [
-      { "name": "ease-out-quart", "value": "cubic-bezier(0.22, 1, 0.36, 1)", "purpose": "Default easing for state transitions, sheet open, sidebar reveal." },
-      { "name": "duration-fast", "value": "160ms", "purpose": "Dialog open, popover open." },
-      { "name": "duration-base", "value": "180ms", "purpose": "Row enter, confirm-stop slide." },
-      { "name": "duration-toggle", "value": "280ms", "purpose": "Terminal pane and right-sidebar reveal." }
+      { "name": "motion-instant", "value": "80ms", "purpose": "Press feedback and checkbox fill." },
+      { "name": "motion-quick", "value": "160ms", "purpose": "Hover, chevron rotation, and colour changes." },
+      { "name": "motion-row", "value": "180ms", "purpose": "List, tool-card, diff-row, and board-card transitions." },
+      { "name": "motion-carry", "value": "240ms", "purpose": "One element being carried to a new location." },
+      { "name": "motion-panel", "value": "280ms", "purpose": "Terminal, drawer, sheet, and empty-state transitions." },
+      { "name": "motion-stagger-tight", "value": "14ms", "purpose": "Sidebar rows making room." },
+      { "name": "motion-stagger-row", "value": "26ms", "purpose": "Project and settings-row cascades." },
+      { "name": "motion-stagger-loose", "value": "40ms", "purpose": "Transcript tool rows." },
+      { "name": "motion-sequence", "value": "860ms", "purpose": "The complete new-session sequence; never one animation beat." },
+      { "name": "motion-ease-arriving", "value": "cubic-bezier(0.22, 0.61, 0.36, 1)", "purpose": "Arriving content." },
+      { "name": "motion-ease-panel", "value": "cubic-bezier(0.22, 1, 0.36, 1)", "purpose": "Panels and sheets." }
     ],
     "breakpoints": [
-      { "name": "sm", "value": "640px" },
-      { "name": "md", "value": "768px" },
-      { "name": "lg", "value": "1024px" },
-      { "name": "xl", "value": "1280px" },
-      { "name": "3xl", "value": "1920px" }
+      { "name": "md", "value": "768px", "purpose": "The client’s responsive pivot." },
+      { "name": "3xl", "value": "2000px", "purpose": "Wide-display token." }
     ]
   },
   "components": [
@@ -104,9 +108,9 @@
       "name": "Destructive Button",
       "kind": "button",
       "refersTo": "button-destructive",
-      "description": "Stop, delete, force-kill. Kanna Coral fill. Pairs with inline confirm flow.",
+      "description": "Stop, delete, force-kill. Dedicated destructive-filled surface with a tested AA text pair. Pairs with inline confirm flow.",
       "html": "<button class=\"ds-btn-destructive\">Stop</button>",
-      "css": ".ds-btn-destructive { background: oklch(71.2% 0.194 13.428); color: oklch(98% 0.005 13); padding: 8px 14px; border: none; border-radius: 6px; font-family: 'Body', system-ui, sans-serif; font-weight: 500; font-size: 14px; line-height: 1.3; cursor: pointer; transition: background 150ms cubic-bezier(0.22,1,0.36,1); } .ds-btn-destructive:hover { background: oklch(66% 0.20 13); } .ds-btn-destructive:focus-visible { outline: 2px solid oklch(71.2% 0.194 13.428); outline-offset: 2px; }"
+      "css": ".ds-btn-destructive { background: oklch(48% 0.16 13); color: oklch(98% 0.003 13); padding: 8px 14px; border: none; border-radius: 6px; font-family: 'Body', system-ui, sans-serif; font-weight: 500; font-size: 14px; line-height: 1.3; cursor: pointer; transition: background 80ms cubic-bezier(0.22,0.61,0.36,1); } .ds-btn-destructive:hover { background: oklch(48% 0.16 13 / 0.9); } .ds-btn-destructive:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }"
     },
     {
       "name": "Ghost Button",
@@ -125,12 +129,12 @@
       "css": ".ds-input-wrap { display: flex; flex-direction: column; gap: 4px; font-family: 'Body', system-ui, sans-serif; } .ds-input-label { font-size: 12px; font-weight: 500; color: oklch(55% 0.013 13); } .ds-input { background: oklch(99.5% 0.003 13); color: oklch(16% 0.01 13); padding: 8px 12px; border: 1px solid oklch(91% 0.008 13); border-radius: 6px; font-size: 14px; line-height: 1.5; transition: border-color 150ms cubic-bezier(0.22,1,0.36,1); } .ds-input:focus { outline: none; border-color: oklch(18% 0.01 13); box-shadow: 0 0 0 1px oklch(18% 0.01 13); } @media (max-width: 640px) { .ds-input { font-size: 16px; } }"
     },
     {
-      "name": "Status Dot",
+      "name": "State Mark",
       "kind": "chip",
       "refersTo": "card-surface",
-      "description": "Status indicator. Static, no pulse. Amber = running, sage = idle, coral = failed.",
-      "html": "<span class=\"ds-status-row\"><span class=\"ds-dot ds-dot-running\" aria-hidden=\"true\"></span><span class=\"ds-status-label\">running</span><span class=\"ds-status-meta\">2m 14s</span></span>",
-      "css": ".ds-status-row { display: inline-flex; align-items: center; gap: 8px; font-family: 'Body', system-ui, sans-serif; font-size: 13px; color: oklch(16% 0.01 13); } .ds-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; } .ds-dot-running { background: oklch(76% 0.14 78); } .ds-dot-idle { background: oklch(68% 0.15 155); } .ds-dot-failed { background: oklch(71.2% 0.194 13.428); } .ds-status-label { font-weight: 500; } .ds-status-meta { font-family: 'Roboto Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; color: oklch(55% 0.013 13); font-size: 13px; }"
+      "description": "Status is carried by silhouette first: doubled stroke for running, based stroke for resting, struck stroke for failure, and half stroke for attention. Static; never a pulse.",
+      "html": "<span class=\"ds-status-row\"><span class=\"ds-mark ds-mark-active\" aria-hidden=\"true\"></span><span class=\"ds-status-label\">running</span><span class=\"ds-status-meta\">2m 14s</span></span>",
+      "css": ".ds-status-row { display: inline-flex; align-items: center; gap: 8px; font-family: 'Body', system-ui, sans-serif; font-size: 13px; color: oklch(16% 0.01 13); } .ds-mark { position: relative; display: inline-block; width: 9px; height: 13px; flex: 0 0 9px; color: oklch(42% 0.09 78); } .ds-mark::before, .ds-mark::after { content: ''; position: absolute; top: 0; bottom: 0; width: 1px; background: currentColor; } .ds-mark::before { left: 2px; } .ds-mark::after { right: 2px; } .ds-status-label { font-weight: 500; } .ds-status-meta { font-family: 'Roboto Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; color: oklch(46% 0.013 13); font-size: 13px; }"
     },
     {
       "name": "Background Task Row",

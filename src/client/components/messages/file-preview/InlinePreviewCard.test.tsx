@@ -9,7 +9,7 @@ const mk = (mime: string, name: string): PreviewSource => ({
 })
 
 describe("InlinePreviewCard", () => {
-  test("image kind → renders <img loading=lazy>", () => {
+  test("image kind renders a lazy-loaded image preview", () => {
     const html = renderToStaticMarkup(<InlinePreviewCard source={mk("image/png", "a.png")} onOpen={() => {}} variant="expanded" />)
     expect(html).toContain('loading="lazy"')
     expect(html).toContain('src="/u/a.png"')
