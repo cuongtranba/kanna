@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { createElement } from "react"
+import { act, createElement } from "react"
+import { createRoot } from "react-dom/client"
 import { renderToStaticMarkup } from "react-dom/server"
+import "../../lib/testing/setupHappyDom"
 import { PROVIDERS } from "../../../shared/types"
 import { ChatTabScopedStore } from "../../stores/chatTabScopedStore"
 import { createAgentMentionRegex } from "../../../shared/mention-pattern"
@@ -236,6 +238,7 @@ describe("ChatInput", () => {
   test("renders the placeholder text", () => {
     const html = renderInput(false)
     expect(html).toContain("Build something...")
+    expect(html).not.toContain("Edit last message")
   })
 
   test("renders send button with correct aria-label when canCancel=false", () => {
@@ -246,6 +249,54 @@ describe("ChatInput", () => {
   test("renders stop button with correct aria-label when canCancel=true", () => {
     const html = renderInput(true)
     expect(html).toContain('aria-label="Stop"')
+  })
+
+  test("shows the previous-message hint and restores it with ArrowUp", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    try {
+      await act(async () => {
+        root.render(
+          createElement(
+            ChatTabScopedStore.Provider,
+            {
+              init: undefined as void,
+              children: createElement(ChatInput, {
+                onSubmit: async () => undefined,
+                disabled: false,
+                canCancel: false,
+                activeProvider: null,
+                availableProviders: PROVIDERS,
+                previousPrompt: "Restore the previous prompt",
+              }),
+            },
+          ),
+        )
+      })
+
+      const editor = container.querySelector('[role="textbox"]') as HTMLDivElement
+      expect(container.textContent).toContain("Edit last message")
+
+      const event = new KeyboardEvent("keydown", {
+        bubbles: true,
+        cancelable: true,
+        key: "ArrowUp",
+      })
+      await act(async () => {
+        editor.dispatchEvent(event)
+      })
+
+      expect(event.defaultPrevented).toBe(true)
+      expect(editor.textContent).toBe("Restore the previous prompt")
+      expect(container.textContent).not.toContain("Edit last message")
+    } finally {
+      await act(async () => {
+        root.unmount()
+      })
+      container.remove()
+    }
   })
 })
 
