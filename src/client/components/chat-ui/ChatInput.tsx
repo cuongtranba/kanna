@@ -38,6 +38,7 @@ import {
 } from "../../../shared/types"
 import { Button } from "../ui/button"
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../ui/dialog"
+import { Kbd } from "../ui/kbd"
 import { ScrollArea } from "../ui/scroll-area"
 import { cn } from "../../lib/utils"
 import { useIsStandalone } from "../../hooks/useIsStandalone"
@@ -1134,8 +1135,14 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
                   contentEditable={
                     <ContentEditable
                       placeholder={
-                        <div className="pointer-events-none absolute top-3 left-3 md:top-4 md:left-6 text-muted-foreground text-base select-none">
-                          Build something...
+                        <div className="pointer-events-none absolute top-3 left-3 flex items-center gap-2 text-base text-muted-foreground select-none md:top-4 md:left-6">
+                          <span>Build something...</span>
+                          {previousPrompt ? (
+                            <span className="inline-flex items-center gap-1 text-xs">
+                              <Kbd className="h-4 min-w-4 rounded-sm border-border/50 bg-transparent px-1 text-xs">↑</Kbd>
+                              Edit last message
+                            </span>
+                          ) : null}
                         </div>
                       }
                       className="flex-1 text-base p-3 md:p-4 !pr-2 pl-3 md:pl-6 min-h-[44px] max-h-[200px] outline-none focus:outline-none focus-visible:outline-none focus-visible:ring-0 bg-transparent border-0 shadow-none overflow-auto"
