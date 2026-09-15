@@ -234,29 +234,6 @@ function withNormalizedContextWindow(
   }
 }
 
-function getEffectiveComposerState(
-  composerState: ComposerState,
-  activeProvider: AgentProvider | null,
-  providerDefaults: ReturnType<typeof useChatPreferencesStore.getState>["providerDefaults"],
-): ComposerState {
-  if (!activeProvider || composerState.provider === activeProvider) {
-    return composerState
-  }
-  return activeProvider === "claude"
-    ? {
-        provider: "claude",
-        model: providerDefaults.claude.model,
-        modelOptions: { ...providerDefaults.claude.modelOptions },
-        planMode: composerState.planMode,
-      }
-    : {
-        provider: "codex",
-        model: providerDefaults.codex.model,
-        modelOptions: { ...providerDefaults.codex.modelOptions },
-        planMode: composerState.planMode,
-      }
-}
-
 function hydrateComposerAttachments(attachments: ChatAttachment[]): ComposerAttachment[] {
   return attachments.map((attachment) => ({
     ...attachment,
@@ -410,7 +387,6 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
     clearAttachmentDrafts,
   } = useChatInputStore()
   const {
-    providerDefaults,
     getComposerState,
     initializeComposerForChat,
     setChatComposerModel,
@@ -448,7 +424,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
 
   const bridgeRef = useRef<LexicalEditorBridgeHandle | null>(null)
 
-  const providerPrefs = getEffectiveComposerState(composerState, activeProvider, providerDefaults)
+  const providerPrefs = composerState
   const selectedProvider = composerState.provider
   const customModels = useAppSettingsStore(selectCustomModels)
   const textSnippets = useAppSettingsStore(selectTextSnippets)

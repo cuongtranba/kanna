@@ -5,6 +5,8 @@ import { renderToStaticMarkup } from "react-dom/server"
 import "../../lib/testing/setupHappyDom"
 import { PROVIDERS } from "../../../shared/types"
 import { ChatTabScopedStore } from "../../stores/chatTabScopedStore"
+import { useChatPreferencesStore } from "../../stores/chatPreferencesStore"
+import { renderClientMarkup } from "../../lib/testing/renderClientMarkup"
 import { createAgentMentionRegex } from "../../../shared/mention-pattern"
 import {
   ChatInput,
@@ -296,6 +298,38 @@ describe("ChatInput", () => {
         root.unmount()
       })
       container.remove()
+    }
+  })
+
+  test("a provider re-picked away from the chat's runtime provider keeps that provider's model", async () => {
+    const chatId = "chat-ran-on-codex"
+    const store = useChatPreferencesStore.getState()
+    store.initializeComposerForChat(chatId, { providerHint: "codex" })
+    store.resetChatComposerFromProvider(chatId, "claude")
+    const claudeModel = store.providerDefaults.claude.model
+    const codexModel = store.providerDefaults.codex.model
+    const labelOf = (provider: "claude" | "codex", id: string) =>
+      PROVIDERS.find((entry) => entry.id === provider)?.models.find((model) => model.id === id)?.label ?? id
+
+    const rendered = await renderClientMarkup(
+      createElement(ChatTabScopedStore.Provider, {
+        init: undefined as void,
+        children: createElement(ChatInput, {
+          onSubmit: async () => undefined,
+          disabled: false,
+          canCancel: false,
+          chatId,
+          activeProvider: "codex",
+          availableProviders: PROVIDERS,
+        }),
+      }),
+    )
+    try {
+      expect(rendered.html).toContain(labelOf("claude", claudeModel))
+      expect(rendered.html).not.toContain(labelOf("codex", codexModel))
+    } finally {
+      await rendered.cleanup()
+      useChatPreferencesStore.setState(useChatPreferencesStore.getInitialState())
     }
   })
 })
