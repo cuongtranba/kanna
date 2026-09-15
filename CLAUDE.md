@@ -1303,6 +1303,19 @@ broader than `restrictedAllowedPaths` by construction. The CLI classifies `LSP`
 the same way, listing it beside Read/Grep/Glob as a file tool subject to
 working-directory checks.
 
+**`SendMessage` is on the list for the same reason `LSP` is.** The CLI's own
+`Agent` tool advertises it twice — in the tool description ("Use SendMessage
+with the agent's ID or name to continue a previously spawned agent") and in
+every background-launch result (`Use SendMessage with to: '<agentId>' … to
+continue this agent`, the text `claude-prompt-helpers.test.ts` pins). With it
+absent from the allowlist the model followed that advice and got `No such tool
+available: SendMessage. SendMessage is disabled for this session` (chat
+`11e60231`, 2026-09-15), then had to relaunch a fresh `Agent` with a full
+re-brief — the prior agent's context was unreachable. The PTY driver was never
+affected: it passes no `--tools` outside restricted mode, so it gets every native
+tool. `SendMessage` is not a file-read primitive and stays available on the
+restricted paths.
+
 # Custom MCP Servers
 
 Users register MCP servers via Settings → "MCP servers". Entries persist

@@ -113,6 +113,7 @@ export const CLAUDE_TOOLSET = [
   "WebSearch",
   "Task",
   "TaskOutput",
+  "SendMessage",
   "Workflow",
   "Bash",
   "Glob",

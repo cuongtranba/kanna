@@ -223,6 +223,10 @@ describe("CLAUDE_TOOLSET", () => {
   test("includes LSP so code navigation reaches the model on every language", () => {
     expect(new Set<string>(CLAUDE_TOOLSET).has("LSP")).toBe(true)
   })
+
+  test("includes SendMessage — the CLI's own Agent launch result tells the model to use it to continue a spawned agent", () => {
+    expect(new Set<string>(CLAUDE_TOOLSET).has("SendMessage")).toBe(true)
+  })
 })
 
 describe("SDK_RESTRICTED_FS_NATIVE_TOOLS", () => {
