@@ -8,6 +8,20 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.55.0](https://github.com/cuongtranba/kanna/compare/v1.54.0...v1.55.0) (2026-09-15)
+
+
+### Features
+
+* **composer:** show prompt history shortcut hint ([640aaf1](https://github.com/cuongtranba/kanna/commit/640aaf121f36987c0263df8937c5f4b60d44f550))
+* **composer:** show prompt history shortcut hint ([356d0fe](https://github.com/cuongtranba/kanna/commit/356d0fec4de4ec25f9e0ffbd225d20a7c1365124))
+* **tools:** expose the native SendMessage tool on the SDK driver ([#1102](https://github.com/cuongtranba/kanna/issues/1102)) ([431e775](https://github.com/cuongtranba/kanna/commit/431e77587baf4668f60980d81e6a182a855df7f5))
+
+
+### Bug Fixes
+
+* **composer:** keep the picked provider's model when it differs from the chat's runtime provider ([#1101](https://github.com/cuongtranba/kanna/issues/1101)) ([6f05457](https://github.com/cuongtranba/kanna/commit/6f05457d7d8ea0f3076656aeed3a9c8b9cde4cb9))
+
 ## [1.54.0](https://github.com/cuongtranba/kanna/compare/v1.53.0...v1.54.0) (2026-09-13)
 
 
