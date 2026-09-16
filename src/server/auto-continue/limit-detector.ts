@@ -1,4 +1,5 @@
 import { isJsonObject, safeJsonParse, type JsonObject, type JsonValue } from "../../shared/json"
+import { log } from "../../shared/log"
 
 export interface LimitDetection {
   chatId: string
@@ -8,9 +9,36 @@ export interface LimitDetection {
 }
 
 export interface LimitDetector {
-  detect(chatId: string, error: Error): LimitDetection | null
+  detect(chatId: string, error: Error, nowMs?: number): LimitDetection | null
   detectFromResultText?(chatId: string, text: string, nowMs?: number): LimitDetection | null
-  detectFromSdkRateLimitInfo?(chatId: string, info: JsonValue): LimitDetection | null
+  detectFromSdkRateLimitInfo?(chatId: string, info: JsonValue, nowMs?: number): LimitDetection | null
+}
+
+const MAX_LIMIT_WINDOW_MS = 8 * 24 * 60 * 60 * 1000
+
+const OVERAGE_RATE_LIMIT_TYPE = "overage"
+
+const EPOCH_SECONDS_CEILING = 1e12
+
+const EPOCH_DIGITS = /^\d{9,13}$/
+
+function epochToMillis(value: number): number {
+  return value < EPOCH_SECONDS_CEILING ? Math.round(value * 1000) : value
+}
+
+function isServableLimitWindow(resetAt: number, nowMs: number): boolean {
+  return resetAt - nowMs <= MAX_LIMIT_WINDOW_MS
+}
+
+function acceptDetection(detection: LimitDetection, nowMs: number, source: string): LimitDetection | null {
+  if (isServableLimitWindow(detection.resetAt, nowMs)) return detection
+  log.warn("[limit-detector] ignoring implausibly distant rate-limit reset", {
+    chatId: detection.chatId,
+    source,
+    resetAt: new Date(detection.resetAt).toISOString(),
+    maxWindowMs: MAX_LIMIT_WINDOW_MS,
+  })
+  return null
 }
 
 interface RateLimitErrorLike {
@@ -33,8 +61,15 @@ function parseBody(error: Error): JsonObject | null {
   return parsed !== null && isJsonObject(parsed) ? parsed : null
 }
 
-function parseIsoMillis(value: JsonValue | undefined): number | null {
+function parseResetMillis(value: JsonValue | undefined): number | null {
+  if (typeof value === "number") {
+    return Number.isFinite(value) && value > 0 ? epochToMillis(value) : null
+  }
   if (typeof value !== "string" || !value) return null
+  if (EPOCH_DIGITS.test(value)) {
+    const epoch = Number(value)
+    return Number.isFinite(epoch) && epoch > 0 ? epochToMillis(epoch) : null
+  }
   const millis = new Date(value).getTime()
   return Number.isFinite(millis) ? millis : null
 }
@@ -102,7 +137,7 @@ export function parseResetFromText(text: string, nowMs: number = Date.now()): { 
 }
 
 export class ClaudeLimitDetector implements LimitDetector {
-  detect(chatId: string, error: Error): LimitDetection | null {
+  detect(chatId: string, error: Error, nowMs: number = Date.now()): LimitDetection | null {
     const like: RateLimitErrorLike = error
     const body = parseBody(error)
     const inner = body && isJsonObject(body.error) ? body.error : null
@@ -111,9 +146,9 @@ export class ClaudeLimitDetector implements LimitDetector {
 
     if (isRateLimit) {
       const headers = extractHeaders(error)
-      const resetAt = parseIsoMillis(headers["anthropic-ratelimit-unified-reset"])
-        ?? parseIsoMillis(inner?.resets_at)
-        ?? parseIsoMillis(inner?.reset_at)
+      const resetAt = parseResetMillis(headers["anthropic-ratelimit-unified-reset"])
+        ?? parseResetMillis(inner?.resets_at)
+        ?? parseResetMillis(inner?.reset_at)
       if (resetAt !== null) {
         const timezone = inner?.timezone
         let tz: string
@@ -124,29 +159,52 @@ export class ClaudeLimitDetector implements LimitDetector {
         } else {
           tz = "system"
         }
-        return { chatId, resetAt, tz, raw: error }
+        const accepted = acceptDetection({ chatId, resetAt, tz, raw: error }, nowMs, "error_headers")
+        if (accepted !== null) return accepted
       }
     }
 
-    return this.detectFromResultText(chatId, error.message)
+    return this.detectFromResultText(chatId, error.message, nowMs)
   }
 
   detectFromResultText(chatId: string, text: string, nowMs: number = Date.now()): LimitDetection | null {
     const parsed = parseResetFromText(text, nowMs)
-    if (parsed) return { chatId, resetAt: parsed.resetAt, tz: parsed.tz, raw: text }
+    if (parsed) {
+      return acceptDetection({ chatId, resetAt: parsed.resetAt, tz: parsed.tz, raw: text }, nowMs, "result_text")
+    }
     const pipe = parseClaudeUsageLimitPipe(text)
-    if (pipe !== null) return { chatId, resetAt: pipe, tz: "system", raw: text }
+    if (pipe !== null) {
+      return acceptDetection({ chatId, resetAt: pipe, tz: "system", raw: text }, nowMs, "usage_limit_pipe")
+    }
     return null
   }
 
-  detectFromSdkRateLimitInfo(chatId: string, info: JsonValue): LimitDetection | null {
+  detectFromSdkRateLimitInfo(chatId: string, info: JsonValue, nowMs: number = Date.now()): LimitDetection | null {
     if (!isJsonObject(info)) return null
     if (info.status !== "rejected") return null
     const raw = info.resetsAt
     if (typeof raw !== "number" || !Number.isFinite(raw) || raw <= 0) return null
-    const resetAt = raw < 1e12 ? Math.round(raw * 1000) : raw
-    return { chatId, resetAt, tz: "system", raw: info }
+    if (isOverageClaim(info, raw)) {
+      log.warn("[limit-detector] ignoring overage-only rate-limit claim", {
+        chatId,
+        rateLimitType: typeof info.rateLimitType === "string" ? info.rateLimitType : null,
+        overageDisabledReason:
+          typeof info.overageDisabledReason === "string" ? info.overageDisabledReason : null,
+        resetAt: new Date(epochToMillis(raw)).toISOString(),
+      })
+      return null
+    }
+    return acceptDetection(
+      { chatId, resetAt: epochToMillis(raw), tz: "system", raw: info },
+      nowMs,
+      "sdk_rate_limit_event",
+    )
   }
+}
+
+function isOverageClaim(info: JsonObject, resetsAt: number): boolean {
+  if (info.rateLimitType === OVERAGE_RATE_LIMIT_TYPE) return true
+  return info.overageStatus === "rejected" && info.overageResetsAt === resetsAt
 }
 
 export function parseClaudeUsageLimitPipe(text: string): number | null {
@@ -155,11 +213,11 @@ export function parseClaudeUsageLimitPipe(text: string): number | null {
   if (!match) return null
   const value = Number(match[1])
   if (!Number.isFinite(value) || value <= 0) return null
-  return value < 1e12 ? value * 1000 : value
+  return epochToMillis(value)
 }
 
 export class CodexLimitDetector implements LimitDetector {
-  detect(chatId: string, error: Error): LimitDetection | null {
+  detect(chatId: string, error: Error, nowMs: number = Date.now()): LimitDetection | null {
     const like: RateLimitErrorLike = error
     const rpcCode = like.code
     const rpcData = like.data !== undefined && isJsonObject(like.data) ? like.data : null
@@ -170,11 +228,11 @@ export class CodexLimitDetector implements LimitDetector {
     if (typeof rpcData?.resets_at_ms === "number" && Number.isFinite(rpcData.resets_at_ms)) {
       resetAt = rpcData.resets_at_ms
     } else {
-      resetAt = parseIsoMillis(rpcData?.resets_at)
+      resetAt = parseResetMillis(rpcData?.resets_at)
     }
     if (resetAt === null) return null
 
     const tz = typeof rpcData?.timezone === "string" ? rpcData.timezone : "system"
-    return { chatId, resetAt, tz, raw: error }
+    return acceptDetection({ chatId, resetAt, tz, raw: error }, nowMs, "codex_rpc")
   }
 }
