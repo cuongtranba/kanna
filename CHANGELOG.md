@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.55.1](https://github.com/cuongtranba/kanna/compare/v1.55.0...v1.55.1) (2026-09-16)
+
+
+### Bug Fixes
+
+* **oauth-pool:** stop an overage-cycle reset locking a healthy token for weeks ([#1108](https://github.com/cuongtranba/kanna/issues/1108)) ([ad9a4b3](https://github.com/cuongtranba/kanna/commit/ad9a4b39a3282ad864384e805a5f365ccc8daff8)), closes [#1103](https://github.com/cuongtranba/kanna/issues/1103)
+
 ## [1.55.0](https://github.com/cuongtranba/kanna/compare/v1.54.0...v1.55.0) (2026-09-15)
 
 
