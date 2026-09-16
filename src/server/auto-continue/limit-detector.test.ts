@@ -81,6 +81,40 @@ describe("ClaudeLimitDetector", () => {
     expect(detection).not.toBeNull()
     expect(detection!.resetAt).toBe(1731384000 * 1000)
   })
+
+  test("reads an epoch-seconds anthropic-ratelimit-unified-reset header (#1103)", () => {
+    const now = 1789477000_000
+    const err = anthropicError(
+      { type: "error", error: { type: "rate_limit_error" } },
+      { "anthropic-ratelimit-unified-reset": "1789477800" },
+    )
+    const detection = detector.detect("c1", err, now)
+    expect(detection).not.toBeNull()
+    expect(detection!.resetAt).toBe(1789477800_000)
+  })
+
+  test("reads an epoch-milliseconds unified-reset header unchanged", () => {
+    const now = 1789477000_000
+    const err = anthropicError(
+      { type: "error", error: { type: "rate_limit_error" } },
+      { "anthropic-ratelimit-unified-reset": "1789477800000" },
+    )
+    expect(detector.detect("c1", err, now)!.resetAt).toBe(1789477800_000)
+  })
+
+  test("falls back to the message text when the header reset is implausibly distant", () => {
+    const now = Date.parse("2026-04-23T05:00:00Z")
+    const err = anthropicError(
+      {
+        type: "error",
+        error: { type: "rate_limit_error", message: "You've hit your limit · resets 2pm (Asia/Saigon)" },
+      },
+      { "anthropic-ratelimit-unified-reset": String(Math.floor((now + 20 * 86_400_000) / 1000)) },
+    )
+    const detection = detector.detect("c1", err, now)
+    expect(detection).not.toBeNull()
+    expect(new Date(detection!.resetAt).toISOString()).toBe("2026-04-23T07:00:00.000Z")
+  })
 })
 
 const codex = new CodexLimitDetector()
@@ -207,5 +241,59 @@ describe("ClaudeLimitDetector.detectFromSdkRateLimitInfo", () => {
   test("returns null for non-object input", () => {
     expect(detector.detectFromSdkRateLimitInfo("c1", null)).toBeNull()
     expect(detector.detectFromSdkRateLimitInfo("c1", "rejected")).toBeNull()
+  })
+
+  test("ignores a rejected overage claim, which does not block serving (#1103)", () => {
+    const now = Date.parse("2026-09-15T09:05:00Z")
+    const detection = detector.detectFromSdkRateLimitInfo("c1", {
+      status: "rejected",
+      rateLimitType: "overage",
+      resetsAt: 1790812800,
+      overageDisabledReason: "org_level_disabled",
+    }, now)
+    expect(detection).toBeNull()
+  })
+
+  test("ignores a claim whose reset is the rejected overage cycle (#1103)", () => {
+    const now = Date.parse("2026-09-15T09:05:00Z")
+    const detection = detector.detectFromSdkRateLimitInfo("c1", {
+      status: "rejected",
+      resetsAt: 1790812800,
+      overageStatus: "rejected",
+      overageResetsAt: 1790812800,
+    }, now)
+    expect(detection).toBeNull()
+  })
+
+  test("still detects a rejected five_hour claim while overage is rejected", () => {
+    const now = Date.parse("2026-09-15T09:05:00Z")
+    const detection = detector.detectFromSdkRateLimitInfo("c1", {
+      status: "rejected",
+      rateLimitType: "five_hour",
+      resetsAt: Math.floor((now + 3 * 3600_000) / 1000),
+      overageStatus: "rejected",
+      overageResetsAt: 1790812800,
+    }, now)
+    expect(detection).not.toBeNull()
+    expect(detection!.resetAt).toBe(Math.floor((now + 3 * 3600_000) / 1000) * 1000)
+  })
+
+  test("still detects a rejected seven_day claim six days out", () => {
+    const now = Date.parse("2026-09-15T09:05:00Z")
+    const detection = detector.detectFromSdkRateLimitInfo("c1", {
+      status: "rejected",
+      rateLimitType: "seven_day",
+      resetsAt: Math.floor((now + 6 * 86_400_000) / 1000),
+    }, now)
+    expect(detection).not.toBeNull()
+  })
+
+  test("ignores a reset further out than any subscription window (#1103)", () => {
+    const now = Date.parse("2026-09-15T09:05:00Z")
+    const detection = detector.detectFromSdkRateLimitInfo("c1", {
+      status: "rejected",
+      resetsAt: Math.floor((now + 20 * 86_400_000) / 1000),
+    }, now)
+    expect(detection).toBeNull()
   })
 })
