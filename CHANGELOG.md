@@ -8,6 +8,14 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.55.2](https://github.com/cuongtranba/kanna/compare/v1.55.1...v1.55.2) (2026-09-17)
+
+
+### Bug Fixes
+
+* **chat-ui:** stop header status and composer hint overlapping on mobile ([#1111](https://github.com/cuongtranba/kanna/issues/1111)) ([ea47dbe](https://github.com/cuongtranba/kanna/commit/ea47dbead90a3c06f848bccd9717c0fff72845c5))
+* **models:** stop a server-originated turn falling back to the catalog default model ([#1113](https://github.com/cuongtranba/kanna/issues/1113)) ([fb55fcb](https://github.com/cuongtranba/kanna/commit/fb55fcb5eb6c49902861e2832f0f7e2da2776334))
+
 ## [1.55.1](https://github.com/cuongtranba/kanna/compare/v1.55.0...v1.55.1) (2026-09-16)
 
 
