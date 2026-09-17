@@ -41,6 +41,14 @@ function hydrateToolCall(entry: Extract<TranscriptEntry, { kind: "tool_call" }>)
   }
 }
 
+const STRUCTURED_RESULT_TOOL_KINDS = new Set<NormalizedToolCall["toolKind"]>([
+  "ask_user_question",
+  "exit_plan_mode",
+  "task_create",
+  "task_update",
+  "task_list",
+])
+
 function getStructuredToolResultFromDebug(
   entry: Extract<TranscriptEntry, { kind: "tool_result" }>,
 ): string | JsonObject | JsonArray | undefined {
@@ -184,10 +192,7 @@ export function processTranscriptMessages(entries: TranscriptEntry[]): HydratedT
       case "tool_result": {
         const pendingCall = pendingToolCalls.get(entry.toolId)
         if (pendingCall) {
-          const rawResult = (
-            pendingCall.normalized.toolKind === "ask_user_question" ||
-            pendingCall.normalized.toolKind === "exit_plan_mode"
-          )
+          const rawResult = STRUCTURED_RESULT_TOOL_KINDS.has(pendingCall.normalized.toolKind)
             ? getStructuredToolResultFromDebug(entry) ?? entry.content
             : entry.content
 

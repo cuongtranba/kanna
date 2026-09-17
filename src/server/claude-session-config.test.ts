@@ -227,6 +227,13 @@ describe("CLAUDE_TOOLSET", () => {
   test("includes SendMessage — the CLI's own Agent launch result tells the model to use it to continue a spawned agent", () => {
     expect(new Set<string>(CLAUDE_TOOLSET).has("SendMessage")).toBe(true)
   })
+
+  test("includes the four Task tools — this allowlist is exclusive, and naming them is also what opts a model off the CLI's default list into task tracking", () => {
+    const set = new Set<string>(CLAUDE_TOOLSET)
+    for (const tool of ["TaskCreate", "TaskUpdate", "TaskGet", "TaskList"]) {
+      expect(set.has(tool)).toBe(true)
+    }
+  })
 })
 
 describe("SDK_RESTRICTED_FS_NATIVE_TOOLS", () => {

@@ -10,6 +10,11 @@ import type {
   OfferDownloadToolResult,
   PreviewFileToolResult,
   ReadFileToolResult,
+  TaskCreateToolResult,
+  TaskListToolResult,
+  TaskStatus,
+  TaskUpdateToolCall,
+  TaskUpdateToolResult,
   TodoItem,
   WorkflowToolResult,
 } from "./types"
@@ -41,6 +46,24 @@ export const PLUGIN_RELOAD_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__plugin_re
 
 function asRecord(value: JsonValue | undefined): JsonObject | null {
   return value !== undefined && isJsonObject(value) ? value : null
+}
+
+const TASK_STATUSES = new Set(["pending", "in_progress", "completed"])
+
+function isTaskStatus(value: JsonValue | undefined): value is TaskStatus {
+  return typeof value === "string" && TASK_STATUSES.has(value)
+}
+
+function isTaskUpdateStatus(value: JsonValue | undefined): value is TaskUpdateToolCall["input"]["status"] {
+  return isTaskStatus(value) || value === "deleted"
+}
+
+function readTaskId(input: JsonObject): string {
+  for (const key of ["taskId", "id", "task_id"]) {
+    const value = input[key]
+    if (typeof value === "string") return value
+  }
+  return ""
 }
 
 function parseWorkflowMeta(script: string): { name?: string; description?: string } {
@@ -124,6 +147,51 @@ export function normalizeToolCall(args: {
               )
             : [],
         },
+        rawInput: input,
+      }
+    case "TaskCreate":
+      return {
+        kind: "tool",
+        toolKind: "task_create",
+        toolName,
+        toolId,
+        input: {
+          subject: typeof input.subject === "string" ? input.subject : "",
+          description: typeof input.description === "string" ? input.description : "",
+          ...(typeof input.activeForm === "string" ? { activeForm: input.activeForm } : {}),
+        },
+        rawInput: input,
+      }
+    case "TaskUpdate":
+      return {
+        kind: "tool",
+        toolKind: "task_update",
+        toolName,
+        toolId,
+        input: {
+          taskId: readTaskId(input),
+          ...(typeof input.subject === "string" ? { subject: input.subject } : {}),
+          ...(typeof input.activeForm === "string" ? { activeForm: input.activeForm } : {}),
+          ...(isTaskUpdateStatus(input.status) ? { status: input.status } : {}),
+        },
+        rawInput: input,
+      }
+    case "TaskGet":
+      return {
+        kind: "tool",
+        toolKind: "task_get",
+        toolName,
+        toolId,
+        input: { taskId: readTaskId(input) },
+        rawInput: input,
+      }
+    case "TaskList":
+      return {
+        kind: "tool",
+        toolKind: "task_list",
+        toolName,
+        toolId,
+        input: {},
         rawInput: input,
       }
     case "Skill":
@@ -438,6 +506,38 @@ export function hydrateToolResult(tool: NormalizedToolCall, raw: JsonValue): Hyd
         message: typeof record?.message === "string" ? record.message : undefined,
         ...(record?.discarded === true ? { discarded: true } : {}),
       } satisfies ExitPlanModeToolResult
+    }
+    case "task_create": {
+      const task = asRecord(asRecord(parsed)?.task)
+      return {
+        task: {
+          id: typeof task?.id === "string" ? task.id : "",
+          subject: typeof task?.subject === "string" ? task.subject : "",
+        },
+      } satisfies TaskCreateToolResult
+    }
+    case "task_update": {
+      const record = asRecord(parsed)
+      return {
+        success: record?.success !== false,
+        taskId: typeof record?.taskId === "string" ? record.taskId : "",
+      } satisfies TaskUpdateToolResult
+    }
+    case "task_list": {
+      const rawTasks = asRecord(parsed)?.tasks
+      return {
+        tasks: Array.isArray(rawTasks)
+          ? rawTasks.flatMap((entry) => {
+              const task = asRecord(entry)
+              if (!task || typeof task.id !== "string") return []
+              return [{
+                id: task.id,
+                subject: typeof task.subject === "string" ? task.subject : "",
+                status: isTaskStatus(task.status) ? task.status : "pending",
+              }]
+            })
+          : [],
+      } satisfies TaskListToolResult
     }
     case "offer_download": {
       const text = extractMcpTextContent(parsed)

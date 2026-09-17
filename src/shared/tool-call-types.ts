@@ -41,6 +41,23 @@ export interface ExitPlanModeToolCall
 export interface TodoWriteToolCall
   extends ToolCallBase<"todo_write", { todos: TodoItem[] }> { }
 
+export type TaskStatus = TodoItem["status"]
+
+export interface TaskCreateToolCall
+  extends ToolCallBase<"task_create", { subject: string; description: string; activeForm?: string }> { }
+
+export interface TaskUpdateToolCall
+  extends ToolCallBase<
+    "task_update",
+    { taskId: string; subject?: string; activeForm?: string; status?: TaskStatus | "deleted" }
+  > { }
+
+export interface TaskGetToolCall
+  extends ToolCallBase<"task_get", { taskId: string }> { }
+
+export interface TaskListToolCall
+  extends ToolCallBase<"task_list", Record<string, never>> { }
+
 export interface SkillToolCall
   extends ToolCallBase<"skill", { skill: string }> { }
 
@@ -122,6 +139,10 @@ export type NormalizedToolCall =
   | AskUserQuestionToolCall
   | ExitPlanModeToolCall
   | TodoWriteToolCall
+  | TaskCreateToolCall
+  | TaskUpdateToolCall
+  | TaskGetToolCall
+  | TaskListToolCall
   | SkillToolCall
   | GlobToolCall
   | GrepToolCall
@@ -182,6 +203,31 @@ export type HydratedExitPlanModeToolCall =
 
 export type HydratedTodoWriteToolCall =
   HydratedToolCallBase<"todo_write", TodoWriteToolCall["input"], JsonValue>
+
+export interface TaskCreateToolResult {
+  task: { id: string; subject: string }
+}
+
+export interface TaskUpdateToolResult {
+  success: boolean
+  taskId: string
+}
+
+export interface TaskListToolResult {
+  tasks: Array<{ id: string; subject: string; status: TaskStatus }>
+}
+
+export type HydratedTaskCreateToolCall =
+  HydratedToolCallBase<"task_create", TaskCreateToolCall["input"], TaskCreateToolResult>
+
+export type HydratedTaskUpdateToolCall =
+  HydratedToolCallBase<"task_update", TaskUpdateToolCall["input"], TaskUpdateToolResult>
+
+export type HydratedTaskGetToolCall =
+  HydratedToolCallBase<"task_get", TaskGetToolCall["input"], JsonValue>
+
+export type HydratedTaskListToolCall =
+  HydratedToolCallBase<"task_list", TaskListToolCall["input"], TaskListToolResult>
 
 export type HydratedSkillToolCall =
   HydratedToolCallBase<"skill", SkillToolCall["input"], JsonValue>
@@ -280,6 +326,10 @@ export type HydratedToolCall =
   | HydratedAskUserQuestionToolCall
   | HydratedExitPlanModeToolCall
   | HydratedTodoWriteToolCall
+  | HydratedTaskCreateToolCall
+  | HydratedTaskUpdateToolCall
+  | HydratedTaskGetToolCall
+  | HydratedTaskListToolCall
   | HydratedSkillToolCall
   | HydratedGlobToolCall
   | HydratedGrepToolCall
