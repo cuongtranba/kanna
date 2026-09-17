@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.55.3](https://github.com/cuongtranba/kanna/compare/v1.55.2...v1.55.3) (2026-09-17)
+
+
+### Bug Fixes
+
+* **compaction:** emit context-window usage on the SDK driver, leave compaction to the CLI ([#1114](https://github.com/cuongtranba/kanna/issues/1114)) ([651a4b5](https://github.com/cuongtranba/kanna/commit/651a4b5d3a89f63e74b70311fdb7fa99b5e80bfb))
+
 ## [1.55.2](https://github.com/cuongtranba/kanna/compare/v1.55.1...v1.55.2) (2026-09-17)
 
 
