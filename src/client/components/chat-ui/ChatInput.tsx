@@ -1114,7 +1114,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
                         <div className="pointer-events-none absolute top-3 left-3 flex items-center gap-2 text-base text-muted-foreground select-none md:top-4 md:left-6">
                           <span>Build something...</span>
                           {previousPrompt ? (
-                            <span className="inline-flex items-center gap-1 text-xs">
+                            <span className="hidden md:inline-flex items-center gap-1 text-xs">
                               <Kbd className="h-4 min-w-4 rounded-sm border-border/50 bg-transparent px-1 text-xs">↑</Kbd>
                               Edit last message
                             </span>

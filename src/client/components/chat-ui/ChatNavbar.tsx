@@ -250,13 +250,13 @@ export function ChatNavbar({
         </div>
 
         {timings && status ? (
-          <div className="flex-1 min-w-0 flex items-center justify-center select-none">
+          <div className="flex-1 min-w-0 flex items-center justify-start md:justify-center overflow-hidden select-none">
             <Tooltip>
               <TooltipTrigger asChild>
                 <div className="flex items-center gap-2 cursor-default min-w-0">
-                  <span className="flex md:hidden items-center gap-1">
+                  <span className="flex md:hidden items-center gap-1 min-w-0">
                     <StateMark tone={statusTone(status)} className={statusToneClass(statusTone(status))} />
-                    <span className="text-xs font-medium text-foreground">{statusLabel(status)}</span>
+                    <span className="text-xs font-medium text-foreground truncate">{statusLabel(status)}</span>
                     <span className="hidden min-[430px]:inline text-xs font-mono tabular-nums text-foreground/80">
                       {formatLiveDuration(timings.derivedAtMs - timings.stateEnteredAt)}
                     </span>
