@@ -867,6 +867,18 @@ reads through `claude-pty/jsonl-to-event.ts`, emits `compactMetadata` /
 `ClaudeRawUsage` already does for `input_tokens` / `inputTokens`. Dropping
 either spelling silently disables one driver.
 
+**Assistant usage is NESTED under `.message` on both drivers, and reading it
+from the top level silently emits nothing.** `normalizeClaudeUsageSnapshot`
+returns `null` for `undefined`, so the wrong path costs no error — just no
+`context_window_updated` entry, ever, which takes out the composer's
+session-token pill and the context-window meter. #344 fixed exactly this in
+`claude-pty/jsonl-to-event.ts` and left `claude-harness-stream.ts` alone on the
+belief that "the SDK stream-json shape keeps `usage` at the top level"; it does
+not. Measured before the fix: **0 of the 40 most recent chats**, all `sdk`, held
+a single `context_window_updated` entry. Both readers now spell it
+`message?.usage ?? usage`, and the SDK suite's fixtures carry the nested shape —
+the flat fixtures are what masked the defect on both drivers.
+
 **`PostCompact` exists to keep the primer whole, not for diagnostics.**
 `selectPrimerEntries` scopes from the newest `compact_boundary` and carries
 pre-boundary history forward only when a `compact_summary` entry exists.
@@ -1988,6 +2000,36 @@ proactive-compact trigger, subagent scope primer — already took the tail path
 when the transcript is not in cache. **pm2 7.0.3 silently clamps
 `max_memory_restart` at 2^31** (both `"3G"` and `"4G"` resolve to
 `2147483648`), so raising the ceiling is not available — only lowering RSS is.
+
+# Compaction is the Claude Code CLI's job (KANNA_PROACTIVE_COMPACT)
+
+**Kanna's own proactive `/compact` injection is OFF by default, deliberately.**
+`isProactiveCompactEnabled` (`claude-send-command.ts`) gates
+`shouldInjectProactiveCompact` on `KANNA_PROACTIVE_COMPACT=enabled`; anything
+else stands aside and lets the CLI compact.
+
+**The feature was built on a premise that has expired.** #116 introduced it
+because "the SDK `query()` driver spawns a fresh claude subprocess per turn and
+never enters the CLI's REPL main loop, so the CLI's built-in auto-compact never
+fires by itself". It fires now: chat `ecaf0304` compacted at 167,418 tokens with
+`compact_metadata.trigger: "auto"`, and #1083 measured 19 auto-boundaries across
+4 chats. `Settings.autoCompactEnabled` defaults to on, Kanna passes
+`settingSources: ["user", "project", "local"]` and sets no compaction setting of
+its own, so the CLI's compactor is what actually runs.
+
+Two compactors racing is worse than one: Kanna's threshold
+(`effective - 13k`) is *lower* than the CLI's, so it would always win and the
+CLI's would never be reached. The switch exists so a user who sets
+`autoCompactEnabled: false` in their CLI settings can restore Kanna's.
+
+**A session probe was tried and reverted.** `query.getContextUsage({detail:
+"summary"})` returns `isAutoCompactEnabled` + `autoCompactThreshold`, which
+would make the gate self-verifying. It cannot work here:
+`shouldInjectProactiveCompact` runs inside `sendCommand` **before**
+`startTurnForChat` spawns the session, so on a cold chat — every server restart,
+which is exactly the `--resume`-a-huge-transcript case #116 was built for —
+there is no session to ask. Making it work needs the answer persisted per chat;
+that is more machinery than an env switch buys.
 
 **The proactive-compact trigger reads the TAIL, not the transcript.**
 `shouldInjectProactiveCompact` runs on every send and needs only the newest
