@@ -4,7 +4,7 @@ import { getDataDir } from "../shared/branding"
 import { log } from "../shared/log"
 import type { StorageBackend } from "./storage/backend"
 import { FsStorageBackend } from "./storage/fs-storage.adapter"
-import type { AgentProvider, ChatHistoryPage, QueuedChatMessage, StackBinding, SubagentRunSnapshot, TranscriptEntry } from "../shared/types"
+import type { AgentProvider, ChatHistoryPage, ModelOptions, QueuedChatMessage, StackBinding, SubagentRunSnapshot, TranscriptEntry } from "../shared/types"
 import type { AutoContinueEvent } from "./auto-continue/events"
 import {
   type StackRecord,
@@ -55,6 +55,7 @@ import { writeSidebarOrderFile } from "./event-store-snapshot"
 import {
   buildAddProjectToStackEvent,
   buildChatPolicyOverrideEvent,
+  buildChatModelEvent,
   buildChatProviderEvent,
   buildChatReadStateEvent,
   buildChatSourceHashEvent,
@@ -411,6 +412,11 @@ export class EventStore implements PushEventStore {
 
   async setChatProvider(chatId: string, provider: AgentProvider) {
     const ev = buildChatProviderEvent(this.state.chatsById, chatId, provider)
+    if (ev) await this.commit(ev)
+  }
+
+  async setChatModel(chatId: string, model: string, modelOptions?: ModelOptions) {
+    const ev = buildChatModelEvent(this.state.chatsById, chatId, model, modelOptions)
     if (ev) await this.commit(ev)
   }
 

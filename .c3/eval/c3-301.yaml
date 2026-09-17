@@ -16,5 +16,6 @@ code:
   - src/shared/projectFileUrl.ts
   - src/shared/task-doc.test.ts
   - src/shared/task-doc.ts
+  - src/shared/turn-model-selection.ts
   - src/shared/types.test.ts
   - src/shared/types.ts

@@ -82,6 +82,21 @@ describe("buildAgentAppSettingsView", () => {
     )
   })
 
+  test("forwards providerDefaults so a server-originated turn can fall back to the configured model", () => {
+    const view = buildAgentAppSettingsView(
+      makeSnapshot({
+        providerDefaults: {
+          claude: { model: "claude-opus-5", modelOptions: { reasoningEffort: "high", contextWindow: "1m" }, planMode: false },
+          codex: { model: "gpt-5.5", modelOptions: { reasoningEffort: "high", fastMode: false }, planMode: false },
+          openrouter: { model: "moonshotai/kimi-k2.5", modelOptions: {}, planMode: false },
+        },
+      }),
+    )
+
+    expect(view.providerDefaults.claude.model).toBe("claude-opus-5")
+    expect(view.providerDefaults.claude.modelOptions.contextWindow).toBe("1m")
+  })
+
   test("forwards claudeDriver preference and lifecycle", () => {
     const view = buildAgentAppSettingsView(
       makeSnapshot({
@@ -126,6 +141,7 @@ describe("buildAgentAppSettingsView", () => {
       "customMcpServers",
       "customModels",
       "globalPromptAppend",
+      "providerDefaults",
       "subagentRuntime",
     ])
   })

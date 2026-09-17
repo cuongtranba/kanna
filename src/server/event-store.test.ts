@@ -293,6 +293,27 @@ describe("EventStore", () => {
     expect(reloaded.getQueuedMessages(chat.id).map((message) => message.id)).toEqual([second.id])
   })
 
+  test("persists the chat model selection across restart", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+
+    const project = await store.openProject("/tmp/project")
+    const chat = await store.createChat(project.id)
+
+    await store.setChatModel(chat.id, "claude-opus-4-8", {
+      claude: { reasoningEffort: "high", contextWindow: "1m" },
+    })
+
+    const reloaded = new EventStore(dataDir)
+    await reloaded.initialize()
+    const reloadedChat = reloaded.requireChat(chat.id)
+    expect(reloadedChat.model).toBe("claude-opus-4-8")
+    expect(reloadedChat.modelOptions).toEqual({
+      claude: { reasoningEffort: "high", contextWindow: "1m" },
+    })
+  })
+
   test("carries the cron run tag through enqueue and reload", async () => {
     const dataDir = await createTempDataDir()
     const store = new EventStore(dataDir)
