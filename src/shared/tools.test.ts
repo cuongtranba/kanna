@@ -393,3 +393,69 @@ describe("hydrateToolResult — preview_file", () => {
     expect(r.mimeType).toBe("text/markdown; charset=utf-8")
   })
 })
+
+describe("normalizeToolCall — task tracking", () => {
+  test("maps TaskCreate to task_create toolKind", () => {
+    const tool = normalizeToolCall({
+      toolName: "TaskCreate",
+      toolId: "tool-tc-1",
+      input: { subject: "Extract auth module", description: "Move login out", activeForm: "Extracting auth module" },
+    })
+    expect(tool.toolKind).toBe("task_create")
+    if (tool.toolKind !== "task_create") throw new Error("unexpected kind")
+    expect(tool.input.subject).toBe("Extract auth module")
+    expect(tool.input.activeForm).toBe("Extracting auth module")
+  })
+
+  test("maps TaskUpdate status and taskId", () => {
+    const tool = normalizeToolCall({
+      toolName: "TaskUpdate",
+      toolId: "tool-tu-1",
+      input: { taskId: "3", status: "in_progress" },
+    })
+    expect(tool.toolKind).toBe("task_update")
+    if (tool.toolKind !== "task_update") throw new Error("unexpected kind")
+    expect(tool.input.taskId).toBe("3")
+    expect(tool.input.status).toBe("in_progress")
+  })
+
+  test("reads the taskId the model emitted under an unrepaired key name", () => {
+    const tool = normalizeToolCall({
+      toolName: "TaskUpdate",
+      toolId: "tool-tu-2",
+      input: { task_id: "5", status: "completed" },
+    })
+    if (tool.toolKind !== "task_update") throw new Error("unexpected kind")
+    expect(tool.input.taskId).toBe("5")
+  })
+
+  test("drops a status outside the documented set", () => {
+    const tool = normalizeToolCall({
+      toolName: "TaskUpdate",
+      toolId: "tool-tu-3",
+      input: { taskId: "3", status: "archived" },
+    })
+    if (tool.toolKind !== "task_update") throw new Error("unexpected kind")
+    expect(tool.input.status).toBeUndefined()
+  })
+})
+
+describe("hydrateToolResult — task tracking", () => {
+  test("hydrates the task id TaskCreate assigns", () => {
+    const normalized = normalizeToolCall({
+      toolName: "TaskCreate",
+      toolId: "tool-tc-2",
+      input: { subject: "Alpha", description: "" },
+    })
+    const result = hydrateToolResult(normalized, { task: { id: "1", subject: "Alpha" } })
+    expect(result).toEqual({ task: { id: "1", subject: "Alpha" } })
+  })
+
+  test("hydrates a TaskList snapshot", () => {
+    const normalized = normalizeToolCall({ toolName: "TaskList", toolId: "tool-tl-1", input: {} })
+    const result = hydrateToolResult(normalized, {
+      tasks: [{ id: "1", subject: "Alpha", status: "completed", blockedBy: [] }],
+    })
+    expect(result).toEqual({ tasks: [{ id: "1", subject: "Alpha", status: "completed" }] })
+  })
+})

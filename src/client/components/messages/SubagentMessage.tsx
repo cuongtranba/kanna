@@ -53,6 +53,13 @@ function toolActivityLabel(tool: NormalizedToolCall, localPath: string): string 
       return tool.input.skill ? `skill ${truncateActivity(tool.input.skill)}` : "running skill..."
     case "todo_write":
       return "updating todos..."
+    case "task_create":
+      return "creating task..."
+    case "task_update":
+      return "updating task..."
+    case "task_get":
+    case "task_list":
+      return "reading tasks..."
     case "subagent_task":
       return tool.input.subagentType
         ? `delegating ${truncateActivity(tool.input.subagentType)}`

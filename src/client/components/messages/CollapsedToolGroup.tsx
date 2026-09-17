@@ -28,6 +28,10 @@ const TOOL_CATEGORIES: Record<string, ToolCategory> = {
   web_search: { key: "websearch", singular: "web search", plural: "web searches" },
   skill: { key: "skill", singular: "skill", plural: "skills" },
   todo_write: { key: "todo", singular: "todo update", plural: "todo updates" },
+  task_create: { key: "task", singular: "task update", plural: "task updates" },
+  task_update: { key: "task", singular: "task update", plural: "task updates" },
+  task_get: { key: "task", singular: "task update", plural: "task updates" },
+  task_list: { key: "task", singular: "task update", plural: "task updates" },
 }
 
 const OTHER_CATEGORY: ToolCategory = { key: "other", singular: "tool call", plural: "tool calls" }
