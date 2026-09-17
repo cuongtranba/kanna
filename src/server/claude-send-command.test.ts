@@ -11,6 +11,7 @@ import {
   type SendCommandDeps,
 } from "./claude-send-command"
 import type { QueuedChatMessage, ChatAttachment, CustomModelEntry, TranscriptEntry } from "../shared/types"
+import type { ChatProviderPreferences, ModelOptions } from "../shared/provider-model-types"
 import type { StartTurnForChatArgs } from "./claude-turn-starter"
 import { ClaudeSessionState, type CompactionTurnKind } from "./claude-session-state"
 import { buildCodexCompactPrompt } from "../shared/builtin-commands"
@@ -83,6 +84,10 @@ type DepsOptions = {
   pendingToolChatIds?: string[]
   queuedMessages?: QueuedChatMessage[]
   chatProvider?: "claude" | "openrouter" | "codex" | null
+  chatModel?: string
+  chatModelOptions?: ModelOptions
+  providerDefaults?: ChatProviderPreferences
+  setChatModelCalls?: Array<{ chatId: string; model: string; modelOptions?: ModelOptions }>
   chatCompactFailures?: number
   messages?: { chatId: string; count: number }[]
   stopLoopCalled?: string[]
@@ -127,7 +132,12 @@ function makeDeps(opts: DepsOptions = {}): SendCommandDeps & { startTurnCalled: 
       },
       requireChat: (_chatId: string) => ({
         provider: opts.chatProvider ?? null,
+        model: opts.chatModel,
+        modelOptions: opts.chatModelOptions,
       }),
+      setChatModel: async (chatId: string, model: string, modelOptions?: ModelOptions) => {
+        opts.setChatModelCalls?.push({ chatId, model, modelOptions })
+      },
       getChat: (_chatId: string) => ({
         compactFailureCount: opts.chatCompactFailures ?? 0,
       }),
@@ -172,7 +182,7 @@ function makeDeps(opts: DepsOptions = {}): SendCommandDeps & { startTurnCalled: 
     analytics: {
       track: (event: string) => { analyticsEvents.push(event) },
     },
-    getAppSettingsSnapshot: () => ({ customModels }),
+    getAppSettingsSnapshot: () => ({ customModels, providerDefaults: opts.providerDefaults }),
     stopLoop: async (chatId: string, reason: string) => {
       stopLoopCalled.push(`${chatId}:${reason}`)
     },
@@ -951,5 +961,80 @@ describe("dequeueAndStartQueuedMessage — local slash commands", () => {
     )
     expect(expandCalls).toHaveLength(0)
     expect(deps.startTurnCalled[0]!.promptOverride).toBeUndefined()
+  })
+})
+
+describe("model resolution for server-originated turns", () => {
+  const CLAUDE_DEFAULTS: ChatProviderPreferences = {
+    claude: { model: "claude-opus-5", modelOptions: { reasoningEffort: "high", contextWindow: "1m" }, planMode: false },
+    codex: { model: "gpt-5.5", modelOptions: { reasoningEffort: "high", fastMode: false }, planMode: false },
+    openrouter: { model: "moonshotai/kimi-k2.5", modelOptions: {}, planMode: false },
+  }
+
+  test("a cron turn runs the chat's model instead of the catalog default", async () => {
+    const deps = makeDeps({
+      chatProvider: "claude",
+      chatModel: "claude-opus-4-8",
+      chatModelOptions: { claude: { reasoningEffort: "high", contextWindow: "1m" } },
+    })
+    await dequeueAndStartQueuedMessage(
+      deps,
+      "chat-1",
+      makeQueuedMessage({ cronRun: { jobId: "j", runId: "r", originChatId: "chat-1" } }),
+    )
+    expect(deps.startTurnCalled[0]!.model).toBe("claude-opus-4-8[1m]")
+  })
+
+  test("a cron turn falls back to the configured provider default when the chat has no model", async () => {
+    const deps = makeDeps({ chatProvider: "claude", providerDefaults: CLAUDE_DEFAULTS })
+    await dequeueAndStartQueuedMessage(
+      deps,
+      "chat-1",
+      makeQueuedMessage({ cronRun: { jobId: "j", runId: "r", originChatId: "chat-1" } }),
+    )
+    expect(deps.startTurnCalled[0]!.model).toBe("claude-opus-5[1m]")
+  })
+
+  test("an explicit model on the queued message still wins over the chat's model", async () => {
+    const deps = makeDeps({
+      chatProvider: "claude",
+      chatModel: "claude-opus-4-8",
+      chatModelOptions: { claude: { reasoningEffort: "high", contextWindow: "1m" } },
+      providerDefaults: CLAUDE_DEFAULTS,
+    })
+    await dequeueAndStartQueuedMessage(
+      deps,
+      "chat-1",
+      makeQueuedMessage({ model: "claude-haiku-4-5-20251001" }),
+    )
+    expect(deps.startTurnCalled[0]!.model).toBe("claude-haiku-4-5-20251001")
+  })
+
+  test("a send records its model on the chat so later server-originated turns can find it", async () => {
+    const setChatModelCalls: Array<{ chatId: string; model: string; modelOptions?: ModelOptions }> = []
+    const deps = makeDeps({ chatProvider: "claude", setChatModelCalls })
+    await sendCommand(deps, {
+      type: "chat.send",
+      chatId: "chat-1",
+      content: "hi",
+      model: "claude-opus-4-8",
+      modelOptions: { claude: { reasoningEffort: "high", contextWindow: "1m" } },
+    })
+    expect(setChatModelCalls).toEqual([{
+      chatId: "chat-1",
+      model: "claude-opus-4-8",
+      modelOptions: { claude: { reasoningEffort: "high", contextWindow: "1m" } },
+    }])
+  })
+
+  test("a server-originated turn does not overwrite the chat's recorded model", async () => {
+    const setChatModelCalls: Array<{ chatId: string; model: string; modelOptions?: ModelOptions }> = []
+    const deps = makeDeps({ chatProvider: "claude", chatModel: "claude-opus-4-8", setChatModelCalls })
+    await dequeueAndStartQueuedMessage(
+      deps,
+      "chat-1",
+      makeQueuedMessage({ autoContinue: { scheduleId: "s-1" } }),
+    )
+    expect(setChatModelCalls).toEqual([])
   })
 })

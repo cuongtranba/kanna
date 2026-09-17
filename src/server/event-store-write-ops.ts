@@ -1,6 +1,6 @@
 
 import path from "node:path"
-import type { AgentProvider, QueuedChatMessage, StackBinding } from "../shared/types"
+import type { AgentProvider, ModelOptions, QueuedChatMessage, StackBinding } from "../shared/types"
 import { STORE_VERSION } from "../shared/types"
 import { GLOBAL_PROMPT_APPEND_MAX_CHARS } from "../shared/app-settings-types"
 import type { ChatPermissionPolicyOverride, ToolRequest, ToolRequestDecision, ToolRequestStatus } from "../shared/permission-policy"
@@ -293,6 +293,26 @@ export function buildChatProviderEvent(
   const chat = requireChat(chatsById, chatId)
   if (chat.provider === provider) return null
   return { v: STORE_VERSION, type: "chat_provider_set", timestamp: Date.now(), chatId, provider }
+}
+
+export function buildChatModelEvent(
+  chatsById: Map<string, ChatRecord>,
+  chatId: string,
+  model: string,
+  modelOptions?: ModelOptions,
+): ChatEvent | null {
+  const chat = requireChat(chatsById, chatId)
+  const unchanged = chat.model === model
+    && JSON.stringify(chat.modelOptions ?? null) === JSON.stringify(modelOptions ?? null)
+  if (unchanged) return null
+  return {
+    v: STORE_VERSION,
+    type: "chat_model_set",
+    timestamp: Date.now(),
+    chatId,
+    model,
+    ...(modelOptions !== undefined ? { modelOptions } : {}),
+  }
 }
 
 export function buildPlanModeEvent(

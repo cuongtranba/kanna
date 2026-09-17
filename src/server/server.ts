@@ -121,6 +121,7 @@ export interface AgentAppSettingsView {
   globalPromptAppend: AppSettingsSnapshot["globalPromptAppend"]
   customMcpServers: AppSettingsSnapshot["customMcpServers"]
   customModels: AppSettingsSnapshot["customModels"]
+  providerDefaults: AppSettingsSnapshot["providerDefaults"]
   subagentRuntime: AppSettingsSnapshot["subagentRuntime"]
 }
 
@@ -130,6 +131,7 @@ export function buildAgentAppSettingsView(snapshot: AppSettingsSnapshot): AgentA
     globalPromptAppend: snapshot.globalPromptAppend,
     customMcpServers: snapshot.customMcpServers,
     customModels: snapshot.customModels,
+    providerDefaults: snapshot.providerDefaults,
     subagentRuntime: snapshot.subagentRuntime,
   }
 }

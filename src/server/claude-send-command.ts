@@ -31,12 +31,18 @@ import {
 } from "../shared/builtin-commands"
 import type { SlashCommandExpansion } from "../shared/slash-expansion"
 import { providerExpandsSlashCommands } from "../shared/types"
+import type { ChatProviderPreferences, ModelOptions } from "../shared/provider-model-types"
+import {
+  providerDefaultSelection,
+  resolveTurnModelSelection,
+} from "../shared/turn-model-selection"
 
 
 interface SendCommandStore {
   createChat(projectId: string): Promise<{ id: string }>
-  requireChat(chatId: string): { provider: AgentProvider | null }
+  requireChat(chatId: string): { provider: AgentProvider | null; model?: string; modelOptions?: ModelOptions }
   getChat(chatId: string): { compactFailureCount?: number } | null
+  setChatModel?: (chatId: string, model: string, modelOptions?: ModelOptions) => Promise<void>
   enqueueMessage(
     chatId: string,
     message: Omit<QueuedChatMessage, "id" | "createdAt"> & Partial<Pick<QueuedChatMessage, "id" | "createdAt">>,
@@ -93,7 +99,10 @@ export interface SendCommandDeps {
 
   analytics: SendCommandAnalytics
 
-  getAppSettingsSnapshot(): { customModels?: readonly CustomModelEntry[] }
+  getAppSettingsSnapshot(): {
+    customModels?: readonly CustomModelEntry[]
+    providerDefaults?: ChatProviderPreferences
+  }
 
   stopLoop(chatId: string, reason: "goal_met" | "user_send" | "chat_deleted"): Promise<void>
 
@@ -159,6 +168,26 @@ export function getProviderSettings(
   }
 }
 
+
+export function resolveTurnProviderSettings(
+  deps: SendCommandDeps,
+  chatId: string,
+  provider: AgentProvider,
+  options: SendMessageOptions,
+): ProviderSettings {
+  const snapshot = deps.getAppSettingsSnapshot()
+  const chat = deps.store.requireChat(chatId)
+  const selection = resolveTurnModelSelection([
+    { model: options.model, modelOptions: options.modelOptions },
+    { model: chat.model, modelOptions: chat.modelOptions },
+    providerDefaultSelection(provider, snapshot.providerDefaults),
+  ])
+  return getProviderSettings(
+    provider,
+    { ...options, model: selection.model, modelOptions: selection.modelOptions },
+    snapshot.customModels ?? [],
+  )
+}
 
 export function shouldInjectProactiveCompact(
   deps: SendCommandDeps,
@@ -276,8 +305,7 @@ export async function dequeueAndStartQueuedMessage(
   const chat = deps.store.requireChat(chatId)
 
   const provider = resolveProvider(queuedMessage, chat.provider)
-  const customModels = deps.getAppSettingsSnapshot().customModels ?? []
-  const settings = getProviderSettings(provider, queuedMessage, customModels)
+  const settings = resolveTurnProviderSettings(deps, chatId, provider, queuedMessage)
 
   const builtin = options?.steered ? null : parseBuiltinCommand(queuedMessage.content)
   if (builtin) {
@@ -364,6 +392,10 @@ export async function sendCommand(
     deps.autoResumeByChat.set(chatId, command.autoResumeOnRateLimit)
   }
 
+  if (command.model && deps.store.setChatModel) {
+    await deps.store.setChatModel(chatId, command.model, command.modelOptions)
+  }
+
   if (isChatBusy(deps, chatId)) {
     deps.analytics.track("message_sent")
     const queuedMessage = await enqueueMessage(deps, chatId, command.content, command.attachments ?? [], {
@@ -378,8 +410,7 @@ export async function sendCommand(
 
   const chat = deps.store.requireChat(chatId)
   const provider = resolveProvider(command, chat.provider)
-  const customModels = deps.getAppSettingsSnapshot().customModels ?? []
-  const settings = getProviderSettings(provider, command, customModels)
+  const settings = resolveTurnProviderSettings(deps, chatId, provider, command)
   deps.analytics.track("message_sent")
 
   const builtin = parseBuiltinCommand(command.content)

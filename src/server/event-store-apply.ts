@@ -42,6 +42,7 @@ export function applyStoreEvent(
     case "chat_archived":
     case "chat_unarchived":
     case "chat_provider_set":
+    case "chat_model_set":
     case "chat_plan_mode_set":
     case "chat_read_state_set":
     case "chat_source_hash_set":

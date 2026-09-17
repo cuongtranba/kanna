@@ -254,6 +254,14 @@ export function applyChatLifecycleEvent(
       replayChatProvider.set(event.chatId, event.provider)
       break
     }
+    case "chat_model_set": {
+      const chat = state.chatsById.get(event.chatId)
+      if (!chat) break
+      chat.model = event.model
+      chat.modelOptions = event.modelOptions
+      chat.updatedAt = event.timestamp
+      break
+    }
     case "chat_plan_mode_set": {
       const chat = state.chatsById.get(event.chatId)
       if (!chat) break

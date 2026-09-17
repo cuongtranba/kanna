@@ -2,6 +2,7 @@ import type {
   AgentProvider,
   ClaudeDriverPreference,
   KannaStatus,
+  ModelOptions,
   ProjectSummary,
   ProviderUsage,
   QueuedChatMessage,
@@ -29,6 +30,8 @@ export interface ChatRecord {
   archivedAt?: number
   unread: boolean
   provider: AgentProvider | null
+  model?: string
+  modelOptions?: ModelOptions
   planMode: boolean
   sessionTokensByProvider: Partial<Record<AgentProvider, string | null>>
   sourceHash: string | null
@@ -154,6 +157,14 @@ export type ChatEvent =
       timestamp: number
       chatId: string
       provider: AgentProvider
+    }
+  | {
+      v: 3
+      type: "chat_model_set"
+      timestamp: number
+      chatId: string
+      model: string
+      modelOptions?: ModelOptions
     }
   | {
       v: 3
@@ -446,6 +457,7 @@ export const LOG_OF_EVENT = {
   chat_archived: "chats",
   chat_unarchived: "chats",
   chat_provider_set: "chats",
+  chat_model_set: "chats",
   chat_plan_mode_set: "chats",
   chat_read_state_set: "chats",
   chat_source_hash_set: "chats",
