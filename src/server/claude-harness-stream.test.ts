@@ -90,6 +90,26 @@ describe("createClaudeHarnessStream", () => {
     expect(cwUpdated.length).toBeGreaterThanOrEqual(1)
   })
 
+  test("reads assistant usage from the real SDK shape, nested under message", async () => {
+    const events = await collect([
+      {
+        type: "assistant",
+        session_id: "sess-nested",
+        message: {
+          id: "m1",
+          role: "assistant",
+          content: [{ type: "text", text: "hello" }],
+          usage: { input_tokens: 10, cache_read_input_tokens: 40335, output_tokens: 6 },
+        },
+      },
+    ])
+    const cwUpdated = events.filter(
+      (e) => e.type === "transcript" && e.entry?.kind === "context_window_updated",
+    )
+    expect(cwUpdated).toHaveLength(1)
+    expect((cwUpdated[0] as { entry: { usage: { usedTokens: number } } }).entry.usage.usedTokens).toBe(40351)
+  })
+
   test("result message produces enriched result entry with usage", async () => {
     const events = await collect([
       {

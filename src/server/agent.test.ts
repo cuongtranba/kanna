@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "bun:test"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
@@ -49,6 +49,10 @@ function timestamped<T extends Omit<TranscriptEntry, "_id" | "createdAt">>(entry
     ...entry,
   } as TranscriptEntry
 }
+
+afterEach(() => {
+  delete process.env.KANNA_PROACTIVE_COMPACT
+})
 
 describe("normalizeClaudeStreamMessage", () => {
   test("normalizes assistant tool calls", () => {
@@ -3268,6 +3272,7 @@ describe("AgentCoordinator claude integration", () => {
   })
 
   test("send() injects /compact ahead of the user's message when usage crosses the auto-compact threshold", async () => {
+    process.env.KANNA_PROACTIVE_COMPACT = "enabled"
     const events = new AsyncEventQueue<any>()
     const prompts: string[] = []
 
@@ -3490,6 +3495,7 @@ describe("AgentCoordinator claude integration", () => {
   })
 
   test("dequeue() refuses to remove queued message while proactive compact is running", async () => {
+    process.env.KANNA_PROACTIVE_COMPACT = "enabled"
     const events = new AsyncEventQueue<any>()
     const prompts: string[] = []
     let releaseCompact!: () => void
@@ -3568,6 +3574,7 @@ describe("AgentCoordinator claude integration", () => {
   })
 
   test("PTY: compact_boundary finalizes the proactive compact turn and drains the queue", async () => {
+    process.env.KANNA_PROACTIVE_COMPACT = "enabled"
     const events = new AsyncEventQueue<any>()
     const prompts: string[] = []
     let releaseBoundary!: () => void

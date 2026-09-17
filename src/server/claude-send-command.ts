@@ -189,12 +189,19 @@ export function resolveTurnProviderSettings(
   )
 }
 
+export function isProactiveCompactEnabled(
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  return env.KANNA_PROACTIVE_COMPACT === "enabled"
+}
+
 export function shouldInjectProactiveCompact(
   deps: SendCommandDeps,
   chatId: string,
   content: string,
 ): boolean {
   if (content.trimStart().startsWith("/")) return false
+  if (!isProactiveCompactEnabled()) return false
   const failures = deps.store.getChat(chatId)?.compactFailureCount ?? 0
   if (failures >= MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES) return false
   const usage = deps.store.getLatestContextWindowUsage

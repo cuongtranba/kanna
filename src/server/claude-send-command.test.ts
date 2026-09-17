@@ -1,9 +1,10 @@
 
-import { describe, test, expect, beforeEach } from "bun:test"
+import { describe, test, expect, beforeEach, afterEach } from "bun:test"
 import {
   resolveProvider,
   getProviderSettings,
   shouldInjectProactiveCompact,
+  isProactiveCompactEnabled,
   enqueueMessage,
   dequeueAndStartQueuedMessage,
   maybeStartNextQueuedMessage,
@@ -256,6 +257,12 @@ describe("getProviderSettings", () => {
 
 
 describe("shouldInjectProactiveCompact", () => {
+  const originalFlag = process.env.KANNA_PROACTIVE_COMPACT
+  afterEach(() => {
+    if (originalFlag === undefined) delete process.env.KANNA_PROACTIVE_COMPACT
+    else process.env.KANNA_PROACTIVE_COMPACT = originalFlag
+  })
+
   test("returns false for slash commands", () => {
     const deps = makeDeps()
     expect(shouldInjectProactiveCompact(deps, "chat-1", "/compact")).toBe(false)
@@ -272,7 +279,25 @@ describe("shouldInjectProactiveCompact", () => {
     expect(shouldInjectProactiveCompact(deps, "chat-1", "hello")).toBe(false)
   })
 
+  test("stays off by default so the Claude Code CLI owns compaction", () => {
+    const deps = makeDeps({ chatCompactFailures: 0 })
+    deps.store.getLatestContextWindowUsage = () => ({
+      usedTokens: 190_000,
+      maxTokens: 200_000,
+      compactsAutomatically: false,
+    })
+
+    expect(isProactiveCompactEnabled({})).toBe(false)
+    expect(shouldInjectProactiveCompact(deps, "chat-1", "hello")).toBe(false)
+  })
+
+  test("KANNA_PROACTIVE_COMPACT=enabled turns Kanna's own injection back on", () => {
+    expect(isProactiveCompactEnabled({ KANNA_PROACTIVE_COMPACT: "enabled" })).toBe(true)
+    expect(isProactiveCompactEnabled({ KANNA_PROACTIVE_COMPACT: "disabled" })).toBe(false)
+  })
+
   test("prefers store.getLatestContextWindowUsage over a full getMessages read", () => {
+    process.env.KANNA_PROACTIVE_COMPACT = "enabled"
     const deps = makeDeps({ chatCompactFailures: 0 })
     deps.store.getLatestContextWindowUsage = () => ({
       usedTokens: 190_000,
@@ -293,6 +318,7 @@ describe("shouldInjectProactiveCompact", () => {
   })
 
   test("falls back to getMessages on a store fake without the method", () => {
+    process.env.KANNA_PROACTIVE_COMPACT = "enabled"
     const deps = makeDeps({
       chatCompactFailures: 0,
       transcript: [

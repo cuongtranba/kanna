@@ -44,7 +44,10 @@ export async function* createClaudeHarnessStream(
 
     if (sdkMessage?.type === "assistant") {
       const usageId = getClaudeAssistantMessageUsageId(sdkMessage)
-      const usageSnapshot = normalizeClaudeUsageSnapshot(sdkMessage.usage, lastKnownContextWindow)
+      const usageSnapshot = normalizeClaudeUsageSnapshot(
+        sdkMessage.message?.usage ?? sdkMessage.usage,
+        lastKnownContextWindow,
+      )
       if (usageId && usageSnapshot && !seenAssistantUsageIds.has(usageId)) {
         seenAssistantUsageIds.add(usageId)
         latestUsageSnapshot = usageSnapshot
