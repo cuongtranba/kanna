@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.56.0](https://github.com/cuongtranba/kanna/compare/v1.55.3...v1.56.0) (2026-09-17)
+
+
+### Features
+
+* **tasks:** restore progress tracking with the Task tools and a Tasks card ([#1116](https://github.com/cuongtranba/kanna/issues/1116)) ([e8842f3](https://github.com/cuongtranba/kanna/commit/e8842f377f8165ae8fb36900f11db9982abfb213))
+
 ## [1.55.3](https://github.com/cuongtranba/kanna/compare/v1.55.2...v1.55.3) (2026-09-17)
 
 
