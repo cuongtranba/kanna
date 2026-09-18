@@ -3,6 +3,10 @@ import type { ResumeLoopResult } from "./loop-wake-recovery"
 import { buildBoardToolList } from "./kanna-mcp-boards"
 import { buildPluginToolList } from "./kanna-mcp-plugins"
 import { getPluginService } from "./plugins/plugin-service-host"
+import { bindChatTaskRun, buildChatTaskToolList, type ChatTaskToolDeps } from "./kanna-mcp-tools/chat-tasks"
+import type { ChatTaskEvent } from "../shared/chat-tasks/types"
+import type { ChatTaskScheduleContext } from "../shared/chat-tasks/schedule"
+import type { ChatTaskProjection } from "../shared/chat-tasks/read-model"
 import { ok, fail } from "./kanna-mcp-tool"
 import type { BoardRegistry } from "./board-registry"
 import { z } from "zod"
@@ -38,21 +42,9 @@ import type { SubagentOrchestrator } from "./subagent-orchestrator"
 import type { LoopSetupInput } from "./loop-template"
 import { confinePathToDir } from "./input-validation"
 import { resolveStructuredDoc } from "../shared/structured-doc/registry"
-import { chunkLabelFromSection, LOOP_SECTIONS } from "../shared/loop-progress"
 import { renderTaskDocSkeleton } from "../shared/task-doc"
 import { readDoc, writeDoc } from "./structured-doc-io.adapter"
 import { withFileLock } from "./tracking-file-lock"
-import {
-  CLAIM_TRACKING_TASK_DESCRIPTION,
-  COMPLETE_TRACKING_TASK_DESCRIPTION,
-  INTEGRATE_TRACKING_TASKS_DESCRIPTION,
-  bindClaimToRun as bindClaimToRunFn,
-  claimTrackingTask,
-  completeTrackingTask,
-  integrateTrackingTasks,
-  type TaskQueueToolDeps,
-} from "./kanna-mcp-tools/task-queue"
-import { mergeLoopBranch } from "./loop-integrate-io.adapter"
 import { computeWorkspaceDigest, runVerifyCommand } from "./loop-verify-io.adapter"
 import { getCachedVerify, setCachedVerify } from "./loop-verify-cache"
 import { parseMermaid } from "./mermaid-parse.adapter"
@@ -95,6 +87,7 @@ export interface KannaMcpArgs extends OfferDownloadArgs {
   resumeLoop?: () => Promise<ResumeLoopResult>
   getArmedLoop?: (chatId: string) => ArmedLoopInfo | null
   isRunAlive?: (chatId: string, runId: string) => boolean
+  chatTaskStore?: ChatTaskStorePort
   parseMermaid?: MermaidParsePort
   armCron?: (command: string) => Promise<{ jobId: string }>
   updateCron?: (jobId: string, patch: import("../shared/cron/types").CronJobPatch) => Promise<void>
@@ -104,6 +97,21 @@ export interface ArmedLoopInfo {
   verifyCommand: string | null
   workdirAbs: string | null
   trackingFileRel: string | null
+  parallelism: number
+}
+
+export interface ChatTaskStorePort {
+  appendEvents: (events: readonly ChatTaskEvent[]) => Promise<void>
+  project: (chatId: string, ctx: ChatTaskScheduleContext) => ChatTaskProjection
+  decide: (
+    chatId: string,
+    ctx: ChatTaskScheduleContext,
+    fn: (projection: ChatTaskProjection) => readonly ChatTaskEvent[],
+  ) => Promise<readonly ChatTaskEvent[]>
+  mergeBranch: (
+    workdir: string,
+    branch: string,
+  ) => Promise<{ ok: boolean; conflicts: readonly string[]; detail: string }>
 }
 
 export type SetupLoopHandlerResult =
@@ -324,26 +332,6 @@ export function buildDelegateProgressEmitter<TExtra>(
   }
 }
 
-function buildTaskQueueDeps(args: {
-  chatId: string
-  cwd: string
-  getArmedLoop?: (chatId: string) => ArmedLoopInfo | null
-  isRunAlive?: (chatId: string, runId: string) => boolean
-}): TaskQueueToolDeps | null {
-  const isRunAlive = args.isRunAlive
-  if (!isRunAlive) return null
-  const chatId = args.chatId
-  return {
-    chatId,
-    baseDir: () => args.getArmedLoop?.(chatId)?.workdirAbs ?? args.cwd,
-    readDoc,
-    writeDoc,
-    withFileLock,
-    confinePath: confinePathToDir,
-    isRunAlive,
-  }
-}
-
 function buildDelegateSubagentToolList(args: {
   orchestrator?: SubagentOrchestrator
   delegationContext?: KannaMcpDelegationContext
@@ -351,32 +339,16 @@ function buildDelegateSubagentToolList(args: {
   cwd: string
   getArmedLoop?: (chatId: string) => ArmedLoopInfo | null
   isRunAlive?: (chatId: string, runId: string) => boolean
+  chatTaskDeps?: ChatTaskToolDeps | null
 }): KannaSdkToolList {
   if (!args.orchestrator || !args.delegationContext || !args.chatId) return []
   const ctx = args.delegationContext
   const chatId = args.chatId
   const orchestrator = args.orchestrator
   const delegate = createDelegateSubagentTool({ orchestrator })
-  const resolveLoopChunkLabel = buildLoopChunkLabelResolver({
-    cwd: args.cwd,
-    chatId,
-    getArmedLoop: args.getArmedLoop,
-  })
-  const queueDeps = buildTaskQueueDeps({
-    chatId,
-    cwd: args.cwd,
-    getArmedLoop: args.getArmedLoop,
-    isRunAlive: args.isRunAlive,
-  })
-  const bindClaimToRun = queueDeps
-    ? async (claimId: string, runId: string): Promise<void> => {
-      const loop = args.getArmedLoop?.(chatId)
-      await bindClaimToRunFn(queueDeps, {
-        claimId,
-        runId,
-        ...(loop?.trackingFileRel ? { file: loop.trackingFileRel } : {}),
-      })
-    }
+  const chatTaskDeps = args.chatTaskDeps
+  const bindClaimToRun = chatTaskDeps
+    ? (claimId: string, runId: string): Promise<void> => bindChatTaskRun(chatTaskDeps, { claimId, runId })
     : undefined
 
   return [
@@ -401,7 +373,6 @@ function buildDelegateSubagentToolList(args: {
           getParentUserMessageId: ctx.getParentUserMessageId,
           getMentionedSubagentIds: ctx.getMentionedSubagentIds,
           onEntry,
-          resolveLoopChunkLabel,
           ...(bindClaimToRun ? { bindClaimToRun } : {}),
         }
         const result = await delegate.handler(input, handlerCtx)
@@ -650,27 +621,6 @@ const RUN_VERIFY_DESCRIPTION =
   + "typecheck + tests) costs a minute or more each time."
 
 
-function buildLoopChunkLabelResolver(args: {
-  cwd: string
-  chatId: string
-  getArmedLoop?: (chatId: string) => ArmedLoopInfo | null
-}): (() => Promise<string | null>) | undefined {
-  const getArmedLoop = args.getArmedLoop
-  if (!getArmedLoop) return undefined
-  return async () => {
-    const loop = getArmedLoop(args.chatId)
-    if (!loop?.trackingFileRel) return null
-    const confined = confinePathToDir(loop.trackingFileRel, loop.workdirAbs ?? args.cwd, "file")
-    if ("error" in confined) return null
-    const doc = resolveStructuredDoc(path.extname(confined.abs))
-    if (!doc) return null
-    const content = await readDoc(confined.abs)
-    if (content === null) return null
-    const label = chunkLabelFromSection(doc.query(content, { sections: [LOOP_SECTIONS.nextChunk] }).content)
-    return label.length > 0 ? label : null
-  }
-}
-
 function buildTrackingDocToolList(args: {
   cwd: string
   chatId: string | null
@@ -681,12 +631,6 @@ function buildTrackingDocToolList(args: {
   const chatId = args.chatId
   const getArmedLoop = args.getArmedLoop
   const baseDir = (): string => getArmedLoop?.(chatId)?.workdirAbs ?? args.cwd
-  const queueDeps = buildTaskQueueDeps({
-    chatId,
-    cwd: args.cwd,
-    getArmedLoop,
-    isRunAlive: args.isRunAlive,
-  })
   const loadOrSeed = async (abs: string): Promise<{ content: string; created: boolean } | null> => {
     const existing = await readDoc(abs)
     if (existing !== null) return { content: existing, created: false }
@@ -775,65 +719,9 @@ function buildTrackingDocToolList(args: {
       },
     ),
     ...buildReplaceTrackingSectionTool(baseDir, loadOrSeed),
-    ...buildTaskQueueToolList(queueDeps),
   ]
 }
 
-function buildTaskQueueToolList(deps: TaskQueueToolDeps | null): KannaSdkToolList {
-  if (!deps) return []
-  return [
-    tool(
-      "claim_tracking_task",
-      CLAIM_TRACKING_TASK_DESCRIPTION,
-      {
-        file: z
-          .string()
-          .optional()
-          .describe("Path relative to the loop workdir. Defaults to PROGRESS.md."),
-      },
-      async (input) => {
-        const result = await claimTrackingTask(deps, { file: input.file })
-        return result.isError ? fail(result.text) : ok(result.text)
-      },
-    ),
-    tool(
-      "complete_tracking_task",
-      COMPLETE_TRACKING_TASK_DESCRIPTION,
-      {
-        file: z
-          .string()
-          .optional()
-          .describe("Path relative to the loop workdir. Defaults to PROGRESS.md."),
-        claim_id: z.string().min(1).describe("The claim_id claim_tracking_task returned."),
-        outcome: z
-          .enum(["done", "release"])
-          .describe("'done' marks the task finished; 'release' returns it to the queue for a retry."),
-      },
-      async (input) => {
-        const result = await completeTrackingTask(deps, {
-          file: input.file,
-          claim_id: input.claim_id,
-          outcome: input.outcome,
-        })
-        return result.isError ? fail(result.text) : ok(result.text)
-      },
-    ),
-    tool(
-      "integrate_tracking_tasks",
-      INTEGRATE_TRACKING_TASKS_DESCRIPTION,
-      {
-        file: z
-          .string()
-          .optional()
-          .describe("Path relative to the loop workdir. Defaults to PROGRESS.md."),
-      },
-      async (input) => {
-        const result = await integrateTrackingTasks(deps, mergeLoopBranch, { file: input.file })
-        return result.isError ? fail(result.text) : ok(result.text)
-      },
-    ),
-  ]
-}
 
 function writeNote(fileCreated: boolean, sectionCreated: boolean, rel: string): string {
   if (fileCreated) return ` (created ${rel} from the task-state skeleton)`
@@ -1066,6 +954,23 @@ function buildCronToolList(args: {
   return tools
 }
 
+function resolveChatTaskDeps(args: KannaMcpArgs, chatId: string | null): ChatTaskToolDeps | null {
+  const store = args.chatTaskStore
+  if (!store || !chatId) return null
+  const isRunAlive = args.isRunAlive
+  const getArmedLoop = args.getArmedLoop
+  return {
+    chatId,
+    appendEvents: (events) => store.appendEvents(events),
+    project: (ctx) => store.project(chatId, ctx),
+    decide: (ctx, fn) => store.decide(chatId, ctx, fn),
+    isRunAlive: (runId) => isRunAlive !== undefined && isRunAlive(chatId, runId),
+    requireWorktree: () => (getArmedLoop?.(chatId)?.parallelism ?? 1) > 1,
+    integrationWorkdir: () => getArmedLoop?.(chatId)?.workdirAbs ?? null,
+    mergeBranch: (workdir, branch) => store.mergeBranch(workdir, branch),
+  }
+}
+
 export function buildKannaMcpTools(args: KannaMcpArgs): KannaSdkToolList {
   const tunnelGateway = args.tunnelGateway ?? null
   const chatId = args.chatId ?? null
@@ -1107,11 +1012,13 @@ export function buildKannaMcpTools(args: KannaMcpArgs): KannaSdkToolList {
       cwd,
       getArmedLoop: args.getArmedLoop,
       isRunAlive: args.isRunAlive,
+      chatTaskDeps: resolveChatTaskDeps(args, chatId),
     }),
     ...buildSetupLoopToolList({ setupLoop: args.setupLoop, stopLoop: args.stopLoop, resumeLoop: args.resumeLoop, chatId }),
     ...buildTrackingDocToolList({ cwd, chatId, getArmedLoop: args.getArmedLoop, isRunAlive: args.isRunAlive }),
     ...buildBoardToolList({ boardRegistry: args.boardRegistry, chatId, projectId: args.projectId ?? null }, tool),
     ...buildPluginToolList(getPluginService(), chatId, args.delegationContext?.depth ?? 0, tool),
+    ...buildChatTaskToolList(resolveChatTaskDeps(args, chatId), tool),
     ...buildRunVerifyToolList({ chatId, cwd, getArmedLoop: args.getArmedLoop }),
     ...buildValidateMermaidToolList({ chatId, parse: args.parseMermaid ?? parseMermaid }),
     ...buildCronToolList({ chatId, armCron: args.armCron, updateCron: args.updateCron }),

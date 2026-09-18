@@ -181,7 +181,7 @@ export function updateChatTiming(
 
 type ChatLifecycleState = Pick<
   StoreState,
-  "chatsById" | "queuedMessagesByChatId" | "autoContinueEventsByChatId" | "chatTimingsByChatId" | "subagentRunsByChatId"
+  "chatsById" | "queuedMessagesByChatId" | "autoContinueEventsByChatId" | "chatTimingsByChatId" | "subagentRunsByChatId" | "chatTasksByChatId"
 >
 
 export function applyChatLifecycleEvent(
@@ -230,6 +230,7 @@ export function applyChatLifecycleEvent(
       state.autoContinueEventsByChatId.delete(event.chatId)
       state.chatTimingsByChatId.delete(event.chatId)
       state.subagentRunsByChatId.delete(event.chatId)
+      state.chatTasksByChatId.delete(event.chatId)
       break
     }
     case "chat_archived": {

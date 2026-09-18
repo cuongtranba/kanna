@@ -88,6 +88,7 @@ const PATHS: SnapshotLogPaths = {
   schedulesLogPath: "/data/schedules.jsonl",
   stacksLogPath: "/data/stacks.jsonl",
   toolRequestsLogPath: "/data/tool-requests.jsonl",
+  chatTasksLogPath: "/data/chat-tasks.jsonl",
 }
 
 describe("loadSnapshotIntoState", () => {

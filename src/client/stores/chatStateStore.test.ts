@@ -44,7 +44,7 @@ function makeSnapshot(chatId: string, seq: number): ChatSnapshot {
     tunnels: {},
     liveTunnelId: null,
     subagentRuns: {},
-    loopProgress: { chatId, armed: false, rows: [], rateLimit: null },
+    loopProgress: { chatId, armed: false, rows: [], rateLimit: null, completed: 0, total: 0 },
     cronJobs: [],
     seq,
   }

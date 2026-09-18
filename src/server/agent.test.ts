@@ -4443,7 +4443,7 @@ describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
     return { coordinator, store }
   }
 
-  test("valid input: creates skeleton, /clears main, emits subagent_background auto-continue carrying the templated prompt", async () => {
+  test("valid input: writes no tracking file, /clears main, emits subagent_background auto-continue carrying the templated prompt", async () => {
     const projectRoot = await mkdtemp(path.join(tmpdir(), "kanna-setup-loop-"))
     try {
       const store = createFakeStore()
@@ -4468,13 +4468,8 @@ describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
       })
 
       if (!result.ok) throw new Error(result.errors.join(", "))
-      expect(result.trackingFileRel).toBe("PROGRESS.md")
-      expect(result.created).toBe(true)
-
-      const written = await Bun.file(path.join(projectRoot, "PROGRESS.md")).text()
-      expect(written).toContain("eslint --max-warnings=0 passes")
-      expect(written).toContain("bun run lint")
-      expect(written).toContain("start with src/client")
+      expect(result.created).toBe(false)
+      expect(await Bun.file(path.join(projectRoot, "PROGRESS.md")).exists()).toBe(false)
 
       expect(store.chat.sessionTokensByProvider.claude ?? null).toBeNull()
       expect(store.messages.filter((m) => m.kind === "context_cleared")).toHaveLength(1)
@@ -4484,7 +4479,8 @@ describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
       const ev = events.find((e) => e.kind === "auto_continue_accepted")
       if (!ev || ev.kind !== "auto_continue_accepted") throw new Error("expected accepted")
       expect(ev.source).toBe("subagent_background")
-      expect(ev.prompt).toContain("PROGRESS.md")
+      expect(ev.prompt).not.toContain("PROGRESS.md")
+      expect(ev.prompt).toContain("mcp__kanna__task_list")
       expect(ev.prompt).toContain("bun run lint")
       expect(ev.prompt).toContain("delegate_subagent")
       expect(ev.prompt).toContain("GOAL MET")
@@ -4597,7 +4593,7 @@ describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
     }
   })
 
-  test("existing non-conformant tracking file is deterministically reconciled; loop still arms", async () => {
+  test("an existing tracking file is left untouched — arming no longer writes or reconciles it", async () => {
     const projectRoot = await mkdtemp(path.join(tmpdir(), "kanna-setup-loop-"))
     try {
       const abs = path.join(projectRoot, "PROGRESS.md")
@@ -4618,80 +4614,9 @@ describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
       })
       if (!result.ok) throw new Error(result.errors.join(", "))
       expect(result.created).toBe(false)
-      expect(result.reconciled).toBe(true)
-      expect(result.reconcileActions).toContain('inserted "## Goal"')
-      expect(result.reconcileActions).toContain('inserted "## Next chunk"')
-
-      const content = await Bun.file(abs).text()
-      expect(content).toContain("user-authored content")
-      expect(content).toContain("## Goal")
-      expect(content).toContain("## Verify command")
-      expect(content).toContain("## Next chunk")
+      expect(result.reconciled).toBe(false)
+      expect(await Bun.file(abs).text()).toBe("user-authored content")
       expect(store.getAutoContinueEvents("chat-1")).toHaveLength(2)
-    } finally {
-      await rm(projectRoot, { recursive: true, force: true })
-    }
-  })
-
-  test("existing conformant tracking file is left byte-identical (reconciled=false)", async () => {
-    const projectRoot = await mkdtemp(path.join(tmpdir(), "kanna-setup-loop-"))
-    try {
-      const store = createFakeStore()
-      store.getProject = () => ({ id: "project-1", localPath: projectRoot }) as never
-      const coordinator = new AgentCoordinator({
-        store: store as never,
-        onStateChange: () => {},
-        startClaudeSession: async () => { throw new Error("not needed") },
-        getSubagents: () => [makeSubagentRecord({ id: "sa-1", name: "alpha" })],
-      })
-      const input = { goal: "g", verifyCommand: "false", subagentId: "sa-1" }
-
-      const first = await coordinator.setupLoop({ chatId: "chat-1", input })
-      if (!first.ok) throw new Error(first.errors.join(", "))
-      expect(first.created).toBe(true)
-      const abs = path.join(projectRoot, "PROGRESS.md")
-      const written = await Bun.file(abs).text()
-
-      const second = await coordinator.setupLoop({ chatId: "chat-1", input })
-      if (!second.ok) throw new Error(second.errors.join(", "))
-      expect(second.created).toBe(false)
-      expect(second.reconciled).toBe(false)
-      expect(second.reconcileActions).toEqual([])
-      expect(await Bun.file(abs).text()).toBe(written)
-    } finally {
-      await rm(projectRoot, { recursive: true, force: true })
-    }
-  })
-
-  test("existing file with a stale goal gets the Goal section rewritten to the new input", async () => {
-    const projectRoot = await mkdtemp(path.join(tmpdir(), "kanna-setup-loop-"))
-    try {
-      const store = createFakeStore()
-      store.getProject = () => ({ id: "project-1", localPath: projectRoot }) as never
-      const coordinator = new AgentCoordinator({
-        store: store as never,
-        onStateChange: () => {},
-        startClaudeSession: async () => { throw new Error("not needed") },
-        getSubagents: () => [makeSubagentRecord({ id: "sa-1", name: "alpha" })],
-      })
-
-      const first = await coordinator.setupLoop({
-        chatId: "chat-1",
-        input: { goal: "OLD STALE GOAL", verifyCommand: "false", subagentId: "sa-1" },
-      })
-      if (!first.ok) throw new Error(first.errors.join(", "))
-
-      const second = await coordinator.setupLoop({
-        chatId: "chat-1",
-        input: { goal: "fresh goal", verifyCommand: "false", subagentId: "sa-1" },
-      })
-      if (!second.ok) throw new Error(second.errors.join(", "))
-      expect(second.reconciled).toBe(true)
-      expect(second.reconcileActions).toEqual(['rewrote "## Goal"'])
-
-      const content = await Bun.file(path.join(projectRoot, "PROGRESS.md")).text()
-      expect(content).toContain("fresh goal")
-      expect(content).not.toContain("OLD STALE GOAL")
     } finally {
       await rm(projectRoot, { recursive: true, force: true })
     }

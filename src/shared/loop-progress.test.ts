@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { buildLoopProgress, chunkLabelFromSection, deriveChunkLabel, parseChunkMarker } from "./loop-progress"
-import type { BuildLoopProgressInput, LoopTrackingSnapshot } from "./loop-progress"
+import { buildLoopProgress, deriveChunkLabel, parseChunkMarker } from "./loop-progress"
+import type { ChatTaskRecord } from "./chat-tasks/types"
 import type { SubagentRunSnapshot } from "./types"
 
 function run(overrides: Partial<SubagentRunSnapshot>): SubagentRunSnapshot {
@@ -88,244 +88,134 @@ describe("parseChunkMarker", () => {
   })
 })
 
-describe("chunkLabelFromSection", () => {
-  test("first line of the section body, heading dropped", () => {
-    expect(chunkLabelFromSection("## Next chunk\n\nWire session tabs to the store\nDetails here"))
-      .toBe("Wire session tabs to the store")
-  })
-
-  test("strips a list marker the plan wrote", () => {
-    expect(chunkLabelFromSection("## Next chunk\n- Fix Dockerfiles for Berry")).toBe(
-      "Fix Dockerfiles for Berry",
-    )
-  })
-
-  test("empty for a finished or empty plan so the caller falls back", () => {
-    expect(chunkLabelFromSection("## Next chunk\n\nDONE\n")).toBe("")
-    expect(chunkLabelFromSection("## Next chunk\n\n")).toBe("")
-    expect(chunkLabelFromSection("")).toBe("")
-  })
-
-  test("keeps a sub-heading that is the chunk's own first line", () => {
-    expect(chunkLabelFromSection("## Next chunk\n### Stage 4: pane retention")).toBe(
-      "Stage 4: pane retention",
-    )
-  })
-})
+function task(overrides: Partial<ChatTaskRecord>): ChatTaskRecord {
+  return {
+    id: "k:1",
+    subject: "A task",
+    activeForm: null,
+    description: null,
+    status: "pending",
+    source: "kanna",
+    needs: [],
+    worktree: null,
+    branch: null,
+    integrated: false,
+    claimId: null,
+    claimedAt: null,
+    runId: null,
+    epoch: 0,
+    originRunId: null,
+    createdAt: 1_000,
+    updatedAt: 1_000,
+    completedAt: null,
+    ...overrides,
+  }
+}
 
 describe("buildLoopProgress", () => {
-  test("maps run status → row status and prefers label over subagentName", () => {
+  test("each task becomes a row with its status, and completed/total are counted", () => {
     const snapshot = buildLoopProgress({
       chatId: "c1",
       armed: true,
       loopArmedAt: 0,
       rateLimit: null,
-      runs: [
-        run({ runId: "r1", status: "completed", label: "chunk one", startedAt: 10, finishedAt: 20 }),
-        run({ runId: "r2", status: "running", label: null, subagentName: "worker", startedAt: 30 }),
-        run({ runId: "r3", status: "failed", label: "chunk three", startedAt: 40 }),
+      runs: [],
+      tasks: [
+        task({ id: "k:1", subject: "one", status: "completed", completedAt: 20 }),
+        task({ id: "k:2", subject: "two", status: "in_progress" }),
+        task({ id: "k:3", subject: "three", status: "pending" }),
       ],
     })
     expect(snapshot.rows.map((r) => [r.runId, r.status, r.label])).toEqual([
-      ["r1", "done", "chunk one"],
-      ["r2", "running", "worker"],
-      ["r3", "failed", "chunk three"],
+      ["task:k:1", "done", "one"],
+      ["task:k:2", "running", "two"],
+      ["task:k:3", "pending", "three"],
+    ])
+    expect(snapshot.completed).toBe(1)
+    expect(snapshot.total).toBe(3)
+  })
+
+  test("a pending task whose needs are unmet renders as blocked", () => {
+    const rows = buildLoopProgress({
+      chatId: "c1",
+      armed: true,
+      loopArmedAt: 0,
+      rateLimit: null,
+      runs: [],
+      tasks: [
+        task({ id: "k:1", subject: "dep", status: "pending" }),
+        task({ id: "k:2", subject: "needs dep", status: "pending", needs: ["k:1"] }),
+      ],
+    }).rows
+    expect(rows.map((r) => [r.runId, r.status])).toEqual([
+      ["task:k:1", "pending"],
+      ["task:k:2", "blocked"],
     ])
   })
 
-  test("excludes nested sub-spawns and runs started before the loop armed", () => {
-    const snapshot = buildLoopProgress({
+  test("an in-progress task shows its activeForm when set", () => {
+    const rows = buildLoopProgress({
+      chatId: "c1",
+      armed: true,
+      loopArmedAt: 0,
+      rateLimit: null,
+      runs: [],
+      tasks: [task({ id: "k:1", subject: "Wire the store", activeForm: "Wiring the store", status: "in_progress" })],
+    }).rows
+    expect(rows[0]?.label).toBe("Wiring the store")
+  })
+
+  test("an errored run not bound to any task is shown when armed", () => {
+    const rows = buildLoopProgress({
       chatId: "c1",
       armed: true,
       loopArmedAt: 100,
       rateLimit: null,
-      runs: [
-        run({ runId: "pre", startedAt: 50 }),
-        run({ runId: "nested", startedAt: 150, depth: 1 }),
-        run({ runId: "keep", startedAt: 200 }),
-      ],
-    })
-    expect(snapshot.rows.map((r) => r.runId)).toEqual(["keep"])
+      runs: [run({ runId: "boom", status: "failed", label: "chunk two", startedAt: 200 })],
+      tasks: [task({ id: "k:1", subject: "one", status: "completed" })],
+    }).rows
+    expect(rows.map((r) => [r.runId, r.status])).toEqual([
+      ["task:k:1", "done"],
+      ["boom", "failed"],
+    ])
   })
 
-  test("passes rate-limit through and reflects armed flag", () => {
+  test("errored runs are ignored when the loop is not armed", () => {
+    const rows = buildLoopProgress({
+      chatId: "c1",
+      armed: false,
+      loopArmedAt: null,
+      rateLimit: null,
+      runs: [run({ runId: "boom", status: "failed", startedAt: 200 })],
+      tasks: [task({ id: "k:1", subject: "one", status: "pending" })],
+    }).rows
+    expect(rows.map((r) => r.runId)).toEqual(["task:k:1"])
+  })
+
+  test("a run bound to a task is not duplicated as an errored row", () => {
+    const rows = buildLoopProgress({
+      chatId: "c1",
+      armed: true,
+      loopArmedAt: 100,
+      rateLimit: null,
+      runs: [run({ runId: "r1", status: "failed", startedAt: 200 })],
+      tasks: [task({ id: "k:1", subject: "one", status: "in_progress", runId: "r1" })],
+    }).rows
+    expect(rows.map((r) => r.runId)).toEqual(["task:k:1"])
+  })
+
+  test("passes rate-limit through and reflects the armed flag with no tasks", () => {
     const snapshot = buildLoopProgress({
       chatId: "c1",
       armed: false,
       loopArmedAt: null,
       rateLimit: { scheduleId: "s1", resetAt: 123, tz: "Asia/Saigon", scheduled: false },
       runs: [],
+      tasks: [],
     })
     expect(snapshot.armed).toBe(false)
     expect(snapshot.rateLimit).toEqual({ scheduleId: "s1", resetAt: 123, tz: "Asia/Saigon", scheduled: false })
     expect(snapshot.rows).toEqual([])
-  })
-})
-
-const NEXT_CHUNK = "## Next chunk\n\nStage 4: pane retention\n"
-
-function tracked(overrides: Partial<LoopTrackingSnapshot> = {}): LoopTrackingSnapshot {
-  return {
-    doneEntries: [
-      "- 2026-08-06 chunk three DONE",
-      "- 2026-08-05 chunk two DONE",
-      "- 2026-08-04 chunk one DONE",
-    ],
-    nextChunkSection: NEXT_CHUNK,
-    ...overrides,
-  }
-}
-
-function tracking(overrides: Partial<BuildLoopProgressInput> = {}): BuildLoopProgressInput {
-  return {
-    chatId: "c1",
-    armed: true,
-    loopArmedAt: 100,
-    rateLimit: null,
-    runs: [],
-    tracking: tracked(),
-    ...overrides,
-  }
-}
-
-describe("buildLoopProgress with a parallel task queue", () => {
-  const QUEUE = [
-    { id: "t1", label: "User model", blocked: false },
-    { id: "t2", label: "Authentication", blocked: true },
-    { id: "t3", label: "Settings page", blocked: false },
-  ]
-
-  test("every queued task gets a row, so a parallel plan is not reduced to one pending step", () => {
-    const rows = buildLoopProgress(tracking({ tracking: tracked({ queueItems: QUEUE }) })).rows
-    expect(rows.map((r) => [r.runId, r.status, r.label]).slice(-3)).toEqual([
-      ["queue:t1", "pending", "User model"],
-      ["queue:t2", "blocked", "Authentication"],
-      ["queue:t3", "pending", "Settings page"],
-    ])
-  })
-
-  test("live workers and still-queued tasks are shown together", () => {
-    const rows = buildLoopProgress(
-      tracking({
-        tracking: tracked({ queueItems: [QUEUE[1], QUEUE[2]] }),
-        runs: [run({ runId: "r1", status: "running", label: "User model", startedAt: 200 })],
-      }),
-    ).rows
-    expect(rows.map((r) => [r.runId, r.status])).toEqual([
-      ["progress:0", "done"],
-      ["progress:1", "done"],
-      ["progress:2", "done"],
-      ["r1", "running"],
-      ["queue:t2", "blocked"],
-      ["queue:t3", "pending"],
-    ])
-  })
-
-  test("a disarmed loop shows no queued rows", () => {
-    const rows = buildLoopProgress(
-      tracking({ armed: false, tracking: tracked({ queueItems: QUEUE }) }),
-    ).rows
-    expect(rows.every((r) => !r.runId.startsWith("queue:"))).toBe(true)
-  })
-})
-
-describe("buildLoopProgress with a tracking file", () => {
-  test("the plan's completed chunks become done rows, oldest first, ahead of the pending step", () => {
-    const rows = buildLoopProgress(tracking()).rows
-    expect(rows.map((r) => [r.runId, r.status, r.label])).toEqual([
-      ["progress:0", "done", "2026-08-04 chunk one DONE"],
-      ["progress:1", "done", "2026-08-05 chunk two DONE"],
-      ["progress:2", "done", "2026-08-06 chunk three DONE"],
-      ["next", "pending", "Stage 4: pane retention"],
-    ])
-  })
-
-  test("a live worker replaces the pending row and keeps its own chunk label", () => {
-    const rows = buildLoopProgress(
-      tracking({
-        runs: [run({ runId: "r9", status: "running", label: "Stage 4a", startedAt: 200 })],
-      }),
-    ).rows
-    expect(rows.filter((r) => r.status === "pending")).toEqual([])
-    expect(rows.at(-1)).toMatchObject({ runId: "r9", status: "running", label: "Stage 4a" })
-  })
-
-  test("a completed run already recorded in the plan is not duplicated", () => {
-    const rows = buildLoopProgress(
-      tracking({
-        tracking: tracked({ doneEntries: ["- 2026-08-04 chunk one DONE"] }),
-        runs: [run({ runId: "r1", status: "completed", label: "chunk one", startedAt: 200, finishedAt: 250 })],
-      }),
-    ).rows
-    expect(rows.map((r) => r.runId)).toEqual(["progress:0", "next"])
-  })
-
-  test("a completion the worker never recorded still shows, so the panel cannot shrink", () => {
-    const rows = buildLoopProgress(
-      tracking({
-        tracking: tracked({ doneEntries: ["- 2026-08-04 chunk one DONE"] }),
-        runs: [
-          run({ runId: "r1", status: "completed", label: "chunk one", startedAt: 200, finishedAt: 250 }),
-          run({ runId: "r2", status: "completed", label: "chunk two", startedAt: 300, finishedAt: 350 }),
-        ],
-      }),
-    ).rows
-    expect(rows.map((r) => [r.runId, r.status])).toEqual([
-      ["progress:0", "done"],
-      ["r2", "done"],
-      ["next", "pending"],
-    ])
-  })
-
-  test("a failed run sits between the recorded work and the current step", () => {
-    const rows = buildLoopProgress(
-      tracking({
-        tracking: tracked({ doneEntries: ["- 2026-08-04 chunk one DONE"] }),
-        runs: [
-          run({ runId: "boom", status: "failed", label: "chunk two", startedAt: 200 }),
-          run({ runId: "live", status: "running", label: "chunk two retry", startedAt: 300 }),
-        ],
-      }),
-    ).rows
-    expect(rows.map((r) => [r.runId, r.status])).toEqual([
-      ["progress:0", "done"],
-      ["boom", "failed"],
-      ["live", "running"],
-    ])
-  })
-
-  test("a finished plan shows no pending row", () => {
-    const rows = buildLoopProgress(
-      tracking({ tracking: tracked({ nextChunkSection: "## Next chunk\n\nDONE\n" }) }),
-    ).rows
-    expect(rows.map((r) => r.status)).toEqual(["done", "done", "done"])
-  })
-
-  test("a disarmed loop shows the recorded work without proposing a next step", () => {
-    const rows = buildLoopProgress(tracking({ armed: false })).rows
-    expect(rows.map((r) => r.status)).toEqual(["done", "done", "done"])
-  })
-
-  test("recording a newer chunk leaves every existing row id untouched", () => {
-    const before = buildLoopProgress(tracking()).rows
-    const after = buildLoopProgress(
-      tracking({
-        tracking: tracked({
-          doneEntries: ["- 2026-08-07 chunk four DONE", ...tracked().doneEntries],
-        }),
-      }),
-    ).rows
-    expect(after.slice(0, 3).map((r) => r.runId)).toEqual(before.slice(0, 3).map((r) => r.runId))
-    expect(after[3]).toMatchObject({ runId: "progress:3", label: "2026-08-07 chunk four DONE" })
-  })
-
-  test("an unreadable plan falls back to the live runs alone", () => {
-    const rows = buildLoopProgress(
-      tracking({
-        tracking: null,
-        runs: [run({ runId: "r1", status: "completed", label: "chunk one", startedAt: 200 })],
-      }),
-    ).rows
-    expect(rows.map((r) => [r.runId, r.status])).toEqual([["r1", "done"]])
+    expect(snapshot.total).toBe(0)
   })
 })

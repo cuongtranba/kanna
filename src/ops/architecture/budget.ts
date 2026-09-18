@@ -46,10 +46,10 @@ export const PATTERN_BUDGETS: readonly PatternBudget[] = [
     id: "deps-bundles",
     include: ["src/server/"],
     pattern: "interface [A-Za-z]*Deps\\b|type [A-Za-z]*Deps\\b *=|deps: \\{$",
-    max: 85,
+    max: 83,
     issue: 893,
     rationale:
-      "Each deps bundle is a hand-maintained slice of the coordinator's fields. Every field is optional, so a builder that omits one compiles and the consumer's fallback is indistinguishable from the feature being off — this is how getArmedLoop shipped declared-but-never-passed. Respelling a bundle as a type alias or an inline parameter object removes nothing, so all three spellings count. TaskQueueToolDeps (85) is the parallel-loop claim tools' bundle: every collaborator on it is REQUIRED, and the registration is gated on the whole bundle rather than falling back per field, so the omit-one-field failure this budget tracks is a compile error there rather than a silent stall.",
+      "Each deps bundle is a hand-maintained slice of the coordinator's fields. Every field is optional, so a builder that omits one compiles and the consumer's fallback is indistinguishable from the feature being off — this is how getArmedLoop shipped declared-but-never-passed. Respelling a bundle as a type alias or an inline parameter object removes nothing, so all three spellings count. Re-baselined 85 → 83 when the file-based loop tracking (TaskQueueToolDeps and its adapters) was replaced by the event-sourced chat-task store, whose one bundle is ChatTaskToolDeps.",
   },
   {
     id: "coordinator-passthroughs",
@@ -151,10 +151,10 @@ export const ESLINT_LIMIT_PINS: readonly EslintLimitPin[] = [
   },
   {
     rule: "max-params",
-    max: 12,
+    max: 11,
     issue: 892,
     rationale:
-      "The peak is deriveChatSnapshot's 12 positional parameters, six of them defaulted, so a caller wanting the last must spell out five it does not care about, and two adjacent Map parameters can be swapped with no type error.",
+      "The peak is deriveChatSnapshot's 11 positional parameters, lowered from 12 when getLoopTracking was removed (the loop panel now reads chat tasks off state, parameter #1). Most are defaulted, so a caller wanting the last must spell out ones it does not care about, and two adjacent Map parameters can be swapped with no type error.",
   },
   {
     rule: "max-depth",

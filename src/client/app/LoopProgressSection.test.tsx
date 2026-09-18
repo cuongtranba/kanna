@@ -16,6 +16,8 @@ function snapshot(overrides: Partial<LoopProgressSnapshot> = {}): LoopProgressSn
       { runId: "next", label: "Wire the transcript viewport", status: "pending", startedAt: 0, finishedAt: null },
     ],
     rateLimit: null,
+    completed: 1,
+    total: 4,
     ...overrides,
   }
 }
@@ -62,6 +64,31 @@ describe("LoopProgressSection", () => {
     try {
       expect(result.loopWarnings).toEqual([])
       expect((document.body.textContent ?? "").includes("Progress")).toBe(false)
+    } finally {
+      await result.cleanup()
+    }
+  })
+
+  test("without a loop the header reads Tasks and shows the completed tally", async () => {
+    const result = await renderForLoopCheck(
+      <LoopProgressSection
+        loopProgress={snapshot({
+          armed: false,
+          completed: 1,
+          total: 4,
+          rows: [
+            { runId: "task:k:1", label: "done one", status: "done", startedAt: 0, finishedAt: null },
+            { runId: "task:k:2", label: "pending two", status: "pending", startedAt: 0, finishedAt: null },
+          ],
+        })}
+      />,
+    )
+    try {
+      const text = document.body.textContent ?? ""
+      expect(text).toContain("Tasks")
+      expect(text).not.toContain("Progress")
+      expect(text).toContain("1/4 completed")
+      expect(text).toContain("done one")
     } finally {
       await result.cleanup()
     }

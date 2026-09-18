@@ -34,7 +34,7 @@ function makeTimings(): Map<string, ChatTimingState> {
 
 function makeChatLifecycleState(): Pick<
   StoreState,
-  "chatsById" | "queuedMessagesByChatId" | "autoContinueEventsByChatId" | "chatTimingsByChatId" | "subagentRunsByChatId"
+  "chatsById" | "queuedMessagesByChatId" | "autoContinueEventsByChatId" | "chatTimingsByChatId" | "subagentRunsByChatId" | "chatTasksByChatId"
 > {
   return {
     chatsById: new Map(),
@@ -42,6 +42,7 @@ function makeChatLifecycleState(): Pick<
     autoContinueEventsByChatId: new Map(),
     chatTimingsByChatId: new Map(),
     subagentRunsByChatId: new Map(),
+    chatTasksByChatId: new Map(),
   }
 }
 

@@ -18,8 +18,8 @@ import type {
   SubagentRunSnapshot,
 } from "../shared/types"
 import { mergeCustomModels } from "../shared/types"
-import type { LoopTrackingSnapshot } from "../shared/loop-progress"
 import { buildLoopProgress } from "../shared/loop-progress"
+import { deriveChatTasks, type ChatTaskProjection } from "../shared/chat-tasks/read-model"
 import type { ChatRecord, ChatTimingState, StoreState } from "./events"
 import { resolveLocalPath } from "./paths"
 import { resolveSpawnPaths, resolveStackProjects } from "./claude-session-config"
@@ -38,17 +38,26 @@ export const ACTIVE_SESSION_IDLE_GAP_MS = 30 * 60 * 1_000
 const SIDEBAR_RECENT_WINDOW_MS = 24 * 60 * 60 * 1_000
 const SIDEBAR_FALLBACK_PREVIEW_LIMIT = 5
 
+function projectChatTasksFromState(state: StoreState, chatId: string, nowMs: number): ChatTaskProjection {
+  const events = state.chatTasksByChatId.get(chatId) ?? []
+  if (events.length === 0) return deriveChatTasks(events, { now: nowMs })
+  const runs = state.subagentRunsByChatId.get(chatId)
+  return deriveChatTasks(events, {
+    now: nowMs,
+    isRunAlive: (runId) => runs?.get(runId)?.status === "running",
+  })
+}
+
 export interface ComputeChatActivityDeps {
   state: StoreState
   activeStatuses: Map<string, KannaStatus>
   workflowRegistry?: Pick<WorkflowRegistry, "snapshot">
   backgroundTasksByChatId?: Map<string, ChatBackgroundTask[]>
-  getLoopTracking?: (chatId: string) => LoopTrackingSnapshot | null
   nowMs: number
 }
 
 export function computeChatActivity(chatId: string, deps: ComputeChatActivityDeps): ChatActivity {
-  const { state, activeStatuses, workflowRegistry, backgroundTasksByChatId, getLoopTracking, nowMs } = deps
+  const { state, activeStatuses, workflowRegistry, backgroundTasksByChatId, nowMs } = deps
 
   const runMap = state.subagentRunsByChatId.get(chatId)
   const runs = runMap ? [...runMap.values()] : []
@@ -69,11 +78,8 @@ export function computeChatActivity(chatId: string, deps: ComputeChatActivityDep
   const loopState = deriveLoopState(autoContinueEvents, chatId)
   let loop: ChatActivity["loop"] = null
   if (loopState !== null) {
-    const tracking = getLoopTracking?.(chatId) ?? null
-    const done = tracking?.doneEntries.length ?? 0
-    const hasNext = tracking !== null && tracking.nextChunkSection.trim().length > 0
-    const total = done + agents + (hasNext ? 1 : 0)
-    loop = { done, total }
+    const projection = projectChatTasksFromState(state, chatId, nowMs)
+    loop = { done: projection.completedCount, total: projection.tasks.length }
   }
 
   const backgroundTasks = backgroundTasksByChatId?.get(chatId)?.length ?? 0
@@ -158,7 +164,6 @@ export function deriveSidebarData(
     discoveredProvidersByPath?: Map<string, AgentProvider[]>
     workflowRegistry?: Pick<WorkflowRegistry, "snapshot">
     backgroundTasksByChatId?: Map<string, ChatBackgroundTask[]>
-    getLoopTracking?: (chatId: string) => LoopTrackingSnapshot | null
   }
 ): SidebarData {
   const nowMs = options?.nowMs ?? Date.now()
@@ -170,7 +175,6 @@ export function deriveSidebarData(
     activeStatuses,
     workflowRegistry: options?.workflowRegistry,
     backgroundTasksByChatId: options?.backgroundTasksByChatId,
-    getLoopTracking: options?.getLoopTracking,
     nowMs,
   }
   const chatsByProjectId = new Map<string, ChatRecord[]>()
@@ -385,7 +389,6 @@ export function deriveChatSnapshot(
   claudeSessionStates: Map<string, ClaudeSessionLifecycleStatus> = new Map(),
   customModels: readonly CustomModelEntry[] = [],
   backgroundTasksByChatId: Map<string, ChatBackgroundTask[]> = new Map(),
-  getLoopTracking: (chatId: string) => LoopTrackingSnapshot | null = () => null,
 ): ChatSnapshot | null {
   const chat = state.chatsById.get(chatId)
   if (!chat || chat.deletedAt) return null
@@ -452,7 +455,7 @@ export function deriveChatSnapshot(
     loopArmedAt: loopState?.armedAt ?? null,
     runs: subagentRunsMap ? [...subagentRunsMap.values()] : [],
     rateLimit,
-    tracking: getLoopTracking(chat.id),
+    tasks: projectChatTasksFromState(state, chat.id, nowMs).tasks,
   })
   const derivedCronJobs = deriveCronJobs(autoContinueEvents, chat.id, nowMs)
   const cronJobs = derivedCronJobs.length > 0 ? derivedCronJobs : EMPTY_CRON_JOBS

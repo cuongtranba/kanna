@@ -358,7 +358,7 @@ export default tseslint.config(
     ],
     rules: {
       complexity: ["error", { max: 131 }],
-      "max-params": ["error", { max: 12 }],
+      "max-params": ["error", { max: 11 }],
       "max-depth": ["error", { max: 7 }],
       "max-nested-callbacks": ["error", { max: 4 }],
     },

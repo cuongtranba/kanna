@@ -154,6 +154,17 @@ export function getReplayEventPriority(event: StoreEvent): number {
       return 5
     case "tool_request_resolved":
       return 6
+    case "chat_task_created":
+    case "chat_task_updated":
+    case "chat_task_deleted":
+    case "chat_task_claimed":
+    case "chat_task_run_bound":
+    case "chat_task_settled":
+    case "chat_task_integrated":
+    case "chat_task_note":
+    case "chat_task_epoch_advanced":
+    case "chat_task_native_synced":
+      return 5
     default: {
       const _exhaustive: never = discriminator
       log.warn(

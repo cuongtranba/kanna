@@ -6,6 +6,10 @@ import type { StorageBackend } from "./storage/backend"
 import { FsStorageBackend } from "./storage/fs-storage.adapter"
 import type { AgentProvider, ChatHistoryPage, ModelOptions, QueuedChatMessage, StackBinding, SubagentRunSnapshot, TranscriptEntry } from "../shared/types"
 import type { AutoContinueEvent } from "./auto-continue/events"
+import * as ChatTasks from "./event-store-tasks"
+import type { ChatTaskEvent } from "../shared/chat-tasks/types"
+import type { ChatTaskProjection } from "../shared/chat-tasks/read-model"
+import type { ChatTaskScheduleContext } from "../shared/chat-tasks/schedule"
 import {
   type StackRecord,
   type StoreEvent,
@@ -102,6 +106,8 @@ export class EventStore implements PushEventStore {
   private readonly pushLogPath: string
   private readonly stacksLogPath: string
   private readonly toolRequestsLogPath: string
+  private readonly chatTasksLogPath: string
+  private readonly pendingNativeTaskCalls: ChatTasks.PendingNativeTaskCalls = new Map()
   private readonly transcriptsDir: string
   private readonly sidebarProjectOrderPath: string
   private legacyMessagesByChatId = new Map<string, TranscriptEntry[]>()
@@ -141,6 +147,7 @@ export class EventStore implements PushEventStore {
     this.pushLogPath = path.join(this.dataDir, "push.jsonl")
     this.stacksLogPath = path.join(this.dataDir, "stacks.jsonl")
     this.toolRequestsLogPath = path.join(this.dataDir, "tool-requests.jsonl")
+    this.chatTasksLogPath = path.join(this.dataDir, "chat-tasks.jsonl")
     this.transcriptsDir = path.join(this.dataDir, "transcripts")
     this.sidebarProjectOrderPath = path.join(this.dataDir, SIDEBAR_PROJECT_ORDER_FILE)
 
@@ -159,6 +166,7 @@ export class EventStore implements PushEventStore {
       pushLogPath: this.pushLogPath,
       stacksLogPath: this.stacksLogPath,
       toolRequestsLogPath: this.toolRequestsLogPath,
+      chatTasksLogPath: this.chatTasksLogPath,
       transcriptsDir: this.transcriptsDir,
       sidebarProjectOrderPath: this.sidebarProjectOrderPath,
       state: this.state,
@@ -441,6 +449,14 @@ export class EventStore implements PushEventStore {
 
   async appendMessage(chatId: string, entry: TranscriptEntry) {
     await TranscriptWrite.appendMessage(this.chatTranscriptDeps, chatId, entry)
+    const taskEvents = ChatTasks.mirrorTranscriptEntry({
+      pending: this.pendingNativeTaskCalls,
+      chatTasksByChatId: this.state.chatTasksByChatId,
+      chatId,
+      entry,
+      now: Date.now(),
+    })
+    if (taskEvents.length > 0) await this.appendChatTaskEvents(taskEvents)
     if (entry.kind === "user_prompt") {
       this.lastUserMessageIdByChatId.set(chatId, entry._id)
     }
@@ -581,6 +597,36 @@ export class EventStore implements PushEventStore {
   async migrateLegacyTranscripts(onProgress?: (message: string) => void) { return migrateLegacyTranscriptsFn(this.initDeps, onProgress) }
 
   async appendAutoContinueEvent(event: AutoContinueEvent) { return this.commit(event) }
+
+  async appendChatTaskEvents(events: readonly ChatTaskEvent[]): Promise<void> {
+    for (const event of events) await this.commit(event)
+  }
+
+  async decideChatTaskEvents(
+    chatId: string,
+    ctx: ChatTaskScheduleContext,
+    decide: (projection: ChatTaskProjection) => readonly ChatTaskEvent[],
+  ): Promise<readonly ChatTaskEvent[]> {
+    let decided: readonly ChatTaskEvent[] = []
+    this.writeChain = this.writeChain.then(async () => {
+      decided = decide(ChatTasks.projectChatTasks(this.state.chatTasksByChatId, chatId, ctx))
+      for (const event of decided) {
+        await this.storage.appendText(this.chatTasksLogPath, `${JSON.stringify(event)}\n`)
+        this.applyEvent(event)
+      }
+    })
+    await this.writeChain
+    return decided
+  }
+
+  getChatTaskEvents(chatId: string): ChatTaskEvent[] {
+    const list = this.state.chatTasksByChatId.get(chatId)
+    return list ? [...list] : []
+  }
+
+  getChatTasks(chatId: string, ctx: ChatTaskScheduleContext): ChatTaskProjection {
+    return ChatTasks.projectChatTasks(this.state.chatTasksByChatId, chatId, ctx)
+  }
 
   getAutoContinueEvents(chatId: string): AutoContinueEvent[] {
     const list = this.state.autoContinueEventsByChatId.get(chatId)

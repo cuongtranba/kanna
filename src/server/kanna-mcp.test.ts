@@ -778,7 +778,7 @@ describe("query_tracking_file + append_tracking_row tools", () => {
   test("inside an armed loop, a missing file still errors so a typo cannot become a phantom", async () => {
     const armed = {
       ...argsFor(dir),
-      getArmedLoop: () => ({ verifyCommand: "bun run lint", workdirAbs: dir, trackingFileRel: "PROGRESS.md" }),
+      getArmedLoop: () => ({ verifyCommand: "bun run lint", workdirAbs: dir, trackingFileRel: "PROGRESS.md", parallelism: 1 }),
     }
     const tools = toolMap(buildKannaMcpTools(armed))
 
@@ -807,15 +807,16 @@ describe("query_tracking_file + append_tracking_row tools", () => {
             verifyCommand: "bun run lint",
             workdirAbs: dir,
             trackingFileRel: "PROGRESS.md",
+            parallelism: 1,
             ...overrides,
           }),
         },
       })
 
-    test("unsubstituted marker → label read from the plan's Next chunk", async () => {
+    test("an unsubstituted marker yields no label — the plan is the task list, not a file", async () => {
       const { tools, fakeOrch } = withArmedLoop()
       await tools.get("delegate_subagent")!.handler({ subagent_id: "s1", prompt: LOOP_PROMPT })
-      expect(fakeOrch.lastDelegate?.label).toBe("chunk 4")
+      expect(fakeOrch.lastDelegate?.label).toBeUndefined()
     })
 
     test("substituted marker wins over the plan — it is per-delegation", async () => {

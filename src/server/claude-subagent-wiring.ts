@@ -8,7 +8,7 @@ import type {
 } from "../shared/types"
 import type { HarnessToolRequest } from "./harness-types"
 import type { ClaudeSessionHandle } from "./harness-types"
-import type { ArmedLoopInfo, KannaMcpDelegationContext } from "./kanna-mcp"
+import type { ArmedLoopInfo, ChatTaskStorePort, KannaMcpDelegationContext } from "./kanna-mcp"
 import type { ChatRecord, ProjectRecord, StackRecord, SubagentRunEvent } from "./events"
 import type { ProviderRunStart, SubagentOrchestrator } from "./subagent-orchestrator"
 import type { BuildSubagentProviderRunArgs } from "./subagent-provider-run"
@@ -76,6 +76,7 @@ export interface SubagentWiringDeps {
   readLlmProvider: () => Promise<LlmProviderSnapshot>
   subagentPendingKey: (chatId: string, runId: string, toolUseId: string) => string
   getArmedLoop?: (chatId: string) => ArmedLoopInfo | null
+  chatTaskStore?: ChatTaskStorePort
 }
 
 
@@ -129,6 +130,7 @@ export function buildClaudeSubagentStarter(
         maxTurns: a.maxTurns,
         keepAlive: a.keepAlive,
         getArmedLoop: a.getArmedLoop,
+        chatTaskStore: deps.chatTaskStore,
       })
     }
     return deps.startClaudeSessionFn({ ...a, customMcpServers: enabledMcpServers, oauthBearers })
@@ -221,6 +223,7 @@ export function buildSubagentProviderRunForChat(
     subagentOrchestrator: deps.subagentOrchestrator,
     delegationContext,
     getArmedLoop: deps.getArmedLoop,
+    chatTaskStore: deps.chatTaskStore,
     codexManager: deps.codexManager,
     onToolRequest,
     globalPromptAppend: deps.getAppSettingsSnapshot().globalPromptAppend,

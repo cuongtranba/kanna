@@ -13,6 +13,7 @@ import {
   type KannaMcpDelegationContext,
   type SetupLoopHandlerResult,
   type ArmedLoopInfo,
+  type ChatTaskStorePort,
 } from "./kanna-mcp"
 import type { LoopSetupInput } from "./loop-template"
 import { KANNA_MCP_SERVER_NAME } from "../shared/tools"
@@ -145,6 +146,7 @@ export async function startClaudeSession(args: {
   isLoopArmed?: () => boolean
   getArmedLoop?: (chatId: string) => ArmedLoopInfo | null
   isRunAlive?: (chatId: string, runId: string) => boolean
+  chatTaskStore?: ChatTaskStorePort
   boardRegistry?: BoardRegistry
   maxTurns?: number
   keepAlive?: boolean
@@ -206,6 +208,7 @@ export async function startClaudeSession(args: {
           resumeLoop: args.resumeLoop,
           getArmedLoop: args.getArmedLoop,
           isRunAlive: args.isRunAlive,
+          chatTaskStore: args.chatTaskStore,
           boardRegistry: args.boardRegistry,
         }),
         ..._deps.buildUserMcpServers(args.customMcpServers ?? [], args.oauthBearers),

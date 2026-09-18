@@ -13,7 +13,7 @@ task that matches none of them cleanly still lands somewhere.
 | `kanna-telemetry` | Adding spans/metrics, and operating the otel-lgtm collector |
 | `kanna-react-style` | React + TypeScript conventions for `src/client/**` |
 | `kanna-test` | Running tests; the lint, ast-grep, and design gates |
-| `kanna-loop` | Autonomous loops: `setup_loop`, the oracle, the tracking file, wake recovery |
+| `kanna-loop` | Autonomous loops: `setup_loop`, the oracle, the durable task list, wake recovery |
 | `kanna-subagents` | `delegate_subagent`, the spawn gate, keep-alive and background runs |
 | `kanna-pty` | The PTY driver — TUI spawn, transcript follower, `KANNA_PTY_*` |
 | `release` | Version bump + npm publish |
@@ -935,31 +935,27 @@ why that paragraph is part of this feature rather than optional polish.
 
 ## A tracking document is durable task state, and works outside a loop
 
-`append_tracking_row` / `replace_tracking_section` used to dead-end on a missing
-file with `run setup_loop to create it first`, so outside a loop there was
-nowhere durable to put task state. They now create the file, seeded from
+`append_tracking_row` / `replace_tracking_section` / `query_tracking_file` are a
+repo-resident, git-diffable, human-readable durable-document surface: a file the
+user reads, commits, and travels with a worktree, holding prose (Decisions,
+Unresolved errors). They create the file on a missing path, seeded from
 `renderTaskDocSkeleton` (`shared/task-doc.ts`): Objective, Acceptance criteria,
 Status, Completed, Remaining, Decisions, Failed approaches, Unresolved errors.
 No new store and no new IO — `writeDoc` already `mkdir -p`s, and the same
 `StructuredDoc` engine reads it back by section.
 
-**Creation is gated on no loop being armed, and that gate is the whole safety
-story.** Inside an armed loop the loud error must stay: create-on-missing would
-turn a worker's typo (`PROGESS.md`) into a silently-successful write while the
-orchestrator kept reading the real file, and the loop would redo the same chunk
-forever with a green tool result every iteration.
+**This is a DIFFERENT surface from the loop's task list.** A loop's plan lives in
+the chat-scoped, event-sourced task store (`mcp__kanna__task_*`, above), which is
+not in git and holds structured rows; this tracking document is on disk and holds
+prose. Use `mcp__kanna__task_*` for a structured checklist for THIS chat that
+survives `/clear` and compaction and shows in the footer; use the tracking
+document for a durable repo-resident record the user will read, commit and diff.
+The loop no longer uses these tools at all.
 
-**The skeleton says `## Objective`, never `## Goal`.** `assertTrackingFileSafe`
-refuses `setup_loop` on a git-tracked file whose `## Goal` body differs from the
-new goal, so a seeded `## Goal` would later block the user's own loop and demand
-`force: true` — which would then rewrite their document. `## Failed approaches`
-matching `LOOP_SECTIONS.failedApproaches` is the opposite case, and deliberate:
-same meaning, same tool call.
-
-The default filename stays `PROGRESS.md`. Outside a loop the tracking registry is
-never registered, so a stray file cannot reach the Progress panel; and if a loop
-is later armed on it, `reconcileTrackingFile` preserves unclaimed sections
-verbatim.
+**The skeleton says `## Objective`, never `## Goal`.** The default filename is
+`PROGRESS.md`. Because the loop no longer reads or writes any tracking file, a
+document created this way can never collide with a loop's plan or reach the
+Progress panel.
 
 # Local skills on every provider — `/name` expansion + the Codex roster
 
@@ -2060,31 +2056,52 @@ as `store as never`: a required member typechecks and then fails at runtime,
 which is the regression `adr-20260813-transcript-memory-budget` records as
 "tried and reverted". See `adr-20260819-context-window-usage-tail-read`.
 
-# Autonomous loops — `/loop`, `setup_loop`, the oracle, the tracking file
+# Autonomous loops — `/loop`, `setup_loop`, the oracle, the task list
 
 Long-horizon autonomous loops run notification-driven, with a per-iteration
-`/clear` on the main agent and the tracking file (`PROGRESS.md` by default) as
-the ONLY durability contract. Main context is intentionally ephemeral; there is
-no timer-based `schedule_wakeup` (removed — it superseded
-`adr-20260603-agent-self-scheduled-wake`).
+`/clear` on the main agent. The loop's plan is the chat's **durable,
+event-sourced task list** (`src/shared/chat-tasks/**`, on the `chat-tasks` event
+log), read and written through the `mcp__kanna__task_*` tools — NOT a markdown
+tracking file. It is the ONLY durability contract and survives `/clear`, a
+restart, and the transcript tail window. Main context is intentionally ephemeral;
+there is no timer-based `schedule_wakeup` (removed — it superseded
+`adr-20260603-agent-self-scheduled-wake`). See
+`adr-20260918-loop-tasks-replace-tracking-file`.
 
 **`.claude/skills/kanna-loop/SKILL.md`** holds the design: the
-orchestrator/worker split and the wake path, `setup_loop` and its five arm-time
-refusals, the four-case oracle table and the TERMINAL CHECK, `run_verify`
-memoization, the structured tracking-doc MCP tools, loop-armed tool blocking,
-Progress-panel rows and chunk labels, per-subagent `maxTurns`, the three
-lost-wake recovery passes, and the disarm/resume tombstone.
+orchestrator/worker split and the wake path (with the `<loop-state>` task
+snapshot injected by `composeLoopWakePrompt`), `setup_loop` with its `tasks[]`
+seed and one-time tracking-file import, the four-case oracle table and the
+TERMINAL CHECK over `task_list`, `run_verify` memoization, the `mcp__kanna__task_*`
+tools, loop-armed tool blocking, the unified task-sourced Progress panel,
+per-subagent `maxTurns`, the three lost-wake recovery passes, and the
+disarm/resume tombstone.
 
-Read it before editing the rendered loop prompt — `validateLoopSetup` asserts a
-list of exact substrings, so an edit that drops one fails validation.
+Read it before editing the rendered loop prompt — `validateLoopSetup` asserts the
+`LOOP_STEP_INVARIANTS` / `LOOP_PARALLEL_STEP_INVARIANTS` substrings, so an edit
+that drops one fails validation. The invariant list and the template move
+together.
+
+**The markdown tracking tools stay for the NON-loop durable-document use** (see
+"A tracking document is durable task state" below); the loop simply no longer
+uses them. `claim_tracking_task` / `complete_tracking_task` /
+`integrate_tracking_tasks`, `loop-task-queue.ts`, the loop-tracking
+registry/sync/io adapters, and the file-based reconcile/skeleton were deleted.
 
 ## Parallel loops — a lease belongs to a RUN, never to a clock
 
-`parallelism > 1` swaps `## Next chunk` for a `## Task queue` whose
-`[ ]`/`[~]`/`[x]` boxes are the concurrency control. A task is claimable only when
-it is `[ ]`, every id in its `needs:` is `[x]`, and its worktree is not held by a
-lease whose run is still alive. That one rule is the entire scheduler, and is what
-makes "build the user model before authentication" work without one.
+`parallelism > 1` uses the same task list; a task's `needs` / `worktree` /
+`branch` / `claimId` / `runId` fields are the concurrency control. A task is
+claimable only when it is pending (or a stale lease), every id in its `needs` is
+completed, and its worktree is not held by a lease whose run is still alive
+(`selectClaimableTask`). That one rule is the entire scheduler, and is what makes
+"build the user model before authentication" work without one.
+
+**The claim is atomic in one process.** `EventStore.decideChatTaskEvents` runs
+the read-decide-append inside the store's per-chat write chain, so two concurrent
+`task_claim` calls can never lease the same task — replacing the old
+`withFileLock` read-modify-write, which existed only because the markdown tools
+had an `await` between reading and writing the file.
 
 **The recovery model is the part that is easy to get catastrophically wrong.** A
 worker that FAILS never releases its lease, so the lease is still fresh when its
@@ -2092,15 +2109,11 @@ own failure-wake arrives. An orchestrator that reads "a live lease exists" as "a
 worker is coming back" ends its turn — and **nothing ever wakes that chat again**,
 because only a run completion produces a wake. A lease TTL cannot rescue this:
 TTL expiry generates no wake, so the timer is never read. `delegate_subagent`
-therefore takes a `claim_id`, the server stamps `run: <runId>` onto the item, and
-`claim_tracking_task` reclaims every `[~]` whose run is gone from
-`store.getSubagentRuns(chatId)`. The 2-minute `TASK_QUEUE_CLAIM_GRACE_MS` covers
-only a claim that never bound a run. **Do not reintroduce a TTL as the primary
-recovery path.**
-
-**`withFileLock` fixes a defect that predates parallelism.** Every tracking tool
-is a read-modify-write with an `await` in the middle, so two concurrent writes
-silently lost one. `writeDoc` is write-then-`rename` for the same reason.
+therefore takes a `claim_id`, the server records `runId` on the task
+(`chat_task_run_bound`), and `task_claim` reclaims every in-progress task whose
+run is gone from `store.getSubagentRuns(chatId)`. The 2-minute
+`CHAT_TASK_CLAIM_GRACE_MS` covers only a claim that never bound a run. **Do not
+reintroduce a TTL as the primary recovery path.**
 
 `MAX_PARALLELISM` is **3**, not 4: `DEFAULT_MAX_PARALLEL` is the whole server's
 subagent permit pool, and exhausting it does not fail — it queues silently, so one
@@ -2109,15 +2122,14 @@ loop would stall every other chat with no error anywhere.
 **A skipped `/clear` is now deferred, not dropped.** `clearClaudeSessionContext`
 only closed the session when `!isSessionInUse`, so a worker finishing during a
 sibling's wake-turn made the next orchestrator turn reuse the previous turn's
-context — breaking the "file is the only state" invariant exactly where the claim
-design depends on it. It sets `session.contextClearPending`, which
+context — breaking the "the task list is the only state" invariant exactly where
+the claim design depends on it. It sets `session.contextClearPending`, which
 `spawnClaudeTurn` honours as a respawn trigger beside `loopArmedAtSpawn`.
 
-Integration is a server tool (`integrate_tracking_tasks`), not prompt-level git:
-the orchestrator is a fresh context every turn, the worst place for a multi-step
-stateful git operation. A parallel loop refuses to arm on a git-tracked tracking
-file — a merge that rolls back claim state is a merge that puts two workers in one
-worktree.
+Integration is a server tool (`task_integrate`), not prompt-level git: the
+orchestrator is a fresh context every turn, the worst place for a multi-step
+stateful git operation. Each parallel task must name its OWN git worktree; a task
+with no worktree, or one naming the loop workdir itself, is refused at claim.
 
 # Background Task Keep-Alive (Bash + Agent + Workflow — KANNA_PTY_BACKGROUND_TASK_MAX_MS)
 

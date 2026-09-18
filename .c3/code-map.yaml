@@ -164,8 +164,6 @@ c3-210:
   - src/server/loop-prompt-parallel.ts
   - src/server/tracking-file-lock.test.ts
   - src/server/tracking-file-lock.ts
-  - src/shared/loop-task-queue.test.ts
-  - src/shared/loop-task-queue.ts
   - src/server/mention-parser.test.ts
   - src/server/mention-parser.ts
   - src/server/proactive-compact.test.ts

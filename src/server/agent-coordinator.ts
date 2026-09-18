@@ -1,4 +1,7 @@
-import { type SetupLoopHandlerResult } from "./kanna-mcp"
+import { type ChatTaskStorePort, type SetupLoopHandlerResult } from "./kanna-mcp"
+import { buildSeedTaskEvents } from "../shared/chat-tasks/seed"
+import { EMPTY_CHAT_TASK_PROJECTION, type ChatTaskProjection } from "../shared/chat-tasks/read-model"
+import { readDoc } from "./structured-doc-io.adapter"
 import { PendingToolSlots } from "./pending-tool-slot"
 import type { LoopSetupInput } from "./loop-template"
 import type {
@@ -23,7 +26,6 @@ import { startClaudeSession } from "./claude-session-start"
 import { readLlmProviderSnapshot } from "./llm-provider"
 import { type ClaudeDriverPreference } from "../shared/types"
 import type { AutoContinueEvent } from "./auto-continue/events"
-import { syncLoopTracking } from "./loop-tracking-sync"
 import { ClaudeLimitDetector, CodexLimitDetector, type LimitDetection, type LimitDetector } from "./auto-continue/limit-detector"
 import { ClaudeAuthErrorDetector, type AuthErrorDetection } from "./auto-continue/auth-error-detector"
 import type { ScheduleManager } from "./auto-continue/schedule-manager"
@@ -172,7 +174,7 @@ import {
   isWorktreeOfSameRepo,
   readOracleScript,
 } from "./loop-template-io.adapter"
-import { currentBranchName } from "./loop-integrate-io.adapter"
+import { currentBranchName, mergeLoopBranch } from "./loop-integrate-io.adapter"
 import { runVerifyCommand } from "./loop-verify-io.adapter"
 import { homedir } from "node:os"
 import { isClaudeSdkProvider } from "./provider-catalog"
@@ -267,7 +269,6 @@ export class AgentCoordinator {
   readonly ptyInstanceRegistry: import("./claude-pty/pty-instance-registry").PtyInstanceRegistry | null
   readonly workflowRegistry: import("./workflow-registry").WorkflowRegistry | null
   readonly boardRegistry: import("./board-registry").BoardRegistry | null
-  readonly loopTrackingRegistry: import("./loop-tracking-registry").LoopTrackingRegistry | null
   readonly backgroundTaskOutputRegistry: import("./background-task-output-registry").BackgroundTaskOutputRegistry | null
   readonly subagentTranscriptRegistry: import("./subagent-transcript-registry").SubagentTranscriptRegistry | null
   readonly localCatalog: import("./local-catalog").LocalCatalogService | null
@@ -400,7 +401,6 @@ export class AgentCoordinator {
     this.ptyInstanceRegistry = args.ptyInstanceRegistry ?? null
     this.workflowRegistry = args.workflowRegistry ?? null
     this.boardRegistry = args.boardRegistry ?? null
-    this.loopTrackingRegistry = args.loopTrackingRegistry ?? null
     this.backgroundTaskOutputRegistry = args.backgroundTaskOutputRegistry ?? null
     this.subagentTranscriptRegistry = args.subagentTranscriptRegistry ?? null
     this.localCatalog = args.localCatalog ?? null
@@ -563,6 +563,11 @@ export class AgentCoordinator {
     }
   }
 
+  private projectChatTasks(chatId: string): ChatTaskProjection {
+    if (typeof this.store.getChatTasks !== "function") return EMPTY_CHAT_TASK_PROJECTION
+    return this.store.getChatTasks(chatId, { now: Date.now() })
+  }
+
   private loopCommandDeps(): LoopCommandDeps {
     return {
       store: this.store,
@@ -584,6 +589,20 @@ export class AgentCoordinator {
       readOracleScript,
       isLoopArmed: (chatId) => this.isLoopArmed(chatId),
       isChatBusy: (chatId) => isChatBusy(this.sendCommandDeps(), chatId),
+      getChatTasks: (chatId) => this.projectChatTasks(chatId).tasks,
+      getChatTaskProjection: (chatId) => this.projectChatTasks(chatId),
+      seedChatTasks: async (chatId, tasks, failedApproaches) => {
+        if (typeof this.store.appendChatTaskEvents !== "function") return
+        await this.store.appendChatTaskEvents(buildSeedTaskEvents({
+          chatId,
+          now: Date.now(),
+          tasks,
+          failedApproaches,
+          newId: () => crypto.randomUUID().slice(0, 8),
+        }))
+        this.emitStateChange(chatId)
+      },
+      readTrackingFileForImport: (absPath) => readDoc(absPath),
     }
   }
 
@@ -949,6 +968,22 @@ export class AgentCoordinator {
     return this.store.getLastUserMessageId(chatId)
   }
 
+  private chatTaskStore(): ChatTaskStorePort {
+    return {
+      appendEvents: async (events) => {
+        await this.store.appendChatTaskEvents(events)
+        for (const chatId of new Set(events.map((event) => event.chatId))) this.emitStateChange(chatId)
+      },
+      project: (chatId, ctx) => this.store.getChatTasks(chatId, ctx),
+      decide: async (chatId, ctx, fn) => {
+        const decided = await this.store.decideChatTaskEvents(chatId, ctx, fn)
+        if (decided.length > 0) this.emitStateChange(chatId)
+        return decided
+      },
+      mergeBranch: (workdir, branch) => mergeLoopBranch(workdir, branch),
+    }
+  }
+
   private isRunAlive(chatId: string, runId: string): boolean {
     return this.store.getSubagentRuns(chatId)[runId]?.status === "running"
   }
@@ -956,6 +991,7 @@ export class AgentCoordinator {
   private spawnClaudeTurnDeps(): SpawnClaudeTurnDeps {
     return {
       isRunAlive: (chatId, runId) => this.isRunAlive(chatId, runId),
+      chatTaskStore: this.chatTaskStore(),
       claudeSessions: this.claudeSessions,
       activeTurns: this.activeTurns,
       mentionedSubagentIdsByChat: this.mentionedSubagentIdsByChat,
@@ -1118,15 +1154,6 @@ export class AgentCoordinator {
 
   async emitAutoContinueEvent(event: AutoContinueEvent): Promise<void> {
     await emitAutoContinueEventFn(this.autoContinueDeps(), event)
-    if (this.loopTrackingRegistry) {
-      syncLoopTracking(
-        {
-          getAutoContinueEvents: (chatId) => this.store.getAutoContinueEvents(chatId),
-          registry: this.loopTrackingRegistry,
-        },
-        event.chatId,
-      )
-    }
   }
 
   async handleLimitError(chatId: string, detector: LimitDetector, error: Error): Promise<boolean> {

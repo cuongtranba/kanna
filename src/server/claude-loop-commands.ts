@@ -6,13 +6,16 @@ import { AUTO_CONTINUE_EVENT_VERSION, type AutoContinueEvent } from "./auto-cont
 import { deriveChatSchedules, deriveLastLoopSpec, deriveLoopState, type LoopSpec, type LoopState } from "./auto-continue/read-model"
 import { clearClaudeSessionContext } from "./claude-context-commands"
 import { timestamped } from "./claude-message-normalizer"
+import { importTrackingFileAsPlan, type ImportedPlan } from "../shared/chat-tasks/import-tracking"
+import type { ChatTaskRecord } from "../shared/chat-tasks/types"
+import type { LoopSeedTask } from "./loop-template"
+import { composeLoopWakePrompt } from "./loop-wake-prompt"
+import type { ChatTaskProjection } from "../shared/chat-tasks/read-model"
 import { buildTaskNotification, resolveSpawnPaths } from "./claude-session-config"
 import {
-  assertTrackingFileSafe,
   auditOracle,
   extractOracleScriptPath,
   validateLoopSetup,
-  reconcileTrackingFile,
   type LoopSetupInput,
 } from "./loop-template"
 import type {
@@ -83,6 +86,18 @@ export interface LoopCommandDeps {
   isLoopArmed(chatId: string): LoopState | null
 
   isChatBusy(chatId: string): boolean
+
+  getChatTasks(chatId: string): readonly ChatTaskRecord[]
+
+  getChatTaskProjection(chatId: string): ChatTaskProjection
+
+  seedChatTasks(
+    chatId: string,
+    tasks: readonly LoopSeedTask[],
+    failedApproaches: readonly string[],
+  ): Promise<void>
+
+  readTrackingFileForImport(absPath: string): Promise<string | null>
 }
 
 
@@ -92,6 +107,34 @@ export { clearClaudeSessionContext } from "./claude-context-commands"
 export { MAX_CONSECUTIVE_LOOP_FAILURES } from "../shared/loop-progress"
 
 const ARM_VERIFY_TIMEOUT_MS = 300_000
+
+async function importSeedPlan(
+  deps: LoopCommandDeps,
+  absPath: string,
+): Promise<ImportedPlan | null> {
+  try {
+    const content = await deps.readTrackingFileForImport(absPath)
+    if (content === null || content.trim().length === 0) return null
+    return importTrackingFileAsPlan(content)
+  } catch {
+    return null
+  }
+}
+
+function seedsFromImportOrHint(
+  imported: ImportedPlan | null,
+  chunkHint: string | null,
+): readonly LoopSeedTask[] {
+  const fromFile = (imported?.tasks ?? [])
+    .filter((task) => !task.completed)
+    .map((task) => ({
+      subject: task.subject,
+      ...(task.worktree !== null ? { worktree: task.worktree } : {}),
+      ...(task.branch !== null ? { branch: task.branch } : {}),
+    }))
+  if (fromFile.length > 0) return fromFile
+  return chunkHint !== null && chunkHint.trim().length > 0 ? [{ subject: chunkHint.trim() }] : []
+}
 
 export async function disarmFailingLoop(
   deps: LoopCommandDeps,
@@ -200,7 +243,14 @@ async function deliverSubagentToMainInner(
 
   let prompt: string
   if (armed) {
-    prompt = `${notification}\n\n${armed.prompt}`
+    const projection = deps.getChatTaskProjection(chatId)
+    prompt = composeLoopWakePrompt({
+      notice: notification,
+      prompt: armed.prompt,
+      goal: null,
+      tasks: projection.tasks,
+      notes: projection.notes,
+    })
   } else {
     const plan = describeLastPlan(
       deriveLastLoopSpec(deps.store.getAutoContinueEvents(chatId), chatId),
@@ -282,25 +332,16 @@ export async function setupLoop(
     }
   }
 
-  const inspection = await deps.inspectTrackingFile(resolved.trackingFileAbs)
-  if (inspection.content !== null) {
-    const safety = assertTrackingFileSafe(inspection.content, {
-      goal: resolved.goal,
-      gitTracked: inspection.gitTracked,
-      force: args.input.force === true,
-    })
-    if (!safety.ok) return { ok: false, errors: [safety.error] }
-  }
-
-  if (resolved.parallelism > 1 && inspection.gitTracked && args.input.force !== true) {
+  const existingTasks = deps.getChatTasks(args.chatId)
+  const unfinished = existingTasks.filter((task) => task.status !== "completed")
+  if (unfinished.length > 0 && args.input.force !== true) {
+    const names = unfinished.slice(0, 5).map((task) => `${task.id} ${task.subject}`).join("; ")
     return {
       ok: false,
       errors: [
-        `${resolved.trackingFileRel} is git-tracked, and a parallel loop integrates task`
-        + " branches by merging them into this checkout. The queue's claim state is the only"
-        + " thing stopping two workers sharing a worktree, and a merge can roll it back."
-        + " Git-ignore the tracking file (or put it outside the repo), or pass force: true if"
-        + " you accept that risk.",
+        `this chat still has ${String(unfinished.length)} unfinished task(s) from an earlier`
+        + ` plan (${names}). Arming over them would mix two plans in one list. Finish or`
+        + " delete them, or pass force: true to arm anyway.",
       ],
     }
   }
@@ -331,27 +372,16 @@ export async function setupLoop(
     scriptPath,
     scriptContent,
   })
-  let created: boolean
-  let reconciled: boolean
-  let reconcileActions: string[]
+  const imported = await importSeedPlan(deps, resolved.trackingFileAbs)
+  const seeds: readonly LoopSeedTask[] = args.input.tasks && args.input.tasks.length > 0
+    ? args.input.tasks
+    : seedsFromImportOrHint(imported, resolved.chunkHint)
   try {
-    const ensureResult = await deps.ensureTrackingFile({
-      absPath: resolved.trackingFileAbs,
-      skeleton: resolved.skeleton,
-      reconcile: (existing) =>
-        reconcileTrackingFile(existing, {
-          goal: resolved.goal,
-          verifyCommand: resolved.verifyCommand,
-          chunkHint: resolved.chunkHint,
-        }),
-    })
-    created = ensureResult.created
-    reconciled = ensureResult.reconciled
-    reconcileActions = ensureResult.actions
+    await deps.seedChatTasks(args.chatId, seeds, imported?.failedApproaches ?? [])
   } catch (err) {
     return {
       ok: false,
-      errors: [`ensureTrackingFile failed: ${err instanceof Error ? err.message : String(err)}`],
+      errors: [`seeding the task list failed: ${err instanceof Error ? err.message : String(err)}`],
     }
   }
 
@@ -398,9 +428,9 @@ export async function setupLoop(
   return {
     ok: true,
     trackingFileRel: resolved.trackingFileRel,
-    created,
-    reconciled,
-    reconcileActions,
+    created: false,
+    reconciled: false,
+    reconcileActions: imported === null ? [] : [`imported ${String(seeds.length)} task(s) from ${resolved.trackingFileRel}`],
     oracleWarnings,
     prompt: resolved.prompt,
   }
@@ -416,6 +446,7 @@ export function toArmedLoopInfo(state: LoopState | null): ArmedLoopInfo | null {
     verifyCommand: state.verifyCommand,
     workdirAbs: state.workdirAbs,
     trackingFileRel: state.trackingFileRel,
+    parallelism: state.parallelism,
   }
 }
 

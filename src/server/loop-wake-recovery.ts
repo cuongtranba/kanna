@@ -151,6 +151,7 @@ export async function resumeLoop(
     ...(spec.verifyCommand !== null ? { verifyCommand: spec.verifyCommand } : {}),
     ...(spec.workdirAbs !== null ? { workdirAbs: spec.workdirAbs } : {}),
     ...(spec.trackingFileRel !== null ? { trackingFileRel: spec.trackingFileRel } : {}),
+    parallelism: spec.parallelism,
   })
 
   await rearmLoopWakeIfLost(deps, chatId, "server_restart")
