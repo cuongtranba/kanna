@@ -5,15 +5,18 @@ import type {
   LoopRowStatus,
   SubagentRunSnapshot,
 } from "./types"
+import type { ChatTaskRecord } from "./chat-tasks/types"
+import { isBlockedByNeeds } from "./chat-tasks/schedule"
 import {
-  APPEND_TRACKING_ROW_TOOL_NAME,
-  CLAIM_TRACKING_TASK_TOOL_NAME,
-  COMPLETE_TRACKING_TASK_TOOL_NAME,
   DELEGATE_SUBAGENT_TOOL_NAME,
-  INTEGRATE_TRACKING_TASKS_TOOL_NAME,
-  QUERY_TRACKING_FILE_TOOL_NAME,
-  REPLACE_TRACKING_SECTION_TOOL_NAME,
   STOP_LOOP_TOOL_NAME,
+  TASK_CLAIM_TOOL_NAME,
+  TASK_CREATE_TOOL_NAME,
+  TASK_INTEGRATE_TOOL_NAME,
+  TASK_LIST_TOOL_NAME,
+  TASK_NOTE_TOOL_NAME,
+  TASK_SETTLE_TOOL_NAME,
+  TASK_UPDATE_TOOL_NAME,
 } from "./tools"
 
 export const LOOP_SECTIONS = {
@@ -60,30 +63,31 @@ export function decideLoopAction(
 }
 
 export const LOOP_STEP_INVARIANTS: readonly { readonly id: string; readonly requires: readonly string[] }[] = [
-  { id: "read-plan", requires: [QUERY_TRACKING_FILE_TOOL_NAME] },
-  { id: "decide", requires: ["BOTH", "GOAL MET", "ORACLE TOO WEAK", "TERMINAL CHECK", "EVERY section", "with NO sections filter", "loop-end summary"] },
+  { id: "read-plan", requires: [TASK_LIST_TOOL_NAME] },
+  { id: "decide", requires: ["BOTH", "GOAL MET", "ORACLE TOO WEAK", "TERMINAL CHECK", "EVERY task", "with NO status filter", "loop-end summary"] },
   { id: "delegate", requires: [DELEGATE_SUBAGENT_TOOL_NAME, "run_in_background: true", "[chunk:", "END THIS TURN"] },
   { id: "stop", requires: [STOP_LOOP_TOOL_NAME] },
-  { id: "worker", requires: [APPEND_TRACKING_ROW_TOOL_NAME, REPLACE_TRACKING_SECTION_TOOL_NAME, "Before writing DONE", "git add -A"] },
+  { id: "worker", requires: [TASK_UPDATE_TOOL_NAME, TASK_NOTE_TOOL_NAME, "Before you mark the last task completed", "git add -A"] },
+  { id: "plan", requires: [TASK_CREATE_TOOL_NAME] },
   { id: "hard-rules", requires: ["NEVER edit code yourself", "/clear"] },
-  { id: "retry", requires: ["AUTH_REQUIRED", "do NOT call stop_loop", LOOP_SECTIONS.failedApproaches] },
+  { id: "retry", requires: ["AUTH_REQUIRED", "do NOT call stop_loop", "failed_approach"] },
 ]
 
 export const LOOP_PARALLEL_STEP_INVARIANTS: readonly {
   readonly id: string
   readonly requires: readonly string[]
 }[] = [
-  { id: "read-plan", requires: [QUERY_TRACKING_FILE_TOOL_NAME] },
-  { id: "integrate", requires: [INTEGRATE_TRACKING_TASKS_TOOL_NAME, "BEFORE you claim"] },
-  { id: "claim", requires: [CLAIM_TRACKING_TASK_TOOL_NAME, LOOP_SECTIONS.taskQueue, "claim_id"] },
+  { id: "read-plan", requires: [TASK_LIST_TOOL_NAME] },
+  { id: "integrate", requires: [TASK_INTEGRATE_TOOL_NAME, "BEFORE you claim"] },
+  { id: "claim", requires: [TASK_CLAIM_TOOL_NAME, "claim_id"] },
   {
     id: "decide",
     requires: [
       "GOAL MET",
       "ORACLE TOO WEAK",
       "TERMINAL CHECK",
-      "EVERY section",
-      "with NO sections filter",
+      "EVERY task",
+      "with NO status filter",
       "loop-end summary",
       "WAIT",
       "QUEUE BLOCKED",
@@ -97,11 +101,11 @@ export const LOOP_PARALLEL_STEP_INVARIANTS: readonly {
   { id: "stop", requires: [STOP_LOOP_TOOL_NAME] },
   {
     id: "worker-settle",
-    requires: [COMPLETE_TRACKING_TASK_TOOL_NAME, "release", APPEND_TRACKING_ROW_TOOL_NAME],
+    requires: [TASK_SETTLE_TOOL_NAME, "release", TASK_NOTE_TOOL_NAME],
   },
   { id: "worktree", requires: ["its OWN git worktree", "git -C"] },
   { id: "hard-rules", requires: ["NEVER edit code yourself", "/clear"] },
-  { id: "retry", requires: ["AUTH_REQUIRED", "do NOT call stop_loop", LOOP_SECTIONS.failedApproaches] },
+  { id: "retry", requires: ["AUTH_REQUIRED", "do NOT call stop_loop", "failed_approach"] },
 ]
 
 
@@ -134,18 +138,6 @@ export function deriveChunkLabel(prompt: string): string {
   return cap(cleaned)
 }
 
-export function chunkLabelFromSection(sectionSource: string): string {
-  const lines = sectionSource.split("\n")
-  const firstContent = lines.findIndex((line) => line.trim().length > 0)
-  const body =
-    firstContent >= 0 && /^\s*#{1,6}\s/.test(lines[firstContent] ?? "")
-      ? lines.slice(firstContent + 1).join("\n")
-      : sectionSource
-  const label = deriveChunkLabel(body)
-  if (label.toUpperCase() === "DONE") return ""
-  return label
-}
-
 function rowStatusFor(run: SubagentRunSnapshot): LoopRowStatus {
   switch (run.status) {
     case "running":
@@ -157,25 +149,13 @@ function rowStatusFor(run: SubagentRunSnapshot): LoopRowStatus {
   }
 }
 
-export interface LoopQueueItem {
-  id: string
-  label: string
-  blocked: boolean
-}
-
-export interface LoopTrackingSnapshot {
-  doneEntries: readonly string[]
-  nextChunkSection: string
-  queueItems?: readonly LoopQueueItem[] | null
-}
-
 export interface BuildLoopProgressInput {
   chatId: string
   armed: boolean
   loopArmedAt: number | null
   runs: readonly SubagentRunSnapshot[]
   rateLimit: LoopRateLimitInfo | null
-  tracking?: LoopTrackingSnapshot | null
+  tasks: readonly ChatTaskRecord[]
 }
 
 function runRow(run: SubagentRunSnapshot): LoopRow {
@@ -188,51 +168,19 @@ function runRow(run: SubagentRunSnapshot): LoopRow {
   }
 }
 
-function trackedRows(
-  runs: readonly SubagentRunSnapshot[],
-  tracking: LoopTrackingSnapshot,
-  armed: boolean,
-): LoopRow[] {
-  const rows: LoopRow[] = [...tracking.doneEntries].reverse().map((entry, index) => ({
-    runId: `progress:${index}`,
-    label: deriveChunkLabel(entry),
-    status: "done" as const,
-    startedAt: 0,
-    finishedAt: null,
-  }))
-
-  const completed = runs.filter((run) => run.status === "completed")
-  const unrecorded = completed.length - tracking.doneEntries.length
-  if (unrecorded > 0) rows.push(...completed.slice(-unrecorded).map(runRow))
-
-  rows.push(
-    ...runs.filter((run) => run.status !== "completed" && run.status !== "running").map(runRow),
-  )
-
-  const live = runs.filter((run) => run.status === "running")
-  rows.push(...live.map(runRow))
-
-  const queue = tracking.queueItems
-  if (queue) {
-    if (armed) rows.push(...queue.map(queueRow))
-    return rows
-  }
-  if (live.length > 0) return rows
-
-  const nextLabel = armed ? chunkLabelFromSection(tracking.nextChunkSection) : ""
-  if (nextLabel.length > 0) {
-    rows.push({ runId: "next", label: nextLabel, status: "pending", startedAt: 0, finishedAt: null })
-  }
-  return rows
+function taskStatus(task: ChatTaskRecord, all: readonly ChatTaskRecord[]): LoopRowStatus {
+  if (task.status === "completed") return "done"
+  if (task.status === "in_progress") return "running"
+  return isBlockedByNeeds(task, all) ? "blocked" : "pending"
 }
 
-function queueRow(item: LoopQueueItem): LoopRow {
+function taskRow(task: ChatTaskRecord, all: readonly ChatTaskRecord[]): LoopRow {
   return {
-    runId: `queue:${item.id}`,
-    label: item.label,
-    status: item.blocked ? "blocked" : "pending",
-    startedAt: 0,
-    finishedAt: null,
+    runId: `task:${task.id}`,
+    label: task.status === "in_progress" && task.activeForm ? task.activeForm : task.subject,
+    status: taskStatus(task, all),
+    startedAt: task.claimedAt ?? task.createdAt,
+    finishedAt: task.completedAt,
   }
 }
 
@@ -241,10 +189,25 @@ export function buildLoopProgress(input: BuildLoopProgressInput): LoopProgressSn
     .filter((run) => run.depth === 0 && run.startedAt >= (input.loopArmedAt ?? 0))
     .sort((a, b) => a.startedAt - b.startedAt)
 
+  const tasks = input.tasks
+  const rows: LoopRow[] = tasks.map((task) => taskRow(task, tasks))
+
+  if (input.armed) {
+    const boundRunIds = new Set(
+      tasks.map((task) => task.runId).filter((id): id is string => id !== null),
+    )
+    const errored = runs.filter(
+      (run) => run.status !== "running" && run.status !== "completed" && !boundRunIds.has(run.runId),
+    )
+    rows.push(...errored.map(runRow))
+  }
+
   return {
     chatId: input.chatId,
     armed: input.armed,
-    rows: input.tracking ? trackedRows(runs, input.tracking, input.armed) : runs.map(runRow),
+    rows,
     rateLimit: input.rateLimit,
+    completed: tasks.filter((task) => task.status === "completed").length,
+    total: tasks.length,
   }
 }

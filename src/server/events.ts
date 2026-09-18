@@ -12,6 +12,7 @@ import type {
   TranscriptEntry,
 } from "../shared/types"
 import type { AutoContinueEvent } from "./auto-continue/events"
+import type { ChatTaskEvent } from "../shared/chat-tasks/types"
 import type { ChatPermissionPolicyOverride, ToolRequest, ToolRequestDecision, ToolRequestStatus } from "../shared/permission-policy"
 import type { JsonArray, JsonObject } from "../shared/json"
 
@@ -69,6 +70,7 @@ export interface StoreState {
   chatTimingsByChatId: Map<string, ChatTimingState>
   stacksById: Map<string, StackRecord>
   subagentRunsByChatId: Map<string, Map<string, SubagentRunSnapshot>>
+  chatTasksByChatId: Map<string, ChatTaskEvent[]>
   toolRequestsById: Map<string, ToolRequest>
 }
 
@@ -81,6 +83,7 @@ export interface SnapshotFile {
   queuedMessages?: Array<{ chatId: string; entries: QueuedChatMessage[] }>
   messages?: Array<{ chatId: string; entries: TranscriptEntry[] }>
   autoContinueEvents?: Array<{ chatId: string; events: AutoContinueEvent[] }>
+  chatTasks?: Array<{ chatId: string; events: ChatTaskEvent[] }>
   stacks?: StackRecord[]
 }
 
@@ -418,7 +421,7 @@ export type ToolRequestEvent =
       mismatchReason?: string
     }
 
-export type StoreEvent = ProjectEvent | ChatEvent | MessageEvent | QueuedMessageEvent | TurnEvent | StackEvent | AutoContinueEvent | SubagentRunEvent | ToolRequestEvent
+export type StoreEvent = ProjectEvent | ChatEvent | MessageEvent | QueuedMessageEvent | TurnEvent | StackEvent | AutoContinueEvent | SubagentRunEvent | ToolRequestEvent | ChatTaskEvent
 
 export type StoreEventKind =
   | Exclude<StoreEvent, AutoContinueEvent>["type"]
@@ -433,6 +436,7 @@ export type LogName =
   | "schedules"
   | "stacks"
   | "tool-requests"
+  | "chat-tasks"
 
 export const LOG_FILES = {
   projects: "projects.jsonl",
@@ -443,6 +447,7 @@ export const LOG_FILES = {
   schedules: "schedules.jsonl",
   stacks: "stacks.jsonl",
   "tool-requests": "tool-requests.jsonl",
+  "chat-tasks": "chat-tasks.jsonl",
 } satisfies Record<LogName, string>
 
 export const LOG_OF_EVENT = {
@@ -503,6 +508,16 @@ export const LOG_OF_EVENT = {
   cron_run_started: "schedules",
   cron_run_outcome: "schedules",
   cron_run_skipped: "schedules",
+  chat_task_created: "chat-tasks",
+  chat_task_updated: "chat-tasks",
+  chat_task_deleted: "chat-tasks",
+  chat_task_claimed: "chat-tasks",
+  chat_task_run_bound: "chat-tasks",
+  chat_task_settled: "chat-tasks",
+  chat_task_integrated: "chat-tasks",
+  chat_task_note: "chat-tasks",
+  chat_task_epoch_advanced: "chat-tasks",
+  chat_task_native_synced: "chat-tasks",
 } satisfies Record<StoreEventKind, LogName>
 
 export interface StackRecord {
@@ -526,6 +541,7 @@ export function createEmptyState(): StoreState {
     chatTimingsByChatId: new Map(),
     stacksById: new Map(),
     subagentRunsByChatId: new Map(),
+    chatTasksByChatId: new Map<string, ChatTaskEvent[]>(),
     toolRequestsById: new Map<string, ToolRequest>(),
   }
 }

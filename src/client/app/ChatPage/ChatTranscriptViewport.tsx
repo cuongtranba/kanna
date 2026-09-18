@@ -41,7 +41,6 @@ import { timerAdapter } from "../../adapters/timer.adapter"
 import type { DomPort } from "../../ports/domPort"
 import type { TimerPort } from "../../ports/timerPort"
 import { LoopProgressSection } from "../LoopProgressSection"
-import { TaskProgressSection } from "../TaskProgressSection"
 import { BackgroundTasksSection } from "../BackgroundTasksSection"
 import { PluginsFooterSlot } from "../PluginsFooterSlot"
 import { useArrivingRows } from "./useArrivingRows"
@@ -420,10 +419,7 @@ export const ChatTranscriptViewport = memo(({
   const listFooter = (
     <div className="mx-auto w-full max-w-[800px] pt-4">
       <PluginsFooterSlot />
-      <div className="empty:hidden pb-4">
-        <TaskProgressSection messages={messages} />
-      </div>
-      {loopProgress && (loopProgress.armed || loopProgress.rows.length > 0) ? (
+      {loopProgress && (loopProgress.armed || loopProgress.rows.length > 0 || loopProgress.rateLimit) ? (
         <div className="pb-4">
           <LoopProgressSection
             loopProgress={loopProgress}

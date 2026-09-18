@@ -17,7 +17,6 @@ import type { PtyInstanceRegistry } from "./claude-pty/pty-instance-registry"
 import type { WorkflowRegistry } from "./workflow-registry"
 import type { BackgroundTaskOutputRegistry } from "./background-task-output-registry"
 import type { BoardRegistry } from "./board-registry"
-import type { LoopTrackingRegistry } from "./loop-tracking-registry"
 import type { FollowedSessionRegistry } from "./followed-session-registry"
 import type { UpdateManager } from "./update-manager"
 import type { PackageUpdateManager } from "./package-update-manager"
@@ -70,7 +69,6 @@ export interface EnvelopeDeps {
   workflowRegistry?: WorkflowRegistry
   backgroundTaskOutputRegistry?: BackgroundTaskOutputRegistry
   boardRegistry?: BoardRegistry
-  loopTrackingRegistry?: LoopTrackingRegistry
   followedSessionRegistry?: FollowedSessionRegistry
   machineDisplayName: string
   updateManager: UpdateManager | null
@@ -89,7 +87,7 @@ function buildSidebarSnapshotCacheEntry(
     return cache.sidebar
   }
 
-  const { store, agent, pushManager, workflowRegistry, loopTrackingRegistry } = deps
+  const { store, agent, pushManager, workflowRegistry } = deps
   const startedAt = performance.now()
   const discoveredProvidersByPath = new Map(
     deps.getDiscoveredProjects().map((p) => [p.localPath, p.discoveredByProviders])
@@ -101,9 +99,6 @@ function buildSidebarSnapshotCacheEntry(
     discoveredProvidersByPath,
     workflowRegistry,
     backgroundTasksByChatId: agent.getBackgroundTasksByChatId?.() ?? new Map(),
-    getLoopTracking: loopTrackingRegistry
-      ? (chatId: string) => loopTrackingRegistry.snapshot(chatId)
-      : undefined,
   })
   const observed = data.projectGroups.flatMap((group) =>
     group.chats.map((chat) => ({
@@ -167,7 +162,6 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
     workflowRegistry,
     backgroundTaskOutputRegistry,
     boardRegistry,
-    loopTrackingRegistry,
     followedSessionRegistry,
     machineDisplayName,
     updateManager,
@@ -194,7 +188,6 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
       agent.getClaudeSessionStates?.() ?? new Map(),
       resolvedAppSettings.getSnapshot().customModels ?? [],
       agent.getBackgroundTasksByChatId?.() ?? new Map(),
-      (id) => loopTrackingRegistry?.snapshot(id) ?? null,
     )
   }
 
@@ -466,7 +459,6 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
       agent.getClaudeSessionStates?.() ?? new Map(),
       resolvedAppSettings.getSnapshot().customModels ?? [],
       agent.getBackgroundTasksByChatId?.() ?? new Map(),
-      (id) => loopTrackingRegistry?.snapshot(id) ?? null,
     )
     return {
       v: PROTOCOL_VERSION,

@@ -191,6 +191,7 @@ describe("setupLoop — arms in the chat's own tree", () => {
     store.chats.set(chat.id, chat as never)
     const verifyCalls: { cwd: string }[] = []
     const ensured: { absPath: string }[] = []
+    const seeded: string[] = []
     const emitted: AutoContinueEvent[] = []
     const deps = makeDeps({
       store,
@@ -207,8 +208,11 @@ describe("setupLoop — arms in the chat's own tree", () => {
         ensured.push({ absPath: args.absPath })
         return { created: true, reconciled: false, actions: [], absPath: args.absPath }
       },
+      seedChatTasks: async (_chatId, tasks) => {
+        seeded.push(...tasks.map((task) => task.subject))
+      },
     })
-    return { deps, store, emitted, verifyCalls, ensured }
+    return { deps, store, emitted, verifyCalls, ensured, seeded }
   }
 
   const worktreeChat = {
@@ -230,10 +234,14 @@ describe("setupLoop — arms in the chat's own tree", () => {
     expect(verifyCalls).toEqual([{ cwd: "/repo/.worktrees/feat" }])
   })
 
-  test("the tracking-file skeleton is written under the worktree", async () => {
-    const { deps, ensured } = depsForChat(worktreeChat)
-    await setupLoop(deps, { chatId: "chat-1", input: validInput })
-    expect(ensured).toEqual([{ absPath: "/repo/.worktrees/feat/PROGRESS.md" }])
+  test("arming writes no tracking file — the chunk hint is seeded into the task list", async () => {
+    const { deps, ensured, seeded } = depsForChat(worktreeChat)
+    await setupLoop(deps, {
+      chatId: "chat-1",
+      input: { ...validInput, chunkHint: "start with src/client" },
+    })
+    expect(ensured).toEqual([])
+    expect(seeded).toEqual(["start with src/client"])
   })
 
   test("a solo chat with no bindings is unchanged", async () => {
@@ -244,7 +252,7 @@ describe("setupLoop — arms in the chat's own tree", () => {
     const armed = emitted.find((e) => e.kind === "loop_armed")
     expect((armed as { workdirAbs?: string }).workdirAbs).toBe("/repo")
     expect(verifyCalls).toEqual([{ cwd: "/repo" }])
-    expect(ensured).toEqual([{ absPath: "/repo/PROGRESS.md" }])
+    expect(ensured).toEqual([])
   })
 
   test("an explicit workdir outside the repo is still refused", async () => {

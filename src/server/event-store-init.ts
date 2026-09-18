@@ -35,6 +35,7 @@ export interface EventStoreInitDeps {
   readonly pushLogPath: string
   readonly stacksLogPath: string
   readonly toolRequestsLogPath: string
+  readonly chatTasksLogPath: string
   readonly transcriptsDir: string
   readonly sidebarProjectOrderPath: string
   readonly state: StoreState
@@ -64,6 +65,7 @@ function getLogPaths(deps: EventStoreInitDeps): SnapshotLogPaths {
     schedulesLogPath: deps.schedulesLogPath,
     stacksLogPath: deps.stacksLogPath,
     toolRequestsLogPath: deps.toolRequestsLogPath,
+    chatTasksLogPath: deps.chatTasksLogPath,
   }
 }
 
@@ -109,6 +111,7 @@ export async function clearStorage(deps: EventStoreInitDeps): Promise<void> {
     deps.storage.writeText(deps.sharesLogPath, ""),
     deps.storage.writeText(deps.stacksLogPath, ""),
     deps.storage.writeText(deps.toolRequestsLogPath, ""),
+    deps.storage.writeText(deps.chatTasksLogPath, ""),
   ])
 }
 
@@ -172,6 +175,7 @@ export async function initializeEventStore(
   await ensureFile(deps, deps.pushLogPath)
   await ensureFile(deps, deps.stacksLogPath)
   await ensureFile(deps, deps.toolRequestsLogPath)
+  await ensureFile(deps, deps.chatTasksLogPath)
   await loadSnapshot(deps)
   await replayLogs(deps)
   await callbacks.loadTunnelEvents()
@@ -219,6 +223,7 @@ export async function snapshotAndTruncateLogs(deps: EventStoreInitDeps): Promise
     schedulesLogPath: deps.schedulesLogPath,
     stacksLogPath: deps.stacksLogPath,
     toolRequestsLogPath: deps.toolRequestsLogPath,
+    chatTasksLogPath: deps.chatTasksLogPath,
   }
   await truncateLogsAfterSnapshot(deps.storage, logPaths, JSON.stringify(snapshot, null, 2))
 }

@@ -1,3 +1,4 @@
+import { EMPTY_CHAT_TASK_PROJECTION } from "../../shared/chat-tasks/read-model"
 
 import type { AutoContinueEvent } from "../auto-continue/events"
 import type { TranscriptEntry } from "../../shared/types"
@@ -73,6 +74,10 @@ export function makeDeps(overrides: Partial<LoopCommandDeps> = {}): LoopCommandD
     claudeSessions: new Map<string, ClaudeSessionState>(),
     activeTurns: new Map<string, unknown>(),
     startingTurns: new Map<string, unknown>(),
+    getChatTasks: () => [],
+    getChatTaskProjection: () => EMPTY_CHAT_TASK_PROJECTION,
+    seedChatTasks: async () => {},
+    readTrackingFileForImport: async () => null,
     getSubagents: () => [],
     getAppSettingsSnapshot: () => ({}),
     closeClaudeSession: (chatId) => {

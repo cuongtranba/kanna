@@ -1,7 +1,7 @@
 
 import path from "node:path"
 
-import { APPEND_TRACKING_ROW_TOOL_NAME, DELEGATE_SUBAGENT_TOOL_NAME, QUERY_TRACKING_FILE_TOOL_NAME, REPLACE_TRACKING_SECTION_TOOL_NAME, STOP_LOOP_TOOL_NAME } from "../shared/tools"
+import { DELEGATE_SUBAGENT_TOOL_NAME, STOP_LOOP_TOOL_NAME, TASK_CREATE_TOOL_NAME, TASK_LIST_TOOL_NAME, TASK_NOTE_TOOL_NAME, TASK_UPDATE_TOOL_NAME } from "../shared/tools"
 import { LOOP_PARALLEL_STEP_INVARIANTS, LOOP_SECTIONS, LOOP_STEP_INVARIANTS } from "../shared/loop-progress"
 import { confinePathToDir, shellCommandIsParseable } from "./input-validation"
 import { renderParallelLoopPrompt } from "./loop-prompt-parallel"
@@ -14,6 +14,13 @@ export const MAX_PARALLELISM = 3
 
 export const DEFAULT_INTEGRATION_BRANCH = "HEAD"
 
+export interface LoopSeedTask {
+  subject: string
+  needs?: readonly string[]
+  worktree?: string
+  branch?: string
+}
+
 export interface LoopSetupInput {
   goal: string
   verifyCommand: string
@@ -24,6 +31,7 @@ export interface LoopSetupInput {
   parallelism?: number
   integrationBranch?: string
   force?: boolean
+  tasks?: readonly LoopSeedTask[]
 }
 
 export interface LoopSetupContext {
@@ -83,48 +91,43 @@ function renderLoopPrompt(args: {
   integrationBranch?: string
 }): string {
   if (args.parallelism > 1) return renderParallelLoopPrompt(args)
-  const { goal, verifyCommand, trackingFileRel, subagentId, parallelism, workdirRel } = args
-  const f = `file: "${trackingFileRel}"`
+  const { goal, verifyCommand, subagentId, parallelism, workdirRel } = args
   const workdirPhrase = workdirRel === "." ? "the project root" : workdirRel
   const workerPrompt = [
-    "[chunk: <one-line summary of the Next chunk you just read>]",
-    `Do the next chunk in ${trackingFileRel}. All work happens in ${workdirPhrase}.`,
-    `To read the plan, call ${QUERY_TRACKING_FILE_TOOL_NAME}({ ${f}, sections: [\\"${LOOP_SECTIONS.nextChunk}\\"] })`,
-    "— by section, never the whole file.",
+    "[chunk: <the subject of the task you are delegating>]",
+    `Do the task named below. All work happens in ${workdirPhrase}.`,
+    `To see the plan, call ${TASK_LIST_TOOL_NAME}({}) — the task list IS the plan; there is no file to read.`,
     `Verify your work with \`${verifyCommand}\` before you report success.`,
-    "On success: commit all changes — run `git add -A && git commit -m \"<one-line chunk summary>\"` in the work directory; then call",
-    `${APPEND_TRACKING_ROW_TOOL_NAME}({ ${f}, section: \\"${LOOP_SECTIONS.progress}\\", entry: \\"- <date> <chunk> DONE\\", position: \\"top\\" })`,
-    "and then REPLACE the plan's next step with",
-    `${REPLACE_TRACKING_SECTION_TOOL_NAME}({ ${f}, section: \\"${LOOP_SECTIONS.nextChunk}\\", body: \\"<the single next chunk, or DONE if the plan is finished>\\" })`,
-    "— replace, never append, or completed chunks pile up and get redone.",
-    "Before writing DONE, run the TERMINAL CHECK: call",
-    `${QUERY_TRACKING_FILE_TOOL_NAME}({ ${f} })`,
-    "with NO sections filter — the one whole-file read you are allowed — and",
-    "confirm no other section still lists undone work; if one does, write that",
-    `work into ${LOOP_SECTIONS.nextChunk} instead of DONE.`,
+    "On success: commit all changes — run `git add -A && git commit -m \"<one-line task summary>\"` in the work directory; then call",
+    `${TASK_UPDATE_TOOL_NAME}({ task_id: \\"<the task id>\\", status: \\"completed\\" })`,
+    "and record what you did with",
+    `${TASK_NOTE_TOOL_NAME}({ task_id: \\"<the task id>\\", kind: \\"progress\\", text: \\"<what changed>\\" }).`,
+    "Before you mark the last task completed, run the TERMINAL CHECK: call",
+    `${TASK_LIST_TOOL_NAME}({}) with NO status filter and confirm EVERY task is completed.`,
+    "If any remains, leave it and let the orchestrator delegate it.",
+    "If the work reveals a step nobody has planned yet, add it with",
+    `${TASK_CREATE_TOOL_NAME}({ subject: \\"<the new step>\\" }) instead of doing it silently.`,
     "On failure: call",
-    `${APPEND_TRACKING_ROW_TOOL_NAME}({ ${f}, section: \\"${LOOP_SECTIONS.failedApproaches}\\", entry: \\"- <what you tried and why it failed>\\" })`,
-    "so the next iteration does not repeat it.",
-    "Never Read or Edit the whole tracking file. Terminate when done.",
+    `${TASK_NOTE_TOOL_NAME}({ task_id: \\"<the task id>\\", kind: \\"failed_approach\\", text: \\"<what you tried and why it failed>\\" })`,
+    "so the next iteration does not repeat it, and leave the task's status alone.",
+    "Terminate when done.",
   ].join(" ")
 
   return [
     "You are the ORCHESTRATOR of an autonomous loop. You do NOT do the work",
     "yourself — you delegate it. Follow these steps EXACTLY every turn:",
     "",
-    `1. Read the current plan by SECTION — do NOT read the whole ${trackingFileRel}.`,
-    `   Call ${QUERY_TRACKING_FILE_TOOL_NAME}({ ${f}, sections: ["${LOOP_SECTIONS.nextChunk}", "${LOOP_SECTIONS.progress}"], list_limit: 5 })`,
-    "   This keeps the file off your context as it grows.",
+    `1. Read the current plan: call ${TASK_LIST_TOOL_NAME}({}).`,
+    "   The task list is your ONLY durable state. It survives the /clear between",
+    "   turns, so it is where the plan lives — there is no tracking file.",
     `2. Run the verify command (the ORACLE) with Bash, from ${workdirPhrase}:`,
     `   \`${verifyCommand}\`. Check its exit code.`,
     "3. Decide, using BOTH signals — the oracle is only a proxy, the plan is the",
     "   authority. Four cases:",
-    `   (a) oracle exited 0 AND "${LOOP_SECTIONS.nextChunk}" is empty / says DONE → run the`,
+    "   (a) oracle exited 0 AND no task is pending or in progress → run the",
     "       TERMINAL CHECK before declaring victory: call",
-    `       ${QUERY_TRACKING_FILE_TOOL_NAME}({ ${f} })`,
-    "       with NO sections filter — the one whole-file read you are allowed —",
-    "       and scan EVERY section, including non-canonical ones (a \"## Chunks\"",
-    "       or \"## Plan\" list), for undone work. Work found → treat as case (b).",
+    `       ${TASK_LIST_TOOL_NAME}({}) with NO status filter and scan EVERY task.`,
+    "       Any task still pending or in progress → treat as case (b).",
     `       Only if the whole plan is exhausted: run \`git log --oneline -20\` in`,
     `       ${workdirPhrase} to count the commits, then print a loop-end summary:`,
     "       how many commits were made, what each one covers, and what the user",
@@ -132,19 +135,20 @@ function renderLoopPrompt(args: {
     `       Then print "GOAL MET: ${goal}",`,
     `       call ${STOP_LOOP_TOOL_NAME}({}) and END THIS TURN. Do NOT call`,
     "       delegate_subagent.",
-    `   (b) oracle exited 0 BUT "${LOOP_SECTIONS.nextChunk}" still lists real work — or the`,
-    "       TERMINAL CHECK found undone work in any other section → the oracle",
-    "       is too weak to define done. Print",
-    "       \"ORACLE TOO WEAK: <what the plan still lists>\", call",
+    "   (b) oracle exited 0 BUT the plan still lists real work — or the TERMINAL",
+    "       CHECK found an unfinished task → the oracle is too weak to define",
+    "       done. Print \"ORACLE TOO WEAK: <what the plan still lists>\", call",
     `       ${STOP_LOOP_TOOL_NAME}({}) and END THIS TURN so a human can tighten`,
     "       it. Do NOT declare the goal met, and do NOT delegate.",
-    `   (c) oracle failed AND "${LOOP_SECTIONS.nextChunk}" has work → normal case, go to step 4.`,
-    `   (d) oracle failed BUT "${LOOP_SECTIONS.nextChunk}" is empty → the plan ran out while the`,
+    "   (c) oracle failed AND a task is pending → normal case, go to step 4.",
+    "   (d) oracle failed BUT no task is pending → the plan ran out while the",
     "       goal is unmet. Write the next step yourself with",
-    `       ${REPLACE_TRACKING_SECTION_TOOL_NAME}({ ${f}, section: "${LOOP_SECTIONS.nextChunk}", body: "<one concrete chunk>" })`,
+    `       ${TASK_CREATE_TOOL_NAME}({ subject: "<one concrete next step>" })`,
     "       then go to step 4.",
-    `4. Delegate the "${LOOP_SECTIONS.nextChunk}" work with EXACTLY this call (the subagent is`,
-    "   fixed by configuration), making the ONE substitution marked below:",
+    "4. Mark the task you are about to delegate as in progress with",
+    `   ${TASK_UPDATE_TOOL_NAME}({ task_id: "<id>", status: "in_progress" }), then`,
+    "   delegate it with EXACTLY this call (the subagent is fixed by",
+    "   configuration), making the ONE substitution marked below:",
     "",
     `     ${DELEGATE_SUBAGENT_TOOL_NAME}({`,
     `       subagent_id: "${subagentId}",`,
@@ -152,35 +156,33 @@ function renderLoopPrompt(args: {
     `       prompt: "${workerPrompt}",`,
     "     })",
     "",
-    "   Replace `<one-line summary of the Next chunk you just read>` inside the",
-    "   leading `[chunk: …]` marker with a short name for the chunk you are",
-    "   delegating (e.g. `[chunk: Wire session tabs to the store]`). It is how",
-    "   this iteration is labelled in the UI, and it is the only edit you make",
-    "   to that prompt — leave every other word verbatim.",
+    "   Replace `<the subject of the task you are delegating>` inside the leading",
+    "   `[chunk: …]` marker with that task's subject, and name the task's id in",
+    "   the prompt body wherever `<the task id>` appears. Those are the only",
+    "   edits you make to that prompt — leave every other word verbatim.",
     "",
     "5. If THIS turn began with a task-notification reporting a FAILED run, class",
     "   the failure before you re-delegate:",
     "   - INFRA (AUTH_REQUIRED, CAP_EXCEEDED, DEPTH_EXCEEDED, timeout, spawn",
-    "     failure): the work was never attempted. Re-delegate the SAME chunk",
+    "     failure): the work was never attempted. Re-delegate the SAME task",
     "     unchanged and do NOT call stop_loop — Kanna disarms the loop itself",
     "     after repeated failures, so stopping here just costs a human round-trip.",
     "   - WORK (the worker ran and could not finish): record it with",
-    `     ${APPEND_TRACKING_ROW_TOOL_NAME}({ ${f}, section: "${LOOP_SECTIONS.failedApproaches}", entry: "- <reason>" })`,
-    "     then delegate a DIFFERENT approach to the same chunk.",
+    `     ${TASK_NOTE_TOOL_NAME}({ task_id: "<id>", kind: "failed_approach", text: "<reason>" })`,
+    "     then delegate a DIFFERENT approach to the same task.",
     "6. End your turn. Kanna will /clear your context and re-fire this exact",
-    `   prompt after the worker completes. Your ONLY durable state is ${trackingFileRel}.`,
+    "   prompt after the worker completes. Your ONLY durable state is the task",
+    "   list — nothing you keep in your head survives.",
     "",
     "HARD RULES (do not violate):",
     "- You are the orchestrator. NEVER edit code yourself: do NOT use Edit,",
     "  Write, MultiEdit, or the Task/Agent tool. Kanna blocks these tools in",
     "  loop turns; attempting them wastes the turn.",
-    `- NEVER read the whole ${trackingFileRel} — EXCEPT the single TERMINAL CHECK`,
-    `  in step 3(a). Use ${QUERY_TRACKING_FILE_TOOL_NAME}`,
-    `  (read), ${APPEND_TRACKING_ROW_TOOL_NAME} and`,
-    `  ${REPLACE_TRACKING_SECTION_TOOL_NAME} (write) so the file stays off your`,
-    "  context no matter how large it grows.",
+    `- Record progress ONLY through ${TASK_UPDATE_TOOL_NAME} and`,
+    `  ${TASK_NOTE_TOOL_NAME}. A task's status cannot pile up the way a hand-`,
+    "  written log could, which is why completed work never gets redone here.",
     ...renderDelegationRule(parallelism),
-    "- All progress lives in the tracking file, never in your context.",
+    "- All progress lives in the task list, never in your context.",
     "",
     `Goal (for reference): ${goal}`,
     `Verify command: \`${verifyCommand}\``,
@@ -500,7 +502,6 @@ export function validateLoopSetup(
 
   const invariants = parallelism > 1 ? LOOP_PARALLEL_STEP_INVARIANTS : LOOP_STEP_INVARIANTS
   const requiredSubstrings: readonly string[] = [
-    resolved.rel,
     verifyCommand,
     subagentId,
     ...invariants.flatMap((step) => step.requires),

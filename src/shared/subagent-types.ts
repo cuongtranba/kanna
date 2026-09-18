@@ -151,6 +151,8 @@ export interface LoopProgressSnapshot {
   armed: boolean
   rows: LoopRow[]
   rateLimit: LoopRateLimitInfo | null
+  completed: number
+  total: number
 }
 
 

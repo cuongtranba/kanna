@@ -10,6 +10,7 @@ import {
   applyStackEvent,
 } from "./event-store-chat-lifecycle"
 import { applySubagentEvent } from "./event-store-subagent"
+import { applyChatTaskEvent } from "./event-store-tasks"
 import { applyToolRequestEvent } from "./event-store-tool-requests"
 
 function isAutoContinueEvent(event: StoreEvent): event is AutoContinueEvent {
@@ -92,6 +93,19 @@ export function applyStoreEvent(
     case "tool_request_put":
     case "tool_request_resolved": {
       applyToolRequestEvent(state.toolRequestsById, e)
+      break
+    }
+    case "chat_task_created":
+    case "chat_task_updated":
+    case "chat_task_deleted":
+    case "chat_task_claimed":
+    case "chat_task_run_bound":
+    case "chat_task_settled":
+    case "chat_task_integrated":
+    case "chat_task_note":
+    case "chat_task_epoch_advanced":
+    case "chat_task_native_synced": {
+      applyChatTaskEvent(state.chatTasksByChatId, e)
       break
     }
   }

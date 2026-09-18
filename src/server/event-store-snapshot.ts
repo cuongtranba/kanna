@@ -10,6 +10,7 @@ import type { CloudflareTunnelEvent } from "./cloudflare-tunnel/events"
 import type { PushEvent } from "./push/events"
 import type { ShareEvent } from "./session-share/share-projection"
 import { compactCronRunEvents } from "./cron/compact"
+import { compactChatTaskEvents } from "../shared/chat-tasks/compact"
 import { compactLoopWakeEvents } from "./auto-continue/compact-loop-wakes"
 import {
   type ChatRecord,
@@ -42,6 +43,7 @@ export interface SnapshotLogPaths {
   schedulesLogPath: string
   stacksLogPath: string
   toolRequestsLogPath: string
+  chatTasksLogPath: string
 }
 
 export interface LoadSnapshotResult {
@@ -154,6 +156,12 @@ export async function loadSnapshotIntoState(
       }
     }
 
+    if (parsed.chatTasks?.length) {
+      for (const entry of parsed.chatTasks) {
+        state.chatTasksByChatId.set(entry.chatId, compactChatTaskEvents([...entry.events]))
+      }
+    }
+
     if (parsed.stacks?.length) {
       for (const stack of parsed.stacks) {
         state.stacksById.set(stack.id, { ...stack, projectIds: [...stack.projectIds] })
@@ -190,6 +198,9 @@ export function buildSnapshotFile(
     autoContinueEvents: [...state.autoContinueEventsByChatId.entries()].map(
       ([chatId, events]) => ({ chatId, events: [...events] }),
     ),
+    chatTasks: [...state.chatTasksByChatId.entries()].map(
+      ([chatId, events]) => ({ chatId, events: [...events] }),
+    ),
     stacks: [...state.stacksById.values()]
       .filter((stack) => !stack.deletedAt)
       .map((stack) => ({ ...stack, projectIds: [...stack.projectIds] })),
@@ -211,6 +222,7 @@ export async function truncateLogsAfterSnapshot(
     storage.writeText(paths.schedulesLogPath, ""),
     storage.writeText(paths.stacksLogPath, ""),
     storage.writeText(paths.toolRequestsLogPath, ""),
+    storage.writeText(paths.chatTasksLogPath, ""),
   ])
 }
 

@@ -2,9 +2,11 @@ import { describe, expect, test } from "bun:test"
 import path from "node:path"
 import { TASK_DOC_SECTIONS, renderTaskDocSkeleton } from "../shared/task-doc"
 import {
-  CLAIM_TRACKING_TASK_TOOL_NAME,
-  COMPLETE_TRACKING_TASK_TOOL_NAME,
-  INTEGRATE_TRACKING_TASKS_TOOL_NAME,
+  TASK_CLAIM_TOOL_NAME,
+  TASK_INTEGRATE_TOOL_NAME,
+  TASK_LIST_TOOL_NAME,
+  TASK_SETTLE_TOOL_NAME,
+  TASK_UPDATE_TOOL_NAME,
 } from "../shared/tools"
 import {
   assertTrackingFileSafe,
@@ -46,7 +48,7 @@ describe("validateLoopSetup — happy path", () => {
     expect(result.resolved.trackingFileAbs).toBe(path.join(cwd, "PROGRESS.md"))
     expect(result.resolved.chunkHint).toBe("start with warnings in src/client/**")
     expect(result.resolved.subagentId).toBe("sub-1")
-    expect(result.resolved.prompt).toContain("PROGRESS.md")
+    expect(result.resolved.prompt).not.toContain("PROGRESS.md")
     expect(result.resolved.prompt).toContain("bun run lint")
     expect(result.resolved.prompt).toContain("delegate_subagent")
     expect(result.resolved.prompt).toContain("run_in_background: true")
@@ -87,7 +89,7 @@ describe("validateLoopSetup — happy path", () => {
     if (!result.ok) throw new Error(result.errors.join(", "))
     expect(result.resolved.trackingFileRel).toBe(path.join("docs", "LOOP-STATE.md"))
     expect(result.resolved.trackingFileAbs).toBe(path.join(cwd, "docs", "LOOP-STATE.md"))
-    expect(result.resolved.prompt).toContain(path.join("docs", "LOOP-STATE.md"))
+    expect(result.resolved.prompt).not.toContain(path.join("docs", "LOOP-STATE.md"))
   })
 
   test("respects an absolute tracking file path when inside cwd", () => {
@@ -415,19 +417,18 @@ describe("renderLoopPrompt structural invariants", () => {
     expect(prompt).toContain("subagent_id: \"sub-1\"")
   })
 
-  test("every rendered tracking-file tool call names the file explicitly", () => {
+  test("the prompt names no tracking file at all — the task list is the plan", () => {
     const prompt = __testing.renderLoopPrompt({ ...BASE, trackingFileRel: "docs/PROGRESS-panes.md" })
-    expect(prompt).not.toContain("PROGRESS.md\"")
-    for (const call of ["query_tracking_file", "append_tracking_row", "replace_tracking_section"]) {
-      const idx = prompt.indexOf(call)
-      expect(idx).toBeGreaterThan(-1)
-    }
-    expect(prompt.match(/docs\/PROGRESS-panes\.md/g)?.length ?? 0).toBeGreaterThanOrEqual(4)
+    expect(prompt).not.toContain("PROGRESS")
+    expect(prompt).not.toContain("query_tracking_file")
+    expect(prompt).not.toContain("append_tracking_row")
+    expect(prompt).not.toContain("replace_tracking_section")
+    expect(prompt).toContain(TASK_LIST_TOOL_NAME)
   })
 
   test("GOAL MET is gated on the plan being exhausted, not the exit code alone", () => {
     const prompt = __testing.renderLoopPrompt(BASE)
-    expect(prompt).toContain("Next chunk")
+    expect(prompt).toContain("no task is pending or in progress")
     expect(prompt).toContain("BOTH")
     expect(prompt).toContain("ORACLE TOO WEAK")
   })
@@ -435,42 +436,38 @@ describe("renderLoopPrompt structural invariants", () => {
   test("GOAL MET requires a terminal whole-plan check across every section", () => {
     const prompt = __testing.renderLoopPrompt(BASE)
     expect(prompt).toContain("TERMINAL CHECK")
-    expect(prompt).toContain("EVERY section")
-    expect(prompt).toContain("with NO sections filter")
-    expect(prompt).toMatch(/ORACLE TOO WEAK[\s\S]*any other section|any other section[\s\S]*ORACLE TOO WEAK/)
+    expect(prompt).toContain("EVERY task")
+    expect(prompt).toContain("with NO status filter")
+    expect(prompt).toMatch(/TERMINAL CHECK[\s\S]*ORACLE TOO WEAK/)
   })
 
-  test("the whole-file ban carves out exactly the terminal check", () => {
+  test("progress may only be recorded through the task tools", () => {
     const prompt = __testing.renderLoopPrompt(BASE)
-    expect(prompt).toContain("EXCEPT the single TERMINAL CHECK")
+    expect(prompt).toContain("Record progress ONLY through")
+    expect(prompt).toContain(TASK_UPDATE_TOOL_NAME)
   })
 
-  test("worker re-reads the whole plan before it may write DONE", () => {
+  test("worker re-reads the whole plan before it may finish the last task", () => {
     const prompt = __testing.renderLoopPrompt(BASE)
-    expect(prompt).toContain("Before writing DONE")
-  })
-
-  test("the terminal-check reads name the tracking file explicitly", () => {
-    const prompt = __testing.renderLoopPrompt({ ...BASE, trackingFileRel: "docs/PROGRESS-panes.md" })
-    expect(prompt).not.toContain("PROGRESS.md\"")
+    expect(prompt).toContain("Before you mark the last task completed")
   })
 
   test("worker prompt opens with a [chunk: …] marker the orchestrator substitutes", () => {
     const prompt = __testing.renderLoopPrompt(BASE)
-    expect(prompt).toContain("prompt: \"[chunk: <one-line summary of the Next chunk you just read>]")
-    expect(prompt).toContain("only edit you make")
+    expect(prompt).toContain("prompt: \"[chunk: <the subject of the task you are delegating>]")
+    expect(prompt).toContain("only")
   })
 
-  test("worker replaces (not appends) the Next chunk section", () => {
+  test("the worker completes its task by status, which cannot pile up the way a log could", () => {
     const prompt = __testing.renderLoopPrompt(BASE)
-    expect(prompt).toContain("replace_tracking_section")
-    expect(prompt).toMatch(/replace_tracking_section[^\n]*Next chunk/)
+    expect(prompt).toMatch(/task_update\(\{ task_id: [^}]*status: [^}]*completed/)
+    expect(prompt).not.toContain("position: ")
   })
 
   test("carries an infra-vs-work retry policy so a transient failure does not kill the loop", () => {
     const prompt = __testing.renderLoopPrompt(BASE)
     expect(prompt).toContain("AUTH_REQUIRED")
-    expect(prompt).toContain("Failed approaches")
+    expect(prompt).toContain("failed_approach")
     expect(prompt).toContain("do NOT call stop_loop")
   })
 
@@ -488,11 +485,9 @@ describe("renderLoopPrompt structural invariants", () => {
     })
     expect(prompt).toContain("at most 3 workers")
     expect(prompt).toContain("its OWN git worktree")
-    expect(prompt).toContain(CLAIM_TRACKING_TASK_TOOL_NAME)
-    expect(prompt).toContain(COMPLETE_TRACKING_TASK_TOOL_NAME)
-    expect(prompt).toContain(INTEGRATE_TRACKING_TASKS_TOOL_NAME)
-    expect(prompt).toContain("Task queue")
-    expect(prompt).not.toContain(LOOP_SECTIONS.nextChunk)
+    expect(prompt).toContain(TASK_CLAIM_TOOL_NAME)
+    expect(prompt).toContain(TASK_SETTLE_TOOL_NAME)
+    expect(prompt).toContain(TASK_INTEGRATE_TOOL_NAME)
   })
 
   test("the parallel prompt names WAIT and QUEUE BLOCKED as distinct, non-stopping outcomes", () => {
@@ -761,7 +756,7 @@ describe("LOOP_SECTIONS constants", () => {
     expect(LOOP_SECTIONS.failedApproaches).toBe("Failed approaches")
   })
 
-  test("rendered prompt contains LOOP_SECTIONS values, not independent literals", () => {
+  test("the rendered prompt names the task tools, not tracking-file sections", () => {
     const prompt = __testing.renderLoopPrompt({
       goal: "green build",
       verifyCommand: "make check",
@@ -770,8 +765,8 @@ describe("LOOP_SECTIONS constants", () => {
       parallelism: 1,
       workdirRel: ".",
     })
-    expect(prompt).toContain(LOOP_SECTIONS.nextChunk)
-    expect(prompt).toContain(LOOP_SECTIONS.progress)
-    expect(prompt).toContain(LOOP_SECTIONS.failedApproaches)
+    expect(prompt).not.toContain(LOOP_SECTIONS.nextChunk)
+    expect(prompt).toContain(TASK_LIST_TOOL_NAME)
+    expect(prompt).toContain(TASK_UPDATE_TOOL_NAME)
   })
 })

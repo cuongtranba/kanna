@@ -21,13 +21,40 @@ function liveWorkerLabel(rows: LoopProgressSnapshot["rows"]): string {
   return live > 1 ? `${live} workers running` : "Loop running"
 }
 
+function HeaderAccessory({
+  armed,
+  rows,
+  completed,
+  total,
+}: {
+  armed: boolean
+  rows: LoopProgressSnapshot["rows"]
+  completed: number
+  total: number
+}) {
+  if (armed) {
+    return (
+      <span className="ml-auto inline-flex items-center gap-1.5 text-xs font-normal text-muted-foreground">
+        <StateMark tone="active" className="text-foreground" />
+        {liveWorkerLabel(rows)}
+      </span>
+    )
+  }
+  if (total === 0) return null
+  return (
+    <span className="ml-auto text-xs font-normal text-muted-foreground tabular-nums">
+      {completed}/{total} completed
+    </span>
+  )
+}
+
 interface Props {
   loopProgress: LoopProgressSnapshot
   onResume?: (scheduleId: string, scheduledAt: number) => void
 }
 
 export function LoopProgressSection({ loopProgress, onResume }: Props) {
-  const { armed, rows, rateLimit } = loopProgress
+  const { armed, rows, rateLimit, completed, total } = loopProgress
   if (!armed && rows.length === 0 && !rateLimit) return null
 
   return (
@@ -35,13 +62,8 @@ export function LoopProgressSection({ loopProgress, onResume }: Props) {
       <div className="rounded-2xl border border-border overflow-hidden">
         <h3 className="font-medium text-foreground text-sm p-3 px-4 bg-card border-b border-border flex items-center gap-2">
           <ListChecks className="h-4 w-4 text-muted-foreground" />
-          Progress
-          {armed ? (
-            <span className="ml-auto inline-flex items-center gap-1.5 text-xs font-normal text-muted-foreground">
-              <StateMark tone="active" className="text-foreground" />
-              {liveWorkerLabel(rows)}
-            </span>
-          ) : null}
+          {armed ? "Progress" : "Tasks"}
+          <HeaderAccessory armed={armed} rows={rows} completed={completed} total={total} />
         </h3>
 
         {rateLimit ? (

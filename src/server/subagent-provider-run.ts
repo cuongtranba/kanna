@@ -17,7 +17,7 @@ import {
 import type { ClaudeSessionHandle } from "./agent"
 import type { LiveTurnSource, ProviderRunStart } from "./subagent-orchestrator"
 import type { SubagentOrchestrator } from "./subagent-orchestrator"
-import type { ArmedLoopInfo, KannaMcpDelegationContext } from "./kanna-mcp"
+import type { ArmedLoopInfo, ChatTaskStorePort, KannaMcpDelegationContext } from "./kanna-mcp"
 import { log } from "../shared/log"
 
 export interface BuildSubagentProviderRunArgs {
@@ -52,11 +52,13 @@ export interface BuildSubagentProviderRunArgs {
     keepAlive?: boolean
     maxTurns?: number
     getArmedLoop?: (chatId: string) => ArmedLoopInfo | null
+    chatTaskStore?: ChatTaskStorePort
   }) => Promise<ClaudeSessionHandle>
   claudeDriverIsPty?: boolean
   subagentOrchestrator?: SubagentOrchestrator
   delegationContext?: KannaMcpDelegationContext
   getArmedLoop?: (chatId: string) => ArmedLoopInfo | null
+  chatTaskStore?: ChatTaskStorePort
   codexManager: CodexAppServerManager
   onToolRequest: (request: HarnessToolRequest) => Promise<JsonValue>
   authReady: (provider: AgentProvider) => Promise<boolean>
@@ -158,6 +160,7 @@ async function runClaudeSubagent(opts: {
     keepAlive,
     maxTurns: args.subagent.maxTurns,
     getArmedLoop: args.getArmedLoop,
+    chatTaskStore: args.chatTaskStore,
   })
   args.abortSignal.addEventListener("abort", () => { session.interrupt() }, { once: true })
 

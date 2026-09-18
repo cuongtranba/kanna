@@ -1001,30 +1001,26 @@ describe("deriveChatSnapshot loopProgress", () => {
 
   const noMessages = () => ({ messages: [], history: { hasOlder: false, olderCursor: null, recentLimit: 200 } })
 
-  test("without a tracking reader the panel keeps its live-run rows", () => {
+  test("an armed loop with no tasks yet reports an empty, armed panel", () => {
     const snap = deriveChatSnapshot(seedArmedLoopChat(), new Map(), new Set(), "c1", noMessages, () => [])
-    expect(snap?.loopProgress).toEqual({ chatId: "c1", armed: true, rows: [], rateLimit: null })
+    expect(snap?.loopProgress).toEqual({ chatId: "c1", armed: true, rows: [], rateLimit: null, completed: 0, total: 0 })
   })
 
-  test("the plan's steps become rows once the tracking file is readable", () => {
-    const snap = deriveChatSnapshot(
-      seedArmedLoopChat(),
-      new Map(),
-      new Set(),
-      "c1",
-      noMessages,
-      () => [],
-      new Map(),
-      Date.now(),
-      new Map(),
-      [],
-      new Map(),
-      () => ({ doneEntries: ["- chunk one DONE"], nextChunkSection: "## Next chunk\nchunk two" }),
-    )
+  test("the chat's durable tasks become rows", () => {
+    const state = seedArmedLoopChat()
+    state.chatTasksByChatId.set("c1", [
+      { v: 3, timestamp: 101, chatId: "c1", type: "chat_task_created", taskId: "k:1", subject: "chunk one", source: "kanna" },
+      { v: 3, timestamp: 102, chatId: "c1", type: "chat_task_created", taskId: "k:2", subject: "chunk two", source: "kanna" },
+      { v: 3, timestamp: 103, chatId: "c1", type: "chat_task_claimed", taskId: "k:1", claimId: "c1a" },
+      { v: 3, timestamp: 104, chatId: "c1", type: "chat_task_settled", taskId: "k:1", claimId: "c1a", outcome: "done" },
+    ] as never)
+    const snap = deriveChatSnapshot(state, new Map(), new Set(), "c1", noMessages, () => [])
     expect(snap?.loopProgress.rows.map((r) => [r.status, r.label])).toEqual([
-      ["done", "chunk one DONE"],
+      ["done", "chunk one"],
       ["pending", "chunk two"],
     ])
+    expect(snap?.loopProgress.completed).toBe(1)
+    expect(snap?.loopProgress.total).toBe(2)
   })
 })
 
@@ -1154,11 +1150,14 @@ describe("computeChatActivity", () => {
       subagentId: "sa-1", prompt: "Do next chunk",
       workdirAbs: "/p1", trackingFileRel: "PROGRESS.md",
     }] as never)
-    const getLoopTracking = () => ({
-      doneEntries: ["chunk 1 done", "chunk 2 done"],
-      nextChunkSection: "chunk 3",
-    })
-    const result = computeChatActivity("c1", baseDeps({ state, getLoopTracking }))
+    state.chatTasksByChatId.set("c1", [
+      { v: 3, timestamp: 101, chatId: "c1", type: "chat_task_created", taskId: "k:1", subject: "chunk 1", source: "kanna" },
+      { v: 3, timestamp: 102, chatId: "c1", type: "chat_task_created", taskId: "k:2", subject: "chunk 2", source: "kanna" },
+      { v: 3, timestamp: 103, chatId: "c1", type: "chat_task_created", taskId: "k:3", subject: "chunk 3", source: "kanna" },
+      { v: 3, timestamp: 104, chatId: "c1", type: "chat_task_settled", taskId: "k:1", claimId: "a", outcome: "done" },
+      { v: 3, timestamp: 105, chatId: "c1", type: "chat_task_settled", taskId: "k:2", claimId: "b", outcome: "done" },
+    ] as never)
+    const result = computeChatActivity("c1", baseDeps({ state }))
     expect(result.loop).toEqual({ done: 2, total: 3 })
   })
 
@@ -1173,11 +1172,12 @@ describe("computeChatActivity", () => {
       ["r1", { runId: "r1", chatId: "c1", subagentId: "s1", subagentName: "a", provider: "claude", model: "m", status: "running", parentUserMessageId: "u1", parentRunId: null, depth: 0, startedAt: 1, finishedAt: null, finalText: null, error: null, usage: null, entries: [], pendingTool: null }],
     ])
     state.subagentRunsByChatId.set("c1", runMap as never)
-    const getLoopTracking = () => ({
-      doneEntries: ["chunk 1 done"],
-      nextChunkSection: "",
-    })
-    const result = computeChatActivity("c1", baseDeps({ state, getLoopTracking }))
+    state.chatTasksByChatId.set("c1", [
+      { v: 3, timestamp: 101, chatId: "c1", type: "chat_task_created", taskId: "k:1", subject: "chunk 1", source: "kanna" },
+      { v: 3, timestamp: 102, chatId: "c1", type: "chat_task_created", taskId: "k:2", subject: "chunk 2", source: "kanna" },
+      { v: 3, timestamp: 103, chatId: "c1", type: "chat_task_settled", taskId: "k:1", claimId: "a", outcome: "done" },
+    ] as never)
+    const result = computeChatActivity("c1", baseDeps({ state }))
     expect(result.loop).toEqual({ done: 1, total: 2 })
   })
 

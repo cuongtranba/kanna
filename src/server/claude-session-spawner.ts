@@ -1,3 +1,4 @@
+import type { ChatTaskStorePort } from "./kanna-mcp"
 
 import type { JsonValue } from "../shared/json"
 import type {
@@ -81,6 +82,7 @@ export interface SpawnClaudeTurnDeps {
   resolveClaudeDriverPreference: () => ClaudeDriverPreference
   isLoopArmed: (chatId: string) => LoopState | null
   isRunAlive: (chatId: string, runId: string) => boolean
+  chatTaskStore?: ChatTaskStorePort
   boardRegistry?: BoardRegistry
   closeClaudeSession: (chatId: string, session: ClaudeSessionState) => void
   enforceClaudeSessionBudget: (protectedChatId?: string) => void
@@ -208,6 +210,7 @@ export async function spawnClaudeTurn(
               : undefined,
             getArmedLoop: (id) => toArmedLoopInfo(deps.isLoopArmed(id)),
             isRunAlive: deps.isRunAlive,
+            chatTaskStore: deps.chatTaskStore,
             boardRegistry: deps.boardRegistry,
             toolCallback: deps.toolCallback ?? undefined,
             tunnelGateway: deps.tunnelGateway,
@@ -257,6 +260,7 @@ export async function spawnClaudeTurn(
               : undefined,
             getArmedLoop: (id) => toArmedLoopInfo(deps.isLoopArmed(id)),
             isRunAlive: deps.isRunAlive,
+            chatTaskStore: deps.chatTaskStore,
             boardRegistry: deps.boardRegistry,
             toolCallback: deps.toolCallback ?? undefined,
             chatPolicy: deps.resolveChatPolicy(args.chatId),

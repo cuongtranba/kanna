@@ -335,7 +335,7 @@ describe("getActiveChatSnapshot", () => {
       tunnels: {},
       liveTunnelId: null,
       subagentRuns: {},
-      loopProgress: { chatId: "c", armed: false, rows: [], rateLimit: null },
+      loopProgress: { chatId: "c", armed: false, rows: [], rateLimit: null, completed: 0, total: 0 },
     cronJobs: [],
     }
 
@@ -372,7 +372,7 @@ describe("getActiveChatSnapshot", () => {
       tunnels: {},
       liveTunnelId: null,
       subagentRuns: {},
-      loopProgress: { chatId: "c", armed: false, rows: [], rateLimit: null },
+      loopProgress: { chatId: "c", armed: false, rows: [], rateLimit: null, completed: 0, total: 0 },
     cronJobs: [],
     }
 
@@ -542,7 +542,7 @@ function createMinimalChatSnapshot(overrides: Partial<ChatSnapshot> = {}): ChatS
     tunnels: {},
     liveTunnelId: null,
     subagentRuns: {},
-    loopProgress: { chatId: "c", armed: false, rows: [], rateLimit: null },
+    loopProgress: { chatId: "c", armed: false, rows: [], rateLimit: null, completed: 0, total: 0 },
     cronJobs: [],
     ...overrides,
   }
@@ -756,7 +756,7 @@ describe("applyProjectCommandsSnapshot", () => {
 describe("sameChatSnapshotCore loop progress rows", () => {
   function progress(rows: import("../../shared/types").LoopRow[]) {
     return createMinimalChatSnapshot({
-      loopProgress: { chatId: "c", armed: true, rows, rateLimit: null },
+      loopProgress: { chatId: "c", armed: true, rows, rateLimit: null, completed: 0, total: 0 },
     })
   }
 

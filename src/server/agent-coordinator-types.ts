@@ -105,7 +105,6 @@ export interface AgentCoordinatorArgs {
   ptyInstanceRegistry?: import("./claude-pty/pty-instance-registry").PtyInstanceRegistry
   workflowRegistry?: import("./workflow-registry").WorkflowRegistry
   boardRegistry?: import("./board-registry").BoardRegistry
-  loopTrackingRegistry?: import("./loop-tracking-registry").LoopTrackingRegistry
   subagentTranscriptRegistry?: import("./subagent-transcript-registry").SubagentTranscriptRegistry
   readLlmProvider?: () => Promise<LlmProviderSnapshot>
   listOpenRouterModels?: () => Promise<import("../shared/types").OpenRouterModel[]>

@@ -29,7 +29,6 @@ import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
 import type { PushManager } from "./push/push-manager"
 import type { SessionShareService } from "./session-share"
 import type { PtyInstanceRegistry } from "./claude-pty/pty-instance-registry"
-import type { LoopTrackingRegistry } from "./loop-tracking-registry"
 import type { WorkflowRegistry } from "./workflow-registry"
 import type { BackgroundTaskOutputRegistry } from "./background-task-output-registry"
 import { handleBoardCommand } from "./ws-router-boards"
@@ -114,7 +113,6 @@ interface CreateWsRouterArgs {
   cleanupView?: (cardId: string) => Promise<WorktreeCleanupView | null>
   resolveCleanup?: (cardId: string, decision: CleanupDecision) => Promise<WorktreeCleanupOutcome>
   suggestSyncRepos?: (boardId: string) => Promise<readonly RepoSuggestion[]>
-  loopTrackingRegistry?: LoopTrackingRegistry
   backgroundTaskOutputRegistry?: BackgroundTaskOutputRegistry
   subagentTranscriptRegistry?: SubagentTranscriptRegistry
   followedSessionRegistry?: FollowedSessionRegistry
@@ -148,7 +146,6 @@ export function createWsRouter({
   cleanupView,
   resolveCleanup,
   suggestSyncRepos,
-  loopTrackingRegistry,
   backgroundTaskOutputRegistry,
   subagentTranscriptRegistry,
   followedSessionRegistry,
@@ -169,7 +166,6 @@ export function createWsRouter({
     ptyInstances,
     workflowRegistry,
     boardRegistry,
-    loopTrackingRegistry,
     backgroundTaskOutputRegistry,
     followedSessionRegistry,
     machineDisplayName,
@@ -191,7 +187,6 @@ export function createWsRouter({
     ptyInstances,
     workflowRegistry,
     boardRegistry,
-    loopTrackingRegistry,
     backgroundTaskOutputRegistry,
     envelopeBuilder,
   })

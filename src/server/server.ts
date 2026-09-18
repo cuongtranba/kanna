@@ -75,10 +75,6 @@ import { TunnelManager } from "./cloudflare-tunnel/tunnel-manager.adapter"
 import { TunnelLifecycle } from "./cloudflare-tunnel/lifecycle"
 import { initToolCallbackOnBoot, type ToolCallbackService } from "./tool-callback"
 import { SessionShareService } from "./session-share"
-import { resolveStructuredDoc } from "../shared/structured-doc/registry"
-import { createLoopTrackingRegistry } from "./loop-tracking-registry"
-import { readTrackingFile, watchTrackingFile } from "./loop-tracking-io.adapter"
-import { rehydrateLoopTracking } from "./loop-tracking-sync"
 import { recoverQueuedMessages } from "./queued-message-recovery"
 import { initObservability } from "./otel.adapter"
 import { createWorkflowRegistry } from "./workflow-registry"
@@ -185,7 +181,6 @@ interface ApplicationServices {
   observability: ReturnType<typeof initObservability>
   scheduleManager: ScheduleManager
   cronScheduler: CronScheduler
-  loopTrackingRegistry: ReturnType<typeof createLoopTrackingRegistry>
   staleEmptyChatPruneInterval: ReturnType<typeof setInterval>
   followedSessionTickInterval: ReturnType<typeof setInterval>
   snapshotSweepHandle: { stop(): void }
@@ -242,11 +237,6 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     watchRunDirs: (dir, onChange) => watchWorkflowRunDirs(dir, onChange),
     readRunJournal: readWorkflowRunJournal,
     readAgentTranscriptLines: readWorkflowAgentTranscriptLines,
-  })
-  const loopTrackingRegistry = createLoopTrackingRegistry({
-    read: readTrackingFile,
-    watch: (abs, onChange) => watchTrackingFile(abs, onChange),
-    resolveDoc: (abs) => resolveStructuredDoc(path.extname(abs)),
   })
   const subagentTranscriptRegistry = createSubagentTranscriptRegistry()
   const backgroundTaskOutputRegistry = createBackgroundTaskOutputRegistry(backgroundTaskOutputIo)
@@ -444,7 +434,6 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     ptyInstanceRegistry,
     workflowRegistry,
     boardRegistry,
-    loopTrackingRegistry,
     backgroundTaskOutputRegistry,
     subagentTranscriptRegistry,
     localCatalog,
@@ -585,7 +574,6 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     cleanupView,
     resolveCleanup,
     suggestSyncRepos,
-    loopTrackingRegistry,
     backgroundTaskOutputRegistry,
     subagentTranscriptRegistry,
     followedSessionRegistry,
@@ -632,7 +620,6 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     observability,
     scheduleManager,
     cronScheduler,
-    loopTrackingRegistry,
     staleEmptyChatPruneInterval,
     followedSessionTickInterval,
     snapshotSweepHandle,
@@ -640,7 +627,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
 }
 
 function rehydrateScheduledWork(services: ApplicationServices): void {
-  const { store, agent, scheduleManager, cronScheduler, loopTrackingRegistry } = services
+  const { store, agent, scheduleManager, cronScheduler } = services
 
   scheduleManager.rehydrate(
     store.listAutoContinueChats().flatMap((chatId) => store.getAutoContinueEvents(chatId))
@@ -653,11 +640,6 @@ function rehydrateScheduledWork(services: ApplicationServices): void {
   void agent.reconcileCronRunsAtBoot(missedCronFires, cronChatIds).catch((error) => {
     log.error("[kanna/cron] boot reconciliation failed:", String(error))
   })
-
-  rehydrateLoopTracking(
-    { getAutoContinueEvents: (chatId) => store.getAutoContinueEvents(chatId), registry: loopTrackingRegistry },
-    store.listAutoContinueChats(),
-  )
 
   void recoverQueuedMessages({
     listChatsWithQueuedMessages: () => store.listChatsWithQueuedMessages(),

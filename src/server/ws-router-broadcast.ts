@@ -3,7 +3,6 @@ import { PROTOCOL_VERSION } from "../shared/types"
 import type { ServerWebSocket } from "bun"
 import type { PtyInstanceDelta } from "../shared/pty-instance"
 import type { PtyInstanceRegistry } from "./claude-pty/pty-instance-registry"
-import type { LoopTrackingRegistry } from "./loop-tracking-registry"
 import type { WorkflowRegistry } from "./workflow-registry"
 import type { BackgroundTaskOutputRegistry } from "./background-task-output-registry"
 import type { BoardChange, BoardRegistry } from "./board-registry"
@@ -42,7 +41,6 @@ export interface BroadcastManagerDeps {
   ptyInstances?: PtyInstanceRegistry
   workflowRegistry?: WorkflowRegistry
   boardRegistry?: BoardRegistry
-  loopTrackingRegistry?: LoopTrackingRegistry
   backgroundTaskOutputRegistry?: BackgroundTaskOutputRegistry
   envelopeBuilder: EnvelopeBuilder
 }
@@ -62,7 +60,6 @@ export class BroadcastManager {
   private readonly disposePtyInstances: () => void
   private readonly disposeWorkflows: () => void
   private readonly disposeBoards: () => void
-  private readonly disposeLoopTracking: () => void
   private readonly disposeBackgroundTaskOutput: () => void
   private readonly disposePackageUpdateEvents: () => void
 
@@ -77,7 +74,6 @@ export class BroadcastManager {
       ptyInstances,
       workflowRegistry,
       boardRegistry,
-      loopTrackingRegistry,
       backgroundTaskOutputRegistry,
     } = deps
 
@@ -175,10 +171,6 @@ export class BroadcastManager {
           send(ws, envelope)
         }
       }
-    }) ?? (() => {})
-
-    this.disposeLoopTracking = loopTrackingRegistry?.subscribe((chatId) => {
-      this.scheduleChatStateBroadcast(chatId)
     }) ?? (() => {})
 
     this.disposeBackgroundTaskOutput = backgroundTaskOutputRegistry?.subscribe((chatId, taskId) => {
@@ -595,7 +587,6 @@ export class BroadcastManager {
     this.disposePtyInstances()
     this.disposeWorkflows()
     this.disposeBoards()
-    this.disposeLoopTracking()
     this.disposeBackgroundTaskOutput()
     this.disposePackageUpdateEvents()
   }

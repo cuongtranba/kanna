@@ -1,3 +1,4 @@
+import type { ChatTaskStorePort } from "../kanna-mcp"
 import type { JsonValue } from "../../shared/json"
 import { homedir } from "node:os"
 import path from "node:path"
@@ -91,6 +92,7 @@ export interface StartClaudeSessionPtyArgs {
   isLoopArmed?: () => boolean
   getArmedLoop?: (chatId: string) => ArmedLoopInfo | null
   isRunAlive?: (chatId: string, runId: string) => boolean
+  chatTaskStore?: ChatTaskStorePort
   boardRegistry?: BoardRegistry
   customMcpServers?: readonly McpServerConfig[]
   oauthBearers?: ReadonlyMap<string, string>
@@ -320,6 +322,7 @@ export async function startClaudeSessionPTY(args: StartClaudeSessionPtyArgs): Pr
         stopLoop: args.stopLoop,
         getArmedLoop: args.getArmedLoop,
         isRunAlive: args.isRunAlive,
+        chatTaskStore: args.chatTaskStore,
         boardRegistry: args.boardRegistry,
         forceInteractiveToolCallbacks: true,
         restrictedAllowedPaths: args.restrictedAllowedPaths,
