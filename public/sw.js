@@ -28,8 +28,8 @@ self.addEventListener("push", (event) => {
   const title = `Kanna • ${payload.projectTitle || "Project"}`
   event.waitUntil(self.registration.showNotification(title, {
     body: bodyFor(payload),
-    tag: payload.projectLocalPath,
-    renotify: false,
+    tag: payload.chatId,
+    renotify: true,
     data: { chatUrl: payload.chatUrl, ts: payload.ts },
   }))
 })
