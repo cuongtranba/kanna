@@ -611,6 +611,17 @@ describe("initializeComposerForChat — provider sync (issue #65)", () => {
     expect(store.getComposerState("chat-claude").provider).toBe("claude")
   })
 
+  test("provider sync keeps the chat's own model when the runtime provider already matches", () => {
+    const store = useChatPreferencesStore.getState()
+
+    store.initializeComposerForChat("chat-sonnet", { providerHint: null })
+    store.setChatComposerModel("chat-sonnet", "claude-sonnet-4-6")
+
+    store.initializeComposerForChat("chat-sonnet", { providerHint: "claude" })
+
+    expect(store.getComposerState("chat-sonnet").model).toBe("claude-sonnet-4-6")
+  })
+
   test("sync is independent per chat — syncing one does not affect another", () => {
     const store = useChatPreferencesStore.getState()
 
