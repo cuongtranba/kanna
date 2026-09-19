@@ -752,7 +752,7 @@ describe("query_tracking_file + append_tracking_row tools", () => {
     })
 
     expect(res.isError).toBeUndefined()
-    expect(res.content[0].text).toContain("created PROGRESS.md")
+    expect(res.content[0].text).toContain(`created ${path.join(scratch, "PROGRESS.md")}`)
     const onDisk = await readFile(path.join(scratch, "PROGRESS.md"), "utf8")
     expect(onDisk).toContain(`## ${TASK_DOC_SECTIONS.objective}`)
     expect(onDisk).toContain("single-flight refresh")

@@ -714,7 +714,7 @@ function buildTrackingDocToolList(args: {
             position: input.position,
           })
           await writeDoc(confined.abs, result.content)
-          return ok(`Appended to "${input.section}" in ${confined.rel}${writeNote(loaded.created, result.created, confined.rel)}.`)
+          return ok(`Appended to "${input.section}" in ${confined.rel}${writeNote(loaded.created, result.created, confined.abs)}.`)
         })
       },
     ),
@@ -723,8 +723,8 @@ function buildTrackingDocToolList(args: {
 }
 
 
-function writeNote(fileCreated: boolean, sectionCreated: boolean, rel: string): string {
-  if (fileCreated) return ` (created ${rel} from the task-state skeleton)`
+function writeNote(fileCreated: boolean, sectionCreated: boolean, abs: string): string {
+  if (fileCreated) return ` (created ${abs} from the task-state skeleton)`
   return sectionCreated ? " (section created)" : ""
 }
 
@@ -763,7 +763,7 @@ function buildReplaceTrackingSectionTool(
           }
           const result = doc.replace(loaded.content, { section: input.section, body: input.body })
           await writeDoc(confined.abs, result.content)
-          return ok(`Replaced "${input.section}" in ${confined.rel}${writeNote(loaded.created, result.created, confined.rel)}.`)
+          return ok(`Replaced "${input.section}" in ${confined.rel}${writeNote(loaded.created, result.created, confined.abs)}.`)
         })
       },
     ),
