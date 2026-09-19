@@ -8,6 +8,20 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.57.0](https://github.com/cuongtranba/kanna/compare/v1.56.0...v1.57.0) (2026-09-19)
+
+
+### Features
+
+* **loop:** track loop progress in durable chat tasks, not PROGRESS.md ([#1119](https://github.com/cuongtranba/kanna/issues/1119)) ([a31bb47](https://github.com/cuongtranba/kanna/commit/a31bb47718ea3ba607bf310bf3f9eb1943c5d07e))
+
+
+### Bug Fixes
+
+* **composer:** keep a chat's own model when the runtime provider resolves ([#1127](https://github.com/cuongtranba/kanna/issues/1127)) ([f937ed0](https://github.com/cuongtranba/kanna/commit/f937ed0dbaa01826049e71f51b04ecc932e81e52))
+* **push:** group notifications by chat, and re-alert when one replaces another ([#1126](https://github.com/cuongtranba/kanna/issues/1126)) ([48e3cb8](https://github.com/cuongtranba/kanna/commit/48e3cb8fe6ed4db87a83dd3c0936688effe12a3d))
+* **tracking:** name the absolute path when a task document is created ([#1124](https://github.com/cuongtranba/kanna/issues/1124)) ([dd01a09](https://github.com/cuongtranba/kanna/commit/dd01a09ca0feab99984fd6a43138b3aa712adcef))
+
 ## [1.56.0](https://github.com/cuongtranba/kanna/compare/v1.55.3...v1.56.0) (2026-09-17)
 
 
