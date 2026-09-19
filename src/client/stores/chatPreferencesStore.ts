@@ -653,6 +653,10 @@ export const useChatPreferencesStore = create<ChatPreferencesState>()(
             if (providerHint && state.pendingProviderSyncChatIds.has(chatId)) {
               const newPending = new Set(state.pendingProviderSyncChatIds)
               newPending.delete(chatId)
+              if (existingState.provider === providerHint) {
+                logChatPreferences("initializeComposerForChat sync skipped", { chatId, provider: providerHint })
+                return { pendingProviderSyncChatIds: newPending }
+              }
               const syncedState = composerFromProviderDefaults(providerHint, state.providerDefaults)
               const updated = { ...syncedState, planMode: existingState.planMode }
               logChatPreferences("initializeComposerForChat sync", { chatId, provider: providerHint })
