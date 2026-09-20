@@ -137,6 +137,14 @@ export const SDK_RESTRICTED_FS_NATIVE_TOOLS = ["Read", "Edit", "Write", "Bash", 
 
 
 const TASK_NOTIFICATION_RESULT_MAX_CHARS = 4_000
+const TASK_NOTIFICATION_RESULT_HEAD_CHARS = 1_000
+
+export function trimTaskNotificationResult(body: string): string {
+  if (body.length <= TASK_NOTIFICATION_RESULT_MAX_CHARS) return body
+  const tailChars = TASK_NOTIFICATION_RESULT_MAX_CHARS - TASK_NOTIFICATION_RESULT_HEAD_CHARS
+  const dropped = body.length - TASK_NOTIFICATION_RESULT_MAX_CHARS
+  return `${body.slice(0, TASK_NOTIFICATION_RESULT_HEAD_CHARS)}\n[... ${dropped} chars truncated ...]\n${body.slice(-tailChars)}`
+}
 
 export function buildTaskNotification(
   runId: string,
@@ -150,9 +158,7 @@ export function buildTaskNotification(
   let resultSection = ""
   if (opts.includeResult) {
     const body = outcome.status === "completed" ? outcome.text : outcome.errorMessage
-    const trimmed = body.length > TASK_NOTIFICATION_RESULT_MAX_CHARS
-      ? `${body.slice(0, TASK_NOTIFICATION_RESULT_MAX_CHARS)}\n[... truncated]`
-      : body
+    const trimmed = trimTaskNotificationResult(body)
     if (trimmed) resultSection = `\n<result>${trimmed}</result>`
   }
   return `<task-notification>
