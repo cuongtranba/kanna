@@ -61,6 +61,7 @@ export interface ChatTaskToolDeps {
     workdir: string,
     branch: string,
   ) => Promise<{ ok: boolean; conflicts: readonly string[]; detail: string }>
+  readonly auditTask?: (task: { subject: string; description: string | null }) => Promise<readonly string[]>
   readonly now?: () => number
   readonly newId?: () => string
 }
@@ -452,15 +453,19 @@ export function buildChatTaskToolList<TTool>(
       worktree: z.string().optional().describe("Absolute path of the git worktree this task is worked in"),
       branch: z.string().optional().describe("Branch name for this task's work"),
     }, async (input) => {
+      const subject = str(input.subject) ?? ""
+      const description = str(input.description) ?? null
       const result = await createChatTask(bound, {
-        subject: str(input.subject) ?? "",
-        ...(str(input.description) ? { description: str(input.description) ?? "" } : {}),
+        subject,
+        ...(description !== null ? { description } : {}),
         ...(str(input.active_form) ? { activeForm: str(input.active_form) ?? "" } : {}),
         ...(strList(input.needs) ? { needs: strList(input.needs) ?? [] } : {}),
         ...(str(input.worktree) ? { worktree: str(input.worktree) ?? "" } : {}),
         ...(str(input.branch) ? { branch: str(input.branch) ?? "" } : {}),
       })
-      return result.ok ? ok(JSON.stringify(result.task)) : fail(result.error)
+      if (!result.ok) return fail(result.error)
+      const chunkAudit = bound.auditTask ? await bound.auditTask({ subject, description }) : []
+      return ok(JSON.stringify(chunkAudit.length > 0 ? { ...result.task, chunkAudit: [...chunkAudit] } : result.task))
     }),
     tool("task_update", TASK_UPDATE_DESCRIPTION, {
       task_id: z.string().describe("Task id from task_list"),

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
+import type { ChunkGate } from "./chunk-gate"
 import {
   AgentCoordinator,
   buildAttachmentHintText,
@@ -4426,7 +4427,7 @@ describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
 
   async function makeSetupLoopCoordinator(
     projectRoot: string,
-    over: { triggerMode?: "auto" | "manual" } = {},
+    over: { triggerMode?: "auto" | "manual"; chunkGate?: ChunkGate | null } = {},
   ) {
     const store = createFakeStore()
     store.getProject = () => ({ id: "project-1", localPath: projectRoot }) as never
@@ -4439,6 +4440,7 @@ describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
       onStateChange: () => {},
       startClaudeSession: async () => { throw new Error("not needed") },
       getSubagents: () => [record],
+      chunkGate: over.chunkGate ?? null,
     })
     return { coordinator, store }
   }
@@ -4524,6 +4526,79 @@ describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
       })
       if (!result.ok) throw new Error(result.errors.join(", "))
       expect(result.oracleWarnings).toEqual([])
+    } finally {
+      await rm(projectRoot, { recursive: true, force: true })
+    }
+  })
+
+  const STATUS_ROW_WARNING =
+    'task "Phase 1 done": reads as a status line, a rule or a question rather than work for a worker to do — write the change to make'
+
+  function recordingChunkGate(audited: string[][], warnings: string[]): ChunkGate {
+    return {
+      audit: async (items) => {
+        audited.push(items.map((item) => `${item.label}|${item.text}`))
+        return warnings
+      },
+    }
+  }
+
+  test("seed tasks are audited by the chunk gate and its warnings ride the result", async () => {
+    const projectRoot = await mkdtemp(path.join(tmpdir(), "kanna-setup-loop-"))
+    try {
+      const audited: string[][] = []
+      const { coordinator } = await makeSetupLoopCoordinator(projectRoot, {
+        chunkGate: recordingChunkGate(audited, [STATUS_ROW_WARNING]),
+      })
+      const result = await coordinator.setupLoop({
+        chatId: "chat-1",
+        input: {
+          goal: "g",
+          verifyCommand: "bun run lint",
+          subagentId: "sa-1",
+          tasks: [{ subject: "Phase 1 done" }, { subject: "Extract X from a.ts into b.ts" }],
+        },
+      })
+      if (!result.ok) throw new Error(result.errors.join(", "))
+      expect(audited).toEqual([[
+        'task "Phase 1 done"|Phase 1 done',
+        'task "Extract X from a.ts into b.ts"|Extract X from a.ts into b.ts',
+      ]])
+      expect(result.chunkWarnings).toEqual([STATUS_ROW_WARNING])
+    } finally {
+      await rm(projectRoot, { recursive: true, force: true })
+    }
+  })
+
+  test("the chunk hint is audited as the single seed task", async () => {
+    const projectRoot = await mkdtemp(path.join(tmpdir(), "kanna-setup-loop-"))
+    try {
+      const audited: string[][] = []
+      const { coordinator } = await makeSetupLoopCoordinator(projectRoot, {
+        chunkGate: recordingChunkGate(audited, []),
+      })
+      const result = await coordinator.setupLoop({
+        chatId: "chat-1",
+        input: { goal: "g", verifyCommand: "bun run lint", subagentId: "sa-1", chunkHint: "start with src/client" },
+      })
+      if (!result.ok) throw new Error(result.errors.join(", "))
+      expect(audited).toEqual([['task "start with src/client"|start with src/client']])
+      expect(result.chunkWarnings).toEqual([])
+    } finally {
+      await rm(projectRoot, { recursive: true, force: true })
+    }
+  })
+
+  test("without a chunk gate the result carries no chunk warnings", async () => {
+    const projectRoot = await mkdtemp(path.join(tmpdir(), "kanna-setup-loop-"))
+    try {
+      const { coordinator } = await makeSetupLoopCoordinator(projectRoot)
+      const result = await coordinator.setupLoop({
+        chatId: "chat-1",
+        input: { goal: "g", verifyCommand: "bun run lint", subagentId: "sa-1", chunkHint: "start with src/client" },
+      })
+      if (!result.ok) throw new Error(result.errors.join(", "))
+      expect(result.chunkWarnings).toEqual([])
     } finally {
       await rm(projectRoot, { recursive: true, force: true })
     }

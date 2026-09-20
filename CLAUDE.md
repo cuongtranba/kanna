@@ -2131,6 +2131,58 @@ orchestrator is a fresh context every turn, the worst place for a multi-step
 stateful git operation. Each parallel task must name its OWN git worktree; a task
 with no worktree, or one naming the loop workdir itself, is refused at claim.
 
+# Chunk gate — `setup_loop` and `task_create` audit a task's text (KANNA_CHUNK_GATE)
+
+A loop's worker starts with an empty context and the task's text alone, so a
+task that reads as a status line, only points at another file, is too vague to
+act on, or bundles several units of work costs an iteration before anyone
+notices. Chunk shape was the first root cause in the decompose-large-files
+review: of the 63 worker briefs in chat `f337fd1b`, 18 were several-unit or
+open-ended. `src/server/chunk-gate.ts` asks TypeSafe's System One model
+(`jev-latest`) six typed questions about the text and turns the calibrated
+answers into ONE warning line per task. `system-one.adapter.ts` is the only IO
+(`POST api.typesafe.ai/v1/systemone`, 2.5 s timeout, one retry on 429/529,
+`fetch` injected for tests) and `src/shared/system-one.ts` is the wire contract:
+`encodeSystemOneRequest` is a field-by-field encoder, never a cast, and
+`parseSystemOneResponse` drops a malformed answer rather than the whole reply.
+
+- **Opt-in, off by default.** `KANNA_CHUNK_GATE=enabled` AND `TYPESAFE_API_KEY`
+  set (`resolveChunkGateConfig`); anything else builds no gate. The task text
+  leaves the machine, so silence is the default. Measured 2026-09-20: ~300 ms
+  and ~1k input tokens per task at $0.042 per million, so a 12-task plan costs
+  well under a cent.
+- **Advisory, never fatal.** `setup_loop` audits the seed tasks (`tasks[]`, else
+  the imported plan, else `chunk_hint`) and appends a `Chunk audit:` block beside
+  `Oracle audit:`; `task_create` appends `chunkAudit` to the created task's JSON,
+  and only while a loop is ARMED (`resolveChatTaskDeps` checks `getArmedLoop`
+  per call), so an ordinary chat's Tasks card is never audited. Both arm/create
+  first and warn second. The gate swallows its own failures and answers nothing
+  on a timeout: a dead gate costs a warning, never a loop.
+- **Thresholds are policy in code, not model output** (`assessChunk`, checked in
+  this order): a status line (`is_instruction` < 0.3), a pointer to another file
+  (`change_described_inline` < 0.3), a vague task (`specificity` < 1 of 2 at
+  confidence ≥ 0.7, naming which of file / done-condition is missing), then a
+  several-unit or open-ended `scope` at confidence ≥ 0.7. Below the confidence
+  floor the gate stays quiet: Jev's confidence is the concentration of its
+  distribution, and a flat one means "don't know", not "wrong".
+- **The phrasing is the feature.** The first question set asked whether the text
+  was "only a pointer", and scored the template stub `Do the next chunk in
+  PROGRESS.md…` as a fully specific task (1.98 of 2) because it names a file and
+  a verify command. Asking whether the text ITSELF describes the change fixed it
+  (0.10). Jev reads literally, so a rephrased question is a behaviour change:
+  re-check the fixtures in `chunk-gate.test.ts` and run the live suite.
+- **Bounds.** At most `CHUNK_GATE_MAX_ITEMS` (12) tasks per call with a note for
+  the rest, 4 concurrent requests, and one ask per distinct text (64-entry memo;
+  an unanswered text is not memoised, so a transient failure cannot silence it
+  for the rest of the process).
+- **`chunk-gate.live.test.ts`** runs four fixtures against the real API under
+  `KANNA_RUN_LIVE_CHUNK_GATE_TESTS=1` — the only proof the question set still
+  discriminates on the model it targets. Everything else runs on fakes.
+
+`ChatTaskStorePort.auditTask` rides the port the chat-task tools already receive
+at every spawn site; threading a separate gate through the four spawn wirings
+would have rippled ten files to serve one optional call.
+
 # Background Task Keep-Alive (Bash + Agent + Workflow — KANNA_PTY_BACKGROUND_TASK_MAX_MS)
 
 Claude-Code background tasks (`Bash(run_in_background: true)`, background

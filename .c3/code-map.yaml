@@ -158,12 +158,15 @@ c3-210:
   - src/server/history-primer.ts
   - src/server/loop-wake-recovery.test.ts
   - src/server/loop-wake-recovery.ts
-  - src/server/kanna-mcp-tools/task-queue.test.ts
-  - src/server/kanna-mcp-tools/task-queue.ts
   - src/server/loop-integrate-io.adapter.ts
   - src/server/loop-prompt-parallel.ts
   - src/server/tracking-file-lock.test.ts
   - src/server/tracking-file-lock.ts
+  - src/server/chunk-gate.ts
+  - src/server/chunk-gate.test.ts
+  - src/server/chunk-gate.live.test.ts
+  - src/server/system-one.adapter.ts
+  - src/server/system-one.adapter.test.ts
   - src/server/mention-parser.test.ts
   - src/server/mention-parser.ts
   - src/server/proactive-compact.test.ts
@@ -298,6 +301,8 @@ c3-301:
   - src/shared/permission-policy.ts
   - src/shared/projectFileUrl.test.ts
   - src/shared/projectFileUrl.ts
+  - src/shared/system-one.ts
+  - src/shared/system-one.test.ts
   - src/shared/task-doc.test.ts
   - src/shared/task-doc.ts
   - src/shared/turn-model-selection.ts

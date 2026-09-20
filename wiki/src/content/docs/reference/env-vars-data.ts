@@ -2,6 +2,7 @@
 export interface EnvVar { name: string; default: string; description: string }
 export const envVars: EnvVar[] = [
   { name: 'KANNA_BACKGROUND_TASK_MAX_WAKES', default: "3", description: "How many times a background task may wake its chat after the keep-alive deadline passes before Kanna stops re-waking it." },
+  { name: 'KANNA_CHUNK_GATE', default: "(unset)", description: "Set to \"enabled\" (with TYPESAFE_API_KEY also set) to have setup_loop and task_create audit each planned task's text against TypeSafe's System One model and append a \"Chunk audit\" note naming tasks that read as status lines, only point at another file, are too vague for a fresh-context worker, or bundle several units of work. Advisory only: it never blocks arming or creating a task, and it fails open when the API is unreachable. The task text is sent to api.typesafe.ai." },
   { name: 'KANNA_CLAUDE_DRIVER', default: "sdk", description: "Claude driver. Leave unset. \"sdk\" runs the Claude Agent SDK and is the supported mode; \"pty\" is a legacy path that drives the claude CLI under a pseudo-terminal, kept only for compatibility." },
   { name: 'KANNA_CLAUDE_SESSION_IDLE_MS', default: "600000", description: "Idle window before a resident Claude session is reaped (10 min)." },
   { name: 'KANNA_CLAUDE_SESSION_MAX_RESIDENT', default: "4", description: "Max simultaneously resident Claude sessions before the least-recently-used is reaped." },

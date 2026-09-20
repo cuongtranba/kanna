@@ -24,6 +24,7 @@ import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import type { StartClaudeSessionPtyArgs } from "./claude-pty/driver"
 import type { JsonValue } from "../shared/json"
 import type { ModelPrice } from "../shared/token-pricing"
+import type { ChunkGate } from "./chunk-gate"
 
 export interface AppSettingsSnapshot {
   claudeDriver?: {
@@ -90,6 +91,7 @@ export interface AgentCoordinatorArgs {
   startClaudeSessionPTY?: (args: StartClaudeSessionPtyArgs) => Promise<ClaudeSessionHandle>
   claudeLimitDetector?: LimitDetector
   codexLimitDetector?: LimitDetector
+  chunkGate?: ChunkGate | null
   scheduleManager?: ScheduleManager
   cronScheduler?: import("./cron/scheduler").CronScheduler
   getAutoResumePreference?: () => boolean

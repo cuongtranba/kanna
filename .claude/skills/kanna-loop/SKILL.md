@@ -329,6 +329,16 @@ appended to the setup_loop reply. NON-FATAL by design — heuristics misfire and
 the operator owns the oracle; the audit never blocks arming. Pattern tables
 live beside `auditOracle`; extend them with a unit fixture in the same PR.
 
+**Arm-time chunk audit (`KANNA_CHUNK_GATE`).** Beside the oracle audit,
+`setup_loop` hands each seed task's text to `src/server/chunk-gate.ts`, which
+asks TypeSafe's System One model six typed questions and appends a
+`Chunk audit:` block naming tasks that read as status lines, only point at
+another file, are too vague for a fresh-context worker, or bundle several
+units; `task_create` does the same while a loop is armed (a `chunkAudit` array
+on the created task's JSON). Opt-in (`KANNA_CHUNK_GATE=enabled` plus
+`TYPESAFE_API_KEY`), advisory, fail-open — see the CLAUDE.md section of the
+same name for the thresholds and why the question phrasing is load-bearing.
+
 **`getArmedLoop` must be SUPPLIED at every spawn site.** `ArmedLoopInfo`
 (`{verifyCommand, workdirAbs, trackingFileRel, parallelism}`) backs `run_verify`
 and the task tools' integration workdir + `requireWorktree` gate. It once shipped

@@ -7,7 +7,9 @@ import { buildDelegateProgressEmitter, buildKannaMcpTools, resolveOfferDownload,
 import { POLICY_DEFAULT } from "../shared/permission-policy"
 import { TASK_DOC_SECTIONS } from "../shared/task-doc"
 import type { SubagentOrchestrator } from "./subagent-orchestrator"
-import type { ArmedLoopInfo, KannaMcpDelegationContext, SetupLoopHandlerResult } from "./kanna-mcp"
+import type { ArmedLoopInfo, ChatTaskStorePort, KannaMcpDelegationContext, SetupLoopHandlerResult } from "./kanna-mcp"
+import { deriveChatTasks } from "../shared/chat-tasks/read-model"
+import type { ChatTaskEvent } from "../shared/chat-tasks/types"
 import type { MermaidParsePort } from "../shared/mermaid-validation"
 import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
 
@@ -487,6 +489,7 @@ describe("setup_loop tool", () => {
         reconciled: false,
         reconcileActions: [],
         oracleWarnings: [],
+        chunkWarnings: [],
         prompt: "x",
       }),
     })
@@ -506,6 +509,7 @@ describe("setup_loop tool", () => {
           reconciled: false,
           reconcileActions: [],
           oracleWarnings: [],
+          chunkWarnings: [],
           prompt: "the rendered loop prompt",
         }
       },
@@ -538,6 +542,7 @@ describe("setup_loop tool", () => {
         reconciled: false,
         reconcileActions: [],
         oracleWarnings: [],
+        chunkWarnings: [],
         prompt: "p",
       }),
     }))
@@ -559,6 +564,7 @@ describe("setup_loop tool", () => {
         reconciled: true,
         reconcileActions: ['rewrote "## Goal"', 'inserted "## Next chunk"'],
         oracleWarnings: [],
+        chunkWarnings: [],
         prompt: "p",
       }),
     }))
@@ -582,6 +588,7 @@ describe("setup_loop tool", () => {
         reconciled: false,
         reconcileActions: [],
         oracleWarnings: ["the oracle contains 3 file-existence/grep check(s), tighten it"],
+        chunkWarnings: [],
         prompt: "p",
       }),
     }))
@@ -604,6 +611,7 @@ describe("setup_loop tool", () => {
         reconciled: false,
         reconcileActions: [],
         oracleWarnings: [],
+        chunkWarnings: [],
         prompt: "p",
       }),
     }))
@@ -611,6 +619,33 @@ describe("setup_loop tool", () => {
       goal: "g",
       verify_command: "bun test",
     })
+    expect(res.content[0].text).not.toContain("Oracle audit:")
+    expect(res.content[0].text).not.toContain("Chunk audit:")
+  })
+
+  test("chunk audit warnings are appended to the success text", async () => {
+    const tools = toolMap(buildKannaMcpTools({
+      ...baseArgs,
+      setupLoop: async () => ({
+        ok: true,
+        trackingFileRel: "PROGRESS.md",
+        created: false,
+        reconciled: false,
+        reconcileActions: [],
+        oracleWarnings: [],
+        chunkWarnings: [
+          'task "Phase 1 done": reads as a status line, a rule or a question rather than work for a worker to do — write the change to make',
+        ],
+        prompt: "p",
+      }),
+    }))
+    const res = await tools.get("setup_loop")!.handler({
+      goal: "g",
+      verify_command: "bun test",
+    })
+    expect(res.isError).toBeUndefined()
+    expect(res.content[0].text).toContain("Chunk audit:")
+    expect(res.content[0].text).toContain("reads as a status line")
     expect(res.content[0].text).not.toContain("Oracle audit:")
   })
 
@@ -630,6 +665,83 @@ describe("setup_loop tool", () => {
     expect(res.content[0].text).toContain("setup_loop rejected")
     expect(res.content[0].text).toContain("goal is required")
     expect(res.content[0].text).toContain("verifyCommand is required")
+  })
+})
+
+describe("task_create chunk audit", () => {
+  const baseArgs = {
+    projectId: "p",
+    localPath: "/tmp",
+    chatId: "c",
+    sessionId: "s",
+    chatPolicy: POLICY_DEFAULT,
+    tunnelGateway: null,
+  } as const
+
+  function toolMap(tools: ReturnType<typeof buildKannaMcpTools>) {
+    const m = new Map<string, { handler: (i: Record<string, unknown>) => Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> }>()
+    for (const t of tools) {
+      m.set(t.name, {
+        handler: (i) => (
+          t as { handler: (x: Record<string, unknown>, e: unknown) => Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> }
+        ).handler(i, undefined),
+      })
+    }
+    return m
+  }
+
+  function fakeChatTaskStore(auditTask: ChatTaskStorePort["auditTask"]): ChatTaskStorePort {
+    const events: ChatTaskEvent[] = []
+    const ofChat = (chatId: string) => events.filter((event) => event.chatId === chatId)
+    return {
+      appendEvents: async (batch) => { events.push(...batch) },
+      project: (chatId, ctx) => deriveChatTasks(ofChat(chatId), ctx),
+      decide: async (chatId, ctx, fn) => {
+        const decided = fn(deriveChatTasks(ofChat(chatId), ctx))
+        events.push(...decided)
+        return decided
+      },
+      mergeBranch: async () => ({ ok: true, conflicts: [], detail: "" }),
+      ...(auditTask ? { auditTask } : {}),
+    }
+  }
+
+  const ARMED: ArmedLoopInfo = { verifyCommand: "bun run lint", workdirAbs: "/tmp", trackingFileRel: null, parallelism: 1 }
+
+  test("with a loop armed, the created task carries the host's chunk audit", async () => {
+    const audited: string[] = []
+    const store = fakeChatTaskStore(async (task) => {
+      audited.push(`${task.subject}|${task.description ?? ""}`)
+      return ['task "Phase 1 done": reads as a status line']
+    })
+    const tools = toolMap(buildKannaMcpTools({ ...baseArgs, chatTaskStore: store, getArmedLoop: () => ARMED }))
+    const res = await tools.get("task_create")!.handler({ subject: "Phase 1 done", description: "the detail" })
+    expect(res.isError).toBeUndefined()
+    const created = JSON.parse(res.content[0].text)
+    expect(created.subject).toBe("Phase 1 done")
+    expect(created.chunkAudit).toEqual(['task "Phase 1 done": reads as a status line'])
+    expect(audited).toEqual(["Phase 1 done|the detail"])
+  })
+
+  test("with no loop armed the task is not audited and the JSON carries no chunkAudit key", async () => {
+    const audited: string[] = []
+    const store = fakeChatTaskStore(async (task) => {
+      audited.push(task.subject)
+      return ["should never be asked"]
+    })
+    const tools = toolMap(buildKannaMcpTools({ ...baseArgs, chatTaskStore: store, getArmedLoop: () => null }))
+    const res = await tools.get("task_create")!.handler({ subject: "Phase 1 done" })
+    expect(res.isError).toBeUndefined()
+    expect(JSON.parse(res.content[0].text).chunkAudit).toBeUndefined()
+    expect(audited).toEqual([])
+  })
+
+  test("a host with no auditor still creates the task", async () => {
+    const store = fakeChatTaskStore(undefined)
+    const tools = toolMap(buildKannaMcpTools({ ...baseArgs, chatTaskStore: store, getArmedLoop: () => ARMED }))
+    const res = await tools.get("task_create")!.handler({ subject: "Extract X" })
+    expect(res.isError).toBeUndefined()
+    expect(JSON.parse(res.content[0].text).chunkAudit).toBeUndefined()
   })
 })
 

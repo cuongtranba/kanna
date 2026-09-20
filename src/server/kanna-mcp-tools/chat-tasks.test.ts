@@ -3,6 +3,7 @@ import { deriveChatTasks } from "../../shared/chat-tasks/read-model"
 import type { ChatTaskScheduleContext } from "../../shared/chat-tasks/schedule"
 import type { ChatTaskEvent } from "../../shared/chat-tasks/types"
 import {
+  buildChatTaskToolList,
   claimChatTask,
   createChatTask,
   listChatTasks,
@@ -182,4 +183,41 @@ test("task_integrate stops at the first conflict and reports it as blocked", asy
 
   expect(result.kind).toBe("blocked")
   if (result.kind === "blocked") expect(result.detail).toContain("conflict")
+})
+
+function toolHandlers(deps: ChatTaskToolDeps) {
+  return new Map(
+    buildChatTaskToolList(deps, (name, _description, _schema, handler) => ({ name, handler }))
+      .map((entry) => [entry.name, entry.handler]),
+  )
+}
+
+test("task_create carries the host's chunk audit beside the created task", async () => {
+  const base = store("chat-1")
+  const audited: string[] = []
+  const deps: ChatTaskToolDeps = {
+    ...base.deps,
+    auditTask: async (task) => {
+      audited.push(`${task.subject}|${task.description ?? ""}`)
+      return ['task "Phase 1 done": reads as a status line']
+    },
+  }
+  const result = await toolHandlers(deps).get("task_create")?.({ subject: "Phase 1 done", description: "detail" })
+
+  const text = result?.content[0]?.text ?? ""
+  expect(result?.isError).toBeUndefined()
+  expect(text).toContain('"subject":"Phase 1 done"')
+  expect(text).toContain('"chunkAudit":["task \\"Phase 1 done\\": reads as a status line"]')
+  expect(audited).toEqual(["Phase 1 done|detail"])
+  expect(base.deps.project({ now: 1_000 }).tasks).toHaveLength(1)
+})
+
+test("task_create leaves chunkAudit out when nothing is flagged or no auditor is wired", async () => {
+  const quiet: ChatTaskToolDeps = { ...store("chat-1").deps, auditTask: async () => [] }
+  const quietResult = await toolHandlers(quiet).get("task_create")?.({ subject: "Extract X" })
+  expect(quietResult?.content[0]?.text).not.toContain("chunkAudit")
+
+  const unwired = store("chat-2").deps
+  const unwiredResult = await toolHandlers(unwired).get("task_create")?.({ subject: "Extract X" })
+  expect(unwiredResult?.content[0]?.text).not.toContain("chunkAudit")
 })

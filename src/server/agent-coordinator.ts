@@ -187,6 +187,8 @@ import { repairMermaidSource } from "../shared/mermaidRepair"
 import { resolveChatCwd } from "./claude-session-config"
 import { createLocalSkillAccess, type LocalSkillAccess } from "./skill-invocation"
 import { readCatalogFileBody } from "./local-catalog-io.adapter"
+import { chunkLabel, createChunkGate, resolveChunkGateConfig, type ChunkGate } from "./chunk-gate"
+import { createSystemOneClient } from "./system-one.adapter"
 import {
   addCounter,
   recordHistogram,
@@ -220,6 +222,15 @@ function recordTurnSpend(active: ActiveTurn): void {
   }
 }
 
+function chunkGateFromEnv(): ChunkGate | null {
+  const config = resolveChunkGateConfig({
+    KANNA_CHUNK_GATE: process.env.KANNA_CHUNK_GATE,
+    TYPESAFE_API_KEY: process.env.TYPESAFE_API_KEY,
+  })
+  if (config === null) return null
+  return createChunkGate({ ask: createSystemOneClient({ apiKey: config.apiKey }) })
+}
+
 export class AgentCoordinator {
   readonly store: EventStore
   private readonly onStateChange: (chatId?: string, options?: { immediate?: boolean }) => void
@@ -245,6 +256,7 @@ export class AgentCoordinator {
   private readonly _cronRepair: CronRepair
   private readonly _cronConfirm: CronConfirm
   private readonly _mermaidGuard: MermaidGuard
+  private readonly _chunkGate: ChunkGate | null
   readonly getAutoResumePreference: () => boolean
   readonly getSubagents: () => Subagent[]
   readonly getAppSettingsSnapshot: NonNullable<AgentCoordinatorArgs["getAppSettingsSnapshot"]>
@@ -319,6 +331,7 @@ export class AgentCoordinator {
         return { source: result.source, repaired: result.repairs.length > 0 }
       },
     })
+    this._chunkGate = args.chunkGate !== undefined ? args.chunkGate : chunkGateFromEnv()
     this.store.onTurnTerminal = (chatId, outcome) => {
       const active = this.activeTurns.get(chatId)
       if (active) {
@@ -603,6 +616,7 @@ export class AgentCoordinator {
         this.emitStateChange(chatId)
       },
       readTrackingFileForImport: (absPath) => readDoc(absPath),
+      chunkGate: this._chunkGate,
     }
   }
 
@@ -969,6 +983,7 @@ export class AgentCoordinator {
   }
 
   private chatTaskStore(): ChatTaskStorePort {
+    const gate = this._chunkGate
     return {
       appendEvents: async (events) => {
         await this.store.appendChatTaskEvents(events)
@@ -981,6 +996,15 @@ export class AgentCoordinator {
         return decided
       },
       mergeBranch: (workdir, branch) => mergeLoopBranch(workdir, branch),
+      ...(gate
+        ? {
+            auditTask: (task: { subject: string; description: string | null }) =>
+              gate.audit([{
+                label: chunkLabel(task.subject),
+                text: task.description ? `${task.subject}\n${task.description}` : task.subject,
+              }]),
+          }
+        : {}),
     }
   }
 

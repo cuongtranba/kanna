@@ -12,6 +12,7 @@ import type { LoopSeedTask } from "./loop-template"
 import { composeLoopWakePrompt } from "./loop-wake-prompt"
 import type { ChatTaskProjection } from "../shared/chat-tasks/read-model"
 import { buildTaskNotification, resolveSpawnPaths } from "./claude-session-config"
+import { chunkLabel, type ChunkGate } from "./chunk-gate"
 import {
   auditOracle,
   extractOracleScriptPath,
@@ -98,8 +99,14 @@ export interface LoopCommandDeps {
   ): Promise<void>
 
   readTrackingFileForImport(absPath: string): Promise<string | null>
+
+  chunkGate?: ChunkGate | null
 }
 
+async function auditSeedChunks(gate: ChunkGate | null, seeds: readonly LoopSeedTask[]): Promise<string[]> {
+  if (gate === null || seeds.length === 0) return []
+  return gate.audit(seeds.map((seed) => ({ label: chunkLabel(seed.subject), text: seed.subject })))
+}
 
 
 export { clearClaudeSessionContext } from "./claude-context-commands"
@@ -376,6 +383,7 @@ export async function setupLoop(
   const seeds: readonly LoopSeedTask[] = args.input.tasks && args.input.tasks.length > 0
     ? args.input.tasks
     : seedsFromImportOrHint(imported, resolved.chunkHint)
+  const chunkWarnings = await auditSeedChunks(deps.chunkGate ?? null, seeds)
   try {
     await deps.seedChatTasks(args.chatId, seeds, imported?.failedApproaches ?? [])
   } catch (err) {
@@ -432,6 +440,7 @@ export async function setupLoop(
     reconciled: false,
     reconcileActions: imported === null ? [] : [`imported ${String(seeds.length)} task(s) from ${resolved.trackingFileRel}`],
     oracleWarnings,
+    chunkWarnings,
     prompt: resolved.prompt,
   }
 }

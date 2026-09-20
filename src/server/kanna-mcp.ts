@@ -112,6 +112,7 @@ export interface ChatTaskStorePort {
     workdir: string,
     branch: string,
   ) => Promise<{ ok: boolean; conflicts: readonly string[]; detail: string }>
+  auditTask?: (task: { subject: string; description: string | null }) => Promise<readonly string[]>
 }
 
 export type SetupLoopHandlerResult =
@@ -122,6 +123,7 @@ export type SetupLoopHandlerResult =
       reconciled: boolean
       reconcileActions: string[]
       oracleWarnings: string[]
+      chunkWarnings: string[]
       prompt: string
     }
   | { ok: false; errors: string[] }
@@ -536,9 +538,12 @@ function buildSetupLoopToolList(args: {
         const auditNote = result.oracleWarnings.length > 0
           ? `\nOracle audit:\n- ${result.oracleWarnings.join("\n- ")}`
           : ""
+        const chunkNote = result.chunkWarnings.length > 0
+          ? `\nChunk audit:\n- ${result.chunkWarnings.join("\n- ")}`
+          : ""
         return ok(
           `Loop armed. Tracking file: ${result.trackingFileRel}${fileNote}.`
-          + ` Your main-agent context has been cleared; the next turn will replay the loop prompt.${auditNote}`,
+          + ` Your main-agent context has been cleared; the next turn will replay the loop prompt.${auditNote}${chunkNote}`,
         )
       },
     ),
@@ -959,6 +964,7 @@ function resolveChatTaskDeps(args: KannaMcpArgs, chatId: string | null): ChatTas
   if (!store || !chatId) return null
   const isRunAlive = args.isRunAlive
   const getArmedLoop = args.getArmedLoop
+  const auditTask = store.auditTask
   return {
     chatId,
     appendEvents: (events) => store.appendEvents(events),
@@ -968,6 +974,12 @@ function resolveChatTaskDeps(args: KannaMcpArgs, chatId: string | null): ChatTas
     requireWorktree: () => (getArmedLoop?.(chatId)?.parallelism ?? 1) > 1,
     integrationWorkdir: () => getArmedLoop?.(chatId)?.workdirAbs ?? null,
     mergeBranch: (workdir, branch) => store.mergeBranch(workdir, branch),
+    ...(auditTask
+      ? {
+          auditTask: (task: { subject: string; description: string | null }) =>
+            getArmedLoop?.(chatId) ? auditTask(task) : Promise.resolve([]),
+        }
+      : {}),
   }
 }
 

@@ -14,6 +14,8 @@ code:
   - src/shared/permission-policy.ts
   - src/shared/projectFileUrl.test.ts
   - src/shared/projectFileUrl.ts
+  - src/shared/system-one.ts
+  - src/shared/system-one.test.ts
   - src/shared/task-doc.test.ts
   - src/shared/task-doc.ts
   - src/shared/turn-model-selection.ts
