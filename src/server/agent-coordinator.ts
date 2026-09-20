@@ -187,8 +187,8 @@ import { repairMermaidSource } from "../shared/mermaidRepair"
 import { resolveChatCwd } from "./claude-session-config"
 import { createLocalSkillAccess, type LocalSkillAccess } from "./skill-invocation"
 import { readCatalogFileBody } from "./local-catalog-io.adapter"
-import { chunkLabel, createChunkGate, resolveChunkGateConfig, type ChunkGate } from "./chunk-gate"
-import { createSystemOneClient } from "./system-one.adapter"
+import { chunkLabel, createChunkGate, type ChunkGate } from "./chunk-gate"
+import { createSystemOneClientFromEnv } from "./system-one.adapter"
 import {
   addCounter,
   recordHistogram,
@@ -223,12 +223,11 @@ function recordTurnSpend(active: ActiveTurn): void {
 }
 
 function chunkGateFromEnv(): ChunkGate | null {
-  const config = resolveChunkGateConfig({
-    KANNA_CHUNK_GATE: process.env.KANNA_CHUNK_GATE,
+  const ask = createSystemOneClientFromEnv({
+    KANNA_SYSTEM_ONE: process.env.KANNA_SYSTEM_ONE,
     TYPESAFE_API_KEY: process.env.TYPESAFE_API_KEY,
   })
-  if (config === null) return null
-  return createChunkGate({ ask: createSystemOneClient({ apiKey: config.apiKey }) })
+  return ask === null ? null : createChunkGate({ ask })
 }
 
 export class AgentCoordinator {

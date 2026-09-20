@@ -10,6 +10,7 @@ import type { SubagentOrchestrator } from "./subagent-orchestrator"
 import type { ArmedLoopInfo, ChatTaskStorePort, KannaMcpDelegationContext, SetupLoopHandlerResult } from "./kanna-mcp"
 import { deriveChatTasks } from "../shared/chat-tasks/read-model"
 import type { ChatTaskEvent } from "../shared/chat-tasks/types"
+import type { SystemOnePort } from "../shared/system-one"
 import type { MermaidParsePort } from "../shared/mermaid-validation"
 import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
 
@@ -665,6 +666,28 @@ describe("setup_loop tool", () => {
     expect(res.content[0].text).toContain("setup_loop rejected")
     expect(res.content[0].text).toContain("goal is required")
     expect(res.content[0].text).toContain("verifyCommand is required")
+  })
+})
+
+describe("decide tool registration", () => {
+  const baseArgs = {
+    projectId: "p",
+    localPath: "/tmp",
+    chatId: "c",
+    sessionId: "s",
+    chatPolicy: POLICY_DEFAULT,
+    tunnelGateway: null,
+  } as const
+  const port: SystemOnePort = async () => ({ model: "jev-1.13.0", answers: {}, inputTokens: 0 })
+  const names = (tools: ReturnType<typeof buildKannaMcpTools>) => tools.map((t) => t.name)
+
+  test("registered when a System One port and a chatId are present", () => {
+    expect(names(buildKannaMcpTools({ ...baseArgs, systemOne: port }))).toContain("decide")
+  })
+
+  test("absent when the port is null or the chat is missing", () => {
+    expect(names(buildKannaMcpTools({ ...baseArgs, systemOne: null }))).not.toContain("decide")
+    expect(names(buildKannaMcpTools({ ...baseArgs, systemOne: port, chatId: undefined }))).not.toContain("decide")
   })
 })
 

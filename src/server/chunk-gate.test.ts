@@ -9,7 +9,6 @@ import {
   chunkLabel,
   createChunkGate,
   describeChunkVerdict,
-  resolveChunkGateConfig,
 } from "./chunk-gate"
 
 interface AnswerShape {
@@ -62,16 +61,6 @@ const OPEN_ENDED = answers({
 const SEVERAL_UNSURE = answers({
   isInstruction: 0.95, inline: 0.99, specificity: 2.0, specificityConfidence: 1.0,
   scope: "several_units", scopeConfidence: 0.43, namesFiles: 0.99, hasDoneCondition: 0.9,
-})
-
-describe("resolveChunkGateConfig", () => {
-  test("enabled only when the switch is on AND a key is present", () => {
-    expect(resolveChunkGateConfig({ KANNA_CHUNK_GATE: "enabled", TYPESAFE_API_KEY: "k" })).toEqual({ apiKey: "k" })
-    expect(resolveChunkGateConfig({ KANNA_CHUNK_GATE: "enabled" })).toBeNull()
-    expect(resolveChunkGateConfig({ TYPESAFE_API_KEY: "k" })).toBeNull()
-    expect(resolveChunkGateConfig({ KANNA_CHUNK_GATE: "disabled", TYPESAFE_API_KEY: "k" })).toBeNull()
-    expect(resolveChunkGateConfig({ KANNA_CHUNK_GATE: "enabled", TYPESAFE_API_KEY: "   " })).toBeNull()
-  })
 })
 
 describe("assessChunk", () => {

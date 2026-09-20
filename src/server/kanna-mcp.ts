@@ -4,6 +4,9 @@ import { buildBoardToolList } from "./kanna-mcp-boards"
 import { buildPluginToolList } from "./kanna-mcp-plugins"
 import { getPluginService } from "./plugins/plugin-service-host"
 import { bindChatTaskRun, buildChatTaskToolList, type ChatTaskToolDeps } from "./kanna-mcp-tools/chat-tasks"
+import { buildDecideToolList } from "./kanna-mcp-tools/decide"
+import { defaultSystemOnePort } from "./system-one.adapter"
+import type { SystemOnePort } from "../shared/system-one"
 import type { ChatTaskEvent } from "../shared/chat-tasks/types"
 import type { ChatTaskScheduleContext } from "../shared/chat-tasks/schedule"
 import type { ChatTaskProjection } from "../shared/chat-tasks/read-model"
@@ -88,6 +91,7 @@ export interface KannaMcpArgs extends OfferDownloadArgs {
   getArmedLoop?: (chatId: string) => ArmedLoopInfo | null
   isRunAlive?: (chatId: string, runId: string) => boolean
   chatTaskStore?: ChatTaskStorePort
+  systemOne?: SystemOnePort | null
   parseMermaid?: MermaidParsePort
   armCron?: (command: string) => Promise<{ jobId: string }>
   updateCron?: (jobId: string, patch: import("../shared/cron/types").CronJobPatch) => Promise<void>
@@ -959,6 +963,10 @@ function buildCronToolList(args: {
   return tools
 }
 
+function resolveSystemOne(args: KannaMcpArgs): SystemOnePort | null {
+  return args.systemOne !== undefined ? args.systemOne : defaultSystemOnePort()
+}
+
 function resolveChatTaskDeps(args: KannaMcpArgs, chatId: string | null): ChatTaskToolDeps | null {
   const store = args.chatTaskStore
   if (!store || !chatId) return null
@@ -1034,6 +1042,7 @@ export function buildKannaMcpTools(args: KannaMcpArgs): KannaSdkToolList {
     ...buildRunVerifyToolList({ chatId, cwd, getArmedLoop: args.getArmedLoop }),
     ...buildValidateMermaidToolList({ chatId, parse: args.parseMermaid ?? parseMermaid }),
     ...buildCronToolList({ chatId, armCron: args.armCron, updateCron: args.updateCron }),
+    ...buildDecideToolList(chatId ? resolveSystemOne(args) : null, tool),
   ]
 
   if (tunnelGateway && chatId) {

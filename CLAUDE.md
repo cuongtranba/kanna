@@ -2131,26 +2131,50 @@ orchestrator is a fresh context every turn, the worst place for a multi-step
 stateful git operation. Each parallel task must name its OWN git worktree; a task
 with no worktree, or one naming the loop workdir itself, is refused at claim.
 
-# Chunk gate — `setup_loop` and `task_create` audit a task's text (KANNA_CHUNK_GATE)
+# TypeSafe System One — the `decide` tool and the chunk gate (KANNA_SYSTEM_ONE)
+
+One switch turns on everything backed by TypeSafe's System One model
+(`jev-latest`): `KANNA_SYSTEM_ONE=enabled` AND `TYPESAFE_API_KEY` set
+(`resolveSystemOneConfig`, `src/shared/system-one.ts`); anything else builds no
+client, registers no tool and audits nothing. Text sent to the model leaves the
+machine for `api.typesafe.ai`, so silence is the default. Both surfaces share
+the wire contract in `src/shared/system-one.ts` (`encodeSystemOneRequest` is a
+field-by-field encoder, never a cast; `parseSystemOneResponse` drops a malformed
+answer rather than the whole reply) and the one IO leaf
+`src/server/system-one.adapter.ts` (`POST /v1/systemone`, one retry on 429/529,
+`fetch` injected for tests; a 2.5 s timeout for the gate, 8 s for the tool).
+
+## `decide` — calibrated judgments the model asks for
+
+`mcp__kanna__decide({ state, questions })` (`kanna-mcp-tools/decide.ts`) exposes
+the three primitives — `noul` (yes/no → probability), `choice` (one of the
+listed criteria → choice, per-option probabilities, confidence) and `score`
+(2–10 described levels → score, confidence) — over a `state` the model supplies:
+a string, an array of texts, or an object with named fields. The reply is the
+parsed `SystemOneResponse` as JSON; the model reads the numbers and decides.
+Registered whenever the client exists and a `chatId` is present (subagents
+included), like `validate_mermaid`; `KannaMcpArgs.systemOne` overrides the
+env-built default for tests, and `null` disables it. Bounds are zod, checked
+before anything is sent: 1–16 questions, a choice needs 2–64 criteria, a score
+2–10 levels, and `state` stays under 32 000 characters. A silent port is an
+`isError` result naming the cause, so the model decides without it rather than
+reading an empty answer as "no". **What the model sends is visible**: every call
+is a `tool_call` entry in the transcript, which is the one privacy advantage the
+tool has over the host-side gate below.
+
+## The chunk gate — `setup_loop` and `task_create` audit a task's text
 
 A loop's worker starts with an empty context and the task's text alone, so a
 task that reads as a status line, only points at another file, is too vague to
 act on, or bundles several units of work costs an iteration before anyone
 notices. Chunk shape was the first root cause in the decompose-large-files
 review: of the 63 worker briefs in chat `f337fd1b`, 18 were several-unit or
-open-ended. `src/server/chunk-gate.ts` asks TypeSafe's System One model
-(`jev-latest`) six typed questions about the text and turns the calibrated
-answers into ONE warning line per task. `system-one.adapter.ts` is the only IO
-(`POST api.typesafe.ai/v1/systemone`, 2.5 s timeout, one retry on 429/529,
-`fetch` injected for tests) and `src/shared/system-one.ts` is the wire contract:
-`encodeSystemOneRequest` is a field-by-field encoder, never a cast, and
-`parseSystemOneResponse` drops a malformed answer rather than the whole reply.
+open-ended. `src/server/chunk-gate.ts` asks the model six typed questions about
+the text and turns the calibrated answers into ONE warning line per task.
 
-- **Opt-in, off by default.** `KANNA_CHUNK_GATE=enabled` AND `TYPESAFE_API_KEY`
-  set (`resolveChunkGateConfig`); anything else builds no gate. The task text
-  leaves the machine, so silence is the default. Measured 2026-09-20: ~300 ms
-  and ~1k input tokens per task at $0.042 per million, so a 12-task plan costs
-  well under a cent.
+- **Same switch as the tool, off by default.** Measured 2026-09-20: ~300 ms and
+  ~1k input tokens per task at $0.042 per million, so a 12-task plan costs well
+  under a cent.
 - **Advisory, never fatal.** `setup_loop` audits the seed tasks (`tasks[]`, else
   the imported plan, else `chunk_hint`) and appends a `Chunk audit:` block beside
   `Oracle audit:`; `task_create` appends `chunkAudit` to the created task's JSON,

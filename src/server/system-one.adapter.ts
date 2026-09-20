@@ -4,6 +4,8 @@ import { log } from "../shared/log"
 import {
   encodeSystemOneRequest,
   parseSystemOneResponse,
+  resolveSystemOneConfig,
+  type SystemOneEnv,
   type SystemOnePort,
   type SystemOneRequest,
 } from "../shared/system-one"
@@ -11,6 +13,7 @@ import {
 export const SYSTEM_ONE_ENDPOINT = "https://api.typesafe.ai/v1/systemone"
 
 const DEFAULT_TIMEOUT_MS = 2_500
+const DECIDE_TOOL_TIMEOUT_MS = 8_000
 const DEFAULT_RETRY_DELAY_MS = 300
 const RETRYABLE_STATUSES: ReadonlySet<number> = new Set([429, 529])
 
@@ -68,4 +71,24 @@ export function createSystemOneClient(options: SystemOneClientOptions): SystemOn
       return null
     }
   }
+}
+
+export function createSystemOneClientFromEnv(
+  env: SystemOneEnv,
+  options: Omit<SystemOneClientOptions, "apiKey"> = {},
+): SystemOnePort | null {
+  const config = resolveSystemOneConfig(env)
+  return config === null ? null : createSystemOneClient({ ...options, apiKey: config.apiKey })
+}
+
+let defaultPort: SystemOnePort | null | undefined
+
+export function defaultSystemOnePort(): SystemOnePort | null {
+  if (defaultPort === undefined) {
+    defaultPort = createSystemOneClientFromEnv(
+      { KANNA_SYSTEM_ONE: process.env.KANNA_SYSTEM_ONE, TYPESAFE_API_KEY: process.env.TYPESAFE_API_KEY },
+      { timeoutMs: DECIDE_TOOL_TIMEOUT_MS },
+    )
+  }
+  return defaultPort
 }

@@ -9,21 +9,6 @@ import {
   type SystemOneQuestions,
 } from "../shared/system-one"
 
-export interface ChunkGateEnv {
-  KANNA_CHUNK_GATE?: string
-  TYPESAFE_API_KEY?: string
-}
-
-export interface ChunkGateConfig {
-  apiKey: string
-}
-
-export function resolveChunkGateConfig(env: ChunkGateEnv): ChunkGateConfig | null {
-  if (env.KANNA_CHUNK_GATE !== "enabled") return null
-  const apiKey = env.TYPESAFE_API_KEY?.trim() ?? ""
-  return apiKey.length > 0 ? { apiKey } : null
-}
-
 const SPECIFICITY_LEVELS: readonly string[] = [
   "Vague: no named file or symbol, no measurable target, could be read many different ways",
   "Partly specific: names a target, file or area, but gives no completion condition",

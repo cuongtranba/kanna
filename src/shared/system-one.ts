@@ -145,3 +145,18 @@ export function scoreOf(answers: SystemOneAnswers, key: string): ScoreAnswer | n
   const answer = answers[key]
   return answer !== undefined && answer.type === "score" ? answer : null
 }
+
+export interface SystemOneEnv {
+  KANNA_SYSTEM_ONE?: string
+  TYPESAFE_API_KEY?: string
+}
+
+export interface SystemOneConfig {
+  apiKey: string
+}
+
+export function resolveSystemOneConfig(env: SystemOneEnv): SystemOneConfig | null {
+  if (env.KANNA_SYSTEM_ONE !== "enabled") return null
+  const apiKey = env.TYPESAFE_API_KEY?.trim() ?? ""
+  return apiKey.length > 0 ? { apiKey } : null
+}

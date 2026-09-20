@@ -40,3 +40,5 @@ code:
   - src/server/chunk-gate.live.test.ts
   - src/server/system-one.adapter.ts
   - src/server/system-one.adapter.test.ts
+  - src/server/kanna-mcp-tools/decide.ts
+  - src/server/kanna-mcp-tools/decide.test.ts

@@ -4,6 +4,7 @@ import {
   encodeSystemOneRequest,
   noulOf,
   parseSystemOneResponse,
+  resolveSystemOneConfig,
   scoreOf,
   SYSTEM_ONE_DEFAULT_MODEL,
   type SystemOneQuestions,
@@ -113,5 +114,15 @@ describe("typed answer readers", () => {
     expect(noulOf(answers, "scope")).toBeNull()
     expect(choiceOf(answers, "bounded")).toBeNull()
     expect(scoreOf(answers, "scope")).toBeNull()
+  })
+})
+
+describe("resolveSystemOneConfig", () => {
+  test("enabled only when the switch is on AND a key is present", () => {
+    expect(resolveSystemOneConfig({ KANNA_SYSTEM_ONE: "enabled", TYPESAFE_API_KEY: "k" })).toEqual({ apiKey: "k" })
+    expect(resolveSystemOneConfig({ KANNA_SYSTEM_ONE: "enabled" })).toBeNull()
+    expect(resolveSystemOneConfig({ TYPESAFE_API_KEY: "k" })).toBeNull()
+    expect(resolveSystemOneConfig({ KANNA_SYSTEM_ONE: "disabled", TYPESAFE_API_KEY: "k" })).toBeNull()
+    expect(resolveSystemOneConfig({ KANNA_SYSTEM_ONE: "enabled", TYPESAFE_API_KEY: "   " })).toBeNull()
   })
 })
