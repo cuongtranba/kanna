@@ -211,6 +211,59 @@ export function computeNewSidebarOrder(
 }
 
 
+function validateStackBindings(
+  projectsById: Pick<StoreState, "projectsById">["projectsById"],
+  bindings: readonly StackBinding[],
+  primaryProjectId: string,
+  stack: StackRecord | null,
+): void {
+  if (bindings.length === 0) throw new Error("stackBindings cannot be empty")
+  const primaries = bindings.filter((b) => b.role === "primary")
+  if (primaries.length !== 1) throw new Error("Exactly one primary binding required")
+  const seenProjects = new Set<string>()
+  for (const binding of bindings) {
+    if (seenProjects.has(binding.projectId)) throw new Error("Duplicate projectId in stackBindings")
+    seenProjects.add(binding.projectId)
+    if (stack && !stack.projectIds.includes(binding.projectId)) {
+      throw new Error(`Binding projectId not a member of stack: ${binding.projectId}`)
+    }
+    const peer = projectsById.get(binding.projectId)
+    if (!peer || peer.deletedAt) throw new Error(`Project not found: ${binding.projectId}`)
+    if (typeof binding.worktreePath !== "string" || binding.worktreePath.trim() === "") {
+      throw new Error("worktreePath must be a non-empty string")
+    }
+  }
+  if (primaries[0].projectId !== primaryProjectId) {
+    throw new Error("Primary binding projectId must match the chat projectId")
+  }
+}
+
+export function buildAttachChatProjectsEvent(
+  state: Pick<StoreState, "chatsById" | "projectsById">,
+  chatId: string,
+  stackBindings: readonly StackBinding[],
+): ChatEvent | null {
+  const chat = requireChat(state.chatsById, chatId)
+  validateStackBindings(state.projectsById, stackBindings, chat.projectId, null)
+  const current = chat.stackBindings ?? []
+  const unchanged = current.length === stackBindings.length
+    && current.every((binding, i) => {
+      const next = stackBindings[i]
+      return next !== undefined
+        && next.projectId === binding.projectId
+        && next.worktreePath === binding.worktreePath
+        && next.role === binding.role
+    })
+  if (unchanged) return null
+  return {
+    v: STORE_VERSION,
+    type: "chat_projects_attached",
+    timestamp: Date.now(),
+    chatId,
+    stackBindings: stackBindings.map((b) => ({ ...b })),
+  }
+}
+
 export function buildCreateChatEvent(
   state: Pick<StoreState, "projectsById" | "stacksById">,
   projectId: string,
@@ -224,27 +277,9 @@ export function buildCreateChatEvent(
   }
 
   if (options?.stackBindings !== undefined) {
-    const stack = options.stackId === undefined ? null : state.stacksById.get(options.stackId)
+    const stack = options.stackId === undefined ? null : state.stacksById.get(options.stackId) ?? null
     if (options.stackId !== undefined && (!stack || stack.deletedAt)) throw new Error("Stack not found")
-    if (options.stackBindings.length === 0) throw new Error("stackBindings cannot be empty")
-    const primaries = options.stackBindings.filter((b) => b.role === "primary")
-    if (primaries.length !== 1) throw new Error("Exactly one primary binding required")
-    const seenProjects = new Set<string>()
-    for (const binding of options.stackBindings) {
-      if (seenProjects.has(binding.projectId)) throw new Error("Duplicate projectId in stackBindings")
-      seenProjects.add(binding.projectId)
-      if (stack && !stack.projectIds.includes(binding.projectId)) {
-        throw new Error(`Binding projectId not a member of stack: ${binding.projectId}`)
-      }
-      const peer = state.projectsById.get(binding.projectId)
-      if (!peer || peer.deletedAt) throw new Error(`Project not found: ${binding.projectId}`)
-      if (typeof binding.worktreePath !== "string" || binding.worktreePath.trim() === "") {
-        throw new Error("worktreePath must be a non-empty string")
-      }
-    }
-    if (primaries[0].projectId !== projectId) {
-      throw new Error("Primary binding projectId must match createChat projectId")
-    }
+    validateStackBindings(state.projectsById, options.stackBindings, projectId, stack)
   }
 
   const chatId = crypto.randomUUID()

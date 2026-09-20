@@ -7,12 +7,14 @@ import {
   MenuOption,
 } from "@lexical/react/LexicalTypeaheadMenuPlugin"
 import type { MenuTextMatch, TriggerFn } from "@lexical/react/LexicalTypeaheadMenuPlugin"
-import { AtSign, Bot, Folder, FileText } from "lucide-react"
+import { AtSign, Bot, Folder, FileText, FolderGit2 } from "lucide-react"
 import { useMentionSuggestions } from "../../../hooks/useMentionSuggestions"
 import { useSubagentSuggestions } from "../../../hooks/useSubagentSuggestions"
+import { useProjectSuggestions } from "../../../hooks/useProjectSuggestions"
 import type { SubagentSuggestion } from "../../../hooks/useSubagentSuggestions"
+import type { ProjectSuggestion } from "../../../hooks/useProjectSuggestions"
 import type { ProjectPath } from "../../../hooks/useMentionSuggestions"
-import { $createMentionNode } from "../nodes/MentionNode"
+import { $createMentionNode, type CreateMentionNodeArgs } from "../nodes/MentionNode"
 import { cn } from "../../../lib/utils"
 import { ChatTabScopedStore } from "../../../stores/chatTabScopedStore"
 import { useTypeaheadHoverHighlight } from "./typeahead-hover-highlight"
@@ -36,17 +38,34 @@ function useMentionTrigger(): TriggerFn {
 
 export type MentionOption =
   | { kind: "agent"; subagent: SubagentSuggestion["subagent"] }
+  | { kind: "project"; project: ProjectSuggestion }
   | { kind: "path"; path: ProjectPath }
+
+function mentionOptionKey(data: MentionOption): string {
+  if (data.kind === "agent") return `agent:${data.subagent.id}`
+  if (data.kind === "project") return `project:${data.project.projectId}`
+  return `path:${data.path.kind}:${data.path.path}`
+}
+
+export function createMentionArgs(data: MentionOption): CreateMentionNodeArgs {
+  if (data.kind === "agent") {
+    return { mentionKind: "agent", value: data.subagent.name, label: data.subagent.name }
+  }
+  if (data.kind === "project") {
+    return {
+      mentionKind: "project",
+      value: data.project.slug,
+      label: `project/${data.project.slug}`,
+    }
+  }
+  return { mentionKind: "path", value: data.path.path, label: data.path.path }
+}
 
 export class MentionMenuOption extends MenuOption {
   readonly data: MentionOption
 
   constructor(data: MentionOption) {
-    const key =
-      data.kind === "agent"
-        ? `agent:${data.subagent.id}`
-        : `path:${data.path.kind}:${data.path.path}`
-    super(key)
+    super(mentionOptionKey(data))
     this.data = data
   }
 }
@@ -76,16 +95,24 @@ export function MentionTypeaheadPlugin({
     query: query ?? "",
     enabled,
   })
+  const projectState = useProjectSuggestions({
+    query: query ?? "",
+    enabled,
+    excludeProjectId: projectId,
+  })
 
   const options = useMemo<MentionMenuOption[]>(() => {
     const agentOpts = subagentState.items.map(
       (s) => new MentionMenuOption({ kind: "agent", subagent: s.subagent }),
     )
+    const projectOpts = projectState.items.map(
+      (p) => new MentionMenuOption({ kind: "project", project: p }),
+    )
     const pathOpts = mentionState.items.map(
       (p) => new MentionMenuOption({ kind: "path", path: p }),
     )
-    return [...agentOpts, ...pathOpts]
-  }, [subagentState.items, mentionState.items])
+    return [...agentOpts, ...projectOpts, ...pathOpts]
+  }, [subagentState.items, projectState.items, mentionState.items])
 
   const highlightOnPointerMove = useTypeaheadHoverHighlight()
 
@@ -99,19 +126,7 @@ export function MentionTypeaheadPlugin({
       textNodeContainingQuery: TextNode | null,
       closeMenu: () => void,
     ) => {
-      const data = option.data
-      const mentionNode =
-        data.kind === "agent"
-          ? $createMentionNode({
-              mentionKind: "agent",
-              value: data.subagent.name,
-              label: data.subagent.name,
-            })
-          : $createMentionNode({
-              mentionKind: "path",
-              value: data.path.path,
-              label: data.path.path,
-            })
+      const mentionNode = $createMentionNode(createMentionArgs(option.data))
 
       if (textNodeContainingQuery !== null) {
         textNodeContainingQuery.replace(mentionNode)
@@ -196,6 +211,18 @@ export function MentionTypeaheadPlugin({
                           {data.subagent.description}
                         </span>
                       ) : null}
+                    </>
+                  )
+                } else if (data.kind === "project") {
+                  mentionContent = (
+                    <>
+                      <FolderGit2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      <span className="font-mono truncate">
+                        project/{data.project.slug}
+                      </span>
+                      <span className="min-w-0 truncate text-xs text-muted-foreground">
+                        {data.project.localPath}
+                      </span>
                     </>
                   )
                 } else if (path) {

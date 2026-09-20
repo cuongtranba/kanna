@@ -353,3 +353,101 @@ describe("project + stack instructions", () => {
     await expect(store.setStackInstructions(stack.id, "x")).rejects.toThrow(/Stack not found/u)
   })
 })
+
+describe("attachChatProjects", () => {
+  test("binds a second project onto a chat that had no bindings", async () => {
+    const { store, projectIds: [p1, p2] } = await buildStoreWithProjects(["/tmp/p1", "/tmp/p2"])
+    const chat = await store.createChat(p1)
+    expect(chat.stackBindings).toBeUndefined()
+
+    await store.attachChatProjects(chat.id, [
+      { projectId: p1, worktreePath: "/tmp/p1", role: "primary" },
+      { projectId: p2, worktreePath: "/tmp/p2", role: "additional" },
+    ])
+
+    expect(store.getChat(chat.id)?.stackBindings).toEqual([
+      { projectId: p1, worktreePath: "/tmp/p1", role: "primary" },
+      { projectId: p2, worktreePath: "/tmp/p2", role: "additional" },
+    ])
+    expect(store.getChat(chat.id)?.stackId).toBeUndefined()
+  })
+
+  test("survives replay", async () => {
+    const dir = await createTempDataDir()
+    const store = createTestEventStore(dir)
+    await store.initialize()
+    const pa = await store.openProject("/tmp/a", "A")
+    const pb = await store.openProject("/tmp/b", "B")
+    const chat = await store.createChat(pa.id)
+    await store.attachChatProjects(chat.id, [
+      { projectId: pa.id, worktreePath: "/tmp/a", role: "primary" },
+      { projectId: pb.id, worktreePath: "/tmp/b", role: "additional" },
+    ])
+    const live = store.getChat(chat.id)?.stackBindings
+
+    const replayed = createTestEventStore(dir)
+    await replayed.initialize()
+    expect(replayed.getChat(chat.id)?.stackBindings).toEqual(live!)
+  })
+
+  test("attaches a project that is not a member of the chat's stack", async () => {
+    const { store, projectIds: [p1, p2, p3] } = await buildStoreWithProjects(["/tmp/p1", "/tmp/p2", "/tmp/p3"])
+    const stack = await store.createStack("X", [p1, p2])
+    const chat = await store.createChat(p1, {
+      stackId: stack.id,
+      stackBindings: [
+        { projectId: p1, worktreePath: "/tmp/p1", role: "primary" },
+        { projectId: p2, worktreePath: "/tmp/p2", role: "additional" },
+      ],
+    })
+
+    await store.attachChatProjects(chat.id, [
+      { projectId: p1, worktreePath: "/tmp/p1", role: "primary" },
+      { projectId: p2, worktreePath: "/tmp/p2", role: "additional" },
+      { projectId: p3, worktreePath: "/tmp/p3", role: "additional" },
+    ])
+
+    expect(store.getChat(chat.id)?.stackBindings?.map((b) => b.projectId)).toEqual([p1, p2, p3])
+    expect(store.getChat(chat.id)?.stackId).toBe(stack.id)
+  })
+
+  test("an unchanged write appends no event", async () => {
+    const { store, projectIds: [p1] } = await buildStoreWithProjects(["/tmp/p1"])
+    const chat = await store.createChat(p1, {
+      stackBindings: [{ projectId: p1, worktreePath: "/tmp/p1", role: "primary" }],
+    })
+    const before = store.getChat(chat.id)?.updatedAt
+    await new Promise((r) => setTimeout(r, 2))
+    await store.attachChatProjects(chat.id, [
+      { projectId: p1, worktreePath: "/tmp/p1", role: "primary" },
+    ])
+    expect(store.getChat(chat.id)?.updatedAt).toBe(before)
+  })
+
+  test("rejects a primary that is not the chat's own project", async () => {
+    const { store, projectIds: [p1, p2] } = await buildStoreWithProjects(["/tmp/p1", "/tmp/p2"])
+    const chat = await store.createChat(p1)
+    await expect(store.attachChatProjects(chat.id, [
+      { projectId: p2, worktreePath: "/tmp/p2", role: "primary" },
+      { projectId: p1, worktreePath: "/tmp/p1", role: "additional" },
+    ])).rejects.toThrow(/Primary binding projectId/u)
+  })
+
+  test("rejects a duplicate projectId", async () => {
+    const { store, projectIds: [p1] } = await buildStoreWithProjects(["/tmp/p1"])
+    const chat = await store.createChat(p1)
+    await expect(store.attachChatProjects(chat.id, [
+      { projectId: p1, worktreePath: "/tmp/p1", role: "primary" },
+      { projectId: p1, worktreePath: "/tmp/other", role: "additional" },
+    ])).rejects.toThrow(/Duplicate projectId/u)
+  })
+
+  test("rejects an unknown project", async () => {
+    const { store, projectIds: [p1] } = await buildStoreWithProjects(["/tmp/p1"])
+    const chat = await store.createChat(p1)
+    await expect(store.attachChatProjects(chat.id, [
+      { projectId: p1, worktreePath: "/tmp/p1", role: "primary" },
+      { projectId: "ghost", worktreePath: "/tmp/ghost", role: "additional" },
+    ])).rejects.toThrow(/Project not found/u)
+  })
+})

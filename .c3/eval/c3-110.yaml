@@ -13,6 +13,8 @@ code:
   - src/client/app/sidebarSwipeGesture.ts
   - src/client/app/appRuntime.test.ts
   - src/client/app/appRuntime.ts
+  - src/client/hooks/useProjectSuggestions.ts
+  - src/client/hooks/useProjectSuggestions.test.ts
   - src/client/app/useAppGlobalState.test.ts
   - src/client/app/useAppGlobalState.ts
   - src/client/app/useKannaState.scrollback.test.tsx

@@ -6,7 +6,7 @@ import { domAdapter } from "../../../adapters/dom.adapter"
 import { cn } from "../../../lib/utils"
 
 
-export type MentionKind = "agent" | "path"
+export type MentionKind = "agent" | "path" | "project"
 
 export type SerializedMentionNode = Spread<
   {
@@ -96,6 +96,9 @@ export class MentionNode extends DecoratorNode<ReactNode> {
     if (this.__mentionKind === "agent") {
       return `@agent/${this.__value}`
     }
+    if (this.__mentionKind === "project") {
+      return `@project/${this.__value}`
+    }
     return `@${this.__value}`
   }
 
@@ -109,6 +112,19 @@ export class MentionNode extends DecoratorNode<ReactNode> {
           className={cn(
             "inline-flex items-center rounded px-1 text-sm",
             "bg-primary/10 text-primary border border-primary/20",
+          )}
+        >
+          {label}
+        </span>
+      )
+    }
+
+    if (this.__mentionKind === "project") {
+      return (
+        <span
+          className={cn(
+            "inline-flex items-center rounded px-1 text-sm font-mono",
+            "bg-accent text-accent-foreground border border-border",
           )}
         >
           {label}

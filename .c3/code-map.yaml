@@ -20,6 +20,8 @@ c3-110:
   - src/client/app/sidebarSwipeGesture.ts
   - src/client/app/appRuntime.test.ts
   - src/client/app/appRuntime.ts
+  - src/client/hooks/useProjectSuggestions.ts
+  - src/client/hooks/useProjectSuggestions.test.ts
   - src/client/app/useAppGlobalState.test.ts
   - src/client/app/useAppGlobalState.ts
   - src/client/app/useKannaState.scrollback.test.tsx
@@ -158,8 +160,8 @@ c3-210:
   - src/server/history-primer.ts
   - src/server/loop-wake-recovery.test.ts
   - src/server/loop-wake-recovery.ts
-  - src/server/kanna-mcp-tools/task-queue.test.ts
-  - src/server/kanna-mcp-tools/task-queue.ts
+  - src/server/project-mention-attach.ts
+  - src/server/project-mention-attach.test.ts
   - src/server/loop-integrate-io.adapter.ts
   - src/server/loop-prompt-parallel.ts
   - src/server/tracking-file-lock.test.ts
@@ -296,6 +298,8 @@ c3-301:
   - src/shared/mention-pattern.ts
   - src/shared/permission-policy.test.ts
   - src/shared/permission-policy.ts
+  - src/shared/project-mention.ts
+  - src/shared/project-mention.test.ts
   - src/shared/projectFileUrl.test.ts
   - src/shared/projectFileUrl.ts
   - src/shared/task-doc.test.ts

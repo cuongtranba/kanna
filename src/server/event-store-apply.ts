@@ -38,6 +38,7 @@ export function applyStoreEvent(
       break
     }
     case "chat_created":
+    case "chat_projects_attached":
     case "chat_renamed":
     case "chat_deleted":
     case "chat_archived":

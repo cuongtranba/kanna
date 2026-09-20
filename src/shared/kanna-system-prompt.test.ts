@@ -276,6 +276,11 @@ describe("buildKannaSystemPromptAppend", () => {
       expect(out).toContain("- (missing) [primary]: /work/gone (missing)")
     })
 
+    test("explains what an @project mention means", () => {
+      const out = buildKannaSystemPromptAppend([], { stackProjects: [fakeBinding()] })
+      expect(out).toContain("`@project/<name>`")
+    })
+
     test("places the block after Workspace instructions and before the subagent roster", () => {
       const out = buildKannaSystemPromptAppend([fakeSubagent({ name: "rev" })], {
         globalPromptAppend: "Always TDD.",

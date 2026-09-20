@@ -15,6 +15,8 @@ import { buildPromptText } from "./claude-prompt-helpers"
 import { buildHistoryPrimer, shouldInjectPrimer } from "./history-primer"
 import { fallbackTitleFromMessage } from "./generate-title"
 import { parseMentions, type ParsedMention } from "./mention-parser"
+import { decideMentionedProjectBindings } from "./project-mention-attach"
+import { pathExists } from "./project-paths-io.adapter"
 import { resolveProjectInstructions, resolveSpawnPaths, resolveStackProjects } from "./claude-session-config"
 import { buildCodexDeveloperInstructions } from "../shared/kanna-system-prompt"
 import { timestamped } from "./claude-message-normalizer"
@@ -91,6 +93,28 @@ async function startTurnForChatOuter(
   }
 }
 
+async function attachMentionedProjects(
+  deps: StartTurnDeps,
+  args: StartTurnForChatArgs,
+  chat: ChatRecord,
+  chatLocalPath: string,
+): Promise<void> {
+  const bindings = decideMentionedProjectBindings({
+    text: args.content,
+    chatProjectId: chat.projectId,
+    chatLocalPath,
+    currentBindings: chat.stackBindings,
+    listProjects: () => deps.store.listProjects(),
+    pathExists,
+  })
+  if (!bindings) return
+  try {
+    await deps.store.attachChatProjects(chat.id, bindings)
+  } catch (err) {
+    log.warn(`${LOG_PREFIX} attaching a mentioned project failed`, String(err))
+  }
+}
+
 async function startTurnForChatInner(
   deps: StartTurnDeps,
   args: StartTurnForChatArgs,
@@ -129,6 +153,8 @@ async function startTurnForChatInner(
   if (!project) {
     throw new Error("Project not found")
   }
+
+  await attachMentionedProjects(deps, args, chat, project.localPath)
 
   let appendedUserMessageId: string | null = null
   if (args.appendUserPrompt) {

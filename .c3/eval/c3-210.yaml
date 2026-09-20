@@ -31,8 +31,8 @@ code:
   - src/server/claude-turn-starter-types.ts
   - src/server/loop-wake-recovery.test.ts
   - src/server/loop-wake-recovery.ts
-  - src/server/kanna-mcp-tools/task-queue.test.ts
-  - src/server/kanna-mcp-tools/task-queue.ts
+  - src/server/project-mention-attach.ts
+  - src/server/project-mention-attach.test.ts
   - src/server/loop-integrate-io.adapter.ts
   - src/server/loop-prompt-parallel.ts
   - src/server/tracking-file-lock.test.ts

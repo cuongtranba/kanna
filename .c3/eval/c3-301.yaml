@@ -12,6 +12,8 @@ code:
   - src/shared/mention-pattern.ts
   - src/shared/permission-policy.test.ts
   - src/shared/permission-policy.ts
+  - src/shared/project-mention.ts
+  - src/shared/project-mention.test.ts
   - src/shared/projectFileUrl.test.ts
   - src/shared/projectFileUrl.ts
   - src/shared/task-doc.test.ts
