@@ -131,6 +131,13 @@ export type ChatEvent =
     }
   | {
       v: 3
+      type: "chat_projects_attached"
+      timestamp: number
+      chatId: string
+      stackBindings: StackBinding[]
+    }
+  | {
+      v: 3
       type: "chat_renamed"
       timestamp: number
       chatId: string
@@ -457,6 +464,7 @@ export const LOG_OF_EVENT = {
   project_star_set: "projects",
   project_instructions_set: "projects",
   chat_created: "chats",
+  chat_projects_attached: "chats",
   chat_renamed: "chats",
   chat_deleted: "chats",
   chat_archived: "chats",

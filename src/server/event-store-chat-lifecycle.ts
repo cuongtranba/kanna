@@ -214,6 +214,13 @@ export function applyChatLifecycleEvent(
       updateChatTiming(state.chatTimingsByChatId, event.chatId, event.timestamp, "idle")
       break
     }
+    case "chat_projects_attached": {
+      const chat = state.chatsById.get(event.chatId)
+      if (!chat) break
+      chat.stackBindings = event.stackBindings.map((b) => ({ ...b }))
+      chat.updatedAt = event.timestamp
+      break
+    }
     case "chat_renamed": {
       const chat = state.chatsById.get(event.chatId)
       if (!chat) break

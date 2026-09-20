@@ -51,6 +51,8 @@ export function renderStackProjectsBlock(stackProjects: ResolvedStackBinding[]):
     "Project worktrees bound to this chat. Each path below is a separate project root you can read and edit — use them to work across projects:",
     "",
     ...lines,
+    "",
+    "The user binds a root by writing `@project/<name>` in a message. Treat that mention as a deliberate instruction to do the work in the project it names, at the matching path above.",
   ].join("\n")
 }
 

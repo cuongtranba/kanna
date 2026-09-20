@@ -88,6 +88,7 @@ export function getReplayEventPriority(event: StoreEvent): number {
       return 0
     case "chat_created":
       return 1
+    case "chat_projects_attached":
     case "chat_renamed":
     case "chat_provider_set":
     case "chat_model_set":

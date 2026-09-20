@@ -163,3 +163,69 @@ describe("MentionNode — path", () => {
     expect(MentionNode.getType()).toBe("kanna-mention")
   })
 })
+
+describe("MentionNode — project", () => {
+  it("getTextContent returns wire form @project/<slug>", () => {
+    const editor = buildEditor()
+    let textContent = ""
+
+    editor.update(
+      () => {
+        const root = $getRoot()
+        root.clear()
+        const para = $createParagraphNode()
+        const node = $createMentionNode({
+          mentionKind: "project",
+          value: "wiki",
+          label: "project/wiki",
+        })
+        para.append(node)
+        root.append(para)
+        textContent = node.getTextContent()
+      },
+      { discrete: true },
+    )
+
+    expect(textContent).toBe("@project/wiki")
+  })
+
+  it("round-trips through JSON", () => {
+    const editor = buildEditor()
+    const restored: SerializedMentionNode[] = []
+
+    editor.update(
+      () => {
+        const node = $createMentionNode({
+          mentionKind: "project",
+          value: "work-api",
+          label: "project/work-api",
+        })
+        const json = node.exportJSON()
+        restored.push(MentionNode.importJSON(json).exportJSON())
+      },
+      { discrete: true },
+    )
+
+    expect(restored[0]).toEqual({
+      type: "kanna-mention",
+      version: 1,
+      mentionKind: "project",
+      value: "work-api",
+      label: "project/work-api",
+    })
+  })
+
+  it("is recognised by $isMentionNode", () => {
+    const editor = buildEditor()
+    let recognised = false
+    editor.update(
+      () => {
+        recognised = $isMentionNode(
+          $createMentionNode({ mentionKind: "project", value: "wiki", label: "project/wiki" }),
+        )
+      },
+      { discrete: true },
+    )
+    expect(recognised).toBe(true)
+  })
+})

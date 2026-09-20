@@ -62,6 +62,7 @@ import {
   buildChatModelEvent,
   buildChatProviderEvent,
   buildChatReadStateEvent,
+  buildAttachChatProjectsEvent,
   buildChatSourceHashEvent,
   buildCompactFailuresEvent,
   buildCreateChatEvent,
@@ -400,6 +401,15 @@ export class EventStore implements PushEventStore {
 
   async renameChat(chatId: string, title: string) {
     const event = buildRenameChatEvent(this.state.chatsById, chatId, title)
+    if (event) await this.commit(event)
+  }
+
+  async attachChatProjects(chatId: string, stackBindings: readonly StackBinding[]) {
+    const event = buildAttachChatProjectsEvent(
+      { chatsById: this.state.chatsById, projectsById: this.state.projectsById },
+      chatId,
+      stackBindings,
+    )
     if (event) await this.commit(event)
   }
 

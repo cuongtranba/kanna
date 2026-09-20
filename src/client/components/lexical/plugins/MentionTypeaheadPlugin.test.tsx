@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test"
 import { createHeadlessEditor } from "@lexical/headless"
 import { $createParagraphNode, $createTextNode, $getRoot } from "lexical"
 import { $createMentionNode, MentionNode } from "../nodes/MentionNode"
-import { MentionMenuOption } from "./MentionTypeaheadPlugin"
+import { MentionMenuOption, createMentionArgs } from "./MentionTypeaheadPlugin"
 import type { MentionOption } from "./MentionTypeaheadPlugin"
 import type { Subagent } from "../../../../shared/types"
 
@@ -262,5 +262,47 @@ describe("@ trigger pattern (custom MENTION_TRIGGER_RE semantics)", () => {
   it("replaceableString is the full `@query` text to replace", () => {
     const m = match("@agent/builder")
     expect(m![1]).toBe("@agent/builder")
+  })
+})
+
+describe("MentionMenuOption — project", () => {
+  const project = {
+    kind: "project" as const,
+    projectId: "proj-9",
+    slug: "wiki",
+    title: "wiki",
+    localPath: "/home/cuong/repo/wiki",
+  }
+
+  it("derives a stable key from the project id", () => {
+    const option = new MentionMenuOption({ kind: "project", project })
+    expect(option.key).toBe("project:proj-9")
+  })
+
+  it("builds a mention node carrying the slug as the wire value", () => {
+    const args = createMentionArgs({ kind: "project", project })
+    expect(args).toEqual({
+      mentionKind: "project",
+      value: "wiki",
+      label: "project/wiki",
+    })
+  })
+
+  it("serializes into the message as @project/<slug>", () => {
+    const editor = buildEditor()
+    let text = ""
+    editor.update(
+      () => {
+        const root = $getRoot()
+        root.clear()
+        const para = $createParagraphNode()
+        para.append($createTextNode("look at "))
+        para.append($createMentionNode(createMentionArgs({ kind: "project", project })))
+        root.append(para)
+        text = root.getTextContent()
+      },
+      { discrete: true },
+    )
+    expect(text).toBe("look at @project/wiki")
   })
 })

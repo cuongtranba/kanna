@@ -1,5 +1,5 @@
 import { describe, test, expect, mock } from "bun:test"
-import { startTurnForChat, type StartTurnDeps, type StartTurnForChatArgs } from "./claude-turn-starter"
+import { startTurnForChat, type StartClaudeTurnArgs, type StartTurnDeps, type StartTurnForChatArgs } from "./claude-turn-starter"
 import { OAuthPoolUnavailableError } from "./oauth-errors"
 import type { ActiveTurn, ClaudeSessionState, StartingTurn } from "./claude-session-state"
 import { PendingToolSlots } from "./pending-tool-slot"
@@ -574,5 +574,97 @@ describe("history primer loading", () => {
 
     expect(capturedLimits.length).toBeGreaterThan(0)
     expect(capturedLimits[0]).toBeGreaterThanOrEqual(500)
+  })
+})
+
+describe("@project mentions", () => {
+  function makeMentionDeps() {
+    const chat = makeFakeChatRecord({ provider: "claude", title: "Existing" })
+    const projects = [
+      { id: "proj-1", localPath: "/tmp/project", title: "Test Project" },
+      { id: "proj-2", localPath: "/tmp", title: "Peer" },
+    ]
+    const attachChatProjects = mock(async (_chatId: string, bindings: readonly unknown[]) => {
+      Object.assign(chat, { stackBindings: bindings })
+    })
+    const claudeSessions = new Map<string, ClaudeSessionState>()
+    const startClaudeTurn = mock(async (_spawn: StartClaudeTurnArgs) => {
+      claudeSessions.set("chat-1", {
+        id: "session-1",
+        nextPromptSeq: 0,
+        pendingPromptSeqs: [],
+        cancelledResultPending: 0,
+        lastUsedAt: Date.now(),
+        session: { sendPrompt: async () => {} },
+      } as unknown as ClaudeSessionState)
+      return makeFakeTurn()
+    })
+    const deps = makeDeps({
+      claudeSessions,
+      store: {
+        requireChat: mock(() => chat),
+        getMessages: mock(() => []),
+        getRecentRawEntries: mock(() => [] as readonly TranscriptEntry[]),
+        getProject: mock((id: string) => projects.find((p) => p.id === id)),
+        listProjects: mock(() => projects),
+        attachChatProjects,
+        appendMessage: mock(async () => {}),
+        setChatProvider: mock(async () => {}),
+        setPlanMode: mock(async () => {}),
+        renameChat: mock(async () => {}),
+        recordTurnStarted: mock(async () => {}),
+        recordTurnFailed: mock(async () => {}),
+        setPendingForkSessionToken: mock(async () => {}),
+      } as unknown as StartTurnDeps["store"],
+      startClaudeTurn,
+    })
+    return { deps, attachChatProjects, startClaudeTurn }
+  }
+
+  test("attaches the mentioned project as an additional binding", async () => {
+    const { deps, attachChatProjects } = makeMentionDeps()
+
+    await startTurnForChat(deps, makeArgs({
+      provider: "claude",
+      model: "claude-opus-4-5",
+      content: "compare this with @project/tmp",
+    }))
+
+    expect(attachChatProjects).toHaveBeenCalledTimes(1)
+    expect(attachChatProjects.mock.calls[0]![1]).toEqual([
+      { projectId: "proj-1", worktreePath: "/tmp/project", role: "primary" },
+      { projectId: "proj-2", worktreePath: "/tmp", role: "additional" },
+    ])
+  })
+
+  test("grants the mentioned root to the spawned session without moving cwd", async () => {
+    const { deps, startClaudeTurn } = makeMentionDeps()
+
+    await startTurnForChat(deps, makeArgs({
+      provider: "claude",
+      model: "claude-opus-4-5",
+      content: "compare this with @project/tmp",
+    }))
+
+    const spawnArgs = startClaudeTurn.mock.calls[0]![0]
+    expect(spawnArgs.localPath).toBe("/tmp/project")
+    expect(spawnArgs.additionalDirectories).toEqual(["/tmp"])
+    expect(spawnArgs.stackProjects).toEqual([
+      { projectId: "proj-1", projectTitle: "Test Project", worktreePath: "/tmp/project", role: "primary", projectStatus: "active" },
+      { projectId: "proj-2", projectTitle: "Peer", worktreePath: "/tmp", role: "additional", projectStatus: "active" },
+    ])
+  })
+
+  test("touches nothing when the message names no project", async () => {
+    const { deps, attachChatProjects, startClaudeTurn } = makeMentionDeps()
+
+    await startTurnForChat(deps, makeArgs({
+      provider: "claude",
+      model: "claude-opus-4-5",
+      content: "just a normal message",
+    }))
+
+    expect(attachChatProjects).not.toHaveBeenCalled()
+    expect(startClaudeTurn.mock.calls[0]![0].additionalDirectories).toEqual([])
   })
 })
