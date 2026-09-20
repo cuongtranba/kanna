@@ -1796,6 +1796,44 @@ contact point by name, route merged.
 - **`mergePerfRoute`, never a rebuilt policy.** Grafana's notification-policy
   endpoint is a whole-tree PUT on a shared instance; building the tree from
   scratch would delete routes this repo does not own.
+- **A threshold is per INSTALL. Never rank one install against another, and
+  never hardcode a byte count** (`adr-20260920-perf-alert-per-install-comparison`).
+  Installs differ by an order of magnitude in RAM, CPU and transcript corpus, so
+  both shapes measure hardware and report it as code.
+
+  `KannaMemoryReleaseRegression` divided each version's fleet-average RSS by
+  `scalar(min(...))` — **the lightest install in the fleet defined "good"**. Since
+  an install upgrades on its own schedule and the heaviest machine is first onto
+  the newest release, it filed **one ticket per release, 16 of them** (1.42 →
+  1.56), with recorded ratios of **4.83x** (#1121) and **13.66x** (#1107). A
+  13.66x memory regression between point releases is not code. It could not
+  produce a true positive, and its ticket could not even name the heavy install:
+  aggregating `by (service_version)` drops the `job` / `host_name` labels the
+  webhook template reads, so the **Affected installs** table rendered empty.
+
+  Both replacements divide an install by **its own past** (`offset 3d`, joined
+  `on (job)`), so machine power, RAM and corpus size cancel exactly. They keep
+  `job, service_name, host_name, service_version` so the ticket table is
+  populated. `rules.test.ts` asserts no rule contains `scalar(min(` — the
+  cheapest thing that stops a revert. Accepted cost: a growth rule also fires on
+  genuine workload growth, which is why its description says to confirm the
+  version changed.
+
+  `KannaMemoryPressure` no longer reads a hardcoded 1.8 GiB. Each install
+  exports `kanna.process.rss_ratio` — RSS over `resolveMemoryCeiling`
+  (`src/server/memory-ceiling.ts`), the lower of pm2's 2 GiB clamp and 80% of
+  `os.totalmem()` — plus the raw ceiling and host total for triage. **Keeping the
+  pm2 clamp in that formula is load-bearing:** a pure fraction-of-RAM rule makes
+  1.9 GB on a 64 GB machine a 3% ratio, missing the one genuinely actionable
+  ticket this rule ever produced (#1105). **The division happens in-process, not
+  as a PromQL join** — a `/ on (job) group_left` between two gauges returns empty
+  on any label mismatch, and every rule ships `noDataState: "OK"`, so a broken
+  join would disable the alert indistinguishably from a healthy fleet.
+
+  `KannaTurnLatencyHigh` and `KannaSubagentFailureRate` still aggregate
+  `by (service_version)` and so still render an empty install table. Neither
+  ranks installs against each other, so neither is noisy; the label fix is
+  outstanding.
 - **Minimum-volume guards are not defensive trimming.** At current fleet volumes
   one failed subagent run out of five is a 20% failure rate. The failure-rate
   and latency rules `and` themselves against an `increase(...) >= N` clause.
@@ -1816,8 +1854,8 @@ contact point by name, route merged.
 
   | scope | marker | on resolve | rules |
   | --- | --- | --- | --- |
-  | `release` | `<alertname>@<version>` | closes | the two `…ReleaseRegression` rules, whose query compares releases |
-  | `condition` | `<alertname>` | **stays open** | the three absolute-threshold rules (memory, subagent failures, turn latency) |
+  | `release` | `<alertname>@<version>` | closes | the two `…GrowthPerInstall` rules, whose breach is expected to be explained by a version change |
+  | `condition` | `<alertname>` | **stays open** | the three threshold rules (memory pressure, subagent failures, turn latency) |
 
   Scoping a condition per release was the second flap, after
   `adr-20260822-perf-alert-reopen-dedup` fixed the first. release-please cuts

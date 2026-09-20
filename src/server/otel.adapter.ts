@@ -1,5 +1,6 @@
 
 import fs from "node:fs"
+import os from "node:os"
 import path from "node:path"
 import { metrics, trace } from "@opentelemetry/api"
 import { NodeTracerProvider, BatchSpanProcessor } from "@opentelemetry/sdk-trace-node"
@@ -14,10 +15,14 @@ import {
   COMPACTION_PRE_TOKENS,
   COMPACTION_TOKEN_BUCKETS,
   DURATION_BUCKETS_MS,
+  HOST_MEMORY_TOTAL_BYTES,
+  PROCESS_MEMORY_CEILING_BYTES,
   PROCESS_RSS_BYTES,
+  PROCESS_RSS_RATIO,
   SUBAGENT_RUN_DURATION_MS,
   TURN_DURATION_MS,
 } from "./observability"
+import { resolveMemoryCeiling, resolveRssRatio } from "./memory-ceiling"
 import { resolveOtelConfig, type ResolvedOtelConfig, type TelemetrySettingsInput } from "./otel-config"
 
 const HISTOGRAM_BUCKETS: readonly {
@@ -202,20 +207,32 @@ export function initObservability(args: InitObservabilityArgs): ObservabilityHan
   }
 }
 
+function isRunningUnderPm2(): boolean {
+  return process.env.pm_id !== undefined
+}
+
 function registerMemoryGauges(): void {
   const meter = metrics.getMeter("kanna")
   const rss = meter.createObservableGauge(PROCESS_RSS_BYTES)
   const heapUsed = meter.createObservableGauge("kanna.process.heap_used_bytes")
   const heapTotal = meter.createObservableGauge("kanna.process.heap_total_bytes")
   const external = meter.createObservableGauge("kanna.process.external_bytes")
+  const hostMemoryTotal = meter.createObservableGauge(HOST_MEMORY_TOTAL_BYTES)
+  const memoryCeiling = meter.createObservableGauge(PROCESS_MEMORY_CEILING_BYTES)
+  const rssRatio = meter.createObservableGauge(PROCESS_RSS_RATIO)
   meter.addBatchObservableCallback(
     (result) => {
       const usage = process.memoryUsage()
+      const totalBytes = os.totalmem()
+      const ceilingBytes = resolveMemoryCeiling({ totalBytes, underPm2: isRunningUnderPm2() })
       result.observe(rss, usage.rss)
       result.observe(heapUsed, usage.heapUsed)
       result.observe(heapTotal, usage.heapTotal)
       result.observe(external, usage.external)
+      result.observe(hostMemoryTotal, totalBytes)
+      result.observe(memoryCeiling, ceilingBytes)
+      result.observe(rssRatio, resolveRssRatio(usage.rss, ceilingBytes))
     },
-    [rss, heapUsed, heapTotal, external],
+    [rss, heapUsed, heapTotal, external, hostMemoryTotal, memoryCeiling, rssRatio],
   )
 }
