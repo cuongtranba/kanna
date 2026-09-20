@@ -5348,7 +5348,7 @@ describe("buildTaskNotification", () => {
     expect(xml).toContain("<task-id>run-1</task-id>")
     expect(xml).toContain("<status>completed</status>")
     expect(xml).toContain("<result>")
-    expect(xml).toContain("[... truncated]")
+    expect(xml).toContain("chars truncated")
     expect(xml.length).toBeLessThan(4_500)
   })
 

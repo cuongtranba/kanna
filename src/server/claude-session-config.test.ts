@@ -203,10 +203,32 @@ describe("buildTaskNotification", () => {
     const longText = "x".repeat(5_000)
     const outcome: BackgroundRunOutcome = { status: "completed", runId: "run-3", text: longText }
     const xml = buildTaskNotification("run-3", outcome, { includeResult: true })
-    expect(xml).toContain("[... truncated]")
+    expect(xml).toContain("chars truncated")
     const match = xml.match(/<result>([\s\S]*?)<\/result>/)
     expect(match).not.toBeNull()
     expect((match?.[1] ?? "").length).toBeLessThan(4_100)
+  })
+
+  test("a truncated result keeps its opening and its final summary, dropping the middle", () => {
+    const opening = "Reading the plan and locating the symbols to move."
+    const narration = "Now let me look at the next helper. ".repeat(300)
+    const summary = "FINAL SUMMARY: extracted 4 helpers, 12 targeted tests pass, lint and typecheck clean."
+    const body = `${opening}\n${narration}\n${summary}`
+    const outcome: BackgroundRunOutcome = { status: "completed", runId: "run-4", text: body }
+    const xml = buildTaskNotification("run-4", outcome, { includeResult: true })
+    const result = xml.match(/<result>([\s\S]*?)<\/result>/)?.[1] ?? ""
+    expect(result.startsWith(opening)).toBe(true)
+    expect(result.endsWith(summary)).toBe(true)
+    expect(result).toContain(`[... ${body.length - 4_000} chars truncated ...]`)
+    expect(result.length).toBeLessThan(4_100)
+  })
+
+  test("a body exactly at the cap is passed through untouched", () => {
+    const body = "y".repeat(4_000)
+    const outcome: BackgroundRunOutcome = { status: "completed", runId: "run-5", text: body }
+    const xml = buildTaskNotification("run-5", outcome, { includeResult: true })
+    expect(xml).toContain(`<result>${body}</result>`)
+    expect(xml).not.toContain("truncated")
   })
 })
 
