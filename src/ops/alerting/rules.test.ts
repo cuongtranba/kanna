@@ -60,6 +60,35 @@ describe("ALERT_RULES", () => {
     }
   })
 
+  test("no rule ranks one install against another", () => {
+    for (const rule of ALERT_RULES) {
+      expect(rule.promql, `${rule.title} divides by the fleet's lightest install`)
+        .not.toContain("scalar(min(")
+    }
+  })
+
+  test("a growth rule compares an install against its own past", () => {
+    const growthRules = ALERT_RULES.filter((r) => r.title.endsWith("GrowthPerInstall"))
+    expect(growthRules.length).toBeGreaterThan(0)
+    for (const rule of growthRules) {
+      expect(rule.promql, `${rule.title} must look back at the same install`).toContain("offset")
+      expect(rule.promql, `${rule.title} must join on the install, not the version`)
+        .toContain("on (job)")
+      expect(rule.promql, `${rule.title} must keep the labels the ticket table renders`)
+        .toContain("job, service_name, host_name, service_version")
+    }
+  })
+
+  test("memory pressure is measured against the machine's own ceiling", () => {
+    const rule = ALERT_RULES.find((r) => r.uid === "kanna-perf-memory")
+    expect(rule).toBeDefined()
+    expect(rule!.promql).toContain("kanna_process_rss_ratio")
+    expect(rule!.promql, "an absolute byte count cannot fit every machine")
+      .not.toContain("kanna_process_rss_bytes")
+    expect(rule!.threshold).toBeGreaterThan(0)
+    expect(rule!.threshold).toBeLessThanOrEqual(1)
+  })
+
   test("an unarmed rule says what must be observed before arming it", () => {
     for (const rule of ALERT_RULES.filter((r) => !r.armed)) {
       expect(rule.baselineNote?.length, rule.title).toBeGreaterThan(0)

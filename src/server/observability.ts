@@ -12,6 +12,12 @@ import {
 
 export const PROCESS_RSS_BYTES = "kanna.process.rss_bytes"
 
+export const HOST_MEMORY_TOTAL_BYTES = "kanna.host.memory_total_bytes"
+
+export const PROCESS_MEMORY_CEILING_BYTES = "kanna.process.memory_ceiling_bytes"
+
+export const PROCESS_RSS_RATIO = "kanna.process.rss_ratio"
+
 export const SUBAGENT_RUN_FINISHED = "kanna.subagent.run.finished"
 
 export const TURN_DURATION_MS = "kanna.turn.duration_ms"

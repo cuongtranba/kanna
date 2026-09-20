@@ -357,6 +357,8 @@ c3-234:
   - src/server/observability.ts
   - src/server/otel.adapter.ts
   - src/server/otel-config.ts
+  - src/server/memory-ceiling.ts
+  - src/server/memory-ceiling.test.ts
   - src/server/ws-router-observability.ts
   - src/server/test-helpers/metric-recorder.ts
   - src/ops/alerting/**/*.ts

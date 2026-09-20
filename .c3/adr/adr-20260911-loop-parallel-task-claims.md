@@ -1,10 +1,11 @@
 ---
 id: adr-20260911-loop-parallel-task-claims
+c3-seal: 6a7491f852ccb4a61fc3a52ce5dac5b0f937eb44d85ae529ed83e60b309b76d5
 title: Parallel loop workers claim tasks in the tracking file, and leases are bound to runs
 type: adr
 goal: Let an autonomous loop run several workers at once without two of them taking the same task or sharing a worktree, and without a dead worker stalling the loop forever.
 status: accepted
-date: 2026-09-11
+date: "2026-09-11"
 ---
 
 ## Goal

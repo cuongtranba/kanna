@@ -4,12 +4,15 @@ import {
   COMPACTION_POST_TOKENS,
   COMPACTION_PRE_TOKENS,
   COMPACTION_STARTED,
+  HOST_MEMORY_TOTAL_BYTES,
   PACKAGE_APPLY_DURATION_MS,
   PACKAGE_APPLY_FINISHED,
   PACKAGE_CHECK_DURATION_MS,
   PACKAGE_CHECK_FINISHED,
   PACKAGE_UPDATE_RATE_LIMITED,
+  PROCESS_MEMORY_CEILING_BYTES,
   PROCESS_RSS_BYTES,
+  PROCESS_RSS_RATIO,
   SUBAGENT_RUN_FINISHED,
   SUBAGENT_RUN_DURATION_MS,
   SUBAGENT_TOKENS,
@@ -24,12 +27,16 @@ export function promMetricName(otelName: string): string {
 }
 
 const rss = promMetricName(PROCESS_RSS_BYTES)
+const rssRatio = promMetricName(PROCESS_RSS_RATIO)
 const subagentRuns = `${promMetricName(SUBAGENT_RUN_FINISHED)}_total`
 const turnDuration = promMetricName(TURN_DURATION_MS)
 const subagentDuration = promMetricName(SUBAGENT_RUN_DURATION_MS)
 
 export const EXPORTED_PROM_METRICS: readonly string[] = [
   rss,
+  rssRatio,
+  promMetricName(HOST_MEMORY_TOTAL_BYTES),
+  promMetricName(PROCESS_MEMORY_CEILING_BYTES),
   "kanna_process_heap_used_bytes",
   "kanna_process_heap_total_bytes",
   "kanna_process_external_bytes",
@@ -82,24 +89,34 @@ export interface AlertRuleSpec {
 
 const MIB = 1024 * 1024
 
+const MIN_MEANINGFUL_RSS_BYTES = 256 * MIB
+
+const SELF_COMPARISON_OFFSET = "3d"
+
 export const ALERT_RULES: readonly AlertRuleSpec[] = [
   {
     uid: "kanna-perf-memory",
     title: "KannaMemoryPressure",
     ticketScope: "condition",
-    promql: `avg_over_time(${rss}[15m])`,
-    threshold: 1800 * MIB,
+    promql: `avg_over_time(${rssRatio}[15m])`,
+    threshold: 0.9,
     forDuration: "10m",
     severity: "critical",
-    summary: "Kanna RSS is close to the pm2 restart ceiling",
+    summary: "Kanna RSS is close to this machine's own memory ceiling",
     description:
-      "Resident memory has averaged over 1.8 GiB for 25 minutes. pm2 clamps"
-      + " max_memory_restart at 2 GiB, and a breach restarts the server, which"
-      + " cancels every in-flight turn and writes an `interrupted` entry"
-      + " indistinguishable from a user Stop.",
+      "Resident memory has averaged over 90% of this install's effective memory"
+      + " ceiling for 25 minutes. The ceiling is computed per install as the"
+      + " lower of the pm2 restart clamp (2 GiB, which pm2 will not exceed"
+      + " whatever max_memory_restart says) and 80% of the machine's own RAM, so"
+      + " a small laptop trips earlier than a large workstation instead of both"
+      + " being judged against one hardcoded number. A breach restarts the"
+      + " server, which cancels every in-flight turn and writes an `interrupted`"
+      + " entry indistinguishable from a user Stop.",
     runbook:
-      "Send SIGUSR2 to the affected process to write a heap snapshot under"
-      + " <dataDir>/heap-snapshots, then open it in Chrome DevTools' Memory tab"
+      "Read kanna_process_memory_ceiling_bytes and kanna_host_memory_total_bytes"
+      + " for the affected install to see which bound applies, then send SIGUSR2"
+      + " to that process to write a heap snapshot under"
+      + " <dataDir>/heap-snapshots and open it in Chrome DevTools' Memory tab"
       + " to see what holds the bytes.",
     codeHints: [
       "src/server/event-store-messages.adapter.ts — TranscriptCache: transcripts larger than maxBytes are never cached; each re-read of a large transcript (e.g., 96 MB → 524 MB peak RSS) spikes on parse",
@@ -139,33 +156,46 @@ export const ALERT_RULES: readonly AlertRuleSpec[] = [
     armed: true,
   },
   {
-    uid: "kanna-perf-memory-regression",
-    title: "KannaMemoryReleaseRegression",
+    uid: "kanna-perf-memory-growth",
+    title: "KannaMemoryGrowthPerInstall",
     ticketScope: "release",
     promql:
-      `(avg by (service_version) (avg_over_time(${rss}[6h]))`
-      + ` / scalar(min(avg by (service_version) (avg_over_time(${rss}[6h])))))`
-      + ` and on (service_version) (count by (service_version) (${rss}) >= 2)`,
+      `(avg by (job, service_name, host_name, service_version) (avg_over_time(${rss}[6h]))`
+      + ` / on (job) group_left()`
+      + ` avg by (job) (avg_over_time(${rss}[6h] offset ${SELF_COMPARISON_OFFSET})))`
+      + ` and on (job) (avg by (job) (avg_over_time(${rss}[6h])) >= ${MIN_MEANINGFUL_RSS_BYTES})`,
     threshold: 1.3,
     forDuration: "60m",
     severity: "warning",
-    summary: "One release uses materially more memory than the best release",
+    summary: "An install is using materially more memory than it used to",
     description:
-      "A service_version's fleet-average RSS is at least 30% above the leanest"
-      + " version currently reporting, sustained for an hour over at least two"
-      + " installs. That shape — same workload, different version — is what"
-      + " separates a regression from one user's heavy project.",
+      "One install's average RSS is at least 30% above what the SAME install"
+      + " averaged three days earlier, sustained for an hour, on a process"
+      + " already using at least 256 MiB. Comparing an install against itself is"
+      + " what makes the number mean something: machine power, RAM and corpus"
+      + " size cancel out, where a ratio between different installs measures"
+      + " whose computer is bigger. Note this fires on genuine workload growth"
+      + " too — a user opening a much larger project — so confirm the version"
+      + " changed before reading it as a release regression.",
     runbook:
-      "Compare the two versions in Grafana, then diff the releases. The"
-      + " regression is in what changed between them, not in whatever is"
-      + " largest in the heap snapshot.",
+      "Check whether the install's service_version changed inside the window."
+      + " If it did, diff the releases; if it did not, the growth is workload or"
+      + " a leak on a single install and the heap snapshot is the next step.",
     codeHints: [
-      "git log --oneline <lean-version>..<regressed-version> — diff the releases; look for new getMessages() calls on hot paths (every turn / every loop iteration / every subagent spawn)",
+      "git log --oneline <previous-version>..<current-version> — diff the releases; look for new getMessages() calls on hot paths (every turn / every loop iteration / every subagent spawn)",
       "src/server/event-store-messages.adapter.ts — TranscriptCache: evict() now drops even the sole entry when it exceeds maxBytes; if a cold getRecentMessagesPage is still doing a full load, check whether readTranscriptTail returned null (storage lacks slice APIs)",
       "src/server/subagent-orchestrator.ts — subagent primer path: full-transcript scope uses getRecentRawEntries (tail read); any reversion to getMessages() here costs ~524 MB peak per spawn on a 96 MB transcript",
       "src/server/claude-turn-starter.ts — history primer: loadExistingMessages thunk must call getRecentRawEntries, not getMessages; fires on every loop iteration (session token cleared by deliverSubagentToMain)",
     ],
-    armed: true,
+    armed: false,
+    baselineNote:
+      "Replaces KannaMemoryReleaseRegression, which divided each release's"
+      + " fleet-average RSS by the LIGHTEST install in the fleet and therefore"
+      + " filed one ticket per release — 16 of them, with recorded ratios of"
+      + " 4.83x (#1121) and 13.66x (#1107) that are hardware differences rather"
+      + " than code. The self-comparison shape has no history yet, so observe a"
+      + " week of this ratio per install before arming and set the threshold"
+      + " from what a healthy upgrade actually costs.",
   },
   {
     uid: "kanna-perf-turn-latency",
@@ -197,31 +227,39 @@ export const ALERT_RULES: readonly AlertRuleSpec[] = [
       + " obviously-bad, not a measured bound.",
   },
   {
-    uid: "kanna-perf-latency-regression",
-    title: "KannaTurnLatencyReleaseRegression",
+    uid: "kanna-perf-latency-growth",
+    title: "KannaTurnLatencyGrowthPerInstall",
     ticketScope: "release",
     promql:
-      `(histogram_quantile(0.95, sum by (service_version, le) (rate(${turnDuration}_bucket[6h])))`
-      + ` / scalar(min(histogram_quantile(0.95,`
-      + ` sum by (service_version, le) (rate(${turnDuration}_bucket[6h]))))))`
-      + ` and on (service_version)`
-      + ` (sum by (service_version) (increase(${turnDuration}_count[6h])) >= 50)`,
+      `(histogram_quantile(0.95, sum by (job, service_name, host_name, service_version, le)`
+      + ` (rate(${turnDuration}_bucket[6h])))`
+      + ` / on (job) group_left()`
+      + ` histogram_quantile(0.95, sum by (job, le)`
+      + ` (rate(${turnDuration}_bucket[6h] offset ${SELF_COMPARISON_OFFSET}))))`
+      + ` and on (job) (sum by (job) (increase(${turnDuration}_count[6h])) >= 50)`,
     threshold: 1.5,
     forDuration: "60m",
     severity: "warning",
-    summary: "One release is materially slower than the best release",
+    summary: "An install's turns are materially slower than they used to be",
     description:
-      "A service_version's p95 turn latency is at least 50% above the fastest"
-      + " version currently reporting, over at least 50 turns.",
-    runbook: "Diff the two releases; the regression is in what changed between them.",
+      "One install's p95 turn latency is at least 50% above what the SAME"
+      + " install measured three days earlier, over at least 50 turns. Turn"
+      + " duration includes spawn cost, so it tracks machine speed as much as"
+      + " code — comparing installs against each other would report the slowest"
+      + " laptop in the fleet rather than a regression.",
+    runbook:
+      "Check whether the install's service_version changed inside the window,"
+      + " then compare against the kanna.turn.start span in Tempo: latency in the"
+      + " span is spawn cost, latency outside it is the model or the stream.",
     codeHints: [
-      "git log --oneline <fast-version>..<slow-version>",
+      "git log --oneline <previous-version>..<current-version>",
       "src/server/claude-turn-starter.ts — startTurnForChat, the measured span",
     ],
     armed: false,
     baselineNote:
-      "Needs kanna.turn.duration_ms present on at least two releases before the"
-      + " ratio means anything. Arm once a second version has reported for a day.",
+      "Needs kanna.turn.duration_ms present for a given install on both sides of"
+      + " the 3d offset before the ratio means anything. Arm once one install has"
+      + " reported turn durations continuously for more than three days.",
   },
 ]
 

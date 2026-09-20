@@ -23,15 +23,44 @@ on by default). An install with it turned off contributes nothing here.
 
 | Rule | Fires when | Armed |
 | --- | --- | --- |
-| `KannaMemoryPressure` | RSS averages over 1.8 GiB for 25 minutes — just under the 2 GiB ceiling at which the process manager restarts the server and cancels live turns | yes |
+| `KannaMemoryPressure` | RSS averages over 90% of that install's own memory ceiling for 25 minutes | yes |
 | `KannaSubagentFailureRate` | Over 30% of subagent runs fail across a 6-hour window with at least 10 runs | yes |
-| `KannaMemoryReleaseRegression` | One release's fleet-average RSS is 30%+ above the leanest release currently reporting, over at least two installs | yes |
+| `KannaMemoryGrowthPerInstall` | One install's average RSS is 30%+ above what the same install averaged 3 days earlier | paused |
 | `KannaTurnLatencyHigh` | p95 end-to-end turn duration exceeds the threshold over at least 20 turns | paused |
-| `KannaTurnLatencyReleaseRegression` | One release's p95 turn latency is 50%+ above the fastest release, over at least 50 turns | paused |
+| `KannaTurnLatencyGrowthPerInstall` | One install's p95 turn latency is 50%+ above what the same install measured 3 days earlier, over at least 50 turns | paused |
 
 The two latency rules ship **paused**: `kanna.turn.duration_ms` is new, so there
 is no baseline yet and any threshold would be a guess. Each carries a
 `baselineNote` saying what to measure first. Arming one is a single flag.
+
+### A threshold is per install, never fleet-wide
+
+Installs differ by an order of magnitude in RAM, CPU and transcript corpus, so
+a number that is alarming on one machine is unremarkable on another. Two
+consequences shape every memory and latency rule here.
+
+**The memory ceiling is computed per install, not hardcoded.** Each install
+exports `kanna_process_memory_ceiling_bytes` — the lower of the process
+manager's 2 GiB restart clamp and 80% of the machine's own RAM — plus
+`kanna_process_rss_ratio`, its RSS as a fraction of that ceiling. The alert
+reads the ratio, so a 4 GB laptop trips earlier than a 64 GB workstation, and
+an install running without a process manager is judged against its real limit
+rather than a clamp that does not apply to it. The division happens in-process
+deliberately: a PromQL join between two gauges returns nothing on any label
+mismatch, and every rule treats no-data as healthy, so a broken join would
+disable the alert silently.
+
+**A growth rule compares an install against its own past**, via a 3-day
+`offset` on the same `job`. Comparing releases against each other across
+different installs cannot work — an install upgrades on its own schedule, so
+the ratio ends up measuring whose computer is bigger. The predecessor rule did
+exactly that, dividing each release's fleet-average RSS by the *lightest*
+install reporting, and filed one ticket per release with recorded ratios of
+4.83x and 13.66x that were hardware differences rather than code.
+
+A growth rule therefore also fires on genuine workload growth — a user opening
+a much larger project. Confirm the install's `service_version` changed inside
+the window before reading one as a release regression.
 
 ## Changing a rule
 
@@ -108,6 +137,9 @@ what you want while the cause is still live.
 | Metric | What it measures |
 | --- | --- |
 | `kanna_process_rss_bytes` | Resident memory of the server process |
+| `kanna_process_rss_ratio` | RSS as a fraction of this install's own memory ceiling |
+| `kanna_process_memory_ceiling_bytes` | The lower of the 2 GiB process-manager clamp and 80% of the machine's RAM |
+| `kanna_host_memory_total_bytes` | Total RAM of the machine the install runs on |
 | `kanna_turn_duration_ms` | End-to-end wall clock of one chat turn, spawn included |
 | `kanna_subagent_run_duration_ms` | End-to-end wall clock of one delegated subagent run |
 | `kanna_subagent_run_finished_total` | Subagent runs, labelled by outcome |
