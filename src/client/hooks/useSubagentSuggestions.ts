@@ -7,14 +7,21 @@ export interface SubagentSuggestion {
   subagent: Subagent
 }
 
+export const AGENT_MENTION_PREFIX = "agent/"
+
 const EMPTY_SUBAGENTS: Subagent[] = []
 
 export function filterSubagentSuggestions(subagents: Subagent[], query: string): SubagentSuggestion[] {
   const normalized = query.toLowerCase()
-  if (normalized && !("agent/".startsWith(normalized) || normalized.startsWith("agent/"))) {
+  if (
+    normalized
+    && !(AGENT_MENTION_PREFIX.startsWith(normalized) || normalized.startsWith(AGENT_MENTION_PREFIX))
+  ) {
     return []
   }
-  const nameQuery = normalized.startsWith("agent/") ? normalized.slice("agent/".length) : ""
+  const nameQuery = normalized.startsWith(AGENT_MENTION_PREFIX)
+    ? normalized.slice(AGENT_MENTION_PREFIX.length)
+    : ""
   return subagents
     .filter((subagent) => subagent.name.toLowerCase().includes(nameQuery))
     .sort((left, right) => left.name.localeCompare(right.name))

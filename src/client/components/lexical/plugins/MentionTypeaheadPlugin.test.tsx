@@ -2,8 +2,16 @@ import { describe, expect, it } from "bun:test"
 import { createHeadlessEditor } from "@lexical/headless"
 import { $createParagraphNode, $createTextNode, $getRoot } from "lexical"
 import { $createMentionNode, MentionNode } from "../nodes/MentionNode"
-import { MentionMenuOption, createMentionArgs } from "./MentionTypeaheadPlugin"
+import {
+  MentionMenuOption,
+  NAMESPACE_PREVIEW_LIMIT,
+  composeMentionOptions,
+  createMentionArgs,
+} from "./MentionTypeaheadPlugin"
 import type { MentionOption } from "./MentionTypeaheadPlugin"
+import type { ProjectSuggestion } from "../../../hooks/useProjectSuggestions"
+import type { SubagentSuggestion } from "../../../hooks/useSubagentSuggestions"
+import type { ProjectPath } from "../../../hooks/useMentionSuggestions"
 import type { Subagent } from "../../../../shared/types"
 
 function makeSubagent(id: string, name: string, description?: string): Subagent {
@@ -304,5 +312,75 @@ describe("MentionMenuOption — project", () => {
       { discrete: true },
     )
     expect(text).toBe("look at @project/wiki")
+  })
+})
+
+describe("composeMentionOptions", () => {
+  function agents(count: number): SubagentSuggestion[] {
+    return Array.from({ length: count }, (_, i) => ({
+      kind: "agent" as const,
+      subagent: makeSubagent(`sub-${i}`, `agent-${i}`),
+    }))
+  }
+
+  function projects(count: number): ProjectSuggestion[] {
+    return Array.from({ length: count }, (_, i) => ({
+      kind: "project" as const,
+      projectId: `proj-${i}`,
+      slug: `repo-${i}`,
+      title: `repo-${i}`,
+      localPath: `/home/cuong/repo/repo-${i}`,
+    }))
+  }
+
+  function paths(count: number): ProjectPath[] {
+    return Array.from({ length: count }, (_, i) => ({
+      path: `file-${i}.ts`,
+      kind: "file" as const,
+    }))
+  }
+
+  it("keeps agents and paths visible on a bare @ when many projects exist", () => {
+    const options = composeMentionOptions({
+      query: "",
+      agents: agents(5),
+      projects: projects(8),
+      paths: paths(4),
+    })
+    expect(options.map((option) => option.kind)).toEqual([
+      "agent", "agent", "agent",
+      "project", "project", "project",
+      "path", "path", "path", "path",
+    ])
+  })
+
+  it("lists every project once @project/ is typed", () => {
+    const options = composeMentionOptions({
+      query: "project/",
+      agents: [],
+      projects: projects(NAMESPACE_PREVIEW_LIMIT + 5),
+      paths: [],
+    })
+    expect(options).toHaveLength(NAMESPACE_PREVIEW_LIMIT + 5)
+  })
+
+  it("lists every agent once @agent/ is typed", () => {
+    const options = composeMentionOptions({
+      query: "agent/",
+      agents: agents(NAMESPACE_PREVIEW_LIMIT + 5),
+      projects: [],
+      paths: [],
+    })
+    expect(options).toHaveLength(NAMESPACE_PREVIEW_LIMIT + 5)
+  })
+
+  it("leaves a group the query already narrowed uncapped", () => {
+    const options = composeMentionOptions({
+      query: "repo",
+      agents: [],
+      projects: projects(5),
+      paths: paths(2),
+    })
+    expect(options.filter((option) => option.kind === "project")).toHaveLength(5)
   })
 })
