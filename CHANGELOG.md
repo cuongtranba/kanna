@@ -8,6 +8,14 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.57.1](https://github.com/cuongtranba/kanna/compare/v1.57.0...v1.57.1) (2026-09-21)
+
+
+### Bug Fixes
+
+* **composer:** keep agents and file paths visible when @ lists projects ([#1134](https://github.com/cuongtranba/kanna/issues/1134)) ([2f198a4](https://github.com/cuongtranba/kanna/commit/2f198a40362f2fd9d6cb0847b403d6a9fc3fab01))
+* **loop:** keep the tail of a background run result in task notifications ([#1130](https://github.com/cuongtranba/kanna/issues/1130)) ([b0b4dd1](https://github.com/cuongtranba/kanna/commit/b0b4dd154e1423cb062b60633973651c01b7311d))
+
 ## [1.57.0](https://github.com/cuongtranba/kanna/compare/v1.56.0...v1.57.0) (2026-09-20)
 
 
