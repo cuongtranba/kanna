@@ -9,11 +9,15 @@ import {
 import type { MenuTextMatch, TriggerFn } from "@lexical/react/LexicalTypeaheadMenuPlugin"
 import { AtSign, Bot, Folder, FileText, FolderGit2 } from "lucide-react"
 import { useMentionSuggestions } from "../../../hooks/useMentionSuggestions"
-import { useSubagentSuggestions } from "../../../hooks/useSubagentSuggestions"
+import {
+  AGENT_MENTION_PREFIX,
+  useSubagentSuggestions,
+} from "../../../hooks/useSubagentSuggestions"
 import { useProjectSuggestions } from "../../../hooks/useProjectSuggestions"
 import type { SubagentSuggestion } from "../../../hooks/useSubagentSuggestions"
 import type { ProjectSuggestion } from "../../../hooks/useProjectSuggestions"
 import type { ProjectPath } from "../../../hooks/useMentionSuggestions"
+import { PROJECT_MENTION_PREFIX } from "../../../../shared/project-mention"
 import { $createMentionNode, type CreateMentionNodeArgs } from "../nodes/MentionNode"
 import { cn } from "../../../lib/utils"
 import { ChatTabScopedStore } from "../../../stores/chatTabScopedStore"
@@ -71,6 +75,37 @@ export class MentionMenuOption extends MenuOption {
 }
 
 
+export const NAMESPACE_PREVIEW_LIMIT = 3
+
+function isListingEverything(query: string, prefix: string): boolean {
+  return query.length < prefix.length && prefix.startsWith(query)
+}
+
+function namespacedGroup<T>(
+  items: readonly T[],
+  query: string,
+  prefix: string,
+): readonly T[] {
+  return isListingEverything(query, prefix) ? items.slice(0, NAMESPACE_PREVIEW_LIMIT) : items
+}
+
+export function composeMentionOptions(args: {
+  query: string
+  agents: readonly SubagentSuggestion[]
+  projects: readonly ProjectSuggestion[]
+  paths: readonly ProjectPath[]
+}): MentionOption[] {
+  const query = args.query.toLowerCase()
+  const agents = namespacedGroup(args.agents, query, AGENT_MENTION_PREFIX)
+  const projects = namespacedGroup(args.projects, query, PROJECT_MENTION_PREFIX)
+  return [
+    ...agents.map((agent): MentionOption => ({ kind: "agent", subagent: agent.subagent })),
+    ...projects.map((project): MentionOption => ({ kind: "project", project })),
+    ...args.paths.map((path): MentionOption => ({ kind: "path", path })),
+  ]
+}
+
+
 export interface MentionTypeaheadPluginProps {
   projectId: string | null
 }
@@ -101,18 +136,16 @@ export function MentionTypeaheadPlugin({
     excludeProjectId: projectId,
   })
 
-  const options = useMemo<MentionMenuOption[]>(() => {
-    const agentOpts = subagentState.items.map(
-      (s) => new MentionMenuOption({ kind: "agent", subagent: s.subagent }),
-    )
-    const projectOpts = projectState.items.map(
-      (p) => new MentionMenuOption({ kind: "project", project: p }),
-    )
-    const pathOpts = mentionState.items.map(
-      (p) => new MentionMenuOption({ kind: "path", path: p }),
-    )
-    return [...agentOpts, ...projectOpts, ...pathOpts]
-  }, [subagentState.items, projectState.items, mentionState.items])
+  const options = useMemo<MentionMenuOption[]>(
+    () =>
+      composeMentionOptions({
+        query: query ?? "",
+        agents: subagentState.items,
+        projects: projectState.items,
+        paths: mentionState.items,
+      }).map((data) => new MentionMenuOption(data)),
+    [query, subagentState.items, projectState.items, mentionState.items],
+  )
 
   const highlightOnPointerMove = useTypeaheadHoverHighlight()
 
@@ -180,7 +213,7 @@ export function MentionTypeaheadPlugin({
         <ul
           role="listbox"
           data-kanna-typeahead-menu="mention"
-          className="absolute bottom-full left-0 mb-2 w-full max-w-md md:max-w-xl max-h-64 overflow-auto rounded-md border border-border bg-popover shadow-md"
+          className="absolute bottom-full left-0 mb-2 w-full max-w-md md:max-w-xl max-h-80 overflow-auto rounded-md border border-border bg-popover shadow-md"
         >
           {mentionState.loading && menuOptions.length === 0
             ? Array.from({ length: 4 }).map((_, i) => (
