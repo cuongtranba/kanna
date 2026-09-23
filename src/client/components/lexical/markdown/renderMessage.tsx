@@ -37,6 +37,7 @@ import {
 import { buildKannaEditorConfig } from "../config"
 import { parseThinkingSegments } from "../../../lib/parseThinking"
 import { linkifyTextRefs } from "../../../lib/linkifyTextRefs"
+import { splitRunawayRepetition } from "../../../lib/splitRunawayRepetition"
 import { ThinkingBlock } from "../../messages/ThinkingBlock"
 import {
   $isMermaidNode,
@@ -333,6 +334,26 @@ export function renderMarkdownDocument(markdown: string): ReactNode {
   return renderMarkdownSegment(markdown)
 }
 
+const REPEAT_COUNT_FORMAT = new Intl.NumberFormat("en-US")
+
+function renderVisibleText(markdown: string): ReactNode {
+  const segments = splitRunawayRepetition(markdown)
+  const only = segments[0]
+  if (segments.length === 1 && only?.kind === "markdown") return renderMarkdownSegment(only.text)
+
+  return segments.map((seg, i) => {
+    if (seg.kind === "markdown") return <span key={`md-${i}`}>{renderMarkdownSegment(seg.text)}</span>
+    return (
+      <span key={`repeat-${i}`}>
+        {renderMarkdownSegment(seg.block)}
+        <p className="mt-1 mb-3 text-xs text-muted-foreground tabular-nums">
+          Repeated {REPEAT_COUNT_FORMAT.format(seg.count)} times
+        </p>
+      </span>
+    )
+  })
+}
+
 export function renderMessageMarkdown(text: string): ReactNode {
   const segments = parseThinkingSegments(text)
 
@@ -340,7 +361,7 @@ export function renderMessageMarkdown(text: string): ReactNode {
     if (seg.kind === "thinking") {
       return <ThinkingBlock key={`think-${i}`} content={seg.content} />
     }
-    const rendered = renderMarkdownSegment(seg.content)
+    const rendered = renderVisibleText(seg.content)
     return <span key={`text-${i}`}>{rendered}</span>
   })
 

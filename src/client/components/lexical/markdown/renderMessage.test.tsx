@@ -119,6 +119,36 @@ describe("renderMessageMarkdown – combined content", () => {
 })
 
 
+describe("renderMessageMarkdown – runaway repetition", () => {
+  test("shows a degenerate run of identical paragraphs once with its count (chat b7dbcd4d)", () => {
+    const text = ["I pushed the fix.", ...Array<string>(500).fill("<br>"), "Done."].join("\n\n")
+
+    const html = render(text)
+
+    expect(html.match(/&lt;br&gt;/g)?.length).toBe(1)
+    expect(html).toContain("Repeated 500 times")
+    expect(html).toContain("I pushed the fix.")
+    expect(html).toContain("Done.")
+  })
+
+  test("keeps a short run of identical paragraphs verbatim", () => {
+    const html = render(Array<string>(5).fill("same line").join("\n\n"))
+
+    expect(html.match(/same line/g)?.length).toBe(5)
+    expect(html).not.toContain("Repeated")
+  })
+
+  test("never collapses repeated lines inside a code fence", () => {
+    const text = ["```text", ...Array<string>(40).fill("row\n"), "```"].join("\n")
+
+    const html = render(text)
+
+    expect(html.match(/row/g)?.length).toBe(40)
+    expect(html).not.toContain("Repeated")
+  })
+})
+
+
 describe("useRenderedMessage", () => {
   test("hook produces same output as renderMessageMarkdown for plain text", () => {
     function TestComponent({ text }: { text: string }) {
