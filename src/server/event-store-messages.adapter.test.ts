@@ -15,6 +15,7 @@ import {
   getRecentChatHistory,
   getRecentMessagesPage,
   getLatestChatContextWindowUsage,
+  getLatestClaudeCumulativeCostUsd,
   getSeenMessageIds,
   getRecentRawEntries,
   loadTranscriptFromDisk,
@@ -727,6 +728,42 @@ describe("getLatestChatContextWindowUsage", () => {
 
     expect(getLatestChatContextWindowUsage(deps, "chat-t")).toBe(null)
     expect(spans.reduce((a, b) => a + b, 0)).toBeLessThan(9 * 1024 * 1024)
+  })
+})
+
+describe("getLatestClaudeCumulativeCostUsd", () => {
+  const resultLine = (i: number, extra: Record<string, number>) => JSON.stringify({
+    _id: `r-${i}`, createdAt: i, kind: "result", subtype: "success", isError: false, durationMs: 1, result: "", ...extra,
+  })
+
+  test("returns the SDK running total of the newest result that recorded one", () => {
+    const content = linesToFile([
+      resultLine(0, { costUsd: 0.1, cumulativeCostUsd: 0.1 }),
+      ...padding(20),
+      resultLine(21, { costUsd: 0.05, cumulativeCostUsd: 0.15 }),
+      resultLine(22, { costUsd: 0.02 }),
+    ])
+    const deps = makeDeps({ storage: makeSliceStorage(content) })
+
+    expect(getLatestClaudeCumulativeCostUsd(deps, "chat-t")).toBe(0.15)
+  })
+
+  test("a context_cleared newer than the last result leaves no baseline", () => {
+    const content = linesToFile([
+      resultLine(0, { costUsd: 0.1, cumulativeCostUsd: 0.1 }),
+      JSON.stringify({ _id: "cc-1", createdAt: 1, kind: "context_cleared" }),
+      ...padding(5),
+    ])
+    const deps = makeDeps({ storage: makeSliceStorage(content) })
+
+    expect(getLatestClaudeCumulativeCostUsd(deps, "chat-t")).toBeUndefined()
+  })
+
+  test("a chat whose results predate the running total has no baseline", () => {
+    const content = linesToFile([resultLine(0, { costUsd: 0.1 }), ...padding(5)])
+    const deps = makeDeps({ storage: makeSliceStorage(content) })
+
+    expect(getLatestClaudeCumulativeCostUsd(deps, "chat-t")).toBeUndefined()
   })
 })
 

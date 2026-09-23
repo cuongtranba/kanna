@@ -146,11 +146,10 @@ describe("normalizeClaudeStreamMessage", () => {
     const entries = normalizeClaudeStreamMessage(msg)
     expect(entries).toHaveLength(1)
     expect(entries[0].kind).toBe("result")
-    const r = entries[0] as { subtype: string; durationMs: number; result: string; costUsd: number }
+    const r = entries[0] as { subtype: string; durationMs: number; result: string }
     expect(r.subtype).toBe("success")
     expect(r.durationMs).toBe(1200)
     expect(r.result).toBe("all good")
-    expect(r.costUsd).toBeCloseTo(0.005)
   })
 
   test("normalizes api_error assistant message to api_error entry", () => {

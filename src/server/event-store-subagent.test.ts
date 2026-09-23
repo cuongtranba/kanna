@@ -195,6 +195,37 @@ describe("applySubagentEvent / subagent_entry_appended", () => {
       costUsd: 0.05,
     })
   })
+
+  test("a keep-alive run adds up usage across its turns instead of keeping only the last", () => {
+    const outer = makeRunsByChatId("chat-1", [baseRun()])
+    for (const [i, turn] of [
+      { costUsd: 0.05, usage: { inputTokens: 10, outputTokens: 20, cachedInputTokens: 5 } },
+      { costUsd: 0.03, usage: { inputTokens: 4, outputTokens: 6 } },
+    ].entries()) {
+      applySubagentEvent(outer, {
+        v: 3,
+        type: "subagent_entry_appended",
+        timestamp: TS,
+        chatId: "chat-1",
+        runId: "run-1",
+        entry: {
+          kind: "result",
+          _id: `res-${i}`,
+          createdAt: TS,
+          subtype: "success",
+          isError: false,
+          durationMs: 100,
+          result: "done",
+          ...turn,
+        },
+      })
+    }
+    const usage = outer.get("chat-1")?.get("run-1")?.usage
+    expect(usage?.inputTokens).toBe(14)
+    expect(usage?.outputTokens).toBe(26)
+    expect(usage?.cachedInputTokens).toBe(5)
+    expect(usage?.costUsd).toBeCloseTo(0.08, 10)
+  })
 })
 
 

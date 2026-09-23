@@ -127,6 +127,7 @@ function makeDeps(overrides: Partial<SpawnClaudeTurnDeps> = {}): SpawnClaudeTurn
     resumeLoop: async () => ({ resumed: false, reason: "no_previous_loop" } as const),
     armCron: async () => ({ jobId: "cron-test" }),
     resolveChatPolicy: () => POLICY_DEFAULT,
+    getCostBaselineUsd: () => undefined,
     runClaudeSession: () => {},
     emitStateChange: () => {},
     onCompaction: () => {},
@@ -384,6 +385,38 @@ describe("spawnClaudeTurn", () => {
       }
       expect(events).toHaveLength(0)
     })
+  })
+})
+
+describe("cost baseline wiring", () => {
+  test("resuming a session hands the stored SDK running total to the new process", async () => {
+    let baseline: number | undefined = -1
+    const deps = makeDeps({
+      getCostBaselineUsd: () => 0.42,
+      startClaudeSessionFn: async (a) => {
+        baseline = a.costBaselineUsd
+        return makeFakeHandle()
+      },
+    })
+
+    await spawnClaudeTurn(deps, makeArgs({ sessionToken: "sess-prior" }))
+
+    expect(baseline).toBe(0.42)
+  })
+
+  test("a fresh session starts its running total from zero", async () => {
+    let baseline: number | undefined = -1
+    const deps = makeDeps({
+      getCostBaselineUsd: () => 0.42,
+      startClaudeSessionFn: async (a) => {
+        baseline = a.costBaselineUsd
+        return makeFakeHandle()
+      },
+    })
+
+    await spawnClaudeTurn(deps, makeArgs({ sessionToken: null }))
+
+    expect(baseline).toBeUndefined()
   })
 })
 
