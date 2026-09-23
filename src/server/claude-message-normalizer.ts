@@ -328,7 +328,6 @@ export function normalizeClaudeStreamMessage(message: ClaudeRawSdkMessage): Tran
         isError: Boolean(message.is_error),
         durationMs: typeof message.duration_ms === "number" ? message.duration_ms : 0,
         result: typeof message.result === "string" ? message.result : stringFromUnknown(message.result),
-        costUsd: typeof message.total_cost_usd === "number" ? message.total_cost_usd : undefined,
         debugRaw,
       }),
     ]

@@ -1024,6 +1024,7 @@ export class AgentCoordinator {
       stopLoop: (chatId, reason) => this.stopLoop(chatId, reason),
       resumeLoop: (chatId) => this.resumeLoop(chatId),
       resolveChatPolicy: (chatId) => this.resolveChatPolicy(chatId),
+      getCostBaselineUsd: (chatId) => this.store.getLatestClaudeCumulativeCostUsd(chatId),
       runClaudeSession: (session) => { void this.runClaudeSession(session) },
       emitStateChange: (chatId) => { this.emitStateChange(chatId) },
       onCompaction: (event) => { this.handleCompaction(event) },

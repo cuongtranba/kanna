@@ -578,6 +578,10 @@ export class EventStore implements PushEventStore {
     return MessageRead.getLatestChatContextWindowUsage(this.msgReadDeps, chatId)
   }
 
+  getLatestClaudeCumulativeCostUsd(chatId: string) {
+    return MessageRead.getLatestClaudeCumulativeCostUsd(this.msgReadDeps, chatId)
+  }
+
   getQueuedMessages(chatId: string) { return MessageRead.getQueuedMessages(this.msgReadDeps, chatId) }
 
   getQueuedMessage(chatId: string, queuedMessageId: string) { return MessageRead.getQueuedMessage(this.msgReadDeps, chatId, queuedMessageId) }

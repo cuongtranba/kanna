@@ -15,11 +15,18 @@ import {
 } from "./claude-usage-math"
 import { ClaudeLimitDetector } from "./auto-continue/limit-detector"
 
+function turnCostFromRunningTotal(runningTotalUsd: number, previousTotalUsd: number): number {
+  return runningTotalUsd >= previousTotalUsd ? runningTotalUsd - previousTotalUsd : runningTotalUsd
+}
+
 export async function* createClaudeHarnessStream(
   q: AsyncIterable<ClaudeRawSdkMessage>,
   configuredContextWindow?: number,
   resolveTurnPrice?: () => ModelPrice | null,
+  costBaselineUsd?: number,
 ): AsyncGenerator<HarnessEvent> {
+  let lastCumulativeCostUsd = costBaselineUsd ?? 0
+  let pendingCumulativeCostUsd: number | undefined
   let seenAssistantUsageIds = new Set<string>()
   let latestUsageSnapshot: ContextWindowUsageSnapshot | null = null
   let lastKnownContextWindow: number | undefined = configuredContextWindow
@@ -77,12 +84,14 @@ export async function* createClaudeHarnessStream(
         lastKnownContextWindow,
       )
 
-      const providerCostUsd =
+      pendingCumulativeCostUsd =
         typeof sdkMessage.total_cost_usd === "number"
           ? sdkMessage.total_cost_usd
           : undefined
 
-      let costUsd = providerCostUsd
+      let costUsd = pendingCumulativeCostUsd === undefined
+        ? undefined
+        : turnCostFromRunningTotal(pendingCumulativeCostUsd, lastCumulativeCostUsd)
       if (costUsd === undefined && resolveTurnPrice && finalUsage) {
         const price = resolveTurnPrice()
         if (price) {
@@ -125,6 +134,8 @@ export async function* createClaudeHarnessStream(
     for (const entry of normalizeClaudeStreamMessage(sdkMessage)) {
       if (entry.kind === "api_error") {
         apiErrorEmittedInTurn = true
+      } else if (entry.kind === "context_cleared") {
+        lastCumulativeCostUsd = 0
       } else if (entry.kind === "result") {
         const scrubbed = entry.isError && apiErrorEmittedInTurn
           ? { ...entry, result: "" }
@@ -134,9 +145,12 @@ export async function* createClaudeHarnessStream(
           ...scrubbed,
           ...(pendingResultUsage !== undefined ? { usage: pendingResultUsage } : {}),
           ...(pendingResultCost !== undefined ? { costUsd: pendingResultCost } : {}),
+          ...(pendingCumulativeCostUsd !== undefined ? { cumulativeCostUsd: pendingCumulativeCostUsd } : {}),
         }
+        if (pendingCumulativeCostUsd !== undefined) lastCumulativeCostUsd = pendingCumulativeCostUsd
         pendingResultUsage = undefined
         pendingResultCost = undefined
+        pendingCumulativeCostUsd = undefined
         yield { type: "transcript", entry: enriched }
         continue
       }

@@ -43,6 +43,9 @@ function createLoopStore() {
     getRecentRawEntries(_chatId: string, limit: number) {
       return this.messages.slice(-limit)
     },
+    getLatestClaudeCumulativeCostUsd(_chatId: string): number | undefined {
+      return undefined
+    },
     async appendMessage(_chatId: string, entry: TranscriptEntry) {
       this.messages.push(entry)
     },

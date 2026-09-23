@@ -47,6 +47,9 @@ function createFakeStore() {
     getRecentRawEntries(_chatId: string, limit: number) {
       return this.messages.slice(-limit)
     },
+    getLatestClaudeCumulativeCostUsd(_chatId: string): number | undefined {
+      return undefined
+    },
     async setChatProvider(_chatId: string, provider: string) {
       chat.provider = provider
     },

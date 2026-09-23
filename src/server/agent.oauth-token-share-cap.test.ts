@@ -73,6 +73,9 @@ function createMultiChatStore(chatIds: string[]) {
     getRecentRawEntries(_chatId: string, limit: number) {
       return this.messages.slice(-limit)
     },
+    getLatestClaudeCumulativeCostUsd(_chatId: string): number | undefined {
+      return undefined
+    },
     async setChatProvider(chatId: string, provider: "claude" | "codex") {
       const c = chats.get(chatId); if (c) c.provider = provider
     },

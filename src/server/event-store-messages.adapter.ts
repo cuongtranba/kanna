@@ -5,7 +5,7 @@ import type {
   QueuedChatMessage,
   TranscriptEntry,
 } from "../shared/types"
-import { getLatestContextWindowUsage, scanLatestContextWindowUsage } from "./proactive-compact"
+import { scanLatestContextWindowUsage } from "./proactive-compact"
 import type { StorageBackend } from "./storage/backend"
 import type { ToolRequest } from "../shared/permission-policy"
 import type { ChatRecord, StoreState } from "./events"
@@ -354,12 +354,20 @@ const USAGE_SCAN_MAX_CHUNK_BYTES = 1024 * 1024
 
 const USAGE_SCAN_MAX_LOOKBACK_BYTES = 8 * 1024 * 1024
 
-export function getLatestChatContextWindowUsage(
+type TailScan<T> = { found: true; value: T } | { found: false }
+
+function scanTranscriptBackward<T>(
   deps: MessageReadDeps,
   chatId: string,
-): ContextWindowUsageSnapshot | null {
+  scan: (entries: readonly TranscriptEntry[]) => TailScan<T>,
+  notFound: T,
+): T {
+  const fromEntries = (entries: readonly TranscriptEntry[]) => {
+    const result = scan(entries)
+    return result.found ? result.value : notFound
+  }
   if (deps.transcriptCache.has(chatId) || deps.legacyMessagesByChatId.has(chatId)) {
-    return getLatestContextWindowUsage(getMessagesView(deps, chatId))
+    return fromEntries(getMessagesView(deps, chatId))
   }
 
   const fileSize = deps.storage.sizeSync?.(transcriptPath(deps, chatId)) ?? 0
@@ -369,19 +377,47 @@ export function getLatestChatContextWindowUsage(
     const tail = readTranscriptTail(deps, chatId, USAGE_SCAN_MIN_ENTRIES, windowEnd, chunkBytes)
     if (!tail) break
 
-    const scan = scanLatestContextWindowUsage(tail.entries)
-    if (scan.found) return scan.usage
-    if (tail.reachedStart) return null
+    const result = scan(tail.entries)
+    if (result.found) return result.value
+    if (tail.reachedStart) return notFound
 
     const nextEnd = tail.lineOffsets[0]
-    if (nextEnd === undefined || nextEnd <= 0) return null
+    if (nextEnd === undefined || nextEnd <= 0) return notFound
 
     windowEnd = nextEnd
-    if (fileSize - windowEnd >= USAGE_SCAN_MAX_LOOKBACK_BYTES) return null
+    if (fileSize - windowEnd >= USAGE_SCAN_MAX_LOOKBACK_BYTES) return notFound
     chunkBytes = Math.min(chunkBytes * USAGE_SCAN_GROWTH, USAGE_SCAN_MAX_CHUNK_BYTES)
   }
 
-  return getLatestContextWindowUsage(getMessagesView(deps, chatId))
+  return fromEntries(getMessagesView(deps, chatId))
+}
+
+export function getLatestChatContextWindowUsage(
+  deps: MessageReadDeps,
+  chatId: string,
+): ContextWindowUsageSnapshot | null {
+  return scanTranscriptBackward<ContextWindowUsageSnapshot | null>(deps, chatId, (entries) => {
+    const scan = scanLatestContextWindowUsage(entries)
+    return scan.found ? { found: true, value: scan.usage } : { found: false }
+  }, null)
+}
+
+function scanLatestCumulativeCost(entries: readonly TranscriptEntry[]): TailScan<number | undefined> {
+  for (let i = entries.length - 1; i >= 0; i -= 1) {
+    const entry = entries[i]
+    if (entry.kind === "context_cleared") return { found: true, value: undefined }
+    if (entry.kind === "result" && entry.cumulativeCostUsd !== undefined) {
+      return { found: true, value: entry.cumulativeCostUsd }
+    }
+  }
+  return { found: false }
+}
+
+export function getLatestClaudeCumulativeCostUsd(
+  deps: MessageReadDeps,
+  chatId: string,
+): number | undefined {
+  return scanTranscriptBackward(deps, chatId, scanLatestCumulativeCost, undefined)
 }
 
 

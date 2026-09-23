@@ -127,6 +127,7 @@ export interface ResultEntry extends TranscriptEntryBase {
   durationMs: number
   result: string
   costUsd?: number
+  cumulativeCostUsd?: number
   usage?: ProviderUsage
   pendingWorkflowCount?: number
   codexErrorInfo?: CodexErrorInfoTag
