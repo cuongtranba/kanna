@@ -11,10 +11,16 @@ import { POLICY_DEFAULT } from "../shared/permission-policy"
 export const LOOP_BLOCKED_NATIVE_TOOLS: readonly string[] = [
   "Edit",
   "Write",
-  "MultiEdit",
   "NotebookEdit",
   "Task",
+  "Agent",
 ]
+
+export const LOOP_BLOCKED_TOOL_MESSAGE =
+  "is blocked while an autonomous loop is armed. You are the "
+  + "orchestrator: delegate the next chunk with delegate_subagent "
+  + "(run_in_background: true) and end your turn, or call stop_loop if the "
+  + "goal is met. Do not edit files directly."
 
 export interface BuildCanUseToolArgs {
   localPath: string
@@ -23,24 +29,12 @@ export interface BuildCanUseToolArgs {
   onToolRequest: (request: HarnessToolRequest) => Promise<JsonValue>
   toolCallback?: ToolCallbackService
   chatPolicy?: ChatPermissionPolicy
-  isLoopArmed?: () => boolean
 }
 
 export function buildCanUseTool(
   args: BuildCanUseToolArgs,
 ): (...params: Parameters<CanUseTool>) => Promise<PermissionResult> {
   return async (toolName, input, options) => {
-    if (args.isLoopArmed?.() && LOOP_BLOCKED_NATIVE_TOOLS.includes(toolName)) {
-      return {
-        behavior: "deny",
-        message:
-          `${toolName} is blocked while an autonomous loop is armed. You are the `
-          + "orchestrator: delegate the next chunk with delegate_subagent "
-          + "(run_in_background: true) and end your turn, or call stop_loop if the "
-          + "goal is met. Do not edit files directly.",
-      }
-    }
-
     if (toolName !== "AskUserQuestion" && toolName !== "ExitPlanMode") {
       return { behavior: "allow", updatedInput: input }
     }

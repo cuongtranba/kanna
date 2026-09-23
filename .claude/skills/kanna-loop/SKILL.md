@@ -417,10 +417,16 @@ the resolved `subagentId` + rendered prompt; replayed by `deriveLoopState`).
 (takeover — awaited before the turn starts) emit `loop_disarmed`. While armed:
 
 - **Filter-at-spawn (Claude Code's `filterToolsForAgent` pattern), both
-  drivers.** `LOOP_BLOCKED_NATIVE_TOOLS` (Edit/Write/MultiEdit/NotebookEdit/
-  Task) are removed at spawn — PTY via `--disallowedTools` CLI args, SDK via
-  `options.disallowedTools` — so the model never sees them. The SDK
-  `canUseTool` deny stays as mid-turn belt-and-suspenders.
+  drivers.** `LOOP_BLOCKED_NATIVE_TOOLS` (Edit/Write/NotebookEdit/Task/Agent)
+  are removed at spawn — PTY via `--disallowedTools` CLI args, SDK via
+  `options.disallowedTools` — so the model never sees them.
+- **Mid-turn guard is a PreToolUse hook, not `canUseTool`.** The SDK never
+  consults `canUseTool` for a call the permission mode already approved, and
+  under `acceptEdits` that is every Edit/Write inside the working
+  directories. The SDK session registers a PreToolUse hook
+  (`buildLoopGuardHooks`, `claude-session-start.ts`) that reads
+  `isLoopArmed()` per call and denies the blocked tools, which also covers
+  the turn in which `setup_loop` armed the loop, before the respawn.
 - **Respawn on armed flip.** Spawn args are immutable per process, so
   `ClaudeSessionState.loopArmedAtSpawn` is compared against the live
   `isLoopArmed()` in `startClaudeTurn`'s reuse condition — any flip (arm or

@@ -40,6 +40,7 @@ import {
   type CompactionEvent,
   type StartClaudeSessionDeps,
 } from "./claude-session-start"
+import { LOOP_BLOCKED_NATIVE_TOOLS } from "./claude-spawn-helpers"
 
 
 class FakeQueue<T> implements AsyncIterable<T> {
@@ -67,7 +68,7 @@ function makeFakeDeps(): StartClaudeSessionDeps {
   return {
     buildCanUseTool: () => async () => ({ behavior: "allow" as const }),
     buildClaudeEnv: (env) => env,
-    loopBlockedNativeTools: [] as readonly string[],
+    loopBlockedNativeTools: LOOP_BLOCKED_NATIVE_TOOLS,
     AsyncMessageQueueCtor: FakeQueue,
     toClaudeMessageStream: () => (async function* () {})(),
     createClaudeHarnessStream: () => (async function* () {})(),
@@ -292,5 +293,57 @@ describe("startClaudeSession compaction hooks", () => {
     )
 
     expect(await fire("PreCompact", { trigger: "auto", session_id: "sess-9" })).toEqual({})
+  })
+})
+
+describe("startClaudeSession loop guard", () => {
+  type PreToolUseOutput = { hookSpecificOutput?: { permissionDecision?: string; permissionDecisionReason?: string } }
+  type PreToolUseHook = (
+    input: { hook_event_name: "PreToolUse"; tool_name: string; tool_input: object; session_id: string },
+    toolUseId: string | undefined,
+    options: { signal: AbortSignal },
+  ) => Promise<PreToolUseOutput>
+
+  const decisionFor = async (toolName: string) => {
+    const matchers = (capturedQueryArgs as { options: { hooks?: { PreToolUse?: { hooks: PreToolUseHook[] }[] } } })
+      .options.hooks?.PreToolUse ?? []
+    for (const matcher of matchers) {
+      for (const hook of matcher.hooks) {
+        const output = await hook(
+          { hook_event_name: "PreToolUse", tool_name: toolName, tool_input: {}, session_id: "sess-1" },
+          "tool-use-1",
+          { signal: AbortSignal.timeout(1_000) },
+        )
+        if (output.hookSpecificOutput?.permissionDecision) return output.hookSpecificOutput
+      }
+    }
+    return undefined
+  }
+
+  test("an armed loop denies file edits and the subagent tool even though acceptEdits would auto-approve them", async () => {
+    await startClaudeSession({ ...BASE_ARGS, chatId: "chat-1", isLoopArmed: () => true }, makeFakeDeps())
+
+    for (const toolName of ["Edit", "Write", "NotebookEdit", "Task", "Agent"]) {
+      const decision = await decisionFor(toolName)
+      expect(decision?.permissionDecision).toBe("deny")
+      expect(decision?.permissionDecisionReason).toContain("autonomous loop is armed")
+    }
+  })
+
+  test("reading, running commands and delegating stay available while a loop is armed", async () => {
+    await startClaudeSession({ ...BASE_ARGS, chatId: "chat-1", isLoopArmed: () => true }, makeFakeDeps())
+
+    for (const toolName of ["Read", "Bash", "Grep", "mcp__kanna__delegate_subagent"]) {
+      expect(await decisionFor(toolName)).toBeUndefined()
+    }
+  })
+
+  test("the guard reads the loop state per call, so a loop armed mid-session blocks edits before any respawn", async () => {
+    let armed = false
+    await startClaudeSession({ ...BASE_ARGS, chatId: "chat-1", isLoopArmed: () => armed }, makeFakeDeps())
+
+    expect(await decisionFor("Edit")).toBeUndefined()
+    armed = true
+    expect((await decisionFor("Edit"))?.permissionDecision).toBe("deny")
   })
 })
