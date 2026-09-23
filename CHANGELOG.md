@@ -8,6 +8,21 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.59.0](https://github.com/cuongtranba/kanna/compare/v1.58.1...v1.59.0) (2026-09-23)
+
+
+### Features
+
+* **shortcuts:** add a recent-tabs switcher and number jump for pane tabs ([#1146](https://github.com/cuongtranba/kanna/issues/1146)) ([bbc5fdf](https://github.com/cuongtranba/kanna/commit/bbc5fdf41a052a5c2e66f468ddae1d9b1192d321))
+
+
+### Bug Fixes
+
+* **claude:** report per-turn cost from the SDK running total ([#1149](https://github.com/cuongtranba/kanna/issues/1149)) ([e72cb2b](https://github.com/cuongtranba/kanna/commit/e72cb2b33df7a8bc37b0f313e0edc45ec5bb2406))
+* **loop:** block edits with a PreToolUse hook instead of canUseTool ([#1150](https://github.com/cuongtranba/kanna/issues/1150)) ([f7aa582](https://github.com/cuongtranba/kanna/commit/f7aa58266f98f5d8e5c8ec63b1d4bcc176b01e7c))
+* **models:** make the Settings model list the chat's model catalog ([#1148](https://github.com/cuongtranba/kanna/issues/1148)) ([833e2b9](https://github.com/cuongtranba/kanna/commit/833e2b94d0050a6706862f9536797b6e22d7fa24))
+* **plugins:** compile bundles in a child process so a wedged Bun.build cannot hang the server or CI ([#1144](https://github.com/cuongtranba/kanna/issues/1144)) ([0433a1c](https://github.com/cuongtranba/kanna/commit/0433a1cb81eb5fb32a013c60596d65968e765677))
+
 ## [1.58.1](https://github.com/cuongtranba/kanna/compare/v1.58.0...v1.58.1) (2026-09-23)
 
 
