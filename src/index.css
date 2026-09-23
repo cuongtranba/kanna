@@ -578,6 +578,29 @@
   }
 
   /*
+    The recent-tabs switcher waits one quick beat before it shows. A tap-and-
+    release of the switch key flips to the previous tab without the panel ever
+    painting, so the common case — bouncing between two tabs — costs no flash.
+    The resting state before the delay is invisible on purpose, which is why
+    this reveal, unlike the arrival rule above, carries a fill-mode.
+  */
+  @keyframes kanna-tab-switcher-in {
+    from {
+      opacity: 0;
+      transform: translateY(-4px) scale(0.98);
+    }
+
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  .kanna-tab-switcher-in {
+    animation: kanna-tab-switcher-in var(--motion-quick) var(--motion-ease-arriving) var(--motion-quick) both;
+  }
+
+  /*
     The session sigil's newest tick grows up out of the baseline — the session's
     history being written live rather than a stroke that was simply always
     there. `transform-origin` is set inline from the real baseline, because it

@@ -1,7 +1,7 @@
 ---
 id: c3-112
 c3-version: 4
-c3-seal: 59e1fb0221cefc78eea384e66e110cdfce18de25c95d550880709a22006f51c4
+c3-seal: f781fb1fdf54f447c6a89f842e1cda8c27f16a632a6eab114e1e8e9bcf024127
 title: chat-page
 type: component
 category: feature
@@ -67,6 +67,7 @@ Composes the workspace route: transcript viewport, input dock, embedded terminal
 | Pane arrangement | OUT | Arrangement is a user-editable pane tree, not a fixed slot order; the route composes the tree and supplies one renderer per tab kind | c3-104 | src/client/app/ChatPage/index.tsx |
 | Focus policy callback | IN | Hooks consumed for sticky scroll | c3-112 | src/client/app/useStickyChatFocus.ts |
 | Tab presentation context | OUT | Titles and statuses for every open tab are built as a pure function over EVERY project's snapshots, never the active project's alone, because one workspace is shared across projects; a board title is read from the open board view as well as the project's board list, so landing straight on a board address still titles its tab | c3-104 | src/client/app/ChatPage/tabPresentationContext.ts |
+| Tab switching keys | OUT | Alt+backtick opens a recent-tabs switcher over EVERY pane, ordered by recorded focus rather than position, and commits when the held modifier is released; the jump modifier plus a digit focuses that position in the focused pane, 9 meaning the last tab; both keys are claimed in the capture phase so a focused terminal never receives them | c3-104 | src/client/hooks/useTabSwitcherHotkeys.ts |
 
 ## Change Safety
 
@@ -75,6 +76,7 @@ Composes the workspace route: transcript viewport, input dock, embedded terminal
 | Sticky focus regression | Scroll-anchor logic edit | User loses place during streaming | bun run test src/client/app/ChatPage.test.ts + manual streaming smoke |
 | Layout animation jank | Toggle animation timing edit | Visible flash on terminal toggle | bun run test src/client/app/useTerminalToggleAnimation.ts adjacent tests |
 | Tab falls back to its kind's label | Titling a tab from the active project's snapshots, or a board from the project's board list alone | A board opened by URL reads "Board"; a chat or terminal tab reads its fallback after the user changes project | bun test --conditions production src/client/app/ChatPage/tabPresentationContext.test.ts |
+| Switch key leaks into the terminal | Moving the tab-switch listener off the window capture phase | The shell receives ESC-backtick while the tab changes | bun test --conditions production src/client/components/panes/TabSwitcher.test.tsx |
 
 ## Derived Materials
 

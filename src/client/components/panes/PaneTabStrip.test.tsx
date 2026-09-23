@@ -6,6 +6,7 @@ import { DEFAULT_TAB_MIN_WIDTH } from "../../../shared/pane-tab-width"
 import type { AppSettingsSnapshot } from "../../../shared/types"
 import { renderClientMarkup } from "../../lib/testing/renderClientMarkup"
 import { useAppSettingsStore } from "../../stores/appSettingsStore"
+import { useTabSwitcherStore } from "../../stores/tabSwitcherStore"
 import { SHELL_TOP_BAND_CLASS } from "../../lib/shellChrome"
 import { PaneTabStrip } from "./PaneTabStrip"
 import type { TabPresentationContext } from "./tabPresentation"
@@ -157,6 +158,42 @@ describe("PaneTabStrip split availability", () => {
 
     expect(html).toContain('aria-label="Split right"')
     expect(html).not.toContain('aria-disabled="true"')
+  })
+})
+
+describe("PaneTabStrip jump hints", () => {
+  const tabs = Array.from({ length: 11 }, (_, index) =>
+    createTab({ kind: "terminal", terminalId: `t${index}` }, 0),
+  )
+
+  afterEach(() => {
+    useTabSwitcherStore.getState().setJumpHintsVisible(false)
+  })
+
+  async function hintsShown(isPaneFocused: boolean) {
+    const { container, cleanup } = await renderClientMarkup(
+      <TooltipProvider>
+        <PaneTabStrip
+          pane={createPane("p", tabs)}
+          isPaneFocused={isPaneFocused}
+          width={2000}
+          presentation={{}}
+          onSelectTab={() => undefined}
+          onCloseTab={() => undefined}
+          onSplit={() => undefined}
+        />
+      </TooltipProvider>,
+    )
+    const hints = [...container.querySelectorAll("[data-tab-jump-hint]")].map((node) => node.textContent)
+    await cleanup()
+    return hints
+  }
+
+  test("while the jump modifiers are held, only the focused pane numbers its tabs, with 9 on the last", async () => {
+    useTabSwitcherStore.getState().setJumpHintsVisible(true)
+
+    expect(await hintsShown(true)).toEqual(["1", "2", "3", "4", "5", "6", "7", "8", "9"])
+    expect(await hintsShown(false)).toEqual([])
   })
 })
 

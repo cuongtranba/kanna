@@ -23,11 +23,13 @@ import {
 import { isRecord } from "../../shared/errors"
 import { asJsonValue } from "../lib/asJsonValue"
 import { buildLayoutFromLegacy, type LegacyProjectLayout } from "./paneLayoutMigration"
+import { recordRecentTab } from "../lib/tabSwitcher"
 
 
 interface PaneLayoutState {
   layout: PaneLayout
   nodeSequence: number
+  recentTabIds: readonly string[]
 
   getLayout: () => PaneLayout
   openTab: (target: PaneTabTarget) => void
@@ -58,7 +60,7 @@ export const usePaneLayoutStore = create<PaneLayoutState>()(
         set((state) => {
           const next = operation(state.layout)
           if (!next) return state
-          return { ...state, layout: next }
+          return { ...state, layout: next, recentTabIds: recordRecentTab(state.recentTabIds, next) }
         })
       }
 
@@ -71,6 +73,7 @@ export const usePaneLayoutStore = create<PaneLayoutState>()(
       return {
         layout: createDefaultLayout(),
         nodeSequence: 0,
+        recentTabIds: [],
 
         getLayout: () => get().layout,
 
@@ -149,7 +152,8 @@ export const usePaneLayoutStore = create<PaneLayoutState>()(
         seedFromLegacy: (legacy) =>
           set((state) => {
             if (hasAnyTab(state.layout)) return state
-            return { ...state, layout: buildLayoutFromLegacy(legacy) }
+            const layout = buildLayoutFromLegacy(legacy)
+            return { ...state, layout, recentTabIds: recordRecentTab(state.recentTabIds, layout) }
           }),
       }
     },
@@ -171,9 +175,18 @@ export const usePaneLayoutStore = create<PaneLayoutState>()(
         const nodeSequence =
           typeof rawSequence === "number" && Number.isFinite(rawSequence) ? rawSequence : 0
 
-        return { ...current, layout, nodeSequence }
+        const rawRecent = persisted.recentTabIds
+        const recentTabIds = Array.isArray(rawRecent)
+          ? rawRecent.filter((tabId): tabId is string => typeof tabId === "string")
+          : current.recentTabIds
+
+        return { ...current, layout, nodeSequence, recentTabIds }
       },
-      partialize: (state) => ({ layout: state.layout, nodeSequence: state.nodeSequence }),
+      partialize: (state) => ({
+        layout: state.layout,
+        nodeSequence: state.nodeSequence,
+        recentTabIds: state.recentTabIds,
+      }),
     },
   ),
 )
