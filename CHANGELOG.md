@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.58.0](https://github.com/cuongtranba/kanna/compare/v1.57.1...v1.58.0) (2026-09-23)
+
+
+### Features
+
+* **shortcuts:** add a Spotlight-style project quick switcher ([#1139](https://github.com/cuongtranba/kanna/issues/1139)) ([ef440fa](https://github.com/cuongtranba/kanna/commit/ef440fa40dfb1565d423bf201f509d375f816a40))
+
 ## [1.57.1](https://github.com/cuongtranba/kanna/compare/v1.57.0...v1.57.1) (2026-09-21)
 
 
