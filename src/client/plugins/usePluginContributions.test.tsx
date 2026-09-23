@@ -1,5 +1,7 @@
-import { describe, expect, test, afterEach, mock } from "bun:test"
+import { describe, expect, test, afterEach } from "bun:test"
 import { renderForLoopCheck } from "../lib/testing/renderForLoopCheck"
+import { usePluginContributions } from "./usePluginContributions"
+import type { LoadedPluginContributions } from "./loadPluginContributions"
 import { usePluginContributionsStore } from "../stores/pluginContributionsStore"
 import { useAppSettingsStore } from "../stores/appSettingsStore"
 
@@ -8,7 +10,6 @@ const cleanups: Array<() => Promise<void>> = []
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0)) await cleanup()
   usePluginContributionsStore.getState().clearContributions()
-  mock.restore()
 })
 
 function setPluginsEnabled(enabled: boolean): void {
@@ -18,13 +19,9 @@ function setPluginsEnabled(enabled: boolean): void {
   }) as never)
 }
 
-async function mountWith(load: () => Promise<unknown>) {
-  mock.module("./loadPluginContributions", () => ({
-    loadPluginContributionsFromServer: load,
-  }))
-  const { usePluginContributions } = await import("./usePluginContributions")
+async function mountWith(load: () => Promise<LoadedPluginContributions>) {
   function Probe() {
-    usePluginContributions()
+    usePluginContributions("", load)
     return null
   }
   const rendered = await renderForLoopCheck(<Probe />)
