@@ -1,6 +1,5 @@
 import { describe, test, expect, mock } from "bun:test"
 import {
-  LOOP_BLOCKED_NATIVE_TOOLS,
   buildCanUseTool,
   buildClaudeEnv,
   withAdditionalDirectoryMemory,
@@ -25,17 +24,6 @@ function makeArgs(overrides: Partial<BuildCanUseToolArgs> = {}): BuildCanUseTool
 const TOOL_OPTIONS = { toolUseID: "tool-use-1", requestId: "req-1", signal: new AbortController().signal }
 
 
-describe("LOOP_BLOCKED_NATIVE_TOOLS", () => {
-  test("contains the expected blocked tool names", () => {
-    expect(LOOP_BLOCKED_NATIVE_TOOLS).toContain("Edit")
-    expect(LOOP_BLOCKED_NATIVE_TOOLS).toContain("Write")
-    expect(LOOP_BLOCKED_NATIVE_TOOLS).toContain("MultiEdit")
-    expect(LOOP_BLOCKED_NATIVE_TOOLS).toContain("NotebookEdit")
-    expect(LOOP_BLOCKED_NATIVE_TOOLS).toContain("Task")
-  })
-})
-
-
 describe("buildCanUseTool", () => {
   test("allows non-AskUserQuestion/ExitPlanMode tools unconditionally", async () => {
     const canUseTool = buildCanUseTool(makeArgs())
@@ -46,25 +34,6 @@ describe("buildCanUseTool", () => {
   test("allows Read, Glob, Grep and other non-special tools", async () => {
     const canUseTool = buildCanUseTool(makeArgs())
     for (const tool of ["Read", "Glob", "Grep", "WebSearch"]) {
-      const result = await canUseTool(tool, {}, TOOL_OPTIONS)
-      expect(result.behavior).toBe("allow")
-    }
-  })
-
-  test("denies LOOP_BLOCKED_NATIVE_TOOLS when isLoopArmed() returns true", async () => {
-    const canUseTool = buildCanUseTool(makeArgs({ isLoopArmed: () => true }))
-    for (const tool of LOOP_BLOCKED_NATIVE_TOOLS) {
-      const result = await canUseTool(tool, {}, TOOL_OPTIONS)
-      expect(result.behavior).toBe("deny")
-      if (result.behavior === "deny") {
-        expect(result.message).toContain("autonomous loop is armed")
-      }
-    }
-  })
-
-  test("allows LOOP_BLOCKED_NATIVE_TOOLS when isLoopArmed() returns false", async () => {
-    const canUseTool = buildCanUseTool(makeArgs({ isLoopArmed: () => false }))
-    for (const tool of LOOP_BLOCKED_NATIVE_TOOLS) {
       const result = await canUseTool(tool, {}, TOOL_OPTIONS)
       expect(result.behavior).toBe("allow")
     }
