@@ -142,18 +142,13 @@ export function buildInstallSkillCommand(
   ]
 }
 
-export function buildUninstallSkillCommand(
-  skillId: string,
-  agents: readonly SkillAgent[] = DEFAULT_SKILL_AGENTS,
-) {
+export function buildUninstallSkillCommand(skillId: string) {
   return [
     process.platform === "win32" ? "npx.cmd" : "npx",
     "skills",
     "remove",
     assertSafeSkillId(skillId),
     "--global",
-    "--agent",
-    ...assertSafeSkillAgents([...agents]),
     "--yes",
   ]
 }
@@ -189,12 +184,13 @@ export async function installSkill(
   }
 }
 
-export async function uninstallSkill(
-  skillId: string,
-  agents: readonly SkillAgent[] = DEFAULT_SKILL_AGENTS,
-): Promise<SkillUninstallResult> {
-  const command = buildUninstallSkillCommand(skillId, agents)
+export async function uninstallSkill(skillId: string): Promise<SkillUninstallResult> {
+  const command = buildUninstallSkillCommand(skillId)
   const { cwd, stdout, stderr } = await runSkillCommand(command)
+  const remaining = await listInstalledSkills()
+  if (remaining.skills.some((skill) => skill.name === command[3])) {
+    throw new Error(`skills CLI exited without removing ${command[3]}; it is still in ${remaining.lockFilePath}.`)
+  }
   return {
     skillId: command[3],
     command,

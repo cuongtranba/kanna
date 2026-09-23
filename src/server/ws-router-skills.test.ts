@@ -224,42 +224,19 @@ describe("ws-router-skills", () => {
   })
 
   describe("buildUninstallSkillCommand", () => {
-    test("builds global uninstall command with default agents (universal, claude-code, codex)", () => {
+    test("removes from every agent, so a detected agent sharing ~/.agents/skills cannot keep the skill installed", () => {
       const cmd = buildUninstallSkillCommand("my-skill")
       expect(cmd.slice(1)).toEqual([
         "skills",
         "remove",
         "my-skill",
         "--global",
-        "--agent",
-        "universal",
-        "claude-code",
-        "codex",
-        "--yes",
-      ])
-    })
-
-    test("builds uninstall command with a custom single-agent override", () => {
-      const cmd = buildUninstallSkillCommand("my-skill", ["claude-code"])
-      expect(cmd.slice(1)).toEqual([
-        "skills",
-        "remove",
-        "my-skill",
-        "--global",
-        "--agent",
-        "claude-code",
         "--yes",
       ])
     })
 
     test("throws on invalid skillId", () => {
       expect(() => buildUninstallSkillCommand("../bad")).toThrow()
-    })
-
-    test("throws on unknown agent alias", () => {
-      expect(() => buildUninstallSkillCommand("skill", ["unknown-agent" as never])).toThrow(
-        "Unknown skill agent alias",
-      )
     })
   })
 })

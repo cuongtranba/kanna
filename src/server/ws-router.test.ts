@@ -226,7 +226,7 @@ describe("skills helpers", () => {
     expect(() => assertSafeSkillId("../nope")).toThrow("Skill id is invalid.")
   })
 
-  test("builds global install and uninstall commands for default agents (universal, claude-code, codex)", () => {
+  test("builds a global install command for the default agents and an uninstall command for every agent", () => {
     expect(buildInstallSkillCommand("owner/repo", "my-skill").slice(1)).toEqual([
       "skills",
       "add",
@@ -245,10 +245,6 @@ describe("skills helpers", () => {
       "remove",
       "my-skill",
       "--global",
-      "--agent",
-      "universal",
-      "claude-code",
-      "codex",
       "--yes",
     ])
   })
