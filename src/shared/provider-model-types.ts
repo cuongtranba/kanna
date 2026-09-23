@@ -284,14 +284,15 @@ export function mergeCustomModels(
     if (entry.id !== "claude" && entry.id !== "codex") return { ...entry, models: [...entry.models] }
     const forProvider = customModels.filter((m) => m.provider === entry.id)
     if (forProvider.length === 0) return { ...entry, models: [...entry.models] }
-    const models = [...entry.models]
-    for (const custom of forProvider) {
+    const models = forProvider.map((custom) => {
       const option = customEntryToModelOption(custom)
-      const idx = models.findIndex((m) => m.id === option.id)
-      if (idx >= 0) models[idx] = { ...models[idx], ...option }
-      else models.push(option)
-    }
-    return { ...entry, models }
+      const builtin = entry.models.find((m) => m.id === option.id)
+      return builtin ? { ...builtin, ...option } : option
+    })
+    const defaultModel = models.some((m) => m.id === entry.defaultModel)
+      ? entry.defaultModel
+      : models[0]?.id ?? entry.defaultModel
+    return { ...entry, defaultModel, models }
   })
 }
 
@@ -304,14 +305,21 @@ export function providerExpandsSlashCommands(provider: AgentProvider): boolean {
   return provider === "claude" || provider === "openrouter"
 }
 
+function effectiveCatalogFor(
+  provider: AgentProvider,
+  customModels?: readonly CustomModelEntry[],
+): ProviderCatalogEntry {
+  const catalog = getProviderCatalog(provider)
+  if (!customModels || customModels.length === 0) return catalog
+  const [merged] = mergeCustomModels([{ ...catalog, models: [...catalog.models] }], customModels)
+  return merged ?? catalog
+}
+
 function catalogModelsFor(
   provider: AgentProvider,
   customModels?: readonly CustomModelEntry[],
 ): readonly ProviderModelOption[] {
-  const catalog = getProviderCatalog(provider)
-  if (!customModels || customModels.length === 0) return catalog.models
-  const [merged] = mergeCustomModels([{ ...catalog, models: [...catalog.models] }], customModels)
-  return merged.models
+  return effectiveCatalogFor(provider, customModels).models
 }
 
 function getProviderModelMatch(
@@ -330,9 +338,13 @@ export function normalizeProviderModelId(
   fallbackModelId?: string,
   customModels?: readonly CustomModelEntry[],
 ): string {
-  return getProviderModelMatch(provider, modelId, customModels)?.id
-    ?? fallbackModelId
-    ?? getProviderCatalog(provider).defaultModel
+  const match = getProviderModelMatch(provider, modelId, customModels)
+  if (match) return match.id
+  const catalog = effectiveCatalogFor(provider, customModels)
+  const fallback = fallbackModelId ?? catalog.defaultModel
+  const userListed = customModels?.some((m) => m.provider === provider) ?? false
+  if (!userListed || catalog.models.some((m) => m.id === fallback)) return fallback
+  return catalog.defaultModel
 }
 
 export function normalizeClaudeModelId(

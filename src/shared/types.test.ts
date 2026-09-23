@@ -160,6 +160,18 @@ describe("mergeCustomModels", () => {
     expect(effectiveContextWindowOptions("claude", "not-a-real-model", undefined)).toEqual([])
   })
 
+  test("a built-in the user's list omits is not offered", () => {
+    const merged = mergeCustomModels(base(), [entry({ id: "claude-opus-5", label: "Opus 5" })])
+    const claude = merged.find((p) => p.id === "claude")!
+    expect(claude.models.map((m) => m.id)).toEqual(["claude-opus-5"])
+    expect(claude.defaultModel).toBe("claude-opus-5")
+  })
+
+  test("a selection of a removed model normalizes to one the user still lists", () => {
+    const custom = [entry({ id: "claude-opus-5", label: "Opus 5" })]
+    expect(normalizeClaudeModelId("claude-opus-4-8", undefined, custom)).toBe("claude-opus-5")
+  })
+
   test("routes codex entries to the codex provider only", () => {
     const merged = mergeCustomModels(base(), [entry({ id: "gpt-x", label: "GPT X", provider: "codex" })])
     expect(merged.find((p) => p.id === "codex")!.models.some((m) => m.id === "gpt-x")).toBe(true)
