@@ -24,6 +24,8 @@ import { cn } from "../lib/utils"
 import { SHELL_CONTENT_CARD_CLASS } from "../lib/shellChrome"
 import { selectIsAnySpawning, useNewSessionStore } from "../stores/newSessionStore"
 import { KannaSidebar } from "./KannaSidebar"
+import { QuickSwitcher } from "../components/quick-switcher/QuickSwitcher"
+import { useQuickSwitcherHotkey } from "../hooks/useQuickSwitcherHotkey"
 import { AppBootstrap } from "./AppBootstrap"
 import { SharePage } from "./share-view/SharePage"
 import { useKannaState } from "./useKannaState"
@@ -33,7 +35,7 @@ import { useSidebarSwipeGesture } from "./sidebarSwipeGesture"
 import { createDrawerVisual } from "./drawerVisual"
 import { useViewportStore, useViewportSubscription } from "../stores/viewportStore"
 import { isMobileViewport } from "../lib/viewport"
-import type { AppSettingsSnapshot } from "../../shared/types"
+import type { AppSettingsSnapshot, LocalProjectSummary } from "../../shared/types"
 import { log } from "../../shared/log"
 import { useAppShellStore } from "../stores/appShellStore"
 import { PasswordScreenStore } from "./PasswordScreen.store"
@@ -47,6 +49,7 @@ import { fetchAuthStatus, postAuthLogin } from "../api/auth"
 
 const drawerVisual = createDrawerVisual()
 
+const EMPTY_LOCAL_PROJECTS: LocalProjectSummary[] = []
 const VERSION_SEEN_STORAGE_KEY = "kanna:last-seen-version"
 const AUTH_STATUS_RETRY_DELAY_MS = 500
 const WorkspacePage = lazy(() => import("./ChatPage").then((module) => ({ default: module.WorkspacePage })))
@@ -353,6 +356,19 @@ function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
   const permissionsChatTitle = state.chatSnapshot?.runtime.title ?? "Chat"
   const permissionsCurrentOverride = state.chatSnapshot?.runtime.policyOverride ?? null
 
+  useQuickSwitcherHotkey(state.keybindings, dom)
+  const handleQuickSwitcherOpenChat = useCallback((chatId: string) => {
+    navigate(`/chat/${chatId}`)
+  }, [navigate])
+  const handleQuickSwitcherCreateChat = useCallback((projectId: string) => {
+    void handleCreateChat(projectId)
+  }, [handleCreateChat])
+  const quickSwitcherOpenProjectPath = state.handleOpenLocalProject
+  const handleQuickSwitcherOpenProjectPath = useCallback((localPath: string) => {
+    void quickSwitcherOpenProjectPath(localPath)
+  }, [quickSwitcherOpenProjectPath])
+  const quickSwitcherLocalProjects = state.localProjects?.projects ?? EMPTY_LOCAL_PROJECTS
+
   const sidebarElement = useMemo(() => (
     <KannaSidebar
       data={state.sidebarData}
@@ -514,6 +530,14 @@ function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
           <Outlet context={state} />
         </div>
       </div>
+      <QuickSwitcher
+        homeDir={state.localProjects?.machine.homeDir ?? ""}
+        localProjects={quickSwitcherLocalProjects}
+        onOpenChat={handleQuickSwitcherOpenChat}
+        onCreateChat={handleQuickSwitcherCreateChat}
+        onOpenProjectPath={handleQuickSwitcherOpenProjectPath}
+        ports={ports}
+      />
       <ChatPolicyDialog
         open={permissionsChatId != null && permissionsChatId === state.activeChatId}
         chatTitle={permissionsChatTitle}

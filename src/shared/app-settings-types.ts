@@ -185,6 +185,7 @@ export type KeybindingAction =
   | "openInEditor"
   | "addSplitTerminal"
   | "jumpToSidebarChat"
+  | "openProjectSwitcher"
   | "createChatInCurrentProject"
   | "openAddProject"
   | "newStack"
@@ -211,6 +212,7 @@ export const DEFAULT_KEYBINDINGS: Record<KeybindingAction, string[]> = {
   openInEditor: ["cmd+shift+o", "ctrl+shift+o"],
   addSplitTerminal: ["cmd+/", "ctrl+/"],
   jumpToSidebarChat: ["cmd+alt"],
+  openProjectSwitcher: ["cmd+k", "ctrl+k"],
   createChatInCurrentProject: ["cmd+alt+n"],
   openAddProject: ["cmd+alt+o"],
   newStack: ["cmd+alt+w"],
@@ -238,6 +240,7 @@ export const KEYBINDING_ACTIONS: readonly KeybindingAction[] = [
   "openInEditor",
   "addSplitTerminal",
   "jumpToSidebarChat",
+  "openProjectSwitcher",
   "createChatInCurrentProject",
   "openAddProject",
   "newStack",
