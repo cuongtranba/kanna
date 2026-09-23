@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.59.1](https://github.com/cuongtranba/kanna/compare/v1.59.0...v1.59.1) (2026-09-23)
+
+
+### Bug Fixes
+
+* **skills:** uninstall a skill from every agent so it actually leaves the lock ([#1151](https://github.com/cuongtranba/kanna/issues/1151)) ([4caed2b](https://github.com/cuongtranba/kanna/commit/4caed2b537dda14492b8be454348f15f4e953523))
+
 ## [1.59.0](https://github.com/cuongtranba/kanna/compare/v1.58.1...v1.59.0) (2026-09-23)
 
 
