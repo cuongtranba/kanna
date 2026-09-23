@@ -24,6 +24,7 @@ import {
   buildCanUseTool,
   buildClaudeEnv,
   LOOP_BLOCKED_NATIVE_TOOLS,
+  LOOP_BLOCKED_TOOL_MESSAGE,
 } from "./claude-spawn-helpers"
 import {
   buildUserMcpServers,
@@ -83,6 +84,35 @@ function buildCompactionHooks(
     PreCompact: [{ hooks: [observe("pre")] }],
     PostCompact: [{ hooks: [observe("post")] }],
   }
+}
+
+function buildLoopGuardHooks(
+  isLoopArmed: () => boolean,
+  blockedTools: readonly string[],
+): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
+  const guard = async (input: HookInput): Promise<HookJSONOutput> => {
+    if (input.hook_event_name !== "PreToolUse") return {}
+    if (!blockedTools.includes(input.tool_name) || !isLoopArmed()) return {}
+    return {
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "deny",
+        permissionDecisionReason: `${input.tool_name} ${LOOP_BLOCKED_TOOL_MESSAGE}`,
+      },
+    }
+  }
+  return { PreToolUse: [{ hooks: [guard] }] }
+}
+
+function buildSessionHooks(
+  args: { chatId?: string; onCompaction?: (event: CompactionEvent) => void; isLoopArmed?: () => boolean },
+  blockedTools: readonly string[],
+): Partial<Record<HookEvent, HookCallbackMatcher[]>> | undefined {
+  const hooks = {
+    ...(args.onCompaction && args.chatId ? buildCompactionHooks(args.chatId, args.onCompaction) : {}),
+    ...(args.isLoopArmed ? buildLoopGuardHooks(args.isLoopArmed, blockedTools) : {}),
+  }
+  return Object.keys(hooks).length > 0 ? hooks : undefined
 }
 
 export type StartClaudeSessionDeps = {
@@ -163,10 +193,10 @@ export async function startClaudeSession(args: {
     onToolRequest: args.onToolRequest,
     toolCallback: args.toolCallback,
     chatPolicy: args.chatPolicy,
-    isLoopArmed: args.isLoopArmed,
   })
 
   const promptQueue = new _deps.AsyncMessageQueueCtor<SDKUserMessage>()
+  const sessionHooks = buildSessionHooks(args, _deps.loopBlockedNativeTools)
 
   const q = query({
     prompt: promptQueue,
@@ -182,9 +212,7 @@ export async function startClaudeSession(args: {
       permissionMode: args.planMode ? "plan" : "acceptEdits",
       canUseTool,
       ...(args.isLoopArmed?.() ? { disallowedTools: [..._deps.loopBlockedNativeTools] } : {}),
-      ...(args.onCompaction && args.chatId
-        ? { hooks: buildCompactionHooks(args.chatId, args.onCompaction) }
-        : {}),
+      ...(sessionHooks ? { hooks: sessionHooks } : {}),
       ...(args.maxTurns !== undefined ? { maxTurns: args.maxTurns } : {}),
       tools: args.restrictedAllowedPaths && args.restrictedAllowedPaths.length > 0
         ? _deps.claudeToolset.filter((t) => !new Set<string>(_deps.sdkRestrictedFsNativeTools).has(t))
