@@ -1,7 +1,10 @@
+import { spawn } from "node:child_process"
 import { readFile } from "node:fs/promises"
+import { createInterface } from "node:readline"
 import { join, relative, resolve } from "node:path"
 import { toError } from "../../shared/errors"
 import { errorMessage } from "../../shared/errors"
+import { isJsonArray, isJsonObject, safeJsonParse } from "../../shared/json"
 import {
   CLIENT_HOST_MODULES,
   hostModuleUnavailableMessage,
@@ -12,11 +15,21 @@ import * as pluginRpcProtocolModule from "./plugin-rpc-protocol"
 export interface BuildPluginBundlesArgs {
   readonly sourceDir: string
   readonly entry: string
+  readonly childPath?: string
+  readonly deadlineMs?: number
 }
 
 export type BuildPluginBundlesResult =
   | { readonly ok: true; readonly client: string; readonly server: string }
   | { readonly ok: false; readonly errors: string[] }
+
+export const PLUGIN_BUILD_RESULT_MARKER = "__KANNA_PLUGIN_BUILD_RESULT__"
+
+const BUILD_CHILD_PATH = join(import.meta.dir, "plugin-build-child.adapter.ts")
+
+const BUILD_CHILD_DEADLINE_MS = 20_000
+
+const STDERR_TAIL_LINES = 20
 
 const BARE_SPECIFIER_PATTERN = /^[^./]/
 
@@ -134,7 +147,10 @@ async function findServerLiteralLeaks(
   return errors
 }
 
-export async function buildPluginBundles({ sourceDir, entry }: BuildPluginBundlesArgs): Promise<BuildPluginBundlesResult> {
+export async function buildPluginBundlesInProcess({
+  sourceDir,
+  entry,
+}: BuildPluginBundlesArgs): Promise<BuildPluginBundlesResult> {
   const client = await buildTarget({
     sourceDir,
     entry,
@@ -159,4 +175,99 @@ export async function buildPluginBundles({ sourceDir, entry }: BuildPluginBundle
   if (!server.ok) return { ok: false, errors: server.errors }
 
   return { ok: true, client: client.code, server: server.code }
+}
+
+function decodeChildResult(payload: string): BuildPluginBundlesResult | null {
+  const parsed = safeJsonParse(payload)
+  if (parsed === null || !isJsonObject(parsed)) return null
+  if (parsed.ok === true && typeof parsed.client === "string" && typeof parsed.server === "string") {
+    return { ok: true, client: parsed.client, server: parsed.server }
+  }
+  const errors = parsed.errors
+  if (parsed.ok === false && errors !== undefined && isJsonArray(errors)) {
+    return { ok: false, errors: errors.filter((entry): entry is string => typeof entry === "string") }
+  }
+  return null
+}
+
+interface BuildChildOutcome {
+  readonly result: BuildPluginBundlesResult | null
+  readonly harnessError: string
+}
+
+function runBuildChild(args: {
+  readonly sourceDir: string
+  readonly entry: string
+  readonly childPath: string
+  readonly deadlineMs: number
+}): Promise<BuildChildOutcome> {
+  return new Promise((resolveOutcome) => {
+    const child = spawn(process.execPath, [args.childPath, args.sourceDir, args.entry], {
+      stdio: ["ignore", "pipe", "pipe"],
+      env: process.env,
+    })
+
+    let markerPayload: string | null = null
+    const stderrTail: string[] = []
+    let deadlineHit = false
+
+    if (child.stdout) {
+      createInterface({ input: child.stdout }).on("line", (line) => {
+        if (line.startsWith(PLUGIN_BUILD_RESULT_MARKER)) {
+          markerPayload = line.slice(PLUGIN_BUILD_RESULT_MARKER.length)
+        }
+      })
+    }
+    if (child.stderr) {
+      createInterface({ input: child.stderr }).on("line", (line) => {
+        stderrTail.push(line)
+        if (stderrTail.length > STDERR_TAIL_LINES) stderrTail.shift()
+      })
+    }
+
+    const deadline = setTimeout(() => {
+      deadlineHit = true
+      child.kill("SIGKILL")
+    }, args.deadlineMs)
+
+    const settle = (exitCode: number) => {
+      clearTimeout(deadline)
+      const result = markerPayload === null ? null : decodeChildResult(markerPayload)
+      if (result) {
+        resolveOutcome({ result, harnessError: "" })
+        return
+      }
+      const detail = stderrTail.length > 0 ? ` — stderr: ${stderrTail.join(" | ")}` : ""
+      const cause = deadlineHit
+        ? `bundler process produced no verdict within ${args.deadlineMs}ms and was killed`
+        : `bundler process exited with code ${exitCode} before reporting a verdict`
+      resolveOutcome({ result: null, harnessError: `${cause}${detail}` })
+    }
+
+    child.once("close", (code) => settle(code ?? 1))
+    child.once("error", (error) => {
+      clearTimeout(deadline)
+      resolveOutcome({ result: null, harnessError: `bundler process failed to spawn: ${errorMessage(error)}` })
+    })
+  })
+}
+
+export async function buildPluginBundles(args: BuildPluginBundlesArgs): Promise<BuildPluginBundlesResult> {
+  const childArgs = {
+    sourceDir: args.sourceDir,
+    entry: args.entry,
+    childPath: args.childPath ?? BUILD_CHILD_PATH,
+    deadlineMs: args.deadlineMs ?? BUILD_CHILD_DEADLINE_MS,
+  }
+  const first = await runBuildChild(childArgs)
+  if (first.result) return first.result
+  const second = await runBuildChild(childArgs)
+  if (second.result) return second.result
+  return {
+    ok: false,
+    errors: [
+      `Plugin compile did not finish: ${first.harnessError}; retry in a fresh process also failed: ${second.harnessError}. ` +
+        "The compile runs in its own process so a wedged bundler cannot hang the server or the test runner.",
+    ],
+  }
 }

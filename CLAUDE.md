@@ -2594,6 +2594,26 @@ route did. `client.js` is served `no-store`: the bundle is rebuilt in place at
 the same url, so a cached copy silently defeats `plugin reload` — which is the
 entire point of that command.
 
+**The compile runs in its OWN bun process, never in-process.**
+`buildPluginBundles` spawns `plugin-build-child.adapter.ts` (same
+`process.execPath` + script-path pattern as the plugin server child) with a
+20 s deadline, one fresh-process retry, and a marker-line JSON verdict on
+stdout; `buildPluginBundlesInProcess` stays exported ONLY for the child.
+In-process `Bun.build` with JS plugin callbacks can wedge the whole process:
+builds serialize behind a single bundle thread that parks inside the in-flight
+build's MiniEventLoop (upstream oven-sh/bun#35060 / #42680; not fixed in the
+pinned bun 1.3.11 CI runs). That wedge is what killed the v1.58.1 publish —
+`plugin_validate > accepts the hello fixture` sat at its 60 s test timeout
+with zero child processes and bun idle in `ep_poll`, every later compile
+queued behind the parked thread, and the CI hang watchdog SIGKILLed the run
+at 170 s (exit 137). In production the same wedge would have hung a real
+install/validate/reload RPC forever. Isolation converts it into a clean
+`{ok:false}` after the deadline, and is not a tax: a child compile of the
+hello fixture measures ~100–200 ms, faster than the 60 s budgets the tests
+used to need. The deadline path is pinned by the `stalling-build-child`
+fixture test in `plugin-build.adapter.test.ts`; do not move the compile back
+in-process.
+
 **A failed RPC is `200 {ok:false}`, not a 4xx.** The transport succeeded and the
 caller needs the plugin's own message; only a malformed REQUEST is a 4xx. A
 well-formed id that is not installed is `404`, and a **disabled** surface is

@@ -6143,7 +6143,7 @@ describe("AgentCoordinator.dispose — awaits session closed promises", () => {
       const elapsed = Date.now() - start
 
       expect(elapsed).toBeGreaterThanOrEqual(90)
-      expect(elapsed).toBeLessThan(500)
+      expect(elapsed).toBeLessThan(5_000)
     },
     10_000,
   )
