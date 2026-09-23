@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.58.1](https://github.com/cuongtranba/kanna/compare/v1.58.0...v1.58.1) (2026-09-23)
+
+
+### Bug Fixes
+
+* **plugins:** inject the contributions loader so a module mock cannot poison CI ([#1141](https://github.com/cuongtranba/kanna/issues/1141)) ([5736e07](https://github.com/cuongtranba/kanna/commit/5736e07312999ffad7e813e3f85d5e44af5a6b03))
+
 ## [1.58.0](https://github.com/cuongtranba/kanna/compare/v1.57.1...v1.58.0) (2026-09-23)
 
 
