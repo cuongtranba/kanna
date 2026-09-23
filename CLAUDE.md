@@ -67,7 +67,7 @@ path — see Wiki. `bun run verify:client-arch` chains ast-grep + lint + typeche
 src/server/      event-sourced server; *.adapter.ts are the only IO leaves
 src/client/      React client (see kanna-react-style)
 src/shared/      contracts both sides import — a type lives here ONCE
-src/ops/         architecture budget + alerting specs (outside the IO seal)
+src/ops/         architecture budget, alerting specs, test-suite guards (outside the IO seal)
 rules/           ast-grep rules; rule-tests/ holds their fixtures
 scripts/         dev, bundle check, complexity limits, Grafana alert applier
 e2e/             Playwright specs (*.pw.ts)
@@ -2472,6 +2472,54 @@ returns, via the teardown registry the preload publishes on
 `globalThis.__kannaDomTeardowns`. It cannot own an `afterEach` for that: bun runs
 hooks in registration order and the preload registers first, so a helper-owned
 hook fires after the sweep has already failed the test.
+
+## Module mocks are banned — `mock.module` outlives its test file (enforced)
+
+`mock.module` substitutes an entry in bun's process-wide module registry, and
+nothing restores it when the test file ends — `mock.restore()` covers functions,
+not modules, and `bun run test` runs every file in ONE process. Whether the
+poison detonates depends on load order. If the real module was already loaded,
+the mock only patches its live bindings: exports the factory omits stay real,
+and the suite passes. If the mock registers FIRST, the registry holds a
+synthetic record with ONLY the factory's keys, and the next file that
+static-imports a missing export dies at link time —
+`SyntaxError: Export named '…' not found in module` — reported as an
+"Unhandled error between tests" against the VICTIM file, which contains no mock
+at all. File order is the filesystem's: alphabetical-ish on APFS, hash-order
+with a per-VM seed on CI's ext4, so the failure never reproduces locally and
+strikes CI at random. Verified on bun 1.3.11 and 1.4.2 alike — a bun upgrade
+does not fix it.
+
+Not theoretical: `usePluginContributions.test.tsx` mocked
+`./loadPluginContributions` with a factory exporting only the `FromServer`
+variant, and whenever ext4 ordered it before `loadPluginContributions.test.ts`
+the victim's import of `loadPluginContributions` failed exactly that way. On
+2026-09-23 it turned three runs red in one morning — Test on main, the release
+PR's Test run, and the Release Please publish job — blocking the v1.58.0 npm
+publish (fixed in #1141).
+
+**The remedy is injection, never a better mock.** Pass the dependency as a
+parameter defaulting to the production value — #1141's shape:
+`load: typeof loadPluginContributionsFromServer = loadPluginContributionsFromServer`
+— or thread it through an existing deps object. The test hands its fake
+straight in, and no registry state survives the file.
+
+**Enforced by `src/ops/testing/module-mock-guard.test.ts`.** It scans `src/`
+and fails any file registering a module mock outside `LEGACY_MODULE_MOCKS` —
+the 11 files that predate the rule. The list only shrinks: a second test
+asserts every entry still registers one, so converting a file to injection
+must delete its entry in the same PR, and a stale entry cannot be reused to
+smuggle a new mock in. The legacy files hold today only because each loads its
+real module (directly or transitively, via hoisted static imports) before
+mocking — the live-bindings case above. That shield is luck, not design: the
+`mermaid` and `shiki` mocks among them register synthetic records and would
+misbehave in an unlucky order, so burn the list down; never add to it.
+
+**The one sanctioned module patch is `scripts/test-preload.ts`'s `node:fs`
+shim.** It runs before ANY test file loads, applies to every file identically,
+and spreads the real module so no export goes missing — uniform harness
+foundation rather than per-suite state, which is why it cannot create order
+dependence. It sits outside the guard's `src/` scope on purpose.
 
 # Wiki
 

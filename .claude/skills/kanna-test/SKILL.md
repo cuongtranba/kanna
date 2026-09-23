@@ -1,6 +1,6 @@
 ---
 name: kanna-test
-description: How to verify a change in the Kanna repo — running tests, and clearing the lint, ast-grep, and design gates that block merges. Use whenever you are about to run tests or report work as done, when a test passes locally but fails on CI, when you hit an ESLint error about node:fs / process.env / a raw hex color / backdrop-blur / a native title attribute, when ast-grep rejects a hook argument or a store selector, when happy-dom throws "removeChild: The node to be removed is not a child of this node", or when React error #185 "Maximum update depth exceeded" appears. Read it before writing a test that mounts a component, and before adding any file that performs IO.
+description: How to verify a change in the Kanna repo — running tests, and clearing the lint, ast-grep, and design gates that block merges. Use whenever you are about to run tests or report work as done, when a test passes locally but fails on CI, when you hit an ESLint error about node:fs / process.env / a raw hex color / backdrop-blur / a native title attribute, when ast-grep rejects a hook argument or a store selector, when happy-dom throws "removeChild: The node to be removed is not a child of this node", when bun reports "Export named X not found in module" for an export that plainly exists, or when React error #185 "Maximum update depth exceeded" appears. Read it before writing a test that mounts a component, and before adding any file that performs IO.
 user-invocable: false
 ---
 
@@ -64,6 +64,21 @@ whose callers forgot the returned `cleanup`, and asserts no render-loop warnings
 **Subprocess-spawning tests** need `stdin: "ignore"` and `GIT_TERMINAL_PROMPT=0`,
 or a credential prompt hangs until the timeout, plus an explicit per-test timeout
 (`test(name, fn, 30_000)`) since CI runners are slower than the 5 s default.
+
+## Module mocks poison the whole process
+
+`mock.module` rewrites bun's process-wide module registry and nothing restores it
+between files, so a factory that omits an export can kill an UNRELATED suite's
+import with `SyntaxError: Export named '…' not found in module` — the error lands
+on the victim file, which contains no mock, and only in the file orders CI's ext4
+produces, never on APFS. This is what intermittently failed main and blocked the
+v1.58.0 publish (#1141). Do not add one: inject the dependency as a parameter
+defaulting to the production value and hand the fake in from the test.
+`src/ops/testing/module-mock-guard.test.ts` enforces it — a new module mock fails
+the suite, and the legacy allowlist only shrinks (converting a file deletes its
+entry in the same PR). The full mechanism, the incident, and the one sanctioned
+exception (`scripts/test-preload.ts`'s uniform `node:fs` shim) are in CLAUDE.md
+under "Module mocks are banned".
 
 ## The gates, and what each one is protecting
 
