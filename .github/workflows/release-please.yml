@@ -59,16 +59,29 @@ jobs:
 
       - run: bun run build
 
-      - name: Run tests
+      # Verification here is ADVISORY — a failure is reported on the step and
+      # the publish proceeds anyway. By the time this job runs the version is
+      # already tagged and the release already exists, so a failing gate does
+      # not prevent a bad release, it only strands a tagged one unpublished —
+      # recoverable solely through the `workflow_dispatch` path above. v1.58.1
+      # was stranded exactly that way by the hang watchdog's SIGKILL (exit 137).
+      # The blocking gate is `test.yml` on `main`, which runs before
+      # release-please ever cuts the release.
+      - name: Run tests (advisory)
+        continue-on-error: true
         run: timeout --foreground --signal=SIGTERM --kill-after=10 420 bash scripts/ci-test-with-hang-diagnostics.sh
         env:
           GIT_TERMINAL_PROMPT: "0"
           HANG_AFTER: "170"
 
+      # Non-blocking too: a failed browser install would otherwise fail the job
+      # and block the publish on behalf of a smoke test that cannot block it.
       - name: Install Playwright browsers
+        continue-on-error: true
         run: bunx playwright install chrome --with-deps
 
-      - name: Page-level smoke test (production bundle)
+      - name: Page-level smoke test (production bundle, advisory)
+        continue-on-error: true
         run: bun run test:smoke
         env:
           KANNA_OTEL: disabled
