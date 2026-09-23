@@ -39,3 +39,21 @@ describe("plugin-build.adapter — HOST_STUB_NAMESPACE", () => {
     }
   }, 60_000)
 })
+
+describe("plugin-build.adapter — process isolation", () => {
+  test("a wedged bundler process is killed at the deadline and reported, never awaited forever", async () => {
+    const { buildPluginBundles } = await import("./plugin-build.adapter")
+
+    const result = await buildPluginBundles({
+      sourceDir: import.meta.dir,
+      entry: "index.ts",
+      childPath: join(import.meta.dir, "__fixtures__", "stalling-build-child.ts"),
+      deadlineMs: 400,
+    })
+
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.errors.join("\n")).toContain("no verdict within 400ms")
+    expect(result.errors.join("\n")).toContain("retry in a fresh process")
+  }, 15_000)
+})
