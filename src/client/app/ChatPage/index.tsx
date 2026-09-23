@@ -30,6 +30,8 @@ import { SplitContainer } from "../../components/panes/SplitContainer"
 import { PaneShell, type SplitArgs } from "../../components/panes/PaneShell"
 import { isTypingTarget, resolvePaneCommand } from "../../components/panes/paneKeyboard"
 import { PaneDndProvider } from "../../components/panes/PaneDndProvider"
+import { TabSwitcher } from "../../components/panes/TabSwitcher"
+import { useTabSwitcherHotkeys } from "../../hooks/useTabSwitcherHotkeys"
 import type { PaneContentRegistry } from "../../components/panes/paneContentRegistry"
 import type { TabPresentationContext } from "../../components/panes/tabPresentation"
 import { buildTabPresentationContext } from "./tabPresentationContext"
@@ -197,6 +199,7 @@ export function WorkspacePage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
     },
     [focusTab, syncUrlToFocusedChat],
   )
+  useTabSwitcherHotkeys(resolvedKeybindings, workspaceHasTabs, handleSelectTab, dom)
   const handleSplitPane = useCallback(
     ({ tabId, paneId, position }: SplitArgs) => {
       splitPane({ tabId, targetPaneId: paneId, position })
@@ -578,6 +581,13 @@ export function WorkspacePage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
             )}
             onFocusPane={handleFocusPane}
             onResizeGroup={handleResizeGroup}
+          />
+          <TabSwitcher
+            layout={paneLayout}
+            presentation={presentation}
+            keybindings={resolvedKeybindings}
+            onCommit={handleSelectTab}
+            ports={{ dom }}
           />
         </PaneDndProvider>
       ) : (

@@ -186,6 +186,8 @@ export type KeybindingAction =
   | "addSplitTerminal"
   | "jumpToSidebarChat"
   | "openProjectSwitcher"
+  | "openTabSwitcher"
+  | "jumpToPaneTab"
   | "createChatInCurrentProject"
   | "openAddProject"
   | "newStack"
@@ -213,6 +215,8 @@ export const DEFAULT_KEYBINDINGS: Record<KeybindingAction, string[]> = {
   addSplitTerminal: ["cmd+/", "ctrl+/"],
   jumpToSidebarChat: ["cmd+alt"],
   openProjectSwitcher: ["cmd+k", "ctrl+k"],
+  openTabSwitcher: ["alt+`"],
+  jumpToPaneTab: ["cmd+ctrl", "ctrl+alt"],
   createChatInCurrentProject: ["cmd+alt+n"],
   openAddProject: ["cmd+alt+o"],
   newStack: ["cmd+alt+w"],
@@ -241,6 +245,8 @@ export const KEYBINDING_ACTIONS: readonly KeybindingAction[] = [
   "addSplitTerminal",
   "jumpToSidebarChat",
   "openProjectSwitcher",
+  "openTabSwitcher",
+  "jumpToPaneTab",
   "createChatInCurrentProject",
   "openAddProject",
   "newStack",

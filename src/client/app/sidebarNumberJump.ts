@@ -1,4 +1,4 @@
-import { findMatchingActionBinding, getBindingsForAction } from "../lib/keybindings"
+import { bindingModifiersMatch, findMatchingActionBinding, getBindingsForAction } from "../lib/keybindings"
 import type { SidebarChatRow, SidebarProjectGroup, KeybindingsSnapshot } from "../../shared/types"
 
 export const SIDEBAR_NUMBER_JUMP_LIMIT = 9
@@ -74,39 +74,4 @@ function getSidebarActionBinding(snapshot: KeybindingsSnapshot | null, visibleIn
   }
 
   return getBindingsForAction(snapshot, "jumpToSidebarChat")[0] ?? null
-}
-
-function bindingModifiersMatch(
-  binding: string,
-  event: Pick<KeyboardEvent, "metaKey" | "altKey" | "ctrlKey" | "shiftKey">
-) {
-  const tokens = binding.split("+").map((part) => part.trim().toLowerCase()).filter(Boolean)
-
-  let meta = false
-  let alt = false
-  let ctrl = false
-  let shift = false
-
-  for (const token of tokens) {
-    if (token === "cmd" || token === "meta") {
-      meta = true
-      continue
-    }
-    if (token === "alt" || token === "option") {
-      alt = true
-      continue
-    }
-    if (token === "ctrl" || token === "control") {
-      ctrl = true
-      continue
-    }
-    if (token === "shift") {
-      shift = true
-    }
-  }
-
-  return event.metaKey === meta
-    && event.altKey === alt
-    && event.ctrlKey === ctrl
-    && event.shiftKey === shift
 }

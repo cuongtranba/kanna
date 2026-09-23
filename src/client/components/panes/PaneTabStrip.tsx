@@ -14,6 +14,9 @@ import { DEFAULT_TAB_MIN_WIDTH } from "../../../shared/pane-tab-width"
 import { useAppSettingsStore } from "../../stores/appSettingsStore"
 import { useViewportStore } from "../../stores/viewportStore"
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip"
+import { Kbd } from "../ui/kbd"
+import { tabJumpHint } from "../../lib/tabSwitcher"
+import { useTabSwitcherStore } from "../../stores/tabSwitcherStore"
 import { SHELL_TOP_BAND_CLASS } from "../../lib/shellChrome"
 import { computeTabStripLayout, PHONE_MIN_TAB_WIDTH } from "./tabStripLayout"
 import { describeTab, type TabPresentationContext } from "./tabPresentation"
@@ -49,6 +52,8 @@ export function PaneTabStrip({
   const tabMinWidth = useAppSettingsStore(
     (state) => state.settings?.panes.tabMinWidth ?? DEFAULT_TAB_MIN_WIDTH,
   )
+  const jumpHintsVisible = useTabSwitcherStore((state) => state.jumpHintsVisible)
+  const showJumpHints = jumpHintsVisible && isPaneFocused && !isPhone
   const canSplit = !isPhone
   const hasTabToKeep = pane.tabs.length > 1
 
@@ -97,7 +102,7 @@ export function PaneTabStrip({
         )}
         style={{ WebkitOverflowScrolling: "touch" }}
       >
-        {pane.tabs.map((tab) => {
+        {pane.tabs.map((tab, index) => {
           const isActive = pane.focusedTabId === tab.tabId
           const { label, icon: Icon, closable, indicator, sessionBadge } = describeTab(
             tab.target,
@@ -112,6 +117,7 @@ export function PaneTabStrip({
               Icon={Icon}
               indicator={indicator}
               sessionBadge={sessionBadge}
+              jumpHint={showJumpHints ? tabJumpHint(index, pane.tabs.length) : null}
               isActive={isActive}
               isPaneFocused={isPaneFocused}
               showLabel={layout.showLabel}
@@ -153,6 +159,7 @@ interface PaneTabProps {
   Icon: React.ComponentType<{ className?: string }>
   indicator: ChatStatusIndicator | null
   sessionBadge: SessionStateBadge | null
+  jumpHint: string | null
   isActive: boolean
   isPaneFocused: boolean
   showLabel: boolean
@@ -169,6 +176,7 @@ function PaneTab({
   Icon,
   indicator,
   sessionBadge,
+  jumpHint,
   isActive,
   isPaneFocused,
   showLabel,
@@ -237,17 +245,7 @@ function PaneTab({
         />
       ) : null}
 
-      {indicator ? (
-        <span
-          aria-hidden
-          data-tab-status={indicator.tone}
-          className="flex size-3.5 shrink-0 items-center justify-center"
-        >
-          <span className={cn("h-2 w-2 rounded-full", chatDotBgClass(indicator.tone))} />
-        </span>
-      ) : (
-        <Icon className="size-3.5 shrink-0" />
-      )}
+      <TabGlyph jumpHint={jumpHint} indicator={indicator} Icon={Icon} />
       {indicator ? <span className="sr-only">{indicator.label}</span> : null}
 
       {sessionBadge && showLabel ? (
@@ -292,6 +290,36 @@ function PaneTab({
       </TooltipContent>
     </Tooltip>
   )
+}
+
+function TabGlyph({ jumpHint, indicator, Icon }: {
+  jumpHint: string | null
+  indicator: ChatStatusIndicator | null
+  Icon: React.ComponentType<{ className?: string }>
+}) {
+  if (jumpHint) {
+    return (
+      <Kbd
+        aria-hidden
+        data-tab-jump-hint={jumpHint}
+        className="h-4 min-w-4 shrink-0 rounded-sm border-border bg-background px-0.5 text-xs text-foreground"
+      >
+        {jumpHint}
+      </Kbd>
+    )
+  }
+  if (indicator) {
+    return (
+      <span
+        aria-hidden
+        data-tab-status={indicator.tone}
+        className="flex size-3.5 shrink-0 items-center justify-center"
+      >
+        <span className={cn("h-2 w-2 rounded-full", chatDotBgClass(indicator.tone))} />
+      </span>
+    )
+  }
+  return <Icon className="size-3.5 shrink-0" />
 }
 
 interface StripActionProps {

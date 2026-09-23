@@ -32,6 +32,8 @@ description: Default keybindings and customization syntax.
 | Close Tab | `Cmd+Ctrl+W` | `Ctrl+Alt+Q` |
 | Next Tab | `Cmd+Ctrl+J` | `Ctrl+Alt+J` |
 | Previous Tab | `Cmd+Ctrl+K` | `Ctrl+Alt+K` |
+| Switch To Recent Tab | `Alt+\`` | `Alt+\`` |
+| Jump To Tab By Number | `Cmd+Ctrl` + `1`–`9` | `Ctrl+Alt` + `1`–`9` |
 | Resize Pane Left | `Cmd+Ctrl+Shift+←` | `Ctrl+Alt+Shift+←` |
 | Resize Pane Right | `Cmd+Ctrl+Shift+→` | `Ctrl+Alt+Shift+→` |
 | Resize Pane Up | `Cmd+Ctrl+Shift+↑` | `Ctrl+Alt+Shift+↑` |
@@ -39,6 +41,17 @@ description: Default keybindings and customization syntax.
 
 These act on the **focused pane** — the one you last clicked into. Pane focus is
 shown by the accent bar above that pane's active tab.
+
+**Switch To Recent Tab** works like `Cmd+Tab` for tabs. Hold `Alt`, tap `` ` ``
+to step back through the tabs you used most recently (add `Shift` to step
+forward), then let go of `Alt` to switch. A quick tap-and-release flips between
+your two latest tabs without the list ever appearing. The list spans every pane,
+and each row's small layout map shows which pane the tab will open in. `Esc`
+cancels.
+
+**Jump To Tab By Number**: hold the modifiers and the focused pane's tabs show
+their numbers. Press a digit to jump. `9` always means the last tab, as in a
+browser.
 
 Resize moves the **divider** the way the arrow points, in 5% steps, stopping at
 each pane's 10% floor. The divider travels the same way whichever of the two

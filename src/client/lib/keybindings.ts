@@ -8,6 +8,8 @@ export const KEYBINDING_ACTION_LABELS: Record<KeybindingAction, string> = {
   addSplitTerminal: "Add Split Terminal",
   jumpToSidebarChat: "Jump To Sidebar Chat",
   openProjectSwitcher: "Open Project Switcher",
+  openTabSwitcher: "Switch To Recent Tab",
+  jumpToPaneTab: "Jump To Tab By Number",
   createChatInCurrentProject: "New Chat In Current Project",
   openAddProject: "Open Add Project",
   newStack: "New Stack",
@@ -113,6 +115,89 @@ export function getResolvedKeybindings(snapshot: KeybindingsSnapshot | null): Ke
     warning: snapshot?.warning ?? null,
     filePathDisplay: snapshot?.filePathDisplay ?? "",
   }
+}
+
+type ModifierState = Pick<KeyboardEvent, "metaKey" | "altKey" | "ctrlKey" | "shiftKey">
+
+export function bindingModifiersMatch(binding: string, event: ModifierState): boolean {
+  const parsed = parseModifiers(binding)
+  return (
+    event.metaKey === parsed.meta &&
+    event.altKey === parsed.alt &&
+    event.ctrlKey === parsed.ctrl &&
+    event.shiftKey === parsed.shift
+  )
+}
+
+export function bindingMatchesEventIgnoringShift(binding: string, event: KeyboardEvent): boolean {
+  const parsed = parseBinding(binding)
+  if (!parsed) return false
+
+  return (
+    eventMatchesParsedKey(event, parsed.key) &&
+    event.ctrlKey === parsed.ctrl &&
+    event.metaKey === parsed.meta &&
+    event.altKey === parsed.alt &&
+    (!parsed.shift || event.shiftKey)
+  )
+}
+
+export function bindingModifiersReleased(binding: string, event: ModifierState): boolean {
+  const parsed = parseModifiers(binding)
+  const required = [
+    [parsed.meta, event.metaKey],
+    [parsed.ctrl, event.ctrlKey],
+    [parsed.alt, event.altKey],
+  ].filter(([needed]) => needed)
+  if (required.length === 0) return false
+  return required.some(([, isDown]) => !isDown)
+}
+
+export function pickPlatformBinding(bindings: readonly string[], isMac: boolean): string | null {
+  const usesCmd = (binding: string) => parseModifiers(binding).meta
+  return (
+    bindings.find((binding) => usesCmd(binding) === isMac) ??
+    (isMac ? bindings[0] : undefined) ??
+    null
+  )
+}
+
+const MAC_GLYPHS = { meta: "⌘", ctrl: "⌃", alt: "⌥", shift: "⇧" } as const
+const PC_GLYPHS = { meta: "Win", ctrl: "Ctrl", alt: "Alt", shift: "Shift" } as const
+const KEY_GLYPHS: Readonly<Record<string, string>> = {
+  arrowleft: "←",
+  arrowright: "→",
+  arrowup: "↑",
+  arrowdown: "↓",
+  enter: "↵",
+  escape: "Esc",
+  tab: "Tab",
+}
+
+export function formatBindingKeys(binding: string, isMac: boolean): string[] {
+  const glyphs = isMac ? MAC_GLYPHS : PC_GLYPHS
+  return binding
+    .split("+")
+    .map((token) => token.trim().toLowerCase())
+    .filter(Boolean)
+    .map((token) => {
+      const modifier = MODIFIER_TOKENS.get(token)
+      if (modifier === "ctrl" || modifier === "meta" || modifier === "alt" || modifier === "shift") {
+        return glyphs[modifier]
+      }
+      return KEY_GLYPHS[token] ?? (token.length === 1 ? token.toUpperCase() : token)
+    })
+}
+
+function parseModifiers(binding: string): Omit<ParsedBinding, "key"> {
+  const parsed = { ctrl: false, meta: false, alt: false, shift: false }
+  for (const part of binding.split("+")) {
+    const modifier = MODIFIER_TOKENS.get(part.trim().toLowerCase())
+    if (modifier === "ctrl" || modifier === "meta" || modifier === "alt" || modifier === "shift") {
+      parsed[modifier] = true
+    }
+  }
+  return parsed
 }
 
 function parseBinding(binding: string): ParsedBinding | null {
