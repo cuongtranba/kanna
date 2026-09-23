@@ -1585,13 +1585,41 @@ describe("collection CRUD contracts", () => {
     expect(manager.getSnapshot().textSnippets).toHaveLength(snippetsBefore + 1)
   })
 
-  test("deleting a seeded model drops the override so the built-in shows through", async () => {
-    const manager = await freshManager()
+  test("a model deleted in Settings leaves the chat catalog and stays deleted after reload", async () => {
+    const filePath = await createTempFilePath()
+    const manager = trackManager(new AppSettingsManager(filePath))
+    await manager.initialize()
     await manager.writePatch({ customModels: { delete: { id: "claude-opus-4-8" } } })
-    const custom = manager.getSnapshot().customModels
-    expect(custom.some((m) => m.id === "claude-opus-4-8")).toBe(false)
-    const merged = mergeCustomModels([...PROVIDERS], custom)
-    expect(merged.find((p) => p.id === "claude")!.models.some((m) => m.id === "claude-opus-4-8")).toBe(true)
+
+    const reloaded = trackManager(new AppSettingsManager(filePath))
+    await reloaded.initialize()
+    const merged = mergeCustomModels([...PROVIDERS], reloaded.getSnapshot().customModels)
+    expect(merged.find((p) => p.id === "claude")!.models.some((m) => m.id === "claude-opus-4-8")).toBe(false)
+  })
+
+  test("a built-in shipped after the list was seeded is added to it once", async () => {
+    const seeded = seedCustomModelsFromBuiltins()
+    const filePath = await writeSettingsFile({
+      customModels: seeded.filter((m) => m.id !== "gpt-5.4"),
+      seededBuiltinModels: seeded.filter((m) => m.id !== "gpt-5.4").map((m) => `${m.provider}:${m.id}`),
+    })
+    const manager = trackManager(new AppSettingsManager(filePath))
+    await manager.initialize()
+    expect(manager.getSnapshot().customModels.some((m) => m.id === "gpt-5.4")).toBe(true)
+
+    await manager.writePatch({ customModels: { delete: { id: "gpt-5.4" } } })
+    const reloaded = trackManager(new AppSettingsManager(filePath))
+    await reloaded.initialize()
+    expect(reloaded.getSnapshot().customModels.some((m) => m.id === "gpt-5.4")).toBe(false)
+  })
+
+  test("a list saved before seeding was recorded keeps the deletions it already has", async () => {
+    const filePath = await writeSettingsFile({
+      customModels: seedCustomModelsFromBuiltins().filter((m) => m.id !== "claude-opus-4-8"),
+    })
+    const manager = trackManager(new AppSettingsManager(filePath))
+    await manager.initialize()
+    expect(manager.getSnapshot().customModels.some((m) => m.id === "claude-opus-4-8")).toBe(false)
   })
 
   test("custom model update is unvalidated at the CRUD boundary; the normalizer drops the result", async () => {

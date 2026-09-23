@@ -1415,9 +1415,15 @@ effective catalog at read time.
   `[...PROVIDERS]` — the former duplicate `HARD_CODED_CODEX_MODELS` was
   removed (it drifted).
 - **Merge.** `mergeCustomModels(base, customModels)` (pure, in `types.ts`)
-  folds each `CustomModelEntry` over its provider's model list: same `id`
-  **overrides** the built-in in place, a new `id` is **appended**. `base`
-  built-ins always remain as a fallback, so the catalog is never empty.
+  makes the Settings list **the** catalog for a provider that has entries: the
+  chat offers exactly the listed models, in list order, and a built-in the list
+  omits is not offered. Each listed id that ships as a built-in inherits that
+  built-in's fields. A provider with no entries falls back to the built-ins, so
+  the catalog is never empty, and `defaultModel` moves to the first listed model
+  when the built-in default is not listed. `normalizeProviderModelId` resolves a
+  selection of a removed model to a listed one rather than the built-in default.
+  It used to append the list over every built-in, so a model deleted in
+  Settings kept appearing in the chat picker.
   **An override MERGES per field, it does not replace the object.** It used to
   replace, and since the Settings form collects only id/label/efforts, a
   hand-added entry for an id that already ships silently stripped every
@@ -1441,12 +1447,17 @@ effective catalog at read time.
   on save. Pre-filling from the DECLARED options instead would tick the box off
   for an entry that was inheriting, and the save would write the inheritance
   away.
-- **Seed + revert-to-default.** `normalizeCustomModels` (`app-settings.ts`)
-  seeds `customModels` from built-ins (deterministic `createdAt/updatedAt = 0`)
-  when the persisted value is absent, making every built-in an editable copy in
-  the UI. Deleting a seeded copy removes the override, so the identical
-  built-in shows through again (revert-to-default); deleting a purely-custom
-  id removes it entirely.
+- **Seeding, and why a deletion sticks.** `normalizeModelCatalog`
+  (`app-settings.ts`) seeds `customModels` from built-ins (deterministic
+  `createdAt/updatedAt = 0`) when the persisted value is absent, making every
+  built-in an editable copy in the UI. `seededBuiltinModels` (file-only, never
+  in the snapshot) records each `provider:id` ever offered. A built-in missing
+  from that record — one a later release shipped — is appended to the list
+  once. A deleted model is still in the record, so it is never re-added. A file
+  that predates the record is treated as having been offered every current
+  built-in, because its missing built-ins are deletions the user already made.
+  The cost: a built-in shipped after such a file was seeded stays hidden until
+  the user adds its id, which restores its built-in fields.
 - **CRUD.** `AppSettingsPatch.customModels` carries `create | update | delete`,
   handled by the settings reducer (mirrors `customMcpServers`), validated by
   `validateCustomModelShape` (id regex, non-empty label, provider ∈

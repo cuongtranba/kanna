@@ -137,6 +137,7 @@ interface AppSettingsFile {
   subagents?: JsonArray
   customMcpServers?: JsonArray
   customModels?: JsonArray
+  seededBuiltinModels?: JsonArray
   textSnippets?: JsonArray
   claudeDriver?: JsonObject
   globalPromptAppend?: string
@@ -168,6 +169,7 @@ function isMcpTransport<T>(value: T): value is T & McpServerTransport {
 
 interface AppSettingsState extends AppSettingsSnapshot {
   analyticsUserId: string
+  seededBuiltinModels: string[]
 }
 
 interface NormalizedAppSettings {
@@ -871,7 +873,11 @@ function toFilePayload({ warning: _warning, filePathDisplay: _filePathDisplay, .
   return rest
 }
 
-function toSnapshot({ analyticsUserId: _analyticsUserId, ...snapshot }: AppSettingsState): AppSettingsSnapshot {
+function toSnapshot({
+  analyticsUserId: _analyticsUserId,
+  seededBuiltinModels: _seededBuiltinModels,
+  ...snapshot
+}: AppSettingsState): AppSettingsSnapshot {
   return snapshot
 }
 
@@ -907,7 +913,7 @@ function normalizeAppSettings<T>(
   const pluginState = normalizePluginState(source, warnings)
   const claudeAuth = normalizeClaudeAuth(source?.claudeAuth, warnings)
   const uploads = normalizeUploadSettings(source?.uploads, warnings)
-  const customModels = normalizeCustomModels(source?.customModels, warnings)
+  const { customModels, seededBuiltinModels } = normalizeModelCatalog(source, warnings)
   const textSnippets = normalizeTextSnippets(source?.textSnippets, warnings)
   const subagents = normalizeSubagents(source?.subagents, warnings, customModels)
   const claudeDriver = normalizeClaudeDriverSettings(source?.claudeDriver, warnings)
@@ -959,6 +965,7 @@ function normalizeAppSettings<T>(
     subagents,
     customMcpServers: normalizeMcpServers(source?.customMcpServers, warnings),
     customModels,
+    seededBuiltinModels,
     textSnippets,
     claudeDriver,
     globalPromptAppend,
@@ -1254,6 +1261,31 @@ function migrateToSupportedEfforts(raw: JsonObject): Pick<CustomModelEntry, "sup
   return raw.supportsMaxReasoningEffort === true
     ? { supportedEfforts: ["low", "medium", "high", "max"] as const }
     : { supportedEfforts: ["low", "medium", "high"] as const }
+}
+
+function builtinModelKey(model: Pick<CustomModelEntry, "provider" | "id">): string {
+  return `${model.provider}:${model.id}`
+}
+
+function normalizeModelCatalog(
+  source: AppSettingsFile | null,
+  warnings: string[],
+): { customModels: CustomModelEntry[]; seededBuiltinModels: string[] } {
+  const builtins = seedCustomModelsFromBuiltins()
+  const customModels = normalizeCustomModels(source?.customModels, warnings)
+  const rawSeeded = source?.seededBuiltinModels
+  const seeded = new Set(
+    Array.isArray(rawSeeded) && Array.isArray(source?.customModels)
+      ? rawSeeded.filter((key): key is string => typeof key === "string")
+      : builtins.map(builtinModelKey),
+  )
+  for (const builtin of builtins) {
+    const key = builtinModelKey(builtin)
+    if (seeded.has(key)) continue
+    seeded.add(key)
+    if (!customModels.some((m) => builtinModelKey(m) === key)) customModels.push(builtin)
+  }
+  return { customModels, seededBuiltinModels: [...seeded] }
 }
 
 function normalizeCustomModels<T>(value: T, warnings: string[]): CustomModelEntry[] {
