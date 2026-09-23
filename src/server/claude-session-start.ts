@@ -151,6 +151,7 @@ export async function startClaudeSession(args: {
   maxTurns?: number
   keepAlive?: boolean
   turnPrice?: ModelPrice | null
+  costBaselineUsd?: number
   contextWindowOverride?: number
   onCompaction?: (event: CompactionEvent) => void
 },
@@ -266,6 +267,7 @@ export async function startClaudeSession(args: {
       _deps.toClaudeMessageStream(q),
       args.contextWindowOverride ?? _deps.parseConfiguredContextWindowFromModelId(args.model),
       args.turnPrice ? () => args.turnPrice ?? null : undefined,
+      args.costBaselineUsd,
     ),
     getAccountInfo: async () => {
       try {

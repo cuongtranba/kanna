@@ -99,6 +99,7 @@ export interface SpawnClaudeTurnDeps {
   stopLoop: (chatId: string, reason: "goal_met" | "user_send" | "chat_deleted") => Promise<void>
   resumeLoop: (chatId: string) => Promise<import("./loop-wake-recovery").ResumeLoopResult>
   resolveChatPolicy: (chatId: string) => ChatPermissionPolicy
+  getCostBaselineUsd: (chatId: string) => number | undefined
   runClaudeSession: (session: ClaudeSessionState) => void
   emitStateChange: (chatId: string) => void
   onCompaction: (event: CompactionEvent) => void
@@ -267,6 +268,7 @@ export async function spawnClaudeTurn(
             customMcpServers: enabledMcpServers,
             oauthBearers,
             turnPrice: openrouterTurnPrice,
+            costBaselineUsd: args.sessionToken ? deps.getCostBaselineUsd(args.chatId) : undefined,
             contextWindowOverride: openrouterContextWindow,
             onCompaction: delegationContext.depth === 0 ? deps.onCompaction : undefined,
           })

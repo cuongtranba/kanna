@@ -14,6 +14,12 @@ export interface AppendSubagentDeps {
 
 export type SubagentRunMap = Map<string, SubagentRunSnapshot>
 
+function sumDefined(a: number | undefined, b: number | undefined): number | undefined {
+  if (a === undefined) return b
+  if (b === undefined) return a
+  return a + b
+}
+
 export function applySubagentEvent(
   subagentRunsByChatId: Map<string, SubagentRunMap>,
   event: SubagentRunEvent,
@@ -57,12 +63,12 @@ export function applySubagentEvent(
       trimEntries(run.entries)
       if (event.entry.kind === "result") {
         const usage = event.entry.usage
-        const cost = event.entry.costUsd
+        const prior = run.usage
         run.usage = {
-          inputTokens: usage?.inputTokens,
-          outputTokens: usage?.outputTokens,
-          cachedInputTokens: usage?.cachedInputTokens,
-          costUsd: cost,
+          inputTokens: sumDefined(prior?.inputTokens, usage?.inputTokens),
+          outputTokens: sumDefined(prior?.outputTokens, usage?.outputTokens),
+          cachedInputTokens: sumDefined(prior?.cachedInputTokens, usage?.cachedInputTokens),
+          costUsd: sumDefined(prior?.costUsd, event.entry.costUsd),
         }
       }
       break

@@ -14,16 +14,36 @@ async function collect(
   messages: unknown[],
   configuredContextWindow?: number,
   resolveTurnPrice?: () => ModelPrice | null,
+  costBaselineUsd?: number,
 ): Promise<HarnessEvent[]> {
   const events: HarnessEvent[] = []
   for await (const ev of createClaudeHarnessStream(
     fakeQuery(messages),
     configuredContextWindow,
     resolveTurnPrice,
+    costBaselineUsd,
   )) {
     events.push(ev)
   }
   return events
+}
+
+async function resultCostsForRunningTotals(runningTotals: number[], costBaselineUsd?: number) {
+  const messages = runningTotals.map((total, i) => ({
+    type: "result",
+    subtype: "success",
+    session_id: "sess-running-total",
+    is_error: false,
+    duration_ms: 100,
+    total_cost_usd: total,
+    uuid: `r-${i}`,
+  }))
+  const events = await collect(messages, undefined, undefined, costBaselineUsd)
+  return events.flatMap((e) =>
+    e.type === "transcript" && e.entry?.kind === "result"
+      ? [{ costUsd: e.entry.costUsd, cumulativeCostUsd: e.entry.cumulativeCostUsd }]
+      : [],
+  )
 }
 
 describe("createClaudeHarnessStream", () => {
@@ -202,6 +222,26 @@ describe("createClaudeHarnessStream", () => {
     )
     expect(resultEntries).toHaveLength(1)
     expect(resultEntries[0].costUsd).toBe(0.0042)
+  })
+
+  test("each result reports only its own turn's cost, not the SDK running total (double-count regression)", async () => {
+    const costs = await resultCostsForRunningTotals([0.01, 0.025, 0.04])
+    expect(costs.map((c) => c.costUsd)).toEqual([0.01, 0.015, 0.015].map((v) => expect.closeTo(v, 10)))
+  })
+
+  test("a resumed session subtracts the stored running-total baseline", async () => {
+    const costs = await resultCostsForRunningTotals([0.55, 0.6], 0.5)
+    expect(costs.map((c) => c.costUsd)).toEqual([0.05, 0.05].map((v) => expect.closeTo(v, 10)))
+  })
+
+  test("a running total below the baseline is treated as a reset", async () => {
+    const costs = await resultCostsForRunningTotals([0.02], 0.5)
+    expect(costs[0]?.costUsd).toBeCloseTo(0.02, 10)
+  })
+
+  test("result entries carry the raw SDK running total", async () => {
+    const costs = await resultCostsForRunningTotals([0.01, 0.025])
+    expect(costs.map((c) => c.cumulativeCostUsd)).toEqual([0.01, 0.025])
   })
 
   test("resolveTurnPrice callback used when total_cost_usd absent", async () => {

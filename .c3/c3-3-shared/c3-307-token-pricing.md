@@ -1,6 +1,6 @@
 ---
 id: c3-307
-c3-seal: 1ce2aab76437cea6052cec54ffe971f9409ce3d7ece6f916a09fdb78f781c0cc
+c3-seal: d0a43da5f84c20d0658f3f988ce861559296fbdb123355d64a165021fbdaa568
 title: token-pricing
 type: component
 category: foundation
@@ -81,4 +81,5 @@ Owns the USD cost arithmetic for per-turn token usage and model-price resolution
 
 | Material | Must derive from | Allowed variance | Evidence |
 | --- | --- | --- | --- |
-| costUsd on context_window_updated and result entries | Contract section: computeCostUsd(usage, price) return value; callers in c3-210 and c3-211 must not invent cost values | May be absent when resolveModelPrice returns null | src/server/agent.ts (line 990), src/server/codex-app-server.ts (line 293), src/server/claude-pty/jsonl-to-event.ts (line 193) |
+| costUsd on context_window_updated and result entries | Contract section: computeCostUsd(usage, price) and billedUsageOfResult(entry) — the cost of that one turn. Codex and price-table paths use the computeCostUsd return value; the Claude SDK path is the SDK running total minus the previous running total, computed in claude-harness-stream.ts. Callers in c3-210 and c3-211 must not invent cost values | May be absent when resolveModelPrice returns null and the provider reports no cost | src/server/claude-harness-stream.ts, src/server/codex-app-server.ts, src/server/codex-transcript-translator.ts |
+| cumulativeCostUsd on Claude result entries | Contract section: billedUsageOfResult(entry) never reads it — it is the raw Agent SDK total_cost_usd running total for the session, stored so a respawned SDK process can resume it as the baseline read by EventStore.getLatestClaudeCumulativeCostUsd | Absent on entries written before adr-20260923-claude-cost-running-total and on providers without a running total; never summed | src/server/claude-harness-stream.ts, src/server/event-store-messages.adapter.ts |
