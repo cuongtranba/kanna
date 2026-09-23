@@ -4,7 +4,10 @@ import { usePluginContributionsStore } from "../stores/pluginContributionsStore"
 import { selectPluginsEnabled, useAppSettingsStore } from "../stores/appSettingsStore"
 import { log } from "../../shared/log"
 
-export function usePluginContributions(reloadToken: string = ""): void {
+export function usePluginContributions(
+  reloadToken: string = "",
+  load: typeof loadPluginContributionsFromServer = loadPluginContributionsFromServer,
+): void {
   const enabled = useAppSettingsStore(selectPluginsEnabled)
 
   useEffect(() => {
@@ -16,7 +19,7 @@ export function usePluginContributions(reloadToken: string = ""): void {
     }
 
     let cancelled = false
-    void loadPluginContributionsFromServer(reloadToken)
+    void load(reloadToken)
       .then((loaded) => {
         if (cancelled) return
         setContributions(loaded)
@@ -32,5 +35,5 @@ export function usePluginContributions(reloadToken: string = ""): void {
     return () => {
       cancelled = true
     }
-  }, [enabled, reloadToken])
+  }, [enabled, reloadToken, load])
 }
