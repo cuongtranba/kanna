@@ -7,6 +7,7 @@ export const KEYBINDING_ACTION_LABELS: Record<KeybindingAction, string> = {
   openInEditor: "Open In Editor",
   addSplitTerminal: "Add Split Terminal",
   jumpToSidebarChat: "Jump To Sidebar Chat",
+  openProjectSwitcher: "Open Project Switcher",
   createChatInCurrentProject: "New Chat In Current Project",
   openAddProject: "Open Add Project",
   newStack: "New Stack",
