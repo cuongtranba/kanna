@@ -1,7 +1,7 @@
 ---
 id: c3-201
 c3-version: 4
-c3-seal: a4286636bc6eb380d95060bd342c3b6d3262fadafea1da8e1968d990ca6df387
+c3-seal: 3ed2e6178a2410181da832500902e256dea93766192e64aa1e8b9762ea09fb80
 title: cli-entry
 type: component
 category: foundation
@@ -64,6 +64,7 @@ Parses argv, resolves runtime mode (dev/prod), supervises the Bun server child, 
 | kanna CLI | IN | Accepts documented flags (--port, --share, --password, ...) | c3-2 | src/server/cli.ts |
 | Spawned server child | OUT | Inherits stdio; restarts on exit code 76 | c3-202 | src/server/cli.ts |
 | Tunnel hookup | OUT | Forwards public URL to share manager | c3-218 | src/server/cli.ts |
+| Child PATH | OUT | Starts with the login shell's PATH directories appended after the inherited PATH, never reordered; a failed or slow shell keeps the inherited PATH | c3-202 | src/server/login-shell-path.adapter.ts |
 
 ## Change Safety
 
@@ -71,6 +72,7 @@ Parses argv, resolves runtime mode (dev/prod), supervises the Bun server child, 
 | --- | --- | --- | --- |
 | Flag parsing regression | New flag added without parser update | Wrong defaults at boot | bun run check + manual kanna --help smoke against src/server/cli.ts |
 | Restart loop | Bad exit-code handling | Process restarts forever | bun run check + manual restart smoke against src/server/cli.ts |
+| Tools on the rc PATH unspawnable | Login-shell PATH resolved after the child starts, or only in-process | Executable not found in PATH under pm2 for an nvm or pyenv tool | bun run test src/server/login-shell-path.adapter.test.ts + pm2-PATH smoke of bin/kanna |
 
 ## Derived Materials
 

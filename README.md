@@ -522,7 +522,18 @@ git pull
 ./scripts/deploy.sh
 ```
 
-### 7. Troubleshooting: 403 on login
+### 7. Tools your shell rc puts on PATH (nvm, pyenv, `~/go/bin`, …)
+
+pm2, launchd and systemd start Kanna without reading `~/.zshrc`, so a tool installed into a directory your rc adds — `npm i -g @openai/codex` under nvm, for example — is invisible to a process pm2 started, and a Codex chat fails with `Executable not found in $PATH: "codex"`.
+
+Kanna fixes this itself at startup: before the server starts it runs your login shell once (`$SHELL -i -l -c`), reads the `PATH` it exports, and **appends** every directory that is missing to the `PATH` it inherited. Nothing already on `PATH` is reordered, so the binaries pm2 already resolved keep winning. The startup log names what was added (`added N PATH entries from login shell …`). No `export PATH=…` line in your pm2 launcher is needed.
+
+- A tool installed into a **new** directory is picked up on the next Kanna restart (`pm2 restart kanna`, or the in-app Update).
+- The shell runs with `KANNA_RESOLVING_SHELL_ENV=1`, so an rc can skip slow or interactive steps that do not touch `PATH` — wrap them in `if [ -z "$KANNA_RESOLVING_SHELL_ENV" ]; then … fi` (a `tmux` autostart, a banner, an update check).
+- A heavy rc (oh-my-zsh + nvm) can take several seconds; Kanna waits up to `KANNA_LOGIN_SHELL_TIMEOUT_MS` (default `10000`) and otherwise keeps the inherited `PATH` and logs a warning.
+- `KANNA_LOGIN_SHELL_PATH=disabled` turns the whole thing off.
+
+### 8. Troubleshooting: 403 on login
 
 If the login screen rejects the correct password with **403** behind a Cloudflare (or any HTTPS-terminating) tunnel, the server is running without `trustProxy` enabled. The CSRF origin check then compares the browser's `https://kanna.example.com` `Origin` against the local `http://127.0.0.1:<port>` `req.url` and rejects them as mismatched. Two ways to enable it:
 
@@ -535,7 +546,7 @@ Other things to check if the 403 persists:
 - The public hostname's **TLS mode** is `Full` or `Flexible` (Cloudflare → Origin is HTTP), not `Full (strict)` against a self-signed origin.
 - No `Access` policy in front of the hostname is stripping or rewriting the `Origin` header.
 
-### 8. Update strategies
+### 9. Update strategies
 
 The update mechanism is abstracted behind `UpdateChecker` + `UpdateReloader` interfaces in `src/server/update-strategy.ts`, selected at startup by `KANNA_RELOADER`:
 

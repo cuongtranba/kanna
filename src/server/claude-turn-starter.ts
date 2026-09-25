@@ -215,7 +215,6 @@ async function startTurnForChatInner(
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    const isOAuthRefusal = error instanceof OAuthPoolUnavailableError
     log.error(`${LOG_PREFIX} startTurnForChat failed after turn_started`, {
       chatId: args.chatId,
       provider: args.provider,
@@ -223,26 +222,24 @@ async function startTurnForChatInner(
       planMode: args.planMode,
       error: message,
       stack: error instanceof Error ? error.stack : undefined,
-      kind: isOAuthRefusal ? "oauth_pool_unavailable" : "unknown",
+      kind: error instanceof OAuthPoolUnavailableError ? "oauth_pool_unavailable" : "unknown",
     })
-    if (isOAuthRefusal) {
-      try {
-        await deps.store.appendMessage(
-          args.chatId,
-          timestamped({
-            kind: "result",
-            subtype: "error",
-            isError: true,
-            durationMs: 0,
-            result: message,
-          })
-        )
-      } catch (appendErr) {
-        log.error(`${LOG_PREFIX} append refusal result entry failed`, {
-          chatId: args.chatId,
-          appendErr: appendErr instanceof Error ? appendErr.message : String(appendErr),
+    try {
+      await deps.store.appendMessage(
+        args.chatId,
+        timestamped({
+          kind: "result",
+          subtype: "error",
+          isError: true,
+          durationMs: 0,
+          result: message,
         })
-      }
+      )
+    } catch (appendErr) {
+      log.error(`${LOG_PREFIX} append turn-start failure result entry failed`, {
+        chatId: args.chatId,
+        appendErr: appendErr instanceof Error ? appendErr.message : String(appendErr),
+      })
     }
     try {
       await deps.store.recordTurnFailed(args.chatId, message)
@@ -254,10 +251,6 @@ async function startTurnForChatInner(
     }
     deps.activeTurns.delete(args.chatId)
     deps.emitStateChange(args.chatId, { immediate: true })
-    if (isOAuthRefusal) {
-      return
-    }
-    throw error
   }
 }
 
