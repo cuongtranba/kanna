@@ -11,6 +11,7 @@ export const SECTION_KEYS = [
   "resolvedBindings",
   "subagentRuns",
   "loopProgress",
+  "cronJobs",
 ] as const satisfies readonly (keyof ChatSections)[]
 
 type SectionKey = (typeof SECTION_KEYS)[number]
@@ -29,6 +30,7 @@ function buildSectionSignatures(meta: ChatSnapshot): Record<SectionKey, string> 
     resolvedBindings: JSON.stringify(meta.resolvedBindings ?? null),
     subagentRuns: JSON.stringify(meta.subagentRuns),
     loopProgress: JSON.stringify(meta.loopProgress),
+    cronJobs: JSON.stringify(meta.cronJobs),
   }
 }
 
