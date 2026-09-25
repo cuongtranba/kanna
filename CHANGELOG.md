@@ -8,6 +8,18 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.60.0](https://github.com/cuongtranba/kanna/compare/v1.59.2...v1.60.0) (2026-09-25)
+
+
+### Features
+
+* **projects:** add Delete project, removing all data Kanna stored for it ([#1160](https://github.com/cuongtranba/kanna/issues/1160)) ([02e6ca7](https://github.com/cuongtranba/kanna/commit/02e6ca7fd5960514bba19e93be99ed4a15f2e42c))
+
+
+### Bug Fixes
+
+* **cron:** carry cron job state on the chat.ops delta stream ([#1158](https://github.com/cuongtranba/kanna/issues/1158)) ([7da4c38](https://github.com/cuongtranba/kanna/commit/7da4c3850df95dfaffe03df3890cc74510b96a80))
+
 ## [1.59.2](https://github.com/cuongtranba/kanna/compare/v1.59.1...v1.59.2) (2026-09-25)
 
 
