@@ -2,6 +2,7 @@ import process from "node:process"
 import { spawn } from "node:child_process"
 import { CLI_COMMAND, LOG_PREFIX } from "../shared/branding"
 import { log } from "../shared/log"
+import { loginShellPathEnvForChild } from "./login-shell-path.adapter"
 import {
   CLI_CHILD_ARGS_ENV_VAR,
   CLI_CHILD_COMMAND_ENV_VAR,
@@ -25,7 +26,7 @@ function getChildProcessSpec() {
   return { command, args }
 }
 
-function spawnChild(argv: string[]) {
+function spawnChild(argv: string[], pathEnv: Record<string, string>) {
   const childProcess = getChildProcessSpec()
   const suppressOpenThisChild = suppressOpenOnNextChild
   const skipUpdateThisChild = skipUpdateOnNextChild
@@ -36,6 +37,7 @@ function spawnChild(argv: string[]) {
       stdio: "inherit",
       env: {
         ...process.env,
+        ...pathEnv,
         [CLI_CHILD_MODE_ENV_VAR]: CLI_CHILD_MODE,
         ...(suppressOpenThisChild ? { [CLI_SUPPRESS_OPEN_ONCE_ENV_VAR]: "1" } : {}),
         ...(skipUpdateThisChild ? { KANNA_DISABLE_SELF_UPDATE: "1" } : {}),
@@ -77,7 +79,7 @@ let skipUpdateOnNextChild = false
 let lastStartupUpdateRestart = false
 
 while (true) {
-  const result = await spawnChild(argv)
+  const result = await spawnChild(argv, await loginShellPathEnvForChild())
   if (shouldRestartCliProcess(result.code, result.signal)) {
     const isStartupUpdate = result.signal === null && result.code === CLI_STARTUP_UPDATE_RESTART_EXIT_CODE
 

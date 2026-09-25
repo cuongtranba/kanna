@@ -1584,6 +1584,47 @@ error (`claude-turn-runner.ts` catch branch); a `turn/completed` failure never
 reaches it, which is why c3-227's documented precondition ("a Claude or Codex
 turn emits a result event with subtype: error") is still only half true.
 
+# A turn that fails to START still speaks in the transcript
+
+`startTurnForChat` (`claude-turn-starter.ts`) owns a failure that happens after
+`recordTurnStarted`: it appends a `result` error entry, records `turn_failed`,
+and **returns** — it does not rethrow. Chat `cda3b2d2` is why: a Codex turn
+died 31 ms in with `Executable not found in $PATH: "codex"`, the entry was
+written only for an OAuth refusal, and the error was rethrown up to the
+`chat.send` ack. On a new chat that ack failure meant the client never
+navigated to the chat, and the chat itself held the user's prompt and nothing
+else — indistinguishable from a hang. Rethrowing also double-reported through
+`claude-turn-runner.ts`, whose own catches append a `result` for whatever
+`startTurnForChat` throws. A failure BEFORE `recordTurnStarted` (chat already
+running, project missing) still throws — no turn exists to own it.
+
+# Login-shell PATH (KANNA_LOGIN_SHELL_PATH)
+
+pm2 / launchd / systemd start Kanna without reading `~/.zshrc`, so a tool the
+rc puts on PATH (nvm's `codex`, pyenv, `~/go/bin`) was unspawnable — chat
+`cda3b2d2` again. `resolveLoginShellPath` (`login-shell-path.ts`) runs
+`$SHELL -i -l -c` once, reads PATH between two markers (rc output around them is
+noise), and **appends** only missing directories — never reorders, so what the
+host already resolved keeps winning.
+
+**It runs in the SUPERVISOR, before the child spawns, and that placement is
+load-bearing.** Measured on Bun 1.4.2: assigning `process.env.PATH` at runtime
+reaches `node:child_process` and any `Bun.spawn` passing `env`, but NOT an
+env-less `Bun.spawn` or `Bun.which` — those read the PATH the process started
+with. So `cli-supervisor.adapter.ts` hands the child a finished PATH plus
+`KANNA_LOGIN_SHELL_PATH_RESOLVED=1`; `cli.ts` resolves in-process only when no
+supervisor did (`KANNA_CLI_MODE=child`, the README pm2 template, `bun run
+start`), and that fallback is partial by the fact above.
+
+- **`detached: true` + process-group SIGKILL**, resolved on the END marker
+  rather than on `close` — an rc that backgrounds a daemon holding stdout would
+  otherwise pin the read.
+- **Timeout 10 s (`KANNA_LOGIN_SHELL_TIMEOUT_MS`)**, not 5: an oh-my-zsh + nvm
+  rc measured 0.6–7.7 s on one machine under load. A timeout keeps the inherited
+  PATH and warns; it never fails boot.
+- The shell runs with `KANNA_RESOLVING_SHELL_ENV=1` so an rc can guard slow or
+  interactive steps; `KANNA_LOGIN_SHELL_PATH=disabled` turns it off.
+
 # Subagent delegation
 
 The main agent is always in the loop. `@agent/<name>` in chat input is a

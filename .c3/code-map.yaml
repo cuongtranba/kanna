@@ -102,6 +102,9 @@ c3-201:
   - src/server/cli-runtime.ts
   - src/server/cli-supervisor.adapter.ts
   - src/server/cli.ts
+  - src/server/login-shell-path.ts
+  - src/server/login-shell-path.adapter.ts
+  - src/server/login-shell-path.adapter.test.ts
 c3-202:
   - src/server/app-settings.ts
   - src/server/server.ts

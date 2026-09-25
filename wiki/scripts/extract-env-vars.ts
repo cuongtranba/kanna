@@ -55,6 +55,8 @@ const DESCRIPTIONS: Record<string, { default: string; description: string }> = {
   KANNA_RELOADER: { default: 'supervisor', description: 'Self-update reload strategy: "supervisor" (default, end-user) or "pm2" (self-host, requires KANNA_REPO_DIR).' },
   KANNA_REPO_DIR: { default: '(unset)', description: 'Repo checkout the pm2 reloader pulls/rebuilds. Required when KANNA_RELOADER=pm2.' },
   KANNA_DISABLE_SELF_UPDATE: { default: '0', description: 'Set to "1" to disable the in-app self-update path.' },
+  KANNA_LOGIN_SHELL_PATH: { default: 'enabled', description: 'Set to "disabled" to stop Kanna from reading PATH out of your login shell at startup. Enabled, Kanna runs `$SHELL -i -l -c` once before the server starts and appends every directory your shell rc adds (nvm, pyenv, ~/go/bin, …) after the PATH it inherited, so tools installed there — codex, gh, node — are found even under pm2, launchd or systemd. The shell runs with KANNA_RESOLVING_SHELL_ENV=1 so an rc can skip slow or interactive steps.' },
+  KANNA_LOGIN_SHELL_TIMEOUT_MS: { default: '10000', description: 'How long Kanna waits for the login shell to print its PATH at startup before giving up and keeping the inherited PATH. Raise it when a heavy rc (oh-my-zsh, nvm) starts slowly; the startup log says when it gave up.' },
 }
 
 const seen = new Set<string>()
