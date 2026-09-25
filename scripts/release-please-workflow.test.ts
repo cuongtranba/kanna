@@ -5,10 +5,12 @@ const WORKFLOW_PATH = new URL("../.github/workflows/release-please.yml", import.
 
 type Job = {
   if?: string
+  concurrency?: { group?: string; "cancel-in-progress"?: boolean }
   needs?: string | string[]
   steps?: Array<{ uses?: string; with?: Record<string, unknown> }>
 }
 type Workflow = {
+  concurrency?: { group?: string; "cancel-in-progress"?: boolean }
   on: { workflow_dispatch?: { inputs?: Record<string, { required?: boolean; type?: string }> } }
   jobs: Record<string, Job>
 }
@@ -80,5 +82,16 @@ describe("release-please workflow", () => {
     expect(ref).not.toBe("")
     expect(evaluate(ref, dispatchEvent("v1.32.0"))).toBe("v1.32.0")
     expect(evaluate(ref, pushEvent(true))).toBe("deadbeef")
+  })
+
+  it("cancels a still-running release-please pass when a newer push arrives, so a stale read of main cannot land", () => {
+    const concurrency = workflow.jobs["release-please"].concurrency
+    expect(concurrency?.group).toContain("release-please")
+    expect(concurrency?.["cancel-in-progress"]).toBe(true)
+  })
+
+  it("never cancels a publish, which would strand a tagged release unpublished", () => {
+    expect(workflow.concurrency?.["cancel-in-progress"]).not.toBe(true)
+    expect(workflow.jobs.publish.concurrency?.["cancel-in-progress"]).not.toBe(true)
   })
 })

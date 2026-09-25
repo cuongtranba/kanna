@@ -23,6 +23,19 @@ jobs:
   release-please:
     # Dispatch is for publishing an existing tag; it must never cut a release.
     if: github.event_name == 'push'
+    # A newer push cancels a pass still in flight. release-please reads the
+    # files it bumps (package.json) early and commits them late, on top of
+    # whatever main is by then; a pass that read before a merge and wrote
+    # after it reverted that merge's package.json change in the release PR
+    # (#1168 put @legendapp/list back to the version #1166 had just bumped,
+    # so `bun install --frozen-lockfile` failed). The newer pass cannot
+    # repair it afterwards, because release-please leaves a PR alone when its
+    # notes are unchanged. Cancelling narrows the window to cancel-delivery
+    # latency; it does not close it. Job-level on purpose: `publish` must
+    # never be cancelled mid-publish.
+    concurrency:
+      group: release-please-${{ github.ref }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
