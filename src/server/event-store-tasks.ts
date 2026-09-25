@@ -40,16 +40,29 @@ function rememberPendingCall(pending: PendingNativeTaskCalls, tool: NormalizedTo
   }
 }
 
-function structuredResultOf(entry: Extract<TranscriptEntry, { kind: "tool_result" }>): JsonValue {
-  if (entry.debugRaw !== undefined) {
-    try {
-      const parsed: JsonValue = JSON.parse(entry.debugRaw)
-      if (isJsonObject(parsed) && parsed.tool_use_result !== undefined) return parsed.tool_use_result
-    } catch {
-      return entry.content ?? null
-    }
+interface NativeResultFrame {
+  readonly raw: JsonValue
+  readonly scope: string | null
+}
+
+function parseDebugRaw(debugRaw: string | undefined): JsonValue {
+  if (debugRaw === undefined) return null
+  try {
+    const parsed: JsonValue = JSON.parse(debugRaw)
+    return parsed
+  } catch {
+    return null
   }
-  return entry.content ?? null
+}
+
+function nativeResultFrameOf(entry: Extract<TranscriptEntry, { kind: "tool_result" }>): NativeResultFrame {
+  const frame = parseDebugRaw(entry.debugRaw)
+  if (!isJsonObject(frame)) return { raw: entry.content ?? null, scope: null }
+  const parent = frame.parent_tool_use_id
+  return {
+    raw: frame.tool_use_result !== undefined ? frame.tool_use_result : (entry.content ?? null),
+    scope: typeof parent === "string" && parent.length > 0 ? parent : null,
+  }
 }
 
 export interface MirrorTranscriptEntryArgs {
@@ -87,14 +100,16 @@ export function mirrorTranscriptEntry(args: MirrorTranscriptEntryArgs): readonly
   args.pending.delete(entry.toolId)
 
   const projection = projectChatTasks(args.chatTasksByChatId, args.chatId, { now: args.now })
+  const frame = nativeResultFrameOf(entry)
   return mirrorNativeTaskCall({
     chatId: args.chatId,
     timestamp: args.now,
     tool,
-    raw: structuredResultOf(entry),
+    raw: frame.raw,
     isError: entry.isError === true,
     toolUseId: entry.toolId,
     originRunId: null,
+    scope: frame.scope,
     knownTaskIds: new Set(projection.tasks.map((task) => task.id)),
   })
 }
