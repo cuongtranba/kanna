@@ -110,7 +110,7 @@ describe("buildOAuthBearers", () => {
     const deps = makeDeps({ ensureFreshToken })
     const stdioServer = makeServer({ transport: "stdio", command: "node", args: [], env: {} })
     const result = await buildOAuthBearers(deps, [stdioServer as McpServerConfig])
-    expect(result.size).toBe(0)
+    expect(result.byServerId.size).toBe(0)
     expect(ensureFreshToken).not.toHaveBeenCalled()
   })
 
@@ -120,7 +120,7 @@ describe("buildOAuthBearers", () => {
     const server = makeServer({ oauth: unauthOauth })
     const deps = makeDeps({ ensureFreshToken })
     const result = await buildOAuthBearers(deps, [server])
-    expect(result.size).toBe(0)
+    expect(result.byServerId.size).toBe(0)
     expect(ensureFreshToken).not.toHaveBeenCalled()
   })
 
@@ -130,8 +130,8 @@ describe("buildOAuthBearers", () => {
     const server = makeServer({ id: "srv-auth", oauth: authOauth })
     const deps = makeDeps({ ensureFreshToken })
     const result = await buildOAuthBearers(deps, [server])
-    expect(result.size).toBe(1)
-    expect(result.get("srv-auth")).toBe("bearer-xyz")
+    expect(result.byServerId.size).toBe(1)
+    expect(result.byServerId.get("srv-auth")).toBe("bearer-xyz")
     expect(ensureFreshToken).toHaveBeenCalledTimes(1)
   })
 
@@ -161,8 +161,44 @@ describe("buildOAuthBearers", () => {
     })
     const deps = makeDeps({ ensureFreshToken })
     const result = await buildOAuthBearers(deps, [bad, good])
-    expect(result.has("bad")).toBe(false)
-    expect(result.get("good")).toBe("good-token")
+    expect(result.byServerId.has("bad")).toBe(false)
+    expect(result.byServerId.get("good")).toBe("good-token")
+  })
+
+  test("reports when the soonest bearer stops being usable, reading the refreshed state when one was refreshed", async () => {
+    const stale: McpOAuthState = {
+      enabled: true,
+      status: "authenticated",
+      tokens: { access_token: "old", token_type: "Bearer", expires_in: 900 },
+      obtainedAt: 0,
+    }
+    const refreshed: McpOAuthState = { ...stale, tokens: { access_token: "new", token_type: "Bearer", expires_in: 900 }, obtainedAt: 1_000_000 }
+    const longLived: McpOAuthState = { ...stale, tokens: { access_token: "long", token_type: "Bearer", expires_in: 28_800 }, obtainedAt: 1_000_000 }
+    const deps = makeDeps({
+      ensureFreshToken: async (s, opts) => {
+        if (s.id === "short") opts.persist(refreshed)
+        return "token"
+      },
+    })
+
+    const result = await buildOAuthBearers(deps, [
+      makeServer({ id: "short", oauth: stale }),
+      makeServer({ id: "long", name: "long", oauth: longLived }),
+    ])
+
+    expect(result.usableUntil).toBe(1_000_000 + 900_000 - 60_000)
+  })
+
+  test("reports no deadline when no bearer carries an expiry", async () => {
+    const authOauth: McpOAuthState = {
+      enabled: true,
+      status: "authenticated",
+      tokens: { access_token: "forever", token_type: "Bearer" },
+    }
+
+    const result = await buildOAuthBearers(makeDeps(), [makeServer({ oauth: authOauth })])
+
+    expect(result.usableUntil).toBeNull()
   })
 })
 

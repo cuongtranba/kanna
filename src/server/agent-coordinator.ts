@@ -44,6 +44,7 @@ import { POLICY_DEFAULT } from "../shared/permission-policy"
 import { startClaudeSessionPTY, type StartClaudeSessionPtyArgs } from "./claude-pty/driver"
 import {
   type ClaudeSessionConfigHelpersDeps,
+  type OAuthBearers,
   resolveClaudeDriverPreference as resolveClaudeDriverPreferenceFn,
   getEnabledCustomMcpServers as getEnabledCustomMcpServersFn,
   buildOAuthBearers as buildOAuthBearersFn,
@@ -508,7 +509,7 @@ export class AgentCoordinator {
     return getEnabledCustomMcpServersFn(this.claudeSessionConfigDeps())
   }
 
-  async buildOAuthBearers(servers: readonly McpServerConfig[]): Promise<Map<string, string>> {
+  async buildOAuthBearers(servers: readonly McpServerConfig[]): Promise<OAuthBearers> {
     return buildOAuthBearersFn(this.claudeSessionConfigDeps(), servers)
   }
 

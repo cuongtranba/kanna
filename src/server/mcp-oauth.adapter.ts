@@ -51,6 +51,16 @@ interface ResolvedAuthServer {
   metadata: AuthorizationServerMetadata
 }
 
+const REFRESH_SCOPE = "offline_access"
+
+function requestedScope(resourceScopes: readonly string[], metadata: AuthorizationServerMetadata): string {
+  const offersRefresh = metadata.scopes_supported?.includes(REFRESH_SCOPE) === true
+  const scopes = offersRefresh && !resourceScopes.includes(REFRESH_SCOPE)
+    ? [...resourceScopes, REFRESH_SCOPE]
+    : resourceScopes
+  return scopes.join(" ")
+}
+
 async function resolveAuthServer(
   serverUrl: string,
   fetchFn: typeof fetch,
@@ -66,7 +76,7 @@ async function resolveAuthServer(
   const prm: { authorization_servers?: string[]; scopes_supported?: string[] } = await (await fetchFn(prmUrl, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(10_000) })).json()
   const issuer = prm.authorization_servers?.[0]
   if (!issuer) throw new Error("protected-resource metadata has no authorization_servers")
-  const scope = (prm.scopes_supported ?? []).join(" ")
+  const resourceScopes = prm.scopes_supported ?? []
 
   const issuerClean = issuer.replace(/\/$/, "")
   const issuerUrl = new URL(issuer)
@@ -89,7 +99,7 @@ async function resolveAuthServer(
     if (r.ok && ct.includes("json")) {
       const metadata: AuthorizationServerMetadata = await r.json()
       if (metadata.authorization_endpoint && metadata.token_endpoint) {
-        return { issuer, scope, metadata }
+        return { issuer, scope: requestedScope(resourceScopes, metadata), metadata }
       }
     }
   }
@@ -206,6 +216,13 @@ export async function completeMcpOAuth(
 
 const EXPIRY_SKEW_MS = 60_000
 
+export function bearerUsableUntil(oauth: McpOAuthState): number | null {
+  const expiresIn = oauth.tokens?.expires_in
+  if (expiresIn === undefined || expiresIn === null) return null
+  if (oauth.obtainedAt === undefined) return 0
+  return oauth.obtainedAt + expiresIn * 1000 - EXPIRY_SKEW_MS
+}
+
 export interface EnsureFreshDeps {
   fetchFn?: typeof fetch
   persist: (oauth: McpOAuthState) => void
@@ -220,13 +237,8 @@ export async function ensureFreshMcpToken(
   const oauth = config.transport === "stdio" ? undefined : config.oauth
   if (!oauth?.tokens?.access_token) throw new Error("server is not authenticated")
   const tokens = oauth.tokens
-  if (tokens.expires_in === undefined || tokens.expires_in === null) {
-    return tokens.access_token
-  }
-  const expiresInMs = tokens.expires_in * 1000
-  const stillValid =
-    oauth.obtainedAt !== undefined && oauth.obtainedAt + expiresInMs - EXPIRY_SKEW_MS > Date.now()
-  if (stillValid) return tokens.access_token
+  const usableUntil = bearerUsableUntil(oauth)
+  if (usableUntil === null || usableUntil > Date.now()) return tokens.access_token
   if (!tokens.refresh_token) throw new Error("access token expired and no refresh token")
   const issuer = oauth.issuer
   if (!issuer) throw new Error("missing issuer for refresh")

@@ -28,6 +28,7 @@ import { resolveProjectInstructions, resolveSpawnPaths, resolveStackProjects } f
 import { openrouterAuthReady, claudeAuthReady } from "./provider-catalog"
 import { OAuthPoolUnavailableError } from "./oauth-errors"
 import type { startClaudeSession as StartClaudeSessionFn } from "./claude-session-start"
+import type { OAuthBearers } from "./claude-session-config-helpers"
 
 
 interface SubagentWiringStore {
@@ -66,7 +67,7 @@ export interface SubagentWiringDeps {
 
   resolveClaudeDriverPreference: () => ClaudeDriverPreference
   getEnabledCustomMcpServers: () => readonly McpServerConfig[]
-  buildOAuthBearers: (servers: readonly McpServerConfig[]) => Promise<Map<string, string>>
+  buildOAuthBearers: (servers: readonly McpServerConfig[]) => Promise<OAuthBearers>
   resolveChatPolicy: (chatId: string) => ChatPermissionPolicy
   emitStateChange: (chatId: string) => void
   buildPoolUnavailableMessage: (reservedFor: string, scopeSuffix: string) => string
@@ -98,7 +99,7 @@ export function buildClaudeSubagentStarter(
 ): NonNullable<BuildSubagentProviderRunArgs["startClaudeSession"]> {
   return async (a) => {
     const enabledMcpServers = deps.getEnabledCustomMcpServers()
-    const oauthBearers = await deps.buildOAuthBearers(enabledMcpServers)
+    const { byServerId: oauthBearers } = await deps.buildOAuthBearers(enabledMcpServers)
     if (deps.resolveClaudeDriverPreference() === "pty") {
       return deps.startClaudeSessionPTYFn({
         chatId: a.chatId ?? "",

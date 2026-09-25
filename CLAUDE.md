@@ -1454,6 +1454,19 @@ re-discovery there returns SPA HTML and was the cause of "token refresh failed"
 forcing an 8 h re-auth; see adr-20260630-mcp-oauth-refresh-metadata). Entries
 authenticated before this fix lack persisted metadata and must re-auth once.
 
+**Kanna asks for `offline_access` whenever the AS advertises it.** The requested
+scope is the protected-resource metadata's `scopes_supported` plus
+`offline_access` when the AS metadata's `scopes_supported` lists it
+(`requestedScope`, `mcp-oauth.adapter.ts`). The PRM alone is not enough: it
+names the RESOURCE's scopes, and `offline_access` is an authorization-server
+scope that a well-behaved PRM never lists. Undercroft's `/mcp` is the case that
+found it — its PRM says `undercroft:read undercroft:write`, its access tokens
+live 15 minutes, and Better Auth issues a refresh token only to a client that
+asked for `offline_access`. Without it `ensureFreshMcpToken` threw `access token
+expired and no refresh token` a quarter hour after every connect. The MCP SDK
+(1.29) does not add the scope itself. An entry authenticated before this fix
+holds no refresh token and must reconnect once.
+
 **Storage.** OAuth state (`clientByIssuer`, `tokens`, `issuer`, `metadata`, `flow`) is
 stored inside the server entry in `settings.json` (file mode 0600). The
 `flow` field is present only mid-flow and cleared on complete or cancel.
@@ -1462,11 +1475,26 @@ serves multiple servers.
 
 **Bearer injection.** At spawn, `AgentCoordinator.buildOAuthBearers` iterates
 enabled network servers, calls `ensureFreshMcpToken` (refresh if needed, then
-return the access token), and builds a `ReadonlyMap<serverId, token>`. Both
+return the access token), and returns `OAuthBearers` — the
+`ReadonlyMap<serverId, token>` plus `usableUntil`, the soonest moment any of
+those tokens stops being usable (`bearerUsableUntil`: expiry minus the same 60 s
+skew the refresh uses; `null` when no token carries an expiry). Both
 `buildUserMcpServers` (SDK driver) and `buildMcpConfigJson` (PTY driver) merge
 `Authorization: Bearer <token>` into the transport headers for that server.
 `validateMcpServer` also accepts an optional `bearer` for the manual "Test"
 action on OAuth servers.
+
+**A header is fixed for the life of the claude process, so a stale bearer is a
+respawn trigger.** The token rides the MCP config the CLI reads once at spawn;
+refreshing the stored token does nothing for a session that is already running,
+which kept sending the old one and got 401s until something else respawned it.
+`spawnClaudeTurn` records `usableUntil` on `ClaudeSessionState.mcpBearersUsableUntil`
+and `mcpBearersStale(now)` joins `contextClearPending` in the respawn condition,
+so the next turn after expiry starts a fresh process (`--resume`, context kept)
+with a freshly refreshed bearer. **It stands aside while `isHoldingWork(now)`**:
+with 15-minute tokens a respawn would otherwise kill a background task or
+workflow every quarter hour, and a stale MCP header is the smaller loss. Subagent
+sessions are per-run and are not re-checked.
 
 # Configurable Model Catalog (customModels)
 

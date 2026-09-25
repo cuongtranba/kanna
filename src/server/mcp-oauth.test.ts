@@ -95,6 +95,52 @@ test("registers as a native client, so an AS that refuses a web client a loopbac
   expect(result.kind).toBe("authorizationUrl")
 })
 
+function withAsScopes(scopesSupported: string[]): { fetchFn: typeof fetch; registrations: string[] } {
+  const base = fakeFetch()
+  const registrations: string[] = []
+  const fetchFn = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input.toString()
+    if (url === "https://as.test/v1/mcp/.well-known/openid-configuration") {
+      return new Response(
+        JSON.stringify({
+          issuer: "https://as.test/v1/mcp",
+          authorization_endpoint: "https://as.test/oauth/authorize",
+          token_endpoint: "https://as.test/oauth/token",
+          registration_endpoint: "https://as.test/oauth/register",
+          response_types_supported: ["code"],
+          code_challenge_methods_supported: ["S256"],
+          scopes_supported: scopesSupported,
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      )
+    }
+    if (url === "https://as.test/oauth/register") registrations.push(String(init?.body))
+    return base(input, init)
+  }) as typeof fetch
+  return { fetchFn, registrations }
+}
+
+async function requestedScope(fetchFn: typeof fetch): Promise<string | null> {
+  const result = await startMcpOAuth(baseConfig(), { fetchFn, persist: () => { } })
+  if (result.kind !== "authorizationUrl") throw new Error("expected an authorization URL")
+  return new URL(result.authorizationUrl).searchParams.get("scope")
+}
+
+test("asks for offline_access when the authorization server offers it, so a short-lived token can be refreshed", async () => {
+  const { fetchFn, registrations } = withAsScopes(["a", "b", "openid", "offline_access"])
+
+  const scope = await requestedScope(fetchFn)
+
+  expect(scope?.split(" ")).toEqual(["a", "b", "offline_access"])
+  expect(registrations.at(-1)).toContain('"scope":"a b offline_access"')
+})
+
+test("does not ask for offline_access when the authorization server does not offer it", async () => {
+  const { fetchFn } = withAsScopes(["a", "b"])
+
+  expect(await requestedScope(fetchFn)).toBe("a b")
+})
+
 test("startMcpOAuth returns alreadyAuthenticated when tokens are present", async () => {
   const cfg: McpServerConfig = {
     id: "s1",
