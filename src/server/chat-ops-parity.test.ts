@@ -7,6 +7,8 @@ import { deriveChatSnapshot } from "./read-models"
 import { diffChatMeta } from "./chat-ops-diff"
 import type { ChatMetaSignatures } from "./chat-ops-diff"
 import { applyChatOps } from "../shared/chat-ops"
+import { parseSchedule } from "../shared/cron/parse-schedule"
+import { AUTO_CONTINUE_EVENT_VERSION } from "./auto-continue/events"
 import type { ChatSnapshot, KannaStatus, TranscriptEntry } from "../shared/types"
 
 const FIXED_NOW = 1700000100000
@@ -108,6 +110,24 @@ describe("chat ops parity (snapshot path vs ops path)", () => {
       activeStatuses.delete(chat.id)
       await store.enqueueMessage(chat.id, { content: "queued later", attachments: [] })
       await assertParityAfterBatch()
+
+      const schedule = parseSchedule("every 5m")
+      if (!schedule.ok) throw new Error(schedule.message)
+      const cronBase = { v: AUTO_CONTINUE_EVENT_VERSION, chatId: chat.id, scheduleId: "cron-parity", timestamp: FIXED_NOW } as const
+      await store.appendAutoContinueEvent({
+        ...cronBase,
+        kind: "cron_armed",
+        instruction: "check ci",
+        mode: "inline",
+        scheduleText: "every 5m",
+        schedule: schedule.schedule,
+      })
+      await assertParityAfterBatch()
+      await store.appendAutoContinueEvent({ ...cronBase, kind: "cron_paused" })
+      await assertParityAfterBatch()
+      await store.appendAutoContinueEvent({ ...cronBase, kind: "cron_resumed" })
+      await assertParityAfterBatch()
+      expect(clientState.cronJobs.map((job) => job.paused)).toEqual([false])
 
       for (let i = 300; i < 340; i++) {
         await store.appendMessage(chat.id, textEntry(i))

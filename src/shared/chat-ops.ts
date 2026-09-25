@@ -1,9 +1,6 @@
 import type { ChatRuntime, ChatSnapshot, TranscriptEntry } from "./types"
 
-export type ChatSections = Pick<ChatSnapshot,
-  | "queuedMessages" | "availableProviders"
-  | "schedules" | "liveScheduleId" | "tunnels" | "liveTunnelId"
-  | "resolvedBindings" | "subagentRuns" | "loopProgress">
+export type ChatSections = Omit<ChatSnapshot, "runtime" | "messages" | "history" | "seq">
 
 export type ChatOp =
   | { kind: "entries.append"; entries: TranscriptEntry[] }
