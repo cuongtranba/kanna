@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.60.3](https://github.com/cuongtranba/kanna/compare/v1.60.2...v1.60.3) (2026-09-25)
+
+
+### Bug Fixes
+
+* **mcp-oauth:** request offline_access and respawn a session whose bearer expired ([#1167](https://github.com/cuongtranba/kanna/issues/1167)) ([0b085df](https://github.com/cuongtranba/kanna/commit/0b085dfdb9296eccf8f273cf218cb7061715e536))
+
 ## [1.60.2](https://github.com/cuongtranba/kanna/compare/v1.60.1...v1.60.2) (2026-09-25)
 
 
