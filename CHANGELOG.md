@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.60.1](https://github.com/cuongtranba/kanna/compare/v1.60.0...v1.60.1) (2026-09-25)
+
+
+### Bug Fixes
+
+* **tasks:** keep a subagent's native tasks whole and in their own scope ([#1161](https://github.com/cuongtranba/kanna/issues/1161)) ([cb8d902](https://github.com/cuongtranba/kanna/commit/cb8d9024c7b2452ba25257c355bfd369d0f0c021))
+
 ## [1.60.0](https://github.com/cuongtranba/kanna/compare/v1.59.2...v1.60.0) (2026-09-25)
 
 
