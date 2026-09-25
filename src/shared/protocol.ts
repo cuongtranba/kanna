@@ -133,6 +133,7 @@ export type ClientCommand =
   | { type: "sessions.importClaude" }
   | { type: "sessions.importClaudeSession"; sessionIds: string[] }
   | { type: "project.remove"; projectId: string }
+  | { type: "project.delete"; projectId: string }
   | { type: "project.setStar"; projectId: string; starred: boolean }
   | { type: "project.setInstructions"; projectId: string; instructions: string }
   | { type: "sidebar.reorderProjectGroups"; projectIds: string[] }

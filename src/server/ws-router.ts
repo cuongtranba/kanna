@@ -49,7 +49,7 @@ import { handlePushCommand } from "./ws-router-push"
 import { handleMiscCommand } from "./ws-router-misc"
 import type { MiscCommandDeps } from "./ws-router-misc"
 import { handleProjectCommand } from "./ws-router-project"
-import { handleChatCommand } from "./ws-router-chat"
+import { deleteChatWithTeardown, handleChatCommand } from "./ws-router-chat"
 import type { ChatCommandDeps } from "./ws-router-chat"
 import {
   ensureSnapshotSignatures,
@@ -332,6 +332,7 @@ export function createWsRouter({
           }),
           openExternalFn: openExternal,
           terminals,
+          deleteChat: (chatId) => deleteChatWithTeardown(buildChatDeps(ws), chatId),
           send: sendToClient,
           broadcastSidebar: () => broadcast.broadcastFilteredSnapshots({ includeSidebar: true }),
         },

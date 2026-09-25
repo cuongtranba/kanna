@@ -27,6 +27,7 @@ import { usePaneLayoutStore } from "../stores/paneLayoutStore"
 import { collectPanes } from "../lib/paneTree"
 import { useSlashCommandsStore } from "../stores/slashCommandsStore"
 import { onRejected } from "../../shared/errors"
+import { getPathBasename } from "../lib/formatters"
 import { runDetached } from "../lib/runDetached"
 import { runPendingAction } from "../stores/pendingActionsStore"
 import { decodeLegacyProviderDefaults, readPersistedZustandState } from "./legacyProviderDefaults"
@@ -315,6 +316,7 @@ export interface AppGlobalState extends StackCommands {
   handleDeleteChat: (chat: SidebarChatRow) => Promise<void>
   handleDeleteBulkChats: (chatIds: string[]) => Promise<void>
   handleHideProject: (projectId: string) => Promise<void>
+  handleDeleteProject: (projectId: string) => Promise<void>
   handleToggleProjectStar: (projectId: string, starred: boolean) => Promise<void>
   handleReorderProjectGroups: (projectIds: string[]) => Promise<void>
   handleCreateStackChat:(primaryProjectId: string, stackId: string, stackBindings: Array<{ projectId: string; worktreePath: string; role: "primary" | "additional" }>) => Promise<void>
@@ -1093,9 +1095,9 @@ export function useAppGlobalState(
     }
   }, [chatNavigator, socket])
 
-  const handleHideProject = useCallback(async (projectId: string) => {
+  const removeProject = useCallback(async (type: "project.remove" | "project.delete", projectId: string) => {
     try {
-      await socket.command({ type: "project.remove", projectId })
+      await socket.command({ type, projectId })
       useTerminalLayoutStore.getState().clearProject(projectId)
       useRightSidebarStore.getState().clearProject(projectId)
       if (runtime?.projectId === projectId) {
@@ -1106,6 +1108,22 @@ export function useAppGlobalState(
       useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
     }
   }, [chatNavigator, runtime, socket])
+
+  const handleHideProject = useCallback((projectId: string) => removeProject("project.remove", projectId), [removeProject])
+
+  const handleDeleteProject = useCallback(async (projectId: string) => {
+    const group = sidebarProjectGroups.find((candidate) => candidate.groupKey === projectId)
+    const name = group ? getPathBasename(group.localPath) : "this project"
+    const chatCount = (group?.chats.length ?? 0) + (group?.archivedChats?.length ?? 0)
+    const confirmed = await dialog.confirm({
+      title: "Delete Project",
+      description: `Delete "${name}" and its ${chatCount} chat${chatCount === 1 ? "" : "s"}, archived ones included? The folder on disk is not touched. This cannot be undone.`,
+      confirmLabel: "Delete",
+      confirmVariant: "destructive",
+    })
+    if (!confirmed) return
+    await removeProject("project.delete", projectId)
+  }, [dialog, removeProject, sidebarProjectGroups])
 
   const handleToggleProjectStar = useCallback(async (projectId: string, starred: boolean) => {
     try {
@@ -1332,6 +1350,7 @@ export function useAppGlobalState(
     handleDeleteChat,
     handleDeleteBulkChats,
     handleHideProject,
+    handleDeleteProject,
     handleToggleProjectStar,
     handleReorderProjectGroups,
     ...stackCommands,

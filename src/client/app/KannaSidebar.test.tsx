@@ -53,6 +53,7 @@ function renderSidebar(data: SidebarData) {
         onCopyPath: async () => undefined,
         onOpenExternalPath: async () => undefined,
         onHideProject: async () => undefined,
+        onDeleteProject: async () => undefined,
         onToggleStar: async () => undefined,
         onSetProjectInstructions: async () => undefined,
         onReorderProjectGroups: async () => undefined,

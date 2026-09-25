@@ -15,7 +15,10 @@ export interface ProjectStoreDep {
   setProjectStar(projectId: string, starred: boolean): Promise<void>
   setProjectInstructions(projectId: string, instructions: string): Promise<void>
   setSidebarProjectOrder(projectIds: string[]): Promise<void>
-  state: { projectIdsByPath: ReadonlyMap<string, string> }
+  state: {
+    projectIdsByPath: ReadonlyMap<string, string>
+    chatsById: ReadonlyMap<string, Pick<ChatRecord, "id" | "projectId" | "deletedAt">>
+  }
 }
 
 export interface ProjectUpdateManagerDep {
@@ -48,6 +51,7 @@ export interface ProjectCommandDeps {
   importSessionsByIdsFn: (sessionIds: string[]) => Promise<ImportSessionsByIdsResult>
   openExternalFn: (command: Extract<ClientCommand, { type: "system.openExternal" }>) => Promise<void>
   terminals: ProjectTerminalsDep
+  deleteChat: (chatId: string) => Promise<void>
   send: (envelope: ServerEnvelope) => void
   broadcastSidebar: () => Promise<void>
 }
@@ -70,6 +74,7 @@ export async function handleProjectCommand(
     importSessionsByIdsFn,
     openExternalFn,
     terminals,
+    deleteChat,
     send,
     broadcastSidebar,
   } = deps
@@ -152,6 +157,20 @@ export async function handleProjectCommand(
       }
       send({ v: PROTOCOL_VERSION, type: "ack", id })
       analytics.track("project_removed")
+      return true
+    }
+    case "project.delete": {
+      const project = store.getProject(command.projectId)
+      if (!project) throw new Error("Project not found")
+      const chatIds = [...store.state.chatsById.values()]
+        .filter((chat) => chat.projectId === command.projectId && !chat.deletedAt)
+        .map((chat) => chat.id)
+      for (const chatId of chatIds) await deleteChat(chatId)
+      await store.removeProject(command.projectId)
+      terminals.closeByCwd(project.localPath)
+      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      analytics.track("project_deleted")
+      await broadcastSidebar()
       return true
     }
     case "project.setStar": {

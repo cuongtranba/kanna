@@ -14,7 +14,7 @@ import type { UpdateInstallResult, UpdateSnapshot } from "../shared/types"
 
 function makeStore(overrides: Partial<ProjectStoreDep> = {}): ProjectStoreDep {
   return {
-    state: { projectIdsByPath: new Map() },
+    state: { projectIdsByPath: new Map(), chatsById: new Map() },
     openProject: mock(async () => ({ id: "proj-1" })),
     removeProject: mock(async () => {}),
     getProject: mock(() => ({ id: "proj-1", localPath: "/tmp/proj" })),
@@ -93,6 +93,7 @@ function makeDeps(
     diffStore: makeDiffStore(),
     analytics,
     terminals: makeTerminals(),
+    deleteChat: async () => {},
     refreshDiscovery: mock(async () => []),
     ensureProjectDirectory: mock(async () => {}),
     resolveLocalPath: (p) => p,
@@ -186,7 +187,7 @@ describe("handleProjectCommand", () => {
   test("project.open — new project — tracks analytics, acks with projectId", async () => {
     const deps = makeDeps({
       storeOverrides: {
-        state: { projectIdsByPath: new Map() },
+        state: { projectIdsByPath: new Map(), chatsById: new Map() },
         openProject: mock(async () => ({ id: "new-proj" })),
       },
     })
@@ -206,7 +207,7 @@ describe("handleProjectCommand", () => {
   test("project.open — existing project — skips analytics", async () => {
     const deps = makeDeps({
       storeOverrides: {
-        state: { projectIdsByPath: new Map([["/tmp/existing", "old-id"]]) },
+        state: { projectIdsByPath: new Map([["/tmp/existing", "old-id"]]), chatsById: new Map() },
         openProject: mock(async () => ({ id: "old-id" })),
       },
     })
@@ -222,7 +223,7 @@ describe("handleProjectCommand", () => {
   test("project.create — new project — tracks both analytics events, acks", async () => {
     const deps = makeDeps({
       storeOverrides: {
-        state: { projectIdsByPath: new Map() },
+        state: { projectIdsByPath: new Map(), chatsById: new Map() },
         openProject: mock(async () => ({ id: "created-proj" })),
       },
     })

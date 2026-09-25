@@ -887,6 +887,61 @@ describe("ws-router", () => {
     }
   })
 
+  test("project.delete deletes every chat in the project, archived ones included, and no other project's", async () => {
+    const store = createTestEventStore(`/project-delete-${randomUUID()}`)
+    await store.initialize()
+    const doomed = await store.openProject("/tmp/project-delete-doomed")
+    const kept = await store.openProject("/tmp/project-delete-kept")
+    const activeChat = await store.createChat(doomed.id)
+    const archivedChat = await store.createChat(doomed.id)
+    await store.archiveChat(archivedChat.id)
+    const otherChat = await store.createChat(kept.id)
+    const router = createWsRouter({
+      store,
+      agent: {
+        cancel: async () => {},
+        listLiveSchedules: () => [],
+        cancelAutoContinue: async () => {},
+        disarmCronJobsForChat: async () => {},
+        closeChat: async () => {},
+        getActiveStatuses: () => new Map(),
+        getDrainingChatIds: () => new Set(),
+        getWaitStartedAtByChatId: () => new Map(),
+      } as never,
+      terminals: {
+        closeByCwd: () => {},
+        getSnapshot: () => null,
+        onEvent: () => () => {},
+      } as never,
+      keybindings: {
+        getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT,
+        onChange: () => () => {},
+      } as never,
+      refreshDiscovery: async () => [],
+      getDiscoveredProjects: () => [],
+      machineDisplayName: "Local Machine",
+      updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
+    })
+    const ws = new FakeWebSocket()
+
+    await router.handleMessage(
+      ws as never,
+      JSON.stringify({
+        v: 1,
+        type: "command",
+        id: "project-delete-1",
+        command: { type: "project.delete", projectId: doomed.id },
+      })
+    )
+
+    expect(ws.sent[0]).toMatchObject({ type: "ack", id: "project-delete-1" })
+    expect(store.getChat(activeChat.id)).toBeNull()
+    expect(store.getChat(archivedChat.id)).toBeNull()
+    expect(store.getChat(otherChat.id)?.id).toBe(otherChat.id)
+    expect(store.listProjects().map((project) => project.id)).toEqual([kept.id])
+  })
+
   test("acks terminal.input without rebroadcasting terminal snapshots", async () => {
     const router = createWsRouter({
       store: { state: createEmptyState() } as never,

@@ -8,6 +8,7 @@ export type ProjectAction =
   | "project.openEditor"
   | "project.setStar"
   | "project.remove"
+  | "project.delete"
   | "project.setInstructions"
 
 const CHAT_ROW_ACTIONS: readonly ChatRowAction[] = ["chat.rename", "chat.fork", "chat.archive", "chat.delete", "chat.openInFinder"]
@@ -18,6 +19,7 @@ const PROJECT_ACTIONS: readonly ProjectAction[] = [
   "project.openEditor",
   "project.setStar",
   "project.remove",
+  "project.delete",
   "project.setInstructions",
 ]
 

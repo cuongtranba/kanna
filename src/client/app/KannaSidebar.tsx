@@ -91,6 +91,7 @@ interface KannaSidebarProps {
   onCopyPath: (localPath: string) => Promise<void>
   onOpenExternalPath: (action: "open_finder" | "open_editor", localPath: string) => Promise<void>
   onHideProject: (projectId: string) => Promise<void>
+  onDeleteProject: (projectId: string) => Promise<void>
   onToggleStar: (projectId: string, starred: boolean) => Promise<void>
   onSetProjectInstructions: (projectId: string, instructions: string) => Promise<void>
   onReorderProjectGroups: (projectIds: string[]) => Promise<void>
@@ -132,6 +133,7 @@ function KannaSidebarImpl({
   onCopyPath,
   onOpenExternalPath,
   onHideProject,
+  onDeleteProject,
   onToggleStar,
   onSetProjectInstructions,
   onReorderProjectGroups,
@@ -848,6 +850,7 @@ function KannaSidebarImpl({
                   onCopyPath={onCopyPath}
                   onOpenExternalPath={onOpenExternalPath}
                   onHideProject={onHideProject}
+                  onDeleteProject={onDeleteProject}
                   onOpenBoards={handleOpenBoards}
                   onToggleStar={onToggleStar}
                   onSetInstructions={onSetProjectInstructions}
@@ -871,6 +874,7 @@ function KannaSidebarImpl({
               onCopyPath={onCopyPath}
               onOpenExternalPath={onOpenExternalPath}
               onHideProject={onHideProject}
+              onDeleteProject={onDeleteProject}
               onOpenBoards={handleOpenBoards}
               onToggleStar={onToggleStar}
               onSetInstructions={onSetProjectInstructions}

@@ -34,6 +34,7 @@ export function ProjectSectionMenu({
   onToggleStar,
   onEditInstructions,
   onHide,
+  onDelete,
   children,
 }: {
   editorLabel: string
@@ -46,6 +47,7 @@ export function ProjectSectionMenu({
   onToggleStar: () => void
   onEditInstructions?: () => void
   onHide: () => void
+  onDelete?: () => void
   children: ReactNode
 }) {
   return (
@@ -134,6 +136,18 @@ export function ProjectSectionMenu({
           <EyeOff className="h-3.5 w-3.5" />
           <span className="text-xs font-medium">Hide</span>
         </ContextMenuItem>
+        {onDelete ? (
+          <ContextMenuItem
+            onSelect={(event) => {
+              event.stopPropagation()
+              onDelete()
+            }}
+            className="text-destructive hover:bg-destructive/10 focus:bg-destructive/10"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            <span className="text-xs font-medium">Delete project</span>
+          </ContextMenuItem>
+        ) : null}
       </ContextMenuContent>
     </ContextMenu>
   )
