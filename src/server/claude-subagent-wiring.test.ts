@@ -64,7 +64,7 @@ function makeDeps(overrides: Partial<SubagentWiringDeps> = {}): SubagentWiringDe
     realpath: (p) => p,
     resolveClaudeDriverPreference: () => "sdk",
     getEnabledCustomMcpServers: () => [],
-    buildOAuthBearers: async () => new Map(),
+    buildOAuthBearers: async () => ({ byServerId: new Map(), usableUntil: null }),
     resolveChatPolicy: () => ({ mode: "acceptEdits" } as never),
     emitStateChange: () => {},
     buildPoolUnavailableMessage: () => "no token available",
@@ -120,7 +120,7 @@ describe("buildClaudeSubagentStarter", () => {
         return {} as never
       },
       getEnabledCustomMcpServers: () => [{ id: "s1", name: "server1", transport: "stdio", command: "npx", args: [], env: {}, disabled: false }] as never,
-      buildOAuthBearers: async () => new Map([["s1", "bearer-token"]]),
+      buildOAuthBearers: async () => ({ byServerId: new Map([["s1", "bearer-token"]]), usableUntil: null }),
     })
     const starter = buildClaudeSubagentStarter(deps)
     await starter({

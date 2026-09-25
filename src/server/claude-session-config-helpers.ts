@@ -3,6 +3,7 @@ import type { ClaudeDriverPreference, McpServerConfig, McpOAuthState } from "../
 import type { ChatPermissionPolicy, ChatPermissionPolicyOverride } from "../shared/permission-policy"
 import { mergePolicyOverride } from "../shared/permission-policy"
 import { log } from "../shared/log"
+import { bearerUsableUntil } from "./mcp-oauth.adapter"
 
 
 interface AppSettingsLike {
@@ -63,25 +64,40 @@ export function getEnabledCustomMcpServers(
   return list.filter((s) => s.enabled)
 }
 
+export interface OAuthBearers {
+  byServerId: ReadonlyMap<string, string>
+  usableUntil: number | null
+}
+
+function earlierDeadline(a: number | null, b: number | null): number | null {
+  if (a === null) return b
+  if (b === null) return a
+  return Math.min(a, b)
+}
+
 export async function buildOAuthBearers(
   deps: ClaudeSessionConfigHelpersDeps,
   servers: readonly McpServerConfig[],
-): Promise<Map<string, string>> {
-  const bearers = new Map<string, string>()
+): Promise<OAuthBearers> {
+  const byServerId = new Map<string, string>()
+  let usableUntil: number | null = null
   for (const s of servers) {
     if (s.transport === "stdio" || !s.oauth || s.oauth.status !== "authenticated") continue
+    let current: McpOAuthState = s.oauth
     try {
       const token = await deps.ensureFreshToken(s, {
         persist: (oauth) => {
+          current = oauth
           if (deps.persistOAuthState) deps.persistOAuthState(s.id, oauth)
         },
       })
-      bearers.set(s.id, token)
+      byServerId.set(s.id, token)
+      usableUntil = earlierDeadline(usableUntil, bearerUsableUntil(current))
     } catch (err) {
       log.warn("[kanna/mcp-oauth] token refresh failed for", s.name, String(err))
     }
   }
-  return bearers
+  return { byServerId, usableUntil }
 }
 
 export function resolveChatPolicy(

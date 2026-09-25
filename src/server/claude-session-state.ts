@@ -81,6 +81,7 @@ export interface ClaudeSessionStateInit {
   suppressSessionTokenPersist: boolean
   backgroundTaskWakeSuppressed: boolean
   workflowsDirRegistered?: boolean
+  mcpBearersUsableUntil?: number | null
 }
 
 type BackgroundTaskMeta = { id: string; taskType: string | null; description: string | null }
@@ -117,6 +118,7 @@ export class ClaudeSessionState {
   suppressSessionTokenPersist: boolean
   backgroundTaskWakeSuppressed: boolean
   contextClearPending = false
+  mcpBearersUsableUntil: number | null
 
   constructor(init: ClaudeSessionStateInit) {
     this.id = init.id
@@ -149,8 +151,14 @@ export class ClaudeSessionState {
     this.cancelledResultPending = init.cancelledResultPending
     this.suppressSessionTokenPersist = init.suppressSessionTokenPersist
     this.backgroundTaskWakeSuppressed = init.backgroundTaskWakeSuppressed
+    this.mcpBearersUsableUntil = init.mcpBearersUsableUntil ?? null
   }
 
+
+  mcpBearersStale(now: number): boolean {
+    if (this.mcpBearersUsableUntil === null || now < this.mcpBearersUsableUntil) return false
+    return !this.isHoldingWork(now)
+  }
 
   isHoldingWork(now: number): boolean {
     if (this.backgroundTasks.size === 0) return false

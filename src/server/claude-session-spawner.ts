@@ -34,6 +34,7 @@ import type { PtyInstanceRegistry } from "./claude-pty/pty-instance-registry"
 import type { WorkflowRegistry } from "./workflow-registry"
 import type { SubagentTranscriptRegistry } from "./subagent-transcript-registry"
 import type { startClaudeSession as StartClaudeSessionFn, CompactionEvent } from "./claude-session-start"
+import type { OAuthBearers } from "./claude-session-config-helpers"
 
 
 interface SpawnOAuthPool {
@@ -92,7 +93,7 @@ export interface SpawnClaudeTurnDeps {
   getSubagents: () => Subagent[]
   getAppSettingsSnapshot: () => { globalPromptAppend?: string }
   getEnabledCustomMcpServers: () => readonly McpServerConfig[]
-  buildOAuthBearers: (servers: readonly McpServerConfig[]) => Promise<Map<string, string>>
+  buildOAuthBearers: (servers: readonly McpServerConfig[]) => Promise<OAuthBearers>
   setupLoop: (chatId: string, input: LoopSetupInput) => Promise<SetupLoopHandlerResult>
   armCron: (chatId: string, command: string) => Promise<{ jobId: string }>
   updateCron?: (chatId: string, jobId: string, patch: import("../shared/cron/types").CronJobPatch) => Promise<void>
@@ -123,7 +124,8 @@ export async function spawnClaudeTurn(
     args.forkSession ||
     session.additionalDirectories.join("|") !== (args.additionalDirectories ?? []).join("|") ||
     session.loopArmedAtSpawn !== loopArmedNow ||
-    session.contextClearPending
+    session.contextClearPending ||
+    session.mcpBearersStale(Date.now())
   ) {
     if (session) {
       deps.closeClaudeSession(args.chatId, session)
@@ -169,7 +171,8 @@ export async function spawnClaudeTurn(
       getMentionedSubagentIds: () => deps.mentionedSubagentIdsByChat.get(chatIdForCtx) ?? [],
     }
     const enabledMcpServers = deps.getEnabledCustomMcpServers()
-    const oauthBearers = await deps.buildOAuthBearers(enabledMcpServers)
+    const { byServerId: oauthBearers, usableUntil: mcpBearersUsableUntil } =
+      await deps.buildOAuthBearers(enabledMcpServers)
     let started: ClaudeSessionHandle
     try {
       started = usePty
@@ -307,6 +310,7 @@ export async function spawnClaudeTurn(
       cancelledResultPending: 0,
       suppressSessionTokenPersist: false,
       backgroundTaskWakeSuppressed: false,
+      mcpBearersUsableUntil,
     })
     deps.claudeSessions.set(args.chatId, session)
     deps.enforceClaudeSessionBudget(args.chatId)

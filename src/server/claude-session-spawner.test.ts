@@ -121,7 +121,7 @@ function makeDeps(overrides: Partial<SpawnClaudeTurnDeps> = {}): SpawnClaudeTurn
     getSubagents: () => [],
     getAppSettingsSnapshot: () => ({}),
     getEnabledCustomMcpServers: () => [],
-    buildOAuthBearers: async () => new Map(),
+    buildOAuthBearers: async () => ({ byServerId: new Map(), usableUntil: null }),
     setupLoop: async () => ({ ok: false as const, errors: [] }),
     stopLoop: async () => {},
     resumeLoop: async () => ({ resumed: false, reason: "no_previous_loop" } as const),
@@ -313,6 +313,46 @@ describe("spawnClaudeTurn", () => {
       expect(closedSession).toBe(existingSession)
       const newSession = deps.claudeSessions.get("chat-1")
       expect(newSession?.loopArmedAtSpawn).toBe(true)
+    })
+
+    test("respawns a warm session whose MCP bearers are no longer usable, so the new process gets a fresh token", async () => {
+      let closedSession: ClaudeSessionState | undefined
+      const deps = makeDeps({
+        closeClaudeSession: (_, session) => { closedSession = session },
+        buildOAuthBearers: async () => ({ byServerId: new Map([["srv", "fresh"]]), usableUntil: Date.now() + 840_000 }),
+      })
+      const existingSession = makeSession({ mcpBearersUsableUntil: Date.now() - 1 })
+      deps.claudeSessions.set("chat-1", existingSession)
+
+      await spawnClaudeTurn(deps, makeArgs())
+
+      expect(closedSession).toBe(existingSession)
+      expect(deps.claudeSessions.get("chat-1")?.mcpBearersUsableUntil).toBeGreaterThan(Date.now())
+    })
+
+    test("keeps a session whose bearers expired while it holds background work, since a respawn would kill that work", async () => {
+      let closedSession: ClaudeSessionState | undefined
+      const deps = makeDeps({ closeClaudeSession: (_, session) => { closedSession = session } })
+      const existingSession = makeSession({
+        mcpBearersUsableUntil: Date.now() - 1,
+        backgroundTasks: new Map([["task-1", { taskType: null, description: null, startedAt: 0, outputPath: null }]]),
+        backgroundTasksLevelSourced: true,
+      })
+      deps.claudeSessions.set("chat-1", existingSession)
+
+      await spawnClaudeTurn(deps, makeArgs())
+
+      expect(closedSession).toBeUndefined()
+    })
+
+    test("keeps a session whose bearers are still usable", async () => {
+      let closedSession: ClaudeSessionState | undefined
+      const deps = makeDeps({ closeClaudeSession: (_, session) => { closedSession = session } })
+      deps.claudeSessions.set("chat-1", makeSession({ mcpBearersUsableUntil: Date.now() + 60_000 }))
+
+      await spawnClaudeTurn(deps, makeArgs())
+
+      expect(closedSession).toBeUndefined()
     })
   })
 
