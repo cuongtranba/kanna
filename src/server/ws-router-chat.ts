@@ -72,6 +72,24 @@ export interface ChatCommandDeps {
 }
 
 
+export async function deleteChatWithTeardown(
+  deps: Pick<ChatCommandDeps, "store" | "agent" | "followedSessionRegistry">,
+  chatId: string,
+): Promise<void> {
+  const { store, agent, followedSessionRegistry } = deps
+  followedSessionRegistry?.stop(chatId, "chat_deleted")
+  await agent.cancel(chatId)
+  for (const scheduleId of agent.listLiveSchedules(chatId)) {
+    await agent.cancelAutoContinue(chatId, scheduleId, "chat_deleted")
+  }
+  await agent.disarmCronJobsForChat(chatId)
+  await agent.closeChat(chatId)
+  if (agent.toolCallbackService) {
+    await agent.toolCallbackService.cancelAllForChat(chatId, "chat_deleted")
+  }
+  await store.deleteChat(chatId)
+}
+
 export async function handleChatCommand(
   deps: ChatCommandDeps,
   command: ClientCommand,
@@ -126,17 +144,7 @@ export async function handleChatCommand(
       return true
     }
     case "chat.delete": {
-      followedSessionRegistry?.stop(command.chatId, "chat_deleted")
-      await agent.cancel(command.chatId)
-      for (const scheduleId of agent.listLiveSchedules(command.chatId)) {
-        await agent.cancelAutoContinue(command.chatId, scheduleId, "chat_deleted")
-      }
-      await agent.disarmCronJobsForChat(command.chatId)
-      await agent.closeChat(command.chatId)
-      if (agent.toolCallbackService) {
-        await agent.toolCallbackService.cancelAllForChat(command.chatId, "chat_deleted")
-      }
-      await store.deleteChat(command.chatId)
+      await deleteChatWithTeardown(deps, command.chatId)
       send({ v: PROTOCOL_VERSION, type: "ack", id })
       analytics.track("chat_deleted")
       await broadcastSidebar()

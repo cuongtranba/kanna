@@ -34,6 +34,7 @@ interface PaneLayoutState {
   getLayout: () => PaneLayout
   openTab: (target: PaneTabTarget) => void
   closeTab: (tabId: string) => void
+  closeTabsFor: (targets: { chatIds: readonly string[]; boardIds: readonly string[] }) => void
   focusTab: (tabId: string) => void
   focusPane: (paneId: string) => void
   splitPane: (args: { tabId: string; targetPaneId: string; position: SplitPosition }) => void
@@ -81,6 +82,15 @@ export const usePaneLayoutStore = create<PaneLayoutState>()(
           apply((layout) => openTabInLayout(layout, target, { createdAt: 0 })?.layout ?? null),
 
         closeTab: (tabId) => apply((layout) => closeTabInLayout(layout, tabId)),
+
+        closeTabsFor: ({ chatIds, boardIds }) =>
+          apply((layout) => {
+            const doomed = collectPanes(layout.root).flatMap((pane) => pane.tabs).filter(({ target }) =>
+              (target.kind === "chat" && chatIds.includes(target.chatId))
+              || (target.kind === "board" && boardIds.includes(target.boardId)))
+            if (doomed.length === 0) return null
+            return doomed.reduce((current, tab) => closeTabInLayout(current, tab.tabId) ?? current, layout)
+          }),
 
         focusTab: (tabId) => apply((layout) => focusTabInLayout(layout, tabId)),
 

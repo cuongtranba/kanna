@@ -1,8 +1,9 @@
+import { errorMessage } from "../shared/errors"
 import { PROTOCOL_VERSION } from "../shared/types"
 import { resolveSpawnPaths } from "./claude-session-config"
 import type { ChatRecord } from "./events"
 import type { UpdateInstallResult, UpdateSnapshot } from "../shared/types"
-import type { ClientCommand, ImportSessionsByIdsResult, ServerEnvelope } from "../shared/protocol"
+import type { ClientCommand, ImportSessionsByIdsResult, ProjectDeleteResult, ServerEnvelope } from "../shared/protocol"
 import type { ImportClaudeSessionsResult } from "./claude-session-importer.adapter"
 import type { DiscoveredProject } from "./discovery.adapter"
 
@@ -15,7 +16,11 @@ export interface ProjectStoreDep {
   setProjectStar(projectId: string, starred: boolean): Promise<void>
   setProjectInstructions(projectId: string, instructions: string): Promise<void>
   setSidebarProjectOrder(projectIds: string[]): Promise<void>
-  state: { projectIdsByPath: ReadonlyMap<string, string> }
+  deleteProject(projectId: string): Promise<void>
+  state: {
+    projectIdsByPath: ReadonlyMap<string, string>
+    chatsById: ReadonlyMap<string, Pick<ChatRecord, "id" | "projectId" | "deletedAt">>
+  }
 }
 
 export interface ProjectUpdateManagerDep {
@@ -36,6 +41,12 @@ export interface ProjectTerminalsDep {
   closeByCwd(cwd: string): void
 }
 
+export interface ProjectPushDep {
+  getPreferences(): { mutedProjectPaths: string[]; mutedChatIds: string[] }
+  setProjectMute(localPath: string, muted: boolean): Promise<void>
+  setChatMute(chatId: string, muted: boolean): Promise<void>
+}
+
 export interface ProjectCommandDeps {
   store: ProjectStoreDep
   updateManager?: ProjectUpdateManagerDep | null
@@ -48,6 +59,14 @@ export interface ProjectCommandDeps {
   importSessionsByIdsFn: (sessionIds: string[]) => Promise<ImportSessionsByIdsResult>
   openExternalFn: (command: Extract<ClientCommand, { type: "system.openExternal" }>) => Promise<void>
   terminals: ProjectTerminalsDep
+  deleteChat: (chatId: string) => Promise<void>
+  boards?: {
+    purgeProject(projectId: string, chatIds: readonly string[]): { deletedBoardIds: string[]; worktreePaths: readonly string[] }
+  }
+  shares?: { revokeSharesForChat(chatId: string): Promise<void> }
+  push: ProjectPushDep
+  removeWorktree: (repoRoot: string, worktreePath: string) => Promise<void>
+  removeProjectKannaFiles: (localPath: string) => Promise<void>
   send: (envelope: ServerEnvelope) => void
   broadcastSidebar: () => Promise<void>
 }
@@ -154,6 +173,13 @@ export async function handleProjectCommand(
       analytics.track("project_removed")
       return true
     }
+    case "project.delete": {
+      const result = await deleteProjectData(deps, command.projectId)
+      send({ v: PROTOCOL_VERSION, type: "ack", id, result })
+      analytics.track("project_deleted")
+      await broadcastSidebar()
+      return true
+    }
     case "project.setStar": {
       await store.setProjectStar(command.projectId, command.starred)
       send({ v: PROTOCOL_VERSION, type: "ack", id })
@@ -209,5 +235,44 @@ export async function handleProjectCommand(
 
     default:
       return false
+  }
+}
+
+
+async function deleteProjectData(deps: ProjectCommandDeps, projectId: string): Promise<ProjectDeleteResult> {
+  const project = deps.store.getProject(projectId)
+  if (!project) throw new Error("Project not found")
+  const chatIds = [...deps.store.state.chatsById.values()]
+    .filter((chat) => chat.projectId === projectId && !chat.deletedAt)
+    .map((chat) => chat.id)
+  for (const chatId of chatIds) {
+    await deps.shares?.revokeSharesForChat(chatId)
+    await deps.deleteChat(chatId)
+  }
+  deps.terminals.closeByCwd(project.localPath)
+
+  const failures: string[] = []
+  const attempt = async (what: string, run: () => Promise<void>) => {
+    try {
+      await run()
+    } catch (error) {
+      failures.push(`${what}: ${errorMessage(error)}`)
+    }
+  }
+  const boards = deps.boards?.purgeProject(projectId, chatIds) ?? { deletedBoardIds: [], worktreePaths: [] }
+  for (const worktreePath of boards.worktreePaths) {
+    await attempt(`worktree ${worktreePath}`, () => deps.removeWorktree(project.localPath, worktreePath))
+  }
+  await attempt("notification mutes", () => unmuteProject(deps.push, project.localPath, chatIds))
+  await attempt(`${project.localPath}/.kanna`, () => deps.removeProjectKannaFiles(project.localPath))
+  await deps.store.deleteProject(projectId)
+  return { deletedBoardIds: boards.deletedBoardIds, failures }
+}
+
+async function unmuteProject(push: ProjectPushDep, localPath: string, chatIds: readonly string[]): Promise<void> {
+  const { mutedProjectPaths, mutedChatIds } = push.getPreferences()
+  if (mutedProjectPaths.includes(localPath)) await push.setProjectMute(localPath, false)
+  for (const chatId of chatIds) {
+    if (mutedChatIds.includes(chatId)) await push.setChatMute(chatId, false)
   }
 }

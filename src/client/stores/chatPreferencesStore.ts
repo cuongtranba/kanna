@@ -21,6 +21,7 @@ import {
 } from "../../shared/types"
 import { useAppSettingsStore } from "./appSettingsStore"
 import { claudeOptionsPatch, codexOptionsPatch, normalizeDefaultProvider } from "./providerOptionsPatch"
+import { providerDefaultsEqual } from "./providerDefaultsEqual"
 import { log } from "../../shared/log"
 
 function currentCustomModels(): readonly CustomModelEntry[] {
@@ -261,27 +262,6 @@ export function normalizeProviderDefaults(value?: {
   }
 }
 
-function claudeModelOptionsEqual(a: ClaudeModelOptions, b: ClaudeModelOptions) {
-  return a.reasoningEffort === b.reasoningEffort && a.contextWindow === b.contextWindow
-}
-
-function codexModelOptionsEqual(a: CodexModelOptions, b: CodexModelOptions) {
-  return a.reasoningEffort === b.reasoningEffort && a.fastMode === b.fastMode
-}
-
-function providerDefaultsEqual(a: ChatProviderPreferences, b: ChatProviderPreferences) {
-  return (
-    a.claude.model === b.claude.model
-    && a.claude.planMode === b.claude.planMode
-    && claudeModelOptionsEqual(a.claude.modelOptions, b.claude.modelOptions)
-    && a.codex.model === b.codex.model
-    && a.codex.planMode === b.codex.planMode
-    && codexModelOptionsEqual(a.codex.modelOptions, b.codex.modelOptions)
-    && a.openrouter.model === b.openrouter.model
-    && a.openrouter.planMode === b.openrouter.planMode
-  )
-}
-
 function logChatPreferences(message: string, details?: object) {
   if (details === undefined) {
     log.info(`[chat-preferences] ${message}`)
@@ -512,6 +492,7 @@ interface ChatPreferencesState {
   ) => void
   setChatComposerPlanMode: (chatId: string, planMode: boolean) => void
   resetChatComposerFromProvider: (chatId: string, provider: AgentProvider) => void
+  forgetChats: (chatIds: readonly string[]) => void
 }
 
 export function migrateChatPreferencesState(
@@ -796,6 +777,12 @@ export const useChatPreferencesStore = create<ChatPreferencesState>()(
             pendingProviderSyncChatIds: newPending,
           }
         }),
+
+      forgetChats: (chatIds) =>
+        set((state) => ({
+          chatStates: Object.fromEntries(Object.entries(state.chatStates).filter(([chatId]) => !chatIds.includes(chatId))),
+          pendingProviderSyncChatIds: new Set([...state.pendingProviderSyncChatIds].filter((chatId) => !chatIds.includes(chatId))),
+        })),
     }),
     {
       name: "chat-preferences-state",

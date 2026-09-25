@@ -80,6 +80,7 @@ export interface BoardRegistry {
   createBoard(input: CreateBoardInput): Board
   updateBoard(boardId: string, patch: UpdateBoardPatch): Board
   archiveBoard(boardId: string): void
+  purgeProject(projectId: string, chatIds: readonly string[]): { deletedBoardIds: string[]; worktreePaths: readonly string[] }
   createColumn(input: CreateColumnInput): BoardColumn
   updateColumn(columnId: string, patch: UpdateColumnPatch): BoardColumn
   moveColumn(input: MoveColumnInput): BoardColumn
@@ -260,6 +261,14 @@ export function createBoardRegistry(options: CreateBoardRegistryOptions): BoardR
 
     updateBoard: (boardId, patch) => mutate(() => boardId, () => store.updateBoard(boardId, patch)),
     archiveBoard: (boardId) => mutate(() => boardId, () => store.archiveBoard(boardId)),
+    purgeProject: (projectId, chatIds) => {
+      const purge = store.purgeProject(projectId, chatIds)
+      for (const { boardId, owner } of purge.touchedBoards) notify(boardId, owner)
+      const deletedBoardIds = purge.touchedBoards
+        .filter(({ owner }) => owner.kind === "project" && owner.id === projectId)
+        .map(({ boardId }) => boardId)
+      return { deletedBoardIds, worktreePaths: purge.worktreePaths }
+    },
 
     createColumn: (input) => mutate(() => input.boardId, () => store.createColumn(input)),
     updateColumn: (columnId, patch) =>

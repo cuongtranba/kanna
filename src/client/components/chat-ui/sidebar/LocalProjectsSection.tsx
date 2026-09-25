@@ -58,6 +58,7 @@ interface Props {
   onCopyPath?: (localPath: string) => Promise<void>
   onOpenExternalPath?: (action: "open_finder" | "open_editor", localPath: string) => Promise<void>
   onHideProject?: (projectId: string) => Promise<void>
+  onDeleteProject?: (projectId: string) => Promise<void>
   onOpenBoards?: (projectId: string) => void
   onToggleStar?: (projectId: string, starred: boolean) => Promise<void>
   onSetInstructions?: (projectId: string, instructions: string) => Promise<void>
@@ -80,6 +81,7 @@ interface SortableProjectGroupProps {
   onCopyPath?: (localPath: string) => Promise<void>
   onOpenExternalPath?: (action: "open_finder" | "open_editor", localPath: string) => Promise<void>
   onHideProject?: (projectId: string) => Promise<void>
+  onDeleteProject?: (projectId: string) => Promise<void>
   onOpenBoards?: (projectId: string) => void
   onToggleStar?: (projectId: string, starred: boolean) => Promise<void>
   onSetInstructions?: (projectId: string, instructions: string) => Promise<void>
@@ -201,6 +203,7 @@ const SortableProjectGroup = memo(({
   onCopyPath,
   onOpenExternalPath,
   onHideProject,
+  onDeleteProject,
   onOpenBoards,
   onToggleStar,
   onSetInstructions,
@@ -315,6 +318,7 @@ const SortableProjectGroup = memo(({
                   onToggleStar={() => { if (onToggleStar) launch("project.setStar", () => onToggleStar(groupKey, group.starredAt === undefined)) }}
                   onEditInstructions={onSetInstructions ? () => setInstructionsProjectId(groupKey) : undefined}
                   onHide={() => { if (onHideProject) launch("project.remove", () => onHideProject(groupKey)) }}
+                  onDelete={onDeleteProject ? () => launch("project.delete", () => onDeleteProject(groupKey)) : undefined}
                   onOpenBoards={onOpenBoards ? () => onOpenBoards(groupKey) : undefined}
                 >
                   <Button
@@ -474,6 +478,7 @@ const LocalProjectsSectionImpl = function LocalProjectsSection({
   onCopyPath,
   onOpenExternalPath,
   onHideProject,
+  onDeleteProject,
   onOpenBoards,
   onToggleStar,
   onSetInstructions,
@@ -563,6 +568,7 @@ const LocalProjectsSectionImpl = function LocalProjectsSection({
               onCopyPath={onCopyPath}
               onOpenExternalPath={onOpenExternalPath}
               onHideProject={onHideProject}
+              onDeleteProject={onDeleteProject}
               onOpenBoards={onOpenBoards}
               onToggleStar={onToggleStar}
               onSetInstructions={onSetInstructions}

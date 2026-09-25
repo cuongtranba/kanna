@@ -59,6 +59,17 @@ describe("paneLayoutStore", () => {
     expect(findPaneContainingTab(s().getLayout().root, "terminal_2_t1")).toBeNull()
   })
 
+  test("closeTabsFor closes the tabs of deleted chats and boards and keeps the rest", () => {
+    s().openTab({ kind: "chat", chatId: "deleted-chat" })
+    s().openTab({ kind: "board", boardId: "deleted-board" })
+    s().openTab({ kind: "chat", chatId: "kept-chat" })
+
+    s().closeTabsFor({ chatIds: ["deleted-chat"], boardIds: ["deleted-board"] })
+
+    const targets = collectPanes(s().getLayout().root).flatMap((pane) => pane.tabs).map((tab) => tab.target)
+    expect(targets).toEqual([{ kind: "chat", chatId: "kept-chat" }])
+  })
+
   test("a no-op action preserves state identity", () => {
     s().openTab({ kind: "chat", chatId: "c1" })
     const before = s().layout

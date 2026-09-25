@@ -307,6 +307,7 @@ function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
     handleCopyPath,
     handleOpenExternalPath,
     handleHideProject,
+    handleDeleteProject,
     handleToggleProjectStar,
     handleSetProjectInstructions,
     handleReorderProjectGroups,
@@ -417,6 +418,7 @@ function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
       onCopyPath={handleCopyPath}
       onOpenExternalPath={handleOpenExternalPath}
       onHideProject={handleHideProject}
+      onDeleteProject={handleDeleteProject}
       onToggleStar={handleToggleProjectStar}
       onSetProjectInstructions={handleSetProjectInstructions}
       onReorderProjectGroups={handleReorderProjectGroups}
@@ -445,6 +447,7 @@ function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
     handleSidebarEditPermissions,
     handleReorderProjectGroups,
     handleHideProject,
+    handleDeleteProject,
     handleToggleProjectStar,
     handleSetProjectInstructions,
     state.handleSetStackInstructions,

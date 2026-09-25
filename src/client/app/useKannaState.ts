@@ -557,6 +557,7 @@ export interface KannaState {
   handleDeleteChat: (chat: SidebarChatRow) => Promise<void>
   handleDeleteBulkChats: (chatIds: string[]) => Promise<void>
   handleHideProject: (projectId: string) => Promise<void>
+  handleDeleteProject: (projectId: string) => Promise<void>
   handleToggleProjectStar: (projectId: string, starred: boolean) => Promise<void>
   handleReorderProjectGroups: (projectIds: string[]) => Promise<void>
   stacks: StackSummary[]

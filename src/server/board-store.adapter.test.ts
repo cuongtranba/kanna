@@ -161,6 +161,31 @@ describe("boards", () => {
     expect(store.getBoard("nope")).toBeNull()
     expect(() => store.updateBoard("nope", { title: "x" })).toThrow(BoardStoreError)
   })
+
+  test("purging a project deletes its boards, archived ones included, and its cards on stack boards, and nothing else", () => {
+    const store = newStore()
+    const { board, columns } = seedBoard(store)
+    const card = store.createCard({ boardId: board.id, columnId: columns[0].id, title: "Ship it", actor: USER })
+    store.addCardLink(card.id, "worktree", "/repos/.kanna-worktrees/app/ship-it")
+    const archived = store.createBoard({ owner: { kind: "project", id: "project-1" }, title: "Old", definition: SIMPLE_DEFINITION })
+    store.archiveBoard(archived.id)
+    const stackBoard = store.createBoard({ owner: { kind: "stack", id: "stack-1" }, title: "Stack", definition: SIMPLE_DEFINITION })
+    const stackColumn = store.listColumns(stackBoard.id)[0].id
+    const doomedStackCard = store.createCard({ boardId: stackBoard.id, columnId: stackColumn, projectId: "project-1", title: "Mine", actor: USER })
+    const otherStackCard = store.createCard({ boardId: stackBoard.id, columnId: stackColumn, projectId: "project-2", title: "Theirs", actor: USER })
+    store.addCardLink(otherStackCard.id, "chat", "chat-of-project-1")
+    const otherBoard = store.createBoard({ owner: { kind: "project", id: "project-2" }, title: "Other", definition: SIMPLE_DEFINITION })
+
+    const purge = store.purgeProject("project-1", ["chat-of-project-1"])
+
+    expect(purge.worktreePaths).toEqual(["/repos/.kanna-worktrees/app/ship-it"])
+    expect(store.getBoard(board.id)).toBeNull()
+    expect(store.getBoard(archived.id)).toBeNull()
+    expect(store.getCard(doomedStackCard.id)).toBeNull()
+    expect(store.getCard(otherStackCard.id)?.id).toBe(otherStackCard.id)
+    expect(store.listCardLinks(otherStackCard.id)).toEqual([])
+    expect(store.getBoard(otherBoard.id)?.id).toBe(otherBoard.id)
+  })
 })
 
 describe("columns", () => {

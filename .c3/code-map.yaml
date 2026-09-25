@@ -15,6 +15,7 @@ c3-110:
   - src/client/app/PageHeader.tsx
   - src/client/app/chatFocusPolicy.test.ts
   - src/client/app/chatFocusPolicy.ts
+  - src/client/app/forgetDeletedLocally.ts
   - src/client/app/chatNotifications.ts
   - src/client/app/derived.ts
   - src/client/app/sidebarSwipeGesture.ts
@@ -127,6 +128,7 @@ c3-206:
   - src/server/event-store-messages.adapter.ts
   - src/server/event-store-write-ops.test.ts
   - src/server/event-store-write-ops.ts
+  - src/server/event-store.project-delete.test.ts
   - src/server/event-store.test.ts
   - src/server/event-store.ts
 c3-207:
@@ -135,6 +137,8 @@ c3-207:
 c3-208:
   - src/server/chat-ops-diff.test.ts
   - src/server/chat-ops-diff.ts
+  - src/server/project-kanna-files.adapter.test.ts
+  - src/server/project-kanna-files.adapter.ts
   - src/server/ws-router.test.ts
   - src/server/ws-router.ts
 c3-209:

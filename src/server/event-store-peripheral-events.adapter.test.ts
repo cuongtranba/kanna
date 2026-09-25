@@ -48,6 +48,7 @@ function makeDeps(overrides: Partial<PeripheralEventsDeps> = {}): PeripheralEven
     sharesLogPath: "/data/shares.jsonl",
     pushLogPath: "/data/push.jsonl",
     tunnelEventsByChatId: new Map(),
+    isLiveChat: () => true,
     shareEventsAll: [],
     getWriteChain: wc.getWriteChain,
     setWriteChain: wc.setWriteChain,

@@ -2410,6 +2410,37 @@ consumed in `src/server/server.ts`:
 - `KANNA_IMPORT_FOLLOW_IDLE_MS` — the registry stops following a session
   after this long with no file growth. Default `600000`.
 
+# Hide vs Delete project — two different events
+
+**Hide** (`project.remove` → `project_removed`) is reversible: the record stays
+with `deletedAt`, and reopening the folder restores the SAME id, so its chats
+come back. The snapshot therefore KEEPS hidden projects (without their
+`projectIdsByPath` entry). It used to drop them, which silently orphaned a
+hidden project's chats at the first log compaction.
+
+**Delete** (`project.delete` → `deleteProjectData` in `ws-router-project.ts`)
+removes everything Kanna stored: every chat through the same teardown as
+`chat.delete` (which now also removes the transcript file), share tokens,
+boards (`BoardStore.purgeProject` — project boards incl. archived, the
+project's cards on stack boards, chat links), their git worktrees
+(`--force`; branches are kept), notification mutes, the in-folder
+`.kanna/{uploads,outputs,exports}` plus emptied `.kanna` / `.kanna-worktrees`
+dirs, stack membership, the sidebar slot, and `dataDir/projects/<id>`. It ends
+with `project_deleted`, which purges the record, so a reopened folder gets a
+NEW id and nothing keyed by the old one can resurface.
+
+**Nothing lingers in append-only logs past the next boot.** A replayed
+`project_deleted` forces the boot compaction, and three logs that compaction
+never touches are pruned as they load: `tunnels.jsonl` and `shares.jsonl` drop
+events of chats that no longer exist, and `push.jsonl` drops the history of any
+mute whose latest state is unmuted. Only `project_deleted` triggers the forced
+compaction; a single `chat.delete` does not, because compaction also truncates
+`tool-requests.jsonl`.
+
+Deliberately NOT deleted: the user's own files, git branches, and Claude
+Code's session files under `~/.claude/projects/` (they belong to the CLI, and
+"Import Claude Code sessions" can re-import them).
+
 # Kanban Boards — the card's lifecycle
 
 One card is one worktree is one branch is one chat (`board-start-work.ts`).

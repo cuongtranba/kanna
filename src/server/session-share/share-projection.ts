@@ -40,6 +40,15 @@ export function applyShareEvent(projection: ShareProjection, event: ShareEvent):
   projection.set(event.tokenId, { ...existing, revoked: true, revokedAt: event.revokedAt })
 }
 
+export function dropSharesOfDeletedChats(
+  events: readonly ShareEvent[],
+  isLiveChat: (chatId: string) => boolean,
+): ShareEvent[] {
+  const deadTokens = new Set(events.flatMap((event) =>
+    event.kind === "share.token_minted" && !isLiveChat(event.chatId) ? [event.tokenId] : []))
+  return events.filter((event) => !deadTokens.has(event.tokenId))
+}
+
 export function buildShareProjection(events: Iterable<ShareEvent>): ShareProjection {
   const proj: ShareProjection = new Map()
   for (const e of events) applyShareEvent(proj, e)

@@ -8,6 +8,7 @@ code:
   - src/client/app/PageHeader.tsx
   - src/client/app/chatFocusPolicy.test.ts
   - src/client/app/chatFocusPolicy.ts
+  - src/client/app/forgetDeletedLocally.ts
   - src/client/app/chatNotifications.ts
   - src/client/app/derived.ts
   - src/client/app/sidebarSwipeGesture.ts

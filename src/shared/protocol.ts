@@ -1,6 +1,6 @@
 import type { CronJobPatch } from "./cron/types"
 import type { ShareClientCommand } from "./session-share/protocol"
-import { isJsonObject, type JsonObject, type JsonPrimitive, type JsonValue } from "./json"
+import { isJsonArray, isJsonObject, type JsonObject, type JsonPrimitive, type JsonValue } from "./json"
 import type {
   AppSettingsSnapshot,
   AppSettingsPatch,
@@ -125,6 +125,21 @@ export interface ImportSessionsByIdsResult {
   newProjects: number
 }
 
+export interface ProjectDeleteResult {
+  deletedBoardIds: string[]
+  failures: string[]
+}
+
+function stringsOf(value: JsonValue | undefined): string[] {
+  if (value === undefined || !isJsonArray(value)) return []
+  return value.filter((item): item is string => typeof item === "string")
+}
+
+export function readProjectDeleteResult(value: JsonValue): ProjectDeleteResult {
+  const record = isJsonObject(value) ? value : {}
+  return { deletedBoardIds: stringsOf(record.deletedBoardIds), failures: stringsOf(record.failures) }
+}
+
 export type WsEvent = TerminalEvent | PtyInstancesEvent | ChatOpsEvent
 
 export type ClientCommand =
@@ -133,6 +148,7 @@ export type ClientCommand =
   | { type: "sessions.importClaude" }
   | { type: "sessions.importClaudeSession"; sessionIds: string[] }
   | { type: "project.remove"; projectId: string }
+  | { type: "project.delete"; projectId: string }
   | { type: "project.setStar"; projectId: string; starred: boolean }
   | { type: "project.setInstructions"; projectId: string; instructions: string }
   | { type: "sidebar.reorderProjectGroups"; projectIds: string[] }

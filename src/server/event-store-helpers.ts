@@ -82,6 +82,7 @@ export function getReplayEventPriority(event: StoreEvent): number {
   switch (discriminator) {
     case "project_opened":
     case "project_removed":
+    case "project_deleted":
     case "sidebar_project_order_set":
     case "project_star_set":
     case "project_instructions_set":

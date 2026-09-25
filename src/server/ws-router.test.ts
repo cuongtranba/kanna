@@ -22,6 +22,8 @@ import {
 } from "./ws-router"
 import { createToolCallbackService } from "./tool-callback"
 import { createTestEventStore } from "./storage/test-helpers"
+import { createBoardRegistry } from "./board-registry"
+import { createBoardStore } from "./board-store.adapter"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
 import { DEFAULT_TAB_MIN_WIDTH } from "../shared/pane-tab-width"
 
@@ -885,6 +887,67 @@ describe("ws-router", () => {
     } finally {
       await rm(projectPath, { recursive: true, force: true })
     }
+  })
+
+  test("project.delete deletes the project's chats, archived ones included, and its boards, and nothing of another project", async () => {
+    const store = createTestEventStore(`/project-delete-${randomUUID()}`)
+    await store.initialize()
+    const doomed = await store.openProject("/tmp/project-delete-doomed")
+    const kept = await store.openProject("/tmp/project-delete-kept")
+    const activeChat = await store.createChat(doomed.id)
+    const archivedChat = await store.createChat(doomed.id)
+    await store.archiveChat(archivedChat.id)
+    const otherChat = await store.createChat(kept.id)
+    const boardRegistry = createBoardRegistry({ store: createBoardStore({ filePath: ":memory:" }) })
+    const doomedBoard = boardRegistry.createBoard({ owner: { kind: "project", id: doomed.id }, title: "Doomed" })
+    const keptBoard = boardRegistry.createBoard({ owner: { kind: "project", id: kept.id }, title: "Kept" })
+    const router = createWsRouter({
+      store,
+      boardRegistry,
+      agent: {
+        cancel: async () => {},
+        listLiveSchedules: () => [],
+        cancelAutoContinue: async () => {},
+        disarmCronJobsForChat: async () => {},
+        closeChat: async () => {},
+        getActiveStatuses: () => new Map(),
+        getDrainingChatIds: () => new Set(),
+        getWaitStartedAtByChatId: () => new Map(),
+      } as never,
+      terminals: {
+        closeByCwd: () => {},
+        getSnapshot: () => null,
+        onEvent: () => () => {},
+      } as never,
+      keybindings: {
+        getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT,
+        onChange: () => () => {},
+      } as never,
+      refreshDiscovery: async () => [],
+      getDiscoveredProjects: () => [],
+      machineDisplayName: "Local Machine",
+      updateManager: null,
+      pushManager: { getPreferences: () => ({ globalEnabled: true, mutedProjectPaths: [], mutedChatIds: [] }) } as never,
+    })
+    const ws = new FakeWebSocket()
+
+    await router.handleMessage(
+      ws as never,
+      JSON.stringify({
+        v: 1,
+        type: "command",
+        id: "project-delete-1",
+        command: { type: "project.delete", projectId: doomed.id },
+      })
+    )
+
+    expect(ws.sent[0]).toMatchObject({ type: "ack", id: "project-delete-1", result: { deletedBoardIds: [doomedBoard.id], failures: [] } })
+    expect(boardRegistry.getBoard(doomedBoard.id)).toBeNull()
+    expect(boardRegistry.getBoard(keptBoard.id)?.id).toBe(keptBoard.id)
+    expect(store.getChat(activeChat.id)).toBeNull()
+    expect(store.getChat(archivedChat.id)).toBeNull()
+    expect(store.getChat(otherChat.id)?.id).toBe(otherChat.id)
+    expect(store.listProjects().map((project) => project.id)).toEqual([kept.id])
   })
 
   test("acks terminal.input without rebroadcasting terminal snapshots", async () => {

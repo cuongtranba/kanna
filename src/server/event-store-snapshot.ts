@@ -82,7 +82,7 @@ export async function loadSnapshotIntoState(
 
     for (const project of parsed.projects) {
       state.projectsById.set(project.id, { ...project })
-      state.projectIdsByPath.set(project.localPath, project.id)
+      if (!project.deletedAt) state.projectIdsByPath.set(project.localPath, project.id)
     }
 
     for (const chat of parsed.chats) {

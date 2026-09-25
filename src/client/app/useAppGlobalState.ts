@@ -12,6 +12,7 @@ import { useTerminalLayoutStore } from "../stores/terminalLayoutStore"
 import { selectEditorCommandTemplate, selectEditorPreset, useAppSettingsStore } from "../stores/appSettingsStore"
 import { useAppDialog } from "../components/ui/app-dialog"
 import type { EditorOpenSettings, ImportSessionsByIdsResult, OpenExternalAction, PtyInstancesEvent } from "../../shared/protocol"
+import { readProjectDeleteResult } from "../../shared/protocol"
 import type { PtyInstancesSnapshot } from "../../shared/pty-instance"
 import type { FollowedSessionsSnapshot } from "../../shared/protocol"
 import type { CronJobsGlobalSnapshot } from "../../shared/cron/types"
@@ -27,6 +28,8 @@ import { usePaneLayoutStore } from "../stores/paneLayoutStore"
 import { collectPanes } from "../lib/paneTree"
 import { useSlashCommandsStore } from "../stores/slashCommandsStore"
 import { onRejected } from "../../shared/errors"
+import { getPathBasename } from "../lib/formatters"
+import { forgetDeletedLocally } from "./forgetDeletedLocally"
 import { runDetached } from "../lib/runDetached"
 import { runPendingAction } from "../stores/pendingActionsStore"
 import { decodeLegacyProviderDefaults, readPersistedZustandState } from "./legacyProviderDefaults"
@@ -315,6 +318,7 @@ export interface AppGlobalState extends StackCommands {
   handleDeleteChat: (chat: SidebarChatRow) => Promise<void>
   handleDeleteBulkChats: (chatIds: string[]) => Promise<void>
   handleHideProject: (projectId: string) => Promise<void>
+  handleDeleteProject: (projectId: string) => Promise<void>
   handleToggleProjectStar: (projectId: string, starred: boolean) => Promise<void>
   handleReorderProjectGroups: (projectIds: string[]) => Promise<void>
   handleCreateStackChat:(primaryProjectId: string, stackId: string, stackBindings: Array<{ projectId: string; worktreePath: string; role: "primary" | "additional" }>) => Promise<void>
@@ -1039,6 +1043,7 @@ export function useAppGlobalState(
     if (!confirmed) return
     try {
       await socket.command({ type: "chat.delete", chatId: chat.chatId })
+      forgetDeletedLocally({ chatIds: [chat.chatId] })
       if (chat.chatId === activeChatId) {
         const nextChatId = getNewestRemainingChatId(sidebarProjectGroups, chat.chatId)
         if (nextChatId) {
@@ -1059,7 +1064,10 @@ export function useAppGlobalState(
     if (!ok) return
     const deletingActive = activeChatId != null && chatIds.includes(activeChatId)
     try {
-      for (const chatId of chatIds) await socket.command({ type: "chat.delete", chatId })
+      for (const chatId of chatIds) {
+        await socket.command({ type: "chat.delete", chatId })
+        forgetDeletedLocally({ chatIds: [chatId] })
+      }
       if (deletingActive) { const next = getNewestRemainingChatId(sidebarProjectGroups, activeChatId); if (next) chatNavigator.openChat(next); else chatNavigator.closeChat() }
     } catch (err) { useKannaStateStore.getState().setCommandError(err instanceof Error ? err.message : String(err)) }
   }, [activeChatId, chatNavigator, dialog, sidebarProjectGroups, socket])
@@ -1093,19 +1101,46 @@ export function useAppGlobalState(
     }
   }, [chatNavigator, socket])
 
+  const forgetProjectLayout = useCallback((projectId: string) => {
+    useTerminalLayoutStore.getState().clearProject(projectId)
+    useRightSidebarStore.getState().clearProject(projectId)
+    if (runtime?.projectId === projectId) {
+      chatNavigator.closeChat()
+    }
+  }, [chatNavigator, runtime])
+
   const handleHideProject = useCallback(async (projectId: string) => {
     try {
       await socket.command({ type: "project.remove", projectId })
-      useTerminalLayoutStore.getState().clearProject(projectId)
-      useRightSidebarStore.getState().clearProject(projectId)
-      if (runtime?.projectId === projectId) {
-        chatNavigator.closeChat()
-      }
+      forgetProjectLayout(projectId)
       useKannaStateStore.getState().setCommandError(null)
     } catch (error) {
       useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
     }
-  }, [chatNavigator, runtime, socket])
+  }, [forgetProjectLayout, socket])
+
+  const handleDeleteProject = useCallback(async (projectId: string) => {
+    const group = sidebarProjectGroups.find((candidate) => candidate.groupKey === projectId)
+    const name = group ? getPathBasename(group.localPath) : "this project"
+    const chatIds = [...(group?.chats ?? []), ...(group?.archivedChats ?? [])].map((chat) => chat.chatId)
+    const confirmed = await dialog.confirm({
+      title: "Delete Project",
+      description: `Delete "${name}" and everything Kanna stored for it: ${chatIds.length} chat${chatIds.length === 1 ? "" : "s"} (archived included), boards and their worktrees, share links, and the attachments in .kanna inside the folder. Your own files in the folder are not touched. This cannot be undone.`,
+      confirmLabel: "Delete",
+      confirmVariant: "destructive",
+    })
+    if (!confirmed) return
+    try {
+      const result = readProjectDeleteResult(await socket.command({ type: "project.delete", projectId }))
+      forgetProjectLayout(projectId)
+      forgetDeletedLocally({ chatIds, boardIds: result.deletedBoardIds, projectId })
+      useKannaStateStore.getState().setCommandError(
+        result.failures.length > 0 ? `Project deleted, but some data could not be removed: ${result.failures.join("; ")}` : null,
+      )
+    } catch (error) {
+      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
+    }
+  }, [dialog, forgetProjectLayout, sidebarProjectGroups, socket])
 
   const handleToggleProjectStar = useCallback(async (projectId: string, starred: boolean) => {
     try {
@@ -1332,6 +1367,7 @@ export function useAppGlobalState(
     handleDeleteChat,
     handleDeleteBulkChats,
     handleHideProject,
+    handleDeleteProject,
     handleToggleProjectStar,
     handleReorderProjectGroups,
     ...stackCommands,
