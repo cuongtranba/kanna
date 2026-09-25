@@ -172,6 +172,21 @@ test("startMcpOAuth returns alreadyAuthenticated when tokens are present", async
   expect(result.kind).toBe("alreadyAuthenticated")
 })
 
+test("startMcpOAuth starts a new flow when the stored token has expired and cannot be refreshed", async () => {
+  const cfg = baseConfig()
+  if (cfg.transport === "stdio") throw new Error("unreachable")
+  cfg.oauth = {
+    enabled: true,
+    status: "authenticated",
+    tokens: { access_token: "dead", token_type: "Bearer", expires_in: 900 },
+    obtainedAt: Date.now() - 3_600_000,
+  }
+
+  const result = await startMcpOAuth(cfg, { fetchFn: fakeFetch(), persist: () => { } })
+
+  expect(result.kind).toBe("authorizationUrl")
+})
+
 test("startMcpOAuth falls through SPA-HTML candidate to working openid-config", async () => {
   const spaFetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input.toString()
@@ -487,13 +502,15 @@ test("ensureFreshMcpToken throws when expired and no refresh_token", async () =>
       tokens: tokensWithoutRefresh as OAuthTokens,
     }
   }
+  const persisted: McpOAuthState[] = []
   await expect(
     ensureFreshMcpToken(cfg, {
       fetchFn: (() => { throw new Error("should not fetch") }) as unknown as typeof fetch,
-      persist: () => {},
+      persist: (oauth) => { persisted.push(oauth) },
       metadataByIssuer: { "https://as.test/v1/mcp": { token_endpoint: "https://as.test/oauth/token" } as unknown as AuthorizationServerMetadata },
     }),
   ).rejects.toThrow(/no refresh token/i)
+  expect(persisted.at(-1)?.status).toBe("error")
 })
 
 test("ensureFreshMcpToken persists error state when refresh endpoint returns error", async () => {

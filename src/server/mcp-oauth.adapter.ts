@@ -113,7 +113,7 @@ export async function startMcpOAuth(
   const fetchFn = deps.fetchFn ?? fetch
   const serverUrl = requireNetworkUrl(config)
   const prev = config.transport === "stdio" ? undefined : config.oauth
-  if (prev?.status === "authenticated" && prev.tokens) {
+  if (prev?.status === "authenticated" && prev.tokens && canStillAuthorize(prev, Date.now())) {
     return { kind: "alreadyAuthenticated" }
   }
   const { issuer, scope, metadata } = await resolveAuthServer(serverUrl, fetchFn)
@@ -223,6 +223,12 @@ export function bearerUsableUntil(oauth: McpOAuthState): number | null {
   return oauth.obtainedAt + expiresIn * 1000 - EXPIRY_SKEW_MS
 }
 
+function canStillAuthorize(oauth: McpOAuthState, now: number): boolean {
+  if (oauth.tokens?.refresh_token) return true
+  const usableUntil = bearerUsableUntil(oauth)
+  return usableUntil === null || usableUntil > now
+}
+
 export interface EnsureFreshDeps {
   fetchFn?: typeof fetch
   persist: (oauth: McpOAuthState) => void
@@ -239,7 +245,11 @@ export async function ensureFreshMcpToken(
   const tokens = oauth.tokens
   const usableUntil = bearerUsableUntil(oauth)
   if (usableUntil === null || usableUntil > Date.now()) return tokens.access_token
-  if (!tokens.refresh_token) throw new Error("access token expired and no refresh token")
+  if (!tokens.refresh_token) {
+    const errorMessage = "access token expired and no refresh token"
+    deps.persist({ ...oauth, status: "error", errorMessage })
+    throw new Error(errorMessage)
+  }
   const issuer = oauth.issuer
   if (!issuer) throw new Error("missing issuer for refresh")
   const client = oauth.clientByIssuer?.[issuer]
