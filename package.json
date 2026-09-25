@@ -1,7 +1,7 @@
 {
   "name": "@cuongtran001/kanna",
   "type": "module",
-  "version": "1.60.2",
+  "version": "1.60.3",
   "description": "A beautiful web UI for Claude Code",
   "license": "MIT",
   "keywords": [
@@ -63,7 +63,7 @@
     "@atlaskit/pragmatic-drag-and-drop": "3.1.0",
     "@atlaskit/pragmatic-drag-and-drop-auto-scroll": "3.2.0",
     "@atlaskit/pragmatic-drag-and-drop-hitbox": "2.2.2",
-    "@legendapp/list": "3.4.0",
+    "@legendapp/list": "3.3.11",
     "@lexical/clipboard": "^0.51.0",
     "@lexical/code": "^0.51.0",
     "@lexical/headless": "^0.51.0",
