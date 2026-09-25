@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.60.2](https://github.com/cuongtranba/kanna/compare/v1.60.1...v1.60.2) (2026-09-25)
+
+
+### Bug Fixes
+
+* **mcp-oauth:** register as a native client so a strict authorization server accepts the loopback redirect ([#1164](https://github.com/cuongtranba/kanna/issues/1164)) ([db58734](https://github.com/cuongtranba/kanna/commit/db58734c37c5c071bb154e8ba172276073492170))
+
 ## [1.60.1](https://github.com/cuongtranba/kanna/compare/v1.60.0...v1.60.1) (2026-09-25)
 
 
