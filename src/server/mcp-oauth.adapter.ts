@@ -13,7 +13,10 @@ import type { McpServerConfig, McpOAuthState, McpServerTestResult } from "../sha
 
 const REDIRECT_URI = "http://localhost:8765/callback"
 
-const CLIENT_METADATA: OAuthClientMetadata = {
+type LoopbackClientMetadata = OAuthClientMetadata & { application_type: "native" }
+
+const CLIENT_METADATA: LoopbackClientMetadata = {
+  application_type: "native",
   client_name: "Kanna MCP OAuth",
   redirect_uris: [REDIRECT_URI],
   grant_types: ["authorization_code", "refresh_token"],

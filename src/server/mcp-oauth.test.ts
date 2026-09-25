@@ -77,6 +77,24 @@ test("startMcpOAuth discovers AS, registers, and returns an authorization URL", 
   expect(last?.issuer).toBe("https://as.test/v1/mcp")
 })
 
+test("registers as a native client, so an AS that refuses a web client a loopback redirect still accepts Kanna", async () => {
+  const lenient = fakeFetch()
+  const strictAs = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input.toString()
+    if (url === "https://as.test/oauth/register" && !String(init?.body).includes('"application_type":"native"')) {
+      return new Response(
+        JSON.stringify({ error: "invalid_redirect_uri", error_description: "web clients require https redirect URIs" }),
+        { status: 400, headers: { "content-type": "application/json" } },
+      )
+    }
+    return lenient(input, init)
+  }) as typeof fetch
+
+  const result = await startMcpOAuth(baseConfig(), { fetchFn: strictAs, persist: () => { } })
+
+  expect(result.kind).toBe("authorizationUrl")
+})
+
 test("startMcpOAuth returns alreadyAuthenticated when tokens are present", async () => {
   const cfg: McpServerConfig = {
     id: "s1",

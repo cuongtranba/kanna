@@ -1424,9 +1424,21 @@ HTML at the RFC8414 path — breaking auto-discovery. `mcp-oauth.adapter.ts`
 probes the OpenID path first, then falls back to RFC8414.
 
 **Two-step paste UX.** Kanna has no redirect server, so after the AS redirects
-the browser to `http://localhost:3334/callback?code=…`, the user copies that
+the browser to `http://localhost:8765/callback?code=…`, the user copies that
 URL from the browser address bar and pastes it into the Settings UI. The
 `completeMcpOAuth` WS command exchanges the code via PKCE and stores tokens.
+
+**Kanna registers as a native client (`application_type: "native"`).** A
+loopback redirect belongs to an app on the user's machine, which RFC 8252 calls
+a native client. Omit the field and a strict authorization server reads the
+client as `web` and refuses the `http://localhost` redirect at registration:
+Better Auth's OAuth provider answers `400 invalid_redirect_uri` ("web clients
+require https redirect URIs"), and it refuses `127.0.0.1` the same way. That is
+how an Undercroft MCP server failed to connect from Kanna while Claude Code,
+whose MCP SDK 2.x sends the field itself, connected fine. An AS that does not
+know the field ignores it, so it costs nothing elsewhere. The SDK 1.x
+`OAuthClientMetadata` type lacks it, so `mcp-oauth.adapter.ts` widens the type
+rather than casting; `registerClient` sends the metadata through verbatim.
 
 **Token lifecycle.** `ensureFreshMcpToken` (called at chat spawn) pre-fetches a
 fresh access token if the current one is within 60 s of expiry. Rotating
