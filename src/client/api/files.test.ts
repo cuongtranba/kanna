@@ -79,9 +79,24 @@ describe("deleteUploadedFile", () => {
     expect(http.calls[0]).toEqual({ method: "DELETE", url: "/api/uploads/1" })
   })
 
-  test("swallows errors silently", async () => {
+  test("treats an already-deleted upload as done", async () => {
     const http = makeFakeHttpPort()
+    http.routes.push({
+      method: "DELETE",
+      url: "/api/uploads/missing",
+      response: { ok: false, status: 404, body: null },
+    })
     await expect(deleteUploadedFile("/api/uploads/missing/content", { http })).resolves.toBeUndefined()
+  })
+
+  test("surfaces a failed delete to the caller", async () => {
+    const http = makeFakeHttpPort()
+    http.routes.push({
+      method: "DELETE",
+      url: "/api/uploads/broken",
+      response: { ok: false, status: 500, body: null },
+    })
+    await expect(deleteUploadedFile("/api/uploads/broken/content", { http })).rejects.toThrow("status 500")
   })
 })
 

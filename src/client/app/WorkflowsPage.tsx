@@ -11,6 +11,10 @@ import { SettingsHeaderButton } from "../components/ui/settings-header-button"
 import { cn } from "../lib/utils"
 import type { WorkflowRun, WorkflowRunSummary } from "../../shared/workflow-types"
 import type { TranscriptEntry } from "../../shared/types"
+import { LOG_PREFIX } from "../../shared/branding"
+import { onRejected } from "../../shared/errors"
+import { log } from "../../shared/log"
+import { runDetached } from "../lib/runDetached"
 
 
 export interface WorkflowsPageViewProps {
@@ -31,15 +35,22 @@ function WorkflowsPageViewInner({ runs, getRunDetail, getAgentTranscript, onBack
   const runsAtSelectionRef = useRef<WorkflowRunSummary[] | null>(null)
   const fetchSeqRef = useRef(0)
 
-  const handleSelectRun = useCallback(async (runId: string) => {
+  const handleSelectRun = useCallback((runId: string) => {
     runsAtSelectionRef.current = runs
     setSelectedRunId(runId)
     setSelectedAgentId(null)
     setSelectedRun("loading")
     const seq = ++fetchSeqRef.current
-    const detail = await getRunDetail(runId)
-    if (fetchSeqRef.current !== seq) return
-    setSelectedRun(detail ?? "not-found")
+    const isCurrent = () => fetchSeqRef.current === seq
+    getRunDetail(runId).then(
+      (detail) => {
+        if (isCurrent()) setSelectedRun(detail ?? "not-found")
+      },
+      onRejected((error) => {
+        log.error(LOG_PREFIX, "workflows.getRun failed", error)
+        if (isCurrent()) setSelectedRun("failed")
+      }),
+    )
   }, [getRunDetail, runs, setSelectedRunId, setSelectedAgentId, setSelectedRun])
 
   const handleClearSelection = useCallback(() => {
@@ -54,15 +65,15 @@ function WorkflowsPageViewInner({ runs, getRunDetail, getAgentTranscript, onBack
     if (!row || row.status !== "running") return
     let cancelled = false
     const seq = ++fetchSeqRef.current
-    void getRunDetail(selectedRunId).then((detail) => {
+    runDetached("workflows.getRun refresh", getRunDetail(selectedRunId).then((detail) => {
       if (cancelled || fetchSeqRef.current !== seq || detail === null) return
       if (selectedAgentId !== null && !detail.agents.some((a) => a.agentId === selectedAgentId)) return
       setSelectedRun(detail)
-    })
+    }))
     return () => { cancelled = true }
   }, [runs, selectedRunId, selectedAgentId, getRunDetail, setSelectedRun])
 
-  const runObj = selectedRun !== "loading" && selectedRun !== "not-found" ? selectedRun : null
+  const runObj = selectedRun !== "loading" && selectedRun !== "not-found" && selectedRun !== "failed" ? selectedRun : null
   const selectedAgent =
     selectedAgentId !== null && runObj
       ? runObj.agents.find((a) => a.agentId === selectedAgentId)
@@ -77,6 +88,8 @@ function WorkflowsPageViewInner({ runs, getRunDetail, getAgentTranscript, onBack
         Loading run…
       </div>
     )
+  } else if (selectedRun === "failed") {
+    detailContent = <WorkflowDetailPlaceholder text="Couldn't load this run. Select it again to retry." />
   } else if (selectedRun === "not-found") {
     detailContent = <WorkflowDetailPlaceholder text="Run not found or no longer available." />
   } else if (selectedAgent && runObj) {
@@ -138,7 +151,7 @@ function WorkflowsPageViewInner({ runs, getRunDetail, getAgentTranscript, onBack
           <WorkflowsSection
             runs={runs}
             selectedRunId={selectedRunId}
-            onSelectRun={(runId) => { void handleSelectRun(runId) }}
+            onSelectRun={handleSelectRun}
           />
         </div>
         <div

@@ -2,6 +2,7 @@ import { useCallback } from "react"
 import { Check, Copy } from "lucide-react"
 import { Button } from "../../ui/button"
 import { cn } from "../../../lib/utils"
+import { runDetached } from "../../../lib/runDetached"
 import { HighlightedCode } from "../../messages/HighlightedCode"
 import { MessageCodeBlockStore } from "./MessageCodeBlock.store"
 import type { ClipboardPort, TimerPort } from "../../../ports"
@@ -26,11 +27,12 @@ function MessageCodeBlockInner({
   const clipboard = ports.clipboard ?? clipboardAdapter
   const timer = ports.timer ?? timerAdapter
 
-  const handleCopy = useCallback(async () => {
+  const copyToClipboard = useCallback(async () => {
     await clipboard.writeText(source)
     setCopied(true)
     timer.setTimeout(() => setCopied(false), 2000)
   }, [source, setCopied, clipboard, timer])
+  const handleCopy = useCallback(() => { runDetached("copy code block", copyToClipboard()) }, [copyToClipboard])
 
   return (
     <div className="relative overflow-x-auto max-w-full min-w-0 no-code-highlight group/pre">

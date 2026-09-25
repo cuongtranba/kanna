@@ -3,6 +3,8 @@ claim: "settings-page is implemented at src/client/app/SettingsPage.tsx and its 
 code:
   - src/client/app/McpServersSection.test.tsx
   - src/client/app/McpServersSection.tsx
+  - src/client/app/McpServerRow.tsx
+  - src/client/app/PendingSegmentedControl.tsx
   - src/client/app/ModelsSection.tsx
   - src/client/app/ModelsSection.test.tsx
   - src/client/app/SettingsPage.tsx

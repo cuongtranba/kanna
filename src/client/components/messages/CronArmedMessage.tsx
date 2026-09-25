@@ -2,6 +2,9 @@ import { useCallback } from "react"
 import { CalendarClock, Check, Copy, Trash2 } from "lucide-react"
 import { CopyStateStore } from "./CopyState.store"
 import { clipboardAdapter, timerAdapter } from "../../adapters"
+import { runDetached } from "../../lib/runDetached"
+import { pendingActionKey, usePendingAction } from "../../stores/pendingActionsStore"
+import { Spinner } from "../ui/spinner"
 import { TruncatedText } from "../ui/truncated-text"
 import type { ProcessedCronArmedMessage } from "./types"
 
@@ -24,11 +27,14 @@ function CronArmedMessageInner({ message, onRemove }: Props) {
 
   const editCommand = `/cron ${message.instruction} ${message.mode} ${message.scheduleText}`
 
-  const handleCopyEdit = useCallback(async () => {
+  const copyEditCommand = useCallback(async () => {
     await clipboardAdapter.writeText(editCommand)
     setCopied(true)
     timerAdapter.setTimeout(() => setCopied(false), 2000)
   }, [editCommand, setCopied])
+  const handleCopyEdit = useCallback(() => { runDetached("copy cron edit command", copyEditCommand()) }, [copyEditCommand])
+
+  const disarming = usePendingAction(pendingActionKey("cron.remove", message.jobId))
 
   const fires = message.upcomingFires ?? (message.nextFireAt !== null ? [message.nextFireAt] : [])
 
@@ -101,10 +107,12 @@ function CronArmedMessageInner({ message, onRemove }: Props) {
           <button
             type="button"
             aria-label={`Disarm cron job ${message.jobId}`}
-            className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:border-destructive/50 hover:text-destructive"
+            className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:border-destructive/50 hover:text-destructive disabled:pointer-events-none disabled:opacity-60"
+            disabled={disarming}
+            aria-busy={disarming || undefined}
             onClick={() => onRemove(message.jobId)}
           >
-            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+            {disarming ? <Spinner /> : <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />}
             Disarm
           </button>
         ) : null}

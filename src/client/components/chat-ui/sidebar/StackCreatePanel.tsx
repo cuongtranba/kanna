@@ -2,6 +2,8 @@ import { useCallback, useRef, type KeyboardEvent, type FormEvent, type ReactNode
 import { Button } from "../../ui/button"
 import { cn } from "../../../lib/utils"
 import { createScopedStore } from "../../../lib/createScopedStore"
+import { runPendingAction, usePendingAction } from "../../../stores/pendingActionsStore"
+import { STACK_PANEL_SAVE_KEY } from "./sidebarPendingActions"
 
 interface StackCreatePanelProps {
   mode: "create" | "edit"
@@ -56,6 +58,7 @@ function StackCreatePanelInner({
   const setInstructions = stackCreatePanelStore.useScopedStore((s) => s.setInstructions)
   const setSelectedIds = stackCreatePanelStore.useScopedStore((s) => s.setSelectedIds)
 
+  const saving = usePendingAction(STACK_PANEL_SAVE_KEY)
   const hasEnoughProjects = projects.length >= 2
   const isSaveDisabled =
     !hasEnoughProjects || title.trim() === "" || selectedIds.size < 2
@@ -72,11 +75,15 @@ function StackCreatePanelInner({
     })
   }, [setSelectedIds])
 
-  const handleFormSubmit = useCallback(async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
+  const submit = useCallback(() => {
     if (isSaveDisabled) return
-    await onSubmit(title.trim(), Array.from(selectedIds), instructions.trim())
+    runPendingAction(STACK_PANEL_SAVE_KEY, () => onSubmit(title.trim(), Array.from(selectedIds), instructions.trim()))
   }, [isSaveDisabled, onSubmit, title, instructions, selectedIds])
+
+  const handleFormSubmit = useCallback((e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    submit()
+  }, [submit])
 
   const handleEscapeKey = useCallback(
     (e: KeyboardEvent<HTMLFormElement>) => {
@@ -100,9 +107,7 @@ function StackCreatePanelInner({
   const handleChipKeyDown = useCallback(
     (e: KeyboardEvent<HTMLButtonElement>, index: number) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-        if (!isSaveDisabled) {
-          void onSubmit(title.trim(), Array.from(selectedIds), instructions.trim())
-        }
+        submit()
       } else if (e.key === "ArrowRight") {
         const chips = chipContainerRef.current?.querySelectorAll("button")
         if (chips) {
@@ -115,13 +120,14 @@ function StackCreatePanelInner({
         }
       }
     },
-    [isSaveDisabled, onSubmit, title, instructions, selectedIds]
+    [submit]
   )
 
   return (
     <form
       onSubmit={handleFormSubmit}
       onKeyDown={handleEscapeKey}
+      aria-busy={saving || undefined}
       className="flex flex-col gap-2 px-2.5 py-2 border border-border rounded-lg bg-background"
     >
       <input
@@ -178,6 +184,7 @@ function StackCreatePanelInner({
           type="submit"
           size="sm"
           disabled={isSaveDisabled}
+          pending={saving}
         >
           Save
         </Button>

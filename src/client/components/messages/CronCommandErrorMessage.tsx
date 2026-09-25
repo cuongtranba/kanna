@@ -2,6 +2,7 @@ import { useCallback } from "react"
 import { CalendarX2, Check, Copy } from "lucide-react"
 import { CopyStateStore } from "./CopyState.store"
 import { clipboardAdapter, timerAdapter } from "../../adapters"
+import { runDetached } from "../../lib/runDetached"
 import type { ProcessedCronCommandErrorMessage } from "./types"
 
 interface Props {
@@ -21,12 +22,13 @@ function CronCommandErrorMessageInner({ message }: Props) {
   const setCopied = CopyStateStore.useScopedStore((s) => s.setCopied)
   const suggestion = message.suggestion
 
-  const handleCopy = useCallback(async () => {
+  const copySuggestion = useCallback(async () => {
     if (suggestion === undefined) return
     await clipboardAdapter.writeText(suggestion)
     setCopied(true)
     timerAdapter.setTimeout(() => setCopied(false), 2000)
   }, [suggestion, setCopied])
+  const handleCopy = useCallback(() => { runDetached("copy cron fix", copySuggestion()) }, [copySuggestion])
 
   return (
     <div className="bg-destructive/10 px-4 py-3">

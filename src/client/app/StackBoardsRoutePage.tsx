@@ -13,7 +13,7 @@ export function StackBoardsRoutePage() {
 
   const handleOpenBoard = useCallback(
     (openedBoardId: string) => {
-      void navigate(`/boards/stack/${stackId}/${openedBoardId}`)
+      navigate(`/boards/stack/${stackId}/${openedBoardId}`)
     },
     [navigate, stackId],
   )

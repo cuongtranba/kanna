@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef } from "react"
-import { Plug, Plus, RefreshCw, ExternalLink, Copy, KeyRound } from "lucide-react"
+import { useCallback, useEffect, useMemo, useRef, type ChangeEvent } from "react"
+import { Plug, Plus, ExternalLink, Copy, KeyRound } from "lucide-react"
 import { Button } from "../components/ui/button"
 import { Input } from "../components/ui/input"
+import { Spinner } from "../components/ui/spinner"
 import { Textarea } from "../components/ui/textarea"
 import { HoverHint } from "../components/ui/truncated-text"
-import { SettingsList, SettingsRowActions } from "../components/settings/SettingsList"
+import { SettingsList } from "../components/settings/SettingsList"
 import {
   Select,
   SelectContent,
@@ -12,20 +13,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../components/ui/select"
-import { cn } from "../lib/utils"
 import { useAppSettingsStore, selectCustomMcpServers } from "../stores/appSettingsStore"
+import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
 import {
   useMcpServersSectionStore,
   type EditingState,
 } from "../stores/mcpServersSectionStore"
-import type {
-  McpOAuthState,
-  McpServerConfig,
-  McpServerInput,
-  McpServerPatch,
-  McpServerTestResult,
-  McpServerTransport,
-} from "../../shared/types"
+import type { McpServerConfig, McpServerInput, McpServerPatch, McpServerTransport } from "../../shared/types"
 import type { KannaState } from "./useKannaState"
 import {
   useAppSettingsCrudHandlers,
@@ -33,10 +27,9 @@ import {
   type AppSettingsPatchWrapper,
 } from "./appSettingsCrud"
 import { editorSubmitLabel, submitEditorForm } from "./settingsEditorForm"
-import type { DomPort } from "../ports/domPort"
 import type { ClipboardPort } from "../ports/clipboardPort"
-import { domAdapter } from "../adapters/dom.adapter"
 import { clipboardAdapter } from "../adapters/clipboard.adapter"
+import { McpRow, OAuthPill } from "./McpServerRow"
 
 const MCP_TRANSPORT_SET = new Set<string>(["stdio", "http", "sse", "ws"])
 function isMcpServerTransport(v: string): v is McpServerTransport {
@@ -57,6 +50,8 @@ interface McpServersSectionHandlers
   onStartMcpOAuth: (id: string) => Promise<OAuthStartResult>
   onCompleteMcpOAuth: (id: string, callbackUrl: string) => Promise<{ ok: boolean; error?: string }>
 }
+
+const NEW_SERVER_ID = "new"
 
 const wrapMcpServersPatch: AppSettingsPatchWrapper<McpServerInput, McpServerPatch> = (
   customMcpServers,
@@ -127,126 +122,6 @@ export function McpServersSection(props: McpServersSectionProps) {
   )
 }
 
-function McpRow({
-  server,
-  handlers,
-  onEdit,
-  dom = domAdapter,
-}: {
-  server: McpServerConfig
-  handlers: McpServersSectionHandlers
-  onEdit: () => void
-  dom?: DomPort
-}) {
-  const testing = useMcpServersSectionStore((s) => s.testingServerIds.has(server.id))
-  const setServerTesting = useMcpServersSectionStore((s) => s.setServerTesting)
-
-  const onTest = useCallback(async () => {
-    setServerTesting(server.id, true)
-    try {
-      await handlers.onTest(server.id)
-    } finally {
-      setServerTesting(server.id, false)
-    }
-  }, [handlers, server.id, setServerTesting])
-
-  const onDelete = useCallback(() => {
-    if (dom.confirmDialog(`Delete MCP server "${server.name}"?`)) {
-      void handlers.onDelete(server.id)
-    }
-  }, [dom, handlers, server.id, server.name])
-
-  return (
-    <li className="flex items-center gap-3 px-4 py-3">
-      <div className="flex flex-col">
-        <span className="font-medium">{server.name}</span>
-        <span className="text-xs text-muted-foreground">
-          <TransportBadge transport={server.transport} />
-          <span className="ml-2">
-            {server.transport === "stdio" ? server.command : server.url}
-          </span>
-        </span>
-      </div>
-      <div className="ml-auto flex items-center gap-2">
-        <TestPill result={server.lastTest} pending={testing} />
-        {server.transport !== "stdio" && <OAuthPill oauth={server.oauth} />}
-        <label className="inline-flex cursor-pointer items-center gap-1 text-xs text-muted-foreground">
-          <input
-            type="checkbox"
-            checked={server.enabled}
-            onChange={(e) => {
-              void handlers.onSetEnabled(server.id, e.target.checked)
-            }}
-            aria-label="Enabled"
-          />
-          <span>On</span>
-        </label>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => {
-            void onTest()
-          }}
-          title="Test connection"
-        >
-          <RefreshCw className={cn("h-4 w-4", testing && "animate-spin")} />
-        </Button>
-        <SettingsRowActions label={server.name} onEdit={onEdit} onDelete={onDelete} />
-      </div>
-    </li>
-  )
-}
-
-function TransportBadge({ transport }: { transport: McpServerTransport }) {
-  return (
-    <span className="rounded bg-muted px-1.5 py-0.5 text-xs">{transport}</span>
-  )
-}
-
-function TestPill({ result, pending }: { result: McpServerTestResult; pending: boolean }) {
-  if (pending || result.status === "pending") {
-    return <span className="text-xs text-muted-foreground">Testing…</span>
-  }
-  switch (result.status) {
-    case "ok":
-      return (
-        <span className="text-xs text-green-600">
-          OK · {result.toolCount} tools
-        </span>
-      )
-    case "error":
-      return (
-        <HoverHint label={result.message}>
-          <span className="text-xs text-red-600">
-            Failed
-          </span>
-        </HoverHint>
-      )
-    case "untested":
-    default:
-      return <span className="text-xs text-muted-foreground">Untested</span>
-  }
-}
-
-function OAuthPill({ oauth }: { oauth: McpOAuthState | undefined }) {
-  if (!oauth?.enabled) return null
-  switch (oauth.status) {
-    case "authenticated":
-      return <span className="text-xs text-green-600">OAuth ✓</span>
-    case "error":
-      return (
-        <HoverHint label={oauth.errorMessage}>
-          <span className="text-xs text-red-600">
-            OAuth error
-          </span>
-        </HoverHint>
-      )
-    default:
-      return <span className="text-xs text-muted-foreground">OAuth: unauth</span>
-  }
-}
-
-
 function McpServerEditor({
   initial,
   existingNames,
@@ -292,6 +167,11 @@ function McpServerEditor({
   }, [resetEditorForm])
 
   const currentOauth = initial !== null && initial.transport !== "stdio" ? initial.oauth : undefined
+  const serverKeyId = initial?.id ?? NEW_SERVER_ID
+  const toggleOAuthKey = pendingActionKey("mcpServers.toggleOAuth", serverKeyId)
+  const toggleOAuthPending = usePendingAction(toggleOAuthKey)
+  const copyAuthUrlKey = pendingActionKey("mcpServers.copyAuthUrl", serverKeyId)
+  const copyAuthUrlPending = usePendingAction(copyAuthUrlKey)
 
   const toggleOAuth = useCallback(
     async (enabled: boolean) => {
@@ -340,6 +220,24 @@ function McpServerEditor({
       patchEditorForm({ completing: false })
     }
   }, [initial, callbackInput, handlers, patchEditorForm])
+
+  const onOAuthCheckboxChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+    const enabled = e.target.checked
+    runPendingAction(toggleOAuthKey, () => toggleOAuth(enabled))
+  }, [toggleOAuth, toggleOAuthKey])
+
+  const onStartAuthClick = useCallback(() => {
+    runPendingAction(pendingActionKey("settings.startMcpOAuth", serverKeyId), startAuth)
+  }, [serverKeyId, startAuth])
+
+  const onCompleteAuthClick = useCallback(() => {
+    runPendingAction(pendingActionKey("settings.completeMcpOAuth", serverKeyId), completeAuth)
+  }, [completeAuth, serverKeyId])
+
+  const onCopyAuthUrlClick = useCallback(() => {
+    if (!authFlowUrl) return
+    runPendingAction(copyAuthUrlKey, () => clipboard.writeText(authFlowUrl))
+  }, [authFlowUrl, clipboard, copyAuthUrlKey])
 
   const nameError = useMemo(() => {
     if (name.length === 0) return null
@@ -403,6 +301,10 @@ function McpServerEditor({
     url,
     patchEditorForm,
   ])
+
+  const onSubmitClick = useCallback(() => {
+    runPendingAction(pendingActionKey("mcpServers.save", serverKeyId), submit)
+  }, [serverKeyId, submit])
 
   const submitLabel = editorSubmitLabel({
     submitting,
@@ -530,10 +432,13 @@ function McpServerEditor({
                 <KeyRound className="h-4 w-4 text-muted-foreground" aria-hidden />
                 <span className="text-xs font-medium">OAuth 2.1</span>
                 <label className="ml-auto flex cursor-pointer items-center gap-1 text-xs text-muted-foreground">
+                  {toggleOAuthPending ? <Spinner /> : null}
                   <input
                     type="checkbox"
                     checked={oauthEnabled}
-                    onChange={(e) => { void toggleOAuth(e.target.checked) }}
+                    disabled={toggleOAuthPending}
+                    aria-busy={toggleOAuthPending || undefined}
+                    onChange={onOAuthCheckboxChange}
                     aria-label="Enable OAuth"
                   />
                   <span>Enable</span>
@@ -552,8 +457,8 @@ function McpServerEditor({
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => { void startAuth() }}
-                        disabled={authenticating}
+                        onClick={onStartAuthClick}
+                        pending={authenticating}
                       >
                         Re-authenticate
                       </Button>
@@ -565,8 +470,8 @@ function McpServerEditor({
                         variant="outline"
                         size="sm"
                         className="w-fit"
-                        onClick={() => { void startAuth() }}
-                        disabled={authenticating}
+                        onClick={onStartAuthClick}
+                        pending={authenticating}
                       >
                         {authenticating ? "Starting…" : "Authenticate"}
                       </Button>
@@ -585,11 +490,13 @@ function McpServerEditor({
                           <HoverHint label="Copy URL">
                             <button
                               type="button"
-                              onClick={() => { void clipboard.writeText(authFlowUrl) }}
+                              onClick={onCopyAuthUrlClick}
+                              disabled={copyAuthUrlPending}
+                              aria-busy={copyAuthUrlPending || undefined}
                               className="ml-1 text-muted-foreground hover:text-foreground"
                               aria-label="Copy authorization URL"
                             >
-                              <Copy className="h-3 w-3" />
+                              {copyAuthUrlPending ? <Spinner className="size-3" /> : <Copy className="h-3 w-3" />}
                             </button>
                           </HoverHint>
                         </div>
@@ -608,8 +515,9 @@ function McpServerEditor({
                           variant="outline"
                           size="sm"
                           className="w-fit"
-                          onClick={() => { void completeAuth() }}
-                          disabled={completing || callbackInput.length === 0}
+                          onClick={onCompleteAuthClick}
+                          pending={completing}
+                          disabled={callbackInput.length === 0}
                         >
                           {completing ? "Completing…" : "Complete"}
                         </Button>
@@ -631,10 +539,9 @@ function McpServerEditor({
           Cancel
         </Button>
         <Button
-          onClick={() => {
-            void submit()
-          }}
-          disabled={submitting || Boolean(nameError) || name.length === 0}
+          onClick={onSubmitClick}
+          pending={submitting}
+          disabled={Boolean(nameError) || name.length === 0}
         >
           {submitLabel}
         </Button>

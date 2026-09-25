@@ -21,7 +21,7 @@ function renderSection(
   projects: Array<{ id: string; title: string }>,
   opts: {
     expandedStackIds?: Set<string>
-    onStartChat?: (stackId: string) => void
+    onStartChat?: (stackId: string) => Promise<void>
     renderChatCreate?: (stack: StackSummary) => React.ReactNode
     onOpenBoards?: (stackId: string) => void
     onDeleteStack?: (stackId: string) => void
@@ -113,7 +113,7 @@ describe("StacksSection", () => {
     const projects = [{ id: "p1", title: "Project A" }, { id: "p2", title: "Project B" }]
     const html = renderSection(stacks, projects, {
       expandedStackIds: new Set(["s1"]),
-      onStartChat: () => undefined,
+      onStartChat: async () => undefined,
     })
     expect(html).toContain("New chat")
   })
@@ -123,7 +123,7 @@ describe("StacksSection", () => {
     const projects = [{ id: "p1", title: "Project A" }, { id: "p2", title: "Project B" }]
     const html = renderSection(stacks, projects, {
       expandedStackIds: new Set(["s1"]),
-      onStartChat: () => undefined,
+      onStartChat: async () => undefined,
       renderChatCreate: () => createElement("div", { "data-testid": "chat-create-slot" }, "FORM"),
     })
     expect(html).toContain("chat-create-slot")

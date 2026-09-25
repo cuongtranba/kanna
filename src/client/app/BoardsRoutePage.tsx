@@ -19,7 +19,7 @@ export function BoardsRoutePage() {
 
   const handleOpenBoard = useCallback(
     (openedBoardId: string) => {
-      void navigate(`/boards/${projectId}/${openedBoardId}`)
+      navigate(`/boards/${projectId}/${openedBoardId}`)
     },
     [navigate, projectId],
   )

@@ -5,6 +5,7 @@ import type { HttpPort } from "../ports/httpPort"
 import type { TimerPort } from "../ports/timerPort"
 import { httpAdapter } from "../adapters/http.adapter"
 import { timerAdapter } from "../adapters/timer.adapter"
+import { onRejected } from "../../shared/errors"
 
 export type { ProjectPath }
 
@@ -49,10 +50,16 @@ export function useMentionSuggestions(args: {
     abortRef.current = controller
 
     debounceRef.current = timer.setTimeout(() => {
-      void fetchProjectPaths(args.projectId!, args.query, { signal: controller.signal, http }).then((items) => {
-        if (controller.signal.aborted) return
-        setMentionSuggestions({ items, loading: false, error: null })
-      })
+      fetchProjectPaths(args.projectId!, args.query, { signal: controller.signal, http }).then(
+        (items) => {
+          if (controller.signal.aborted) return
+          setMentionSuggestions({ items, loading: false, error: null })
+        },
+        onRejected((error) => {
+          if (controller.signal.aborted) return
+          setMentionSuggestions({ items: [], loading: false, error: error.message })
+        }),
+      )
     }, DEBOUNCE_MS)
 
     return () => {

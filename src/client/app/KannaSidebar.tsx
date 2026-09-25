@@ -13,10 +13,8 @@ import { Button } from "../components/ui/button"
 import { HoverHint } from "../components/ui/truncated-text"
 import { SidebarUtilityNav } from "./SidebarUtilityNav"
 import { usePluginContributionsStore, selectPluginSidebarItems } from "../stores/pluginContributionsStore"
-import { Dialog, DialogBody, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../components/ui/dialog"
 import { ImportSessionsDialog } from "../components/ImportSessionsDialog"
-import { formatSidebarAgeLabel, getPathBasename } from "../lib/formatters"
-import { getSidebarChatTimestamp } from "../lib/sidebarChats"
+import { getPathBasename } from "../lib/formatters"
 import { cn } from "../lib/utils"
 import { SHELL_TOP_BAND_CLASS } from "../lib/shellChrome"
 import { ChatRow } from "../components/chat-ui/sidebar/ChatRow"
@@ -25,6 +23,9 @@ import { LocalProjectsSection } from "../components/chat-ui/sidebar/LocalProject
 import { StacksSection } from "../components/chat-ui/sidebar/StacksSection"
 import { StackEditPanels } from "../components/chat-ui/sidebar/StackEditPanels"
 import { StackChatCreateRow } from "../components/chat-ui/sidebar/StackChatCreateRow"
+import { ArchivedChatsDialog } from "../components/chat-ui/sidebar/ArchivedChatsDialog"
+import { createChatKey } from "../components/chat-ui/sidebar/sidebarPendingActions"
+import { runPendingAction } from "../stores/pendingActionsStore"
 import { getResolvedKeybindings } from "../lib/keybindings"
 import type { GitWorktree, KeybindingsSnapshot, SidebarData, SidebarChatRow, SidebarProjectGroup, StackBinding, UpdateSnapshot } from "../../shared/types"
 import type { SocketStatus } from "./socket"
@@ -74,30 +75,30 @@ interface KannaSidebarProps {
   onClose: () => void
   onCollapse: () => void
   onExpand: () => void
-  onCreateChat: (projectId: string) => void | Promise<void>
-  onForkChat: (chat: SidebarChatRow) => void | Promise<void>
+  onCreateChat: (projectId: string) => Promise<void>
+  onForkChat: (chat: SidebarChatRow) => Promise<void>
   currentProjectId: string | null
   keybindings: KeybindingsSnapshot | null
-  onRenameChat: (chat: SidebarChatRow) => void | Promise<void>
-  onArchiveChat: (chat: SidebarChatRow) => void | Promise<void>
-  onOpenArchivedChat: (chatId: string) => void | Promise<void>
-  onDeleteChat: (chat: SidebarChatRow) => void | Promise<void>
-  onDeleteBulkChats: (chatIds: string[]) => void | Promise<void>
+  onRenameChat: (chat: SidebarChatRow) => Promise<void>
+  onArchiveChat: (chat: SidebarChatRow) => Promise<void>
+  onOpenArchivedChat: (chatId: string) => Promise<void>
+  onDeleteChat: (chat: SidebarChatRow) => Promise<void>
+  onDeleteBulkChats: (chatIds: string[]) => Promise<void>
   onEditChatPermissions?: (chatId: string) => void
-  onOpenAddProjectModal: () => void | Promise<void>
+  onOpenAddProjectModal: () => void
   onImportClaudeSessions?: () => Promise<void>
   onImportClaudeSessionIds?: (sessionIds: string[]) => Promise<void>
-  onCopyPath: (localPath: string) => void | Promise<void>
-  onOpenExternalPath: (action: "open_finder" | "open_editor", localPath: string) => void | Promise<void>
-  onHideProject: (projectId: string) => void | Promise<void>
-  onToggleStar: (projectId: string, starred: boolean) => void | Promise<void>
-  onSetProjectInstructions: (projectId: string, instructions: string) => void | Promise<void>
-  onReorderProjectGroups: (projectIds: string[]) => void | Promise<void>
-  onCreateStack: (title: string, projectIds: string[], instructions?: string) => void
-  onRenameStack: (stackId: string, title: string) => void
-  onSetStackInstructions: (stackId: string, instructions: string) => void
-  onRemoveStack: (stackId: string) => void
-  onCreateStackChat: (primaryProjectId: string, stackId: string, stackBindings: StackBinding[]) => void
+  onCopyPath: (localPath: string) => Promise<void>
+  onOpenExternalPath: (action: "open_finder" | "open_editor", localPath: string) => Promise<void>
+  onHideProject: (projectId: string) => Promise<void>
+  onToggleStar: (projectId: string, starred: boolean) => Promise<void>
+  onSetProjectInstructions: (projectId: string, instructions: string) => Promise<void>
+  onReorderProjectGroups: (projectIds: string[]) => Promise<void>
+  onCreateStack: (title: string, projectIds: string[], instructions?: string) => Promise<void>
+  onRenameStack: (stackId: string, title: string) => Promise<void>
+  onSetStackInstructions: (stackId: string, instructions: string) => Promise<void>
+  onRemoveStack: (stackId: string) => Promise<void>
+  onCreateStackChat: (primaryProjectId: string, stackId: string, stackBindings: StackBinding[]) => Promise<void>
   onListStackWorktrees: (projectId: string) => Promise<GitWorktree[]>
   editorLabel: string
   updateSnapshot: UpdateSnapshot | null
@@ -302,29 +303,29 @@ function KannaSidebarImpl({
     stackId: string,
     { primaryProjectId, stackBindings }: { primaryProjectId: string; stackBindings: StackBinding[] },
   ) => {
-    onCreateStackChat(primaryProjectId, stackId, stackBindings)
+    await onCreateStackChat(primaryProjectId, stackId, stackBindings)
     closeStackChatCreate()
   }, [onCreateStackChat, closeStackChatCreate])
 
   const handleStackPanelSubmit = useCallback(async (title: string, projectIds: string[], instructions: string) => {
     if (stackEditId) {
-      onRenameStack(stackEditId, title)
-      onSetStackInstructions(stackEditId, instructions)
+      await onRenameStack(stackEditId, title)
+      await onSetStackInstructions(stackEditId, instructions)
     } else {
-      onCreateStack(title, projectIds, instructions)
+      await onCreateStack(title, projectIds, instructions)
     }
     closeStackPanel()
   }, [stackEditId, onRenameStack, onSetStackInstructions, onCreateStack, closeStackPanel])
 
   const clearStackDeleteConfirm = useCallback(() => setStackDeleteConfirmId(null), [setStackDeleteConfirmId])
 
-  const handleConfirmDeleteStack = useCallback((stackId: string) => {
-    onRemoveStack(stackId)
+  const handleConfirmDeleteStack = useCallback(async (stackId: string) => {
+    await onRemoveStack(stackId)
     setStackDeleteConfirmId(null)
   }, [onRemoveStack, setStackDeleteConfirmId])
 
-  const handleOpenArchivedChat = useCallback((chatId: string) => {
-    onOpenArchivedChat(chatId)
+  const handleOpenArchivedChat = useCallback(async (chatId: string) => {
+    await onOpenArchivedChat(chatId)
     setArchivedProjectId(null)
     onClose()
   }, [onOpenArchivedChat, setArchivedProjectId, onClose])
@@ -353,6 +354,11 @@ function KannaSidebarImpl({
     () => new Map([...data.starredProjectGroups, ...data.projectGroups].map((group) => [group.localPath, group.groupKey])),
     [data.starredProjectGroups, data.projectGroups]
   )
+
+  const handleNewLocalChat = useCallback(async (localPath: string) => {
+    const projectId = projectIdByPath.get(localPath)
+    if (projectId) await onCreateChat(projectId)
+  }, [onCreateChat, projectIdByPath])
 
   const activeVisibleCount = visibleChats.length
   const archivedProject = useMemo(
@@ -383,9 +389,9 @@ function KannaSidebarImpl({
     toggleAllSectionsCollapsed(allSidebarGroupKeys)
   }, [allSidebarGroupKeys, toggleAllSectionsCollapsed])
 
-  const handleBulkDelete = useCallback(() => {
+  const handleBulkDelete = useCallback(async () => {
     if (!selectedChatIds.size) return
-    void onDeleteBulkChats([...selectedChatIds])
+    await onDeleteBulkChats([...selectedChatIds])
     stopSelecting()
   }, [selectedChatIds, onDeleteBulkChats, stopSelecting])
 
@@ -447,7 +453,7 @@ function KannaSidebarImpl({
         }
 
         event.preventDefault()
-        onCreateChat(currentProjectId)
+        runPendingAction(createChatKey(currentProjectId), () => onCreateChat(currentProjectId))
         return
       }
 
@@ -792,7 +798,7 @@ function KannaSidebarImpl({
               onOpenStackMenu={openStackEditPanel}
               onOpenBoards={handleOpenStackBoards}
               onDeleteStack={(stackId) => setStackDeleteConfirmId(stackId)}
-              onStartChat={(stackId) => { void handleStartStackChat(stackId) }}
+              onStartChat={handleStartStackChat}
               renderChatCreate={(stack) => {
                 if (stack.id !== stackChatCreateId) return null
                 if (stackChatLoading) return <p className="text-xs text-muted-foreground">Loading worktrees…</p>
@@ -838,12 +844,7 @@ function KannaSidebarImpl({
                   onToggleExpandedGroup={toggleExpandedGroup}
                   renderChatRow={renderChatRow}
                   onShowArchivedProject={setArchivedProjectId}
-                  onNewLocalChat={(localPath) => {
-                    const projectId = projectIdByPath.get(localPath)
-                    if (projectId) {
-                      onCreateChat(projectId)
-                    }
-                  }}
+                  onNewLocalChat={handleNewLocalChat}
                   onCopyPath={onCopyPath}
                   onOpenExternalPath={onOpenExternalPath}
                   onHideProject={onHideProject}
@@ -866,12 +867,7 @@ function KannaSidebarImpl({
               onToggleExpandedGroup={toggleExpandedGroup}
               renderChatRow={renderChatRow}
               onShowArchivedProject={setArchivedProjectId}
-              onNewLocalChat={(localPath) => {
-                const projectId = projectIdByPath.get(localPath)
-                if (projectId) {
-                  onCreateChat(projectId)
-                }
-              }}
+              onNewLocalChat={handleNewLocalChat}
               onCopyPath={onCopyPath}
               onOpenExternalPath={onOpenExternalPath}
               onHideProject={onHideProject}
@@ -922,46 +918,20 @@ function KannaSidebarImpl({
       </div>
       </FocusScope>
 
-      <Dialog
-        open={Boolean(archivedProject)}
+      <ArchivedChatsDialog
+        project={archivedProject}
+        nowMs={nowMs}
         onOpenChange={handleArchivedDialogOpenChange}
-      >
-        <DialogContent size="md">
-          <DialogHeader>
-            <DialogTitle>Archived Chats</DialogTitle>
-            <DialogDescription>
-              {archivedProject?.localPath ?? ""}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogBody className="space-y-1">
-            {archivedProject?.archivedChats?.length ? (
-              archivedProject.archivedChats.map((chat) => (
-                <button
-                  key={chat.chatId}
-                  type="button"
-                  className="flex w-full items-center justify-between gap-3 rounded-lg border border-border/0 px-3 py-2 text-left transition-colors hover:border-border hover:bg-muted"
-                  onClick={() => handleOpenArchivedChat(chat.chatId)}
-                >
-                  <span className="min-w-0 truncate text-sm">{chat.title}</span>
-                  <span className="shrink-0 text-xs text-muted-foreground">
-                    {formatSidebarAgeLabel(getSidebarChatTimestamp(chat), nowMs)}
-                  </span>
-                </button>
-              ))
-            ) : (
-              <p className="px-1 py-3 text-sm text-muted-foreground">No archived chats</p>
-            )}
-          </DialogBody>
-        </DialogContent>
-      </Dialog>
+        onOpenChat={handleOpenArchivedChat}
+      />
 
       {onImportClaudeSessions ? (
         <ImportSessionsDialog
           open={importDialogOpen}
           busy={isImporting}
           onClose={() => setImportDialogOpen(false)}
-          onImportAll={() => void handleImportAll()}
-          onImportSessions={(sessionIds) => void handleImportSessionIds(sessionIds)}
+          onImportAll={handleImportAll}
+          onImportSessions={handleImportSessionIds}
         />
       ) : null}
 

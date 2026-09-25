@@ -4,24 +4,45 @@ import { isJsonArray, isJsonObject, type JsonObject } from "../../../shared/json
 import { Button } from "../ui/button"
 import { AskUserQuestionInteractive } from "./AskUserQuestionInteractive"
 import { encodeAskUserQuestionResult } from "../../lib/askUserQuestionJson"
+import { useCallback } from "react"
+import { pendingActionKey, runPendingAction, usePendingAction } from "../../stores/pendingActionsStore"
 
 export type PendingToolRequestHydrated = Extract<HydratedTranscriptMessage, { kind: "pending_tool_request" }>
 
+type AnswerToolRequest = (toolRequestId: string, decision: ToolRequestDecision) => Promise<void>
+
 interface Props {
   entry: PendingToolRequestHydrated
-  onAnswer: (toolRequestId: string, decision: ToolRequestDecision) => void
+  onAnswer: AnswerToolRequest
 }
 
+interface ToolRequestResponder {
+  answering: boolean
+  denying: boolean
+  answer: (decision: ToolRequestDecision) => void
+  deny: () => void
+}
 
-function ExitPlanModePending({
-  toolRequestId,
-  plan,
-  onAnswer,
-}: {
-  toolRequestId: string
-  plan: string
-  onAnswer: (toolRequestId: string, decision: ToolRequestDecision) => void
-}) {
+const USER_CANCELED: ToolRequestDecision = { kind: "deny", reason: "user_canceled" }
+
+function useToolRequestResponder(toolRequestId: string, onAnswer: AnswerToolRequest): ToolRequestResponder {
+  const answerKey = pendingActionKey("toolRequest.answer", toolRequestId)
+  const denyKey = pendingActionKey("toolRequest.deny", toolRequestId)
+  const answering = usePendingAction(answerKey)
+  const denying = usePendingAction(denyKey)
+  const busy = answering || denying
+  const answer = useCallback((decision: ToolRequestDecision) => {
+    if (busy) return
+    runPendingAction(answerKey, () => onAnswer(toolRequestId, decision))
+  }, [busy, answerKey, onAnswer, toolRequestId])
+  const deny = useCallback(() => {
+    if (busy) return
+    runPendingAction(denyKey, () => onAnswer(toolRequestId, USER_CANCELED))
+  }, [busy, denyKey, onAnswer, toolRequestId])
+  return { answering, denying, answer, deny }
+}
+
+function ExitPlanModePending({ plan, responder }: { plan: string; responder: ToolRequestResponder }) {
   return (
     <div className="rounded-2xl border border-border overflow-hidden">
       <div className="font-medium text-sm p-3 px-4 bg-muted border-b border-border flex items-center justify-between">
@@ -36,14 +57,18 @@ function ExitPlanModePending({
           size="sm"
           variant="outline"
           className="rounded-full"
-          onClick={() => onAnswer(toolRequestId, { kind: "deny", reason: "user_canceled" })}
+          pending={responder.denying}
+          disabled={responder.answering}
+          onClick={responder.deny}
         >
           Edit
         </Button>
         <Button
           size="sm"
           className="rounded-full"
-          onClick={() => onAnswer(toolRequestId, { kind: "answer", payload: { confirmed: true } })}
+          pending={responder.answering}
+          disabled={responder.denying}
+          onClick={() => responder.answer({ kind: "answer", payload: { confirmed: true } })}
         >
           Confirm
         </Button>
@@ -54,15 +79,13 @@ function ExitPlanModePending({
 
 
 function GenericPending({
-  toolRequestId,
   toolName,
   args,
-  onAnswer,
+  responder,
 }: {
-  toolRequestId: string
   toolName: string
   args: JsonObject
-  onAnswer: (toolRequestId: string, decision: ToolRequestDecision) => void
+  responder: ToolRequestResponder
 }) {
   const previewKey = (["command", "path", "url", "pattern", "query"] as const).find(
     (k) => typeof args[k] === "string" && String(args[k]).length > 0,
@@ -84,14 +107,18 @@ function GenericPending({
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => onAnswer(toolRequestId, { kind: "deny", reason: "user_canceled" })}
+          pending={responder.denying}
+          disabled={responder.answering}
+          onClick={responder.deny}
         >
           Deny
         </Button>
         <Button
           variant="default"
           size="sm"
-          onClick={() => onAnswer(toolRequestId, { kind: "allow" })}
+          pending={responder.answering}
+          disabled={responder.denying}
+          onClick={() => responder.answer({ kind: "allow" })}
         >
           Allow
         </Button>
@@ -103,6 +130,7 @@ function GenericPending({
 
 export function PendingToolRequestMessage({ entry, onAnswer }: Props) {
   const { toolRequestId, toolName, arguments: args } = entry
+  const responder = useToolRequestResponder(toolRequestId, onAnswer)
 
   if (toolName === "mcp__kanna__ask_user_question") {
     const rawQuestions: JsonObject[] = isJsonArray(args.questions) ? args.questions.filter(isJsonObject) : []
@@ -133,14 +161,14 @@ export function PendingToolRequestMessage({ entry, onAnswer }: Props) {
       <AskUserQuestionInteractive
         questions={questions}
         onSubmit={(finalAnswers) =>
-          onAnswer(toolRequestId, {
+          responder.answer({
             kind: "answer",
             payload: encodeAskUserQuestionResult(questions, finalAnswers),
           })
         }
-        onCancel={() =>
-          onAnswer(toolRequestId, { kind: "deny", reason: "user_canceled" })
-        }
+        onCancel={responder.deny}
+        submitPending={responder.answering}
+        cancelPending={responder.denying}
       />
     )
   }
@@ -148,20 +176,11 @@ export function PendingToolRequestMessage({ entry, onAnswer }: Props) {
   if (toolName === "mcp__kanna__exit_plan_mode") {
     const plan = typeof args.plan === "string" ? args.plan : ""
     return (
-      <ExitPlanModePending
-        toolRequestId={toolRequestId}
-        plan={plan}
-        onAnswer={onAnswer}
-      />
+      <ExitPlanModePending plan={plan} responder={responder} />
     )
   }
 
   return (
-    <GenericPending
-      toolRequestId={toolRequestId}
-      toolName={toolName}
-      args={args}
-      onAnswer={onAnswer}
-    />
+    <GenericPending toolName={toolName} args={args} responder={responder} />
   )
 }

@@ -181,7 +181,7 @@ describe("ChangelogSection", () => {
         updateSnapshot={createUpdateSnapshot({ latestVersion: "0.8.1", currentVersion: "0.8.1" })}
         currentVersion="1.0.0"
         onInstallUpdate={() => {}}
-        onCheckForUpdates={() => {}}
+        onCheckForUpdates={async () => {}}
         onForceReload={() => {}}
       />
     )
@@ -210,7 +210,7 @@ describe("ChangelogSection", () => {
         updateSnapshot={createUpdateSnapshot({ updateAvailable: false, status: "error", error: "GitHub said no" })}
         currentVersion="1.0.0"
         onInstallUpdate={() => {}}
-        onCheckForUpdates={() => {}}
+        onCheckForUpdates={async () => {}}
         onForceReload={() => {}}
       />
     )
@@ -234,7 +234,7 @@ describe("ChangelogSection", () => {
         })}
         currentVersion="1.0.0"
         onInstallUpdate={() => {}}
-        onCheckForUpdates={() => {}}
+        onCheckForUpdates={async () => {}}
         onForceReload={() => {}}
       />
     )
@@ -256,7 +256,7 @@ describe("ChangelogSection", () => {
         })}
         currentVersion="1.0.0"
         onInstallUpdate={() => {}}
-        onCheckForUpdates={() => {}}
+        onCheckForUpdates={async () => {}}
         onForceReload={() => {}}
       />
     )

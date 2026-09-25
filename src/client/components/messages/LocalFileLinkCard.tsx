@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from "react"
 import { probeFileUrl } from "../../api/files"
+import { runDetached } from "../../lib/runDetached"
 import type { ChatAttachment } from "../../../shared/types"
 import { middleTruncate } from "../../lib/middleTruncate"
 import { toLocalFileUrl } from "../../lib/pathUtils"
@@ -28,10 +29,10 @@ function LocalFileLinkCardInner({ path, linkText }: Props) {
 
   useEffect(() => {
     const controller = new AbortController()
-    probeFileUrl(contentUrl, { signal: controller.signal }).then((probe) => {
+    runDetached("probe local file link", probeFileUrl(contentUrl, { signal: controller.signal }).then((probe) => {
       if (controller.signal.aborted) return
       setProbe(probe)
-    })
+    }))
     return () => controller.abort()
   }, [contentUrl, setProbe])
 

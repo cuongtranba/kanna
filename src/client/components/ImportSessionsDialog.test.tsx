@@ -23,8 +23,8 @@ async function renderDialog(overrides: Partial<ImportSessionsDialogProps> = {}) 
     open: true,
     busy: false,
     onClose: () => {},
-    onImportAll: () => { calls.importAll += 1 },
-    onImportSessions: (ids) => { calls.importSessions.push(ids) },
+    onImportAll: async () => { calls.importAll += 1 },
+    onImportSessions: async (ids) => { calls.importSessions.push(ids) },
     ...overrides,
   }
   await act(async () => {

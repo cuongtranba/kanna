@@ -1,6 +1,7 @@
 import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "../../lib/utils"
+import { Spinner } from "./spinner"
 
 const buttonVariants = cva(
   "touch-manipulation inline-flex items-center justify-center whitespace-nowrap cursor-pointer rounded-md text-sm font-medium ring-offset-background transition-[colors,transform] duration-[var(--motion-instant)] active:scale-[0.955] motion-reduce:transition-none motion-reduce:active:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:active:scale-100",
@@ -37,17 +38,28 @@ const buttonVariants = cva(
 
 export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement>,
-  VariantProps<typeof buttonVariants> { }
+  VariantProps<typeof buttonVariants> {
+  pending?: boolean
+}
+
+function isIconSize(size: ButtonProps["size"]): boolean {
+  return typeof size === "string" && size.startsWith("icon")
+}
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, type = "button", ...props }, ref) => {
+  ({ className, variant, size, type = "button", pending = false, disabled, children, ...props }, ref) => {
     return (
       <button
         type={type}
-        className={cn(buttonVariants({ variant, size, className }))}
+        className={cn(buttonVariants({ variant, size, className }), pending && "gap-1.5")}
         ref={ref}
+        disabled={disabled || pending}
+        aria-busy={pending || undefined}
         {...props}
-      />
+      >
+        {pending ? <Spinner /> : null}
+        {pending && isIconSize(size) ? null : children}
+      </button>
     )
   }
 )

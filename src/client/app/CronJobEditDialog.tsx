@@ -8,13 +8,14 @@ import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, Dia
 import { Input } from "../components/ui/input"
 import { SegmentedControl, type SegmentedOption } from "../components/ui/segmented-control"
 import { Textarea } from "../components/ui/textarea"
+import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
 import { CronJobEditStore } from "./CronJobEditDialog.store"
 
 interface Props {
   job: CronJobSnapshot
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSave: (patch: CronJobPatch) => void
+  onSave: (patch: CronJobPatch) => Promise<void>
 }
 
 const MODE_OPTIONS: SegmentedOption<CronMode>[] = [
@@ -23,6 +24,8 @@ const MODE_OPTIONS: SegmentedOption<CronMode>[] = [
 ]
 
 function CronJobEditForm({ job, open, onOpenChange, onSave }: Props) {
+  const saveKey = pendingActionKey("cron.update", job.jobId)
+  const savePending = usePendingAction(saveKey)
   const instruction = CronJobEditStore.useScopedStore((state) => state.instruction)
   const scheduleText = CronJobEditStore.useScopedStore((state) => state.scheduleText)
   const mode = CronJobEditStore.useScopedStore((state) => state.mode)
@@ -55,9 +58,11 @@ function CronJobEditForm({ job, open, onOpenChange, onSave }: Props) {
 
   const handleSave = useCallback(() => {
     if (!canSave) return
-    onSave(patch)
-    onOpenChange(false)
-  }, [canSave, onOpenChange, onSave, patch])
+    runPendingAction(saveKey, async () => {
+      await onSave(patch)
+      onOpenChange(false)
+    })
+  }, [canSave, onOpenChange, onSave, patch, saveKey])
 
   const handleCancel = useCallback(() => {
     onOpenChange(false)
@@ -119,7 +124,7 @@ function CronJobEditForm({ job, open, onOpenChange, onSave }: Props) {
           <Button variant="ghost" size="sm" onClick={handleCancel}>
             Cancel
           </Button>
-          <Button size="sm" onClick={handleSave} disabled={!canSave}>
+          <Button size="sm" onClick={handleSave} disabled={!canSave} pending={savePending}>
             Save
           </Button>
         </DialogFooter>

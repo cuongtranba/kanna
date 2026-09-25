@@ -67,6 +67,8 @@ c3-115:
 c3-116:
   - src/client/app/McpServersSection.test.tsx
   - src/client/app/McpServersSection.tsx
+  - src/client/app/McpServerRow.tsx
+  - src/client/app/PendingSegmentedControl.tsx
   - src/client/app/ModelsSection.tsx
   - src/client/app/SettingsPage.tsx
   - src/client/app/SubagentsSection.tsx

@@ -1,12 +1,22 @@
 import { useCallback, useEffect } from "react"
 import { MoreHorizontal, Plus } from "lucide-react"
 import { Button } from "../ui/button"
+import { Spinner } from "../ui/spinner"
 import { Input } from "../ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover"
 import { cn } from "../../lib/utils"
 import { ownerKey, selectBoards, useBoardsStore } from "../../stores/boardsStore"
-import { selectTemplates, useBoardsPageStore } from "./BoardsPage.store"
+import { selectTemplates, useBoardsPageStore, type TemplatesStatus } from "./BoardsPage.store"
 import { COLUMN_DOT_CLASS } from "../../lib/boards/columnStyle"
+import {
+  pendingActionKey,
+  runPendingAction,
+  usePendingAction,
+  usePendingActionsStore,
+} from "../../stores/pendingActionsStore"
+import { LOG_PREFIX } from "../../../shared/branding"
+import { onRejected } from "../../../shared/errors"
+import { log } from "../../../shared/log"
 import type { BoardsSnapshot, ClientCommand, SubscriptionTopic } from "../../../shared/protocol"
 import type { BoardOwnerKind, BoardSummary, BoardTemplate } from "../../../shared/boards/types"
 import type { JsonValue } from "../../../shared/json"
@@ -15,6 +25,14 @@ import type { JsonValue } from "../../../shared/json"
 export interface BoardsPageSocket {
   subscribe(topic: SubscriptionTopic, onSnapshot: (snapshot: BoardsSnapshot) => void): () => void
   command<TResult = JsonValue>(command: ClientCommand): Promise<TResult>
+}
+
+const BOARD_ROW_ACTION_SCOPES = ["board.update", "board.duplicate", "board.saveAsTemplate", "board.archive"] as const
+
+function useBoardRowPending(boardId: string): boolean {
+  return usePendingActionsStore((state) =>
+    BOARD_ROW_ACTION_SCOPES.some((scope) => state.inFlight[pendingActionKey(scope, boardId)] === true),
+  )
 }
 
 export interface BoardsPageProps {
@@ -32,6 +50,9 @@ export function BoardsPage({ ownerKind, ownerId, ownerName, socket, onOpenBoard 
   const picking = useBoardsPageStore((state) => state.picking)
   const renamingId = useBoardsPageStore((state) => state.renamingId)
   const error = useBoardsPageStore((state) => state.error)
+  const templatesStatus = useBoardsPageStore((state) => state.templatesStatus)
+  const createKey = pendingActionKey("board.create", key)
+  const creating = usePendingAction(createKey)
   const { openPicker, closePicker, startRename, stopRename, setError, setTemplates } =
     useBoardsPageStore.getState()
 
@@ -46,25 +67,31 @@ export function BoardsPage({ ownerKind, ownerId, ownerName, socket, onOpenBoard 
 
   useEffect(() => {
     let cancelled = false
-    void socket
-      .command<BoardTemplate[]>({ type: "board.templates.list" })
-      .then((list) => {
+    const pageStore = useBoardsPageStore.getState()
+    if (pageStore.templatesStatus !== "ready") pageStore.beginTemplatesLoad()
+    socket.command<BoardTemplate[]>({ type: "board.templates.list" }).then(
+      (list) => {
         if (!cancelled) setTemplates(list)
-      })
-      .catch(() => {
-      })
+      },
+      onRejected((cause) => {
+        log.error(LOG_PREFIX, "board.templates.list failed", cause)
+        if (!cancelled) useBoardsPageStore.getState().failTemplatesLoad()
+      }),
+    )
     return () => {
       cancelled = true
     }
   }, [socket, setTemplates])
 
   const run = useCallback(
-    async (command: ClientCommand) => {
+    async (command: ClientCommand): Promise<boolean> => {
       try {
         await socket.command(command)
         setError(null)
+        return true
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : "That did not work.")
+        return false
       }
     },
     [socket, setError],
@@ -72,16 +99,18 @@ export function BoardsPage({ ownerKind, ownerId, ownerName, socket, onOpenBoard 
 
   const handleCreate = useCallback(
     (template: BoardTemplate | null) => {
-      closePicker()
-      void run({
-        type: "board.create",
-        ownerKind,
-        ownerId,
-        title: template ? template.name : "Untitled board",
-        templateId: template?.id ?? null,
+      runPendingAction(createKey, async () => {
+        const created = await run({
+          type: "board.create",
+          ownerKind,
+          ownerId,
+          title: template ? template.name : "Untitled board",
+          templateId: template?.id ?? null,
+        })
+        if (created) closePicker()
       })
     },
-    [closePicker, ownerKind, ownerId, run],
+    [closePicker, createKey, ownerKind, ownerId, run],
   )
 
   const handleRename = useCallback(
@@ -89,7 +118,9 @@ export function BoardsPage({ ownerKind, ownerId, ownerName, socket, onOpenBoard 
       stopRename()
       const trimmed = title.trim()
       if (trimmed === "") return
-      void run({ type: "board.update", boardId, title: trimmed })
+      runPendingAction(pendingActionKey("board.update", boardId), () =>
+        run({ type: "board.update", boardId, title: trimmed }),
+      )
     },
     [run, stopRename],
   )
@@ -107,7 +138,7 @@ export function BoardsPage({ ownerKind, ownerId, ownerName, socket, onOpenBoard 
           </p>
         </div>
         {boards.length > 0 ? (
-          <Button size="sm" onClick={openPicker}>
+          <Button size="sm" onClick={openPicker} pending={creating}>
             <Plus className="size-3.5" />
             New board
           </Button>
@@ -122,6 +153,8 @@ export function BoardsPage({ ownerKind, ownerId, ownerName, socket, onOpenBoard 
         {showPicker ? (
           <TemplatePicker
             templates={templates}
+            templatesStatus={templatesStatus}
+            creating={creating}
             firstRun={boards.length === 0}
             onPick={handleCreate}
             onCancel={closePicker}
@@ -164,8 +197,9 @@ function BoardRow({
   onStartRename: (boardId: string) => void
   onRename: (boardId: string, title: string) => void
   onCancelRename: () => void
-  onCommand: (command: ClientCommand) => Promise<void>
+  onCommand: (command: ClientCommand) => Promise<boolean>
 }) {
+  const pending = useBoardRowPending(board.id)
   const handleOpen = useCallback(() => onOpen(board.id), [board.id, onOpen])
 
   const handleRenameKey = useCallback(
@@ -182,7 +216,10 @@ function BoardRow({
   )
 
   return (
-    <li className="group grid grid-cols-[1fr_auto_auto] items-center gap-5 border-b border-border px-3 py-3 last:border-b-0 hover:bg-secondary">
+    <li
+      aria-busy={pending || undefined}
+      className="group grid grid-cols-[1fr_auto_auto] items-center gap-5 border-b border-border px-3 py-3 last:border-b-0 hover:bg-secondary"
+    >
       <div className="min-w-0">
         {renaming ? (
           <Input
@@ -214,19 +251,21 @@ function BoardRow({
         </span>
       </div>
 
-      <RowMenu board={board} onStartRename={onStartRename} onCommand={onCommand} />
+      <RowMenu board={board} pending={pending} onStartRename={onStartRename} onCommand={onCommand} />
     </li>
   )
 }
 
 function RowMenu({
   board,
+  pending,
   onStartRename,
   onCommand,
 }: {
   board: BoardSummary
+  pending: boolean
   onStartRename: (boardId: string) => void
-  onCommand: (command: ClientCommand) => Promise<void>
+  onCommand: (command: ClientCommand) => Promise<boolean>
 }) {
   const open = useBoardsPageStore((state) => state.openMenuId === board.id)
   const { openMenu, closeMenu } = useBoardsPageStore.getState()
@@ -246,17 +285,23 @@ function RowMenu({
 
   const duplicate = useCallback(() => {
     closeMenu()
-    void onCommand({ type: "board.duplicate", boardId: board.id, title: `${board.title} copy` })
+    runPendingAction(pendingActionKey("board.duplicate", board.id), () =>
+      onCommand({ type: "board.duplicate", boardId: board.id, title: `${board.title} copy` }),
+    )
   }, [board.id, board.title, closeMenu, onCommand])
 
   const saveTemplate = useCallback(() => {
     closeMenu()
-    void onCommand({ type: "board.saveAsTemplate", boardId: board.id, name: board.title })
+    runPendingAction(pendingActionKey("board.saveAsTemplate", board.id), () =>
+      onCommand({ type: "board.saveAsTemplate", boardId: board.id, name: board.title }),
+    )
   }, [board.id, board.title, closeMenu, onCommand])
 
   const archive = useCallback(() => {
     closeMenu()
-    void onCommand({ type: "board.archive", boardId: board.id })
+    runPendingAction(pendingActionKey("board.archive", board.id), () =>
+      onCommand({ type: "board.archive", boardId: board.id }),
+    )
   }, [board.id, closeMenu, onCommand])
 
   return (
@@ -265,9 +310,14 @@ function RowMenu({
         <button
           type="button"
           aria-label={`Actions for ${board.title}`}
-          className="rounded-md px-1.5 py-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 data-[state=open]:opacity-100"
+          disabled={pending}
+          aria-busy={pending || undefined}
+          className={cn(
+            "rounded-md px-1.5 py-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 data-[state=open]:opacity-100",
+            pending && "opacity-100",
+          )}
         >
-          <MoreHorizontal className="size-4" />
+          {pending ? <Spinner className="size-4" /> : <MoreHorizontal className="size-4" />}
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-56 p-1">
@@ -308,11 +358,15 @@ function MenuButton({
 
 function TemplatePicker({
   templates,
+  templatesStatus,
+  creating,
   firstRun,
   onPick,
   onCancel,
 }: {
   templates: BoardTemplate[]
+  templatesStatus: TemplatesStatus
+  creating: boolean
   firstRun: boolean
   onPick: (template: BoardTemplate | null) => void
   onCancel: () => void
@@ -333,14 +387,24 @@ function TemplatePicker({
         <h2 className="text-15 font-semibold text-foreground">Start from a shape</h2>
       )}
 
-      <div className="mt-4 max-w-xl rounded-lg border border-border">
+      <div className="mt-4 max-w-xl rounded-lg border border-border" aria-busy={creating || undefined}>
         {templates.map((template) => (
-          <TemplateRow key={template.id} template={template} onPick={onPick} />
+          <TemplateRow key={template.id} template={template} disabled={creating} onPick={onPick} />
         ))}
+        {templatesStatus === "loading" ? (
+          <p role="status" className="flex items-center gap-2 px-3.5 py-2.5 text-xs text-muted-foreground">
+            <Spinner />
+            Loading templates…
+          </p>
+        ) : null}
+        {templatesStatus === "failed" ? (
+          <p className="px-3.5 py-2.5 text-xs text-muted-foreground">Couldn't load templates.</p>
+        ) : null}
         <button
           type="button"
           onClick={handleEmpty}
-          className="flex w-full items-center border-t border-border px-3.5 py-2.5 text-left hover:bg-secondary"
+          disabled={creating}
+          className="flex w-full items-center border-t border-border px-3.5 py-2.5 text-left hover:bg-secondary disabled:pointer-events-none disabled:opacity-60"
         >
           <span>
             <span className="block text-sm font-medium text-foreground">Empty board</span>
@@ -348,6 +412,13 @@ function TemplatePicker({
           </span>
         </button>
       </div>
+
+      {creating ? (
+        <p role="status" className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+          <Spinner />
+          Creating board…
+        </p>
+      ) : null}
 
       {!firstRun ? (
         <Button variant="ghost" size="sm" className="mt-3" onClick={onCancel}>
@@ -360,9 +431,11 @@ function TemplatePicker({
 
 function TemplateRow({
   template,
+  disabled,
   onPick,
 }: {
   template: BoardTemplate
+  disabled: boolean
   onPick: (template: BoardTemplate) => void
 }) {
   const handlePick = useCallback(() => onPick(template), [onPick, template])
@@ -372,7 +445,8 @@ function TemplateRow({
     <button
       type="button"
       onClick={handlePick}
-      className="flex w-full items-center gap-3 border-b border-border px-3.5 py-2.5 text-left last:border-b-0 hover:bg-secondary"
+      disabled={disabled}
+      className="flex w-full items-center gap-3 border-b border-border px-3.5 py-2.5 text-left last:border-b-0 hover:bg-secondary disabled:pointer-events-none disabled:opacity-60"
     >
       <span className="min-w-0">
         <span className="block text-sm font-medium text-foreground">{template.name}</span>

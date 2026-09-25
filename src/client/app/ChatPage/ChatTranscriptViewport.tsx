@@ -34,7 +34,10 @@ import { CloudflareTunnelCard } from "../../components/chat-ui/CloudflareTunnelC
 import {
   CHAT_NAVBAR_OFFSET_PX,
   EMPTY_STATE_TEXT,
+  scrollTranscriptListToEnd,
 } from "./utils"
+import { runDetached } from "../../lib/runDetached"
+import { pendingActionKey, runPendingAction } from "../../stores/pendingActionsStore"
 import { WorkflowsSectionWithDetail } from "../WorkflowsSection"
 import { domAdapter } from "../../adapters/dom.adapter"
 import { timerAdapter } from "../../adapters/timer.adapter"
@@ -203,7 +206,7 @@ export const ChatTranscriptViewport = memo(({
 
     onIsAtEndChange(true)
     const frameId = timer.requestAnimationFrame(() => {
-      void listRef.current?.scrollToEnd?.({ animated: false })
+      scrollTranscriptListToEnd(listRef.current, false)
     })
     return () => timer.cancelAnimationFrame(frameId)
   }, [listRef, onIsAtEndChange, resolvedRows.length, timer])
@@ -361,13 +364,13 @@ export const ChatTranscriptViewport = memo(({
     if (isHistoryLoading || !hasOlderHistory) {
       return
     }
-    void loadOlderHistory()
+    runDetached("transcript.loadOlderHistory", loadOlderHistory())
   }, [hasOlderHistory, isHistoryLoading, loadOlderHistory])
 
   const handleOpenLocalLinkClick = useCallback((target: OpenLocalLinkTarget) => {
     if (target.trigger !== "contextmenu") {
       const action = shouldOpenLocalFileLinkInEditor(target.path) ? "open_editor" : "open_default"
-      void onOpenLocalLink(target, action)
+      runPendingAction(pendingActionKey("system.openExternal", target.path), () => onOpenLocalLink(target, action))
       return
     }
 
@@ -461,12 +464,12 @@ export const ChatTranscriptViewport = memo(({
         <QueuedUserMessage
           key={message.id}
           message={message}
-          onRemove={() => void onRemoveQueuedMessage(message.id)}
-          onSendNow={() => void onSteerQueuedMessage(message.id)}
+          onRemove={() => onRemoveQueuedMessage(message.id)}
+          onSendNow={() => onSteerQueuedMessage(message.id)}
         />
       ))}
       {!isProcessing && isDraining ? (
-        <DrainingIndicator onStop={() => void onStopDraining()} />
+        <DrainingIndicator chatId={activeChatId} onStop={onStopDraining} />
       ) : null}
       {commandError ? (
         <div className="rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive whitespace-pre-wrap">
@@ -567,7 +570,10 @@ export const ChatTranscriptViewport = memo(({
             includePreview
             includeDefault
             onOpenExternal={(action, editor) => {
-              void onOpenLocalLink(localLinkMenuTarget, action, editor)
+              runPendingAction(
+                pendingActionKey("system.openExternal", localLinkMenuTarget.path),
+                () => onOpenLocalLink(localLinkMenuTarget, action, editor),
+              )
             }}
           />
         ) : null}

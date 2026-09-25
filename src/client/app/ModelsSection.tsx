@@ -15,6 +15,7 @@ import {
   SettingsRowActions,
 } from "../components/settings/SettingsList"
 import { useAppSettingsStore, selectCustomModels } from "../stores/appSettingsStore"
+import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
 import {
   CLAUDE_CONTEXT_WINDOW_OPTIONS,
   CLAUDE_REASONING_OPTIONS,
@@ -132,11 +133,8 @@ export function ModelsSection({ models, handlers, dom = domAdapter }: ModelsSect
                     key={model.id}
                     model={model}
                     onEdit={() => navigate({ kind: "edit", id: model.id })}
-                    onDelete={() => {
-                      if (dom.confirmDialog(`Delete model "${model.label}"?`)) {
-                        void handlers.onDelete(model.id)
-                      }
-                    }}
+                    onDelete={handlers.onDelete}
+                    dom={dom}
                   />
                 ))}
               </SettingsList>
@@ -152,13 +150,22 @@ function ModelRow({
   model,
   onEdit,
   onDelete,
+  dom,
 }: {
   model: CustomModelEntry
   onEdit: () => void
-  onDelete: () => void
+  onDelete: (id: string) => Promise<void>
+  dom: DomPort
 }) {
+  const deleteKey = pendingActionKey("models.delete", model.provider, model.id)
+  const deletePending = usePendingAction(deleteKey)
+  const handleDelete = useCallback(() => {
+    if (!dom.confirmDialog(`Delete model "${model.label}"?`)) return
+    runPendingAction(deleteKey, () => onDelete(model.id))
+  }, [deleteKey, dom, model.id, model.label, onDelete])
+
   return (
-    <li className="flex items-center gap-3 px-4 py-3">
+    <li className="flex items-center gap-3 px-4 py-3" aria-busy={deletePending || undefined}>
       <div className="flex flex-col">
         <span className="font-medium">{model.label}</span>
         <span className="font-mono text-xs text-muted-foreground">{model.id}</span>
@@ -170,7 +177,7 @@ function ModelRow({
         {model.supportedEfforts?.includes("max") && (
           <span className="rounded bg-muted px-1.5 py-0.5 text-xs">max</span>
         )}
-        <SettingsRowActions label={model.label} onEdit={onEdit} onDelete={onDelete} />
+        <SettingsRowActions label={model.label} onEdit={onEdit} onDelete={handleDelete} deletePending={deletePending} />
       </div>
     </li>
   )
@@ -321,8 +328,9 @@ function ModelEditor({
       <div className="flex items-center gap-2">
         <Button
           onClick={() => {
-            void onSubmit()
+            runPendingAction(pendingActionKey("models.save", initial?.id ?? "new"), onSubmit)
           }}
+          pending={submitting}
           disabled={!canSave}
         >
           {submitLabel}

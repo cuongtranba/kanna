@@ -1,5 +1,5 @@
 import { LegendList, type LegendListRef } from "@legendapp/list/react"
-import { AlertTriangle, ArrowUp, Ban, Building2, Check, ChevronDown, ChevronUp, Code, Columns2, Copy, Download, Ellipsis, FileText, FolderOpen, GitBranch, GitBranchPlus, GitMerge, GitPullRequest, Globe, LoaderCircle, Lock, Minus, PencilLine, PenLine, RefreshCw, Rows3, Search, Trash2, Upload, UserRound, WrapText } from "lucide-react"
+import { AlertTriangle, ArrowUp, Ban, Building2, Check, ChevronDown, ChevronUp, Code, Columns2, Copy, Download, Ellipsis, FileText, FolderOpen, GitBranch, GitBranchPlus, GitMerge, GitPullRequest, Globe, LoaderCircle, Lock, Minus, PencilLine, PenLine, RefreshCw, Rows3, Trash2, Upload, UserRound, WrapText } from "lucide-react"
 import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, type ChangeEvent as ReactChangeEvent, type MouseEvent as ReactMouseEvent, type ReactNode, type RefObject } from "react"
 import type {
   BranchActionFailure,
@@ -17,13 +17,17 @@ import type {
   GitHubPublishInfo,
   GitHubRepoAvailabilityResult,
 } from "../../../shared/types"
+import { errorMessage, onRejected } from "../../../shared/errors"
 import type { DomPort } from "../../ports/domPort"
 import type { TimerPort } from "../../ports/timerPort"
 import { domAdapter } from "../../adapters/dom.adapter"
 import { timerAdapter } from "../../adapters/timer.adapter"
 import { useStickyState } from "../../hooks/useStickyState"
+import { runDetached } from "../../lib/runDetached"
 import { cn } from "../../lib/utils"
 import { useDiffCommitStore } from "../../stores/diffCommitStore"
+import { useKannaStateStore } from "../../stores/kannaStateStore"
+import { pendingActionKey, runPendingAction, usePendingAction } from "../../stores/pendingActionsStore"
 import { useRightSidebarStore } from "../../stores/rightSidebarStore"
 import { useRightSidebarUiStore } from "../../stores/rightSidebarUiStore"
 import { DiffFileCardStore } from "./DiffFileCard.store"
@@ -32,7 +36,8 @@ import { FilePreviewSheet } from "../messages/file-preview/FilePreviewSheet"
 import { toPreviewSourceFromAttachment } from "../messages/file-preview/types"
 import { classifyAttachmentPreview } from "../messages/attachmentPreview"
 import { Button } from "../ui/button"
-import { SectionCaption } from "../ui/plate"
+import { Spinner } from "../ui/spinner"
+import { BranchListSection, BranchSearchInput } from "./BranchList"
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from "../ui/context-menu"
 import { GithubMark } from "../ui/github-mark"
 import { Input } from "../ui/input"
@@ -78,13 +83,13 @@ export interface RightSidebarPorts {
 }
 
 export interface DiffFileActions {
-  onOpenFile: (path: string) => void
-  onOpenInFinder: (path: string) => void
-  onDiscardFile: (path: string) => void
-  onIgnoreFile: (path: string) => void
-  onIgnoreFolder: (path: string) => void
-  onCopyFilePath: (path: string) => void
-  onCopyRelativePath: (path: string) => void
+  onOpenFile: (path: string) => Promise<void>
+  onOpenInFinder: (path: string) => Promise<void>
+  onDiscardFile: (path: string) => Promise<void>
+  onIgnoreFile: (path: string) => Promise<void>
+  onIgnoreFolder: (path: string) => Promise<void>
+  onCopyFilePath: (path: string) => Promise<void>
+  onCopyRelativePath: (path: string) => Promise<void>
 }
 
 interface RightSidebarProps extends DiffFileActions {
@@ -289,7 +294,7 @@ function GitHubPublishModal({
     let cancelled = false
     setIsLoadingInfo(true)
     setAvailability(null)
-    void onGetGitHubPublishInfo()
+    runDetached("github publish info", onGetGitHubPublishInfo()
       .then((result) => {
         if (cancelled) return
         setInfo(result)
@@ -297,11 +302,14 @@ function GitHubPublishModal({
         setName(result.suggestedRepoName)
         setVisibility("private")
         setDescription("")
-      })
+      }, onRejected((error) => {
+        if (cancelled) return
+        useKannaStateStore.getState().setCommandError(errorMessage(error))
+      }))
       .finally(() => {
         if (cancelled) return
         setIsLoadingInfo(false)
-      })
+      }))
     return () => {
       cancelled = true
     }
@@ -321,15 +329,18 @@ function GitHubPublishModal({
     let cancelled = false
     setIsCheckingAvailability(true)
     const timeoutId = timer.setTimeout(() => {
-      void onCheckGitHubRepoAvailability({ owner: trimmedOwner, name: trimmedName })
+      runDetached("github repo availability", onCheckGitHubRepoAvailability({ owner: trimmedOwner, name: trimmedName })
         .then((result) => {
           if (cancelled) return
           setAvailability(result)
-        })
+        }, onRejected((error) => {
+          if (cancelled) return
+          setAvailability({ available: false, message: errorMessage(error) })
+        }))
         .finally(() => {
           if (cancelled) return
           setIsCheckingAvailability(false)
-        })
+        }))
     }, 250)
 
     return () => {
@@ -337,6 +348,10 @@ function GitHubPublishModal({
       timer.clearTimeout(timeoutId)
     }
   }, [info?.authenticated, info?.ghInstalled, name, onCheckGitHubRepoAvailability, open, owner, setAvailability, setIsCheckingAvailability, timer])
+
+  function launchPublish() {
+    runPendingAction(pendingActionKey("chat.publishToGitHub", owner.trim(), name.trim()), handlePublish)
+  }
 
   async function handlePublish() {
     if (!owner.trim() || !name.trim()) return
@@ -517,7 +532,7 @@ function GitHubPublishModal({
           <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button size="sm" disabled={!canPublish} onClick={() => void handlePublish()}>
+          <Button size="sm" disabled={!canPublish} onClick={launchPublish}>
             {isPublishing ? (
               <>
                 <LoaderCircle className="mr-1.5 size-3.5 animate-spin" />
@@ -530,106 +545,6 @@ function GitHubPublishModal({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  )
-}
-
-function BranchSearchInput({
-  value,
-  onChange,
-  placeholder,
-  disabled,
-  trailingAction,
-}: {
-  value: string
-  onChange: (value: string) => void
-  placeholder: string
-  disabled?: boolean
-  trailingAction?: ReactNode
-}) {
-  return (
-    <div className="relative">
-      <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-      <Input
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={placeholder}
-        className={cn("h-9 pl-7 text-sm", trailingAction ? "pr-14" : undefined)}
-        disabled={disabled}
-      />
-      {trailingAction ? <div className="absolute right-1 top-1/2 -translate-y-1/2">{trailingAction}</div> : null}
-    </div>
-  )
-}
-
-function BranchListSection({
-  title,
-  entries,
-  emptyLabel,
-  selectedName,
-  disabled,
-  stickyTitle = false,
-  onSelect,
-}: {
-  title: string
-  entries: ChatBranchListEntry[]
-  emptyLabel?: string
-  selectedName?: string | null
-  disabled?: boolean
-  stickyTitle?: boolean
-  onSelect: (entry: ChatBranchListEntry) => void
-}) {
-  if (entries.length === 0 && !emptyLabel) {
-    return null
-  }
-
-  return (
-    <div className="space-y-1">
-      <SectionCaption
-        label={title}
-        fact={entries.length > 0 ? String(entries.length) : undefined}
-        className={cn(stickyTitle && "sticky top-0 z-10 bg-background")}
-      />
-      {entries.length === 0 ? (
-        <div className="px-1 py-1 text-xs text-muted-foreground">{emptyLabel}</div>
-      ) : (
-        entries.map((entry) => {
-          const isSelected = selectedName === entry.name
-          return (
-            <button
-              key={entry.id}
-              type="button"
-              disabled={disabled}
-              onClick={() => onSelect(entry)}
-              className={cn(
-                "flex w-full items-start gap-2 rounded-lg px-2 py-2 text-left transition-colors disabled:opacity-60",
-                isSelected
-                  ? "bg-accent text-foreground"
-                  : "hover:bg-accent"
-              )}
-            >
-              {entry.kind === "pull_request"
-                ? <GitPullRequest className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                : <GitBranch className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
-              <div className="min-w-0 flex-1">
-                <div className="flex w-full items-center gap-3">
-                  <div className="min-w-0 flex-1 overflow-hidden whitespace-nowrap text-sm text-foreground">{entry.displayName}</div>
-                  {entry.updatedAt ? (
-                    <div className="ml-auto shrink-0 text-right text-xs text-muted-foreground">
-                      {formatRelativeTime(entry.updatedAt)}
-                    </div>
-                  ) : null}
-                </div>
-                {(entry.kind === "pull_request" && entry.description) || entry.headLabel ? (
-                  <div className="truncate text-xs text-muted-foreground">
-                    {entry.kind === "pull_request" ? (entry.description ?? entry.headLabel ?? entry.name) : (entry.headLabel ?? undefined)}
-                  </div>
-                ) : null}
-              </div>
-            </button>
-          )
-        })
-      )}
-    </div>
   )
 }
 
@@ -731,6 +646,11 @@ function MergeBranchModal({
   }, [onPreviewMergeBranch, open, resetMergePreview, selectedEntry, setIsPreviewLoading, setPreview, setPreviewError])
 
   const mergeDisabled = !selectedEntry || !preview || isPreviewLoading || isMerging || preview.status !== "mergeable"
+
+  function launchMerge() {
+    if (!selectedEntry) return
+    runPendingAction(pendingActionKey("chat.mergeBranch", selectedEntry.id), handleMerge)
+  }
 
   async function handleMerge() {
     if (!selectedEntry || mergeDisabled) return
@@ -847,7 +767,7 @@ function MergeBranchModal({
             <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button className="max-w-full min-w-0" size="sm" disabled={mergeDisabled} onClick={() => void handleMerge()}>
+            <Button className="max-w-full min-w-0" size="sm" disabled={mergeDisabled} onClick={launchMerge}>
               {isMerging ? (
                 <>
                   <LoaderCircle className="mr-1.5 h-3.5 w-3.5 animate-spin" />
@@ -865,6 +785,7 @@ function MergeBranchModal({
 }
 
 function BranchSwitcher({
+  projectId,
   currentBranchName,
   onListBranches,
   onPreviewMergeBranch,
@@ -872,6 +793,7 @@ function BranchSwitcher({
   onCheckoutBranch,
   onCreateBranch,
 }: {
+  projectId: string | null
   currentBranchName?: string
   onListBranches: () => Promise<ChatBranchListResult>
   onPreviewMergeBranch: (branch: ChatBranchListEntry) => Promise<ChatMergePreviewResult>
@@ -915,6 +837,18 @@ function BranchSwitcher({
 
   const { currentName, recent, local, remote, pullRequests, totalPullRequestCount } =
     deriveBranchListSnapshot(branchList ?? null, currentBranchName, query)
+
+  const checkoutScope = pendingActionKey("chat.checkoutBranch", projectId ?? "")
+  const createBranchKey = pendingActionKey("chat.createBranch", projectId ?? "")
+  const isCreatingBranch = usePendingAction(createBranchKey)
+
+  function launchCheckout(entry: ChatBranchListEntry) {
+    runPendingAction(pendingActionKey(checkoutScope, entry.id), () => handleCheckout(entry))
+  }
+
+  function launchCreate() {
+    runPendingAction(createBranchKey, handleCreate)
+  }
 
   async function handleCheckout(entry: ChatBranchListEntry) {
     setIsMutating(true)
@@ -974,9 +908,8 @@ function BranchSwitcher({
         emptyLabel={pullRequestsEmptyLabel}
         disabled={isMutating}
         stickyTitle
-        onSelect={(entry) => {
-          void handleCheckout(entry)
-        }}
+        pendingScope={checkoutScope}
+        onSelect={launchCheckout}
       />
     )
   } else {
@@ -988,9 +921,8 @@ function BranchSwitcher({
           emptyLabel="No recent branches."
           disabled={isMutating}
           stickyTitle
-          onSelect={(entry) => {
-            void handleCheckout(entry)
-          }}
+          pendingScope={checkoutScope}
+          onSelect={launchCheckout}
         />
         <BranchListSection
           title="Local"
@@ -998,9 +930,8 @@ function BranchSwitcher({
           emptyLabel="No local branches."
           disabled={isMutating}
           stickyTitle
-          onSelect={(entry) => {
-            void handleCheckout(entry)
-          }}
+          pendingScope={checkoutScope}
+          onSelect={launchCheckout}
         />
         <BranchListSection
           title="Remote"
@@ -1008,9 +939,8 @@ function BranchSwitcher({
           emptyLabel="No remote branches."
           disabled={isMutating}
           stickyTitle
-          onSelect={(entry) => {
-            void handleCheckout(entry)
-          }}
+          pendingScope={checkoutScope}
+          onSelect={launchCheckout}
         />
       </div>
     )
@@ -1040,8 +970,9 @@ function BranchSwitcher({
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => void handleCreate()}
+                onClick={launchCreate}
                 disabled={isLoading || isMutating}
+                pending={isCreatingBranch}
                 className="h-7 px-2 text-xs hover:!bg-transparent hover:!border-border/0"
               >
                 + New
@@ -1157,8 +1088,15 @@ function DiffFileCard({
     }
 
     autoLoadPatchKeyRef.current = autoLoadKey
-    void onLoadPatch(file.path).catch(() => {})
+    runDetached("diff patch prefetch", onLoadPatch(file.path))
   }, [file.patchDigest, file.path, onLoadPatch, shouldLoadPatchWhenVisible])
+
+  const fileActionKey = pendingActionKey("diff.fileAction", projectId ?? "", file.path)
+  const isFileActionPending = usePendingAction(fileActionKey)
+
+  function runFileAction(action: (path: string) => Promise<void>) {
+    runPendingAction(fileActionKey, () => action(file.path))
+  }
 
   function handleAttachmentClick(attachment: ChatAttachment) {
     const target = classifyAttachmentPreview(attachment)
@@ -1205,9 +1143,10 @@ function DiffFileCard({
       return
     }
 
-    void onLoadPatch(file.path).then(() => {
+    runPendingAction(pendingActionKey("project.readDiffPatch", projectId ?? "", file.path), async () => {
+      await onLoadPatch(file.path)
       onToggleCollapsed()
-    }).catch(() => {})
+    })
   }
 
   let collapseIcon: ReactNode
@@ -1272,7 +1211,7 @@ function DiffFileCard({
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
-        <div ref={cardRef} key={file.path} className="relative rounded-lg border border-border bg-background">
+        <div ref={cardRef} key={file.path} aria-busy={isFileActionPending || undefined} className="relative rounded-lg border border-border bg-background">
           {!isCollapsed ? <div ref={sentinelRef} className="pointer-events-none absolute inset-x-0 top-0 h-px" aria-hidden="true" /> : null}
           <div
             role="button"
@@ -1310,9 +1249,10 @@ function DiffFileCard({
                 type="button"
                 aria-label={`Open actions for ${file.path}`}
                 onClick={openContextMenuFromButton}
+                disabled={isFileActionPending}
                 className="flex h-5 w-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               >
-                <Ellipsis className="h-3.5 w-3.5 shrink-0" />
+                {isFileActionPending ? <Spinner /> : <Ellipsis className="h-3.5 w-3.5 shrink-0" />}
               </button>
               {collapseIcon}
             </div>
@@ -1337,7 +1277,7 @@ function DiffFileCard({
         <ContextMenuItem
           onSelect={(event) => {
             event.stopPropagation()
-            fileActions.onOpenFile(file.path)
+            runFileAction(fileActions.onOpenFile)
           }}
         >
           <Code className="h-3.5 w-3.5" />
@@ -1346,7 +1286,7 @@ function DiffFileCard({
         <ContextMenuItem
           onSelect={(event) => {
             event.stopPropagation()
-            fileActions.onOpenInFinder(file.path)
+            runFileAction(fileActions.onOpenInFinder)
           }}
         >
           <FolderOpen className="h-3.5 w-3.5" />
@@ -1355,7 +1295,7 @@ function DiffFileCard({
         <ContextMenuItem
           onSelect={(event) => {
             event.stopPropagation()
-            fileActions.onDiscardFile(file.path)
+            runFileAction(fileActions.onDiscardFile)
           }}
           className="text-destructive hover:bg-destructive/10 focus:bg-destructive/10"
         >
@@ -1367,7 +1307,7 @@ function DiffFileCard({
           onSelect={(event) => {
             event.stopPropagation()
             if (!canIgnore) return
-            fileActions.onIgnoreFile(file.path)
+            runFileAction(fileActions.onIgnoreFile)
           }}
         >
           <Ban className="h-3.5 w-3.5" />
@@ -1378,7 +1318,7 @@ function DiffFileCard({
           onSelect={(event) => {
             event.stopPropagation()
             if (!canIgnoreFolder) return
-            fileActions.onIgnoreFolder(file.path)
+            runFileAction(fileActions.onIgnoreFolder)
           }}
         >
           <Ban className="h-3.5 w-3.5" />
@@ -1388,7 +1328,7 @@ function DiffFileCard({
         <ContextMenuItem
           onSelect={(event) => {
             event.stopPropagation()
-            fileActions.onCopyFilePath(file.path)
+            runFileAction(fileActions.onCopyFilePath)
           }}
         >
           <Copy className="h-3.5 w-3.5" />
@@ -1397,7 +1337,7 @@ function DiffFileCard({
         <ContextMenuItem
           onSelect={(event) => {
             event.stopPropagation()
-            fileActions.onCopyRelativePath(file.path)
+            runFileAction(fileActions.onCopyRelativePath)
           }}
         >
           <Copy className="h-3.5 w-3.5" />
@@ -1614,16 +1554,40 @@ function RightSidebarImpl({
     }
   }
 
+  const gitActionScope = projectId ?? ""
+  const initGitKey = pendingActionKey("chat.initGit", gitActionScope)
+  const isInitializingGit = usePendingAction(initGitKey)
+
+  function launchCommit(mode: DiffCommitMode) {
+    runPendingAction(pendingActionKey("chat.commitDiffs", gitActionScope), () => handleCommit(mode))
+  }
+
+  function launchGenerate() {
+    runPendingAction(pendingActionKey("chat.generateCommitMessage", gitActionScope), handleGenerate)
+  }
+
+  function launchPrimaryCommitAction() {
+    if (hasSummary) {
+      launchCommit(primaryCommitMode)
+      return
+    }
+    launchGenerate()
+  }
+
+  function launchSync(action: "fetch" | "pull" | "push" | "publish" = syncAction) {
+    runPendingAction(pendingActionKey("chat.syncBranch", gitActionScope), () => handleSync(action))
+  }
+
+  function launchInitGit() {
+    runPendingAction(initGitKey, onInitializeGit)
+  }
+
   function handleCommitKeyDown(event: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) {
     if (!(event.metaKey || event.ctrlKey) || event.key !== "Enter") {
       return
     }
     event.preventDefault()
-    if (hasSummary) {
-      void handleCommit(primaryCommitMode)
-      return
-    }
-    void handleGenerate()
+    launchPrimaryCommitAction()
   }
 
   async function handleSync(action: "fetch" | "pull" | "push" | "publish" = syncAction) {
@@ -1742,7 +1706,7 @@ function RightSidebarImpl({
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => void handleSync()}
+          onClick={() => launchSync()}
           disabled={isSyncing}
           className="h-7 gap-1.5 px-2 text-xs hover:!bg-transparent hover:!border-border/0"
         >
@@ -1759,7 +1723,7 @@ function RightSidebarImpl({
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => void handleSync()}
+                  onClick={() => launchSync()}
                   disabled={isSyncing}
                   className="h-7 gap-1.5 px-2 text-xs hover:!bg-transparent hover:!border-border/0"
                 >
@@ -1773,7 +1737,7 @@ function RightSidebarImpl({
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => void handleSync()}
+              onClick={() => launchSync()}
               disabled={isSyncing}
               className="h-7 gap-1.5 px-2 text-xs hover:!bg-transparent hover:!border-border/0"
             >
@@ -1788,7 +1752,7 @@ function RightSidebarImpl({
             <Button
               variant="default"
               size="sm"
-              onClick={() => void handleSync("push")}
+              onClick={() => launchSync("push")}
               disabled={isSyncing}
               className="h-7 gap-1.5 px-2 text-xs"
             >
@@ -1825,7 +1789,7 @@ function RightSidebarImpl({
       <div className="flex h-full items-center justify-center px-6 py-3 text-center">
         <div className="flex max-w-[280px] flex-col items-center gap-3">
           <p className="text-sm text-muted-foreground">Initialize git here to start tracking branches, diffs, and history.</p>
-          <Button size="sm" onClick={() => void onInitializeGit()}>
+          <Button size="sm" pending={isInitializingGit} onClick={launchInitGit}>
             Init Git
           </Button>
         </div>
@@ -1895,6 +1859,7 @@ function RightSidebarImpl({
         <div className="flex shrink-0 items-center gap-2 border-b border-border pl-2.5 pr-2 py-2">
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <BranchSwitcher
+              projectId={projectId}
               currentBranchName={diffs.branchName}
               onListBranches={onListBranches}
               onPreviewMergeBranch={onPreviewMergeBranch}
@@ -2006,13 +1971,7 @@ function RightSidebarImpl({
                             type="button"
                             className="-mt-px w-full rounded-xl"
                             disabled={hasSummary ? !canCommit : !canGenerate}
-                            onClick={() => {
-                              if (hasSummary) {
-                                void handleCommit(primaryCommitMode)
-                                return
-                              }
-                              void handleGenerate()
-                            }}
+                            onClick={launchPrimaryCommitAction}
                           >
                             <span className="flex min-w-0 items-center gap-1.5">
                               {commitButtonIcon}
@@ -2028,7 +1987,7 @@ function RightSidebarImpl({
                               disabled={!hasSummary || !canCommit}
                               onSelect={(event) => {
                                 event.stopPropagation()
-                                void handleCommit("commit_only")
+                                launchCommit("commit_only")
                               }}
                             >
                               Commit Only

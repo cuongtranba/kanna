@@ -2,10 +2,31 @@ import { type ReactNode, useCallback, useEffect } from "react"
 import { ExternalLink, Loader2, RefreshCw } from "lucide-react"
 import { Button } from "../ui/button"
 import { STATUS_PILL_CLASS } from "../../../shared/design/tone-pairings"
+import { errorMessage } from "../../../shared/errors"
+import type { ClientCommand } from "../../../shared/protocol"
 import type { InstalledPackage, PackageInventorySnapshot, PackageKind, PackageUpdateEntry, UpdateAvailability } from "../../../shared/packages/types"
 import { cn } from "../../lib/utils"
+import { runDetached } from "../../lib/runDetached"
+import { useKannaStateStore } from "../../stores/kannaStateStore"
+import { pendingActionKey, runPendingAction, usePendingAction } from "../../stores/pendingActionsStore"
 import { useSettingsPageStore } from "../../stores/settingsPageStore"
 import type { KannaState } from "../../app/useKannaState"
+
+const CHECK_UPDATES_KEY = pendingActionKey("packages.checkUpdates")
+
+function packageUpdateKey(id: string): string {
+  return pendingActionKey("packages.update", id)
+}
+
+async function sendPackageCommand(socket: KannaState["socket"], command: ClientCommand): Promise<void> {
+  try {
+    await socket.command(command)
+    useKannaStateStore.getState().setCommandError(null)
+  } catch (error) {
+    useKannaStateStore.getState().setCommandError(errorMessage(error))
+    throw error
+  }
+}
 
 const EMPTY_PACKAGES: InstalledPackage[] = []
 const EMPTY_ERRORS: Array<{ kind: PackageKind; message: string }> = []
@@ -34,6 +55,8 @@ function PluginRow({
   applying: boolean
   onUpdate: () => void
 }) {
+  const updatePending = usePendingAction(packageUpdateKey(pkg.id))
+  const updating = applying || updatePending
   const avail = packageEntry?.update.availability
   const version = pkg.versionLabel ?? pkg.version ?? pkg.revision?.slice(0, 7) ?? null
   const pillClass = avail && avail !== "up_to_date" ? STATUS_PILL_CLASS[avail] : null
@@ -55,11 +78,12 @@ function PluginRow({
             type="button"
             size="sm"
             variant="secondary"
-            disabled={applying}
+            disabled={updating}
+            aria-busy={updating || undefined}
             onClick={onUpdate}
             className="h-6 rounded-full px-2 text-xs"
           >
-            {applying ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}Update
+            {updating ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}Update
           </Button>
         ) : null}
         {pkg.sourceUrl ? (
@@ -104,6 +128,7 @@ function MarketplaceGroup({
           variant="ghost"
           className="h-6 rounded-full px-2 text-xs"
           disabled={isChecking}
+          aria-busy={isChecking || undefined}
           onClick={onCheckUpdates}
         >
           {isChecking ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <RefreshCw className="mr-1 h-3 w-3" />}
@@ -239,21 +264,22 @@ export function PluginsSection({
   }, [connectionStatus, socket, setPluginInventory, setPluginInventoryLoading, setPluginInventoryError])
 
   useEffect(() => {
-    void loadPlugins()
+    runDetached("packages.listInstalled", loadPlugins())
   }, [loadPlugins])
 
   const checkUpdates = useCallback(() => {
-    void socket.command({ type: "packages.checkUpdates" })
+    runPendingAction(CHECK_UPDATES_KEY, () => sendPackageCommand(socket, { type: "packages.checkUpdates" }))
   }, [socket])
 
   const updatePlugin = useCallback(
     (id: string) => {
-      void socket.command({ type: "packages.update", id })
+      runPendingAction(packageUpdateKey(id), () => sendPackageCommand(socket, { type: "packages.update", id }))
     },
     [socket],
   )
 
-  const isChecking = packageUpdateSnapshot?.status === "checking"
+  const checkPending = usePendingAction(CHECK_UPDATES_KEY)
+  const isChecking = packageUpdateSnapshot?.status === "checking" || checkPending
   const applying = packageUpdateSnapshot?.applying ?? EMPTY_APPLYING
   const pluginUpdateEntries = packageUpdateSnapshot?.packages.filter(
     (p) => p.kind === "claude-plugin" || p.kind === "codex-plugin",

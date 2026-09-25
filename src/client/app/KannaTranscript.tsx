@@ -397,7 +397,7 @@ export function useStableResolvedRows(rows: ResolvedTranscriptRow[]) {
   return result.result
 }
 
-const NOOP_TOOL_REQUEST_ANSWER = (_toolRequestId: string, _decision: ToolRequestDecision): void => {}
+const NOOP_TOOL_REQUEST_ANSWER = (_toolRequestId: string, _decision: ToolRequestDecision): Promise<void> => Promise.resolve()
 
 interface TranscriptSingleRowProps {
   message: HydratedTranscriptMessage
@@ -416,13 +416,13 @@ interface TranscriptSingleRowProps {
     questions: AskUserQuestionItem[],
     answers: AskUserQuestionAnswerMap
   ) => void | Promise<void>
-  onExitPlanModeConfirm: (toolUseId: string, confirmed: boolean, clearContext?: boolean, message?: string) => void
-  onToolRequestAnswer?: (toolRequestId: string, decision: ToolRequestDecision) => void
+  onExitPlanModeConfirm: (toolUseId: string, confirmed: boolean, clearContext?: boolean, message?: string) => Promise<void>
+  onToolRequestAnswer?: (toolRequestId: string, decision: ToolRequestDecision) => Promise<void>
   schedules: Record<string, AutoContinueSchedule>
   cronJobs: readonly CronJobSnapshot[]
-  onAutoContinueAccept: (scheduleId: string, scheduledAt: number) => void
-  onAutoContinueReschedule: (scheduleId: string, scheduledAt: number) => void
-  onAutoContinueCancel: (scheduleId: string) => void
+  onAutoContinueAccept: (scheduleId: string, scheduledAt: number) => Promise<void>
+  onAutoContinueReschedule: (scheduleId: string, scheduledAt: number) => Promise<void>
+  onAutoContinueCancel: (scheduleId: string) => Promise<void>
   onRetryFailedTurn?: (resultMessageId: string) => void | Promise<void>
   onCronRemove?: (jobId: string) => void
   chatId?: string

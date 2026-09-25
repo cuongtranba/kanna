@@ -24,9 +24,17 @@ import { EMPTY_CRON_JOBS, EMPTY_SCHEDULES } from "../KannaTranscript"
 import { findRetryPromptForResult } from "../../lib/retryPrompt"
 import { useShareStore } from "../../components/share/share-store"
 import type { ShareCommandResult } from "../../../shared/session-share/protocol"
+import { COMPOSE_CHAT_KEY } from "../useAppGlobalState"
 import { ChatTranscriptViewport } from "./ChatTranscriptViewport"
 import { TranscriptActionsProvider, type TranscriptActionsContextValue } from "../transcriptActionsContext"
-import { hasFileDragTypes, EMPTY_STATE_TEXT, EMPTY_STATE_TYPING_INTERVAL_MS } from "./utils"
+import {
+  hasFileDragTypes,
+  EMPTY_STATE_TEXT,
+  EMPTY_STATE_TYPING_INTERVAL_MS,
+  gitInitializeKey,
+  projectOpenExternalKey,
+  scrollTranscriptListToEnd,
+} from "./utils"
 import { useWorkflowsStore, selectRuns } from "../../stores/workflowsStore"
 import { useShallow } from "zustand/react/shallow"
 import type { WorkflowRun } from "../../../shared/workflow-types"
@@ -34,9 +42,14 @@ import type { SubagentRunSnapshot, TranscriptEntry } from "../../../shared/types
 import { useChatPageStore } from "../../stores/chatPageStore"
 import { ChatTabScopedStore } from "../../stores/chatTabScopedStore"
 import { useKannaStateStore } from "../../stores/kannaStateStore"
+import { pendingActionKey, runPendingAction, usePendingAction } from "../../stores/pendingActionsStore"
+import { runDetached } from "../../lib/runDetached"
+import { describeShareFailure, surfaceCommandError } from "./chatCommandFeedback"
+import type { EditorOpenSettings, OpenExternalAction } from "../../../shared/protocol"
 
 const EMPTY_MUTED_CHAT_IDS: string[] = []
 const EMPTY_SUBAGENT_RUNS: Record<string, SubagentRunSnapshot> = {}
+
 
 
 function useTranscriptPaddingBottom() {
@@ -288,28 +301,31 @@ export function ChatTabContent({
   }, [])
 
 
-  const handleAutoContinueAccept = useCallback((scheduleId: string, scheduledAt: number) => {
+  const handleAutoContinueAccept = useCallback(async (scheduleId: string, scheduledAt: number) => {
     const chatId = state.activeChatId
     if (!chatId) return
-    void state.socket.command({ type: "autoContinue.accept", chatId, scheduleId, scheduledAt }).catch(() => {})
+    await surfaceCommandError(() => state.socket.command({ type: "autoContinue.accept", chatId, scheduleId, scheduledAt }))
   }, [state.activeChatId, state.socket])
 
-  const handleAutoContinueReschedule = useCallback((scheduleId: string, scheduledAt: number) => {
+  const handleAutoContinueReschedule = useCallback(async (scheduleId: string, scheduledAt: number) => {
     const chatId = state.activeChatId
     if (!chatId) return
-    void state.socket.command({ type: "autoContinue.reschedule", chatId, scheduleId, scheduledAt }).catch(() => {})
+    await surfaceCommandError(() => state.socket.command({ type: "autoContinue.reschedule", chatId, scheduleId, scheduledAt }))
   }, [state.activeChatId, state.socket])
 
   const handleCronRemove = useCallback((jobId: string) => {
     const chatId = state.activeChatId
     if (!chatId) return
-    void state.socket.command({ type: "cron.remove", chatId, jobId }).catch(() => {})
+    runPendingAction(
+      pendingActionKey("cron.remove", jobId),
+      () => surfaceCommandError(() => state.socket.command({ type: "cron.remove", chatId, jobId })),
+    )
   }, [state.activeChatId, state.socket])
 
-  const handleAutoContinueCancel = useCallback((scheduleId: string) => {
+  const handleAutoContinueCancel = useCallback(async (scheduleId: string) => {
     const chatId = state.activeChatId
     if (!chatId) return
-    void state.socket.command({ type: "autoContinue.cancel", chatId, scheduleId }).catch(() => {})
+    await surfaceCommandError(() => state.socket.command({ type: "autoContinue.cancel", chatId, scheduleId }))
   }, [state.activeChatId, state.socket])
 
 
@@ -332,8 +348,8 @@ export function ChatTabContent({
   }, [state.activeChatId, state.socket])
 
 
-  const handleCancelSubagentRun = useCallback((chatId: string, runId: string) => {
-    void state.socket.command({ type: "chat.cancelSubagentRun", chatId, runId }).catch(() => {})
+  const handleCancelSubagentRun = useCallback(async (chatId: string, runId: string) => {
+    await surfaceCommandError(() => state.socket.command({ type: "chat.cancelSubagentRun", chatId, runId }))
   }, [state.socket])
 
   const workflowRuns = useWorkflowsStore(useShallow(selectRuns(state.activeChatId ?? "")))
@@ -436,11 +452,33 @@ export function ChatTabContent({
 
   const mutedChatIds = useKannaStateStore((s) => s.pushConfig?.preferences.mutedChatIds ?? EMPTY_MUTED_CHAT_IDS)
   const isSilent = state.activeChatId != null && mutedChatIds.includes(state.activeChatId)
+  const composePending = usePendingAction(COMPOSE_CHAT_KEY)
+  const silentPending = usePendingAction(pendingActionKey("push.setChatMute", state.activeChatId ?? ""))
   const handleToggleSilent = useCallback(() => {
     const chatId = state.activeChatId
     if (!chatId) return
-    void state.socket.command({ type: "push.setChatMute", chatId, muted: !isSilent }).catch(() => {})
+    runPendingAction(
+      pendingActionKey("push.setChatMute", chatId),
+      () => surfaceCommandError(() => state.socket.command({ type: "push.setChatMute", chatId, muted: !isSilent })),
+    )
   }, [state.activeChatId, state.socket, isSilent])
+
+  const openExternalPending = usePendingAction(projectOpenExternalKey(projectId))
+  const rightSidebarPending = usePendingAction(gitInitializeKey(projectId))
+  const stateHandleOpenExternal = state.handleOpenExternal
+  const handleOpenExternal = useCallback((action: OpenExternalAction, editor?: EditorOpenSettings) => {
+    runPendingAction(projectOpenExternalKey(projectId), () => stateHandleOpenExternal(action, editor))
+  }, [projectId, stateHandleOpenExternal])
+
+  const stateHandleCancel = state.handleCancel
+  const activeChatId = state.activeChatId
+  const handleCancel = useCallback(() => {
+    runPendingAction(pendingActionKey("chat.cancel", activeChatId ?? ""), () => stateHandleCancel())
+  }, [activeChatId, stateHandleCancel])
+
+  const handleScrollToBottom = useCallback(() => {
+    runDetached("transcript.scrollToEnd", scrollToTranscriptEnd(true))
+  }, [scrollToTranscriptEnd])
 
 
   const shareShares = useShareStore((s) => s.listForChat(state.activeChatId ?? ""))
@@ -452,7 +490,8 @@ export function ChatTabContent({
       type: "share.mint",
       payload: { chatId },
     })
-    if (reply.ok && reply.kind === "mint") {
+    if (!reply.ok) throw new Error(describeShareFailure(reply.error))
+    if (reply.kind === "mint") {
       addShare(chatId, reply.data.summary)
     }
   }, [addShare, state.socket])
@@ -464,9 +503,8 @@ export function ChatTabContent({
       type: "share.revoke",
       payload: { tokenId },
     })
-    if (reply.ok) {
-      removeShare(chatId, tokenId)
-    }
+    if (!reply.ok) throw new Error(describeShareFailure(reply.error))
+    removeShare(chatId, tokenId)
   }, [removeShare, state.activeChatId, state.socket])
 
 
@@ -533,9 +571,9 @@ export function ChatTabContent({
 
     let secondFrame: number | null = null
     const firstFrame = timer.requestAnimationFrame(() => {
-      void transcriptListRef.current?.scrollToEnd?.({ animated: false })
+      scrollTranscriptListToEnd(transcriptListRef.current, false)
       secondFrame = timer.requestAnimationFrame(() => {
-        void transcriptListRef.current?.scrollToEnd?.({ animated: false })
+        scrollTranscriptListToEnd(transcriptListRef.current, false)
       })
     })
 
@@ -575,7 +613,9 @@ export function ChatTabContent({
           onToggleEmbeddedTerminal={projectId ? onToggleEmbeddedTerminal : undefined}
           rightSidebarVisible={showRightSidebar}
           onToggleRightSidebar={projectId ? onToggleRightSidebar : undefined}
-          onOpenExternal={state.handleOpenExternal}
+          rightSidebarPending={rightSidebarPending}
+          onOpenExternal={handleOpenExternal}
+          openExternalPending={openExternalPending}
           editorPreset={editorPreset}
           editorCommandTemplate={editorCommandTemplate}
           platform={state.localProjects?.machine.platform}
@@ -595,7 +635,9 @@ export function ChatTabContent({
           shareShares={shareShares}
           onShareMint={handleShareMint}
           onShareRevoke={handleShareRevoke}
+          newChatPending={composePending}
           silent={isSilent}
+          silentPending={silentPending}
           onToggleSilent={handleToggleSilent}
         />
         <TranscriptActionsProvider value={transcriptActionsValue}>
@@ -610,7 +652,7 @@ export function ChatTabContent({
             onOpenLocalLink={state.handleOpenLocalLink}
             showScrollButton={showScrollToBottom && state.messages.length > 0}
             onIsAtEndChange={onIsAtEndChange}
-            scrollToBottom={() => scrollToTranscriptEnd(true)}
+            scrollToBottom={handleScrollToBottom}
             typedEmptyStateText={typedEmptyStateText}
             isEmptyStateTypingComplete={isEmptyStateTypingComplete}
             isPageFileDragActive={isPageFileDragActive}
@@ -627,7 +669,7 @@ export function ChatTabContent({
             onLayoutChange={syncInputHeight}
             key={state.activeChatId ?? "new-chat"}
             onSubmit={handleChatSubmit}
-            onCancel={state.handleCancel}
+            onCancel={handleCancel}
             disabled={!state.hasSelectedProject}
             canCancel={state.canCancel}
             chatId={state.activeChatId}

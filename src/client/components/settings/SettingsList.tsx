@@ -51,17 +51,19 @@ export function SettingsRowActions({
   label,
   onEdit,
   onDelete,
+  deletePending = false,
 }: {
   label: string
   onEdit: () => void
   onDelete: () => void
+  deletePending?: boolean
 }) {
   return (
     <>
       <Button variant="ghost" size="sm" onClick={onEdit} aria-label={`Edit ${label}`}>
         <Pencil className="h-4 w-4" />
       </Button>
-      <Button variant="ghost" size="sm" onClick={onDelete} aria-label={`Delete ${label}`}>
+      <Button variant="ghost" size="sm" onClick={onDelete} pending={deletePending} aria-label={`Delete ${label}`}>
         <Trash2 className="h-4 w-4" />
       </Button>
     </>

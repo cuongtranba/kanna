@@ -3,6 +3,8 @@ import { Check, CheckCheck, Pencil, CornerDownLeft, ChevronDown, Copy, Send } fr
 import type { ProcessedToolCall } from "./types"
 import { Button } from "../ui/button"
 import { cn } from "../../lib/utils"
+import { runDetached } from "../../lib/runDetached"
+import { pendingActionKey, runPendingAction, usePendingAction } from "../../stores/pendingActionsStore"
 import { useTranscriptRenderOptions } from "./render-context"
 import { renderMarkdownDocument } from "../lexical/markdown/renderMessage"
 import { ExitPlanModeMessageStore } from "./ExitPlanModeMessage.store"
@@ -16,9 +18,16 @@ interface ExitPlanModeMessagePorts {
 
 interface Props {
   message: Extract<ProcessedToolCall, { toolKind: "exit_plan_mode" }>
-  onConfirm: (toolUseId: string, confirmed: boolean, clearContext?: boolean, message?: string) => void
+  onConfirm: (toolUseId: string, confirmed: boolean, clearContext?: boolean, message?: string) => Promise<void>
   isLatest: boolean
   ports?: ExitPlanModeMessagePorts
+}
+
+export function useExitPlanModeResponding(toolId: string): boolean {
+  const approvingClear = usePendingAction(pendingActionKey("exitPlanMode.approveClear", toolId))
+  const approving = usePendingAction(pendingActionKey("exitPlanMode.approve", toolId))
+  const adjusting = usePendingAction(pendingActionKey("exitPlanMode.adjust", toolId))
+  return approvingClear || approving || adjusting
 }
 
 function ExitPlanModeMessageInner({ message, onConfirm, isLatest, ports = {} }: Props) {
@@ -36,16 +45,37 @@ function ExitPlanModeMessageInner({ message, onConfirm, isLatest, ports = {} }: 
   const openEdit = ExitPlanModeMessageStore.useScopedStore((s) => s.openEdit)
   const cancelEdit = ExitPlanModeMessageStore.useScopedStore((s) => s.cancelEdit)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const approveClearKey = pendingActionKey("exitPlanMode.approveClear", message.toolId)
+  const approveKey = pendingActionKey("exitPlanMode.approve", message.toolId)
+  const adjustKey = pendingActionKey("exitPlanMode.adjust", message.toolId)
+  const approvingClear = usePendingAction(approveClearKey)
+  const approving = usePendingAction(approveKey)
+  const adjusting = usePendingAction(adjustKey)
+  const responding = approvingClear || approving || adjusting
+
+  const handleApproveClear = useCallback(() => {
+    if (responding) return
+    runPendingAction(approveClearKey, () => onConfirm(message.toolId, true, true))
+  }, [responding, approveClearKey, onConfirm, message.toolId])
+  const handleApprove = useCallback(() => {
+    if (responding) return
+    runPendingAction(approveKey, () => onConfirm(message.toolId, true))
+  }, [responding, approveKey, onConfirm, message.toolId])
+  const handleAdjust = useCallback(() => {
+    const trimmed = editMessage.trim()
+    if (!trimmed || responding) return
+    runPendingAction(adjustKey, () => onConfirm(message.toolId, false, undefined, trimmed))
+  }, [editMessage, responding, adjustKey, onConfirm, message.toolId])
 
   const handleEditKeyDown = useCallback((e: ReactKeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey && editMessage.trim()) {
       e.preventDefault()
-      onConfirm(message.toolId, false, undefined, editMessage.trim())
+      handleAdjust()
     }
     if (e.key === "Escape") {
       cancelEdit()
     }
-  }, [editMessage, onConfirm, message.toolId, cancelEdit])
+  }, [editMessage, handleAdjust, cancelEdit])
   const input = message.input
 
   useEffect(() => {
@@ -54,12 +84,13 @@ function ExitPlanModeMessageInner({ message, onConfirm, isLatest, ports = {} }: 
     }
   }, [showEditInput])
 
-  const handleCopy = async () => {
+  const copyPlan = async () => {
     if (!input?.plan) return
     await clipboard.writeText(input.plan)
     setCopied(true)
     timer.setTimeout(() => setCopied(false), 2000)
   }
+  const handleCopy = () => { runDetached("copy plan", copyPlan()) }
 
   const result = isComplete ? message.result : null
   const isDiscarded = result?.discarded === true
@@ -108,16 +139,19 @@ function ExitPlanModeMessageInner({ message, onConfirm, isLatest, ports = {} }: 
           <div className="flex flex-col md:flex-row items-stretch md:items-center justify-end gap-2 mx-2">
             <Button
               size="sm"
-              onClick={() => onConfirm(message.toolId, true, true)}
+              pending={approvingClear}
+              disabled={responding}
+              onClick={handleApproveClear}
               className="rounded-full bg-primary text-background pr-4 md:order-last"
             >
-              <CheckCheck className="h-4 w-4 mr-1.5" />
+              {approvingClear ? null : <CheckCheck className="h-4 w-4 mr-1.5" />}
               Approve & Clear
             </Button>
             <div className="flex items-stretch md:items-center gap-2 md:contents">
               <Button
                 size="sm"
                 variant="outline"
+                disabled={responding}
                 onClick={openEdit}
                 className="rounded-full border-border flex-1 md:flex-initial md:order-first"
               >
@@ -127,10 +161,12 @@ function ExitPlanModeMessageInner({ message, onConfirm, isLatest, ports = {} }: 
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => onConfirm(message.toolId, true)}
+                pending={approving}
+                disabled={responding}
+                onClick={handleApprove}
                 className="rounded-full border-border flex-1 md:flex-initial"
               >
-                <Check className="h-4 w-4 mr-1.5" />
+                {approving ? null : <Check className="h-4 w-4 mr-1.5" />}
                 Approve
               </Button>
             </div>
@@ -159,11 +195,12 @@ function ExitPlanModeMessageInner({ message, onConfirm, isLatest, ports = {} }: 
               </Button>
               <Button
                 size="sm"
-                disabled={!editMessage.trim()}
-                onClick={() => onConfirm(message.toolId, false, undefined, editMessage.trim())}
+                pending={adjusting}
+                disabled={!editMessage.trim() || responding}
+                onClick={handleAdjust}
                 className="rounded-full bg-primary text-background disabled:opacity-50 disabled:pointer-events-none"
               >
-                <Send className="h-4 w-4 mr-1.5" />
+                {adjusting ? null : <Send className="h-4 w-4 mr-1.5" />}
                 Adjust Plan
               </Button>
             </div>

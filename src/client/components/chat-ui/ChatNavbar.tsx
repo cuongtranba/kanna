@@ -14,8 +14,21 @@ import { formatCompactDuration, formatLiveDuration } from "../../lib/formatDurat
 import { statusLabel, statusTone, statusToneClass } from "../../lib/statusLabel"
 import { StateMark } from "../ui/state-mark"
 import { Reduction } from "../ui/reduction"
+import { Spinner } from "../ui/spinner"
 
 const EMPTY_DURATIONS: readonly number[] = []
+
+function SilentIcon({ pending, silent }: { pending: boolean; silent: boolean }) {
+  if (pending) return <Spinner className="size-4.5" />
+  if (silent) return <BellOff strokeWidth={2} className="size-4.5" />
+  return <Bell strokeWidth={2} className="size-4.5" />
+}
+
+function RightSidebarIcon({ pending, visible }: { pending: boolean; visible: boolean }) {
+  if (pending) return <Spinner className="size-4" />
+  if (visible) return <PanelRight strokeWidth={2.25} className="h-4" />
+  return <GitBranch strokeWidth={2.25} className="h-4" />
+}
 
 function SessionSigil({
   durationsMs,
@@ -124,12 +137,15 @@ interface Props {
   onOpenSidebar: () => void
   onExpandSidebar: () => void
   onNewChat: () => void
+  newChatPending?: boolean
   localPath?: string
   embeddedTerminalVisible?: boolean
   onToggleEmbeddedTerminal?: () => void
   rightSidebarVisible?: boolean
   onToggleRightSidebar?: () => void
+  rightSidebarPending?: boolean
   onOpenExternal?: (action: OpenExternalAction, editor?: EditorOpenSettings) => void
+  openExternalPending?: boolean
   editorPreset?: EditorPreset
   editorCommandTemplate?: string
   platform?: NodeJS.Platform
@@ -153,6 +169,7 @@ interface Props {
   onShareMint?: (chatId: string) => Promise<void>
   onShareRevoke?: (tokenId: string) => Promise<void>
   silent?: boolean
+  silentPending?: boolean
   onToggleSilent?: () => void
   dom?: DomPort
   turnDurationsMs?: readonly number[]
@@ -164,12 +181,15 @@ export function ChatNavbar({
   onOpenSidebar,
   onExpandSidebar,
   onNewChat,
+  newChatPending = false,
   localPath,
   embeddedTerminalVisible = false,
   onToggleEmbeddedTerminal,
   rightSidebarVisible = false,
   onToggleRightSidebar,
+  rightSidebarPending = false,
   onOpenExternal,
+  openExternalPending = false,
   editorPreset = "cursor",
   editorCommandTemplate,
   platform = "darwin",
@@ -193,6 +213,7 @@ export function ChatNavbar({
   onShareMint,
   onShareRevoke,
   silent,
+  silentPending = false,
   onToggleSilent,
   dom: domProp,
 }: Props) {
@@ -242,6 +263,7 @@ export function ChatNavbar({
             size="icon"
             className="hover:!border-border/0 hover:!bg-transparent"
             onClick={onNewChat}
+            pending={newChatPending}
             title="Compose"
             aria-label="New chat"
           >
@@ -310,6 +332,8 @@ export function ChatNavbar({
                   variant="ghost"
                   size="none"
                   onClick={onToggleSilent}
+                  disabled={silentPending}
+                  aria-busy={silentPending || undefined}
                   aria-pressed={silent ?? false}
                   aria-label={silent ? "Unsilence notifications" : "Silence notifications"}
                   className={cn(
@@ -317,7 +341,7 @@ export function ChatNavbar({
                     silent && "text-muted-foreground"
                   )}
                 >
-                  {silent ? <BellOff strokeWidth={2} className="size-4.5" /> : <Bell strokeWidth={2} className="size-4.5" />}
+                  <SilentIcon pending={silentPending} silent={silent ?? false} />
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="bottom">
@@ -338,6 +362,7 @@ export function ChatNavbar({
                   finderShortcut={finderShortcut}
                   editorShortcut={editorShortcut}
                   onOpenExternal={onOpenExternal}
+                  pending={openExternalPending}
                 />
               </div>
             ) : null}
@@ -386,12 +411,14 @@ export function ChatNavbar({
                       <Button
                         variant="ghost"
                         onClick={onToggleRightSidebar}
+                        disabled={rightSidebarPending}
+                        aria-busy={rightSidebarPending || undefined}
                         className={cn(
                           "border flex flex-row items-center gap-1.5 h-9 border-border/0 pl-1.5 pr-2 hover:!border-border/0 hover:!bg-transparent",
                           rightSidebarVisible && "text-foreground"
                         )}
                       >
-                        {rightSidebarVisible ? <PanelRight strokeWidth={2.25} className="h-4" /> : <GitBranch strokeWidth={2.25} className="h-4" />}
+                        <RightSidebarIcon pending={rightSidebarPending} visible={rightSidebarVisible} />
                         {branchLabel && !rightSidebarVisible ? <div className="text-13 font-mono max-w-[280px] truncate hidden md:block">{branchLabel}</div> : null}
                       </Button>
                     </HotkeyTooltipTrigger>

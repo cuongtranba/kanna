@@ -1,6 +1,6 @@
 ---
 name: kanna-test
-description: How to verify a change in the Kanna repo — running tests, and clearing the lint, ast-grep, and design gates that block merges. Use whenever you are about to run tests or report work as done, when a test passes locally but fails on CI, when you hit an ESLint error about node:fs / process.env / a raw hex color / backdrop-blur / a native title attribute, when ast-grep rejects a hook argument or a store selector, when happy-dom throws "removeChild: The node to be removed is not a child of this node", when bun reports "Export named X not found in module" for an export that plainly exists, or when React error #185 "Maximum update depth exceeded" appears. Read it before writing a test that mounts a component, and before adding any file that performs IO.
+description: How to verify a change in the Kanna repo — running tests, and clearing the lint, ast-grep, and design gates that block merges. Use whenever you are about to run tests or report work as done, when a test passes locally but fails on CI, when you hit an ESLint error about node:fs / process.env / a raw hex color / backdrop-blur / a native title attribute / no-floating-promises / no-misused-promises / a banned empty .catch, when ast-grep rejects a hook argument or a store selector, when happy-dom throws "removeChild: The node to be removed is not a child of this node", when bun reports "Export named X not found in module" for an export that plainly exists, or when React error #185 "Maximum update depth exceeded" appears. Read it before writing a test that mounts a component, and before adding any file that performs IO.
 user-invocable: false
 ---
 
@@ -146,6 +146,26 @@ Never silence a false positive with an `ignores` entry: extract the handler, or 
 a `not:` clause together with a pinning fixture in the same PR. Adding a new rule
 means adding both the tsx and `-ts` variants (where the grammar allows) plus
 `rule-tests/` coverage, in that same PR — a note in a doc is not a gate.
+
+### Pending-state gate: a client promise must be settled by someone
+
+`bun run lint` type-checks promises under `src/client/**` (tests excluded):
+
+- **`no-floating-promises` with `ignoreVoid: false`.** `void save()` is an error. A
+  user action goes through `runPendingAction(key, () => save())`
+  (`src/client/stores/pendingActionsStore.ts`) and its trigger renders
+  `usePendingAction(key)`. Background work nobody waits on goes through
+  `runDetached(label, promise)`. Inside an async flow, `await` it.
+- **`no-misused-promises` on JSX attributes.** An async function passed to a prop
+  typed `() => void` is an error. Retype the prop to `() => Promise<void>` and have
+  the child launch it with `runPendingAction`. Do not wrap the call in a sync arrow
+  that drops the promise.
+- **`.catch(() => {})` / `() => undefined` / `() => null` are banned.** They hide
+  the failure and slip past the promise rules.
+
+A sync fake handed to a prop that is now `() => Promise<void>` fails typecheck in
+its test; make it `async () => {}`. The full rationale is in CLAUDE.md under
+**Pending state for side effects**.
 
 ### Lint warnings ratchet
 

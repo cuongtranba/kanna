@@ -80,7 +80,7 @@ export function SubmitPlugin({ onSubmit, disabled, dom = domAdapter }: SubmitPlu
         })
 
         justSubmittedRef.current = true
-        Promise.resolve().then(() => { justSubmittedRef.current = false })
+        queueMicrotask(() => { justSubmittedRef.current = false })
 
         onSubmit(payload)
         return true

@@ -39,8 +39,8 @@ function render(instance: PtyInstanceState): string {
       createElement(PtyInstanceRow, {
         instance,
         onOpenChat: () => {},
-        onCancel: () => {},
-        onKill: () => {},
+        onCancel: () => Promise.resolve(),
+        onKill: () => Promise.resolve(),
       }),
     ),
   )

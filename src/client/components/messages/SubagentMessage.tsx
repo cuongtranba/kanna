@@ -13,6 +13,8 @@ import { cn } from "../../lib/utils"
 import { SubagentEntryRow } from "./SubagentEntryRow"
 import { SubagentErrorCard } from "./SubagentErrorCard"
 import { SubagentPendingToolCard } from "./SubagentPendingToolCard"
+import { Spinner } from "../ui/spinner"
+import { pendingActionKey, runPendingAction, usePendingAction } from "../../stores/pendingActionsStore"
 
 const ACTIVITY_MAX_LEN = 40
 
@@ -111,14 +113,38 @@ interface SubagentMessageProps {
     toolUseId: string,
     questions: AskUserQuestionItem[],
     answers: AskUserQuestionAnswerMap,
-  ) => void
+  ) => Promise<void>
   onSubagentExitPlanModeSubmit?: (
     runId: string,
     toolUseId: string,
     response: { confirmed: boolean; clearContext?: boolean; message?: string },
-  ) => void
-  onCancelSubagentRun?: (chatId: string, runId: string) => void
+  ) => Promise<void>
+  onCancelSubagentRun?: (chatId: string, runId: string) => Promise<void>
   suppressPendingTool?: boolean
+}
+
+function SubagentCancelButton({
+  run,
+  onCancel,
+}: {
+  run: SubagentRunSnapshot
+  onCancel: (chatId: string, runId: string) => Promise<void>
+}) {
+  const pendingKey = pendingActionKey("chat.cancelSubagentRun", run.runId)
+  const pending = usePendingAction(pendingKey)
+  return (
+    <button
+      type="button"
+      data-testid={`subagent-cancel:${run.runId}`}
+      aria-label="Cancel subagent"
+      aria-busy={pending || undefined}
+      disabled={pending}
+      onClick={() => runPendingAction(pendingKey, () => onCancel(run.chatId, run.runId))}
+      className="text-muted-foreground hover:text-foreground disabled:pointer-events-none"
+    >
+      {pending ? <Spinner /> : <X className="h-3.5 w-3.5" />}
+    </button>
+  )
 }
 
 export function SubagentMessage({
@@ -160,15 +186,7 @@ export function SubagentMessage({
           </span>
         )}
         {onCancelSubagentRun && run.status === "running" && (
-          <button
-            type="button"
-            data-testid={`subagent-cancel:${run.runId}`}
-            aria-label="Cancel subagent"
-            onClick={() => onCancelSubagentRun(run.chatId, run.runId)}
-            className="text-muted-foreground hover:text-foreground"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
+          <SubagentCancelButton run={run} onCancel={onCancelSubagentRun} />
         )}
       </header>
       {messages.map((m) => (
@@ -182,12 +200,12 @@ export function SubagentMessage({
       {!suppressPendingTool && run.pendingTool && (
         <SubagentPendingToolCard
           pendingTool={run.pendingTool}
-          onAskUserQuestionSubmit={(toolUseId, questions, answers) =>
-            onSubagentAskUserQuestionSubmit?.(run.runId, toolUseId, questions, answers)
-          }
-          onExitPlanModeSubmit={(toolUseId, response) =>
-            onSubagentExitPlanModeSubmit?.(run.runId, toolUseId, response)
-          }
+          onAskUserQuestionSubmit={async (toolUseId, questions, answers) => {
+            await onSubagentAskUserQuestionSubmit?.(run.runId, toolUseId, questions, answers)
+          }}
+          onExitPlanModeSubmit={async (toolUseId, response) => {
+            await onSubagentExitPlanModeSubmit?.(run.runId, toolUseId, response)
+          }}
         />
       )}
       {messages.length === 0 && run.finalText && (

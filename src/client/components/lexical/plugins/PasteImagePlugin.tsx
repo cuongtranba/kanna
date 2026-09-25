@@ -9,6 +9,7 @@ import {
 } from "lexical"
 import { uploadFile } from "../../../lib/uploadFile.adapter"
 import { $createAttachmentNode } from "../nodes"
+import { runInlineUpload } from "./inlineUploadPending"
 import type { ChatAttachment } from "../../../../shared/types"
 
 
@@ -121,6 +122,7 @@ export async function uploadAndInsertFiles(
 
 export interface PasteImagePluginProps {
   projectId: string | null
+  uploadOwnerId: string
   onUploadError?: (msg: string) => void
   uploadFileFn?: UploadFileFn
 }
@@ -128,6 +130,7 @@ export interface PasteImagePluginProps {
 
 export function PasteImagePlugin({
   projectId,
+  uploadOwnerId,
   onUploadError,
   uploadFileFn = uploadFile,
 }: PasteImagePluginProps): null {
@@ -146,14 +149,14 @@ export function PasteImagePlugin({
         const hasText = hasClipboardTextPayload(clipboardData)
 
         if (projectId) {
-          void uploadAndInsertFiles(files, editor, projectId, uploadFileFn, onUploadError)
+          runInlineUpload(uploadOwnerId, () => uploadAndInsertFiles(files, editor, projectId, uploadFileFn, onUploadError))
         }
 
         return !hasText
       },
       COMMAND_PRIORITY_HIGH,
     )
-  }, [editor, projectId, onUploadError, uploadFileFn])
+  }, [editor, projectId, uploadOwnerId, onUploadError, uploadFileFn])
 
   return null
 }

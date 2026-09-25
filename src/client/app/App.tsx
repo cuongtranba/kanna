@@ -46,12 +46,16 @@ import { domAdapter } from "../adapters/dom.adapter"
 import { timerAdapter } from "../adapters/timer.adapter"
 import { localStorageAdapter } from "../adapters/storage.adapter"
 import { fetchAuthStatus, postAuthLogin } from "../api/auth"
+import { runDetached } from "../lib/runDetached"
+import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
+import { createChatKey, openProjectKey } from "../components/chat-ui/sidebar/sidebarPendingActions"
 
 const drawerVisual = createDrawerVisual()
 
 const EMPTY_LOCAL_PROJECTS: LocalProjectSummary[] = []
 const VERSION_SEEN_STORAGE_KEY = "kanna:last-seen-version"
 const AUTH_STATUS_RETRY_DELAY_MS = 500
+const AUTH_LOGIN_KEY = pendingActionKey("auth.login")
 const WorkspacePage = lazy(() => import("./ChatPage").then((module) => ({ default: module.WorkspacePage })))
 const LocalProjectsPage = lazy(() => import("./LocalProjectsPage").then((module) => ({ default: module.LocalProjectsPage })))
 const BoardsRoutePage = lazy(() => import("./BoardsRoutePage").then((module) => ({ default: module.BoardsRoutePage })))
@@ -104,9 +108,7 @@ function PasswordScreenInner({
   const setPassword = PasswordScreenStore.useScopedStore((s) => s.setPassword)
   const setSubmitting = PasswordScreenStore.useScopedStore((s) => s.setSubmitting)
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!password || submitting) return
+  async function submit() {
     setSubmitting(true)
     try {
       await onSubmit(password)
@@ -114,6 +116,12 @@ function PasswordScreenInner({
     } finally {
       setSubmitting(false)
     }
+  }
+
+  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!password || submitting) return
+    runPendingAction(AUTH_LOGIN_KEY, submit)
   }
 
   return (
@@ -131,7 +139,7 @@ function PasswordScreenInner({
           </CardDescription>
         </CardHeader>
         <CardContent className="px-6 pb-6">
-          <form className="space-y-4" onSubmit={(event) => void handleSubmit(event)}>
+          <form className="space-y-4" onSubmit={handleSubmit}>
             {error ? (
               <div className="rounded-2xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-foreground">
                 {error}
@@ -149,7 +157,8 @@ function PasswordScreenInner({
             />
             <Button
               type="submit"
-              disabled={submitting || password.length === 0}
+              disabled={password.length === 0}
+              pending={submitting}
               className="h-11 w-full"
             >
               {submitting ? "Unlocking..." : "Unlock"}
@@ -196,7 +205,7 @@ function useAppAuthState(ports: AppPorts = {}) {
       payload = await fetchAuthStatus()
     } catch {
       retryTimeoutRef.current = timer.setTimeout(() => {
-        void refreshRef.current()
+        runDetached("auth status retry", refreshRef.current())
       }, AUTH_STATUS_RETRY_DELAY_MS)
       return
     }
@@ -204,7 +213,7 @@ function useAppAuthState(ports: AppPorts = {}) {
     const responseOk = Object.keys(payload).length > 0 ? true : null
     if (shouldRetryAuthStatusRequest(responseOk)) {
       retryTimeoutRef.current = timer.setTimeout(() => {
-        void refreshRef.current()
+        runDetached("auth status retry", refreshRef.current())
       }, AUTH_STATUS_RETRY_DELAY_MS)
       return
     }
@@ -217,7 +226,7 @@ function useAppAuthState(ports: AppPorts = {}) {
   })
 
   useEffect(() => {
-    void refresh()
+    runDetached("auth status", refresh())
     return () => {
       if (retryTimeoutRef.current !== null) {
         timer.clearTimeout(retryTimeoutRef.current)
@@ -227,7 +236,13 @@ function useAppAuthState(ports: AppPorts = {}) {
 
   const submitPassword = useCallback(async (password: string) => {
     const next = dom.getPathname() + dom.getSearch()
-    const ok = await postAuthLogin({ password, next })
+    let ok: boolean
+    try {
+      ok = await postAuthLogin({ password, next })
+    } catch {
+      useAppShellStore.getState().setAuthStatus({ status: "locked", error: "Could not reach the server. Try again." })
+      return
+    }
 
     if (!ok) {
       useAppShellStore.getState().setAuthStatus({ status: "locked", error: "Incorrect password. Try again." })
@@ -347,11 +362,16 @@ function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
       navigate(`/chat/${chatId}`)
     }
   }, [navigate, setPermissionsChatId, state.activeChatId])
-  const handleApplyChatPolicy = useCallback((next: Parameters<typeof state.handleSetChatPolicyOverride>[1]) => {
+  const policyApplyKey = pendingActionKey("chat.setPolicyOverride", permissionsChatId ?? "")
+  const policyApplying = usePendingAction(policyApplyKey)
+  const { handleSetChatPolicyOverride } = state
+  const handleApplyChatPolicy = useCallback((next: Parameters<typeof handleSetChatPolicyOverride>[1]) => {
     if (!permissionsChatId) return
-    void state.handleSetChatPolicyOverride(permissionsChatId, next).catch(() => undefined)
-    setPermissionsChatId(null)
-  }, [permissionsChatId, state, setPermissionsChatId])
+    runPendingAction(policyApplyKey, async () => {
+      await handleSetChatPolicyOverride(permissionsChatId, next)
+      setPermissionsChatId(null)
+    })
+  }, [handleSetChatPolicyOverride, permissionsChatId, policyApplyKey, setPermissionsChatId])
 
   const permissionsChatTitle = state.chatSnapshot?.runtime.title ?? "Chat"
   const permissionsCurrentOverride = state.chatSnapshot?.runtime.policyOverride ?? null
@@ -361,11 +381,11 @@ function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
     navigate(`/chat/${chatId}`)
   }, [navigate])
   const handleQuickSwitcherCreateChat = useCallback((projectId: string) => {
-    void handleCreateChat(projectId)
+    runPendingAction(createChatKey(projectId), () => handleCreateChat(projectId))
   }, [handleCreateChat])
   const quickSwitcherOpenProjectPath = state.handleOpenLocalProject
   const handleQuickSwitcherOpenProjectPath = useCallback((localPath: string) => {
-    void quickSwitcherOpenProjectPath(localPath)
+    runPendingAction(openProjectKey(localPath), () => quickSwitcherOpenProjectPath(localPath))
   }, [quickSwitcherOpenProjectPath])
   const quickSwitcherLocalProjects = state.localProjects?.projects ?? EMPTY_LOCAL_PROJECTS
 
@@ -490,7 +510,7 @@ function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
     if (burstCount <= 0) return
     if (!shouldPlayChatNotificationSound(appSettings, chatSoundPreference)) return
 
-    void playChatNotificationSound(chatSoundId, burstCount).catch(() => undefined)
+    runDetached("chat notification sound", playChatNotificationSound(chatSoundId, burstCount))
   }, [appSettings, chatSoundId, chatSoundPreference, state.sidebarData])
 
   const ptyDriverActive = appSettings?.claudeDriver.preference === "pty"
@@ -545,6 +565,7 @@ function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
         current={permissionsCurrentOverride}
         onCancel={() => setPermissionsChatId(null)}
         onApply={handleApplyChatPolicy}
+        applying={policyApplying}
       />
     </div>
   )

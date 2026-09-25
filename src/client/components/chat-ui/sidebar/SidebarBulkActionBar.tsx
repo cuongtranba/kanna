@@ -1,13 +1,17 @@
 import { Trash2 } from "lucide-react"
+import { runPendingAction, usePendingAction } from "../../../stores/pendingActionsStore"
+import { Spinner } from "../../ui/spinner"
+import { BULK_DELETE_CHATS_KEY } from "./sidebarPendingActions"
 
 interface Props {
   selectedCount: number
   visibleChatCount: number
   onSelectAll: () => void
-  onDelete: () => void
+  onDelete: () => Promise<void>
 }
 
 export function SidebarBulkActionBar({ selectedCount, visibleChatCount, onSelectAll, onDelete }: Props) {
+  const deleting = usePendingAction(BULK_DELETE_CHATS_KEY)
   return (
     <div className="flex items-center justify-between gap-2 px-2 py-1.5 border-t border-border/50 shrink-0">
       <button
@@ -23,11 +27,12 @@ export function SidebarBulkActionBar({ selectedCount, visibleChatCount, onSelect
         )}
         <button
           type="button"
-          onClick={onDelete}
-          disabled={selectedCount === 0}
+          onClick={() => runPendingAction(BULK_DELETE_CHATS_KEY, onDelete)}
+          disabled={selectedCount === 0 || deleting}
+          aria-busy={deleting || undefined}
           className="inline-flex items-center gap-1.5 rounded-md border border-destructive/50 bg-transparent px-2.5 py-1 text-xs font-medium text-destructive hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-40 transition-colors duration-150"
         >
-          <Trash2 className="size-3.5" aria-hidden />
+          {deleting ? <Spinner /> : <Trash2 className="size-3.5" aria-hidden />}
           Delete
         </button>
       </div>

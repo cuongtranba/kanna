@@ -27,6 +27,8 @@ import { usePaneLayoutStore } from "../stores/paneLayoutStore"
 import { collectPanes } from "../lib/paneTree"
 import { useSlashCommandsStore } from "../stores/slashCommandsStore"
 import { onRejected } from "../../shared/errors"
+import { runDetached } from "../lib/runDetached"
+import { runPendingAction } from "../stores/pendingActionsStore"
 import { decodeLegacyProviderDefaults, readPersistedZustandState } from "./legacyProviderDefaults"
 import type { StoragePort } from "../ports/storagePort"
 import type { DomPort } from "../ports/domPort"
@@ -39,6 +41,8 @@ import { sameDiffs, shouldPreserveExistingProjectDiffs, UpdateRestartRuntime } f
 import type { OpenLocalLinkTarget } from "../components/messages/shared"
 
 
+export const LLM_PROVIDER_READ_KEY = "settings.readLlmProvider"
+export const COMPOSE_CHAT_KEY = "chat.compose"
 const LEGACY_THEME_STORAGE_KEY = "lever-theme"
 const LEGACY_CHAT_SOUND_STORAGE_KEY = "chat-sound-preferences"
 const LEGACY_TERMINAL_STORAGE_KEY = "terminal-preferences"
@@ -650,7 +654,7 @@ export function useAppGlobalState(
 
   useEffect(() => {
     if (connectionStatus !== "connected") return
-    void handleReadAppSettings()
+    runDetached("read app settings", handleReadAppSettings())
   }, [connectionStatus, handleReadAppSettings])
 
   useEffect(() => {
@@ -691,14 +695,15 @@ export function useAppGlobalState(
     if (appSettings?.browserSettingsMigrated !== false) return
     const patch = readLegacyBrowserSettingsPatch(localStore)
     if (!patch) return
-    void handleWriteAppSettings(patch)
-      .then(() => clearLegacyBrowserSettings(localStore))
-      .catch(() => undefined)
+    runDetached(
+      "migrate legacy browser settings",
+      handleWriteAppSettings(patch).then(() => clearLegacyBrowserSettings(localStore)),
+    )
   }, [appSettings?.browserSettingsMigrated, connectionStatus, handleWriteAppSettings, localStore])
 
   useEffect(() => {
     if (connectionStatus !== "connected") return
-    void handleReadLlmProvider()
+    runPendingAction(LLM_PROVIDER_READ_KEY, handleReadLlmProvider)
   }, [connectionStatus, handleReadLlmProvider])
 
 
@@ -927,7 +932,7 @@ export function useAppGlobalState(
     const result = await socket.command<{ chatId: string }>({ type: "chat.create", projectId })
     chatPreferences.initializeComposerForChat(result.chatId, { sourceState: sourceComposerState, providerHint })
     useNewSessionStore.getState().markSpawned(result.chatId)
-    void flyChatTitleToTab(result.chatId)
+    runDetached("fly chat title to tab", flyChatTitleToTab(result.chatId))
     const store = useKannaStateStore.getState()
     store.setSelectedProjectId(projectId)
     store.setPendingChatId(result.chatId)
@@ -1264,7 +1269,7 @@ export function useAppGlobalState(
       fallbackLocalProjectPath,
     })
     if (intent) {
-      void startChatFromIntent(intent)
+      runPendingAction(COMPOSE_CHAT_KEY, () => startChatFromIntent(intent))
       return
     }
 

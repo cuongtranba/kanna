@@ -13,6 +13,8 @@ import {
   SelectValue,
 } from "../components/ui/select"
 import { cn } from "../lib/utils"
+import { errorMessage } from "../../shared/errors"
+import { pendingActionKey, runPendingAction } from "../stores/pendingActionsStore"
 import {
   CLAUDE_CONTEXT_WINDOW_OPTIONS,
   CLAUDE_REASONING_OPTIONS,
@@ -313,7 +315,7 @@ function SubagentForm(props: SubagentFormProps) {
 
   async function handleSubmit() {
     if (!canSave || pending) return
-    patchForm({ pending: true, error: null })
+    patchForm({ pending: true, error: null, confirmDelete: false })
     try {
       const result =
         props.mode === "create"
@@ -322,6 +324,8 @@ function SubagentForm(props: SubagentFormProps) {
       if (!result.ok) {
         patchForm({ error: mapSubagentValidationError(result.error) })
       }
+    } catch (cause) {
+      patchForm({ error: { field: "general", message: errorMessage(cause) } })
     } finally {
       patchForm({ pending: false })
     }
@@ -333,9 +337,11 @@ function SubagentForm(props: SubagentFormProps) {
       patchForm({ confirmDelete: true })
       return
     }
-    patchForm({ pending: true })
+    patchForm({ pending: true, error: null })
     try {
       await props.handlers.onDelete(props.subject.id)
+    } catch (cause) {
+      patchForm({ error: { field: "general", message: errorMessage(cause) } })
     } finally {
       patchForm({ pending: false, confirmDelete: false })
     }
@@ -547,7 +553,8 @@ function SubagentForm(props: SubagentFormProps) {
             size="sm"
             data-testid="subagent-form-delete"
             disabled={pending}
-            onClick={handleDelete}
+            pending={pending && confirmDelete}
+            onClick={() => { runPendingAction(pendingActionKey("subagent.delete", props.subject?.id ?? ""), handleDelete) }}
           >
             {confirmDelete ? "Confirm delete" : "Delete"}
           </Button>
@@ -557,7 +564,8 @@ function SubagentForm(props: SubagentFormProps) {
           size="sm"
           data-testid="subagent-form-save"
           disabled={!canSave || pending}
-          onClick={handleSubmit}
+          pending={pending && !confirmDelete}
+          onClick={() => { runPendingAction(pendingActionKey("subagent.save", props.subject?.id ?? "new"), handleSubmit) }}
         >
           {pending ? "Saving…" : "Save"}
         </Button>

@@ -6,6 +6,8 @@ import { cn } from "../../../lib/utils"
 import { StackActionsPopover, StackSectionMenu } from "./Menus"
 import type { StackSummary, SidebarChatRow } from "../../../../shared/types"
 import { formatStackActivity } from "../../../../shared/stack-activity"
+import { runPendingAction, usePendingAction } from "../../../stores/pendingActionsStore"
+import { startStackChatKey } from "./sidebarPendingActions"
 
 interface StacksSectionProps {
   stacks: StackSummary[]
@@ -16,7 +18,7 @@ interface StacksSectionProps {
   onOpenStackMenu: (stackId: string) => void
   onOpenBoards?: (stackId: string) => void
   onDeleteStack?: (stackId: string) => void
-  onStartChat?: (stackId: string) => void
+  onStartChat?: (stackId: string) => Promise<void>
   renderChatCreate?: (stack: StackSummary) => ReactNode
   renderChatRow?: (chat: SidebarChatRow) => ReactNode
   chats: SidebarChatRow[]
@@ -196,20 +198,7 @@ export function StacksSection({
                         {(chatsByStackId.get(stack.id) ?? []).map((chat) => renderChatRow(chat))}
                       </div>
                     )}
-                    {onStartChat && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="ml-[28px] mt-1 self-start h-6 px-2 text-xs text-muted-foreground hover:text-foreground rounded-md"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          onStartChat(stack.id)
-                        }}
-                      >
-                        <Plus className="size-3" /> New chat
-                      </Button>
-                    )}
+                    {onStartChat && <StartStackChatButton stackId={stack.id} onStartChat={onStartChat} />}
                     {renderChatCreate ? <div className="pl-[28px] pr-2 py-1">{renderChatCreate(stack)}</div> : null}
                   </div>
                 )}
@@ -219,5 +208,30 @@ export function StacksSection({
         </div>
       )}
     </div>
+  )
+}
+
+function StartStackChatButton({
+  stackId,
+  onStartChat,
+}: {
+  stackId: string
+  onStartChat: (stackId: string) => Promise<void>
+}): ReactNode {
+  const pending = usePendingAction(startStackChatKey(stackId))
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      pending={pending}
+      className="ml-[28px] mt-1 self-start h-6 px-2 text-xs text-muted-foreground hover:text-foreground rounded-md"
+      onClick={(e) => {
+        e.stopPropagation()
+        runPendingAction(startStackChatKey(stackId), () => onStartChat(stackId))
+      }}
+    >
+      {pending ? null : <Plus className="size-3" />} New chat
+    </Button>
   )
 }

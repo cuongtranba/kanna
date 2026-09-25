@@ -1,8 +1,13 @@
+import type { ReactNode } from "react"
 import type { LocalProjectsSnapshot, PushConfigSnapshot } from "../../../shared/types"
 import { isValidVapidSubject } from "../../../shared/vapid-subject"
+import { errorMessage } from "../../../shared/errors"
+import { useKannaStateStore } from "../../stores/kannaStateStore"
 import { cn } from "../../lib/utils"
+import { pendingActionKey, runPendingAction, usePendingAction } from "../../stores/pendingActionsStore"
 import type { PushPermissionState } from "../../app/pushClient"
 import { Input } from "../ui/input"
+import { Spinner } from "../ui/spinner"
 import { TruncatedText } from "../ui/truncated-text"
 
 interface PushNotificationsSectionProps {
@@ -27,9 +32,87 @@ const primaryButton =
   "inline-flex items-center justify-center rounded-lg bg-foreground px-3 py-1.5 text-sm font-medium text-background transition-colors hover:bg-foreground/90"
 const codeChip = "rounded bg-muted px-1 py-0.5 font-mono text-12 text-foreground"
 const sectionLabel = "text-xs font-medium tracking-wide text-muted-foreground"
+const pendingButton = "gap-1.5 disabled:cursor-default disabled:opacity-60"
+
+const PUSH_ENABLE_KEY = "push.enable"
+const PUSH_TEST_KEY = "push.test"
+const PUSH_DISABLE_KEY = "push.disable"
+const PUSH_CONTACT_KEY = "push.contactSubject"
+
+async function reportFailure(action: () => Promise<void>): Promise<void> {
+  try {
+    await action()
+    useKannaStateStore.getState().setCommandError(null)
+  } catch (error) {
+    useKannaStateStore.getState().setCommandError(errorMessage(error))
+  }
+}
+
+function runPushAction(key: string, action: () => Promise<void>): void {
+  runPendingAction(key, () => reportFailure(action))
+}
+
+interface PendingButtonProps {
+  pendingKey: string
+  onRun: () => Promise<void>
+  className: string
+  label?: string
+  children: ReactNode
+}
+
+function PendingButton({ pendingKey, onRun, className, label, children }: PendingButtonProps) {
+  const pending = usePendingAction(pendingKey)
+  return (
+    <button
+      type="button"
+      onClick={() => runPushAction(pendingKey, onRun)}
+      disabled={pending}
+      aria-busy={pending || undefined}
+      aria-label={label}
+      className={cn(className, pendingButton)}
+    >
+      {pending ? <Spinner /> : null}
+      {children}
+    </button>
+  )
+}
+
+interface ProjectMuteRowProps {
+  localPath: string
+  muted: boolean
+  onMuteToggle: PushNotificationsSectionProps["onMuteToggle"]
+}
+
+function ProjectMuteRow({ localPath, muted, onMuteToggle }: ProjectMuteRowProps) {
+  const key = pendingActionKey("push.setProjectMute", localPath)
+  const pending = usePendingAction(key)
+  return (
+    <label
+      aria-busy={pending || undefined}
+      className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-1.5 transition-colors hover:bg-muted/50"
+    >
+      <input
+        type="checkbox"
+        checked={!muted}
+        disabled={pending}
+        onChange={(e) => runPushAction(key, () => onMuteToggle(localPath, !e.target.checked))}
+        className="h-4 w-4 shrink-0 rounded border-border accent-foreground"
+      />
+      <TruncatedText
+        inline
+        className="min-w-0 flex-1 font-mono text-12 text-foreground"
+        tooltip={localPath}
+      >
+        {localPath}
+      </TruncatedText>
+      {pending ? <Spinner className="text-muted-foreground" /> : null}
+    </label>
+  )
+}
 
 export function PushNotificationsSection(props: PushNotificationsSectionProps) {
   const { permissionState } = props
+  const contactSaving = usePendingAction(PUSH_CONTACT_KEY)
 
   if (permissionState === "unsupported") {
     return (
@@ -62,9 +145,9 @@ export function PushNotificationsSection(props: PushNotificationsSectionProps) {
 
   if (!isSubscribed) {
     return (
-      <button type="button" onClick={() => void props.onEnable()} className={primaryButton}>
+      <PendingButton pendingKey={PUSH_ENABLE_KEY} onRun={props.onEnable} className={primaryButton}>
         Enable on this device
-      </button>
+      </PendingButton>
     )
   }
 
@@ -74,7 +157,7 @@ export function PushNotificationsSection(props: PushNotificationsSectionProps) {
   const subjectValid = isValidVapidSubject(trimmedSubject)
   const subjectDirty = trimmedSubject !== props.contactSubject
   const commitSubject = () => {
-    if (subjectValid && subjectDirty) void props.onContactSubjectSave(trimmedSubject)
+    if (subjectValid && subjectDirty) runPushAction(PUSH_CONTACT_KEY, () => props.onContactSubjectSave(trimmedSubject))
   }
 
   return (
@@ -84,22 +167,27 @@ export function PushNotificationsSection(props: PushNotificationsSectionProps) {
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden />
           Enabled on this device
         </span>
-        <button type="button" onClick={() => void props.onTest()} className={secondaryButton}>
+        <PendingButton pendingKey={PUSH_TEST_KEY} onRun={props.onTest} className={secondaryButton}>
           Send test
-        </button>
-        <button type="button" onClick={() => void props.onDisable()} className={secondaryButton}>
+        </PendingButton>
+        <PendingButton pendingKey={PUSH_DISABLE_KEY} onRun={props.onDisable} className={secondaryButton}>
           Disable
-        </button>
+        </PendingButton>
       </div>
 
       <div className="flex flex-col gap-2">
-        <div className={sectionLabel}>Contact for delivery</div>
+        <div className={cn(sectionLabel, "flex items-center gap-1.5")}>
+          Contact for delivery
+          {contactSaving ? <Spinner /> : null}
+        </div>
         <Input
           type="text"
           inputMode="email"
           spellCheck={false}
           autoCapitalize="none"
           value={props.contactSubjectDraft}
+          readOnly={contactSaving}
+          aria-busy={contactSaving || undefined}
           onChange={(e) => props.onContactSubjectDraftChange(e.target.value)}
           onBlur={commitSubject}
           onKeyDown={(e) => {
@@ -142,14 +230,14 @@ export function PushNotificationsSection(props: PushNotificationsSectionProps) {
                 </span>
               </div>
               {!device.isCurrentDevice && (
-                <button
-                  type="button"
-                  onClick={() => void props.onRemoveDevice(device.id)}
-                  aria-label={`Remove ${device.label}`}
-                  className="shrink-0 rounded-md border border-border bg-background px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                <PendingButton
+                  pendingKey={pendingActionKey("push.unsubscribe", device.id)}
+                  onRun={() => props.onRemoveDevice(device.id)}
+                  label={`Remove ${device.label}`}
+                  className="inline-flex shrink-0 items-center rounded-md border border-border bg-background px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 >
                   Remove
-                </button>
+                </PendingButton>
               )}
             </li>
           ))}
@@ -161,21 +249,11 @@ export function PushNotificationsSection(props: PushNotificationsSectionProps) {
         <ul className="flex flex-col">
           {props.projects.map((project) => (
             <li key={project.localPath}>
-              <label className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-1.5 transition-colors hover:bg-muted/50">
-                <input
-                  type="checkbox"
-                  checked={!muted.has(project.localPath)}
-                  onChange={(e) => void props.onMuteToggle(project.localPath, !e.target.checked)}
-                  className="h-4 w-4 shrink-0 rounded border-border accent-foreground"
-                />
-                <TruncatedText
-                  inline
-                  className="min-w-0 flex-1 font-mono text-12 text-foreground"
-                  tooltip={project.localPath}
-                >
-                  {project.localPath}
-                </TruncatedText>
-              </label>
+              <ProjectMuteRow
+                localPath={project.localPath}
+                muted={muted.has(project.localPath)}
+                onMuteToggle={props.onMuteToggle}
+              />
             </li>
           ))}
         </ul>

@@ -5,6 +5,7 @@ import type { TimerPort } from "../ports/timerPort"
 import type { SocketStatus } from "./socket"
 import type { UpdateSnapshot } from "../../shared/types"
 import { sameDiffs } from "../../shared/equality"
+import { runDetached } from "../lib/runDetached"
 
 
 export { sameDiffs }
@@ -153,7 +154,7 @@ export class UpdateRestartRuntime {
 
   private startPolling(): void {
     this.pollCancelled = false
-    void this.poll()
+    runDetached("appRuntime.poll", this.poll())
   }
 
   private async poll(): Promise<void> {
@@ -168,7 +169,7 @@ export class UpdateRestartRuntime {
     }
     if (this.pollCancelled) return
     this.pollTimeoutId = this.deps.timer.setTimeout(() => {
-      void this.poll()
+      runDetached("appRuntime.poll", this.poll())
     }, 500)
   }
 

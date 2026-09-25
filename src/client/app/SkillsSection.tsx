@@ -8,8 +8,13 @@ import type {
   SkillSearchSnapshot,
   SkillUninstallResult,
 } from "../../shared/types"
+import type { PackageUpdateEntry } from "../../shared/packages/types"
+import type { ClientCommand } from "../../shared/protocol"
+import { errorMessage } from "../../shared/errors"
 import { Button } from "../components/ui/button"
 import { InstalledSkillCard } from "../components/settings/SkillCard"
+import { runDetached } from "../lib/runDetached"
+import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
 import { useSettingsPageStore } from "../stores/settingsPageStore"
 import { timerAdapter } from "../adapters/timer.adapter"
 import type { TimerPort } from "../ports/timerPort"
@@ -20,6 +25,43 @@ function formatInstallCount(count: number) {
   if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1).replace(/\.0$/, "")}M installs`
   if (count >= 1_000) return `${(count / 1_000).toFixed(1).replace(/\.0$/, "")}K installs`
   return `${count} install${count === 1 ? "" : "s"}`
+}
+
+const CHECK_UPDATES_KEY = pendingActionKey("packages.checkUpdates")
+const UPDATE_ALL_KEY = pendingActionKey("packages.updateAll", "skill")
+
+function skillPackageId(skillName: string): string {
+  return `skill:${skillName}`
+}
+
+function InstalledSkillEntry({
+  skill,
+  packageEntry,
+  uninstalling,
+  applying,
+  onUninstall,
+  onUpdate,
+}: {
+  skill: InstalledSkillSummary
+  packageEntry: PackageUpdateEntry | null
+  uninstalling: boolean
+  applying: boolean
+  onUninstall: (skill: InstalledSkillSummary) => void
+  onUpdate: (id: string) => void
+}) {
+  const packageId = skillPackageId(skill.name)
+  const updatePending = usePendingAction(pendingActionKey("packages.update", packageId))
+  const uninstallPending = usePendingAction(pendingActionKey("skills.uninstall", skill.name))
+  return (
+    <InstalledSkillCard
+      skill={skill}
+      packageEntry={packageEntry}
+      uninstalling={uninstalling || uninstallPending}
+      applying={applying || updatePending}
+      onUninstall={() => onUninstall(skill)}
+      onUpdate={() => onUpdate(packageId)}
+    />
+  )
 }
 
 function SkillErrorBlock({ message }: { message: string }) {
@@ -134,18 +176,39 @@ export function SkillsSection({
     ? new Date(packageUpdateSnapshot.lastCheckedAt).toLocaleTimeString()
     : null
 
+  const checkPending = usePendingAction(CHECK_UPDATES_KEY)
+  const updateAllPending = usePendingAction(UPDATE_ALL_KEY)
+  const checking = isChecking || checkPending
+
+  async function sendPackageCommand(command: ClientCommand) {
+    try {
+      setOperationError(null)
+      await socket.command(command)
+    } catch (error) {
+      setOperationError(errorMessage(error))
+      throw error
+    }
+  }
+
   function checkUpdates() {
-    void socket.command({ type: "packages.checkUpdates" })
+    runPendingAction(CHECK_UPDATES_KEY, () => sendPackageCommand({ type: "packages.checkUpdates" }))
   }
 
   function updateSkill(id: string) {
-    void socket.command({ type: "packages.update", id })
+    runPendingAction(pendingActionKey("packages.update", id), () => sendPackageCommand({ type: "packages.update", id }))
   }
 
   function updateAllSkills() {
-    if (bulkUpdatableIds.length > 0) {
-      void socket.command({ type: "packages.updateAll", ids: bulkUpdatableIds })
-    }
+    if (bulkUpdatableIds.length === 0) return
+    runPendingAction(UPDATE_ALL_KEY, () => sendPackageCommand({ type: "packages.updateAll", ids: bulkUpdatableIds }))
+  }
+
+  function launchInstallSkill(skill: SkillSearchResult) {
+    runPendingAction(pendingActionKey("skills.install", skill.id), () => installSkill(skill))
+  }
+
+  function launchUninstallSkill(skill: InstalledSkillSummary) {
+    runPendingAction(pendingActionKey("skills.uninstall", skill.name), () => uninstallSkill(skill))
   }
 
   const loadInstalledSkills = useCallback(async () => {
@@ -173,7 +236,7 @@ export function SkillsSection({
   }, [connectionStatus, socket, setInstalledSkills, setInstalledSkillIds, setInstalledError, setInstalledLoading])
 
   useEffect(() => {
-    void loadInstalledSkills()
+    runDetached("skills.listInstalled", loadInstalledSkills())
   }, [connectionStatus, loadInstalledSkills, socket])
 
   useEffect(() => {
@@ -240,7 +303,7 @@ export function SkillsSection({
       })
       addInstalledSkillId(skill.skillId)
       setInstallMessage(skill.id, "Installed globally")
-      void loadInstalledSkills()
+      runDetached("skills.listInstalled", loadInstalledSkills())
     } catch (error) {
       setOperationError(error instanceof Error ? error.message : "Install failed.")
     } finally {
@@ -264,7 +327,7 @@ export function SkillsSection({
       setInstalledSkills(installedSkills.filter((installedSkill) => installedSkill.name !== skill.name))
       removeInstalledSkillId(skill.name)
       clearInstallMessagesForSkill(skill.name)
-      void loadInstalledSkills()
+      runDetached("skills.listInstalled", loadInstalledSkills())
     } catch (error) {
       setOperationError(error instanceof Error ? error.message : "Uninstall failed.")
     } finally {
@@ -277,14 +340,14 @@ export function SkillsSection({
     installedContent = (
       <div className="grid gap-3 md:grid-cols-2">
         {installedSkills.map((skill) => (
-          <InstalledSkillCard
+          <InstalledSkillEntry
             key={`${skill.source}/${skill.name}`}
             skill={skill}
             packageEntry={packageUpdateSnapshot?.packages.find((p) => p.kind === "skill" && p.name === skill.name) ?? null}
             uninstalling={uninstallingSkillId === skill.name}
-            applying={packageUpdateSnapshot?.applying.includes(`skill:${skill.name}`) ?? false}
-            onUninstall={() => { void uninstallSkill(skill) }}
-            onUpdate={() => { updateSkill(`skill:${skill.name}`) }}
+            applying={packageUpdateSnapshot?.applying.includes(skillPackageId(skill.name)) ?? false}
+            onUninstall={launchUninstallSkill}
+            onUpdate={updateSkill}
           />
         ))}
       </div>
@@ -307,10 +370,10 @@ export function SkillsSection({
           <div className="flex items-center gap-2">
             {lastChecked ? <span className="tabular-nums text-xs text-muted-foreground">Checked {lastChecked}</span> : null}
             {outdatedCount > 0 ? (
-              <Button size="sm" variant="secondary" className="h-6 rounded-full px-2 text-xs" onClick={() => { updateAllSkills() }}>Update all ({outdatedCount})</Button>
+              <Button size="sm" variant="secondary" className="h-6 rounded-full px-2 text-xs" pending={updateAllPending} onClick={updateAllSkills}>Update all ({outdatedCount})</Button>
             ) : null}
-            <Button size="sm" variant="ghost" className="h-6 rounded-full px-2 text-xs" disabled={isChecking} onClick={checkUpdates}>
-              {isChecking ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}Check
+            <Button size="sm" variant="ghost" className="h-6 rounded-full px-2 text-xs" disabled={checking} aria-busy={checking || undefined} onClick={checkUpdates}>
+              {checking ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}Check
             </Button>
             {installedLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" /> : null}
           </div>
@@ -352,7 +415,7 @@ export function SkillsSection({
               installing={installingSkillId === skill.id}
               installed={installedSkillIds.has(skill.skillId)}
               message={installMessages[skill.id]}
-              onInstall={() => { void installSkill(skill) }}
+              onInstall={() => { launchInstallSkill(skill) }}
             />
           ))}
         </div>

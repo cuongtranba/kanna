@@ -9,6 +9,7 @@ import {
 } from "lexical"
 import { uploadFile } from "../../../lib/uploadFile.adapter"
 import { $createAttachmentNode } from "../nodes"
+import { runInlineUpload } from "./inlineUploadPending"
 import type { ChatAttachment } from "../../../../shared/types"
 
 
@@ -90,6 +91,7 @@ export function getDroppedFiles(event: DragEvent): File[] {
 
 export interface DropAttachmentPluginProps {
   projectId: string | null
+  uploadOwnerId: string
   onUploadError?: (msg: string) => void
   uploadFileFn?: UploadFileFn
 }
@@ -97,6 +99,7 @@ export interface DropAttachmentPluginProps {
 
 export function DropAttachmentPlugin({
   projectId,
+  uploadOwnerId,
   onUploadError,
   uploadFileFn = uploadFile,
 }: DropAttachmentPluginProps): null {
@@ -123,7 +126,7 @@ export function DropAttachmentPlugin({
         event.preventDefault()
 
         if (projectId) {
-          void uploadDroppedFiles(files, editor, projectId, uploadFileFn, onUploadError)
+          runInlineUpload(uploadOwnerId, () => uploadDroppedFiles(files, editor, projectId, uploadFileFn, onUploadError))
         }
         return true
       },
@@ -134,7 +137,7 @@ export function DropAttachmentPlugin({
       unregisterDragover()
       unregisterDrop()
     }
-  }, [editor, projectId, onUploadError, uploadFileFn])
+  }, [editor, projectId, uploadOwnerId, onUploadError, uploadFileFn])
 
   return null
 }

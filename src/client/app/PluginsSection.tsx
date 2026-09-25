@@ -1,9 +1,13 @@
+import { useCallback } from "react"
 import { Blocks } from "lucide-react"
 import { Button } from "../components/ui/button"
 import { StatusPill } from "../components/ui/status-pill"
 import { SettingsEmptyState, SettingsList } from "../components/settings/SettingsList"
+import { errorMessage } from "../../shared/errors"
 import type { JsonValue } from "../../shared/json"
 import type { InstalledPluginConfig } from "../../shared/plugins/settings"
+import { useKannaStateStore } from "../stores/kannaStateStore"
+import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
 
 export type PostJsonBodyFn = (url: string, body: JsonValue) => Promise<{ readonly ok: boolean }>
 
@@ -14,7 +18,8 @@ export interface PluginsSectionHandlers {
 export function buildPluginsSectionHandlers(postJsonBody: PostJsonBodyFn): PluginsSectionHandlers {
   return {
     async onReload(id) {
-      await postJsonBody(`/api/plugins/${id}/reload`, {})
+      const response = await postJsonBody(`/api/plugins/${id}/reload`, {})
+      if (!response.ok) throw new Error(`Failed to reload plugin ${id}`)
     },
   }
 }
@@ -48,6 +53,20 @@ function PluginRow({
   plugin: InstalledPluginConfig
   onReload: (id: string) => Promise<void>
 }) {
+  const reloadKey = pendingActionKey("plugins.reload", plugin.id)
+  const reloading = usePendingAction(reloadKey)
+  const handleReload = useCallback(() => {
+    runPendingAction(reloadKey, async () => {
+      try {
+        await onReload(plugin.id)
+        useKannaStateStore.getState().setCommandError(null)
+      } catch (error) {
+        useKannaStateStore.getState().setCommandError(errorMessage(error))
+        throw error
+      }
+    })
+  }, [onReload, plugin.id, reloadKey])
+
   return (
     <li className="flex items-center justify-between gap-3 px-4 py-3">
       <div className="flex min-w-0 flex-col gap-0.5">
@@ -61,9 +80,8 @@ function PluginRow({
         variant="ghost"
         size="sm"
         data-testid={`plugin-reload:${plugin.id}`}
-        onClick={() => {
-          void onReload(plugin.id)
-        }}
+        pending={reloading}
+        onClick={handleReload}
       >
         Reload
       </Button>

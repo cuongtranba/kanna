@@ -1,6 +1,9 @@
 import type { ChatBranchListEntry, ChatDiffSnapshot } from "../../../shared/types"
 import type { ResolvedTranscriptRow } from "../KannaTranscript"
 import type { ContextWindowSnapshot } from "../../lib/contextWindow"
+import type { LegendListRef } from "@legendapp/list/react"
+import { runDetached } from "../../lib/runDetached"
+import { pendingActionKey } from "../../stores/pendingActionsStore"
 
 export const EMPTY_STATE_TEXT = "What are we building?"
 export const EMPTY_STATE_TYPING_INTERVAL_MS = 19
@@ -137,4 +140,17 @@ export function resolveDiffFilePath(projectPath: string | null, filePath: string
   return !projectPath || isAbsoluteLocalPath(filePath)
     ? filePath
     : joinProjectRelativePath(projectPath, filePath)
+}
+
+export function projectOpenExternalKey(projectId: string | null): string {
+  return pendingActionKey("system.openExternal", "project", projectId ?? "")
+}
+
+export function gitInitializeKey(projectId: string | null): string {
+  return pendingActionKey("git.initialize", projectId ?? "")
+}
+
+export function scrollTranscriptListToEnd(list: LegendListRef | null, animated: boolean): void {
+  const task = list?.scrollToEnd?.({ animated })
+  if (task) runDetached("transcript.scrollToEnd", task)
 }

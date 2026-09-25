@@ -12,11 +12,11 @@ import type { KannaState } from "./useKannaState"
 
 export interface TranscriptActionsContextValue {
   onAskUserQuestionSubmit: (toolUseId: string, questions: AskUserQuestionItem[], answers: AskUserQuestionAnswerMap) => void | Promise<void>
-  onExitPlanModeConfirm: (toolUseId: string, confirmed: boolean, clearContext?: boolean, message?: string) => void
-  onToolRequestAnswer: (toolRequestId: string, decision: ToolRequestDecision) => void
-  onAutoContinueAccept: (scheduleId: string, scheduledAt: number) => void
-  onAutoContinueReschedule: (scheduleId: string, scheduledAt: number) => void
-  onAutoContinueCancel: (scheduleId: string) => void
+  onExitPlanModeConfirm: (toolUseId: string, confirmed: boolean, clearContext?: boolean, message?: string) => Promise<void>
+  onToolRequestAnswer: (toolRequestId: string, decision: ToolRequestDecision) => Promise<void>
+  onAutoContinueAccept: (scheduleId: string, scheduledAt: number) => Promise<void>
+  onAutoContinueReschedule: (scheduleId: string, scheduledAt: number) => Promise<void>
+  onAutoContinueCancel: (scheduleId: string) => Promise<void>
   onRetryFailedTurn: ((resultMessageId: string) => void | Promise<void>) | undefined
   onCronRemove: ((jobId: string) => void) | undefined
   schedules: Record<string, AutoContinueSchedule>
@@ -28,7 +28,7 @@ export interface TranscriptActionsContextValue {
   subagentRuns: Record<string, SubagentRunSnapshot>
   editorPreset: EditorPreset
   editorCommandTemplate: string | undefined
-  onCancelSubagentRun?: (chatId: string, runId: string) => void
+  onCancelSubagentRun?: (chatId: string, runId: string) => Promise<void>
   getSubagentTranscript?: GetSubagentTranscript
   platform: string
   tunnels?: Record<string, CloudflareTunnelRecord>
@@ -40,9 +40,9 @@ export interface TranscriptActionsContextValue {
   runtimeStatus: string | null
   isDraining: boolean
   commandError: string | null
-  onStopDraining: () => void | Promise<void>
-  onSteerQueuedMessage: (queuedMessageId: string) => void | Promise<void>
-  onRemoveQueuedMessage: (queuedMessageId: string) => void | Promise<void>
+  onStopDraining: () => Promise<void>
+  onSteerQueuedMessage: (queuedMessageId: string) => Promise<void>
+  onRemoveQueuedMessage: (queuedMessageId: string) => Promise<void>
   loopProgress?: LoopProgressSnapshot
   workflowRuns?: WorkflowRunSummary[]
   backgroundTasks?: ChatBackgroundTask[]
@@ -53,14 +53,15 @@ export interface TranscriptActionsContextValue {
 }
 
 const NOOP = () => {}
+const ASYNC_NOOP = () => Promise.resolve()
 
 const defaultContextValue: TranscriptActionsContextValue = {
   onAskUserQuestionSubmit: NOOP,
-  onExitPlanModeConfirm: NOOP,
-  onToolRequestAnswer: NOOP,
-  onAutoContinueAccept: NOOP,
-  onAutoContinueReschedule: NOOP,
-  onAutoContinueCancel: NOOP,
+  onExitPlanModeConfirm: ASYNC_NOOP,
+  onToolRequestAnswer: ASYNC_NOOP,
+  onAutoContinueAccept: ASYNC_NOOP,
+  onAutoContinueReschedule: ASYNC_NOOP,
+  onAutoContinueCancel: ASYNC_NOOP,
   onRetryFailedTurn: undefined,
   onCronRemove: undefined,
   schedules: {},
@@ -75,9 +76,9 @@ const defaultContextValue: TranscriptActionsContextValue = {
   runtimeStatus: null,
   isDraining: false,
   commandError: null,
-  onStopDraining: NOOP,
-  onSteerQueuedMessage: NOOP,
-  onRemoveQueuedMessage: NOOP,
+  onStopDraining: ASYNC_NOOP,
+  onSteerQueuedMessage: ASYNC_NOOP,
+  onRemoveQueuedMessage: ASYNC_NOOP,
   localPath: undefined,
   latestToolIds: {},
   isProcessing: false,

@@ -20,14 +20,15 @@ import {
 const ROW_WRAPPER_MARKER = "data-transcript-row-id="
 
 const NOOP = () => undefined
+const ASYNC_NOOP = () => Promise.resolve()
 
 const DEFAULT_ACTIONS: TranscriptActionsContextValue = {
   onAskUserQuestionSubmit: NOOP,
-  onExitPlanModeConfirm: NOOP,
-  onToolRequestAnswer: NOOP,
-  onAutoContinueAccept: NOOP,
-  onAutoContinueReschedule: NOOP,
-  onAutoContinueCancel: NOOP,
+  onExitPlanModeConfirm: ASYNC_NOOP,
+  onToolRequestAnswer: ASYNC_NOOP,
+  onAutoContinueAccept: ASYNC_NOOP,
+  onAutoContinueReschedule: ASYNC_NOOP,
+  onAutoContinueCancel: ASYNC_NOOP,
   onRetryFailedTurn: undefined,
   onCronRemove: undefined,
   schedules: {},
@@ -42,9 +43,9 @@ const DEFAULT_ACTIONS: TranscriptActionsContextValue = {
   runtimeStatus: null,
   isDraining: false,
   commandError: null,
-  onStopDraining: NOOP,
-  onSteerQueuedMessage: NOOP,
-  onRemoveQueuedMessage: NOOP,
+  onStopDraining: ASYNC_NOOP,
+  onSteerQueuedMessage: ASYNC_NOOP,
+  onRemoveQueuedMessage: ASYNC_NOOP,
   localPath: undefined,
   latestToolIds: {},
   isProcessing: false,

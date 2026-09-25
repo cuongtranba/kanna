@@ -2,6 +2,11 @@ import { useCallback, useEffect, useRef } from "react"
 import { WorkflowsSectionDetailStore } from "./WorkflowsSection.store"
 import { Activity, FileText } from "lucide-react"
 import { cn } from "../lib/utils"
+import { runDetached } from "../lib/runDetached"
+import { Spinner } from "../components/ui/spinner"
+import { LOG_PREFIX } from "../../shared/branding"
+import { onRejected } from "../../shared/errors"
+import { log } from "../../shared/log"
 import { formatCompactDuration } from "../lib/formatDuration"
 import { statusToneClass, workflowStatusTone, type StatusTone } from "../lib/statusLabel"
 import { StateMark } from "../components/ui/state-mark"
@@ -125,6 +130,7 @@ function WorkflowRunRow(props: {
 
 interface WorkflowRunDetailDialogProps {
   run: WorkflowRun | null
+  failed?: boolean
   open: boolean
   onClose: () => void
 }
@@ -146,7 +152,20 @@ export function formatWorkflowResult(result: string): string {
   }
 }
 
-export function WorkflowRunDetailDialog({ run, open, onClose }: WorkflowRunDetailDialogProps) {
+function WorkflowRunDetailDialogBody({ run, failed }: { run: WorkflowRun | null; failed: boolean }) {
+  if (run) return <WorkflowRunDetail run={run} />
+  if (failed) {
+    return <p className="text-sm text-muted-foreground">Couldn't load this run. Close and select it again to retry.</p>
+  }
+  return (
+    <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
+      <Spinner />
+      Loading…
+    </p>
+  )
+}
+
+export function WorkflowRunDetailDialog({ run, failed = false, open, onClose }: WorkflowRunDetailDialogProps) {
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose() }}>
       <DialogContent size="lg" aria-describedby={undefined}>
@@ -156,9 +175,7 @@ export function WorkflowRunDetailDialog({ run, open, onClose }: WorkflowRunDetai
           </DialogTitle>
         </DialogHeader>
         <DialogBody>
-          {run ? <WorkflowRunDetail run={run} /> : (
-            <p className="text-sm text-muted-foreground">Loading…</p>
-          )}
+          <WorkflowRunDetailDialogBody run={run} failed={failed} />
         </DialogBody>
       </DialogContent>
     </Dialog>
@@ -358,13 +375,23 @@ function WorkflowsSectionWithDetailInner({ runs, getRunDetail }: WorkflowsSectio
   const clearSelection = WorkflowsSectionDetailStore.useScopedStore((s) => s.clearSelection)
   const isOpen = selectedRun !== null
   const runsAtSelectionRef = useRef<WorkflowRunSummary[] | null>(null)
+  const fetchSeqRef = useRef(0)
 
-  const handleSelectRun = useCallback(async (runId: string) => {
+  const handleSelectRun = useCallback((runId: string) => {
     runsAtSelectionRef.current = runs
     setSelectedRunId(runId)
     setSelectedRun("loading")
-    const detail = await getRunDetail(runId)
-    setSelectedRun(detail)
+    const seq = ++fetchSeqRef.current
+    const isCurrent = () => fetchSeqRef.current === seq
+    getRunDetail(runId).then(
+      (detail) => {
+        if (isCurrent()) setSelectedRun(detail)
+      },
+      onRejected((error) => {
+        log.error(LOG_PREFIX, "workflows.getRun failed", error)
+        if (isCurrent()) setSelectedRun("failed")
+      }),
+    )
   }, [getRunDetail, runs, setSelectedRun, setSelectedRunId])
 
   const handleClose = useCallback(() => {
@@ -378,10 +405,11 @@ function WorkflowsSectionWithDetailInner({ runs, getRunDetail }: WorkflowsSectio
     const row = runs.find((r) => r.runId === selectedRunId)
     if (!row || row.status !== "running") return
     let stale = false
-    void getRunDetail(selectedRunId).then((detail) => {
-      if (stale || detail === null) return
+    const seq = ++fetchSeqRef.current
+    runDetached("workflows.getRun refresh", getRunDetail(selectedRunId).then((detail) => {
+      if (stale || fetchSeqRef.current !== seq || detail === null) return
       setSelectedRun(detail)
-    })
+    }))
     return () => { stale = true }
   }, [runs, selectedRunId, getRunDetail, setSelectedRun])
 
@@ -389,10 +417,11 @@ function WorkflowsSectionWithDetailInner({ runs, getRunDetail }: WorkflowsSectio
     <>
       <WorkflowsSection
         runs={runs}
-        onSelectRun={(runId) => { void handleSelectRun(runId) }}
+        onSelectRun={handleSelectRun}
       />
       <WorkflowRunDetailDialog
-        run={selectedRun === "loading" ? null : selectedRun}
+        run={selectedRun === "loading" || selectedRun === "failed" ? null : selectedRun}
+        failed={selectedRun === "failed"}
         open={isOpen}
         onClose={handleClose}
       />

@@ -14,6 +14,7 @@ import { resolveEffectiveScaleStep, resolveFontScale } from "../../../shared/des
 import type { JsonValue } from "../../../shared/json"
 import { useAppSettingsStore } from "../../stores/appSettingsStore"
 import { usePreferencesStore } from "../../stores/preferences"
+import { runDetached } from "../../lib/runDetached"
 
 export interface TerminalPanePorts {
   dom?: DomPort
@@ -292,12 +293,12 @@ function TerminalPaneInner({
     }
   }, [socket, terminalId, storeSetError])
   const sendResize = useCallback((cols: number, rows: number) => {
-    void socket.command({
+    runDetached("terminal.resize", socket.command({
       type: "terminal.resize",
       terminalId,
       cols,
       rows,
-    }).catch(() => {})
+    }))
   }, [socket, terminalId])
   const scheduleResizeSync = useCallback(() => {
     const sync = () => {
@@ -370,12 +371,12 @@ function TerminalPaneInner({
       const element = containerRef.current
       if (!terminalInstance || !element) return
       syncTerminalSize(terminalInstance, element, lastSizeRef, hasCreatedRef.current, (cols, rows) => {
-        void socket.command({
+        runDetached("terminal.resize", socket.command({
           type: "terminal.resize",
           terminalId,
           cols,
           rows,
-        }).catch(() => {})
+        }))
       }, dom)
     })
 

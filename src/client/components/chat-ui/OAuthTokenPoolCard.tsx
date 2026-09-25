@@ -11,6 +11,8 @@ import { maskToken } from "../../lib/oauthTokenMask"
 import { Input } from "../ui/input"
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "../ui/tooltip"
 import { HoverHint } from "../ui/truncated-text"
+import { Spinner } from "../ui/spinner"
+import { pendingActionKey, runPendingAction, usePendingAction } from "../../stores/pendingActionsStore"
 import { useOAuthTokenPoolCardStore } from "../../stores/oauthTokenPoolCardStore"
 import type { TimerPort } from "../../ports/timerPort"
 import { timerAdapter } from "../../adapters/timer.adapter"
@@ -112,11 +114,11 @@ function TokenRow({
   now: number
   isCurrent: boolean
   concurrencyDefault: number
-  onRemove: () => void
-  onToggleDisabled: () => void
+  onRemove: () => Promise<void>
+  onToggleDisabled: () => Promise<void>
   onTest: (token: string, baseUrl?: string) => Promise<{ ok: boolean; error: string | null }>
-  onChangeMaxConcurrent: (id: string, value: number) => void
-  onChangeBaseUrl: (id: string, value: string) => void
+  onChangeMaxConcurrent: (id: string, value: number) => Promise<void>
+  onChangeBaseUrl: (id: string, value: string) => Promise<void>
   ports?: TokenRowPorts
 }) {
   const timer = ports?.timer ?? timerAdapter
@@ -134,7 +136,17 @@ function TokenRow({
   const baseUrlInvalid =
     baseUrlValue.trim().length > 0 && normalizeAnthropicBaseUrl(baseUrlValue) === null
 
-  const commitBaseUrl = () => onChangeBaseUrl(entry.id, baseUrlValue)
+  const removeKey = pendingActionKey("oauthPool.remove", entry.id)
+  const toggleKey = pendingActionKey("oauthPool.toggle", entry.id)
+  const concurrencyKey = pendingActionKey("oauthPool.concurrency", entry.id)
+  const baseUrlKey = pendingActionKey("oauthPool.baseUrl", entry.id)
+  const testKey = pendingActionKey("oauthPool.test", entry.id)
+  const removing = usePendingAction(removeKey)
+  const toggling = usePendingAction(toggleKey)
+  const concurrencySaving = usePendingAction(concurrencyKey)
+  const baseUrlSaving = usePendingAction(baseUrlKey)
+
+  const commitBaseUrl = () => runPendingAction(baseUrlKey, () => onChangeBaseUrl(entry.id, baseUrlValue))
 
   const handleBaseUrlKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Enter") event.currentTarget.blur()
@@ -157,6 +169,7 @@ function TokenRow({
   }
 
   const isDisabled = entry.status === "disabled"
+  const ToggleIcon = isDisabled ? Power : PowerOff
   const effectiveCap = entry.maxConcurrent ?? concurrencyDefault
 
   return (
@@ -181,10 +194,13 @@ function TokenRow({
         <HoverHint label="Maximum concurrent chats sharing this OAuth token. Higher = risks Anthropic rate limits.">
         <label className="inline-flex items-center gap-1 text-xs text-muted-foreground">
           <span>Concurrent</span>
+          {concurrencySaving ? <Spinner className="size-3" /> : null}
           <Input
             type="number"
             value={effectiveCap}
-            onChange={(e) => onChangeMaxConcurrent(entry.id, clampTokenConcurrency(Number(e.target.value)))}
+            readOnly={concurrencySaving}
+            aria-busy={concurrencySaving || undefined}
+            onChange={(e) => runPendingAction(concurrencyKey, () => onChangeMaxConcurrent(entry.id, clampTokenConcurrency(Number(e.target.value))))}
             min={OAUTH_TOKEN_MAX_CONCURRENT_MIN}
             aria-label="Max concurrent chats"
             className="h-7 w-14 text-xs"
@@ -198,11 +214,12 @@ function TokenRow({
         <button
           type="button"
           aria-label="Test"
-          onClick={handleTest}
+          onClick={() => runPendingAction(testKey, handleTest)}
           disabled={testing || isDisabled}
+          aria-busy={testing || undefined}
           className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
         >
-          <FlaskConical className="size-3" aria-hidden="true" />
+          {testing ? <Spinner className="size-3" /> : <FlaskConical className="size-3" aria-hidden="true" />}
           Test
         </button>
         <TooltipProvider>
@@ -211,12 +228,12 @@ function TokenRow({
               <button
                 type="button"
                 aria-label={isDisabled ? "Enable" : "Disable"}
-                onClick={onToggleDisabled}
-                className="rounded p-1 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                onClick={() => runPendingAction(toggleKey, onToggleDisabled)}
+                disabled={toggling}
+                aria-busy={toggling || undefined}
+                className="rounded p-1 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default"
               >
-                {isDisabled
-                  ? <Power className="size-3.5" aria-hidden="true" />
-                  : <PowerOff className="size-3.5" aria-hidden="true" />}
+                {toggling ? <Spinner /> : <ToggleIcon aria-hidden="true" className="size-3.5" />}
                 <span className="sr-only">{isDisabled ? "Enable" : "Disable"}</span>
               </button>
             </TooltipTrigger>
@@ -226,10 +243,12 @@ function TokenRow({
         <button
           type="button"
           aria-label="Remove"
-          onClick={onRemove}
-          className="rounded p-1 text-muted-foreground transition-colors hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          onClick={() => runPendingAction(removeKey, onRemove)}
+          disabled={removing}
+          aria-busy={removing || undefined}
+          className="rounded p-1 text-muted-foreground transition-colors hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default"
         >
-          <Trash2 className="size-3.5" aria-hidden="true" />
+          {removing ? <Spinner /> : <Trash2 className="size-3.5" aria-hidden="true" />}
           <span className="sr-only">Remove</span>
         </button>
       </div>
@@ -238,8 +257,11 @@ function TokenRow({
     <HoverHint label="Anthropic API endpoint this token authenticates against. Leave empty for the default api.anthropic.com; set it to route this credential through a proxy.">
     <label className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
       <span className="shrink-0">Base URL</span>
+      {baseUrlSaving ? <Spinner className="size-3" /> : null}
       <Input
         value={baseUrlValue}
+        readOnly={baseUrlSaving}
+        aria-busy={baseUrlSaving || undefined}
         onChange={(e) => setBaseUrlDraft(entry.id, e.target.value)}
         onBlur={commitBaseUrl}
         onKeyDown={handleBaseUrlKeyDown}
@@ -332,10 +354,12 @@ function AddTokenForm({
         </div>
         <button
           type="button"
-          onClick={handleAdd}
+          onClick={() => runPendingAction("oauthPool.add", handleAdd)}
           disabled={!canSubmit}
-          className="inline-flex shrink-0 items-center rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+          aria-busy={addSubmitting || undefined}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
         >
+          {addSubmitting ? <Spinner /> : null}
           Add token
         </button>
       </div>
@@ -377,36 +401,30 @@ export function OAuthTokenPoolCard({
     null,
   )?.id ?? null
 
-  const handleRemove = (id: string) => {
-    void onWrite({ tokens: tokens.filter((t) => t.id !== id) })
-  }
+  const handleRemove = (id: string) => onWrite({ tokens: tokens.filter((t) => t.id !== id) })
 
-  const handleToggleDisabled = (id: string) => {
-    void onWrite({
-      tokens: tokens.map((t) =>
-        t.id === id
-          ? { ...t, status: t.status === "disabled" ? "active" : "disabled" }
-          : t,
-      ),
-    })
-  }
+  const handleToggleDisabled = (id: string) => onWrite({
+    tokens: tokens.map((t) =>
+      t.id === id
+        ? { ...t, status: t.status === "disabled" ? "active" : "disabled" }
+        : t,
+    ),
+  })
 
-  const handleChangeMaxConcurrent = (id: string, value: number) => {
-    void onWrite({
-      tokens: tokens.map((t) =>
-        t.id === id ? { ...t, maxConcurrent: value } : t,
-      ),
-    })
-  }
+  const handleChangeMaxConcurrent = (id: string, value: number) => onWrite({
+    tokens: tokens.map((t) =>
+      t.id === id ? { ...t, maxConcurrent: value } : t,
+    ),
+  })
 
-  const handleChangeBaseUrl = (id: string, value: string) => {
+  const handleChangeBaseUrl = async (id: string, value: string) => {
     const entry = tokens.find((t) => t.id === id)
     if (!entry) return
     const normalized = normalizeAnthropicBaseUrl(value)
     if (normalized === null && value.trim().length > 0) return
     clearBaseUrlDraft(id)
     if (normalized === (entry.baseUrl ?? null)) return
-    void onWrite({
+    await onWrite({
       tokens: tokens.map((t) => {
         if (t.id !== id) return t
         const { baseUrl: _dropped, ...withoutBaseUrl } = t
@@ -415,8 +433,9 @@ export function OAuthTokenPoolCard({
     })
   }
 
+  const defaultSaving = usePendingAction("oauthPool.concurrencyDefault")
   const handleChangeGlobalDefault = (value: number) => {
-    void onWrite({ concurrencyDefault: clampTokenConcurrency(value) })
+    runPendingAction("oauthPool.concurrencyDefault", () => onWrite({ concurrencyDefault: clampTokenConcurrency(value) }))
   }
 
   return (
@@ -428,9 +447,12 @@ export function OAuthTokenPoolCard({
           <span className="text-xs text-muted-foreground">Cap for tokens without an explicit per-row override. Minimum {OAUTH_TOKEN_MAX_CONCURRENT_MIN}, no upper limit.</span>
         </label>
         </HoverHint>
+        {defaultSaving ? <Spinner className="ml-auto text-muted-foreground" /> : null}
         <Input
           type="number"
           value={concurrencyDefault}
+          readOnly={defaultSaving}
+          aria-busy={defaultSaving || undefined}
           onChange={(e) => handleChangeGlobalDefault(Number(e.target.value))}
           min={OAUTH_TOKEN_MAX_CONCURRENT_MIN}
           aria-label="Default concurrency per token"

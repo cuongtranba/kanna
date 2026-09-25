@@ -23,6 +23,7 @@ import { MermaidBody } from "./bodies/MermaidBody"
 import { downloadFile, shareViaWebShare } from "./actions"
 import type { PreviewSource } from "./types"
 import { SheetBodyStore } from "./SheetBody.store"
+import { pendingActionKey, runPendingAction, usePendingAction } from "../../../stores/pendingActionsStore"
 
 interface Props {
   source: PreviewSource | null
@@ -94,7 +95,15 @@ function SheetBodyInner({ source, onClose }: { source: PreviewSource; onClose: (
     }
   }, [onClose, setDy])
 
-  const handleShare = useCallback(() => { void shareViaWebShare(source) }, [source])
+  const shareKey = pendingActionKey("file.share", source.id)
+  const sharing = usePendingAction(shareKey)
+  const shareOutcome = SheetBodyStore.useScopedStore((s) => s.shareOutcome)
+  const setShareOutcome = SheetBodyStore.useScopedStore((s) => s.setShareOutcome)
+  const handleShare = useCallback(() => {
+    runPendingAction(shareKey, async () => {
+      setShareOutcome(await shareViaWebShare(source))
+    })
+  }, [setShareOutcome, shareKey, source])
   const handleDownload = useCallback(() => downloadFile(source), [source])
 
   return (
@@ -114,8 +123,13 @@ function SheetBodyInner({ source, onClose }: { source: PreviewSource; onClose: (
         {createElement(pickBody(source), { source })}
       </div>
       <div className="flex items-center justify-end gap-2 border-t border-border px-4 py-3">
-        <Button type="button" variant="outline" onClick={handleShare}>
-          <Share2 className="mr-2 h-4 w-4" />
+        {shareOutcome === "copied" || shareOutcome === "failed" ? (
+          <span role="status" className="mr-auto text-xs text-muted-foreground">
+            {shareOutcome === "copied" ? "Link copied" : "Couldn't share this file"}
+          </span>
+        ) : null}
+        <Button type="button" variant="outline" pending={sharing} onClick={handleShare}>
+          {sharing ? null : <Share2 className="mr-2 h-4 w-4" />}
           Share
         </Button>
         {source.origin === "offer_download" ? (
