@@ -380,6 +380,13 @@ armed and "Tasks" otherwise, showing a `completed/total` tally in the latter.
   namespace (Kanna-minted tasks are `k:`), so an ordinary non-loop chat gets a
   working Tasks card that — unlike the old client reducer — survives `/clear`
   (native tasks go `stale`, not deleted) and the transcript tail window.
+  A subagent keeps its OWN native task counter (its first task is `#1` even when
+  the parent already has a `#1`), so its tasks are scoped `n:<parent_tool_use_id>:<id>`
+  and its `TaskList` resync replaces only that scope. Its tool results also carry
+  no structured `tool_use_result`, so `TaskCreate`'s id is read from the result
+  text (`Task #<id> created successfully`); without that fallback every create
+  is dropped and the next `TaskUpdate` adopts the task under its bare id, which
+  renders as a task titled "1" with no description.
 - **Transport:** no new WS topic and no file watcher. `loopProgress` rides the
   existing `ChatSnapshot`; the coordinator's chat-task store port emits a chat
   state change after every task write, which re-pushes the chat topic.

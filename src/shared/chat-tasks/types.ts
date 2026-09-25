@@ -130,6 +130,7 @@ export type ChatTaskEvent =
   | (ChatTaskEventBase & {
     readonly type: "chat_task_native_synced"
     readonly rows: readonly ChatTaskNativeRow[]
+    readonly scope?: string
     readonly sourceToolUseId?: string
   })
 
@@ -152,8 +153,16 @@ export function isNativeTaskId(taskId: string): boolean {
   return taskId.startsWith(NATIVE_TASK_ID_PREFIX)
 }
 
-export function nativeTaskId(nativeId: string): string {
-  return `${NATIVE_TASK_ID_PREFIX}${nativeId}`
+export function nativeTaskId(nativeId: string, scope: string | null = null): string {
+  return scope === null
+    ? `${NATIVE_TASK_ID_PREFIX}${nativeId}`
+    : `${NATIVE_TASK_ID_PREFIX}${scope}:${nativeId}`
+}
+
+export function nativeTaskScope(taskId: string): string | null {
+  const nativeId = taskId.slice(NATIVE_TASK_ID_PREFIX.length)
+  const separator = nativeId.lastIndexOf(":")
+  return separator === -1 ? null : nativeId.slice(0, separator)
 }
 
 export function kannaTaskId(seed: string): string {

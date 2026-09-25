@@ -44,6 +44,17 @@ function toolResult(toolId: string, structured: string, isError = false): Transc
   }
 }
 
+function subagentResult(toolId: string, content: string, parentToolUseId = "toolu_parent"): TranscriptEntry {
+  return {
+    _id: `res-${toolId}`,
+    createdAt: 2,
+    kind: "tool_result",
+    toolId,
+    content,
+    debugRaw: JSON.stringify({ type: "user", parent_tool_use_id: parentToolUseId }),
+  }
+}
+
 const kannaTask: ChatTaskEvent = {
   v: CHAT_TASK_EVENT_VERSION,
   timestamp: 1,
@@ -107,6 +118,49 @@ test("a native TaskUpdate for an id Kanna never saw repairs itself instead of dr
   const task = h.project().tasks[0]
   expect(task?.id).toBe("n:4")
   expect(task?.status).toBe("completed")
+})
+
+test("a subagent's TaskCreate keeps its subject and description though its result carries no structured task", () => {
+  const h = harness()
+  h.feed(toolCall("t1", "TaskCreate", { subject: "Contracts: cron rule", description: "checkCron, upcomingFires" }))
+  h.feed(subagentResult("t1", "Task #1 created successfully: Contracts: cron rule"))
+  h.feed(toolCall("t2", "TaskUpdate", { taskId: "1", status: "in_progress" }))
+  h.feed(subagentResult("t2", "Updated task #1 status"))
+
+  expect(h.project().tasks.map((t) => [t.subject, t.description, t.status])).toEqual([
+    ["Contracts: cron rule", "checkCron, upcomingFires", "in_progress"],
+  ])
+})
+
+test("a subagent's task #1 does not overwrite the main agent's task #1", () => {
+  const h = harness()
+  h.feed(toolCall("t1", "TaskCreate", { subject: "Main plan" }))
+  h.feed(toolResult("t1", JSON.stringify({ task: { id: "1", subject: "Main plan" } })))
+  h.feed(toolCall("t2", "TaskCreate", { subject: "Subagent step" }))
+  h.feed(subagentResult("t2", "Task #1 created successfully: Subagent step"))
+  h.feed(toolCall("t3", "TaskUpdate", { taskId: "1", status: "completed" }))
+  h.feed(subagentResult("t3", "Updated task #1 status"))
+
+  expect(h.project().tasks.map((t) => [t.subject, t.status])).toEqual([
+    ["Main plan", "pending"],
+    ["Subagent step", "completed"],
+  ])
+})
+
+test("a subagent's TaskList resync leaves the main agent's native tasks alone", () => {
+  const h = harness()
+  h.feed(toolCall("t1", "TaskCreate", { subject: "Main plan" }))
+  h.feed(toolResult("t1", JSON.stringify({ task: { id: "1", subject: "Main plan" } })))
+  h.feed(toolCall("t2", "TaskList", {}))
+  h.feed({
+    ...subagentResult("t2", "#1 [pending] Subagent step"),
+    debugRaw: JSON.stringify({
+      parent_tool_use_id: "toolu_parent",
+      tool_use_result: { tasks: [{ id: "1", subject: "Subagent step", status: "pending" }] },
+    }),
+  })
+
+  expect(h.project().tasks.map((t) => t.subject)).toEqual(["Main plan", "Subagent step"])
 })
 
 test("a failed native tool result is not mirrored", () => {

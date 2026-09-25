@@ -3,6 +3,7 @@ import {
   MAX_CHAT_TASK_NOTES,
   isNativeTaskId,
   nativeTaskId,
+  nativeTaskScope,
   type ChatTaskEvent,
   type ChatTaskNote,
   type ChatTaskPatch,
@@ -50,11 +51,12 @@ function syncNativeRows(
   epoch: number,
 ): void {
   if (event.rows.length === 0) return
+  const scope = event.scope ?? null
   for (const id of [...tasks.keys()]) {
-    if (isNativeTaskId(id)) tasks.delete(id)
+    if (isNativeTaskId(id) && nativeTaskScope(id) === scope) tasks.delete(id)
   }
   for (const row of event.rows) {
-    const id = nativeTaskId(row.nativeId)
+    const id = nativeTaskId(row.nativeId, scope)
     const existing = tasks.get(id)
     tasks.set(id, {
       id,

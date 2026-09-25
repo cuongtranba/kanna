@@ -26,8 +26,11 @@ export interface NativeMirrorInput {
   readonly isError: boolean
   readonly toolUseId: string
   readonly originRunId: string | null
+  readonly scope: string | null
   readonly knownTaskIds: ReadonlySet<string>
 }
+
+const CREATED_TASK_TEXT = /^Task #(\S+) created successfully/
 
 function base(input: NativeMirrorInput): {
   v: typeof CHAT_TASK_EVENT_VERSION
@@ -43,6 +46,10 @@ function readString(bag: JsonObject, key: string): string | null {
 }
 
 function readCreatedTask(raw: JsonValue): { id: string; subject: string } | null {
+  if (typeof raw === "string") {
+    const id = CREATED_TASK_TEXT.exec(raw)?.[1]
+    return id === undefined ? null : { id, subject: "" }
+  }
   if (!isJsonObject(raw)) return null
   const task = raw.task
   if (!isJsonObject(task)) return null
@@ -80,7 +87,7 @@ function mirrorCreate(input: NativeMirrorInput): readonly ChatTaskEvent[] {
   if (input.tool.toolKind !== "task_create") return []
   const created = readCreatedTask(input.raw)
   if (!created) return []
-  const taskId = nativeTaskId(created.id)
+  const taskId = nativeTaskId(created.id, input.scope)
   if (input.knownTaskIds.has(taskId)) return []
   const subject = input.tool.input.subject.length > 0 ? input.tool.input.subject : created.subject
   return [{
@@ -102,7 +109,7 @@ function mirrorUpdate(input: NativeMirrorInput): readonly ChatTaskEvent[] {
   if (ack && !ack.success) return []
   const rawId = input.tool.input.taskId.length > 0 ? input.tool.input.taskId : (ack?.taskId ?? "")
   if (rawId.length === 0) return []
-  const taskId = nativeTaskId(rawId)
+  const taskId = nativeTaskId(rawId, input.scope)
 
   if (input.tool.input.status === "deleted") {
     return [{ ...base(input), type: "chat_task_deleted", taskId, sourceToolUseId: input.toolUseId }]
@@ -144,6 +151,7 @@ function mirrorList(input: NativeMirrorInput): readonly ChatTaskEvent[] {
     ...base(input),
     type: "chat_task_native_synced",
     rows,
+    ...(input.scope !== null ? { scope: input.scope } : {}),
     sourceToolUseId: input.toolUseId,
   }]
 }
