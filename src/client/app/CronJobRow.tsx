@@ -1,12 +1,17 @@
 import { useCallback, type ReactNode } from "react"
 import { Pause, Pencil, Play, X } from "lucide-react"
 import { hasActiveRun, type CronJobPatch, type CronJobSnapshot } from "../../shared/cron/types"
+import { errorMessage } from "../../shared/errors"
+import type { ClientCommand } from "../../shared/protocol"
 import { humanizeSchedule } from "../../shared/cron/humanize"
 import { CronPausedPill, CronRunStatusPill } from "../components/messages/CronRunMessage"
+import { Spinner } from "../components/ui/spinner"
 import { HoverHint } from "../components/ui/truncated-text"
 import { formatCompactDuration, formatLiveDuration } from "../lib/formatDuration"
 import { useNow } from "../hooks/useNow"
 import { cn } from "../lib/utils"
+import { useKannaStateStore } from "../stores/kannaStateStore"
+import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
 import { CronJobEditDialog } from "./CronJobEditDialog"
 import { CronJobRowStore } from "./CronJobRow.store"
 import { useOptionalKannaSocket } from "./KannaSocketProvider"
@@ -22,6 +27,23 @@ const ICON_BUTTON_CLASS = "rounded-md p-1.5 text-muted-foreground hover:bg-muted
 
 const EDIT_BLOCKED_REASON = "cannot edit while a run is in flight"
 
+type CronRowCommandType = "cron.pause" | "cron.resume" | "cron.remove"
+
+function cronRowActionKey(type: CronRowCommandType, chatId: string, jobId: string): string {
+  return pendingActionKey(type, chatId, jobId)
+}
+
+async function sendCronCommand(socket: ReturnType<typeof useOptionalKannaSocket>, command: ClientCommand): Promise<void> {
+  if (!socket) return
+  try {
+    await socket.command(command)
+    useKannaStateStore.getState().setCommandError(null)
+  } catch (error) {
+    useKannaStateStore.getState().setCommandError(errorMessage(error))
+    throw error
+  }
+}
+
 function CronJobRowContent({ job, chatId, trailing, divider }: Props) {
   const now = useNow(1_000)
   const socket = useOptionalKannaSocket()
@@ -29,9 +51,16 @@ function CronJobRowContent({ job, chatId, trailing, divider }: Props) {
   const openEditor = CronJobRowStore.useScopedStore((state) => state.openEditor)
   const setEditing = CronJobRowStore.useScopedStore((state) => state.setEditing)
 
+  const pauseKey = cronRowActionKey("cron.pause", chatId, job.jobId)
+  const resumeKey = cronRowActionKey("cron.resume", chatId, job.jobId)
+  const removeKey = cronRowActionKey("cron.remove", chatId, job.jobId)
+  const pausePending = usePendingAction(pauseKey)
+  const resumePending = usePendingAction(resumeKey)
+  const removePending = usePendingAction(removeKey)
+
   const send = useCallback(
-    (command: { type: "cron.pause" | "cron.resume" | "cron.remove"; chatId: string; jobId: string }) => {
-      void socket?.command(command).catch(() => {})
+    (command: { type: CronRowCommandType; chatId: string; jobId: string }) => {
+      runPendingAction(cronRowActionKey(command.type, command.chatId, command.jobId), () => sendCronCommand(socket, command))
     },
     [socket],
   )
@@ -54,9 +83,7 @@ function CronJobRowContent({ job, chatId, trailing, divider }: Props) {
   }, [job, openEditor])
 
   const handleSave = useCallback(
-    (patch: CronJobPatch) => {
-      void socket?.command({ type: "cron.update", chatId, jobId: job.jobId, patch }).catch(() => {})
-    },
+    (patch: CronJobPatch) => sendCronCommand(socket, { type: "cron.update", chatId, jobId: job.jobId, patch }),
     [chatId, job.jobId, socket],
   )
 
@@ -114,27 +141,33 @@ function CronJobRowContent({ job, chatId, trailing, divider }: Props) {
             type="button"
             aria-label={`Resume cron job ${job.jobId}`}
             className={ICON_BUTTON_CLASS}
+            disabled={resumePending}
+            aria-busy={resumePending || undefined}
             onClick={handleResume}
           >
-            <Play className="h-3.5 w-3.5" aria-hidden="true" />
+            {resumePending ? <Spinner /> : <Play className="h-3.5 w-3.5" aria-hidden="true" />}
           </button>
         ) : (
           <button
             type="button"
             aria-label={`Pause cron job ${job.jobId}`}
             className={ICON_BUTTON_CLASS}
+            disabled={pausePending}
+            aria-busy={pausePending || undefined}
             onClick={handlePause}
           >
-            <Pause className="h-3.5 w-3.5" aria-hidden="true" />
+            {pausePending ? <Spinner /> : <Pause className="h-3.5 w-3.5" aria-hidden="true" />}
           </button>
         )}
         <button
           type="button"
           aria-label={`Remove cron job ${job.jobId}`}
           className="rounded-md p-1.5 text-muted-foreground hover:bg-muted/40 hover:text-destructive"
+          disabled={removePending}
+          aria-busy={removePending || undefined}
           onClick={handleRemove}
         >
-          <X className="h-3.5 w-3.5" aria-hidden="true" />
+          {removePending ? <Spinner /> : <X className="h-3.5 w-3.5" aria-hidden="true" />}
         </button>
       </span>
       {editing ? (

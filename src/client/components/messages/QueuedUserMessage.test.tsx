@@ -15,8 +15,8 @@ describe("QueuedUserMessage", () => {
     const html = renderToStaticMarkup(
       <QueuedUserMessage
         message={message}
-        onRemove={() => undefined}
-        onSendNow={() => undefined}
+        onRemove={() => Promise.resolve()}
+        onSendNow={() => Promise.resolve()}
       />
     )
 

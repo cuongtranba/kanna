@@ -39,7 +39,7 @@ function renderSection(
   }: {
     expandedGroups?: Set<string>
     collapsedSections?: Set<string>
-    onNewLocalChat?: (localPath: string) => void
+    onNewLocalChat?: (localPath: string) => Promise<void>
     heading?: string
   } = {}
 ) {
@@ -133,7 +133,7 @@ describe("LocalProjectsSection", () => {
     }]
 
     const html = renderSection(projectGroups, {
-      onNewLocalChat: () => undefined,
+      onNewLocalChat: async () => undefined,
     })
 
     expect(html).toContain("New Chat")
@@ -152,7 +152,7 @@ describe("LocalProjectsSection", () => {
 
     const html = renderSection(projectGroups, {
       collapsedSections: new Set(["project-a"]),
-      onNewLocalChat: () => undefined,
+      onNewLocalChat: async () => undefined,
     })
 
     expect(html).not.toContain("New Chat")

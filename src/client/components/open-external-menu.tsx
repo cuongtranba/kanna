@@ -7,6 +7,7 @@ import { getDefaultEditorCommandTemplate } from "../stores/terminalPreferencesSt
 import { DefaultAppIcon, EDITOR_OPTIONS, EditorIcon, FinderIcon, FolderFallbackIcon, PreviewIcon, TerminalIcon } from "./editor-icons"
 import { HotkeyTooltip, HotkeyTooltipContent, HotkeyTooltipTrigger } from "./ui/tooltip"
 import { Button } from "./ui/button"
+import { Spinner } from "./ui/spinner"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger } from "./ui/select"
 import { ContextMenuContent, ContextMenuItem } from "./ui/context-menu"
 import type { StoragePort } from "../ports/storagePort"
@@ -176,6 +177,7 @@ function OpenExternalSelectInner({
   finderShortcut,
   editorShortcut,
   onOpenExternal,
+  pending = false,
   ports,
 }: {
   isMac: boolean
@@ -184,6 +186,7 @@ function OpenExternalSelectInner({
   finderShortcut?: string[]
   editorShortcut?: string[]
   onOpenExternal: (action: OpenExternalAction, editor?: EditorOpenSettings) => void
+  pending?: boolean
   ports?: OpenExternalSelectPorts
 }) {
   const storage = ports?.storage ?? localStorageAdapter
@@ -226,10 +229,14 @@ function OpenExternalSelectInner({
             variant="ghost"
             size="none"
             onClick={() => handleOpenValue(lastValue)}
+            disabled={pending}
+            aria-busy={pending || undefined}
             title={`Open in ${getOpenAppLabel(lastValue, isMac)}`}
             className="border-0 !pl-2.5 !pr-1 hover:!border-border/0 hover:!bg-transparent"
           >
-            <OpenAppIcon value={lastValue} isMac={isMac} className="size-6" />
+            {pending
+              ? <Spinner className="size-6 p-1" />
+              : <OpenAppIcon value={lastValue} isMac={isMac} className="size-6" />}
           </Button>
         </HotkeyTooltipTrigger>
         <HotkeyTooltipContent
@@ -237,7 +244,7 @@ function OpenExternalSelectInner({
           shortcut={tooltipShortcut}
         />
       </HotkeyTooltip>
-      <Select value={undefined} onValueChange={(value) => handleOpenValue(normalizeOpenAppValue(value, lastValue))}>
+      <Select disabled={pending} value={undefined} onValueChange={(value) => handleOpenValue(normalizeOpenAppValue(value, lastValue))}>
         <SelectTrigger
           aria-label="Choose open destination"
           className="!pl-1 !pr-2.5 border-0 bg-transparent hover:bg-transparent focus:ring-0 focus:ring-offset-0 [&>svg]:hidden"
@@ -267,6 +274,7 @@ export function OpenExternalSelect({
   finderShortcut,
   editorShortcut,
   onOpenExternal,
+  pending,
   ports,
 }: {
   isMac: boolean
@@ -275,6 +283,7 @@ export function OpenExternalSelect({
   finderShortcut?: string[]
   editorShortcut?: string[]
   onOpenExternal: (action: OpenExternalAction, editor?: EditorOpenSettings) => void
+  pending?: boolean
   ports?: OpenExternalSelectPorts
 }) {
   const initialValue: OpenAppValue = `editor:${editorPreset}`
@@ -287,6 +296,7 @@ export function OpenExternalSelect({
         finderShortcut={finderShortcut}
         editorShortcut={editorShortcut}
         onOpenExternal={onOpenExternal}
+        pending={pending}
         ports={ports}
       />
     </OpenExternalSelectStore.Provider>

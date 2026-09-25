@@ -29,6 +29,7 @@ import {
   Check,
 } from "lucide-react"
 import { cn } from "../../lib/utils"
+import { runDetached } from "../../lib/runDetached"
 import type { ClipboardPort, TimerPort } from "../../ports"
 import { clipboardAdapter, timerAdapter } from "../../adapters"
 
@@ -198,11 +199,12 @@ function MetaCodeBlockInner({
   const clipboard = ports.clipboard ?? clipboardAdapter
   const timer = ports.timer ?? timerAdapter
 
-  const handleCopy = useCallback(async () => {
+  const copyToClipboard = useCallback(async () => {
     await clipboard.writeText(textContent)
     setCopied(true)
     timer.setTimeout(() => setCopied(false), 2000)
   }, [textContent, setCopied, clipboard, timer])
+  const handleCopy = useCallback(() => { runDetached("copy code", copyToClipboard()) }, [copyToClipboard])
 
   return (
     <div>
@@ -302,11 +304,12 @@ function PreBlockInner({
   const clipboard = ports.clipboard ?? clipboardAdapter
   const timer = ports.timer ?? timerAdapter
 
-  const handleCopy = async () => {
+  const copyToClipboard = async () => {
     await clipboard.writeText(textContent)
     setCopied(true)
     timer.setTimeout(() => setCopied(false), 2000)
   }
+  const handleCopy = () => { runDetached("copy code", copyToClipboard()) }
 
   return (
     <div className="relative overflow-x-auto max-w-full min-w-0 no-code-highlight group/pre">

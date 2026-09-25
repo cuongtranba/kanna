@@ -13,6 +13,7 @@ interface Props {
   current: ChatPermissionPolicyOverride | null
   onApply: (next: ChatPermissionPolicyOverride | null) => void
   onCancel: () => void
+  applying?: boolean
 }
 
 function listToText(values: string[] | undefined): string {
@@ -31,7 +32,7 @@ export function ChatPolicyDialog(props: Props) {
   return <ChatPolicyDialogInner {...props} />
 }
 
-function ChatPolicyDialogInner({ open, chatTitle, baseline, current, onApply, onCancel }: Props) {
+function ChatPolicyDialogInner({ open, chatTitle, baseline, current, onApply, onCancel, applying = false }: Props) {
   const initialDefaultAction = current?.defaultAction ?? baseline.defaultAction
   const initialReadDenyText = listToText(current?.readPathDeny ?? baseline.readPathDeny)
   const initialWriteDenyText = listToText(current?.writePathDeny ?? baseline.writePathDeny)
@@ -46,6 +47,7 @@ function ChatPolicyDialogInner({ open, chatTitle, baseline, current, onApply, on
         baseline={baseline}
         onApply={onApply}
         onCancel={onCancel}
+        applying={applying}
       />
     </ChatPolicyDialogStore.Provider>
   )
@@ -57,9 +59,10 @@ interface ContentProps {
   baseline: ChatPermissionPolicy
   onApply: (next: ChatPermissionPolicyOverride | null) => void
   onCancel: () => void
+  applying: boolean
 }
 
-function ChatPolicyDialogContent({ open, chatTitle, baseline, onApply, onCancel }: ContentProps) {
+function ChatPolicyDialogContent({ open, chatTitle, baseline, onApply, onCancel, applying }: ContentProps) {
   const defaultAction = ChatPolicyDialogStore.useScopedStore((state) => state.defaultAction)
   const readDenyText = ChatPolicyDialogStore.useScopedStore((state) => state.readDenyText)
   const writeDenyText = ChatPolicyDialogStore.useScopedStore((state) => state.writeDenyText)
@@ -146,10 +149,10 @@ function ChatPolicyDialogContent({ open, chatTitle, baseline, onApply, onCancel 
             </div>
           </DialogBody>
           <DialogFooter className="justify-between">
-            <Button variant="ghost" onClick={handleResetToDefault}>Reset to defaults</Button>
+            <Button variant="ghost" onClick={handleResetToDefault} disabled={applying}>Reset to defaults</Button>
             <div className="flex gap-2">
               <Button variant="ghost" onClick={onCancel}>Cancel</Button>
-              <Button onClick={handleApply}>Apply</Button>
+              <Button onClick={handleApply} pending={applying}>Apply</Button>
             </div>
           </DialogFooter>
         </DialogContent>

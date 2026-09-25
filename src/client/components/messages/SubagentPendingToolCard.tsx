@@ -5,9 +5,11 @@ import type {
   HydratedExitPlanModeToolCall,
   SubagentPendingTool,
 } from "../../../shared/types"
+import { useCallback } from "react"
 import { isRecord } from "../../../shared/errors"
+import { Spinner } from "../ui/spinner"
 import { AskUserQuestionMessage } from "./AskUserQuestionMessage"
-import { ExitPlanModeMessage } from "./ExitPlanModeMessage"
+import { ExitPlanModeMessage, useExitPlanModeResponding } from "./ExitPlanModeMessage"
 
 interface Props {
   pendingTool: SubagentPendingTool
@@ -15,11 +17,20 @@ interface Props {
     toolUseId: string,
     questions: AskUserQuestionItem[],
     answers: AskUserQuestionAnswerMap,
-  ) => void
+  ) => Promise<void>
   onExitPlanModeSubmit: (
     toolUseId: string,
     response: { confirmed: boolean; clearContext?: boolean; message?: string },
-  ) => void
+  ) => Promise<void>
+}
+
+function AwaitingResponseLabel({ pending }: { pending: boolean }) {
+  return (
+    <div className="text-xs tracking-wide text-muted-foreground mb-1 flex items-center gap-1.5">
+      {pending ? <Spinner className="size-3" /> : null}
+      {pending ? "sending response…" : "awaiting your response"}
+    </div>
+  )
 }
 
 export function SubagentPendingToolCard({
@@ -27,6 +38,13 @@ export function SubagentPendingToolCard({
   onAskUserQuestionSubmit,
   onExitPlanModeSubmit,
 }: Props) {
+  const exitPlanPending = useExitPlanModeResponding(pendingTool.toolUseId)
+  const handleExitPlanConfirm = useCallback(
+    (toolUseId: string, confirmed: boolean, clearContext?: boolean, message?: string) =>
+      onExitPlanModeSubmit(toolUseId, { confirmed, clearContext, message }),
+    [onExitPlanModeSubmit],
+  )
+
   if (pendingTool.toolKind === "ask_user_question") {
     const questionsRaw = pendingTool.input.questions
     const questions: AskUserQuestionItem[] = Array.isArray(questionsRaw)
@@ -43,9 +61,7 @@ export function SubagentPendingToolCard({
     }
     return (
       <div data-testid={`subagent-pending-tool:${pendingTool.toolUseId}`}>
-        <div className="text-xs tracking-wide text-muted-foreground mb-1">
-          awaiting your response
-        </div>
+        <AwaitingResponseLabel pending={false} />
         <AskUserQuestionMessage
           message={message}
           onSubmit={onAskUserQuestionSubmit}
@@ -70,15 +86,15 @@ export function SubagentPendingToolCard({
       timestamp: new Date(pendingTool.requestedAt).toISOString(),
     }
     return (
-      <div data-testid={`subagent-pending-tool:${pendingTool.toolUseId}`}>
-        <div className="text-xs tracking-wide text-muted-foreground mb-1">
-          awaiting your response
-        </div>
+      <div
+        data-testid={`subagent-pending-tool:${pendingTool.toolUseId}`}
+        aria-busy={exitPlanPending || undefined}
+        className={exitPlanPending ? "pointer-events-none opacity-60" : undefined}
+      >
+        <AwaitingResponseLabel pending={exitPlanPending} />
         <ExitPlanModeMessage
           message={message}
-          onConfirm={(toolUseId, confirmed, clearContext, msg) =>
-            onExitPlanModeSubmit(toolUseId, { confirmed, clearContext, message: msg })
-          }
+          onConfirm={handleExitPlanConfirm}
           isLatest={true}
         />
       </div>

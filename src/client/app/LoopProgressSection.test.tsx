@@ -101,7 +101,10 @@ describe("LoopProgressSection", () => {
         loopProgress={snapshot({
           rateLimit: { scheduleId: "sched-9", resetAt: Date.now() + 60_000, tz: "Asia/Saigon", scheduled: false },
         })}
-        onResume={(scheduleId) => calls.push({ scheduleId })}
+        onResume={(scheduleId) => {
+          calls.push({ scheduleId })
+          return Promise.resolve()
+        }}
       />,
     )
     try {
@@ -124,7 +127,7 @@ describe("LoopProgressSection", () => {
         loopProgress={snapshot({
           rateLimit: { scheduleId: "sched-9", resetAt: Date.now() + 60_000, tz: "Asia/Saigon", scheduled: true },
         })}
-        onResume={() => {}}
+        onResume={() => Promise.resolve()}
       />,
     )
     try {

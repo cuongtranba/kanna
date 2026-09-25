@@ -14,8 +14,10 @@ import { KannaBoard, type CardMoveRequest } from "./KannaBoard"
 import { moveCardInView, moveColumnInView } from "../../lib/boards/optimistic"
 import type { ColumnSettingsValue } from "./ColumnSettings"
 import type { BoardSnapshot, ClientCommand, SubscriptionTopic } from "../../../shared/protocol"
-import { onRejected } from "../../../shared/errors"
+import { errorMessage, onRejected } from "../../../shared/errors"
+import { pendingActionKey, runPendingAction } from "../../stores/pendingActionsStore"
 import type { JsonValue } from "../../../shared/json"
+import type { BoardViewSnapshot } from "../../../shared/boards/types"
 
 
 export interface BoardPaneSocket {
@@ -24,6 +26,16 @@ export interface BoardPaneSocket {
 }
 
 const EMPTY_CANDIDATES: readonly BlockerCandidate[] = []
+
+function revertOptimisticView(
+  boardId: string,
+  previous: BoardViewSnapshot | null | undefined,
+  optimistic: BoardViewSnapshot | undefined,
+) {
+  if (!previous || !optimistic) return
+  if (useBoardsStore.getState().viewByBoard[boardId] !== optimistic) return
+  useBoardsStore.getState().setBoardView(boardId, previous)
+}
 
 export interface BoardPaneProps {
   boardId: string
@@ -46,7 +58,8 @@ export function BoardPane({ boardId, socket, chatFacts, onOpenCard, onOpenBoards
   const handleCardMove = useCallback(
     (move: CardMoveRequest) => {
       const current = useBoardsStore.getState().viewByBoard[boardId]
-      if (current) useBoardsStore.getState().setBoardView(boardId, moveCardInView(current, move))
+      const optimistic = current ? moveCardInView(current, move) : undefined
+      if (optimistic) useBoardsStore.getState().setBoardView(boardId, optimistic)
       void socket
         .command({
           type: "board.card.move",
@@ -55,8 +68,10 @@ export function BoardPane({ boardId, socket, chatFacts, onOpenCard, onOpenBoards
           aboveCardId: move.aboveCardId,
           belowCardId: move.belowCardId,
         })
-        .catch(() => {
-        })
+        .catch(onRejected((error) => {
+          revertOptimisticView(boardId, current, optimistic)
+          useBoardSyncStore.getState().finishSync(boardId, error.message)
+        }))
     },
     [boardId, socket],
   )
@@ -124,9 +139,12 @@ export function BoardPane({ boardId, socket, chatFacts, onOpenCard, onOpenBoards
   const handleColumnMove = useCallback(
     (columnId: string, afterColumnId: string | null) => {
       const current = useBoardsStore.getState().viewByBoard[boardId]
-      if (current) useBoardsStore.getState().setBoardView(boardId, moveColumnInView(current, columnId, afterColumnId))
-      void socket.command({ type: "board.column.move", columnId, afterColumnId }).catch(() => {
-      })
+      const optimistic = current ? moveColumnInView(current, columnId, afterColumnId) : undefined
+      if (optimistic) useBoardsStore.getState().setBoardView(boardId, optimistic)
+      void socket.command({ type: "board.column.move", columnId, afterColumnId }).catch(onRejected((error) => {
+        revertOptimisticView(boardId, current, optimistic)
+        useBoardSyncStore.getState().finishSync(boardId, error.message)
+      }))
     },
     [boardId, socket],
   )
@@ -178,16 +196,19 @@ export function BoardPane({ boardId, socket, chatFacts, onOpenCard, onOpenBoards
       const columnCards = current.cards[card.columnId] ?? []
       const topCard = columnCards[0]
       if (topCard?.id === cardId) return
-      void socket
-        .command({
-          type: "board.card.move",
-          cardId,
-          toColumnId: card.columnId,
-          aboveCardId: null,
-          belowCardId: topCard?.id ?? null,
-        })
-        .catch(() => {
-        })
+      runPendingAction(pendingActionKey("board.card.move", cardId), async () => {
+        try {
+          await socket.command({
+            type: "board.card.move",
+            cardId,
+            toColumnId: card.columnId,
+            aboveCardId: null,
+            belowCardId: topCard?.id ?? null,
+          })
+        } catch (error) {
+          useBoardSyncStore.getState().finishSync(boardId, errorMessage(error))
+        }
+      })
     },
     [boardId, socket],
   )

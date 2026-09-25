@@ -24,11 +24,11 @@ describe("ChatRow", () => {
         activeChatId={null}
         nowMs={60_000}
         onSelectChat={() => undefined}
-        onRenameChat={() => undefined}
-        onOpenInFinder={() => undefined}
-        onForkChat={() => undefined}
-        onArchiveChat={() => undefined}
-        onDeleteChat={() => undefined}
+        onRenameChat={async () => undefined}
+        onOpenInFinder={async () => undefined}
+        onForkChat={async () => undefined}
+        onArchiveChat={async () => undefined}
+        onDeleteChat={async () => undefined}
       />
     )
 
@@ -42,11 +42,11 @@ describe("ChatRow", () => {
         activeChatId={null}
         nowMs={60_000}
         onSelectChat={() => undefined}
-        onRenameChat={() => undefined}
-        onOpenInFinder={() => undefined}
-        onForkChat={() => undefined}
-        onArchiveChat={() => undefined}
-        onDeleteChat={() => undefined}
+        onRenameChat={async () => undefined}
+        onOpenInFinder={async () => undefined}
+        onForkChat={async () => undefined}
+        onArchiveChat={async () => undefined}
+        onDeleteChat={async () => undefined}
       />
     )
 
@@ -60,11 +60,11 @@ describe("ChatRow", () => {
         activeChatId={null}
         nowMs={60_000}
         onSelectChat={() => undefined}
-        onRenameChat={() => undefined}
-        onOpenInFinder={() => undefined}
-        onForkChat={() => undefined}
-        onArchiveChat={() => undefined}
-        onDeleteChat={() => undefined}
+        onRenameChat={async () => undefined}
+        onOpenInFinder={async () => undefined}
+        onForkChat={async () => undefined}
+        onArchiveChat={async () => undefined}
+        onDeleteChat={async () => undefined}
       />
     )
 
@@ -81,11 +81,11 @@ describe("ChatRow", () => {
         shortcutHint="1"
         showShortcutHint
         onSelectChat={() => undefined}
-        onRenameChat={() => undefined}
-        onOpenInFinder={() => undefined}
-        onForkChat={() => undefined}
-        onArchiveChat={() => undefined}
-        onDeleteChat={() => undefined}
+        onRenameChat={async () => undefined}
+        onOpenInFinder={async () => undefined}
+        onForkChat={async () => undefined}
+        onArchiveChat={async () => undefined}
+        onDeleteChat={async () => undefined}
       />
     )
 
@@ -101,11 +101,11 @@ describe("ChatRow", () => {
         activeChatId={null}
         nowMs={12_000}
         onSelectChat={() => undefined}
-        onRenameChat={() => undefined}
-        onOpenInFinder={() => undefined}
-        onForkChat={() => undefined}
-        onArchiveChat={() => undefined}
-        onDeleteChat={() => undefined}
+        onRenameChat={async () => undefined}
+        onOpenInFinder={async () => undefined}
+        onForkChat={async () => undefined}
+        onArchiveChat={async () => undefined}
+        onDeleteChat={async () => undefined}
       />
     )
     expect(html).toContain("Running")
@@ -120,11 +120,11 @@ describe("ChatRow", () => {
         nowMs={12_000}
         silent
         onSelectChat={() => undefined}
-        onRenameChat={() => undefined}
-        onOpenInFinder={() => undefined}
-        onForkChat={() => undefined}
-        onArchiveChat={() => undefined}
-        onDeleteChat={() => undefined}
+        onRenameChat={async () => undefined}
+        onOpenInFinder={async () => undefined}
+        onForkChat={async () => undefined}
+        onArchiveChat={async () => undefined}
+        onDeleteChat={async () => undefined}
       />
     )
     expect(html).toContain("Running")
@@ -140,11 +140,11 @@ describe("ChatRow", () => {
         activeChatId={null}
         nowMs={30_000}
         onSelectChat={() => undefined}
-        onRenameChat={() => undefined}
-        onOpenInFinder={() => undefined}
-        onForkChat={() => undefined}
-        onArchiveChat={() => undefined}
-        onDeleteChat={() => undefined}
+        onRenameChat={async () => undefined}
+        onOpenInFinder={async () => undefined}
+        onForkChat={async () => undefined}
+        onArchiveChat={async () => undefined}
+        onDeleteChat={async () => undefined}
       />
     )
     expect(html).toContain("Waiting")
@@ -158,11 +158,11 @@ describe("ChatRow", () => {
         activeChatId={null}
         nowMs={60_000}
         onSelectChat={() => undefined}
-        onRenameChat={() => undefined}
-        onOpenInFinder={() => undefined}
-        onForkChat={() => undefined}
-        onArchiveChat={() => undefined}
-        onDeleteChat={() => undefined}
+        onRenameChat={async () => undefined}
+        onOpenInFinder={async () => undefined}
+        onForkChat={async () => undefined}
+        onArchiveChat={async () => undefined}
+        onDeleteChat={async () => undefined}
       />
     )
 
@@ -178,11 +178,11 @@ describe("ChatRow", () => {
         nowMs={60_000}
         silent
         onSelectChat={() => undefined}
-        onRenameChat={() => undefined}
-        onOpenInFinder={() => undefined}
-        onForkChat={() => undefined}
-        onArchiveChat={() => undefined}
-        onDeleteChat={() => undefined}
+        onRenameChat={async () => undefined}
+        onOpenInFinder={async () => undefined}
+        onForkChat={async () => undefined}
+        onArchiveChat={async () => undefined}
+        onDeleteChat={async () => undefined}
       />
     )
 
@@ -197,11 +197,11 @@ describe("ChatRow", () => {
         nowMs={60_000}
         silent={false}
         onSelectChat={() => undefined}
-        onRenameChat={() => undefined}
-        onOpenInFinder={() => undefined}
-        onForkChat={() => undefined}
-        onArchiveChat={() => undefined}
-        onDeleteChat={() => undefined}
+        onRenameChat={async () => undefined}
+        onOpenInFinder={async () => undefined}
+        onForkChat={async () => undefined}
+        onArchiveChat={async () => undefined}
+        onDeleteChat={async () => undefined}
       />
     )
 

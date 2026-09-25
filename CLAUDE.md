@@ -672,6 +672,59 @@ When editing or adding React code under `src/client/**`:
    be covered by `renderForLoopCheck` (`src/client/lib/testing/`).
 4. **Verify before done:** `bunx ast-grep test`, `bun run lint:usestate`,
    `bun run lint`, and for UI behaviour changes open the browser.
+5. **Every side effect shows it is in flight.** A control that sends a WS
+   command or an HTTP request renders a pending state until it settles —
+   see **Pending state for side effects** below.
+
+# Pending state for side effects (MANDATORY — hard gate in `bun run lint`)
+
+The client used to fire side effects with no feedback: `onClick={() => void
+handleArchive()}`, `socket.command(x).catch(() => {})`, async handlers passed to
+props typed `() => void`. The click appeared to do nothing until the server
+answered, a double click sent the command twice, and a failure vanished. 235 such
+sites were fixed in one pass; the gate below exists so they cannot come back.
+
+**The one primitive** is `src/client/stores/pendingActionsStore.ts`:
+
+- `runPendingAction(key, () => doIt())` — marks `key` in flight, runs the action,
+  clears it on settle, logs a rejection, and **ignores a second trigger while the
+  first is still in flight**. It returns `void`, so it is legal in any handler.
+- `usePendingAction(key)` — the trigger renders this flag.
+- `pendingActionKey(scope, ...ids)` — scope is the WS command type
+  (`"chat.archive"`, `"cron.remove"`), plus the entity id for a per-row action so
+  only that row reads as busy.
+
+Render it with `<Button pending={pending}>` (disables it, sets `aria-busy`, adds a
+spinner), or for a non-Button trigger `disabled` + `aria-busy` + `<Spinner />`
+(`components/ui/spinner.tsx`). A trigger inside a menu that closes on click shows
+the pending state on the row it acts on, because the menu item is gone.
+
+**Hard gate** (`eslint.config.js`, type-aware, `src/client/**` minus tests):
+
+| Rule | Rejects |
+| --- | --- |
+| `@typescript-eslint/no-floating-promises` with `ignoreVoid: false` | a promise nobody settles, including `void promise` — the exact spelling of every silent button. `navigate()` is allowlisted |
+| `@typescript-eslint/no-misused-promises` (`checksVoidReturn.attributes`) | an async function handed to a JSX prop typed to return void — the child cannot know it should show pending |
+| `SILENT_CATCH_BAN` (`no-restricted-syntax`) | `.catch(() => {})`, `.catch(() => undefined)`, `.catch(() => null)` — these satisfy the promise rules while hiding both the wait and the failure |
+
+**Soft rules the gate cannot check** (review them by hand):
+
+- The pending flag must be RENDERED on the trigger. The gate proves the promise is
+  settled, not that anyone sees it.
+- `runDetached(label, promise)` (`src/client/lib/runDetached.ts`) is for work no
+  user waits on — reconnect, polling, a probe on mount, scroll, best-effort
+  cleanup. Using it for a click is the one way around the gate; do not.
+- A user action's failure is shown, not only logged: the component's own error
+  state, or `setCommandError` in `kannaStateStore` for a WS command.
+- A view that loads its data renders a loading state instead of an empty one.
+- Do not add a per-component `saving`/`busy` boolean for a new action — use the
+  store above. Existing flags that already render correctly were left in place.
+- An async prop is typed `() => Promise<void>` all the way down. Retyping it to
+  `() => void` to satisfy `no-misused-promises` hides the promise from the one
+  component that should render it.
+
+Never silence these rules with `eslint-disable`. See
+`adr-20260925-client-pending-action-state`.
 
 # Tool Callback Feature Flag (KANNA_MCP_TOOL_CALLBACKS)
 

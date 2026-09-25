@@ -8,6 +8,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip"
 import { TruncatedText } from "../ui/truncated-text"
 import { formatAge } from "../../lib/formatters"
 import type { KannaSocket } from "../../app/socket"
+import { pendingActionKey, runPendingAction, usePendingAction } from "../../stores/pendingActionsStore"
+import { errorMessage } from "../../../shared/errors"
+import { Spinner } from "../ui/spinner"
 
 const PHASE_COLOR: Record<PtyInstancePhase, string> = {
   spawning: "var(--warning)",
@@ -59,8 +62,8 @@ export function formatPercent(pct: number): string {
 interface RowProps {
   instance: PtyInstanceState
   onOpenChat: (chatId: string) => void
-  onCancel: (chatId: string) => void
-  onKill: (chatId: string) => void
+  onCancel: (chatId: string) => Promise<void>
+  onKill: (chatId: string) => Promise<void>
 }
 
 function StatusPill({ phase }: { phase: PtyInstancePhase }) {
@@ -89,17 +92,37 @@ export function PtyInstanceRow({ instance, onOpenChat, onCancel, onKill }: RowPr
 
 function PtyInstanceRowContent({ instance, onOpenChat, onCancel, onKill }: RowProps) {
   const confirmKill = PtyInstanceRowStore.useScopedStore((state) => state.confirmKill)
+  const actionError = PtyInstanceRowStore.useScopedStore((state) => state.actionError)
   const storeApi = PtyInstanceRowStore.useScopedStoreApi()
+  const cancelKey = pendingActionKey("pty.cancel", instance.chatId)
+  const killKey = pendingActionKey("pty.kill", instance.chatId)
+  const cancelPending = usePendingAction(cancelKey)
+  const killPending = usePendingAction(killKey)
+
+  const runRowAction = useCallback((key: string, action: (chatId: string) => Promise<void>) => {
+    storeApi.getState().setActionError(null)
+    runPendingAction(key, async () => {
+      try {
+        await action(instance.chatId)
+      } catch (error) {
+        storeApi.getState().setActionError(errorMessage(error))
+      }
+    })
+  }, [storeApi, instance.chatId])
+
+  const handleCancelClick = useCallback(() => {
+    runRowAction(cancelKey, onCancel)
+  }, [runRowAction, cancelKey, onCancel])
 
   const handleKillClick = useCallback(() => {
     const state = storeApi.getState()
     if (state.confirmKill) {
-      onKill(instance.chatId)
+      runRowAction(killKey, onKill)
       state.setConfirmKill(false)
     } else {
       state.setConfirmKill(true)
     }
-  }, [storeApi, instance.chatId, onKill])
+  }, [storeApi, runRowAction, killKey, onKill])
 
   return (
     <div className="group border border-border/60 rounded-lg p-3 flex flex-col gap-2 hover:border-border transition-colors">
@@ -175,22 +198,28 @@ function PtyInstanceRowContent({ instance, onOpenChat, onCancel, onKill }: RowPr
           </button>
           <button
             type="button"
-            onClick={() => onCancel(instance.chatId)}
-            className="text-xs font-mono px-2 py-1 rounded-md border border-border/60 hover:bg-muted/40 transition-colors"
+            onClick={handleCancelClick}
+            disabled={cancelPending}
+            aria-busy={cancelPending || undefined}
+            className="inline-flex items-center gap-1 text-xs font-mono px-2 py-1 rounded-md border border-border/60 hover:bg-muted/40 transition-colors disabled:pointer-events-none disabled:opacity-60"
           >
+            {cancelPending ? <Spinner className="size-3" /> : null}
             cancel
           </button>
           <button
             type="button"
             onClick={handleKillClick}
             onBlur={() => storeApi.getState().setConfirmKill(false)}
-            className="text-xs font-mono px-2 py-1 rounded-md border transition-colors ml-auto"
+            disabled={killPending}
+            aria-busy={killPending || undefined}
+            className="inline-flex items-center gap-1 text-xs font-mono px-2 py-1 rounded-md border transition-colors ml-auto disabled:pointer-events-none disabled:opacity-60"
             style={{
               borderColor: confirmKill ? "var(--destructive)" : "var(--border)",
               color: confirmKill ? "var(--destructive)" : undefined,
             }}
             aria-label={confirmKill ? "Confirm kill" : "Kill PTY process"}
           >
+            {killPending ? <Spinner className="size-3" /> : null}
             {confirmKill ? "confirm kill?" : "kill"}
           </button>
         </div>
@@ -199,6 +228,9 @@ function PtyInstanceRowContent({ instance, onOpenChat, onCancel, onKill }: RowPr
           exited{instance.exitCode !== null ? ` · code ${instance.exitCode}` : ""}
         </div>
       )}
+      {actionError ? (
+        <div className="text-xs text-destructive" role="alert">{actionError}</div>
+      ) : null}
     </div>
   )
 }
@@ -209,8 +241,8 @@ interface ViewProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onOpenChat: (chatId: string) => void
-  onCancel: (chatId: string) => void
-  onKill: (chatId: string) => void
+  onCancel: (chatId: string) => Promise<void>
+  onKill: (chatId: string) => Promise<void>
 }
 
 export function PtyInstancesIndicatorView({
@@ -310,19 +342,19 @@ export function PtyInstancesIndicator({ socket, onOpenChat }: ConnectedProps) {
   )
 
   const handleCancel = useCallback(
-    (chatId: string) => {
+    async (chatId: string) => {
       if (!socket) return
       const cmd: ClientCommand = { type: "pty.cancel", chatId }
-      void socket.command(cmd).catch(() => {})
+      await socket.command(cmd)
     },
     [socket],
   )
 
   const handleKill = useCallback(
-    (chatId: string) => {
+    async (chatId: string) => {
       if (!socket) return
       const cmd: ClientCommand = { type: "pty.kill", chatId }
-      void socket.command(cmd).catch(() => {})
+      await socket.command(cmd)
     },
     [socket],
   )

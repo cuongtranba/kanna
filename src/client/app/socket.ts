@@ -12,6 +12,7 @@ import { LOG_PREFIX } from "../../shared/branding"
 import { log } from "../../shared/log"
 import type { JsonValue } from "../../shared/json"
 import { generateUUID } from "../lib/utils"
+import { runDetached } from "../lib/runDetached"
 import { getStoredPushDeviceId } from "./pushClient"
 import type { DomPort } from "../ports/domPort"
 import type { TimerPort } from "../ports/timerPort"
@@ -75,18 +76,18 @@ export class KannaSocket {
   private readonly wsBridge: WebSocketPort
 
   private readonly handleWindowFocus = () => {
-    void this.ensureHealthyConnection()
+    runDetached("socket.ensureHealthyConnection", this.ensureHealthyConnection())
   }
   private readonly handleVisibilityChange = () => {
     if (this.dom.getVisibilityState() === "visible") {
       this.startHeartbeat()
-      void this.ensureHealthyConnection()
+      runDetached("socket.ensureHealthyConnection", this.ensureHealthyConnection())
       return
     }
     this.stopHeartbeat()
   }
   private readonly handleOnline = () => {
-    void this.ensureHealthyConnection()
+    runDetached("socket.ensureHealthyConnection", this.ensureHealthyConnection())
   }
 
   constructor(url: string, ports: KannaSocketPorts = {}) {
@@ -445,7 +446,7 @@ export class KannaSocket {
       if (this.ws?.readyState !== WS.OPEN) {
         return
       }
-      void this.ensureHealthyConnection()
+      runDetached("socket.ensureHealthyConnection", this.ensureHealthyConnection())
     }, HEARTBEAT_INTERVAL_MS)
   }
 

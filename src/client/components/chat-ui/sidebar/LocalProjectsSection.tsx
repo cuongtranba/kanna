@@ -1,5 +1,5 @@
 import { memo, type MouseEvent as ReactMouseEvent, type ReactNode, useCallback, useMemo } from "react"
-import { ChevronRight, GripVertical, Loader2, MoreHorizontal, SquarePen, Star } from "lucide-react"
+import { ChevronRight, GripVertical, MoreHorizontal, SquarePen, Star } from "lucide-react"
 import {
   DndContext,
   MouseSensor,
@@ -21,6 +21,7 @@ import {
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import { Button } from "../../ui/button"
+import { Spinner } from "../../ui/spinner"
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../ui/tooltip"
 import { HoverHint } from "../../ui/truncated-text"
 import { AnimatePresence, MotionReveal } from "../../ui/motion-reveal"
@@ -32,6 +33,14 @@ import { cn } from "../../../lib/utils"
 import { ProjectSectionMenu } from "./Menus"
 import { InstructionsDialog } from "./InstructionsDialog"
 import { useKannaSidebarStore } from "../../../stores/kannaSidebarStore"
+import { runPendingAction, usePendingAction } from "../../../stores/pendingActionsStore"
+import {
+  REORDER_PROJECT_GROUPS_KEY,
+  createChatKey,
+  projectActionKey,
+  useProjectPending,
+  type ProjectAction,
+} from "./sidebarPendingActions"
 import type { DomPort } from "../../../ports/domPort"
 import { domAdapter } from "../../../adapters/dom.adapter"
 
@@ -45,14 +54,14 @@ interface Props {
   onToggleExpandedGroup: (key: string) => void
   renderChatRow: (chat: SidebarChatRow) => ReactNode
   onShowArchivedProject?: (projectId: string) => void
-  onNewLocalChat?: (localPath: string) => void
-  onCopyPath?: (localPath: string) => void
-  onOpenExternalPath?: (action: "open_finder" | "open_editor", localPath: string) => void
-  onHideProject?: (projectId: string) => void
+  onNewLocalChat?: (localPath: string) => Promise<void>
+  onCopyPath?: (localPath: string) => Promise<void>
+  onOpenExternalPath?: (action: "open_finder" | "open_editor", localPath: string) => Promise<void>
+  onHideProject?: (projectId: string) => Promise<void>
   onOpenBoards?: (projectId: string) => void
-  onToggleStar?: (projectId: string, starred: boolean) => void
-  onSetInstructions?: (projectId: string, instructions: string) => void
-  onReorderGroups?: (newOrder: string[]) => void
+  onToggleStar?: (projectId: string, starred: boolean) => Promise<void>
+  onSetInstructions?: (projectId: string, instructions: string) => Promise<void>
+  onReorderGroups?: (newOrder: string[]) => Promise<void>
   isConnected?: boolean
   startingLocalPath?: string | null
   dom?: DomPort
@@ -67,13 +76,13 @@ interface SortableProjectGroupProps {
   onToggleExpandedGroup: (key: string) => void
   renderChatRow: (chat: SidebarChatRow) => ReactNode
   onShowArchivedProject?: (projectId: string) => void
-  onNewLocalChat?: (localPath: string) => void
-  onCopyPath?: (localPath: string) => void
-  onOpenExternalPath?: (action: "open_finder" | "open_editor", localPath: string) => void
-  onHideProject?: (projectId: string) => void
+  onNewLocalChat?: (localPath: string) => Promise<void>
+  onCopyPath?: (localPath: string) => Promise<void>
+  onOpenExternalPath?: (action: "open_finder" | "open_editor", localPath: string) => Promise<void>
+  onHideProject?: (projectId: string) => Promise<void>
   onOpenBoards?: (projectId: string) => void
-  onToggleStar?: (projectId: string, starred: boolean) => void
-  onSetInstructions?: (projectId: string, instructions: string) => void
+  onToggleStar?: (projectId: string, starred: boolean) => Promise<void>
+  onSetInstructions?: (projectId: string, instructions: string) => Promise<void>
   isConnected?: boolean
   startingLocalPath?: string | null
   dom: DomPort
@@ -100,20 +109,21 @@ function EmptyProjectChatButton({
   localPath,
   onNewLocalChat,
   isConnected,
-  startingLocalPath,
+  pending,
 }: {
   localPath: string
   onNewLocalChat: (localPath: string) => void
   isConnected?: boolean
-  startingLocalPath?: string | null
+  pending: boolean
 }) {
-  const disabled = !isConnected || startingLocalPath === localPath
+  const disabled = !isConnected || pending
 
   return (
     <HoverHint label={!isConnected ? `Start ${APP_NAME} to connect` : "New Chat"}>
     <button
       type="button"
       disabled={disabled}
+      aria-busy={pending || undefined}
       className={cn(
         "group flex w-full items-center gap-2 pl-2 pr-1 py-1.5 rounded-md text-left cursor-pointer transition-colors duration-150",
         "hover:bg-muted/40",
@@ -121,7 +131,9 @@ function EmptyProjectChatButton({
       )}
       onClick={() => onNewLocalChat(localPath)}
     >
-      <span className="h-3.5 w-3.5 shrink-0" aria-hidden />
+      <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center" aria-hidden>
+        {pending ? <Spinner className="text-muted-foreground" /> : null}
+      </span>
       <span className="text-sm truncate flex-1 text-muted-foreground italic">
         New Chat
       </span>
@@ -209,10 +221,19 @@ const SortableProjectGroup = memo(({
     (open: boolean) => setInstructionsProjectId(open ? groupKey : null),
     [groupKey, setInstructionsProjectId],
   )
-  const handleSaveInstructions = useCallback(
-    (instructions: string) => onSetInstructions?.(groupKey, instructions),
-    [groupKey, onSetInstructions],
-  )
+  const projectPending = useProjectPending(groupKey)
+  const newChatPending = usePendingAction(createChatKey(groupKey)) || startingLocalPath === localPath
+  const launch = useCallback((action: ProjectAction, run: () => Promise<void>) => {
+    runPendingAction(projectActionKey(action, groupKey), run)
+  }, [groupKey])
+  const handleNewLocalChat = useCallback((path: string) => {
+    if (!onNewLocalChat) return
+    runPendingAction(createChatKey(groupKey), () => onNewLocalChat(path))
+  }, [groupKey, onNewLocalChat])
+  const handleSaveInstructions = useCallback((instructions: string) => {
+    if (!onSetInstructions) return
+    launch("project.setInstructions", () => onSetInstructions(groupKey, instructions))
+  }, [groupKey, launch, onSetInstructions])
 
   const {
     attributes,
@@ -231,6 +252,7 @@ const SortableProjectGroup = memo(({
 
   const header = (
     <div
+      aria-busy={projectPending || undefined}
       className={cn(
         "sticky top-0 bg-background dark:bg-card z-10 relative pl-2 pr-2 py-1 flex items-center gap-1 select-none",
         isDragging && "opacity-50"
@@ -276,20 +298,23 @@ const SortableProjectGroup = memo(({
         <Star className="size-3 shrink-0 fill-amber-400 text-amber-400" aria-label="Starred" />
       )}
       {(hasProjectMenu || onNewLocalChat) && (
-        <div className="flex items-center gap-px opacity-100 md:opacity-0 md:group-hover/section:opacity-100 transition-opacity duration-150">
+        <div className={cn(
+          "flex items-center gap-px opacity-100 md:group-hover/section:opacity-100 transition-opacity duration-150",
+          projectPending || newChatPending ? "md:opacity-100" : "md:opacity-0",
+        )}>
           {hasProjectMenu ? (
             <Tooltip>
               <TooltipTrigger asChild>
                 <ProjectSectionMenu
                   editorLabel={editorLabel}
                   starred={group.starredAt !== undefined}
-                  onCopyPath={() => onCopyPath?.(localPath)}
+                  onCopyPath={() => { if (onCopyPath) launch("project.copyPath", () => onCopyPath(localPath)) }}
                   onShowArchived={() => onShowArchivedProject?.(groupKey)}
-                  onOpenInFinder={() => onOpenExternalPath?.("open_finder", localPath)}
-                  onOpenInEditor={() => onOpenExternalPath?.("open_editor", localPath)}
-                  onToggleStar={() => onToggleStar?.(groupKey, group.starredAt === undefined)}
+                  onOpenInFinder={() => { if (onOpenExternalPath) launch("project.openFinder", () => onOpenExternalPath("open_finder", localPath)) }}
+                  onOpenInEditor={() => { if (onOpenExternalPath) launch("project.openEditor", () => onOpenExternalPath("open_editor", localPath)) }}
+                  onToggleStar={() => { if (onToggleStar) launch("project.setStar", () => onToggleStar(groupKey, group.starredAt === undefined)) }}
                   onEditInstructions={onSetInstructions ? () => setInstructionsProjectId(groupKey) : undefined}
-                  onHide={() => onHideProject?.(groupKey)}
+                  onHide={() => { if (onHideProject) launch("project.remove", () => onHideProject(groupKey)) }}
                   onOpenBoards={onOpenBoards ? () => onOpenBoards(groupKey) : undefined}
                 >
                   <Button
@@ -298,8 +323,9 @@ const SortableProjectGroup = memo(({
                     className="size-8 rounded-sm text-muted-foreground hover:text-foreground"
                     onClick={(event) => openContextMenuFromButton(event, dom)}
                     aria-label="Project options"
+                    aria-busy={projectPending || undefined}
                   >
-                    <MoreHorizontal className="size-3.5" />
+                    {projectPending ? <Spinner /> : <MoreHorizontal className="size-3.5" />}
                   </Button>
                 </ProjectSectionMenu>
               </TooltipTrigger>
@@ -316,20 +342,17 @@ const SortableProjectGroup = memo(({
                   size="icon"
                   className={cn(
                     "size-8 rounded-sm text-muted-foreground hover:text-foreground",
-                    (!isConnected || startingLocalPath === localPath) && "opacity-50 cursor-not-allowed"
+                    !isConnected && "opacity-50 cursor-not-allowed"
                   )}
-                  disabled={!isConnected || startingLocalPath === localPath}
+                  disabled={!isConnected}
+                  pending={newChatPending}
                   onClick={(event) => {
                     event.stopPropagation()
-                    onNewLocalChat(localPath)
+                    handleNewLocalChat(localPath)
                   }}
                   aria-label="New chat in this project"
                 >
-                  {startingLocalPath === localPath ? (
-                    <Loader2 className="size-3.5 animate-spin" />
-                  ) : (
-                    <SquarePen className="size-3.5" />
-                  )}
+                  <SquarePen className="size-3.5" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="right" sideOffset={4}>
@@ -370,9 +393,9 @@ const SortableProjectGroup = memo(({
             {isEmptyProject && onNewLocalChat ? (
               <EmptyProjectChatButton
                 localPath={localPath}
-                onNewLocalChat={onNewLocalChat}
+                onNewLocalChat={handleNewLocalChat}
                 isConnected={isConnected}
-                startingLocalPath={startingLocalPath}
+                pending={newChatPending}
               />
             ) : (
               <>
@@ -423,15 +446,16 @@ const SortableProjectGroup = memo(({
   )
 })
 
-function SectionHeading({ label }: { label: string }) {
+function SectionHeading({ label, pending }: { label: string; pending: boolean }) {
   return (
-    <div className="pl-2 pr-2 pt-2 pb-1 flex items-center gap-1">
+    <div className="pl-2 pr-2 pt-2 pb-1 flex items-center gap-1" aria-busy={pending || undefined}>
       <span
         data-testid="sidebar-section-heading"
         className="flex-1 min-w-0 text-xs font-semibold tracking-wide text-muted-foreground"
       >
         {label}
       </span>
+      {pending ? <Spinner className="text-muted-foreground" /> : null}
     </div>
   )
 }
@@ -459,6 +483,7 @@ const LocalProjectsSectionImpl = function LocalProjectsSection({
   dom: domProp,
 }: Props) {
   const dom = domProp ?? domAdapter
+  const reorderPending = usePendingAction(REORDER_PROJECT_GROUPS_KEY) && Boolean(onReorderGroups)
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 2 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
@@ -509,20 +534,20 @@ const LocalProjectsSectionImpl = function LocalProjectsSection({
       const newIndex = groupIds.indexOf(String(over.id))
       if (oldIndex !== -1 && newIndex !== -1) {
         const newOrder = arrayMove(groupIds, oldIndex, newIndex)
-        onReorderGroups(newOrder)
+        runPendingAction(REORDER_PROJECT_GROUPS_KEY, () => onReorderGroups(newOrder))
       }
     }
   }
 
   return (
     <>
-      {heading && projectGroups.length > 0 ? <SectionHeading label={heading} /> : null}
+      {heading && projectGroups.length > 0 ? <SectionHeading label={heading} pending={reorderPending} /> : null}
       <DndContext
         sensors={sensors}
         collisionDetection={collisionDetection}
         onDragEnd={handleDragEnd}
       >
-        <SortableContext items={groupIds} strategy={verticalListSortingStrategy}>
+        <SortableContext items={groupIds} strategy={verticalListSortingStrategy} disabled={reorderPending}>
           {projectGroups.map((group) => (
             <SortableProjectGroup
               key={group.groupKey}

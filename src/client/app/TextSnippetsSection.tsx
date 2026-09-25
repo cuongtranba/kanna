@@ -1,4 +1,4 @@
-import { useMemo } from "react"
+import { useCallback, useMemo } from "react"
 import { Plus, Type } from "lucide-react"
 import { Button } from "../components/ui/button"
 import { Input } from "../components/ui/input"
@@ -9,6 +9,7 @@ import {
   SettingsRowActions,
 } from "../components/settings/SettingsList"
 import { useAppSettingsStore, selectTextSnippets } from "../stores/appSettingsStore"
+import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
 import type { TextSnippet, TextSnippetInput, TextSnippetPatch } from "../../shared/types"
 import type { KannaState } from "./useKannaState"
 import {
@@ -99,11 +100,8 @@ export function TextSnippetsSection({ snippets, handlers, dom = domAdapter }: Te
               key={snippet.id}
               snippet={snippet}
               onEdit={() => navigate({ kind: "edit", id: snippet.id })}
-              onDelete={() => {
-                if (dom.confirmDialog(`Delete snippet "${snippet.shortcut}"?`)) {
-                  void handlers.onDelete(snippet.id)
-                }
-              }}
+              onDelete={handlers.onDelete}
+              dom={dom}
             />
           ))}
         </SettingsList>
@@ -116,19 +114,28 @@ function SnippetRow({
   snippet,
   onEdit,
   onDelete,
+  dom,
 }: {
   snippet: TextSnippet
   onEdit: () => void
-  onDelete: () => void
+  onDelete: (id: string) => Promise<void>
+  dom: DomPort
 }) {
+  const deleteKey = pendingActionKey("textSnippets.delete", snippet.id)
+  const deletePending = usePendingAction(deleteKey)
+  const handleDelete = useCallback(() => {
+    if (!dom.confirmDialog(`Delete snippet "${snippet.shortcut}"?`)) return
+    runPendingAction(deleteKey, () => onDelete(snippet.id))
+  }, [deleteKey, dom, onDelete, snippet.id, snippet.shortcut])
+
   return (
-    <li className="flex items-center gap-3 px-4 py-3">
+    <li className="flex items-center gap-3 px-4 py-3" aria-busy={deletePending || undefined}>
       <div className="flex min-w-0 flex-col gap-0.5">
         <span className="font-mono text-sm">{snippet.shortcut}</span>
         <span className="truncate text-xs text-muted-foreground">{snippet.expansion}</span>
       </div>
       <div className="ml-auto flex items-center gap-2">
-        <SettingsRowActions label={snippet.shortcut} onEdit={onEdit} onDelete={onDelete} />
+        <SettingsRowActions label={snippet.shortcut} onEdit={onEdit} onDelete={handleDelete} deletePending={deletePending} />
       </div>
     </li>
   )
@@ -215,8 +222,9 @@ function SnippetEditor({
       <div className="flex items-center gap-2">
         <Button
           onClick={() => {
-            void onSubmit()
+            runPendingAction(pendingActionKey("textSnippets.save", initial?.id ?? "new"), onSubmit)
           }}
+          pending={submitting}
           disabled={!canSave}
         >
           {submitLabel}

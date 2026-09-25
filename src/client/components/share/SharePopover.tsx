@@ -7,6 +7,8 @@ import type { ShareSummary } from "../../../shared/session-share/types"
 import type { ClipboardPort } from "../../ports/clipboardPort"
 import { clipboardAdapter } from "../../adapters/clipboard.adapter"
 import { SharePopoverBodyStore } from "./SharePopoverBody.store"
+import { pendingActionKey, runPendingAction, usePendingAction } from "../../stores/pendingActionsStore"
+import { errorMessage } from "../../../shared/errors"
 
 export interface SharePopoverProps {
   chatId: string
@@ -38,63 +40,118 @@ export interface SharePopoverBodyProps {
 
 function SharePopoverBodyInner(props: SharePopoverBodyProps) {
   const clipboard = props.clipboard ?? clipboardAdapter
-  const busy = SharePopoverBodyStore.useScopedStore((s) => s.busy)
-  const setBusy = SharePopoverBodyStore.useScopedStore((s) => s.setBusy)
+  const error = SharePopoverBodyStore.useScopedStore((s) => s.error)
+  const setError = SharePopoverBodyStore.useScopedStore((s) => s.setError)
   const activeShares = props.shares.filter((s) => !s.revoked)
 
   const { onMint, chatId } = props
-  const handleMint = useCallback(async () => {
-    setBusy(true)
-    try {
-      await onMint(chatId)
-    } catch {
-    } finally {
-      setBusy(false)
-    }
-  }, [onMint, chatId, setBusy])
+  const mintKey = pendingActionKey("share.mint", chatId)
+  const minting = usePendingAction(mintKey)
+
+  const handleMint = useCallback(() => {
+    runPendingAction(mintKey, async () => {
+      try {
+        await onMint(chatId)
+        setError(null)
+      } catch (cause) {
+        setError(`Couldn't create a share link: ${errorMessage(cause)}`)
+      }
+    })
+  }, [mintKey, onMint, chatId, setError])
 
   return (
     <>
       <Button
         variant="default"
-        disabled={busy}
+        pending={minting}
         data-share-mint=""
-        onClick={() => { void handleMint() }}
+        onClick={handleMint}
       >
-        {busy ? "Creating…" : "Create share link"}
+        {minting ? "Creating…" : "Create share link"}
       </Button>
+      {error ? <p role="alert" className="text-xs text-destructive-text">{error}</p> : null}
       {activeShares.length === 0 ? (
         <p className="text-xs text-muted-foreground">No active share links for this chat.</p>
       ) : (
         <ul className="space-y-2">
           {activeShares.map((s) => (
-            <li key={s.tokenId} className="flex flex-col gap-1 rounded border border-border/40 p-2 text-xs">
-              <code className="break-all">{s.url}</code>
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => { void clipboard.writeText(s.url) }}
-                >
-                  <Copy className="h-3.5 w-3.5 mr-1" />
-                  Copy
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  data-share-revoke=""
-                  onClick={() => { void props.onRevoke(s.tokenId) }}
-                >
-                  <Link2Off className="h-3.5 w-3.5 mr-1" />
-                  Revoke
-                </Button>
-                <span className="ml-auto text-muted-foreground">{relativeExpiry(s.expiresAt, props.now)}</span>
-              </div>
-            </li>
+            <ShareRow
+              key={s.tokenId}
+              share={s}
+              now={props.now}
+              clipboard={clipboard}
+              onRevoke={props.onRevoke}
+            />
           ))}
         </ul>
       )}
     </>
+  )
+}
+
+function ShareRow({
+  share,
+  now,
+  clipboard,
+  onRevoke,
+}: {
+  share: ShareSummary
+  now: number
+  clipboard: ClipboardPort
+  onRevoke: (tokenId: string) => Promise<void>
+}) {
+  const setError = SharePopoverBodyStore.useScopedStore((s) => s.setError)
+  const markCopied = SharePopoverBodyStore.useScopedStore((s) => s.markCopied)
+  const copied = SharePopoverBodyStore.useScopedStore((s) => s.copiedTokenId === share.tokenId)
+  const copyKey = pendingActionKey("share.copy", share.tokenId)
+  const revokeKey = pendingActionKey("share.revoke", share.tokenId)
+  const copying = usePendingAction(copyKey)
+  const revoking = usePendingAction(revokeKey)
+  const { tokenId, url } = share
+
+  const handleCopy = useCallback(() => {
+    runPendingAction(copyKey, async () => {
+      try {
+        await clipboard.writeText(url)
+        markCopied(tokenId)
+      } catch (cause) {
+        setError(`Couldn't copy the link: ${errorMessage(cause)}`)
+      }
+    })
+  }, [clipboard, copyKey, markCopied, setError, tokenId, url])
+
+  const handleRevoke = useCallback(() => {
+    runPendingAction(revokeKey, async () => {
+      try {
+        await onRevoke(tokenId)
+        setError(null)
+      } catch (cause) {
+        setError(`Couldn't revoke the link: ${errorMessage(cause)}`)
+      }
+    })
+  }, [onRevoke, revokeKey, setError, tokenId])
+
+  return (
+    <li className="flex flex-col gap-1 rounded border border-border/40 p-2 text-xs">
+      <code className="break-all">{url}</code>
+      <div className="flex items-center gap-2">
+        <Button size="sm" variant="ghost" pending={copying} onClick={handleCopy}>
+          {copying ? null : <Copy className="h-3.5 w-3.5 mr-1" />}
+          {copied ? "Copied" : "Copy"}
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          data-share-revoke=""
+          pending={revoking}
+          onClick={handleRevoke}
+        >
+          {revoking ? null : <Link2Off className="h-3.5 w-3.5 mr-1" />}
+          {revoking ? "Revoking…" : "Revoke"}
+        </Button>
+        <span className="ml-auto text-muted-foreground">{relativeExpiry(share.expiresAt, now)}</span>
+      </div>
+    </li>
   )
 }
 

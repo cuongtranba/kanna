@@ -178,6 +178,30 @@ const DESIGN_GATE_SYNTAX_NO_RAW_HEX = [
   ...DESIGN_TITLE,
 ]
 
+// A `.catch` whose handler does nothing is a side effect the user can never
+// learn the outcome of: it fired with no pending state and fails with no
+// message. It also satisfies no-floating-promises, which is why the
+// pending-state gate needs this beside it. Report the failure (set an error
+// the UI renders, or log it) instead of discarding it.
+const SILENT_CATCH_MESSAGE =
+  "A `.catch` that discards the error hides a failed side effect. Launch user actions with runPendingAction and render the failure; for background work use runDetached (src/client/lib/runDetached.ts), which logs it."
+const SILENT_CATCH_BAN = [
+  {
+    selector:
+      "CallExpression[callee.property.name='catch'] > :matches(ArrowFunctionExpression, FunctionExpression)[body.type='BlockStatement'][body.body.length=0]",
+    message: SILENT_CATCH_MESSAGE,
+  },
+  {
+    selector:
+      "CallExpression[callee.property.name='catch'] > ArrowFunctionExpression[body.type='Identifier'][body.name='undefined']",
+    message: SILENT_CATCH_MESSAGE,
+  },
+  {
+    selector: "CallExpression[callee.property.name='catch'] > ArrowFunctionExpression[body.type='Literal'][body.value=null]",
+    message: SILENT_CATCH_MESSAGE,
+  },
+]
+
 export default tseslint.config(
   {
     ignores: [
@@ -307,6 +331,7 @@ export default tseslint.config(
         ...SHARED_CLIENT_SEAL_SYNTAX,
         ...TYPE_STRICT_SYNTAX,
         ...DESIGN_GATE_SYNTAX,
+        ...SILENT_CATCH_BAN,
       ],
     },
   },
@@ -320,6 +345,7 @@ export default tseslint.config(
         ...SHARED_CLIENT_SEAL_SYNTAX,
         ...TYPE_STRICT_SYNTAX,
         ...DESIGN_GATE_SYNTAX_NO_RAW_HEX,
+        ...SILENT_CATCH_BAN,
       ],
     },
   },
@@ -339,6 +365,50 @@ export default tseslint.config(
     ],
     rules: {
       "no-restricted-globals": ["error", ...CLIENT_EFFECT_SEAL_GLOBALS],
+    },
+  },
+  {
+    // Pending-state gate (adr-20260925-client-pending-action-state). A promise
+    // launched from the client must be settled by someone: awaited inside an
+    // async flow, handed to runPendingAction (user-triggered: the trigger
+    // renders usePendingAction's flag) or runDetached (background work no user
+    // waits on). `void promise` is not settling it — ignoreVoid is off because
+    // `onClick={() => void save()}` was the exact spelling of every button that
+    // fired a side effect and showed nothing while it ran. Type-aware, so it
+    // counts the concept (a Promise), not a keyword.
+    files: ["src/client/**/*.{ts,tsx}"],
+    ignores: [
+      "src/client/**/*.test.ts",
+      "src/client/**/*.test.tsx",
+      "src/client/lib/testing/**",
+      "src/client/adapters/testing/**",
+    ],
+    languageOptions: {
+      parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname },
+    },
+    rules: {
+      "@typescript-eslint/no-floating-promises": [
+        "error",
+        {
+          ignoreVoid: false,
+          allowForKnownSafeCalls: [{ from: "package", name: "NavigateFunction", package: "react-router" }],
+        },
+      ],
+      "@typescript-eslint/no-misused-promises": [
+        "error",
+        {
+          checksConditionals: false,
+          checksSpreads: false,
+          checksVoidReturn: {
+            attributes: true,
+            arguments: false,
+            inheritedMethods: false,
+            properties: true,
+            returns: false,
+            variables: false,
+          },
+        },
+      ],
     },
   },
   {

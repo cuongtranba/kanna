@@ -3,6 +3,7 @@ import type { DomPort } from "../ports/domPort"
 import { domAdapter } from "../adapters/dom.adapter"
 import { BREAKPOINT_MD } from "../lib/viewport"
 import type { DrawerVisual } from "./drawerVisual"
+import { runDetached } from "../lib/runDetached"
 
 export const SIDEBAR_SWIPE_MOBILE_BREAKPOINT_PX = BREAKPOINT_MD
 export const SIDEBAR_SWIPE_OPEN_START_MIN_X = 0
@@ -181,14 +182,14 @@ export function useSidebarSwipeGesture({ sidebarOpen, onOpen, onClose, visual, p
 
       if (outcome === "open") {
         onOpen()
-        void visual.settle(1)
+        runDetached("sidebar drawer settle", visual.settle(1))
         return
       }
       if (outcome === "close") {
-        void visual.settle(0).then(onClose)
+        runDetached("sidebar drawer settle", visual.settle(0).then(onClose))
         return
       }
-      void visual.settle(sidebarOpen ? 1 : 0)
+      runDetached("sidebar drawer settle", visual.settle(sidebarOpen ? 1 : 0))
     }
 
     function handleTouchCancel() {

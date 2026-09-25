@@ -31,7 +31,10 @@ export async function deleteUploadedFile(
 ): Promise<void> {
   const http = options.http ?? httpAdapter
   const deleteUrl = contentUrl.replace(/\/content$/, "")
-  await http.del(deleteUrl).catch(() => undefined)
+  const result = await http.del(deleteUrl)
+  if (!result.ok && result.status !== 404) {
+    throw new Error(`Delete request failed with status ${result.status}`)
+  }
 }
 
 export interface TextPreviewResult {

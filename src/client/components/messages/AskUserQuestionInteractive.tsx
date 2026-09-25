@@ -156,12 +156,15 @@ export interface AskUserQuestionInteractiveProps {
   questions: AskUserQuestionItem[]
   onSubmit: (answers: AskUserQuestionAnswerMap) => void
   onCancel?: () => void
+  submitPending?: boolean
+  cancelPending?: boolean
   ports?: AskUserQuestionInteractivePorts
 }
 
 function AskUserQuestionInteractiveInner(
-  { questions, onSubmit, onCancel, ports = {} }: AskUserQuestionInteractiveProps,
+  { questions, onSubmit, onCancel, submitPending = false, cancelPending = false, ports = {} }: AskUserQuestionInteractiveProps,
 ): React.ReactElement | null {
+  const responding = submitPending || cancelPending
   const timer = ports.timer ?? timerAdapter
   const currentIndex = AskUserQuestionInteractiveStore.useScopedStore((s) => s.currentIndex)
   const answers = AskUserQuestionInteractiveStore.useScopedStore((s) => s.answers)
@@ -300,7 +303,7 @@ function AskUserQuestionInteractiveInner(
 
       <div className="flex items-center mx-2">
         {onCancel ? (
-          <Button size="sm" variant="outline" className="rounded-full" onClick={onCancel}>
+          <Button size="sm" variant="outline" className="rounded-full" pending={cancelPending} disabled={submitPending} onClick={onCancel}>
             Cancel
           </Button>
         ) : null}
@@ -312,7 +315,8 @@ function AskUserQuestionInteractiveInner(
             <Button
               size="sm"
               onClick={handleSubmit}
-              disabled={!allQuestionsAnswered}
+              pending={submitPending}
+              disabled={!allQuestionsAnswered || responding}
               className={cn(!allQuestionsAnswered && "opacity-50 cursor-not-allowed", "rounded-full")}
             >
               Submit
@@ -325,11 +329,18 @@ function AskUserQuestionInteractiveInner(
 }
 
 export function AskUserQuestionInteractive(
-  { questions, onSubmit, onCancel, ports }: AskUserQuestionInteractiveProps,
+  { questions, onSubmit, onCancel, submitPending, cancelPending, ports }: AskUserQuestionInteractiveProps,
 ): React.ReactElement | null {
   return (
     <AskUserQuestionInteractiveStore.Provider init={undefined}>
-      <AskUserQuestionInteractiveInner questions={questions} onSubmit={onSubmit} onCancel={onCancel} ports={ports} />
+      <AskUserQuestionInteractiveInner
+        questions={questions}
+        onSubmit={onSubmit}
+        onCancel={onCancel}
+        submitPending={submitPending}
+        cancelPending={cancelPending}
+        ports={ports}
+      />
     </AskUserQuestionInteractiveStore.Provider>
   )
 }

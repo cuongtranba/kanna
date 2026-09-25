@@ -1,8 +1,8 @@
 import { useCallback, type ReactNode } from "react"
-import { Loader2 } from "lucide-react"
 import { Button } from "../ui/button"
 import { cn } from "../../lib/utils"
 import { log } from "../../../shared/log"
+import { errorMessage as describeError, onRejected } from "../../../shared/errors"
 import { TranscriptActionCardStore } from "./TranscriptActionCard.store"
 
 export type CardActionVariant = "primary" | "secondary" | "ghost" | "destructive"
@@ -61,7 +61,7 @@ function TranscriptActionCardContent({
   const storeApi = TranscriptActionCardStore.useScopedStoreApi()
 
   const handleClick = useCallback(
-    async (action: CardAction) => {
+    (action: CardAction) => {
       const state = storeApi.getState()
       if (state.busyId) return
       state.setActionError(null)
@@ -70,19 +70,19 @@ function TranscriptActionCardContent({
         result = action.onClick()
       } catch (error) {
         log.error("[transcript-action-card] sync click threw", String(error))
-        storeApi.getState().setActionError(error instanceof Error ? error.message : String(error))
+        storeApi.getState().setActionError(describeError(error))
         return
       }
       if (!(result instanceof Promise)) return
       state.setBusyId(action.id)
-      try {
-        await result
-      } catch (error) {
-        log.error("[transcript-action-card] async click rejected", String(error))
-        storeApi.getState().setActionError(error instanceof Error ? error.message : String(error))
-      } finally {
-        storeApi.getState().setBusyId(null)
-      }
+      result.then(
+        () => storeApi.getState().setBusyId(null),
+        onRejected((error) => {
+          log.error("[transcript-action-card] async click rejected", error.message)
+          storeApi.getState().setActionError(error.message)
+          storeApi.getState().setBusyId(null)
+        }),
+      )
     },
     [storeApi],
   )
@@ -127,12 +127,10 @@ function TranscriptActionCardContent({
                 size="sm"
                 variant={VARIANT_TO_BUTTON[action.variant ?? "ghost"]}
                 disabled={action.disabled || (isBusy && !isThisBusy)}
-                onClick={() => {
-                  void handleClick(action)
-                }}
+                pending={isThisBusy}
+                onClick={() => handleClick(action)}
                 className="gap-1.5"
               >
-                {isThisBusy ? <Loader2 className="size-3.5 animate-spin" /> : null}
                 {action.label}
               </Button>
             )

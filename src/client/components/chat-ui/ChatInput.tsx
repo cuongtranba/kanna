@@ -37,6 +37,7 @@ import {
   resolveClaudeContextWindowTokens,
 } from "../../../shared/types"
 import { Button } from "../ui/button"
+import { Spinner } from "../ui/spinner"
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../ui/dialog"
 import { Kbd } from "../ui/kbd"
 import { ScrollArea } from "../ui/scroll-area"
@@ -82,9 +83,12 @@ import {
   SnippetExpandPlugin,
   type SubmitPayload,
 } from "../lexical/plugins"
+import { useInlineUploadsPending } from "../lexical/plugins/inlineUploadPending"
 import { serializeEditorToWire } from "../lexical/serialize/editorToWireString"
 import { log } from "../../../shared/log"
 import { deleteUploadedFile } from "../../api/files"
+import { runDetached } from "../../lib/runDetached"
+import { pendingActionKey, runPendingAction, usePendingAction } from "../../stores/pendingActionsStore"
 import type { DomPort } from "../../ports/domPort"
 import type { HttpPort } from "../../ports/httpPort"
 import { domAdapter } from "../../adapters/dom.adapter"
@@ -451,7 +455,11 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
   ])
 
   const uploadedAttachments = attachments.filter((a) => a.status === "uploaded")
-  const hasPendingUploads = attachments.some((a) => a.status === "uploading")
+  const inlineUploadsPending = useInlineUploadsPending(composerChatId)
+  const hasPendingUploads = inlineUploadsPending || attachments.some((a) => a.status === "uploading")
+  const submitActionKey = pendingActionKey("chat.send", composerChatId)
+  const submitPending = usePendingAction(submitActionKey)
+  const cancelPending = usePendingAction(pendingActionKey("chat.cancel", chatId ?? ""))
   const hasTextToSend = currentText.trim().length > 0
   const canSubmit = currentText.trim().length > 0 || uploadedAttachments.length > 0
   const orderedAttachments = [...attachments].sort((left, right) => {
@@ -553,14 +561,14 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
         },
       ])
 
-      void (async () => {
+      runDetached("attachment upload", (async () => {
         try {
           const { attachments: uploaded } = await handle.promise
           const result = uploaded[0]
           if (!result) throw new Error("Upload failed")
 
           if (generation !== uploadGenerationRef.current) {
-            void deleteUploadedAttachment(result, http)
+            runDetached("abandoned upload cleanup", deleteUploadedAttachment(result, http))
             if (previewUrl) URL.revokeObjectURL(previewUrl)
             return
           }
@@ -568,7 +576,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
           if (removedAttachmentIdsRef.current.has(tempId)) {
             removedAttachmentIdsRef.current.delete(tempId)
             if (previewUrl) URL.revokeObjectURL(previewUrl)
-            void deleteUploadedAttachment(result, http)
+            runDetached("abandoned upload cleanup", deleteUploadedAttachment(result, http))
             return
           }
 
@@ -610,7 +618,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
           activeUploadsRef.current = Math.max(0, activeUploadsRef.current - 1)
           processUploadQueueRef.current?.()
         }
-      })()
+      })())
     }
   }, [http, projectId, setAttachments, setUploadError])
   useEffect(() => {
@@ -713,18 +721,18 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
   )
 
   const handlePluginSubmit = useCallback(
-    async (payload: SubmitPayload) => {
+    (payload: SubmitPayload) => {
       if (!canSubmit || hasPendingUploads) return
-      await doSubmit(payload.text, payload.attachments)
+      runPendingAction(submitActionKey, () => doSubmit(payload.text, payload.attachments))
     },
-    [canSubmit, hasPendingUploads, doSubmit],
+    [canSubmit, hasPendingUploads, doSubmit, submitActionKey],
   )
 
-  const handleManualSubmit = useCallback(async () => {
+  const handleManualSubmit = useCallback(() => {
     if (!canSubmit || hasPendingUploads) return
     const payload = bridgeRef.current?.readCurrentPayload() ?? { text: currentText, attachments: [] }
-    await doSubmit(payload.text, payload.attachments)
-  }, [canSubmit, hasPendingUploads, currentText, doSubmit])
+    runPendingAction(submitActionKey, () => doSubmit(payload.text, payload.attachments))
+  }, [canSubmit, hasPendingUploads, currentText, doSubmit, submitActionKey])
 
   const handleDraftChange = useCallback(
     (state: SerializedEditorState, text: string) => {
@@ -897,7 +905,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
     }
     if (attachment.status === "uploaded") {
       removedAttachmentIdsRef.current.delete(attachment.id)
-      void deleteUploadedAttachment(attachment, http)
+      runDetached("removed upload cleanup", deleteUploadedAttachment(attachment, http))
     }
   }
 
@@ -1133,10 +1141,10 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
                 <HistoryPlugin />
                 <MentionTypeaheadPlugin projectId={projectId ?? null} />
                 <SlashCommandTypeaheadPlugin projectId={projectId ?? null} />
-                <PasteImagePlugin projectId={projectId ?? null} onUploadError={handleUploadError} />
-                <DropAttachmentPlugin projectId={projectId ?? null} onUploadError={handleUploadError} />
+                <PasteImagePlugin projectId={projectId ?? null} uploadOwnerId={composerChatId} onUploadError={handleUploadError} />
+                <DropAttachmentPlugin projectId={projectId ?? null} uploadOwnerId={composerChatId} onUploadError={handleUploadError} />
                 <SnippetExpandPlugin snippets={textSnippets} />
-                <SubmitPlugin onSubmit={handlePluginSubmit} disabled={disabled || hasPendingUploads} />
+                <SubmitPlugin onSubmit={handlePluginSubmit} disabled={disabled || hasPendingUploads || submitPending} />
                 <DraftPersistencePlugin onChange={handleDraftChange} />
                 <LexicalEditorBridgePlugin bridgeRef={bridgeRef} />
                 <EditorEditabilityPlugin isDisabled={disabled} />
@@ -1149,14 +1157,15 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
               onPointerDown={(event) => {
                 event.preventDefault()
                 if (!disabled && hasTextToSend && !hasPendingUploads) {
-                  void handleManualSubmit()
+                  handleManualSubmit()
                 } else if (canCancel) {
                   onCancel?.()
                 } else if (!disabled && canSubmit && !hasPendingUploads) {
-                  void handleManualSubmit()
+                  handleManualSubmit()
                 }
               }}
               disabled={disabled || (!canCancel && !canSubmit) || hasPendingUploads}
+              pending={submitPending || cancelPending}
               size="icon"
               aria-label={isStopAffordance(Boolean(canCancel), hasTextToSend) ? "Stop" : "Send message"}
               className="flex-shrink-0 bg-primary text-background rounded-full cursor-pointer h-11 w-11 mb-1 -mr-0.5 md:mr-0 md:mb-1.5 touch-manipulation disabled:opacity-50"
@@ -1169,6 +1178,13 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
             </Button>
           </div>
         </div>
+
+        {inlineUploadsPending ? (
+          <div role="status" className="max-w-[840px] mx-auto mt-2 px-1 flex items-center gap-1.5 text-sm text-muted-foreground">
+            <Spinner />
+            Uploading attachment…
+          </div>
+        ) : null}
 
         {uploadError ? (
           <div className="max-w-[840px] mx-auto mt-2 px-1 text-sm text-destructive">

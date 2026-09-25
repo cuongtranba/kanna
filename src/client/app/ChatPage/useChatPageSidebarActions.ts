@@ -27,6 +27,7 @@ import {
 import type { DomPort } from "../../ports/domPort"
 import type { TimerPort } from "../../ports/timerPort"
 import { domAdapter } from "../../adapters/dom.adapter"
+import { runDetached } from "../../lib/runDetached"
 import { timerAdapter } from "../../adapters/timer.adapter"
 
 export interface ChatPageSidebarActionsPorts {
@@ -76,7 +77,7 @@ export function useChatPageSidebarActions({
     if (!chatId) {
       return
     }
-    void state.socket.command({ type: "chat.refreshDiffs", chatId }).catch(() => {})
+    runDetached("project git refresh", state.socket.command({ type: "chat.refreshDiffs", chatId }))
   }, [state.socket])
 
   const refreshDiffs = useCallback(() => {
@@ -84,7 +85,7 @@ export function useChatPageSidebarActions({
     if (!chatId || !showRightSidebar) {
       return
     }
-    void state.socket.command({ type: "chat.refreshDiffs", chatId }).catch(() => {})
+    runDetached("diff refresh", state.socket.command({ type: "chat.refreshDiffs", chatId }))
   }, [showRightSidebar, state.socket])
 
   const scheduleTerminalDiffRefresh = useCallback(() => {
@@ -103,16 +104,16 @@ export function useChatPageSidebarActions({
   const handleOpenDiffFile = useCallback((filePath: string) => {
     const projectPath = projectPathRef.current
     const resolvedPath = resolveDiffFilePath(projectPath, filePath)
-    void handleOpenLocalLink({ path: resolvedPath }, "open_editor")
+    return handleOpenLocalLink({ path: resolvedPath }, "open_editor")
   }, [handleOpenLocalLink])
 
   const handleCopyDiffFilePath = useCallback((filePath: string) => {
     const projectPath = projectPathRef.current
-    void handleCopyPath(resolveDiffFilePath(projectPath, filePath))
+    return handleCopyPath(resolveDiffFilePath(projectPath, filePath))
   }, [handleCopyPath])
 
   const handleCopyDiffRelativePath = useCallback((filePath: string) => {
-    void handleCopyPath(filePath)
+    return handleCopyPath(filePath)
   }, [handleCopyPath])
 
   const handleLoadDiffPatch = useCallback(async (filePath: string) => {
@@ -129,98 +130,92 @@ export function useChatPageSidebarActions({
     return result.patch
   }, [activeChatIdRef, projectId, state.socket])
 
-  const handleDiscardDiffFile = useCallback((filePath: string) => {
+  const handleDiscardDiffFile = useCallback(async (filePath: string) => {
     const chatId = activeChatIdRef.current
     if (!chatId) return
 
-    void (async () => {
-      const confirmed = await dialog.confirm({
-        title: "Discard Changes",
-        description: `Discard changes for "${filePath}"? This cannot be undone.`,
-        confirmLabel: "Discard",
-        confirmVariant: "destructive",
-      })
-      if (!confirmed) return
+    const confirmed = await dialog.confirm({
+      title: "Discard Changes",
+      description: `Discard changes for "${filePath}"? This cannot be undone.`,
+      confirmLabel: "Discard",
+      confirmVariant: "destructive",
+    })
+    if (!confirmed) return
 
-      try {
-        await state.socket.command({
-          type: "chat.discardDiffFile",
-          chatId,
-          path: filePath,
-        })
-      } catch (error) {
-        await dialog.alert({
-          title: "Discard failed",
-          description: error instanceof Error ? error.message : String(error),
-          closeLabel: "OK",
-        })
-      }
-    })()
+    try {
+      await state.socket.command({
+        type: "chat.discardDiffFile",
+        chatId,
+        path: filePath,
+      })
+    } catch (error) {
+      await dialog.alert({
+        title: "Discard failed",
+        description: error instanceof Error ? error.message : String(error),
+        closeLabel: "OK",
+      })
+    }
   }, [dialog, state.socket])
 
-  const handleIgnoreDiffFile = useCallback((filePath: string) => {
+  const handleIgnoreDiffFile = useCallback(async (filePath: string) => {
     const chatId = activeChatIdRef.current
     if (!chatId) return
 
-    void (async () => {
-      const confirmed = await dialog.confirm({
-        title: "Ignore File",
-        description: `Add "${filePath}" to .gitignore?`,
-        confirmLabel: "Ignore",
-        confirmVariant: "destructive",
-      })
-      if (!confirmed) return
+    const confirmed = await dialog.confirm({
+      title: "Ignore File",
+      description: `Add "${filePath}" to .gitignore?`,
+      confirmLabel: "Ignore",
+      confirmVariant: "destructive",
+    })
+    if (!confirmed) return
 
-      try {
-        await state.socket.command({
-          type: "chat.ignoreDiffFile",
-          chatId,
-          path: filePath,
-        })
-      } catch (error) {
-        await dialog.alert({
-          title: "Ignore failed",
-          description: error instanceof Error ? error.message : String(error),
-          closeLabel: "OK",
-        })
-      }
-    })()
+    try {
+      await state.socket.command({
+        type: "chat.ignoreDiffFile",
+        chatId,
+        path: filePath,
+      })
+    } catch (error) {
+      await dialog.alert({
+        title: "Ignore failed",
+        description: error instanceof Error ? error.message : String(error),
+        closeLabel: "OK",
+      })
+    }
   }, [dialog, state.socket])
 
-  const handleIgnoreDiffFolder = useCallback((filePath: string) => {
+  const handleIgnoreDiffFolder = useCallback(async (filePath: string) => {
     const chatId = activeChatIdRef.current
     if (!chatId) return
 
     const initialValue = getIgnoreFolderEntryFromDiffPath(filePath)
     if (!initialValue) return
 
-    void (async () => {
-      const ignorePath = await dialog.prompt({
-        title: "Ignore Folder",
-        description: "Edit the folder pattern to add to .gitignore.",
-        initialValue,
-        confirmLabel: "Ignore",
-      })
-      if (!ignorePath) return
+    const ignorePath = await dialog.prompt({
+      title: "Ignore Folder",
+      description: "Edit the folder pattern to add to .gitignore.",
+      initialValue,
+      confirmLabel: "Ignore",
+    })
+    if (!ignorePath) return
 
-      try {
-        await state.socket.command({
-          type: "chat.ignoreDiffFile",
-          chatId,
-          path: ignorePath,
-        })
-      } catch (error) {
-        await dialog.alert({
-          title: "Ignore failed",
-          description: error instanceof Error ? error.message : String(error),
-          closeLabel: "OK",
-        })
-      }
-    })()
+    try {
+      await state.socket.command({
+        type: "chat.ignoreDiffFile",
+        chatId,
+        path: ignorePath,
+      })
+    } catch (error) {
+      await dialog.alert({
+        title: "Ignore failed",
+        description: error instanceof Error ? error.message : String(error),
+        closeLabel: "OK",
+      })
+    }
   }, [dialog, state.socket])
 
   const handleOpenDiffInFinder = useCallback((filePath: string) => {
-    void handleOpenExternalPath("open_finder", filePath)
+    return handleOpenExternalPath("open_finder", filePath)
   }, [handleOpenExternalPath])
 
   const handleCommitDiffs = useCallback(async (args: { paths: string[]; summary: string; description: string; mode: DiffCommitMode }) => {

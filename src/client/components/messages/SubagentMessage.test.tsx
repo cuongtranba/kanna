@@ -216,8 +216,8 @@ describe("SubagentMessage", () => {
         })}
         indentDepth={0}
         localPath="/tmp"
-        onSubagentAskUserQuestionSubmit={() => undefined}
-        onSubagentExitPlanModeSubmit={() => undefined}
+        onSubagentAskUserQuestionSubmit={() => Promise.resolve()}
+        onSubagentExitPlanModeSubmit={() => Promise.resolve()}
       />,
     )
     expect(html).toContain('data-testid="subagent-pending-tool:t1"')
@@ -238,8 +238,8 @@ describe("SubagentMessage", () => {
         })}
         indentDepth={0}
         localPath="/tmp"
-        onSubagentAskUserQuestionSubmit={() => undefined}
-        onSubagentExitPlanModeSubmit={() => undefined}
+        onSubagentAskUserQuestionSubmit={() => Promise.resolve()}
+        onSubagentExitPlanModeSubmit={() => Promise.resolve()}
       />,
     )
     expect(html).toContain('data-testid="subagent-pending-tool:t2"')
@@ -265,8 +265,8 @@ describe("SubagentMessage", () => {
         indentDepth={0}
         localPath="/tmp"
         suppressPendingTool
-        onSubagentAskUserQuestionSubmit={() => undefined}
-        onSubagentExitPlanModeSubmit={() => undefined}
+        onSubagentAskUserQuestionSubmit={() => Promise.resolve()}
+        onSubagentExitPlanModeSubmit={() => Promise.resolve()}
       />,
     )
     expect(html).not.toContain('data-testid="subagent-pending-tool:t3"')
@@ -309,8 +309,8 @@ describe("SubagentMessage", () => {
         })}
         indentDepth={0}
         localPath="/tmp"
-        onSubagentAskUserQuestionSubmit={() => undefined}
-        onSubagentExitPlanModeSubmit={() => undefined}
+        onSubagentAskUserQuestionSubmit={() => Promise.resolve()}
+        onSubagentExitPlanModeSubmit={() => Promise.resolve()}
       />,
     )
     expect(html).toContain("output too large")
@@ -324,7 +324,7 @@ describe("SubagentMessage", () => {
         run={makeRunSnapshot({ status: "running", runId: "r-running", chatId: "c1" })}
         indentDepth={0}
         localPath="/tmp"
-        onCancelSubagentRun={() => undefined}
+        onCancelSubagentRun={() => Promise.resolve()}
       />,
     )
     expect(html).toContain('data-testid="subagent-cancel:r-running"')
@@ -337,7 +337,7 @@ describe("SubagentMessage", () => {
         run={makeRunSnapshot({ status: "completed", finalText: "done" })}
         indentDepth={0}
         localPath="/tmp"
-        onCancelSubagentRun={() => undefined}
+        onCancelSubagentRun={() => Promise.resolve()}
       />,
     )
     expect(html).not.toContain("subagent-cancel:")
@@ -619,8 +619,8 @@ describe("SubagentMessage", () => {
         })}
         indentDepth={0}
         localPath="/tmp"
-        onSubagentAskUserQuestionSubmit={() => undefined}
-        onSubagentExitPlanModeSubmit={() => undefined}
+        onSubagentAskUserQuestionSubmit={() => Promise.resolve()}
+        onSubagentExitPlanModeSubmit={() => Promise.resolve()}
       />,
     )
     expect(html).toContain("waiting for input...")
@@ -650,8 +650,8 @@ describe("SubagentMessage", () => {
         })}
         indentDepth={0}
         localPath="/tmp"
-        onSubagentAskUserQuestionSubmit={() => undefined}
-        onSubagentExitPlanModeSubmit={() => undefined}
+        onSubagentAskUserQuestionSubmit={() => Promise.resolve()}
+        onSubagentExitPlanModeSubmit={() => Promise.resolve()}
       />,
     )
     try {

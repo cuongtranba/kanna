@@ -1,5 +1,5 @@
 # C3 Structural Index
-<!-- hash: sha256:7a9a4e62470cb377986b20e54e4733bf2027704fed4e35c222117c860a08069a -->
+<!-- hash: sha256:a65d10331ad966de3f164dcbe2ec3860d8f1f0699e697c2c8384d244384dc2fc -->
 
 ## c3-0 — Kanna (system)
 
@@ -28,7 +28,7 @@ refs: ref-colocated-bun-test, ref-strong-typing, ref-zustand-store
 ## c3-110 — app-shell (component)
 container: c3-1 | context: c3-0
 refs: ref-cqrs-read-models, ref-ws-subscription
-files: src/client/app/App.test.tsx, src/client/app/App.tsx, src/client/app/AppBootstrap.tsx, src/client/app/AppGlobalProvider.tsx, src/client/app/PageHeader.tsx, src/client/app/appRuntime.test.ts, src/client/app/appRuntime.ts, src/client/app/chatFocusPolicy.test.ts, src/client/app/chatFocusPolicy.ts, src/client/app/chatNotifications.ts, src/client/app/derived.ts, src/client/app/sidebarSwipeGesture.ts, src/client/app/useAppGlobalState.test.ts, src/client/app/useAppGlobalState.ts, src/client/app/useKannaState.test.ts, src/client/app/useKannaState.ts, src/client/app/usePushFocus.test.ts, src/client/app/usePushFocus.ts, src/client/components/LocalDev.tsx, src/client/hooks/**/*.ts, src/client/hooks/**/*.tsx, src/client/lib/**/*.ts, src/main.tsx
+files: src/client/app/App.test.tsx, src/client/app/App.tsx, src/client/app/AppBootstrap.tsx, src/client/app/AppGlobalProvider.tsx, src/client/app/PageHeader.tsx, src/client/app/appRuntime.test.ts, src/client/app/appRuntime.ts, src/client/app/chatFocusPolicy.test.ts, src/client/app/chatFocusPolicy.ts, src/client/app/chatNotifications.ts, src/client/app/derived.ts, src/client/app/sidebarSwipeGesture.ts, src/client/app/useAppGlobalState.test.ts, src/client/app/useAppGlobalState.ts, src/client/app/useKannaState.scrollback.test.tsx, src/client/app/useKannaState.test.ts, src/client/app/useKannaState.ts, src/client/app/usePushFocus.test.ts, src/client/app/usePushFocus.ts, src/client/components/LocalDev.tsx, src/client/hooks/**/*.ts, src/client/hooks/**/*.tsx, src/client/hooks/useProjectSuggestions.test.ts, src/client/hooks/useProjectSuggestions.ts, src/client/lib/**/*.ts, src/main.tsx
 
 ## c3-111 — sidebar (component)
 container: c3-1 | context: c3-0
@@ -58,7 +58,7 @@ files: src/client/components/chat-ui/**/*.ts, src/client/components/chat-ui/**/*
 ## c3-116 — settings-page (component)
 container: c3-1 | context: c3-0
 refs: ref-local-first-data, ref-zustand-store, rule-zustand-store
-files: src/client/app/McpServersSection.test.tsx, src/client/app/McpServersSection.tsx, src/client/app/ModelsSection.test.tsx, src/client/app/ModelsSection.tsx, src/client/app/SettingsPage.tsx, src/client/app/SubagentsSection.test.tsx, src/client/app/SubagentsSection.tsx, src/client/app/TextSnippetsSection.test.tsx, src/client/app/TextSnippetsSection.tsx, src/client/app/appSettingsCrud.ts, src/client/app/llmProviderDraft.ts, src/client/app/settingsEditorForm.ts, src/client/components/settings/SettingsList.tsx
+files: src/client/app/McpServerRow.tsx, src/client/app/McpServersSection.test.tsx, src/client/app/McpServersSection.tsx, src/client/app/ModelsSection.test.tsx, src/client/app/ModelsSection.tsx, src/client/app/PendingSegmentedControl.tsx, src/client/app/SettingsPage.tsx, src/client/app/SubagentsSection.test.tsx, src/client/app/SubagentsSection.tsx, src/client/app/TextSnippetsSection.test.tsx, src/client/app/TextSnippetsSection.tsx, src/client/app/appSettingsCrud.ts, src/client/app/llmProviderDraft.ts, src/client/app/settingsEditorForm.ts, src/client/components/settings/SettingsList.tsx
 
 ## c3-117 — local-projects-page (component)
 container: c3-1 | context: c3-0
@@ -142,7 +142,7 @@ files: src/server/process-utils.adapter.ts, src/server/process-utils.test.ts
 container: c3-2 | context: c3-0
 refs: ref-colocated-bun-test, ref-event-sourcing, ref-provider-adapter, ref-tool-hydration, rule-colocated-bun-test
 reverse deps: adr-20260617-subagent-id-or-name-resolution, adr-20260617-subagent-trigger-mode
-files: src/server/agent.test.ts, src/server/agent.ts, src/server/claude-context-commands.test.ts, src/server/claude-context-commands.ts, src/server/claude-send-command.test.ts, src/server/claude-send-command.ts, src/server/claude-session-lifecycle.test.ts, src/server/claude-session-lifecycle.ts, src/server/claude-session-runner.test.ts, src/server/claude-session-runner.ts, src/server/claude-session-state-queries.test.ts, src/server/claude-session-state-queries.ts, src/server/claude-session-state.ts, src/server/claude-turn-starter-types.ts, src/server/claude-turn-starter.ts, src/server/history-primer.test.ts, src/server/history-primer.ts, src/server/loop-wake-recovery.test.ts, src/server/loop-wake-recovery.ts, src/server/mention-parser.test.ts, src/server/mention-parser.ts, src/server/proactive-compact.test.ts, src/server/proactive-compact.ts, src/server/subagent-entry-cap.test.ts, src/server/subagent-orchestrator.test.ts, src/server/subagent-orchestrator.ts, src/server/subagent-provider-run.test.ts, src/server/subagent-provider-run.ts
+files: src/server/agent.test.ts, src/server/agent.ts, src/server/claude-context-commands.test.ts, src/server/claude-context-commands.ts, src/server/claude-send-command.test.ts, src/server/claude-send-command.ts, src/server/claude-session-lifecycle.test.ts, src/server/claude-session-lifecycle.ts, src/server/claude-session-runner.test.ts, src/server/claude-session-runner.ts, src/server/claude-session-state-queries.test.ts, src/server/claude-session-state-queries.ts, src/server/claude-session-state.ts, src/server/claude-turn-starter-types.ts, src/server/claude-turn-starter.ts, src/server/compaction.test.ts, src/server/compaction.ts, src/server/history-primer.test.ts, src/server/history-primer.ts, src/server/loop-integrate-io.adapter.ts, src/server/loop-prompt-parallel.ts, src/server/loop-wake-recovery.test.ts, src/server/loop-wake-recovery.ts, src/server/mention-parser.test.ts, src/server/mention-parser.ts, src/server/proactive-compact.test.ts, src/server/proactive-compact.ts, src/server/project-mention-attach.test.ts, src/server/project-mention-attach.ts, src/server/subagent-entry-cap.test.ts, src/server/subagent-orchestrator.test.ts, src/server/subagent-orchestrator.ts, src/server/subagent-provider-run.test.ts, src/server/subagent-provider-run.ts, src/server/tracking-file-lock.test.ts, src/server/tracking-file-lock.ts
 
 ## c3-211 — codex-app-server (component)
 container: c3-2 | context: c3-0
@@ -261,7 +261,7 @@ files: src/server/cron/**/*.ts
 ## c3-234 — observability (component)
 container: c3-2 | context: c3-0
 refs: ref-local-first-data, rule-colocated-bun-test
-files: scripts/grafana-alerts.ts, scripts/perf-alert-issue.ts, src/ops/alerting/**/*.ts, src/server/observability.ts, src/server/otel-config.ts, src/server/otel.adapter.ts, src/server/test-helpers/metric-recorder.ts, src/server/ws-router-observability.ts
+files: scripts/grafana-alerts.ts, scripts/perf-alert-issue.ts, src/ops/alerting/**/*.ts, src/server/memory-ceiling.test.ts, src/server/memory-ceiling.ts, src/server/observability.ts, src/server/otel-config.ts, src/server/otel.adapter.ts, src/server/test-helpers/metric-recorder.ts, src/server/ws-router-observability.ts
 
 ## c3-235 — secret-scanning (component)
 container: c3-2 | context: c3-0
@@ -294,7 +294,7 @@ context: c3-0
 ## c3-301 — types (component)
 container: c3-3 | context: c3-0
 refs: ref-strong-typing, rule-strong-typing
-files: src/shared/analytics.ts, src/shared/dynamic-module.ts, src/shared/json.test.ts, src/shared/json.ts, src/shared/kanna-system-prompt.test.ts, src/shared/kanna-system-prompt.ts, src/shared/mask-oauth-key.test.ts, src/shared/mask-oauth-key.ts, src/shared/mention-pattern.ts, src/shared/permission-policy.test.ts, src/shared/permission-policy.ts, src/shared/projectFileUrl.test.ts, src/shared/projectFileUrl.ts, src/shared/types.test.ts, src/shared/types.ts
+files: src/shared/analytics.ts, src/shared/dynamic-module.ts, src/shared/json.test.ts, src/shared/json.ts, src/shared/kanna-system-prompt.test.ts, src/shared/kanna-system-prompt.ts, src/shared/mask-oauth-key.test.ts, src/shared/mask-oauth-key.ts, src/shared/mention-pattern.ts, src/shared/permission-policy.test.ts, src/shared/permission-policy.ts, src/shared/project-mention.test.ts, src/shared/project-mention.ts, src/shared/projectFileUrl.test.ts, src/shared/projectFileUrl.ts, src/shared/task-doc.test.ts, src/shared/task-doc.ts, src/shared/turn-model-selection.ts, src/shared/types.test.ts, src/shared/types.ts
 
 ## c3-302 — protocol (component)
 container: c3-3 | context: c3-0
@@ -432,6 +432,7 @@ src/client/app/derived.ts → c3-110
 src/client/app/sidebarSwipeGesture.ts → c3-110
 src/client/app/useAppGlobalState.test.ts → c3-110
 src/client/app/useAppGlobalState.ts → c3-110
+src/client/app/useKannaState.scrollback.test.tsx → c3-110
 src/client/app/useKannaState.test.ts → c3-110
 src/client/app/useKannaState.ts → c3-110
 src/client/app/usePushFocus.test.ts → c3-110
@@ -439,6 +440,8 @@ src/client/app/usePushFocus.ts → c3-110
 src/client/components/LocalDev.tsx → c3-110
 src/client/hooks/**/*.ts → c3-110
 src/client/hooks/**/*.tsx → c3-110
+src/client/hooks/useProjectSuggestions.test.ts → c3-110
+src/client/hooks/useProjectSuggestions.ts → c3-110
 src/client/lib/**/*.ts → c3-110
 src/main.tsx → c3-110
 src/client/app/KannaSidebar.tsx → c3-111
@@ -473,10 +476,12 @@ src/client/components/lexical/nodes/** → c3-115
 src/client/components/lexical/plugins/** → c3-115
 src/client/components/lexical/serialize/** → c3-115
 src/client/components/open-external-menu.tsx → c3-115
+src/client/app/McpServerRow.tsx → c3-116
 src/client/app/McpServersSection.test.tsx → c3-116
 src/client/app/McpServersSection.tsx → c3-116
 src/client/app/ModelsSection.test.tsx → c3-116
 src/client/app/ModelsSection.tsx → c3-116
+src/client/app/PendingSegmentedControl.tsx → c3-116
 src/client/app/SettingsPage.tsx → c3-116
 src/client/app/SubagentsSection.test.tsx → c3-116
 src/client/app/SubagentsSection.tsx → c3-116
@@ -578,19 +583,27 @@ src/server/claude-session-state-queries.ts → c3-210
 src/server/claude-session-state.ts → c3-210
 src/server/claude-turn-starter-types.ts → c3-210
 src/server/claude-turn-starter.ts → c3-210
+src/server/compaction.test.ts → c3-210
+src/server/compaction.ts → c3-210
 src/server/history-primer.test.ts → c3-210
 src/server/history-primer.ts → c3-210
+src/server/loop-integrate-io.adapter.ts → c3-210
+src/server/loop-prompt-parallel.ts → c3-210
 src/server/loop-wake-recovery.test.ts → c3-210
 src/server/loop-wake-recovery.ts → c3-210
 src/server/mention-parser.test.ts → c3-210
 src/server/mention-parser.ts → c3-210
 src/server/proactive-compact.test.ts → c3-210
 src/server/proactive-compact.ts → c3-210
+src/server/project-mention-attach.test.ts → c3-210
+src/server/project-mention-attach.ts → c3-210
 src/server/subagent-entry-cap.test.ts → c3-210
 src/server/subagent-orchestrator.test.ts → c3-210
 src/server/subagent-orchestrator.ts → c3-210
 src/server/subagent-provider-run.test.ts → c3-210
 src/server/subagent-provider-run.ts → c3-210
+src/server/tracking-file-lock.test.ts → c3-210
+src/server/tracking-file-lock.ts → c3-210
 src/server/codex-app-server-protocol.ts → c3-211
 src/server/codex-app-server.test.ts → c3-211
 src/server/codex-app-server.ts → c3-211
@@ -683,6 +696,8 @@ src/server/cron/**/*.ts → c3-233
 scripts/grafana-alerts.ts → c3-234
 scripts/perf-alert-issue.ts → c3-234
 src/ops/alerting/**/*.ts → c3-234
+src/server/memory-ceiling.test.ts → c3-234
+src/server/memory-ceiling.ts → c3-234
 src/server/observability.ts → c3-234
 src/server/otel-config.ts → c3-234
 src/server/otel.adapter.ts → c3-234
@@ -731,8 +746,13 @@ src/shared/mask-oauth-key.ts → c3-301
 src/shared/mention-pattern.ts → c3-301
 src/shared/permission-policy.test.ts → c3-301
 src/shared/permission-policy.ts → c3-301
+src/shared/project-mention.test.ts → c3-301
+src/shared/project-mention.ts → c3-301
 src/shared/projectFileUrl.test.ts → c3-301
 src/shared/projectFileUrl.ts → c3-301
+src/shared/task-doc.test.ts → c3-301
+src/shared/task-doc.ts → c3-301
+src/shared/turn-model-selection.ts → c3-301
 src/shared/types.test.ts → c3-301
 src/shared/types.ts → c3-301
 src/shared/chat-ops.test.ts → c3-302

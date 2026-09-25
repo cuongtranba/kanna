@@ -231,6 +231,45 @@ Default: zero comments. Only annotate **why** when:
 
 Don't restate the code, don't reference the PR, don't add `// added for issue #28` — those rot. Prefer renaming the variable or extracting a helper over writing a comment.
 
+## Every side effect shows it is in flight
+
+A control that sends a WS command or an HTTP request renders a pending state
+until the request settles. Launch the request with `runPendingAction` and render
+`usePendingAction` on the trigger. Both come from
+`src/client/stores/pendingActionsStore.ts`:
+
+```tsx
+// Yes: the button disables, shows a spinner, and ignores a double click
+const key = pendingActionKey("chat.archive", chat.chatId)
+const archiving = usePendingAction(key)
+const handleArchive = useCallback(() => runPendingAction(key, () => onArchive(chat)), [key, onArchive, chat])
+<Button pending={archiving} onClick={handleArchive}>Archive</Button>
+
+// No: nothing happens on screen until the server answers, and a failure vanishes
+<Button onClick={() => void onArchive(chat)}>Archive</Button>
+socket.command({ type: "cron.remove", chatId, jobId }).catch(() => {})
+```
+
+- **Per-row actions key on the entity id**, so only that row reads as busy.
+- **A non-Button trigger** gets `disabled={pending}`,
+  `aria-busy={pending || undefined}`, and `<Spinner />` in place of its icon.
+  Toggles and selects are disabled while their write is in flight.
+- **A menu item that closes on click** has nowhere to show pending, so render it
+  on the row the action targets.
+- **An async callback prop is typed `() => Promise<void>`**, and the child that
+  owns the trigger launches it. Typing it `() => void` hides the promise from the
+  one component that can show it. `no-misused-promises` rejects that mismatch.
+- **Failures are shown**, through the component's error state or
+  `setCommandError` for a WS command, never swallowed.
+- **`runDetached(label, promise)`** is only for background work nobody waits on:
+  reconnects, polling, a probe on mount, best-effort cleanup.
+- **A loading view** renders a loading indicator, never an empty panel.
+
+`bun run lint` enforces the launch side with type-aware
+`no-floating-promises` (`ignoreVoid: false`) and `no-misused-promises`, and bans
+`.catch(() => {})`. Whether the flag is actually rendered is on you. See CLAUDE.md
+**Pending state for side effects**.
+
 ## Live state vs idle state styling
 
 When a row or pill represents a live process, give the live variant a **different visual weight** than the idle one:

@@ -4,6 +4,7 @@ import type { LoopProgressSnapshot, LoopRowStatus } from "../../shared/types"
 import { formatLocal } from "../lib/autoContinueTime"
 import { Button } from "../components/ui/button"
 import { cn } from "../lib/utils"
+import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
 
 const ROW_STATUS_CONFIG: Record<
   LoopRowStatus,
@@ -50,7 +51,29 @@ function HeaderAccessory({
 
 interface Props {
   loopProgress: LoopProgressSnapshot
-  onResume?: (scheduleId: string, scheduledAt: number) => void
+  onResume?: (scheduleId: string, scheduledAt: number) => Promise<void>
+}
+
+function ResumeNowButton({
+  scheduleId,
+  onResume,
+}: {
+  scheduleId: string
+  onResume: (scheduleId: string, scheduledAt: number) => Promise<void>
+}) {
+  const pendingKey = pendingActionKey("autoContinue.accept", scheduleId)
+  const pending = usePendingAction(pendingKey)
+  return (
+    <Button
+      variant="secondary"
+      size="sm"
+      className="ml-auto"
+      pending={pending}
+      onClick={() => runPendingAction(pendingKey, () => onResume(scheduleId, Date.now()))}
+    >
+      Resume now
+    </Button>
+  )
 }
 
 export function LoopProgressSection({ loopProgress, onResume }: Props) {
@@ -73,14 +96,7 @@ export function LoopProgressSection({ loopProgress, onResume }: Props) {
               {rateLimit.scheduled ? "Resumes" : "Usage limit — resets"} {formatLocal(rateLimit.resetAt, rateLimit.tz)}
             </span>
             {!rateLimit.scheduled && onResume ? (
-              <Button
-                variant="secondary"
-                size="sm"
-                className="ml-auto"
-                onClick={() => onResume(rateLimit.scheduleId, Date.now())}
-              >
-                Resume now
-              </Button>
+              <ResumeNowButton scheduleId={rateLimit.scheduleId} onResume={onResume} />
             ) : null}
           </div>
         ) : null}

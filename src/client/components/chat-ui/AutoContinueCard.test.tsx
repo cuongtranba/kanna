@@ -14,9 +14,9 @@ describe("AutoContinueCard", () => {
           resetAt: Date.UTC(2026, 3, 22, 17, 0),
           detectedAt: 0,
         }}
-        onAccept={() => {}}
-        onReschedule={() => {}}
-        onCancel={() => {}}
+        onAccept={() => Promise.resolve()}
+        onReschedule={() => Promise.resolve()}
+        onCancel={() => Promise.resolve()}
       />,
     )
     expect(html).toContain("Schedule")
@@ -34,9 +34,9 @@ describe("AutoContinueCard", () => {
           resetAt: Date.UTC(2026, 3, 22, 17, 0),
           detectedAt: 0,
         }}
-        onAccept={() => {}}
-        onReschedule={() => {}}
-        onCancel={() => {}}
+        onAccept={() => Promise.resolve()}
+        onReschedule={() => Promise.resolve()}
+        onCancel={() => Promise.resolve()}
       />,
     )
     expect(html).toContain("Change time")
@@ -54,9 +54,9 @@ describe("AutoContinueCard", () => {
           resetAt: 1_000,
           detectedAt: 0,
         }}
-        onAccept={() => {}}
-        onReschedule={() => {}}
-        onCancel={() => {}}
+        onAccept={() => Promise.resolve()}
+        onReschedule={() => Promise.resolve()}
+        onCancel={() => Promise.resolve()}
       />,
     )
     expect(html).toContain("Auto-continued")
@@ -74,9 +74,9 @@ describe("AutoContinueCard", () => {
           resetAt: 1_000,
           detectedAt: 0,
         }}
-        onAccept={() => {}}
-        onReschedule={() => {}}
-        onCancel={() => {}}
+        onAccept={() => Promise.resolve()}
+        onReschedule={() => Promise.resolve()}
+        onCancel={() => Promise.resolve()}
       />,
     )
     expect(html).toContain("Auto-continue cancelled")

@@ -40,6 +40,10 @@ import { useBoardsStore } from "../../stores/boardsStore"
 import { ChatTabRoot } from "./ChatTabRoot"
 import { BoardPane } from "../../components/boards/BoardPane"
 import { ChatTabContent } from "./ChatTabContent"
+import { gitInitializeKey, projectOpenExternalKey } from "./utils"
+import { pendingActionKey, runPendingAction } from "../../stores/pendingActionsStore"
+import { useKannaStateStore } from "../../stores/kannaStateStore"
+import { errorMessage, onRejected } from "../../../shared/errors"
 
 export {
   getIgnoreFolderEntryFromDiffPath,
@@ -296,20 +300,23 @@ export function WorkspacePage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
     }
 
     if (state.chatDiffSnapshot?.status === "no_repo") {
-      void (async () => {
-        const confirmed = await dialog.confirm({
-          title: "Initialize Git?",
-          description: "Initialize a local git repository in this project?",
-          confirmLabel: "Init Git",
-          cancelLabel: "Cancel",
-        })
-        if (!confirmed) return
-
+      const initializeGitAndOpen = async () => {
         const result = await handleInitializeGit()
         if (result?.ok && !showRightSidebar) {
           toggleRightSidebar(projectId)
         }
-      })()
+      }
+      dialog.confirm({
+        title: "Initialize Git?",
+        description: "Initialize a local git repository in this project?",
+        confirmLabel: "Init Git",
+        cancelLabel: "Cancel",
+      }).then(
+        (confirmed) => {
+          if (confirmed) runPendingAction(gitInitializeKey(projectId), initializeGitAndOpen)
+        },
+        onRejected((error) => useKannaStateStore.getState().setCommandError(error.message)),
+      )
       return
     }
 
@@ -318,7 +325,14 @@ export function WorkspacePage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
 
 
   const handleRemoveTerminal = useCallback((currentProjectId: string, terminalId: string) => {
-    void state.socket.command({ type: "terminal.close", terminalId }).catch(() => {})
+    const socket = state.socket
+    runPendingAction(pendingActionKey("terminal.close", terminalId), async () => {
+      try {
+        await socket.command({ type: "terminal.close", terminalId })
+      } catch (error) {
+        useKannaStateStore.getState().setCommandError(`Failed to close terminal: ${errorMessage(error)}`)
+      }
+    })
     removeTerminal(currentProjectId, terminalId)
   }, [removeTerminal, state.socket])
 
@@ -389,13 +403,13 @@ export function WorkspacePage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
 
         if (actionMatchesEvent(resolvedKeybindings, "openInFinder", event)) {
           event.preventDefault()
-          void handleOpenExternal("open_finder")
+          runPendingAction(projectOpenExternalKey(projectId), () => handleOpenExternal("open_finder"))
           return
         }
 
         if (actionMatchesEvent(resolvedKeybindings, "openInEditor", event)) {
           event.preventDefault()
-          void handleOpenExternal("open_editor")
+          runPendingAction(projectOpenExternalKey(projectId), () => handleOpenExternal("open_editor"))
           return
         }
 
@@ -505,7 +519,7 @@ export function WorkspacePage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
 
   const handleOpenBoards = useCallback(
     (boardsProjectId: string) => {
-      void navigate(`/boards/${boardsProjectId}`)
+      navigate(`/boards/${boardsProjectId}`)
     },
     [navigate],
   )

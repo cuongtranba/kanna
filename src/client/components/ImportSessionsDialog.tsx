@@ -4,13 +4,15 @@ import { useImportSessionsDialogStore, useImportSessionsDialogText } from "../st
 import { Button } from "./ui/button"
 import { Dialog, DialogContent, DialogBody, DialogTitle, DialogFooter } from "./ui/dialog"
 import { Textarea } from "./ui/textarea"
+import { runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
+import { IMPORT_ALL_SESSIONS_KEY, IMPORT_SESSION_IDS_KEY } from "./chat-ui/sidebar/sidebarPendingActions"
 
 export interface ImportSessionsDialogProps {
   open: boolean
   busy: boolean
   onClose: () => void
-  onImportAll: () => void
-  onImportSessions: (sessionIds: string[]) => void
+  onImportAll: () => Promise<void>
+  onImportSessions: (sessionIds: string[]) => Promise<void>
 }
 
 export function ImportSessionsDialog({
@@ -23,6 +25,8 @@ export function ImportSessionsDialog({
   const text = useImportSessionsDialogText()
   const setText = useImportSessionsDialogStore((state) => state.setText)
   const resetForOpen = useImportSessionsDialogStore((state) => state.resetForOpen)
+  const importingAll = usePendingAction(IMPORT_ALL_SESSIONS_KEY)
+  const importingIds = usePendingAction(IMPORT_SESSION_IDS_KEY)
 
   useEffect(() => {
     if (open) resetForOpen()
@@ -34,7 +38,12 @@ export function ImportSessionsDialog({
 
   const handleImportSessions = () => {
     if (ids.length === 0 || busy) return
-    onImportSessions(ids)
+    runPendingAction(IMPORT_SESSION_IDS_KEY, () => onImportSessions(ids))
+  }
+
+  const handleImportAll = () => {
+    if (busy) return
+    runPendingAction(IMPORT_ALL_SESSIONS_KEY, onImportAll)
   }
 
   return (
@@ -60,7 +69,7 @@ export function ImportSessionsDialog({
           <Button variant="ghost" size="sm" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button variant="ghost" size="sm" onClick={onImportAll} disabled={busy}>
+          <Button variant="ghost" size="sm" onClick={handleImportAll} disabled={busy} pending={importingAll}>
             Import all
           </Button>
           <Button
@@ -68,6 +77,7 @@ export function ImportSessionsDialog({
             size="sm"
             onClick={handleImportSessions}
             disabled={ids.length === 0 || busy}
+            pending={importingIds}
           >
             Import {ids.length === 1 ? "session" : "sessions"}
           </Button>

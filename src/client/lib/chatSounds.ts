@@ -3,6 +3,7 @@ import type { DomPort } from "../ports/domPort"
 import type { TimerPort } from "../ports/timerPort"
 import { domAdapter } from "../adapters/dom.adapter"
 import { timerAdapter } from "../adapters/timer.adapter"
+import { runDetached } from "./runDetached"
 
 const CHAT_SOUND_SRC: Record<ChatSoundId, string> = {
   blow: "/chat-sounds/Blow.mp3",
@@ -37,7 +38,7 @@ export async function playChatNotificationSound(
 
   const tasks = Array.from({ length: count }, (_, index) => new Promise<void>((resolve) => {
     timer.setTimeout(() => {
-      void playSingleChatSound(soundId).catch(() => undefined).finally(() => resolve())
+      runDetached("chat sound", playSingleChatSound(soundId).finally(() => resolve()))
     }, index * 90)
   }))
 

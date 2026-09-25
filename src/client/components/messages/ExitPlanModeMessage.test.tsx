@@ -21,7 +21,7 @@ function planMessage(plan: string): Extract<ProcessedToolCall, { toolKind: "exit
 
 function render(plan: string): string {
   return renderToStaticMarkup(
-    <ExitPlanModeMessage message={planMessage(plan)} onConfirm={() => {}} isLatest={false} />,
+    <ExitPlanModeMessage message={planMessage(plan)} onConfirm={() => Promise.resolve()} isLatest={false} />,
   )
 }
 

@@ -1,7 +1,7 @@
 import { createScopedStore } from "../lib/createScopedStore"
 import type { WorkflowRun } from "../../shared/workflow-types"
 
-export type WorkflowsSectionSelectedRun = WorkflowRun | null | "loading"
+export type WorkflowsSectionSelectedRun = WorkflowRun | null | "loading" | "failed"
 
 interface WorkflowsSectionDetailState {
   selectedRun: WorkflowsSectionSelectedRun

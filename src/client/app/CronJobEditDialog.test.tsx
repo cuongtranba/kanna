@@ -43,7 +43,9 @@ async function mount(snapshot = job()): Promise<Harness> {
         job={snapshot}
         open
         onOpenChange={() => {}}
-        onSave={(patch) => saved.push(patch)}
+        onSave={async (patch) => {
+          saved.push(patch)
+        }}
       />,
     )
   })

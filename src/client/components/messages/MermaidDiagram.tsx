@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId } from "react"
 import { AlertTriangle, Check, Code2, Copy, Maximize2, RefreshCw, Wrench } from "lucide-react"
 import { Button } from "../ui/button"
 import { cn } from "../../lib/utils"
+import { runDetached } from "../../lib/runDetached"
 import { useTheme } from "../../hooks/useTheme"
 import { MermaidFallbackCodeBlock } from "./shared"
 import { MermaidZoomModal } from "./MermaidZoomModal"
@@ -84,11 +85,12 @@ function MermaidDiagramInner({ source, ports }: { source: string; ports?: Mermai
 
   const closeZoom = useCallback(() => setZoomOpen(false), [setZoomOpen])
 
-  const handleCopy = async () => {
+  const copySource = async () => {
     await (ports?.clipboard ?? clipboardAdapter).writeText(source)
     setCopied(true)
     ;(ports?.timer ?? timerAdapter).setTimeout(() => setCopied(false), 2000)
   }
+  const handleCopy = () => { runDetached("copy mermaid source", copySource()) }
 
   const load = ports?.loadMermaid ?? loadMermaid
 

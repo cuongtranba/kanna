@@ -119,6 +119,11 @@ import {
 import { createLlmProviderDraftForSelection } from "./llmProviderDraft"
 import { useSettingsPageStore, type GithubRelease, type ChangelogStatus } from "../stores/settingsPageStore"
 import { SkillsSection } from "./SkillsSection"
+import { PendingSegmentedControl } from "./PendingSegmentedControl"
+import { LLM_PROVIDER_READ_KEY } from "./useAppGlobalState"
+import { Spinner } from "../components/ui/spinner"
+import { runDetached } from "../lib/runDetached"
+import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
 import { KannaPluginsSettingsBranch } from "./KannaPluginsSettingsBranch"
 
 const sidebarItems = [
@@ -337,6 +342,9 @@ export function formatPublishedDate(value: string | null) {
 }
 
 const REDEPLOY_PENDING_KEY = "__redeploy__"
+const LLM_PROVIDER_WRITE_KEY = "settings.writeLlmProvider"
+const TUNNEL_WRITE_SCOPE = "appSettings.setCloudflareTunnel"
+const CLOUDFLARED_PATH_KEY = pendingActionKey(TUNNEL_WRITE_SCOPE, "cloudflaredPath")
 
 export function ChangelogSection({
   status,
@@ -356,14 +364,15 @@ export function ChangelogSection({
   updateSnapshot: UpdateSnapshot | null
   currentVersion: string
   onInstallUpdate: (version?: string) => Promise<void> | void
-  onCheckForUpdates: () => void
+  onCheckForUpdates: () => Promise<void>
   onForceReload: () => Promise<void> | void
 }) {
+  const checkPending = usePendingAction("update.check")
   const pendingAction = useSettingsPageStore((s) => s.changelogPendingAction)
   const setPendingAction = useSettingsPageStore((s) => s.setChangelogPendingAction)
   const latestVersion = updateSnapshot?.latestVersion ?? releases[0]?.tag_name ?? "Unknown"
   const currentVersionLabel = updateSnapshot?.currentVersion ?? currentVersion
-  const isChecking = updateSnapshot?.status === "checking"
+  const isChecking = updateSnapshot?.status === "checking" || checkPending
   const snapshotUpdating = updateSnapshot?.status === "updating" || updateSnapshot?.status === "restart_pending"
   const isUpdating = snapshotUpdating || pendingAction !== null
   const canInstallUpdate = updateSnapshot?.updateAvailable === true
@@ -434,7 +443,7 @@ export function ChangelogSection({
         <div className="flex justify-end gap-2">
           <SettingsHeaderButton
             variant="outline"
-            onClick={() => { void handleRedeployClick() }}
+            onClick={() => runPendingAction("update.redeploy", handleRedeployClick)}
             disabled={isUpdating}
           >
             {redeployPending ? (
@@ -448,7 +457,7 @@ export function ChangelogSection({
           </SettingsHeaderButton>
           <SettingsHeaderButton
             variant="outline"
-            onClick={onCheckForUpdates}
+            onClick={() => runPendingAction("update.check", onCheckForUpdates)}
             disabled={isChecking || isUpdating}
           >
             {isChecking ? (
@@ -495,9 +504,6 @@ export function ChangelogSection({
               </div>
 
               <div className="flex flex-row items-center justify-end min-w-0 flex-1 gap-2 ">
-
-             
-            
                   <a
                   href={release.html_url}
                   target="_blank"
@@ -547,7 +553,7 @@ export function ChangelogSection({
                       <SettingsHeaderButton
                         variant="default"
                         className=""
-                        onClick={() => { void handleInstallClick(release.tag_name) }}
+                        onClick={() => runPendingAction(pendingActionKey("update.install", release.tag_name), () => handleInstallClick(release.tag_name))}
                         disabled={isUpdating}
                       >
                         <div className="flex flex-row items-center justify-center gap-2">
@@ -693,8 +699,9 @@ export function GlobalInstructionsSection({ state }: { state: KannaState }) {
             <Button
               type="button"
               size="sm"
-              onClick={() => { void onSave() }}
+              onClick={() => runPendingAction("settings.globalInstructions", onSave)}
               disabled={saveDisabled}
+              pending={saving}
             >
               {saveLabel}
             </Button>
@@ -725,7 +732,15 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
   const changelogError = useSettingsPageStore((s) => s.changelogError)
   const setChangelogError = useSettingsPageStore((s) => s.setChangelogError)
   const selectedPage = resolveSettingsSectionId(sectionId) ?? "general"
-  const isConnecting = state.connectionStatus === "connecting" || !state.localProjectsReady
+  const appSettingsLoading = useAppSettingsStore((s) => s.hydrationStatus === "loading" && s.settings === null)
+  const isConnecting = state.connectionStatus === "connecting" || !state.localProjectsReady || appSettingsLoading
+  const llmProviderSaving = usePendingAction(LLM_PROVIDER_WRITE_KEY)
+  const llmProviderLoading = usePendingAction(LLM_PROVIDER_READ_KEY)
+  const llmBusy = llmProviderSaving || llmProviderLoading
+  const cloudflaredPathSaving = usePendingAction(CLOUDFLARED_PATH_KEY)
+  const openingKeybindings = usePendingAction("keybindings.openEditor")
+  const chatSoundPreferenceSaving = usePendingAction("settings.chatSoundPreference")
+  const chatSoundIdSaving = usePendingAction("settings.chatSoundId")
   const machineName = state.localProjects?.machine.displayName ?? "Unavailable"
   const projectCount = state.localProjects?.projects.length ?? 0
   const appVersion = SDK_CLIENT_APP.split("/")[1] ?? "unknown"
@@ -948,7 +963,7 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
 
   useEffect(() => {
     if (selectedPage !== "providers" || isConnecting) return
-    void handleReadLlmProvider()
+    runPendingAction(LLM_PROVIDER_READ_KEY, handleReadLlmProvider)
   }, [handleReadLlmProvider, isConnecting, selectedPage])
 
   const fetchChangelogReleases = useCallback<FetchReleases>(
@@ -1141,10 +1156,10 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
     }
 
     setChatSoundPreference(nextValue)
-    void handleWriteAppSettings({ chatSoundPreference: nextValue }).catch((error) => {
+    runPendingAction("settings.chatSoundPreference", () => handleWriteAppSettings({ chatSoundPreference: nextValue }).catch((error) => {
       setAppSettingsError(error instanceof Error ? error.message : "Unable to save chat sound settings.")
-    })
-    void playChatNotificationSound(chatSoundId, 1).catch(() => undefined)
+    }))
+    runDetached("chat sound preview", playChatNotificationSound(chatSoundId, 1))
   }
 
   function handleChatSoundIdChange(nextValue: ChatSoundId) {
@@ -1153,10 +1168,10 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
     }
 
     setChatSoundId(nextValue)
-    void handleWriteAppSettings({ chatSoundId: nextValue }).catch((error) => {
+    runPendingAction("settings.chatSoundId", () => handleWriteAppSettings({ chatSoundId: nextValue }).catch((error) => {
       setAppSettingsError(error instanceof Error ? error.message : "Unable to save chat sound settings.")
-    })
-    void playChatNotificationSound(nextValue, 1).catch(() => undefined)
+    }))
+    runDetached("chat sound preview", playChatNotificationSound(nextValue, 1))
   }
 
   async function handleAnalyticsPreferenceChange(nextValue: "enabled" | "disabled") {
@@ -1237,7 +1252,11 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
   function handleLlmProviderSelection(nextProvider: LlmProviderKind) {
     const nextDraft = createLlmProviderDraftForSelection(llmProviderDraft, nextProvider)
     setLlmProviderDraft(nextDraft)
-    void commitLlmProvider(nextDraft)
+    saveLlmProvider(nextDraft)
+  }
+
+  function saveLlmProvider(nextValue = llmProviderDraft) {
+    runPendingAction(LLM_PROVIDER_WRITE_KEY, () => commitLlmProvider(nextValue))
   }
 
   function retryChangelog() {
@@ -1274,7 +1293,9 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
   const showFooter = !isConnecting
   const llmValidationErrorText = llmValidationError ? JSON.stringify(llmValidationError, null, 2) : ""
   let llmStatusClassName: string
-  if (llmValidationStatus === "valid") {
+  if (llmBusy) {
+    llmStatusClassName = "inline-flex items-center gap-1.5 text-muted-foreground"
+  } else if (llmValidationStatus === "valid") {
     llmStatusClassName = "text-success-text"
   } else if (llmValidationStatus === "invalid") {
     llmStatusClassName = "text-destructive"
@@ -1282,7 +1303,9 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
     llmStatusClassName = "hidden"
   }
   let llmStatusContent: ReactNode
-  if (llmValidationStatus === "valid") {
+  if (llmBusy) {
+    llmStatusContent = <><Spinner />{llmProviderSaving ? "Saving…" : "Loading…"}</>
+  } else if (llmValidationStatus === "valid") {
     llmStatusContent = "Credentials valid & saved"
   } else if (llmValidationStatus === "invalid") {
     llmStatusContent = (
@@ -1345,7 +1368,7 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
                 <button
                   key={item.label}
                   type="button"
-                  onClick={() => navigate(`/settings/${item.id}`)}
+                  onClick={() => { navigate(`/settings/${item.id}`) }}
                   className={`relative cursor-pointer rounded-lg px-3 py-2 text-sm ${
                     item.id === selectedPage
                       ? "font-medium text-foreground"
@@ -1375,14 +1398,12 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
             {authEnabled ? (
               <button
                 type="button"
-                onClick={() => {
-                  void handleSidebarSignOut()
-                }}
+                onClick={() => runPendingAction("auth.signOut", handleSidebarSignOut)}
                 disabled={signingOut}
                 className="cursor-pointer rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <div className="flex items-center gap-2.5">
-                  <LogOut className="h-4 w-4 shrink-0" />
+                  {signingOut ? <Spinner className="h-4 w-4" /> : <LogOut className="h-4 w-4 shrink-0" />}
                   <span>{signingOut ? "Signing out..." : "Sign out"}</span>
                 </div>
               </button>
@@ -1403,7 +1424,7 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
                   <Menu className="h-4 w-4 shrink-0" />
                 </button>
               </HoverHint>
-              <Select value={selectedPage} onValueChange={(value) => navigate(`/settings/${value}`)}>
+              <Select value={selectedPage} onValueChange={(value) => { navigate(`/settings/${value}`) }}>
                 <SelectTrigger className="h-11 min-w-0 flex-1" aria-label="Settings section">
                   <SelectValue />
                 </SelectTrigger>
@@ -1418,13 +1439,11 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
               {authEnabled ? (
                 <button
                   type="button"
-                  onClick={() => {
-                    void handleSidebarSignOut()
-                  }}
+                  onClick={() => runPendingAction("auth.signOut", handleSidebarSignOut)}
                   disabled={signingOut}
                   className="flex min-h-11 shrink-0 items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <LogOut className="h-4 w-4 shrink-0" />
+                  {signingOut ? <Spinner className="h-4 w-4" /> : <LogOut className="h-4 w-4 shrink-0" />}
                   <span className="sr-only">{signingOut ? "Signing out..." : "Sign out"}</span>
                 </button>
               ) : null}
@@ -1449,17 +1468,17 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
                     {selectedPage === "general" ? (
                       <SettingsHeaderButton
                         variant="outline"
-                        onClick={() => navigate("/settings/changelog")}
+                        onClick={() => { navigate("/settings/changelog") }}
                       >
                         Check for updates
                       </SettingsHeaderButton>
                     ) : null}
                     {selectedPage === "keybindings" ? (
                       <SettingsHeaderButton
-                        onClick={() => {
-                          void state.handleOpenExternalPath("open_editor", keybindingsFilePathDisplay)
-                        }}
-                        icon={<Code className="h-4 w-4" />}
+                        onClick={() => runPendingAction("keybindings.openEditor", () => state.handleOpenExternalPath("open_editor", keybindingsFilePathDisplay))}
+                        disabled={openingKeybindings}
+                        aria-busy={openingKeybindings || undefined}
+                        icon={openingKeybindings ? <Spinner className="h-4 w-4" /> : <Code className="h-4 w-4" />}
                       >
                         Open in {state.editorLabel}
                       </SettingsHeaderButton>
@@ -1557,6 +1576,7 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
                         description="Play a pop when a chat starts waiting on you or the unread chat count increases"
                       >
                         <Select
+                          disabled={chatSoundPreferenceSaving}
                           value={chatSoundPreference}
                           onValueChange={(value) => { if (isChatSoundPreference(value)) handleChatSoundPreferenceChange(value) }}
                         >
@@ -1580,6 +1600,7 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
                         description="The bundled sound used for chat notification playback and previews"
                       >
                         <Select
+                          disabled={chatSoundIdSaving}
                           value={chatSoundId}
                           onValueChange={(value) => { if (isChatSoundId(value)) handleChatSoundIdChange(value) }}
                         >
@@ -1816,11 +1837,10 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
                           </>
                         )}
                       >
-                        <SegmentedControl
+                        <PendingSegmentedControl
+                          pendingKey="settings.analytics"
                           value={analyticsSettingValue}
-                          onValueChange={(value) => {
-                            void handleAnalyticsPreferenceChange(value)
-                          }}
+                          onValueChange={handleAnalyticsPreferenceChange}
                           options={analyticsOptions}
                           size="sm"
                         />
@@ -1838,11 +1858,10 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
                           </>
                         )}
                       >
-                        <SegmentedControl
+                        <PendingSegmentedControl
+                          pendingKey="settings.telemetry"
                           value={telemetrySettingValue}
-                          onValueChange={(value) => {
-                            void handleTelemetryPreferenceChange(value)
-                          }}
+                          onValueChange={handleTelemetryPreferenceChange}
                           options={analyticsOptions}
                           size="sm"
                         />
@@ -1870,11 +1889,10 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
                         )}
                         bordered={false}
                       >
-                        <SegmentedControl
+                        <PendingSegmentedControl
+                          pendingKey={pendingActionKey(TUNNEL_WRITE_SCOPE, "enabled")}
                           value={tunnelEnabledValue}
-                          onValueChange={(value) => {
-                            void handleTunnelPatch({ enabled: value === "enabled" })
-                          }}
+                          onValueChange={(value) => handleTunnelPatch({ enabled: value === "enabled" })}
                           options={cloudflareTunnelEnabledOptions}
                           size="sm"
                         />
@@ -1885,11 +1903,10 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
                             title="Tool mode"
                             description="Always ask: each expose_port call shows an accept card. Auto-expose: expose_port calls spawn cloudflared immediately without prompting."
                           >
-                            <SegmentedControl
+                            <PendingSegmentedControl
+                              pendingKey={pendingActionKey(TUNNEL_WRITE_SCOPE, "mode")}
                               value={tunnelSettings.mode}
-                              onValueChange={(value) => {
-                                void handleTunnelPatch({ mode: value })
-                              }}
+                              onValueChange={(value) => handleTunnelPatch({ mode: value })}
                               options={cloudflareTunnelModeOptions}
                               size="sm"
                             />
@@ -1901,9 +1918,9 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
                             <Input
                               value={cloudflaredPathDraft}
                               onChange={(event) => setCloudflaredPathDraft(event.target.value)}
-                              onBlur={() => {
-                                void handleTunnelPatch({ cloudflaredPath: cloudflaredPathDraft })
-                              }}
+                              onBlur={() => runPendingAction(CLOUDFLARED_PATH_KEY, () => handleTunnelPatch({ cloudflaredPath: cloudflaredPathDraft }))}
+                              readOnly={cloudflaredPathSaving}
+                              aria-busy={cloudflaredPathSaving || undefined}
                               placeholder="cloudflared"
                               className="w-full font-mono md:w-64"
                             />
@@ -2118,7 +2135,7 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
                             {llmProvider.warning}
                           </div>
                         ) : null}
-                        <Select value={llmProviderDraft.provider} onValueChange={(value) => { if (isLlmProviderKind(value)) handleLlmProviderSelection(value) }}>
+                        <Select value={llmProviderDraft.provider} disabled={llmBusy} onValueChange={(value) => { if (isLlmProviderKind(value)) handleLlmProviderSelection(value) }}>
                           <SelectTrigger className="w-full">
                             <SelectValue />
                           </SelectTrigger>
@@ -2136,8 +2153,9 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
                           <Input
                             value={llmProviderDraft.baseUrl}
                             onChange={(event) => setLlmProviderDraft({ ...llmProviderDraft, baseUrl: event.target.value })}
-                            onBlur={() => void commitLlmProvider()}
-                            onKeyDown={(event) => handleTextInputKeyDown(event, () => void commitLlmProvider())}
+                            onBlur={() => saveLlmProvider()}
+                            onKeyDown={(event) => handleTextInputKeyDown(event, saveLlmProvider)}
+                            readOnly={llmBusy}
                             placeholder="https://your-provider.example/v1"
                           />
                         ) : null}
@@ -2145,15 +2163,17 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
                           type="password"
                           value={llmProviderDraft.apiKey}
                           onChange={(event) => setLlmProviderDraft({ ...llmProviderDraft, apiKey: event.target.value })}
-                          onBlur={() => void commitLlmProvider()}
-                          onKeyDown={(event) => handleTextInputKeyDown(event, () => void commitLlmProvider())}
+                          onBlur={() => saveLlmProvider()}
+                          onKeyDown={(event) => handleTextInputKeyDown(event, saveLlmProvider)}
+                          readOnly={llmBusy}
                           placeholder="API key"
                         />
                         <Input
                           value={llmProviderDraft.model}
                           onChange={(event) => setLlmProviderDraft({ ...llmProviderDraft, model: event.target.value })}
-                          onBlur={() => void commitLlmProvider()}
-                          onKeyDown={(event) => handleTextInputKeyDown(event, () => void commitLlmProvider())}
+                          onBlur={() => saveLlmProvider()}
+                          onKeyDown={(event) => handleTextInputKeyDown(event, saveLlmProvider)}
+                          readOnly={llmBusy}
                           placeholder="Model id"
                         />
                       </div>
@@ -2178,9 +2198,7 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
                     updateSnapshot={updateSnapshot}
                     currentVersion={appVersion}
                     onInstallUpdate={(version) => state.handleInstallUpdate(version)}
-                    onCheckForUpdates={() => {
-                      void state.handleCheckForUpdates({ force: true })
-                    }}
+                    onCheckForUpdates={() => state.handleCheckForUpdates({ force: true })}
                     onForceReload={() => state.handleForceReload()}
                   />
                 )}

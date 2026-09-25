@@ -7,6 +7,8 @@ import { draggable, dropTargetForElements } from "@atlaskit/pragmatic-drag-and-d
 import { autoScrollForElements } from "@atlaskit/pragmatic-drag-and-drop-auto-scroll/element"
 import { attachClosestEdge, extractClosestEdge } from "@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge"
 import { cn } from "../../lib/utils"
+import { Spinner } from "../ui/spinner"
+import { pendingActionKey, usePendingAction } from "../../stores/pendingActionsStore"
 import { chatDotBgClass, chatDotTextClass } from "../../lib/chatStatusIndicator"
 import { formatCountdown, formatLiveDuration } from "../../lib/formatDuration"
 import { useNow } from "../../hooks/useNow"
@@ -363,6 +365,7 @@ function BoardCard({
 
   const handleOpen = useCallback(() => { onOpen(cardId) }, [cardId, onOpen])
   const handleMoveToTop = useCallback(() => { onMoveToTop(cardId) }, [cardId, onMoveToTop])
+  const movingToTop = usePendingAction(pendingActionKey("board.card.move", cardId))
 
   const signal = cardWorkSignal(chatIds, chatFacts)
   const isNew = isNewCard(card, newSince)
@@ -380,13 +383,15 @@ function BoardCard({
           <button
             type="button"
             onClick={handleOpen}
+            aria-busy={movingToTop || undefined}
             className={cn(
-              "w-full cursor-grab rounded-lg border border-border bg-card px-3 py-2 text-left",
+              "relative w-full cursor-grab rounded-lg border border-border bg-card px-3 py-2 text-left",
               "transition-[colors,transform,opacity] duration-[var(--motion-quick)] hover:bg-secondary",
               "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
               dragging && "scale-[1.02] opacity-40",
             )}
           >
+            {movingToTop ? <Spinner className="absolute top-2 right-2 text-muted-foreground" /> : null}
             <span className="line-clamp-2 text-sm font-medium leading-snug text-foreground [text-wrap:pretty]">
               {card.title}
             </span>
@@ -418,7 +423,7 @@ function BoardCard({
           </button>
         </ContextMenuTrigger>
         <ContextMenuContent>
-          <ContextMenuItem onSelect={handleMoveToTop}>Move to top</ContextMenuItem>
+          <ContextMenuItem onSelect={handleMoveToTop} disabled={movingToTop}>Move to top</ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
     </motion.div>

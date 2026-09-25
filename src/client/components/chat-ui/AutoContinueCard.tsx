@@ -7,9 +7,9 @@ import { AutoContinueCardStore } from "./AutoContinueCard.store"
 
 export interface AutoContinueCardProps {
   schedule: AutoContinueSchedule
-  onAccept: (scheduledAtMs: number) => void
-  onReschedule: (scheduledAtMs: number) => void
-  onCancel: () => void
+  onAccept: (scheduledAtMs: number) => Promise<void>
+  onReschedule: (scheduledAtMs: number) => Promise<void>
+  onCancel: () => Promise<void>
 }
 
 export function AutoContinueCard({ schedule, onAccept, onReschedule, onCancel }: AutoContinueCardProps) {
@@ -57,15 +57,15 @@ function AutoContinueCardContent({ schedule, onAccept, onReschedule, onCancel }:
         label: "Schedule",
         variant: "primary",
         disabled: !isFuture,
-        onClick: () => {
-          if (parsed !== null) onAccept(parsed)
+        onClick: async () => {
+          if (parsed !== null) await onAccept(parsed)
         },
       },
       {
         id: "dismiss",
         label: "Dismiss",
         variant: "ghost",
-        onClick: () => onCancel(),
+        onClick: onCancel,
       },
     ]
     return (
@@ -102,7 +102,7 @@ function AutoContinueCardContent({ schedule, onAccept, onReschedule, onCancel }:
         id: "cancel",
         label: "Cancel",
         variant: "ghost",
-        onClick: () => onCancel(),
+        onClick: onCancel,
       },
     ]
     return (
@@ -119,11 +119,10 @@ function AutoContinueCardContent({ schedule, onAccept, onReschedule, onCancel }:
       label: "Save",
       variant: "primary",
       disabled: !isFuture,
-      onClick: () => {
-        if (parsed !== null) {
-          onReschedule(parsed)
-          setEditing(false)
-        }
+      onClick: async () => {
+        if (parsed === null) return
+        await onReschedule(parsed)
+        setEditing(false)
       },
     },
     {

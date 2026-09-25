@@ -21,6 +21,18 @@ describe("shared interaction design contract", () => {
     }
   })
 
+  test("a pending button is disabled and announces it is busy", async () => {
+    const rendered = await renderForLoopCheck(<Button pending>Save</Button>)
+    try {
+      const button = document.querySelector("button")
+      expect(button?.disabled).toBe(true)
+      expect(button?.getAttribute("aria-busy")).toBe("true")
+      expect(button?.textContent).toBe("Save")
+    } finally {
+      await rendered.cleanup()
+    }
+  })
+
   test("destructive buttons use the tested filled token pair", async () => {
     const rendered = await renderForLoopCheck(<Button variant="destructive">Delete</Button>)
     try {

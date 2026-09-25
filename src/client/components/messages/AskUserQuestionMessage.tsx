@@ -7,6 +7,8 @@ import { cn } from "../../lib/utils"
 import { useTranscriptRenderOptions } from "./render-context"
 import { AskUserQuestionInteractive } from "./AskUserQuestionInteractive"
 import { AskUserQuestionMessageStore } from "./AskUserQuestionMessage.store"
+import { pendingActionKey, runPendingAction, usePendingAction } from "../../stores/pendingActionsStore"
+import { Spinner } from "../ui/spinner"
 
 interface Props {
   message: Extract<ProcessedToolCall, { toolKind: "ask_user_question" }>
@@ -77,27 +79,32 @@ function AskUserQuestionMessageInner({ message, onSubmit, isLatest }: Props) {
   const markSubmitFailed = AskUserQuestionMessageStore.useScopedStore((s) => s.markSubmitFailed)
   const submitError = AskUserQuestionMessageStore.useScopedStore((s) => s.submitError)
 
+  const submitKey = pendingActionKey("askUserQuestion.submit", message.toolId)
+  const submitPending = usePendingAction(submitKey)
+
   const handleSubmit = useCallback((finalAnswers: AskUserQuestionAnswerMap) => {
     markSubmitted(finalAnswers)
-    try {
-      const settled = onSubmit(message.toolId, questions, finalAnswers)
-      if (settled && typeof settled.then === "function") {
-        void settled.catch((error) => { markSubmitFailed(errorMessage(error)) })
+    runPendingAction(submitKey, async () => {
+      try {
+        await onSubmit(message.toolId, questions, finalAnswers)
+      } catch (error) {
+        markSubmitFailed(errorMessage(error))
       }
-    } catch (error) {
-      markSubmitFailed(errorMessage(error))
-    }
-  }, [markSubmitted, markSubmitFailed, onSubmit, message.toolId, questions])
+    })
+  }, [markSubmitted, markSubmitFailed, onSubmit, message.toolId, questions, submitKey])
 
   if (isSubmitted || isComplete) {
     const displayAnswers = savedAnswers || submittedAnswers || {}
 
     return (
-      <div className="w-full">
+      <div className="w-full" aria-busy={submitPending || undefined}>
         <div className="rounded-2xl border border-border overflow-hidden">
           <div className="font-medium text-sm p-3 px-4 pr-5 bg-muted  border-b border-border flex flex-row items-center justify-between">
             <p>Question{questions.length !== 1 ? "s" : ""}</p>
-            <p className="">{isDiscarded ? "Discarded" : "Answers"}</p>
+            <p className="flex items-center gap-1.5">
+              {submitPending ? <Spinner /> : null}
+              {isDiscarded ? "Discarded" : "Answers"}
+            </p>
           </div>
           {questions.map((question, index) => {
             const answerValue = displayAnswers[getQuestionKey(question)] || displayAnswers[question.question] || []

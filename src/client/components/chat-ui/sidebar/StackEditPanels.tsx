@@ -1,7 +1,10 @@
 
 import type { ReactNode } from "react"
 import type { StackSummary } from "../../../../shared/types"
+import { runPendingAction, usePendingAction } from "../../../stores/pendingActionsStore"
+import { Spinner } from "../../ui/spinner"
 import { StackCreatePanel } from "./StackCreatePanel"
+import { removeStackKey } from "./sidebarPendingActions"
 
 export function StackEditPanels({
   stacks,
@@ -21,11 +24,12 @@ export function StackEditPanels({
   deleteConfirmId: string | null
   onSubmit: (title: string, projectIds: string[], instructions: string) => Promise<void>
   onCancel: () => void
-  onConfirmDelete: (stackId: string) => void
+  onConfirmDelete: (stackId: string) => Promise<void>
   onCancelDelete: () => void
 }): ReactNode {
   const editing = editId ? stacks.find((s) => s.id === editId) : undefined
   const deleting = deleteConfirmId ? stacks.find((s) => s.id === deleteConfirmId) : undefined
+  const deletePending = usePendingAction(removeStackKey(deleteConfirmId ?? ""))
 
   return (
     <>
@@ -47,14 +51,18 @@ export function StackEditPanels({
           <div className="flex gap-2">
             <button
               type="button"
-              className="text-xs px-2 py-1 rounded bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => onConfirmDelete(deleting.id)}
+              disabled={deletePending}
+              aria-busy={deletePending || undefined}
+              className="inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded bg-destructive text-destructive-foreground hover:bg-destructive/90 disabled:opacity-70"
+              onClick={() => runPendingAction(removeStackKey(deleting.id), () => onConfirmDelete(deleting.id))}
             >
+              {deletePending ? <Spinner /> : null}
               Delete
             </button>
             <button
               type="button"
-              className="text-xs px-2 py-1 rounded border border-border hover:bg-muted"
+              disabled={deletePending}
+              className="text-xs px-2 py-1 rounded border border-border hover:bg-muted disabled:opacity-50"
               onClick={onCancelDelete}
             >
               Cancel

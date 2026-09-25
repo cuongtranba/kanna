@@ -12,6 +12,8 @@ import { cn } from "../../../lib/utils"
 import { useIsMobile } from "../../../hooks/useIsMobile"
 import type { GitWorktree, StackSummary } from "../../../../shared/types"
 import { stackChatCreateRowStore } from "./StackChatCreateRow.store"
+import { runPendingAction } from "../../../stores/pendingActionsStore"
+import { createStackChatKey } from "./sidebarPendingActions"
 
 interface StackChatCreateRowProps {
   stack: StackSummary
@@ -44,10 +46,8 @@ function StackChatCreateRowInner({
 
   const isSingleProject = filteredProjects.length <= 1
 
-  const handleSubmit = useCallback(
-    async (e: FormEvent<HTMLFormElement>) => {
-      e.preventDefault()
-      if (isSubmitting) return
+  const submit = useCallback(
+    async () => {
       setErrorMessage(null)
       setIsSubmitting(true)
       try {
@@ -65,7 +65,16 @@ function StackChatCreateRowInner({
         setIsSubmitting(false)
       }
     },
-    [filteredProjects, selectedWorktrees, primaryProjectId, onCreate, isSubmitting, setErrorMessage, setIsSubmitting]
+    [filteredProjects, selectedWorktrees, primaryProjectId, onCreate, setErrorMessage, setIsSubmitting]
+  )
+
+  const handleSubmit = useCallback(
+    (e: FormEvent<HTMLFormElement>) => {
+      e.preventDefault()
+      if (isSubmitting) return
+      runPendingAction(createStackChatKey(stack.id), submit)
+    },
+    [isSubmitting, stack.id, submit]
   )
 
   const handleKeyDown = useCallback(
@@ -151,7 +160,7 @@ function StackChatCreateRowInner({
         )}
 
         <div className="flex gap-2">
-          <Button type="submit" size="sm" disabled={isSubmitting}>
+          <Button type="submit" size="sm" pending={isSubmitting}>
             {isSubmitting ? "Creating…" : "Create Chat"}
           </Button>
           <Button type="button" size="sm" variant="ghost" onClick={onCancel} disabled={isSubmitting}>

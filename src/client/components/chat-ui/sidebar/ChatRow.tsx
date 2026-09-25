@@ -15,7 +15,10 @@ import {
   sessionStateBadge,
 } from "../../../lib/chatStatusIndicator"
 import { selectIsSpawning, useNewSessionStore } from "../../../stores/newSessionStore"
+import { runPendingAction, usePendingAction } from "../../../stores/pendingActionsStore"
+import { Spinner } from "../../ui/spinner"
 import { ChatRowMenu } from "./Menus"
+import { chatRowActionKey, useChatRowPending, type ChatRowAction } from "./sidebarPendingActions"
 
 interface Props {
   chat: SidebarChatRow
@@ -24,11 +27,11 @@ interface Props {
   shortcutHint?: string | null
   showShortcutHint?: boolean
   onSelectChat: (chatId: string) => void
-  onRenameChat: (chatId: string) => void
-  onOpenInFinder: (localPath: string) => void
-  onForkChat: (chatId: string) => void
-  onArchiveChat: (chatId: string) => void
-  onDeleteChat: (chatId: string) => void
+  onRenameChat: (chatId: string) => Promise<void>
+  onOpenInFinder: (localPath: string) => Promise<void>
+  onForkChat: (chatId: string) => Promise<void>
+  onArchiveChat: (chatId: string) => Promise<void>
+  onDeleteChat: (chatId: string) => Promise<void>
   onEditPermissions?: (chatId: string) => void
   silent?: boolean
   isSelected?: boolean
@@ -65,6 +68,13 @@ function ChatRowImpl({
   const tone = chatStatusIndicator(chat)?.tone ?? null
   const minSlotWidth = chat.canFork ? "min-w-12" : "min-w-6"
   const isSpawning = useNewSessionStore(selectIsSpawning(normalizedChatId))
+  const rowPending = useChatRowPending(chat.chatId)
+  const forkPending = usePendingAction(chatRowActionKey("chat.fork", chat.chatId))
+  const archivePending = usePendingAction(chatRowActionKey("chat.archive", chat.chatId))
+
+  function launch(action: ChatRowAction, run: () => Promise<void>) {
+    runPendingAction(chatRowActionKey(action, chat.chatId), run)
+  }
 
   let rowBgClass: string
   if (onToggleSelect) {
@@ -93,7 +103,13 @@ function ChatRowImpl({
   }
 
   let trailingLabelContent: ReactNode = null
-  if (trailingLabel) {
+  if (rowPending) {
+    trailingLabelContent = (
+      <span className="flex items-center justify-end pr-1 text-muted-foreground">
+        <Spinner />
+      </span>
+    )
+  } else if (trailingLabel) {
     if (showShortcutKeycap) {
       trailingLabelContent = (
         <span className="hidden md:flex items-center justify-end pr-0.5 text-xs text-foreground transition-opacity duration-150 group-hover:opacity-0">
@@ -157,6 +173,7 @@ function ChatRowImpl({
     <div
       key={chat._id}
       data-chat-id={normalizedChatId}
+      aria-busy={rowPending || undefined}
       className={cn(
         "group relative flex items-center rounded-md pr-1 transition-colors duration-[var(--motion-quick)]",
         rowBgClass,
@@ -174,11 +191,11 @@ function ChatRowImpl({
       ) : (
         <ChatRowMenu
           canFork={chat.canFork}
-          onRename={() => onRenameChat(chat.chatId)}
-          onOpenInFinder={() => onOpenInFinder(chat.localPath)}
-          onFork={() => onForkChat(chat.chatId)}
-          onArchive={() => onArchiveChat(chat.chatId)}
-          onDelete={() => onDeleteChat(chat.chatId)}
+          onRename={() => launch("chat.rename", () => onRenameChat(chat.chatId))}
+          onOpenInFinder={() => launch("chat.openInFinder", () => onOpenInFinder(chat.localPath))}
+          onFork={() => launch("chat.fork", () => onForkChat(chat.chatId))}
+          onArchive={() => launch("chat.archive", () => onArchiveChat(chat.chatId))}
+          onDelete={() => launch("chat.delete", () => onDeleteChat(chat.chatId))}
           onEditPermissions={onEditPermissions ? () => onEditPermissions(chat.chatId) : undefined}
         >
           {mainAction}
@@ -198,9 +215,10 @@ function ChatRowImpl({
               variant="ghost"
               size="icon"
               className="size-8 cursor-pointer rounded-sm hover:!bg-transparent !border-0"
+              pending={forkPending}
               onClick={(event) => {
                 event.stopPropagation()
-                onForkChat(chat.chatId)
+                launch("chat.fork", () => onForkChat(chat.chatId))
               }}
               title="Fork chat"
             >
@@ -211,9 +229,10 @@ function ChatRowImpl({
             variant="ghost"
             size="icon"
             className="size-8 cursor-pointer rounded-sm hover:!bg-transparent !border-0"
+            pending={archivePending}
             onClick={(event) => {
               event.stopPropagation()
-              onArchiveChat(chat.chatId)
+              launch("chat.archive", () => onArchiveChat(chat.chatId))
             }}
             title="Archive chat"
           >

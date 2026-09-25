@@ -23,6 +23,9 @@ import { Button } from "./ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip"
 import type { ClipboardPort, TimerPort } from "../ports"
 import { clipboardAdapter, timerAdapter } from "../adapters"
+import { runDetached } from "../lib/runDetached"
+import { runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
+import { CREATE_PROJECT_KEY, openProjectKey } from "./chat-ui/sidebar/sidebarPendingActions"
 
 type CopyPorts = {
   clipboard?: ClipboardPort
@@ -59,7 +62,7 @@ function CopyButtonInner({ text, ports = {} }: { text: string; ports?: CopyPorts
       size="icon-mobile"
       aria-label={copied ? "Copied" : "Copy to clipboard"}
       className="text-muted-foreground hover:text-foreground"
-      onClick={() => void handleCopy()}
+      onClick={() => runDetached("copy command", handleCopy())}
     >
       {copied ? <Check className="h-4 w-4 text-success-text" /> : <Copy className="h-4 w-4" />}
     </Button>
@@ -148,13 +151,14 @@ function Step({
 
 function ProjectCard({
   localPath,
-  loading,
-  onClick,
+  starting,
+  onOpenProject,
 }: {
   localPath: string
-  loading: boolean
-  onClick: () => void
+  starting: boolean
+  onOpenProject: (localPath: string) => Promise<void>
 }) {
+  const loading = usePendingAction(openProjectKey(localPath)) || starting
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -164,7 +168,8 @@ function ProjectCard({
             loading && "opacity-50 cursor-not-allowed"
           )}
           disabled={loading}
-          onClick={onClick}
+          aria-busy={loading || undefined}
+          onClick={() => runPendingAction(openProjectKey(localPath), () => onOpenProject(localPath))}
         >
           <Folder className="h-4 w-4 text-muted-foreground flex-shrink-0" />
           <span className="font-medium text-foreground truncate flex-1">
@@ -198,6 +203,7 @@ export function LocalDev({
   const projects = useMemo(() => snapshot?.projects ?? [], [snapshot?.projects])
   const isConnecting = connectionStatus === "connecting" || !ready
   const isConnected = connectionStatus === "connected" && ready
+  const creatingProject = usePendingAction(CREATE_PROJECT_KEY)
 
   return (
     <div className="flex-1 flex flex-col min-w-0 bg-background overflow-y-auto">
@@ -289,8 +295,8 @@ export function LocalDev({
           <div className="w-full px-6 mb-10">
             <div className="flex items-baseline justify-between mb-3">
               <h2 className="text-13 font-medium text-muted-foreground tracking-wider">Projects</h2>
-              <Button variant="default" size="sm" onClick={() => onNewProjectOpenChange(true)}>
-                <Plus className="h-4 w-4 mr-1.5" />
+              <Button variant="default" size="sm" pending={creatingProject} onClick={() => onNewProjectOpenChange(true)}>
+                {creatingProject ? null : <Plus className="h-4 w-4 mr-1.5" />}
                 Add Project
               </Button>
             </div>
@@ -300,10 +306,8 @@ export function LocalDev({
                   <ProjectCard
                     key={project.localPath}
                     localPath={project.localPath}
-                    loading={startingLocalPath === project.localPath}
-                    onClick={() => {
-                      void onOpenProject(project.localPath)
-                    }}
+                    starting={startingLocalPath === project.localPath}
+                    onOpenProject={onOpenProject}
                   />
                 ))}
               </div>
@@ -327,7 +331,7 @@ export function LocalDev({
         open={newProjectOpen}
         onOpenChange={onNewProjectOpenChange}
         onConfirm={(project) => {
-          void onCreateProject(project)
+          runPendingAction(CREATE_PROJECT_KEY, () => onCreateProject(project))
         }}
       />
 
