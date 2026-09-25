@@ -5,6 +5,7 @@ export const ANALYTICS_STATIC_EVENT_NAMES = [
   "project_opened",
   "project_created",
   "project_removed",
+  "project_deleted",
   "chat_created",
   "chat_deleted",
   "message_sent",

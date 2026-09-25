@@ -101,6 +101,11 @@ export type ProjectEvent = {
   projectId: string
 } | {
   v: 3
+  type: "project_deleted"
+  timestamp: number
+  projectId: string
+} | {
+  v: 3
   type: "sidebar_project_order_set"
   timestamp: number
   projectIds: string[]
@@ -460,6 +465,7 @@ export const LOG_FILES = {
 export const LOG_OF_EVENT = {
   project_opened: "projects",
   project_removed: "projects",
+  project_deleted: "projects",
   sidebar_project_order_set: "projects",
   project_star_set: "projects",
   project_instructions_set: "projects",

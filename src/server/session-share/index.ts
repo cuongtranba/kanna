@@ -111,6 +111,13 @@ export class SessionShareService {
     return { ok: true, data: { tokenId: req.tokenId } }
   }
 
+  async revokeSharesForChat(chatId: string): Promise<void> {
+    const tokenIds = [...this.projection.values()]
+      .filter((record) => record.chatId === chatId && !record.revoked)
+      .map((record) => record.tokenId)
+    for (const tokenId of tokenIds) await this.revokeToken({ tokenId })
+  }
+
   async getShare(
     tokenId: string,
     now: number = this.now(),

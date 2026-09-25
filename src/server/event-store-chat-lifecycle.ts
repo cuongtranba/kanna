@@ -44,6 +44,13 @@ export function applyProjectEvent(state: ProjectLifecycleState, event: ProjectEv
       state.projectIdsByPath.delete(project.localPath)
       break
     }
+    case "project_deleted": {
+      const project = state.projectsById.get(event.projectId)
+      if (!project) break
+      state.projectsById.delete(project.id)
+      if (state.projectIdsByPath.get(project.localPath) === project.id) state.projectIdsByPath.delete(project.localPath)
+      break
+    }
     case "sidebar_project_order_set": {
       state.sidebarProjectOrder = [...event.projectIds]
       break

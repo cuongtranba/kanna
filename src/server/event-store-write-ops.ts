@@ -65,6 +65,20 @@ export function buildRemoveProjectEvent(
   return { v: STORE_VERSION, type: "project_removed", timestamp: Date.now(), projectId }
 }
 
+export function buildDeleteProjectEvents(
+  state: Pick<StoreState, "projectsById" | "stacksById">,
+  projectId: string,
+): Array<ProjectEvent | StackEvent> {
+  if (!state.projectsById.has(projectId)) throw new Error("Project not found")
+  const timestamp = Date.now()
+  const stackEvents: StackEvent[] = [...state.stacksById.values()]
+    .filter((stack) => !stack.deletedAt && stack.projectIds.includes(projectId))
+    .map((stack) => stack.projectIds.length <= 2
+      ? { v: STORE_VERSION, type: "stack_removed", timestamp, stackId: stack.id }
+      : { v: STORE_VERSION, type: "stack_project_removed", timestamp, stackId: stack.id, projectId })
+  return [...stackEvents, { v: STORE_VERSION, type: "project_deleted", timestamp, projectId }]
+}
+
 export function buildSetProjectStarEvent(
   projectsById: Map<string, { id: string; deletedAt?: number }>,
   projectId: string,

@@ -6,6 +6,7 @@ interface DiffCommitState {
   reconcileProject: (projectId: string, paths: string[]) => void
   toggleChecked: (projectId: string, path: string) => void
   toggleAllChecked: (projectId: string, paths: string[]) => void
+  clearProject: (projectId: string) => void
 }
 
 export const useDiffCommitStore = create<DiffCommitState>()(
@@ -51,6 +52,10 @@ export const useDiffCommitStore = create<DiffCommitState>()(
             },
           },
         }
+      }),
+      clearProject: (projectId) => set((state) => {
+        const { [projectId]: _, ...rest } = state.checkedPathsByProjectId
+        return { checkedPathsByProjectId: rest }
       }),
     }),
     {

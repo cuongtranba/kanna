@@ -22,6 +22,8 @@ import {
 } from "./ws-router"
 import { createToolCallbackService } from "./tool-callback"
 import { createTestEventStore } from "./storage/test-helpers"
+import { createBoardRegistry } from "./board-registry"
+import { createBoardStore } from "./board-store.adapter"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
 import { DEFAULT_TAB_MIN_WIDTH } from "../shared/pane-tab-width"
 
@@ -887,7 +889,7 @@ describe("ws-router", () => {
     }
   })
 
-  test("project.delete deletes every chat in the project, archived ones included, and no other project's", async () => {
+  test("project.delete deletes the project's chats, archived ones included, and its boards, and nothing of another project", async () => {
     const store = createTestEventStore(`/project-delete-${randomUUID()}`)
     await store.initialize()
     const doomed = await store.openProject("/tmp/project-delete-doomed")
@@ -896,8 +898,12 @@ describe("ws-router", () => {
     const archivedChat = await store.createChat(doomed.id)
     await store.archiveChat(archivedChat.id)
     const otherChat = await store.createChat(kept.id)
+    const boardRegistry = createBoardRegistry({ store: createBoardStore({ filePath: ":memory:" }) })
+    const doomedBoard = boardRegistry.createBoard({ owner: { kind: "project", id: doomed.id }, title: "Doomed" })
+    const keptBoard = boardRegistry.createBoard({ owner: { kind: "project", id: kept.id }, title: "Kept" })
     const router = createWsRouter({
       store,
+      boardRegistry,
       agent: {
         cancel: async () => {},
         listLiveSchedules: () => [],
@@ -921,7 +927,7 @@ describe("ws-router", () => {
       getDiscoveredProjects: () => [],
       machineDisplayName: "Local Machine",
       updateManager: null,
-      pushManager: NOOP_PUSH_MANAGER,
+      pushManager: { getPreferences: () => ({ globalEnabled: true, mutedProjectPaths: [], mutedChatIds: [] }) } as never,
     })
     const ws = new FakeWebSocket()
 
@@ -935,7 +941,9 @@ describe("ws-router", () => {
       })
     )
 
-    expect(ws.sent[0]).toMatchObject({ type: "ack", id: "project-delete-1" })
+    expect(ws.sent[0]).toMatchObject({ type: "ack", id: "project-delete-1", result: { deletedBoardIds: [doomedBoard.id], failures: [] } })
+    expect(boardRegistry.getBoard(doomedBoard.id)).toBeNull()
+    expect(boardRegistry.getBoard(keptBoard.id)?.id).toBe(keptBoard.id)
     expect(store.getChat(activeChat.id)).toBeNull()
     expect(store.getChat(archivedChat.id)).toBeNull()
     expect(store.getChat(otherChat.id)?.id).toBe(otherChat.id)

@@ -153,6 +153,8 @@ export async function deleteChat(
   await deps.append(deps.chatsLogPath, event)
   deleteToolRequestsForChat(deps.toolRequestsById, chatId)
   deps.clearChatOps(chatId)
+  await deps.storage.remove(transcriptPath(deps, chatId))
+  deps.transcriptCache.invalidate(chatId)
   await removeSubagentResultsDir(deps, projectId, chatId)
 }
 

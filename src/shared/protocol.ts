@@ -1,6 +1,6 @@
 import type { CronJobPatch } from "./cron/types"
 import type { ShareClientCommand } from "./session-share/protocol"
-import { isJsonObject, type JsonObject, type JsonPrimitive, type JsonValue } from "./json"
+import { isJsonArray, isJsonObject, type JsonObject, type JsonPrimitive, type JsonValue } from "./json"
 import type {
   AppSettingsSnapshot,
   AppSettingsPatch,
@@ -123,6 +123,21 @@ export interface SingleImportResultRow {
 export interface ImportSessionsByIdsResult {
   results: SingleImportResultRow[]
   newProjects: number
+}
+
+export interface ProjectDeleteResult {
+  deletedBoardIds: string[]
+  failures: string[]
+}
+
+function stringsOf(value: JsonValue | undefined): string[] {
+  if (value === undefined || !isJsonArray(value)) return []
+  return value.filter((item): item is string => typeof item === "string")
+}
+
+export function readProjectDeleteResult(value: JsonValue): ProjectDeleteResult {
+  const record = isJsonObject(value) ? value : {}
+  return { deletedBoardIds: stringsOf(record.deletedBoardIds), failures: stringsOf(record.failures) }
 }
 
 export type WsEvent = TerminalEvent | PtyInstancesEvent | ChatOpsEvent

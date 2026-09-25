@@ -137,15 +137,20 @@ async function loadSidebarProjectOrder(deps: EventStoreInitDeps): Promise<void> 
   )
 }
 
-async function replayLogs(deps: EventStoreInitDeps): Promise<void> {
+async function replayLogs(deps: EventStoreInitDeps): Promise<{ replayedProjectDeletion: boolean }> {
+  let replayedProjectDeletion = false
   await loadAndReplayLogs(
     deps.storage,
     getLogPaths(deps),
     () => deps.getStorageReset(),
-    (event) => { deps.applyEvent(event) },
+    (event) => {
+      if ("type" in event && event.type === "project_deleted") replayedProjectDeletion = true
+      deps.applyEvent(event)
+    },
     () => clearStorage(deps),
     () => { deps.replayChatProvider.clear() },
   )
+  return { replayedProjectDeletion }
 }
 
 export async function shouldSnapshotLogs(deps: EventStoreInitDeps): Promise<boolean> {
@@ -177,11 +182,11 @@ export async function initializeEventStore(
   await ensureFile(deps, deps.toolRequestsLogPath)
   await ensureFile(deps, deps.chatTasksLogPath)
   await loadSnapshot(deps)
-  await replayLogs(deps)
+  const { replayedProjectDeletion } = await replayLogs(deps)
   await callbacks.loadTunnelEvents()
   await callbacks.loadShareEvents()
   await loadSidebarProjectOrder(deps)
-  if (!(await callbacks.hasLegacyTranscriptData()) && await shouldSnapshotLogs(deps)) {
+  if (!(await callbacks.hasLegacyTranscriptData()) && (replayedProjectDeletion || await shouldSnapshotLogs(deps))) {
     await callbacks.snapshotAndTruncateLogs()
   }
 }
@@ -211,7 +216,7 @@ export async function hasLegacyTranscriptData(deps: EventStoreInitDeps): Promise
 }
 
 export async function snapshotAndTruncateLogs(deps: EventStoreInitDeps): Promise<void> {
-  const projects = [...deps.state.projectsById.values()].filter((p) => !p.deletedAt)
+  const projects = [...deps.state.projectsById.values()]
   const snapshot = buildSnapshotFile(deps.state, projects)
   const logPaths: SnapshotLogPaths = {
     snapshotPath: deps.snapshotPath,

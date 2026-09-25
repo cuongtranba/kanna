@@ -133,6 +133,7 @@ export interface BoardStore {
   createBoard(input: CreateBoardInput): Board
   updateBoard(boardId: string, patch: UpdateBoardPatch): Board
   archiveBoard(boardId: string): void
+  purgeProject(projectId: string, chatIds: readonly string[]): ProjectBoardPurge
 
   listColumns(boardId: string): BoardColumn[]
   getColumn(columnId: string): BoardColumn | null
@@ -180,6 +181,11 @@ export interface BoardStore {
   listConflicts(boardId: string, limit: number): SyncConflict[]
 
   close(): void
+}
+
+export interface ProjectBoardPurge {
+  readonly touchedBoards: readonly { readonly boardId: string; readonly owner: BoardOwnerRef }[]
+  readonly worktreePaths: readonly string[]
 }
 
 export interface UpsertBindingInput {

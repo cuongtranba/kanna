@@ -44,6 +44,7 @@ import {
   validateCardContent,
   type BoardOwnerRef,
   type BoardStore,
+  type ProjectBoardPurge,
   type CardPage,
   type CardPageQuery,
   type CreateBoardInput,
@@ -752,6 +753,35 @@ export function createBoardStore(options: CreateBoardStoreOptions): BoardStore {
     archiveBoard(boardId: string): void {
       requireBoard(boardId)
       db.run("UPDATE board SET archived_at = ?, updated_at = ? WHERE id = ?", [now(), now(), boardId])
+    },
+
+    purgeProject(projectId: string, chatIds: readonly string[]): ProjectBoardPurge {
+      return db.transaction((): ProjectBoardPurge => {
+        const touchedBoards = db
+          .query<Pick<BoardRow, "id" | "owner_kind" | "owner_id">, [string, string]>(
+            `SELECT id, owner_kind, owner_id FROM board
+             WHERE (owner_kind = 'project' AND owner_id = ?) OR id IN (SELECT board_id FROM card WHERE project_id = ?)`,
+          )
+          .all(projectId, projectId)
+          .map((row) => ({
+            boardId: row.id,
+            owner: { kind: isBoardOwnerKind(row.owner_kind) ? row.owner_kind : "project", id: row.owner_id },
+          }))
+        const worktreePaths = db
+          .query<{ target_id: string }, [string, string]>(
+            `SELECT DISTINCT target_id FROM card_link WHERE kind = 'worktree' AND card_id IN (
+               SELECT id FROM card WHERE project_id = ?
+               OR board_id IN (SELECT id FROM board WHERE owner_kind = 'project' AND owner_id = ?))`,
+          )
+          .all(projectId, projectId)
+          .map((row) => row.target_id)
+        db.run("DELETE FROM board WHERE owner_kind = 'project' AND owner_id = ?", [projectId])
+        db.run("DELETE FROM card WHERE project_id = ?", [projectId])
+        db.run("DELETE FROM sync_binding WHERE project_id = ?", [projectId])
+        for (const chatId of chatIds) db.run("DELETE FROM card_link WHERE kind = 'chat' AND target_id = ?", [chatId])
+        db.run("DELETE FROM card_link WHERE kind IN ('card', 'blocked_by') AND target_id NOT IN (SELECT id FROM card)")
+        return { touchedBoards, worktreePaths }
+      })()
     },
 
     getColumn(columnId: string): BoardColumn | null {

@@ -51,6 +51,8 @@ import type { MiscCommandDeps } from "./ws-router-misc"
 import { handleProjectCommand } from "./ws-router-project"
 import { deleteChatWithTeardown, handleChatCommand } from "./ws-router-chat"
 import type { ChatCommandDeps } from "./ws-router-chat"
+import { removeProjectKannaFiles } from "./project-kanna-files.adapter"
+import { removeWorktree } from "./worktree-store.adapter"
 import {
   ensureSnapshotSignatures,
   isBenignStaleStateMessage,
@@ -333,6 +335,11 @@ export function createWsRouter({
           openExternalFn: openExternal,
           terminals,
           deleteChat: (chatId) => deleteChatWithTeardown(buildChatDeps(ws), chatId),
+          boards: boardRegistry,
+          shares: sessionShare,
+          push: pushManager,
+          removeWorktree: (repoRoot, worktreePath) => removeWorktree(repoRoot, worktreePath, { force: true }),
+          removeProjectKannaFiles,
           send: sendToClient,
           broadcastSidebar: () => broadcast.broadcastFilteredSnapshots({ includeSidebar: true }),
         },

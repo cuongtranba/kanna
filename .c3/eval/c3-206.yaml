@@ -6,6 +6,7 @@ code:
   - src/server/chat-ops-parity.test.ts
   - src/server/event-store-messages.adapter.test.ts
   - src/server/event-store-messages.adapter.ts
+  - src/server/event-store.project-delete.test.ts
   - src/server/event-store.test.ts
   - src/server/event-store.ts
   - src/server/event-store-write-ops.ts

@@ -72,6 +72,7 @@ import {
   buildPendingForkSessionTokenEvent,
   buildPlanModeEvent,
   buildRemoveProjectEvent,
+  buildDeleteProjectEvents,
   buildRemoveProjectFromStackEvent,
   buildRemoveQueuedMessageEvent,
   buildRemoveStackEvent,
@@ -202,6 +203,7 @@ export class EventStore implements PushEventStore {
       sharesLogPath: this.sharesLogPath,
       pushLogPath: this.pushLogPath,
       tunnelEventsByChatId: this.tunnelEventsByChatId,
+      isLiveChat: (chatId) => this.getChat(chatId) !== null,
       shareEventsAll: this.shareEventsAll,
       getWriteChain: () => this.writeChain,
       setWriteChain: (p) => { this.writeChain = p },
@@ -296,7 +298,6 @@ export class EventStore implements PushEventStore {
     return this.append(filePath, event)
   }
 
-
   private getSeenMessageIds(chatId: string): Set<string> { return MessageRead.getSeenMessageIds(this.msgReadDeps, chatId) }
 
   async openProject(localPath: string, title?: string) {
@@ -312,6 +313,12 @@ export class EventStore implements PushEventStore {
 
   async removeProject(projectId: string) {
     await this.commit(buildRemoveProjectEvent(this.state.projectsById, projectId))
+  }
+
+  async deleteProject(projectId: string) {
+    for (const event of buildDeleteProjectEvents(this.state, projectId)) await this.commit(event)
+    await this.setSidebarProjectOrder(this.sidebarProjectOrderRef.value)
+    await this.storage.remove(path.join(this.dataDir, "projects", projectId), { recursive: true })
   }
 
   async setProjectStar(projectId: string, starred: boolean) {
