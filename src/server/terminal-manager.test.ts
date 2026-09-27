@@ -133,6 +133,27 @@ async function waitForOutputToContain(getOutput: () => string, value: string, ti
 }
 
 describeIfSupported("TerminalManager", () => {
+  test("opens the shell without the NODE_ENV Kanna runs under", async () => {
+    const terminalId = "terminal-node-env"
+    const kannaNodeEnv = process.env.NODE_ENV
+    process.env.NODE_ENV = "production"
+    let session: Awaited<ReturnType<typeof createSession>>
+    try {
+      session = await createSession(terminalId)
+    } finally {
+      process.env.NODE_ENV = kannaNodeEnv
+    }
+    const { manager, getOutput } = session
+
+    try {
+      manager.write(terminalId, "printf '__NODE_ENV_%s__\\n' \"${NODE_ENV-unset}\"\r")
+      await waitForOutputToContain(getOutput, "__NODE_ENV_unset__")
+      expect(getOutput()).not.toContain("__NODE_ENV_production__")
+    } finally {
+      manager.close(terminalId)
+    }
+  })
+
   test("ctrl+c interrupts the foreground job and keeps the shell alive", async () => {
     const terminalId = "terminal-ctrl-c-foreground"
     const { manager, getOutput } = await createSession(terminalId)

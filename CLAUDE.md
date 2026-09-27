@@ -1648,6 +1648,24 @@ turn would spawn), keep-alive multi-turn sessions and their permit model, and
 background runs plus the `deliverSubagentToMain` re-entry that /clears main on
 every delivery.
 
+# A project's process never inherits Kanna's runtime env (`projectProcessEnv`)
+
+Anything Kanna starts to run a PROJECT's code — a Claude SDK or PTY session, the
+Codex app-server, the embedded terminal, the loop oracle, an MCP stdio server —
+builds its environment through `projectProcessEnv` (`src/server/project-process-env.ts`),
+which drops the variables that describe Kanna rather than the project. Today that
+is `NODE_ENV`: the pm2 deploy used to run Kanna with `NODE_ENV=production`, every
+spawn spread `process.env`, and so every project opened in Kanna ran its tests
+against React's production bundle (`act(...) is not supported in production
+builds of React`). Kanna's own suite patched itself in #127 and the leak kept
+resurfacing everywhere else.
+
+A new project-facing spawn goes through `projectProcessEnv`. A spawn that runs
+Kanna's own code (the CLI supervisor, the self-updaters, plugin builds, git
+plumbing) keeps `process.env`. The server's `Bun.serve` mode comes from
+`KANNA_RUNTIME_PROFILE`, never from Bun's `NODE_ENV` default, so the deployment
+needs no `NODE_ENV` at all. `adr-20260927-project-process-env-node-env`.
+
 # A queued message carries the whole dispatch, and the builder must not enumerate it
 
 `buildEnqueueMessageResult` (`event-store-write-ops.ts`) owns exactly three

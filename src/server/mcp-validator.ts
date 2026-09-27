@@ -5,6 +5,7 @@ import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
 import { WebSocketClientTransport } from "@modelcontextprotocol/sdk/client/websocket.js"
 import type { McpServerConfig, McpServerTestResult } from "../shared/types"
 import { toError } from "../shared/errors"
+import { projectProcessEnv } from "./project-process-env"
 
 const DEFAULT_TIMEOUT_MS = 10_000
 
@@ -71,7 +72,7 @@ function buildTransport(config: McpServerConfig, bearer?: string) {
       return new StdioClientTransport({
         command: config.command,
         args: config.args,
-        env: { ...(Object.fromEntries(Object.entries(process.env).filter((e): e is [string, string] => e[1] !== undefined))), ...config.env },
+        env: { ...(Object.fromEntries(Object.entries(projectProcessEnv(process.env)).filter((e): e is [string, string] => e[1] !== undefined))), ...config.env },
         cwd: config.cwd,
       })
     case "http":

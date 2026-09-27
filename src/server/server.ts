@@ -696,6 +696,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   const port = options.port ?? 3210
   const hostname = options.host ?? "127.0.0.1"
   const strictPort = options.strictPort ?? false
+  const development = getRuntimeProfile() === "dev"
 
   let server!: Server<ClientState>
   let actualPort = port
@@ -705,6 +706,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
       server = serveHttp<ClientState>({
         port: actualPort,
         hostname,
+        development,
         maxRequestBodySize: MAX_REQUEST_BODY_BYTES,
         fetch: fetchHandler,
         websocket: {
@@ -739,6 +741,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
 
   return {
     port: boundPort,
+    development: server.development,
     store,
     diffStore,
     updateManager,

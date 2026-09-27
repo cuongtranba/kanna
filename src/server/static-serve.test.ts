@@ -111,6 +111,33 @@ describe("static asset serving", () => {
     }
   })
 
+  test("a prod runtime profile serves without Bun's development error page, whatever NODE_ENV says", async () => {
+    const kannaNodeEnv = process.env.NODE_ENV
+    delete process.env.NODE_ENV
+    let server: Awaited<ReturnType<typeof startStaticServer>> | null = null
+    try {
+      server = await startStaticServer()
+      expect(server.development).toBe(false)
+    } finally {
+      process.env.NODE_ENV = kannaNodeEnv
+      await server?.stop()
+    }
+  })
+
+  test("the dev runtime profile keeps Bun's development mode", async () => {
+    const profile = process.env.KANNA_RUNTIME_PROFILE
+    process.env.KANNA_RUNTIME_PROFILE = "dev"
+    let server: Awaited<ReturnType<typeof startStaticServer>> | null = null
+    try {
+      server = await startStaticServer()
+      expect(server.development).toBe(true)
+    } finally {
+      if (profile === undefined) delete process.env.KANNA_RUNTIME_PROFILE
+      else process.env.KANNA_RUNTIME_PROFILE = profile
+      await server?.stop()
+    }
+  })
+
   test("a chat id containing a dot is still treated as a navigation route", async () => {
     const server = await startStaticServer()
     try {

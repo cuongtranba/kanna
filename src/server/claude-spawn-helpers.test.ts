@@ -141,6 +141,15 @@ describe("buildCanUseTool", () => {
 
 
 describe("buildClaudeEnv", () => {
+  test("never hands a session the NODE_ENV Kanna runs under, on any auth path", () => {
+    const base: NodeJS.ProcessEnv = { PATH: "/usr/bin", NODE_ENV: "production" }
+
+    expect(buildClaudeEnv(base, "token")).not.toHaveProperty("NODE_ENV")
+    expect(buildClaudeEnv(base, null)).not.toHaveProperty("NODE_ENV")
+    expect(buildClaudeEnv(base, null, { apiKey: "or-key" })).not.toHaveProperty("NODE_ENV")
+    expect(buildClaudeEnv(base, "token", null, "https://proxy.example")).not.toHaveProperty("NODE_ENV")
+  })
+
   test("strips CLAUDECODE and CLAUDE_CODE_OAUTH_TOKEN from base env when oauthToken provided", () => {
     const base: NodeJS.ProcessEnv = {
       PATH: "/usr/bin",
