@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.60.4](https://github.com/cuongtranba/kanna/compare/v1.60.3...v1.60.4) (2026-09-27)
+
+
+### Bug Fixes
+
+* **server:** stop handing Kanna's NODE_ENV to the processes it runs for a project ([#1171](https://github.com/cuongtranba/kanna/issues/1171)) ([9425a49](https://github.com/cuongtranba/kanna/commit/9425a4991912fe845243bd728d29950de0c5de56))
+
 ## [1.60.3](https://github.com/cuongtranba/kanna/compare/v1.60.2...v1.60.3) (2026-09-25)
 
 
