@@ -27,8 +27,20 @@ describe("buildCodexSpawnOptions", () => {
     expect(opts.stdio).toEqual(["pipe", "pipe", "pipe"])
   })
 
-  test("always passes process.env", () => {
+  test("passes Kanna's environment on", () => {
     const opts = buildCodexSpawnOptions("linux", "/project")
-    expect(opts.env).toBe(process.env)
+    expect(opts.env?.PATH).toBe(process.env.PATH)
+    expect(opts.env?.HOME).toBe(process.env.HOME)
+  })
+
+  test("never passes on the NODE_ENV Kanna runs under", () => {
+    const kannaNodeEnv = process.env.NODE_ENV
+    process.env.NODE_ENV = "production"
+    try {
+      expect(buildCodexSpawnOptions("linux", "/project").env).not.toHaveProperty("NODE_ENV")
+      expect(buildCodexSpawnOptions("win32", "/project").env).not.toHaveProperty("NODE_ENV")
+    } finally {
+      process.env.NODE_ENV = kannaNodeEnv
+    }
   })
 })

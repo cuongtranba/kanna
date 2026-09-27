@@ -57,6 +57,21 @@ describe("runVerifyCommand", () => {
     expect(result.durationMs).toBeGreaterThanOrEqual(0)
   }, 30_000)
 
+  test("runs the project's command without the NODE_ENV Kanna runs under", async () => {
+    const kannaNodeEnv = process.env.NODE_ENV
+    process.env.NODE_ENV = "production"
+    try {
+      const result = await runVerifyCommand({
+        command: "printf 'node-env=%s' \"${NODE_ENV-unset}\"",
+        cwd: tempRoot,
+        timeoutMs: 10_000,
+      })
+      expect(result.output).toContain("node-env=unset")
+    } finally {
+      process.env.NODE_ENV = kannaNodeEnv
+    }
+  }, 30_000)
+
   test("returns a non-zero exit code instead of throwing", async () => {
     const result = await runVerifyCommand({
       command: "exit 3",

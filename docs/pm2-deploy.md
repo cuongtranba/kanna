@@ -61,7 +61,6 @@ module.exports = {
         PATH: "/Users/<you>/.bun/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
         SHELL: "/bin/zsh",
         LANG: "en_US.UTF-8",
-        NODE_ENV: "production",
       },
     },
   ],
@@ -69,6 +68,8 @@ module.exports = {
 ```
 
 The `env` block is belt-and-suspenders only; the real defense is starting the daemon under `env -i` (next section).
+
+Do not set `NODE_ENV`. The server's own mode comes from `KANNA_RUNTIME_PROFILE` (production unless it is `dev`), so it serves plain `500`s rather than Bun's development error page without it. Kanna also never passes its `NODE_ENV` to the agents, terminals and loop oracles it starts for a project (`projectProcessEnv`, `adr-20260927-project-process-env-node-env`); older releases did, which made every project's React tests load React's production bundle.
 
 ## Launch under a clean daemon
 
@@ -89,7 +90,6 @@ env -i \
   USER=$USER \
   LOGNAME=$USER \
   PM2_HOME=$HOME/.pm2 \
-  NODE_ENV=production \
   $HOME/.bun/bin/pm2 start \
     $HOME/Desktop/repo/kanna_deploy_pm2/ecosystem.config.cjs
 

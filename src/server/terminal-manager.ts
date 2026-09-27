@@ -7,6 +7,7 @@ import type { TerminalEvent, TerminalSnapshot } from "../shared/protocol"
 import { clampScrollback } from "../shared/terminal-scrollback"
 import type { TerminalPidRegistry } from "./terminal-pid-registry.adapter"
 import { createBunTerminal, hasBunTerminal, spawnTerminalProcess } from "./terminal-manager-io.adapter"
+import { projectProcessEnv } from "./project-process-env"
 
 const DEFAULT_COLS = 80
 const DEFAULT_ROWS = 24
@@ -76,7 +77,7 @@ export function resolveShellArgs(shellPath: string): string[] {
 
 function createTerminalEnv() {
   return {
-    ...process.env,
+    ...projectProcessEnv(process.env),
     TERM: "xterm-256color",
     COLORTERM: "truecolor",
   }

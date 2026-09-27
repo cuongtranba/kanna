@@ -3,6 +3,16 @@ import { describe, test, expect } from "bun:test"
 import { buildPtyEnv } from "./env"
 
 describe("buildPtyEnv", () => {
+  test("never hands the TUI the NODE_ENV Kanna runs under", () => {
+    const env = buildPtyEnv({
+      baseEnv: { NODE_ENV: "production", PATH: "/usr/bin" },
+      homeDir: "/home/u",
+      oauthToken: "tok",
+    })
+    expect("NODE_ENV" in env).toBe(false)
+    expect(env.PATH).toBe("/usr/bin")
+  })
+
   test("strips ANTHROPIC_API_KEY defensively", () => {
     const env = buildPtyEnv({
       baseEnv: { ANTHROPIC_API_KEY: "sk-should-be-removed", PATH: "/usr/bin" },

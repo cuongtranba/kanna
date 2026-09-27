@@ -7,6 +7,7 @@ import { toJsonObject } from "./json-boundary"
 import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
+import { projectProcessEnv } from "./project-process-env"
 
 export const LOOP_BLOCKED_NATIVE_TOOLS: readonly string[] = [
   "Edit",
@@ -149,7 +150,7 @@ export function buildClaudeEnv(
   openrouter?: { apiKey: string } | null,
   anthropicBaseUrl?: string | null,
 ): NodeJS.ProcessEnv {
-  const { CLAUDECODE: _unused, CLAUDE_CODE_OAUTH_TOKEN: _oauth, ...rest } = baseEnv
+  const { CLAUDECODE: _unused, CLAUDE_CODE_OAUTH_TOKEN: _oauth, ...rest } = projectProcessEnv(baseEnv)
   if (openrouter) {
     return {
       ...rest,

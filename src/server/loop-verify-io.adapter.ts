@@ -4,6 +4,7 @@ import type { Readable } from "node:stream"
 import { createHash } from "node:crypto"
 import { stat } from "node:fs/promises"
 import path from "node:path"
+import { projectProcessEnv } from "./project-process-env"
 
 
 const DEFAULT_MAX_OUTPUT_CHARS = 4000
@@ -106,7 +107,7 @@ function spawnCapture(argv: string[], options: SpawnCaptureOptions): Promise<Spa
       cwd: options.cwd,
       detached: true,
       stdio: ["ignore", "pipe", "pipe"] as const,
-      env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+      env: { ...projectProcessEnv(process.env), GIT_TERMINAL_PROMPT: "0" },
     })
 
     const stdoutSink = createTailSink(options.maxOutputChars)

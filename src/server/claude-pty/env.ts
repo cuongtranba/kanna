@@ -1,3 +1,4 @@
+import { projectProcessEnv } from "../project-process-env"
 
 export function buildPtyEnv(args: {
   baseEnv: NodeJS.ProcessEnv
@@ -5,7 +6,7 @@ export function buildPtyEnv(args: {
   oauthToken: string | null
   baseUrl?: string | null
 }): NodeJS.ProcessEnv {
-  const spawnEnv: NodeJS.ProcessEnv = { ...args.baseEnv }
+  const spawnEnv = projectProcessEnv(args.baseEnv)
   delete spawnEnv.ANTHROPIC_API_KEY
   spawnEnv.HOME = args.homeDir
   spawnEnv.DISABLE_AUTOUPDATER = "1"
