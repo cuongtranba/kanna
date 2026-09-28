@@ -1,5 +1,5 @@
 # C3 Structural Index
-<!-- hash: sha256:a65d10331ad966de3f164dcbe2ec3860d8f1f0699e697c2c8384d244384dc2fc -->
+<!-- hash: sha256:a8c2cda84777b79c1df3409b1cbaf14fc49867b9e16f7cf77d7ee4f0e0718e4c -->
 
 ## c3-0 — Kanna (system)
 
@@ -96,7 +96,7 @@ context: c3-0
 ## c3-201 — cli-entry (component)
 container: c3-2 | context: c3-0
 refs: ref-local-first-data
-files: src/server/cli-bootstrap.adapter.ts, src/server/cli-runtime.test.ts, src/server/cli-runtime.ts, src/server/cli-supervisor.adapter.ts, src/server/cli.ts
+files: src/server/cli-bootstrap.adapter.ts, src/server/cli-runtime.test.ts, src/server/cli-runtime.ts, src/server/cli-supervisor.adapter.ts, src/server/cli.ts, src/server/login-shell-path.adapter.test.ts, src/server/login-shell-path.adapter.ts, src/server/login-shell-path.ts
 
 ## c3-202 — http-ws-server (component)
 container: c3-2 | context: c3-0
@@ -537,6 +537,9 @@ src/server/cli-runtime.test.ts → c3-201
 src/server/cli-runtime.ts → c3-201
 src/server/cli-supervisor.adapter.ts → c3-201
 src/server/cli.ts → c3-201
+src/server/login-shell-path.adapter.test.ts → c3-201
+src/server/login-shell-path.adapter.ts → c3-201
+src/server/login-shell-path.ts → c3-201
 src/server/app-settings.ts → c3-202
 src/server/http-api-routes.ts → c3-202
 src/server/http-dispatcher.ts → c3-202

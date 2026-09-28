@@ -180,19 +180,6 @@ describe("startTurnForChat", () => {
     expect(resultEntries.length).toBeGreaterThan(0)
   })
 
-  test("8. rethrows non-OAuth errors after cleanup (recordTurnFailed, emitStateChange)", async () => {
-    const boom = new Error("unexpected failure")
-    const deps = makeDeps({
-      startClaudeTurn: mock(async () => { throw boom }),
-    })
-    const args = makeArgs({ provider: "claude", model: "claude-opus-4-5" })
-
-    await expect(startTurnForChat(deps, args)).rejects.toThrow("unexpected failure")
-
-    expect(deps.store.recordTurnFailed as ReturnType<typeof mock>).toHaveBeenCalledWith("chat-1", "unexpected failure")
-    expect(deps.emitStateChange as ReturnType<typeof mock>).toHaveBeenCalledWith("chat-1", { immediate: true })
-  })
-
   test("9. routes to codexManager.startTurn for non-claude providers", async () => {
     const deps = makeDeps()
     await startTurnForChat(deps, makeArgs({ provider: "codex", model: "gpt-4o" }))
@@ -332,9 +319,7 @@ describe("startTurnForChat — starting-turn marker", () => {
       startClaudeTurn: mock(async () => { throw new Error("spawn failed") }),
     })
 
-    await expect(
-      startTurnForChat(deps, makeArgs({ provider: "claude", model: "claude-opus-4-5" })),
-    ).rejects.toThrow("spawn failed")
+    await startTurnForChat(deps, makeArgs({ provider: "claude", model: "claude-opus-4-5" }))
 
     expect(deps.startingTurns.has("chat-1")).toBe(false)
   })

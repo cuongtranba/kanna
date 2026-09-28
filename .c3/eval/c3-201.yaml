@@ -6,3 +6,6 @@ code:
   - src/server/cli-runtime.ts
   - src/server/cli-supervisor.adapter.ts
   - src/server/cli.ts
+  - src/server/login-shell-path.ts
+  - src/server/login-shell-path.adapter.ts
+  - src/server/login-shell-path.adapter.test.ts

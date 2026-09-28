@@ -5870,7 +5870,7 @@ describe("AgentCoordinator late tool request", () => {
 })
 
 describe("AgentCoordinator turn-start failure recording", () => {
-  test("records turn_failed and clears activeTurn when startClaudeSession throws", async () => {
+  test("a provider that fails to spawn leaves its error in the transcript instead of a silent prompt", async () => {
     const store = createFakeStore()
     store.chat.provider = "claude"
     const consoleError = console.error
@@ -5880,7 +5880,7 @@ describe("AgentCoordinator turn-start failure recording", () => {
         store: store as never,
         onStateChange: () => {},
         startClaudeSession: async () => {
-          throw new Error("simulated spawn failure")
+          throw new Error("Executable not found in $PATH: \"claude\"")
         },
       })
 
@@ -5891,12 +5891,17 @@ describe("AgentCoordinator turn-start failure recording", () => {
           provider: "claude",
           content: "hi",
         }),
-      ).rejects.toThrow(/simulated spawn failure/)
+      ).resolves.toEqual({ chatId: "chat-1" })
 
-      expect(store.turnFailedCount).toBe(1)
-      expect(store.turnFailures[0]?.chatId).toBe("chat-1")
-      expect(store.turnFailures[0]?.reason).toContain("simulated spawn failure")
-      expect(store.messages[0]?.kind).toBe("user_prompt")
+      expect(store.turnFailures).toEqual([
+        expect.objectContaining({ chatId: "chat-1", reason: "Executable not found in $PATH: \"claude\"" }),
+      ])
+      expect(coordinator.getActiveTurnMap().has("chat-1")).toBe(false)
+      expect(store.messages.map((entry) => entry.kind)).toEqual(["user_prompt", "result"])
+      expect(store.messages[1]).toMatchObject({
+        isError: true,
+        result: "Executable not found in $PATH: \"claude\"",
+      })
     } finally {
       console.error = consoleError
     }

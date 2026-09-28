@@ -8,6 +8,7 @@ import {
   openUrl,
   runCli,
 } from "./cli-runtime"
+import { inheritLoginShellPath } from "./login-shell-path.adapter"
 import { CLI_STARTUP_UPDATE_RESTART_EXIT_CODE, CLI_UI_UPDATE_RESTART_EXIT_CODE } from "./restart"
 import { startKannaServer } from "./server"
 
@@ -20,6 +21,7 @@ const result = await runCli(argv, {
   version: VERSION,
   bunVersion: getBunVersion(),
   startServer: async (options) => {
+    await inheritLoginShellPath()
     const started = await startKannaServer(options)
     if (started.updateManager && options.update) {
       started.updateManager.onChange((snapshot) => {
