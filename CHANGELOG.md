@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.61.0](https://github.com/cuongtranba/kanna/compare/v1.60.4...v1.61.0) (2026-09-29)
+
+
+### Features
+
+* **genui:** generative UI — validated interactive views, financial charts and dataset sources ([#1177](https://github.com/cuongtranba/kanna/issues/1177)) ([3b71f28](https://github.com/cuongtranba/kanna/commit/3b71f28266a957af4c8b763e7dde3fe87bf7f742))
+
 ## [1.60.4](https://github.com/cuongtranba/kanna/compare/v1.60.3...v1.60.4) (2026-09-27)
 
 
