@@ -42,7 +42,7 @@ export function CardElement({ element, children }: ComponentRenderProps) {
   const parsed = GENUI_COMPONENTS.Card.props.safeParse(resolvedProps(element.props))
   if (!parsed.success) return <PropsIssue component="Card" />
   return (
-    <section className="min-w-0 rounded-md border border-border p-3">
+    <section className="min-w-0 rounded-md border border-border p-3" aria-label={parsed.data.title}>
       {parsed.data.title ? <h4 className="text-sm font-medium text-foreground">{parsed.data.title}</h4> : null}
       {parsed.data.description ? <p className="mt-0.5 text-xs text-muted-foreground">{parsed.data.description}</p> : null}
       <div className={cn("flex flex-col gap-3", (parsed.data.title || parsed.data.description) && "mt-3")}>{children}</div>
@@ -54,7 +54,7 @@ export function SectionElement({ element, children }: ComponentRenderProps) {
   const parsed = GENUI_COMPONENTS.Section.props.safeParse(resolvedProps(element.props))
   if (!parsed.success) return <PropsIssue component="Section" />
   return (
-    <section className="flex min-w-0 flex-col gap-3">
+    <section className="flex min-w-0 flex-col gap-3" aria-label={parsed.data.title}>
       <div>
         <h4 className="text-sm font-medium text-foreground">{parsed.data.title}</h4>
         {parsed.data.description ? <p className="text-xs text-muted-foreground">{parsed.data.description}</p> : null}

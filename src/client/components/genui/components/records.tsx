@@ -31,7 +31,7 @@ function FileLink({ path, line, label }: { path: string; line?: number; label: s
       onClick={run}
       disabled={pending}
       aria-busy={pending || undefined}
-      className="min-w-0 truncate text-left font-mono text-xs text-foreground underline decoration-border underline-offset-2 hover:decoration-foreground"
+      className="max-w-full rounded-sm text-left font-mono text-xs break-all text-foreground underline decoration-border underline-offset-2 hover:decoration-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       {label}
     </button>
@@ -69,13 +69,13 @@ export function FileListElement({ element }: ComponentRenderProps) {
         const status = file.status ? FILE_STATUS[file.status] : null
         const Icon = status?.icon ?? FileCode2
         return (
-          <li key={file.path} className="flex items-center gap-2 px-3 py-2">
-            <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <li key={file.path} className="flex items-start gap-2 px-3 py-2">
+            <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
             <div className="min-w-0 flex-1">
               <FileLink path={file.path} label={file.path} />
               {file.description ? <p className="text-xs text-muted-foreground">{file.description}</p> : null}
             </div>
-            {status ? <span className="shrink-0 text-xs text-muted-foreground">{status.label}</span> : null}
+            {status ? <span className="mt-0.5 shrink-0 pl-2 text-xs text-muted-foreground">{status.label}</span> : null}
           </li>
         )
       })}
@@ -122,7 +122,7 @@ export function DiagnosticListElement({ element }: ComponentRenderProps) {
 function FixFailureButton({ name, context }: { name: string; context: JsonObject }) {
   const { run, pending } = useRunAction("agent.fix", { subject: name, context }, name)
   return (
-    <Button size="sm" variant="ghost" onClick={run} pending={pending} aria-label={`Ask the agent to fix ${name}`}>
+    <Button size="sm" variant="ghost" className="gap-1.5" onClick={run} pending={pending} aria-label={`Ask the agent to fix ${name}`}>
       {pending ? null : <Wrench className="h-3.5 w-3.5" aria-hidden="true" />}
       Fix
     </Button>

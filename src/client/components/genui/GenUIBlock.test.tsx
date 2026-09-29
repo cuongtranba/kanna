@@ -166,6 +166,18 @@ test("clicking a chart point drills down by the configured dimension, determinis
   expect(log.sent).toEqual([])
 })
 
+test("the table view drills down without the canvas, then moves focus to Back so a keyboard user is not stranded", async () => {
+  const container = await mount(renderMessageMarkdown(fence(report({
+    trend: { type: "FinancialChart", props: { chart: "line", dataset: "sales", metric: "revenue", dimension: "month", drilldown: { dimension: "customer" } } },
+  }, { title: "Revenue by month" }))), chatHost().host)
+
+  await click(await waitFor(() => buttonNamed(container, "Table"), "the Table toggle"))
+  await click(await waitFor(() => container.querySelector<HTMLButtonElement>('button[aria-label="Break down Aug 2026 by customer"]'), "the August row"))
+  const back = await waitFor(() => buttonNamed(container, "Back"), "the Back button")
+  await waitFor(() => (document.activeElement === back ? true : null), "focus on Back")
+  expect(container.textContent).toContain("Aug 2026 by customer")
+})
+
 test("Explain variance asks first, then sends the agent structured values rather than button text", async () => {
   const { host, log } = chatHost()
   const container = await mount(renderMessageMarkdown(fence(report({

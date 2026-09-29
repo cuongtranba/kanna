@@ -1,7 +1,8 @@
-import { lazy, Suspense, useCallback, useMemo } from "react"
+import { lazy, Suspense, useCallback, useEffect, useId, useMemo, useRef, type RefObject } from "react"
 import { useActions, useStateValue, type ComponentRenderProps } from "@json-render/react"
 import { ChevronLeft, MessageSquareText } from "lucide-react"
 import {
+  bucketLabel,
   describeCompareMode,
   describePeriodSpec,
   dimensionLabel,
@@ -18,7 +19,7 @@ import { cn } from "../../../lib/utils"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../../../stores/pendingActionsStore"
 import { drillStatePath, drillStateSchema, type DrillState } from "../actions"
 import { buildChartModel, type ChartKind, type ChartModel } from "../charts/chart-model"
-import type { ChartPointRef, ChartRendererProps } from "../charts/chart-renderer"
+import { chartPointFromDatum, type ChartPointRef, type ChartRendererProps } from "../charts/chart-renderer"
 import { useGenUIHost } from "../host"
 import { useDatasetDecl, useDatasetQuery } from "../useDatasetQuery"
 import { useElementUiState } from "../useElementUiState"
@@ -76,7 +77,28 @@ function chartKind(props: ChartProps, drill: DrillState | null): ChartKind {
   return props.chart === "composition" ? "composition" : "bar"
 }
 
-function ChartTable({ model }: { model: ChartModel }) {
+interface ChartTableDrill {
+  intoLabel: string
+  pending: boolean
+  onDrill: (point: ChartPointRef) => void
+}
+
+function ChartTableRowHeader({ x, label, drill }: { x: string; label: string; drill: ChartTableDrill | null }) {
+  if (!drill) return <>{label}</>
+  return (
+    <button
+      type="button"
+      className="rounded-sm text-left text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+      aria-label={`Break down ${label} by ${drill.intoLabel}`}
+      disabled={drill.pending}
+      onClick={() => drill.onDrill({ x, series: "" })}
+    >
+      {label}
+    </button>
+  )
+}
+
+function ChartTable({ model, drill }: { model: ChartModel; drill: ChartTableDrill | null }) {
   const series = model.series.filter((entry) => model.points.some((point) => point.series === entry.id))
   const value = (x: string, id: string) => model.points.find((point) => point.x === x && point.series === id)?.value ?? null
   return (
@@ -93,7 +115,9 @@ function ChartTable({ model }: { model: ChartModel }) {
         <tbody className="divide-y divide-border">
           {model.xOrder.map((x) => (
             <tr key={x}>
-              <th scope="row" className="px-3 py-1.5 text-left font-normal text-foreground">{model.xLabels[x] ?? x}</th>
+              <th scope="row" className="px-3 py-1.5 text-left font-normal text-foreground">
+                <ChartTableRowHeader x={x} label={model.xLabels[x] ?? x} drill={isDrillableX(model, x) ? drill : null} />
+              </th>
               {series.map((entry) => (
                 <td key={entry.id} className="px-3 py-1.5 text-right tabular-nums text-foreground">{formatMetricValue(value(x, entry.id), model.format)}</td>
               ))}
@@ -105,10 +129,14 @@ function ChartTable({ model }: { model: ChartModel }) {
   )
 }
 
+function isDrillableX(model: ChartModel, x: string): boolean {
+  return chartPointFromDatum(model, { x }) !== null
+}
+
 function ChartSurface({ model, height, onPointClick }: { model: ChartModel; height: number; onPointClick: ChartRendererProps["onPointClick"] }) {
   const host = useGenUIHost()
   const Renderer = host.ChartRenderer ?? LazyVChartSurface
-  const label = `${model.valueLabel} by ${model.dimensionLabel.toLowerCase()}, ${model.points.length} values. Switch to Table to read them.`
+  const label = `${model.valueLabel} by ${model.dimensionLabel.toLowerCase()}, ${model.points.length} values. Switch to Table to read them${onPointClick ? " or break a value down" : ""}.`
   return (
     <Suspense fallback={<div className="w-full" style={{ height }} aria-hidden="true" />}>
       <Renderer model={model} height={height} label={label} onPointClick={onPointClick} />
@@ -146,30 +174,53 @@ function ExplainButton({ props, drill }: { props: ChartProps; drill: DrillState 
   )
 }
 
-function DrillBreadcrumb({ datasetId, drill, decl }: { datasetId: string; drill: DrillState; decl: DatasetDecl }) {
+type FocusAfterDrill = "back" | "figure" | null
+
+function focusTargetAfterDrill(request: FocusAfterDrill, drilled: boolean, back: HTMLElement | null, figure: HTMLElement | null): HTMLElement | null {
+  if (request === "back" && drilled) return back
+  if (request === "figure" && !drilled) return figure
+  return null
+}
+
+interface DrillBreadcrumbProps {
+  datasetId: string
+  drill: DrillState
+  decl: DatasetDecl
+  backRef: RefObject<HTMLButtonElement | null>
+  focusAfterRef: RefObject<FocusAfterDrill>
+}
+
+function DrillBreadcrumb({ datasetId, drill, decl, backRef, focusAfterRef }: DrillBreadcrumbProps) {
   const { execute } = useActions()
   const { viewKey } = useGenUIView()
   const key = pendingActionKey("genui.drill.back", viewKey, datasetId)
   const pending = usePendingAction(key)
   const handleBack = useCallback(() => {
+    focusAfterRef.current = "figure"
     runPendingAction(key, () => execute({ action: "setState", params: { statePath: drillStatePath(datasetId), value: null } }))
-  }, [datasetId, execute, key])
+  }, [datasetId, execute, focusAfterRef, key])
   return (
     <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-      <Button size="sm" variant="ghost" className="gap-1" onClick={handleBack} pending={pending}>
+      <Button ref={backRef} size="sm" variant="ghost" className="gap-1" onClick={handleBack} pending={pending}>
         {pending ? null : <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" />}
         Back
       </Button>
       <span>
-        {dimensionLabel(drill.dimension, decl.dimensions?.[drill.dimension])}: <span className="text-foreground">{drill.value}</span>
+        {dimensionLabel(drill.dimension, decl.dimensions?.[drill.dimension])}: <span className="text-foreground">{drillValueLabel(drill, decl)}</span>
         {" "}by {dimensionLabel(drill.into, decl.dimensions?.[drill.into]).toLowerCase()}
       </span>
     </div>
   )
 }
 
-function chartSubtitle(props: ChartProps, result: { period: { label: string }; comparison?: { label: string } } | null): string {
+function drillValueLabel(drill: DrillState, decl: DatasetDecl): string {
+  const dimension = decl.dimensions?.[drill.dimension]
+  return dimension?.kind === "time" ? bucketLabel(drill.value, dimension.grain ?? "month") : drill.value
+}
+
+function chartSubtitle(props: ChartProps, result: { period: { label: string }; comparison?: { label: string } } | null, drill: DrillState | null, decl: DatasetDecl | null): string {
   const period = result ? result.period.label : describePeriodSpec(props.period)
+  if (drill) return decl?.dimensions?.[drill.dimension]?.kind === "time" ? drillValueLabel(drill, decl) : period
   const compare = compareOf(props.compareWith)
   const comparisonLabel = result?.comparison?.label ?? (compare ? describeCompareMode(compare) : null)
   return comparisonLabel ? `${period} · vs ${comparisonLabel.charAt(0).toLowerCase()}${comparisonLabel.slice(1)}` : period
@@ -185,6 +236,10 @@ export function FinancialChartElement({ element }: ComponentRenderProps) {
   const { execute } = useActions()
   const { viewKey } = useGenUIView()
   const drillKey = pendingActionKey("genui.financial.drilldown", viewKey, props?.dataset ?? "")
+  const titleId = useId()
+  const figureRef = useRef<HTMLElement>(null)
+  const backRef = useRef<HTMLButtonElement>(null)
+  const focusAfterRef = useRef<FocusAfterDrill>(null)
   const drillPending = usePendingAction(drillKey)
 
   const modelResult = useMemo(() => {
@@ -210,17 +265,32 @@ export function FinancialChartElement({ element }: ComponentRenderProps) {
     }))
   }, [drill, drillKey, drilldown, execute, props])
 
+  useEffect(() => {
+    const target = focusTargetAfterDrill(focusAfterRef.current, drill !== null, backRef.current, figureRef.current)
+    if (!target) return
+    focusAfterRef.current = null
+    target.focus()
+  }, [drill])
+
+  const drillFromTable = useCallback((point: ChartPointRef) => {
+    focusAfterRef.current = "back"
+    onPointClick(point)
+  }, [onPointClick])
+
   if (!props) return <PropsIssue component="FinancialChart" />
   const height = CHART_HEIGHT[props.height ?? "md"]
   const metricId = Array.isArray(props.metric) ? props.metric[0] ?? "" : props.metric
   const title = props.title ?? metricLabel(metricId, decl?.metrics[metricId])
-  const subtitle = chartSubtitle(props, state.status === "ok" ? state.result : null)
+  const subtitle = chartSubtitle(props, state.status === "ok" ? state.result : null, drill, decl)
+  const tableDrill: ChartTableDrill | null = props.drilldown && !drill && decl
+    ? { intoLabel: dimensionLabel(props.drilldown.dimension, decl.dimensions?.[props.drilldown.dimension]).toLowerCase(), pending: drillPending, onDrill: drillFromTable }
+    : null
 
   return (
-    <figure className="flex min-w-0 flex-col gap-2">
+    <figure ref={figureRef} tabIndex={-1} className="flex min-w-0 flex-col gap-2 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-labelledby={titleId}>
       <figcaption className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="text-sm font-medium text-foreground">{title}</div>
+          <div id={titleId} className="text-sm font-medium text-foreground">{title}</div>
           <div className="text-xs text-muted-foreground">{subtitle}</div>
         </div>
         <div className="flex items-center gap-1">
@@ -228,7 +298,7 @@ export function FinancialChartElement({ element }: ComponentRenderProps) {
           <SegmentedControl size="sm" value={view} onValueChange={setView} options={[{ value: "chart", label: "Chart" }, { value: "table", label: "Table" }]} />
         </div>
       </figcaption>
-      {drill && decl ? <DrillBreadcrumb datasetId={props.dataset} drill={drill} decl={decl} /> : null}
+      {drill && decl ? <DrillBreadcrumb datasetId={props.dataset} drill={drill} decl={decl} backRef={backRef} focusAfterRef={focusAfterRef} /> : null}
       {state.status !== "ok" ? <DataStateNotice state={state} minHeight={height} /> : null}
       {state.status === "ok" && modelResult && !modelResult.ok ? <EmptyNotice label={modelResult.message} minHeight={height} /> : null}
       {state.status === "ok" && modelResult?.ok && modelResult.model.points.length === 0 ? <EmptyNotice label="No data for the selected period" minHeight={height} /> : null}
@@ -236,7 +306,7 @@ export function FinancialChartElement({ element }: ComponentRenderProps) {
         <div className={cn("transition-opacity duration-[var(--motion-quick)]", (state.refreshing || drillPending) && "opacity-60")} aria-busy={drillPending || undefined}>
           {view === "chart"
             ? <ChartSurface model={modelResult.model} height={height} onPointClick={props.drilldown && !drill ? onPointClick : null} />
-            : <ChartTable model={modelResult.model} />}
+            : <ChartTable model={modelResult.model} drill={tableDrill} />}
           {state.result.truncated ? <p className="mt-1 text-xs text-muted-foreground">Showing the first {state.result.rows.length} groups.</p> : null}
         </div>
       ) : null}
