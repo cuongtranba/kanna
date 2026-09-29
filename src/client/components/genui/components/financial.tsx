@@ -21,6 +21,10 @@ import { DataStateNotice, PropsIssue, sentimentTone, toneInkClass, TrendIcon } f
 import { FinancialTableBody } from "./financial-table-body"
 import { ALL_VALUES, compareOf, resolvedProps, withDrillFilter } from "./props"
 
+export function lowerFirst(text: string): string {
+  return text.charAt(0).toLowerCase() + text.slice(1)
+}
+
 function parse<T>(props: ComponentRenderProps["element"]["props"], parser: (json: ReturnType<typeof resolvedProps>) => T | null): T | null {
   return parser(resolvedProps(props))
 }
@@ -66,13 +70,16 @@ export function FinancialMetricElement({ element }: ComponentRenderProps) {
     <div className={cn("flex flex-col gap-1 rounded-md border border-border p-3", state.refreshing && "opacity-60")}>
       <span className="text-xs font-medium text-muted-foreground">{label}</span>
       <span className="text-2xl font-semibold leading-tight text-foreground">{formatMetricValue(value, format, { compact: true })}</span>
-      {state.result.comparison ? (
+      {state.result.comparison && variance.amount !== null ? (
         <span className={cn("flex flex-wrap items-center gap-1 text-xs", toneInkClass(tone))}>
           <TrendIcon trend={variance.trend} />
           <span className="font-medium tabular-nums">{variance.ratioText}</span>
           <span className="tabular-nums">({variance.amountText})</span>
-          <span className="text-muted-foreground">vs {state.result.comparison.label.toLowerCase()}</span>
+          <span className="text-muted-foreground">vs {lowerFirst(state.result.comparison.label)}</span>
         </span>
+      ) : null}
+      {state.result.comparison && variance.amount === null ? (
+        <span className="text-xs text-muted-foreground">No {lowerFirst(state.result.comparison.label)} data to compare</span>
       ) : null}
       <span className="text-xs text-muted-foreground">{state.result.period.label}</span>
     </div>

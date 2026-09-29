@@ -59,12 +59,14 @@ export function seriesColor(series: ChartSeries, theme: ChartTheme): string {
 }
 
 function colorScale(model: ChartModel, theme: ChartTheme) {
-  return { type: "ordinal" as const, domain: model.series.map((series) => series.id), range: model.series.map((series) => seriesColor(series, theme)) }
+  return { type: "ordinal" as const, domain: model.series.map((series) => series.label), range: model.series.map((series) => seriesColor(series, theme)) }
 }
 
-function isCompareSeries(model: ChartModel, id: string): boolean {
-  return model.series.some((series) => series.id === id && series.role === "compare")
+function isCompareSeries(model: ChartModel, label: string): boolean {
+  return model.series.some((series) => series.label === label && series.role === "compare")
 }
+
+const SERIES_FIELD = "seriesLabel"
 
 function readField(datum: Datum | undefined, field: "series" | "seriesLabel" | "xLabel"): string {
   const value = datum?.[field]
@@ -90,6 +92,10 @@ function tooltip(model: ChartModel): ITooltipSpec {
   }
 }
 
+function showsEveryCategory(model: ChartModel): boolean {
+  return model.kind !== "line" && model.kind !== "area"
+}
+
 function axes(model: ChartModel, theme: ChartTheme): ICartesianAxisSpec[] {
   const labelStyle = { fill: theme.mutedText, fontSize: LABEL_FONT_SIZE, fontFamily: theme.fontFamily }
   return [
@@ -104,7 +110,8 @@ function axes(model: ChartModel, theme: ChartTheme): ICartesianAxisSpec[] {
     {
       orient: "bottom",
       type: "band",
-      label: { style: labelStyle, formatMethod: (value) => model.xLabels[String(value)] ?? String(value) },
+      sampling: !showsEveryCategory(model),
+      label: { style: labelStyle, autoLimit: true, formatMethod: (value) => model.xLabels[String(value)] ?? String(value) },
       domainLine: { visible: true, style: { stroke: theme.axis, lineWidth: 1 } },
       tick: { visible: false },
       grid: { visible: false },
@@ -161,10 +168,10 @@ function lineSpec(model: ChartModel, theme: ChartTheme): ILineChartSpec {
     ...shared(model, theme),
     xField: "x",
     yField: "value",
-    seriesField: "series",
+    seriesField: SERIES_FIELD,
     axes: axes(model, theme),
     crosshair: crosshair(theme),
-    line: { style: { lineWidth: LINE_WIDTH, lineCap: "round", lineJoin: "round", lineDash: (datum: Datum | undefined) => (isCompareSeries(model, readField(datum, "series")) ? COMPARE_DASH : []) } },
+    line: { style: { lineWidth: LINE_WIDTH, lineCap: "round", lineJoin: "round", lineDash: (datum: Datum | undefined) => (isCompareSeries(model, readField(datum, "seriesLabel")) ? COMPARE_DASH : []) } },
     point: { style: { size: POINT_SIZE, stroke: theme.surface, lineWidth: 2 } },
   }
 }
@@ -175,11 +182,11 @@ function areaSpec(model: ChartModel, theme: ChartTheme): IAreaChartSpec {
     ...shared(model, theme),
     xField: "x",
     yField: "value",
-    seriesField: "series",
+    seriesField: SERIES_FIELD,
     axes: axes(model, theme),
     crosshair: crosshair(theme),
     line: { style: { lineWidth: LINE_WIDTH, lineCap: "round", lineJoin: "round" } },
-    area: { style: { fillOpacity: (datum: Datum | undefined) => (isCompareSeries(model, readField(datum, "series")) ? 0 : AREA_OPACITY) } },
+    area: { style: { fillOpacity: (datum: Datum | undefined) => (isCompareSeries(model, readField(datum, "seriesLabel")) ? 0 : AREA_OPACITY) } },
     point: { visible: false },
   }
 }
@@ -190,9 +197,9 @@ function barSpec(model: ChartModel, theme: ChartTheme): IBarChartSpec {
   return {
     type: "bar",
     ...shared(model, theme),
-    xField: grouped ? ["x", "series"] : "x",
+    xField: grouped ? ["x", SERIES_FIELD] : "x",
     yField: "value",
-    seriesField: "series",
+    seriesField: SERIES_FIELD,
     stack: stacked,
     barMaxWidth: BAR_MAX_WIDTH,
     barGapInGroup: 2,
@@ -215,8 +222,8 @@ function comboSpec(model: ChartModel, theme: ChartTheme): ICommonChartSpec {
     legends: base.legends,
     data: [{ id: "bars", values: valuesOf(bars?.id) }, { id: "line", values: valuesOf(line?.id) }],
     series: [
-      { type: "bar", dataIndex: 0, xField: "x", yField: "value", seriesField: "series", barMaxWidth: BAR_MAX_WIDTH, bar: { style: { cornerRadius: [4, 4, 0, 0] } } },
-      { type: "line", dataIndex: 1, xField: "x", yField: "value", seriesField: "series", line: { style: { lineWidth: LINE_WIDTH } }, point: { style: { size: POINT_SIZE, stroke: theme.surface, lineWidth: 2 } } },
+      { type: "bar", dataIndex: 0, xField: "x", yField: "value", seriesField: SERIES_FIELD, barMaxWidth: BAR_MAX_WIDTH, bar: { style: { cornerRadius: [4, 4, 0, 0] } } },
+      { type: "line", dataIndex: 1, xField: "x", yField: "value", seriesField: SERIES_FIELD, line: { style: { lineWidth: LINE_WIDTH } }, point: { style: { size: POINT_SIZE, stroke: theme.surface, lineWidth: 2 } } },
     ],
     axes: axes(model, theme).map((axis) => (axis.orient === "left" ? { ...axis, seriesIndex: [0, 1] } : axis)),
   }
@@ -229,7 +236,7 @@ function waterfallSpec(model: ChartModel, theme: ChartTheme): IRangeColumnChartS
     xField: "x",
     minField: "start",
     maxField: "end",
-    seriesField: "series",
+    seriesField: SERIES_FIELD,
     barMaxWidth: BAR_MAX_WIDTH,
     axes: axes(model, theme),
     bar: { style: { cornerRadius: 2 } },
@@ -240,7 +247,7 @@ function compositionSpec(model: ChartModel, theme: ChartTheme): IPieChartSpec {
   return {
     type: "pie",
     ...shared(model, theme),
-    categoryField: "series",
+    categoryField: SERIES_FIELD,
     valueField: "value",
     innerRadius: 0.62,
     outerRadius: 0.9,

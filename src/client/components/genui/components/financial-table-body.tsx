@@ -149,7 +149,7 @@ function sum(values: readonly (number | null | undefined)[]): number | null {
   return present.length === 0 ? null : present.reduce((total, value) => total + value, 0)
 }
 
-export function statementGroups(result: QueryResult, metric: string, groupDimension: string | undefined): StatementGroup[] {
+export function statementGroups(result: QueryResult, metric: string, groupDimension: string | undefined, order: readonly string[] = []): StatementGroup[] {
   const groups = new Map<string, QueryRow[]>()
   for (const row of result.rows) {
     const name = groupDimension ? row.dimensions[groupDimension] ?? "" : ""
@@ -157,7 +157,8 @@ export function statementGroups(result: QueryResult, metric: string, groupDimens
     list.push(row)
     groups.set(name, list)
   }
-  return [...groups.entries()].map(([name, rows]) => ({
+  const rank = (name: string) => (order.includes(name) ? order.indexOf(name) : order.length)
+  return [...groups.entries()].sort(([left], [right]) => rank(left) - rank(right)).map(([name, rows]) => ({
     name,
     rows,
     value: sum(rows.map((row) => row.values[metric])),
@@ -172,7 +173,7 @@ function StatementTable({ element, config, result, decl }: Omit<Props, "query">)
   const def = decl.metrics[metric]
   const format = valueFormatOf(def)
   const baseline = result.comparison?.label
-  const groups = statementGroups(result, metric, config.groupRows)
+  const groups = statementGroups(result, metric, config.groupRows, config.groupRows ? decl.dimensions?.[config.groupRows]?.order : undefined)
   const toggle = (name: string) => {
     setCollapsedGroups(collapsed.has(name) ? collapsedGroups.filter((group) => group !== name) : [...collapsedGroups, name])
   }

@@ -51,7 +51,7 @@ import {
   TextNode,
 } from "lexical"
 import { KANNA_BUILTIN_TRANSFORMERS } from "./gfmTransformers"
-import { KANNA_UI_FENCE, KANNA_UI_INTENT_FENCE } from "./messageTransformers"
+import { KANNA_UI_FENCE, KANNA_UI_INTENT_FENCE } from "./kannaUiTransformers"
 import { $isKannaUiNode, KannaUiNode } from "../nodes/KannaUiNode"
 import { KannaUiBlock } from "../../genui/KannaUiBlock"
 import { KannaUiIntentChip } from "../../genui/KannaUiIntentChip"
@@ -74,7 +74,9 @@ const KANNA_NODES = [
   KannaUiNode,
 ]
 
-const DEFAULT_TRANSFORMERS: Array<Transformer> = [KANNA_UI_INTENT_FENCE, KANNA_UI_FENCE, ...KANNA_BUILTIN_TRANSFORMERS]
+function defaultTransformers(): Array<Transformer> {
+  return [KANNA_UI_INTENT_FENCE, KANNA_UI_FENCE, ...KANNA_BUILTIN_TRANSFORMERS]
+}
 
 
 let keyCounter = 0
@@ -335,7 +337,7 @@ export function lexicalStateToReact(): ReactNode {
 
 export function renderMarkdownToReact(
   markdown: string,
-  transformers: Array<Transformer> = DEFAULT_TRANSFORMERS,
+  transformers: Array<Transformer> = defaultTransformers(),
 ): ReactNode {
   const editor = createHeadlessEditor(
     buildKannaEditorConfig({

@@ -139,7 +139,7 @@ function ExplainButton({ props, drill }: { props: ChartProps; drill: DrillState 
   }, [drill, execute, key, metric, props])
   if (host.readonly || !host.sendToAgent) return null
   return (
-    <Button size="sm" variant="ghost" pending={pending} onClick={handleExplain}>
+    <Button size="sm" variant="ghost" className="gap-1.5" pending={pending} onClick={handleExplain}>
       {pending ? null : <MessageSquareText className="h-3.5 w-3.5" aria-hidden="true" />}
       Explain variance
     </Button>
@@ -156,7 +156,7 @@ function DrillBreadcrumb({ datasetId, drill, decl }: { datasetId: string; drill:
   }, [datasetId, execute, key])
   return (
     <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-      <Button size="sm" variant="ghost" onClick={handleBack} pending={pending}>
+      <Button size="sm" variant="ghost" className="gap-1" onClick={handleBack} pending={pending}>
         {pending ? null : <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" />}
         Back
       </Button>
@@ -172,7 +172,7 @@ function chartSubtitle(props: ChartProps, result: { period: { label: string }; c
   const period = result ? result.period.label : describePeriodSpec(props.period)
   const compare = compareOf(props.compareWith)
   const comparisonLabel = result?.comparison?.label ?? (compare ? describeCompareMode(compare) : null)
-  return comparisonLabel ? `${period} · vs ${comparisonLabel.toLowerCase()}` : period
+  return comparisonLabel ? `${period} · vs ${comparisonLabel.charAt(0).toLowerCase()}${comparisonLabel.slice(1)}` : period
 }
 
 export function FinancialChartElement({ element }: ComponentRenderProps) {

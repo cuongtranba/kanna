@@ -230,3 +230,25 @@ test("a user message carrying view context shows a compact chip instead of raw J
   const container = await mount(renderMarkdownToReact("Fix: login test\n\n```kanna-ui-intent\n{\"action\":\"agent.fix\",\"context\":{\"path\":\"a.ts\"}}\n```"), READONLY_GENUI_HOST)
   expect(container.textContent).toContain("Fix request from a view")
 })
+
+test("an income statement lists sections in their declared order, not alphabetically", async () => {
+  const container = await mount(renderMessageMarkdown(fence({
+    version: 1,
+    root: "pl",
+    datasets: {
+      pnl: {
+        source: "inline",
+        rows: [
+          { section: "Revenue", account: "Sales", amount: 100 },
+          { section: "Cost of sales", account: "Hosting", amount: -40 },
+        ],
+        metrics: { amount: { format: "currency", currency: "USD" } },
+        dimensions: { section: { order: ["Revenue", "Cost of sales"] }, account: {} },
+      },
+    },
+    elements: { pl: { type: "IncomeStatement", props: { dataset: "pnl", metric: "amount", rows: "account", groupRows: "section" } } },
+  })), chatHost().host)
+
+  const text = await waitFor(() => (container.textContent?.includes("Hosting") ? container.textContent : null), "the statement")
+  expect(text.indexOf("Revenue")).toBeLessThan(text.indexOf("Cost of sales"))
+})
