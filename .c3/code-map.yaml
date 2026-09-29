@@ -421,3 +421,16 @@ c3-238:
   - src/server/plugins/**
 c3-313:
   - src/shared/plugins/**
+c3-315:
+  - src/shared/genui/*.ts
+c3-240:
+  - src/server/genui/*.ts
+  - src/server/ws-router-genui.ts
+  - src/server/turn-end-guard.ts
+c3-123:
+  - src/client/components/genui/**/*.ts
+  - src/client/components/genui/**/*.tsx
+  - src/client/components/lexical/nodes/KannaUiNode.tsx
+  - src/client/components/lexical/markdown/kannaUiTransformers.ts
+  - e2e/genui.pw.ts
+  - e2e/genui-fixture.ts

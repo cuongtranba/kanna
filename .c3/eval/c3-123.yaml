@@ -1,0 +1,9 @@
+fact: c3-123
+claim: "kanna-ui fences render as validated interactive views with charts, statements, and confirmed agent actions"
+code:
+  - src/client/components/genui/**/*.ts
+  - src/client/components/genui/**/*.tsx
+  - src/client/components/lexical/nodes/KannaUiNode.tsx
+  - src/client/components/lexical/markdown/kannaUiTransformers.ts
+  - e2e/genui.pw.ts
+  - e2e/genui-fixture.ts

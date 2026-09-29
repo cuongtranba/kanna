@@ -35,6 +35,7 @@ export default defineConfig({
           items: [
             { label: 'Providers & Models', slug: 'features/providers-models' },
             { label: 'Chat & Transcript', slug: 'features/chat-transcript' },
+            { label: 'Generative UI', slug: 'features/generative-ui' },
             { label: 'Projects & Sessions', slug: 'features/projects-sessions' },
             { label: 'Boards', slug: 'features/boards' },
             { label: 'Multi-repo Stacks', slug: 'features/multi-repo-stacks' },

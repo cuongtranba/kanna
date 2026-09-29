@@ -1,7 +1,7 @@
 ---
 id: c3-1
 c3-version: 4
-c3-seal: 114b9ab51f48406379982a75f638e544c0f8cbfdcc46e7ec359c21a9cace9637
+c3-seal: e7ee47c9aab07f558c4945e290bc2d1c017854e917351461361296aca2d3ce3f
 title: Client
 type: container
 boundary: app
@@ -44,3 +44,4 @@ Render the chat experience: hydrate transcripts, accept input, drive sidebar/set
 | c3-120 | cron-ui | feature | active | Render the cron feature in the client: six transcript cards for cron entries, |
 | c3-121 | plugins-ui | feature | active | Render what plugins contribute to the running app — sidebar entries, a chat-footer panel and a Settings page — each isolated so one bad plugin cannot take the shell down. |
 | c3-122 | stacks-ui | feature | active | Render stacks in the sidebar: create one, edit its projects and instructions, start a chat on it, and read what is running across it. |
+| c3-123 | genui-ui | feature | active | Render kanna-ui fences in the transcript as validated interactive views, run their local and Kanna actions, and hand agent actions back after the user confirms. |

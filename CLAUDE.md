@@ -1148,6 +1148,79 @@ iff it holds none of `[ ] ( ) { } | "`. Rule 95 (`[/`) longest-match-beats plain
 `Current[/opt/app/current symlink]` dies. Rule 24 (`"`) is present in every
 state, so quoting is the universal escape; a literal `"` is written `#quot;`.
 
+# Generative UI (```kanna-ui, KANNA_GENUI)
+
+The agent composes interactive views — reports, charts, statements, test results —
+from Kanna's own component catalog; Kanna validates them, renders them, fetches their
+data and runs their actions. **The model decides WHAT to show; nothing it writes ever
+executes.** Design note: `docs/superpowers/specs/2026-09-29-generative-ui-design.md`;
+ADR `adr-20260929-generative-ui`.
+
+- **The contract is a fence, not a tool.** A ```kanna-ui block in `assistant_text`
+  carries one JSON spec. Codex receives no Kanna MCP tools
+  (`codex-transcript-translator.ts` passes `mcpServers: []`), so a `present_ui` tool
+  would have been Claude-only; the fence also persists and restores with the
+  transcript and renders read-only in share links. `mcp__kanna__validate_ui` is the
+  in-turn check (file datasets are resolved too); the prompt section comes from
+  `renderGenUIPromptSection`, added to main chats only (`genui` option on both
+  prompt builders), never to subagents.
+- **`parseGenUISpec` (`src/shared/genui/spec.ts`) is the trust boundary.**
+  json-render's own `catalog.validate` checks only component NAMES — on 0.21.0 it
+  accepted `title: 3`, an `onClick` string prop, and an unknown action `shell.run`.
+  Kanna validates every prop with a strict Zod schema, every `on` binding against
+  `GENUI_ACTIONS` and its params, and dataset references; expressions (`$state`,
+  `$bindState`, `$template`, `$item`, `$index`, `$cond`) are checked for shape and
+  then excused from the prop schema at their position, because json-render resolves
+  them recursively. `$computed` and json-render's `push`/`pop`/`validateForm`
+  built-ins are rejected. **Components re-parse their resolved props at render** — a
+  bound value can resolve to anything.
+- **Datasets are resolved server-side** by `GenUIDatasetService`
+  (`src/server/genui/`), except `inline` ones, which the client runs through the same
+  shared engine (`runDatasetQuery`). A file must resolve inside the chat's cwd by
+  REALPATH, and the chat policy's `readPathDeny` is checked against both the path as
+  written and the real path — on macOS the two differ (`/var` vs `/private/var`) and
+  checking only one let a denied file through in testing. An MCP tool is called only
+  if it declares `readOnlyHint` or the user clicked *Allow for this chat* (in-memory,
+  per chat); the MCP server's own token is the authorization, never a tenant id the
+  model wrote.
+- **One turn-end seam for both guards.** `composeTurnEndGuards` (`turn-end-guard.ts`)
+  feeds the mermaid guard and the GenUI guard through the runner's existing
+  `turnEndGuard` dep — `runClaudeSession` sits on the complexity ceiling, so adding a
+  second call there fails lint. Codex turns get the GenUI guard only (its correction
+  wording names no tool, because Codex has none). The escalation key is a content
+  HASH: `ModelEscalation` logs its key, and a spec can carry inline financial rows.
+- **Actions have three classes** (`GENUI_ACTIONS`): `local` (json-render state),
+  `kanna` (`file.open`, `link.open` https-only, `dataset.refresh`,
+  `financial.drilldown`), `agent`. An agent action is proposed in an inline confirm
+  strip and, on *Send*, becomes a `chat.send` whose content is a headline plus a
+  ```kanna-ui-intent block of structured context (values, period, dataset source) —
+  no protocol change, and it queues like any message. json-render's `ActionProvider`
+  captures its handlers ONCE, so `HandlerSync` re-registers them when the host changes.
+- **Client state rules.** `useState` is banned in `src/client`, and rows are
+  virtualised, so per-element UI state (tab, chart/table view, expanded rows, drill
+  path) lives in the view's json-render store (`view-state-registry.ts`, bounded)
+  under `/_ui/<elementKey>` and `/_drill/<datasetId>`; the element key rides an
+  injected `_kannaKey` prop that `resolvedProps` strips.
+- **The kanna-ui transformers live in their own module**
+  (`lexical/markdown/kannaUiTransformers.ts`) and `lexicalToReact` builds its default
+  list at call time. Spreading `KANNA_BUILTIN_TRANSFORMERS` at module load through
+  `messageTransformers` hit an import cycle in the PRODUCTION bundle and left the
+  whole app blank (`UC is not iterable`) while every bun test passed — bun orders
+  modules differently. `e2e/smoke.pw.ts` is what catches this class.
+- **Charts** (`charts/`): VChart **core** with explicit `register*` calls, lazily
+  loaded (~360 KB gzip chunk, never in the entry). `buildChartModel` is the
+  deterministic adapter and enforces one axis — a combo whose metrics differ in
+  unit is refused ("use two charts"); the waterfall is a range-column whose steps
+  Kanna computes. Series colours are `--chart-1..8` in `src/index.css`, the dataviz
+  skill's validated palette in OKLCH; `chart-palette.test.ts` pins mark contrast
+  (light slots 3–5 are documented relief slots: every chart has a Table view).
+  Colours are converted from OKLCH by `oklchToRgbString`, because canvas parsing of
+  `oklch()` is not reliable. Series order is alphabetical/declared, never by value,
+  so a filter never repaints survivors.
+
+`KANNA_GENUI=disabled` removes the prompt section and the guard; existing views keep
+rendering and `validate_ui` stays registered.
+
 # `/cron` Self-Repair (KANNA_CRON_REPAIR)
 
 `/cron` always intercepts and never starts a turn, so a rejected line used to be
