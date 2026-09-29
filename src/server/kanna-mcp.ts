@@ -48,6 +48,7 @@ import { withFileLock } from "./tracking-file-lock"
 import { computeWorkspaceDigest, runVerifyCommand } from "./loop-verify-io.adapter"
 import { getCachedVerify, setCachedVerify } from "./loop-verify-cache"
 import { parseMermaid } from "./mermaid-parse.adapter"
+import { buildValidateUiToolList } from "./genui/validate-ui-tool"
 import { validateMermaid } from "../shared/mermaid-validate"
 import { formatMermaidDefect } from "../shared/mermaid-report"
 import type { MermaidParsePort } from "../shared/mermaid-validation"
@@ -1021,6 +1022,7 @@ export function buildKannaMcpTools(args: KannaMcpArgs): KannaSdkToolList {
     ...buildChatTaskToolList(resolveChatTaskDeps(args, chatId), tool),
     ...buildRunVerifyToolList({ chatId, cwd, getArmedLoop: args.getArmedLoop }),
     ...buildValidateMermaidToolList({ chatId, parse: args.parseMermaid ?? parseMermaid }),
+    ...buildValidateUiToolList(chatId, cwd),
     ...buildCronToolList({ chatId, armCron: args.armCron, updateCron: args.updateCron }),
   ]
 

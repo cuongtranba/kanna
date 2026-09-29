@@ -1255,7 +1255,7 @@ describe("runClaudeSession — mermaid guard", () => {
     const deps = makeDeps(session, {
       activeTurns: new Map([[session.chatId, active]]),
       maybeStartNextQueuedMessage: async () => { order.push("drain") },
-      mermaidGuard: {
+      turnEndGuard: {
         check: async (chatId, text) => {
           calls.push({ chatId, text })
           order.push("guard")

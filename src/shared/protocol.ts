@@ -375,6 +375,8 @@ export type ClientCommand =
   | { type: "workflows.getAgentTranscript"; chatId: string; runId: string; agentId: string }
   | { type: "subagents.getRun"; chatId: string; agentId: string }
   | { type: "backgroundTasks.getOutput"; chatId: string; taskId: string }
+  | { type: "genui.dataset.query"; chatId: string; dataset: JsonObject; query: JsonObject; refresh?: boolean }
+  | { type: "genui.dataset.approve"; chatId: string; server: string; tool: string }
   | {
       type: "message.enqueue"
       chatId: string

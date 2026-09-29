@@ -111,4 +111,5 @@ export interface AgentCoordinatorArgs {
   localCatalog?: import("./local-catalog").LocalCatalogService
   persistOAuthState?: (id: string, oauth: McpOAuthState) => void
   backgroundTaskOutputRegistry?: import("./background-task-output-registry").BackgroundTaskOutputRegistry
+  genuiDatasets?: import("./genui/dataset-service").GenUIDatasetService
 }

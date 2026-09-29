@@ -35,6 +35,7 @@ import type { WorkflowRegistry } from "./workflow-registry"
 import type { SubagentTranscriptRegistry } from "./subagent-transcript-registry"
 import type { startClaudeSession as StartClaudeSessionFn, CompactionEvent } from "./claude-session-start"
 import type { OAuthBearers } from "./claude-session-config-helpers"
+import { isGenUIEnabled } from "./genui/genui-config"
 
 
 interface SpawnOAuthPool {
@@ -160,6 +161,7 @@ export async function spawnClaudeTurn(
       globalPromptAppend: deps.getAppSettingsSnapshot().globalPromptAppend,
       ...args.instructions,
       stackProjects: args.stackProjects,
+      genui: isGenUIEnabled(),
     })
     const chatIdForCtx = args.chatId
     const delegationContext: KannaMcpDelegationContext = {

@@ -48,6 +48,14 @@ export const COMPACTION_PRE_TOKENS = "kanna.compaction.pre_tokens"
 
 export const COMPACTION_POST_TOKENS = "kanna.compaction.post_tokens"
 
+export const GENUI_SPEC_CHECKED = "kanna.genui.spec.checked"
+
+export const GENUI_DATASET_QUERY = "kanna.genui.dataset.query"
+
+export const GENUI_DATASET_QUERY_DURATION_MS = "kanna.genui.dataset.query_duration_ms"
+
+export const GENUI_TOOL_APPROVED = "kanna.genui.dataset.tool_approved"
+
 export const DURATION_BUCKETS_MS: readonly number[] = [
   1_000, 2_000, 5_000, 10_000, 20_000, 30_000,
   60_000, 120_000, 300_000, 600_000, 1_200_000, 1_800_000,

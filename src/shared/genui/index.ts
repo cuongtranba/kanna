@@ -63,7 +63,16 @@ export {
   type ParsedIntentMessage,
   type ViewContext,
 } from "./intent"
+export { contentHash } from "./hash"
 export { jsonObjectSchema, jsonValueSchema } from "./json-schema"
+export {
+  DATASET_ERROR_CODES,
+  DATASET_ERROR_MESSAGES,
+  decodeDatasetQueryOutcome,
+  type DatasetErrorCode,
+  type DatasetQueryOutcome,
+} from "./protocol"
+export { DATASET_MAX_ROWS, formatForPath, rowsFromCsv, rowsFromJson, rowsFromText, type RowsParse } from "./rows"
 export { bucketLabel, describeWindow, type CompareMode, type PeriodSpec, type PeriodWindow } from "./period"
 export { renderGenUIPromptSection, type GenUIPromptOptions } from "./prompt"
 export {

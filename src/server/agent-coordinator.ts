@@ -179,7 +179,11 @@ import { currentBranchName, mergeLoopBranch } from "./loop-integrate-io.adapter"
 import { runVerifyCommand } from "./loop-verify-io.adapter"
 import { homedir } from "node:os"
 import { isClaudeSdkProvider } from "./provider-catalog"
-import { createMermaidGuard, type MermaidGuard } from "./mermaid-guard"
+import { createMermaidGuard } from "./mermaid-guard"
+import { composeTurnEndGuards, type TurnEndGuard } from "./turn-end-guard"
+import { createGenUIGuard } from "./genui/genui-guard"
+import { isGenUIEnabled } from "./genui/genui-config"
+import type { DatasetDecl } from "../shared/genui"
 import { createCronRepair, type CronRepair } from "./cron/repair"
 import { createCronConfirm, type CronConfirm } from "./cron/confirm"
 import { createModelEscalation, type ModelEscalation } from "./model-escalation"
@@ -245,7 +249,8 @@ export class AgentCoordinator {
   private readonly pendingCronOutcomes = new Set<Promise<void>>()
   private readonly _cronRepair: CronRepair
   private readonly _cronConfirm: CronConfirm
-  private readonly _mermaidGuard: MermaidGuard
+  private readonly _turnEndGuard: TurnEndGuard
+  private readonly _codexTurnEndGuard: TurnEndGuard
   readonly getAutoResumePreference: () => boolean
   readonly getSubagents: () => Subagent[]
   readonly getAppSettingsSnapshot: NonNullable<AgentCoordinatorArgs["getAppSettingsSnapshot"]>
@@ -309,17 +314,25 @@ export class AgentCoordinator {
         drain: true,
       }),
     })
-    this._mermaidGuard = createMermaidGuard({
-      escalation: this._buildModelEscalation({
-        name: "mermaid",
-        enabled: process.env.KANNA_MERMAID_GUARD !== "disabled",
+    const genuiDatasets = args.genuiDatasets
+    const checkGenUIDataset = async (chatId: string, decl: DatasetDecl) =>
+      (genuiDatasets ? await genuiDatasets.checkResolvable(chatId, decl) : null)
+    const genuiEscalation = this._buildModelEscalation({ name: "genui", enabled: isGenUIEnabled() })
+    this._codexTurnEndGuard = createGenUIGuard(genuiEscalation, checkGenUIDataset, false)
+    this._turnEndGuard = composeTurnEndGuards(
+      createMermaidGuard({
+        escalation: this._buildModelEscalation({
+          name: "mermaid",
+          enabled: process.env.KANNA_MERMAID_GUARD !== "disabled",
+        }),
+        parse: parseMermaid,
+        repair: (source) => {
+          const result = repairMermaidSource(source)
+          return { source: result.source, repaired: result.repairs.length > 0 }
+        },
       }),
-      parse: parseMermaid,
-      repair: (source) => {
-        const result = repairMermaidSource(source)
-        return { source: result.source, repaired: result.repairs.length > 0 }
-      },
-    })
+      createGenUIGuard(genuiEscalation, checkGenUIDataset, true),
+    )
     this.store.onTurnTerminal = (chatId, outcome) => {
       const active = this.activeTurns.get(chatId)
       if (active) {
@@ -1108,7 +1121,7 @@ export class AgentCoordinator {
       closeClaudeSession: (chatId, session) => { this.closeClaudeSession(chatId, session) },
       maybeStartNextQueuedMessage: (chatId) => this.maybeStartNextQueuedMessage(chatId),
       resolveClaudeDriverPreference: () => this.resolveClaudeDriverPreference(),
-      mermaidGuard: this._mermaidGuard,
+      turnEndGuard: this._turnEndGuard,
       onBackgroundTaskLaunch: this.backgroundTaskOutputRegistry
         ? (chatId, taskId, outputPath) => {
             this.backgroundTaskOutputRegistry!.trackTask(chatId, taskId, outputPath)
@@ -1143,6 +1156,7 @@ export class AgentCoordinator {
       startTurnForChat: (args) => this.startTurnForChat(args),
       maybeStartNextQueuedMessage: (chatId) => this.maybeStartNextQueuedMessage(chatId),
       stopCodexSession: (chatId) => this.codexManager.stopSession(chatId),
+      turnEndGuard: this._codexTurnEndGuard,
     }
   }
 
