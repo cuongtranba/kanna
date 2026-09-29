@@ -1218,6 +1218,22 @@ ADR `adr-20260929-generative-ui`.
   `oklch()` is not reliable. Series order is alphabetical/declared, never by value,
   so a filter never repaints survivors.
 
+- **Accessibility and visual baselines** (`e2e/genui.pw.ts`). axe-core checks both
+  seeded views against WCAG 2.1 AA in light and dark, and asserts it actually scanned
+  something — an `include` selector that matches nothing reports zero violations. A
+  keyboard-only test changes the period, switches a chart to its table, drills in, and
+  reaches *Send*. The canvas is not focusable, so **the table view is the keyboard
+  path for drilldown**: each drillable row header is a button. When a drill replaces
+  the button that had focus, focus moves to *Back*, and *Back* returns it to the
+  chart's figure — without that, focus falls to `<body>` and a keyboard user restarts
+  from the top of the page. Eighteen element screenshots in
+  `e2e/genui.pw.ts-snapshots/` are compared with `toHaveScreenshot`. They are named
+  `-darwin` because font rasterisation differs per OS; e2e is off CI, so regenerate
+  them on macOS with `--update-snapshots` after an intended visual change, and look at
+  every image before committing. Each capture scrolls its element to the top first,
+  because the chat composer overlays the bottom of the transcript and would be
+  stitched into the image.
+
 `KANNA_GENUI=disabled` removes the prompt section and the guard; existing views keep
 rendering and `validate_ui` stays registered.
 
