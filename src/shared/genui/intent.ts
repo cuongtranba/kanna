@@ -21,7 +21,6 @@ const intentPayloadSchema = z.strictObject({
   context: jsonObjectSchema,
 })
 
-const INTENT_PREAMBLE = "Structured context from the generated view the user is looking at:"
 const HEADLINE_LIMIT = 300
 
 function clampHeadline(text: string): string {
@@ -31,7 +30,7 @@ function clampHeadline(text: string): string {
 
 export function formatIntentMessage(intent: AgentIntent): string {
   const payload = JSON.stringify({ action: intent.action, context: intent.context }, null, 2)
-  return `${clampHeadline(intent.headline)}\n\n${INTENT_PREAMBLE}\n\n${fenceBlock(KANNA_UI_INTENT_FENCE_LANGUAGE, payload)}`
+  return `${clampHeadline(intent.headline)}\n\n${fenceBlock(KANNA_UI_INTENT_FENCE_LANGUAGE, payload)}`
 }
 
 export interface ParsedIntentMessage {
