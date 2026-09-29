@@ -1,3 +1,3 @@
-export function isGenUIEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-  return env.KANNA_GENUI !== "disabled"
+export function isGenUIEnabled(): boolean {
+  return process.env.KANNA_GENUI !== "disabled"
 }

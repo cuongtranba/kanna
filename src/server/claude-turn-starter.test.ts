@@ -5,6 +5,7 @@ import type { ActiveTurn, ClaudeSessionState, StartingTurn } from "./claude-sess
 import { PendingToolSlots } from "./pending-tool-slot"
 import type { HarnessTurn } from "./harness-types"
 import type { TranscriptEntry } from "../shared/types"
+import { renderGenUIPromptSection } from "../shared/genui"
 
 
 function makeFakeTurn(): HarnessTurn {
@@ -225,11 +226,11 @@ describe("startTurnForChat", () => {
       expect(instructions).toContain("/work/fe")
     })
 
-    test("a solo chat gets the workspace block and no stack block", async () => {
+    test("a solo chat gets the workspace block, the generative UI section, and no stack block", async () => {
       const deps = depsForBindings()
       deps.getAppSettingsSnapshot = mock(() => ({ globalPromptAppend: "Always TDD." })) as never
       await startTurnForChat(deps, makeArgs({ provider: "codex" }))
-      expect(instructionsOfSession(deps)).toBe("## Workspace instructions\n\nAlways TDD.")
+      expect(instructionsOfSession(deps)).toBe(`## Workspace instructions\n\nAlways TDD.\n\n${renderGenUIPromptSection({ canValidate: false })}`)
     })
   })
 
