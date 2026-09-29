@@ -10,7 +10,10 @@ The Share button in a chat's header creates a public read-only link that anyone 
 - The server projects the current event log into a frozen JSON snapshot.
 - The snapshot is stored under `~/.kanna/data/shares/<token>.json` (file mode `0600`).
 - The URL is `<your-origin>/share/<token>`, where `<your-origin>` is the scheme + host of the request that minted it. The 256-bit token is the credential.
-- Viewers see the chat transcript, tool calls, diffs, and terminal output. They cannot send messages.
+- Viewers see the conversation the way the chat shows it: your prompts, the assistant's replies and thinking, and tool calls grouped into the same collapsible tool rows. They cannot send messages.
+- Account details, attachments, cron and loop records, hidden entries, and raw provider payloads are left out of the snapshot.
+- **Generative views keep their data.** When a reply contains a report or chart backed by a workspace file or an MCP tool, the rows it reads are copied into the snapshot at the moment you create the link, so the viewer can still change the period, switch to the table and drill in. Only the columns the view declares are copied. A tool you have not allowed for the chat is not called; that view shows why its data is missing. The copy does not update: create a new link to publish newer data.
+- Links created before this format showed tool calls as raw JSON and no view data. They now render tool calls the same way; their views still have no data, so share the chat again to include it.
 - **Public reachability is a deployment concern.** Kanna will happily mint a `http://localhost:3210/share/<token>` URL if that's how you're hitting the server — recipients outside your network won't be able to open it. To make share URLs work for outside recipients, run Kanna behind a Cloudflare tunnel, deploy it to a reachable VPS, or expose a port.
 
 ## Lifecycle
@@ -22,7 +25,8 @@ The Share button in a chat's header creates a public read-only link that anyone 
 ## Limits
 
 A snapshot larger than **50 MB** is refused rather than minted. In practice that
-is a very long chat with a lot of diff and terminal output.
+is a very long chat with a lot of tool output. A single view's data is copied only
+up to 8 MB; a larger dataset is left out and the view says so.
 
 There is no cap on the total size of the shares directory, so a habit of minting
 links and never revoking them will accumulate on disk until each one expires.
@@ -32,4 +36,5 @@ Expired snapshots are reclaimed by the daily sweep.
 
 - `/share/:token` and `/assets/share-view/*` are the only unauthenticated paths.
 - The token is the credential — anyone with the URL can view. Treat it as a secret.
+- A link publishes the data behind every generative view in the chat, as of the moment it was created. Check a report's data before sharing a chat that contains it.
 - Viewers cannot mint, revoke, or interact. The composer is hidden client-side and the server does not accept any write commands from share-view requests.

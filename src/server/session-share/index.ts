@@ -24,7 +24,7 @@ export interface ShareEventSink {
 export interface SessionShareDeps {
   events: ShareEventSink
   snapshotStore: SnapshotStore
-  buildSnapshot: (chatId: string) => ChatSnapshot
+  buildSnapshot: (chatId: string) => Promise<ChatSnapshot>
   getDefaultTtlHours: () => number
   now?: () => number
   owner: () => string
@@ -48,7 +48,7 @@ export class SessionShareService {
   async mintToken(req: MintRequest, baseUrl: string): Promise<Result<MintResponse>> {
     let snapshot: ChatSnapshot
     try {
-      snapshot = this.deps.buildSnapshot(req.chatId)
+      snapshot = await this.deps.buildSnapshot(req.chatId)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       if (msg.startsWith("chat_not_found:")) {

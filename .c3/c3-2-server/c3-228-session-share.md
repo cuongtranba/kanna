@@ -1,6 +1,6 @@
 ---
 id: c3-228
-c3-seal: 85f21fe26e141d712e5b5cdee8e13f0b953d932de7bd8ccac2af945c424a1bdb
+c3-seal: 23ec857b059f5a7fb6e320d17b1036fe485dd8b97f3a7a967731ef34d371fc25
 title: session-share
 type: component
 category: feature
@@ -48,8 +48,9 @@ Owns the complete lifecycle of a read-only session share: receive mint request f
 
 | Aspect | Detail | Reference |
 | --- | --- | --- |
-| Outcome | Owner receives a URL they can paste to any browser; recipient sees a frozen read-only transcript | c3-2 |
-| Primary path | ws share.mint → build snapshot → write file (mode 0600) → append share.token_minted → return ${originHost}/share/<token> | c3-208 |
+| Outcome | Owner receives a URL they can paste to any browser; recipient sees the frozen transcript rendered by the chat's own row components, and generative views show the data captured at mint | c3-2 |
+| Primary path | ws share.mint → build snapshot (allowlisted entries plus frozen dataset rows) → write file (mode 0600) → append share.token_minted → return ${originHost}/share/<token> | c3-208 |
+| Alternate — legacy snapshot | A version 1 snapshot minted before the transcript-entry format is upgraded in the viewer; tool results pair with calls by order because v1 kept no tool id | c3-228 |
 | Alternate — sweep expiry | TTL cron fires → load share projection → for each expired token: delete file + append share.token_expired | c3-228 |
 | Alternate — startup replay | On boot, replay shares JSONL; any token past TTL is expired immediately (fail-closed) | c3-206 |
 | Failure — snapshot read error | File missing or corrupt on GET: return 404 | c3-228 |
@@ -71,9 +72,11 @@ Owns the complete lifecycle of a read-only session share: receive mint request f
 
 | Surface | Direction | Contract | Boundary | Evidence |
 | --- | --- | --- | --- | --- |
-| mintShare(chatId, ttlHours, baseUrl) | IN | Builds snapshot, persists file, appends event, returns ${baseUrl}/share/<token>. Caller (ws-router) passes the request origin captured at WS upgrade. | c3-208 | src/server/session-share/session-share-service.ts |
-| GET /share/:token | IN | Returns frozen ShareSnapshot JSON if valid; 404 if unknown; 410 if expired | c3-202 | src/server/session-share/share-route.ts |
-| sweepExpired() | IN | Appends share.token_expired and deletes file for each token past TTL | internal timer | src/server/session-share/snapshot-sweep.ts |
+| mintShare(chatId, ttlHours, baseUrl) | IN | Builds snapshot, persists file, appends event, returns ${baseUrl}/share/<token>. Caller (ws-router) passes the request origin captured at WS upgrade. | c3-208 | src/server/session-share/index.ts |
+| buildChatSnapshot | IN | Version 2 snapshot: TranscriptEntry list restricted by shareableEntries (prompts, assistant text and thinking, tool calls and results, results, errors, compaction and interrupt markers; no account info, system init, attachments, hidden entries, or debugRaw beyond the tool_use_result sidecar) plus datasets keyed by datasetFreezeKey | c3-306 | src/server/session-share/snapshot-builder.ts |
+| freezeDataset | OUT | GenUIDatasetService.freeze loads each non-inline dataset a kanna-ui view declares under the chat's own authorization and keeps only the columns the declaration reads; an unapproved MCP tool or an oversized result is recorded as unavailable, never called or truncated | c3-208 | src/server/genui/dataset-service.ts |
+| GET /share/:token | IN | Returns frozen ShareSnapshot JSON if valid; 404 if unknown; 410 if expired | c3-202 | src/server/session-share/http-routes.ts |
+| sweepExpired() | IN | Appends share.token_expired and deletes file for each token past TTL | internal timer | src/server/session-share/sweep.ts |
 | snapshot-store adapter | IN/OUT | readSnapshot(token), writeSnapshot(token, data), deleteSnapshot(token) | c3-204 | src/server/session-share/snapshot-store.adapter.ts |
 | share projection | IN | Projects share events into Map<token, ShareRecord>; rebuilt on startup replay | c3-206 | src/server/session-share/share-projection.ts |
 
@@ -86,14 +89,19 @@ Owns the complete lifecycle of a read-only session share: receive mint request f
 | Stale snapshot served | GET route reads file without checking projection expiry | Expired token returns 200 instead of 410 | bun test src/server/session-share/share-route.test.ts: expired fixture returns 410 |
 | Event schema drift | New share event kind added without projection handler | Replay corrupts in-memory map | bun test share-projection.test.ts covers all event kinds |
 | Token collision | PRNG weakness produces duplicate 256-bit token | Two chats share same file | Token uniqueness assertion in token.ts unit test |
+| Private data published | An entry kind or field added to the snapshot without review | A public link shows an email, attachment path, or raw provider payload | bun run test src/server/session-share/snapshot-builder.test.ts |
+| Viewer diverges from chat | Share view gets its own renderer again | Tool calls render as raw JSON | bun run test src/client/app/share-view/ShareViewPage.test.tsx |
+| Dataset columns leak | Frozen rows keep columns the view never reads | A shared report carries unrelated columns | bun run test src/server/genui/dataset-service.test.ts |
 
 ## Derived Materials
 
 | Material | Must derive from | Allowed variance | Evidence |
 | --- | --- | --- | --- |
-| src/server/session-share/session-share-service.ts | c3-228 Contract: mintShare, sweepExpired | Orchestration detail | src/server/session-share/session-share-service.ts |
-| src/server/session-share/share-route.ts | c3-228 Contract: GET /share/:token | HTTP framework detail | src/server/session-share/share-route.ts |
+| src/server/session-share/index.ts | c3-228 Contract: mintShare | Orchestration detail | src/server/session-share/index.ts |
+| src/server/session-share/snapshot-builder.ts | c3-228 Contract: buildChatSnapshot | Snapshot assembly detail | src/server/session-share/snapshot-builder.ts |
+| src/server/session-share/shareable-entries.ts | c3-228 Contract: buildChatSnapshot | Allowlist detail | src/server/session-share/shareable-entries.ts |
+| src/server/session-share/http-routes.ts | c3-228 Contract: GET /share/:token | HTTP framework detail | src/server/session-share/http-routes.ts |
 | src/server/session-share/snapshot-store.adapter.ts | c3-228 Contract: snapshot-store adapter | fs implementation detail | src/server/session-share/snapshot-store.adapter.ts |
 | src/server/session-share/share-projection.ts | c3-228 Contract: share projection | Projection implementation | src/server/session-share/share-projection.ts |
-| src/server/session-share/snapshot-sweep.ts | c3-228 Contract: sweepExpired | Cron wiring detail | src/server/session-share/snapshot-sweep.ts |
-| src/server/session-share/share-route.test.ts | c3-228 Contract: GET /share/:token | Test fixture detail | src/server/session-share/share-route.test.ts |
+| src/server/session-share/sweep.ts | c3-228 Contract: sweepExpired | Cron wiring detail | src/server/session-share/sweep.ts |
+| src/server/session-share/http-routes.test.ts | c3-228 Contract: GET /share/:token | Test fixture detail | src/server/session-share/http-routes.test.ts |

@@ -55,7 +55,7 @@ export interface TranscriptActionsContextValue {
 const NOOP = () => {}
 const ASYNC_NOOP = () => Promise.resolve()
 
-const defaultContextValue: TranscriptActionsContextValue = {
+export const DEFAULT_TRANSCRIPT_ACTIONS: TranscriptActionsContextValue = {
   onAskUserQuestionSubmit: NOOP,
   onExitPlanModeConfirm: ASYNC_NOOP,
   onToolRequestAnswer: ASYNC_NOOP,
@@ -84,7 +84,7 @@ const defaultContextValue: TranscriptActionsContextValue = {
   isProcessing: false,
 }
 
-export const TranscriptActionsContext = createContext<TranscriptActionsContextValue>(defaultContextValue)
+export const TranscriptActionsContext = createContext<TranscriptActionsContextValue>(DEFAULT_TRANSCRIPT_ACTIONS)
 
 export function useTranscriptActions(): TranscriptActionsContextValue {
   return useContext(TranscriptActionsContext)

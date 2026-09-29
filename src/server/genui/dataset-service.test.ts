@@ -121,3 +121,16 @@ test("reports an MCP server that is not configured as missing, before calling an
   const outcome = await service().query("chat", decl, { metrics: ["total"] })
   expect(outcome.status === "error" ? outcome.code : outcome.status).toBe("not_found")
 })
+
+test("freezing a dataset for a share keeps only the columns the view declares", async () => {
+  await writeFile(path.join(root, "sales.csv"), "region,revenue,customer_email\nnorth,10,a@example.com\nsouth,5,b@example.com\n")
+  const frozen = await service().freeze("chat", fileDataset("sales.csv"))
+  expect(frozen).toEqual({ status: "ok", rows: [{ region: "north", revenue: "10" }, { region: "south", revenue: "5" }] })
+})
+
+test("freezing never calls an MCP tool the user has not allowed, and says why the data is missing", async () => {
+  const mcp = fakeMcp({ list_deals: { readOnly: false, value: [{ stage: "won", total: 3 }] } })
+  const frozen = await service(mcp).freeze("chat", mcpDataset("list_deals"))
+  expect(frozen.status).toBe("unavailable")
+  expect(mcp.calls).toEqual([])
+})

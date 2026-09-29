@@ -54,7 +54,7 @@ export function useDatasetQuery(datasetId: string | undefined, query: DatasetQue
     },
     enabled: remote,
     placeholderData: keepPreviousData,
-    refetchInterval: decl && remote ? pollIntervalMs(decl) : false,
+    refetchInterval: decl && remote && !host.readonly ? pollIntervalMs(decl) : false,
     retry: false,
   })
 

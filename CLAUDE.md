@@ -1160,7 +1160,9 @@ ADR `adr-20260929-generative-ui`.
   carries one JSON spec. Codex receives no Kanna MCP tools
   (`codex-transcript-translator.ts` passes `mcpServers: []`), so a `present_ui` tool
   would have been Claude-only; the fence also persists and restores with the
-  transcript and renders read-only in share links. `mcp__kanna__validate_ui` is the
+  transcript and renders read-only in share links, where each non-inline dataset is
+  answered from rows frozen into the snapshot at mint (see **Share links render
+  through the chat's pipeline** below). `mcp__kanna__validate_ui` is the
   in-turn check (file datasets are resolved too); the prompt section comes from
   `renderGenUIPromptSection`, added to main chats only (`genui` option on both
   prompt builders), never to subagents.
@@ -1236,6 +1238,47 @@ ADR `adr-20260929-generative-ui`.
 
 `KANNA_GENUI=disabled` removes the prompt section and the guard; existing views keep
 rendering and `validate_ui` stays registered.
+
+# Share links render through the chat's pipeline
+
+A share snapshot is **version 2**: the chat's own `TranscriptEntry` values, chosen by
+`shareableEntries` (`src/server/session-share/shareable-entries.ts`), plus a
+`datasets` map. `ShareViewPage` renders them with `processTranscriptMessages` →
+`buildResolvedTranscriptRows` → `TranscriptRowFrame`, exactly as the chat does. The
+share page used to have its own renderer over a flattened version 1 message list that
+kept only a tool's name and raw input, so every tool call showed as a JSON box. **Do
+not give the share page its own renderer again.**
+
+- **`shareableEntries` is an ALLOWLIST, and it is the privacy boundary.** An entry
+  kind is published only if it is listed there. `account_info` (email),
+  `system_init`, attachments (absolute paths), cron/loop records, hidden entries and
+  `debugRaw` are withheld. A tool result keeps only the `tool_use_result` /
+  `toolUseResult` sidecar, and only for the tool kinds `toolResultReadsSidecar`
+  (`shared/tools.ts`) names — the ones `processTranscriptMessages` reads it for
+  (AskUserQuestion, plan, task, subagent cards). Elsewhere the sidecar is a second
+  copy of the result, measured at twice the size of the content itself. A new entry kind
+  stays private until someone adds it on purpose; `snapshot-builder.test.ts` pins the
+  withheld fields.
+- **Datasets are frozen at mint, never queried by the viewer.** The viewer has no
+  chat, workspace or MCP access, and a query endpoint keyed by share token would hand
+  all three to anyone holding a link. `GenUIDatasetService.freeze` loads each
+  non-inline dataset under the CHAT's authorization — the same realpath containment,
+  `readPathDeny` and MCP approval gate as a live query, so an unapproved tool is
+  recorded as unavailable and never called — and keeps only the columns the
+  declaration reads (`projectDatasetRows`). The share host answers with
+  `runDatasetQuery` over those rows, so period, compare and drill-down still work.
+  Rewriting the views to inline datasets was rejected: the spec parser caps inline
+  data at 500 rows and 64 KB.
+- **`datasetFreezeKey` is key-order independent** (`JSON.stringify` with a sorted-key
+  replacer). The server keys the rows from its own `parseGenUISpec` result and the
+  client looks them up from json-render's, so the key must not depend on property
+  order.
+- **Version 1 links still render.** `snapshotTranscriptEntries` upgrades them in the
+  viewer through `normalizeToolCall`. A v1 tool call kept no tool id, so results pair
+  with calls in ORDER; parallel calls can mis-pair, which is accepted for links that
+  expire within days anyway.
+
+See `adr-20260929-share-view-chat-parity`.
 
 # `/cron` Self-Repair (KANNA_CRON_REPAIR)
 

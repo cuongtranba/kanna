@@ -12,7 +12,8 @@ afterEach(() => { rmSync(dir, { recursive: true, force: true }) })
 const sample: ChatSnapshot = {
   version: CHAT_SNAPSHOT_VERSION,
   chatMeta: { id: "c1", title: "t", model: "m", createdAt: 0 },
-  messages: [],
+  entries: [],
+  datasets: {},
   attachmentsManifest: [],
 }
 

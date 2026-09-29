@@ -1,4 +1,4 @@
-import { hydrateToolResult } from "../../shared/tools"
+import { hydrateToolResult, STRUCTURED_RESULT_TOOL_KINDS } from "../../shared/tools"
 import type { HydratedToolCall, HydratedToolCallBase, HydratedTranscriptMessage, NormalizedToolCall, SubagentTaskResult, SubagentToolStats, TranscriptEntry } from "../../shared/types"
 import type { JsonArray, JsonObject, JsonValue } from "../../shared/json"
 import { isJsonObject } from "../../shared/json"
@@ -40,14 +40,6 @@ function hydrateToolCall(entry: Extract<TranscriptEntry, { kind: "tool_call" }>)
     timestamp: createTimestamp(entry.createdAt),
   }
 }
-
-const STRUCTURED_RESULT_TOOL_KINDS = new Set<NormalizedToolCall["toolKind"]>([
-  "ask_user_question",
-  "exit_plan_mode",
-  "task_create",
-  "task_update",
-  "task_list",
-])
 
 function getStructuredToolResultFromDebug(
   entry: Extract<TranscriptEntry, { kind: "tool_result" }>,

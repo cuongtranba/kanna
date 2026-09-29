@@ -1,5 +1,5 @@
 # C3 Structural Index
-<!-- hash: sha256:c3a9733e4510a1095c34c7c0a9097929836348649958d5d75a32daddc3d6dbc3 -->
+<!-- hash: sha256:ac31e767ed7d0617a3cfcd44043d33e982c972243b05acafe4dd011b399d88cb -->
 
 ## c3-0 — Kanna (system)
 
@@ -237,6 +237,7 @@ files: src/server/auto-continue/**/*.ts
 ## c3-228 — session-share (component)
 container: c3-2 | context: c3-0
 refs: ref-cqrs-read-models, ref-event-sourcing, ref-local-first-data, ref-side-effect-adapter, ref-strong-typing
+files: src/server/session-share/**/*.ts
 
 ## c3-229 — workflow-status (component)
 container: c3-2 | context: c3-0
@@ -329,7 +330,7 @@ files: src/shared/branding.test.ts, src/shared/branding.ts
 ## c3-306 — share-shared (component)
 container: c3-3 | context: c3-0
 refs: ref-strong-typing, rule-strong-typing
-files: src/shared/share.ts
+files: src/shared/session-share/**/*.ts, src/shared/share.ts
 
 ## c3-307 — token-pricing (component)
 container: c3-3 | context: c3-0
@@ -678,6 +679,7 @@ src/server/claude-pty/** → c3-225
 src/server/mcp-oauth.adapter.ts → c3-226
 src/server/mcp-validator.ts → c3-226
 src/server/auto-continue/**/*.ts → c3-227
+src/server/session-share/**/*.ts → c3-228
 src/client/app/WorkflowAgentTranscriptPanel.store.ts → c3-229
 src/client/app/WorkflowAgentTranscriptPanel.test.tsx → c3-229
 src/client/app/WorkflowAgentTranscriptPanel.tsx → c3-229
@@ -793,6 +795,7 @@ src/shared/dev-ports.ts → c3-304
 src/shared/ports.ts → c3-304
 src/shared/branding.test.ts → c3-305
 src/shared/branding.ts → c3-305
+src/shared/session-share/**/*.ts → c3-306
 src/shared/share.ts → c3-306
 src/shared/token-pricing.ts → c3-307
 src/shared/boards/**/*.ts → c3-310
