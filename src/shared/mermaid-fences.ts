@@ -15,6 +15,7 @@ export function closingFenceRegex(fenceLength: number): RegExp {
 export interface FenceBody {
   source: string
   lastLineIndex: number
+  closed: boolean
 }
 
 export function scanFenceBody(
@@ -30,11 +31,11 @@ export function scanFenceBody(
     const line = lines[i]
     if (line === undefined) break
     lastLineIndex = i
-    if (endRegex.test(line)) break
+    if (endRegex.test(line)) return { source: bodyLines.join("\n"), lastLineIndex, closed: true }
     bodyLines.push(line)
   }
 
-  return { source: bodyLines.join("\n"), lastLineIndex }
+  return { source: bodyLines.join("\n"), lastLineIndex, closed: false }
 }
 
 export function extractMermaidFences(markdown: string): readonly MermaidFence[] {
