@@ -49,6 +49,8 @@ import { handlePushCommand } from "./ws-router-push"
 import { handleMiscCommand } from "./ws-router-misc"
 import type { MiscCommandDeps } from "./ws-router-misc"
 import { handleProjectCommand } from "./ws-router-project"
+import { handleGenUICommand } from "./ws-router-genui"
+import type { GenUIDatasetService } from "./genui/dataset-service"
 import { deleteChatWithTeardown, handleChatCommand } from "./ws-router-chat"
 import type { ChatCommandDeps } from "./ws-router-chat"
 import { removeProjectKannaFiles } from "./project-kanna-files.adapter"
@@ -120,6 +122,7 @@ interface CreateWsRouterArgs {
   followedSessionRegistry?: FollowedSessionRegistry
   sessionShare?: SessionShareService
   packageUpdateManager?: PackageUpdateManager
+  genuiDatasets?: GenUIDatasetService
 }
 
 export function createWsRouter({
@@ -153,6 +156,7 @@ export function createWsRouter({
   followedSessionRegistry,
   sessionShare,
   packageUpdateManager,
+  genuiDatasets,
 }: CreateWsRouterArgs) {
   const resolvedDiffStore = diffStore ?? buildFallbackDiffStore()
   const resolvedLlmProvider = llmProvider ?? buildFallbackLlmProvider()
@@ -363,6 +367,7 @@ export function createWsRouter({
         id,
       ),
       () => command.type === "backgroundTasks.getOutput" && sendBackgroundTaskOutput(ws, command, id),
+      () => handleGenUICommand(genuiDatasets, sendToClient, command, id),
     ]
     for (const runHandler of handlers) {
       if (await runHandler()) return true

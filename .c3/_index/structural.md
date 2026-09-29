@@ -1,5 +1,5 @@
 # C3 Structural Index
-<!-- hash: sha256:a65d10331ad966de3f164dcbe2ec3860d8f1f0699e697c2c8384d244384dc2fc -->
+<!-- hash: sha256:c3a9733e4510a1095c34c7c0a9097929836348649958d5d75a32daddc3d6dbc3 -->
 
 ## c3-0 — Kanna (system)
 
@@ -28,7 +28,7 @@ refs: ref-colocated-bun-test, ref-strong-typing, ref-zustand-store
 ## c3-110 — app-shell (component)
 container: c3-1 | context: c3-0
 refs: ref-cqrs-read-models, ref-ws-subscription
-files: src/client/app/App.test.tsx, src/client/app/App.tsx, src/client/app/AppBootstrap.tsx, src/client/app/AppGlobalProvider.tsx, src/client/app/PageHeader.tsx, src/client/app/appRuntime.test.ts, src/client/app/appRuntime.ts, src/client/app/chatFocusPolicy.test.ts, src/client/app/chatFocusPolicy.ts, src/client/app/chatNotifications.ts, src/client/app/derived.ts, src/client/app/sidebarSwipeGesture.ts, src/client/app/useAppGlobalState.test.ts, src/client/app/useAppGlobalState.ts, src/client/app/useKannaState.scrollback.test.tsx, src/client/app/useKannaState.test.ts, src/client/app/useKannaState.ts, src/client/app/usePushFocus.test.ts, src/client/app/usePushFocus.ts, src/client/components/LocalDev.tsx, src/client/hooks/**/*.ts, src/client/hooks/**/*.tsx, src/client/hooks/useProjectSuggestions.test.ts, src/client/hooks/useProjectSuggestions.ts, src/client/lib/**/*.ts, src/main.tsx
+files: src/client/app/App.test.tsx, src/client/app/App.tsx, src/client/app/AppBootstrap.tsx, src/client/app/AppGlobalProvider.tsx, src/client/app/PageHeader.tsx, src/client/app/appRuntime.test.ts, src/client/app/appRuntime.ts, src/client/app/chatFocusPolicy.test.ts, src/client/app/chatFocusPolicy.ts, src/client/app/chatNotifications.ts, src/client/app/derived.ts, src/client/app/forgetDeletedLocally.ts, src/client/app/sidebarSwipeGesture.ts, src/client/app/useAppGlobalState.test.ts, src/client/app/useAppGlobalState.ts, src/client/app/useKannaState.scrollback.test.tsx, src/client/app/useKannaState.test.ts, src/client/app/useKannaState.ts, src/client/app/usePushFocus.test.ts, src/client/app/usePushFocus.ts, src/client/components/LocalDev.tsx, src/client/hooks/**/*.ts, src/client/hooks/**/*.tsx, src/client/hooks/useProjectSuggestions.test.ts, src/client/hooks/useProjectSuggestions.ts, src/client/lib/**/*.ts, src/main.tsx
 
 ## c3-111 — sidebar (component)
 container: c3-1 | context: c3-0
@@ -90,6 +90,11 @@ container: c3-1 | context: c3-0
 refs: rule-colocated-bun-test, rule-strong-typing, rule-zustand-store
 files: src/client/app/StackBoardsRoutePage.tsx, src/client/app/useStackCommands.ts, src/client/components/chat-ui/sidebar/Stack*.tsx, src/client/components/chat-ui/sidebar/StackChatCreateRow.store.ts
 
+## c3-123 — genui-ui (component)
+container: c3-1 | context: c3-0
+refs: rule-colocated-bun-test, rule-strong-typing, rule-zustand-store
+files: e2e/genui-fixture.ts, e2e/genui.pw.ts, src/client/components/genui/**/*.ts, src/client/components/genui/**/*.tsx, src/client/components/lexical/markdown/kannaUiTransformers.ts, src/client/components/lexical/nodes/KannaUiNode.tsx
+
 ## c3-2 — Server (container)
 context: c3-0
 
@@ -121,7 +126,7 @@ files: src/server/events.ts, src/server/harness-types.ts
 ## c3-206 — event-store (component)
 container: c3-2 | context: c3-0
 refs: ref-colocated-bun-test, ref-event-sourcing, ref-local-first-data, rule-colocated-bun-test
-files: src/server/chat-op-log.test.ts, src/server/chat-op-log.ts, src/server/chat-ops-parity.test.ts, src/server/event-store-messages.adapter.test.ts, src/server/event-store-messages.adapter.ts, src/server/event-store-write-ops.test.ts, src/server/event-store-write-ops.ts, src/server/event-store.test.ts, src/server/event-store.ts
+files: src/server/chat-op-log.test.ts, src/server/chat-op-log.ts, src/server/chat-ops-parity.test.ts, src/server/event-store-messages.adapter.test.ts, src/server/event-store-messages.adapter.ts, src/server/event-store-write-ops.test.ts, src/server/event-store-write-ops.ts, src/server/event-store.project-delete.test.ts, src/server/event-store.test.ts, src/server/event-store.ts
 
 ## c3-207 — read-models (component)
 container: c3-2 | context: c3-0
@@ -131,7 +136,7 @@ files: src/server/read-models.test.ts, src/server/read-models.ts
 ## c3-208 — ws-router (component)
 container: c3-2 | context: c3-0
 refs: ref-colocated-bun-test, ref-cqrs-read-models, ref-ws-subscription, rule-colocated-bun-test
-files: src/server/chat-ops-diff.test.ts, src/server/chat-ops-diff.ts, src/server/ws-router.test.ts, src/server/ws-router.ts
+files: src/server/chat-ops-diff.test.ts, src/server/chat-ops-diff.ts, src/server/project-kanna-files.adapter.test.ts, src/server/project-kanna-files.adapter.ts, src/server/ws-router.test.ts, src/server/ws-router.ts
 
 ## c3-209 — process-utils (component)
 container: c3-2 | context: c3-0
@@ -288,6 +293,11 @@ container: c3-2 | context: c3-0
 refs: ref-strong-typing, rule-colocated-bun-test
 files: src/server/agent.stack-spawn.test.ts, src/server/claude-session-config.ts, src/server/event-store.stack-methods.test.ts, src/server/ws-router.stack.test.ts
 
+## c3-240 — genui (component)
+container: c3-2 | context: c3-0
+refs: ref-side-effect-adapter, rule-colocated-bun-test
+files: src/server/genui/*.ts, src/server/turn-end-guard.ts, src/server/ws-router-genui.ts
+
 ## c3-3 — Shared (container)
 context: c3-0
 
@@ -351,6 +361,11 @@ container: c3-3 | context: c3-0
 refs: rule-colocated-bun-test, rule-strong-typing
 files: src/shared/stack-activity.test.ts, src/shared/stack-activity.ts
 
+## c3-315 — genui-contract (component)
+container: c3-3 | context: c3-0
+refs: rule-colocated-bun-test, rule-strong-typing
+files: src/shared/genui/*.ts
+
 ## ref-colocated-bun-test — Colocated Bun Test (ref)
 reverse deps: c3-102, c3-104, c3-206, c3-208, c3-210, c3-225, c3-231, c3-303, c3-310
 citers: c3-102, c3-104, c3-206, c3-208, c3-210, c3-225, c3-231, c3-303, c3-310
@@ -372,8 +387,8 @@ reverse deps: c3-113, c3-115, c3-210, c3-211, c3-212, c3-213, c3-225, c3-229
 citers: c3-113, c3-115, c3-210, c3-211, c3-212, c3-213, c3-225, c3-229
 
 ## ref-side-effect-adapter — side-effect-adapter (ref)
-reverse deps: c3-228, c3-229, c3-230, c3-231, c3-232, c3-236, c3-237, c3-238, c3-312, c3-313
-citers: c3-228, c3-229, c3-230, c3-231, c3-232, c3-236, c3-237, c3-238, c3-312, c3-313
+reverse deps: c3-228, c3-229, c3-230, c3-231, c3-232, c3-236, c3-237, c3-238, c3-240, c3-312, c3-313
+citers: c3-228, c3-229, c3-230, c3-231, c3-232, c3-236, c3-237, c3-238, c3-240, c3-312, c3-313
 
 ## ref-strong-typing — Strong Typing Policy (ref)
 reverse deps: c3-101, c3-102, c3-103, c3-104, c3-114, c3-119, c3-121, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-226, c3-227, c3-228, c3-229, c3-230, c3-232, c3-236, c3-238, c3-239, c3-301, c3-302, c3-303, c3-304, c3-306, c3-307, c3-310, c3-312, c3-313
@@ -392,20 +407,20 @@ reverse deps: c3-102, c3-104, c3-111, c3-115, c3-116, c3-118, c3-119, c3-229
 citers: c3-102, c3-104, c3-111, c3-115, c3-116, c3-118, c3-119, c3-229
 
 ## rule-colocated-bun-test — colocated-bun-test (rule)
-reverse deps: c3-102, c3-119, c3-120, c3-121, c3-122, c3-206, c3-208, c3-210, c3-224, c3-225, c3-226, c3-227, c3-229, c3-230, c3-232, c3-233, c3-234, c3-236, c3-238, c3-239, c3-303, c3-310, c3-311, c3-312, c3-313, c3-314
-citers: c3-102, c3-119, c3-120, c3-121, c3-122, c3-206, c3-208, c3-210, c3-224, c3-225, c3-226, c3-227, c3-229, c3-230, c3-232, c3-233, c3-234, c3-236, c3-238, c3-239, c3-303, c3-310, c3-311, c3-312, c3-313, c3-314
+reverse deps: c3-102, c3-119, c3-120, c3-121, c3-122, c3-123, c3-206, c3-208, c3-210, c3-224, c3-225, c3-226, c3-227, c3-229, c3-230, c3-232, c3-233, c3-234, c3-236, c3-238, c3-239, c3-240, c3-303, c3-310, c3-311, c3-312, c3-313, c3-314, c3-315
+citers: c3-102, c3-119, c3-120, c3-121, c3-122, c3-123, c3-206, c3-208, c3-210, c3-224, c3-225, c3-226, c3-227, c3-229, c3-230, c3-232, c3-233, c3-234, c3-236, c3-238, c3-239, c3-240, c3-303, c3-310, c3-311, c3-312, c3-313, c3-314, c3-315
 
 ## rule-mcp-name-reserved — mcp-name-reserved (rule)
 reverse deps: c3-232
 citers: c3-232
 
 ## rule-strong-typing — strong-typing (rule)
-reverse deps: c3-101, c3-102, c3-103, c3-114, c3-120, c3-122, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-225, c3-226, c3-227, c3-229, c3-233, c3-301, c3-302, c3-303, c3-304, c3-306, c3-310, c3-311, c3-314
-citers: c3-101, c3-102, c3-103, c3-114, c3-120, c3-122, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-225, c3-226, c3-227, c3-229, c3-233, c3-301, c3-302, c3-303, c3-304, c3-306, c3-310, c3-311, c3-314
+reverse deps: c3-101, c3-102, c3-103, c3-114, c3-120, c3-122, c3-123, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-225, c3-226, c3-227, c3-229, c3-233, c3-301, c3-302, c3-303, c3-304, c3-306, c3-310, c3-311, c3-314, c3-315
+citers: c3-101, c3-102, c3-103, c3-114, c3-120, c3-122, c3-123, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-225, c3-226, c3-227, c3-229, c3-233, c3-301, c3-302, c3-303, c3-304, c3-306, c3-310, c3-311, c3-314, c3-315
 
 ## rule-zustand-store — zustand-store (rule)
-reverse deps: c3-102, c3-111, c3-115, c3-116, c3-118, c3-119, c3-120, c3-121, c3-122, c3-229
-citers: c3-102, c3-111, c3-115, c3-116, c3-118, c3-119, c3-120, c3-121, c3-122, c3-229
+reverse deps: c3-102, c3-111, c3-115, c3-116, c3-118, c3-119, c3-120, c3-121, c3-122, c3-123, c3-229
+citers: c3-102, c3-111, c3-115, c3-116, c3-118, c3-119, c3-120, c3-121, c3-122, c3-123, c3-229
 
 ## File Map
 src/client/app/KannaSocketProvider.tsx → c3-101
@@ -429,6 +444,7 @@ src/client/app/chatFocusPolicy.test.ts → c3-110
 src/client/app/chatFocusPolicy.ts → c3-110
 src/client/app/chatNotifications.ts → c3-110
 src/client/app/derived.ts → c3-110
+src/client/app/forgetDeletedLocally.ts → c3-110
 src/client/app/sidebarSwipeGesture.ts → c3-110
 src/client/app/useAppGlobalState.test.ts → c3-110
 src/client/app/useAppGlobalState.ts → c3-110
@@ -532,6 +548,12 @@ src/client/app/StackBoardsRoutePage.tsx → c3-122
 src/client/app/useStackCommands.ts → c3-122
 src/client/components/chat-ui/sidebar/Stack*.tsx → c3-122
 src/client/components/chat-ui/sidebar/StackChatCreateRow.store.ts → c3-122
+e2e/genui-fixture.ts → c3-123
+e2e/genui.pw.ts → c3-123
+src/client/components/genui/**/*.ts → c3-123
+src/client/components/genui/**/*.tsx → c3-123
+src/client/components/lexical/markdown/kannaUiTransformers.ts → c3-123
+src/client/components/lexical/nodes/KannaUiNode.tsx → c3-123
 src/server/cli-bootstrap.adapter.ts → c3-201
 src/server/cli-runtime.test.ts → c3-201
 src/server/cli-runtime.ts → c3-201
@@ -558,12 +580,15 @@ src/server/event-store-messages.adapter.test.ts → c3-206
 src/server/event-store-messages.adapter.ts → c3-206
 src/server/event-store-write-ops.test.ts → c3-206
 src/server/event-store-write-ops.ts → c3-206
+src/server/event-store.project-delete.test.ts → c3-206
 src/server/event-store.test.ts → c3-206
 src/server/event-store.ts → c3-206
 src/server/read-models.test.ts → c3-207
 src/server/read-models.ts → c3-207
 src/server/chat-ops-diff.test.ts → c3-208
 src/server/chat-ops-diff.ts → c3-208
+src/server/project-kanna-files.adapter.test.ts → c3-208
+src/server/project-kanna-files.adapter.ts → c3-208
 src/server/ws-router.test.ts → c3-208
 src/server/ws-router.ts → c3-208
 src/server/process-utils.adapter.ts → c3-209
@@ -735,6 +760,9 @@ src/server/agent.stack-spawn.test.ts → c3-239
 src/server/claude-session-config.ts → c3-239
 src/server/event-store.stack-methods.test.ts → c3-239
 src/server/ws-router.stack.test.ts → c3-239
+src/server/genui/*.ts → c3-240
+src/server/turn-end-guard.ts → c3-240
+src/server/ws-router-genui.ts → c3-240
 src/shared/analytics.ts → c3-301
 src/shared/dynamic-module.ts → c3-301
 src/shared/json.test.ts → c3-301
@@ -786,3 +814,4 @@ src/shared/plugins/**/*.ts → c3-313
 src/shared/plugins/kanna-plugin.d.ts → c3-313
 src/shared/stack-activity.test.ts → c3-314
 src/shared/stack-activity.ts → c3-314
+src/shared/genui/*.ts → c3-315

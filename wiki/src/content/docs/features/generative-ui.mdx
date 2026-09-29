@@ -1,0 +1,72 @@
+---
+title: Generative UI
+description: Interactive reports, charts and structured result views that the agent composes and Kanna renders, fetches data for, and runs actions from.
+---
+
+import Screenshot from '../../../components/Screenshot.astro'
+
+Ask the agent for a report, a dashboard, or an interactive summary of structured
+results — "show revenue for the last 12 months against budget", "summarise that test
+run", "list the files you changed" — and it can answer with a live view inside the
+chat instead of a wall of text.
+
+<Screenshot
+  light="/screenshots/light/generative-ui.png"
+  dark="/screenshots/dark/generative-ui.png"
+  alt="A generated revenue report with period and comparison selectors, metric tiles, a trend chart, an EBITDA waterfall, a stacked bar and an income statement"
+/>
+
+## How it works
+
+The agent decides **what** to show. Kanna decides **how** it renders and **what
+actually happens**:
+
+- The agent writes a small JSON description in a ` ```kanna-ui ` block. It names
+  components from Kanna's catalog — metric tiles, charts, statements, tables, test
+  results, file lists — never code, colours or chart-library options.
+- Kanna validates that description before anything renders. A view with an unknown
+  component, a wrong setting, or an action Kanna does not offer is shown as *Unable to
+  show this view* and nothing from it runs. The agent checks its views with
+  `mcp__kanna__validate_ui` first, and if a broken one slips through, Kanna asks it
+  once to fix it at the end of the turn.
+- Views work the same on Claude and Codex, stay in the chat history, and render again
+  when you reopen the chat.
+
+## Where the data comes from
+
+The agent never pastes large data into a view. Each view declares its datasets and
+Kanna fetches them:
+
+| Source | Use it for | What Kanna enforces |
+| --- | --- | --- |
+| **Inline** | a few rows you gave in the chat (at most 500) | size limits |
+| **File** | a CSV or JSON file in the chat's working directory — the agent writes computed data to a file first | the path must stay inside the working directory (symlinks included) and pass the chat's read-path rules |
+| **MCP** | a tool on one of your configured MCP servers, such as a BI query | the tool must declare itself read-only, or you click **Allow for this chat** first; the server's own credentials decide what data you can see |
+
+File views refresh on their own when the file changes, without asking the agent to
+redraw anything.
+
+## Exploring without the agent
+
+Changing the period or comparison, drilling into a chart point, switching a chart to
+its table, and expanding statement groups all run inside Kanna — no tokens, no
+waiting. Every chart has a **Table** view with the exact numbers, and in that view
+each row you can drill into is a button, so the whole report works from the keyboard.
+
+## Asking the agent about what you see
+
+Buttons such as **Explain variance** or **Fix** on a failing test hand the question
+back to the agent. Kanna shows you the message first and sends it only when you click
+**Send**. The message carries the view's current numbers and the dataset it came
+from, so the agent starts from facts rather than from button text; in your chat it
+appears as your question plus a small context chip.
+
+## Shared links
+
+A shared chat shows views read-only. Inline data still renders; data from files and
+MCP servers is not included in a share, and agent actions are hidden.
+
+## Turning it off
+
+Set `KANNA_GENUI=disabled` to stop teaching the agent the format and to turn off the
+end-of-turn check. Views already in a transcript keep rendering.

@@ -24,6 +24,7 @@ import { logClaudeSteer, logSendToStartingProfile } from "./claude-steer-log"
 import { log } from "../shared/log"
 import { withSpan } from "./observability"
 import { LOG_PREFIX } from "../shared/branding"
+import { isGenUIEnabled } from "./genui/genui-config"
 
 const PRIMER_TAIL_LIMIT = 1000
 
@@ -365,6 +366,7 @@ async function startTurnAfterTurnStarted(
         ...instructionOptions,
         stackProjects,
         skills: deps.listSkills(args.chatId),
+        genui: isGenUIEnabled(),
       }),
     })
     if (pendingForkToken && sessionToken) {

@@ -18,6 +18,8 @@ import {
   scanFenceBody,
 } from "../../../../shared/mermaid-fences"
 import { KANNA_BUILTIN_TRANSFORMERS } from "./gfmTransformers"
+import { KANNA_UI_FENCE, KANNA_UI_INTENT_FENCE } from "./kannaUiTransformers"
+
 
 
 export const MERMAID_FENCE: MultilineElementTransformer = {
@@ -103,6 +105,8 @@ export const LOCAL_FILE_LINK: TextMatchTransformer = {
 
 export const KANNA_MESSAGE_TRANSFORMERS: Array<Transformer> = [
   MERMAID_FENCE,
+  KANNA_UI_INTENT_FENCE,
+  KANNA_UI_FENCE,
   LOCAL_FILE_LINK,
   ...KANNA_BUILTIN_TRANSFORMERS,
 ]

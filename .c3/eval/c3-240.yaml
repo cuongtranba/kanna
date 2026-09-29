@@ -1,0 +1,6 @@
+fact: c3-240
+claim: "generative UI datasets are resolved and authorized on the server, and invalid views are escalated once at turn end"
+code:
+  - src/server/genui/*.ts
+  - src/server/ws-router-genui.ts
+  - src/server/turn-end-guard.ts

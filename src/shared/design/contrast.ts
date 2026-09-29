@@ -43,6 +43,27 @@ export function compositeOver(fg: Oklch, bg: Oklch, alpha: number): number {
   )
 }
 
+const OKLCH_VALUE = /^oklch\(\s*([0-9.]+)(%?)\s+([0-9.]+)\s+([0-9.]+)\s*(?:\/\s*([0-9.]+)(%?)\s*)?\)$/i
+
+export function parseOklchColor(value: string): (Oklch & { alpha: number }) | null {
+  const match = OKLCH_VALUE.exec(value.trim())
+  if (!match) return null
+  const lightness = Number(match[1])
+  const alphaValue = match[5] === undefined ? 1 : Number(match[5]) / (match[6] ? 100 : 1)
+  return { l: match[2] ? lightness / 100 : lightness, c: Number(match[3]), h: Number(match[4]), alpha: alphaValue }
+}
+
+function encodeSrgbChannel(linear: number): number {
+  const clamped = Math.max(0, Math.min(1, linear))
+  const encoded = clamped <= 0.0031308 ? 12.92 * clamped : 1.055 * clamped ** (1 / 2.4) - 0.055
+  return Math.round(encoded * 255)
+}
+
+export function oklchToRgbString(oklch: Oklch, alpha = 1): string {
+  const [r, g, b] = oklchToLinearSrgb(oklch).map(encodeSrgbChannel)
+  return alpha >= 1 ? `rgb(${r}, ${g}, ${b})` : `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
+
 export function contrastRatio(l1: number, l2: number): number {
   const lighter = Math.max(l1, l2)
   const darker = Math.min(l1, l2)

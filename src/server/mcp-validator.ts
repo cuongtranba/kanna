@@ -66,7 +66,7 @@ export async function validateMcpServer(
   }
 }
 
-function buildTransport(config: McpServerConfig, bearer?: string) {
+export function buildTransport(config: McpServerConfig, bearer?: string) {
   switch (config.transport) {
     case "stdio":
       return new StdioClientTransport({

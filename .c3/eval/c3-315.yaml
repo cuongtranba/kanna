@@ -1,0 +1,4 @@
+fact: c3-315
+claim: "the generative UI spec, catalog, dataset declarations, fences, and query engine are defined once in shared code"
+code:
+  - src/shared/genui/*.ts

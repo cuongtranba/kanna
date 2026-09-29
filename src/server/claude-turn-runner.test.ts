@@ -98,6 +98,17 @@ function makeDeps(overrides: Partial<RunTurnDeps> = {}): RunTurnDeps {
 
 
 describe("runTurn", () => {
+  test("hands a finished Codex turn's text to the turn-end guard, so a broken generated view is caught", async () => {
+    const text: TranscriptEntry = { _id: "t", createdAt: 0, kind: "assistant_text", text: "```kanna-ui\n{}\n```" }
+    const turn = makeFakeTurn([{ type: "transcript", entry: text }, { type: "transcript", entry: makeResultEntry(false) }])
+    const checked: Array<{ chatId: string; text: readonly string[] }> = []
+    const deps = makeDeps({ turnEndGuard: { check: async (chatId, assistantText) => { checked.push({ chatId, text: assistantText }) } } })
+
+    await runTurn(deps, makeActiveTurn({}, turn))
+
+    expect(checked).toEqual([{ chatId: "chat-1", text: ["```kanna-ui\n{}\n```"] }])
+  })
+
   test("calls recordTurnFinished on successful result entry", async () => {
     const turn = makeFakeTurn([{ type: "transcript", entry: makeResultEntry(false) }])
     const active = makeActiveTurn({}, turn)

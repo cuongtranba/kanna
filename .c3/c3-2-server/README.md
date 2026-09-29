@@ -1,7 +1,7 @@
 ---
 id: c3-2
 c3-version: 4
-c3-seal: f251ea7e4ef765c3a45051a8a78b5879cd3d35ef3a93f1a5de0b50a2a95c6dda
+c3-seal: 3dad56f5f5685fb4a0784d638b17f26d1accb3c32f24329647f6ef88b0774a14
 title: Server
 type: container
 boundary: service
@@ -67,3 +67,4 @@ Run the local Bun backend: serve HTTP+WebSocket on localhost, coordinate Claude 
 | c3-237 | package-autoupdate | feature | active | Detect and apply updates for the three package kinds Kanna installs (skill, claude-plugin, codex-plugin), serialized and deferred while any chat is busy. |
 | c3-238 | plugin-system | feature | active | Run third-party plugins for Kanna: compile a plugin directory to two bundles, run its server half as a subprocess speaking typed RPC over a unix socket, keep a bounded log ring per plugin, and expose one service that the HTTP routes, the CLI and the MCP authoring tools all drive. |
 | c3-239 | stacks | feature | active | Bind several project checkouts into one chat, and resolve those bindings into the roots a turn may reach and the instruction blocks its prompt must carry. |
+| c3-240 | genui | feature | active | Resolve generative UI datasets from workspace files and MCP tools under the chat's authorization, and ask the model once to fix an invalid view. |

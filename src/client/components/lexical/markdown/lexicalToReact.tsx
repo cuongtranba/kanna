@@ -51,6 +51,10 @@ import {
   TextNode,
 } from "lexical"
 import { KANNA_BUILTIN_TRANSFORMERS } from "./gfmTransformers"
+import { KANNA_UI_FENCE, KANNA_UI_INTENT_FENCE } from "./kannaUiTransformers"
+import { $isKannaUiNode, KannaUiNode } from "../nodes/KannaUiNode"
+import { KannaUiBlock } from "../../genui/KannaUiBlock"
+import { KannaUiIntentChip } from "../../genui/KannaUiIntentChip"
 import { buildKannaEditorConfig } from "../config"
 import { MessageCodeBlock } from "./MessageCodeBlock"
 
@@ -67,7 +71,12 @@ const KANNA_NODES = [
   TableNode,
   TableRowNode,
   TableCellNode,
+  KannaUiNode,
 ]
+
+function defaultTransformers(): Array<Transformer> {
+  return [KANNA_UI_INTENT_FENCE, KANNA_UI_FENCE, ...KANNA_BUILTIN_TRANSFORMERS]
+}
 
 
 let keyCounter = 0
@@ -85,6 +94,12 @@ export const HEADING_CLASS_MAP: Record<string, string> = {
 }
 
 function walkNode(node: LexicalNode): ReactNode {
+  if ($isKannaUiNode(node)) {
+    return node.isIntent()
+      ? <KannaUiIntentChip key={nextKey()} source={node.getTextContent()} />
+      : <KannaUiBlock key={nextKey()} source={node.getTextContent()} closed={node.isClosed()} />
+  }
+
   if ($isHeadingNode(node)) {
     const tag = node.getTag()
     const children = walkChildren(node)
@@ -322,7 +337,7 @@ export function lexicalStateToReact(): ReactNode {
 
 export function renderMarkdownToReact(
   markdown: string,
-  transformers: Array<Transformer> = KANNA_BUILTIN_TRANSFORMERS,
+  transformers: Array<Transformer> = defaultTransformers(),
 ): ReactNode {
   const editor = createHeadlessEditor(
     buildKannaEditorConfig({

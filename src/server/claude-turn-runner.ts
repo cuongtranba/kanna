@@ -7,6 +7,7 @@ import type { ActiveTurn } from "./claude-session-state"
 import type { LimitDetector } from "./auto-continue/limit-detector"
 import type { StartTurnForChatArgs } from "./claude-turn-starter"
 import { timestamped } from "./claude-message-normalizer"
+import type { TurnEndGuard } from "./turn-end-guard"
 
 
 interface RunTurnStore {
@@ -43,6 +44,7 @@ export interface RunTurnDeps {
   startTurnForChat: (args: StartTurnForChatArgs) => Promise<void>
   maybeStartNextQueuedMessage: (chatId: string) => Promise<boolean | void>
   stopCodexSession: (chatId: string) => void
+  turnEndGuard?: TurnEndGuard
 }
 
 
@@ -64,6 +66,7 @@ async function finalizeCodexSummary(
 export async function runTurn(deps: RunTurnDeps, active: ActiveTurn): Promise<void> {
   const isCodexSummary = active.compactionTurn === "codex_summary"
   const summaryParts: string[] = []
+  const assistantText: string[] = []
   try {
     for await (const event of active.turn.stream) {
       if (active.cancelRequested) break
@@ -91,6 +94,7 @@ export async function runTurn(deps: RunTurnDeps, active: ActiveTurn): Promise<vo
           }
 
           await deps.store.appendMessage(active.chatId, event.entry)
+          if (event.entry.kind === "assistant_text") assistantText.push(event.entry.text)
 
           if (event.entry.kind === "system_init") {
             active.status = "running"
@@ -104,6 +108,7 @@ export async function runTurn(deps: RunTurnDeps, active: ActiveTurn): Promise<vo
             } else if (!active.cancelRequested) {
               await deps.store.recordTurnFinished(active.chatId)
               await finalizeCodexSummary(deps, active, summaryParts)
+              if (!isCodexSummary) await deps.turnEndGuard?.check(active.chatId, assistantText)
             }
             deps.activeTurns.delete(active.chatId)
             deps.drainingStreams.set(active.chatId, { turn: active.turn })

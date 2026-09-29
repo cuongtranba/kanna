@@ -17,7 +17,7 @@ import { logClaudeSteer } from "./claude-steer-log"
 import type { ClaudeSessionState, ActiveTurn } from "./claude-session-state"
 import { isCliCompactTurn, isProactiveCompactTurn } from "./claude-session-state"
 import type { PendingToolSlots } from "./pending-tool-slot"
-import type { MermaidGuard } from "./mermaid-guard"
+import type { TurnEndGuard } from "./turn-end-guard"
 
 const RECENT_TOOL_DESCRIPTION_LIMIT = 64
 
@@ -75,7 +75,7 @@ export interface RunClaudeSessionDeps {
   closeClaudeSession(chatId: string, session: ClaudeSessionState): void
   maybeStartNextQueuedMessage(chatId: string): Promise<boolean | void>
   resolveClaudeDriverPreference(): ClaudeDriverPreference
-  mermaidGuard?: MermaidGuard
+  turnEndGuard?: TurnEndGuard
   onBackgroundTaskLaunch?(chatId: string, taskId: string, outputPath: string | null): void
   onBackgroundTaskSettle?(chatId: string, taskId: string): void
 }
@@ -357,7 +357,7 @@ export async function runClaudeSession(
           if (isProactiveCompactTurn(active)) {
             await deps.store.setCompactFailureCount(session.chatId, 0)
           }
-          await deps.mermaidGuard?.check(session.chatId, turnAssistantText)
+          await deps.turnEndGuard?.check(session.chatId, turnAssistantText)
         }
         deps.pendingTools.discard(session.chatId)
         deps.activeTurns.delete(session.chatId)

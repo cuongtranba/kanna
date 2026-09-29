@@ -99,6 +99,7 @@ import type {
   ChatMeta,
 } from "../shared/session-share/types"
 import { createHttpDispatcher } from "./http-dispatcher"
+import { createGenUIDatasetService } from "./genui/dataset-service-boot"
 export { persistUploadedFiles } from "./http-api-routes"
 
 function parsePositiveIntEnv(raw: string | undefined, fallback: number): number {
@@ -405,6 +406,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
   })
 
   let agent!: AgentCoordinator
+  const genuiDatasets = createGenUIDatasetService(store, appSettings, (chatId) => agent.resolveChatPolicy(chatId))
   const scheduleManager = new ScheduleManager({
     fire: async (chatId, scheduleId) => {
       await agent.fireAutoContinue(chatId, scheduleId)
@@ -437,6 +439,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     backgroundTaskOutputRegistry,
     subagentTranscriptRegistry,
     localCatalog,
+    genuiDatasets,
     chatPolicy: { ...POLICY_DEFAULT, defaultAction: "auto-allow" },
     getSubagents: () => appSettings.getSnapshot().subagents,
     getAppSettingsSnapshot: () => buildAgentAppSettingsView(appSettings.getSnapshot()),
@@ -587,6 +590,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     },
     sessionShare: sessionShareService,
     packageUpdateManager,
+    genuiDatasets,
   })
 
   broadcastChatState = (chatId: string) => { router.scheduleChatStateBroadcast(chatId) }

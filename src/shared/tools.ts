@@ -44,6 +44,7 @@ export const SETUP_LOOP_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__setup_loop`
 export const ARM_CRON_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__arm_cron`
 export const VALIDATE_CRON_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__validate_cron`
 export const VALIDATE_MERMAID_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__validate_mermaid`
+export const VALIDATE_UI_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__validate_ui`
 export const RUN_VERIFY_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__run_verify`
 export const PLUGIN_LIST_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__plugin_list`
 export const PLUGIN_VALIDATE_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__plugin_validate`
