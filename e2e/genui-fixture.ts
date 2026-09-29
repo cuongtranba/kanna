@@ -66,10 +66,11 @@ export const REPORT_SPEC = {
     },
   },
   elements: {
-    page: { type: "Stack", children: ["controls", "tiles", "trend", "drill", "grid", "statement"] },
+    page: { type: "Stack", children: ["controls", "headline", "trend", "drill", "grid", "statement"] },
     controls: { type: "Grid", props: { columns: 2 }, children: ["period", "compare"] },
     period: { type: "PeriodSelector", props: { value: { $bindState: "/period" } } },
     compare: { type: "CompareSelector", props: { value: { $bindState: "/compare" } } },
+    headline: { type: "Section", props: { title: "Headline metrics" }, children: ["tiles"] },
     tiles: { type: "Grid", props: { columns: 3 }, children: ["revenueTile", "augTile", "acmeTile"] },
     revenueTile: { type: "FinancialMetric", props: { dataset: "sales", metric: "revenue", period: { $state: "/period" }, compareWith: { $state: "/compare" } } },
     augTile: { type: "FinancialMetric", props: { dataset: "sales", metric: "revenue", label: "August revenue", period: "2026-08", compareWith: "budget" } },
@@ -90,22 +91,76 @@ export const REPORT_SPEC = {
   },
 }
 
+export const CODING_SPEC = {
+  version: 1,
+  title: "Invoice rounding fix",
+  root: "page",
+  elements: {
+    page: { type: "Stack", children: ["task", "tests"] },
+    task: { type: "Card", props: { title: "Task: fix invoice rounding", description: "Branch fix/invoice-rounding, ready for review" }, children: ["status", "facts", "files", "diagnostics", "timeline"] },
+    status: { type: "Badge", props: { label: "Needs review", tone: "attention" } },
+    facts: { type: "KeyValue", props: { columns: 2, items: [{ label: "Branch", value: "fix/invoice-rounding" }, { label: "Commits", value: "3" }, { label: "Files changed", value: "3" }, { label: "Duration", value: "4m 12s" }] } },
+    files: {
+      type: "FileList",
+      props: {
+        files: [
+          { path: "src/billing/round.ts", status: "modified", description: "Round half-cents to even" },
+          { path: "src/billing/round.test.ts", status: "added", description: "Pins the half-cent cases" },
+          { path: "src/billing/legacy-round.ts", status: "deleted" },
+        ],
+      },
+    },
+    diagnostics: { type: "DiagnosticList", props: { items: [{ severity: "warning", message: "'legacyRound' is declared but its value is never read", path: "src/billing/invoice.ts", line: 42, source: "tsc" }] } },
+    timeline: {
+      type: "Timeline",
+      props: {
+        items: [
+          { time: "10:02", title: "Reproduced the rounding error", detail: "Totals of 10.005 rounded up to 10.01" },
+          { time: "10:04", title: "Switched to round-half-even", tone: "positive" },
+          { time: "10:06", title: "One test still fails", tone: "negative" },
+        ],
+      },
+    },
+    tests: {
+      type: "Card",
+      props: { title: "Test run" },
+      children: ["result"],
+    },
+    result: {
+      type: "TestResult",
+      props: {
+        passed: 128,
+        failed: 1,
+        skipped: 2,
+        durationMs: 8400,
+        command: "bun run test src/billing",
+        failures: [{ name: "rounds half-cent totals", message: "expected 10.01 to be 10.00", path: "src/billing/round.test.ts", line: 18 }],
+      },
+    },
+  },
+}
+
+function kannaUiReply(uuid: string, messageId: string, timestamp: string, intro: string, spec: object) {
+  return {
+    type: "assistant",
+    uuid,
+    timestamp,
+    message: {
+      id: messageId,
+      role: "assistant",
+      model: "claude-opus-5-5",
+      content: [{ type: "text", text: `${intro}\n\n\`\`\`kanna-ui\n${JSON.stringify(spec, null, 2)}\n\`\`\`` }],
+    },
+  }
+}
+
 function sessionJsonl(cwd: string): string {
   const base = { sessionId: SESSION_ID, cwd, version: "2.1.0" }
   const records = [
     { ...base, type: "user", uuid: "u-1", timestamp: "2026-09-01T10:00:00.000Z", message: { role: "user", content: "Show revenue for the last 12 months against budget" } },
-    {
-      ...base,
-      type: "assistant",
-      uuid: "a-1",
-      timestamp: "2026-09-01T10:00:05.000Z",
-      message: {
-        id: "msg-1",
-        role: "assistant",
-        model: "claude-opus-5-5",
-        content: [{ type: "text", text: `Here is the revenue report.\n\n\`\`\`kanna-ui\n${JSON.stringify(REPORT_SPEC, null, 2)}\n\`\`\`` }],
-      },
-    },
+    { ...base, ...kannaUiReply("a-1", "msg-1", "2026-09-01T10:00:05.000Z", "Here is the revenue report.", REPORT_SPEC) },
+    { ...base, type: "user", uuid: "u-2", timestamp: "2026-09-01T10:07:00.000Z", message: { role: "user", content: "Summarise the invoice rounding fix" } },
+    { ...base, ...kannaUiReply("a-2", "msg-2", "2026-09-01T10:07:05.000Z", "Here is where the fix stands.", CODING_SPEC) },
   ]
   return `${records.map((record) => JSON.stringify(record)).join("\n")}\n`
 }
