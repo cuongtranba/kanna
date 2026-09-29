@@ -222,6 +222,41 @@ export function shiftWindow(window: PeriodWindow, shift: ComparisonShift): Perio
   return { unit: "day", from: move(window.from), to: move(window.to) }
 }
 
+const RELATIVE_UNIT_LABELS: Readonly<Record<string, string>> = { days: "day", months: "month", quarters: "quarter", years: "year" }
+const TO_DATE_LABELS: Readonly<Record<string, string>> = { ytd: "Year to date", qtd: "Quarter to date", mtd: "Month to date", all: "All time" }
+
+export function describePeriodSpec(spec: PeriodSpec | undefined): string {
+  if (spec === undefined) return "All time"
+  if (typeof spec !== "string") return `${describePeriodSpec(spec.from)} – ${describePeriodSpec(spec.to)}`
+  const value = spec.trim().toLowerCase()
+  const toDate = TO_DATE_LABELS[value]
+  if (toDate) return toDate
+  const relative = /^last-(\d{1,3})-(days|months|quarters|years)$/.exec(value)
+  if (relative) {
+    const count = Number(relative[1])
+    const unit = RELATIVE_UNIT_LABELS[relative[2] ?? ""] ?? "period"
+    return count === 1 ? `Last ${unit}` : `Last ${count} ${unit}s`
+  }
+  const fiscal = /^fy(\d{4})$/.exec(value)
+  if (fiscal) return `FY${fiscal[1]}`
+  if (/^\d{4}-q[1-4]$/.test(value)) return bucketLabel(value.toUpperCase(), "quarter")
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return bucketLabel(value, "day")
+  if (/^\d{4}-\d{2}$/.test(value)) return bucketLabel(value, "month")
+  return spec
+}
+
+const COMPARE_LABELS: Readonly<Record<CompareMode | "none", string>> = {
+  "previous-period": "Prior period",
+  "previous-year": "Prior year",
+  budget: "Budget",
+  forecast: "Forecast",
+  none: "No comparison",
+}
+
+export function describeCompareMode(mode: CompareMode | "none"): string {
+  return COMPARE_LABELS[mode]
+}
+
 export function describeWindow(window: PeriodWindow | null): string {
   if (!window) return "All time"
   if (window.unit === "month") {

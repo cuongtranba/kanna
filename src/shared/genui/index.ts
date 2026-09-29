@@ -73,7 +73,15 @@ export {
   type DatasetQueryOutcome,
 } from "./protocol"
 export { DATASET_MAX_ROWS, formatForPath, rowsFromCsv, rowsFromJson, rowsFromText, type RowsParse } from "./rows"
-export { bucketLabel, describeWindow, type CompareMode, type PeriodSpec, type PeriodWindow } from "./period"
+export {
+  bucketLabel,
+  describeCompareMode,
+  describePeriodSpec,
+  describeWindow,
+  type CompareMode,
+  type PeriodSpec,
+  type PeriodWindow,
+} from "./period"
 export { renderGenUIPromptSection, type GenUIPromptOptions } from "./prompt"
 export {
   COMPARE_MODES,
@@ -84,6 +92,7 @@ export {
   datasetQuerySchema,
   dimensionValue,
   parseNumeric,
+  periodSpecSchema,
   runDatasetQuery,
   type DatasetFilter,
   type DatasetQuery,

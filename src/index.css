@@ -69,6 +69,23 @@
     --info-text: oklch(38% 0.09 235);
 
     /*
+      Categorical chart series for generative-UI charts, in a fixed order that is
+      part of their colour-blind safety (validated with the dataviz skill's
+      validate_palette.js against --card in both themes). Assign in order, never
+      cycle, and never reuse a status colour for a series.
+    */
+    --chart-1: oklch(57.5% 0.163 255.5);
+    --chart-2: oklch(67.1% 0.175 40.6);
+    --chart-3: oklch(66.9% 0.141 162.1);
+    --chart-4: oklch(76.4% 0.161 75.1);
+    --chart-5: oklch(71.6% 0.141 357.4);
+    --chart-6: oklch(52.9% 0.18 142.5);
+    --chart-7: oklch(43.3% 0.167 283.6);
+    --chart-8: oklch(62.3% 0.191 24.9);
+    --chart-grid: oklch(93% 0.006 13);
+    --chart-axis: oklch(82% 0.008 13);
+
+    /*
       Height of the shell's top chrome band. The sidebar header and every pane
       tab strip are both the topmost row of their column, so they share this one
       value — that is what keeps their top edges, their labels, and their bottom
@@ -160,6 +177,16 @@
     --info: oklch(72% 0.12 235);
     --info-foreground: oklch(15% 0.02 235);
     --info-text: var(--info);
+    --chart-1: oklch(62.2% 0.161 255.1);
+    --chart-2: oklch(62.2% 0.173 40.1);
+    --chart-3: oklch(62.1% 0.128 163.1);
+    --chart-4: oklch(67% 0.143 73.2);
+    --chart-5: oklch(62.2% 0.171 0.8);
+    --chart-6: oklch(52.9% 0.18 142.5);
+    --chart-7: oklch(67% 0.145 286.8);
+    --chart-8: oklch(66.9% 0.159 22.3);
+    --chart-grid: oklch(28% 0.008 13);
+    --chart-axis: oklch(38% 0.008 13);
   }
 }
 

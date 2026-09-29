@@ -39,6 +39,7 @@ import { parseThinkingSegments } from "../../../lib/parseThinking"
 import { linkifyTextRefs } from "../../../lib/linkifyTextRefs"
 import { ThinkingBlock } from "../../messages/ThinkingBlock"
 import {
+  $isKannaUiNode,
   $isMermaidNode,
   $isLocalFileLinkNode,
   KANNA_MESSAGE_NODES,
@@ -81,7 +82,7 @@ export const HEADING_CLASS_MAP: Record<string, string> = {
 }
 
 function walkNode(node: LexicalNode): ReactNode {
-  if ($isMermaidNode(node) && renderEditor && renderConfig) {
+  if (($isMermaidNode(node) || $isKannaUiNode(node)) && renderEditor && renderConfig) {
     return <span key={nextKey()}>{node.decorate(renderEditor, renderConfig)}</span>
   }
 

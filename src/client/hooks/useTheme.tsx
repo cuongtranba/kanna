@@ -91,6 +91,10 @@ export function ThemeProvider({ children, dom = domAdapter }: { children: ReactN
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
 }
 
+export function useOptionalResolvedTheme(): "light" | "dark" | null {
+  return useContext(ThemeContext)?.resolvedTheme ?? null
+}
+
 export function useTheme() {
   const context = useContext(ThemeContext)
   if (!context) {

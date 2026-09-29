@@ -5,7 +5,7 @@ import { extractKannaUiIntentFences, fenceBlock, KANNA_UI_INTENT_FENCE_LANGUAGE 
 import { computeVariance, formatMetricValue, valueFormatOf } from "./format"
 import { jsonObjectSchema } from "./json-schema"
 import type { DatasetFilter, QueryResult } from "./query"
-import type { CompareMode, PeriodSpec } from "./period"
+import { describeCompareMode, describePeriodSpec, type CompareMode, type PeriodSpec } from "./period"
 
 export const AGENT_INTENT_ACTIONS = ["agent.ask", "agent.investigate", "agent.fix", "financial.explainVariance"] as const
 export type AgentIntentAction = (typeof AGENT_INTENT_ACTIONS)[number]
@@ -85,27 +85,28 @@ export interface ExplainVarianceInput {
   compareWith: CompareMode
   filters?: readonly DatasetFilter[]
   question?: string
-  result: QueryResult
+  result: QueryResult | null
 }
 
 export function buildExplainVarianceIntent(input: ExplainVarianceInput, view: ViewContext): AgentIntent {
   const metricDef = input.decl.metrics[input.metric]
   const label = metricLabel(input.metric, metricDef)
   const format = valueFormatOf(metricDef)
-  const value = input.result.totals.values[input.metric] ?? null
-  const compare = input.result.totals.compare?.[input.metric] ?? null
+  const value = input.result?.totals.values[input.metric] ?? null
+  const compare = input.result?.totals.compare?.[input.metric] ?? null
   const variance = computeVariance(value, compare, format, metricDef?.direction)
-  const comparisonLabel = input.result.comparison?.label ?? input.compareWith
+  const comparisonLabel = input.result?.comparison?.label ?? describeCompareMode(input.compareWith)
+  const periodLabel = input.result?.period.label ?? describePeriodSpec(input.period)
   const headline = input.question
     ? input.question
-    : `Explain the ${label.toLowerCase()} variance for ${input.result.period.label} against ${comparisonLabel.toLowerCase()}`
+    : `Explain the ${label.toLowerCase()} variance for ${periodLabel} against ${comparisonLabel.toLowerCase()}`
   return {
     action: "financial.explainVariance",
     headline,
     context: {
       ...(view.title ? { view: view.title } : {}),
       metric: { id: input.metric, label, format: format.format, ...(format.currency ? { currency: format.currency } : {}) },
-      period: input.result.period.label,
+      period: periodLabel,
       comparison: comparisonLabel,
       ...(input.filters && input.filters.length > 0 ? { filters: input.filters.map((filter) => ({ ...filter })) } : {}),
       values: {

@@ -27,6 +27,8 @@ import { SubagentMessage } from "../../components/messages/SubagentMessage"
 import { SubagentPendingToolCard } from "../../components/messages/SubagentPendingToolCard"
 import { AskUserQuestionMessage } from "../../components/messages/AskUserQuestionMessage"
 import { TranscriptRenderOptionsProvider } from "../../components/messages/render-context"
+import { GenUIHostProvider } from "../../components/genui/host"
+import { useChatGenUIHost } from "../../components/genui/useChatGenUIHost"
 import type { ProcessedToolCall } from "../../components/messages/types"
 import { renderChatLinks } from "../../components/messages/renderChatLinks"
 import React from "react"
@@ -175,6 +177,7 @@ export const ChatTranscriptViewport = memo(({
 
   const dom = ports?.dom ?? domAdapter
   const timer = ports?.timer ?? timerAdapter
+  const genuiHost = useChatGenUIHost(activeChatId, localPath ?? null)
   const previousRowCountRef = useRef(0)
   const localLinkMenuTriggerRef = useRef<HTMLSpanElement | null>(null)
   const toolGroupExpanded = ChatTabScopedStore.useScopedStore((s) => s.toolGroupExpanded)
@@ -526,6 +529,7 @@ export const ChatTranscriptViewport = memo(({
       <TranscriptRenderOptionsProvider
         value={pendingMainQuestion ? FOOTER_SURFACE_OPTIONS : INLINE_SURFACE_OPTIONS}
       >
+      <GenUIHostProvider value={genuiHost}>
         <LegendList<ResolvedTranscriptRow>
           ref={listRef}
           data={resolvedRows}
@@ -545,6 +549,7 @@ export const ChatTranscriptViewport = memo(({
           ListHeaderComponent={listHeader}
           ListFooterComponent={listFooter}
         />
+      </GenUIHostProvider>
       </TranscriptRenderOptionsProvider>
       </OpenLocalLinkProvider>
       </SubagentTranscriptFetchProvider>
