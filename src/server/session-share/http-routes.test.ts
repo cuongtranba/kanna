@@ -8,7 +8,7 @@ const TOKEN = "a".repeat(40)
 const snap: ChatSnapshot = {
   version: CHAT_SNAPSHOT_VERSION,
   chatMeta: { id: "c1", title: "t", model: "m", createdAt: 0 },
-  messages: [], attachmentsManifest: [],
+  entries: [], datasets: {}, attachmentsManifest: [],
 }
 
 function service(impl: (tokenId: string) => Promise<Result<{ snapshot: ChatSnapshot }>>) {

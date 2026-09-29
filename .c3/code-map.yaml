@@ -247,6 +247,8 @@ c3-226:
   - src/server/mcp-validator.ts
 c3-227:
   - src/server/auto-continue/**/*.ts
+c3-228:
+  - src/server/session-share/**/*.ts
 c3-229:
   - src/server/agent-transcript-parse.test.ts
   - src/server/agent-transcript-parse.ts
@@ -329,6 +331,7 @@ c3-305:
   - src/shared/branding.ts
 c3-306:
   - src/shared/share.ts
+  - src/shared/session-share/**/*.ts
 c3-307:
   - src/shared/token-pricing.ts
 c3-310:

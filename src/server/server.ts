@@ -27,7 +27,6 @@ import { KeybindingsManager } from "./keybindings"
 import { readLlmProviderSnapshot, validateLlmProviderCredentials, writeLlmProviderSnapshot } from "./llm-provider"
 import { OpenRouterModelCache } from "./openrouter-models"
 import { fetchOpenRouterModelsRaw } from "./openrouter-models-io.adapter"
-import { toJsonValue } from "./json-boundary"
 import { getMachineDisplayName } from "./machine-name.adapter"
 import { TerminalManager } from "./terminal-manager"
 import { TerminalPidRegistry } from "./terminal-pid-registry.adapter"
@@ -90,14 +89,10 @@ import { parseClaudeSessionFile } from "./claude-session-parser.adapter"
 import { listWorkflowRunDirs, readWorkflowDir, readWorkflowRunJournal, watchWorkflowDir, watchWorkflowRunDirs } from "./workflow-watch-io.adapter"
 import { readWorkflowAgentTranscriptLines } from "./workflow-agent-transcript-io.adapter"
 import { SnapshotStore } from "./session-share/snapshot-store.adapter"
-import { buildChatSnapshot, type SnapshotSources } from "./session-share/snapshot-builder"
+import { buildChatSnapshot } from "./session-share/snapshot-builder"
+import { createSnapshotSources } from "./session-share/snapshot-sources"
 import { startSnapshotSweep } from "./session-share/sweep"
 import { log } from "../shared/log"
-import type {
-  ChatSnapshotMessage,
-  AttachmentManifestEntry,
-  ChatMeta,
-} from "../shared/session-share/types"
 import { createHttpDispatcher } from "./http-dispatcher"
 import { createGenUIDatasetService } from "./genui/dataset-service-boot"
 export { persistUploadedFiles } from "./http-api-routes"
@@ -268,44 +263,9 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     now: () => Date.now(),
   })
   const snapshotStore = new SnapshotStore(path.join(store.dataDir, "shares"))
-  const snapshotSources: SnapshotSources = {
-    getChatMeta(chatId): ChatMeta | null {
-      const chat = store.getChat(chatId)
-      if (!chat) return null
-      const transcript = store.getMessages(chatId)
-      const systemInit = transcript.find((e) => e.kind === "system_init")
-      const model = systemInit?.kind === "system_init" ? systemInit.model : "unknown"
-      return { id: chat.id, title: chat.title ?? "Untitled chat", model, createdAt: chat.createdAt ?? 0 }
-    },
-    getTranscript(chatId): ChatSnapshotMessage[] {
-      const out: ChatSnapshotMessage[] = []
-      for (const entry of store.getMessages(chatId)) {
-        switch (entry.kind) {
-          case "user_prompt":
-            out.push({ kind: "user_prompt", id: entry._id, createdAt: entry.createdAt, text: entry.content })
-            break
-          case "assistant_text":
-            out.push({ kind: "assistant_text", id: entry._id, createdAt: entry.createdAt, text: entry.text })
-            break
-          case "assistant_thinking":
-            out.push({ kind: "assistant_thinking", id: entry._id, createdAt: entry.createdAt, text: entry.text })
-            break
-          case "tool_call":
-            out.push({ kind: "tool_call", id: entry._id, createdAt: entry.createdAt, name: entry.tool.toolName, input: toJsonValue(entry.tool.input) })
-            break
-          case "tool_result":
-            out.push({ kind: "tool_result", id: entry._id, createdAt: entry.createdAt, toolCallId: entry.toolId, output: entry.content, isError: entry.isError ?? false })
-            break
-          default:
-            break
-        }
-      }
-      return out
-    },
-    getAttachments(_chatId): AttachmentManifestEntry[] {
-      return []
-    },
-  }
+  let agent!: AgentCoordinator
+  const genuiDatasets = createGenUIDatasetService(store, appSettings, (chatId) => agent.resolveChatPolicy(chatId))
+  const snapshotSources = createSnapshotSources(store, genuiDatasets)
   const sessionShareService = new SessionShareService({
     events: store,
     snapshotStore,
@@ -405,8 +365,6 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     homeDir: defaultHomeDir(),
   })
 
-  let agent!: AgentCoordinator
-  const genuiDatasets = createGenUIDatasetService(store, appSettings, (chatId) => agent.resolveChatPolicy(chatId))
   const scheduleManager = new ScheduleManager({
     fire: async (chatId, scheduleId) => {
       await agent.fireAutoContinue(chatId, scheduleId)

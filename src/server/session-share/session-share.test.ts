@@ -16,7 +16,8 @@ class FakeEventStore implements ShareEventSink {
 const snapshot: ChatSnapshot = {
   version: CHAT_SNAPSHOT_VERSION,
   chatMeta: { id: "c1", title: "t", model: "m", createdAt: 0 },
-  messages: [],
+  entries: [],
+  datasets: {},
   attachmentsManifest: [],
 }
 
@@ -32,7 +33,7 @@ beforeEach(() => {
   service = new SessionShareService({
     events,
     snapshotStore: store,
-    buildSnapshot: () => snapshot,
+    buildSnapshot: () => Promise.resolve(snapshot),
     getDefaultTtlHours: () => 24,
     now: () => 1_000_000,
     owner: () => "owner",
@@ -123,11 +124,12 @@ describe("SessionShareService", () => {
     const huge: ChatSnapshot = {
       version: CHAT_SNAPSHOT_VERSION,
       chatMeta: { id: "c1", title: "t", model: "m", createdAt: 0 },
-      messages: [{ kind: "assistant_text", id: "m1", createdAt: 0, text: "x".repeat(60 * 1024 * 1024) }],
+      entries: [{ kind: "assistant_text", _id: "m1", createdAt: 0, text: "x".repeat(60 * 1024 * 1024) }],
+      datasets: {},
       attachmentsManifest: [],
     }
     service = new SessionShareService({
-      events, snapshotStore: store, buildSnapshot: () => huge,
+      events, snapshotStore: store, buildSnapshot: () => Promise.resolve(huge),
       getDefaultTtlHours: () => 24,
       now: () => 1, owner: () => "owner",
     })

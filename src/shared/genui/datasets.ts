@@ -1,5 +1,5 @@
 import { z } from "zod"
-import type { JsonObject } from "../json"
+import { isJsonObject, type JsonObject, type JsonValue } from "../json"
 import { jsonByteLength, jsonObjectSchema } from "./json-schema"
 
 export const GENUI_IDENTIFIER = /^[A-Za-z][A-Za-z0-9_.-]{0,63}$/
@@ -165,4 +165,34 @@ export function describeDatasetSource(decl: DatasetDecl): JsonObject {
     case "mcp":
       return { source: "mcp", server: decl.server, tool: decl.tool, ...(decl.arguments ? { arguments: decl.arguments } : {}) }
   }
+}
+
+function sortedKeys(_key: string, value: JsonValue): JsonValue {
+  if (!isJsonObject(value)) return value
+  return Object.fromEntries(Object.keys(value).sort().flatMap((key) => {
+    const field = value[key]
+    return field === undefined ? [] : [[key, field]]
+  }))
+}
+
+export function datasetFreezeKey(decl: DatasetDecl): string {
+  return JSON.stringify(decl, sortedKeys)
+}
+
+export function datasetColumns(decl: DatasetDecl): string[] {
+  const columns = new Set<string>()
+  for (const [id, metric] of Object.entries(decl.metrics)) {
+    if (!metric.derived) columns.add(metricColumn(id, metric))
+  }
+  for (const [id, dimension] of Object.entries(decl.dimensions ?? {})) columns.add(dimensionColumn(id, dimension))
+  if (decl.scenario) columns.add(decl.scenario.column)
+  return [...columns]
+}
+
+export function projectDatasetRows(decl: DatasetDecl, rows: readonly JsonObject[]): JsonObject[] {
+  const columns = datasetColumns(decl)
+  return rows.map((row) => Object.fromEntries(columns.flatMap((column) => {
+    const value = row[column]
+    return value === undefined ? [] : [[column, value]]
+  })))
 }

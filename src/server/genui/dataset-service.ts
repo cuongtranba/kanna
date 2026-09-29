@@ -2,6 +2,9 @@ import path from "node:path"
 import { isJsonArray, isJsonObject, type JsonObject, type JsonValue } from "../../shared/json"
 import type { McpServerConfig } from "../../shared/mcp-types"
 import { runDatasetQuery, type DatasetDecl, type DatasetQuery } from "../../shared/genui"
+import { projectDatasetRows } from "../../shared/genui/datasets"
+import { jsonByteLength } from "../../shared/genui/json-schema"
+import type { FrozenDataset } from "../../shared/session-share/types"
 import type { DatasetErrorCode, DatasetQueryOutcome } from "../../shared/genui/protocol"
 import { formatForPath, rowsFromJson, rowsFromText, type RowsParse } from "../../shared/genui/rows"
 import { contentHash } from "../../shared/genui/hash"
@@ -17,6 +20,7 @@ import { policy } from "../permission-gate"
 import type { DatasetFileReader, GenUIDataScope, McpDataClient, McpToolDescriptor } from "./dataset-ports"
 
 export const DATASET_FILE_MAX_BYTES = 20 * 1024 * 1024
+export const FROZEN_DATASET_MAX_BYTES = 8 * 1024 * 1024
 const CACHE_MAX_BYTES = 32 * 1024 * 1024
 const CACHE_MAX_ENTRIES = 32
 const MCP_DEFAULT_TTL_SECONDS = 60
@@ -39,7 +43,7 @@ interface CachedRows {
 
 type Loaded =
   | { ok: true; rows: readonly JsonObject[]; revision: string; fetchedAt: number }
-  | { ok: false; outcome: DatasetQueryOutcome }
+  | { ok: false; outcome: Exclude<DatasetQueryOutcome, { status: "ok" }> }
 
 type ToolAccess = "allowed" | "ask" | "missing" | "unavailable"
 
@@ -82,6 +86,18 @@ export class GenUIDatasetService {
       recordHistogram(GENUI_DATASET_QUERY_DURATION_MS, this.now() - started, { source: decl.source })
       return outcome
     })
+  }
+
+  async freeze(chatId: string, decl: DatasetDecl): Promise<FrozenDataset> {
+    const loaded = await this.load(chatId, decl, false)
+    if (!loaded.ok) {
+      return { status: "unavailable", message: loaded.outcome.message }
+    }
+    const rows = projectDatasetRows(decl, loaded.rows)
+    if (jsonByteLength(rows) > FROZEN_DATASET_MAX_BYTES) {
+      return { status: "unavailable", message: `This data is larger than ${FROZEN_DATASET_MAX_BYTES / 1024 / 1024} MB, too large to include in a shared view` }
+    }
+    return { status: "ok", rows }
   }
 
   approveTool(chatId: string, server: string, tool: string): void {

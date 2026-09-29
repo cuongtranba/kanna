@@ -11,7 +11,8 @@ import { CHAT_SNAPSHOT_VERSION, type ChatSnapshot } from "../../../shared/sessio
 const snap: ChatSnapshot = {
   version: CHAT_SNAPSHOT_VERSION,
   chatMeta: { id: "c1", title: "Hello world", model: "claude", createdAt: 0 },
-  messages: [{ kind: "user_prompt", id: "m1", createdAt: 0, text: "ping" }],
+  entries: [{ kind: "user_prompt", _id: "m1", createdAt: 0, content: "ping" }],
+  datasets: {},
   attachmentsManifest: [],
 }
 

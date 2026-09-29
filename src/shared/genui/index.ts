@@ -15,6 +15,7 @@ export {
 } from "./catalog"
 export {
   datasetDeclSchema,
+  datasetFreezeKey,
   describeDatasetSource,
   dimensionColumn,
   dimensionLabel,

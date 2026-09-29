@@ -1,6 +1,7 @@
-import { isJsonObject, type JsonValue } from "../json"
+import { isJsonObject, type JsonObject, type JsonValue } from "../json"
+import type { TranscriptEntry } from "../transcript-types"
 
-export const CHAT_SNAPSHOT_VERSION = 1 as const
+export const CHAT_SNAPSHOT_VERSION = 2 as const
 
 export interface ChatMeta {
   id: string
@@ -25,12 +26,26 @@ export interface AttachmentManifestEntry {
   inlineBase64?: string
 }
 
-export interface ChatSnapshot {
-  version: typeof CHAT_SNAPSHOT_VERSION
+export type FrozenDataset =
+  | { status: "ok"; rows: JsonObject[] }
+  | { status: "unavailable"; message: string }
+
+export interface ChatSnapshotV1 {
+  version: 1
   chatMeta: ChatMeta
   messages: ChatSnapshotMessage[]
   attachmentsManifest: AttachmentManifestEntry[]
 }
+
+export interface ChatSnapshotV2 {
+  version: typeof CHAT_SNAPSHOT_VERSION
+  chatMeta: ChatMeta
+  entries: TranscriptEntry[]
+  datasets: Record<string, FrozenDataset>
+  attachmentsManifest: AttachmentManifestEntry[]
+}
+
+export type ChatSnapshot = ChatSnapshotV1 | ChatSnapshotV2
 
 export type ShareError =
   | { kind: "chat_not_found"; chatId: string }

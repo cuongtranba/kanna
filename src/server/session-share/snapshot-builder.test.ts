@@ -1,45 +1,93 @@
 import { describe, expect, test } from "bun:test"
-import { CHAT_SNAPSHOT_VERSION } from "../../shared/session-share/types"
+import type { DatasetDecl } from "../../shared/genui"
+import { datasetFreezeKey, datasetDeclSchema } from "../../shared/genui"
+import { CHAT_SNAPSHOT_VERSION, type FrozenDataset } from "../../shared/session-share/types"
+import type { TranscriptEntry } from "../../shared/transcript-types"
 import { buildChatSnapshot, type SnapshotSources } from "./snapshot-builder"
 
-function fakeSources(): SnapshotSources {
+const SALES_DATASET = { source: "file", path: "reports/sales.csv", metrics: { revenue: { format: "number" } }, dimensions: { region: {} } }
+
+const REPORT_VIEW = [
+  "Here is the report:",
+  "```kanna-ui",
+  JSON.stringify({
+    version: 1,
+    root: "total",
+    datasets: {
+      sales: SALES_DATASET,
+      notes: { source: "inline", rows: [{ region: "north", revenue: 1 }], metrics: { revenue: {} } },
+    },
+    elements: {
+      total: { type: "FinancialMetric", props: { dataset: "sales", metric: "revenue" } },
+    },
+  }),
+  "```",
+].join("\n")
+
+const TRANSCRIPT: TranscriptEntry[] = [
+  { kind: "system_init", _id: "e0", createdAt: 0, provider: "claude", model: "claude-opus", tools: [], agents: [], slashCommands: [], mcpServers: [] },
+  { kind: "account_info", _id: "e1", createdAt: 1, accountInfo: { email: "owner@example.com" } },
+  {
+    kind: "user_prompt",
+    _id: "e2",
+    createdAt: 2,
+    content: "show the report",
+    attachments: [{ id: "a1", kind: "file", displayName: "secret.pdf", absolutePath: "/Users/owner/secret.pdf", relativePath: "./secret.pdf", contentUrl: "/api/x", mimeType: "application/pdf", size: 1 }],
+  },
+  { kind: "tool_call", _id: "e3", createdAt: 3, tool: { kind: "tool", toolKind: "read_file", toolName: "Read", toolId: "toolu_1", input: { filePath: "/repo/a.ts" } } },
+  { kind: "tool_result", _id: "e4", createdAt: 4, toolId: "toolu_1", content: "file body", debugRaw: JSON.stringify({ tool_use_result: { file: "copy of file body" } }) },
+  { kind: "tool_call", _id: "q1", createdAt: 4, tool: { kind: "tool", toolKind: "ask_user_question", toolName: "AskUserQuestion", toolId: "toolu_q", input: { questions: [] } } },
+  { kind: "tool_result", _id: "q2", createdAt: 4, toolId: "toolu_q", content: "answered", debugRaw: JSON.stringify({ tool_use_result: { answers: { pick: "a" } }, requestHeaders: { authorization: "Bearer secret" } }) },
+  { kind: "assistant_text", _id: "e5", createdAt: 5, text: REPORT_VIEW, debugRaw: "{\"raw\":\"provider payload\"}" },
+  { kind: "assistant_text", _id: "e6", createdAt: 6, text: "hidden", hidden: true },
+]
+
+function sources(frozen: FrozenDataset = { status: "ok", rows: [{ region: "north", revenue: 10 }] }): SnapshotSources & { frozenDecls: DatasetDecl[] } {
+  const frozenDecls: DatasetDecl[] = []
   return {
+    frozenDecls,
     getChatMeta: () => ({ id: "c1", title: "t", model: "claude-opus", createdAt: 1 }),
-    getTranscript: () => [
-      { kind: "user_prompt", id: "m1", createdAt: 2, text: "hi" },
-      { kind: "assistant_text", id: "m2", createdAt: 3, text: "hello" },
-    ],
-    getAttachments: () => [{ filename: "a.txt", sizeBytes: 4, inlineBase64: "Zm9v" }],
+    getTranscript: () => TRANSCRIPT,
+    freezeDataset: (_chatId, decl) => {
+      frozenDecls.push(decl)
+      return Promise.resolve(frozen)
+    },
+    getAttachments: () => [],
   }
 }
 
 describe("buildChatSnapshot", () => {
-  test("builds a v1 snapshot from sources", () => {
-    const snap = buildChatSnapshot(fakeSources(), "c1")
+  test("publishes the conversation the chat renders and withholds account details, attachments and raw provider payloads beyond what a tool card reads", async () => {
+    const snap = await buildChatSnapshot(sources(), "c1")
     expect(snap.version).toBe(CHAT_SNAPSHOT_VERSION)
-    expect(snap.chatMeta.id).toBe("c1")
-    expect(snap.messages.length).toBe(2)
-    expect(snap.attachmentsManifest[0]!.filename).toBe("a.txt")
+    expect(snap.entries.map((entry) => entry._id)).toEqual(["e2", "e3", "e4", "q1", "q2", "e5"])
+    const published = JSON.stringify(snap)
+    expect(published).not.toContain("owner@example.com")
+    expect(published).not.toContain("/Users/owner/secret.pdf")
+    expect(published).not.toContain("Bearer secret")
+    expect(published).not.toContain("provider payload")
+    expect(published).not.toContain("copy of file body")
+    const answer = snap.entries.find((entry) => entry._id === "q2")
+    expect(answer?.debugRaw).toBe(JSON.stringify({ tool_use_result: { answers: { pick: "a" } } }))
   })
 
-  test("strips diff and terminal_chunk bodies when stripLargeBodies=true", () => {
-    const sources: SnapshotSources = {
-      ...fakeSources(),
-      getTranscript: () => [
-        { kind: "diff", id: "m1", createdAt: 1, path: "f", patch: "X".repeat(1024) },
-        { kind: "terminal_chunk", id: "m2", createdAt: 2, chunk: "Y".repeat(1024) },
-        { kind: "assistant_text", id: "m3", createdAt: 3, text: "kept" },
-      ],
-    }
-    const snap = buildChatSnapshot(sources, "c1", { stripLargeBodies: true })
-    expect(snap.messages.map(m => m.kind)).toEqual(["omitted", "omitted", "assistant_text"])
+  test("freezes the rows of every non-inline dataset a view declares, keyed so the viewer can find them", async () => {
+    const src = sources()
+    const snap = await buildChatSnapshot(src, "c1")
+    expect(src.frozenDecls.map((decl) => decl.source)).toEqual(["file"])
+    const key = datasetFreezeKey(datasetDeclSchema.parse(SALES_DATASET))
+    expect(snap.datasets[key]).toEqual({ status: "ok", rows: [{ region: "north", revenue: 10 }] })
   })
 
-  test("throws when chat is unknown", () => {
-    const sources: SnapshotSources = {
-      ...fakeSources(),
-      getChatMeta: () => null,
+  test("rejects when the chat is unknown", async () => {
+    const src: SnapshotSources = { ...sources(), getChatMeta: () => null }
+    let failure: Error | null = null
+    try {
+      await buildChatSnapshot(src, "missing")
+    } catch (error) {
+      if (!(error instanceof Error)) throw error
+      failure = error
     }
-    expect(() => buildChatSnapshot(sources, "missing")).toThrow(/chat_not_found/)
+    expect(failure?.message).toMatch(/chat_not_found/)
   })
 })

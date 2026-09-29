@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test"
 import { CHAT_SNAPSHOT_VERSION, isShareError, type ChatSnapshot, type ShareError } from "./types"
 
 describe("session-share types", () => {
-  test("CHAT_SNAPSHOT_VERSION is 1", () => {
-    expect(CHAT_SNAPSHOT_VERSION).toBe(1)
+  test("CHAT_SNAPSHOT_VERSION is 2", () => {
+    expect(CHAT_SNAPSHOT_VERSION).toBe(2)
   })
 
   test("isShareError narrows discriminated union", () => {
@@ -16,9 +16,10 @@ describe("session-share types", () => {
     const snap: ChatSnapshot = {
       version: CHAT_SNAPSHOT_VERSION,
       chatMeta: { id: "c1", title: "t", model: "m", createdAt: 0 },
-      messages: [],
+      entries: [],
+      datasets: {},
       attachmentsManifest: [],
     }
-    expect(snap.version).toBe(1)
+    expect(snap.version).toBe(2)
   })
 })

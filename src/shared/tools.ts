@@ -479,6 +479,18 @@ function extractMcpTextContent(value: JsonValue): string | null {
   return parts.length > 0 ? parts.join("") : null
 }
 
+export const STRUCTURED_RESULT_TOOL_KINDS: ReadonlySet<NormalizedToolCall["toolKind"]> = new Set<NormalizedToolCall["toolKind"]>([
+  "ask_user_question",
+  "exit_plan_mode",
+  "task_create",
+  "task_update",
+  "task_list",
+])
+
+export function toolResultReadsSidecar(toolKind: NormalizedToolCall["toolKind"]): boolean {
+  return STRUCTURED_RESULT_TOOL_KINDS.has(toolKind) || toolKind === "subagent_task"
+}
+
 export function hydrateToolResult(tool: NormalizedToolCall, raw: JsonValue): HydratedToolCall["result"] {
   const parsed = parseJsonValue(raw)
 
