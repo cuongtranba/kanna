@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.61.1](https://github.com/cuongtranba/kanna/compare/v1.61.0...v1.61.1) (2026-09-29)
+
+
+### Bug Fixes
+
+* **share:** render shared chats with the chat's own rows and keep generative-view data ([#1180](https://github.com/cuongtranba/kanna/issues/1180)) ([94a58bd](https://github.com/cuongtranba/kanna/commit/94a58bd022ee927374018203d165dc1134e622f4))
+
 ## [1.61.0](https://github.com/cuongtranba/kanna/compare/v1.60.4...v1.61.0) (2026-09-29)
 
 
