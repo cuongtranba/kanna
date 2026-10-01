@@ -9,8 +9,14 @@ const EXAMPLE = JSON.stringify({
   state: { period: "last-12-months", compare: "budget" },
   datasets: {
     pnl: {
-      source: "file",
-      path: "reports/pnl.csv",
+      source: "inline",
+      columns: ["month", "customer", "scenario", "revenue"],
+      rows: [
+        ["2026-07", "Acme", "Actual", 42000],
+        ["2026-07", "Acme", "Budget", 40000],
+        ["2026-08", "Acme", "Actual", 47500],
+        ["2026-08", "Acme", "Budget", 41000],
+      ],
       metrics: { revenue: { format: "currency", currency: "USD" } },
       dimensions: { month: { kind: "time", grain: "month" }, customer: {} },
       scenario: { column: "scenario", actual: "Actual", budget: "Budget" },
@@ -50,7 +56,10 @@ export function renderGenUIPromptSection(options: GenUIPromptOptions): string {
     "",
     "Rules:",
     "- Only the components and actions listed here. Never JavaScript, JSX, HTML, colours, pixel sizes, or chart-library options.",
-    "- Data lives in datasets and is referenced by id; never put rows into component props. Sources: {\"source\":\"inline\",\"rows\":[…]} only for a few rows the user gave you (at most 500 rows, 64 KB); {\"source\":\"file\",\"path\":\"relative/to/cwd.csv\",\"format\"?:\"csv\"|\"json\",\"rowsPath\"?} — write computed or large data to a file first; {\"source\":\"mcp\",\"server\":\"<configured MCP server>\",\"tool\":\"<read-only tool>\",\"arguments\"?:{…},\"rowsPath\"?}.",
+    "- Data lives in datasets and is referenced by id; never put rows into component props. Sources:",
+    "  - inline — the default for any data you already hold: a tool or query result, numbers you computed, rows the user gave you. Write it as a table, {\"source\":\"inline\",\"columns\":[\"month\",\"revenue\"],\"rows\":[[\"2026-07\",42000],…]} (rows as objects also work). A tool result already shaped {columns, rows} can be pasted as is. At most 500 rows and 64 KB, so aggregate before you embed.",
+    "  - file — {\"source\":\"file\",\"path\":\"relative/to/cwd.csv\",\"format\"?:\"csv\"|\"json\",\"rowsPath\"?} — only for a data file that already exists in the workspace. Never write a file just to feed a view.",
+    "  - mcp — {\"source\":\"mcp\",\"server\":\"<configured MCP server>\",\"tool\":\"<read-only tool>\",\"arguments\"?:{…},\"rowsPath\"?} — when the view should re-query the tool live instead of showing a snapshot.",
     "- Every dataset declares its semantics: \"metrics\": {id: {\"column\"?, \"label\"?, \"format\": currency|percent|number, \"currency\"?, \"aggregate\"?: sum|avg|min|max|last|count, \"derived\"?: {\"op\": ratio|sum|difference, \"of\": [metric ids]}, \"direction\"?: higher-is-better|lower-is-better}} and \"dimensions\": {id: {\"column\"?, \"label\"?, \"kind\"?: time|category, \"grain\"?: day|month|quarter|year, \"order\"?, \"parent\"?}}; optionally \"scenario\": {\"column\", \"actual\", \"budget\"?, \"forecast\"?}, \"fiscalYearStartMonth\", \"refreshSeconds\". Percent values are ratios (0.142 means 14.2%). Balances (cash, receivables) aggregate with \"last\".",
     "- Periods: all, last-N-days|months|quarters|years, ytd, qtd, mtd, fy2026, 2026, 2026-Q3, 2026-08, 2026-08-15, or {\"from\",\"to\"}. Relative periods count back from the latest date in the data.",
     "- compareWith: previous-period, previous-year, budget, forecast (the last two need the scenario column), or none.",

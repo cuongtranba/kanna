@@ -79,6 +79,26 @@ test("rejects a file dataset that escapes the working directory", () => {
   expect(issues.map((issue) => issue.path)).toContain("datasets.pnl.path")
 })
 
+const SALES_TABLE: JsonObject = {
+  source: "inline",
+  columns: ["region", "revenue"],
+  rows: [["North", 120], ["South", 80]],
+  metrics: { revenue: {} },
+  dimensions: { region: {} },
+}
+
+test("an inline dataset written as columns and rows reaches the view as one object per row", () => {
+  const result = parseGenUISpec(specWith({}, { datasets: { sales: SALES_TABLE } }))
+  if (!result.ok) throw new Error(JSON.stringify(result.issues))
+  const sales = result.spec.datasets?.sales
+  expect(sales?.source === "inline" ? sales.rows : null).toEqual([{ region: "North", revenue: 120 }, { region: "South", revenue: 80 }])
+})
+
+test("rejects an inline table row whose values do not line up with its columns", () => {
+  const issues = issuesOf(specWith({}, { datasets: { sales: { ...SALES_TABLE, rows: [["North", 120], ["South"]] } } }))
+  expect(issues).toEqual([{ path: "datasets.sales.rows.1", message: "the row has 1 values; \"columns\" names 2" }])
+})
+
 test("reports a child reference to an element that does not exist", () => {
   const issues = issuesOf({ version: 1, root: "page", elements: { page: { type: "Stack", children: ["missing"] } } })
   expect(issues[0]?.path).toBe("elements.page")

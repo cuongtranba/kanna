@@ -30,7 +30,7 @@ export async function checkFileDatasetInCwd(cwd: string, decl: DatasetDecl): Pro
   if (resolved.ok) return null
   return resolved.reason === "outside_root"
     ? `"${decl.path}" resolves outside the working directory`
-    : `"${decl.path}" does not exist in ${cwd} — write the file before showing the view`
+    : `"${decl.path}" does not exist in ${cwd} — embed the rows inline instead, or point at a file that exists`
 }
 
 export function buildValidateUiToolList(chatId: string | null, cwd: string) {

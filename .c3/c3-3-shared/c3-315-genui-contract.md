@@ -1,6 +1,6 @@
 ---
 id: c3-315
-c3-seal: fa3ac000f5e0695746ca5d5a6f36e26d5893822b330299caaf3cad30977f5eeb
+c3-seal: dbb400eb4152217d666f0e7242b824023ce1324c99e04fa2884b4cff2ab8480f
 title: genui-contract
 type: component
 category: feature
@@ -45,6 +45,7 @@ Owns what a generative view IS: the versioned spec, the catalog of components an
 | runDatasetQuery | OUT | One engine for inline rows on the client and file or MCP rows on the server; periods count back from the latest date in the data, never the clock | c3-240 | src/shared/genui/query.test.ts |
 | Fences | IN/OUT | extractKannaUiFences reports whether a fence is closed; the intent fence carries an agent action and its structured context | c3-114 | src/shared/genui/contract.test.ts |
 | renderGenUIPromptSection | OUT | The prompt section is generated from the catalog, so the prompt cannot name a component the parser rejects | c3-226 | src/shared/genui/contract.test.ts |
+| datasetDeclSchema | IN | An inline dataset is written as object rows or as a columns list plus rows of values, and parses to object rows so every consumer reads one shape; the prompt makes inline the default for data the agent already holds, keeps file for data already in the workspace, and its worked example must parse | c3-240 | src/shared/genui/spec.test.ts |
 
 ## Derived Materials
 
