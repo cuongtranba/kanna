@@ -297,7 +297,7 @@ export const GENUI_COMPONENTS = {
   FinancialTable: {
     props: z.strictObject({ variant: z.enum(["detail", "statement", "comparison"]).optional(), ...financialTableProps }),
     description: "A financial table. detail: metrics by the rows dimension. comparison: metric with variance columns. statement: line items (rows) under groups (groupRows) with subtotals and totals.",
-    signature: "variant?: detail|statement|comparison, dataset, metric?, metrics?, rows?, groupRows?, columns?: period|metrics, period?, compareWith?, filters?, totals?, title?, limit?",
+    signature: "variant?: detail|statement|comparison, dataset, metric?, metrics?, rows?, groupRows?, columns?: period|metrics, period?, compareWith?, filters?, totals?: [{label, groups[]}], title?, limit?",
     children: false,
     events: [],
     datasetRefs: refsFor(["metric", "metrics"], ["rows", "groupRows"]),
