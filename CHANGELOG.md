@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.62.0](https://github.com/cuongtranba/kanna/compare/v1.61.1...v1.62.0) (2026-10-01)
+
+
+### Features
+
+* **genui:** FlowDiagram — node-and-edge diagrams laid out by ELK, with static and live flow edges ([#1187](https://github.com/cuongtranba/kanna/issues/1187)) ([f3c6ee8](https://github.com/cuongtranba/kanna/commit/f3c6ee8fc6508f6b5bb1b5d0d664a7b303cf021f))
+
 ## [1.61.1](https://github.com/cuongtranba/kanna/compare/v1.61.0...v1.61.1) (2026-09-29)
 
 
