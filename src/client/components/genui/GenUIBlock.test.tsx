@@ -7,6 +7,7 @@ import { renderClientMarkup, type ClientRenderResult } from "../../lib/testing/r
 import { renderMessageMarkdown } from "../lexical/markdown/renderMessage"
 import { renderMarkdownToReact } from "../lexical/markdown/lexicalToReact"
 import type { ChartRendererProps } from "./charts/chart-renderer"
+import type { FlowRendererProps } from "./flow/flow-renderer"
 import { GenUIHostProvider, READONLY_GENUI_HOST, type GenUIHost } from "./host"
 
 const MONTHS = ["2026-05", "2026-06", "2026-07", "2026-08"]
@@ -54,6 +55,41 @@ function FakeChart({ model, onPointClick }: ChartRendererProps) {
   )
 }
 
+function FakeFlow({ layout, onSelect }: FlowRendererProps) {
+  return (
+    <ul aria-label="fake diagram">
+      {layout.nodes.map((placed) => (
+        <li key={placed.node.id}>
+          <button type="button" onClick={() => onSelect(placed.node.id)}>{placed.node.label}</button>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+const PIPELINE: JsonObject = {
+  version: 1,
+  title: "Deploy",
+  root: "flow",
+  elements: {
+    flow: {
+      type: "FlowDiagram",
+      props: {
+        title: "Deploy pipeline",
+        nodes: [
+          { id: "ship", label: "Ship", kind: "end" },
+          { id: "build", label: "Build", status: "running", tone: "info" },
+          { id: "push", label: "Push", kind: "start" },
+        ],
+        edges: [
+          { from: "push", to: "build", label: "webhook" },
+          { from: "build", to: "ship", type: "flow" },
+        ],
+      },
+    },
+  },
+}
+
 interface HostLog {
   sent: string[]
   approved: string[]
@@ -76,6 +112,7 @@ function chatHost(overrides: Partial<GenUIHost> = {}): { host: GenUIHost; log: H
         log.approved.push(`${server}/${tool}`)
       },
       ChartRenderer: FakeChart,
+      FlowRenderer: FakeFlow,
       ...overrides,
     },
   }
@@ -263,4 +300,36 @@ test("an income statement lists sections in their declared order, not alphabetic
 
   const text = await waitFor(() => (container.textContent?.includes("Hosting") ? container.textContent : null), "the statement")
   expect(text.indexOf("Revenue")).toBeLessThan(text.indexOf("Cost of sales"))
+})
+
+test("asking the agent about a diagram step sends the step with its neighbours, not just its name", async () => {
+  const { host, log } = chatHost()
+  const container = await mount(renderMessageMarkdown(fence(PIPELINE)), host)
+
+  await click(await waitFor(() => buttonNamed(container, "Build"), "the laid-out diagram"))
+  await click(await waitFor(() => buttonNamed(container, "Ask agent"), "the step details"))
+  await click(await waitFor(() => buttonNamed(container, "Send"), "the confirmation"))
+  await waitFor(() => (log.sent.length > 0 ? true : null), "the message")
+
+  const intent = parseIntentMessage(log.sent[0] ?? "")
+  expect(intent?.action).toBe("agent.investigate")
+  expect(intent?.context).toMatchObject({
+    diagram: "Deploy pipeline",
+    step: "Build",
+    status: "running",
+    upstream: [{ step: "Push", edge: "static", label: "webhook" }],
+    downstream: [{ step: "Ship", edge: "flow" }],
+  })
+})
+
+test("the outline reads a diagram in flow order, not declaration order, and marks live edges", async () => {
+  const container = await mount(renderMessageMarkdown(fence(PIPELINE)), chatHost().host)
+
+  await click(await waitFor(() => buttonNamed(container, "Outline"), "the Outline toggle"))
+  const steps = await waitFor(() => {
+    const list = container.querySelector("ol")
+    return list ? [...list.querySelectorAll("li button")].map((button) => button.textContent) : null
+  }, "the outline")
+  expect(steps).toEqual(["Push", "Build", "Ship"])
+  expect(container.querySelector("ol")?.textContent).toContain("Ship · live")
 })

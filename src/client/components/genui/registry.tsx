@@ -28,6 +28,7 @@ import {
   TimelineElement,
 } from "./components/records"
 import { DataTableElement } from "./components/data-table"
+import { FlowDiagramElement } from "./components/flow-diagram"
 
 export const GENUI_REGISTRY = {
   Stack: StackElement,
@@ -45,6 +46,7 @@ export const GENUI_REGISTRY = {
   DiagnosticList: DiagnosticListElement,
   TestResult: TestResultElement,
   Timeline: TimelineElement,
+  FlowDiagram: FlowDiagramElement,
   FinancialMetric: FinancialMetricElement,
   FinancialChart: FinancialChartElement,
   FinancialTable: FinancialTableElement,

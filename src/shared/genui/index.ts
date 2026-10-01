@@ -1,4 +1,9 @@
 export {
+  FLOW_EDGE_TYPES,
+  FLOW_MAX_EDGES,
+  FLOW_MAX_GROUPS,
+  FLOW_MAX_NODES,
+  FLOW_NODE_KINDS,
   GENUI_ACTIONS,
   GENUI_COMPONENTS,
   actionDef,
@@ -8,6 +13,9 @@ export {
   isHttpsUrl,
   type ActionClass,
   type DatasetReference,
+  type FlowDiagramProps,
+  type FlowEdge,
+  type FlowNode,
   type GenUIActionDef,
   type GenUIActionName,
   type GenUIComponentDef,
@@ -64,6 +72,7 @@ export {
   type ParsedIntentMessage,
   type ViewContext,
 } from "./intent"
+export { flowEdgeType, flowNodeContext, flowOutline, type FlowLink, type FlowOutlineEntry } from "./flow"
 export { contentHash } from "./hash"
 export { jsonObjectSchema, jsonValueSchema } from "./json-schema"
 export {

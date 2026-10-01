@@ -107,6 +107,10 @@ export interface DomPort {
 
   getCssVar(name: string, fallback: string): string
 
+  measureTextWidth(text: string, font: string): number | null
+
+  whenFontsReady(): Promise<void>
+
   getComputedStyle(element: Element): ComputedStyleLike
 
   openWindow(url: string, target: string, features: string): void
