@@ -68,6 +68,8 @@ export function makeFakeDomPort(options: FakeDomPortOptions = {}): DomPort {
     getBaseURI: () => currentHref,
     triggerDownload: () => { },
     getCssVar: (_name, fallback) => fallback,
+    measureTextWidth: () => null,
+    whenFontsReady: () => Promise.resolve(),
     getComputedStyle: () => ({
       getPropertyValue: () => "",
       paddingLeft: "0px",

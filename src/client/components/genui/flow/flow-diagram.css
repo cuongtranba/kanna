@@ -1,0 +1,83 @@
+.kanna-flow .react-flow {
+  --xy-background-color: var(--card);
+  --xy-background-pattern-dots-color-default: var(--border);
+  --xy-edge-stroke-default: var(--muted-foreground);
+  --xy-edge-stroke-width-default: 1.25;
+  --xy-node-boxshadow-selected-default: none;
+  --xy-controls-button-background-color-default: var(--card);
+  --xy-controls-button-background-color-hover-default: var(--accent);
+  --xy-controls-button-color-default: var(--foreground);
+  --xy-controls-button-color-hover-default: var(--foreground);
+  --xy-controls-button-border-color-default: var(--border);
+  --xy-controls-box-shadow-default: none;
+  --xy-attribution-background-color-default: transparent;
+}
+
+.kanna-flow .react-flow__controls {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.kanna-flow .react-flow__attribution a {
+  color: var(--muted-foreground);
+}
+
+.kanna-flow .react-flow__handle {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.kanna-flow .react-flow__node-step,
+.kanna-flow .react-flow__node-group {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.kanna-flow .react-flow__node-step {
+  cursor: pointer;
+}
+
+.kanna-flow .react-flow__node-group {
+  cursor: default;
+}
+
+.kanna-flow-edge {
+  --flow-edge-color: var(--muted-foreground);
+}
+
+.kanna-flow-edge.tone-positive { --flow-edge-color: var(--success); }
+.kanna-flow-edge.tone-negative { --flow-edge-color: var(--destructive); }
+.kanna-flow-edge.tone-attention { --flow-edge-color: var(--warning); }
+.kanna-flow-edge.tone-info,
+.kanna-flow-edge.is-flow.tone-neutral { --flow-edge-color: var(--info); }
+
+.kanna-flow-edge .react-flow__edge-path {
+  stroke: var(--flow-edge-color);
+}
+
+.kanna-flow-edge.is-dashed .react-flow__edge-path {
+  stroke-dasharray: 5 4;
+}
+
+.kanna-flow-edge.is-flow .react-flow__edge-path {
+  stroke-width: 1.75;
+}
+
+.kanna-flow-run {
+  fill: none;
+  stroke: var(--flow-edge-color);
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  stroke-dasharray: 0.1 16;
+  animation: kanna-flow-run 1s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes kanna-flow-run {
+  to {
+    stroke-dashoffset: -16.1;
+  }
+}

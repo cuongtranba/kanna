@@ -192,6 +192,8 @@ class FakeDomPort implements DomPort {
   getBaseURI(): string { return "http://localhost/" }
   triggerDownload(_url: string, _filename: string): void { }
   getCssVar(_name: string, fallback: string): string { return fallback }
+  measureTextWidth(): number | null { return null }
+  whenFontsReady(): Promise<void> { return Promise.resolve() }
   getComputedStyle(_element: Element): ComputedStyleLike { return { paddingLeft: "", paddingRight: "", paddingTop: "", paddingBottom: "" } }
   getOrigin(): string { return "http://localhost" }
   openWindow(_url: string, _target: string, _features: string): void { }

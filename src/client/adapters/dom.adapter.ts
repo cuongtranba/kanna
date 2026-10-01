@@ -7,6 +7,8 @@ declare global {
   }
 }
 
+let measureContext: CanvasRenderingContext2D | null = null
+
 export const domAdapter: DomPort = {
   getTitle(): string {
     return document.title
@@ -232,6 +234,19 @@ export const domAdapter: DomPort = {
     if (typeof document === "undefined") return fallback
     const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
     return value || fallback
+  },
+
+  measureTextWidth(text: string, font: string): number | null {
+    if (typeof document === "undefined") return null
+    measureContext ??= document.createElement("canvas").getContext("2d")
+    if (!measureContext) return null
+    measureContext.font = font
+    return measureContext.measureText(text).width
+  },
+
+  async whenFontsReady(): Promise<void> {
+    if (typeof document === "undefined" || !("fonts" in document)) return
+    await document.fonts.ready
   },
 
   getComputedStyle(element: Element): ComputedStyleLike {

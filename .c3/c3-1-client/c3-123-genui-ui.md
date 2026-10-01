@@ -1,6 +1,6 @@
 ---
 id: c3-123
-c3-seal: 2c1871773ab0d917c71a27e06182c989835ceee9ed79bed2d76f846173ec9049
+c3-seal: 0ffc266e9f314ed4a1ecd6562161d8e95c524d8b6f7912f6e2c1c54d46493bd2
 title: genui-ui
 type: component
 category: feature
@@ -46,6 +46,7 @@ Owns the generative UI renderer: the Lexical node and transformers for kanna-ui 
 | Agent actions | OUT | Shown in a confirm strip and sent as chat.send with a kanna-ui-intent fence only after Send | c3-208 | e2e/genui.pw.ts |
 | Read-only host | IN | A shared view renders inline data and hides every non-local action | c3-218 | src/client/components/genui/host.tsx |
 | Charts | OUT | buildChartModel refuses a combo whose units differ, keeps series order stable, and every chart has a table view | c3-123 | src/client/components/genui/charts/chart-model.test.ts |
+| Flow diagrams | OUT | ELK lays the diagram out in a lazy chunk and React Flow draws ELK's routed edges read-only; only flow edges animate and reduced motion freezes them; the Outline view is the keyboard path; Ask agent on a step carries its upstream and downstream steps | c3-123 | src/client/components/genui/GenUIBlock.test.tsx |
 | Transformer list | OUT | The kanna-ui transformers live in their own module and the default list is built at call time; a module-load spread blanked the production app | c3-114 | e2e/smoke.pw.ts |
 
 ## Derived Materials
@@ -62,3 +63,4 @@ Owns the generative UI renderer: the Lexical node and transformers for kanna-ui 
 | The whole app renders blank | KANNA_BUILTIN_TRANSFORMERS is spread at module load again | Production bundle throws on load while bun tests pass | bun run test:e2e |
 | Handlers act on a stale host | HandlerSync is removed | Actions from a view use the previous chat | bun run test src/client/components/genui/GenUIBlock.test.tsx |
 | Chart marks fail contrast | A chart token changes without re-validation | chart-palette.test.ts fails | bun run test src/server/design/chart-palette.test.ts |
+| The entry bundle grows by about 480 KB gzip | elkjs or @xyflow/react is imported statically instead of through the lazy FlowSurface and layout imports | check-client-bundle reports the entry over budget | bun run check |

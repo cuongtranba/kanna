@@ -503,6 +503,14 @@ export function makeFakeDomPort(overrides: Partial<{
       return fallback
     },
 
+    measureTextWidth(): number | null {
+      return null
+    },
+
+    whenFontsReady(): Promise<void> {
+      return Promise.resolve()
+    },
+
     getComputedStyle(_element: Element): ComputedStyleLike {
       return { paddingLeft: "", paddingRight: "", paddingTop: "", paddingBottom: "" }
     },

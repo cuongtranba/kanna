@@ -53,6 +53,31 @@ its table, and expanding statement groups all run inside Kanna — no tokens, no
 waiting. Every chart has a **Table** view with the exact numbers, and in that view
 each row you can drill into is a button, so the whole report works from the keyboard.
 
+## Diagrams
+
+Ask the agent to "draw how a request flows", "map the modules this touches", or
+"show the pipeline with each step's status", and it can answer with a **FlowDiagram**:
+steps and the connections between them, optionally grouped, each step marked as a
+start, end, decision, store or external system and carrying a status such as
+*passed* or *running*.
+
+- The agent never places anything. It names the steps and connections, and Kanna lays
+  the diagram out, picking left-to-right or top-to-bottom to fit the chat, and routes
+  each connection around the steps rather than through them.
+- A connection is either **static** — a relationship that simply exists, such as a
+  dependency or a decision branch — or **flow**, meaning work is moving along it right
+  now. Only flow connections animate, with beads travelling toward the next step. With
+  your system's reduce-motion setting on they hold still, and stay visibly different
+  from static ones. A dashed connection means optional or conditional.
+- Click a step to see its details. **Open file** jumps to the code it names, and
+  **Ask agent** sends a question about that step that includes the steps before and
+  after it.
+- The diagram is read-only: you can pan and zoom with the controls, but the mouse wheel
+  keeps scrolling the chat. **Outline** reads the same diagram as a numbered list in
+  flow order, and is the way to use it from the keyboard.
+
+For a picture you only need to look at, the agent still writes a mermaid diagram.
+
 ## Asking the agent about what you see
 
 Buttons such as **Explain variance** or **Fix** on a failing test hand the question
