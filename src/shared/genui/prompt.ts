@@ -64,6 +64,7 @@ export function renderGenUIPromptSection(options: GenUIPromptOptions): string {
     "- Periods: all, last-N-days|months|quarters|years, ytd, qtd, mtd, fy2026, 2026, 2026-Q3, 2026-08, 2026-08-15, or {\"from\",\"to\"}. Relative periods count back from the latest date in the data.",
     "- compareWith: previous-period, previous-year, budget, forecast (the last two need the scenario column), or none.",
     "- Selectors bind with {\"$bindState\":\"/path\"}; other props read the value with {\"$state\":\"/path\"}. Seed defaults in \"state\". {\"$template\":\"text ${/path}\"} and {\"$cond\":…,\"$then\":…,\"$else\":…} are also allowed.",
+    "- \"filters\" is always an array, [{\"dimension\", \"op\"?: eq|neq|in|not-in, \"value\"}], never an object. To filter by a selector's choice, write [{\"dimension\":\"currency\",\"value\":{\"$state\":\"/currency\"}}]. \"totals\" on a table or statement is an array, [{\"label\",\"groups\":[…]}], never true.",
     "- Exploration — changing the period or comparison, drilling into a chart, sorting — runs inside Kanna without you. Only [agent] actions come back to you, as a message carrying a ```kanna-ui-intent block of structured context.",
     "",
     "Components:",
