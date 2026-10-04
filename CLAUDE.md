@@ -1238,13 +1238,30 @@ ADR `adr-20260929-generative-ui`.
   path for drilldown**: each drillable row header is a button. When a drill replaces
   the button that had focus, focus moves to *Back*, and *Back* returns it to the
   chart's figure — without that, focus falls to `<body>` and a keyboard user restarts
-  from the top of the page. Eighteen element screenshots in
+  from the top of the page. Twenty element screenshots in
   `e2e/genui.pw.ts-snapshots/` are compared with `toHaveScreenshot`. They are named
   `-darwin` because font rasterisation differs per OS; e2e is off CI, so regenerate
   them on macOS with `--update-snapshots` after an intended visual change, and look at
-  every image before committing. Each capture scrolls its element to the top first,
-  because the chat composer overlays the bottom of the transcript and would be
-  stitched into the image.
+  every image before committing. `--update-snapshots` rewrites only a baseline that
+  FAILS, and `maxDiffPixelRatio` is 1%, so a small intended change passes against the
+  old image and is never rewritten — delete the baseline first. Each capture scrolls
+  its element to the top first, because the chat composer overlays the bottom of the
+  transcript and would be stitched into the image.
+
+- **FlowDiagram** (`components/flow-diagram.tsx`, `flow/`; ADR
+  `adr-20261001-genui-flow-diagram`). The model writes nodes, edges and groups, never
+  positions; the catalog schema rejects an edge or group reference that names nothing.
+  **Edge `type` is intent, not styling:** `static` (default) is a relationship, `flow` is
+  work moving now and is the ONLY thing that animates — beads on a `stroke-dashoffset`
+  CSS animation, which the global reduced-motion rule freezes into a static dotted mark.
+  `style: "dashed"` means optional or conditional; never reuse it for "in progress". ELK
+  (`elkjs` 0.12, pinned: mermaid's 0.9.3 lacks `elk.json.edgeCoords`) lays out with
+  `edgeCoords: ROOT`, and `FlowSurface` draws ELK's routed points — React Flow's own
+  edge paths ignore the routes and cut through groups. Node boxes are sized by
+  `measureTextWidth` (DomPort) after `whenFontsReady`; the chrome constants in
+  `flow-layout.ts` must match `StepNode`'s padding, or labels truncate. The canvas is
+  read-only and leaves the wheel to the transcript; **Outline** is the keyboard path.
+  React Flow and ELK are lazy chunks — a static import puts ~480 KB gzip in the entry.
 
 `KANNA_GENUI=disabled` removes the prompt section and the guard; existing views keep
 rendering and `validate_ui` stays registered.

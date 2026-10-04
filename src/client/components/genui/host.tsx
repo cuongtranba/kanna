@@ -1,6 +1,7 @@
 import { createContext, useContext, type ComponentType, type ReactNode } from "react"
 import type { DatasetDecl, DatasetQuery, DatasetQueryOutcome } from "../../../shared/genui"
 import type { ChartRendererProps } from "./charts/chart-renderer"
+import type { FlowRendererProps } from "./flow/flow-renderer"
 
 export interface GenUIHost {
   chatId: string | null
@@ -11,6 +12,7 @@ export interface GenUIHost {
   sendToAgent: ((message: string) => Promise<void>) | null
   openLink: (url: string) => void
   ChartRenderer: ComponentType<ChartRendererProps> | null
+  FlowRenderer: ComponentType<FlowRendererProps> | null
 }
 
 export const READONLY_GENUI_HOST: GenUIHost = {
@@ -22,6 +24,7 @@ export const READONLY_GENUI_HOST: GenUIHost = {
   sendToAgent: null,
   openLink: () => {},
   ChartRenderer: null,
+  FlowRenderer: null,
 }
 
 const GenUIHostContext = createContext<GenUIHost>(READONLY_GENUI_HOST)

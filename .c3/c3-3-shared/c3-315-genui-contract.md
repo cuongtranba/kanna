@@ -1,6 +1,6 @@
 ---
 id: c3-315
-c3-seal: dbb400eb4152217d666f0e7242b824023ce1324c99e04fa2884b4cff2ab8480f
+c3-seal: 8b45677180f01799f85319394fc727d17d7679be7bb8814fdb5f5736476bcfdb
 title: genui-contract
 type: component
 category: feature
@@ -42,6 +42,7 @@ Owns what a generative view IS: the versioned spec, the catalog of components an
 | --- | --- | --- | --- | --- |
 | parseGenUISpec | IN | The trust boundary: an unknown version, component, prop, action, action param, dataset reference, or expression shape fails closed with an issue path | c3-240 | src/shared/genui/spec.test.ts |
 | GENUI_COMPONENTS and GENUI_ACTIONS | OUT | The only components and actions a view may name; each action carries its class, local or kanna or agent | c3-123 | src/shared/genui/catalog.ts |
+| FlowDiagram | IN | Nodes, edges and groups only, never positions; every edge endpoint and node group must name something the diagram declares or the spec fails with the field path; edge type is static by default and flow only for live work | c3-123 | src/shared/genui/spec.test.ts |
 | runDatasetQuery | OUT | One engine for inline rows on the client and file or MCP rows on the server; periods count back from the latest date in the data, never the clock | c3-240 | src/shared/genui/query.test.ts |
 | Fences | IN/OUT | extractKannaUiFences reports whether a fence is closed; the intent fence carries an agent action and its structured context | c3-114 | src/shared/genui/contract.test.ts |
 | renderGenUIPromptSection | OUT | The prompt section is generated from the catalog, so the prompt cannot name a component the parser rejects | c3-226 | src/shared/genui/contract.test.ts |

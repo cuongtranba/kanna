@@ -48,7 +48,7 @@ export function renderGenUIPromptSection(options: GenUIPromptOptions): string {
   return [
     "## Generative UI",
     "",
-    `Kanna renders a \`\`\`${KANNA_UI_FENCE_LANGUAGE} fence in your reply as an interactive view built from Kanna's own components. Use it for reports, dashboards, charts, and interactive summaries of structured results (test runs, diagnostics, changed files). Do not use it for prose, a small static table (write a markdown table), or a static diagram (write mermaid). You decide WHAT to show; Kanna renders it, fetches the data, and runs the actions.`,
+    `Kanna renders a \`\`\`${KANNA_UI_FENCE_LANGUAGE} fence in your reply as an interactive view built from Kanna's own components. Use it for reports, dashboards, charts, and interactive summaries of structured results (test runs, diagnostics, changed files). Do not use it for prose, a small static table (write a markdown table), or a diagram the reader only needs to look at (write mermaid); use FlowDiagram when they should explore one — click a step to open its file or ask about it, read per-step status, or watch a live run. You decide WHAT to show; Kanna renders it, fetches the data, and runs the actions.`,
     "",
     validation,
     "",
@@ -65,6 +65,8 @@ export function renderGenUIPromptSection(options: GenUIPromptOptions): string {
     "- compareWith: previous-period, previous-year, budget, forecast (the last two need the scenario column), or none.",
     "- Selectors bind with {\"$bindState\":\"/path\"}; other props read the value with {\"$state\":\"/path\"}. Seed defaults in \"state\". {\"$template\":\"text ${/path}\"} and {\"$cond\":…,\"$then\":…,\"$else\":…} are also allowed.",
     "- \"filters\" is always an array, [{\"dimension\", \"op\"?: eq|neq|in|not-in, \"value\"}], never an object. To filter by a selector's choice, write [{\"dimension\":\"currency\",\"value\":{\"$state\":\"/currency\"}}]. \"totals\" on a table or statement is an array, [{\"label\",\"groups\":[…]}], never true.",
+    "- FlowDiagram nodes and edges are the diagram itself, so they go in props, not a dataset. Never give positions or sizes; Kanna lays the diagram out and picks the direction unless you set one.",
+    "- FlowDiagram edge type states intent. \"static\" (the default) is a relationship that simply exists — architecture, a dependency, a decision branch, a run that already finished or has not started. \"flow\" is a path work is moving along RIGHT NOW — a live run, a request in flight, a job streaming — and Kanna animates it; use it only for those edges. style \"dashed\" means optional or conditional, never in progress.",
     "- Exploration — changing the period or comparison, drilling into a chart, sorting — runs inside Kanna without you. Only [agent] actions come back to you, as a message carrying a ```kanna-ui-intent block of structured context.",
     "",
     "Components:",

@@ -96,6 +96,66 @@ const statementProps = z.strictObject({
 
 const STATEMENT_SIGNATURE = "dataset, metric, rows, groupRows?, period?, compareWith?, filters?, totals?: [{label, groups[]}], title?"
 
+export const FLOW_NODE_KINDS = ["start", "end", "process", "decision", "store", "external"] as const
+export const FLOW_EDGE_TYPES = ["static", "flow"] as const
+export const FLOW_MAX_NODES = 120
+export const FLOW_MAX_EDGES = 240
+export const FLOW_MAX_GROUPS = 16
+
+const flowId = z.string().regex(/^[A-Za-z][A-Za-z0-9_-]{0,63}$/, "must start with a letter and use only letters, digits, _ and -")
+
+const flowNodeSchema = z.strictObject({
+  id: flowId,
+  label: z.string().min(1).max(80),
+  description: z.string().max(160).optional(),
+  kind: z.enum(FLOW_NODE_KINDS).optional(),
+  tone: tone.optional(),
+  status: z.string().min(1).max(40).optional(),
+  group: flowId.optional(),
+  path: workspacePath.optional(),
+  line: z.number().int().min(1).optional(),
+})
+
+const flowEdgeSchema = z.strictObject({
+  from: flowId,
+  to: flowId,
+  label: z.string().min(1).max(40).optional(),
+  type: z.enum(FLOW_EDGE_TYPES).optional(),
+  style: z.enum(["solid", "dashed"]).optional(),
+  tone: tone.optional(),
+})
+
+const flowDiagramProps = z.strictObject({
+  title: shortText.optional(),
+  direction: z.enum(["auto", "LR", "TB"]).optional(),
+  height: z.enum(["sm", "md", "lg"]).optional(),
+  groups: z.array(z.strictObject({ id: flowId, label: z.string().min(1).max(60) })).max(FLOW_MAX_GROUPS).optional(),
+  nodes: z.array(flowNodeSchema).min(1).max(FLOW_MAX_NODES),
+  edges: z.array(flowEdgeSchema).max(FLOW_MAX_EDGES),
+}).superRefine((diagram, ctx) => {
+  const groupIds = new Set<string>()
+  diagram.groups?.forEach((group, index) => {
+    if (groupIds.has(group.id)) ctx.addIssue({ code: "custom", path: ["groups", index, "id"], message: `duplicate group id "${group.id}"` })
+    groupIds.add(group.id)
+  })
+  const nodeIds = new Set<string>()
+  diagram.nodes.forEach((node, index) => {
+    if (nodeIds.has(node.id) || groupIds.has(node.id)) ctx.addIssue({ code: "custom", path: ["nodes", index, "id"], message: `"${node.id}" is already used by another node or group` })
+    nodeIds.add(node.id)
+    if (node.group !== undefined && !groupIds.has(node.group)) ctx.addIssue({ code: "custom", path: ["nodes", index, "group"], message: `unknown group "${node.group}"; declare it under groups` })
+    if (node.line !== undefined && node.path === undefined) ctx.addIssue({ code: "custom", path: ["nodes", index, "line"], message: "line needs a path" })
+  })
+  diagram.edges.forEach((edge, index) => {
+    for (const end of ["from", "to"] as const) {
+      if (!nodeIds.has(edge[end])) ctx.addIssue({ code: "custom", path: ["edges", index, end], message: `unknown node "${edge[end]}"` })
+    }
+  })
+})
+
+export type FlowDiagramProps = z.output<typeof flowDiagramProps>
+export type FlowNode = FlowDiagramProps["nodes"][number]
+export type FlowEdge = FlowDiagramProps["edges"][number]
+
 export const GENUI_COMPONENTS = {
   Stack: {
     props: z.strictObject({ direction: z.enum(["vertical", "horizontal"]).optional(), gap: z.enum(["sm", "md", "lg"]).optional() }),
@@ -251,6 +311,13 @@ export const GENUI_COMPONENTS = {
     }),
     description: "An ordered sequence of events.",
     signature: "items: [{time?, title, detail?, tone?}]",
+    children: false,
+    events: [],
+  },
+  FlowDiagram: {
+    props: flowDiagramProps,
+    description: "A read-only node-and-edge diagram that Kanna lays out (never give coordinates): architecture, data flow, a pipeline or run with per-step status. Edge type is intent: static (default) for a relationship that simply exists; flow, animated, only for a path work is moving along right now. Clicking a step opens its path or asks the agent about it; an Outline view reads it as a list.",
+    signature: "nodes: [{id, label, description?, kind?: start|end|process|decision|store|external, tone?, status?, group?, path?, line?}], edges: [{from, to, label?, type?: static|flow, style?: solid|dashed, tone?}], groups?: [{id, label}], title?, direction?: auto|LR|TB, height?: sm|md|lg",
     children: false,
     events: [],
   },

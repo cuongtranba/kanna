@@ -11,7 +11,7 @@ import { useGenUIView } from "../view-context"
 import { PropsIssue, ToneIcon, toneInkClass, type Tone } from "./primitives"
 import { resolvedProps } from "./props"
 
-function useRunAction(action: string, params: JsonObject, id: string) {
+export function useRunAction(action: string, params: JsonObject, id: string) {
   const { execute } = useActions()
   const { viewKey } = useGenUIView()
   const key = pendingActionKey(`genui.${action}`, viewKey, id)

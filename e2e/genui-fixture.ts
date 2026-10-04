@@ -140,6 +140,48 @@ export const CODING_SPEC = {
   },
 }
 
+export const FLOW_SPEC = {
+  version: 1,
+  title: "How a chat turn runs",
+  root: "page",
+  elements: {
+    page: { type: "Stack", children: ["flow"] },
+    flow: {
+      type: "FlowDiagram",
+      props: {
+        title: "Turn pipeline",
+        height: "lg",
+        groups: [
+          { id: "send", label: "Send pipeline" },
+          { id: "session", label: "Provider session" },
+        ],
+        nodes: [
+          { id: "compose", label: "User sends message", kind: "start" },
+          { id: "sendCommand", label: "sendCommand", description: "WS chat.send handler", group: "send", path: "src/server/claude-send-command.ts" },
+          { id: "busy", label: "Chat busy?", kind: "decision", group: "send" },
+          { id: "queue", label: "enqueueMessage", description: "released on commit", kind: "store", group: "send", tone: "attention", status: "queued" },
+          { id: "start", label: "startTurnForChat", group: "session", path: "src/server/claude-turn-starter.ts", line: 42 },
+          { id: "runner", label: "runClaudeSession", description: "stream to HarnessEvents", group: "session", tone: "info", status: "streaming" },
+          { id: "claude", label: "Claude CLI", kind: "external", group: "session" },
+          { id: "append", label: "EventStore.appendMessage", kind: "store" },
+          { id: "transcript", label: "Transcript re-renders", kind: "end" },
+        ],
+        edges: [
+          { from: "compose", to: "sendCommand", label: "chat.send" },
+          { from: "sendCommand", to: "busy" },
+          { from: "busy", to: "queue", label: "yes", style: "dashed" },
+          { from: "busy", to: "start", label: "no" },
+          { from: "queue", to: "start", label: "drain", style: "dashed" },
+          { from: "start", to: "runner" },
+          { from: "runner", to: "claude", type: "flow" },
+          { from: "runner", to: "append", type: "flow" },
+          { from: "append", to: "transcript" },
+        ],
+      },
+    },
+  },
+}
+
 function kannaUiReply(uuid: string, messageId: string, timestamp: string, intro: string, spec: object) {
   return {
     type: "assistant",
@@ -161,6 +203,8 @@ function sessionJsonl(cwd: string): string {
     { ...base, ...kannaUiReply("a-1", "msg-1", "2026-09-01T10:00:05.000Z", "Here is the revenue report.", REPORT_SPEC) },
     { ...base, type: "user", uuid: "u-2", timestamp: "2026-09-01T10:07:00.000Z", message: { role: "user", content: "Summarise the invoice rounding fix" } },
     { ...base, ...kannaUiReply("a-2", "msg-2", "2026-09-01T10:07:05.000Z", "Here is where the fix stands.", CODING_SPEC) },
+    { ...base, type: "user", uuid: "u-3", timestamp: "2026-09-01T10:12:00.000Z", message: { role: "user", content: "Draw how a chat turn runs" } },
+    { ...base, ...kannaUiReply("a-3", "msg-3", "2026-09-01T10:12:05.000Z", "Here is the turn pipeline.", FLOW_SPEC) },
   ]
   return `${records.map((record) => JSON.stringify(record)).join("\n")}\n`
 }

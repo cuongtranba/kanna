@@ -45,6 +45,7 @@ export function useChatGenUIHost(chatId: string | null, workspaceRoot: string | 
         : null,
       openLink: (url) => domAdapter.openWindow(url, "_blank", "noopener,noreferrer"),
       ChartRenderer: null,
+      FlowRenderer: null,
     }
   }, [chatId, socket, workspaceRoot])
 }

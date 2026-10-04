@@ -107,3 +107,16 @@ test("reports a child reference to an element that does not exist", () => {
 test("rejects text that is not a JSON object", () => {
   expect(issuesOf("{not json")).toEqual([{ path: "", message: "the spec must be one JSON object" }])
 })
+
+test("rejects a FlowDiagram whose edge or group points at a node or group it never declares", () => {
+  const issues = issuesOf(specWith({
+    flow: {
+      type: "FlowDiagram",
+      props: {
+        nodes: [{ id: "a", label: "A", group: "backend" }, { id: "b", label: "B" }],
+        edges: [{ from: "a", to: "b" }, { from: "b", to: "ghost", type: "flow" }],
+      },
+    },
+  }))
+  expect(issues.map((issue) => issue.path)).toEqual(["elements.flow.props.nodes.0.group", "elements.flow.props.edges.1.to"])
+})

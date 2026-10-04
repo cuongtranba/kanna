@@ -5,6 +5,7 @@ import { SESSION_ID, seedGenUIReport } from "./genui-fixture"
 
 const REPORT = "FY2026 revenue report"
 const CODING = "Invoice rounding fix"
+const FLOW = "How a chat turn runs"
 const WCAG_AA = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]
 const DESKTOP = { width: 1440, height: 2600 }
 const PHONE = { width: 390, height: 3400 }
@@ -54,6 +55,7 @@ async function openView(page: Page, name: string): Promise<Locator> {
 
 async function openReady(page: Page, name: string): Promise<Locator> {
   const view = await openView(page, name)
+  if (name === FLOW) await expect(view.locator(".react-flow__node-step")).toHaveCount(9, { timeout: 20_000 })
   if (name === REPORT) {
     await expect(view.getByRole("img").first()).toBeVisible({ timeout: 20_000 })
     await expect(view.getByText("Gross profit")).toBeVisible()
@@ -169,6 +171,41 @@ test("the coding task and test result views render and offer their actions", asy
   await expect(tests.getByRole("button", { name: "Ask the agent to fix rounds half-cent totals" })).toBeVisible()
 })
 
+test("a flow diagram lays out every step and animates only the live edges", async ({ page }) => {
+  const flow = await openReady(page, FLOW)
+  await expect(flow.getByText("9 steps · 9 connections · 2 live")).toBeVisible()
+  await expect(flow.locator(".react-flow__edge")).toHaveCount(9)
+  await expect(flow.locator(".kanna-flow-edge.is-flow")).toHaveCount(2)
+  await expect(flow.locator(".kanna-flow-run")).toHaveCount(2)
+  await expect(flow.getByText("Send pipeline")).toBeVisible()
+})
+
+test("clicking a step shows its details and asks the agent about it with the step's neighbours", async ({ page }) => {
+  const flow = await openReady(page, FLOW)
+  await flow.locator(".react-flow__node-step", { hasText: "startTurnForChat" }).click()
+  const detail = flow.getByRole("region", { name: "Step startTurnForChat" })
+  await expect(detail.getByText("src/server/claude-turn-starter.ts:42")).toBeVisible()
+  await expect(detail.getByRole("button", { name: "Open file" })).toBeVisible()
+  await detail.getByRole("button", { name: "Ask agent" }).click()
+  await flow.getByRole("group", { name: "Send to the agent" }).getByRole("button", { name: "Send" }).click()
+  await revealLatest(page, "Investigate: startTurnForChat")
+})
+
+test("a keyboard alone can read a flow diagram as an outline and open a step", async ({ page }) => {
+  await page.setViewportSize(DESKTOP)
+  const flow = await openReady(page, FLOW)
+  await page.getByText("Here is the turn pipeline.").click()
+  const outline = flow.getByRole("button", { name: "Outline" })
+  await tabTo(page, outline)
+  await expectVisibleFocus(outline)
+  await page.keyboard.press("Enter")
+  const step = flow.getByRole("button", { name: "runClaudeSession" })
+  await tabTo(page, step)
+  await expectVisibleFocus(step)
+  await page.keyboard.press("Enter")
+  await expect(flow.getByRole("region", { name: "Step runClaudeSession" }).getByText("Claude CLI")).toBeVisible()
+})
+
 for (const theme of ["light", "dark"] as const) {
   test(`generated views have no WCAG 2.1 AA violations in the ${theme} theme`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: theme })
@@ -177,6 +214,15 @@ for (const theme of ["light", "dark"] as const) {
     await expectNoAxeViolations(page, REPORT)
     await openReady(page, CODING)
     await expectNoAxeViolations(page, CODING)
+    await openReady(page, FLOW)
+    await expectNoAxeViolations(page, FLOW)
+  })
+
+  test(`a flow diagram matches its baseline in the ${theme} theme`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" })
+    await page.setViewportSize(DESKTOP)
+    const flow = await openReady(page, FLOW)
+    await expectMatchesBaseline(flow.getByRole("figure", { name: "Turn pipeline" }), `flow-diagram-${theme}.png`)
   })
 
   test(`generated views match their baselines in the ${theme} theme`, async ({ page }) => {
