@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.63.0](https://github.com/cuongtranba/kanna/compare/v1.62.0...v1.63.0) (2026-10-04)
+
+
+### Features
+
+* **genui:** embed fetched data inline as a columns-and-rows table ([#1186](https://github.com/cuongtranba/kanna/issues/1186)) ([10fa143](https://github.com/cuongtranba/kanna/commit/10fa1430b82dec7696bcb887e2e58bcf52ef1020))
+
 ## [1.62.0](https://github.com/cuongtranba/kanna/compare/v1.61.1...v1.62.0) (2026-10-04)
 
 
