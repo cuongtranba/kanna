@@ -266,7 +266,7 @@ function parseDatasets(raw: Record<string, JsonValue> | undefined): { datasets: 
 
 export function parseGenUISpec(input: string | JsonValue): GenUISpecParse {
   if (typeof input === "string" && new TextEncoder().encode(input).byteLength > GENUI_MAX_SOURCE_BYTES) {
-    return { ok: false, issues: [{ path: "", message: `the spec exceeds ${GENUI_MAX_SOURCE_BYTES / 1024} KB; move data into a dataset file` }] }
+    return { ok: false, issues: [{ path: "", message: `the spec exceeds ${GENUI_MAX_SOURCE_BYTES / 1024} KB; aggregate the inline data, or use a "file" or "mcp" dataset that reads it where it already lives` }] }
   }
   const value = typeof input === "string" ? safeJsonParse(input) : input
   if (value === null || !isJsonObject(value)) {

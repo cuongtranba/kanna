@@ -118,7 +118,7 @@ export class GenUIDatasetService {
     if (resolved.ok) return null
     return resolved.reason === "outside_root"
       ? `"${decl.path}" resolves outside the chat's working directory`
-      : `"${decl.path}" does not exist in ${scope.cwd} — write the file before showing the view`
+      : `"${decl.path}" does not exist in ${scope.cwd} — embed the rows inline instead, or point at a file that exists`
   }
 
   private async run(chatId: string, decl: DatasetDecl, query: DatasetQuery, refresh: boolean): Promise<DatasetQueryOutcome> {

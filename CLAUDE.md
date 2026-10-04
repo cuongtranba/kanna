@@ -1176,6 +1176,16 @@ ADR `adr-20260929-generative-ui`.
   them recursively. `$computed` and json-render's `push`/`pop`/`validateForm`
   built-ins are rejected. **Components re-parse their resolved props at render** — a
   bound value can resolve to anything.
+- **Inline is the default source for data the agent already holds.** The prompt
+  used to allow inline rows only "for a few rows the user gave you" and said to write
+  computed data to a file, so chat `494c0085` fetched six tables over MCP and then typed
+  them back out as scratch CSVs in the user's project. An inline dataset may now be
+  written as a table, `{"columns":[…],"rows":[[…],…]}` (the shape query tools already
+  return), or as object rows. `datasetDeclSchema` normalizes the table to object rows at
+  parse, so no consumer ever sees two shapes. `file` is for a data file that already
+  exists, and `mcp` is for a view that should re-query live. `contract.test.ts` parses
+  the prompt's worked example, so the example cannot teach a shape the parser rejects.
+  ADR `adr-20261001-genui-inline-tabular-datasets`.
 - **Datasets are resolved server-side** by `GenUIDatasetService`
   (`src/server/genui/`), except `inline` ones, which the client runs through the same
   shared engine (`runDatasetQuery`). A file must resolve inside the chat's cwd by

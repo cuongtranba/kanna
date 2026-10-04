@@ -1,6 +1,6 @@
 import { z } from "zod"
 import { isJsonObject, type JsonObject, type JsonValue } from "../json"
-import { jsonByteLength, jsonObjectSchema } from "./json-schema"
+import { jsonByteLength, jsonObjectSchema, jsonValueSchema } from "./json-schema"
 
 export const GENUI_IDENTIFIER = /^[A-Za-z][A-Za-z0-9_.-]{0,63}$/
 export const INLINE_DATASET_MAX_ROWS = 500
@@ -63,8 +63,15 @@ const relativeFilePath = z
   .max(512)
   .refine((value) => isRelativeWorkspacePath(value), "is a path relative to the chat's working directory, without ..")
 
+const inlineRowSchema = z.union([jsonObjectSchema, z.array(jsonValueSchema)])
+
 const datasetDeclShape = z.discriminatedUnion("source", [
-  z.strictObject({ source: z.literal("inline"), rows: z.array(jsonObjectSchema).max(INLINE_DATASET_MAX_ROWS), ...commonShape }),
+  z.strictObject({
+    source: z.literal("inline"),
+    columns: z.array(columnName).min(1).max(64).optional(),
+    rows: z.array(inlineRowSchema).max(INLINE_DATASET_MAX_ROWS),
+    ...commonShape,
+  }),
   z.strictObject({
     source: z.literal("file"),
     path: relativeFilePath,
@@ -82,9 +89,36 @@ const datasetDeclShape = z.discriminatedUnion("source", [
   }),
 ])
 
-export type DatasetDecl = z.output<typeof datasetDeclShape>
+type WrittenDatasetDecl = z.output<typeof datasetDeclShape>
 export type MetricDef = z.output<typeof metricDefSchema>
 export type DimensionDef = z.output<typeof dimensionDefSchema>
+
+function checkInlineTable(decl: Extract<WrittenDatasetDecl, { source: "inline" }>, ctx: z.RefinementCtx): void {
+  const { columns, rows } = decl
+  if (columns && new Set(columns).size !== columns.length) {
+    ctx.addIssue({ code: "custom", path: ["columns"], message: "column names must be unique" })
+  }
+  rows.forEach((row, index) => {
+    if (!Array.isArray(row)) {
+      if (columns) ctx.addIssue({ code: "custom", path: ["rows", index], message: "with \"columns\", every row is an array of values in column order" })
+      return
+    }
+    if (!columns) ctx.addIssue({ code: "custom", path: ["rows", index], message: "a row written as an array needs \"columns\" naming its values" })
+    else if (row.length !== columns.length) ctx.addIssue({ code: "custom", path: ["rows", index], message: `the row has ${row.length} values; "columns" names ${columns.length}` })
+  })
+  if (jsonByteLength({ ...(columns ? { columns } : {}), rows }) > INLINE_DATASET_MAX_BYTES) {
+    ctx.addIssue({ code: "custom", path: ["rows"], message: `inline rows exceed ${INLINE_DATASET_MAX_BYTES / 1024} KB; aggregate them first, or point a "file" or "mcp" dataset at where the data already lives` })
+  }
+}
+
+function normalizeInlineRows(decl: WrittenDatasetDecl) {
+  if (decl.source !== "inline") return decl
+  const { columns, rows, ...rest } = decl
+  const objectRows = rows.map((row): JsonObject => (Array.isArray(row)
+    ? Object.fromEntries((columns ?? []).map((column, index) => [column, row[index] ?? null]))
+    : row))
+  return { ...rest, rows: objectRows }
+}
 
 export const datasetDeclSchema = datasetDeclShape.superRefine((decl, ctx) => {
   const metricIds = Object.keys(decl.metrics)
@@ -114,13 +148,13 @@ export const datasetDeclSchema = datasetDeclShape.superRefine((decl, ctx) => {
       ctx.addIssue({ code: "custom", path: ["dimensions", id, "parent"], message: `unknown dimension "${dimension.parent}"` })
     }
   }
-  if (decl.source === "inline" && jsonByteLength(decl.rows) > INLINE_DATASET_MAX_BYTES) {
-    ctx.addIssue({ code: "custom", path: ["rows"], message: `inline rows exceed ${INLINE_DATASET_MAX_BYTES / 1024} KB; write them to a file and use source "file"` })
-  }
+  if (decl.source === "inline") checkInlineTable(decl, ctx)
   if (decl.source === "mcp" && decl.arguments && jsonByteLength(decl.arguments) > MCP_ARGUMENTS_MAX_BYTES) {
     ctx.addIssue({ code: "custom", path: ["arguments"], message: `arguments exceed ${MCP_ARGUMENTS_MAX_BYTES / 1024} KB` })
   }
-})
+}).transform(normalizeInlineRows)
+
+export type DatasetDecl = z.output<typeof datasetDeclSchema>
 
 export function isRelativeWorkspacePath(value: string): boolean {
   const normalized = value.replaceAll("\\", "/")

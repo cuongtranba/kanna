@@ -5,6 +5,7 @@ import {
   GENUI_COMPONENTS,
   extractKannaUiFences,
   formatIntentMessage,
+  parseGenUISpec,
   parseIntentMessage,
   renderGenUIPromptSection,
 } from "./index"
@@ -36,6 +37,12 @@ test("both prompt variants name every component and action the validator accepts
     const missing = [...Object.keys(GENUI_COMPONENTS), ...Object.keys(GENUI_ACTIONS)].filter((name) => !prompt.includes(`- ${name}`))
     expect(missing).toEqual([])
   }
+})
+
+test("the prompt's worked example is a view the validator accepts", () => {
+  const [example] = extractKannaUiFences(renderGenUIPromptSection({ canValidate: true }))
+  const result = parseGenUISpec(example?.source ?? "")
+  expect(result.ok ? [] : result.issues).toEqual([])
 })
 
 test("every component's prompt signature names each prop its schema accepts", () => {

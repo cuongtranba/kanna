@@ -8,7 +8,9 @@ abstraction before any code is written, as the handoff's Phase 0 requires.
 
 1. **Financial reporting is an example, not the domain.** A dataset's rows come from wherever
    the user points: data given in chat (`inline`), a workspace file (`file`), or a tool on a
-   configured MCP server (`mcp`). One resolver, three sources.
+   configured MCP server (`mcp`). One resolver, three sources. Since
+   `adr-20261001-genui-inline-tabular-datasets`, inline is the default for any data the
+   agent already holds, and it may be written as a `{columns, rows}` table.
 2. **The contract is a fenced block, not a tool.** The agent writes a ` ```kanna-ui ` fence in
    its reply. Codex receives no Kanna MCP tools (`codex-transcript-translator.ts` passes
    `mcpServers: []`), so a `present_ui` tool would be Claude-only. The fence works on every
