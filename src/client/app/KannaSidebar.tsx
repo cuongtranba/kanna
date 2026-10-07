@@ -49,6 +49,7 @@ import {
 } from "../stores/kannaSidebarStore"
 import { useViewportStore } from "../stores/viewportStore"
 import { useKannaStateStore } from "../stores/kannaStateStore"
+import { useComposerFocusStore } from "../stores/composerFocusStore"
 import type { DomPort } from "../ports/domPort"
 import type { TimerPort } from "../ports/timerPort"
 import { domAdapter } from "../adapters/dom.adapter"
@@ -489,6 +490,7 @@ function KannaSidebarImpl({
       }
 
       event.preventDefault()
+      useComposerFocusStore.getState().requestComposerFocus(targetChat.chatId)
       navigate(`/chat/${targetChat.chatId}`)
       onClose()
     }

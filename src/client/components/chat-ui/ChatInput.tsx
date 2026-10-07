@@ -220,6 +220,7 @@ interface Props {
 
 export interface ChatInputHandle {
   enqueueFiles: (files: File[]) => void
+  focus: () => void
 }
 
 
@@ -653,7 +654,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
 
   useImperativeHandle(
     forwardedRef,
-    () => ({ enqueueFiles }),
+    () => ({ enqueueFiles, focus: () => bridgeRef.current?.focusEditor() }),
     [enqueueFiles],
   )
 
