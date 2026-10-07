@@ -8,6 +8,14 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.63.1](https://github.com/cuongtranba/kanna/compare/v1.63.0...v1.63.1) (2026-10-07)
+
+
+### Bug Fixes
+
+* **claude:** explain claude_code_version_too_old instead of a raw 400 card ([#1201](https://github.com/cuongtranba/kanna/issues/1201)) ([4869420](https://github.com/cuongtranba/kanna/commit/4869420e5cbc4a8f5f98b60f0d7757417d5ffd3f)), closes [#1198](https://github.com/cuongtranba/kanna/issues/1198)
+* **uploads:** transliterate non-ASCII filenames and reuse identical uploads ([#1200](https://github.com/cuongtranba/kanna/issues/1200)) ([4b4f6bb](https://github.com/cuongtranba/kanna/commit/4b4f6bb5666b5e25f0ecd2bb75cede38f4ff5e45)), closes [#1199](https://github.com/cuongtranba/kanna/issues/1199)
+
 ## [1.63.0](https://github.com/cuongtranba/kanna/compare/v1.62.0...v1.63.0) (2026-10-04)
 
 
