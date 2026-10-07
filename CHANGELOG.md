@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.63.2](https://github.com/cuongtranba/kanna/compare/v1.63.1...v1.63.2) (2026-10-07)
+
+
+### Bug Fixes
+
+* **chat:** focus the composer when a shortcut switches sessions ([#1203](https://github.com/cuongtranba/kanna/issues/1203)) ([fdfbf0c](https://github.com/cuongtranba/kanna/commit/fdfbf0c7a2a57604e6b87ab3a18935c433393618))
+
 ## [1.63.1](https://github.com/cuongtranba/kanna/compare/v1.63.0...v1.63.1) (2026-10-07)
 
 
