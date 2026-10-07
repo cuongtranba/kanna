@@ -24,8 +24,9 @@ import type { KannaState } from "../useKannaState"
 import { useAppGlobalContext } from "../AppGlobalProvider"
 import { TerminalWorkspaceShell } from "./TerminalWorkspaceShell"
 import { useChatPageSidebarActions, EMPTY_DIFF_SNAPSHOT } from "./useChatPageSidebarActions"
-import { collectPanes, type SplitPosition } from "../../lib/paneTree"
+import { collectPanes, type PaneLayout, type SplitPosition } from "../../lib/paneTree"
 import { usePaneLayoutStore } from "../../stores/paneLayoutStore"
+import { useComposerFocusStore } from "../../stores/composerFocusStore"
 import { SplitContainer } from "../../components/panes/SplitContainer"
 import { PaneShell, type SplitArgs } from "../../components/panes/PaneShell"
 import { isTypingTarget, resolvePaneCommand } from "../../components/panes/paneKeyboard"
@@ -52,6 +53,12 @@ export {
 } from "./utils"
 
 export const CHAT_PAGE_LAYOUT_ROOT_CLASS = "flex-1 flex flex-col min-h-0 min-w-0 relative"
+
+function focusedChatId(layout: PaneLayout): string | null {
+  const pane = collectPanes(layout.root).find((p) => p.id === layout.focusedPaneId)
+  const tab = pane?.tabs.find((t) => t.tabId === pane.focusedTabId)
+  return tab?.target.kind === "chat" ? tab.target.chatId : null
+}
 
 function useLayoutWidth(ref: RefObject<HTMLDivElement | null>) {
   const layoutWidth = useChatPageStore((s) => s.layoutWidth)
@@ -142,6 +149,7 @@ export function WorkspacePage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
   const moveTabToPane = usePaneLayoutStore((s) => s.moveTabToPane)
   const openTab = usePaneLayoutStore((s) => s.openTab)
   const getPaneLayout = usePaneLayoutStore((s) => s.getLayout)
+  const requestComposerFocus = useComposerFocusStore((s) => s.requestComposerFocus)
 
   useEffect(() => {
     if (!projectId) return
@@ -188,20 +196,24 @@ export function WorkspacePage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
   ])
 
   const syncUrlToFocusedChat = useCallback(() => {
-    const layout = getPaneLayout()
-    const pane = collectPanes(layout.root).find((p) => p.id === layout.focusedPaneId)
-    const tab = pane?.tabs.find((t) => t.tabId === pane.focusedTabId)
-    if (tab?.target.kind === "chat" && tab.target.chatId !== activeChatId) {
-      chatNavigator.openChat(tab.target.chatId)
+    const chatId = focusedChatId(getPaneLayout())
+    if (chatId && chatId !== activeChatId) {
+      chatNavigator.openChat(chatId)
     }
   }, [getPaneLayout, activeChatId, chatNavigator])
+
+  const switchToFocusedChat = useCallback(() => {
+    syncUrlToFocusedChat()
+    const chatId = focusedChatId(getPaneLayout())
+    if (chatId) requestComposerFocus(chatId)
+  }, [getPaneLayout, requestComposerFocus, syncUrlToFocusedChat])
 
   const handleSelectTab = useCallback(
     (tabId: string) => {
       focusTab(tabId)
-      syncUrlToFocusedChat()
+      switchToFocusedChat()
     },
-    [focusTab, syncUrlToFocusedChat],
+    [focusTab, switchToFocusedChat],
   )
   useTabSwitcherHotkeys(resolvedKeybindings, workspaceHasTabs, handleSelectTab, dom)
   const handleSplitPane = useCallback(
@@ -432,7 +444,7 @@ export function WorkspacePage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
       switch (command.kind) {
         case "focus":
           focusAdjacentPane(command.direction)
-          syncUrlToFocusedChat()
+          switchToFocusedChat()
           return
         case "resize":
           resizeFocusedPane(command.direction)
@@ -442,16 +454,16 @@ export function WorkspacePage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
           return
         case "closeTab":
           closeFocusedTab()
-          syncUrlToFocusedChat()
+          switchToFocusedChat()
           return
         case "cycleTab":
           cycleFocusedPaneTab(command.delta)
-          syncUrlToFocusedChat()
+          switchToFocusedChat()
       }
     }
 
     return dom.addWindowListener("keydown", handleGlobalKeydown)
-  }, [addTerminal, closeFocusedTab, cycleFocusedPaneTab, dom, focusAdjacentPane, handleOpenExternal, handleToggleEmbeddedTerminal, handleToggleRightSidebar, projectId, resizeFocusedPane, resolvedKeybindings, splitFocusedPane, syncUrlToFocusedChat])
+  }, [addTerminal, closeFocusedTab, cycleFocusedPaneTab, dom, focusAdjacentPane, handleOpenExternal, handleToggleEmbeddedTerminal, handleToggleRightSidebar, projectId, resizeFocusedPane, resolvedKeybindings, splitFocusedPane, switchToFocusedChat])
 
 
   const rightSidebarContentProps = useMemo<ComponentProps<typeof RightSidebar> | null>(() => {
@@ -535,13 +547,14 @@ export function WorkspacePage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
           onOpenBoards={handleOpenBoards}
         />
       ) : null,
-    chat: (target) => (
+    chat: (target, _pane, isFocused) => (
       <ChatTabRoot chatId={target.chatId} timer={timer} dom={dom}>
         <ChatTabContent
           timer={timer}
           dom={dom}
           onToggleEmbeddedTerminal={handleToggleEmbeddedTerminal}
           onToggleRightSidebar={handleToggleRightSidebar}
+          isFocused={isFocused}
         />
       </ChatTabRoot>
     ),
@@ -611,6 +624,7 @@ export function WorkspacePage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
             dom={dom}
             onToggleEmbeddedTerminal={handleToggleEmbeddedTerminal}
             onToggleRightSidebar={handleToggleRightSidebar}
+            isFocused
           />
         </ChatTabRoot>
       )}

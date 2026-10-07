@@ -5,6 +5,7 @@ import { Kbd, KbdGroup } from "../ui/kbd"
 import { StateMark } from "../ui/state-mark"
 import { useKannaStateStore } from "../../stores/kannaStateStore"
 import { useQuickSwitcherStore } from "../../stores/quickSwitcherStore"
+import { useComposerFocusStore } from "../../stores/composerFocusStore"
 import { useNow } from "../../hooks/useNow"
 import { statusLabel, statusTone, statusToneClass } from "../../lib/statusLabel"
 import { formatSidebarAgeLabel } from "../../lib/formatters"
@@ -83,6 +84,7 @@ export function QuickSwitcher({
 
   const openSession = useCallback((chatId: string) => {
     closeSwitcher()
+    useComposerFocusStore.getState().requestComposerFocus(chatId)
     onOpenChat(chatId)
   }, [closeSwitcher, onOpenChat])
 

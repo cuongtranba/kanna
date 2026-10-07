@@ -18,6 +18,7 @@ import { selectEditorCommandTemplate, selectEditorPreset, useAppSettingsStore } 
 import { TERMINAL_TOGGLE_ANIMATION_DURATION_MS } from "../terminalToggleAnimation"
 import { useStickyChatFocus } from "../useStickyChatFocus"
 import { usePushFocus } from "../usePushFocus"
+import { useComposerFocusRequest } from "./useComposerFocusRequest"
 import { getNextMeasuredInputHeight, getTranscriptPaddingBottom } from "../useKannaState"
 import { useChatTabState } from "./ChatTabRoot"
 import { EMPTY_CRON_JOBS, EMPTY_SCHEDULES } from "../KannaTranscript"
@@ -175,6 +176,7 @@ export interface ChatTabContentProps {
   dom: DomPort
   onToggleEmbeddedTerminal: () => void
   onToggleRightSidebar: () => void
+  isFocused: boolean
 }
 
 export function ChatTabContent({
@@ -182,6 +184,7 @@ export function ChatTabContent({
   dom,
   onToggleEmbeddedTerminal,
   onToggleRightSidebar,
+  isFocused,
 }: ChatTabContentProps) {
   const state = useChatTabState()
 
@@ -516,6 +519,7 @@ export function ChatTabContent({
   })
 
   usePushFocus({ socket: state.socket, activeChatId: state.activeChatId })
+  useComposerFocusRequest({ chatId: state.activeChatId, isFocused, chatInputRef, timer })
 
   const enqueueDroppedFiles = useCallback((files: File[]) => {
     if (!state.hasSelectedProject || files.length === 0) return
