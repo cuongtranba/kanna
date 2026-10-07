@@ -94,6 +94,10 @@ export interface ChatAttachment {
   size: number
 }
 
+export interface UploadedAttachment extends ChatAttachment {
+  reused?: boolean
+}
+
 export interface QueuedChatMessage {
   id: string
   content: string

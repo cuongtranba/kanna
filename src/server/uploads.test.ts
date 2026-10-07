@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { mkdtemp, rm } from "node:fs/promises"
+import { mkdtemp, readdir, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { deleteProjectUpload, inferAttachmentContentType, persistProjectUpload } from "./uploads"
@@ -89,6 +89,84 @@ describe("uploads", () => {
 
     const contents = await Promise.all(attachments.map((attachment) => Bun.file(attachment.absolutePath).text()))
     expect(new Set(contents)).toEqual(new Set(["first", "second", "third"]))
+  })
+
+  test("transliterates Vietnamese letters instead of dropping them", async () => {
+    const projectDir = await mkdtemp(path.join(tmpdir(), "kanna-upload-vietnamese-"))
+    tempDirs.push(projectDir)
+
+    const upload = (fileName: string, body: string) =>
+      persistProjectUpload({
+        projectId: "project-1",
+        localPath: projectDir,
+        fileName,
+        bytes: new TextEncoder().encode(body),
+        fallbackMimeType: "text/plain",
+      })
+
+    const salary = await upload("CP LƯƠNG T8.2026.xlsx", "salary")
+    const dStroke = await upload("ĐÀO đạt.txt", "d-stroke")
+    const cjkOnly = await upload("報告.xlsx", "cjk")
+
+    expect(salary.relativePath).toBe("./.kanna/uploads/CP-LUONG-T8.2026.xlsx")
+    expect(salary.displayName).toBe("CP LƯƠNG T8.2026.xlsx")
+    expect(dStroke.relativePath).toBe("./.kanna/uploads/DAO-dat.txt")
+    expect(cjkOnly.relativePath).toBe("./.kanna/uploads/upload.xlsx")
+  })
+
+  test("reuses an existing file holding identical bytes instead of minting a copy", async () => {
+    const projectDir = await mkdtemp(path.join(tmpdir(), "kanna-upload-reuse-"))
+    tempDirs.push(projectDir)
+
+    const upload = (body: string) =>
+      persistProjectUpload({
+        projectId: "project-1",
+        localPath: projectDir,
+        fileName: "report.txt",
+        bytes: new TextEncoder().encode(body),
+        fallbackMimeType: "text/plain",
+      })
+
+    const first = await upload("same bytes")
+    const repeat = await upload("same bytes")
+    const different = await upload("other bytes")
+
+    expect(first.reused).toBeUndefined()
+    expect(repeat.reused).toBe(true)
+    expect(repeat.relativePath).toBe(first.relativePath)
+    expect(different.reused).toBeUndefined()
+    expect(different.relativePath).toBe("./.kanna/uploads/report-1.txt")
+    expect((await readdir(getProjectUploadDir(projectDir))).sort()).toEqual(["report-1.txt", "report.txt"])
+  })
+
+  test("keeps a reused file when a later file in the batch fails", async () => {
+    const projectDir = await mkdtemp(path.join(tmpdir(), "kanna-upload-reuse-rollback-"))
+    tempDirs.push(projectDir)
+
+    const earlier = await persistProjectUpload({
+      projectId: "project-1",
+      localPath: projectDir,
+      fileName: "shared.txt",
+      bytes: new TextEncoder().encode("shared"),
+      fallbackMimeType: "text/plain",
+    })
+
+    await expect(
+      persistUploadedFiles({
+        projectId: "project-1",
+        localPath: projectDir,
+        files: [
+          new File(["shared"], "shared.txt", { type: "text/plain" }),
+          new File(["boom"], "boom.txt", { type: "text/plain" }),
+        ],
+        persistUpload: async (args) => {
+          if (args.fileName === "boom.txt") throw new Error("disk full")
+          return persistProjectUpload(args)
+        },
+      })
+    ).rejects.toThrow("disk full")
+
+    expect(await Bun.file(earlier.absolutePath).text()).toBe("shared")
   })
 
   test("detects image uploads and returns absolute plus project-relative paths", async () => {

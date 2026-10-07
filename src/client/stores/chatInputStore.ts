@@ -1,7 +1,7 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
 import type { SerializedEditorState } from "lexical"
-import type { ChatAttachment } from "../../shared/types"
+import type { UploadedAttachment } from "../../shared/types"
 
 
 export interface DraftEntry {
@@ -22,7 +22,7 @@ function normalizeDraft(value: PersistedDraft | undefined): DraftEntry | null {
 
 interface ChatInputState {
   drafts: Record<string, PersistedDraft>
-  attachmentDrafts: Record<string, ChatAttachment[]>
+  attachmentDrafts: Record<string, UploadedAttachment[]>
 
   setDraft: (chatId: string, valueOrState: SerializedEditorState | string, text?: string) => void
 
@@ -30,9 +30,9 @@ interface ChatInputState {
 
   getDraft: (chatId: string) => DraftEntry | null
 
-  setAttachmentDrafts: (chatId: string, attachments: ChatAttachment[]) => void
+  setAttachmentDrafts: (chatId: string, attachments: UploadedAttachment[]) => void
   clearAttachmentDrafts: (chatId: string) => void
-  getAttachmentDrafts: (chatId: string) => ChatAttachment[]
+  getAttachmentDrafts: (chatId: string) => UploadedAttachment[]
   forgetChats: (chatIds: readonly string[]) => void
 }
 

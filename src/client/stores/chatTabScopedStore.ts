@@ -1,8 +1,8 @@
 import { createScopedStore } from "../lib/createScopedStore"
-import type { ChatAttachment } from "../../shared/types"
+import type { UploadedAttachment } from "../../shared/types"
 
 
-export interface ComposerAttachment extends ChatAttachment {
+export interface ComposerAttachment extends UploadedAttachment {
   status: "uploading" | "uploaded" | "failed"
   previewUrl?: string
   uploadProgress?: number

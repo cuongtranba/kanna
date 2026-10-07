@@ -3,13 +3,15 @@ import { act, createElement } from "react"
 import { createRoot } from "react-dom/client"
 import { renderToStaticMarkup } from "react-dom/server"
 import "../../lib/testing/setupHappyDom"
-import { PROVIDERS } from "../../../shared/types"
+import { PROVIDERS, type UploadedAttachment } from "../../../shared/types"
+import { makeFakeHttpPort } from "../../adapters/testing/makeFakePorts"
 import { ChatTabScopedStore } from "../../stores/chatTabScopedStore"
 import { useChatPreferencesStore } from "../../stores/chatPreferencesStore"
 import { renderClientMarkup } from "../../lib/testing/renderClientMarkup"
 import { createAgentMentionRegex } from "../../../shared/mention-pattern"
 import {
   ChatInput,
+  deleteUploadedAttachment,
   getClipboardImageFiles,
   trimTrailingPastedNewlines,
   willExceedAttachmentLimit,
@@ -30,6 +32,41 @@ function createClipboardItem(args: {
     getAsFile: () => args.file ?? null,
   }
 }
+
+
+function uploadedAttachment(storedName: string, reused?: boolean): UploadedAttachment {
+  return {
+    id: storedName,
+    kind: "file",
+    displayName: storedName,
+    absolutePath: `/project/.kanna/uploads/${storedName}`,
+    relativePath: `./.kanna/uploads/${storedName}`,
+    contentUrl: `/api/projects/p1/uploads/${storedName}/content`,
+    mimeType: "text/plain",
+    size: 4,
+    ...(reused ? { reused } : {}),
+  }
+}
+
+describe("deleteUploadedAttachment", () => {
+  test("deletes a freshly stored upload the composer drops", async () => {
+    const http = makeFakeHttpPort()
+    http.routes.push({ method: "DELETE", url: "/api/projects/p1/uploads/", response: { ok: true, status: 200, body: { ok: true } } })
+
+    await deleteUploadedAttachment(uploadedAttachment("fresh.txt"), http)
+
+    expect(http.calls).toEqual([{ method: "DELETE", url: "/api/projects/p1/uploads/fresh.txt" }])
+  })
+
+  test("never deletes a reused upload, which an earlier message may still reference", async () => {
+    const http = makeFakeHttpPort()
+    http.routes.push({ method: "DELETE", url: "/api/projects/p1/uploads/", response: { ok: true, status: 200, body: { ok: true } } })
+
+    await deleteUploadedAttachment(uploadedAttachment("shared.txt", true), http)
+
+    expect(http.calls).toEqual([])
+  })
+})
 
 
 describe("willExceedAttachmentLimit", () => {
