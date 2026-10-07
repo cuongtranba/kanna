@@ -168,6 +168,46 @@ describe("normalizeClaudeStreamMessage", () => {
     expect(entries[0].kind).toBe("api_error")
     const ae = entries[0] as { status: number }
     expect(ae.status).toBe(529)
+    expect(entries[0]).not.toHaveProperty("apiErrorReason")
+  })
+
+  test("reads the SDK stream's snake_case api_error reason onto the api_error entry", () => {
+    const sdkWireMessage = {
+      type: "assistant",
+      uuid: "0d38970c-7209-47c5-a3c6-d34fc1135b9f",
+      message: {
+        role: "assistant",
+        model: "<synthetic>",
+        content: [{ type: "text", text: "API Error: 400 Claude Code 2.1.272 does not support this model; version 2.1.280 or newer is required." }],
+      },
+      error: "invalid_request",
+      request_id: "req_011CfKebXVkHUHQRupFNfFw2",
+      is_api_error_message: true,
+      api_error: "claude_code_version_too_old",
+    }
+    const msg: ClaudeRawSdkMessage = sdkWireMessage
+    const [entry] = normalizeClaudeStreamMessage(msg)
+    if (entry?.kind !== "api_error") throw new Error("expected api_error")
+    expect(entry.status).toBe(400)
+    expect(entry.apiErrorReason).toBe("claude_code_version_too_old")
+  })
+
+  test("reads the CLI transcript's camelCase apiError reason onto the api_error entry", () => {
+    const msg: ClaudeRawSdkMessage = {
+      type: "assistant",
+      isApiErrorMessage: true,
+      apiErrorStatus: 400,
+      apiError: "claude_code_version_too_old",
+      message: {
+        role: "assistant",
+        model: "<synthetic>",
+        content: [{ type: "text", text: "API Error: 400 Claude Code 2.1.272 does not support this model." }],
+      },
+    }
+    const [entry] = normalizeClaudeStreamMessage(msg)
+    if (entry?.kind !== "api_error") throw new Error("expected api_error")
+    expect(entry.status).toBe(400)
+    expect(entry.apiErrorReason).toBe("claude_code_version_too_old")
   })
 
   test("normalizes cancelled result to interrupted entry", () => {

@@ -107,6 +107,7 @@ export interface ApiErrorEntry extends TranscriptEntryBase {
   status: number
   text: string
   requestId?: string
+  apiErrorReason?: string
 }
 
 export interface PolicyRefusalEntry extends TranscriptEntryBase {
@@ -295,7 +296,7 @@ export type HydratedTranscriptMessage =
   | ({ kind: "account_info"; accountInfo: AccountInfo; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "assistant_text"; text: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "assistant_thinking"; text: string; signature?: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
-  | ({ kind: "api_error"; status: number; text: string; requestId?: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
+  | ({ kind: "api_error"; status: number; text: string; requestId?: string; apiErrorReason?: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "policy_refusal"; text: string; requestId?: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "result"; success: boolean; cancelled?: boolean; result: string; durationMs: number; costUsd?: number; codexErrorInfo?: CodexErrorInfoTag; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "status"; status: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })

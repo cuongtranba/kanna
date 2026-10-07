@@ -64,7 +64,7 @@ function shareableEntry(entry: TranscriptEntry, toolKinds: ReadonlyMap<string, N
         codexErrorInfo: entry.codexErrorInfo,
       }
     case "api_error":
-      return { ...base, kind: "api_error", status: entry.status, text: entry.text }
+      return { ...base, kind: "api_error", status: entry.status, text: entry.text, apiErrorReason: entry.apiErrorReason }
     case "policy_refusal":
       return { ...base, kind: "policy_refusal", text: entry.text }
     case "compact_boundary":
