@@ -1,31 +1,83 @@
 import { randomUUID } from "node:crypto"
-import { mkdir, open, rm } from "node:fs/promises"
+import { mkdir, open, readFile, rm, stat } from "node:fs/promises"
 import path from "node:path"
 import { fileTypeFromBuffer } from "file-type"
 import { isErrnoException } from "../shared/errors"
-import type { ChatAttachment } from "../shared/types"
+import type { UploadedAttachment } from "../shared/types"
 import { getProjectUploadDir } from "./paths"
 
 const DEFAULT_BINARY_MIME_TYPE = "application/octet-stream"
 const IMAGE_MIME_PREFIX = "image/"
+const FALLBACK_UPLOAD_NAME = "upload"
 
-function sanitizeFileName(fileName: string) {
-  const baseName = path.basename(fileName).trim()
-  const cleaned = baseName.replace(/[^\w.-]+/g, "-").replace(/^-+|-+$/g, "")
-  return cleaned || "upload"
+function foldToAscii(value: string) {
+  return value.normalize("NFD").replace(/\p{M}+/gu, "").replace(/đ/g, "d").replace(/Đ/g, "D")
+}
+
+function cleanSegment(value: string) {
+  return foldToAscii(value).replace(/[^\w.-]+/g, "-").replace(/^-+|-+$/g, "")
+}
+
+function isOnlyDots(value: string) {
+  return /^\.*$/.test(value)
 }
 
 function getUploadCandidateNames(originalName: string) {
-  const sanitizedName = sanitizeFileName(originalName)
-  const parsed = path.parse(sanitizedName)
-  const extension = parsed.ext
-  const name = parsed.name || "upload"
+  const parsed = path.parse(path.basename(originalName).trim())
+  const cleanedName = cleanSegment(parsed.name)
+  const cleanedExtension = cleanSegment(parsed.ext)
+  const name = isOnlyDots(cleanedName) ? FALLBACK_UPLOAD_NAME : cleanedName
+  const extension = isOnlyDots(cleanedExtension) ? "" : cleanedExtension
 
   return {
-    first: sanitizedName,
+    first: `${name}${extension}`,
     withCounter(counter: number) {
       return `${name}-${counter}${extension}`
     },
+  }
+}
+
+async function holdsSameBytes(absolutePath: string, bytes: Uint8Array): Promise<boolean> {
+  try {
+    const info = await stat(absolutePath)
+    if (!info.isFile() || info.size !== bytes.byteLength) return false
+    const existing = await readFile(absolutePath)
+    return existing.equals(bytes)
+  } catch {
+    return false
+  }
+}
+
+async function writeNewFile(absolutePath: string, bytes: Uint8Array): Promise<"written" | "exists"> {
+  try {
+    const handle = await open(absolutePath, "wx")
+    try {
+      await handle.writeFile(bytes)
+    } finally {
+      await handle.close()
+    }
+    return "written"
+  } catch (error) {
+    if (isErrnoException(error) && error.code === "EEXIST") return "exists"
+    throw error
+  }
+}
+
+async function storeUploadBytes(uploadDir: string, fileName: string, bytes: Uint8Array) {
+  const candidates = getUploadCandidateNames(fileName)
+  let storedName = candidates.first
+  let counter = 1
+
+  while (true) {
+    const absolutePath = path.join(uploadDir, storedName)
+    if ((await writeNewFile(absolutePath, bytes)) === "written") {
+      return { storedName, absolutePath, reused: false }
+    }
+    if (await holdsSameBytes(absolutePath, bytes)) {
+      return { storedName, absolutePath, reused: true }
+    }
+    storedName = candidates.withCounter(counter)
+    counter += 1
   }
 }
 
@@ -35,48 +87,24 @@ export async function persistProjectUpload(args: {
   fileName: string
   bytes: Uint8Array
   fallbackMimeType?: string
-}): Promise<ChatAttachment> {
+}): Promise<UploadedAttachment> {
   const uploadDir = getProjectUploadDir(args.localPath)
   await mkdir(uploadDir, { recursive: true })
 
   const detectedType = await fileTypeFromBuffer(args.bytes)
   const mimeType = detectedType?.mime ?? args.fallbackMimeType ?? DEFAULT_BINARY_MIME_TYPE
-  const candidates = getUploadCandidateNames(args.fileName)
-
-  let storedName = candidates.first
-  let absolutePath = path.join(uploadDir, storedName)
-  let counter = 1
-
-  while (true) {
-    try {
-      const handle = await open(absolutePath, "wx")
-      try {
-        await handle.writeFile(args.bytes)
-      } finally {
-        await handle.close()
-      }
-      break
-    } catch (error) {
-      const code = isErrnoException(error) ? error.code : undefined
-      if (code !== "EEXIST") {
-        throw error
-      }
-
-      storedName = candidates.withCounter(counter)
-      absolutePath = path.join(uploadDir, storedName)
-      counter += 1
-    }
-  }
+  const stored = await storeUploadBytes(uploadDir, args.fileName, args.bytes)
 
   return {
     id: randomUUID(),
     kind: mimeType.startsWith(IMAGE_MIME_PREFIX) ? "image" : "file",
     displayName: args.fileName,
-    absolutePath,
-    relativePath: `./.kanna/uploads/${storedName}`,
-    contentUrl: `/api/projects/${args.projectId}/uploads/${encodeURIComponent(storedName)}/content`,
+    absolutePath: stored.absolutePath,
+    relativePath: `./.kanna/uploads/${stored.storedName}`,
+    contentUrl: `/api/projects/${args.projectId}/uploads/${encodeURIComponent(stored.storedName)}/content`,
     mimeType,
     size: args.bytes.byteLength,
+    ...(stored.reused ? { reused: true } : {}),
   }
 }
 

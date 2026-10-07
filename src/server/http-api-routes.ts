@@ -6,7 +6,7 @@ import { deleteProjectUpload, inferAttachmentContentType, inferProjectFileConten
 import { getProjectUploadDir } from "./paths"
 import { listProjectPaths } from "./project-paths"
 import { log } from "../shared/log"
-import type { ChatAttachment } from "../shared/types"
+import type { UploadedAttachment } from "../shared/types"
 
 const MAX_UPLOAD_FILES = 50
 
@@ -15,9 +15,9 @@ export async function persistUploadedFiles(args: {
   localPath: string
   files: File[]
   persistUpload?: typeof persistProjectUpload
-}): Promise<ChatAttachment[]> {
+}): Promise<UploadedAttachment[]> {
   const persist = args.persistUpload ?? persistProjectUpload
-  const attachments: ChatAttachment[] = []
+  const attachments: UploadedAttachment[] = []
   try {
     for (const file of args.files) {
       const bytes = new Uint8Array(await file.arrayBuffer())
@@ -32,7 +32,7 @@ export async function persistUploadedFiles(args: {
     }
   } catch (error) {
     await Promise.allSettled(
-      attachments.map((attachment) =>
+      attachments.filter((attachment) => !attachment.reused).map((attachment) =>
         deleteProjectUpload({ localPath: args.localPath, storedName: path.basename(attachment.absolutePath) })
       )
     )

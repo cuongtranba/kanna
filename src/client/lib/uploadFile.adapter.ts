@@ -1,4 +1,4 @@
-import type { AttachmentKind, ChatAttachment } from "../../shared/types"
+import type { AttachmentKind, UploadedAttachment } from "../../shared/types"
 import { isJsonArray, isJsonObject, safeJsonParse, type JsonValue } from "../../shared/json"
 
 const ATTACHMENT_KINDS = new Set<string>(["image", "file", "mention"] satisfies AttachmentKind[])
@@ -11,7 +11,7 @@ function stringOr(value: JsonValue, fallback: string): string {
   return typeof value === "string" ? value : fallback
 }
 
-function parseAttachment(value: JsonValue): ChatAttachment | null {
+function parseAttachment(value: JsonValue): UploadedAttachment | null {
   if (!isJsonObject(value)) return null
   const id = value.id
   if (typeof id !== "string") return null
@@ -24,12 +24,13 @@ function parseAttachment(value: JsonValue): ChatAttachment | null {
     contentUrl: stringOr(value.contentUrl, ""),
     mimeType: stringOr(value.mimeType, ""),
     size: typeof value.size === "number" ? value.size : 0,
+    ...(value.reused === true ? { reused: true } : {}),
   }
 }
 
-function parseAttachments(value: JsonValue): ChatAttachment[] | null {
+function parseAttachments(value: JsonValue): UploadedAttachment[] | null {
   if (!isJsonArray(value)) return null
-  const attachments: ChatAttachment[] = []
+  const attachments: UploadedAttachment[] = []
   for (const entry of value) {
     const attachment = parseAttachment(entry)
     if (attachment) attachments.push(attachment)
@@ -50,7 +51,7 @@ export interface UploadProgressEvent {
 }
 
 export interface UploadFileResponse {
-  attachments: ChatAttachment[]
+  attachments: UploadedAttachment[]
 }
 
 export interface UploadHandle {

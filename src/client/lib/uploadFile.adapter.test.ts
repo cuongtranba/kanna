@@ -109,6 +109,26 @@ describe("uploadFile", () => {
     expect(events.length).toBeGreaterThanOrEqual(2)
   })
 
+  test("carries the server's reused flag on an uploaded attachment", async () => {
+    const XHR = createMockXHR()
+    const handle = uploadFile({
+      projectId: "proj-1",
+      file: createTestFile(10, "same.txt"),
+      onProgress: () => {},
+      XHR,
+    })
+
+    MockXMLHttpRequest.instances[0]!.finish(200, {
+      attachments: [
+        { id: "a1", displayName: "same.txt", reused: true },
+        { id: "a2", displayName: "fresh.txt" },
+      ],
+    })
+
+    const result = await handle.promise
+    expect(result.attachments.map((attachment) => attachment.reused)).toEqual([true, undefined])
+  })
+
   test("rejects with server error message on non-2xx", async () => {
     const XHR = createMockXHR()
     const handle = uploadFile({

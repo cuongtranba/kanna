@@ -31,6 +31,7 @@ import {
   type ModelOptions,
   type ProviderCatalogEntry,
   type Subagent,
+  type UploadedAttachment,
   isClaudeReasoningEffort,
   isCodexReasoningEffort,
   normalizeClaudeContextWindow,
@@ -238,15 +239,15 @@ function withNormalizedContextWindow(
   }
 }
 
-function hydrateComposerAttachments(attachments: ChatAttachment[]): ComposerAttachment[] {
+function hydrateComposerAttachments(attachments: UploadedAttachment[]): ComposerAttachment[] {
   return attachments.map((attachment) => ({
     ...attachment,
     status: "uploaded" as const,
   }))
 }
 
-async function deleteUploadedAttachment(attachment: ChatAttachment, http?: HttpPort): Promise<void> {
-  if (!attachment.contentUrl) return
+export async function deleteUploadedAttachment(attachment: UploadedAttachment, http?: HttpPort): Promise<void> {
+  if (!attachment.contentUrl || attachment.reused) return
   await deleteUploadedFile(attachment.contentUrl, { http })
 }
 
@@ -678,7 +679,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
       const previousUploadError = uploadError
 
       const composerAttachmentsCopy = uploadedAttachments.map(
-        ({ previewUrl: _p, status: _s, uploadProgress: _up, cancelUpload: _c, ...a }) => a,
+        ({ previewUrl: _p, status: _s, uploadProgress: _up, cancelUpload: _c, reused: _r, ...a }) => a,
       )
       const allAttachments = [...composerAttachmentsCopy, ...pluginAttachments]
 
