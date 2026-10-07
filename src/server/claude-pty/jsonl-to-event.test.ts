@@ -38,6 +38,28 @@ describe("parseJsonlLine", () => {
     expect(transcriptEvents.length).toBeGreaterThan(0)
   })
 
+  test("on-disk apiError reason survives onto the api_error transcript entry", () => {
+    const line = JSON.stringify({
+      type: "assistant",
+      uuid: "bbfa6969-b743-4219-8cee-8f6fef2bb688",
+      message: {
+        model: "<synthetic>",
+        role: "assistant",
+        content: [{ type: "text", text: "API Error: 400 Claude Code 2.1.272 does not support this model; version 2.1.280 or newer is required." }],
+      },
+      requestId: "req_011CfKjVZB7wvfHVmLXQfJSU",
+      apiError: "claude_code_version_too_old",
+      error: "invalid_request",
+      isApiErrorMessage: true,
+      apiErrorStatus: 400,
+    })
+    const entries = parseJsonlLine(line).flatMap((e) => (e.type === "transcript" && e.entry ? [e.entry] : []))
+    const apiError = entries.find((entry) => entry.kind === "api_error")
+    if (apiError?.kind !== "api_error") throw new Error("expected api_error")
+    expect(apiError.status).toBe(400)
+    expect(apiError.apiErrorReason).toBe("claude_code_version_too_old")
+  })
+
   test("system.rate_limit subtype → rate_limit event", () => {
     const line = JSON.stringify({
       type: "system",

@@ -102,6 +102,8 @@ export interface ClaudeRawSdkMessage {
   message?: ClaudeRawMessageBody
   isApiErrorMessage?: boolean
   apiErrorStatus?: number
+  api_error?: JsonValue
+  apiError?: JsonValue
   request_id?: string
   requestId?: string
   is_error?: boolean
@@ -149,6 +151,14 @@ export function parseCompactMetadata(
     ...(durationMs !== undefined ? { durationMs } : {}),
   }
   return Object.keys(metadata).length > 0 ? metadata : undefined
+}
+
+
+function parseApiErrorReason(message: ClaudeRawSdkMessage): string | undefined {
+  for (const candidate of [message.api_error, message.apiError]) {
+    if (typeof candidate === "string" && candidate.length > 0) return candidate
+  }
+  return undefined
 }
 
 
@@ -252,12 +262,14 @@ export function normalizeClaudeStreamMessage(message: ClaudeRawSdkMessage): Tran
           debugRaw,
         })]
       }
+      const apiErrorReason = parseApiErrorReason(message)
       return [timestamped({
         kind: "api_error",
         messageId,
         status: statusFromField ?? statusFromText ?? 0,
         text: joinedText,
         requestId,
+        ...(apiErrorReason !== undefined ? { apiErrorReason } : {}),
         debugRaw,
       })]
     }

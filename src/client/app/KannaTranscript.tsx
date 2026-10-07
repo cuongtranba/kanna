@@ -273,6 +273,7 @@ function sameMessage(left: HydratedTranscriptMessage, right: HydratedTranscriptM
         && left.status === right.status
         && left.text === right.text
         && left.requestId === right.requestId
+        && left.apiErrorReason === right.apiErrorReason
     case "policy_refusal":
       return right.kind === "policy_refusal"
         && left.text === right.text

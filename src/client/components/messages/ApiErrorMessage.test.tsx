@@ -56,5 +56,45 @@ describe("ApiErrorMessage", () => {
       <ApiErrorMessage message={buildMessage({ status: 429, text: "API Error: 429" })} />
     )
     expect(html).toContain("Rate Limited")
+    expect(html).toContain("status.claude.com")
+  })
+
+  const VERSION_TOO_OLD_TEXT = "API Error: 400 Claude Code 2.1.272 does not support this model; version 2.1.280 or newer is required. Run 'claude update', or update the Claude desktop app, then try again."
+
+  test("400 with claude_code_version_too_old explains the version mismatch and gives a both-driver remedy", () => {
+    const html = renderToStaticMarkup(
+      <ApiErrorMessage
+        message={buildMessage({ status: 400, text: VERSION_TOO_OLD_TEXT, apiErrorReason: "claude_code_version_too_old" })}
+      />
+    )
+    expect(html).toContain("Model not supported by this Claude Code version")
+    expect(html).toContain("Pick another model, or update Kanna")
+    expect(html).toContain("claude update")
+    expect(html).toContain("does not support this model")
+    expect(html).not.toContain("400 API Error")
+    expect(html).not.toContain("status.claude.com")
+    expect(html).not.toContain("Check status")
+  })
+
+  test("400 with no reason renders the raw text and no status link", () => {
+    const html = renderToStaticMarkup(
+      <ApiErrorMessage message={buildMessage({ status: 400, text: VERSION_TOO_OLD_TEXT })} />
+    )
+    expect(html).toContain("400 API Error")
+    expect(html).toContain("does not support this model")
+    expect(html).not.toContain("Model not supported by this Claude Code version")
+    expect(html).not.toContain("Check status")
+  })
+
+  test("an unknown reason renders like a reasonless error", () => {
+    const withUnknown = renderToStaticMarkup(
+      <ApiErrorMessage message={buildMessage({ apiErrorReason: "some_future_reason" })} />
+    )
+    expect(withUnknown).toBe(renderToStaticMarkup(<ApiErrorMessage message={buildMessage()} />))
+  })
+
+  test("529 still links the status page", () => {
+    const html = renderToStaticMarkup(<ApiErrorMessage message={buildMessage({ status: 529 })} />)
+    expect(html).toContain("Check status")
   })
 })

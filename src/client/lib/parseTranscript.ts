@@ -165,6 +165,7 @@ export function processTranscriptMessages(entries: TranscriptEntry[]): HydratedT
           status: entry.status,
           text: entry.text,
           requestId: entry.requestId,
+          apiErrorReason: entry.apiErrorReason,
         })
         break
       case "policy_refusal":
