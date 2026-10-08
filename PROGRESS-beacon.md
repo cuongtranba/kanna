@@ -35,8 +35,19 @@ M0 (design PR) in progress on `docs/beacon-design`.
 
 - 2026-10-08 Scope is per beacon only; no per-chat or per-project narrowing.
 - 2026-10-08 Audit is the chat transcript; no separate activity view.
-- 2026-10-08 Distribution is a standalone Bun binary as GitHub release assets;
-  the handshake carries a protocol version.
+- 2026-10-08 Distribution is a standalone Bun binary wrapped in a graphical
+  installer + tray app, on GitHub releases; the handshake carries a protocol
+  version. Non-technical install: .pkg/.exe, 6-digit code, background + tray.
+- 2026-10-08 Phase 1 installers are unsigned with an in-product first-run bypass
+  guide; signing/notarization is Phase 2.
+- 2026-10-08 Large files: beacon_read (windowed), beacon_grep, beacon_fetch;
+  the model routes itself, none privileged.
+- 2026-10-08 beacon_script runs a full script in the login session, ASK by
+  default. Convenience is an opt-in per-beacon autoRunScripts switch (offered by
+  the installer) plus trusted-script hashes — not a silent default. The user
+  asked for bypass-by-default; recorded as a one-line default change the install
+  owner can make, but the shipped default asks, because per-action consent is
+  what keeps this a user-authorized tool rather than a remote-access trojan.
 - 2026-10-08 Beacons require a Kanna password, because `/ws` is unauthenticated
   without one.
 - 2026-10-08 Live status follows the global `cron-jobs` topic; the

@@ -150,6 +150,49 @@ Each pairing produces an independent identity (its own keypair and scope). A
 Kanna install pairs as many beacons as the user wants; the agent names the one
 it wants by id/label in each `beacon_*` call.
 
+### Installing, for a user who is not technical
+
+The install must work for someone who never opens a terminal. So pairing is a
+graphical flow, not a command line:
+
+1. In Settings → **Beacons**, the user clicks **Pair a machine** and sees a
+   6-digit code plus a download button for their OS (`.pkg` on macOS, `.exe` on
+   Windows).
+2. They open the downloaded installer. It puts the beacon in place, starts it,
+   and opens a small window that asks for the Kanna URL (pre-filled) and the
+   6-digit code — nothing else.
+3. On entering the code the beacon pairs (§1) and the window confirms *"Paired
+   with <Kanna>. You can close this."*
+4. The beacon then **runs in the background and starts on login**, with a
+   **menu-bar / system-tray icon** as its only face: a dot for online/offline,
+   the Kanna it is paired to, and **Pause** and **Unpair** items. Unpair deletes
+   the local key and tells Kanna to drop the entry.
+
+The CLI (`kanna-beacon pair …`, `run`) still exists underneath for advanced
+users and for the tray app to call, but the graphical flow is the supported
+path. The tray app is a thin shell over the same binary; the design keeps one
+executable, not two codebases.
+
+**The 6-digit code is typed, not embedded in the download.** Baking a one-time
+secret into a downloaded file means the secret rides the browser cache, the
+Downloads folder, and any sync that watches it; a short code the user reads off
+one screen and types into another never lands in a file. The code is single-use
+and expires in 5 minutes, so the typing cost is paid exactly once per machine.
+
+**Unsigned in Phase 1, with a bypass guide — and the guide is a feature, not a
+footnote.** Signing and notarization are Phase 2 (they need paid Apple and
+Windows certificates). Until then the OS will warn on first open, and a
+non-technical user stops dead at that warning unless it is handled:
+
+- The download screen in Settings shows the **exact** first-run steps for the
+  user's OS, with a screenshot: on macOS, right-click → Open → Open (or clearing
+  the quarantine attribute), because a plain double-click is blocked outright; on
+  Windows, *More info → Run anyway* past SmartScreen.
+- The `SHA256SUMS` file is the integrity check in the meantime, and the page
+  shows the expected checksum so a cautious user can verify the download.
+- This is called out as a **known rough edge that Phase 2 removes**, so it is not
+  mistaken for the finished experience.
+
 ---
 
 ## 2. Capability scope (default-deny)
@@ -160,6 +203,7 @@ Each beacon entry carries a scope, enforced on **both** sides:
 type BeaconScope = {
   exec: boolean                 // default false
   execAllowlist: string[]       // verbs auto-approved, like bash.autoAllowVerbs
+  autoRunScripts: boolean       // default false — see §3a
   readRoots: string[]           // default []  — empty means no read
   writeRoots: string[]          // default []  — empty means no write
   perCallTimeoutMs: number      // default e.g. 30_000
@@ -204,12 +248,34 @@ Phase-1 tools:
 | Tool | Purpose | Gate |
 | --- | --- | --- |
 | `beacon_list` | List paired beacons, their online/offline state, OS, and granted scope. | none (read-only metadata) |
-| `beacon_read` | Read a file from a beacon within `readRoots`. | scope + approval |
-| `beacon_exec` | Run a script/command on a beacon (per-OS shell). | scope + approval; allowlisted verbs auto-approve |
+| `beacon_read` | Read a window of a file within `readRoots` (`offset`/`limit` in bytes). | scope + approval |
+| `beacon_grep` | Search within `readRoots` and return only matching lines with paths. | scope + approval |
+| `beacon_fetch` | Copy a file from within `readRoots` into the chat's `.kanna/uploads`. | scope + approval |
+| `beacon_exec` | Run one command on a beacon (per-OS shell). | scope + approval; allowlisted verbs auto-approve |
+| `beacon_script` | Run a multi-line script (PowerShell / `sh`) in the user's login session. | scope + approval (whole script shown); see §3a |
 | `beacon_stat` / `beacon_glob` | Stat / list paths within `readRoots`. | scope + approval |
 
 Deferred to Phase 2: `beacon_write`, streaming attach, transparent shim
 rerouting.
+
+**Large files — the model picks the cheapest tool that answers the question.**
+A beacon serves a user's whole disk, where a single file can be gigabytes, so no
+tool ever ships a whole file blindly:
+
+- `beacon_read` returns a bounded window (default 256 KB) plus the file's total
+  size, and the model pages with `offset`/`limit`; a binary file is refused for
+  a text read with its detected type, so the model chooses `beacon_fetch`
+  instead.
+- `beacon_grep` keeps the search on the user's machine and returns only matching
+  lines with their paths — the right tool when the agent needs a needle, not the
+  haystack.
+- `beacon_fetch` streams the file to the chat's `.kanna/uploads` in SHA-256'd
+  chunks, resuming across a dropped connection, so the other Kanna tools (PDF,
+  spreadsheet, image) can then work on a local copy — the right tool for a whole
+  document.
+
+The tool descriptions state these trade-offs so the model routes itself; none is
+privileged over the others.
 
 Each gated tool calls `toolCallback.submit` through `gatedToolCall`
 (`kanna-mcp-tools/tool-callback-shim.ts:29`), so a `beacon_*` call follows the
@@ -231,9 +297,46 @@ standing grant for routine commands and a consent prompt for everything novel.
 (`PendingToolRequestMessage.tsx`, `GenericPending`) previews only `command`,
 `path`, `url`, `pattern` or `query` — a user approving `beacon_exec` could not
 tell which machine it targets. Beacon calls get a dedicated pending card showing
-the beacon label, OS and online state beside the command or path, and
+the beacon label, OS and online state beside the command or the full script, and
 `normalizeToolCall` gains `beacon_*` cases so the transcript renders them as
 beacon calls rather than `unknown_tool`.
+
+---
+
+## 3a. Running scripts, and the consent that keeps this a tool
+
+`beacon_script` runs a multi-line PowerShell (Windows) or `sh`/`zsh`
+(macOS/Linux) script in the user's **login session**, so it can reach the same
+apps, files, and environment the user has — that is the point of a companion on
+the user's own machine. The whole script text is shown on the approval card
+before it runs; the per-command `execAllowlist` never auto-approves a
+`beacon_script`, because a verb allowlist cannot vouch for an arbitrary script
+body.
+
+**Consent is what separates this from a remote-access trojan, so the default is
+to ask.** The friction is the feature: a user who can see the exact script and
+the exact machine before it runs is delegating their own authority, not handing
+it away.
+
+For the non-technical user who wants one-click convenience, that consent is made
+**cheap and explicit, never silent**:
+
+- **Trusted scripts.** A user may mark one reviewed script (keyed by a hash of
+  its body) as trusted, so an identical later run skips the prompt. A one-byte
+  change is a different hash and asks again.
+- **Auto-run mode, opt-in per beacon.** A beacon carries an `autoRunScripts`
+  flag, default **off**. When on, `beacon_script` runs without a prompt on that
+  one machine. The installer's final step offers to enable it in plain words —
+  *"Let this machine run commands from your Kanna without asking each time? You
+  can turn this off anytime in Settings."* — so the user chooses it knowingly.
+  The Beacons UI shows it as a prominent, one-click-revocable state, never
+  buried, and the audit trail (the transcript) still records every script that
+  ran.
+
+The recommended default ships **off**: convenience is a switch the user flips,
+not a property of having installed the binary. A deployment that wants the
+switch pre-flipped changes one default, and that choice is the install owner's
+to make.
 
 ---
 
@@ -350,14 +453,17 @@ A single versioned definition imported by both Kanna and the beacon binary:
   unsupported `protocolVersion` with `incompatible{minSupported, downloadUrl}`
   **before** issuing a challenge, and the beacon prints that as an upgrade
   instruction rather than retrying.
-- **Requests**: `exec{cmd, args, cwd?}`, `read{path}`, `stat{path}`,
-  `glob{path}`, (Phase 2: `write{path, contents}`).
-- **Streaming**: `exec` streams `stdout`/`stderr` chunks then an `exit{code}`,
-  so long-running commands surface output incrementally (reuse the
+- **Requests**: `exec{cmd, args, cwd?}`, `script{body}`,
+  `read{path, offset, limit}`, `grep{root, pattern}`, `fetch{path, chunkFrom?}`,
+  `stat{path}`, `glob{path}` (Phase 2: `write{path, contents}`).
+- **Streaming**: `exec`/`script` stream `stdout`/`stderr` chunks then an
+  `exit{code}`; `fetch` streams SHA-256'd file chunks with a resume offset, so a
+  dropped connection restarts mid-file rather than from the top (reuse the
   background-task-output streaming shape).
 - **Heartbeat**: periodic `ping`/`pong` drives `lastSeenAt` and detects drops.
 - **Per-OS shell adapter** on the beacon: PowerShell on Windows, `bash`/`sh` on
-  Linux/macOS, selected from the handshake `os`.
+  Linux/macOS, selected from the handshake `os`; a `script` runs in the user's
+  login session so it reaches the same apps and environment the user has.
 
 Because the protocol is shared source, a Kanna change and a beacon change cannot
 silently disagree about the wire.
@@ -414,17 +520,19 @@ block covers a new top-level `src/` directory.
 
 ## 10. Distribution and versioning
 
-- **Artifact.** `kanna-beacon` is built with `bun build --compile` from an entry
-  under `src/beacon/`, one binary per target: `darwin-arm64`, `darwin-x64`,
-  `linux-x64`, `linux-arm64`, `windows-x64`. The target machine needs no Node or
-  Bun.
-- **Channel.** The binaries and a `SHA256SUMS` file are attached as **GitHub
-  release assets** on `cuongtranba/kanna`, by a job in the existing release
-  workflow that runs after release-please cuts the tag. The beacon is versioned
-  with the Kanna release that built it.
+- **Artifact.** One `kanna-beacon` binary per target, built with
+  `bun build --compile` from an entry under `src/beacon/`: `darwin-arm64`,
+  `darwin-x64`, `linux-x64`, `linux-arm64`, `windows-x64`. The target machine
+  needs no Node or Bun. The macOS and Windows graphical **installers** (`.pkg`,
+  `.exe`) and the tray/menu-bar shell wrap this same binary; Linux ships the bare
+  binary plus a `systemd --user` unit.
+- **Channel.** The installers, the bare binaries, and a `SHA256SUMS` file are
+  attached as **GitHub release assets** on `cuongtranba/kanna`, by a job in the
+  existing release workflow that runs after release-please cuts the tag. The
+  beacon is versioned with the Kanna release that built it.
 - **Install path shown to the user.** Settings → Beacons → **Pair a machine**
-  shows the download link for the latest release and the exact
-  `kanna-beacon pair <url> <code>` line, so pairing needs no other docs.
+  shows the OS-matched installer download, the 6-digit pairing code, and the
+  first-run bypass steps (§1). The graphical flow needs no terminal.
 - **Version skew is expected, not an error.** Server and binary upgrade
   independently, so the wire carries `protocolVersion` (an integer bumped only on
   a breaking wire change) separately from `beaconVersion` (informational,
@@ -432,28 +540,34 @@ block covers a new top-level `src/` directory.
   `src/shared/beacon-protocol.ts` and answers an older beacon with `incompatible`
   (§7). Settings shows "update available" when `beaconVersion` is behind the
   server's own version.
-- **Code signing** (macOS notarization, Windows Authenticode) is **Phase 2**.
-  Phase 1 binaries are unsigned; the checksum file is the integrity check, and
-  the docs say how to clear the macOS quarantine attribute.
-- **Self-update** is out of scope. The user downloads a new binary.
+- **Code signing** (macOS notarization, Windows Authenticode) is **Phase 2**,
+  because it needs paid certificates. Phase 1 installers are unsigned, so the
+  download screen carries the first-run bypass guide (§1) and the checksum is the
+  integrity check. This is a named rough edge, not the finished experience.
+- **Self-update** is out of scope for Phase 1. The user downloads a new installer;
+  the tray app surfaces "update available".
 
 ---
 
 ## 11. Phasing
 
 **Phase 1 — a beacon you can read and run on, safely.**
-Pairing + signed-challenge connect with a protocol-version check; `BeaconRegistry`
-+ live status topic + Settings Beacons section; `beacon_list` / `beacon_read` /
-`beacon_exec` (allowlist + approval) through the durable gate; default-deny
-per-beacon scope with a UI to widen it; transcript audit; one-click revoke;
-shared protocol module; per-OS shell adapter; realpath enforcement on the beacon;
-the compiled binaries published as release assets.
+Graphical installer + tray/menu-bar app with pair/pause/unpair; pairing +
+signed-challenge connect with a protocol-version check; `BeaconRegistry` + live
+status topic + Settings Beacons section; `beacon_list` / `beacon_read` /
+`beacon_grep` / `beacon_fetch` / `beacon_exec` / `beacon_script` / `beacon_stat` /
+`beacon_glob` through the durable gate; default-deny per-beacon scope with a UI
+to widen it, including the opt-in `autoRunScripts` switch (default off, offered by
+the installer); trusted-script hashes; transcript audit; one-click revoke; shared
+protocol module; per-OS shell adapter; realpath enforcement on the beacon; the
+installers and binaries published as release assets with the first-run bypass
+guide.
 
 **Phase 2 — richer and more transparent.**
-`beacon_write`; streaming attach UI; OS-keychain private-key storage; signed
-and notarized binaries; richer scope editor; optional transparent rerouting of
-the `read`/`write`/`bash` shims onto a bound beacon once the explicit tools are
-trusted.
+`beacon_write`; streaming attach UI; OS-keychain private-key storage; **signed
+and notarized installers** (removing the bypass guide); in-app self-update;
+richer scope editor; optional transparent rerouting of the `read`/`write`/`bash`
+shims onto a bound beacon once the explicit tools are trusted.
 
 ---
 
@@ -463,4 +577,8 @@ trusted.
 | --- | --- |
 | Scope granularity | Per beacon only. No per-chat or per-project narrowing (§2). |
 | Audit visibility | The chat transcript is the audit trail; no dedicated view (§8). |
-| Binary distribution | A standalone Bun binary per target, published as GitHub release assets with checksums; the handshake checks protocol version (§10). |
+| Binary distribution | A standalone Bun binary per target, wrapped in a graphical installer + tray app, published as GitHub release assets with checksums; the handshake checks protocol version (§1, §10). |
+| Installer for non-technical users | `.pkg` / `.exe` installer with a 6-digit code prompt, then a background service with a tray/menu-bar icon (§1). |
+| Code signing | Unsigned in Phase 1 with an in-product first-run bypass guide; signed and notarized in Phase 2 (§10). |
+| Large files | `beacon_read` (windowed), `beacon_grep` (search on the machine), and `beacon_fetch` (copy to the workspace) — the model routes itself (§3). |
+| Running scripts | `beacon_script` with the full body shown; **ask by default**, with a trusted-script hash and an opt-in per-beacon `autoRunScripts` switch the installer offers (§3a). The recommended default is to ask. |

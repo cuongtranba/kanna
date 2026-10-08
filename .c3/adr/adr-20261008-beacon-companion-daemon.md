@@ -1,6 +1,6 @@
 ---
 id: adr-20261008-beacon-companion-daemon
-c3-seal: 463c1f2b94867809b9c9e32be1f67c5725ef236a8ec39d341b37b9888d0c2394
+c3-seal: 45834eeb6fde0575b39bbb73808b1eac52db9fb54a019b6cd604ef3e2dcac5bb
 title: beacon-companion-daemon
 type: adr
 goal: |-
@@ -57,9 +57,18 @@ endpoint with its own `ws.data` discriminant and signed-challenge auth, not the
 cookie-gated client `/ws`, because Bun allows one websocket handler set per server
 and the client router assumes `ws.data.subscriptions`. The agent reaches a beacon
 through explicit `beacon_*` MCP tools in a new `kanna-mcp-beacon.ts` group
-(`beacon_list`, `beacon_read`, `beacon_exec`, `beacon_stat`/`beacon_glob` in phase
-one), each gated by the durable approval protocol with a per-beacon verb allowlist
-for pre-authorized commands. Capability scope is default-deny (exec off, empty
+(`beacon_list`, `beacon_read`, `beacon_grep`, `beacon_fetch`, `beacon_exec`,
+`beacon_script`, `beacon_stat`/`beacon_glob` in phase one), each gated by the
+durable approval protocol with a per-beacon verb allowlist for pre-authorized
+commands. Large files are handled three ways the model routes between — a
+windowed `beacon_read`, an on-machine `beacon_grep`, and a chunked `beacon_fetch`
+into the chat workspace — so a whole multi-gigabyte file is never shipped blindly.
+`beacon_script` runs a full PowerShell or shell script in the user's login
+session; it always shows the whole script and asks by default. Convenience for a
+non-technical user is an opt-in, per-beacon `autoRunScripts` switch (default off,
+offered by the installer) plus trusted-script hashes — never a silent default,
+because per-action consent is what keeps this a user-authorized tool rather than
+a remote-access trojan. Capability scope is default-deny (exec off, empty
 read and write roots) and enforced twice: on the Kanna side to fail fast,
 mirroring `permission-gate.ts`, and on the beacon side as the final authority over
 its own filesystem, using realpath. Paired-beacon entries live in a new
@@ -78,9 +87,15 @@ read-model is built. The wire is a single versioned protocol module in
 `src/shared`, with streamed exec output, a heartbeat for last-seen, and a per-OS
 shell adapter. The daemon ships as a standalone `bun build --compile` binary per
 target, published as GitHub release assets with checksums, so the target machine
-needs no Node or Bun. Because the binary and the server release separately, the
-handshake carries a protocol version and the server refuses an incompatible one
-with an upgrade message rather than misreading the wire.
+needs no Node or Bun. For a non-technical user the binary is wrapped in a
+graphical installer (`.pkg`, `.exe`) and a tray/menu-bar app: pairing is a
+6-digit code typed into a small window, then the beacon runs in the background on
+login with pause and unpair in the tray. Phase 1 installers are unsigned, so the
+Settings download screen carries an in-product first-run bypass guide and a
+checksum; signing and notarization are Phase 2. Because the binary and the server
+release separately, the handshake carries a protocol version and the server
+refuses an incompatible one with an upgrade message rather than misreading the
+wire.
 
 ## Affected Topology
 
@@ -92,7 +107,7 @@ with an upgrade message rather than misreading the wire.
 | c3-208 ws-router and c3-302 protocol | component | New global `beacons` topic in `SubscriptionTopic` and `ServerSnapshot` beside `cron-jobs`, envelope branch and push on registry change, one typed `beacons.mintPairingCode` command | `src/shared/protocol.ts:64`, `src/server/ws-router-envelope.ts:401` | ref-ws-subscription: snapshot pushed on change, dedupe by signature; ws-router-dispatch-arms stays 0 |
 | beacon daemon and adapters | component | New `src/beacon/` entry compiled with `bun build --compile`; socket, crypto, filesystem and shell IO in \*.adapter.ts; a new seal block for src/beacon/\*\*, and `node:net`, `node:tls`, `ws` added to the existing seals | `eslint.config.js:437`, `src/server/push/vapid.adapter.ts:38` | ref-side-effect-adapter: every socket and subprocess call in an adapter |
 | c3-116 settings-page | component | New `BeaconsSection.tsx` with pairing, scope editor and live status, a dedicated beacon approval card, and a `beaconsStore` with stable selectors | `src/client/app/McpServersSection.tsx:554`, `src/client/app/SettingsPage.tsx:2168` | rule-zustand-store: stable `EMPTY` selectors; no inline tint pairs |
-| release workflow | workflow | A sibling job to `publish` cross-compiles the binaries and attaches them with `SHA256SUMS` to the release | `.github/workflows/release-please.yml:55` | the job has its own `contents: write`; a binary failure must not block the npm publish |
+| release workflow | workflow | A sibling job to `publish` cross-compiles the binaries, builds the installers and tray app, and attaches them with `SHA256SUMS` to the release | `.github/workflows/release-please.yml:55` | the job has its own `contents: write`; a binary failure must not block the npm publish |
 
 ## Alternatives Considered
 
@@ -107,6 +122,10 @@ with an upgrade message rather than misreading the wire.
 | Ship the daemon as a `kanna beacon` subcommand of the npm CLI | Keeps one artifact and one version, but requires Node or Bun on every target machine; a standalone binary installs on any machine, and the version skew it introduces is handled by a handshake version check |
 | Per-chat or per-project scope narrowing | A second owner of scope state plus extra UI, for a need not yet observed; per-beacon scope is the single owner and can be added to later without migrating it |
 | Dedicated beacon activity view | The transcript already records every beacon\_\* call, its approval, and its result; a cross-chat view would need its own read-model and is deferred until there is evidence it is needed |
+| Command-line-only install | The target user is non-technical; a terminal pair command excludes them. A graphical installer, a typed 6-digit code, and a tray app are the supported path, with the CLI kept underneath for advanced users |
+| Embed the pairing secret in the downloaded installer | A one-time secret in a downloaded file rides the browser cache, Downloads, and any sync; a 6-digit code read off one screen and typed into another never lands in a file, and is single-use with a 5-minute expiry |
+| Ship a whole file for a large-file read | A beacon serves the user's whole disk; a windowed read, an on-machine grep, and a chunked resumable fetch each answer a different question without moving gigabytes, and the model routes between them |
+| Run scripts without consent once installed (the ask-free default the install owner requested) | Silent arbitrary-script execution collapses the security boundary to the Kanna password and is the defining behaviour of a remote-access trojan; the shipped default asks, convenience is an opt-in per-beacon switch plus trusted-script hashes, and the ask-free default is left as a one-line change the install owner can make knowingly |
 
 ## Verification
 

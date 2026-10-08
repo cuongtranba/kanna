@@ -4,10 +4,11 @@
 > ADR: `adr-20261008-beacon-companion-daemon`. Progress: `PROGRESS-beacon.md`.
 > Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** A user with a password-protected Kanna pairs a machine they own, grants
-it a default-deny scope, and the agent reads files and runs approved commands on
+**Goal:** A non-technical user with a password-protected Kanna installs a beacon
+through a graphical installer, pairs their machine with a 6-digit code, grants it
+a default-deny scope, and the agent reads files and runs approved commands on
 that machine through explicit `beacon_*` tools — with every call visible in the
-transcript and revocable in one click.
+transcript and revocable in one click from a tray icon or Settings.
 
 **Architecture:** A standalone `kanna-beacon` binary (`src/beacon/`, `bun build
 --compile`) dials out to a new `/beacon` websocket on the Kanna server and
@@ -60,12 +61,16 @@ and their tests.
   `challenge`, `auth`, `ready`, `ping`/`pong`, `request`, `stdout`/`stderr`,
   `exit`, `result`, `error`), `BEACON_PROTOCOL_VERSION`, `MIN_BEACON_PROTOCOL`,
   and a parser from `JsonValue` that rejects any malformed frame.
-- [ ] `beacon-scope.ts`: `BeaconScope`, `DEFAULT_BEACON_SCOPE` (grants nothing),
-  and `evaluateBeaconRequest(scope, request)` returning `deny | allow | ask`.
-  Path containment here is lexical; the beacon re-checks with realpath (M4).
+- [ ] `beacon-scope.ts`: `BeaconScope` (with `autoRunScripts: boolean`, default
+  false), `DEFAULT_BEACON_SCOPE` (grants nothing), and
+  `evaluateBeaconRequest(scope, request, trustedScriptHashes)` returning
+  `deny | allow | ask`. A `script` asks unless `autoRunScripts` is on or its body
+  hash is trusted; the allowlist never covers a script. Path containment here is
+  lexical; the beacon re-checks with realpath (M4).
 - [ ] Tests: the scope evaluator's verdict table (outside roots, exec off,
-  allowlisted verb, unlisted verb, `..` traversal), and the parser refusing an
-  unknown `kind` and a frame from an unsupported protocol version.
+  allowlisted verb, unlisted verb, `..` traversal, script with `autoRunScripts`
+  off/on, trusted vs untrusted script hash), and the parser refusing an unknown
+  `kind` and a frame from an unsupported protocol version.
 
 ## M2 — Settings collection and pairing (server)
 
@@ -118,18 +123,20 @@ only), `src/server/ws-router-defaults.ts`, `src/client/stores/appSettingsStore.t
 **Files:** create `src/beacon/main.ts` (CLI: `pair`, `run`), `src/beacon/session.ts`
 (handshake + request loop), `src/beacon/key-store.adapter.ts` (0600 key file,
 precedent `vapid.adapter.ts:38`), `src/beacon/fs.adapter.ts` (realpath-checked
-read/stat/glob), `src/beacon/shell.adapter.ts` (PowerShell on Windows,
-`/bin/sh` elsewhere; timeout, output cap, concurrency cap); edit
-`eslint.config.js` (seal block for `src/beacon/**`, plus `node:net`, `node:tls`,
-`ws` in the existing seals).
+windowed read, grep, chunked fetch, stat, glob), `src/beacon/shell.adapter.ts`
+(PowerShell on Windows, `/bin/sh` elsewhere for `exec`; login-shell `script`;
+timeout, output cap, concurrency cap); edit `eslint.config.js` (seal block for
+`src/beacon/**`, plus `node:net`, `node:tls`, `ws` in the existing seals).
 
 - [ ] Reconnect with backoff; print `incompatible` as an upgrade instruction and
   exit instead of retrying.
 - [ ] Every request is re-checked against the beacon's copy of scope using
-  **realpath**; the beacon is the final authority.
-- [ ] Tests: a symlink inside a read root that points outside is refused; exec
-  stops at the per-call timeout and the output cap; an end-to-end run against a
-  real server (pair → connect → read a file → run an allowlisted command).
+  **realpath**; the beacon is the final authority. Binary-file detection refuses
+  a text `read`; `fetch` chunks with SHA-256 and resumes from an offset.
+- [ ] Tests: a symlink inside a read root that points outside is refused; a
+  windowed read returns the right bytes and total size; exec/script stop at the
+  per-call timeout and the output cap; an end-to-end run against a real server
+  (pair → connect → read a file → run an allowlisted command).
 - [ ] Verify `node:crypto` Ed25519 under the CI Bun (1.3.11) and inside a
   `bun build --compile` binary — both are unverified today.
 
@@ -141,12 +148,15 @@ read/stat/glob), `src/beacon/shell.adapter.ts` (PowerShell on Windows,
 `server.ts → agent-coordinator → claude-session-spawner → claude-session-start`
 threading (as `boardRegistry` does), and the client pending card.
 
-- [ ] `beacon_list`, `beacon_read`, `beacon_stat`, `beacon_glob`, `beacon_exec`,
-  each naming the beacon id and label in its input and result so the transcript
-  is the audit trail.
-- [ ] Permission-gate beacon branch built on `evaluateBeaconRequest`.
+- [ ] `beacon_list`, `beacon_read` (windowed), `beacon_grep`, `beacon_fetch`,
+  `beacon_stat`, `beacon_glob`, `beacon_exec`, `beacon_script`, each naming the
+  beacon id and label in its input and result so the transcript is the audit
+  trail. Tool descriptions state the large-file trade-off so the model routes
+  itself between read/grep/fetch.
+- [ ] Permission-gate beacon branch built on `evaluateBeaconRequest`, including
+  the `autoRunScripts` and trusted-hash paths for `beacon_script`.
 - [ ] Dedicated approval card showing beacon label, OS, online state, and the
-  command or path.
+  command or the full script body.
 - [ ] Decide and record whether subagent sessions get beacon tools (boards do
   not today); default to main chats only.
 - [ ] Tests: through the gate's public `evaluate`, an allowlisted exec
@@ -159,27 +169,35 @@ threading (as `boardRegistry` does), and the client pending card.
 `src/client/stores/beaconsStore.ts`; edit `src/client/app/SettingsPage.tsx`
 (nav entry, mount, `:2168` exclusion id only).
 
-- [ ] Pair-a-machine flow: pending state while minting, the code with its
-  expiry, the release download link, and the exact `kanna-beacon pair` line;
+- [ ] Pair-a-machine flow: pending state while minting, the 6-digit code with
+  its expiry, the OS-matched installer download, and the first-run bypass steps;
   a clear message when no password is set.
 - [ ] Per-beacon row: online dot plus label (never colour alone), last seen with
-  `tabular-nums`, `beaconVersion` with "update available", scope editor, revoke
-  with confirmation, all through `runPendingAction`.
+  `tabular-nums`, `beaconVersion` with "update available", scope editor, the
+  `autoRunScripts` toggle shown prominently with its consequence, revoke with
+  confirmation, all through `runPendingAction`.
 - [ ] Gates: `bun run lint:usestate`, `bunx ast-grep test`, and a
   `renderForLoopCheck` test for the section; check it in the browser.
 
-## M7 — Release binaries
+## M7 — Release binaries, installers, tray app
 
 **Files:** edit `.github/workflows/release-please.yml`; create
-`scripts/build-beacon.ts`.
+`scripts/build-beacon.ts`, the installer packaging, and the tray/menu-bar shell.
 
 - [ ] Sibling job to `publish`: `needs: release-please`, the same `if`, its own
   `permissions: contents: write`, tag from `inputs.tag ||
   needs.release-please.outputs.tag_name`.
-- [ ] Cross-compile `darwin-arm64`, `darwin-x64`, `linux-x64`, `linux-arm64`,
-  `windows-x64`; write `SHA256SUMS`; upload with `gh release upload`.
+- [ ] Cross-compile the five targets; build the `.pkg` and `.exe` installers and
+  the tray/menu-bar shell over the same binary (`launchd`/Windows service on
+  install, `systemd --user` unit on Linux); write `SHA256SUMS`; upload all with
+  `gh release upload`.
+- [ ] Installer UX: pairing-code window on first launch, then background run with
+  a tray icon exposing online state, Pause, and Unpair, and the installer's
+  final opt-in for `autoRunScripts`.
 - [ ] A workflow test pins the job's trigger and permissions, the way
   `perf-alert-workflow.test.ts` does.
+- [ ] Phase 1 is unsigned: the Settings download screen carries the first-run
+  bypass guide and the checksum. Signing/notarization is Phase 2.
 
 ## M8 — Architecture facts and docs
 
