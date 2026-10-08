@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.64.0](https://github.com/cuongtranba/kanna/compare/v1.63.3...v1.64.0) (2026-10-08)
+
+
+### Features
+
+* **uploads:** resumable tus uploads and Range-aware downloads ([#1210](https://github.com/cuongtranba/kanna/issues/1210)) ([05b6454](https://github.com/cuongtranba/kanna/commit/05b64542130c09b5f9082bca44164cd9a678f91f))
+
 ## [1.63.3](https://github.com/cuongtranba/kanna/compare/v1.63.2...v1.63.3) (2026-10-08)
 
 
