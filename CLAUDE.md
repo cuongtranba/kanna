@@ -1547,7 +1547,9 @@ file-read primitive and stays available on the restricted path.
 # Custom MCP Servers
 
 Users register MCP servers via Settings → "MCP servers". Entries persist
-in `settings.json` under `customMcpServers` (file mode 0600) and are
+in `settings.json` under `customMcpServers` (written with the default umask,
+mode 0644 — `writeTextFileUtf8` sets no mode; a secret belongs in a 0600 file of
+its own, as `push/vapid.adapter.ts` does) and are
 merged into the Claude session at chat spawn time: `buildUserMcpServers`
 (`agent.ts`) maps each enabled entry to the SDK's per-transport config and
 merges it into the `mcpServers` map passed to `query()` alongside
@@ -1639,8 +1641,9 @@ the server. Now the refresh path persists `status: "error"` before throwing, and
 token, or an access token still inside `bearerUsableUntil`).
 
 **Storage.** OAuth state (`clientByIssuer`, `tokens`, `issuer`, `metadata`, `flow`) is
-stored inside the server entry in `settings.json` (file mode 0600). The
-`flow` field is present only mid-flow and cleared on complete or cancel.
+stored inside the server entry in `settings.json` (written with the default
+umask, mode 0644, not 0600 — do not rely on the file mode to protect a secret).
+The `flow` field is present only mid-flow and cleared on complete or cancel.
 DCR results are keyed by AS issuer to avoid re-registering if the same AS
 serves multiple servers.
 

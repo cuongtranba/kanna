@@ -3,3 +3,11 @@ claim: "MCP OAuth adapter and validator are at src/server/mcp-oauth.adapter.ts a
 code:
   - src/server/mcp-oauth.adapter.ts
   - src/server/mcp-validator.ts
+  - src/server/kanna-mcp-beacon.ts
+  - src/server/kanna-mcp-beacon.test.ts
+  - src/server/kanna-mcp.ts
+  - src/server/kanna-mcp.test.ts
+  - src/server/tool-callback.ts
+  - src/server/tool-callback.test.ts
+  - src/server/permission-gate.ts
+  - src/server/permission-gate.test.ts

@@ -8,6 +8,7 @@ import {
 } from "./claude-subagent-wiring"
 import type { ProviderRunStart } from "./subagent-orchestrator"
 import type { Subagent } from "../shared/subagent-types"
+import type { ToolCallbackService } from "./tool-callback"
 
 
 const NOOP_PROMISE = () => Promise.resolve(null as unknown as never)
@@ -132,6 +133,52 @@ describe("buildClaudeSubagentStarter", () => {
     expect(Array.isArray(args.customMcpServers)).toBe(true)
     expect((args.customMcpServers as unknown[]).length).toBe(1)
     expect(args.oauthBearers).toBeInstanceOf(Map)
+  })
+
+  const PARENT_TOOL_CALLBACK: ToolCallbackService = {
+    submit: async () => ({ status: "answered", decision: { kind: "deny", reason: "unused" } }),
+    answer: async () => {},
+    cancel: async () => {},
+    cancelAllForChat: async () => {},
+    recoverOnStartup: async () => {},
+  }
+
+  async function startWith(beaconToolsAllowed: boolean) {
+    const captured: Parameters<SubagentWiringDeps["startClaudeSessionFn"]>[0][] = []
+    const starter = buildClaudeSubagentStarter(
+      makeDeps({
+        toolCallback: PARENT_TOOL_CALLBACK,
+        startClaudeSessionFn: async (a) => {
+          captured.push(a)
+          return {} as never
+        },
+      }),
+      beaconToolsAllowed,
+    )
+    await starter({
+      projectId: "proj",
+      localPath: "/tmp/x",
+      model: "claude-opus-4-5",
+      effort: undefined,
+      planMode: false,
+      sessionToken: null,
+      forkSession: false,
+      oauthToken: null,
+      onToolRequest: async () => null,
+    } as never)
+    return captured[0]
+  }
+
+  test("a subagent granted beacon tools receives the parent's tool callback so its beacon approvals reach the user", async () => {
+    const args = await startWith(true)
+    expect(args?.beaconToolsAllowed).toBe(true)
+    expect(args?.toolCallback).toBe(PARENT_TOOL_CALLBACK)
+  })
+
+  test("a subagent not granted beacon tools gets neither the flag nor a tool callback", async () => {
+    const args = await startWith(false)
+    expect(args?.beaconToolsAllowed).toBe(false)
+    expect(args?.toolCallback).toBeUndefined()
   })
 })
 

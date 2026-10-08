@@ -9,6 +9,7 @@ import { useSlashCommandsStore } from "../stores/slashCommandsStore"
 import { usePreferencesStore } from "../stores/preferences"
 import type { ChatSnapshot, CloudflareTunnelRecord, ProjectCommandsSnapshot } from "../../shared/types"
 import type { ChatOpsEvent } from "../../shared/chat-ops"
+import type { BeaconMintResult } from "../../shared/beacon-config"
 import type { AskUserQuestionItem } from "../components/messages/types"
 import type { OpenLocalLinkTarget } from "../components/messages/shared"
 import { processTranscriptMessages } from "../lib/parseTranscript"
@@ -536,6 +537,7 @@ export interface KannaState {
   handleReadAppSettings: () => Promise<void>
   handleWriteAppSettings: (patch: AppSettingsPatch) => Promise<void>
   handleTestMcpServer: (id: string) => Promise<void>
+  handleMintBeaconPairingCode: () => Promise<BeaconMintResult>
   handleStartMcpOAuth: (id: string) => Promise<{ ok: boolean; authorizationUrl?: string; alreadyAuthenticated?: boolean; error?: string }>
   handleCompleteMcpOAuth: (id: string, callbackUrl: string) => Promise<{ ok: boolean; error?: string }>
   handleSetChatPolicyOverride: (chatId: string, policyOverride: ChatPermissionPolicyOverride | null) => Promise<void>

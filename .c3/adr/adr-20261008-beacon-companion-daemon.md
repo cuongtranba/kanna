@@ -1,6 +1,6 @@
 ---
 id: adr-20261008-beacon-companion-daemon
-c3-seal: feff153d4d821d9a91bceac7ecc313979225178b602bff2937792f013dd997e8
+c3-seal: 3f69202f2f6b834ce01f34320d5422f88fe6127bce518f6c1e1c76c6cf243e72
 title: beacon-companion-daemon
 type: adr
 goal: |-
@@ -12,7 +12,7 @@ goal: |-
     scoped, approved requests. Authorization, default-deny scoping, consent, and
     audit are core requirements, not polish, because they are what separates a
     user-authorized companion daemon from a remote-access implant.
-status: proposed
+status: accepted
 date: "2026-10-08"
 ---
 

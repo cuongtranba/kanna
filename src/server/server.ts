@@ -91,6 +91,7 @@ import { createSnapshotSources } from "./session-share/snapshot-sources"
 import { startSnapshotSweep } from "./session-share/sweep"
 import { log } from "../shared/log"
 import { createHttpDispatcher } from "./http-dispatcher"
+import { buildBeaconAwareWebsocket, createBeaconServices, type BeaconServices } from "./beacon-services"
 import { createGenUIDatasetService } from "./genui/dataset-service-boot"
 
 function parsePositiveIntEnv(raw: string | undefined, fallback: number): number {
@@ -164,6 +165,7 @@ interface ApplicationServices {
   packageUpdateManager: PackageUpdateManager
   agent: AgentCoordinator
   router: ReturnType<typeof createWsRouter>
+  beacon: BeaconServices
   appSettings: AppSettingsManager
   keybindings: KeybindingsManager
   tunnelGateway: TunnelGateway
@@ -191,6 +193,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     store,
     serverSecret: process.env.KANNA_SERVER_SECRET ?? crypto.randomUUID(),
     onStateChange: (chatId) => broadcastChatState?.(chatId),
+    getBeacons: () => appSettings.getSnapshot().customBeacons,
   })
 
   const vapid = await loadOrGenerateVapidKeys(store.dataDir)
@@ -234,6 +237,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
   }
   const keybindings = new KeybindingsManager()
   const appSettings = new AppSettingsManager(path.join(store.dataDir, "settings.json"))
+  const beacon = createBeaconServices({ appSettings })
   await appSettings.initialize()
   const observability = initObservability({
     dataDir: store.dataDir,
@@ -384,6 +388,8 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     toolCallback,
     workflowRegistry,
     boardRegistry,
+    beaconRegistry: beacon.registry,
+    getBeacons: () => appSettings.getSnapshot().customBeacons,
     backgroundTaskOutputRegistry,
     subagentTranscriptRegistry,
     localCatalog,
@@ -518,6 +524,8 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     pushManager,
     workflowRegistry,
     boardRegistry,
+    beaconRegistry: beacon.registry,
+    authEnabled: auth !== null,
     boardSync,
     startWork,
     startWorkView,
@@ -555,6 +563,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     packageUpdateManager,
     agent,
     router,
+    beacon,
     appSettings,
     keybindings,
     tunnelGateway,
@@ -601,7 +610,7 @@ function rehydrateScheduledWork(services: ApplicationServices): void {
 async function shutdownServices(services: ApplicationServices, server: Server<ClientState>): Promise<void> {
   const { store, agent, auth, appSettings, keybindings, scheduleManager, cronScheduler,
     tunnelGateway, snapshotSweepHandle, observability, staleEmptyChatPruneInterval,
-    followedSessionTickInterval, router, terminals, packageUpdateManager } = services
+    followedSessionTickInterval, router, terminals, packageUpdateManager, beacon } = services
 
   packageUpdateManager.stop()
   appSettings.dispose()
@@ -613,6 +622,7 @@ async function shutdownServices(services: ApplicationServices, server: Server<Cl
   await observability.shutdown()
   clearInterval(staleEmptyChatPruneInterval)
   clearInterval(followedSessionTickInterval)
+  beacon.stop()
   for (const chatId of agent.getActiveTurnChatIds()) {
     await agent.cancel(chatId)
   }
@@ -631,7 +641,7 @@ const MAX_PORT_ATTEMPTS = 20
 
 export async function startKannaServer(options: StartKannaServerOptions = {}) {
   const services = await createApplicationServices(options)
-  const { store, diffStore, updateManager, appSettings, auth, sessionShareService, router, analytics } = services
+  const { store, diffStore, updateManager, appSettings, auth, sessionShareService, router, beacon, analytics } = services
 
   const distDir = options.distDir ?? path.join(import.meta.dir, "..", "..", "dist", "client")
   const fetchHandler = createHttpDispatcher({ store, appSettings, auth, sessionShare: sessionShareService, distDir })
@@ -652,11 +662,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
         development,
         maxRequestBodySize: MAX_REQUEST_BODY_BYTES,
         fetch: fetchHandler,
-        websocket: {
-          open(ws) { router.handleOpen(ws) },
-          message(ws, raw) { router.handleMessage(ws, raw) },
-          close(ws) { router.handleClose(ws) },
-        },
+        websocket: buildBeaconAwareWebsocket(router, beacon.connection),
       })
       break
     } catch (err) {
@@ -671,14 +677,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
 
   const boundPort = server.port ?? actualPort
 
-  analytics.trackLaunch({
-    port: boundPort,
-    host: hostname,
-    openBrowser: options.openBrowser ?? true,
-    share: options.share ?? false,
-    password: options.password ?? null,
-    strictPort,
-  })
+  analytics.trackLaunch({ port: boundPort, host: hostname, openBrowser: options.openBrowser ?? true, share: options.share ?? false, password: options.password ?? null, strictPort })
 
   rehydrateScheduledWork(services)
 

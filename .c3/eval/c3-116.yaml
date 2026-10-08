@@ -9,6 +9,8 @@ code:
   - src/client/app/ModelsSection.test.tsx
   - src/client/app/SettingsPage.tsx
   - src/client/app/SubagentsSection.tsx
+  - src/client/app/SubagentFormRow.tsx
+  - src/client/app/SubagentScopeFields.tsx
   - src/client/app/SubagentsSection.test.tsx
   - src/client/app/TextSnippetsSection.tsx
   - src/client/app/TextSnippetsSection.test.tsx
@@ -16,3 +18,7 @@ code:
   - src/client/app/llmProviderDraft.ts
   - src/client/app/settingsEditorForm.ts
   - src/client/components/settings/SettingsList.tsx
+  - src/client/app/BeaconsSection.tsx
+  - src/client/app/BeaconsSection.test.tsx
+  - src/client/stores/beaconsStore.ts
+  - src/client/stores/beaconsStore.test.ts

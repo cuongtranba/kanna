@@ -107,6 +107,23 @@ describe("normalizeToolCall", () => {
     expect(tool.input.path).toBe("dist/build.zip")
     expect(tool.input.label).toBe("Download build")
   })
+
+  test("renders beacon tools as a beacon tool kind with a readable summary", () => {
+    const read = normalizeToolCall({
+      toolName: "mcp__kanna__beacon_read",
+      toolId: "tool-b1",
+      input: { beaconId: "b1", path: "/data/notes.txt" },
+    })
+    const exec = normalizeToolCall({
+      toolName: "mcp__kanna__beacon_exec",
+      toolId: "tool-b2",
+      input: { beaconId: "b1", cmd: "git", args: ["status", "-s"] },
+    })
+
+    if (read.toolKind !== "beacon" || exec.toolKind !== "beacon") throw new Error("unexpected tool kind")
+    expect(read.input).toEqual({ op: "read", beaconId: "b1", summary: "read /data/notes.txt" })
+    expect(exec.input).toEqual({ op: "exec", beaconId: "b1", summary: "exec git status -s" })
+  })
 })
 
 describe("hydrateToolResult", () => {

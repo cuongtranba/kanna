@@ -131,6 +131,9 @@ export function ToolCallMessage({ message, isLoading = false, localPath, chatId 
     if (message.toolKind === "mcp_generic") {
       return `${toTitleCase(message.input.tool)} from ${toTitleCase(message.input.server)}`
     }
+    if (message.toolKind === "beacon") {
+      return message.input.beaconId ? `Beacon ${message.input.beaconId}: ${message.input.summary}` : message.input.summary
+    }
     if (message.toolKind === "subagent_task") {
       return message.input.subagentType || message.toolName
     }

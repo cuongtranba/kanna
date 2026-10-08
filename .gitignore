@@ -53,3 +53,6 @@ scripts/pm2.env
 .c3/c3.db-wal
 # Per-machine c3x command log — local noise, like the cache above.
 .c3/activity.jsonl
+
+# kanna-beacon release binaries (scripts/build-beacon.ts)
+dist-beacon/

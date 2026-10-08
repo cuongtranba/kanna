@@ -20,6 +20,13 @@ export interface ClientState {
   protectedDraftChatIds?: Set<string>
   pushDeviceId?: string | null
   originHost?: string
+  kind?: "beacon"
+  beaconHandshake?: {
+    phase: "awaiting-hello" | "awaiting-auth" | "ready"
+    beaconId?: string
+    nonce?: string
+    beaconVersion?: string
+  }
 }
 
 export interface SnapshotBroadcastFilter {

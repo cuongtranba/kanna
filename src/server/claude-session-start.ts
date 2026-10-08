@@ -8,6 +8,8 @@ import {
 } from "@anthropic-ai/claude-agent-sdk"
 import type { CompactionTrigger } from "../shared/transcript-types"
 import type { BoardRegistry } from "./board-registry"
+import type { BeaconRegistry } from "./beacon-registry"
+import type { BeaconConfig } from "../shared/beacon-config"
 import {
   createKannaMcpServer,
   type KannaMcpDelegationContext,
@@ -178,6 +180,9 @@ export async function startClaudeSession(args: {
   isRunAlive?: (chatId: string, runId: string) => boolean
   chatTaskStore?: ChatTaskStorePort
   boardRegistry?: BoardRegistry
+  beaconRegistry?: BeaconRegistry
+  getBeacons?: () => readonly BeaconConfig[]
+  beaconToolsAllowed?: boolean
   maxTurns?: number
   keepAlive?: boolean
   turnPrice?: ModelPrice | null
@@ -239,6 +244,9 @@ export async function startClaudeSession(args: {
           isRunAlive: args.isRunAlive,
           chatTaskStore: args.chatTaskStore,
           boardRegistry: args.boardRegistry,
+          beaconRegistry: args.beaconRegistry,
+          getBeacons: args.getBeacons,
+          beaconToolsAllowed: args.beaconToolsAllowed,
         }),
         ..._deps.buildUserMcpServers(args.customMcpServers ?? [], args.oauthBearers),
       },

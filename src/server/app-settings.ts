@@ -9,6 +9,14 @@ import {
   writeTextFileUtf8,
 } from "./app-settings-io.adapter"
 import { getSettingsFilePath } from "../shared/branding"
+import type { BeaconConfig, BeaconInput, BeaconPatch } from "../shared/beacon-config"
+import {
+  applyBeaconSetters,
+  beaconNotFound,
+  createBeacon,
+  normalizeBeacons,
+  updateBeacon,
+} from "./beacon-settings"
 import { clampTabMinWidth } from "../shared/pane-tab-width"
 import { normalizePackageUpdateSettings } from "./app-settings-package-updates"
 import { mergePluginPatch, normalizePluginState } from "./plugins/plugin-settings"
@@ -134,6 +142,7 @@ interface AppSettingsFile {
   uploads?: JsonObject
   subagents?: JsonArray
   customMcpServers?: JsonArray
+  customBeacons?: JsonArray
   customModels?: JsonArray
   seededBuiltinModels?: JsonArray
   textSnippets?: JsonArray
@@ -527,6 +536,7 @@ function normalizeSubagentEntry<T>(
     workingDir,
     allowedPaths: allowedPaths && allowedPaths.length > 0 ? allowedPaths : undefined,
     maxTurns,
+    allowBeaconTools: source.allowBeaconTools === true ? true : undefined,
     createdAt: typeof source.createdAt === "number" && Number.isFinite(source.createdAt) ? source.createdAt : Date.now(),
     updatedAt: typeof source.updatedAt === "number" && Number.isFinite(source.updatedAt) ? source.updatedAt : Date.now(),
   }
@@ -954,6 +964,7 @@ function normalizeAppSettings<T>(
     uploads,
     subagents,
     customMcpServers: normalizeMcpServers(source?.customMcpServers, warnings),
+    customBeacons: normalizeBeacons(source?.customBeacons, warnings),
     customModels,
     seededBuiltinModels,
     textSnippets,
@@ -1378,6 +1389,7 @@ const SUBAGENT_CRUD: CollectionCrud<Subagent, SubagentInput, SubagentPatch> = {
       workingDir: input.workingDir,
       allowedPaths: input.allowedPaths && input.allowedPaths.length > 0 ? input.allowedPaths : undefined,
       maxTurns: normalizeSubagentMaxTurns(input.maxTurns),
+      allowBeaconTools: input.allowBeaconTools === true ? true : undefined,
       createdAt: now,
       updatedAt: now,
     }
@@ -1411,6 +1423,7 @@ const SUBAGENT_CRUD: CollectionCrud<Subagent, SubagentInput, SubagentPatch> = {
       workingDir: nextWorkingDir,
       allowedPaths: nextAllowedPaths,
       maxTurns: nextMaxTurns,
+      allowBeaconTools: (patch.allowBeaconTools ?? existing.allowBeaconTools) === true ? true : undefined,
       triggerMode: patch.triggerMode ?? existing.triggerMode,
       updatedAt: Date.now(),
     }
@@ -1433,6 +1446,12 @@ function validatedMcpEntry(entry: McpServerConfig, current: readonly McpServerCo
   const error = validateMcpShape(entry, current.map((s) => ({ id: s.id, name: s.name })))
   if (error) throw new McpValidationException(error)
   return entry
+}
+
+const BEACON_CRUD: CollectionCrud<BeaconConfig, BeaconInput, BeaconPatch> = {
+  create: createBeacon,
+  update: updateBeacon,
+  notFound: beaconNotFound,
 }
 
 function applyMcpSetterPatch(
@@ -1477,7 +1496,11 @@ function validatedTextSnippet(entry: TextSnippet, current: readonly TextSnippet[
   return entry
 }
 
-function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettingsState {
+type BeaconPairingPatch = Omit<AppSettingsPatch, "customBeacons"> & {
+  customBeacons?: NonNullable<AppSettingsPatch["customBeacons"]> & { create?: BeaconInput }
+}
+
+function applyPatch(state: AppSettingsState, patch: BeaconPairingPatch): AppSettingsState {
   if (patch.shareDefaultTtlHours !== undefined) {
     const value = patch.shareDefaultTtlHours
     if (!Number.isInteger(value) || value < 1) {
@@ -1506,6 +1529,9 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
   const nextSubagents = applyCollectionPatch(state.subagents, patch.subagents, SUBAGENT_CRUD) ?? state.subagents
   const nextMcpServers = applyCollectionPatch(state.customMcpServers, mcpPatch, MCP_CRUD)
     ?? (mcpPatch ? applyMcpSetterPatch(state.customMcpServers, mcpPatch) : state.customMcpServers)
+  const beaconPatch = patch.customBeacons
+  const nextBeacons = applyCollectionPatch(state.customBeacons, beaconPatch, BEACON_CRUD)
+    ?? (beaconPatch ? applyBeaconSetters(state.customBeacons, beaconPatch) : state.customBeacons)
   const nextCustomModels = applyCollectionPatch(state.customModels, patch.customModels, CUSTOM_MODEL_CRUD)
     ?? state.customModels
   const nextTextSnippets = applyCollectionPatch(state.textSnippets, patch.textSnippets, TEXT_SNIPPET_CRUD)
@@ -1579,6 +1605,7 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
     },
     subagents: nextSubagents,
     customMcpServers: nextMcpServers,
+    customBeacons: nextBeacons,
     customModels: nextCustomModels,
     textSnippets: nextTextSnippets,
     ...mergePluginPatch(state, patch),
@@ -1784,7 +1811,16 @@ export class AppSettingsManager {
     await this.writePatch({ subagents: { delete: { id } } })
   }
 
+  async createBeaconFromPairing(input: BeaconInput): Promise<BeaconConfig> {
+    const snapshot = await this.commitPatch({ customBeacons: { create: input } })
+    return snapshot.customBeacons[snapshot.customBeacons.length - 1]!
+  }
+
   async writePatch(patch: AppSettingsPatch) {
+    return this.commitPatch(patch)
+  }
+
+  private async commitPatch(patch: BeaconPairingPatch) {
     const nextState = {
       ...applyPatch(this.state, patch),
       warning: null,

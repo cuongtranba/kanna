@@ -15,10 +15,14 @@ import type { EditorOpenSettings, ImportSessionsByIdsResult, OpenExternalAction 
 import { readProjectDeleteResult } from "../../shared/protocol"
 import type { FollowedSessionsSnapshot } from "../../shared/protocol"
 import type { CronJobsGlobalSnapshot } from "../../shared/cron/types"
+import type { BeaconMintResult } from "../../shared/beacon-config"
+import type { BeaconsSnapshot } from "../../shared/beacon-status"
 import type { PackageUpdateSnapshot } from "../../shared/packages/types"
 import type { ChatPermissionPolicyOverride } from "../../shared/permission-policy"
 import { useFollowedSessionsStore } from "../stores/followedSessionsStore"
 import { useCronJobsStore } from "../stores/cronJobsStore"
+import { useBeaconsStore } from "../stores/beaconsStore"
+import { parseBeaconMintResult } from "../lib/parseBeaconMintResult"
 import { useSettingsPageStore } from "../stores/settingsPageStore"
 import { useOpenRouterModelsStore } from "../stores/openrouterModelsStore"
 import { gitSnapshotKey, useKannaStateStore } from "../stores/kannaStateStore"
@@ -300,6 +304,7 @@ export interface AppGlobalState extends StackCommands {
   handleReadAppSettings: () => Promise<void>
   handleWriteAppSettings: (patch: AppSettingsPatch) => Promise<void>
   handleTestMcpServer: (id: string) => Promise<void>
+  handleMintBeaconPairingCode: () => Promise<BeaconMintResult>
   handleStartMcpOAuth: (id: string) => Promise<{ ok: boolean; authorizationUrl?: string; alreadyAuthenticated?: boolean; error?: string }>
   handleCompleteMcpOAuth: (id: string, callbackUrl: string) => Promise<{ ok: boolean; error?: string }>
   handleSetChatPolicyOverride: (chatId: string, policyOverride: ChatPermissionPolicyOverride | null) => Promise<void>
@@ -521,6 +526,12 @@ export function useAppGlobalState(
   }, [socket])
 
   useEffect(() => {
+    return socket.subscribe<BeaconsSnapshot>({ type: "beacons" }, (snapshot) => {
+      useBeaconsStore.getState().setRows(snapshot.beacons)
+    })
+  }, [socket])
+
+  useEffect(() => {
     return socket.subscribe<PackageUpdateSnapshot>({ type: "package-updates" }, (snapshot) => {
       useSettingsPageStore.getState().setPackageUpdateSnapshot(snapshot)
     })
@@ -707,6 +718,14 @@ export function useAppGlobalState(
     } catch (error) {
       useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
       throw error
+    }
+  }, [socket])
+
+  const handleMintBeaconPairingCode = useCallback(async (): Promise<BeaconMintResult> => {
+    try {
+      return parseBeaconMintResult(await socket.command({ type: "beacons.mintPairingCode" }))
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) }
     }
   }, [socket])
 
@@ -1331,6 +1350,7 @@ export function useAppGlobalState(
     handleReadAppSettings,
     handleWriteAppSettings,
     handleTestMcpServer,
+    handleMintBeaconPairingCode,
     handleStartMcpOAuth,
     handleCompleteMcpOAuth,
     handleSetChatPolicyOverride,

@@ -4,8 +4,11 @@ import { isJsonArray, isJsonObject, type JsonObject } from "../../../shared/json
 import { Button } from "../ui/button"
 import { AskUserQuestionInteractive } from "./AskUserQuestionInteractive"
 import { encodeAskUserQuestionResult } from "../../lib/askUserQuestionJson"
+import { StateMarkLabel } from "../ui/state-mark"
 import { useCallback } from "react"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../../stores/pendingActionsStore"
+import { selectBeaconById, useBeaconsStore } from "../../stores/beaconsStore"
+import { BEACON_SCRIPT_TOOL_NAME, BEACON_TOOL_PREFIX, beaconToolOp } from "../../../shared/beacon-tools"
 
 export type PendingToolRequestHydrated = Extract<HydratedTranscriptMessage, { kind: "pending_tool_request" }>
 
@@ -127,6 +130,79 @@ function GenericPending({
   )
 }
 
+function stringArg(args: JsonObject, key: string): string {
+  const value = args[key]
+  return typeof value === "string" ? value : ""
+}
+
+function beaconPayload(toolName: string, args: JsonObject): string {
+  if (toolName === BEACON_SCRIPT_TOOL_NAME) return stringArg(args, "body")
+  if (beaconToolOp(toolName) === "exec") {
+    const execArgs = isJsonArray(args.args) ? args.args.filter((arg): arg is string => typeof arg === "string") : []
+    return [stringArg(args, "cmd"), ...execArgs].join(" ")
+  }
+  const target = stringArg(args, "path") || stringArg(args, "root")
+  const pattern = stringArg(args, "pattern")
+  return pattern ? `${pattern}  in  ${target}` : target
+}
+
+function BeaconPending({
+  toolName,
+  args,
+  responder,
+}: {
+  toolName: string
+  args: JsonObject
+  responder: ToolRequestResponder
+}) {
+  const beaconId = stringArg(args, "beaconId")
+  const beacon = useBeaconsStore(selectBeaconById(beaconId))
+  const payload = beaconPayload(toolName, args)
+  const action = toolName.slice(BEACON_TOOL_PREFIX.length)
+  return (
+    <div className="rounded-2xl border border-border bg-background px-4 py-3 text-sm">
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+        <span className="text-muted-foreground shrink-0">Run on machine:</span>
+        <span className="font-medium text-foreground">{beacon?.label ?? beaconId}</span>
+        {beacon ? (
+          <span className="flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground">
+            <span>{beacon.os}</span>
+            <StateMarkLabel tone={beacon.online ? "active" : "muted"} label={beacon.online ? "Online" : "Offline"} />
+          </span>
+        ) : null}
+      </div>
+      <div className="mt-1 flex items-baseline gap-2">
+        <span className="text-muted-foreground shrink-0">Action:</span>
+        <span className="font-mono text-foreground">{action}</span>
+      </div>
+      {payload ? (
+        <pre className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap break-all rounded-md border border-border bg-muted px-3 py-2 font-mono text-xs text-foreground">
+          {payload}
+        </pre>
+      ) : null}
+      <div className="mt-3 flex items-center justify-end gap-2">
+        <Button
+          variant="ghost"
+          size="sm"
+          pending={responder.denying}
+          disabled={responder.answering}
+          onClick={responder.deny}
+        >
+          Deny
+        </Button>
+        <Button
+          variant="default"
+          size="sm"
+          pending={responder.answering}
+          disabled={responder.denying}
+          onClick={() => responder.answer({ kind: "allow" })}
+        >
+          Allow
+        </Button>
+      </div>
+    </div>
+  )
+}
 
 export function PendingToolRequestMessage({ entry, onAnswer }: Props) {
   const { toolRequestId, toolName, arguments: args } = entry
@@ -178,6 +254,10 @@ export function PendingToolRequestMessage({ entry, onAnswer }: Props) {
     return (
       <ExitPlanModePending plan={plan} responder={responder} />
     )
+  }
+
+  if (toolName.startsWith(BEACON_TOOL_PREFIX)) {
+    return <BeaconPending toolName={toolName} args={args} responder={responder} />
   }
 
   return (

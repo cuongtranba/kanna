@@ -6,6 +6,7 @@ import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLAUDE_DRIVER_DEFAULTS, CLAUDE_LIF
   TELEMETRY_DEFAULTS, TYPOGRAPHY_DEFAULTS, UPLOAD_DEFAULTS } from "../shared/types"
 import { AppSettingsManager, readAppSettingsSnapshot, seedCustomModelsFromBuiltins } from "./app-settings"
 import type { AppSettingsSnapshot, McpOAuthState, SubagentInput } from "../shared/types"
+import { DEFAULT_BEACON_SCOPE } from "../shared/beacon-scope"
 import { DEFAULT_TAB_MIN_WIDTH, MAX_TAB_WIDTH } from "../shared/pane-tab-width"
 
 let tempDirs: string[] = []
@@ -88,6 +89,7 @@ function expectedSettingsSnapshot(filePath: string, overrides: Partial<AppSettin
     uploads: UPLOAD_DEFAULTS,
     subagents: [],
     customMcpServers: [],
+    customBeacons: [],
     customModels: seedCustomModelsFromBuiltins(),
     textSnippets: [],
     claudeDriver: { ...CLAUDE_DRIVER_DEFAULTS, lifecycle: { ...CLAUDE_LIFECYCLE_DEFAULTS } },
@@ -678,6 +680,30 @@ describe("subagent CRUD", () => {
     if (!("id" in kept)) return
     expect(kept.maxTurns).toBe(75)
     mgr.dispose()
+  })
+
+  test("allowBeaconTools is off by default, persists across reload and can be granted then revoked", async () => {
+    const filePath = await createTempFilePath()
+    const mgr = trackManager(new AppSettingsManager(filePath))
+    await mgr.initialize()
+
+    const created = await mgr.createSubagent(baseInput())
+    if (!("id" in created)) throw new Error("setup failed")
+    expect(created.allowBeaconTools).toBeUndefined()
+
+    const granted = await mgr.updateSubagent(created.id, { allowBeaconTools: true })
+    if (!("id" in granted)) throw new Error("grant failed")
+    expect(granted.allowBeaconTools).toBe(true)
+    mgr.dispose()
+
+    const reloaded = trackManager(new AppSettingsManager(filePath))
+    await reloaded.initialize()
+    expect(reloaded.getSnapshot().subagents.find((s) => s.id === created.id)?.allowBeaconTools).toBe(true)
+
+    const revoked = await reloaded.updateSubagent(created.id, { allowBeaconTools: false })
+    if (!("id" in revoked)) throw new Error("revoke failed")
+    expect(revoked.allowBeaconTools).toBeUndefined()
+    reloaded.dispose()
   })
 
   test("update renames and bumps updatedAt", async () => {
@@ -1841,5 +1867,69 @@ describe("packageUpdates settings", () => {
     const snapshot = await manager.writePatch({ packageUpdates: { checkEnabled: false } })
     expect(snapshot.packageUpdates.checkEnabled).toBe(false)
     expect(snapshot.packageUpdates.checkIntervalMs).toBe(PACKAGE_UPDATE_SETTINGS_DEFAULTS.checkIntervalMs)
+  })
+})
+
+describe("customBeacons", () => {
+  const input = { label: "laptop", publicKey: "pk-1", os: "darwin" } as const
+
+  async function freshManager() {
+    const filePath = await createTempFilePath()
+    const manager = trackManager(new AppSettingsManager(filePath))
+    await manager.initialize()
+    return { manager, filePath }
+  }
+
+  test("createBeaconFromPairing appends a default-scope entry that survives a reload", async () => {
+    const { manager, filePath } = await freshManager()
+    const created = await manager.createBeaconFromPairing(input)
+    expect(created.scope).toEqual(DEFAULT_BEACON_SCOPE)
+    expect(created.enabled).toBe(true)
+    expect(manager.getSnapshot().customBeacons).toEqual([created])
+    const reloaded = trackManager(new AppSettingsManager(filePath))
+    await reloaded.initialize()
+    expect(reloaded.getSnapshot().customBeacons).toEqual([created])
+  })
+
+  test("an update patch changes the label", async () => {
+    const { manager } = await freshManager()
+    const created = await manager.createBeaconFromPairing(input)
+    await manager.writePatch({ customBeacons: { update: { id: created.id, patch: { label: "desktop" } } } })
+    expect(manager.getSnapshot().customBeacons[0]?.label).toBe("desktop")
+  })
+
+  test("setEnabled and setScope change only the targeted beacon", async () => {
+    const { manager } = await freshManager()
+    const first = await manager.createBeaconFromPairing(input)
+    const second = await manager.createBeaconFromPairing({ ...input, label: "server" })
+    const scope = { ...DEFAULT_BEACON_SCOPE, exec: true }
+    await manager.writePatch({ customBeacons: { setEnabled: { id: first.id, enabled: false } } })
+    await manager.writePatch({ customBeacons: { setScope: { id: first.id, scope } } })
+    const [updatedFirst, untouched] = manager.getSnapshot().customBeacons
+    expect(updatedFirst?.enabled).toBe(false)
+    expect(updatedFirst?.scope).toEqual(scope)
+    expect(untouched).toEqual(second)
+  })
+
+  test("addTrustedScript records a hash once and removeTrustedScript removes it", async () => {
+    const { manager } = await freshManager()
+    const first = await manager.createBeaconFromPairing(input)
+    const second = await manager.createBeaconFromPairing({ ...input, label: "server" })
+    await manager.writePatch({ customBeacons: { addTrustedScript: { id: first.id, hash: "h1" } } })
+    await manager.writePatch({ customBeacons: { addTrustedScript: { id: first.id, hash: "h1" } } })
+    await manager.writePatch({ customBeacons: { addTrustedScript: { id: first.id, hash: "h2" } } })
+    expect(manager.getSnapshot().customBeacons[0]?.scope.trustedScriptHashes).toEqual(["h1", "h2"])
+    await manager.writePatch({ customBeacons: { removeTrustedScript: { id: first.id, hash: "h1" } } })
+    expect(manager.getSnapshot().customBeacons[0]?.scope.trustedScriptHashes).toEqual(["h2"])
+    expect(manager.getSnapshot().customBeacons[1]).toEqual(second)
+  })
+
+  test("a duplicate label is rejected", async () => {
+    const { manager } = await freshManager()
+    await manager.createBeaconFromPairing(input)
+    await expect(manager.createBeaconFromPairing(input)).rejects.toMatchObject({
+      validationError: { code: "INVALID_LABEL" },
+    })
+    expect(manager.getSnapshot().customBeacons).toHaveLength(1)
   })
 })

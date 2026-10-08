@@ -19,6 +19,9 @@ import type {
   WorkflowToolResult,
 } from "./types"
 import { isJsonObject, type JsonObject, type JsonValue } from "./json"
+import { beaconToolOp, summarizeBeaconCall } from "./beacon-tools"
+
+export * from "./beacon-tools"
 
 export const KANNA_MCP_SERVER_NAME = "kanna"
 export const OFFER_DOWNLOAD_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__offer_download`
@@ -52,7 +55,6 @@ export const PLUGIN_LOGS_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__plugin_logs
 export const PLUGIN_SCAFFOLD_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__plugin_scaffold`
 export const PLUGIN_INSTALL_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__plugin_install`
 export const PLUGIN_RELOAD_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__plugin_reload`
-
 function asRecord(value: JsonValue | undefined): JsonObject | null {
   return value !== undefined && isJsonObject(value) ? value : null
 }
@@ -339,6 +341,22 @@ export function normalizeToolCall(args: {
       input: {
         path: typeof input.path === "string" ? input.path : "",
         label: typeof input.label === "string" ? input.label : undefined,
+      },
+      rawInput: input,
+    }
+  }
+
+  const beaconOp = beaconToolOp(toolName)
+  if (beaconOp !== null) {
+    return {
+      kind: "tool",
+      toolKind: "beacon",
+      toolName,
+      toolId,
+      input: {
+        op: beaconOp,
+        beaconId: typeof input.beaconId === "string" ? input.beaconId : "",
+        summary: summarizeBeaconCall(beaconOp, input),
       },
       rawInput: input,
     }

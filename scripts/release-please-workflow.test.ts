@@ -7,7 +7,8 @@ type Job = {
   if?: string
   concurrency?: { group?: string; "cancel-in-progress"?: boolean }
   needs?: string | string[]
-  steps?: Array<{ uses?: string; with?: Record<string, unknown> }>
+  permissions?: Record<string, string>
+  steps?: Array<{ uses?: string; run?: string; with?: Record<string, unknown>; env?: Record<string, string> }>
 }
 type Workflow = {
   concurrency?: { group?: string; "cancel-in-progress"?: boolean }
@@ -93,5 +94,33 @@ describe("release-please workflow", () => {
   it("never cancels a publish, which would strand a tagged release unpublished", () => {
     expect(workflow.concurrency?.["cancel-in-progress"]).not.toBe(true)
     expect(workflow.jobs.publish.concurrency?.["cancel-in-progress"]).not.toBe(true)
+  })
+
+  it("builds and uploads the beacon binaries from a job separate from publish", () => {
+    const job = workflow.jobs["beacon-binaries"]
+    expect(job).toBeDefined()
+    expect(job.needs).toBe("release-please")
+    expect(job.permissions).toEqual({ contents: "write" })
+    expect(job.if).toBe(workflow.jobs.publish.if)
+    expect(workflow.jobs.publish.needs).toBe("release-please")
+
+    const commands = (job.steps ?? []).map((step) => step.run ?? "")
+    expect(commands.some((run) => run.includes("scripts/build-beacon.ts"))).toBe(true)
+    expect(commands.some((run) => run.includes("gh release upload") && run.includes("--clobber"))).toBe(true)
+  })
+
+  it("runs the beacon job on the same events as publish and takes its tag from the dispatch or the release", () => {
+    const job = workflow.jobs["beacon-binaries"]
+    const gate = job.if ?? "true"
+    expect(Boolean(evaluate(gate, pushEvent(true)))).toBe(true)
+    expect(Boolean(evaluate(gate, pushEvent(false)))).toBe(false)
+    expect(Boolean(evaluate(gate, dispatchEvent("v1.32.0")))).toBe(true)
+
+    const upload = job.steps?.find((step) => step.run?.includes("gh release upload"))
+    const tag = String(upload?.env?.TAG ?? "")
+    expect(evaluate(tag, dispatchEvent("v1.32.0"))).toBe("v1.32.0")
+    const released = { ...pushEvent(true), needs: { "release-please": { outputs: { tag_name: "v1.60.0" } } } }
+    expect(evaluate(tag, released)).toBe("v1.60.0")
+    expect(upload?.env?.GH_TOKEN).toBe("${{ secrets.GITHUB_TOKEN }}")
   })
 })

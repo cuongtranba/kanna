@@ -1,7 +1,7 @@
 ---
 id: c3-2
 c3-version: 4
-c3-seal: 189fddf2665066bcb145bcc9408c2272e6f8f7f9c10db5fdf24b0bb8a1c4fb40
+c3-seal: 17df4af3ece881a96e8bcd80715e0f18988c844821d2f38f01b80aad345dfcf5
 title: Server
 type: container
 boundary: service
@@ -67,3 +67,4 @@ Run the local Bun backend: serve HTTP+WebSocket on localhost, coordinate Claude 
 | c3-238 | plugin-system | feature | active | Run third-party plugins for Kanna: compile a plugin directory to two bundles, run its server half as a subprocess speaking typed RPC over a unix socket, keep a bounded log ring per plugin, and expose one service that the HTTP routes, the CLI and the MCP authoring tools all drive. |
 | c3-239 | stacks | feature | active | Bind several project checkouts into one chat, and resolve those bindings into the roots a turn may reach and the instruction blocks its prompt must carry. |
 | c3-240 | genui | feature | active | Resolve generative UI datasets from workspace files and MCP tools under the chat's authorization, and ask the model once to fix an invalid view. |
+| c3-241 | beacon-daemon | feature | active | Run a user-authorized companion daemon on the user's own machine that dials out to Kanna and executes scoped file and shell requests. |

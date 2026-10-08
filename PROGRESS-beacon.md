@@ -20,16 +20,52 @@ agent read files and run approved commands on it through `beacon_*` tools.
 
 ## Status
 
-M0 (design PR) in progress on `docs/beacon-design`.
+Phase 1 COMPLETE on feat/beacon-phase1 except the native GUI installer + tray app.
+The whole repo is green: `bun run check` (bundle 170657/350000), `bun run test`
+(8293 pass / 0 fail), lint:usestate, ast-grep, check:arch, lint:limits, and
+`c3x check` (0 errors). The follow-up items M1–M6 listed are now done; see Completed.
+Still deferred: the signed native .pkg/.exe installer and the menu-bar/tray app
+(need real macOS/Windows + code-signing), and a real daemon↔server end-to-end run.
 
 ## Completed
 
-- 2026-10-08 Design doc and ADR written, resolved questions recorded.
+- 2026-10-08 Design doc + ADR (sealed) + plan on docs/beacon-design (PR #1213).
+- 2026-10-08 M1 shared contracts: beacon-protocol.ts (frames + parser + version),
+  beacon-scope.ts (BeaconScope, DEFAULT_BEACON_SCOPE, evaluateBeaconRequest).
+- 2026-10-08 M2 customBeacons settings collection + in-memory pairing-code store.
+- 2026-10-08 M3a ed25519 crypto (verified under Bun), live registry, status snapshot.
+- 2026-10-08 M3b /beacon ws endpoint + handshake + POST /beacon/pair + beacons topic;
+  server.ts kept at 695 lines, no pin raised.
+- 2026-10-08 M4 daemon in src/beacon/** with its own IO seal: handshake session,
+  realpath-scoped fs, shell with timeout/cap, key store (0600), CLI pair/run.
+- 2026-10-08 M5a beacon_* MCP tools + scope-aware permission-gate branch + transcript
+  tool kind + threading; a beacon "ask" verdict forces a real prompt regardless of the
+  chat default (otherwise an auto-allow chat would run beacon exec unprompted).
+- 2026-10-08 M6 Settings -> Beacons section: pair (mint code + CLI line), live status,
+  enable/revoke, scope editor incl. the autoRunScripts opt-in toggle; store + subscription.
+- 2026-10-08 Heartbeat: registry.sweep() pings online beacons and evicts stale ones;
+  per-beacon trusted-script hashes wired into the gate (addTrustedScript/removeTrustedScript).
+- 2026-10-08 Granted subagents reach beacon tools via the parent chat's toolCallback
+  (shims stay off; non-granted subagents unchanged); allowBeaconTools Settings toggle.
+- 2026-10-08 Dedicated beacon consent card names the machine (label/OS/online + command or
+  full script body); update-available badge via isBeaconBehind vs the server version.
+- 2026-10-08 M7 (partial): release-please beacon-binaries job cross-compiles the five
+  targets + SHA256SUMS; scripts/build-beacon.ts (daemon compiles + runs as a 62MB binary);
+  scripts/install-beacon.sh; workflow test pins the job.
+- 2026-10-08 M8: c3 bound (c3-241 beacon-daemon created; beacon files bound into c3-202/
+  c3-226/c3-302/c3-116), c3x check clean; ADR set accepted + resealed; wiki pairing guide;
+  CLAUDE.md 0600 settings.json claim corrected to 0644.
 
 ## Remaining
 
-- M0 seal ADR and open the design PR.
-- M1–M8 per the plan.
+- Native signed .pkg/.exe installer + menu-bar/tray app + launchd/Windows-service/systemd
+  units. Needs real macOS/Windows and paid code-signing certs; the binaries + install
+  script + Settings pairing are the interim path.
+- A real daemon<->server end-to-end run (pair -> connect -> read a file -> run a command)
+  against a live server; and verifying the signed handshake from inside the compiled binary.
+  The compiled binary runs; the live handshake is exercised only by unit tests so far.
+- The design/ADR describe an installer final-step consent; the shipped consent is the
+  per-beacon autoRunScripts toggle (default off). The wiki describes the shipped behavior.
 
 ## Decisions
 

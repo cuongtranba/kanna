@@ -1,6 +1,9 @@
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk"
 import type { ResumeLoopResult } from "./loop-wake-recovery"
 import { buildBoardToolList } from "./kanna-mcp-boards"
+import { buildBeaconToolList } from "./kanna-mcp-beacon"
+import type { BeaconRegistry } from "./beacon-registry"
+import type { BeaconConfig } from "../shared/beacon-config"
 import { buildPluginToolList } from "./kanna-mcp-plugins"
 import { getPluginService } from "./plugins/plugin-service-host"
 import { bindChatTaskRun, buildChatTaskToolList, type ChatTaskToolDeps } from "./kanna-mcp-tools/chat-tasks"
@@ -73,6 +76,9 @@ export interface KannaMcpDelegationContext {
 export interface KannaMcpArgs extends OfferDownloadArgs {
   chatId?: string
   boardRegistry?: BoardRegistry
+  beaconRegistry?: BeaconRegistry
+  getBeacons?: () => readonly BeaconConfig[]
+  beaconToolsAllowed?: boolean
   sessionId?: string
   tunnelGateway?: TunnelGateway | null
   toolCallback?: ToolCallbackService
@@ -1015,6 +1021,15 @@ export function buildKannaMcpTools(args: KannaMcpArgs): KannaSdkToolList {
     ...buildSetupLoopToolList({ setupLoop: args.setupLoop, stopLoop: args.stopLoop, resumeLoop: args.resumeLoop, chatId }),
     ...buildTrackingDocToolList({ cwd, chatId, getArmedLoop: args.getArmedLoop, isRunAlive: args.isRunAlive }),
     ...buildBoardToolList({ boardRegistry: args.boardRegistry, chatId, projectId: args.projectId ?? null }, tool),
+    ...buildBeaconToolList({
+      beaconRegistry: args.beaconRegistry,
+      getBeacons: args.getBeacons ?? (() => []),
+      chatId,
+      allowed: args.beaconToolsAllowed ?? (args.delegationContext?.depth ?? 0) === 0,
+      approval: args.toolCallback
+        ? { toolCallback: args.toolCallback, sessionId, cwd, chatPolicy, restrictedAllowedPaths: args.restrictedAllowedPaths }
+        : undefined,
+    }, tool),
     ...buildPluginToolList(getPluginService(), chatId, args.delegationContext?.depth ?? 0, tool),
     ...buildChatTaskToolList(resolveChatTaskDeps(args, chatId), tool),
     ...buildRunVerifyToolList({ chatId, cwd, getArmedLoop: args.getArmedLoop }),

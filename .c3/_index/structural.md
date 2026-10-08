@@ -1,5 +1,5 @@
 # C3 Structural Index
-<!-- hash: sha256:6634aa58c25178b43c11f85d3cc6b6a3b7078a7a9a6a00d155a27ebb4adab76c -->
+<!-- hash: sha256:e4744a4f51a34b8e4ede0cd4f2ab9f7d14d49e7c663a189608a80949b887831e -->
 
 ## c3-0 — Kanna (system)
 
@@ -58,7 +58,7 @@ files: src/client/components/chat-ui/**/*.ts, src/client/components/chat-ui/**/*
 ## c3-116 — settings-page (component)
 container: c3-1 | context: c3-0
 refs: ref-local-first-data, ref-zustand-store, rule-zustand-store
-files: src/client/app/McpServerRow.tsx, src/client/app/McpServersSection.test.tsx, src/client/app/McpServersSection.tsx, src/client/app/ModelsSection.test.tsx, src/client/app/ModelsSection.tsx, src/client/app/PendingSegmentedControl.tsx, src/client/app/SettingsPage.tsx, src/client/app/SubagentsSection.test.tsx, src/client/app/SubagentsSection.tsx, src/client/app/TextSnippetsSection.test.tsx, src/client/app/TextSnippetsSection.tsx, src/client/app/appSettingsCrud.ts, src/client/app/llmProviderDraft.ts, src/client/app/settingsEditorForm.ts, src/client/components/settings/SettingsList.tsx
+files: src/client/app/BeaconsSection.test.tsx, src/client/app/BeaconsSection.tsx, src/client/app/McpServerRow.tsx, src/client/app/McpServersSection.test.tsx, src/client/app/McpServersSection.tsx, src/client/app/ModelsSection.test.tsx, src/client/app/ModelsSection.tsx, src/client/app/PendingSegmentedControl.tsx, src/client/app/SettingsPage.tsx, src/client/app/SubagentFormRow.tsx, src/client/app/SubagentScopeFields.tsx, src/client/app/SubagentsSection.test.tsx, src/client/app/SubagentsSection.tsx, src/client/app/TextSnippetsSection.test.tsx, src/client/app/TextSnippetsSection.tsx, src/client/app/appSettingsCrud.ts, src/client/app/llmProviderDraft.ts, src/client/app/settingsEditorForm.ts, src/client/components/settings/SettingsList.tsx, src/client/stores/beaconsStore.test.ts, src/client/stores/beaconsStore.ts
 
 ## c3-117 — local-projects-page (component)
 container: c3-1 | context: c3-0
@@ -106,7 +106,7 @@ files: src/server/cli-bootstrap.adapter.ts, src/server/cli-runtime.test.ts, src/
 ## c3-202 — http-ws-server (component)
 container: c3-2 | context: c3-0
 refs: ref-local-first-data, ref-ws-subscription
-files: src/server/app-settings.ts, src/server/http-api-routes.ts, src/server/http-dispatcher.ts, src/server/http-static.ts, src/server/server.ts
+files: src/server/app-settings.ts, src/server/beacon-connection.test.ts, src/server/beacon-connection.ts, src/server/beacon-crypto.test.ts, src/server/beacon-crypto.ts, src/server/beacon-pairing-host.ts, src/server/beacon-pairing.test.ts, src/server/beacon-pairing.ts, src/server/beacon-registry.test.ts, src/server/beacon-registry.ts, src/server/beacon-services.ts, src/server/beacon-settings.test.ts, src/server/beacon-settings.ts, src/server/http-api-routes.ts, src/server/http-dispatcher.ts, src/server/http-static.ts, src/server/server.ts
 
 ## c3-203 — auth (component)
 container: c3-2 | context: c3-0
@@ -222,7 +222,7 @@ files: src/server/oauth-pool/**/*.ts
 ## c3-226 — kanna-mcp-host (component)
 container: c3-2 | context: c3-0
 refs: ref-local-first-data, ref-strong-typing, ref-tool-hydration, rule-colocated-bun-test, rule-strong-typing
-files: src/server/mcp-oauth.adapter.ts, src/server/mcp-validator.ts
+files: src/server/kanna-mcp-beacon.test.ts, src/server/kanna-mcp-beacon.ts, src/server/kanna-mcp.test.ts, src/server/kanna-mcp.ts, src/server/mcp-oauth.adapter.ts, src/server/mcp-validator.ts, src/server/permission-gate.test.ts, src/server/permission-gate.ts, src/server/tool-callback.test.ts, src/server/tool-callback.ts
 
 ## c3-227 — auto-continue (component)
 container: c3-2 | context: c3-0
@@ -294,6 +294,11 @@ container: c3-2 | context: c3-0
 refs: ref-side-effect-adapter, rule-colocated-bun-test
 files: src/server/genui/*.ts, src/server/turn-end-guard.ts, src/server/ws-router-genui.ts
 
+## c3-241 — beacon-daemon (component)
+container: c3-2 | context: c3-0
+refs: ref-side-effect-adapter
+files: src/beacon/entry.adapter.ts, src/beacon/fs.adapter.test.ts, src/beacon/fs.adapter.ts, src/beacon/key-store.adapter.test.ts, src/beacon/key-store.adapter.ts, src/beacon/main.test.ts, src/beacon/main.ts, src/beacon/pair-client.adapter.ts, src/beacon/ports.ts, src/beacon/session.test.ts, src/beacon/session.ts, src/beacon/shell.adapter.test.ts, src/beacon/shell.adapter.ts, src/beacon/state-store.adapter.ts, src/beacon/transport.adapter.ts
+
 ## c3-3 — Shared (container)
 context: c3-0
 
@@ -305,7 +310,7 @@ files: src/shared/analytics.ts, src/shared/dynamic-module.ts, src/shared/json.te
 ## c3-302 — protocol (component)
 container: c3-3 | context: c3-0
 refs: ref-strong-typing, ref-ws-subscription, rule-strong-typing
-files: src/shared/chat-ops.test.ts, src/shared/chat-ops.ts, src/shared/protocol.ts
+files: src/shared/beacon-config.ts, src/shared/beacon-protocol.test.ts, src/shared/beacon-protocol.ts, src/shared/beacon-scope.test.ts, src/shared/beacon-scope.ts, src/shared/beacon-status.test.ts, src/shared/beacon-status.ts, src/shared/beacon-tool-request.ts, src/shared/beacon-tools.ts, src/shared/chat-ops.test.ts, src/shared/chat-ops.ts, src/shared/protocol.ts
 
 ## c3-303 — tools (component)
 container: c3-3 | context: c3-0
@@ -383,8 +388,8 @@ reverse deps: c3-113, c3-115, c3-210, c3-211, c3-212, c3-213, c3-229
 citers: c3-113, c3-115, c3-210, c3-211, c3-212, c3-213, c3-229
 
 ## ref-side-effect-adapter — side-effect-adapter (ref)
-reverse deps: c3-228, c3-229, c3-230, c3-231, c3-232, c3-236, c3-237, c3-238, c3-240, c3-312, c3-313
-citers: c3-228, c3-229, c3-230, c3-231, c3-232, c3-236, c3-237, c3-238, c3-240, c3-312, c3-313
+reverse deps: c3-228, c3-229, c3-230, c3-231, c3-232, c3-236, c3-237, c3-238, c3-240, c3-241, c3-312, c3-313
+citers: c3-228, c3-229, c3-230, c3-231, c3-232, c3-236, c3-237, c3-238, c3-240, c3-241, c3-312, c3-313
 
 ## ref-strong-typing — Strong Typing Policy (ref)
 reverse deps: c3-101, c3-102, c3-103, c3-104, c3-114, c3-119, c3-121, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-226, c3-227, c3-228, c3-229, c3-230, c3-232, c3-236, c3-238, c3-239, c3-301, c3-302, c3-303, c3-304, c3-306, c3-307, c3-310, c3-312, c3-313
@@ -488,6 +493,8 @@ src/client/components/lexical/nodes/** → c3-115
 src/client/components/lexical/plugins/** → c3-115
 src/client/components/lexical/serialize/** → c3-115
 src/client/components/open-external-menu.tsx → c3-115
+src/client/app/BeaconsSection.test.tsx → c3-116
+src/client/app/BeaconsSection.tsx → c3-116
 src/client/app/McpServerRow.tsx → c3-116
 src/client/app/McpServersSection.test.tsx → c3-116
 src/client/app/McpServersSection.tsx → c3-116
@@ -495,6 +502,8 @@ src/client/app/ModelsSection.test.tsx → c3-116
 src/client/app/ModelsSection.tsx → c3-116
 src/client/app/PendingSegmentedControl.tsx → c3-116
 src/client/app/SettingsPage.tsx → c3-116
+src/client/app/SubagentFormRow.tsx → c3-116
+src/client/app/SubagentScopeFields.tsx → c3-116
 src/client/app/SubagentsSection.test.tsx → c3-116
 src/client/app/SubagentsSection.tsx → c3-116
 src/client/app/TextSnippetsSection.test.tsx → c3-116
@@ -503,6 +512,8 @@ src/client/app/appSettingsCrud.ts → c3-116
 src/client/app/llmProviderDraft.ts → c3-116
 src/client/app/settingsEditorForm.ts → c3-116
 src/client/components/settings/SettingsList.tsx → c3-116
+src/client/stores/beaconsStore.test.ts → c3-116
+src/client/stores/beaconsStore.ts → c3-116
 src/client/app/LocalProjectsPage.tsx → c3-117
 src/client/components/NewProjectModal.tsx → c3-117
 src/client/app/ChatPage/TerminalWorkspaceShell.tsx → c3-118
@@ -556,6 +567,18 @@ src/server/cli-runtime.ts → c3-201
 src/server/cli-supervisor.adapter.ts → c3-201
 src/server/cli.ts → c3-201
 src/server/app-settings.ts → c3-202
+src/server/beacon-connection.test.ts → c3-202
+src/server/beacon-connection.ts → c3-202
+src/server/beacon-crypto.test.ts → c3-202
+src/server/beacon-crypto.ts → c3-202
+src/server/beacon-pairing-host.ts → c3-202
+src/server/beacon-pairing.test.ts → c3-202
+src/server/beacon-pairing.ts → c3-202
+src/server/beacon-registry.test.ts → c3-202
+src/server/beacon-registry.ts → c3-202
+src/server/beacon-services.ts → c3-202
+src/server/beacon-settings.test.ts → c3-202
+src/server/beacon-settings.ts → c3-202
 src/server/http-api-routes.ts → c3-202
 src/server/http-dispatcher.ts → c3-202
 src/server/http-static.ts → c3-202
@@ -675,8 +698,16 @@ src/server/keybindings.test.ts → c3-222
 src/server/keybindings.ts → c3-222
 src/server/cloudflare-tunnel/**/*.ts → c3-223
 src/server/oauth-pool/**/*.ts → c3-224
+src/server/kanna-mcp-beacon.test.ts → c3-226
+src/server/kanna-mcp-beacon.ts → c3-226
+src/server/kanna-mcp.test.ts → c3-226
+src/server/kanna-mcp.ts → c3-226
 src/server/mcp-oauth.adapter.ts → c3-226
 src/server/mcp-validator.ts → c3-226
+src/server/permission-gate.test.ts → c3-226
+src/server/permission-gate.ts → c3-226
+src/server/tool-callback.test.ts → c3-226
+src/server/tool-callback.ts → c3-226
 src/server/auto-continue/**/*.ts → c3-227
 src/server/session-share/**/*.ts → c3-228
 src/client/app/WorkflowAgentTranscriptPanel.store.ts → c3-229
@@ -768,6 +799,21 @@ src/server/ws-router.stack.test.ts → c3-239
 src/server/genui/*.ts → c3-240
 src/server/turn-end-guard.ts → c3-240
 src/server/ws-router-genui.ts → c3-240
+src/beacon/entry.adapter.ts → c3-241
+src/beacon/fs.adapter.test.ts → c3-241
+src/beacon/fs.adapter.ts → c3-241
+src/beacon/key-store.adapter.test.ts → c3-241
+src/beacon/key-store.adapter.ts → c3-241
+src/beacon/main.test.ts → c3-241
+src/beacon/main.ts → c3-241
+src/beacon/pair-client.adapter.ts → c3-241
+src/beacon/ports.ts → c3-241
+src/beacon/session.test.ts → c3-241
+src/beacon/session.ts → c3-241
+src/beacon/shell.adapter.test.ts → c3-241
+src/beacon/shell.adapter.ts → c3-241
+src/beacon/state-store.adapter.ts → c3-241
+src/beacon/transport.adapter.ts → c3-241
 src/shared/analytics.ts → c3-301
 src/shared/dynamic-module.ts → c3-301
 src/shared/json.test.ts → c3-301
@@ -788,6 +834,15 @@ src/shared/task-doc.ts → c3-301
 src/shared/turn-model-selection.ts → c3-301
 src/shared/types.test.ts → c3-301
 src/shared/types.ts → c3-301
+src/shared/beacon-config.ts → c3-302
+src/shared/beacon-protocol.test.ts → c3-302
+src/shared/beacon-protocol.ts → c3-302
+src/shared/beacon-scope.test.ts → c3-302
+src/shared/beacon-scope.ts → c3-302
+src/shared/beacon-status.test.ts → c3-302
+src/shared/beacon-status.ts → c3-302
+src/shared/beacon-tool-request.ts → c3-302
+src/shared/beacon-tools.ts → c3-302
 src/shared/chat-ops.test.ts → c3-302
 src/shared/chat-ops.ts → c3-302
 src/shared/protocol.ts → c3-302

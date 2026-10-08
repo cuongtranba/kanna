@@ -17,6 +17,9 @@ import { createTusUploads } from "./tus-uploads.adapter"
 import { handlePluginRequest } from "./plugin-http-routes"
 import { configurePluginService, getPluginService } from "./plugins/plugin-service-host"
 import { createInstalledPluginStore } from "./plugins/installed-plugin-store"
+import { getBeaconPairingStore } from "./beacon-pairing-host"
+import { isJsonObject, type JsonObject, type JsonValue } from "../shared/json"
+import type { BeaconInput } from "../shared/beacon-config"
 
 const BYTES_PER_MB = 1024 * 1024
 const TUS_UPLOAD_ROUTE = /^\/api\/projects\/([^/]+)\/uploads\/tus(\/(?!content$)[^/]+)?$/
@@ -44,6 +47,46 @@ function deriveOriginFromUpgrade(req: Request, url: URL): string {
     forwardedProto ??
     (url.protocol === "wss:" || url.protocol === "https:" ? "https" : "http")
   return `${scheme}://${host}`
+}
+
+function readNonEmptyString(body: JsonObject, key: string): string | null {
+  const value = body[key]
+  return typeof value === "string" && value.trim().length > 0 ? value : null
+}
+
+function readBeaconOs(body: JsonObject): BeaconInput["os"] | null {
+  const value = body.os
+  return value === "darwin" || value === "linux" || value === "windows" ? value : null
+}
+
+function isBase64(value: string): boolean {
+  return /^[A-Za-z0-9+/_-]+={0,2}$/.test(value)
+}
+
+function parsePairRequest(body: JsonValue): { code: string; input: BeaconInput } | null {
+  if (!isJsonObject(body)) return null
+  const code = readNonEmptyString(body, "code")
+  const publicKey = readNonEmptyString(body, "publicKey")
+  const label = readNonEmptyString(body, "label")
+  const os = readBeaconOs(body)
+  if (code === null || publicKey === null || label === null || os === null || !isBase64(publicKey)) return null
+  return { code, input: { label, publicKey, os } }
+}
+
+async function handleBeaconPair(req: Request, appSettings: AppSettingsManager): Promise<Response> {
+  if (req.method !== "POST") return new Response(null, { status: 405, headers: { Allow: "POST" } })
+  let body: JsonValue
+  try {
+    body = await req.json()
+  } catch {
+    return Response.json({ ok: false, error: "invalid json" }, { status: 400 })
+  }
+  const parsed = parsePairRequest(body)
+  if (!parsed) return Response.json({ ok: false, error: "invalid request" }, { status: 400 })
+  const redeemed = getBeaconPairingStore().redeem(parsed.code)
+  if (!redeemed.ok) return Response.json({ ok: false, error: redeemed.reason }, { status: 400 })
+  const created = await appSettings.createBeaconFromPairing(parsed.input)
+  return Response.json({ ok: true, beaconId: created.id })
 }
 
 export function createHttpDispatcher(
@@ -91,6 +134,24 @@ export function createHttpDispatcher(
       } else if (url.pathname.startsWith("/api/") && !auth.isAuthenticated(req)) {
         return Response.json({ error: "Unauthorized" }, { status: 401 })
       }
+    }
+
+    if (url.pathname === "/beacon/pair") {
+      if (!auth) return new Response("Beacons require a password", { status: 403 })
+      return handleBeaconPair(req, appSettings)
+    }
+
+    if (url.pathname === "/beacon") {
+      if (!auth) return new Response("Beacons require a password", { status: 403 })
+      const upgraded = server.upgrade(req, {
+        data: {
+          subscriptions: new Map(),
+          snapshotSignatures: new Map(),
+          kind: "beacon",
+          originHost: deriveOriginFromUpgrade(req, url),
+        },
+      })
+      return upgraded ? undefined : new Response("WebSocket upgrade failed", { status: 400 })
     }
 
     if (url.pathname === "/ws") {
