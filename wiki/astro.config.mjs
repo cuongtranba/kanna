@@ -7,7 +7,7 @@ export default defineConfig({
   integrations: [
     starlight({
       title: 'Kanna',
-      description: 'A beautiful web UI for the Claude Code & Codex CLIs',
+      description: 'A web UI for the Claude Code and Codex agents, built for long sessions across many projects',
       logo: {
         src: './src/assets/logo.svg',
         replacesTitle: false,
@@ -27,6 +27,7 @@ export default defineConfig({
           items: [
             { label: 'Install', slug: 'getting-started/install' },
             { label: 'First Chat', slug: 'getting-started/first-chat' },
+            { label: 'How Kanna Works', slug: 'getting-started/how-it-works' },
             { label: 'OAuth Pool Setup', slug: 'getting-started/oauth-pool-setup' },
           ],
         },
@@ -42,6 +43,7 @@ export default defineConfig({
             { label: 'Slash Commands', slug: 'features/slash-commands' },
             { label: 'Cron Jobs', slug: 'features/cron-jobs' },
             { label: 'Loops', slug: 'features/loops' },
+            { label: 'Kanna Plugins', slug: 'features/plugins' },
             { label: 'Package Auto-Update', slug: 'features/package-auto-update' },
             { label: 'Advanced', slug: 'features/advanced' },
             { label: 'Security', slug: 'features/security-sandboxing' },

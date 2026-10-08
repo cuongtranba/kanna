@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>How Kanna fits together</title>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,800&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1415;
+      color: #faf8f8;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 2rem;
+    }
+    .frame { max-width: 1320px; width: 100%; }
+    .diagram-container { width: 100%; overflow-x: auto; }
+    .eyebrow {
+      font-family: 'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: #aca2a2;
+      margin-bottom: 0.5rem;
+    }
+    h1 {
+      font-family: 'Bricolage Grotesque', 'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem);
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      color: #faf8f8;
+      margin-bottom: 1.5rem;
+    }
+    svg { width: 100%; min-width: 1280px; display: block; }
+    @media print {
+      .diagram-container { overflow-x: visible; }
+      svg { min-width: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Architecture · Kanna</p>
+    <h1>How Kanna fits together</h1>
+    <div class="diagram-container">
+      <svg viewBox="0 0 1280 536" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="kanna-architecture-dark-title kanna-architecture-dark-desc">
+        <title id="kanna-architecture-dark-title">How Kanna fits together</title>
+        <desc id="kanna-architecture-dark-desc">Architecture diagram: the Kanna web app talks to a Bun server over WebSocket; its agent coordinator records every event, runs turns on the Claude Agent SDK or the Codex app-server, and those agents edit your project worktree and call your MCP servers and Kanna's own tools.</desc>
+        <defs><marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#aca2a2"/></marker><marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#ff637e"/></marker><marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#4cb0e5"/></marker><marker id="arrow-soft" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#867e7e"/></marker></defs>
+        <rect width="100%" height="100%" rx="8" fill="#1a1415"/>
+<rect x="272" y="168" width="416" height="280" rx="8" fill="rgba(250,248,248,0.02)" stroke="rgba(250,248,248,0.12)" stroke-width="0.8"/><rect x="284" y="172" width="108" height="12" rx="2" fill="#1a1415"/><text x="338.0" y="181" fill="#867e7e" font-size="7" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.14em">KANNA SERVER · BUN</text>
+<rect x="712" y="120" width="216" height="248" rx="8" fill="rgba(250,248,248,0.02)" stroke="rgba(250,248,248,0.12)" stroke-width="0.8"/><rect x="724" y="124" width="88" height="12" rx="2" fill="#1a1415"/><text x="768.0" y="133" fill="#867e7e" font-size="7" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.14em">AGENT RUNTIMES</text>
+<path d="M192,220 H296" fill="none" stroke="#4cb0e5" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+<path d="M296,244 H192" fill="none" stroke="#aca2a2" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+<path d="M384,264 V360" fill="none" stroke="#aca2a2" stroke-width="1.2" marker-end="url(#arrow)"/>
+<path d="M472,220 H584 Q592,220 592,212 V192 Q592,184 600,184 H736" fill="none" stroke="#aca2a2" stroke-width="1.2" marker-end="url(#arrow)"/>
+<path d="M472,244 H608 Q616,244 616,252 V304 Q616,312 624,312 H736" fill="none" stroke="#aca2a2" stroke-width="1.2" marker-end="url(#arrow)"/>
+<path d="M736,204 H648 Q640,204 640,212 V304 a8,8 0 0,0 0,16 V360" fill="none" stroke="#aca2a2" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+<path d="M912,172 H968 Q976,172 976,164 V144 Q976,136 984,136 H1040" fill="none" stroke="#aca2a2" stroke-width="1.2" marker-end="url(#arrow)"/>
+<path d="M912,196 H992 Q1000,196 1000,204 V260 Q1000,268 1008,268 H1040" fill="none" stroke="#aca2a2" stroke-width="1.2" marker-end="url(#arrow)"/>
+<path d="M912,312 H1008 Q1016,312 1016,304 V300 Q1016,292 1024,292 H1040" fill="none" stroke="#aca2a2" stroke-width="1.2" marker-end="url(#arrow)"/>
+<rect x="206.0" y="200" width="52" height="12" rx="2" fill="#1a1415"/><text x="232" y="209" fill="#4cb0e5" font-size="8" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.06em">COMMANDS</text>
+<rect x="200.0" y="250" width="64" height="12" rx="2" fill="#1a1415"/><text x="232" y="259" fill="#aca2a2" font-size="8" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.06em">LIVE STATE</text>
+<rect x="390.0" y="306" width="44" height="12" rx="2" fill="#1a1415"/><text x="412" y="315" fill="#aca2a2" font-size="8" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.06em">APPEND</text>
+<rect x="652.0" y="164" width="32" height="12" rx="2" fill="#1a1415"/><text x="668" y="173" fill="#aca2a2" font-size="8" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.06em">TURN</text>
+<rect x="572.0" y="336" width="60" height="12" rx="2" fill="#1a1415"/><text x="602" y="345" fill="#aca2a2" font-size="8" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.06em">KANNA MCP</text>
+<rect x="956.0" y="224" width="36" height="12" rx="2" fill="#1a1415"/><text x="974" y="233" fill="#aca2a2" font-size="8" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.06em">TOOLS</text>
+<rect x="998.0" y="116" width="28" height="12" rx="2" fill="#1a1415"/><text x="1012" y="125" fill="#aca2a2" font-size="8" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.06em">MCP</text>
+<rect x="40" y="200" width="152" height="64" rx="6" fill="#1a1415"/><rect x="40" y="200" width="152" height="64" rx="6" fill="rgba(172,162,162,0.1)" stroke="#867e7e" stroke-width="1"/><rect x="48" y="208" width="20" height="12" rx="2" fill="none" stroke="rgba(172,162,162,0.4)" stroke-width="0.8"/><text x="58.0" y="217" fill="#867e7e" font-size="7" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.08em">UI</text><text x="116.0" y="238" fill="#faf8f8" font-size="12" font-weight="600" font-family="'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="middle">Kanna web app</text><text x="116.0" y="254" fill="#aca2a2" font-size="9" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle">browser · PWA</text>
+<rect x="296" y="200" width="176" height="64" rx="6" fill="#1a1415"/><rect x="296" y="200" width="176" height="64" rx="6" fill="rgba(255,99,126,0.12)" stroke="#ff637e" stroke-width="1"/><rect x="304" y="208" width="32" height="12" rx="2" fill="none" stroke="rgba(255,99,126,0.5)" stroke-width="0.8"/><text x="320.0" y="217" fill="#ff8096" font-size="7" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.08em">CORE</text><text x="384.0" y="238" fill="#faf8f8" font-size="12" font-weight="600" font-family="'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="middle">Agent coordinator</text><text x="384.0" y="254" fill="#aca2a2" font-size="9" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle">turns · queue · approvals</text>
+<rect x="296" y="360" width="176" height="64" rx="6" fill="#1a1415"/><rect x="296" y="360" width="176" height="64" rx="6" fill="rgba(250,248,248,0.05)" stroke="#aca2a2" stroke-width="1"/><rect x="304" y="368" width="28" height="12" rx="2" fill="none" stroke="rgba(172,162,162,0.5)" stroke-width="0.8"/><text x="318.0" y="377" fill="#aca2a2" font-size="7" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.08em">LOG</text><text x="384.0" y="398" fill="#faf8f8" font-size="12" font-weight="600" font-family="'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="middle">Event store</text><text x="384.0" y="414" fill="#aca2a2" font-size="9" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle">~/.kanna/data · JSONL</text>
+<rect x="504" y="360" width="160" height="64" rx="6" fill="#1a1415"/><rect x="504" y="360" width="160" height="64" rx="6" fill="#211b1c" stroke="#faf8f8" stroke-width="1"/><rect x="512" y="368" width="28" height="12" rx="2" fill="none" stroke="rgba(250,248,248,0.4)" stroke-width="0.8"/><text x="526.0" y="377" fill="#faf8f8" font-size="7" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.08em">MCP</text><text x="584.0" y="398" fill="#faf8f8" font-size="12" font-weight="600" font-family="'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="middle">Kanna tools</text><text x="584.0" y="414" fill="#aca2a2" font-size="9" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle">subagents · cron · tasks</text>
+<rect x="736" y="152" width="176" height="64" rx="6" fill="#1a1415"/><rect x="736" y="152" width="176" height="64" rx="6" fill="rgba(250,248,248,0.03)" stroke="rgba(250,248,248,0.3)" stroke-width="1"/><rect x="744" y="160" width="28" height="12" rx="2" fill="none" stroke="rgba(250,248,248,0.22)" stroke-width="0.8"/><text x="758.0" y="169" fill="#867e7e" font-size="7" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.08em">SDK</text><text x="824.0" y="190" fill="#faf8f8" font-size="12" font-weight="600" font-family="'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="middle">Claude Agent SDK</text><text x="824.0" y="206" fill="#aca2a2" font-size="9" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle">Claude · OpenRouter</text>
+<rect x="736" y="280" width="176" height="64" rx="6" fill="#1a1415"/><rect x="736" y="280" width="176" height="64" rx="6" fill="rgba(250,248,248,0.03)" stroke="rgba(250,248,248,0.3)" stroke-width="1"/><rect x="744" y="288" width="28" height="12" rx="2" fill="none" stroke="rgba(250,248,248,0.22)" stroke-width="0.8"/><text x="758.0" y="297" fill="#867e7e" font-size="7" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.08em">RPC</text><text x="824.0" y="318" fill="#faf8f8" font-size="12" font-weight="600" font-family="'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="middle">Codex app-server</text><text x="824.0" y="334" fill="#aca2a2" font-size="9" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle">JSON-RPC</text>
+<rect x="1040" y="104" width="200" height="64" rx="6" fill="#1a1415"/><rect x="1040" y="104" width="200" height="64" rx="6" fill="rgba(250,248,248,0.03)" stroke="rgba(250,248,248,0.3)" stroke-width="1"/><rect x="1048" y="112" width="28" height="12" rx="2" fill="none" stroke="rgba(250,248,248,0.22)" stroke-width="0.8"/><text x="1062.0" y="121" fill="#867e7e" font-size="7" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.08em">EXT</text><text x="1140.0" y="142" fill="#faf8f8" font-size="12" font-weight="600" font-family="'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="middle">Your MCP servers</text><text x="1140.0" y="158" fill="#aca2a2" font-size="9" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle">stdio · http · sse · ws</text>
+<rect x="1040" y="248" width="200" height="64" rx="6" fill="#1a1415"/><rect x="1040" y="248" width="200" height="64" rx="6" fill="rgba(250,248,248,0.05)" stroke="#aca2a2" stroke-width="1"/><rect x="1048" y="256" width="28" height="12" rx="2" fill="none" stroke="rgba(172,162,162,0.5)" stroke-width="0.8"/><text x="1062.0" y="265" fill="#aca2a2" font-size="7" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.08em">GIT</text><text x="1140.0" y="286" fill="#faf8f8" font-size="12" font-weight="600" font-family="'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="middle">Project worktree</text><text x="1140.0" y="302" fill="#aca2a2" font-size="9" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle">one branch per chat</text>
+<line x1="40" y1="472" x2="1240" y2="472" stroke="rgba(250,248,248,0.1)" stroke-width="0.8"/><text x="40" y="488" fill="#aca2a2" font-size="8" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" letter-spacing="0.18em">LEGEND</text><rect x="40" y="504" width="14" height="10" rx="2" fill="rgba(255,99,126,0.12)" stroke="#ff637e" stroke-width="1"/><text x="60" y="512" fill="#aca2a2" font-size="8.5" font-family="'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">Focal</text><rect x="112" y="504" width="14" height="10" rx="2" fill="#211b1c" stroke="#faf8f8" stroke-width="1"/><text x="132" y="512" fill="#aca2a2" font-size="8.5" font-family="'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">Kanna service</text><rect x="224" y="504" width="14" height="10" rx="2" fill="rgba(250,248,248,0.05)" stroke="#aca2a2" stroke-width="1"/><text x="244" y="512" fill="#aca2a2" font-size="8.5" font-family="'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">Data</text><rect x="292" y="504" width="14" height="10" rx="2" fill="rgba(250,248,248,0.03)" stroke="rgba(250,248,248,0.3)" stroke-width="1"/><text x="312" y="512" fill="#aca2a2" font-size="8.5" font-family="'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">External runtime</text><rect x="420" y="504" width="14" height="10" rx="2" fill="rgba(172,162,162,0.1)" stroke="#867e7e" stroke-width="1"/><text x="440" y="512" fill="#aca2a2" font-size="8.5" font-family="'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">You</text><line x1="484" y1="509" x2="512" y2="509" stroke="#4cb0e5" stroke-width="1.2" marker-end="url(#arrow-link)"/><text x="520" y="512" fill="#aca2a2" font-size="8.5" font-family="'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">WebSocket</text><line x1="592" y1="509" x2="620" y2="509" stroke="#aca2a2" stroke-width="1.2" marker-end="url(#arrow)"/><text x="628" y="512" fill="#aca2a2" font-size="8.5" font-family="'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">Call</text><line x1="676" y1="509" x2="704" y2="509" stroke="#aca2a2" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arrow)"/><text x="712" y="512" fill="#aca2a2" font-size="8.5" font-family="'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">Return / tool call</text>
+      </svg>
+    </div>
+  </div>
+</body>
+</html>

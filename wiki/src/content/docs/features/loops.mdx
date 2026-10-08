@@ -1,0 +1,156 @@
+---
+title: Loops
+description: Point an agent at a goal and a verify command and let it work through a durable task list until the check passes, with gates that stop it declaring victory early.
+---
+
+import Diagram from '../../../components/Diagram.astro'
+
+A **loop** runs an agent repeatedly until a goal is actually met. It is for the
+long grind: an eslint burn-down, a migration sweep, a codemod across hundreds of
+files. That is work too big for one turn and too mechanical to babysit.
+
+## Loops versus cron
+
+Both repeat. They stop for different reasons, and that is the whole distinction:
+
+|  | Cron | Loop |
+| --- | --- | --- |
+| Fires on | the **clock** | the previous iteration **finishing** |
+| Stops when | you stop it | its **goal is met** |
+| Knows if it worked | no | yes, a verify command says so |
+| Good for | polling, reports, periodic checks | finishing a body of work |
+
+A [cron job](/features/cron-jobs/) has no goal and no oracle. A loop is nothing
+but a goal and an oracle.
+
+## Arming one
+
+Ask, in plain words:
+
+> Set up a loop. Goal: `eslint --max-warnings=0` passes. Verify with
+> `bun run lint`.
+
+The agent calls `setup_loop` with the goal and the verify command. It can also
+seed the plan: either a list of tasks written in advance, or a hint for the
+first task. With neither, the loop writes its first task itself.
+
+## How an iteration runs
+
+<Diagram
+  name="kanna-loop"
+  alt="Loop diagram: each iteration wakes with a fresh context, reads the chat task list, runs the verify oracle and stops when it passes, otherwise picks a task, delegates it to a background worker, and the worker settles the task, which wakes the next iteration."
+/>
+
+The main agent is an **orchestrator**. Each iteration it:
+
+1. wakes with a **fresh context** (Kanna clears it on purpose),
+2. reads the plan with `task_list`,
+3. runs the verify command,
+4. picks the next pending task,
+5. hands it to a **background worker** subagent and ends its turn.
+
+The worker does the one task, records the outcome by setting the task's status,
+and finishes. Its completion is what wakes the next iteration. There is no
+timer: a loop that is waiting on a worker costs nothing.
+
+## The task list is the only durable state
+
+The plan lives in the chat's **task list**, an event-sourced record that
+survives `/clear`, compaction and a server restart. Nothing is carried in the
+orchestrator's head between iterations, so nothing is lost when its context is
+wiped.
+
+- A task's status is **set**, not appended. A finished task cannot pile up and be
+  done twice.
+- A dead end is recorded as a `failed_approach` note. Every wake carries the
+  current tasks, their counts and the recent failure notes, so the next worker
+  does not retry what the last one already burned an iteration on.
+- The same list backs the **Tasks** card in the chat footer, so you can read the
+  plan at any time.
+
+:::note[Older loops used a markdown file]
+Loops used to keep their plan in a `PROGRESS.md` tracking file. Passing
+`tracking_file` to `setup_loop` still works: if the file exists, its tasks are
+imported into the task list once, and the file is never written again.
+:::
+
+## The verify command is the oracle
+
+**Exit 0 means done.** That is the entire contract, and it is worth choosing
+carefully: the loop cannot be more rigorous than the command you gave it. The
+agent runs it through `run_verify`, which caches the result against the state of
+the working tree, so an unchanged tree is never checked twice.
+
+`setup_loop` refuses to arm rather than starting something that cannot work:
+
+- The verify command **already exits 0**. Either the goal is met or the oracle
+  is too weak; starting would declare victory having done nothing.
+- The chat still has **unfinished tasks from an earlier plan**. Arming over them
+  would mix two plans; the error lists them.
+- The worker subagent is **manual-trigger**, so a loop cannot delegate to it.
+- `workdir` is not the project checkout or a worktree of the same repository.
+- `parallelism` is outside 1 to 3.
+
+The first two can be overridden with `force`, if you know why.
+
+## It will not declare victory early
+
+A green oracle is not the same as finished work. A loop once declared success at
+stage 4 of a 12-stage plan because its verify command flipped green early. So
+the decision reads **two** signals, not one:
+
+| Verify | Task list | What happens |
+| --- | --- | --- |
+| passes | nothing pending | Final check, then **goal met**; the loop stops |
+| passes | still has work | **Oracle too weak**; stops and hands back to you |
+| fails | a task is pending | Delegate it (the normal case) |
+| fails | nothing pending | Write the next task, then delegate |
+
+The second row is the interesting one: it **stops rather than continuing**. The
+loop cannot tell a stale plan from a weak oracle, and only a person can tighten
+the definition of done.
+
+Before declaring the goal met, the orchestrator lists **every** task with no
+status filter and confirms each one is completed. A worker about to complete
+the last task runs the same check.
+
+## Parallel loops
+
+With `parallelism` above 1, up to three workers run at once. Each task can
+declare which tasks it **needs** first and which **git worktree** it works in,
+so workers never edit the same checkout:
+
+- A task is claimable only when everything it needs is completed and its
+  worktree is not held by a live worker. That one rule is the whole scheduler.
+- A claim belongs to a **worker run**, not a timer. If a worker dies, its task
+  goes back to the queue the next time the orchestrator claims.
+- Finished branches are merged into the loop's working tree by `task_integrate`
+  before the next claim, so a worker sees the work its task depends on.
+
+## Watching it
+
+The chat footer's **Progress** card lists the whole plan, one row per task,
+marked done, running, pending, blocked or failed, with a "Loop running" pill
+while it is armed. If the loop hits a rate limit the card shows when it resumes,
+plus a **Resume now** button.
+
+The card outlives a disarm, so a stopped loop still shows what it got through.
+
+## Stopping and resuming
+
+- **Just type.** Sending a message disarms the loop; you are taking over.
+- **Ask it to stop.** The agent calls `stop_loop`.
+- **Ask it to resume.** `resume_loop` re-arms the loop it last ran, from the
+  same spec, with no arguments needed.
+
+While a loop is armed the orchestrator's own editing tools are blocked. It
+plans and delegates; the edits happen in the worker that owns each task.
+
+## Costs and caveats
+
+- A loop's per-iteration cost is a **subagent run**, not a chat turn. A loop
+  that looks idle in turn-level token metrics shows up in the subagent ones.
+- Loops are unattended by design. Give one a checkout it may break, such as a
+  [board card's worktree](/features/boards/), rather than your only copy.
+- The goal is only as good as the verify command. `bun run lint` is an oracle;
+  "the code is better" is not.

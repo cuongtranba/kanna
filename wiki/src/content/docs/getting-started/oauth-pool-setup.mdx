@@ -47,7 +47,9 @@ stopping you.
 
 ## Where tokens are stored
 
-In `~/.kanna/data/settings.json`, mode `0600`, alongside the rest of your
-settings. Treat that file as a secret in any backup. See
+In `~/.kanna/data/settings.json`, alongside the rest of your settings. The file
+is written with your default file mode, not `0600`, and is replaced on every
+save, so protect the directory instead (`chmod 700 ~/.kanna/data`) on a shared
+machine, and treat the file as a secret in any backup. See
 [OAuth Pool Admin](/guides/ops/oauth-pool-admin/) for the on-disk shape, the
 status values, and what to do when a token stops being picked.

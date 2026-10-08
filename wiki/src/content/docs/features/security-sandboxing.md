@@ -55,7 +55,8 @@ If you need stronger isolation than your own user account:
 ## Credential storage
 
 Claude OAuth tokens, custom MCP server credentials and OAuth state all live in
-`~/.kanna/data/settings.json`, written mode `0600`. Kanna stores nothing outside
+`~/.kanna/data/settings.json`, written with your default file mode, not `0600`
+(on a shared machine, `chmod 700 ~/.kanna/data`). Kanna stores nothing outside
 `~/.kanna`, and sends credentials nowhere except the provider they belong to.
 
 Back that file up as a secret, or exclude it from backups entirely.

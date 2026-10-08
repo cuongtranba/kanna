@@ -1,13 +1,13 @@
 ---
 title: Advanced
-description: Custom MCP servers, workflow panel, agent chat re-entry, snippets, global instructions, token cost, self-update, expose_port, mermaid, transcript export, keybindings, password gate, PWA.
+description: Custom MCP servers, the LSP tool, workflow panel, agent chat re-entry, snippets, global instructions, token cost, self-update, expose_port, mermaid, transcript export, keybindings, password gate, PWA.
 ---
 
 import Screenshot from '../../../components/Screenshot.astro'
 
 ## Self-update
 
-One-click pull/rebuild/reload from the UI. Works under pm2, systemd, docker, or plain shell via a host-agnostic supervisor. Install any prior release straight from the changelog UI.
+One click installs the new version and restarts Kanna on it. Works under pm2, systemd, Docker, or a plain shell via a host-agnostic supervisor, and you can install any prior release straight from the changelog. See [Self-update](/guides/ops/self-update/) for the strategies and overrides.
 
 <Screenshot
   light="/screenshots/light/settings-general.png"
@@ -17,7 +17,7 @@ One-click pull/rebuild/reload from the UI. Works under pm2, systemd, docker, or 
 
 ## Expose port (Cloudflare tunnel)
 
-The agent can call `mcp__kanna__expose_port` to surface a localhost port via a Cloudflare quick tunnel. Always-ask or auto-expose modes, configurable per-project.
+The agent can call `mcp__kanna__expose_port` right after it starts a dev server, to surface that localhost port through a Cloudflare quick tunnel. Enable it under **Settings → Cloudflare Tunnel** (off by default) and pick a mode: **Always ask** shows a card in the chat that you accept, **Auto-expose** starts `cloudflared` immediately. Tunnels stop when the chat closes or the server restarts. Requires `cloudflared` on your `PATH`; see [Cloudflare tunnel](/guides/ops/cloudflare-tunnel/).
 
 <Screenshot
   light="/screenshots/light/settings-general.png"
@@ -27,12 +27,17 @@ The agent can call `mcp__kanna__expose_port` to surface a localhost port via a C
 
 ## Custom MCP servers
 
-Register your own MCP servers from **Settings → MCP servers**. Entries persist in `settings.json` (`customMcpServers`, file mode `0600`) and are merged in at chat spawn time, so their tools appear as `mcp__<name>__<tool>`.
+Register your own MCP servers from **Settings → MCP servers**. Entries persist in `settings.json` (`customMcpServers`) and are merged in at chat spawn time, so their tools appear as `mcp__<name>__<tool>`.
 
 - **Transports:** `stdio`, `http`, `sse`, `ws`. The name `kanna` is reserved.
-- **OAuth:** `http` and `sse` servers support OAuth 2.1 (PKCE + dynamic client registration + rotating refresh). Kanna has no redirect server, so after the provider redirects to `http://localhost:3334/callback?code=…` you copy that URL from the address bar and paste it back into Settings to complete the flow. Tokens refresh automatically before expiry.
+- **OAuth:** `http` and `sse` servers support OAuth 2.1 (PKCE + dynamic client registration + rotating refresh). Kanna has no redirect server, so after the provider redirects to `http://localhost:8765/callback?code=…` you copy that URL from the address bar and paste it back into Settings to complete the flow. Tokens refresh automatically before expiry.
 - **Connect-test:** creating or updating a server fires a list-tools probe; the row shows a status pill, and a manual **Test** button re-runs it.
 - **Trust model:** user MCP tool calls auto-allow — if you installed it, Kanna trusts it.
+- **Secrets:** `settings.json` is written with your default file mode, not `0600`. On a shared machine, restrict the directory with `chmod 700 ~/.kanna/data`.
+
+## The LSP tool
+
+Claude chats can call the `LSP` tool for go-to-definition, find-references and go-to-implementation. It is one tool for every language: the Claude CLI picks a language server from whichever `*-lsp` plugin you have installed. Adding a language means installing that plugin **and** putting its server on the `PATH` of the process that runs Kanna, for example `npm i -g typescript-language-server typescript` for `typescript-lsp`, or `go install golang.org/x/tools/gopls@latest` for `gopls-lsp`.
 
 ## Workflow status panel
 
@@ -52,7 +57,7 @@ The timer-based `mcp__kanna__schedule_wakeup` tool and its `KANNA_MAX_AGENT_WAKE
 
 ## Local skills & slash commands
 
-The composer's `/` picker lists local Claude Code skills and slash commands discovered on disk alongside Kanna's built-ins, so installed plugin skills are one keystroke away. `/clear`, `/compact` and `/cron` are Kanna's own — see [Slash commands](/features/slash-commands/).
+The composer's `/` picker lists local Claude Code skills and slash commands discovered on disk alongside Kanna's built-ins, so installed plugin skills are one keystroke away, on every provider including Codex. `/clear`, `/compact` and `/cron` are Kanna's own — see [Slash commands](/features/slash-commands/).
 
 ## Text snippets
 
@@ -73,10 +78,10 @@ Mermaid diagrams in agent output render inline in the transcript.
 ```mermaid
 graph LR
   User --> Kanna
-  Kanna --> ClaudeCLI[Claude CLI]
+  Kanna --> SDK[Claude Agent SDK]
   Kanna --> Codex
   Kanna --> OpenRouter
-  ClaudeCLI --> Anthropic
+  SDK --> Anthropic
   Codex --> OpenAI
 ```
 

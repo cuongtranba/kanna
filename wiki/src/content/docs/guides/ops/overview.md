@@ -11,6 +11,8 @@ Self-hosting choices:
 - [systemd](/guides/ops/systemd/) — long-running service on Linux
 - [docker](/guides/ops/docker/) — containerised deployment
 - [OAuth pool admin](/guides/ops/oauth-pool-admin/) — managing tokens at scale
+- [Cloudflare tunnel](/guides/ops/cloudflare-tunnel/) — share links, named tunnels, the macOS pm2 recipe, 403 on login
+- [Self-update](/guides/ops/self-update/) — how the Update button installs a new version
 
 Start with **Self-host basics**: port, password and the data directory are not
 configured the way most guides on the internet assume.

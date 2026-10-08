@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>How an autonomous loop iterates</title>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,800&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1415;
+      color: #faf8f8;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 2rem;
+    }
+    .frame { max-width: 1000px; width: 100%; }
+    .diagram-container { width: 100%; overflow-x: auto; }
+    .eyebrow {
+      font-family: 'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: #aca2a2;
+      margin-bottom: 0.5rem;
+    }
+    h1 {
+      font-family: 'Bricolage Grotesque', 'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem);
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      color: #faf8f8;
+      margin-bottom: 1.5rem;
+    }
+    svg { width: 100%; min-width: 960px; display: block; }
+    @media print {
+      .diagram-container { overflow-x: visible; }
+      svg { min-width: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Loop · Kanna</p>
+    <h1>How an autonomous loop iterates</h1>
+    <div class="diagram-container">
+      <svg viewBox="0 0 960 672" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="kanna-loop-dark-title kanna-loop-dark-desc">
+        <title id="kanna-loop-dark-title">How an autonomous loop iterates</title>
+        <desc id="kanna-loop-dark-desc">Loop diagram: each iteration wakes with a fresh context, reads the chat task list, runs the verify oracle and stops when it passes, otherwise picks a task, delegates it to a background worker, and the worker settles the task, which wakes the next iteration.</desc>
+        <defs><marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#aca2a2"/></marker><marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#ff637e"/></marker><marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#4cb0e5"/></marker><marker id="arrow-soft" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#867e7e"/></marker></defs>
+        <rect width="100%" height="100%" rx="8" fill="#1a1415"/>
+<path d="M568.000,97.501 A230,230 0 0 1 656.955,163.075" fill="none" stroke="#aca2a2" stroke-width="1.2" marker-end="url(#arrow)"/>
+<path d="M694.886,228.000 A230,230 0 0 1 695.311,390.878" fill="none" stroke="#aca2a2" stroke-width="1.2" marker-end="url(#arrow)"/>
+<path d="M657.719,456.000 A230,230 0 0 1 569.107,522.037" fill="none" stroke="#aca2a2" stroke-width="1.2" marker-end="url(#arrow)"/>
+<path d="M392.000,522.499 A230,230 0 0 1 303.045,456.925" fill="none" stroke="#aca2a2" stroke-width="1.2" marker-end="url(#arrow)"/>
+<path d="M265.114,392.000 A230,230 0 0 1 264.689,229.122" fill="none" stroke="#aca2a2" stroke-width="1.2" marker-end="url(#arrow)"/>
+<path d="M302.281,164.000 A230,230 0 0 1 390.893,97.963" fill="none" stroke="#aca2a2" stroke-width="1.2" marker-end="url(#arrow)"/>
+<path d="M480.000,508.000 L480.000,360.000" fill="none" stroke="#867e7e" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#arrow-soft)"/>
+<path d="M336.140,228.000 L397.594,263.029" fill="none" stroke="#867e7e" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#arrow-soft)"/>
+<rect x="434.0" y="428" width="36" height="12" rx="2" fill="#1a1415"/><text x="452" y="437" fill="#867e7e" font-size="8" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.06em">CLAIM</text>
+<rect x="377.0" y="240" width="44" height="12" rx="2" fill="#1a1415"/><text x="399" y="249" fill="#867e7e" font-size="8" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.06em">SETTLE</text>
+<rect x="392" y="48" width="176" height="64" rx="6" fill="#1a1415"/><rect x="392" y="48" width="176" height="64" rx="6" fill="#211b1c" stroke="#faf8f8" stroke-width="1"/><rect x="400" y="56" width="20" height="12" rx="2" fill="none" stroke="rgba(250,248,248,0.4)" stroke-width="0.8"/><text x="410.0" y="65" fill="#faf8f8" font-size="7" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.08em">01</text><text x="480.0" y="86" fill="#faf8f8" font-size="12" font-weight="600" font-family="'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="middle">Wake</text><text x="480.0" y="102" fill="#aca2a2" font-size="9" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle">fresh context</text>
+<rect x="592" y="164" width="176" height="64" rx="6" fill="#1a1415"/><rect x="592" y="164" width="176" height="64" rx="6" fill="#211b1c" stroke="#faf8f8" stroke-width="1"/><rect x="600" y="172" width="20" height="12" rx="2" fill="none" stroke="rgba(250,248,248,0.4)" stroke-width="0.8"/><text x="610.0" y="181" fill="#faf8f8" font-size="7" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.08em">02</text><text x="680.0" y="202" fill="#faf8f8" font-size="12" font-weight="600" font-family="'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="middle">Read the plan</text><text x="680.0" y="218" fill="#aca2a2" font-size="9" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle">task_list</text>
+<rect x="592" y="392" width="176" height="64" rx="6" fill="#1a1415"/><rect x="592" y="392" width="176" height="64" rx="6" fill="rgba(255,99,126,0.12)" stroke="#ff637e" stroke-width="1"/><rect x="600" y="400" width="20" height="12" rx="2" fill="none" stroke="rgba(255,99,126,0.5)" stroke-width="0.8"/><text x="610.0" y="409" fill="#ff8096" font-size="7" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.08em">03</text><text x="680.0" y="430" fill="#faf8f8" font-size="12" font-weight="600" font-family="'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="middle">Run the oracle</text><text x="680.0" y="446" fill="#aca2a2" font-size="9" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle">exit 0 → goal met</text>
+<rect x="392" y="508" width="176" height="64" rx="6" fill="#1a1415"/><rect x="392" y="508" width="176" height="64" rx="6" fill="#211b1c" stroke="#faf8f8" stroke-width="1"/><rect x="400" y="516" width="20" height="12" rx="2" fill="none" stroke="rgba(250,248,248,0.4)" stroke-width="0.8"/><text x="410.0" y="525" fill="#faf8f8" font-size="7" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.08em">04</text><text x="480.0" y="546" fill="#faf8f8" font-size="12" font-weight="600" font-family="'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="middle">Pick a task</text><text x="480.0" y="562" fill="#aca2a2" font-size="9" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle">pending → in progress</text>
+<rect x="192" y="392" width="176" height="64" rx="6" fill="#1a1415"/><rect x="192" y="392" width="176" height="64" rx="6" fill="#211b1c" stroke="#faf8f8" stroke-width="1"/><rect x="200" y="400" width="20" height="12" rx="2" fill="none" stroke="rgba(250,248,248,0.4)" stroke-width="0.8"/><text x="210.0" y="409" fill="#faf8f8" font-size="7" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.08em">05</text><text x="280.0" y="430" fill="#faf8f8" font-size="12" font-weight="600" font-family="'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="middle">Delegate</text><text x="280.0" y="446" fill="#aca2a2" font-size="9" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle">background worker</text>
+<rect x="192" y="164" width="176" height="64" rx="6" fill="#1a1415"/><rect x="192" y="164" width="176" height="64" rx="6" fill="#211b1c" stroke="#faf8f8" stroke-width="1"/><rect x="200" y="172" width="20" height="12" rx="2" fill="none" stroke="rgba(250,248,248,0.4)" stroke-width="0.8"/><text x="210.0" y="181" fill="#faf8f8" font-size="7" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.08em">06</text><text x="280.0" y="202" fill="#faf8f8" font-size="12" font-weight="600" font-family="'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="middle">Worker settles</text><text x="280.0" y="218" fill="#aca2a2" font-size="9" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle">status + notes</text>
+<rect x="388.0" y="266.0" width="184" height="88" rx="8" fill="#faf8f8" stroke="#faf8f8" stroke-width="1"/><text x="480" y="296" fill="#1a1415" font-size="7" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.14em" opacity="0.7">THE PLAN</text><text x="480" y="316" fill="#1a1415" font-size="14" font-weight="600" font-family="'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="middle">Chat task list</text><text x="480" y="334" fill="#1a1415" font-size="9" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle" opacity="0.8">survives /clear · restart</text>
+<line x1="40" y1="612" x2="920" y2="612" stroke="rgba(250,248,248,0.1)" stroke-width="0.8"/><text x="40" y="628" fill="#aca2a2" font-size="8" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" letter-spacing="0.18em">LEGEND</text><rect x="40" y="644" width="14" height="10" rx="2" fill="#211b1c" stroke="#faf8f8" stroke-width="1"/><text x="60" y="652" fill="#aca2a2" font-size="8.5" font-family="'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">Step</text><rect x="108" y="644" width="14" height="10" rx="2" fill="rgba(255,99,126,0.12)" stroke="#ff637e" stroke-width="1"/><text x="128" y="652" fill="#aca2a2" font-size="8.5" font-family="'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">Exit check</text><rect x="204" y="644" width="14" height="10" rx="2" fill="#faf8f8" stroke="#faf8f8" stroke-width="1"/><text x="224" y="652" fill="#aca2a2" font-size="8.5" font-family="'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">Durable state</text><line x1="316" y1="649" x2="344" y2="649" stroke="#aca2a2" stroke-width="1.2" marker-end="url(#arrow)"/><text x="352" y="652" fill="#aca2a2" font-size="8.5" font-family="'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">Next step</text><line x1="424" y1="649" x2="452" y2="649" stroke="#867e7e" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arrow-soft)"/><text x="460" y="652" fill="#aca2a2" font-size="8.5" font-family="'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">Writes to the plan</text>
+      </svg>
+    </div>
+  </div>
+</body>
+</html>

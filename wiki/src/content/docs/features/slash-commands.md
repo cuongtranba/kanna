@@ -56,8 +56,11 @@ writes the result into the transcript in the same shape.
 If the compaction errors, is cancelled, or comes back empty, **nothing is
 committed** — you keep the conversation you had.
 
-Kanna also compacts on its own before the context window fills; the meter in the
-chat footer shows how close you are.
+You rarely need it: the Claude agent compacts on its own when the context window
+fills, and the meter in the composer shows how close you are. Kanna's own
+automatic compaction is off by default so the two never race;
+`KANNA_PROACTIVE_COMPACT=enabled` turns it back on if you have disabled the
+CLI's.
 
 ## `/cron` intercepts even when it is wrong
 
@@ -75,12 +78,22 @@ See [Cron Jobs](/features/cron-jobs/) for the grammar and schedules.
 ## Skills and commands from disk
 
 The picker also lists Claude Code skills and slash commands found on disk,
-including ones installed by plugins, so they are one keystroke away.
+including ones installed by plugins, so they are one keystroke away. They work
+on **every provider**:
 
-Two behaviours worth knowing:
+- **Claude and OpenRouter** resolve `/name` themselves, as the Claude Code CLI
+  does.
+- **Codex** does not, so Kanna expands the command before sending it. A command
+  file becomes its body with `$ARGUMENTS` and `$1`–`$9` filled in; a skill is
+  sent as a pointer to its `SKILL.md` with your arguments. The transcript still
+  shows the line you typed, with a note that it was expanded.
+- Codex also gets a roster of your skills in its instructions, so it can pick
+  one up on its own when it fits, the way Claude does.
 
-- **On Codex, only the built-ins are offered.** Disk-scanned Claude Code skills
-  mean nothing to a provider that does not run the `claude` CLI.
-- **A project command named `clear` will not be reachable.** Dispatch intercepts
-  that name first, so it is dropped from the listing rather than shown and
-  ignored. Rename it.
+Shell lines (`` !`cmd` ``) and `@path` references inside a command are **not**
+run during expansion. They are passed on for the agent to run or read with its
+own tools.
+
+A **project command named `clear` will not be reachable.** Dispatch intercepts
+that name first, so it is dropped from the listing rather than shown and
+ignored. Rename it.

@@ -1,19 +1,62 @@
 ---
-title: Architecture (C3)
-description: How Kanna's component documentation works.
+title: Architecture
+description: How the Kanna server is shaped (event sourcing, the IO seal) and how its C3 component documentation works.
 ---
+
+import Diagram from '../../../../components/Diagram.astro'
+
+## How the server is shaped
+
+<Diagram
+  name="kanna-event-flow"
+  alt="Architecture diagram of the Kanna server: browser commands enter the WebSocket router, turns and edits append events to the event store, the store writes JSONL logs through IO adapters, and derived read models push snapshots back to the browser."
+/>
+
+- **Event sourcing.** Every state change is an event appended to a JSONL log
+  under `~/.kanna/data`. On boot the server replays the log tail after the last
+  snapshot, then compacts. Nothing is edited in place.
+- **Separate read and write paths.** Commands write events; read models derive
+  the views the client needs from them; subscribers are pushed a fresh snapshot
+  (or a small list of operations) on every change. The client never asks the
+  server to recompute anything.
+- **One process.** The WebSocket router, the agent coordinator, the event store,
+  the cron scheduler and the Kanna MCP tools all live in one Bun process. Agent
+  runtimes (the Claude Agent SDK, the Codex app-server) and plugin servers are
+  child processes.
+- **Shared contracts.** `src/shared/` holds the protocol and domain types both
+  sides import; a type is defined there once.
+
+### The IO seal
+
+Side effects are sealed by ESLint at `error` level across `src/shared/**`,
+`src/client/**` and `src/server/**`: `node:fs`, `node:child_process`,
+`node:http`, `bun:sqlite`, `Bun.spawn`, `Bun.file`, `process.env` and friends
+fail `bun run lint` outside the exempt files.
+
+| You need IO in… | Do this |
+| --- | --- |
+| `src/shared` or `src/client` | Move the code to the server, or take the operation as a typed parameter |
+| a server file whose only job is the IO | Name it `*.adapter.ts`; adapters are exempt |
+| a server file mixing domain logic and IO | Extract the IO into a sibling `*-io.adapter.ts` and import it |
+| server domain code | Accept a typed port from the caller's adapter |
+
+Adapters are leaf modules: they wrap one primitive and hold no domain logic, so
+anything can import them. There is no escape valve; do not add
+`eslint-disable` comments.
+
+## C3 component docs
 
 Kanna uses C3 component docs at `.c3/`.
 
-## Before coding
+### Before coding
 
 Run `/c3 query <topic>` (or `c3x lookup <file>`) to load component context, refs, and rules. **Do not skip this** — even for small edits. Skipping leads to stale assumptions and wrong patches.
 
-## After coding
+### After coding
 
 If a change touches component boundaries, refs, public contracts, or rules, run `/c3 change` (or `/c3 sweep` for audit) to update `.c3/` docs in the same PR. Code-doc drift is a blocker.
 
-## Operations
+### Operations
 
 | Op | Purpose |
 |---|---|
@@ -23,15 +66,15 @@ If a change touches component boundaries, refs, public contracts, or rules, run 
 | `ref` | Add or fix a ref between components |
 | `sweep` | Bulk audit across all components |
 
-## File lookup
+### File lookup
 
 `c3x lookup <file-or-glob>` maps files/directories to components + refs.
 
-## Skill
+### Skill
 
 `c3-skill:c3` auto-triggers on `/c3` or architecture phrases.
 
-## Always review what `c3x` wrote
+### Always review what `c3x` wrote
 
 **`c3x` can rewrite docs your change never touched.** Run `git status .c3/`
 after *any* `c3x` write — `repair` and `change apply` alike — and
@@ -62,7 +105,7 @@ change** and is worth reading. Three authoring mistakes make it produce one:
 3. A wrapped list item loses its continuation indent. Keep list items on one
    line in `.c3/` prose.
 
-## Keeping `c3x lookup` working
+### Keeping `c3x lookup` working
 
 Every production-significant component has a spec at `.c3/eval/c3-NNN.yaml` with
 a `code:` list; that is what maps a file back to its owning component. When you

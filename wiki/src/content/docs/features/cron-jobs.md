@@ -184,7 +184,7 @@ Both run work repeatedly, for different reasons:
 - **Cron** fires on the **clock**, forever, whether or not there's progress to
   make. Use it for polling, reports, and periodic checks.
 - **A loop** (`setup_loop`) fires on **completion** and stops when its goal is
-  met, driven by a verify command and a tracking file. Use it for finishing a
+  met, driven by a verify command and a durable task list. Use it for finishing a
   body of work.
 
 A cron job has no goal and no oracle; it stops when you stop it.

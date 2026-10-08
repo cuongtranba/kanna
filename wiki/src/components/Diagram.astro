@@ -1,0 +1,55 @@
+---
+interface Props {
+  name: string
+  alt: string
+}
+const { name, alt } = Astro.props
+const light = `/diagrams/${name}.svg`
+const dark = `/diagrams/${name}-dark.svg`
+---
+
+<figure class="kanna-diagram">
+  <div class="kanna-diagram-scroll">
+    <a class="kanna-diagram-light" href={light} target="_blank" rel="noopener">
+      <img src={light} alt={alt} loading="lazy" />
+    </a>
+    <a class="kanna-diagram-dark" href={dark} target="_blank" rel="noopener">
+      <img src={dark} alt={alt} loading="lazy" />
+    </a>
+  </div>
+  <figcaption>Click the diagram to open it full size.</figcaption>
+</figure>
+
+<style>
+  .kanna-diagram {
+    margin: 1.5rem 0;
+  }
+  .kanna-diagram-scroll {
+    overflow-x: auto;
+    border: 1px solid var(--sl-color-hairline);
+    border-radius: var(--sl-radius-lg);
+  }
+  .kanna-diagram img {
+    display: block;
+    width: 100%;
+    min-width: 960px;
+    height: auto;
+  }
+  .kanna-diagram figcaption {
+    margin-top: 0.5rem;
+    font-size: var(--sl-text-xs);
+    color: var(--sl-color-gray-3);
+  }
+  .kanna-diagram-light {
+    display: none;
+  }
+  .kanna-diagram-dark {
+    display: block;
+  }
+  :global(:root[data-theme='light']) .kanna-diagram-light {
+    display: block;
+  }
+  :global(:root[data-theme='light']) .kanna-diagram-dark {
+    display: none;
+  }
+</style>
