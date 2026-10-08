@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.65.0](https://github.com/cuongtranba/kanna/compare/v1.64.1...v1.65.0) (2026-10-08)
+
+
+### Features
+
+* **beacon:** Phase 1 companion daemon — pair a machine, read and run over beacon tools ([#1215](https://github.com/cuongtranba/kanna/issues/1215)) ([7331fbd](https://github.com/cuongtranba/kanna/commit/7331fbd683e1992eb8c91962ad2ec11faf9beaa0))
+
 ## [1.64.1](https://github.com/cuongtranba/kanna/compare/v1.64.0...v1.64.1) (2026-10-08)
 
 
