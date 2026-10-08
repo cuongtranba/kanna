@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.64.1](https://github.com/cuongtranba/kanna/compare/v1.64.0...v1.64.1) (2026-10-08)
+
+
+### Bug Fixes
+
+* **subagents:** keep main's context when a background run finishes outside a loop ([#1212](https://github.com/cuongtranba/kanna/issues/1212)) ([18ed86e](https://github.com/cuongtranba/kanna/commit/18ed86edeba5a314c39638ab24efd73affb6396c))
+
 ## [1.64.0](https://github.com/cuongtranba/kanna/compare/v1.63.3...v1.64.0) (2026-10-08)
 
 
