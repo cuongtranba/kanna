@@ -1,5 +1,5 @@
 import { useCallback, useMemo, type ChangeEvent } from "react"
-import { Copy, ExternalLink, Plus, Radio, Trash2, X } from "lucide-react"
+import { Check, Copy, ExternalLink, Plus, Radio, Trash2, X } from "lucide-react"
 import { Button, buttonVariants } from "../components/ui/button"
 import { Input } from "../components/ui/input"
 import { Spinner } from "../components/ui/spinner"
@@ -12,6 +12,7 @@ import { useAppSettingsStore, selectCustomBeacons } from "../stores/appSettingsS
 import { beaconDraftKey, useBeaconsSectionStore } from "../stores/beaconsSectionStore"
 import { selectBeaconRows, useBeaconsStore } from "../stores/beaconsStore"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
+import { copyWithFeedback, useCopied } from "../stores/copyFeedbackStore"
 import type { BeaconConfig, BeaconMintResult } from "../../shared/beacon-config"
 import type { BeaconScope } from "../../shared/beacon-scope"
 import { BEACON_DOWNLOAD_PAGE, buildBeaconPairLink } from "../../shared/beacon-pair-link"
@@ -21,8 +22,10 @@ import { SDK_CLIENT_APP } from "../../shared/branding"
 import { cn } from "../lib/utils"
 import type { ClipboardPort } from "../ports/clipboardPort"
 import type { DomPort } from "../ports/domPort"
+import type { TimerPort } from "../ports/timerPort"
 import { clipboardAdapter } from "../adapters/clipboard.adapter"
 import { domAdapter } from "../adapters/dom.adapter"
+import { timerAdapter } from "../adapters/timer.adapter"
 import type { KannaState } from "./useKannaState"
 
 const SERVER_VERSION = SDK_CLIENT_APP.split("/")[1]
@@ -43,6 +46,7 @@ interface BeaconsSectionProps {
   serverVersion?: string
   dom?: DomPort
   clipboard?: ClipboardPort
+  timer?: TimerPort
 }
 
 export function mergeBeaconRows(
@@ -62,6 +66,7 @@ export function BeaconsSection({
   serverVersion,
   dom = domAdapter,
   clipboard = clipboardAdapter,
+  timer = timerAdapter,
 }: BeaconsSectionProps) {
   const now = useNow(1_000)
   const merged = useMemo(() => mergeBeaconRows(rows, configs), [rows, configs])
@@ -69,7 +74,7 @@ export function BeaconsSection({
 
   return (
     <div className="flex flex-col gap-4 px-6 py-6">
-      <PairingPanel now={now} handlers={handlers} dom={dom} clipboard={clipboard} />
+      <PairingPanel now={now} handlers={handlers} dom={dom} clipboard={clipboard} timer={timer} />
       {merged.length === 0 ? (
         <SettingsEmptyState
           icon={Radio}
@@ -99,11 +104,13 @@ function PairingPanel({
   handlers,
   dom,
   clipboard,
+  timer,
 }: {
   now: number
   handlers: BeaconsSectionHandlers
   dom: DomPort
   clipboard: ClipboardPort
+  timer: TimerPort
 }) {
   const pairing = useBeaconsSectionStore((s) => s.pairing)
   const setPairing = useBeaconsSectionStore((s) => s.setPairing)
@@ -136,7 +143,14 @@ function PairingPanel({
         </p>
       )}
       {pairing?.ok === true && (
-        <PairingCode code={pairing.code} expiresAt={pairing.expiresAt} now={now} dom={dom} clipboard={clipboard} />
+        <PairingCode
+          code={pairing.code}
+          expiresAt={pairing.expiresAt}
+          now={now}
+          dom={dom}
+          clipboard={clipboard}
+          timer={timer}
+        />
       )}
     </div>
   )
@@ -148,12 +162,14 @@ function PairingCode({
   now,
   dom,
   clipboard,
+  timer,
 }: {
   code: string
   expiresAt: number
   now: number
   dom: DomPort
   clipboard: ClipboardPort
+  timer: TimerPort
 }) {
   const remaining = expiresAt - now
   const origin = dom.getOrigin()
@@ -161,10 +177,11 @@ function PairingCode({
   const appLink = buildBeaconPairLink({ kannaUrl: origin, code })
   const copyKey = pendingActionKey("beacons.copyPairCommand", code)
   const copying = usePendingAction(copyKey)
+  const copied = useCopied(copyKey)
 
   const onCopy = useCallback(() => {
-    runPendingAction(copyKey, () => clipboard.writeText(command))
-  }, [clipboard, command, copyKey])
+    runPendingAction(copyKey, () => copyWithFeedback(copyKey, () => clipboard.writeText(command), timer))
+  }, [clipboard, command, copyKey, timer])
 
   return (
     <div className="flex flex-col gap-2 border-t border-border pt-3">
@@ -193,9 +210,15 @@ function PairingCode({
         <code className="min-w-0 flex-1 break-all rounded-md border border-border bg-muted px-3 py-2 font-mono text-13">
           {command}
         </code>
-        <HoverHint label="Copy command">
-          <Button variant="ghost" size="icon" onClick={onCopy} pending={copying} aria-label="Copy pairing command">
-            <Copy className="h-4 w-4" />
+        <HoverHint label={copied ? "Copied" : "Copy command"}>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onCopy}
+            pending={copying}
+            aria-label={copied ? "Copied" : "Copy pairing command"}
+          >
+            {copied ? <Check className="h-4 w-4 text-success-text" /> : <Copy className="h-4 w-4" />}
           </Button>
         </HoverHint>
       </div>

@@ -1,9 +1,12 @@
 import { useEffect, useRef } from "react"
+import { Check, Copy } from "lucide-react"
 import type { CloudflareTunnelRecord, CloudflareTunnelState } from "../../../shared/types"
 import { clipboardAdapter } from "../../adapters/clipboard.adapter"
 import { timerAdapter } from "../../adapters/timer.adapter"
 import type { ClipboardPort } from "../../ports/clipboardPort"
 import type { TimerPort } from "../../ports/timerPort"
+import { copyWithFeedback, useCopied } from "../../stores/copyFeedbackStore"
+import { pendingActionKey } from "../../stores/pendingActionsStore"
 import { TranscriptActionCard, type CardAction } from "./TranscriptActionCard"
 
 export type CloudflareTunnelCardPorts = {
@@ -34,6 +37,8 @@ export function CloudflareTunnelCard({
   const clipboard = ports.clipboard ?? clipboardAdapter
   const pendingResolverRef = useRef<(() => void) | null>(null)
   const lastStateRef = useRef<CloudflareTunnelState>(record.state)
+  const copyUrlKey = pendingActionKey("tunnel.copyUrl", record.tunnelId)
+  const urlCopied = useCopied(copyUrlKey)
 
   useEffect(() => {
     if (record.state !== lastStateRef.current && pendingResolverRef.current) {
@@ -86,11 +91,12 @@ export function CloudflareTunnelCard({
     const actions: CardAction[] = [
       {
         id: "copy",
-        label: "Copy URL",
+        label: urlCopied ? "Copied" : "Copy URL",
+        icon: urlCopied ? <Check className="h-4 w-4 text-success-text" /> : <Copy className="h-4 w-4" />,
         variant: "secondary",
         onClick: async () => {
           if (!url) return
-          await clipboard.writeText(url)
+          await copyWithFeedback(copyUrlKey, () => clipboard.writeText(url), timer)
         },
       },
       {
