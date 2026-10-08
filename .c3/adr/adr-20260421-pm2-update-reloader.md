@@ -1,6 +1,6 @@
 ---
 id: adr-20260421-pm2-update-reloader
-c3-seal: 9b2b7a5c2ed2d6659771c633b243b4875c75ecbaea474b6edfb93c7c55168285
+c3-seal: a9092c740912c5f0ea534aef01ddcfc8f5091367a2fbf6c0bc4aae8a723e213e
 title: pm2-update-reloader
 type: adr
 goal: Replace macOS launchd supervision with pm2 for the dev deploy path, and wire the in-app Update button to trigger a pm2-reload pipeline (git pull → build → `pm2 reload`). Abstract the update mechanism so the existing npm/self-update path and the new git/pm2 path coexist and can be swapped without touching `UpdateManager` or server wiring.
@@ -43,7 +43,7 @@ Shipped two implementations of each, wired by a factory `createUpdateStrategy` k
 
 ## Work Breakdown
 
-Done across 11 tasks (see `docs/plans/2026-04-21-pm2-update-reloader.md`): interfaces + npm/supervisor impl → factory → UpdateManager refactor → server wiring → pm2 dep → GitChecker → Pm2Reloader → pm2 ecosystem template → deploy.sh rewrite → manual verification.
+Done across 11 tasks: interfaces + npm/supervisor impl → factory → UpdateManager refactor → server wiring → pm2 dep → GitChecker → Pm2Reloader → pm2 ecosystem template → deploy.sh rewrite → manual verification.
 
 ## Risks
 

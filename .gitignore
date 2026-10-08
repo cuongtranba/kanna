@@ -56,3 +56,6 @@ scripts/pm2.env
 
 # kanna-beacon release binaries (scripts/build-beacon.ts)
 dist-beacon/
+
+# Superpowers brainstorm server scratch (port, auth token, rendered pages)
+.superpowers/

@@ -1158,8 +1158,7 @@ state, so quoting is the universal escape; a literal `"` is written `#quot;`.
 The agent composes interactive views — reports, charts, statements, test results —
 from Kanna's own component catalog; Kanna validates them, renders them, fetches their
 data and runs their actions. **The model decides WHAT to show; nothing it writes ever
-executes.** Design note: `docs/superpowers/specs/2026-09-29-generative-ui-design.md`;
-ADR `adr-20260929-generative-ui`.
+executes.** ADR `adr-20260929-generative-ui`.
 
 - **The contract is a fence, not a tool.** A ```kanna-ui block in `assistant_text`
   carries one JSON spec. Codex receives no Kanna MCP tools
@@ -2997,7 +2996,7 @@ lives in Settings → Packages (`PackageUpdateSettings` in `settings.json`).
 Third-party plugins that compile to two bundles (a browser one and a server
 one), run their server half as a **subprocess** speaking typed RPC over a unix
 socket, and contribute UI to the sidebar, the chat footer and a Settings page.
-Design: `PLUGIN-SYSTEM-PLAN.md`. Plan/progress: `PROGRESS-plugin-system.md`.
+Component fact: `c3-238`.
 
 **Plugins are OFF by default** (`plugins.enabled`, `PLUGIN_SETTINGS_DEFAULTS`).
 Every surface — HTTP routes, MCP tools, client host registry — stays dark until
@@ -3046,7 +3045,7 @@ downstream, so a traversal-shaped id is rejected at the routing layer.
 **Mounting cost three extractions, not three raised allowances.** Three modules
 sat EXACTLY on their architecture-budget ceilings, so each got the remedy the
 budget message prescribes: `SettingsPage.tsx` 2787 → 2449 (`SkillsSection.tsx`,
-which `PLUGIN-SYSTEM-PLAN.md` itself prescribed), `KannaSidebar.tsx` 1007 → 964
+which the plugin-system plan itself prescribed), `KannaSidebar.tsx` 1007 → 964
 (`SidebarUtilityNav.tsx` — also the natural home for plugin nav entries, which
 are navigation destinations exactly like Workflows/Cron/Settings), and
 `ChatTranscriptViewport.tsx`, which was two lines under the 700 threshold and so

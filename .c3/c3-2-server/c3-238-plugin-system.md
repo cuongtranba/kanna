@@ -1,6 +1,6 @@
 ---
 id: c3-238
-c3-seal: e78ab146d8b1c986aa4c2af89d02da838fac1a7ee66b635ab886d80c1be4cf5e
+c3-seal: 1a3e3bc10e4724bca86b44be5f04f365c3acd8c9dea0f2b2c6e4d2485684110f
 title: plugin-system
 type: component
 category: feature
@@ -60,7 +60,7 @@ A plugin is untrusted third-party code, so the design keeps it at arm's length i
 | src/server/plugins/installed-plugin-store.ts | Contract (install persistence) | Write batching | src/server/plugins/installed-plugin-store.ts |
 | src/server/kanna-mcp-plugins.ts | Contract (MCP authoring tools) | Tool description wording | src/server/kanna-mcp-plugins.ts |
 | src/server/plugin-cli-dispatch.ts | Contract (CLI) | Output formatting | src/server/plugin-cli-dispatch.ts |
-| src/server/plugin-system-acceptance.test.tsx | Contract and the phase table in PLUGIN-SYSTEM-PLAN.md | Test framing | src/server/plugin-system-acceptance.test.tsx |
+| src/server/plugin-system-acceptance.test.tsx | Contract of the plugin system across its phases | Test framing | src/server/plugin-system-acceptance.test.tsx |
 
 ## Change Safety
 

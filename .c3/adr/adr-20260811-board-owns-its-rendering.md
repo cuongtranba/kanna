@@ -1,6 +1,6 @@
 ---
 id: adr-20260811-board-owns-its-rendering
-c3-seal: 883ce4f0faa9a41a43c0920e9b25ee67ac222fd6362d062740fcb689c0132b63
+c3-seal: 9f0bd3de376151ae85a3bd82ddad9e7b80fc0178519d6bad8854ecc90ff83457
 title: board-owns-its-rendering
 type: adr
 goal: |-
@@ -46,8 +46,8 @@ no unmeasured-item state to get stuck in.
 Two things had also changed since the package was chosen. Paging now bounds a
 column to one page (30 cards, raised on demand, capped at 500 server-side), so
 the DOM is bounded by the paging contract rather than by the size of the board —
-which was the whole argument for virtualizing. And `docs/kanban-boards-brainstorm.md`
-§10 already named this exact fallback, with the confinement designed to make it
+which was the whole argument for virtualizing. And the boards brainstorm
+already named this exact fallback, with the confinement designed to make it
 cheap.
 
 Affected topology: the board pane and its components (c3-104); no server, store,
