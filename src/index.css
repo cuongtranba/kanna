@@ -581,8 +581,8 @@
 
     Deliberately no `animation-fill-mode`. The resting state is the visible
     one, so an animation that is throttled, frozen or never runs leaves the
-    diff list simply static — motion is lost, content is not (handoff pitfall
-    #1). A `forwards`/`both` fill here would strand the panel blank.
+    diff list simply static — motion is lost, content is not. A
+    `forwards`/`both` fill here would strand the panel blank.
 
     Applied to the list CONTAINER rather than each row: the file list is a
     virtualized LegendList that recycles rows on scroll, so a per-row stagger
@@ -657,7 +657,7 @@
     app where that rule is not negotiable. Rows arrive on their own while the
     model streams, so the user did not ask for this animation and cannot retry
     it; a frozen or throttled opacity tween would leave a row of real work
-    permanently invisible with no gesture that recovers it (handoff pitfall #1).
+    permanently invisible with no gesture that recovers it.
     6px of travel and no fill-mode: if the animation never runs, the row is
     simply already in place.
 

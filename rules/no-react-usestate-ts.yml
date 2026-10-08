@@ -6,7 +6,7 @@ note: |
   Singleton feature state -> src/client/stores/<feature>Store.ts (zustand create()).
   Per-instance component state -> colocated <Component>.store.ts using
   createScopedStore from src/client/lib/createScopedStore.tsx.
-  Spec: docs/superpowers/specs/2026-07-12-usestate-zustand-migration-design.md
+  ADR: adr-20260712-usestate-zustand-migration
 files:
   - src/client/**
 ignores:
