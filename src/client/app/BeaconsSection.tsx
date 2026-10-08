@@ -1,6 +1,6 @@
 import { useCallback, useMemo, type ChangeEvent } from "react"
-import { Copy, Plus, Radio, Trash2, X } from "lucide-react"
-import { Button } from "../components/ui/button"
+import { Copy, ExternalLink, Plus, Radio, Trash2, X } from "lucide-react"
+import { Button, buttonVariants } from "../components/ui/button"
 import { Input } from "../components/ui/input"
 import { Spinner } from "../components/ui/spinner"
 import { StateMarkLabel } from "../components/ui/state-mark"
@@ -14,6 +14,7 @@ import { selectBeaconRows, useBeaconsStore } from "../stores/beaconsStore"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
 import type { BeaconConfig, BeaconMintResult } from "../../shared/beacon-config"
 import type { BeaconScope } from "../../shared/beacon-scope"
+import { BEACON_DOWNLOAD_PAGE, buildBeaconPairLink } from "../../shared/beacon-pair-link"
 import { buildBeaconStatusRows, isBeaconBehind, type BeaconStatusRow } from "../../shared/beacon-status"
 import { STATUS_PILL_CLASS } from "../../shared/design/tone-pairings"
 import { SDK_CLIENT_APP } from "../../shared/branding"
@@ -124,7 +125,7 @@ function PairingPanel({
             commands there, only within the scope you grant below.
           </p>
         </div>
-        <Button size="sm" onClick={onMint} pending={minting}>
+        <Button size="sm" variant={pairing?.ok === true ? "secondary" : "default"} onClick={onMint} pending={minting}>
           <Plus className="mr-1 h-4 w-4" />
           Pair a machine
         </Button>
@@ -155,7 +156,9 @@ function PairingCode({
   clipboard: ClipboardPort
 }) {
   const remaining = expiresAt - now
-  const command = `kanna-beacon pair ${dom.getOrigin()} ${code}`
+  const origin = dom.getOrigin()
+  const command = `kanna-beacon pair ${origin} ${code}`
+  const appLink = buildBeaconPairLink({ kannaUrl: origin, code })
   const copyKey = pendingActionKey("beacons.copyPairCommand", code)
   const copying = usePendingAction(copyKey)
 
@@ -171,7 +174,21 @@ function PairingCode({
           {remaining > 0 ? `Expires in ${formatCountdown(remaining)}` : "Expired. Pair again for a new code."}
         </span>
       </div>
-      <p className="text-13 text-muted-foreground">Run this on the machine you want to pair:</p>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <a href={appLink} className={buttonVariants({ size: "sm" })}>
+          <ExternalLink className="mr-1 h-4 w-4" />
+          Open in Kanna Beacon
+        </a>
+        <a
+          href={BEACON_DOWNLOAD_PAGE}
+          target="_blank"
+          rel="noreferrer"
+          className="text-13 text-muted-foreground underline underline-offset-2 hover:text-foreground"
+        >
+          Download Kanna Beacon
+        </a>
+      </div>
+      <p className="text-13 text-muted-foreground">Or run this on the machine you want to pair:</p>
       <div className="flex items-center gap-2">
         <code className="min-w-0 flex-1 break-all rounded-md border border-border bg-muted px-3 py-2 font-mono text-13">
           {command}

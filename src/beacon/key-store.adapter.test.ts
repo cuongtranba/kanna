@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, statSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { verifyBeaconSignature } from "../server/beacon-crypto"
-import { createKeyStore } from "./key-store.adapter"
+import { createKeyStore, eraseKeyStore } from "./key-store.adapter"
 
 let dir = ""
 
@@ -31,5 +31,13 @@ describe("beacon key store", () => {
     const path = join(dir, "key.der")
     createKeyStore(path)
     expect(statSync(path).mode & 0o777).toBe(0o600)
+  })
+
+  test("erasing the key gives the machine a new identity on the next open", () => {
+    const path = join(dir, "key.der")
+    const before = createKeyStore(path).publicKeySpkiBase64()
+    eraseKeyStore(path)
+    eraseKeyStore(path)
+    expect(createKeyStore(path).publicKeySpkiBase64()).not.toBe(before)
   })
 })

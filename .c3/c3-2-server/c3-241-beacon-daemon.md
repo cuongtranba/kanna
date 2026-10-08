@@ -1,6 +1,6 @@
 ---
 id: c3-241
-c3-seal: 31484ab3ad65b0717dcd0aac0778daedffd56818dd0480f5cdc94a3611ad50bd
+c3-seal: b2151f6e1d633db86364a02546b136eb9086c537adf8e4b8f860d28df8c6253f
 title: beacon-daemon
 type: component
 category: feature
@@ -41,6 +41,8 @@ Owns the beacon daemon: pairing client, key and state storage, the authenticated
 | Session loop | IN/OUT | Handles server requests through injected ports and answers only within the granted scope | c3-302 | src/beacon/session.ts |
 | Ports | OUT | Abstract filesystem, shell, transport, key and state operations so the session is testable without IO | c3-302 | src/beacon/ports.ts |
 | Pair client | OUT | Redeems a one-time pairing code against the server and stores the resulting key | c3-202 | src/beacon/pair-client.adapter.ts |
+| Desktop app | IN/OUT | Pairs from a kanna-beacon link, edits the grant, records served requests, pauses and unpairs; the view and Electrobun glue only call this service | c3-302 | src/beacon/desktop/desktop-app.ts |
+| Runner | IN/OUT | Owns the reconnect loop for the CLI and the desktop app: pause, resume, stop, unpair, and typed status snapshots | c3-202 | src/beacon/runner.ts |
 
 ## Derived Materials
 

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { JsonValue } from "../shared/json"
 import type { BeaconFrame } from "../shared/beacon-protocol"
+import { DEFAULT_BEACON_SCOPE } from "../shared/beacon-scope"
 import { createBeaconRegistry, STALE_MS, type BeaconRequestSink, type BeaconSocket } from "./beacon-registry"
 
 type SendPayload = Parameters<BeaconSocket["send"]>[0]
@@ -41,7 +42,7 @@ function sentRequestId(socket: { sent: string[] }): string {
 describe("beacon registry", () => {
   test("connect marks the beacon online and live() reflects it", () => {
     const registry = createBeaconRegistry({ now: () => 42 })
-    registry.connect({ beaconId: "b1", socket: fakeSocket(), beaconVersion: "1.0.0" })
+    registry.connect({ beaconId: "b1", socket: fakeSocket(), beaconVersion: "1.0.0", protocolVersion: 1, scope: DEFAULT_BEACON_SCOPE })
     expect(registry.isOnline("b1")).toBe(true)
     expect(registry.live()).toEqual([{ beaconId: "b1", online: true, lastSeenAt: 42, beaconVersion: "1.0.0" }])
   })
@@ -49,7 +50,7 @@ describe("beacon registry", () => {
   test("heartbeat advances lastSeenAt", () => {
     let clock = 10
     const registry = createBeaconRegistry({ now: () => clock })
-    registry.connect({ beaconId: "b1", socket: fakeSocket(), beaconVersion: "1.0.0" })
+    registry.connect({ beaconId: "b1", socket: fakeSocket(), beaconVersion: "1.0.0", protocolVersion: 1, scope: DEFAULT_BEACON_SCOPE })
     clock = 99
     registry.heartbeat("b1")
     expect(registry.live()[0].lastSeenAt).toBe(99)
@@ -58,7 +59,7 @@ describe("beacon registry", () => {
   test("dispatch sends a request frame and a matching result finalizes the request", () => {
     const registry = createBeaconRegistry()
     const socket = fakeSocket()
-    registry.connect({ beaconId: "b1", socket, beaconVersion: "1.0.0" })
+    registry.connect({ beaconId: "b1", socket, beaconVersion: "1.0.0", protocolVersion: 1, scope: DEFAULT_BEACON_SCOPE })
     const { sink, events, results } = recordingSink()
     const { requestId } = registry.dispatch("b1", { op: "stat", path: "/tmp" }, sink)
     expect(JSON.parse(socket.sent[0])).toEqual({ kind: "request", id: requestId, request: { op: "stat", path: "/tmp" } })
@@ -71,7 +72,7 @@ describe("beacon registry", () => {
   test("stdout and stderr chunks stream in order before a terminal exit", () => {
     const registry = createBeaconRegistry()
     const socket = fakeSocket()
-    registry.connect({ beaconId: "b1", socket, beaconVersion: "1.0.0" })
+    registry.connect({ beaconId: "b1", socket, beaconVersion: "1.0.0", protocolVersion: 1, scope: DEFAULT_BEACON_SCOPE })
     const { sink, events } = recordingSink()
     registry.dispatch("b1", { op: "exec", cmd: "ls", args: [] }, sink)
     const id = sentRequestId(socket)
@@ -86,8 +87,8 @@ describe("beacon registry", () => {
   test("frames for unknown ids or from a different beacon are ignored", () => {
     const registry = createBeaconRegistry()
     const socket = fakeSocket()
-    registry.connect({ beaconId: "b1", socket, beaconVersion: "1.0.0" })
-    registry.connect({ beaconId: "b2", socket: fakeSocket(), beaconVersion: "1.0.0" })
+    registry.connect({ beaconId: "b1", socket, beaconVersion: "1.0.0", protocolVersion: 1, scope: DEFAULT_BEACON_SCOPE })
+    registry.connect({ beaconId: "b2", socket: fakeSocket(), beaconVersion: "1.0.0", protocolVersion: 1, scope: DEFAULT_BEACON_SCOPE })
     const { sink, events } = recordingSink()
     registry.dispatch("b1", { op: "glob", path: "/x" }, sink)
     const id = sentRequestId(socket)
@@ -98,7 +99,7 @@ describe("beacon registry", () => {
 
   test("a cancelled request no longer receives frames", () => {
     const registry = createBeaconRegistry()
-    registry.connect({ beaconId: "b1", socket: fakeSocket(), beaconVersion: "1.0.0" })
+    registry.connect({ beaconId: "b1", socket: fakeSocket(), beaconVersion: "1.0.0", protocolVersion: 1, scope: DEFAULT_BEACON_SCOPE })
     const { sink, events } = recordingSink()
     const { requestId, cancel } = registry.dispatch("b1", { op: "stat", path: "/" }, sink)
     cancel()
@@ -109,7 +110,7 @@ describe("beacon registry", () => {
   test("disconnect fails pending requests, marks the beacon offline and stops delivery", () => {
     const registry = createBeaconRegistry()
     const socket = fakeSocket()
-    registry.connect({ beaconId: "b1", socket, beaconVersion: "1.0.0" })
+    registry.connect({ beaconId: "b1", socket, beaconVersion: "1.0.0", protocolVersion: 1, scope: DEFAULT_BEACON_SCOPE })
     const { sink, events } = recordingSink()
     registry.dispatch("b1", { op: "stat", path: "/" }, sink)
     const id = sentRequestId(socket)
@@ -135,11 +136,11 @@ describe("beacon registry", () => {
     const unsubscribe = registry.subscribe(() => {
       calls += 1
     })
-    registry.connect({ beaconId: "b1", socket: fakeSocket(), beaconVersion: "1.0.0" })
+    registry.connect({ beaconId: "b1", socket: fakeSocket(), beaconVersion: "1.0.0", protocolVersion: 1, scope: DEFAULT_BEACON_SCOPE })
     registry.disconnect("b1")
     expect(calls).toBe(2)
     unsubscribe()
-    registry.connect({ beaconId: "b1", socket: fakeSocket(), beaconVersion: "1.0.0" })
+    registry.connect({ beaconId: "b1", socket: fakeSocket(), beaconVersion: "1.0.0", protocolVersion: 1, scope: DEFAULT_BEACON_SCOPE })
     expect(calls).toBe(2)
   })
 
@@ -147,8 +148,8 @@ describe("beacon registry", () => {
     const registry = createBeaconRegistry()
     const first = fakeSocket()
     const second = fakeSocket()
-    registry.connect({ beaconId: "b1", socket: first, beaconVersion: "1.0.0" })
-    registry.connect({ beaconId: "b1", socket: second, beaconVersion: "1.0.0" })
+    registry.connect({ beaconId: "b1", socket: first, beaconVersion: "1.0.0", protocolVersion: 1, scope: DEFAULT_BEACON_SCOPE })
+    registry.connect({ beaconId: "b1", socket: second, beaconVersion: "1.0.0", protocolVersion: 1, scope: DEFAULT_BEACON_SCOPE })
     registry.disconnectIfCurrent("b1", first)
     expect(registry.isOnline("b1")).toBe(true)
     expect(registry.send("b1", { kind: "ping" })).toBe(true)
@@ -161,7 +162,7 @@ describe("beacon registry", () => {
     let clock = 1_000
     const registry = createBeaconRegistry({ now: () => clock })
     const socket = fakeSocket()
-    registry.connect({ beaconId: "b1", socket, beaconVersion: "1.0.0" })
+    registry.connect({ beaconId: "b1", socket, beaconVersion: "1.0.0", protocolVersion: 1, scope: DEFAULT_BEACON_SCOPE })
     clock += STALE_MS
     registry.sweep()
     expect(socket.sent.map((payload) => JSON.parse(payload))).toEqual([{ kind: "ping" }])
@@ -172,7 +173,7 @@ describe("beacon registry", () => {
     let clock = 1_000
     const registry = createBeaconRegistry({ now: () => clock })
     const socket = fakeSocket()
-    registry.connect({ beaconId: "b1", socket, beaconVersion: "1.0.0" })
+    registry.connect({ beaconId: "b1", socket, beaconVersion: "1.0.0", protocolVersion: 1, scope: DEFAULT_BEACON_SCOPE })
     const { sink, events } = recordingSink()
     registry.dispatch("b1", { op: "stat", path: "/" }, sink)
     let notified = 0
@@ -190,11 +191,41 @@ describe("beacon registry", () => {
   test("a heartbeat refreshes lastSeenAt so the next sweep does not evict the beacon", () => {
     let clock = 1_000
     const registry = createBeaconRegistry({ now: () => clock })
-    registry.connect({ beaconId: "b1", socket: fakeSocket(), beaconVersion: "1.0.0" })
+    registry.connect({ beaconId: "b1", socket: fakeSocket(), beaconVersion: "1.0.0", protocolVersion: 1, scope: DEFAULT_BEACON_SCOPE })
     clock += STALE_MS
     registry.heartbeat("b1")
     clock += STALE_MS
     registry.sweep()
     expect(registry.isOnline("b1")).toBe(true)
+  })
+})
+
+describe("beacon registry scope push", () => {
+  test("a scope-sync beacon is sent a changed scope once and an unchanged one never", () => {
+    const registry = createBeaconRegistry()
+    const socket = fakeSocket()
+    registry.connect({ beaconId: "b1", socket, beaconVersion: "2.0.0", protocolVersion: 2, scope: DEFAULT_BEACON_SCOPE })
+    registry.pushScope("b1", DEFAULT_BEACON_SCOPE)
+    expect(socket.sent).toEqual([])
+    const widened = { ...DEFAULT_BEACON_SCOPE, readRoots: ["/srv"] }
+    registry.pushScope("b1", widened)
+    registry.pushScope("b1", widened)
+    expect(socket.sent.map((raw) => JSON.parse(raw))).toEqual([{ kind: "scope", scope: widened }])
+  })
+
+  test("a forced push repeats the current scope as a reply", () => {
+    const registry = createBeaconRegistry()
+    const socket = fakeSocket()
+    registry.connect({ beaconId: "b1", socket, beaconVersion: "2.0.0", protocolVersion: 2, scope: DEFAULT_BEACON_SCOPE })
+    registry.pushScope("b1", DEFAULT_BEACON_SCOPE, { force: true })
+    expect(socket.sent.map((raw) => JSON.parse(raw))).toEqual([{ kind: "scope", scope: DEFAULT_BEACON_SCOPE }])
+  })
+
+  test("a beacon that predates scope sync is never sent a scope frame", () => {
+    const registry = createBeaconRegistry()
+    const socket = fakeSocket()
+    registry.connect({ beaconId: "b1", socket, beaconVersion: "0.1.0", protocolVersion: 1, scope: DEFAULT_BEACON_SCOPE })
+    registry.pushScope("b1", { ...DEFAULT_BEACON_SCOPE, exec: true }, { force: true })
+    expect(socket.sent).toEqual([])
   })
 })

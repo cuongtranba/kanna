@@ -18,3 +18,4 @@ code:
   - src/server/beacon-pairing.ts
   - src/server/beacon-pairing.test.ts
   - src/server/beacon-pairing-host.ts
+  - src/server/beacon-services.test.ts

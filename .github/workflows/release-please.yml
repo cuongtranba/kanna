@@ -141,3 +141,34 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ inputs.tag || needs.release-please.outputs.tag_name }}
+
+  # The desktop app (apps/beacon-desktop) is built with Electrobun, which only
+  # builds for the host OS, so each platform needs its own runner. Kept apart
+  # from beacon-binaries so a failed app build never blocks the CLI binaries.
+  beacon-desktop:
+    needs: release-please
+    if: ${{ !cancelled() && (needs.release-please.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.sha }}
+
+      - uses: oven-sh/setup-bun@v2
+
+      - run: bun install --frozen-lockfile
+
+      - run: bun run build:beacon-desktop -- --env stable
+
+      - name: Upload the app to the release
+        shell: bash
+        run: gh release upload "${TAG}" dist-beacon-desktop/stage/artifacts/* --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag || needs.release-please.outputs.tag_name }}

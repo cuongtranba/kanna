@@ -327,6 +327,16 @@ State is carried by the **shape of a drawn mark**, not by hue. A dot that change
 
 `kanna-terminal` overrides xterm's default background to transparent, inheriting the page background. The PTY content sits in the same tonal field as the chat — the terminal is part of the document, not a separate window. Roboto Mono carries content; selection uses Surface Secondary; cursor blink is a single CSS animation, no canvas glow.
 
+### Kanna Beacon desktop window (`apps/beacon-desktop`)
+
+A second surface in the same world: one 460×700 window and a tray icon, built from `src/beacon/desktop/view/`. Direction contract in `.impeccable/surfaces/apps-beacon-desktop.md` ("The record").
+
+- **Same inks and marks.** The window restates the four inks and the semantic `-text` tokens in `beacon-desktop.css` (it ships outside the Tailwind build), follows the OS light/dark preference, and draws state with `stateMarkStrokes` from `src/client/lib/stateMark.ts`, never its own paths.
+- **System type, deliberately.** Body ships no Vietnamese glyphs (ơ, ư, ế, ố and the rest are missing, checked with fontTools), and the window's language follows the OS, so prose uses the system UI stack (Segoe UI Variable, SF Pro, Noto Sans). Bricolage Grotesque Variable sets only the wordmark. Mono uses Roboto Mono when installed and otherwise the system mono (Cascadia Mono, Consolas, SF Mono), the same fallback the web client relies on.
+- **Shape-first, coral reserved.** A non-zero command exit is attention (half mark, warning ink), not failure; coral marks only refusal, the unpair action, and the title of the run-without-asking consent, which is a hairline-topped section rather than a box. Save stays disabled until that consent is ticked.
+- **The record.** Each row is a fixed tabular time column, then the target (mono, wrapping to two lines so a file name keeps its extension), then verb and outcome. Only rows that arrive after the window opens animate, transform only.
+- **Icon.** A beacon mast on a base with signal arcs (`scripts/beacon-desktop-icons.ts` draws every PNG and ICO; the files carry no other provenance). The tray shows the arcs only while connected; resting is the bare mast in Margin Gray. Electrobun 2.0.2 has no window-icon option, so the title bar keeps a generic icon.
+
 ### Responsive and performance contracts
 
 - **Mobile navigation:** the sidebar is a modal dialog below the desktop breakpoint. It traps focus, isolates the application outlet with `inert`, closes on Escape, and restores focus to the control that opened it.

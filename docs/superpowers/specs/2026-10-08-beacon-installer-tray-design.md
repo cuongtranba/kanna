@@ -1,6 +1,6 @@
 # Beacon — native installer + menu-bar/tray app — Design
 
-**Status:** Draft for review (implementation deferred to a human on real hardware)
+**Status:** Implemented for Windows (built and exercised on Windows 11); macOS and Linux paths are written but not yet run on hardware. See "Implementation notes" at the end.
 **Date:** 2026-10-08
 **Author:** Design session (cuongtranba)
 **Builds on:** `2026-10-08-beacon-companion-daemon-design.md`, ADR `adr-20261008-beacon-companion-daemon`
@@ -161,3 +161,18 @@ Because signing is deferred and the GUI needs the real OS, the acceptance is a p
   templates to copy the structure from.
 - The signing round (separate ADR): Developer ID + notarization, Authenticode, and removing the
   bypass guide.
+
+## Implementation notes (2026-10-08)
+
+What shipped differs from the draft above in these places; ADR `adr-20261008-beacon-desktop-app` records why.
+
+- **Layout.** The app's logic lives in `src/beacon/desktop/` (service, adapters, React view) so the repo's lint, typecheck and tests cover it. `apps/beacon-desktop/` holds only the Electrobun glue (`src/main.ts`, `src/view.tsx`, `src/rpc.ts`), config, icons and a preview harness. `bun run build:beacon-desktop` bundles both halves with Bun, stages an Electrobun project under `dist-beacon-desktop/stage`, and runs `electrobun build` (host OS only). `--stage-only --out <dir>` stages without building, which is how the Windows build was produced from WSL.
+- **Shared runner.** The CLI's reconnect loop moved to `src/beacon/runner.ts`; the CLI and the app both drive it (pause, resume, stop, unpair, status snapshots).
+- **Pairing.** The code is 8 characters (`PAIRING_CODE_ALPHABET`), not 6 digits. Kanna Settings offers an **Open in Kanna Beacon** link, `kanna-beacon://pair?url=…&code=…`, plus the CLI command as a fallback; the app also accepts either pasted into its window. Electrobun registers URL schemes on macOS only and its Windows launcher forwards no argv, so on Windows and Linux the app registers a per-user handler (`HKCU\Software\Classes\kanna-beacon`, or a hidden XDG entry) that runs the bundled `bun` with `open-link.js`. The helper hands the link to the running app over a named pipe (`\\.\pipe\kanna-beacon-<user>`) or unix socket, or stores it in `pending-link.txt` and starts the app. The same pipe makes the app single-instance.
+- **Scope from the app.** Beacon protocol 2 adds `set-scope`, `scope`, `unpair` and `refused` frames. The app proposes folders and flags; Kanna validates (absolute paths, at most 64), stores, and pushes the stored scope to every connected protocol-2 beacon whenever settings change, including edits made in Kanna Settings.
+- **Window.** "The record" design: status line, the grant as three rows (May read, Commands, Approval), and a record of what Kanna read and ran on this machine (`activity.jsonl`, last 500). Consent to run without asking is an explicit, unticked box that gates Save. Language follows the OS (English or Vietnamese).
+- **Launch at login** is on after pairing and off after unpairing. Windows uses a `Run` value that starts the launcher through `conhost --headless` with `KANNA_BEACON_AUTOSTART=1`, macOS a LaunchAgent (`open -g -b dev.kanna.beacon --env …`), Linux an XDG autostart entry. A login launch stays in the tray; a launch by the user opens the window.
+- **State** stays in `~/.kanna-beacon`, shared with the CLI; the app adds `desktop.json`, `activity.jsonl` and a capped `desktop.log`.
+- **Release.** `release-please.yml` gains a `beacon-desktop` job on `windows-latest` and `macos-latest` that uploads `dist-beacon-desktop/stage/artifacts/*`. It runs only on a real release, so it has not been exercised in CI yet.
+- **Known limits.** Electrobun 2.0.2 exposes no window-icon option, so the title bar shows a generic icon (the launcher and installer carry the app icon). Builds are unsigned.
+

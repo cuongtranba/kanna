@@ -54,7 +54,7 @@ export interface BeaconPairingRequest {
   os: BeaconOs
 }
 
-export type BeaconPairingResult = { ok: true; beaconId: string } | { ok: false; error: string }
+export type BeaconPairingResult = { ok: true; beaconId: string } | { ok: false; error: string; status: number | null }
 
 export interface BeaconPairClient {
   pair(kannaUrl: string, request: BeaconPairingRequest): Promise<BeaconPairingResult>
@@ -68,4 +68,5 @@ export interface BeaconState {
 export interface BeaconStateStore {
   load(): Promise<BeaconState | null>
   save(state: BeaconState): Promise<void>
+  clear(): Promise<void>
 }

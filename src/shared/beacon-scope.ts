@@ -1,4 +1,4 @@
-import type { BeaconRequest } from "./beacon-protocol"
+import type { BeaconRequest, BeaconScopeChange } from "./beacon-protocol"
 
 export type BeaconScope = {
   exec: boolean
@@ -70,6 +70,31 @@ function isInsideRoot(target: NormalizedPath, root: NormalizedPath): boolean {
   if (target.drive !== root.drive) return false
   if (root.segments.length > target.segments.length) return false
   return root.segments.every((segment, index) => segment === target.segments[index])
+}
+
+export const MAX_READ_ROOTS = 64
+export const MAX_READ_ROOT_LENGTH = 1024
+
+function isAcceptableReadRoot(root: string): boolean {
+  if (root.length === 0 || root.length > MAX_READ_ROOT_LENGTH) return false
+  const normalized = normalizePath(root)
+  return normalized.absolute
+}
+
+function normalizeReadRoots(roots: readonly string[]): readonly string[] | null {
+  if (roots.length > MAX_READ_ROOTS || !roots.every(isAcceptableReadRoot)) return null
+  return [...new Set(roots)]
+}
+
+export function applyScopeChange(scope: BeaconScope, change: BeaconScopeChange): BeaconScope | null {
+  const readRoots = change.readRoots === undefined ? scope.readRoots : normalizeReadRoots(change.readRoots)
+  if (readRoots === null) return null
+  return {
+    ...scope,
+    readRoots,
+    exec: change.exec ?? scope.exec,
+    autoRunScripts: change.autoRunScripts ?? scope.autoRunScripts,
+  }
 }
 
 export function isPathInsideRoots(target: string, roots: readonly string[]): boolean {

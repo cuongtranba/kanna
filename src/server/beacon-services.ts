@@ -1,6 +1,6 @@
 import type { ServerWebSocket } from "bun"
 import type { AppSettingsManager } from "./app-settings"
-import { createBeaconConnection, type BeaconConnection } from "./beacon-connection"
+import { createBeaconConnection, type BeaconConnection, type BeaconConnectionSettings } from "./beacon-connection"
 import { createBeaconRegistry, PING_INTERVAL_MS, type BeaconRegistry } from "./beacon-registry"
 import type { ClientState } from "./ws-router-utils"
 
@@ -16,15 +16,21 @@ export interface ClientSocketRouter {
   handleClose(ws: ServerWebSocket<ClientState>): void
 }
 
-export function createBeaconServices(deps: { appSettings: Pick<AppSettingsManager, "getSnapshot"> }): BeaconServices {
+export type BeaconServicesSettings = BeaconConnectionSettings & Pick<AppSettingsManager, "onChange">
+
+export function createBeaconServices(deps: { appSettings: BeaconServicesSettings }): BeaconServices {
   const registry = createBeaconRegistry()
   const connection = createBeaconConnection({ registry, appSettings: deps.appSettings })
   const sweepTimer = setInterval(() => registry.sweep(), PING_INTERVAL_MS)
+  const stopScopePush = deps.appSettings.onChange((snapshot) => {
+    for (const beacon of snapshot.customBeacons) registry.pushScope(beacon.id, beacon.scope)
+  })
   return {
     registry,
     connection,
     stop() {
       clearInterval(sweepTimer)
+      stopScopePush()
     },
   }
 }

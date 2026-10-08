@@ -1,5 +1,5 @@
 import { createPrivateKey, createPublicKey, generateKeyPairSync, sign, type KeyObject } from "node:crypto"
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { dirname } from "node:path"
 import type { BeaconKeyStore } from "./ports"
 
@@ -21,4 +21,8 @@ export function createKeyStore(path: string): BeaconKeyStore {
     publicKeySpkiBase64: () => spkiBase64,
     sign: (nonce) => sign(null, Buffer.from(nonce), privateKey).toString("base64"),
   }
+}
+
+export function eraseKeyStore(path: string): void {
+  rmSync(path, { force: true })
 }

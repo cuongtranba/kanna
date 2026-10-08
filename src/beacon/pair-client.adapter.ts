@@ -21,9 +21,9 @@ export function createPairClient(): BeaconPairClient {
         if (response.ok && parsed !== null && isJsonObject(parsed) && typeof parsed.beaconId === "string") {
           return { ok: true, beaconId: parsed.beaconId }
         }
-        return { ok: false, error: describeFailure(response.status, text) }
+        return { ok: false, error: describeFailure(response.status, text), status: response.status }
       } catch (error) {
-        return { ok: false, error: error instanceof Error ? error.message : String(error) }
+        return { ok: false, error: error instanceof Error ? error.message : String(error), status: null }
       }
     },
   }

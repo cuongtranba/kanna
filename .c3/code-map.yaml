@@ -118,6 +118,7 @@ c3-202:
   - src/server/beacon-registry.ts
   - src/server/beacon-registry.test.ts
   - src/server/beacon-services.ts
+  - src/server/beacon-services.test.ts
   - src/server/beacon-connection.ts
   - src/server/beacon-connection.test.ts
   - src/server/beacon-crypto.ts
@@ -358,6 +359,8 @@ c3-302:
   - src/shared/protocol.ts
   - src/shared/beacon-protocol.ts
   - src/shared/beacon-protocol.test.ts
+  - src/shared/beacon-pair-link.ts
+  - src/shared/beacon-pair-link.test.ts
   - src/shared/beacon-scope.ts
   - src/shared/beacon-scope.test.ts
   - src/shared/beacon-config.ts
@@ -493,6 +496,19 @@ c3-241:
   - src/beacon/shell.adapter.test.ts
   - src/beacon/state-store.adapter.ts
   - src/beacon/transport.adapter.ts
+  - src/beacon/activity.ts
+  - src/beacon/activity.test.ts
+  - src/beacon/runner.ts
+  - src/beacon/runner.test.ts
+  - src/beacon/host-os.ts
+  - src/beacon/version.ts
+  - src/beacon/version.test.ts
+  - src/beacon/desktop/**/*.ts
+  - src/beacon/desktop/**/*.tsx
+  - src/beacon/desktop/view/beacon-desktop.css
+  - apps/beacon-desktop/**/*
+  - scripts/build-beacon-desktop.ts
+  - scripts/beacon-desktop-icons.ts
 c3-123:
   - src/client/components/genui/**/*.ts
   - src/client/components/genui/**/*.tsx

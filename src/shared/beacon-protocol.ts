@@ -1,10 +1,19 @@
 import { isJsonArray, isJsonObject, type JsonObject, type JsonValue } from "./json"
 import type { BeaconScope } from "./beacon-scope"
 
-export const BEACON_PROTOCOL_VERSION = 1
+export const BEACON_PROTOCOL_VERSION = 2
 export const MIN_BEACON_PROTOCOL = 1
+export const SCOPE_SYNC_PROTOCOL = 2
 
 export type BeaconOs = "darwin" | "linux" | "windows"
+
+export type BeaconScopeChange = {
+  readRoots?: readonly string[]
+  exec?: boolean
+  autoRunScripts?: boolean
+}
+
+export type BeaconRefusal = "unknown-beacon" | "disabled"
 
 export type BeaconRequest =
   | { op: "exec"; cmd: string; args: readonly string[]; cwd?: string }
@@ -20,7 +29,11 @@ export type BeaconFrame =
   | { kind: "incompatible"; minSupported: number; downloadUrl?: string }
   | { kind: "challenge"; nonce: string }
   | { kind: "auth"; signature: string }
-  | { kind: "ready"; scope: BeaconScope }
+  | { kind: "ready"; scope: BeaconScope; protocolVersion?: number }
+  | { kind: "refused"; reason: BeaconRefusal }
+  | { kind: "scope"; scope: BeaconScope }
+  | { kind: "set-scope"; change: BeaconScopeChange }
+  | { kind: "unpair" }
   | { kind: "ping" }
   | { kind: "pong" }
   | { kind: "request"; id: string; request: BeaconRequest }
@@ -196,7 +209,47 @@ function parseIncompatible(object: JsonObject): BeaconFrame | null {
 
 function parseReady(object: JsonObject): BeaconFrame | null {
   const scope = parseBeaconScope(object.scope)
-  return scope === null ? null : { kind: "ready", scope }
+  const protocolVersion = readOptionalNumber(object, "protocolVersion")
+  if (scope === null || protocolVersion === null) return null
+  return protocolVersion === undefined ? { kind: "ready", scope } : { kind: "ready", scope, protocolVersion }
+}
+
+function parseScopeFrame(object: JsonObject): BeaconFrame | null {
+  const scope = parseBeaconScope(object.scope)
+  return scope === null ? null : { kind: "scope", scope }
+}
+
+function readOptionalBoolean(object: JsonObject, key: string): boolean | undefined | null {
+  if (!(key in object)) return undefined
+  return readBoolean(object, key)
+}
+
+function readOptionalStringList(object: JsonObject, key: string): readonly string[] | undefined | null {
+  if (!(key in object)) return undefined
+  return readStringList(object, key)
+}
+
+function parseScopeChange(value: JsonValue): BeaconScopeChange | null {
+  if (!isJsonObject(value)) return null
+  const readRoots = readOptionalStringList(value, "readRoots")
+  const exec = readOptionalBoolean(value, "exec")
+  const autoRunScripts = readOptionalBoolean(value, "autoRunScripts")
+  if (readRoots === null || exec === null || autoRunScripts === null) return null
+  return {
+    ...(readRoots === undefined ? {} : { readRoots }),
+    ...(exec === undefined ? {} : { exec }),
+    ...(autoRunScripts === undefined ? {} : { autoRunScripts }),
+  }
+}
+
+function parseSetScope(object: JsonObject): BeaconFrame | null {
+  const change = parseScopeChange(object.change)
+  return change === null ? null : { kind: "set-scope", change }
+}
+
+function parseRefused(object: JsonObject): BeaconFrame | null {
+  const reason = readString(object, "reason")
+  return reason === "unknown-beacon" || reason === "disabled" ? { kind: "refused", reason } : null
 }
 
 function parseRequestFrame(object: JsonObject): BeaconFrame | null {
@@ -250,6 +303,14 @@ export function parseBeaconFrame(value: JsonValue): BeaconFrame | null {
     }
     case "ready":
       return parseReady(value)
+    case "refused":
+      return parseRefused(value)
+    case "scope":
+      return parseScopeFrame(value)
+    case "set-scope":
+      return parseSetScope(value)
+    case "unpair":
+      return { kind: "unpair" }
     case "ping":
       return { kind: "ping" }
     case "pong":

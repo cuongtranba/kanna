@@ -2,6 +2,9 @@ import { expect, test } from "bun:test"
 import type { BeaconRequest } from "./beacon-protocol"
 import {
   DEFAULT_BEACON_SCOPE,
+  MAX_READ_ROOTS,
+  MAX_READ_ROOT_LENGTH,
+  applyScopeChange,
   evaluateBeaconRequest,
   type BeaconEvalContext,
   type BeaconScope,
@@ -94,4 +97,26 @@ test("a script with an untrusted or missing hash asks", () => {
 test("a script is allowed when autoRunScripts is on", () => {
   const scope = { ...DEFAULT_BEACON_SCOPE, exec: true, autoRunScripts: true }
   expect(evaluateBeaconRequest(scope, SCRIPT, NO_TRUST)).toBe("allow")
+})
+
+test("a scope change replaces only the fields it names", () => {
+  const base: BeaconScope = { ...DEFAULT_BEACON_SCOPE, execAllowlist: ["git"], readRoots: ["/old"] }
+  expect(applyScopeChange(base, { exec: true })).toEqual({ ...base, exec: true })
+  expect(applyScopeChange(base, { readRoots: ["/home/me/notes", "D:\\Projects"] })).toEqual({
+    ...base,
+    readRoots: ["/home/me/notes", "D:\\Projects"],
+  })
+  expect(applyScopeChange(base, { autoRunScripts: true })).toEqual({ ...base, autoRunScripts: true })
+})
+
+test("a scope change drops duplicate folders and keeps their first order", () => {
+  expect(applyScopeChange(DEFAULT_BEACON_SCOPE, { readRoots: ["/a", "/b", "/a"] })?.readRoots).toEqual(["/a", "/b"])
+})
+
+test("a scope change naming a relative, empty or oversized folder is refused whole", () => {
+  expect(applyScopeChange(DEFAULT_BEACON_SCOPE, { readRoots: ["notes"] })).toBeNull()
+  expect(applyScopeChange(DEFAULT_BEACON_SCOPE, { readRoots: [""] })).toBeNull()
+  expect(applyScopeChange(DEFAULT_BEACON_SCOPE, { readRoots: [`/${"a".repeat(MAX_READ_ROOT_LENGTH)}`] })).toBeNull()
+  const many = Array.from({ length: MAX_READ_ROOTS + 1 }, (_, index) => `/r${index}`)
+  expect(applyScopeChange(DEFAULT_BEACON_SCOPE, { readRoots: many })).toBeNull()
 })

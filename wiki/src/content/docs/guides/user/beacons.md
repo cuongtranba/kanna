@@ -23,7 +23,24 @@ Set the password in Settings before you begin.
 
 ## Install
 
-Pick one:
+### The Kanna Beacon app (recommended)
+
+Download **Kanna Beacon** for your computer from the
+[latest release](https://github.com/cuongtranba/kanna/releases/latest)
+(`win-x64-KannaBeacon-Setup.zip` on Windows: unzip it and run
+`Kanna Beacon-Setup.exe`), then open it.
+It is a small window plus a tray icon (menu bar on macOS); there is nothing to
+type into a terminal. The window follows your system language (English or
+Vietnamese) and your light or dark theme.
+
+The app is **not code-signed yet**. On Windows, SmartScreen may say "Windows
+protected your PC": choose **More info**, then **Run anyway**. On macOS, see
+[macOS first run](#macos-first-run-gatekeeper) below. Only do this for a copy
+you downloaded from the official release.
+
+### The command-line beacon
+
+For servers and scripts, the same beacon ships as a single binary:
 
 - **Installer script** (macOS and Linux):
 
@@ -43,6 +60,13 @@ Pick one:
   or `kanna-beacon-windows-x64.exe`, together with `SHA256SUMS`. Verify the
   checksum, rename the file to `kanna-beacon`, and mark it executable.
 
+The command-line beacon has no window. Run it from a terminal (PowerShell on
+Windows). Opened by double-click on Windows, it prints its usage and a link to
+the app, then waits for Enter instead of closing at once.
+
+The app and the CLI share one identity on a machine (`~/.kanna-beacon`), so pair
+with one of them, not both.
+
 ### macOS first run (Gatekeeper)
 
 Phase 1 binaries are **not code-signed or notarized**, so macOS may refuse to
@@ -61,31 +85,40 @@ checked against `SHA256SUMS`.
 
 1. In Kanna, open **Settings → Beacons** and choose **Pair a machine**. Kanna
    shows a short-lived one-time code with a countdown.
-2. On the machine you are pairing, run the command Kanna shows (use **Copy
-   command**):
+2. On the machine you are pairing:
+   - **With the app:** click **Open in Kanna Beacon**. The app opens with the
+     Kanna address and code filled in and asks you to confirm the address.
+     Check it is your own Kanna, then choose **Connect**. If the link does not
+     open the app, copy the command Kanna shows and paste it into the app's
+     window instead.
+   - **With the CLI:** run the command Kanna shows (use **Copy command**):
 
-   ```sh
-   kanna-beacon pair <kanna-url> <code>
-   ```
+     ```sh
+     kanna-beacon pair <kanna-url> <code>
+     ```
 
-3. Start the daemon with `kanna-beacon run`. The machine appears under Beacons
-   as **Online**.
+     then start the daemon with `kanna-beacon run`.
+3. The machine appears under Beacons as **Online**.
 
-The code works once and expires; if it lapses, mint a new one. Pairing stores a
-private key on that machine. From then on the beacon proves who it is by
-signing a challenge from the server, so there is no shared password to leak.
+The code works once and expires after five minutes; if it lapses, mint a new
+one. Pairing stores a private key on that machine. From then on the beacon
+proves who it is by signing a challenge from the server, so there is no shared
+password to leak.
 
 ## Grant scope
 
 A freshly paired beacon can do **nothing**. Scope is default-deny, and you
-widen it per machine from **Settings → Beacons → Scope**:
+widen it per machine, either in the app (right after pairing, or later with
+**Change**) or in Kanna under **Settings → Beacons → Scope**. Both edit the same
+grant: Kanna stores it, and a change made in either place reaches a connected
+beacon at once.
 
 | Setting | Effect |
 | --- | --- |
-| Folders the agent may read (`readRoots`) | The only directories the agent can read, list, search or fetch from. Anything outside is denied. Empty means no file access at all. |
+| Folders the agent may read (`readRoots`) | The only directories the agent can read, list, search or fetch from. Anything outside is denied. Empty means no file access at all. In the app, **Add folder** opens the system folder picker. |
 | Allow running commands (`exec`) | Off by default. Until it is on, the agent cannot run commands or scripts on this machine. |
-| Commands that always run without asking (`execAllowlist`) | With exec on, a command whose name is listed here runs immediately. Any other command asks you first. |
-| Run commands and scripts from this chat without asking each time (`autoRunScripts`) | Removes the per-call approval prompt: reads inside your folders and any command you have enabled run immediately. |
+| Commands that always run without asking (`execAllowlist`) | With exec on, a command whose name is listed here runs immediately. Any other command asks you first. Set this in Kanna. |
+| Run commands and scripts from this chat without asking each time (`autoRunScripts`) | Removes the per-call approval prompt: reads inside your folders and any command you have enabled run immediately. In the app this is the **Ask me in Kanna before each read or command** box, turned off. |
 
 Everything that is allowed but not pre-approved raises an approval prompt in
 the chat, so you see what is about to run before it does.
@@ -101,12 +134,32 @@ flag is **off by default** and **per machine**, so a beacon paired through the
 bare CLI asks before every run until you turn it on. The transcript still
 records every run, and turning the setting off withdraws the consent.
 
+## The record, pausing and unpairing (app)
+
+The app's main window shows what Kanna may use and, below it, a **record** of
+what Kanna read and ran on this computer: time, target, action and outcome.
+The record is kept on this machine (the last 500 entries) and is cleared when
+you unpair.
+
+- **Pause** disconnects the beacon without unpairing; Kanna cannot reach the
+  machine until you **Resume**. A pause survives a restart.
+- **Start when I sign in** (in the **…** menu) launches the app quietly into
+  the tray at login. It is on after pairing and off after unpairing.
+- **Unpair this computer** (in the **…** menu) tells Kanna to forget the
+  machine, deletes the local key and record, and returns the app to its
+  pairing screen. If Kanna cannot be reached, the app says so, and you should
+  revoke the machine in Kanna as below.
+
+Closing the window keeps the beacon running in the tray; quit it from the tray
+menu.
+
 ## Revoke
 
 In **Settings → Beacons**, use **Revoke** on a machine. Kanna confirms, then the
 agent loses access immediately and the machine must be paired again to come
-back. To remove the daemon from the machine itself, delete the `kanna-beacon`
-binary and its stored state.
+back. The app shows **Removed from Kanna** and offers **Pair again**. To remove
+the CLI daemon from the machine itself, delete the `kanna-beacon` binary and its
+stored state (`~/.kanna-beacon`).
 
 ## Troubleshooting
 
@@ -117,3 +170,9 @@ binary and its stored state.
 - **Update available badge** — install a newer `kanna-beacon`; the daemon and
   server must speak a compatible protocol version, and an incompatible daemon
   exits rather than run.
+- **The pairing link does nothing** — open Kanna Beacon once so it can register
+  the `kanna-beacon:` link handler, or paste the pairing command into its window.
+- **Saving the grant says the Kanna is too old** — update Kanna; until then set
+  the scope in Kanna Settings.
+- **App diagnostics** — the app writes `~/.kanna-beacon/desktop.log`
+  (`%USERPROFILE%\.kanna-beacon\desktop.log` on Windows).
