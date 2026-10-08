@@ -1,6 +1,6 @@
 ---
 id: adr-20261008-beacon-companion-daemon
-c3-seal: 4b9331cfb29173b4ac442b7aa69732fe7553b03b76e5a2786b48faa898f88979
+c3-seal: feff153d4d821d9a91bceac7ecc313979225178b602bff2937792f013dd997e8
 title: beacon-companion-daemon
 type: adr
 goal: |-
@@ -107,7 +107,7 @@ wire.
 
 | Entity | Type | Why affected | Evidence | Governance review |
 | --- | --- | --- | --- | --- |
-| c3-226 kanna-mcp-host | component | Gains the beacon\_\* tool group in its own `kanna-mcp-beacon.ts`, registered beside `buildBoardToolList`, gated on a beacon registry plus `chatId`, results via `ok()`/`fail()`; `kanna-mcp.ts` and `tool-callback.ts` currently resolve to no component, so this change binds them | `src/server/kanna-mcp.ts:1017`, `src/server/kanna-mcp-tool.ts:9` | rule-mcp-name-reserved: new tool names are constants in `src/shared/tools.ts`; mcp-inline-tool-results budget stays 0 |
+| c3-226 kanna-mcp-host | component | Gains the beacon\_\* tool group in its own `kanna-mcp-beacon.ts`, registered beside `buildBoardToolList`, gated on a beacon registry plus `chatId`; a main chat always gets it, a subagent only when its config allows the group (default off), via `args.delegationContext.depth`; results via `ok()`/`fail()`; `kanna-mcp.ts` and `tool-callback.ts` currently resolve to no component, so this change binds them | `src/server/kanna-mcp.ts:1017`, `src/server/kanna-mcp-tool.ts:9` | rule-mcp-name-reserved: new tool names are constants in `src/shared/tools.ts`; mcp-inline-tool-results budget stays 0 |
 | permission gate | component | New beacon branch: deny outside `readRoots` or with exec off, auto-allow allowlisted exec verbs, ask otherwise; today only mcp\_\_kanna\_\_bash has verb logic | `src/server/permission-gate.ts:186`, `src/server/permission-gate.ts:254` | per-call timeout lives in beacon scope, since the approval path never times out (NEVER\_EXPIRES) |
 | c3-202 http-ws-server | component | New `customBeacons` collection through the generic `CollectionCrud`, with normalize and validate in a new `beacon-settings.ts`; new `/beacon` upgrade branch in `http-dispatcher.ts` refused while `auth` is null; `server.ts` websocket handlers dispatch on a `ws.data` kind | `src/server/app-settings.ts:1341`, `src/server/http-dispatcher.ts:83`, `src/server/server.ts:658` | ref-event-sourcing: registry entries persist through the settings collection, never a sidecar; `server.ts` is 3 lines under the module threshold |
 | c3-208 ws-router and c3-302 protocol | component | New global `beacons` topic in `SubscriptionTopic` and `ServerSnapshot` beside `cron-jobs`, envelope branch and push on registry change, one typed `beacons.mintPairingCode` command | `src/shared/protocol.ts:64`, `src/server/ws-router-envelope.ts:401` | ref-ws-subscription: snapshot pushed on change, dedupe by signature; ws-router-dispatch-arms stays 0 |

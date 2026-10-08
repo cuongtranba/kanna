@@ -243,6 +243,14 @@ It registers **only** when `beaconRegistry && chatId` are present, and its
 results use `ok()` / `fail()` (`kanna-mcp-tool.ts:9–15`) — the
 `mcp-inline-tool-results` budget pins inline result literals at 0.
 
+**Subagent access is configurable, like an allowed-tool setting.** A main chat
+(`depth === 0`) gets the group whenever a beacon registry is present. A subagent
+(`depth > 0`) gets it only when the subagent's configuration allows the beacon
+tool group — the same shape as the per-subagent tool allowlist, defaulting to
+**off**, so a subagent cannot reach a paired machine unless the user granted it.
+The depth already reaches this code as `args.delegationContext?.depth`, the way
+`buildPluginToolList` withholds its mutating tools past depth 0.
+
 Phase-1 tools:
 
 | Tool | Purpose | Gate |
@@ -592,4 +600,5 @@ shims onto a bound beacon once the explicit tools are trusted.
 | Installer for non-technical users | `.pkg` / `.exe` installer with a 6-digit code prompt, then a background service with a tray/menu-bar icon (§1). |
 | Code signing | Unsigned in Phase 1 with an in-product first-run bypass guide; signed and notarized in Phase 2 (§10). |
 | Large files | `beacon_read` (windowed), `beacon_grep` (search on the machine), and `beacon_fetch` (copy to the workspace) — the model routes itself (§3). |
+| Subagent access | Configurable per subagent, like an allowed-tool setting; default off, so only a main chat reaches a beacon unless the user grants a subagent the tool group (§3). |
 | Running scripts | One-time informed consent at install: the installer's final step asks once, and agreeing turns on per-beacon `autoRunScripts` so `beacon_script`/`beacon_exec` run with no further prompt on that machine (§3a). Revocable in one click; the transcript still records every run; requires a Kanna password. A CLI-paired beacon with no consent screen asks until the user turns it on. |

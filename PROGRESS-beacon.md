@@ -56,6 +56,14 @@ M0 (design PR) in progress on `docs/beacon-design`.
 - 2026-10-08 Live status follows the global `cron-jobs` topic; the
   `pty-instances` precedent was deleted with the PTY driver.
 
+- 2026-10-08 Subagent access to beacon tools is a per-subagent allowed-tool
+  setting, default off. Main chat always gets the group; a subagent only when
+  granted. Gated on delegation depth plus the flag.
+- 2026-10-08 Implementation: thin vertical slice first (protocol, scope,
+  settings, /beacon transport, registry, beacon tools, daemon CLI), skipping the
+  native .pkg/.exe installer and tray app. Running the milestones continuously,
+  reporting at the end. Branch feat/beacon-phase1 off docs/beacon-design.
+
 ## Failed approaches
 
 ## Unresolved errors

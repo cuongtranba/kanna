@@ -158,8 +158,9 @@ threading (as `boardRegistry` does), and the client pending card.
   the `autoRunScripts` and trusted-hash paths for `beacon_script`.
 - [ ] Dedicated approval card showing beacon label, OS, online state, and the
   command or the full script body.
-- [ ] Decide and record whether subagent sessions get beacon tools (boards do
-  not today); default to main chats only.
+- [ ] Subagent access is a per-subagent allowed-tool setting, default off: a main
+  chat (`depth === 0`) always gets the group; a subagent only when its config
+  grants it. Gate on `args.delegationContext?.depth` plus that flag.
 - [ ] Tests: through the gate's public `evaluate`, an allowlisted exec
   auto-allows, an unlisted one asks, and an out-of-root read is denied without
   reaching the beacon; an offline beacon returns a clear error.
