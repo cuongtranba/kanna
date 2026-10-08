@@ -1,9 +1,20 @@
 ---
 title: Chat & Transcript
-description: Rendering, diffs, terminal, uploads, slash commands, plan mode, subagents, background tasks, auto-resume, compaction.
+description: Live output, rendering, diffs, terminal, the message queue, uploads, slash commands, plan mode, subagents, background tasks, auto-resume, compaction.
 ---
 
 import Screenshot from '../../../components/Screenshot.astro'
+import Diagram from '../../../components/Diagram.astro'
+
+## Live output
+
+On Claude chats you watch the model work instead of a spinner. Its thinking, the
+reply it is writing, and a tool call being prepared (with the file it targets and
+the size of its input so far) stream into the transcript as they are generated.
+When a block finishes, the live preview is replaced by the finished entry in the
+same frame.
+
+The preview is never saved: only finished entries reach the transcript on disk.
 
 ## Rich transcript rendering
 
@@ -99,16 +110,40 @@ Pending tool requests survive a server restart and replay on reconnect (with `KA
 
 When a turn hits a rate limit, Kanna can schedule a "continue" for the moment the limit resets instead of asking you. Enable it under **Settings → General**; each scheduled resume is still cancellable from the chat.
 
-## Proactive compaction
+## The message queue
 
-A context-window meter shows usage near the threshold. Kanna runs automatic transcript compaction before limits are hit.
+Everything that wants a chat's attention arrives as a message to that chat:
+what you type, a [cron job](/features/cron-jobs/), a [loop](/features/loops/)
+waking up, a background subagent reporting back, a [board card](/features/boards/)
+starting work.
 
-<Screenshot
-  light="/screenshots/light/chat-transcript.png"
-  dark="/screenshots/dark/chat-transcript.png"
-  alt="Context-window meter near threshold"
+<Diagram
+  name="kanna-turn-queue"
+  alt="Fan-in diagram: a typed message, a cron job, a loop wake, a background subagent and a board card all enter one durable per-chat queue, which starts a turn only when the chat is idle and writes its output to the transcript."
 />
+
+A chat runs one turn at a time. While it is busy, new messages wait in its
+queue and start, in order, the moment it is idle. The queue is saved to disk
+and a message is only removed once its turn is recorded, so a server restart
+does not lose one; queued messages are picked up again at boot.
+
+A queued message can also be **steered**: Kanna stops the running turn and sends
+that message right away instead of waiting.
+
+## Context window and compaction
+
+The composer shows how much of the model's context window the chat is using.
+When it fills, the Claude agent compacts the conversation on its own and keeps
+working; Kanna saves the summary into the transcript so a later restart resumes
+with the full history. Type `/compact` to compact earlier, optionally saying
+what to keep. See [Slash commands](/features/slash-commands/#compact).
 
 ## File & image uploads
 
 Drag and drop files or images into the composer to attach them to the next turn.
+
+Uploads are **resumable**. A file is sent in 8 MiB pieces, so a multi-gigabyte
+upload works behind a Cloudflare tunnel (which refuses any single request over
+100 MB) and picks up where it stopped after a dropped connection. The size limit
+is a setting (default 2 GB, up to 50 GB). Downloads support byte
+ranges, so a download manager can resume them too.

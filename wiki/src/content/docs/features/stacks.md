@@ -74,8 +74,8 @@ value clears it.
 
 A loop armed from a chat runs in **that chat's** working directory. On a chat
 started from a board card that is the card's worktree, not the project's
-registered checkout — so `PROGRESS.md` appears beside the branch it describes
-and the verify command runs against the tree the agent is editing. Pass
+registered checkout — so the verify command runs against the tree the agent is
+editing, and parallel workers' branches merge back into it. Pass
 `workdir` to `setup_loop` only to point a loop at a *different* tree; it must
 still be the project's checkout or a worktree of it.
 

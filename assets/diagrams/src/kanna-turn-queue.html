@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Every trigger is a message to a chat</title>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,800&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      background: #fffdfd;
+      color: #110c0c;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 2rem;
+    }
+    .frame { max-width: 1320px; width: 100%; }
+    .diagram-container { width: 100%; overflow-x: auto; }
+    .eyebrow {
+      font-family: 'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: #5f5556;
+      margin-bottom: 0.5rem;
+    }
+    h1 {
+      font-family: 'Bricolage Grotesque', 'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem);
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      color: #110c0c;
+      margin-bottom: 1.5rem;
+    }
+    svg { width: 100%; min-width: 1280px; display: block; }
+    @media print {
+      .diagram-container { overflow-x: visible; }
+      svg { min-width: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Data flow · Kanna</p>
+    <h1>Every trigger is a message to a chat</h1>
+    <div class="diagram-container">
+      <svg viewBox="0 0 1280 496" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="kanna-turn-queue-title kanna-turn-queue-desc">
+        <title id="kanna-turn-queue-title">Every trigger is a message to a chat</title>
+        <desc id="kanna-turn-queue-desc">Fan-in diagram: a typed message, a cron job, a loop wake, a background subagent and a board card all enter one durable per-chat queue, which starts a turn only when the chat is idle and writes its output to the transcript.</desc>
+        <defs><marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#5f5556"/></marker><marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#ff637e"/></marker><marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#006c9d"/></marker><marker id="arrow-soft" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#7b7272"/></marker></defs>
+        <rect width="100%" height="100%" rx="8" fill="#fffdfd"/>
+<path d="M240,92 H336 Q344,92 344,100 V188 Q344,196 352,196 H400" fill="none" stroke="#5f5556" stroke-width="1.2" marker-end="url(#arrow)"/>
+<path d="M240,164 H312 Q320,164 320,172 V208 Q320,216 328,216 H400" fill="none" stroke="#5f5556" stroke-width="1.2" marker-end="url(#arrow)"/>
+<path d="M240,236 H400" fill="none" stroke="#5f5556" stroke-width="1.2" marker-end="url(#arrow)"/>
+<path d="M240,308 H312 Q320,308 320,300 V264 Q320,256 328,256 H400" fill="none" stroke="#5f5556" stroke-width="1.2" marker-end="url(#arrow)"/>
+<path d="M240,380 H336 Q344,380 344,372 V284 Q344,276 352,276 H400" fill="none" stroke="#5f5556" stroke-width="1.2" marker-end="url(#arrow)"/>
+<path d="M640,236 H720" fill="none" stroke="#ff637e" stroke-width="1.4" marker-end="url(#arrow-accent)"/>
+<path d="M904,236 H1024" fill="none" stroke="#5f5556" stroke-width="1.2" marker-end="url(#arrow)"/>
+<path d="M812,268 V324 Q812,332 804,332 H528 Q520,332 520,324 V296" fill="none" stroke="#5f5556" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+<rect x="650.0" y="216" width="60" height="12" rx="2" fill="#fffdfd"/><text x="680" y="225" fill="#c73756" font-size="8" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.06em">WHEN IDLE</text>
+<rect x="940.0" y="216" width="48" height="12" rx="2" fill="#fffdfd"/><text x="964" y="225" fill="#5f5556" font-size="8" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.06em">ENTRIES</text>
+<rect x="636.0" y="338" width="60" height="12" rx="2" fill="#fffdfd"/><text x="666" y="347" fill="#5f5556" font-size="8" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.06em">CHAT BUSY</text>
+<rect x="40" y="64" width="200" height="56" rx="6" fill="#fffdfd"/><rect x="40" y="64" width="200" height="56" rx="6" fill="rgba(95,85,86,0.1)" stroke="#7b7272" stroke-width="1"/><rect x="48" y="72" width="32" height="12" rx="2" fill="none" stroke="rgba(95,85,86,0.4)" stroke-width="0.8"/><text x="64.0" y="81" fill="#7b7272" font-size="7" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.08em">CRON</text><text x="140.0" y="97" fill="#110c0c" font-size="12" font-weight="600" font-family="'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="middle">/cron job</text><text x="140.0" y="111" fill="#5f5556" font-size="9" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle">inline or spawn</text>
+<rect x="40" y="136" width="200" height="56" rx="6" fill="#fffdfd"/><rect x="40" y="136" width="200" height="56" rx="6" fill="rgba(95,85,86,0.1)" stroke="#7b7272" stroke-width="1"/><rect x="48" y="144" width="32" height="12" rx="2" fill="none" stroke="rgba(95,85,86,0.4)" stroke-width="0.8"/><text x="64.0" y="153" fill="#7b7272" font-size="7" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.08em">LOOP</text><text x="140.0" y="169" fill="#110c0c" font-size="12" font-weight="600" font-family="'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="middle">Loop wake</text><text x="140.0" y="183" fill="#5f5556" font-size="9" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle">worker finished</text>
+<rect x="40" y="208" width="200" height="56" rx="6" fill="#fffdfd"/><rect x="40" y="208" width="200" height="56" rx="6" fill="rgba(95,85,86,0.1)" stroke="#7b7272" stroke-width="1"/><rect x="48" y="216" width="32" height="12" rx="2" fill="none" stroke="rgba(95,85,86,0.4)" stroke-width="0.8"/><text x="64.0" y="225" fill="#7b7272" font-size="7" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.08em">USER</text><text x="140.0" y="241" fill="#110c0c" font-size="12" font-weight="600" font-family="'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="middle">You</text><text x="140.0" y="255" fill="#5f5556" font-size="9" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle">type · queue · steer</text>
+<rect x="40" y="280" width="200" height="56" rx="6" fill="#fffdfd"/><rect x="40" y="280" width="200" height="56" rx="6" fill="rgba(95,85,86,0.1)" stroke="#7b7272" stroke-width="1"/><rect x="48" y="288" width="36" height="12" rx="2" fill="none" stroke="rgba(95,85,86,0.4)" stroke-width="0.8"/><text x="66.0" y="297" fill="#7b7272" font-size="7" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.08em">AGENT</text><text x="140.0" y="313" fill="#110c0c" font-size="12" font-weight="600" font-family="'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="middle">Background subagent</text><text x="140.0" y="327" fill="#5f5556" font-size="9" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle">reports back</text>
+<rect x="40" y="352" width="200" height="56" rx="6" fill="#fffdfd"/><rect x="40" y="352" width="200" height="56" rx="6" fill="rgba(95,85,86,0.1)" stroke="#7b7272" stroke-width="1"/><rect x="48" y="360" width="36" height="12" rx="2" fill="none" stroke="rgba(95,85,86,0.4)" stroke-width="0.8"/><text x="66.0" y="369" fill="#7b7272" font-size="7" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.08em">BOARD</text><text x="140.0" y="385" fill="#110c0c" font-size="12" font-weight="600" font-family="'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="middle">Board card</text><text x="140.0" y="399" fill="#5f5556" font-size="9" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle">Start work</text>
+<rect x="400" y="176" width="240" height="120" rx="6" fill="#fffdfd"/><rect x="400" y="176" width="240" height="120" rx="6" fill="rgba(255,99,126,0.08)" stroke="#ff637e" stroke-width="1"/><rect x="408" y="184" width="36" height="12" rx="2" fill="none" stroke="rgba(255,99,126,0.5)" stroke-width="0.8"/><text x="426.0" y="193" fill="#c73756" font-size="7" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.08em">QUEUE</text><text x="520.0" y="214" fill="#110c0c" font-size="12" font-weight="600" font-family="'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="middle">Chat queue</text><text x="520.0" y="230" fill="#5f5556" font-size="9" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle">durable · survives restart</text>
+<rect x="416" y="252" width="64" height="24" rx="2" fill="#fffdfd" stroke="rgba(255,99,126,0.5)" stroke-width="0.8"/><text x="448" y="267" fill="#c73756" font-size="8" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.06em">wake</text>
+<rect x="488" y="252" width="64" height="24" rx="2" fill="#fffdfd" stroke="rgba(255,99,126,0.5)" stroke-width="0.8"/><text x="520" y="267" fill="#c73756" font-size="8" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.06em">cron</text>
+<rect x="560" y="252" width="64" height="24" rx="2" fill="#fffdfd" stroke="rgba(255,99,126,0.5)" stroke-width="0.8"/><text x="592" y="267" fill="#c73756" font-size="8" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.06em">you</text>
+<rect x="720" y="204" width="184" height="64" rx="6" fill="#fffdfd"/><rect x="720" y="204" width="184" height="64" rx="6" fill="#ffffff" stroke="#110c0c" stroke-width="1"/><rect x="728" y="212" width="32" height="12" rx="2" fill="none" stroke="rgba(17,12,12,0.4)" stroke-width="0.8"/><text x="744.0" y="221" fill="#110c0c" font-size="7" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.08em">TURN</text><text x="812.0" y="242" fill="#110c0c" font-size="12" font-weight="600" font-family="'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="middle">Turn runner</text><text x="812.0" y="258" fill="#5f5556" font-size="9" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle">one live turn per chat</text>
+<rect x="1024" y="204" width="216" height="64" rx="6" fill="#fffdfd"/><rect x="1024" y="204" width="216" height="64" rx="6" fill="rgba(17,12,12,0.05)" stroke="#5f5556" stroke-width="1"/><rect x="1032" y="212" width="28" height="12" rx="2" fill="none" stroke="rgba(95,85,86,0.5)" stroke-width="0.8"/><text x="1046.0" y="221" fill="#5f5556" font-size="7" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.08em">LOG</text><text x="1132.0" y="242" fill="#110c0c" font-size="12" font-weight="600" font-family="'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-anchor="middle">Transcript</text><text x="1132.0" y="258" fill="#5f5556" font-size="9" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" text-anchor="middle">saved · streamed live</text>
+<line x1="40" y1="432" x2="1240" y2="432" stroke="rgba(17,12,12,0.1)" stroke-width="0.8"/><text x="40" y="448" fill="#5f5556" font-size="8" font-family="'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" letter-spacing="0.18em">LEGEND</text><rect x="40" y="464" width="14" height="10" rx="2" fill="rgba(95,85,86,0.1)" stroke="#7b7272" stroke-width="1"/><text x="60" y="472" fill="#5f5556" font-size="8.5" font-family="'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">Trigger</text><rect x="124" y="464" width="14" height="10" rx="2" fill="rgba(255,99,126,0.08)" stroke="#ff637e" stroke-width="1"/><text x="144" y="472" fill="#5f5556" font-size="8.5" font-family="'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">Queue</text><rect x="196" y="464" width="14" height="10" rx="2" fill="#ffffff" stroke="#110c0c" stroke-width="1"/><text x="216" y="472" fill="#5f5556" font-size="8.5" font-family="'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">Runner</text><rect x="276" y="464" width="14" height="10" rx="2" fill="rgba(17,12,12,0.05)" stroke="#5f5556" stroke-width="1"/><text x="296" y="472" fill="#5f5556" font-size="8.5" font-family="'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">Record</text><line x1="356" y1="469" x2="384" y2="469" stroke="#ff637e" stroke-width="1.2" marker-end="url(#arrow-accent)"/><text x="392" y="472" fill="#5f5556" font-size="8.5" font-family="'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">Dequeue</text><line x1="456" y1="469" x2="484" y2="469" stroke="#5f5556" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arrow)"/><text x="492" y="472" fill="#5f5556" font-size="8.5" font-family="'Body', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">Wait while busy</text>
+      </svg>
+    </div>
+  </div>
+</body>
+</html>

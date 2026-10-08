@@ -3,6 +3,8 @@ title: Boards
 description: Kanban boards where starting work on a card cuts a branch, a worktree and a chat — plus GitHub Issues sync and the tools an agent uses to move its own card.
 ---
 
+import Diagram from '../../../components/Diagram.astro'
+
 Every project gets kanban boards, at `/boards/<project>`. They are ordinary
 boards — columns, cards, drag and drop, a card drawer with custom fields — with
 one thing that makes them more than a to-do list:
@@ -58,6 +60,11 @@ not symmetric:
 | You press **Start work** | Kanna | the `active` column |
 | The work is finished and verified | **the agent** | one column forward |
 | The card reaches `done` | only ever **you** | — |
+
+<Diagram
+  name="kanna-board-card"
+  alt="State diagram of a board card: Kanna moves it to In progress on Start work and creates its worktree and chat, the agent advances it one column when the work is verified, and only you move it to Done, which asks whether to merge, discard or keep the worktree."
+/>
 
 **The agent moves its own card, and Kanna does not do it for them.** There is no
 turn-end hook, on purpose: a card takes as many turns as it takes, so "the turn

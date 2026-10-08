@@ -1,0 +1,55 @@
+---
+title: How Kanna works
+description: The few ideas that explain the rest of Kanna — one server process, an event log, a queue per chat, and a worktree per card.
+---
+
+import Diagram from '../../../components/Diagram.astro'
+
+Kanna is one Bun process on your machine with a browser UI in front of it. Four
+ideas explain almost everything else in these docs.
+
+## One server, many agents
+
+<Diagram
+  name="kanna-architecture"
+  alt="Architecture diagram: the Kanna web app talks to a Bun server over WebSocket; its agent coordinator records every event, runs turns on the Claude Agent SDK or the Codex app-server, and those agents edit your project worktree and call your MCP servers and Kanna's own tools."
+/>
+
+The browser sends commands over a WebSocket. The **agent coordinator** runs each
+turn on a provider: the Claude Agent SDK (which also serves OpenRouter models)
+or the Codex app-server. The agent edits files in the chat's project or worktree,
+and calls tools: your own [MCP servers](/features/advanced/#custom-mcp-servers)
+and Kanna's tools for subagents, cron, boards and the task list.
+
+## Everything is an event
+
+Every change, from a renamed chat to a streamed tool result, is appended to an
+event log under `~/.kanna/data`. The screen you see is derived from that log.
+That is why a page refresh, a server restart or a dropped connection loses
+nothing: the server replays the log and the chat comes back as it was. The
+[architecture page](/guides/contributing/architecture/) has the details.
+
+## Every trigger is a message to a chat
+
+<Diagram
+  name="kanna-turn-queue"
+  alt="Fan-in diagram: a typed message, a cron job, a loop wake, a background subagent and a board card all enter one durable per-chat queue, which starts a turn only when the chat is idle and writes its output to the transcript."
+/>
+
+You typing, a [cron job](/features/cron-jobs/) firing, a [loop](/features/loops/)
+waking, a [subagent](/guides/user/subagents/) reporting back: all of them become
+a message in the chat's queue. A chat runs one turn at a time and starts the next
+message when it is idle. The queue is saved to disk, so work you scheduled
+survives a restart.
+
+## One card, one worktree, one chat
+
+<Diagram
+  name="kanna-board-card"
+  alt="State diagram of a board card: Kanna moves it to In progress on Start work and creates its worktree and chat, the agent advances it one column when the work is verified, and only you move it to Done, which asks whether to merge, discard or keep the worktree."
+/>
+
+On a [board](/features/boards/), *Start work* gives a card its own branch, git
+worktree and chat. Several agents can then work at once without touching each
+other's files. The agent moves its card forward when the work is verified; only
+you move it to Done.

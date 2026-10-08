@@ -42,7 +42,7 @@ Your data lives in `~/.kanna`.
 bun install -g @cuongtran001/kanna@latest
 ```
 
-Or use the in-app self-update button — see [Advanced → Self-update](/features/advanced/#self-update).
+Or use the in-app **Update** button — see [Self-update](/guides/ops/self-update/).
 
 ## Uninstall
 

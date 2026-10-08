@@ -30,8 +30,9 @@ Tokens are part of Kanna's settings, not a separate file:
 }
 ```
 
-Timestamps are epoch milliseconds. The file holds live credentials — it is
-written `0600`, and it should be treated as a secret in any backup.
+Timestamps are epoch milliseconds. The file holds live credentials. It is
+written with the default file mode rather than `0600`, so restrict its
+directory (`chmod 700 ~/.kanna/data`) and treat it as a secret in any backup.
 
 :::caution
 Edit this file only while Kanna is stopped. The server holds settings in memory
