@@ -1,7 +1,6 @@
 import { randomBytes } from "node:crypto"
+import { PAIRING_CODE_ALPHABET as ALPHABET, PAIRING_CODE_LENGTH as CODE_LENGTH } from "../shared/beacon-pair-link"
 
-const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-const CODE_LENGTH = 8
 export const PAIRING_TTL_MS = 5 * 60 * 1000
 
 export type BeaconPairingStore = {

@@ -26,6 +26,7 @@ export interface ClientState {
     beaconId?: string
     nonce?: string
     beaconVersion?: string
+    protocolVersion?: number
   }
 }
 

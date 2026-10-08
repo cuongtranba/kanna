@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { BEACON_DOWNLOAD_PAGE } from "../shared/beacon-pair-link"
 import type { BeaconFrame } from "../shared/beacon-protocol"
 import { backoffMs, beaconSocketUrl, parseBeaconArgs, runBeaconCli, type BeaconCliDeps } from "./main"
 import type { BeaconPairingRequest, BeaconState, BeaconTransport } from "./ports"
@@ -10,8 +11,8 @@ function createDeps(overrides: Partial<BeaconCliDeps> = {}): { deps: BeaconCliDe
     hostname: "box",
     beaconVersion: "0.1.0",
     openKeyStore: () => ({ publicKeySpkiBase64: () => "PUB", sign: () => "SIG" }),
-    stateStore: { load: async () => null, save: async () => {} },
-    pairClient: { pair: async () => ({ ok: false, error: "unused" }) },
+    stateStore: { load: async () => null, save: async () => {}, clear: async () => {} },
+    pairClient: { pair: async () => ({ ok: false, error: "unused", status: null }) },
     openTransport: () => {
       throw new Error("no transport expected")
     },
@@ -77,7 +78,7 @@ describe("runBeaconCli", () => {
           return { ok: true, beaconId: "b-9" }
         },
       },
-      stateStore: { load: async () => null, save: async (state) => void saved.push(state) },
+      stateStore: { load: async () => null, save: async (state) => void saved.push(state), clear: async () => {} },
     })
     expect(await runBeaconCli(["pair", "http://kanna.local/", "CODE"], deps)).toBe(0)
     expect(requests).toEqual([{ code: "CODE", publicKey: "PUB", label: "box", os: "linux" }])
@@ -85,9 +86,15 @@ describe("runBeaconCli", () => {
   })
 
   test("pair reports a refused code with a failing exit code", async () => {
-    const { deps, logs } = createDeps({ pairClient: { pair: async () => ({ ok: false, error: "expired" }) } })
+    const { deps, logs } = createDeps({ pairClient: { pair: async () => ({ ok: false, error: "expired", status: 400 }) } })
     expect(await runBeaconCli(["pair", "http://kanna.local", "CODE"], deps)).toBe(1)
     expect(logs.join("\n")).toContain("expired")
+  })
+
+  test("started with no command it points at the desktop app", async () => {
+    const { deps, logs } = createDeps()
+    expect(await runBeaconCli([], deps)).toBe(64)
+    expect(logs.join("\n")).toContain(BEACON_DOWNLOAD_PAGE)
   })
 
   test("run refuses to start on an unpaired machine", async () => {
@@ -124,7 +131,11 @@ describe("runBeaconCli", () => {
       }
     }
     const { deps, logs } = createDeps({
-      stateStore: { load: async () => ({ kannaUrl: "http://kanna.local", beaconId: "b-1" }), save: async () => {} },
+      stateStore: {
+        load: async () => ({ kannaUrl: "http://kanna.local", beaconId: "b-1" }),
+        save: async () => {},
+        clear: async () => {},
+      },
       openTransport,
       sleep: async (ms) => void sleeps.push(ms),
     })

@@ -1,7 +1,7 @@
 ---
 id: c3-302
 c3-version: 4
-c3-seal: 7aa2388128e1cf8ffcdde820755bae922de36fd2a7b460b10aa9f3d1a97fa760
+c3-seal: b70914f2f878bc22b19ada50dd125a725e75949d9bf89297f7a76077e5002a97
 title: protocol
 type: component
 category: foundation
@@ -65,6 +65,8 @@ Holds the WS envelope discriminated unions: subscribe/unsubscribe/command kinds,
 | --- | --- | --- | --- | --- |
 | WsInbound union | OUT | Client-to-server envelope kinds | c3-208 | src/shared/protocol.ts |
 | WsOutbound union | OUT | Server-to-client envelope kinds | c3-101 | src/shared/protocol.ts |
+| Beacon pairing link | OUT | kanna-beacon://pair with url and code; the parser also accepts the pasted CLI command and owns the pairing code alphabet | c3-241 | src/shared/beacon-pair-link.ts |
+| Beacon frames | IN/OUT | Protocol 2: ready carries the server version; refused, scope, set-scope and unpair frames; a beacon sends set-scope or unpair only to a server at SCOPE_SYNC_PROTOCOL or later | c3-241 | src/shared/beacon-protocol.ts |
 
 ## Change Safety
 

@@ -35,6 +35,8 @@
   "scripts": {
     "build": "bun run build:client",
     "build:client": "vite build",
+    "build:beacon-desktop": "bun run ./scripts/build-beacon-desktop.ts",
+    "icons:beacon-desktop": "bun run ./scripts/beacon-desktop-icons.ts",
     "typecheck": "node_modules/typescript-7/bin/tsc --noEmit",
     "check": "bun run typecheck && bun run lint && bun run lint:comments && bun run build:client && bun run check:bundle",
     "check:bundle": "bun run ./scripts/check-client-bundle.ts",

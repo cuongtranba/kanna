@@ -64,6 +64,8 @@ function connectedRegistry(responder: Responder): { registry: BeaconRegistry; se
   registry.connect({
     beaconId: BEACON_ID,
     beaconVersion: "1.0.0",
+    protocolVersion: 1,
+    scope: DEFAULT_BEACON_SCOPE,
     socket: {
       send(payload: SendPayload): number {
         const frame: BeaconFrame = JSON.parse(String(payload))

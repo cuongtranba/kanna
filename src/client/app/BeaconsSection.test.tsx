@@ -2,6 +2,8 @@ import { afterEach, expect, test } from "bun:test"
 import "../lib/testing/setupHappyDom"
 import { renderForLoopCheck } from "../lib/testing/renderForLoopCheck"
 import { DEFAULT_BEACON_SCOPE } from "../../shared/beacon-scope"
+import { BEACON_DOWNLOAD_PAGE, buildBeaconPairLink } from "../../shared/beacon-pair-link"
+import { domAdapter } from "../adapters/dom.adapter"
 import type { BeaconConfig } from "../../shared/beacon-config"
 import type { BeaconStatusRow } from "../../shared/beacon-status"
 import { useBeaconsSectionStore } from "../stores/beaconsSectionStore"
@@ -65,6 +67,16 @@ test("a minted code and an open scope editor render without a render loop", asyn
   expect(result.loopWarnings).toEqual([])
   expect(document.body.textContent).toContain("kanna-beacon pair")
   expect(document.body.textContent).toContain("/Users/me/projects")
+  await result.cleanup()
+})
+
+test("a minted code offers a link that opens Kanna Beacon with the address and code filled in", async () => {
+  useBeaconsSectionStore.setState({ pairing: { ok: true, code: "ABCD2345", expiresAt: Date.now() + 600_000 } })
+  const result = await renderForLoopCheck(<BeaconsSection rows={[]} configs={[]} handlers={HANDLERS} />)
+  const open = Array.from(document.querySelectorAll("a")).find((anchor) => anchor.textContent?.includes("Open in Kanna Beacon"))
+  expect(open?.getAttribute("href")).toBe(buildBeaconPairLink({ kannaUrl: domAdapter.getOrigin(), code: "ABCD2345" }))
+  const download = Array.from(document.querySelectorAll("a")).find((anchor) => anchor.getAttribute("href") === BEACON_DOWNLOAD_PAGE)
+  expect(download).toBeDefined()
   await result.cleanup()
 })
 

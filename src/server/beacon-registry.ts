@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto"
 import type { ServerWebSocket } from "bun"
 import type { JsonValue } from "../shared/json"
-import type { BeaconFrame, BeaconRequest } from "../shared/beacon-protocol"
+import { SCOPE_SYNC_PROTOCOL, type BeaconFrame, type BeaconRequest } from "../shared/beacon-protocol"
+import type { BeaconScope } from "../shared/beacon-scope"
 import type { BeaconLiveState } from "../shared/beacon-status"
 import type { ClientState } from "./ws-router"
 
@@ -19,13 +20,20 @@ export interface BeaconRequestSink {
 }
 
 export interface BeaconRegistry {
-  connect(args: { beaconId: string; socket: BeaconSocket; beaconVersion: string }): void
+  connect(args: {
+    beaconId: string
+    socket: BeaconSocket
+    beaconVersion: string
+    protocolVersion: number
+    scope: BeaconScope
+  }): void
   disconnect(beaconId: string): void
   disconnectIfCurrent(beaconId: string, socket: BeaconSocket): void
   heartbeat(beaconId: string): void
   isOnline(beaconId: string): boolean
   live(): BeaconLiveState[]
   send(beaconId: string, frame: BeaconFrame): boolean
+  pushScope(beaconId: string, scope: BeaconScope, options?: { force?: boolean }): void
   dispatch(beaconId: string, request: BeaconRequest, sink: BeaconRequestSink): { requestId: string; cancel(): void }
   routeInbound(beaconId: string, frame: BeaconFrame): void
   subscribe(cb: () => void): () => void
@@ -37,6 +45,8 @@ interface BeaconEntry {
   online: boolean
   lastSeenAt: number
   beaconVersion: string
+  protocolVersion: number
+  sentScope: string
 }
 
 interface PendingRequest {
@@ -105,8 +115,15 @@ export function createBeaconRegistry(deps: { now?: () => number } = {}): BeaconR
   }
 
   return {
-    connect({ beaconId, socket, beaconVersion }) {
-      entries.set(beaconId, { socket, online: true, lastSeenAt: now(), beaconVersion })
+    connect({ beaconId, socket, beaconVersion, protocolVersion, scope }) {
+      entries.set(beaconId, {
+        socket,
+        online: true,
+        lastSeenAt: now(),
+        beaconVersion,
+        protocolVersion,
+        sentScope: JSON.stringify(scope),
+      })
       notify()
     },
     disconnect,
@@ -132,6 +149,14 @@ export function createBeaconRegistry(deps: { now?: () => number } = {}): BeaconR
       }))
     },
     send,
+    pushScope(beaconId, scope, options) {
+      const entry = entries.get(beaconId)
+      if (!entry || !entry.socket || entry.protocolVersion < SCOPE_SYNC_PROTOCOL) return
+      const serialized = JSON.stringify(scope)
+      if (serialized === entry.sentScope && options?.force !== true) return
+      entry.sentScope = serialized
+      send(beaconId, { kind: "scope", scope })
+    },
     dispatch(beaconId, request, sink) {
       const requestId = randomUUID()
       const cancel = () => {

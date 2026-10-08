@@ -1,18 +1,24 @@
 import {
   BEACON_PROTOCOL_VERSION,
+  MIN_BEACON_PROTOCOL,
+  SCOPE_SYNC_PROTOCOL,
   type BeaconFrame,
   type BeaconOs,
+  type BeaconRefusal,
   type BeaconRequest,
+  type BeaconScopeChange,
 } from "../shared/beacon-protocol"
 import type { BeaconScope } from "../shared/beacon-scope"
 import { errorMessage } from "../shared/errors"
 import type { JsonValue } from "../shared/json"
-import type {
-  BeaconFsPort,
-  BeaconKeyStore,
-  BeaconRequestSink,
-  BeaconShellPort,
-  BeaconTransport,
+import { describeBeaconRequest, type BeaconActivity, type BeaconActivityOutcome } from "./activity"
+import {
+  BeaconScopeError,
+  type BeaconFsPort,
+  type BeaconKeyStore,
+  type BeaconRequestSink,
+  type BeaconShellPort,
+  type BeaconTransport,
 } from "./ports"
 
 export interface BeaconSessionDeps {
@@ -23,26 +29,44 @@ export interface BeaconSessionDeps {
   keyStore: BeaconKeyStore
   fs: BeaconFsPort
   shell: BeaconShellPort
-  onReady?: (scope: BeaconScope) => void
+  now?: () => number
+  onReady?: (scope: BeaconScope, serverProtocol: number) => void
+  onScope?: (scope: BeaconScope) => void
+  onActivity?: (activity: BeaconActivity) => void
+  onRefused?: (reason: BeaconRefusal) => void
   onIncompatible?: (frame: Extract<BeaconFrame, { kind: "incompatible" }>) => void
 }
 
 export interface BeaconSession {
   start(): void
+  requestScopeChange(change: BeaconScopeChange): boolean
+  requestUnpair(): boolean
 }
 
 type Phase = "idle" | "awaiting-challenge" | "awaiting-ready" | "ready" | "stopped"
 
+const EXEC_REFUSED = "exec not permitted"
+
+class ExecRefusedError extends Error {
+  constructor() {
+    super(EXEC_REFUSED)
+    this.name = "ExecRefusedError"
+  }
+}
+
+function failureOutcome(error: Error): BeaconActivityOutcome {
+  const refused = error instanceof BeaconScopeError || error instanceof ExecRefusedError
+  return refused ? { kind: "refused", message: error.message } : { kind: "failed", message: error.message }
+}
+
 export function createBeaconSession(deps: BeaconSessionDeps): BeaconSession {
   const { transport } = deps
+  const now = deps.now ?? Date.now
   let phase: Phase = "idle"
   let scope: BeaconScope | null = null
+  let serverProtocol = MIN_BEACON_PROTOCOL
   let running = 0
   const queue: Array<() => void> = []
-
-  function sendError(id: string, message: string): void {
-    transport.send({ kind: "error", id, message })
-  }
 
   function sinkFor(id: string): BeaconRequestSink {
     return {
@@ -51,11 +75,12 @@ export function createBeaconSession(deps: BeaconSessionDeps): BeaconSession {
     }
   }
 
-  async function runShell(id: string, request: BeaconRequest, granted: BeaconScope): Promise<void> {
-    if (!granted.exec) {
-      sendError(id, "exec not permitted")
-      return
-    }
+  function record(id: string, request: BeaconRequest, outcome: BeaconActivityOutcome): void {
+    deps.onActivity?.({ id, at: now(), ...describeBeaconRequest(request), outcome })
+  }
+
+  async function runShell(id: string, request: BeaconRequest, granted: BeaconScope): Promise<number> {
+    if (!granted.exec) throw new ExecRefusedError()
     const limits = { timeoutMs: granted.perCallTimeoutMs, outputByteCap: granted.outputByteCap }
     const sink = sinkFor(id)
     if (request.op === "exec") {
@@ -63,14 +88,10 @@ export function createBeaconSession(deps: BeaconSessionDeps): BeaconSession {
         request.cwd === undefined
           ? { cmd: request.cmd, cmdArgs: request.args }
           : { cmd: request.cmd, cmdArgs: request.args, cwd: request.cwd }
-      const code = await deps.shell.exec(args, sink, limits)
-      transport.send({ kind: "exit", id, code })
-      return
+      return deps.shell.exec(args, sink, limits)
     }
-    if (request.op === "script") {
-      const code = await deps.shell.script(request.body, sink, limits)
-      transport.send({ kind: "exit", id, code })
-    }
+    if (request.op === "script") return deps.shell.script(request.body, sink, limits)
+    throw new Error("unsupported operation")
   }
 
   function runFs(request: BeaconRequest): Promise<JsonValue> {
@@ -93,13 +114,18 @@ export function createBeaconSession(deps: BeaconSessionDeps): BeaconSession {
   async function serve(id: string, request: BeaconRequest, granted: BeaconScope): Promise<void> {
     try {
       if (request.op === "exec" || request.op === "script") {
-        await runShell(id, request, granted)
+        const code = await runShell(id, request, granted)
+        transport.send({ kind: "exit", id, code })
+        record(id, request, { kind: "exit", code })
         return
       }
       const result = await runFs(request)
       transport.send({ kind: "result", id, result })
+      record(id, request, { kind: "done" })
     } catch (error) {
-      sendError(id, errorMessage(error))
+      const failure = error instanceof Error ? error : new Error(errorMessage(error))
+      transport.send({ kind: "error", id, message: failure.message })
+      record(id, request, failureOutcome(failure))
     }
   }
 
@@ -122,12 +148,24 @@ export function createBeaconSession(deps: BeaconSessionDeps): BeaconSession {
     drain()
   }
 
+  function adoptScope(next: BeaconScope): void {
+    scope = next
+    deps.onScope?.(next)
+  }
+
   function handleFrame(frame: BeaconFrame): void {
     switch (frame.kind) {
       case "incompatible":
         if (phase === "awaiting-challenge") {
           phase = "stopped"
           deps.onIncompatible?.(frame)
+          transport.close()
+        }
+        return
+      case "refused":
+        if (phase === "awaiting-challenge") {
+          phase = "stopped"
+          deps.onRefused?.(frame.reason)
           transport.close()
         }
         return
@@ -139,8 +177,12 @@ export function createBeaconSession(deps: BeaconSessionDeps): BeaconSession {
       case "ready":
         if (phase !== "awaiting-ready") return
         phase = "ready"
-        scope = frame.scope
-        deps.onReady?.(frame.scope)
+        serverProtocol = frame.protocolVersion ?? MIN_BEACON_PROTOCOL
+        adoptScope(frame.scope)
+        deps.onReady?.(frame.scope, serverProtocol)
+        return
+      case "scope":
+        if (phase === "ready") adoptScope(frame.scope)
         return
       case "ping":
         if (phase === "ready") transport.send({ kind: "pong" })
@@ -151,6 +193,10 @@ export function createBeaconSession(deps: BeaconSessionDeps): BeaconSession {
       default:
         break
     }
+  }
+
+  function canSyncScope(): boolean {
+    return phase === "ready" && serverProtocol >= SCOPE_SYNC_PROTOCOL
   }
 
   return {
@@ -168,6 +214,16 @@ export function createBeaconSession(deps: BeaconSessionDeps): BeaconSession {
         beaconVersion: deps.beaconVersion,
         os: deps.os,
       })
+    },
+    requestScopeChange(change) {
+      if (!canSyncScope()) return false
+      transport.send({ kind: "set-scope", change })
+      return true
+    },
+    requestUnpair() {
+      if (!canSyncScope()) return false
+      transport.send({ kind: "unpair" })
+      return true
     },
   }
 }

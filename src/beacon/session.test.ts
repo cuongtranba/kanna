@@ -9,6 +9,7 @@ import {
   type BeaconShellPort,
   type BeaconTransport,
 } from "./ports"
+import type { BeaconActivity } from "./activity"
 import { createBeaconSession } from "./session"
 
 function createFakeTransport() {
@@ -57,9 +58,11 @@ function createFakeShell(): BeaconShellPort & { calls: string[] } {
 
 const READY_SCOPE: BeaconScope = { ...DEFAULT_BEACON_SCOPE, exec: true, readRoots: ["/data"] }
 
-function setup(options: { fs?: BeaconFsPort; scope?: BeaconScope } = {}) {
+function setup(options: { fs?: BeaconFsPort; scope?: BeaconScope; serverProtocol?: number } = {}) {
   const fake = createFakeTransport()
   const shell = createFakeShell()
+  const activities: BeaconActivity[] = []
+  const scopes: BeaconScope[] = []
   const session = createBeaconSession({
     beaconId: "b1",
     beaconVersion: "0.1.0",
@@ -68,12 +71,20 @@ function setup(options: { fs?: BeaconFsPort; scope?: BeaconScope } = {}) {
     keyStore: { publicKeySpkiBase64: () => "pub", sign: (nonce) => `signed:${nonce}` },
     fs: options.fs ?? createFakeFs(),
     shell,
+    now: () => 1_000,
+    onActivity: (activity) => activities.push(activity),
+    onScope: (scope) => scopes.push(scope),
   })
   session.start()
   fake.push({ kind: "challenge", nonce: "n1" })
-  fake.push({ kind: "ready", scope: options.scope ?? READY_SCOPE })
+  const scope = options.scope ?? READY_SCOPE
+  fake.push(
+    options.serverProtocol === undefined
+      ? { kind: "ready", scope }
+      : { kind: "ready", scope, protocolVersion: options.serverProtocol },
+  )
   fake.sent.length = 0
-  return { ...fake, shell }
+  return { ...fake, shell, session, activities, scopes }
 }
 
 async function settled(): Promise<void> {
@@ -189,5 +200,90 @@ describe("beacon session", () => {
     releases[0]?.()
     await settled()
     expect(started).toEqual(["/data/a", "/data/b"])
+  })
+
+  test("a scope frame from the server replaces the granted scope", async () => {
+    const harness = setup({ scope: { ...READY_SCOPE, exec: false }, serverProtocol: 2 })
+    harness.push({ kind: "scope", scope: { ...READY_SCOPE, exec: true } })
+    harness.push({ kind: "request", id: "r6", request: { op: "exec", cmd: "echo", args: [] } })
+    await settled()
+    expect(harness.shell.calls).toEqual(["echo"])
+    expect(harness.scopes.map((scope) => scope.exec)).toEqual([false, true])
+  })
+
+  test("a scope change is sent only to a server that speaks scope sync", () => {
+    const modern = setup({ serverProtocol: 2 })
+    expect(modern.session.requestScopeChange({ readRoots: ["/home/me"] })).toBe(true)
+    expect(modern.sent).toEqual([{ kind: "set-scope", change: { readRoots: ["/home/me"] } }])
+    const legacy = setup()
+    expect(legacy.session.requestScopeChange({ exec: true })).toBe(false)
+    expect(legacy.sent).toEqual([])
+  })
+
+  test("an unpair is sent only once ready on a server that speaks scope sync", () => {
+    const modern = setup({ serverProtocol: 2 })
+    expect(modern.session.requestUnpair()).toBe(true)
+    expect(modern.sent).toEqual([{ kind: "unpair" }])
+    expect(setup().session.requestUnpair()).toBe(false)
+  })
+
+  test("a refusal before the challenge is reported and the transport is closed", () => {
+    const fake = createFakeTransport()
+    let closed = false
+    const refusals: string[] = []
+    createBeaconSession({
+      beaconId: "b1",
+      beaconVersion: "0.1.0",
+      os: "windows",
+      transport: { ...fake.transport, close: () => (closed = true) },
+      keyStore: { publicKeySpkiBase64: () => "pub", sign: () => "sig" },
+      fs: createFakeFs(),
+      shell: createFakeShell(),
+      onRefused: (reason) => refusals.push(reason),
+    }).start()
+    fake.push({ kind: "refused", reason: "unknown-beacon" })
+    expect(refusals).toEqual(["unknown-beacon"])
+    expect(closed).toBe(true)
+  })
+
+  test("every served request is recorded as an activity with its outcome", async () => {
+    const fs = createFakeFs({
+      read: async (path) => {
+        if (path === "/etc/passwd") throw new BeaconScopeError("outside roots")
+        return { content: "" }
+      },
+      fetchChunk: async () => {
+        throw new Error("disk on fire")
+      },
+    })
+    const harness = setup({ fs })
+    harness.push({ kind: "request", id: "a", request: { op: "read", path: "/data/a.txt", offset: 0, limit: 10 } })
+    harness.push({ kind: "request", id: "b", request: { op: "read", path: "/etc/passwd", offset: 0, limit: 10 } })
+    harness.push({ kind: "request", id: "c", request: { op: "exec", cmd: "git", args: ["status", "--short"] } })
+    harness.push({ kind: "request", id: "d", request: { op: "fetch", path: "/data/big.bin" } })
+    await settled()
+    await settled()
+    const byId = [...harness.activities].sort((left, right) => left.id.localeCompare(right.id))
+    expect(byId).toEqual([
+      { id: "a", at: 1_000, verb: "read", target: "/data/a.txt", outcome: { kind: "done" } },
+      { id: "b", at: 1_000, verb: "read", target: "/etc/passwd", outcome: { kind: "refused", message: "outside roots" } },
+      { id: "c", at: 1_000, verb: "run", target: "git status --short", outcome: { kind: "exit", code: 0 } },
+      { id: "d", at: 1_000, verb: "read", target: "/data/big.bin", outcome: { kind: "failed", message: "disk on fire" } },
+    ])
+  })
+
+  test("a command refused by the scope is recorded as refused", async () => {
+    const harness = setup({ scope: { ...READY_SCOPE, exec: false } })
+    harness.push({ kind: "request", id: "r7", request: { op: "script", body: "Remove-Item C:\\x\nWrite-Host done" } })
+    await settled()
+    expect(harness.activities).toEqual([
+      {
+        id: "r7",
+        at: 1_000,
+        verb: "script",
+        target: "Remove-Item C:\\x",
+        outcome: { kind: "refused", message: "exec not permitted" },
+      },
+    ])
   })
 })

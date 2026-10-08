@@ -57,5 +57,11 @@ scripts/pm2.env
 # kanna-beacon release binaries (scripts/build-beacon.ts)
 dist-beacon/
 
+# Kanna Beacon desktop app (scripts/build-beacon-desktop.ts stages into dist-beacon-desktop/)
+dist-beacon-desktop/
+apps/beacon-desktop/.hutch/
+apps/beacon-desktop/build/
+apps/beacon-desktop/artifacts/
+
 # Superpowers brainstorm server scratch (port, auth token, rendered pages)
 .superpowers/

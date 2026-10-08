@@ -4,6 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { BEACON_PROTOCOL_VERSION, MIN_BEACON_PROTOCOL, type BeaconFrame } from "../shared/beacon-protocol"
+import { DEFAULT_BEACON_SCOPE } from "../shared/beacon-scope"
 import { AppSettingsManager } from "./app-settings"
 import { createBeaconConnection, type BeaconConnectionSocket } from "./beacon-connection"
 import { createBeaconRegistry } from "./beacon-registry"
@@ -71,6 +72,7 @@ describe("beacon connection", () => {
     connection.handleMessage(socket, hello(beaconId))
     connection.handleMessage(socket, auth(privateKey, frames))
     expect(frames.map((frame) => frame.kind)).toEqual(["challenge", "ready"])
+    expect(frames[1]).toMatchObject({ kind: "ready", protocolVersion: BEACON_PROTOCOL_VERSION })
     expect(state.closed).toBe(false)
     expect(registry.isOnline(beaconId)).toBe(true)
     expect(registry.live()[0]?.beaconVersion).toBe("1.2.3")
@@ -88,13 +90,13 @@ describe("beacon connection", () => {
     expect(frames.map((frame) => frame.kind)).toEqual(["challenge"])
   })
 
-  test("an unknown beacon id is closed before any challenge is sent", async () => {
+  test("an unknown beacon id is told it was refused and closed before any challenge is sent", async () => {
     const { connection } = await createFixture()
     const { socket, frames, state } = fakeSocket()
     connection.handleOpen(socket)
     connection.handleMessage(socket, hello("not-a-beacon"))
     expect(state.closed).toBe(true)
-    expect(frames).toEqual([])
+    expect(frames).toEqual([{ kind: "refused", reason: "unknown-beacon" }])
   })
 
   test("a disabled beacon is closed before any challenge is sent", async () => {
@@ -104,7 +106,7 @@ describe("beacon connection", () => {
     connection.handleOpen(socket)
     connection.handleMessage(socket, hello(beaconId))
     expect(state.closed).toBe(true)
-    expect(frames).toEqual([])
+    expect(frames).toEqual([{ kind: "refused", reason: "disabled" }])
   })
 
   test("an unsupported protocol version is told the minimum then closed", async () => {
@@ -146,5 +148,56 @@ describe("beacon connection", () => {
     connection.handleOpen(second.socket)
     connection.handleMessage(second.socket, "not json")
     expect(second.state.closed).toBe(true)
+  })
+
+  test("a set-scope from a ready beacon is saved and the saved scope is sent back", async () => {
+    const { connection, appSettings, beaconId, privateKey } = await createFixture()
+    const { socket, frames } = fakeSocket()
+    connection.handleOpen(socket)
+    connection.handleMessage(socket, hello(beaconId))
+    connection.handleMessage(socket, auth(privateKey, frames))
+    await connection.handleMessage(
+      socket,
+      JSON.stringify({ kind: "set-scope", change: { readRoots: ["/home/me/notes"], exec: true } }),
+    )
+    const saved = appSettings.getSnapshot().customBeacons.find((beacon) => beacon.id === beaconId)?.scope
+    expect(saved?.readRoots).toEqual(["/home/me/notes"])
+    expect(saved?.exec).toBe(true)
+    expect(saved?.autoRunScripts).toBe(false)
+    expect(frames.at(-1)).toEqual({ kind: "scope", scope: saved ?? DEFAULT_BEACON_SCOPE })
+  })
+
+  test("a set-scope naming a relative folder changes nothing and the current scope is sent back", async () => {
+    const { connection, appSettings, beaconId, privateKey } = await createFixture()
+    const { socket, frames } = fakeSocket()
+    connection.handleOpen(socket)
+    connection.handleMessage(socket, hello(beaconId))
+    connection.handleMessage(socket, auth(privateKey, frames))
+    const before = appSettings.getSnapshot().customBeacons.find((beacon) => beacon.id === beaconId)?.scope
+    await connection.handleMessage(socket, JSON.stringify({ kind: "set-scope", change: { readRoots: ["notes"] } }))
+    expect(appSettings.getSnapshot().customBeacons.find((beacon) => beacon.id === beaconId)?.scope).toEqual(before)
+    expect(frames.at(-1)).toEqual({ kind: "scope", scope: before ?? DEFAULT_BEACON_SCOPE })
+  })
+
+  test("a set-scope before the handshake completes closes the socket", async () => {
+    const { connection, beaconId } = await createFixture()
+    const { socket, state } = fakeSocket()
+    connection.handleOpen(socket)
+    connection.handleMessage(socket, hello(beaconId))
+    await connection.handleMessage(socket, JSON.stringify({ kind: "set-scope", change: { exec: true } }))
+    expect(state.closed).toBe(true)
+  })
+
+  test("an unpair from a ready beacon removes it from Kanna and closes the socket", async () => {
+    const { connection, appSettings, registry, beaconId, privateKey } = await createFixture()
+    const { socket, frames, state } = fakeSocket()
+    connection.handleOpen(socket)
+    connection.handleMessage(socket, hello(beaconId))
+    connection.handleMessage(socket, auth(privateKey, frames))
+    await connection.handleMessage(socket, JSON.stringify({ kind: "unpair" }))
+    expect(appSettings.getSnapshot().customBeacons.some((beacon) => beacon.id === beaconId)).toBe(false)
+    expect(state.closed).toBe(true)
+    connection.handleClose(socket)
+    expect(registry.isOnline(beaconId)).toBe(false)
   })
 })

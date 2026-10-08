@@ -1,5 +1,6 @@
+import { BEACON_DOWNLOAD_PAGE } from "../shared/beacon-pair-link"
 import type { BeaconOs } from "../shared/beacon-protocol"
-import { createBeaconSession } from "./session"
+import { backoffMs, beaconSocketUrl, createBeaconRunner, MAX_BACKOFF_MS, type BeaconRunnerStatus } from "./runner"
 import type {
   BeaconFsPort,
   BeaconKeyStore,
@@ -10,9 +11,11 @@ import type {
   BeaconTransport,
 } from "./ports"
 
+export { backoffMs, beaconSocketUrl, MAX_BACKOFF_MS }
+
 export const BEACON_USAGE = "usage: kanna-beacon pair <kanna-url> <code> | kanna-beacon run"
-export const MAX_BACKOFF_MS = 30_000
 export const INCOMPATIBLE_EXIT_CODE = 2
+export const DESKTOP_APP_HINT = `This is the command-line beacon. To pair and run it from a window instead, install Kanna Beacon: ${BEACON_DOWNLOAD_PAGE}`
 
 export type BeaconCommand =
   | { command: "pair"; kannaUrl: string; code: string }
@@ -35,14 +38,6 @@ export function parseBeaconArgs(argv: readonly string[]): BeaconCommand {
     return { command: "pair", kannaUrl: kannaUrl.replace(/\/+$/, ""), code }
   }
   return { command: "invalid", reason: command === undefined ? "missing command" : `unknown command: ${command}` }
-}
-
-export function beaconSocketUrl(kannaUrl: string): string {
-  return `${kannaUrl.replace(/\/+$/, "").replace(/^http/, "ws")}/beacon`
-}
-
-export function backoffMs(attempt: number): number {
-  return Math.min(MAX_BACKOFF_MS, 1000 * 2 ** Math.max(0, attempt - 1))
 }
 
 export interface BeaconCliDeps {
@@ -76,49 +71,51 @@ async function pairMachine(deps: BeaconCliDeps, kannaUrl: string, code: string):
   return 0
 }
 
-async function runBeacon(deps: BeaconCliDeps, state: BeaconState): Promise<number> {
-  const url = beaconSocketUrl(state.kannaUrl)
-  const keyStore = deps.openKeyStore()
-  const shell = deps.createShell(deps.os)
-  let readRoots: readonly string[] = []
-  const fs = deps.createFs(() => readRoots)
-  let failures = 0
-  for (;;) {
-    const transport = deps.openTransport(url)
-    let incompatible = false
-    const closed = new Promise<void>((resolve) => transport.onClose(resolve))
-    createBeaconSession({
-      beaconId: state.beaconId,
-      beaconVersion: deps.beaconVersion,
-      os: deps.os,
-      transport,
-      keyStore,
-      fs,
-      shell,
-      onReady: (scope) => {
-        readRoots = scope.readRoots
-        failures = 0
-        deps.log(`connected to ${state.kannaUrl}`)
-      },
-      onIncompatible: (frame) => {
-        incompatible = true
-        const download = frame.downloadUrl === undefined ? "" : ` Download the latest beacon: ${frame.downloadUrl}`
-        deps.log(`this beacon is too old for the server (it needs protocol ${frame.minSupported} or newer).${download}`)
-      },
-    }).start()
-    await closed
-    if (incompatible) return INCOMPATIBLE_EXIT_CODE
-    failures += 1
-    const delay = backoffMs(failures)
-    deps.log(`disconnected; reconnecting in ${delay} ms`)
-    await deps.sleep(delay)
+function describeStatus(status: BeaconRunnerStatus, kannaUrl: string): string | null {
+  switch (status.phase) {
+    case "online":
+      return `connected to ${kannaUrl}`
+    case "offline": {
+      const why = status.reason === "disabled" ? "Kanna has switched this beacon off; " : "disconnected; "
+      return `${why}reconnecting in ${Math.max(0, status.retryAt - Date.now())} ms`
+    }
+    case "revoked":
+      return "Kanna no longer knows this beacon. Pair it again: kanna-beacon pair <kanna-url> <code>"
+    case "incompatible": {
+      const download = status.downloadUrl === undefined ? "" : ` Download the latest beacon: ${status.downloadUrl}`
+      return `this beacon is too old for the server (it needs protocol ${status.minSupported} or newer).${download}`
+    }
+    default:
+      return null
   }
+}
+
+async function runBeacon(deps: BeaconCliDeps, state: BeaconState): Promise<number> {
+  const runner = createBeaconRunner({
+    state,
+    os: deps.os,
+    beaconVersion: deps.beaconVersion,
+    keyStore: deps.openKeyStore(),
+    openTransport: deps.openTransport,
+    createFs: deps.createFs,
+    createShell: deps.createShell,
+    sleep: deps.sleep,
+    now: Date.now,
+  })
+  runner.subscribe((snapshot) => {
+    const line = describeStatus(snapshot.status, state.kannaUrl)
+    if (line !== null) deps.log(line)
+  })
+  const exit = await runner.run()
+  if (exit.reason === "incompatible") return INCOMPATIBLE_EXIT_CODE
+  return exit.reason === "revoked" ? 1 : 0
 }
 
 export async function runBeaconCli(argv: readonly string[], deps: BeaconCliDeps): Promise<number> {
   const parsed = parseBeaconArgs(argv)
   if (parsed.command === "invalid") {
-    deps.log(`${parsed.reason}\n${BEACON_USAGE}`)
+    const appHint = argv.length === 0 ? `\n${DESKTOP_APP_HINT}` : ""
+    deps.log(`${parsed.reason}\n${BEACON_USAGE}${appHint}`)
     return 64
   }
   if (parsed.command === "pair") return pairMachine(deps, parsed.kannaUrl, parsed.code)
