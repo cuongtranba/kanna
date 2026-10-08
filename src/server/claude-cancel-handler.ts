@@ -1,5 +1,5 @@
 
-import type { ClaudeDriverPreference, TranscriptEntry } from "../shared/types"
+import type { TranscriptEntry } from "../shared/types"
 import type { ActiveTurn, ClaudeSessionState, StartingTurn } from "./claude-session-state"
 import type { PendingToolSlots } from "./pending-tool-slot"
 import type { HarnessTurn } from "./harness-types"
@@ -51,10 +51,6 @@ export interface CancelHandlerDeps {
   claudeSessions: ClaudeSessionsMap
 
   emitStateChange(chatId: string): void
-
-  resolveClaudeDriverPreference(): ClaudeDriverPreference
-
-  closeClaudeSession(chatId: string, session: ClaudeSessionState): void
 }
 
 
@@ -120,10 +116,6 @@ export async function cancelChat(
         ])
       } catch {
       }
-      if (deps.resolveClaudeDriverPreference() === "pty") {
-        deps.closeClaudeSession(chatId, session)
-        deps.emitStateChange(chatId)
-      }
     }
     return
   }
@@ -178,12 +170,4 @@ export async function cancelChat(
   } catch {
   }
   active.turn.close()
-
-  if (active.provider === "claude" && deps.resolveClaudeDriverPreference() === "pty") {
-    const session = deps.claudeSessions.get(chatId)
-    if (session) {
-      deps.closeClaudeSession(chatId, session)
-    }
-  }
-
 }

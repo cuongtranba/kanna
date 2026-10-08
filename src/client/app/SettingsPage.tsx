@@ -29,12 +29,11 @@ import { useNavigate, useOutletContext, useParams } from "react-router-dom"
 import { getKeybindingsFilePathDisplay, SDK_CLIENT_APP } from "../../shared/branding"
 import { ANALYTICS_STATIC_EVENT_NAMES, ANALYTICS_STATIC_PROPERTY_NAMES } from "../../shared/analytics"
 import {
-  CLAUDE_DRIVER_DEFAULTS,
-  CLAUDE_PTY_IDLE_TIMEOUT_MS_MAX,
-  CLAUDE_PTY_IDLE_TIMEOUT_MS_MIN,
-  CLAUDE_PTY_LIFECYCLE_DEFAULTS,
-  CLAUDE_PTY_MAX_CONCURRENT_MAX,
-  CLAUDE_PTY_MAX_CONCURRENT_MIN,
+  CLAUDE_IDLE_TIMEOUT_MS_MAX,
+  CLAUDE_IDLE_TIMEOUT_MS_MIN,
+  CLAUDE_LIFECYCLE_DEFAULTS,
+  CLAUDE_MAX_CONCURRENT_MAX,
+  CLAUDE_MAX_CONCURRENT_MIN,
   CLOUDFLARE_TUNNEL_DEFAULTS,
   GLOBAL_PROMPT_APPEND_MAX_CHARS,
   PROVIDERS,
@@ -45,7 +44,6 @@ import {
   isAgentProvider,
   isChatSoundId,
   isChatSoundPreference,
-  isClaudeDriverPreference,
   isEditorPreset,
   isLlmProviderKind,
   type AgentProvider,
@@ -820,11 +818,10 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
   const uploadMaxFileSizeMb = appSettings?.uploads.maxFileSizeMb ?? UPLOAD_DEFAULTS.maxFileSizeMb
   const uploadMaxFileSizeDraft = useSettingsPageStore((s) => s.uploadMaxFileSizeDraft)
   const setUploadMaxFileSizeDraft = useSettingsPageStore((s) => s.setUploadMaxFileSizeDraft)
-  const claudeDriverPreference = appSettings?.claudeDriver.preference ?? CLAUDE_DRIVER_DEFAULTS.preference
   const claudeIdleMinutes = Math.round(
-    (appSettings?.claudeDriver.lifecycle.idleTimeoutMs ?? CLAUDE_PTY_LIFECYCLE_DEFAULTS.idleTimeoutMs) / 60_000,
+    (appSettings?.claudeDriver.lifecycle.idleTimeoutMs ?? CLAUDE_LIFECYCLE_DEFAULTS.idleTimeoutMs) / 60_000,
   )
-  const claudeMaxConcurrent = appSettings?.claudeDriver.lifecycle.maxConcurrent ?? CLAUDE_PTY_LIFECYCLE_DEFAULTS.maxConcurrent
+  const claudeMaxConcurrent = appSettings?.claudeDriver.lifecycle.maxConcurrent ?? CLAUDE_LIFECYCLE_DEFAULTS.maxConcurrent
   const claudeIdleMinutesDraft = useSettingsPageStore((s) => s.claudeIdleMinutesDraft)
   const setClaudeIdleMinutesDraft = useSettingsPageStore((s) => s.setClaudeIdleMinutesDraft)
   const claudeMaxConcurrentDraft = useSettingsPageStore((s) => s.claudeMaxConcurrentDraft)
@@ -1048,17 +1045,10 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
     })
   }
 
-  function handleClaudeDriverChange(next: "sdk" | "pty") {
-    if (next === claudeDriverPreference) return
-    void handleWriteAppSettings({ claudeDriver: { preference: next } }).catch((error) => {
-      setAppSettingsError(error instanceof Error ? error.message : "Unable to save Claude driver preference.")
-    })
-  }
-
   function commitClaudeIdleMinutes() {
     const nextMinutes = Number(claudeIdleMinutesDraft)
-    const minMinutes = Math.round(CLAUDE_PTY_IDLE_TIMEOUT_MS_MIN / 60_000)
-    const maxMinutes = Math.round(CLAUDE_PTY_IDLE_TIMEOUT_MS_MAX / 60_000)
+    const minMinutes = Math.round(CLAUDE_IDLE_TIMEOUT_MS_MIN / 60_000)
+    const maxMinutes = Math.round(CLAUDE_IDLE_TIMEOUT_MS_MAX / 60_000)
     if (!Number.isFinite(nextMinutes) || nextMinutes < minMinutes || nextMinutes > maxMinutes) {
       setClaudeIdleMinutesDraft(String(claudeIdleMinutes))
       setAppSettingsError(`Idle timeout must be between ${minMinutes} and ${maxMinutes} minutes.`)
@@ -1078,10 +1068,10 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
   function commitClaudeMaxConcurrent() {
     const nextValue = Number(claudeMaxConcurrentDraft)
     if (!Number.isFinite(nextValue)
-      || nextValue < CLAUDE_PTY_MAX_CONCURRENT_MIN
-      || nextValue > CLAUDE_PTY_MAX_CONCURRENT_MAX) {
+      || nextValue < CLAUDE_MAX_CONCURRENT_MIN
+      || nextValue > CLAUDE_MAX_CONCURRENT_MAX) {
       setClaudeMaxConcurrentDraft(String(claudeMaxConcurrent))
-      setAppSettingsError(`Max concurrent sessions must be between ${CLAUDE_PTY_MAX_CONCURRENT_MIN} and ${CLAUDE_PTY_MAX_CONCURRENT_MAX}.`)
+      setAppSettingsError(`Max concurrent sessions must be between ${CLAUDE_MAX_CONCURRENT_MIN} and ${CLAUDE_MAX_CONCURRENT_MAX}.`)
       return
     }
     if (Math.round(nextValue) === claudeMaxConcurrent) {
@@ -1976,28 +1966,14 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
                     </SettingsRow>
 
                     <SettingsRow
-                      title="Claude driver"
-                      description='SDK uses the @anthropic-ai/claude-agent-sdk programmatic API (billed at API rates). PTY launches the `claude` CLI under a pseudo-terminal — preserves Pro/Max subscription billing. Requires an OAuth-pool token configured in Kanna settings and ANTHROPIC_API_KEY to be unset. macOS/Linux only.'
-                    >
-                      <SegmentedControl
-                        value={claudeDriverPreference}
-                        onValueChange={(value) => { if (isClaudeDriverPreference(value)) handleClaudeDriverChange(value) }}
-                        options={[
-                          { value: "sdk" as const, label: "SDK (API)" },
-                          { value: "pty" as const, label: "PTY (subscription)" },
-                        ]}
-                      />
-                    </SettingsRow>
-
-                    <SettingsRow
-                      title="PTY idle timeout"
-                      description="Stop a Claude PTY session after this many minutes without user activity. Lower values free subscription quota faster; higher values keep cold-start latency low."
+                      title="Claude session idle timeout"
+                      description="Stop a Claude session after this many minutes without user activity. Lower values free memory sooner; higher values keep cold-start latency low."
                     >
                       <div className="flex w-full min-w-0 flex-col items-stretch gap-2 md:w-auto md:items-end">
                         <Input
                           type="number"
-                          min={Math.round(CLAUDE_PTY_IDLE_TIMEOUT_MS_MIN / 60_000)}
-                          max={Math.round(CLAUDE_PTY_IDLE_TIMEOUT_MS_MAX / 60_000)}
+                          min={Math.round(CLAUDE_IDLE_TIMEOUT_MS_MIN / 60_000)}
+                          max={Math.round(CLAUDE_IDLE_TIMEOUT_MS_MAX / 60_000)}
                           step={1}
                           value={claudeIdleMinutesDraft}
                           onChange={(event) => setClaudeIdleMinutesDraft(event.target.value)}
@@ -2006,20 +1982,20 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
                           className="hide-number-steppers w-full text-left font-mono md:w-28 md:text-right"
                         />
                         <div className="text-left text-xs text-muted-foreground md:text-right">
-                          {Math.round(CLAUDE_PTY_IDLE_TIMEOUT_MS_MIN / 60_000)}–{Math.round(CLAUDE_PTY_IDLE_TIMEOUT_MS_MAX / 60_000)} min · default {Math.round(CLAUDE_PTY_LIFECYCLE_DEFAULTS.idleTimeoutMs / 60_000)}
+                          {Math.round(CLAUDE_IDLE_TIMEOUT_MS_MIN / 60_000)}–{Math.round(CLAUDE_IDLE_TIMEOUT_MS_MAX / 60_000)} min · default {Math.round(CLAUDE_LIFECYCLE_DEFAULTS.idleTimeoutMs / 60_000)}
                         </div>
                       </div>
                     </SettingsRow>
 
                     <SettingsRow
-                      title="PTY max concurrent sessions"
-                      description="Hard cap on resident Claude PTY processes. Excess sessions are evicted LRU; their next activation cold-starts."
+                      title="Max concurrent Claude sessions"
+                      description="Hard cap on resident Claude processes. Excess sessions are evicted LRU; their next activation cold-starts."
                     >
                       <div className="flex w-full min-w-0 flex-col items-stretch gap-2 md:w-auto md:items-end">
                         <Input
                           type="number"
-                          min={CLAUDE_PTY_MAX_CONCURRENT_MIN}
-                          max={CLAUDE_PTY_MAX_CONCURRENT_MAX}
+                          min={CLAUDE_MAX_CONCURRENT_MIN}
+                          max={CLAUDE_MAX_CONCURRENT_MAX}
                           step={1}
                           value={claudeMaxConcurrentDraft}
                           onChange={(event) => setClaudeMaxConcurrentDraft(event.target.value)}
@@ -2028,7 +2004,7 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
                           className="hide-number-steppers w-full text-left font-mono md:w-28 md:text-right"
                         />
                         <div className="text-left text-xs text-muted-foreground md:text-right">
-                          {CLAUDE_PTY_MAX_CONCURRENT_MIN}–{CLAUDE_PTY_MAX_CONCURRENT_MAX} · default {CLAUDE_DRIVER_DEFAULTS.lifecycle.maxConcurrent}
+                          {CLAUDE_MAX_CONCURRENT_MIN}–{CLAUDE_MAX_CONCURRENT_MAX} · default {CLAUDE_LIFECYCLE_DEFAULTS.maxConcurrent}
                         </div>
                       </div>
                     </SettingsRow>

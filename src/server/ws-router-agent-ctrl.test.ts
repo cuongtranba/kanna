@@ -10,7 +10,6 @@ function makeAgent(overrides: Partial<AgentCtrlAgentDep> = {}): AgentCtrlAgentDe
     rescheduleAutoContinue: mock(async () => {}),
     cancelAutoContinue: mock(async () => {}),
     runCronCommand: mock(async () => null),
-    cancel: mock(async () => {}),
     ...overrides,
   }
 }
@@ -27,14 +26,12 @@ function makeTunnel(overrides: Partial<TunnelGatewayDep> = {}): TunnelGatewayDep
 function makeDeps(
   agentOverrides?: Partial<AgentCtrlAgentDep>,
   tunnel?: TunnelGatewayDep | undefined,
-  killPty?: AgentCtrlCommandDeps["killPtyInstance"],
 ): AgentCtrlCommandDeps & { sent: unknown[]; broadcasts: string[] } {
   const sent: unknown[] = []
   const broadcasts: string[] = []
   return {
     agent: makeAgent(agentOverrides),
     tunnelGateway: tunnel,
-    killPtyInstance: killPty,
     send: (envelope) => { sent.push(envelope) },
     broadcastChatAndSidebar: async (chatId) => { broadcasts.push(chatId) },
     sent,
@@ -127,47 +124,5 @@ describe("handleAgentCtrlCommand", () => {
     expect(handled).toBe(true)
     expect((tunnel.retry as ReturnType<typeof mock>)).toHaveBeenCalledWith("c-7", "t-4")
     expect(deps.broadcasts).toEqual(["c-7"])
-  })
-
-
-  test("pty.cancel — acks {ok:true} on success", async () => {
-    const deps = makeDeps()
-    const cmd: ClientCommand = { type: "pty.cancel", chatId: "c-8" }
-    const handled = await handleAgentCtrlCommand(deps, cmd, "r8")
-    expect(handled).toBe(true)
-    expect((deps.agent.cancel as ReturnType<typeof mock>)).toHaveBeenCalledWith("c-8")
-    const ack = deps.sent[0] as { result: { ok: boolean } }
-    expect(ack.result.ok).toBe(true)
-  })
-
-  test("pty.cancel — acks {ok:false} when agent.cancel throws", async () => {
-    const deps = makeDeps({ cancel: mock(async () => { throw new Error("boom") }) })
-    const cmd: ClientCommand = { type: "pty.cancel", chatId: "c-9" }
-    const handled = await handleAgentCtrlCommand(deps, cmd, "r9")
-    expect(handled).toBe(true)
-    const ack = deps.sent[0] as { result: { ok: boolean; error: string } }
-    expect(ack.result.ok).toBe(false)
-    expect(ack.result.error).toBe("boom")
-  })
-
-  test("pty.kill — returns {ok:false} error when killPtyInstance is absent", async () => {
-    const deps = makeDeps(undefined, undefined, undefined)
-    const cmd: ClientCommand = { type: "pty.kill", chatId: "c-10" }
-    const handled = await handleAgentCtrlCommand(deps, cmd, "r10")
-    expect(handled).toBe(true)
-    const ack = deps.sent[0] as { result: { ok: boolean; error: string } }
-    expect(ack.result.ok).toBe(false)
-    expect(ack.result.error).toContain("not available")
-  })
-
-  test("pty.kill — delegates to killPtyInstance and acks with its result", async () => {
-    const killFn = mock(async (_chatId: string) => ({ ok: true }))
-    const deps = makeDeps(undefined, undefined, killFn)
-    const cmd: ClientCommand = { type: "pty.kill", chatId: "c-11" }
-    const handled = await handleAgentCtrlCommand(deps, cmd, "r11")
-    expect(handled).toBe(true)
-    expect(killFn).toHaveBeenCalledWith("c-11")
-    const ack = deps.sent[0] as { result: { ok: boolean } }
-    expect(ack.result.ok).toBe(true)
   })
 })

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLAUDE_DRIVER_DEFAULTS, CLAUDE_PTY_LIFECYCLE_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, DEFAULT_OPENROUTER_SDK_MODEL, GLOBAL_PROMPT_APPEND_MAX_CHARS, mergeCustomModels, PACKAGE_UPDATE_CHECK_INTERVAL_MAX_MS, PACKAGE_UPDATE_CHECK_INTERVAL_MIN_MS, PACKAGE_UPDATE_SETTINGS_DEFAULTS, PLUGIN_SETTINGS_DEFAULTS, PROVIDERS, PUSH_DEFAULTS,
+import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLAUDE_DRIVER_DEFAULTS, CLAUDE_LIFECYCLE_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, DEFAULT_OPENROUTER_SDK_MODEL, GLOBAL_PROMPT_APPEND_MAX_CHARS, mergeCustomModels, PACKAGE_UPDATE_CHECK_INTERVAL_MAX_MS, PACKAGE_UPDATE_CHECK_INTERVAL_MIN_MS, PACKAGE_UPDATE_SETTINGS_DEFAULTS, PLUGIN_SETTINGS_DEFAULTS, PROVIDERS, PUSH_DEFAULTS,
   TELEMETRY_DEFAULTS, TYPOGRAPHY_DEFAULTS, UPLOAD_DEFAULTS } from "../shared/types"
 import { AppSettingsManager, readAppSettingsSnapshot, seedCustomModelsFromBuiltins } from "./app-settings"
 import type { AppSettingsSnapshot, McpOAuthState, SubagentInput } from "../shared/types"
@@ -90,7 +90,7 @@ function expectedSettingsSnapshot(filePath: string, overrides: Partial<AppSettin
     customMcpServers: [],
     customModels: seedCustomModelsFromBuiltins(),
     textSnippets: [],
-    claudeDriver: { ...CLAUDE_DRIVER_DEFAULTS, lifecycle: { ...CLAUDE_PTY_LIFECYCLE_DEFAULTS } },
+    claudeDriver: { ...CLAUDE_DRIVER_DEFAULTS, lifecycle: { ...CLAUDE_LIFECYCLE_DEFAULTS } },
     globalPromptAppend: "",
     shareDefaultTtlHours: 24,
     subagentRuntime: { runTimeoutMs: 600_000, defaultLoopSubagentId: null },
@@ -880,25 +880,22 @@ describe("subagent CRUD", () => {
 })
 
 describe("claudeDriver settings", () => {
-  test("defaults to sdk + default lifecycle when file missing", async () => {
+  test("defaults to the default lifecycle when file missing", async () => {
     const filePath = await createTempFilePath()
     const snapshot = await readAppSettingsSnapshot(filePath)
-    expect(snapshot.claudeDriver.preference).toBe("sdk")
     expect(snapshot.claudeDriver.lifecycle.idleTimeoutMs).toBe(600_000)
     expect(snapshot.claudeDriver.lifecycle.maxConcurrent).toBe(4)
   })
 
-  test("setClaudeDriver persists preference + lifecycle", async () => {
+  test("setClaudeDriver persists lifecycle", async () => {
     const filePath = await createTempFilePath()
     const mgr = trackManager(new AppSettingsManager(filePath))
     await mgr.initialize()
     try {
       await mgr.setClaudeDriver({
-        preference: "pty",
         lifecycle: { idleTimeoutMs: 900_000, maxConcurrent: 2 },
       })
       expect(mgr.getSnapshot().claudeDriver).toEqual({
-        preference: "pty",
         lifecycle: { idleTimeoutMs: 900_000, maxConcurrent: 2 },
       })
     } finally {
@@ -908,7 +905,6 @@ describe("claudeDriver settings", () => {
     const reloaded = trackManager(new AppSettingsManager(filePath))
     await reloaded.initialize()
     try {
-      expect(reloaded.getSnapshot().claudeDriver.preference).toBe("pty")
       expect(reloaded.getSnapshot().claudeDriver.lifecycle.idleTimeoutMs).toBe(900_000)
       expect(reloaded.getSnapshot().claudeDriver.lifecycle.maxConcurrent).toBe(2)
     } finally {
@@ -928,22 +924,23 @@ describe("claudeDriver settings", () => {
     await expect(mgr.setClaudeDriver({ lifecycle: { maxConcurrent: 99 } })).rejects.toThrow(/maxConcurrent/)
   })
 
-  test("setClaudeDriver rejects invalid preference", async () => {
-    const mgr = trackManager(new AppSettingsManager(path.join(tmpdir(), "kanna-settings-unused.json")))
-    await expect(
-      mgr.setClaudeDriver({ preference: "garbage" as unknown as "sdk" }),
-    ).rejects.toThrow(/preference/)
-  })
-
   test("normalizer clamps and warns on bad values in file", async () => {
     const filePath = await writeSettingsFile({
-      claudeDriver: { preference: "pty", lifecycle: { idleTimeoutMs: 10, maxConcurrent: 50 } },
+      claudeDriver: { lifecycle: { idleTimeoutMs: 10, maxConcurrent: 50 } },
     })
     const snapshot = await readAppSettingsSnapshot(filePath)
-    expect(snapshot.claudeDriver.preference).toBe("pty")
     expect(snapshot.claudeDriver.lifecycle.idleTimeoutMs).toBe(60_000)
     expect(snapshot.claudeDriver.lifecycle.maxConcurrent).toBe(16)
     expect(snapshot.warning).toMatch(/idleTimeoutMs/)
+  })
+
+  test("settings file with preference pty loads without warning and keeps lifecycle", async () => {
+    const filePath = await writeSettingsFile({
+      claudeDriver: { preference: "pty", lifecycle: { idleTimeoutMs: 900_000, maxConcurrent: 2 } },
+    })
+    const snapshot = await readAppSettingsSnapshot(filePath)
+    expect(snapshot.warning).toBeNull()
+    expect(snapshot.claudeDriver).toEqual({ lifecycle: { idleTimeoutMs: 900_000, maxConcurrent: 2 } })
   })
 })
 

@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises"
 import { homedir, tmpdir } from "node:os"
 import path from "node:path"
 import { describe, expect, test } from "bun:test"
-import { computeJsonlPath, computeProjectDir, computeWorkflowsDir, encodeCwd } from "./jsonl-path.adapter"
+import { computeProjectDir, computeWorkflowsDir, encodeCwd } from "./claude-projects-path.adapter"
 
 describe("encodeCwd", () => {
   test("absolute path: replaces / with -", () => {
@@ -20,24 +20,6 @@ describe("encodeCwd", () => {
   })
   test("root path", () => {
     expect(encodeCwd("/")).toBe("-")
-  })
-})
-
-describe("computeJsonlPath", () => {
-  test("combines homeDir + encoded cwd + session uuid", async () => {
-    const tmp = await mkdtemp(path.join(tmpdir(), "kanna-jsonlpath-"))
-    try {
-      const realPath = realpathSync(tmp)
-      const encodedCwd = realPath.replace(/[^a-zA-Z0-9]/g, "-")
-      const result = computeJsonlPath({
-        homeDir: "/home/u",
-        cwd: tmp,
-        sessionId: "abc-123",
-      })
-      expect(result).toBe(`/home/u/.claude/projects/${encodedCwd}/abc-123.jsonl`)
-    } finally {
-      await rm(tmp, { recursive: true, force: true })
-    }
   })
 })
 

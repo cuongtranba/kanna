@@ -326,3 +326,137 @@ describe("createClaudeHarnessStream", () => {
     expect(lastSnapshot.usage.maxTokens).toBeGreaterThanOrEqual(1_000_000)
   })
 })
+
+describe("createClaudeHarnessStream cost attachment", () => {
+  test("claude result cost is attached to the final-turn snapshot", async () => {
+    const events = await collect([
+      {
+        type: "assistant",
+        session_id: "sess-cost",
+        message: { id: "m1", role: "assistant", content: [] },
+        usage: { input_tokens: 100, output_tokens: 50 },
+      },
+      {
+        type: "result",
+        subtype: "success",
+        session_id: "sess-cost",
+        is_error: false,
+        total_cost_usd: 0.0123,
+        usage: { input_tokens: 100, output_tokens: 50 },
+        duration_ms: 10,
+        num_turns: 1,
+        result: "ok",
+      },
+    ])
+
+    const cwuEntries = events.flatMap((ev) =>
+      ev.type === "transcript" && ev.entry.kind === "context_window_updated" ? [ev.entry] : [],
+    )
+    const lastCwu = cwuEntries.at(-1)
+    expect(lastCwu).toBeDefined()
+    expect(lastCwu!.usage.costUsd).toBeCloseTo(0.0123, 6)
+  })
+
+  test("openrouter turn gets computed cost from a price resolver", async () => {
+    const price: ModelPrice = { inputPerMTok: 3, outputPerMTok: 15 }
+    const events = await collect(
+      [
+        {
+          type: "assistant",
+          session_id: "sess-or",
+          message: { id: "m1", role: "assistant", content: [] },
+          usage: { input_tokens: 1_000_000, output_tokens: 0 },
+        },
+        {
+          type: "result",
+          subtype: "success",
+          session_id: "sess-or",
+          is_error: false,
+          usage: { input_tokens: 1_000_000, output_tokens: 0 },
+          duration_ms: 10,
+          num_turns: 1,
+          result: "ok",
+        },
+      ],
+      undefined,
+      () => price,
+    )
+
+    const cwuEntries = events.flatMap((ev) =>
+      ev.type === "transcript" && ev.entry.kind === "context_window_updated" ? [ev.entry] : [],
+    )
+    const lastCwu = cwuEntries.at(-1)
+    expect(lastCwu).toBeDefined()
+    expect(lastCwu!.usage.costUsd).toBeCloseTo(3, 6)
+  })
+})
+
+describe("result entry usage + cost enrichment", () => {
+  test("claude: result entry carries usage tokens and provider costUsd", async () => {
+    const events = await collect([
+      {
+        type: "assistant",
+        session_id: "sess-ru",
+        message: { id: "m1", role: "assistant", content: [] },
+        usage: { input_tokens: 200, output_tokens: 80 },
+      },
+      {
+        type: "result",
+        subtype: "success",
+        session_id: "sess-ru",
+        is_error: false,
+        total_cost_usd: 0.02,
+        usage: { input_tokens: 200, output_tokens: 80 },
+        duration_ms: 100,
+        num_turns: 1,
+        result: "done",
+      },
+    ])
+
+    const resultEntries = events.flatMap((ev) =>
+      ev.type === "transcript" && ev.entry.kind === "result" ? [ev.entry] : [],
+    )
+    expect(resultEntries).toHaveLength(1)
+    const resultEntry = resultEntries[0]
+    expect(resultEntry.costUsd).toBeCloseTo(0.02, 6)
+    expect(resultEntry.usage).toBeDefined()
+    expect(resultEntry.usage?.outputTokens).toBe(80)
+    expect(resultEntry.usage?.inputTokens).toBe(200)
+  })
+
+  test("openrouter: result entry carries computed cost and usage tokens from resolver", async () => {
+    const price: ModelPrice = { inputPerMTok: 3, outputPerMTok: 15 }
+    const events = await collect(
+      [
+        {
+          type: "assistant",
+          session_id: "sess-oru",
+          message: { id: "m1", role: "assistant", content: [] },
+          usage: { input_tokens: 1_000_000, output_tokens: 0 },
+        },
+        {
+          type: "result",
+          subtype: "success",
+          session_id: "sess-oru",
+          is_error: false,
+          usage: { input_tokens: 1_000_000, output_tokens: 0 },
+          duration_ms: 10,
+          num_turns: 1,
+          result: "ok",
+        },
+      ],
+      undefined,
+      () => price,
+    )
+
+    const resultEntries = events.flatMap((ev) =>
+      ev.type === "transcript" && ev.entry.kind === "result" ? [ev.entry] : [],
+    )
+    expect(resultEntries).toHaveLength(1)
+    const resultEntry = resultEntries[0]
+    expect(resultEntry.costUsd).toBeCloseTo(3, 6)
+    expect(resultEntry.usage).toBeDefined()
+    expect(resultEntry.usage?.inputTokens).toBe(1_000_000)
+    expect(resultEntry.usage?.outputTokens).toBeUndefined()
+  })
+})

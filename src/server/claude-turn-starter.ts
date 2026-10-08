@@ -196,7 +196,6 @@ async function startTurnForChatInner(
     ...(args.effort !== undefined ? { effort: args.effort } : {}),
     ...(args.serviceTier !== undefined ? { serviceTier: args.serviceTier } : {}),
     planMode: args.planMode,
-    driver: deps.resolveClaudeDriverPreference(),
   })
   logSendToStartingProfile(args.profile, "start_turn.turn_started_recorded", {
     chatId: args.chatId,
@@ -406,10 +405,6 @@ async function startTurnAfterTurnStarted(
     } catch {
     }
     turn.close()
-    if (args.provider === "claude" && deps.resolveClaudeDriverPreference() === "pty") {
-      const session = deps.claudeSessions.get(args.chatId)
-      if (session) deps.closeClaudeSession(args.chatId, session)
-    }
     return
   }
 

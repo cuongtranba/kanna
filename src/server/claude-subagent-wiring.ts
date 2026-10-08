@@ -1,25 +1,17 @@
 
 import type { JsonValue } from "../shared/json"
 import type {
-  ClaudeDriverPreference,
   LlmProviderSnapshot,
   McpServerConfig,
   Subagent,
 } from "../shared/types"
 import type { HarnessToolRequest } from "./harness-types"
-import type { ClaudeSessionHandle } from "./harness-types"
 import type { ArmedLoopInfo, ChatTaskStorePort, KannaMcpDelegationContext } from "./kanna-mcp"
 import type { ChatRecord, ProjectRecord, StackRecord, SubagentRunEvent } from "./events"
 import type { ProviderRunStart, SubagentOrchestrator } from "./subagent-orchestrator"
 import type { BuildSubagentProviderRunArgs } from "./subagent-provider-run"
 import { buildSubagentProviderRun } from "./subagent-provider-run"
-import type { StartClaudeSessionPtyArgs } from "./claude-pty/driver"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
-import type { ToolCallbackService } from "./tool-callback"
-import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
-import type { ClaudePtyRegistry } from "./claude-pty/pid-registry.adapter"
-import type { PtyInstanceRegistry } from "./claude-pty/pty-instance-registry"
-import type { WorkflowRegistry } from "./workflow-registry"
 import type { CodexAppServerManager } from "./codex-app-server"
 import type { RealpathFn } from "./paths"
 import { resolveSubagentRoots } from "./paths"
@@ -50,13 +42,7 @@ export interface SubagentWiringDeps {
   store: SubagentWiringStore
 
   startClaudeSessionFn: typeof StartClaudeSessionFn
-  startClaudeSessionPTYFn: (args: StartClaudeSessionPtyArgs) => Promise<ClaudeSessionHandle>
 
-  toolCallback: ToolCallbackService | null
-  tunnelGateway: TunnelGateway | null
-  claudePtyRegistry: ClaudePtyRegistry | null
-  ptyInstanceRegistry: PtyInstanceRegistry | null
-  workflowRegistry: WorkflowRegistry | null
   subagentOrchestrator: SubagentOrchestrator
   codexManager: CodexAppServerManager
   oauthPool: SubagentWiringOAuthPool | null
@@ -65,7 +51,6 @@ export interface SubagentWiringDeps {
 
   realpath: RealpathFn
 
-  resolveClaudeDriverPreference: () => ClaudeDriverPreference
   getEnabledCustomMcpServers: () => readonly McpServerConfig[]
   buildOAuthBearers: (servers: readonly McpServerConfig[]) => Promise<OAuthBearers>
   resolveChatPolicy: (chatId: string) => ChatPermissionPolicy
@@ -100,40 +85,6 @@ export function buildClaudeSubagentStarter(
   return async (a) => {
     const enabledMcpServers = deps.getEnabledCustomMcpServers()
     const { byServerId: oauthBearers } = await deps.buildOAuthBearers(enabledMcpServers)
-    if (deps.resolveClaudeDriverPreference() === "pty") {
-      return deps.startClaudeSessionPTYFn({
-        chatId: a.chatId ?? "",
-        projectId: a.projectId,
-        localPath: a.localPath,
-        model: a.model,
-        effort: a.effort,
-        planMode: a.planMode,
-        sessionToken: a.sessionToken,
-        forkSession: a.forkSession,
-        oauthToken: a.oauthToken,
-        oauthBaseUrl: a.oauthBaseUrl,
-        additionalDirectories: a.additionalDirectories,
-        onToolRequest: a.onToolRequest,
-        systemPromptOverride: a.systemPromptOverride,
-        initialPrompt: a.initialPrompt,
-        subagentOrchestrator: a.subagentOrchestrator,
-        delegationContext: a.delegationContext,
-        toolCallback: deps.toolCallback ?? undefined,
-        tunnelGateway: deps.tunnelGateway,
-        chatPolicy: a.chatId ? deps.resolveChatPolicy(a.chatId) : undefined,
-        oneShot: true,
-        ptyRegistry: deps.claudePtyRegistry ?? undefined,
-        ptyInstanceRegistry: deps.ptyInstanceRegistry ?? undefined,
-        workflowRegistry: deps.workflowRegistry ?? undefined,
-        customMcpServers: enabledMcpServers,
-        oauthBearers,
-        restrictedAllowedPaths: a.restrictedAllowedPaths,
-        maxTurns: a.maxTurns,
-        keepAlive: a.keepAlive,
-        getArmedLoop: a.getArmedLoop,
-        chatTaskStore: deps.chatTaskStore,
-      })
-    }
     return deps.startClaudeSessionFn({ ...a, customMcpServers: enabledMcpServers, oauthBearers })
   }
 }
@@ -220,7 +171,6 @@ export function buildSubagentProviderRunForChat(
     allowedPaths: restriction?.allowedPaths,
     projectId: project.id,
     startClaudeSession: buildClaudeSubagentStarter(deps),
-    claudeDriverIsPty: deps.resolveClaudeDriverPreference() === "pty",
     subagentOrchestrator: deps.subagentOrchestrator,
     delegationContext,
     getArmedLoop: deps.getArmedLoop,

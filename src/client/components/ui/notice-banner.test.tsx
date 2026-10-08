@@ -5,10 +5,10 @@ import { NoticeBanner } from "./notice-banner"
 describe("NoticeBanner", () => {
   test("renders children inside a status role strip", () => {
     const html = renderToStaticMarkup(
-      <NoticeBanner variant="warning">PTY driver active.</NoticeBanner>,
+      <NoticeBanner variant="warning">Heads up.</NoticeBanner>,
     )
     expect(html).toContain('role="status"')
-    expect(html).toContain("PTY driver active.")
+    expect(html).toContain("Heads up.")
   })
 
   test("applies warning tone via --warning dot + bg-warning tint", () => {

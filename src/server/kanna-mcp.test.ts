@@ -106,39 +106,6 @@ const makeArgs = (toolCallback?: Parameters<typeof buildKannaMcpTools>[0]["toolC
   tunnelGateway: null,
 })
 
-test("feature flag off → ask_user_question / exit_plan_mode NOT registered", () => {
-  delete process.env.KANNA_MCP_TOOL_CALLBACKS
-  const tools = buildKannaMcpTools(makeArgs(undefined))
-  const names = tools.map((t) => t.name)
-  expect(names).not.toContain("ask_user_question")
-  expect(names).not.toContain("exit_plan_mode")
-})
-
-test("feature flag on → tools registered when toolCallback present", () => {
-  process.env.KANNA_MCP_TOOL_CALLBACKS = "1"
-  const stub: Parameters<typeof buildKannaMcpTools>[0]["toolCallback"] = {
-    submit: async () => ({ status: "answered", decision: { kind: "deny" as const, reason: "test" } }),
-    answer: async () => {},
-    cancel: async () => {},
-    cancelAllForChat: async () => {},
-    recoverOnStartup: async () => {},
-  }
-  const tools = buildKannaMcpTools(makeArgs(stub))
-  const names = tools.map((t) => t.name)
-  expect(names).toContain("ask_user_question")
-  expect(names).toContain("exit_plan_mode")
-  delete process.env.KANNA_MCP_TOOL_CALLBACKS
-})
-
-test("feature flag on but toolCallback absent → tools NOT registered", () => {
-  process.env.KANNA_MCP_TOOL_CALLBACKS = "1"
-  const tools = buildKannaMcpTools(makeArgs(undefined))
-  const names = tools.map((t) => t.name)
-  expect(names).not.toContain("ask_user_question")
-  expect(names).not.toContain("exit_plan_mode")
-  delete process.env.KANNA_MCP_TOOL_CALLBACKS
-})
-
 test("feature flag on → all 8 new mcp__kanna__* tools registered", () => {
   process.env.KANNA_MCP_TOOL_CALLBACKS = "1"
   try {
@@ -168,48 +135,6 @@ test("feature flag on → all 8 new mcp__kanna__* tools registered", () => {
   }
 })
 
-
-const callbackStub = (): Parameters<typeof buildKannaMcpTools>[0]["toolCallback"] => ({
-  submit: async () => ({ status: "answered", decision: { kind: "deny" as const, reason: "test" } }),
-  answer: async () => {},
-  cancel: async () => {},
-  cancelAllForChat: async () => {},
-  recoverOnStartup: async () => {},
-})
-
-test("forceInteractiveToolCallbacks → ask_user_question / exit_plan_mode registered with env flag UNSET", () => {
-  delete process.env.KANNA_MCP_TOOL_CALLBACKS
-  const tools = buildKannaMcpTools({
-    ...makeArgs(callbackStub()),
-    forceInteractiveToolCallbacks: true,
-  })
-  const names = tools.map((t) => t.name)
-  expect(names).toContain("ask_user_question")
-  expect(names).toContain("exit_plan_mode")
-})
-
-test("forceInteractiveToolCallbacks does NOT register the 8 built-in shims (env flag UNSET)", () => {
-  delete process.env.KANNA_MCP_TOOL_CALLBACKS
-  const tools = buildKannaMcpTools({
-    ...makeArgs(callbackStub()),
-    forceInteractiveToolCallbacks: true,
-  })
-  const names = tools.map((t) => t.name)
-  for (const n of ["read", "glob", "grep", "bash", "edit", "write", "webfetch", "websearch"]) {
-    expect(names).not.toContain(n)
-  }
-})
-
-test("forceInteractiveToolCallbacks but toolCallback absent → nothing registered (fail-safe)", () => {
-  delete process.env.KANNA_MCP_TOOL_CALLBACKS
-  const tools = buildKannaMcpTools({
-    ...makeArgs(undefined),
-    forceInteractiveToolCallbacks: true,
-  })
-  const names = tools.map((t) => t.name)
-  expect(names).not.toContain("ask_user_question")
-  expect(names).not.toContain("exit_plan_mode")
-})
 
 describe("buildDelegateProgressEmitter", () => {
   function makeEntry(over: Partial<TranscriptEntry> = {}): TranscriptEntry {

@@ -126,7 +126,7 @@ describe("tool-callback durable protocol", () => {
     })
     const p = svc.submit(baseInput)
     await new Promise<void>((r) => setTimeout(r, 0))
-    await svc.cancelAllForChat("chat-1", "PTY shutdown")
+    await svc.cancelAllForChat("chat-1", "session shutdown")
     const res = await p
     expect(res.status).toBe("canceled")
   })

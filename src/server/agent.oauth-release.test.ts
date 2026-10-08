@@ -154,7 +154,6 @@ describe("OAuth pool reservation lifetime", () => {
         closed: Promise.resolve(),
         setModel: async () => {},
         setPermissionMode: async () => {},
-        getSupportedCommands: async () => [],
         sendPrompt: async () => {
           events.push({
             type: "transcript",
@@ -222,7 +221,6 @@ describe("OAuth pool reservation lifetime", () => {
           closed: Promise.resolve(),
           setModel: async () => {},
           setPermissionMode: async () => {},
-          getSupportedCommands: async () => [],
           sendPrompt: async () => {
             events.push({
               type: "transcript",

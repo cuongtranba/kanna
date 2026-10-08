@@ -1,8 +1,7 @@
 
-import type { ClaudeDriverPreference } from "../shared/types"
 import type { ClaudeSessionState, ActiveTurn } from "./claude-session-state"
 import type { TokenUnavailability } from "./oauth-pool/oauth-token-pool"
-import { computeWorkflowsDir } from "./claude-pty/jsonl-path.adapter"
+import { computeWorkflowsDir } from "./claude-projects-path.adapter"
 import {
   hasPendingBackgroundTask,
   backgroundTaskGuardExpired,
@@ -50,8 +49,6 @@ export interface SessionLifecycleDeps {
 
   workflowRegistry: LifecycleWorkflowRegistry | null
 
-  resolveClaudeDriverPreference(): ClaudeDriverPreference
-
   emitStateChange(chatId: string): void
 
   store: LifecycleStore
@@ -93,9 +90,7 @@ export function closeClaudeSession(
     deps.oauthPool?.release(chatId)
   }
   session.session.close()
-  if (deps.resolveClaudeDriverPreference() !== "pty") {
-    deps.workflowRegistry?.unregister(chatId)
-  }
+  deps.workflowRegistry?.unregister(chatId)
 }
 
 export function maybeRegisterSdkWorkflowsDir(
@@ -104,7 +99,6 @@ export function maybeRegisterSdkWorkflowsDir(
 ): void {
   if (!deps.workflowRegistry) return
   if (session.workflowsDirRegistered) return
-  if (deps.resolveClaudeDriverPreference() === "pty") return
   if (!session.sessionToken) return
   const dir = computeWorkflowsDir({
     homeDir: deps.homeDir,

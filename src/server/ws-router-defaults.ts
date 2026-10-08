@@ -4,7 +4,7 @@ import {
   AUTH_DEFAULTS,
   CLAUDE_AUTH_DEFAULTS,
   CLAUDE_DRIVER_DEFAULTS,
-  CLAUDE_PTY_LIFECYCLE_DEFAULTS,
+  CLAUDE_LIFECYCLE_DEFAULTS,
   CLOUDFLARE_TUNNEL_DEFAULTS,
   DEFAULT_OPENROUTER_SDK_MODEL,
   PACKAGE_UPDATE_SETTINGS_DEFAULTS,
@@ -166,7 +166,6 @@ export function mergeAppSettingsPatch(
     },
     installedPlugins: snapshot.installedPlugins,
     claudeDriver: {
-      preference: patch.claudeDriver?.preference ?? snapshot.claudeDriver.preference,
       lifecycle: {
         ...snapshot.claudeDriver.lifecycle,
         ...patch.claudeDriver?.lifecycle,
@@ -241,7 +240,7 @@ export function buildInitialAppSettingsSnapshot(): AppSettingsSnapshot {
     customMcpServers: [],
     customModels: [],
     textSnippets: [],
-    claudeDriver: { ...CLAUDE_DRIVER_DEFAULTS, lifecycle: { ...CLAUDE_PTY_LIFECYCLE_DEFAULTS } },
+    claudeDriver: { ...CLAUDE_DRIVER_DEFAULTS, lifecycle: { ...CLAUDE_LIFECYCLE_DEFAULTS } },
     globalPromptAppend: "",
     shareDefaultTtlHours: 24,
     subagentRuntime: { runTimeoutMs: 600_000, defaultLoopSubagentId: null },

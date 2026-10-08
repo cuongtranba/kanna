@@ -53,8 +53,6 @@ function SessionSigil({
 import { branchLabel as computeBranchLabel } from "../../lib/branchLabel"
 import { OpenExternalSelect } from "../open-external-menu"
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "../ui/context-menu"
-import { PtyInstancesIndicator } from "./PtyInstancesIndicator"
-import type { KannaSocket } from "../../app/socket"
 import { ChatTabScopedStore } from "../../stores/chatTabScopedStore"
 import { useFollowedSessionsStore, selectIsFollowing } from "../../stores/followedSessionsStore"
 import type { DomPort } from "../../ports/domPort"
@@ -162,8 +160,6 @@ interface Props {
   resolvedBindings?: ResolvedStackBinding[]
   provider?: AgentProvider | null
   onOpenPath?: (path: string) => void
-  socket?: KannaSocket
-  onOpenPtyChat?: (chatId: string) => void
   currentChatId?: string
   shareShares?: readonly ShareSummary[]
   onShareMint?: (chatId: string) => Promise<void>
@@ -206,8 +202,6 @@ export function ChatNavbar({
   resolvedBindings,
   provider,
   onOpenPath = () => undefined,
-  socket,
-  onOpenPtyChat,
   currentChatId,
   shareShares,
   onShareMint,
@@ -324,7 +318,6 @@ export function ChatNavbar({
         <FollowingPill chatId={currentChatId} />
 
         <div className="flex items-center flex-shrink-0 border border-border rounded-2xl">
-          <PtyInstancesIndicator socket={socket} onOpenChat={onOpenPtyChat} />
           {onToggleSilent != null ? (
             <Tooltip>
               <TooltipTrigger asChild>

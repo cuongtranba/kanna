@@ -17,10 +17,6 @@ export interface StartingTurn {
 
 export type CompactionTurnKind = "proactive" | "user" | "codex_summary"
 
-export function isCliCompactTurn(turn: Pick<ActiveTurn, "compactionTurn"> | undefined): boolean {
-  return turn?.compactionTurn === "proactive" || turn?.compactionTurn === "user"
-}
-
 export function isProactiveCompactTurn(turn: Pick<ActiveTurn, "compactionTurn"> | undefined): boolean {
   return turn?.compactionTurn === "proactive"
 }

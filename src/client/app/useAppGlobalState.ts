@@ -11,14 +11,12 @@ import { useRightSidebarStore } from "../stores/rightSidebarStore"
 import { useTerminalLayoutStore } from "../stores/terminalLayoutStore"
 import { selectEditorCommandTemplate, selectEditorPreset, useAppSettingsStore } from "../stores/appSettingsStore"
 import { useAppDialog } from "../components/ui/app-dialog"
-import type { EditorOpenSettings, ImportSessionsByIdsResult, OpenExternalAction, PtyInstancesEvent } from "../../shared/protocol"
+import type { EditorOpenSettings, ImportSessionsByIdsResult, OpenExternalAction } from "../../shared/protocol"
 import { readProjectDeleteResult } from "../../shared/protocol"
-import type { PtyInstancesSnapshot } from "../../shared/pty-instance"
 import type { FollowedSessionsSnapshot } from "../../shared/protocol"
 import type { CronJobsGlobalSnapshot } from "../../shared/cron/types"
 import type { PackageUpdateSnapshot } from "../../shared/packages/types"
 import type { ChatPermissionPolicyOverride } from "../../shared/permission-policy"
-import { usePtyInstancesStore } from "../stores/ptyInstancesStore"
 import { useFollowedSessionsStore } from "../stores/followedSessionsStore"
 import { useCronJobsStore } from "../stores/cronJobsStore"
 import { useSettingsPageStore } from "../stores/settingsPageStore"
@@ -508,24 +506,6 @@ export function useAppGlobalState(
     return socket.subscribe<PushConfigSnapshot>({ type: "push-config" }, (snapshot) => {
       useKannaStateStore.getState().setPushConfig(snapshot)
     })
-  }, [socket])
-
-  useEffect(() => {
-    return socket.subscribe<PtyInstancesSnapshot, PtyInstancesEvent>(
-      { type: "pty-instances" },
-      (snapshot) => {
-        usePtyInstancesStore.getState().applySnapshot(snapshot.instances)
-      },
-      (event) => {
-        if (event.type === "pty-instances.added") {
-          usePtyInstancesStore.getState().applyDiff({ op: "added", instance: event.instance })
-        } else if (event.type === "pty-instances.updated") {
-          usePtyInstancesStore.getState().applyDiff({ op: "updated", instance: event.instance })
-        } else {
-          usePtyInstancesStore.getState().applyDiff({ op: "removed", chatId: event.chatId })
-        }
-      },
-    )
   }, [socket])
 
   useEffect(() => {

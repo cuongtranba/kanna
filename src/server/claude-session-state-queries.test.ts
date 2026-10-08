@@ -28,7 +28,6 @@ const STUB_HANDLE = {
   sendPrompt: async () => {},
   setModel: async () => {},
   setPermissionMode: async () => {},
-  getSupportedCommands: async () => [],
 }
 
 function makeSession(overrides?: Partial<ConstructorParameters<typeof ClaudeSessionState>[0]>): ClaudeSessionState {
@@ -565,7 +564,7 @@ describe("sweepIdleClaudeSessions background-task escalation", () => {
     expect(session.backgroundTaskWakeCount).toBe(0)
   })
 
-  it("still wakes a session that never saw a level snapshot (PTY driver)", () => {
+  it("still wakes a session that never saw a level snapshot", () => {
     const session = makeExpiredSession({ backgroundTasksLevelSourced: false })
     const wakeFn = mock<SessionStateQueryDeps["wakeBackgroundTaskSession"]>(() => undefined)
     const deps = makeDeps({

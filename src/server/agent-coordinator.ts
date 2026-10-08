@@ -21,10 +21,9 @@ import type { AnalyticsReporter } from "./analytics"
 import { NoopAnalyticsReporter } from "./analytics"
 import { CodexAppServerManager } from "./codex-app-server"
 import { type GenerateChatTitleResult, generateTitleForChatDetailed } from "./generate-title"
-import type { ClaudeSessionHandle, HarnessTurn } from "./harness-types"
+import type { HarnessTurn } from "./harness-types"
 import { startClaudeSession } from "./claude-session-start"
 import { readLlmProviderSnapshot } from "./llm-provider"
-import { type ClaudeDriverPreference } from "../shared/types"
 import type { AutoContinueEvent } from "./auto-continue/events"
 import { ClaudeLimitDetector, CodexLimitDetector, type LimitDetection, type LimitDetector } from "./auto-continue/limit-detector"
 import { ClaudeAuthErrorDetector, type AuthErrorDetection } from "./auto-continue/auth-error-detector"
@@ -41,15 +40,12 @@ import {
 import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
-import { startClaudeSessionPTY, type StartClaudeSessionPtyArgs } from "./claude-pty/driver"
 import {
   type ClaudeSessionConfigHelpersDeps,
   type OAuthBearers,
-  resolveClaudeDriverPreference as resolveClaudeDriverPreferenceFn,
   getEnabledCustomMcpServers as getEnabledCustomMcpServersFn,
   buildOAuthBearers as buildOAuthBearersFn,
   resolveChatPolicy as resolveChatPolicyFn,
-  killPtyInstance as killPtyInstanceFn,
 } from "./claude-session-config-helpers"
 import { toError } from "../shared/errors"
 import type { JsonValue } from "../shared/json"
@@ -208,7 +204,7 @@ import type {
 const DEFAULT_CLAUDE_SESSION_IDLE_MS = 10 * 60 * 1000
 const DEFAULT_CLAUDE_SESSION_MAX_RESIDENT = 4
 const DEFAULT_CLAUDE_SESSION_SWEEP_INTERVAL_MS = 60 * 1000
-const DEFAULT_PTY_BACKGROUND_TASK_MAX_MS = 30 * 60 * 1000
+const DEFAULT_CLAUDE_BACKGROUND_TASK_MAX_MS = 30 * 60 * 1000
 const DEFAULT_BACKGROUND_TASK_MAX_WAKES = 3
 const DEFAULT_OPENROUTER_FIRST_ENTRY_TIMEOUT_MS = 2 * 60 * 1000
 
@@ -232,7 +228,6 @@ export class AgentCoordinator {
   readonly codexManager: CodexAppServerManager
   readonly generateTitle: (messageContent: string, cwd: string) => Promise<GenerateChatTitleResult>
   readonly startClaudeSessionFn: NonNullable<AgentCoordinatorArgs["startClaudeSession"]>
-  readonly startClaudeSessionPTYFn: (args: StartClaudeSessionPtyArgs) => Promise<ClaudeSessionHandle>
   reportBackgroundError: ((message: string) => void) | null = null
   private readonly activeTurns = new Map<string, ActiveTurn>()
   private readonly pendingTools = new PendingToolSlots()
@@ -271,8 +266,6 @@ export class AgentCoordinator {
   readonly chatPolicy: ChatPermissionPolicy
   readonly claudeSessionLifecycle: ClaudeSessionLifecycleOptions
   private readonly claudeSessionSweepTimer: ReturnType<typeof setInterval> | null
-  readonly claudePtyRegistry: import("./claude-pty/pid-registry.adapter").ClaudePtyRegistry | null
-  readonly ptyInstanceRegistry: import("./claude-pty/pty-instance-registry").PtyInstanceRegistry | null
   readonly workflowRegistry: import("./workflow-registry").WorkflowRegistry | null
   readonly boardRegistry: import("./board-registry").BoardRegistry | null
   readonly backgroundTaskOutputRegistry: import("./background-task-output-registry").BackgroundTaskOutputRegistry | null
@@ -294,7 +287,6 @@ export class AgentCoordinator {
     this.codexManager = args.codexManager ?? new CodexAppServerManager()
     this.generateTitle = args.generateTitle ?? generateTitleForChatDetailed
     this.startClaudeSessionFn = args.startClaudeSession ?? startClaudeSession
-    this.startClaudeSessionPTYFn = args.startClaudeSessionPTY ?? startClaudeSessionPTY
     this.claudeLimitDetector = args.claudeLimitDetector ?? new ClaudeLimitDetector()
     this.codexLimitDetector = args.codexLimitDetector ?? new CodexLimitDetector()
     this.claudeAuthErrorDetector = new ClaudeAuthErrorDetector()
@@ -403,7 +395,10 @@ export class AgentCoordinator {
       sweepIntervalMs: args.claudeSessionLifecycle?.sweepIntervalMs
         ?? positiveIntegerFromEnv(process.env.KANNA_CLAUDE_SESSION_SWEEP_INTERVAL_MS, DEFAULT_CLAUDE_SESSION_SWEEP_INTERVAL_MS),
       backgroundTaskMaxMs: args.claudeSessionLifecycle?.backgroundTaskMaxMs
-        ?? positiveIntegerFromEnv(process.env.KANNA_PTY_BACKGROUND_TASK_MAX_MS, DEFAULT_PTY_BACKGROUND_TASK_MAX_MS),
+        ?? positiveIntegerFromEnv(
+          process.env.KANNA_CLAUDE_BACKGROUND_TASK_MAX_MS,
+          positiveIntegerFromEnv(process.env.KANNA_PTY_BACKGROUND_TASK_MAX_MS, DEFAULT_CLAUDE_BACKGROUND_TASK_MAX_MS),
+        ),
       backgroundTaskMaxWakes: args.claudeSessionLifecycle?.backgroundTaskMaxWakes
         ?? positiveIntegerFromEnv(process.env.KANNA_BACKGROUND_TASK_MAX_WAKES, DEFAULT_BACKGROUND_TASK_MAX_WAKES),
     }
@@ -411,8 +406,6 @@ export class AgentCoordinator {
       ? setInterval(() => { this.sweepIdleClaudeSessions() }, this.claudeSessionLifecycle.sweepIntervalMs)
       : null
     this.claudeSessionSweepTimer?.unref?.()
-    this.claudePtyRegistry = args.claudePtyRegistry ?? null
-    this.ptyInstanceRegistry = args.ptyInstanceRegistry ?? null
     this.workflowRegistry = args.workflowRegistry ?? null
     this.boardRegistry = args.boardRegistry ?? null
     this.backgroundTaskOutputRegistry = args.backgroundTaskOutputRegistry ?? null
@@ -504,18 +497,9 @@ export class AgentCoordinator {
       getAppSettingsSnapshot: () => this.getAppSettingsSnapshot(),
       chatPolicy: this.chatPolicy,
       store: this.store,
-      ptyInstanceRegistry: this.ptyInstanceRegistry,
       ensureFreshToken: (server, opts) => ensureFreshMcpToken(server, opts),
       persistOAuthState: this.persistOAuthStateFn,
-      killProcessTree: async (pid) => {
-        const { killProcessTree } = await import("./claude-pty/pid-registry.adapter")
-        await killProcessTree(pid)
-      },
     }
-  }
-
-  resolveClaudeDriverPreference(): ClaudeDriverPreference {
-    return resolveClaudeDriverPreferenceFn(this.claudeSessionConfigDeps())
   }
 
   getEnabledCustomMcpServers(): readonly McpServerConfig[] {
@@ -542,7 +526,6 @@ export class AgentCoordinator {
       pendingTools: this.pendingTools,
       oauthPool: this.oauthPool,
       workflowRegistry: this.workflowRegistry,
-      resolveClaudeDriverPreference: () => this.resolveClaudeDriverPreference(),
       emitStateChange: (chatId: string) => { this.emitStateChange(chatId) },
       store: this.store,
       homeDir: homedir(),
@@ -667,8 +650,6 @@ export class AgentCoordinator {
       store: this.store,
       claudeSessions: this.claudeSessions,
       emitStateChange: (chatId) => this.emitStateChange(chatId),
-      resolveClaudeDriverPreference: () => this.resolveClaudeDriverPreference(),
-      closeClaudeSession: (chatId, session) => this.closeClaudeSession(chatId, session),
     }
   }
 
@@ -717,18 +698,11 @@ export class AgentCoordinator {
     return {
       store: this.store,
       startClaudeSessionFn: this.startClaudeSessionFn,
-      startClaudeSessionPTYFn: this.startClaudeSessionPTYFn,
-      toolCallback: this.toolCallback,
-      tunnelGateway: this.tunnelGateway,
-      claudePtyRegistry: this.claudePtyRegistry,
-      ptyInstanceRegistry: this.ptyInstanceRegistry,
-      workflowRegistry: this.workflowRegistry,
       subagentOrchestrator: this.getSubagentOrchestrator(),
       codexManager: this.codexManager,
       oauthPool: this.oauthPool,
       subagentPendingResolvers: this.subagentPendingResolvers,
       realpath: realpathAdapter,
-      resolveClaudeDriverPreference: () => this.resolveClaudeDriverPreference(),
       getEnabledCustomMcpServers: () => this.getEnabledCustomMcpServers(),
       buildOAuthBearers: (servers) => this.buildOAuthBearers(servers),
       resolveChatPolicy: (chatId) => this.resolveChatPolicy(chatId),
@@ -946,8 +920,6 @@ export class AgentCoordinator {
       subagentOrchestrator: this.getSubagentOrchestrator(),
       clearDrainingStream: (chatId) => this.clearDrainingStream(chatId),
       emitStateChange: (chatId, opts) => this.emitStateChange(chatId, opts),
-      resolveClaudeDriverPreference: () => this.resolveClaudeDriverPreference(),
-      closeClaudeSession: (chatId, session) => this.closeClaudeSession(chatId, session),
       getSubagents: () => this.getSubagents(),
       getAppSettingsSnapshot: () => this.getAppSettingsSnapshot(),
       listSkills: (chatId) => this.skillAccess.listSkills(chatId),
@@ -1011,15 +983,9 @@ export class AgentCoordinator {
       mentionedSubagentIdsByChat: this.mentionedSubagentIdsByChat,
       oauthPool: this.oauthPool,
       startClaudeSessionFn: this.startClaudeSessionFn,
-      startClaudeSessionPTYFn: this.startClaudeSessionPTYFn,
       subagentOrchestrator: this.getSubagentOrchestrator(),
       toolCallback: this.toolCallback,
       tunnelGateway: this.tunnelGateway,
-      claudePtyRegistry: this.claudePtyRegistry,
-      ptyInstanceRegistry: this.ptyInstanceRegistry,
-      workflowRegistry: this.workflowRegistry,
-      subagentTranscriptRegistry: this.subagentTranscriptRegistry,
-      resolveClaudeDriverPreference: () => this.resolveClaudeDriverPreference(),
       isLoopArmed: (chatId) => this.isLoopArmed(chatId),
       boardRegistry: this.boardRegistry ?? undefined,
       closeClaudeSession: (chatId, session) => this.closeClaudeSession(chatId, session),
@@ -1120,7 +1086,6 @@ export class AgentCoordinator {
       handleAuthFailure: (session, detection) => this.handleAuthFailure(session, detection),
       closeClaudeSession: (chatId, session) => { this.closeClaudeSession(chatId, session) },
       maybeStartNextQueuedMessage: (chatId) => this.maybeStartNextQueuedMessage(chatId),
-      resolveClaudeDriverPreference: () => this.resolveClaudeDriverPreference(),
       turnEndGuard: this._turnEndGuard,
       onBackgroundTaskLaunch: this.backgroundTaskOutputRegistry
         ? (chatId, taskId, outputPath) => {
@@ -1297,10 +1262,6 @@ export class AgentCoordinator {
 
   listLiveSchedules(chatId: string): string[] {
     return listLiveSchedulesFn(this.loopCommandDeps(), chatId)
-  }
-
-  async killPtyInstance(chatId: string): Promise<void> {
-    return killPtyInstanceFn(this.claudeSessionConfigDeps(), chatId)
   }
 
   async cancel(chatId: string, options?: { hideInterrupted?: boolean }) {

@@ -154,7 +154,6 @@ describe("AgentCoordinator OpenRouter model resolution", () => {
             closed: Promise.resolve(),
             setModel: async () => {},
             setPermissionMode: async () => {},
-            getSupportedCommands: async () => [],
             sendPrompt: async () => pushResult(events),
           }
         },
@@ -197,7 +196,6 @@ describe("AgentCoordinator OpenRouter model resolution", () => {
             closed: Promise.resolve(),
             setModel: async () => {},
             setPermissionMode: async () => {},
-            getSupportedCommands: async () => [],
             sendPrompt: async () => pushResult(events),
           }
         },

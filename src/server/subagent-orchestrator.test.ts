@@ -519,7 +519,6 @@ describe("SubagentOrchestrator", () => {
       sendPrompt: async () => {},
       setModel: async () => {},
       setPermissionMode: async () => {},
-      getSupportedCommands: async () => [],
       getAccountInfo: async () => null,
     }
 

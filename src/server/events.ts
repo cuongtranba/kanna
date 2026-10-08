@@ -1,6 +1,5 @@
 import type {
   AgentProvider,
-  ClaudeDriverPreference,
   KannaStatus,
   ModelOptions,
   ProjectSummary,
@@ -247,7 +246,7 @@ export interface TurnRunConfig {
   effort?: string
   serviceTier?: "fast"
   planMode: boolean
-  driver: ClaudeDriverPreference
+  driver?: "sdk" | "pty"
 }
 
 export type TurnEvent =

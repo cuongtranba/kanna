@@ -25,16 +25,15 @@ import {
   AUTH_SESSION_MAX_AGE_DAYS_MIN,
   CLAUDE_AUTH_DEFAULTS,
   CLAUDE_DRIVER_DEFAULTS,
-  CLAUDE_PTY_IDLE_TIMEOUT_MS_MAX,
-  CLAUDE_PTY_IDLE_TIMEOUT_MS_MIN,
-  CLAUDE_PTY_LIFECYCLE_DEFAULTS,
-  CLAUDE_PTY_MAX_CONCURRENT_MAX,
-  CLAUDE_PTY_MAX_CONCURRENT_MIN,
+  CLAUDE_IDLE_TIMEOUT_MS_MAX,
+  CLAUDE_IDLE_TIMEOUT_MS_MIN,
+  CLAUDE_LIFECYCLE_DEFAULTS,
+  CLAUDE_MAX_CONCURRENT_MAX,
+  CLAUDE_MAX_CONCURRENT_MIN,
   DEFAULT_CLAUDE_MODEL_OPTIONS,
   DEFAULT_CODEX_MODEL_OPTIONS,
   DEFAULT_OPENROUTER_SDK_MODEL,
   GLOBAL_PROMPT_APPEND_MAX_CHARS,
-  isClaudeDriverPreference,
   isClaudeReasoningEffort,
   isCodexReasoningEffort,
   normalizeClaudeContextWindow,
@@ -60,10 +59,9 @@ import {
   type ChatSoundId,
   type ChatSoundPreference,
   type ClaudeAuthSettings,
-  type ClaudeDriverPreference,
   type ClaudeDriverSettings,
   type ClaudeModelOptions,
-  type ClaudePtyLifecycleSettings,
+  type ClaudeLifecycleSettings,
   type CloudflareTunnelSettings,
   type CodexModelOptions,
   type OpenRouterModelOptions,
@@ -729,35 +727,35 @@ function normalizeTokenEntry<T>(value: T, warnings: string[]): OAuthTokenEntry |
   }
 }
 
-function normalizeClaudePtyLifecycle<T>(value: T, warnings: string[]): ClaudePtyLifecycleSettings {
+function normalizeClaudeLifecycle<T>(value: T, warnings: string[]): ClaudeLifecycleSettings {
   const source = isPlainObject(value) ? value : null
   if (value !== undefined && !source) {
     warnings.push("claudeDriver.lifecycle must be an object")
   }
   const idleRaw = source?.idleTimeoutMs
-  let idleTimeoutMs = CLAUDE_PTY_LIFECYCLE_DEFAULTS.idleTimeoutMs
+  let idleTimeoutMs = CLAUDE_LIFECYCLE_DEFAULTS.idleTimeoutMs
   if (idleRaw !== undefined) {
     if (typeof idleRaw !== "number" || !Number.isFinite(idleRaw)) {
       warnings.push("claudeDriver.lifecycle.idleTimeoutMs must be a number")
-    } else if (idleRaw < CLAUDE_PTY_IDLE_TIMEOUT_MS_MIN || idleRaw > CLAUDE_PTY_IDLE_TIMEOUT_MS_MAX) {
+    } else if (idleRaw < CLAUDE_IDLE_TIMEOUT_MS_MIN || idleRaw > CLAUDE_IDLE_TIMEOUT_MS_MAX) {
       warnings.push(
-        `claudeDriver.lifecycle.idleTimeoutMs must be between ${CLAUDE_PTY_IDLE_TIMEOUT_MS_MIN} and ${CLAUDE_PTY_IDLE_TIMEOUT_MS_MAX}`,
+        `claudeDriver.lifecycle.idleTimeoutMs must be between ${CLAUDE_IDLE_TIMEOUT_MS_MIN} and ${CLAUDE_IDLE_TIMEOUT_MS_MAX}`,
       )
-      idleTimeoutMs = clampNumber(idleRaw, CLAUDE_PTY_LIFECYCLE_DEFAULTS.idleTimeoutMs, CLAUDE_PTY_IDLE_TIMEOUT_MS_MIN, CLAUDE_PTY_IDLE_TIMEOUT_MS_MAX)
+      idleTimeoutMs = clampNumber(idleRaw, CLAUDE_LIFECYCLE_DEFAULTS.idleTimeoutMs, CLAUDE_IDLE_TIMEOUT_MS_MIN, CLAUDE_IDLE_TIMEOUT_MS_MAX)
     } else {
       idleTimeoutMs = Math.round(idleRaw)
     }
   }
   const maxRaw = source?.maxConcurrent
-  let maxConcurrent = CLAUDE_PTY_LIFECYCLE_DEFAULTS.maxConcurrent
+  let maxConcurrent = CLAUDE_LIFECYCLE_DEFAULTS.maxConcurrent
   if (maxRaw !== undefined) {
     if (typeof maxRaw !== "number" || !Number.isFinite(maxRaw)) {
       warnings.push("claudeDriver.lifecycle.maxConcurrent must be a number")
-    } else if (maxRaw < CLAUDE_PTY_MAX_CONCURRENT_MIN || maxRaw > CLAUDE_PTY_MAX_CONCURRENT_MAX) {
+    } else if (maxRaw < CLAUDE_MAX_CONCURRENT_MIN || maxRaw > CLAUDE_MAX_CONCURRENT_MAX) {
       warnings.push(
-        `claudeDriver.lifecycle.maxConcurrent must be between ${CLAUDE_PTY_MAX_CONCURRENT_MIN} and ${CLAUDE_PTY_MAX_CONCURRENT_MAX}`,
+        `claudeDriver.lifecycle.maxConcurrent must be between ${CLAUDE_MAX_CONCURRENT_MIN} and ${CLAUDE_MAX_CONCURRENT_MAX}`,
       )
-      maxConcurrent = clampNumber(maxRaw, CLAUDE_PTY_LIFECYCLE_DEFAULTS.maxConcurrent, CLAUDE_PTY_MAX_CONCURRENT_MIN, CLAUDE_PTY_MAX_CONCURRENT_MAX)
+      maxConcurrent = clampNumber(maxRaw, CLAUDE_LIFECYCLE_DEFAULTS.maxConcurrent, CLAUDE_MAX_CONCURRENT_MIN, CLAUDE_MAX_CONCURRENT_MAX)
     } else {
       maxConcurrent = Math.round(maxRaw)
     }
@@ -771,18 +769,10 @@ function normalizeClaudeDriverSettings<T>(value: T, warnings: string[]): ClaudeD
     warnings.push("claudeDriver must be an object")
     return {
       ...CLAUDE_DRIVER_DEFAULTS,
-      lifecycle: { ...CLAUDE_PTY_LIFECYCLE_DEFAULTS },
+      lifecycle: { ...CLAUDE_LIFECYCLE_DEFAULTS },
     }
   }
-  const rawPref = typeof source?.preference === "string" ? source.preference : undefined
-  const preference: ClaudeDriverPreference = isClaudeDriverPreference(rawPref)
-    ? rawPref
-    : CLAUDE_DRIVER_DEFAULTS.preference
-  if (source?.preference !== undefined && !isClaudeDriverPreference(rawPref)) {
-    warnings.push(`claudeDriver.preference must be "sdk" or "pty"`)
-  }
-  const lifecycle = normalizeClaudePtyLifecycle(source?.lifecycle, warnings)
-  return { preference, lifecycle }
+  return { lifecycle: normalizeClaudeLifecycle(source?.lifecycle, warnings) }
 }
 
 function normalizeGlobalPromptAppend<T>(value: T, warnings: string[]): string {
@@ -1593,7 +1583,6 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
     textSnippets: nextTextSnippets,
     ...mergePluginPatch(state, patch),
     claudeDriver: {
-      preference: patch.claudeDriver?.preference ?? state.claudeDriver.preference,
       lifecycle: {
         ...state.claudeDriver.lifecycle,
         ...patch.claudeDriver?.lifecycle,
@@ -1713,24 +1702,20 @@ export class AppSettingsManager {
   }
 
   async setClaudeDriver(patch: {
-    preference?: ClaudeDriverPreference
-    lifecycle?: Partial<ClaudePtyLifecycleSettings>
+    lifecycle?: Partial<ClaudeLifecycleSettings>
   }) {
-    if (patch.preference !== undefined && !isClaudeDriverPreference(patch.preference)) {
-      throw new Error(`claudeDriver.preference must be "sdk" or "pty"`)
-    }
     if (patch.lifecycle?.idleTimeoutMs !== undefined) {
       const value = patch.lifecycle.idleTimeoutMs
       if (typeof value !== "number" || !Number.isFinite(value)
-        || value < CLAUDE_PTY_IDLE_TIMEOUT_MS_MIN || value > CLAUDE_PTY_IDLE_TIMEOUT_MS_MAX) {
-        throw new Error(`claudeDriver.lifecycle.idleTimeoutMs must be between ${CLAUDE_PTY_IDLE_TIMEOUT_MS_MIN} and ${CLAUDE_PTY_IDLE_TIMEOUT_MS_MAX}`)
+        || value < CLAUDE_IDLE_TIMEOUT_MS_MIN || value > CLAUDE_IDLE_TIMEOUT_MS_MAX) {
+        throw new Error(`claudeDriver.lifecycle.idleTimeoutMs must be between ${CLAUDE_IDLE_TIMEOUT_MS_MIN} and ${CLAUDE_IDLE_TIMEOUT_MS_MAX}`)
       }
     }
     if (patch.lifecycle?.maxConcurrent !== undefined) {
       const value = patch.lifecycle.maxConcurrent
       if (typeof value !== "number" || !Number.isFinite(value)
-        || value < CLAUDE_PTY_MAX_CONCURRENT_MIN || value > CLAUDE_PTY_MAX_CONCURRENT_MAX) {
-        throw new Error(`claudeDriver.lifecycle.maxConcurrent must be between ${CLAUDE_PTY_MAX_CONCURRENT_MIN} and ${CLAUDE_PTY_MAX_CONCURRENT_MAX}`)
+        || value < CLAUDE_MAX_CONCURRENT_MIN || value > CLAUDE_MAX_CONCURRENT_MAX) {
+        throw new Error(`claudeDriver.lifecycle.maxConcurrent must be between ${CLAUDE_MAX_CONCURRENT_MIN} and ${CLAUDE_MAX_CONCURRENT_MAX}`)
       }
     }
     return this.writePatch({ claudeDriver: patch })

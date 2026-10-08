@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "bun:test"
 import { AgentCoordinator } from "./agent"
 import { COMPACTION_STARTED } from "./observability"
 import { startMetricRecorder, type MetricRecorder } from "./test-helpers/metric-recorder"
@@ -16,7 +16,6 @@ function fakeHandle(): ClaudeSessionHandle {
     sendPrompt: async () => {},
     setModel: async () => {},
     setPermissionMode: async () => {},
-    getSupportedCommands: async () => [],
   }
 }
 
@@ -66,17 +65,6 @@ async function captureCompactionObserver(): Promise<CapturedCompaction> {
 
 describe("AgentCoordinator compaction handling", () => {
   let recorder: MetricRecorder | null = null
-  let prevDriver: string | undefined
-
-  beforeAll(() => {
-    prevDriver = process.env.KANNA_CLAUDE_DRIVER
-    process.env.KANNA_CLAUDE_DRIVER = "sdk"
-  })
-
-  afterAll(() => {
-    if (prevDriver === undefined) delete process.env.KANNA_CLAUDE_DRIVER
-    else process.env.KANNA_CLAUDE_DRIVER = prevDriver
-  })
 
   afterEach(async () => {
     await recorder?.dispose()

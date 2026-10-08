@@ -7,7 +7,6 @@ export interface AgentCtrlAgentDep {
   rescheduleAutoContinue(chatId: string, scheduleId: string, scheduledAt: number): Promise<void>
   cancelAutoContinue(chatId: string, scheduleId: string, reason: "user" | "chat_deleted"): Promise<void>
   runCronCommand(chatId: string, result: import("../shared/cron/types").CronParseResult): Promise<string | null>
-  cancel(chatId: string): Promise<void>
 }
 
 export interface TunnelGatewayDep {
@@ -19,7 +18,6 @@ export interface TunnelGatewayDep {
 export interface AgentCtrlCommandDeps {
   agent: AgentCtrlAgentDep
   tunnelGateway: TunnelGatewayDep | undefined
-  killPtyInstance: ((chatId: string) => Promise<{ ok: boolean; error?: string }>) | undefined
   send: (envelope: ServerEnvelope) => void
   broadcastChatAndSidebar: (chatId: string) => Promise<void>
 }
@@ -30,7 +28,7 @@ export async function handleAgentCtrlCommand(
   command: ClientCommand,
   id: string,
 ): Promise<boolean> {
-  const { agent, tunnelGateway, killPtyInstance, send, broadcastChatAndSidebar } = deps
+  const { agent, tunnelGateway, send, broadcastChatAndSidebar } = deps
 
   switch (command.type) {
     case "autoContinue.accept": {
@@ -96,34 +94,6 @@ export async function handleAgentCtrlCommand(
       }
       send({ v: PROTOCOL_VERSION, type: "ack", id })
       await broadcastChatAndSidebar(command.chatId)
-      return true
-    }
-    case "pty.cancel": {
-      try {
-        await agent.cancel(command.chatId)
-        send({ v: PROTOCOL_VERSION, type: "ack", id, result: { ok: true } })
-      } catch (err) {
-        send({
-          v: PROTOCOL_VERSION,
-          type: "ack",
-          id,
-          result: { ok: false, error: err instanceof Error ? err.message : String(err) },
-        })
-      }
-      return true
-    }
-    case "pty.kill": {
-      if (!killPtyInstance) {
-        send({
-          v: PROTOCOL_VERSION,
-          type: "ack",
-          id,
-          result: { ok: false, error: "pty kill not available" },
-        })
-        return true
-      }
-      const result = await killPtyInstance(command.chatId)
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result })
       return true
     }
     default:

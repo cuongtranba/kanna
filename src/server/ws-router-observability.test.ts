@@ -3,7 +3,7 @@ import type { ObservabilityCommandDeps } from "./ws-router-observability"
 import { handleObservabilityCommand } from "./ws-router-observability"
 import type { ClientCommand } from "../shared/protocol"
 import type { ChatRecord, ProjectRecord } from "./events"
-import { encodeCwd } from "./claude-pty/jsonl-path.adapter"
+import { encodeCwd } from "./claude-projects-path.adapter"
 
 const REAL_CWD = process.cwd()
 

@@ -81,8 +81,6 @@ function makeDeps(overrides: Partial<StartTurnDeps> = {}): StartTurnDeps {
 
     clearDrainingStream: mock(() => {}),
     emitStateChange: mock(() => {}),
-    resolveClaudeDriverPreference: mock(() => "sdk" as const),
-    closeClaudeSession: mock(() => {}),
     getSubagents: mock(() => []),
     getAppSettingsSnapshot: mock(() => ({ globalPromptAppend: undefined })),
     listSkills: mock(() => []),
@@ -363,32 +361,6 @@ describe("startTurnForChat — starting-turn marker", () => {
     expect(deps.runTurn as ReturnType<typeof mock>).not.toHaveBeenCalled()
     expect(interrupt).toHaveBeenCalledTimes(1)
     expect(close).toHaveBeenCalledTimes(1)
-  })
-
-  test("cancel during a claude PTY boot also drops the dead session", async () => {
-    const gate = deferred<HarnessTurn>()
-    const closeClaudeSession = mock(() => {})
-    const deps = makeDeps({
-      resolveClaudeDriverPreference: mock(() => "pty" as const),
-      closeClaudeSession,
-    })
-    deps.startClaudeTurn = mock(() => {
-      deps.claudeSessions.set("chat-1", { chatId: "chat-1" } as unknown as ClaudeSessionState)
-      return gate.promise
-    })
-
-    const pending = startTurnForChat(deps, makeArgs({ provider: "claude", model: "claude-opus-4-5" }))
-    await new Promise((r) => setTimeout(r, 0))
-
-    const starting = deps.startingTurns.get("chat-1")!
-    starting.cancelRequested = true
-    deps.startingTurns.delete("chat-1")
-
-    gate.resolve(makeFakeTurn())
-    await pending
-
-    expect(deps.activeTurns.has("chat-1")).toBe(false)
-    expect(closeClaudeSession).toHaveBeenCalledTimes(1)
   })
 
   test("a cancelled boot does not clear a newer turn's marker", async () => {

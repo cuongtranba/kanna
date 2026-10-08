@@ -6,7 +6,7 @@ import { importSessionsByIds } from "./claude-session-importer.adapter"
 import { createTestEventStore } from "./storage/test-helpers"
 import { createSubagentTranscriptRegistry } from "./subagent-transcript-registry"
 import { handleObservabilityCommand } from "./ws-router-observability"
-import { encodeCwd } from "./claude-pty/jsonl-path.adapter"
+import { encodeCwd } from "./claude-projects-path.adapter"
 import type { ServerEnvelope } from "../shared/protocol"
 
 describe("subagent drill-in for imported chats (e2e)", () => {

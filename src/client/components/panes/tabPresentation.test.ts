@@ -81,7 +81,7 @@ describe("describeTab", () => {
     expect(describeTab(target, {}).indicator).toBeNull()
   })
 
-  test("a chat tab carries the PTY session badge, and only while the session lives", () => {
+  test("a chat tab carries the session badge, and only while the session lives", () => {
     const target: PaneTabTarget = { kind: "chat", chatId: "c1" }
     const active = describeTab(target, {
       chatStatuses: { c1: { status: "idle", unread: false, sessionState: "active" } },

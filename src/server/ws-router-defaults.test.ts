@@ -94,13 +94,12 @@ describe("mergeAppSettingsPatch", () => {
     expect(result.providerDefaults.codex.modelOptions.reasoningEffort).toBe("high")
   })
 
-  test("claudeDriver lifecycle is deep-merged and preference is preserved", () => {
+  test("claudeDriver lifecycle is deep-merged", () => {
     const snapshot = makeSnapshot()
     const result = mergeAppSettingsPatch(snapshot, {
       claudeDriver: { lifecycle: { idleTimeoutMs: 9_000 } },
     })
-    expect(result.claudeDriver.preference).toBe(snapshot.claudeDriver.preference)
-    expect(result.claudeDriver.lifecycle).toMatchObject({ idleTimeoutMs: 9_000 })
+    expect(result.claudeDriver.lifecycle).toEqual({ ...snapshot.claudeDriver.lifecycle, idleTimeoutMs: 9_000 })
   })
 
   test("subagentRuntime.defaultLoopSubagentId null clears the value", () => {

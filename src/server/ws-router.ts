@@ -28,7 +28,6 @@ import { listWorktrees } from "./worktree-store.adapter"
 import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
 import type { PushManager } from "./push/push-manager"
 import type { SessionShareService } from "./session-share"
-import type { PtyInstanceRegistry } from "./claude-pty/pty-instance-registry"
 import type { WorkflowRegistry } from "./workflow-registry"
 import type { BackgroundTaskOutputRegistry } from "./background-task-output-registry"
 import { handleBoardCommand } from "./ws-router-boards"
@@ -107,8 +106,6 @@ interface CreateWsRouterArgs {
   machineDisplayName: string
   updateManager: UpdateManager | null
   pushManager: PushManager
-  ptyInstances?: PtyInstanceRegistry
-  killPtyInstance?: (chatId: string) => Promise<{ ok: boolean; error?: string }>
   workflowRegistry?: WorkflowRegistry
   boardRegistry?: BoardRegistry
   boardSync?: BoardSync
@@ -141,8 +138,6 @@ export function createWsRouter({
   machineDisplayName,
   updateManager,
   pushManager,
-  ptyInstances,
-  killPtyInstance,
   workflowRegistry,
   boardRegistry,
   boardSync,
@@ -169,7 +164,6 @@ export function createWsRouter({
     resolvedAppSettings,
     keybindings,
     resolvedDiffStore,
-    ptyInstances,
     workflowRegistry,
     boardRegistry,
     backgroundTaskOutputRegistry,
@@ -190,7 +184,6 @@ export function createWsRouter({
     resolvedAppSettings,
     updateManager,
     packageUpdateManager,
-    ptyInstances,
     workflowRegistry,
     boardRegistry,
     backgroundTaskOutputRegistry,
@@ -229,7 +222,6 @@ export function createWsRouter({
     return {
       agent,
       tunnelGateway,
-      killPtyInstance,
       send: (envelope) => send(ws, envelope),
       broadcastChatAndSidebar: (chatId) => broadcast.broadcastChatAndSidebar(chatId),
     }

@@ -7,7 +7,6 @@ type FakeQuery = {
   close: () => void
   setModel: (m: string) => Promise<void>
   setPermissionMode: (m: string) => Promise<void>
-  supportedCommands: () => Promise<unknown[]>
 }
 
 let mockQueryFn: (args: unknown) => FakeQuery
@@ -19,7 +18,6 @@ const defaultFakeQ = (): FakeQuery => ({
   close: () => {},
   setModel: async () => {},
   setPermissionMode: async () => {},
-  supportedCommands: async () => [],
 })
 
 mock.module("@anthropic-ai/claude-agent-sdk", () => ({
@@ -107,12 +105,11 @@ describe("startClaudeSession", () => {
     expect(typeof handle.stream[Symbol.asyncIterator]).toBe("function")
   })
 
-  test("returned handle exposes sendPrompt, setModel, setPermissionMode, getSupportedCommands, interrupt, close", async () => {
+  test("returned handle exposes sendPrompt, setModel, setPermissionMode, interrupt, close", async () => {
     const handle = await startClaudeSession(BASE_ARGS, makeFakeDeps())
     expect(typeof handle.sendPrompt).toBe("function")
     expect(typeof handle.setModel).toBe("function")
     expect(typeof handle.setPermissionMode).toBe("function")
-    expect(typeof handle.getSupportedCommands).toBe("function")
     expect(typeof handle.interrupt).toBe("function")
     expect(typeof handle.close).toBe("function")
   })
@@ -140,16 +137,6 @@ describe("startClaudeSession", () => {
     const handle = await startClaudeSession(BASE_ARGS, makeFakeDeps())
     const info = await handle.getAccountInfo?.()
     expect(info).toBeNull()
-  })
-
-  test("getSupportedCommands returns [] when supportedCommands() throws", async () => {
-    mockQueryFn = () => ({
-      ...defaultFakeQ(),
-      supportedCommands: async () => { throw new Error("not ready") },
-    })
-    const handle = await startClaudeSession(BASE_ARGS, makeFakeDeps())
-    const cmds = await handle.getSupportedCommands()
-    expect(cmds).toEqual([])
   })
 
   test("SDK options include the model passed to startClaudeSession", async () => {

@@ -155,7 +155,6 @@ describe("AgentCoordinator SDK OAuth-pool account info parity", () => {
           closed: Promise.resolve(),
           setModel: async () => {},
           setPermissionMode: async () => {},
-          getSupportedCommands: async () => [],
           sendPrompt: async () => {
             events.push({
               type: "transcript",
@@ -218,7 +217,6 @@ describe("AgentCoordinator SDK OAuth-pool account info parity", () => {
           closed: Promise.resolve(),
           setModel: async () => {},
           setPermissionMode: async () => {},
-          getSupportedCommands: async () => [],
           sendPrompt: async () => {
             events.push({
               type: "transcript",
@@ -293,7 +291,6 @@ describe("AgentCoordinator OpenRouter account info", () => {
           closed: Promise.resolve(),
           setModel: async () => {},
           setPermissionMode: async () => {},
-          getSupportedCommands: async () => [],
           sendPrompt: async () => {
             events.push({
               type: "transcript",

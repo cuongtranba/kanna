@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { realpathSync } from "node:fs"
 import { homedir } from "node:os"
 import { AgentCoordinator } from "./agent"
@@ -6,7 +6,7 @@ import type { HarnessEvent } from "./harness-types"
 import type { SlashCommand, TranscriptEntry } from "../shared/types"
 import type { AutoContinueEvent } from "./auto-continue/events"
 import type { WorkflowRegistry } from "./workflow-registry"
-import { computeWorkflowsDir } from "./claude-pty/jsonl-path.adapter"
+import { computeWorkflowsDir } from "./claude-projects-path.adapter"
 import { AsyncEventQueue } from "./test-helpers/async-event-queue"
 import { waitFor } from "./test-helpers/wait-for"
 
@@ -172,18 +172,6 @@ const SESSION_UUID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 const LOCAL_PATH = realpathSync("/tmp")
 
 describe("AgentCoordinator — SDK workflow dir registration", () => {
-  let prevDriver: string | undefined
-
-  beforeEach(() => {
-    prevDriver = process.env.KANNA_CLAUDE_DRIVER
-    delete process.env.KANNA_CLAUDE_DRIVER
-  })
-
-  afterEach(() => {
-    if (prevDriver === undefined) delete process.env.KANNA_CLAUDE_DRIVER
-    else process.env.KANNA_CLAUDE_DRIVER = prevDriver
-  })
-
   test(
     "registers workflows dir when SDK session emits session_token",
     async () => {
@@ -206,7 +194,6 @@ describe("AgentCoordinator — SDK workflow dir registration", () => {
             closed: Promise.resolve(),
             setModel: async () => {},
             setPermissionMode: async () => {},
-            getSupportedCommands: async () => [],
             sendPrompt: async () => {
               events.push({ type: "session_token", sessionToken: SESSION_UUID })
             },
@@ -262,7 +249,6 @@ describe("AgentCoordinator — SDK workflow dir registration", () => {
           closed: Promise.resolve(),
           setModel: async () => {},
           setPermissionMode: async () => {},
-          getSupportedCommands: async () => [],
           sendPrompt: async () => {
             events.push({ type: "session_token", sessionToken: SESSION_UUID })
             events.push({ type: "session_token", sessionToken: SESSION_UUID })
@@ -288,54 +274,6 @@ describe("AgentCoordinator — SDK workflow dir registration", () => {
       await new Promise((r) => setTimeout(r, 50))
 
       expect(workflowRegistry.registerCalls).toHaveLength(1)
-    },
-    10_000,
-  )
-
-  test(
-    "does NOT register when KANNA_CLAUDE_DRIVER=pty",
-    async () => {
-      process.env.KANNA_CLAUDE_DRIVER = "pty"
-
-      const store = createFakeStore()
-      const workflowRegistry = createFakeWorkflowRegistry()
-      const events = new AsyncEventQueue<HarnessEvent>()
-
-      const coordinator = new AgentCoordinator({
-        store: store as never,
-        onStateChange: () => {},
-        workflowRegistry,
-        startClaudeSession: async () => {
-          throw new Error("SDK driver must not be used under KANNA_CLAUDE_DRIVER=pty")
-        },
-        startClaudeSessionPTY: async () => ({
-          provider: "claude",
-          stream: events,
-          getAccountInfo: async () => null,
-          interrupt: async () => {},
-          close: () => {},
-          closed: Promise.resolve(),
-          setModel: async () => {},
-          setPermissionMode: async () => {},
-          getSupportedCommands: async () => [],
-          sendPrompt: async () => {
-            events.push({ type: "session_token", sessionToken: SESSION_UUID })
-          },
-        }),
-        claudeSessionLifecycle: { sweepIntervalMs: 0 },
-      })
-
-      await coordinator.send({
-        type: "chat.send",
-        chatId: CHAT_ID,
-        provider: "claude",
-        content: "hello",
-        model: "claude-sonnet-4-5",
-      })
-
-      await new Promise((r) => setTimeout(r, 200))
-
-      expect(workflowRegistry.registerCalls).toHaveLength(0)
     },
     10_000,
   )

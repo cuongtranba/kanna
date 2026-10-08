@@ -205,7 +205,6 @@ describe("buildSubagentProviderRun – Claude", () => {
         closed: Promise.resolve(),
         setModel: async () => {},
         setPermissionMode: async () => {},
-        getSupportedCommands: async () => [],
       }),
     })
 
@@ -239,7 +238,6 @@ describe("buildSubagentProviderRun – Claude", () => {
           sendPrompt: async () => {},
           setModel: async () => {},
           setPermissionMode: async () => {},
-          getSupportedCommands: async () => [],
         }
       },
     })
@@ -262,7 +260,6 @@ describe("buildSubagentProviderRun – Claude", () => {
           sendPrompt: async () => {},
           setModel: async () => {},
           setPermissionMode: async () => {},
-          getSupportedCommands: async () => [],
         }
       },
     })
@@ -297,7 +294,6 @@ describe("buildSubagentProviderRun – Claude", () => {
         closed: Promise.resolve(),
         setModel: async () => {},
         setPermissionMode: async () => {},
-        getSupportedCommands: async () => [],
       }),
     })
 
@@ -341,7 +337,6 @@ describe("buildSubagentProviderRun – Claude", () => {
           sendPrompt: async () => {},
           setModel: async () => {},
           setPermissionMode: async () => {},
-          getSupportedCommands: async () => [],
         }
       },
     })
@@ -506,7 +501,6 @@ describe("buildSubagentProviderRun – keep-alive Claude", () => {
         closed: Promise.resolve(),
         setModel: async () => {},
         setPermissionMode: async () => {},
-        getSupportedCommands: async () => [],
         pushChannelPrompt: async (text: string) => {
           pushed.push(text)
           pushEvent(makeTextEvent(`r:${text}`))
@@ -547,7 +541,6 @@ describe("buildSubagentProviderRun – keep-alive Claude", () => {
           sendPrompt: async () => {},
           setModel: async () => {},
           setPermissionMode: async () => {},
-          getSupportedCommands: async () => [],
           pushChannelPrompt: async (_text: string) => {},
         }
       },
@@ -571,7 +564,6 @@ describe("buildSubagentProviderRun – keep-alive Claude", () => {
         closed: Promise.resolve(),
         setModel: async () => {},
         setPermissionMode: async () => {},
-        getSupportedCommands: async () => [],
       }),
     })
 
@@ -599,7 +591,6 @@ describe("buildSubagentProviderRun – keep-alive Claude", () => {
         closed: Promise.resolve(),
         setModel: async () => {},
         setPermissionMode: async () => {},
-        getSupportedCommands: async () => [],
       }),
     })
 

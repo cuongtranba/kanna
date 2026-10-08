@@ -4,7 +4,6 @@ import type { CodexAppServerManager } from "./codex-app-server"
 import type { GenerateChatTitleResult } from "./generate-title"
 import type { ClaudeSessionHandle, HarnessToolRequest } from "./harness-types"
 import type {
-  ClaudeDriverPreference,
   CustomModelEntry,
   LlmProviderSnapshot,
   McpOAuthState,
@@ -21,13 +20,11 @@ import type { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
 import type { SubagentOrchestrator } from "./subagent-orchestrator"
 import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
-import type { StartClaudeSessionPtyArgs } from "./claude-pty/driver"
 import type { JsonValue } from "../shared/json"
 import type { ModelPrice } from "../shared/token-pricing"
 
 export interface AppSettingsSnapshot {
   claudeDriver?: {
-    preference?: ClaudeDriverPreference
     lifecycle?: { idleTimeoutMs?: number; maxConcurrent?: number }
   }
   globalPromptAppend?: string
@@ -87,7 +84,6 @@ export interface AgentCoordinatorArgs {
     turnPrice?: ModelPrice | null
     contextWindowOverride?: number
   }) => Promise<ClaudeSessionHandle>
-  startClaudeSessionPTY?: (args: StartClaudeSessionPtyArgs) => Promise<ClaudeSessionHandle>
   claudeLimitDetector?: LimitDetector
   codexLimitDetector?: LimitDetector
   scheduleManager?: ScheduleManager
@@ -101,8 +97,6 @@ export interface AgentCoordinatorArgs {
   toolCallback?: ToolCallbackService
   chatPolicy?: ChatPermissionPolicy
   claudeSessionLifecycle?: Partial<ClaudeSessionLifecycleOptions>
-  claudePtyRegistry?: import("./claude-pty/pid-registry.adapter").ClaudePtyRegistry
-  ptyInstanceRegistry?: import("./claude-pty/pty-instance-registry").PtyInstanceRegistry
   workflowRegistry?: import("./workflow-registry").WorkflowRegistry
   boardRegistry?: import("./board-registry").BoardRegistry
   subagentTranscriptRegistry?: import("./subagent-transcript-registry").SubagentTranscriptRegistry

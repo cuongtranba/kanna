@@ -42,7 +42,6 @@ const STUB_HANDLE = {
   closed: Promise.resolve(),
   setModel: async () => {},
   setPermissionMode: async () => {},
-  getSupportedCommands: async () => [],
 }
 
 function makeTestSession(overrides: Partial<ConstructorParameters<typeof ClaudeSessionState>[0]> = {}): ClaudeSessionState {

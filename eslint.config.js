@@ -427,7 +427,7 @@ export default tseslint.config(
       "src/client/lib/testing/**",
     ],
     rules: {
-      complexity: ["error", { max: 131 }],
+      complexity: ["error", { max: 127 }],
       "max-params": ["error", { max: 11 }],
       "max-depth": ["error", { max: 7 }],
       "max-nested-callbacks": ["error", { max: 4 }],
@@ -516,25 +516,6 @@ export default tseslint.config(
     files: SERVER_OPS_DYNAMIC_MODULE_FILES,
     rules: {
       "no-restricted-syntax": ["error", AS_CAST_BAN, ANGLE_CAST_BAN, UNKNOWN_BAN],
-    },
-  },
-  // Sanctioned LIBRARY-INTEROP chokepoint, and the only one.
-  //
-  // The Agent SDK types a tool's zod shape against its own `AnyZodRawShape`
-  // while the MCP SDK's `registerTool` wants `ZodRawShapeCompat`. Both describe
-  // the same runtime object — a single zod 4.5.4 is installed, so this is not a
-  // duplicate-copy problem — but neither package's type is assignable to the
-  // other's, and no guard can prove a structural claim about a third party's
-  // branded types. The assertion is unavoidable; its BLAST RADIUS is not.
-  //
-  // Confining it to one ~40-line module keeps `kanna-mcp-http.ts` fully gated,
-  // where the cast previously sat inline in ordinary application code. Same
-  // containment as dynamic-module.ts, and the same reason TerminalPane.tsx is
-  // exempt from the raw-hex rule for xterm's ITheme.
-  {
-    files: ["src/server/mcp-zod-compat.adapter.ts"],
-    rules: {
-      "no-restricted-syntax": ["error", AS_CAST_BAN, UNTYPED_ALIAS_BAN],
     },
   },
   // Tests + fixtures + test-helpers legitimately use console, `any`, `as`

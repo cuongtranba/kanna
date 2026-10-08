@@ -8,7 +8,7 @@ const DESCRIPTION_BY_REASON: ReadonlyMap<string, ClaudeApiErrorDescription> = ne
   ["claude_code_version_too_old", {
     headline: "Model not supported by this Claude Code version",
     explanation: "The selected model needs a newer Claude Code than the one Kanna runs, so every turn on this model fails.",
-    remedy: "Pick another model, or update Kanna, which bundles Claude Code. If Kanna runs your own claude binary (the PTY driver, or CLAUDE_EXECUTABLE is set), run \"claude update\" instead.",
+    remedy: "Pick another model, or update Kanna, which bundles Claude Code. If Kanna runs your own claude binary (CLAUDE_EXECUTABLE is set), run \"claude update\" instead.",
   }],
 ])
 
