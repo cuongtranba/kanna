@@ -26,6 +26,7 @@ export interface Subagent {
   workingDir?: string
   allowedPaths?: string[]
   maxTurns?: number
+  allowBeaconTools?: boolean
   createdAt: number
   updatedAt: number
 }
@@ -42,6 +43,7 @@ export interface SubagentInput {
   workingDir?: string
   allowedPaths?: string[]
   maxTurns?: number
+  allowBeaconTools?: boolean
 }
 
 export interface SubagentPatch {
@@ -56,6 +58,7 @@ export interface SubagentPatch {
   workingDir?: string | null
   allowedPaths?: string[] | null
   maxTurns?: number | null
+  allowBeaconTools?: boolean
 }
 
 export type SubagentValidationErrorCode =

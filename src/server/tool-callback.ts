@@ -11,12 +11,14 @@ import { canonicalArgsHash } from "./canonical-args"
 import type { EventStore } from "./event-store"
 import { log } from "../shared/log"
 import type { JsonObject } from "../shared/json"
+import type { BeaconConfig } from "../shared/beacon-config"
 
 export interface ToolCallbackServiceArgs {
   store: EventStore
   serverSecret: string
   now: () => number
   onStateChange?: (chatId: string) => void
+  getBeacons?: () => readonly BeaconConfig[]
 }
 
 export interface ToolCallbackSubmitArgs {
@@ -173,6 +175,7 @@ export function createToolCallbackService(opts: ToolCallbackServiceArgs): ToolCa
         chatPolicy: args.chatPolicy,
         cwd: args.cwd,
         restrictedAllowedPaths: args.restrictedAllowedPaths,
+        beacons: opts.getBeacons?.() ?? [],
       })
       const now = opts.now()
       const req: ToolRequest = {
@@ -259,12 +262,14 @@ export async function initToolCallbackOnBoot(args: {
   serverSecret: string
   now?: () => number
   onStateChange?: (chatId: string) => void
+  getBeacons?: () => readonly BeaconConfig[]
 }): Promise<ToolCallbackService> {
   const svc = createToolCallbackService({
     store: args.store,
     serverSecret: args.serverSecret,
     now: args.now ?? (() => Date.now()),
     onStateChange: args.onStateChange,
+    getBeacons: args.getBeacons,
   })
   await svc.recoverOnStartup()
   return svc

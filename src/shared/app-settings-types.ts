@@ -6,6 +6,8 @@ import type {
   DefaultProviderPreference,
   LlmProviderKind,
 } from "./core-types"
+import type { BeaconConfig, BeaconPatch } from "./beacon-config"
+import type { BeaconScope } from "./beacon-scope"
 import type { PackageKind } from "./packages/types"
 import type { AuthSettings } from "./settings/auth"
 import {
@@ -294,6 +296,7 @@ export interface AppSettingsSnapshot {
   uploads: UploadSettings
   subagents: Subagent[]
   customMcpServers: McpServerConfig[]
+  customBeacons: BeaconConfig[]
   customModels: CustomModelEntry[]
   textSnippets: TextSnippet[]
   claudeDriver: ClaudeDriverSettings
@@ -364,6 +367,14 @@ export interface AppSettingsPatch {
     setEnabled?: { id: string; enabled: boolean }
     setTestResult?: { id: string; result: McpServerTestResult }
     setOAuthState?: { id: string; oauth: McpOAuthState }
+  }
+  customBeacons?: {
+    update?: { id: string; patch: BeaconPatch }
+    delete?: { id: string }
+    setEnabled?: { id: string; enabled: boolean }
+    setScope?: { id: string; scope: BeaconScope }
+    addTrustedScript?: { id: string; hash: string }
+    removeTrustedScript?: { id: string; hash: string }
   }
   customModels?: {
     create?: CustomModelInput

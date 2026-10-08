@@ -1,5 +1,6 @@
 import type { CronJobPatch } from "./cron/types"
 import type { ShareClientCommand } from "./session-share/protocol"
+import type { BeaconsSnapshot } from "./beacon-status"
 import { isJsonArray, isJsonObject, type JsonObject, type JsonPrimitive, type JsonValue } from "./json"
 import type {
   AppSettingsSnapshot,
@@ -62,6 +63,7 @@ export type SubscriptionTopic =
   | { type: "board"; boardId: string; pageSize?: number }
   | { type: "followed-sessions" }
   | { type: "cron-jobs" }
+  | { type: "beacons" }
   | { type: "background-task-output"; chatId: string; taskId: string }
   | { type: "package-updates" }
 
@@ -169,6 +171,7 @@ export type ClientCommand =
   | { type: "subagent.update"; id: string; patch: SubagentPatch }
   | { type: "subagent.delete"; id: string }
   | { type: "settings.testMcpServer"; id: string }
+  | { type: "beacons.mintPairingCode" }
   | { type: "settings.startMcpOAuth"; id: string }
   | { type: "settings.completeMcpOAuth"; id: string; callbackUrl: string }
   | { type: "settings.readLlmProvider" }
@@ -438,6 +441,7 @@ export type ServerSnapshot =
   | { type: "board"; data: BoardSnapshot }
   | { type: "followed-sessions"; data: FollowedSessionsSnapshot }
   | { type: "cron-jobs"; data: import("./cron/types").CronJobsGlobalSnapshot }
+  | { type: "beacons"; data: BeaconsSnapshot }
   | { type: "background-task-output"; data: BackgroundTaskOutputSnapshot }
   | { type: "package-updates"; data: import("./packages/types").PackageUpdateSnapshot }
 

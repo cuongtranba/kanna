@@ -1,0 +1,18 @@
+fact: c3-241
+claim: "the beacon daemon is the src/beacon entry: ports, session loop, and the dot-adapter files that perform its socket, key, filesystem and shell IO"
+code:
+  - src/beacon/entry.adapter.ts
+  - src/beacon/fs.adapter.ts
+  - src/beacon/fs.adapter.test.ts
+  - src/beacon/key-store.adapter.ts
+  - src/beacon/key-store.adapter.test.ts
+  - src/beacon/main.ts
+  - src/beacon/main.test.ts
+  - src/beacon/pair-client.adapter.ts
+  - src/beacon/ports.ts
+  - src/beacon/session.ts
+  - src/beacon/session.test.ts
+  - src/beacon/shell.adapter.ts
+  - src/beacon/shell.adapter.test.ts
+  - src/beacon/state-store.adapter.ts
+  - src/beacon/transport.adapter.ts

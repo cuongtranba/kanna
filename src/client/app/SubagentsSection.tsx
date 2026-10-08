@@ -1,4 +1,3 @@
-import * as React from "react"
 import { useCallback, useEffect, useMemo } from "react"
 import { Bot, Plus } from "lucide-react"
 import { Button } from "../components/ui/button"
@@ -51,6 +50,8 @@ import type { SubagentCommandResult } from "../../shared/protocol"
 import { useSubagentsSectionStore } from "../stores/subagentsSectionStore"
 import { useOpenRouterModelsStore } from "../stores/openrouterModelsStore"
 import { useShallow } from "zustand/react/shallow"
+import { FormRow } from "./SubagentFormRow"
+import { SubagentScopeFields } from "./SubagentScopeFields"
 
 function isClaudeModelOptions(opts: ClaudeModelOptions | CodexModelOptions | OpenRouterModelOptions): opts is ClaudeModelOptions {
   return "contextWindow" in opts
@@ -508,41 +509,7 @@ function SubagentForm(props: SubagentFormProps) {
       </FormRow>
 
       {draft.provider === "claude" ? (
-        <>
-          <FormRow
-            label="Working directory"
-            hint="Optional. Relative to the parent chat cwd. Restricts the subagent's filesystem access to this subtree."
-          >
-            <Input
-              data-testid="subagent-form-working-dir"
-              value={draft.workingDir ?? ""}
-              onChange={(event) => {
-                const v = event.target.value
-                patchDraft({ workingDir: v.length > 0 ? v : undefined })
-              }}
-              placeholder="docs"
-            />
-          </FormRow>
-
-          <FormRow
-            label="Allowed paths"
-            hint="Optional. Newline-separated, relative to the parent chat cwd. When set, file tools can only read/write inside these roots."
-          >
-            <Textarea
-              data-testid="subagent-form-allowed-paths"
-              value={(draft.allowedPaths ?? []).join("\n")}
-              onChange={(event) => {
-                const lines = event.target.value
-                  .split(/\r?\n/)
-                  .map((l) => l.trim())
-                  .filter((l) => l.length > 0)
-                patchDraft({ allowedPaths: lines.length > 0 ? lines : undefined })
-              }}
-              placeholder={"docs\nwiki"}
-              rows={3}
-            />
-          </FormRow>
-        </>
+        <SubagentScopeFields draft={draft} patchDraft={patchDraft} />
       ) : null}
 
       <footer className="flex flex-wrap items-center justify-end gap-2 pt-2">
@@ -571,30 +538,6 @@ function SubagentForm(props: SubagentFormProps) {
         </Button>
       </footer>
     </section>
-  )
-}
-
-function FormRow(props: {
-  label: string
-  hint?: string | null
-  hintTone?: "muted" | "destructive"
-  children: React.ReactNode
-}) {
-  return (
-    <div className="grid gap-1.5">
-      <span className="text-xs font-medium text-foreground">{props.label}</span>
-      {props.children}
-      {props.hint ? (
-        <span
-          className={cn(
-            "text-xs",
-            props.hintTone === "destructive" ? "text-destructive" : "text-muted-foreground",
-          )}
-        >
-          {props.hint}
-        </span>
-      ) : null}
-    </div>
   )
 }
 
@@ -884,6 +827,7 @@ export function toSubagentInput(subagent: Subagent): SubagentInput {
     workingDir: subagent.workingDir,
     allowedPaths: subagent.allowedPaths,
     maxTurns: subagent.maxTurns,
+    allowBeaconTools: subagent.allowBeaconTools,
   }
 }
 
@@ -906,6 +850,7 @@ export function isSubagentDraftDirty(draft: SubagentInput, baseline: SubagentInp
   if ((draft.workingDir ?? "") !== (baseline.workingDir ?? "")) return true
   if (!stringArrayEqual(draft.allowedPaths, baseline.allowedPaths)) return true
   if ((draft.maxTurns ?? null) !== (baseline.maxTurns ?? null)) return true
+  if ((draft.allowBeaconTools ?? false) !== (baseline.allowBeaconTools ?? false)) return true
   return !shallowEqualModelOptions(draft.modelOptions, baseline.modelOptions)
 }
 

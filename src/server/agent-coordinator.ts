@@ -268,6 +268,8 @@ export class AgentCoordinator {
   private readonly claudeSessionSweepTimer: ReturnType<typeof setInterval> | null
   readonly workflowRegistry: import("./workflow-registry").WorkflowRegistry | null
   readonly boardRegistry: import("./board-registry").BoardRegistry | null
+  readonly beaconRegistry: import("./beacon-registry").BeaconRegistry | null
+  readonly getBeacons: () => readonly import("../shared/beacon-config").BeaconConfig[]
   readonly backgroundTaskOutputRegistry: import("./background-task-output-registry").BackgroundTaskOutputRegistry | null
   readonly subagentTranscriptRegistry: import("./subagent-transcript-registry").SubagentTranscriptRegistry | null
   readonly localCatalog: import("./local-catalog").LocalCatalogService | null
@@ -408,6 +410,8 @@ export class AgentCoordinator {
     this.claudeSessionSweepTimer?.unref?.()
     this.workflowRegistry = args.workflowRegistry ?? null
     this.boardRegistry = args.boardRegistry ?? null
+    this.beaconRegistry = args.beaconRegistry ?? null
+    this.getBeacons = args.getBeacons ?? (() => [])
     this.backgroundTaskOutputRegistry = args.backgroundTaskOutputRegistry ?? null
     this.subagentTranscriptRegistry = args.subagentTranscriptRegistry ?? null
     this.localCatalog = args.localCatalog ?? null
@@ -714,6 +718,9 @@ export class AgentCoordinator {
       subagentPendingKey: (chatId, runId, toolUseId) =>
         this.subagentPendingKey(chatId, runId, toolUseId),
       getArmedLoop: (chatId) => toArmedLoopInfo(this.isLoopArmed(chatId)),
+      beaconRegistry: this.beaconRegistry ?? undefined,
+      getBeacons: this.getBeacons,
+      toolCallback: this.toolCallback,
     }
   }
 
@@ -988,6 +995,8 @@ export class AgentCoordinator {
       tunnelGateway: this.tunnelGateway,
       isLoopArmed: (chatId) => this.isLoopArmed(chatId),
       boardRegistry: this.boardRegistry ?? undefined,
+      beaconRegistry: this.beaconRegistry ?? undefined,
+      getBeacons: this.getBeacons,
       closeClaudeSession: (chatId, session) => this.closeClaudeSession(chatId, session),
       enforceClaudeSessionBudget: (protectedChatId?) => this.enforceClaudeSessionBudget(protectedChatId),
       readLlmProvider: () => this.readLlmProvider(),

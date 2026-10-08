@@ -35,6 +35,7 @@ import type { StartWorkResult, StartWorkView } from "../shared/boards/start-work
 import type { CleanupDecision, WorktreeCleanupView } from "../shared/boards/worktree-cleanup"
 import type { WorktreeCleanupOutcome } from "./board-worktree-cleanup"
 import type { BoardRegistry } from "./board-registry"
+import type { BeaconRegistry } from "./beacon-registry"
 import type { BoardSync } from "./board-sync"
 import type { SubagentTranscriptRegistry } from "./subagent-transcript-registry"
 import type { FollowedSessionRegistry } from "./followed-session-registry"
@@ -108,6 +109,7 @@ interface CreateWsRouterArgs {
   pushManager: PushManager
   workflowRegistry?: WorkflowRegistry
   boardRegistry?: BoardRegistry
+  beaconRegistry?: BeaconRegistry
   boardSync?: BoardSync
   startWork?: (cardId: string) => Promise<StartWorkResult>
   startWorkView?: (cardId: string) => Promise<StartWorkView>
@@ -120,6 +122,7 @@ interface CreateWsRouterArgs {
   sessionShare?: SessionShareService
   packageUpdateManager?: PackageUpdateManager
   genuiDatasets?: GenUIDatasetService
+  authEnabled?: boolean
 }
 
 export function createWsRouter({
@@ -140,6 +143,7 @@ export function createWsRouter({
   pushManager,
   workflowRegistry,
   boardRegistry,
+  beaconRegistry,
   boardSync,
   startWork,
   startWorkView,
@@ -152,6 +156,7 @@ export function createWsRouter({
   sessionShare,
   packageUpdateManager,
   genuiDatasets,
+  authEnabled,
 }: CreateWsRouterArgs) {
   const resolvedDiffStore = diffStore ?? buildFallbackDiffStore()
   const resolvedLlmProvider = llmProvider ?? buildFallbackLlmProvider()
@@ -166,6 +171,7 @@ export function createWsRouter({
     resolvedDiffStore,
     workflowRegistry,
     boardRegistry,
+    beaconRegistry,
     backgroundTaskOutputRegistry,
     followedSessionRegistry,
     machineDisplayName,
@@ -186,6 +192,7 @@ export function createWsRouter({
     packageUpdateManager,
     workflowRegistry,
     boardRegistry,
+    beaconRegistry,
     backgroundTaskOutputRegistry,
     envelopeBuilder,
   })
@@ -294,6 +301,7 @@ export function createWsRouter({
           resolvedLlmProvider,
           listOpenRouterModels,
           packageUpdateManager,
+          authEnabled,
           send: sendToClient,
         },
         command,

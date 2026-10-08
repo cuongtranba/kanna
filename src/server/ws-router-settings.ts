@@ -14,6 +14,8 @@ import type {
 import type { ClientCommand, ServerEnvelope } from "../shared/protocol"
 import type { AnalyticsReporter } from "./analytics"
 import { KeybindingsManager } from "./keybindings"
+import type { BeaconMintResult } from "../shared/beacon-config"
+import { getBeaconPairingStore } from "./beacon-pairing-host"
 import { validateMcpServer } from "./mcp-validator"
 import { startMcpOAuth, completeMcpOAuth, ensureFreshMcpToken } from "./mcp-oauth.adapter"
 import { fetchGitHubReleases } from "./diff-store"
@@ -52,6 +54,7 @@ export interface SettingsCommandDeps {
   resolvedLlmProvider: ResolvedLlmProvider
   listOpenRouterModels: (() => Promise<OpenRouterModel[]>) | undefined
   packageUpdateManager?: PackageUpdateManager
+  authEnabled?: boolean
   send: (envelope: ServerEnvelope) => void
 }
 
@@ -140,7 +143,7 @@ export async function handleSettingsCommand(
   command: ClientCommand,
   id: string,
 ): Promise<boolean> {
-  const { keybindings, resolvedAppSettings, resolvedAnalytics, resolvedLlmProvider, listOpenRouterModels, packageUpdateManager, send } = deps
+  const { keybindings, resolvedAppSettings, resolvedAnalytics, resolvedLlmProvider, listOpenRouterModels, packageUpdateManager, authEnabled, send } = deps
 
   switch (command.type) {
     case "settings.readKeybindings": {
@@ -278,6 +281,13 @@ export async function handleSettingsCommand(
           lastTest,
         },
       })
+      return true
+    }
+    case "beacons.mintPairingCode": {
+      const minted: BeaconMintResult = authEnabled
+        ? { ok: true, ...getBeaconPairingStore().mint() }
+        : { ok: false, error: "Pairing a beacon requires a server password. Start Kanna with --password." }
+      send({ v: PROTOCOL_VERSION, type: "ack", id, result: minted })
       return true
     }
     case "settings.startMcpOAuth": {

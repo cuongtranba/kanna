@@ -51,6 +51,7 @@ function makeSnapshot(): AppSettingsSnapshot {
     uploads: UPLOAD_DEFAULTS,
     subagents: [],
     customMcpServers: [],
+    customBeacons: [],
     customModels: [],
     textSnippets: [],
     claudeDriver: { ...CLAUDE_DRIVER_DEFAULTS, lifecycle: { ...CLAUDE_LIFECYCLE_DEFAULTS } },

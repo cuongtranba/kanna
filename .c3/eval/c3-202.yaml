@@ -6,3 +6,15 @@ code:
   - src/server/http-dispatcher.ts
   - src/server/http-api-routes.ts
   - src/server/http-static.ts
+  - src/server/beacon-registry.ts
+  - src/server/beacon-registry.test.ts
+  - src/server/beacon-services.ts
+  - src/server/beacon-connection.ts
+  - src/server/beacon-connection.test.ts
+  - src/server/beacon-crypto.ts
+  - src/server/beacon-crypto.test.ts
+  - src/server/beacon-settings.ts
+  - src/server/beacon-settings.test.ts
+  - src/server/beacon-pairing.ts
+  - src/server/beacon-pairing.test.ts
+  - src/server/beacon-pairing-host.ts

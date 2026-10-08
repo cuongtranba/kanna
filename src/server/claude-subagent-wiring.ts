@@ -22,6 +22,9 @@ import { openrouterAuthReady, claudeAuthReady } from "./provider-catalog"
 import { OAuthPoolUnavailableError } from "./oauth-errors"
 import type { startClaudeSession as StartClaudeSessionFn } from "./claude-session-start"
 import type { OAuthBearers } from "./claude-session-config-helpers"
+import type { BeaconRegistry } from "./beacon-registry"
+import type { BeaconConfig } from "../shared/beacon-config"
+import type { ToolCallbackService } from "./tool-callback"
 
 
 interface SubagentWiringStore {
@@ -65,6 +68,9 @@ export interface SubagentWiringDeps {
   subagentPendingKey: (chatId: string, runId: string, toolUseId: string) => string
   getArmedLoop?: (chatId: string) => ArmedLoopInfo | null
   chatTaskStore?: ChatTaskStorePort
+  beaconRegistry?: BeaconRegistry
+  getBeacons?: () => readonly BeaconConfig[]
+  toolCallback?: ToolCallbackService | null
 }
 
 
@@ -83,11 +89,20 @@ export interface BuildSubagentProviderRunForChatArgs {
 
 export function buildClaudeSubagentStarter(
   deps: SubagentWiringDeps,
+  beaconToolsAllowed = false,
 ): NonNullable<BuildSubagentProviderRunArgs["startClaudeSession"]> {
   return async (a) => {
     const enabledMcpServers = deps.getEnabledCustomMcpServers()
     const { byServerId: oauthBearers } = await deps.buildOAuthBearers(enabledMcpServers)
-    return deps.startClaudeSessionFn({ ...a, customMcpServers: enabledMcpServers, oauthBearers })
+    return deps.startClaudeSessionFn({
+      ...a,
+      customMcpServers: enabledMcpServers,
+      oauthBearers,
+      beaconRegistry: deps.beaconRegistry,
+      getBeacons: deps.getBeacons,
+      beaconToolsAllowed,
+      toolCallback: beaconToolsAllowed ? (deps.toolCallback ?? undefined) : undefined,
+    })
   }
 }
 
@@ -172,7 +187,7 @@ export function buildSubagentProviderRunForChat(
     },
     allowedPaths: restriction?.allowedPaths,
     projectId: project.id,
-    startClaudeSession: buildClaudeSubagentStarter(deps),
+    startClaudeSession: buildClaudeSubagentStarter(deps, args.subagent.allowBeaconTools === true),
     subagentOrchestrator: deps.subagentOrchestrator,
     delegationContext,
     getArmedLoop: deps.getArmedLoop,

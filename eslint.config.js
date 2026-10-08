@@ -308,7 +308,19 @@ export default tseslint.config(
                 "Database clients are server-only. Move the module into src/server/** or depend on an injected port instead.",
             },
             {
-              group: ["child_process", "node:child_process", "node:http", "node:https", "http", "https"],
+              group: [
+                "child_process",
+                "node:child_process",
+                "node:http",
+                "node:https",
+                "http",
+                "https",
+                "node:net",
+                "net",
+                "node:tls",
+                "tls",
+                "ws",
+              ],
               message:
                 "Process spawn / raw http is server-only. Move the module into src/server/** or depend on an injected port instead.",
             },
@@ -459,7 +471,19 @@ export default tseslint.config(
                 "Database clients must move into an adapter file or be reached through an injected port.",
             },
             {
-              group: ["child_process", "node:child_process", "node:http", "node:https", "http", "https"],
+              group: [
+                "child_process",
+                "node:child_process",
+                "node:http",
+                "node:https",
+                "http",
+                "https",
+                "node:net",
+                "net",
+                "node:tls",
+                "tls",
+                "ws",
+              ],
               message:
                 "Process spawn / raw http must move into an adapter file or be reached through an injected port.",
             },
@@ -474,6 +498,53 @@ export default tseslint.config(
             "Bun globals (Bun.spawn, Bun.$, Bun.file, Bun.write, Bun.serve) must move into an adapter file or be reached through an injected port.",
         },
       ],
+    },
+  },
+  {
+    files: ["src/beacon/**/*.{ts,tsx}"],
+    ignores: ["src/beacon/**/*.test.ts", "src/beacon/**/*.adapter.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["fs", "fs/*", "node:fs", "node:fs/*", "chokidar"],
+              message: "Beacon IO must live in a src/beacon/**/*.adapter.ts file or be reached through an injected port.",
+            },
+            {
+              group: ["bun:sqlite", "better-sqlite3", "pg"],
+              message: "Beacon IO must live in a src/beacon/**/*.adapter.ts file or be reached through an injected port.",
+            },
+            {
+              group: [
+                "child_process",
+                "node:child_process",
+                "node:http",
+                "node:https",
+                "http",
+                "https",
+                "node:net",
+                "net",
+                "node:tls",
+                "tls",
+                "node:crypto",
+                "crypto",
+                "ws",
+              ],
+              message: "Beacon IO must live in a src/beacon/**/*.adapter.ts file or be reached through an injected port.",
+            },
+          ],
+        },
+      ],
+      "no-restricted-globals": [
+        "error",
+        {
+          name: "Bun",
+          message: "Beacon IO must live in a src/beacon/**/*.adapter.ts file or be reached through an injected port.",
+        },
+      ],
+      "no-restricted-syntax": ["error", ...SHARED_CLIENT_SEAL_SYNTAX, ...TYPE_STRICT_SYNTAX],
     },
   },
   // Sanctioned logger chokepoint: the only file allowed to call console.

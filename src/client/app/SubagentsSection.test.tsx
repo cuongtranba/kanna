@@ -187,6 +187,11 @@ describe("isSubagentDraftDirty", () => {
     ).toBe(true)
   })
 
+  test("returns true when the beacon tools grant is toggled", () => {
+    expect(isSubagentDraftDirty({ ...baseline, allowBeaconTools: true }, baseline)).toBe(true)
+    expect(isSubagentDraftDirty({ ...baseline, allowBeaconTools: false }, baseline)).toBe(false)
+  })
+
   test("returns true when provider differs", () => {
     expect(
       isSubagentDraftDirty(
@@ -547,5 +552,55 @@ describe("SubagentsSection — list rendering", () => {
     await act(async () => { row!.click() })
     expect(onSelect).toHaveBeenCalledWith("sa-1")
     closeRoot(root, container)
+  })
+})
+
+describe("SubagentsSection — beacon tools grant", () => {
+  function recordingHandlers(): { handlers: SubagentsSectionHandlers; saved: SubagentInput[] } {
+    const saved: SubagentInput[] = []
+    const handlers: SubagentsSectionHandlers = {
+      ...noopHandlers(),
+      onUpdate: async (_id, input) => {
+        saved.push(input)
+        return { ok: true as const, subagent: makeSubagent() }
+      },
+    }
+    return { handlers, saved }
+  }
+
+  async function mountEditing(subagent: Subagent, handlers: SubagentsSectionHandlers) {
+    const { container, cleanup } = await mountSubagentsSection({
+      subagents: [subagent],
+      editing: { kind: "edit", id: subagent.id },
+      handlers,
+    })
+    const checkbox = container.querySelector<HTMLInputElement>("[data-testid='subagent-form-allow-beacon-tools']")!
+    const save = container.querySelector<HTMLButtonElement>("[data-testid='subagent-form-save']")!
+    return { container, cleanup, checkbox, save }
+  }
+
+  test("an ungranted subagent shows the box unchecked and granting it saves allowBeaconTools true", async () => {
+    const { handlers, saved } = recordingHandlers()
+    const { checkbox, save, cleanup } = await mountEditing(makeSubagent({ id: "sa-9" }), handlers)
+    expect(checkbox.checked).toBe(false)
+    expect(save.disabled).toBe(true)
+    await act(async () => { checkbox.click() })
+    expect(save.disabled).toBe(false)
+    await act(async () => { save.click() })
+    expect(saved.map((input) => input.allowBeaconTools)).toEqual([true])
+    cleanup()
+  })
+
+  test("a granted subagent shows the box checked and revoking it saves allowBeaconTools false", async () => {
+    const { handlers, saved } = recordingHandlers()
+    const { checkbox, save, cleanup } = await mountEditing(
+      makeSubagent({ id: "sa-9", allowBeaconTools: true }),
+      handlers,
+    )
+    expect(checkbox.checked).toBe(true)
+    await act(async () => { checkbox.click() })
+    await act(async () => { save.click() })
+    expect(saved.map((input) => input.allowBeaconTools)).toEqual([false])
+    cleanup()
   })
 })

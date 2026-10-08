@@ -4,6 +4,7 @@ import type { ServerWebSocket } from "bun"
 import type { WorkflowRegistry } from "./workflow-registry"
 import type { BackgroundTaskOutputRegistry } from "./background-task-output-registry"
 import type { BoardChange, BoardRegistry } from "./board-registry"
+import type { BeaconRegistry } from "./beacon-registry"
 import type { EventStore } from "./event-store"
 import type { AgentCoordinator } from "./agent"
 import type { TerminalManager } from "./terminal-manager"
@@ -38,6 +39,7 @@ export interface BroadcastManagerDeps {
   packageUpdateManager?: PackageUpdateManager
   workflowRegistry?: WorkflowRegistry
   boardRegistry?: BoardRegistry
+  beaconRegistry?: BeaconRegistry
   backgroundTaskOutputRegistry?: BackgroundTaskOutputRegistry
   envelopeBuilder: EnvelopeBuilder
 }
@@ -56,6 +58,7 @@ export class BroadcastManager {
   private readonly disposeUpdateEvents: () => void
   private readonly disposeWorkflows: () => void
   private readonly disposeBoards: () => void
+  private readonly disposeBeacons: () => void
   private readonly disposeBackgroundTaskOutput: () => void
   private readonly disposePackageUpdateEvents: () => void
 
@@ -69,6 +72,7 @@ export class BroadcastManager {
       packageUpdateManager,
       workflowRegistry,
       boardRegistry,
+      beaconRegistry,
       backgroundTaskOutputRegistry,
     } = deps
 
@@ -148,6 +152,21 @@ export class BroadcastManager {
             && topic.ownerKind === change.owner.kind
             && topic.ownerId === change.owner.id
           if (!matchesBoard && !matchesList) continue
+          const envelope = deps.envelopeBuilder.createEnvelope(id, topic, undefined, ws)
+          if (envelope.type !== "snapshot") continue
+          const signature = JSON.stringify(envelope.snapshot)
+          if (snapshotSignatures.get(id) === signature) continue
+          snapshotSignatures.set(id, signature)
+          send(ws, envelope)
+        }
+      }
+    }) ?? (() => {})
+
+    this.disposeBeacons = beaconRegistry?.subscribe(() => {
+      for (const ws of this.sockets) {
+        const snapshotSignatures = ensureSnapshotSignatures(ws)
+        for (const [id, topic] of ws.data.subscriptions.entries()) {
+          if (topic.type !== "beacons") continue
           const envelope = deps.envelopeBuilder.createEnvelope(id, topic, undefined, ws)
           if (envelope.type !== "snapshot") continue
           const signature = JSON.stringify(envelope.snapshot)
@@ -560,6 +579,7 @@ export class BroadcastManager {
     this.disposeUpdateEvents()
     this.disposeWorkflows()
     this.disposeBoards()
+    this.disposeBeacons()
     this.disposeBackgroundTaskOutput()
     this.disposePackageUpdateEvents()
   }

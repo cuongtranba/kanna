@@ -99,6 +99,8 @@ export interface AgentCoordinatorArgs {
   claudeSessionLifecycle?: Partial<ClaudeSessionLifecycleOptions>
   workflowRegistry?: import("./workflow-registry").WorkflowRegistry
   boardRegistry?: import("./board-registry").BoardRegistry
+  beaconRegistry?: import("./beacon-registry").BeaconRegistry
+  getBeacons?: () => readonly import("../shared/beacon-config").BeaconConfig[]
   subagentTranscriptRegistry?: import("./subagent-transcript-registry").SubagentTranscriptRegistry
   readLlmProvider?: () => Promise<LlmProviderSnapshot>
   listOpenRouterModels?: () => Promise<import("../shared/types").OpenRouterModel[]>

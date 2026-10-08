@@ -4,3 +4,12 @@ code:
   - src/shared/chat-ops.test.ts
   - src/shared/chat-ops.ts
   - src/shared/protocol.ts
+  - src/shared/beacon-protocol.ts
+  - src/shared/beacon-protocol.test.ts
+  - src/shared/beacon-scope.ts
+  - src/shared/beacon-scope.test.ts
+  - src/shared/beacon-config.ts
+  - src/shared/beacon-status.ts
+  - src/shared/beacon-status.test.ts
+  - src/shared/beacon-tools.ts
+  - src/shared/beacon-tool-request.ts

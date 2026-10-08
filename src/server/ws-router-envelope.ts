@@ -16,6 +16,8 @@ import type { KeybindingsManager } from "./keybindings"
 import type { WorkflowRegistry } from "./workflow-registry"
 import type { BackgroundTaskOutputRegistry } from "./background-task-output-registry"
 import type { BoardRegistry } from "./board-registry"
+import type { BeaconRegistry } from "./beacon-registry"
+import { buildBeaconStatusRows } from "../shared/beacon-status"
 import type { FollowedSessionRegistry } from "./followed-session-registry"
 import type { UpdateManager } from "./update-manager"
 import type { PackageUpdateManager } from "./package-update-manager"
@@ -67,6 +69,7 @@ export interface EnvelopeDeps {
   workflowRegistry?: WorkflowRegistry
   backgroundTaskOutputRegistry?: BackgroundTaskOutputRegistry
   boardRegistry?: BoardRegistry
+  beaconRegistry?: BeaconRegistry
   followedSessionRegistry?: FollowedSessionRegistry
   machineDisplayName: string
   updateManager: UpdateManager | null
@@ -159,6 +162,7 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
     workflowRegistry,
     backgroundTaskOutputRegistry,
     boardRegistry,
+    beaconRegistry,
     followedSessionRegistry,
     machineDisplayName,
     updateManager,
@@ -406,6 +410,23 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
         snapshot: {
           type: "cron-jobs",
           data: { rows: buildCronJobsGlobalRows(store) },
+        },
+      }
+    }
+
+    if (topic.type === "beacons") {
+      return {
+        v: PROTOCOL_VERSION,
+        type: "snapshot",
+        id,
+        snapshot: {
+          type: "beacons",
+          data: {
+            beacons: buildBeaconStatusRows(
+              resolvedAppSettings.getSnapshot().customBeacons,
+              beaconRegistry?.live() ?? [],
+            ),
+          },
         },
       }
     }

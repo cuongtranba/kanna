@@ -9,6 +9,11 @@ import { minimatch } from "minimatch"
 import { log } from "../shared/log"
 import { isRecord } from "../shared/errors"
 import type { JsonObject } from "../shared/json"
+import type { BeaconConfig } from "../shared/beacon-config"
+import { evaluateBeaconRequest, type BeaconEvalContext } from "../shared/beacon-scope"
+import { beaconScriptHash } from "./beacon-crypto"
+import { buildBeaconRequest } from "../shared/beacon-tool-request"
+import { BEACON_LIST_TOOL_NAME, BEACON_TOOL_PREFIX, beaconToolOp } from "../shared/beacon-tools"
 
 export interface EvaluateArgs {
   toolName: string
@@ -16,6 +21,7 @@ export interface EvaluateArgs {
   chatPolicy: ChatPermissionPolicy
   cwd: string
   restrictedAllowedPaths?: readonly string[]
+  beacons?: readonly BeaconConfig[]
 }
 
 export function pathInsideAllowedRoots(absPath: string, roots: readonly string[]): boolean {
@@ -133,6 +139,41 @@ const INTERACTIVE_TOOLS = new Set([
   "mcp__kanna__exit_plan_mode",
 ])
 
+const NO_TRUSTED_SCRIPT_HASHES: ReadonlySet<string> = new Set()
+
+function beaconEvalContext(scope: BeaconConfig["scope"], request: NonNullable<ReturnType<typeof buildBeaconRequest>>): BeaconEvalContext {
+  if (request.op !== "script") return { trustedScriptHashes: NO_TRUSTED_SCRIPT_HASHES }
+  return {
+    trustedScriptHashes: new Set(scope.trustedScriptHashes),
+    scriptHash: beaconScriptHash(request.body),
+  }
+}
+
+function evaluateBeaconTool(args: EvaluateArgs): EvaluateResult | null {
+  if (!args.toolName.startsWith(BEACON_TOOL_PREFIX)) return null
+  if (args.toolName === BEACON_LIST_TOOL_NAME) {
+    return { verdict: "auto-allow", reason: "beacon_list reads metadata only" }
+  }
+  const op = beaconToolOp(args.toolName)
+  if (op === null) return null
+  const request = buildBeaconRequest(op, args.args)
+  if (request === null) return null
+  const beaconId = typeof args.args.beaconId === "string" ? args.args.beaconId : ""
+  const beacon = (args.beacons ?? []).find((candidate) => candidate.id === beaconId)
+  if (!beacon) return { verdict: "auto-deny", reason: `unknown beacon: ${beaconId}` }
+  if (!beacon.enabled) return { verdict: "auto-deny", reason: `beacon ${beacon.label} (${beacon.id}) is disabled` }
+  const verdict = evaluateBeaconRequest(beacon.scope, request, beaconEvalContext(beacon.scope, request))
+  const subject = `beacon ${beacon.label} (${beacon.id}) ${op}`
+  switch (verdict) {
+    case "allow":
+      return { verdict: "auto-allow", reason: `${subject} is within the beacon scope` }
+    case "deny":
+      return { verdict: "auto-deny", reason: `${subject} is outside the beacon scope` }
+    case "ask":
+      return { verdict: "ask", reason: `${subject} needs approval` }
+  }
+}
+
 export const policy = {
   evaluate(args: EvaluateArgs): EvaluateResult {
     if (INTERACTIVE_TOOLS.has(args.toolName)) {
@@ -236,6 +277,9 @@ export const policy = {
         return { verdict: "auto-deny", reason: `matched denylist: ${rule.pattern}` }
       }
     }
+
+    const beaconVerdict = evaluateBeaconTool(args)
+    if (beaconVerdict) return beaconVerdict
 
     for (const rule of args.chatPolicy.toolAllowList) {
       if (rule.tool !== args.toolName) continue

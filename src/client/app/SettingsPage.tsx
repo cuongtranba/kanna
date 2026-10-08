@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, type KeyboardEvent, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, type ComponentType, type KeyboardEvent, type ReactNode } from "react"
 import { motion } from "motion/react"
 import { MOTION_SPRING } from "../lib/motion"
 import type { DomPort } from "../ports/domPort"
@@ -19,6 +19,7 @@ import {
   Moon,
   MessageSquareQuote,
   Plug,
+  Radio,
   Settings2,
   Sun,
   DownloadCloud,
@@ -55,6 +56,7 @@ import {
 import { renderMarkdownToReact } from "../components/lexical/markdown/lexicalToReact"
 import { SubagentsSettingsBranch } from "./SubagentsSection"
 import { McpServersSettingsBranch } from "./McpServersSection"
+import { BeaconsSettingsBranch } from "./BeaconsSection"
 import { ModelsSettingsBranch } from "./ModelsSection"
 import { TextSnippetsSettingsBranch } from "./TextSnippetsSection"
 import { useAppSettingsStore, selectCustomModels, selectPluginsEnabled, selectScrollbackLines, selectMinColumnWidth, selectEditorPreset, selectEditorCommandTemplate, selectChatSoundPreference, selectChatSoundId } from "../stores/appSettingsStore"
@@ -174,6 +176,12 @@ const sidebarItems = [
     subtitle: "Install custom MCP servers (stdio, http, sse, ws) and connect-test them.",
   },
   {
+    id: "beacons",
+    label: "Beacons",
+    icon: Radio,
+    subtitle: "Pair your own machines so the agent can read files and run approved commands there.",
+  },
+  {
     id: "snippets",
     label: "Text snippets",
     icon: Type,
@@ -200,6 +208,11 @@ const sidebarItems = [
 ] as const
 type SidebarItem = (typeof sidebarItems)[number]
 type SidebarPageId = SidebarItem["id"]
+
+const SETTINGS_SERVICE_BRANCHES: Partial<Record<SidebarPageId, ComponentType<{ state: KannaState }>>> = {
+  "mcp-servers": McpServersSettingsBranch,
+  beacons: BeaconsSettingsBranch,
+}
 
 export function resolveSettingsSectionId(sectionId: string | undefined): SidebarPageId | null {
   if (!sectionId) return null
@@ -730,6 +743,7 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
   const changelogError = useSettingsPageStore((s) => s.changelogError)
   const setChangelogError = useSettingsPageStore((s) => s.setChangelogError)
   const selectedPage = resolveSettingsSectionId(sectionId) ?? "general"
+  const ServiceBranch = SETTINGS_SERVICE_BRANCHES[selectedPage]
   const appSettingsLoading = useAppSettingsStore((s) => s.hydrationStatus === "loading" && s.settings === null)
   const isConnecting = state.connectionStatus === "connecting" || !state.localProjectsReady || appSettingsLoading
   const llmProviderSaving = usePendingAction(LLM_PROVIDER_WRITE_KEY)
@@ -2162,10 +2176,10 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
                 {selectedPage === "kanna-plugins" && kannaPluginsEnabled && <KannaPluginsSettingsBranch />}
                 {selectedPage === "subagents" && <SubagentsSettingsBranch state={state} />}
                 {selectedPage === "models" && <ModelsSettingsBranch state={state} />}
-                {selectedPage === "mcp-servers" && <McpServersSettingsBranch state={state} />}
+                {ServiceBranch && <ServiceBranch state={state} />}
                 {selectedPage === "snippets" && <TextSnippetsSettingsBranch state={state} />}
                 {selectedPage === "instructions" && <GlobalInstructionsSection state={state} />}
-                {!["general", "providers", "keybindings", "skills", "plugins", "subagents", "models", "mcp-servers", "snippets", "instructions"].includes(selectedPage) && (
+                {!["general", "providers", "keybindings", "skills", "plugins", "subagents", "models", "mcp-servers", "beacons", "snippets", "instructions"].includes(selectedPage) && (
                   <ChangelogSection
                     status={changelogStatus}
                     releases={releases}

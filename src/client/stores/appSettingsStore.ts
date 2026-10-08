@@ -1,5 +1,6 @@
 import { create } from "zustand"
 import type { AppSettingsPatch, AppSettingsSnapshot, CustomModelEntry, McpServerConfig, TextSnippet } from "../../shared/types"
+import type { BeaconConfig } from "../../shared/beacon-config"
 import { DEFAULT_TERMINAL_SCROLLBACK } from "../../shared/terminal-scrollback"
 import type { ChatSoundId, ChatSoundPreference, EditorPreset } from "../../shared/core-types"
 import type { InstalledPluginConfig } from "../../shared/plugins/settings"
@@ -86,6 +87,7 @@ export function mergeAppSettingsPatch(
     },
     subagents: settings.subagents,
     customMcpServers: settings.customMcpServers,
+    customBeacons: settings.customBeacons,
     customModels: settings.customModels,
     textSnippets: settings.textSnippets,
     plugins: {
@@ -128,6 +130,11 @@ const EMPTY_MCP_SERVERS: readonly McpServerConfig[] = []
 
 export const selectCustomMcpServers = (state: AppSettingsStoreState): readonly McpServerConfig[] =>
   state.settings?.customMcpServers ?? EMPTY_MCP_SERVERS
+
+const EMPTY_BEACONS: readonly BeaconConfig[] = []
+
+export const selectCustomBeacons = (state: AppSettingsStoreState): readonly BeaconConfig[] =>
+  state.settings?.customBeacons ?? EMPTY_BEACONS
 
 const EMPTY_CUSTOM_MODELS: readonly CustomModelEntry[] = []
 

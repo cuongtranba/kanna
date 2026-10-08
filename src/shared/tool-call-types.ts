@@ -129,6 +129,11 @@ export interface ImageGenerationToolResult {
 export interface ImageViewToolCall
   extends ToolCallBase<"image_view", { path: string; contentUrl: string; mimeType: string }> { }
 
+export type BeaconToolOp = "list" | "read" | "stat" | "glob" | "grep" | "fetch" | "exec" | "script"
+
+export interface BeaconToolCall
+  extends ToolCallBase<"beacon", { op: BeaconToolOp; beaconId: string; summary: string }> { }
+
 export interface UnknownToolCall
   extends ToolCallBase<"unknown_tool", { payload: JsonObject }> { }
 
@@ -154,6 +159,7 @@ export type NormalizedToolCall =
   | DeleteFileToolCall
   | SubagentTaskToolCall
   | McpGenericToolCall
+  | BeaconToolCall
   | OfferDownloadToolCall
   | PreviewFileToolCall
   | ImageGenerationToolCall
@@ -299,6 +305,9 @@ export type HydratedSubagentTaskToolCall =
 export type HydratedMcpGenericToolCall =
   HydratedToolCallBase<"mcp_generic", McpGenericToolCall["input"], JsonValue>
 
+export type HydratedBeaconToolCall =
+  HydratedToolCallBase<"beacon", BeaconToolCall["input"], JsonValue>
+
 export type HydratedOfferDownloadToolCall =
   HydratedToolCallBase<"offer_download", OfferDownloadToolCall["input"], OfferDownloadToolResult>
 
@@ -341,6 +350,7 @@ export type HydratedToolCall =
   | HydratedDeleteFileToolCall
   | HydratedSubagentTaskToolCall
   | HydratedMcpGenericToolCall
+  | HydratedBeaconToolCall
   | HydratedOfferDownloadToolCall
   | HydratedPreviewFileToolCall
   | HydratedImageGenerationToolCall
