@@ -1,5 +1,7 @@
 # SDK ↔ PTY Driver Parity Implementation Plan
 
+> **Superseded (2026-10-08).** The PTY Claude driver this document was written for was removed in `adr-20261008-remove-pty-driver` (#1206); every Claude chat now runs on the Agent SDK. Kept as history; do not implement from it.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Bring three PTY-driver features to parity on the default SDK driver: keep-alive multi-turn subagents, the workflow status panel, and confirm the background-task keep-alive guard.

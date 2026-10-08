@@ -1,5 +1,7 @@
 # Claude PTY Allowlist Preflight Implementation Plan (P3b)
 
+> **Superseded (2026-10-08).** The PTY Claude driver this document was written for was removed in `adr-20261008-remove-pty-driver` (#1206); every Claude chat now runs on the Agent SDK. Kept as history; do not implement from it.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Apply `--tools "mcp__kanna__*"` at PTY spawn and gate spawns on a runtime preflight that proves the `claude` CLI's `--tools` allowlist actually disables every disallowed built-in. Fail-closed: if any built-in is reachable, PTY mode refuses to spawn (falling back to SDK).
