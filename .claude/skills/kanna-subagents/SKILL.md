@@ -142,21 +142,25 @@ with `keep_alive` (the MCP host rejects both set). Works for any provider
   background run holds a permit while in flight, so concurrency is bounded by
   the existing permit pool (default 4) + run timeout. No live-session registry
   (background runs are one-shot, not keep-alive).
-- **Re-entry (provider-agnostic, always /clears main).** `AgentCoordinator.deliverSubagentToMain`
-  is wired as `onBackgroundRunComplete`. On every delivery it (1) wipes the
-  chat's Claude `session_token` (main /clear equivalent — same machinery
-  `exit_plan_mode`'s clearContext branch uses), (2) appends a `context_cleared`
-  transcript entry, (3) emits `auto_continue_accepted { source:
-  "subagent_background", delayMs: 0 }` whose prompt is the structured
-  `<task-notification>` XML (`buildTaskNotification` in `agent.ts` — same
-  format Claude Code's LocalAgentTask uses, so the model parses task
-  identity/status natively). Un-armed ad-hoc deliveries include the subagent's
-  `<result>` body (truncated at 4k chars) — the /clear per delivery means the
-  result rides exactly one fresh prompt, context never accumulates. ARMED loop
-  deliveries omit `<result>` (PROGRESS.md stays the loop's only durability
-  contract) and append the full loop discipline prompt after the notification.
-  `fireAutoContinue` → `enqueueMessage` delivers it through the normal queue; because
-  session_token is null, the next main turn is a FRESH Claude spawn.
+- **Re-entry (provider-agnostic; /clears main only for an ARMED loop).** `AgentCoordinator.deliverSubagentToMain`
+  is wired as `onBackgroundRunComplete`. Every delivery emits
+  `auto_continue_accepted { source: "subagent_background", delayMs: 0 }` whose
+  prompt is the structured `<task-notification>` XML (`buildTaskNotification`
+  in `agent.ts` — same format Claude Code's LocalAgentTask uses, so the model
+  parses task identity/status natively). An ARMED loop delivery first (1) wipes
+  the chat's Claude `session_token` (main /clear equivalent — same machinery
+  `exit_plan_mode`'s clearContext branch uses) and (2) appends a
+  `context_cleared` transcript entry, omits `<result>` (the task list stays the
+  loop's only durability contract) and appends the full loop discipline prompt
+  after the notification; the next main turn is a FRESH Claude spawn. An
+  un-armed ad-hoc delivery clears NOTHING: main keeps its session token and warm
+  session, so a conversation that launched a background researcher is still
+  there when it reports back. It includes the subagent's `<result>` body
+  (truncated at 4k chars) and a short "decide the next action" sentence, and
+  never claims the context was cleared. Main's context grows with each
+  un-armed delivery; the CLI's auto-compaction bounds it. See
+  `adr-20261008-unarmed-delivery-keeps-context`. `fireAutoContinue` →
+  `enqueueMessage` delivers it through the normal queue.
 - **No wake cap.** Concurrency is bounded by the subagent permit pool + run
   timeout. Every delivery is a real event, never a self-poll — no runaway
   budget is meaningful here.

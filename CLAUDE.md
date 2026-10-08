@@ -1102,8 +1102,8 @@ before they can stand.** Two layers, deliberately covering each other:
   extracts ```mermaid fences and validates them. On a real failure it enqueues
   one correction prompt via `enqueueMessage` with a synthetic
   `autoContinue.scheduleId` — the `wakeBackgroundTaskSession` shape, NOT
-  `deliverSubagentToMain`'s: **no `/clear`**, because the model needs the
-  diagram still in context to fix it.
+  `deliverSubagentToMain`'s armed-loop shape: **no `/clear`**, because the
+  model needs the diagram still in context to fix it.
 
 **The guard's bounds are load-bearing, not defensive.** It fires only when the
 reader would actually see an error — a diagram `repairMermaidSource` saves
@@ -1807,8 +1807,8 @@ cycle/depth check (`LOOP_DETECTED` / `DEPTH_EXCEEDED`), and a per-subagent
 injection into the system prompt, the spawn gate (`claudeAuthReady` — the single
 definition of it, and why a subagent must never be refused where a main-chat
 turn would spawn), keep-alive multi-turn sessions and their permit model, and
-background runs plus the `deliverSubagentToMain` re-entry that /clears main on
-every delivery.
+background runs plus the `deliverSubagentToMain` re-entry, which /clears main
+only when a loop is armed.
 
 # A project's process never inherits Kanna's runtime env (`projectProcessEnv`)
 

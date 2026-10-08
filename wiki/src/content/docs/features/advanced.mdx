@@ -42,7 +42,7 @@ Kanna surfaces Claude Code's native **Workflow** tool (dynamic multi-agent orche
 
 The agent can hand work off and have the chat pick it up again later, without polling on a timer.
 
-Call `mcp__kanna__delegate_subagent({ run_in_background: true, … })` and the tool returns immediately with a run id while the subagent works. When it finishes, Kanna clears the main agent's context and re-enters the chat as a fresh turn carrying the result — so a long job costs one wake, not a polling loop. Delivery is event-driven and provider-agnostic, and it survives a server restart via event replay.
+Call `mcp__kanna__delegate_subagent({ run_in_background: true, … })` and the tool returns immediately with a run id while the subagent works. When it finishes, Kanna re-enters the chat as a new turn carrying the result — so a long job costs one wake, not a polling loop. In a chat that is not running a loop the agent keeps its conversation; an armed loop clears the main agent's context on every wake, because the task list is the plan. Delivery is event-driven and provider-agnostic, and it survives a server restart via event replay.
 
 For work that should recur on a **clock** rather than on completion, use [cron jobs](/features/cron-jobs/).
 

@@ -408,7 +408,7 @@ describe("deliverSubagentToMain — naming the plan when no loop is armed", () =
   test("names no file at all when the chat never ran a loop", async () => {
     const prompt = await deliver([])
     expect(prompt).not.toContain("PROGRESS.md")
-    expect(prompt).toContain("context has been cleared")
+    expect(prompt).not.toContain("context has been cleared")
   })
 })
 

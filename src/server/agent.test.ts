@@ -3986,7 +3986,7 @@ describe("AgentCoordinator.deliverSubagentToMain (notification-driven /clear)", 
       | { status: "failed"; runId: string; errorCode: string; errorMessage: string },
   ) => Promise<void>
 
-  test("success: wipes claude session_token, appends context_cleared, emits subagent_background auto-continue with task-notification XML", async () => {
+  test("an un-armed background delivery keeps main's conversation and wakes it with the result", async () => {
     const store = createFakeStore()
     const coordinator = new AgentCoordinator({
       store: store as never,
@@ -4002,10 +4002,10 @@ describe("AgentCoordinator.deliverSubagentToMain (notification-driven /clear)", 
       { status: "completed", runId: "run-bg", text: "the answer" },
     )
 
-    expect(store.chat.sessionTokensByProvider.claude ?? null).toBeNull()
+    expect(store.chat.sessionTokensByProvider.claude).toBe("prior-session-uuid")
 
     const cleared = store.messages.filter((m) => m.kind === "context_cleared")
-    expect(cleared).toHaveLength(1)
+    expect(cleared).toHaveLength(0)
 
     const events = store.getAutoContinueEvents("chat-1")
     expect(events).toHaveLength(1)
@@ -4018,11 +4018,11 @@ describe("AgentCoordinator.deliverSubagentToMain (notification-driven /clear)", 
       expect(ev.prompt).toContain("<status>completed</status>")
       expect(ev.prompt).toContain("<result>the answer</result>")
       expect(ev.prompt).not.toContain("PROGRESS.md")
-      expect(ev.prompt).toContain("context has been cleared")
+      expect(ev.prompt).not.toContain("context has been cleared")
     }
   })
 
-  test("closes the warm claude session so the /clear yields a truly fresh spawn", async () => {
+  test("armed loop: closes the warm claude session so the /clear yields a truly fresh spawn", async () => {
     const events = new AsyncEventQueue<any>()
     let closeCount = 0
 
@@ -4067,6 +4067,16 @@ describe("AgentCoordinator.deliverSubagentToMain (notification-driven /clear)", 
     await waitFor(() => store.turnFinishedCount === 1)
     expect(store.chat.sessionTokensByProvider.claude).toBe("warm-token")
 
+    store.autoContinueEvents.push({
+      v: AUTO_CONTINUE_EVENT_VERSION,
+      timestamp: 0,
+      chatId: "chat-1",
+      scheduleId: "loop-schedule-warm",
+      kind: "loop_armed",
+      subagentId: "sa-loop",
+      prompt: "LOOP DISCIPLINE PROMPT",
+    })
+
     await (coordinator as unknown as { deliverSubagentToMain: DeliverFn }).deliverSubagentToMain(
       "chat-1",
       "run-bg",
@@ -4075,6 +4085,7 @@ describe("AgentCoordinator.deliverSubagentToMain (notification-driven /clear)", 
 
     expect(closeCount).toBeGreaterThanOrEqual(1)
     expect(store.chat.sessionTokensByProvider.claude ?? null).toBeNull()
+    expect(store.messages.filter((m) => m.kind === "context_cleared")).toHaveLength(1)
 
     events.close()
   })
@@ -4115,7 +4126,7 @@ describe("AgentCoordinator.deliverSubagentToMain (notification-driven /clear)", 
     }
   })
 
-  test("failure: still /clears, prompt carries error code + message", async () => {
+  test("failure: un-armed delivery keeps context, prompt carries error code + message", async () => {
     const store = createFakeStore()
     const coordinator = new AgentCoordinator({
       store: store as never,
@@ -4135,7 +4146,7 @@ describe("AgentCoordinator.deliverSubagentToMain (notification-driven /clear)", 
     )
 
     const cleared = store.messages.filter((m) => m.kind === "context_cleared")
-    expect(cleared).toHaveLength(1)
+    expect(cleared).toHaveLength(0)
 
     const events = store.getAutoContinueEvents("chat-1")
     expect(events).toHaveLength(1)

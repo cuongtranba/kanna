@@ -3,15 +3,6 @@ import { AgentCoordinator } from "./agent"
 import type { AutoContinueEvent } from "./auto-continue/events"
 import type { TranscriptEntry, SlashCommand } from "../shared/types"
 
-
-function timestamped<T extends Omit<TranscriptEntry, "_id" | "createdAt">>(entry: T): TranscriptEntry {
-  return {
-    _id: crypto.randomUUID(),
-    createdAt: Date.now(),
-    ...entry,
-  } as TranscriptEntry
-}
-
 function createLoopStore() {
   const chat = {
     id: "chat-loop",
@@ -98,8 +89,8 @@ function createLoopStore() {
   }
 }
 
-describe("notification-driven loop orchestration — 50-iteration scenario", () => {
-  test("50 consecutive subagent_background deliveries all /clear main; PROGRESS.md is the only continuity", async () => {
+describe("notification-driven delivery without an armed loop", () => {
+  test("50 consecutive subagent_background deliveries never clear main; every wake carries its result", async () => {
     const store = createLoopStore()
     const coordinator = new AgentCoordinator({
       store: store as never,
@@ -117,23 +108,20 @@ describe("notification-driven loop orchestration — 50-iteration scenario", () 
     const deliver = (coordinator as unknown as { deliverSubagentToMain: DeliverFn }).deliverSubagentToMain
       .bind(coordinator)
 
-    await store.setSessionTokenForProvider("chat-loop", "claude", "session-token-turn-0")
+    await store.setSessionTokenForProvider("chat-loop", "claude", "conversation-session")
 
     const N = 50
     for (let i = 1; i <= N; i += 1) {
-      await store.setSessionTokenForProvider("chat-loop", "claude", `session-token-turn-${i}`)
-
       await deliver("chat-loop", `run-${i}`, {
         status: "completed",
         runId: `run-${i}`,
         text: `iteration ${i} of the loop is done`,
       })
 
-      expect(store.chat.sessionTokensByProvider.claude ?? null).toBeNull()
+      expect(store.chat.sessionTokensByProvider.claude).toBe("conversation-session")
     }
 
-    const cleared = store.messages.filter((m) => m.kind === "context_cleared")
-    expect(cleared).toHaveLength(N)
+    expect(store.messages.filter((m) => m.kind === "context_cleared")).toHaveLength(0)
 
     const events = store.getAutoContinueEvents("chat-loop")
     expect(events).toHaveLength(N)
@@ -146,129 +134,8 @@ describe("notification-driven loop orchestration — 50-iteration scenario", () 
         expect(ev.prompt).toContain(`<task-id>run-${i + 1}</task-id>`)
         expect(ev.prompt).toContain("<status>completed</status>")
         expect(ev.prompt).toContain(`<result>iteration ${i + 1} of the loop is done</result>`)
-        expect(ev.prompt).not.toContain("PROGRESS.md")
-        expect(ev.prompt).toContain("context has been cleared")
+        expect(ev.prompt).not.toContain("context has been cleared")
       }
     }
-  })
-
-  test("failure deliveries also /clear; error code + message land in the prompt", async () => {
-    const store = createLoopStore()
-    const coordinator = new AgentCoordinator({
-      store: store as never,
-      onStateChange: () => {},
-      startClaudeSession: async () => { throw new Error("not needed") },
-    })
-    type DeliverFn = (
-      chatId: string,
-      runId: string,
-      outcome:
-        | { status: "completed"; runId: string; text: string }
-        | { status: "failed"; runId: string; errorCode: string; errorMessage: string },
-    ) => Promise<void>
-    const deliver = (coordinator as unknown as { deliverSubagentToMain: DeliverFn }).deliverSubagentToMain
-      .bind(coordinator)
-
-    await store.setSessionTokenForProvider("chat-loop", "claude", "prior")
-
-    await deliver("chat-loop", "run-fail", {
-      status: "failed",
-      runId: "run-fail",
-      errorCode: "TIMEOUT",
-      errorMessage: "deadline exceeded",
-    })
-
-    expect(store.chat.sessionTokensByProvider.claude ?? null).toBeNull()
-    expect(store.messages.filter((m) => m.kind === "context_cleared")).toHaveLength(1)
-
-    const events = store.getAutoContinueEvents("chat-loop")
-    expect(events).toHaveLength(1)
-    const ev = events[0]
-    if (ev.kind === "auto_continue_accepted") {
-      expect(ev.source).toBe("subagent_background")
-      expect(ev.prompt).toContain("TIMEOUT")
-      expect(ev.prompt).toContain("deadline exceeded")
-      expect(ev.prompt).not.toContain("PROGRESS.md")
-    }
-  })
-
-  test("interleaved success + failure deliveries — each independently /clears main", async () => {
-    const store = createLoopStore()
-    const coordinator = new AgentCoordinator({
-      store: store as never,
-      onStateChange: () => {},
-      startClaudeSession: async () => { throw new Error("not needed") },
-    })
-    type DeliverFn = (
-      chatId: string,
-      runId: string,
-      outcome:
-        | { status: "completed"; runId: string; text: string }
-        | { status: "failed"; runId: string; errorCode: string; errorMessage: string },
-    ) => Promise<void>
-    const deliver = (coordinator as unknown as { deliverSubagentToMain: DeliverFn }).deliverSubagentToMain
-      .bind(coordinator)
-
-    const N = 20
-    for (let i = 1; i <= N; i += 1) {
-      await store.setSessionTokenForProvider("chat-loop", "claude", `sess-${i}`)
-      if (i % 3 === 0) {
-        await deliver("chat-loop", `run-${i}`, {
-          status: "failed",
-          runId: `run-${i}`,
-          errorCode: "FAIL",
-          errorMessage: `iteration ${i} failed`,
-        })
-      } else {
-        await deliver("chat-loop", `run-${i}`, {
-          status: "completed",
-          runId: `run-${i}`,
-          text: `iteration ${i} done`,
-        })
-      }
-      expect(store.chat.sessionTokensByProvider.claude ?? null).toBeNull()
-    }
-
-    expect(store.messages.filter((m) => m.kind === "context_cleared")).toHaveLength(N)
-    expect(store.getAutoContinueEvents("chat-loop")).toHaveLength(N)
-  })
-
-  test("delivery survives 13 fake compact_boundary entries mixed into the transcript (compaction of the main channel is irrelevant because main is always fresh)", async () => {
-    const store = createLoopStore()
-    const coordinator = new AgentCoordinator({
-      store: store as never,
-      onStateChange: () => {},
-      startClaudeSession: async () => { throw new Error("not needed") },
-    })
-    type DeliverFn = (
-      chatId: string,
-      runId: string,
-      outcome:
-        | { status: "completed"; runId: string; text: string }
-        | { status: "failed"; runId: string; errorCode: string; errorMessage: string },
-    ) => Promise<void>
-    const deliver = (coordinator as unknown as { deliverSubagentToMain: DeliverFn }).deliverSubagentToMain
-      .bind(coordinator)
-
-    const N = 50
-    const compactAt = new Set([2, 5, 9, 14, 18, 22, 27, 31, 35, 40, 44, 47, 49])
-    expect(compactAt.size).toBe(13)
-
-    for (let i = 1; i <= N; i += 1) {
-      if (compactAt.has(i)) {
-        await store.appendMessage("chat-loop", timestamped({ kind: "compact_boundary" } as never))
-      }
-      await store.setSessionTokenForProvider("chat-loop", "claude", `sess-${i}`)
-      await deliver("chat-loop", `run-${i}`, {
-        status: "completed",
-        runId: `run-${i}`,
-        text: `it-${i}`,
-      })
-      expect(store.chat.sessionTokensByProvider.claude ?? null).toBeNull()
-    }
-
-    expect(store.messages.filter((m) => m.kind === "context_cleared")).toHaveLength(N)
-    expect(store.getAutoContinueEvents("chat-loop")).toHaveLength(N)
-    expect(store.messages.filter((m) => m.kind === "compact_boundary")).toHaveLength(13)
   })
 })
