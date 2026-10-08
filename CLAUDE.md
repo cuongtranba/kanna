@@ -2836,6 +2836,61 @@ and spreads the real module so no export goes missing — uniform harness
 foundation rather than per-suite state, which is why it cannot create order
 dependence. It sits outside the guard's `src/` scope on purpose.
 
+# Resumable uploads (tus) and Range downloads
+
+Uploads speak the **tus 1.0.0 protocol** at `/api/projects/<id>/uploads/tus`
+(`src/server/tus-uploads.adapter.ts`, `@tus/server` + `@tus/file-store`; browser side
+`tus-js-client`, lazy-imported by `src/client/lib/uploadFile.adapter.ts`, whose public
+API did not change). The multipart route is gone. The reason is a Cloudflare tunnel:
+it refuses any request body over 100 MB with a non-JSON page, so one request can never
+carry a big file. ADR `adr-20261008-tus-resumable-uploads`, component `c3-217`.
+
+- **`chunkSize` (8 MiB) must stay under the smallest proxy body cap in front of Kanna.**
+  Without it `tus-js-client` sends the whole file in one PATCH and the cap returns
+  as "Upload failed". It is load-bearing, not a tuning knob.
+- **One tus `Server` per project, its FileStore inside the project** at
+  `<project>/.kanna/uploads/.partial`. Finalize **hard-links** the finished partial into
+  `.kanna/uploads`, which only works on one filesystem; a shared store under the data
+  dir would copy every multi-GB file once more. `link()` falls back to `copyFile` on
+  `EXDEV`. The `.partial` directory is not a stored name: a user file called `.partial`
+  takes a counter name because the existing entry is not a regular file.
+- **Finalize preserves the #1200 reuse rule** (`finalizeUploadFromFile`,
+  `uploads.adapter.ts`). On `EEXIST` it compares size, then **streams** both files in
+  1 MiB chunks, never `readFile` on a multi-GB file. Identical bytes return
+  `reused: true`; different bytes take the next counter name from
+  `getUploadCandidateNames`. Client cleanup relies on `reused` so it never deletes a file
+  another attachment owns.
+- **The partial is removed on tus `POST_FINISH`, not inside `onUploadFinish`.** A
+  zero-length upload finishes during creation and `PostHandler` reads the upload again
+  after the hook; deleting the partial in the hook made every empty file a 404. The hook
+  answers `201` for the creation request (tus-js-client requires a `Location` header,
+  which tus only adds for 201 or 3xx) and `200` for a PATCH.
+- **A tus error body is always `{"error": "..."}`** (`onResponseError`), so the client
+  can show the server's message; a 413 names the limit read live from
+  `appSettings.uploads.maxFileSizeMb` (default 2048, max 51200).
+- **`MAX_REQUEST_BODY_BYTES` is a fixed 128 MiB**, deliberately decoupled from the size
+  setting: tus never sends more than one chunk per request, and deriving it from a
+  50 GB cap would lift the body limit of every route.
+- **Downloads own their Range handling** (`src/server/http-file-response.ts`).
+  `Bun.serve` answers a Range request for any file-backed `Response` itself, with 206
+  and **no `If-Range` check**, so `buildFileResponse` sends a satisfiable range as an
+  explicit 206 slice and, when a Range header arrived but the full file is the right
+  answer (stale `If-Range`, multi-range, malformed), streams the body through a plain
+  `ReadableStream` so Bun does not range it. Dropping that wrapper makes a stale
+  `If-Range` return 206 with a mismatched file. Validators are a **strong**
+  `"<size>-<mtimeMs>"` ETag plus `Last-Modified`; `If-Range` accepts either. The ETag
+  must stay strong: RFC 9110 forbids a weak tag from satisfying `If-Range`, so a browser
+  download manager would restart from byte 0 instead of resuming.
+- **The bare `/uploads/tus` path is tus only for `POST` and `OPTIONS`**
+  (`isTusRequest`, `http-dispatcher.ts`). Every other tus verb carries an upload id, so a
+  `DELETE` of an attachment stored under the name `tus` still reaches the attachment
+  delete route, and `/uploads/tus/content` still serves it.
+- **Tests** speak tus with plain `fetch` against the real server
+  (`src/server/uploads.test.ts`) and drive the client with a fake `Upload` class passed
+  as `loadTus`; no module mock. After a cut PATCH the offset is whatever the server had
+  flushed, so assert a prefix and continue from the reported offset, never an exact byte
+  count.
+
 # Wiki
 
 Public docs site lives in `wiki/` (Astro Starlight) and is deployed to

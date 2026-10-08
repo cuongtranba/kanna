@@ -88,7 +88,11 @@ describe("password auth", () => {
     const { server } = await startPasswordServer()
 
     try {
-      const response = await fetch(`http://localhost:${server.port}/api/projects/project-1/uploads`, { redirect: "manual" })
+      const response = await fetch(`http://localhost:${server.port}/api/projects/project-1/uploads/tus`, {
+        method: "POST",
+        headers: { "Tus-Resumable": "1.0.0", "Upload-Length": "10" },
+        redirect: "manual",
+      })
       expect(response.status).toBe(401)
     } finally {
       await server.stop()

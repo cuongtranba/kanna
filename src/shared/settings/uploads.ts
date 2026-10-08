@@ -5,11 +5,11 @@ export interface UploadSettings {
 }
 
 export const UPLOAD_DEFAULTS: UploadSettings = {
-  maxFileSizeMb: 100,
+  maxFileSizeMb: 2048,
 }
 
 export const UPLOAD_MAX_FILE_SIZE_MB_MIN = 1
-export const UPLOAD_MAX_FILE_SIZE_MB_MAX = 2048
+export const UPLOAD_MAX_FILE_SIZE_MB_MAX = 51200
 
 export function normalizeUploadSettings<T>(value: T, warnings: string[]): UploadSettings {
   const source = isPlainObject(value) ? value : null

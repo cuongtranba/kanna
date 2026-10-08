@@ -367,7 +367,7 @@ describe("uploads normalization", () => {
   test("returns defaults when uploads block missing", async () => {
     const filePath = await writeSettingsFile({ analyticsEnabled: true })
     const snapshot = await readAppSettingsSnapshot(filePath)
-    expect(snapshot.uploads).toEqual({ maxFileSizeMb: 100 })
+    expect(snapshot.uploads).toEqual({ maxFileSizeMb: 2048 })
   })
 
   test("preserves valid maxFileSizeMb", async () => {
@@ -379,14 +379,14 @@ describe("uploads normalization", () => {
   test("clamps out-of-range values and emits warning", async () => {
     const filePath = await writeSettingsFile({ uploads: { maxFileSizeMb: 99999 } })
     const snapshot = await readAppSettingsSnapshot(filePath)
-    expect(snapshot.uploads.maxFileSizeMb).toBe(2048)
+    expect(snapshot.uploads.maxFileSizeMb).toBe(51200)
     expect(snapshot.warning).toContain("uploads.maxFileSizeMb")
   })
 
   test("rejects non-number maxFileSizeMb and falls back to default", async () => {
     const filePath = await writeSettingsFile({ uploads: { maxFileSizeMb: "big" } })
     const snapshot = await readAppSettingsSnapshot(filePath)
-    expect(snapshot.uploads.maxFileSizeMb).toBe(100)
+    expect(snapshot.uploads.maxFileSizeMb).toBe(2048)
     expect(snapshot.warning).toContain("uploads.maxFileSizeMb must be a number")
   })
 

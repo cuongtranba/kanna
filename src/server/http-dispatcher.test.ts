@@ -123,15 +123,13 @@ describe("auth gating", () => {
 })
 
 describe("uploads endpoint", () => {
-  test("POST /api/projects/:id/uploads returns 404 for unknown project", async () => {
+  test("POST /api/projects/:id/uploads/tus returns 404 for unknown project", async () => {
     const { distDir, dataDir } = await makeDistDir()
     const server = await startKannaServer({ dataDir, distDir, port: 0, discoverProjects: () => [] })
     try {
-      const form = new FormData()
-      form.append("files", new File(["hello"], "test.txt", { type: "text/plain" }))
-      const res = await fetch(`http://127.0.0.1:${server.port}/api/projects/nonexistent/uploads`, {
+      const res = await fetch(`http://127.0.0.1:${server.port}/api/projects/nonexistent/uploads/tus`, {
         method: "POST",
-        body: form,
+        headers: { "Tus-Resumable": "1.0.0", "Upload-Length": "5" },
       })
       expect(res.status).toBe(404)
     } finally {
@@ -139,13 +137,13 @@ describe("uploads endpoint", () => {
     }
   })
 
-  test("POST /api/projects/:id/uploads with unknown project returns 404 before file validation", async () => {
+  test("a tus follow-up request for an unknown project returns 404 before any upload lookup", async () => {
     const { distDir, dataDir } = await makeDistDir()
     const server = await startKannaServer({ dataDir, distDir, port: 0, discoverProjects: () => [] })
     try {
-      const res = await fetch(`http://127.0.0.1:${server.port}/api/projects/nonexistent/uploads`, {
-        method: "POST",
-        body: new FormData(),
+      const res = await fetch(`http://127.0.0.1:${server.port}/api/projects/nonexistent/uploads/tus/abc123`, {
+        method: "HEAD",
+        headers: { "Tus-Resumable": "1.0.0" },
       })
       expect(res.status).toBe(404)
     } finally {

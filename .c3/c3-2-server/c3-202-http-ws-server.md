@@ -1,7 +1,7 @@
 ---
 id: c3-202
 c3-version: 4
-c3-seal: e735a97c3aedd6d7b52c1681f6a8380ca47843c92dd579e3722d6a20eda1a578
+c3-seal: 0d2a798ffbe45bd1ca1aacea4060827a3e21f3786828861675d58cd69707ec14
 title: http-ws-server
 type: component
 category: foundation
@@ -49,7 +49,7 @@ Hosts the Bun-side HTTP server, serves built client assets, exposes API + upgrad
 | Outcome | Client connects, authenticates, opens single WS | c3-101 |
 | Primary path | HTTP serves assets → upgrade → ws-router | c3-208 |
 | Alternate — health | /health returns 200 for liveness checks | c3-202 |
-| Alternate — API | /api/* routes serve JSON endpoints (uploads, etc.) | c3-217 |
+| Alternate — API | /api/* routes serve JSON endpoints and the tus upload endpoint under /api/projects/:projectId/uploads/tus | c3-217 |
 | Failure — auth reject | 401 close on missing/invalid cookie | c3-203 |
 
 ## Governance
