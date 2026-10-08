@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, type ChangeEvent } from "react"
-import { Plug, Plus, ExternalLink, Copy, KeyRound } from "lucide-react"
+import { Check, Plug, Plus, ExternalLink, Copy, KeyRound } from "lucide-react"
 import { Button } from "../components/ui/button"
 import { Input } from "../components/ui/input"
 import { Spinner } from "../components/ui/spinner"
@@ -15,6 +15,7 @@ import {
 } from "../components/ui/select"
 import { useAppSettingsStore, selectCustomMcpServers } from "../stores/appSettingsStore"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
+import { copyWithFeedback, useCopied } from "../stores/copyFeedbackStore"
 import {
   useMcpServersSectionStore,
   type EditingState,
@@ -52,6 +53,12 @@ interface McpServersSectionHandlers
 }
 
 const NEW_SERVER_ID = "new"
+
+function CopyAuthUrlIcon({ pending, copied }: { pending: boolean; copied: boolean }) {
+  if (pending) return <Spinner className="size-3" />
+  if (copied) return <Check className="h-3 w-3 text-success-text" />
+  return <Copy className="h-3 w-3" />
+}
 
 const wrapMcpServersPatch: AppSettingsPatchWrapper<McpServerInput, McpServerPatch> = (
   customMcpServers,
@@ -172,6 +179,7 @@ function McpServerEditor({
   const toggleOAuthPending = usePendingAction(toggleOAuthKey)
   const copyAuthUrlKey = pendingActionKey("mcpServers.copyAuthUrl", serverKeyId)
   const copyAuthUrlPending = usePendingAction(copyAuthUrlKey)
+  const authUrlCopied = useCopied(copyAuthUrlKey)
 
   const toggleOAuth = useCallback(
     async (enabled: boolean) => {
@@ -236,7 +244,7 @@ function McpServerEditor({
 
   const onCopyAuthUrlClick = useCallback(() => {
     if (!authFlowUrl) return
-    runPendingAction(copyAuthUrlKey, () => clipboard.writeText(authFlowUrl))
+    runPendingAction(copyAuthUrlKey, () => copyWithFeedback(copyAuthUrlKey, () => clipboard.writeText(authFlowUrl)))
   }, [authFlowUrl, clipboard, copyAuthUrlKey])
 
   const nameError = useMemo(() => {
@@ -487,16 +495,16 @@ function McpServerEditor({
                             Open authorization URL
                             <ExternalLink className="h-3 w-3" />
                           </a>
-                          <HoverHint label="Copy URL">
+                          <HoverHint label={authUrlCopied ? "Copied" : "Copy URL"}>
                             <button
                               type="button"
                               onClick={onCopyAuthUrlClick}
                               disabled={copyAuthUrlPending}
                               aria-busy={copyAuthUrlPending || undefined}
                               className="ml-1 text-muted-foreground hover:text-foreground"
-                              aria-label="Copy authorization URL"
+                              aria-label={authUrlCopied ? "Copied" : "Copy authorization URL"}
                             >
-                              {copyAuthUrlPending ? <Spinner className="size-3" /> : <Copy className="h-3 w-3" />}
+                              <CopyAuthUrlIcon pending={copyAuthUrlPending} copied={authUrlCopied} />
                             </button>
                           </HoverHint>
                         </div>

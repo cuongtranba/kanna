@@ -1,5 +1,7 @@
 import { afterEach, expect, test } from "bun:test"
+import { act } from "react"
 import "../lib/testing/setupHappyDom"
+import { makeFakeClipboardPort, makeFakeTimerPort } from "../adapters/testing/makeFakePorts"
 import { renderForLoopCheck } from "../lib/testing/renderForLoopCheck"
 import { DEFAULT_BEACON_SCOPE } from "../../shared/beacon-scope"
 import { BEACON_DOWNLOAD_PAGE, buildBeaconPairLink } from "../../shared/beacon-pair-link"
@@ -77,6 +79,30 @@ test("a minted code offers a link that opens Kanna Beacon with the address and c
   expect(open?.getAttribute("href")).toBe(buildBeaconPairLink({ kannaUrl: domAdapter.getOrigin(), code: "ABCD2345" }))
   const download = Array.from(document.querySelectorAll("a")).find((anchor) => anchor.getAttribute("href") === BEACON_DOWNLOAD_PAGE)
   expect(download).toBeDefined()
+  await result.cleanup()
+})
+
+test("copying the pairing command turns the button into a Copied tick until the feedback window ends", async () => {
+  useBeaconsSectionStore.setState({ pairing: { ok: true, code: "ABCD2345", expiresAt: Date.now() + 600_000 } })
+  const clipboard = makeFakeClipboardPort()
+  const timer = makeFakeTimerPort()
+  const result = await renderForLoopCheck(
+    <BeaconsSection rows={[]} configs={[]} handlers={HANDLERS} clipboard={clipboard} timer={timer} />,
+  )
+  const copyButton = () => document.querySelector<HTMLButtonElement>('button[aria-label="Copy pairing command"]')
+  const copiedButton = () => document.querySelector<HTMLButtonElement>('button[aria-label="Copied"]')
+
+  await act(async () => {
+    copyButton()?.click()
+  })
+  expect(clipboard.clipboard).toBe(`kanna-beacon pair ${domAdapter.getOrigin()} ABCD2345`)
+  expect(copiedButton()).not.toBeNull()
+
+  await act(async () => {
+    timer.flushTimeouts()
+  })
+  expect(copiedButton()).toBeNull()
+  expect(copyButton()).not.toBeNull()
   await result.cleanup()
 })
 

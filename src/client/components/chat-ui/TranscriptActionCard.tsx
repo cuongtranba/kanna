@@ -10,6 +10,7 @@ export type CardActionVariant = "primary" | "secondary" | "ghost" | "destructive
 export interface CardAction {
   id: string
   label: string
+  icon?: ReactNode
   onClick: () => void | Promise<void>
   variant?: CardActionVariant
   disabled?: boolean
@@ -131,6 +132,7 @@ function TranscriptActionCardContent({
                 onClick={() => handleClick(action)}
                 className="gap-1.5"
               >
+                {action.icon}
                 {action.label}
               </Button>
             )
