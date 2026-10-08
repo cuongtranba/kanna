@@ -34,7 +34,7 @@ and from then on the beacon runs in the background with a menu-bar (macOS) / sys
 | 2 | The app is a **new workspace package** `apps/beacon-desktop/`, parallel to the daemon, not folded into `src/beacon` (which stays a headless, testable library + CLI). |
 | 3 | **The main process imports the daemon ports directly** — `createKeyStore`, `createBeaconFs`, `createBeaconShell`, `createBeaconSession`, `createWebSocketTransport` — so there is one implementation of the protocol, scope and realpath enforcement, shared by the CLI and the app. |
 | 4 | **The tray is the app's resident face**; `exitOnLastWindowClosed: false`, so closing the pairing window leaves it running in the tray, exactly as the reference does. |
-| 5 | **Updates come from the GitHub release** (`releases/latest/download`), reusing the `beacon-binaries` job's assets; no separate update server. |
+| 5 | **The GUI app has its OWN per-OS CI matrix**, separate from the headless `beacon-binaries` job. Electrobun builds only for the OS it runs on — it cannot cross-compile the way `bun build --compile` does — so the app is built on one runner per platform, unlike the daemon binary. Updates come from the same GitHub release (`releases/latest/download`); no separate update server. |
 | 6 | **Unsigned this round.** Artifacts are built from public source with SHA-256 checksums; the download screen carries the first-run bypass guide. Signing + notarization is a later round and its own ADR. |
 | 7 | **The one-time auto-run consent lives in the wizard's final step** — it sets the per-beacon `autoRunScripts` flag through the same `/beacon/pair` → settings path, so the app and the CLI agree on what consent means. |
 
@@ -113,8 +113,7 @@ until the user sets it — the design's existing rule, unchanged.
 `release.baseUrl = https://github.com/cuongtranba/kanna/releases/latest/download`, `generatePatch:
 false` (only the latest release is reachable there, so a patch could bridge at most one release,
 and the full archive is what downloads anyway — the reference's reasoning). The updater reads
-`stable-<os>-<arch>-update.json`. The existing `beacon-binaries` release job gains the app
-artifacts + these update manifests beside the bare binaries and `SHA256SUMS`.
+`stable-<os>-<arch>-update.json`, whose name is the contract the release must keep.
 
 ## Signing — deferred, and what the user sees meanwhile
 
@@ -125,14 +124,48 @@ checksum is the integrity check. **A later round adds an Apple Developer ID + no
 Windows Authenticode cert and removes this guide;** it is its own ADR because it needs paid certs
 and changes the trust story. This is a named rough edge, not the finished experience.
 
-## Build + release (through `task`, never bare)
+## Build + release (through `task`, per `tooling.md`; the concrete CI)
 
-`scripts/build.ts` runs Electrobun's build for the host OS; `task build:beacon-desktop` wraps it.
-`scripts/release.ts` + `task cd:beacon-desktop-release` attach the app artifacts to the GitHub
-release in the same job that already publishes the daemon binaries. `scripts/check.ts` is a CI
-smoke switch (`KANNA_BEACON_DESKTOP_SMOKE=<file>`): the app opens the wizard, walks it to the
-pairing step against a throwaway local server, writes the result, and quits — the one automated
-check that the window renders and the RPC is wired, short of a real pairing.
+**Not an npm package.** `apps/beacon-desktop` is `private: true` and is published as **GitHub
+release assets** (the installers + `stable-*-update.json` + checksums), exactly like the daemon
+binaries and like the reference's desktop app — there is no `npm publish` for it. The only
+`npm publish` in this repo stays the main `kanna` package (server + CLI); the beacon GUI is a
+downloaded app, not a dependency anyone installs.
+
+Electrobun builds for the OS it runs on, so the headless `beacon-binaries` job (one ubuntu runner,
+`bun build --compile`, five targets) **cannot** build this app. The GUI app gets two new jobs in
+the release workflow, modelled exactly on Undercroft's `build-desktop` / `release-desktop`:
+
+- **`build-beacon-desktop`** — a matrix `runner: [macos-15, windows-2025, ubuntu-24.04]`,
+  `needs: release-please`, gated on `release_created == 'true'`, `permissions: contents: read`.
+  Each runner: checkout → `setup-bun` → `setup-task` → `bun install --frozen-lockfile` →
+  `task build:beacon-desktop` → `upload-artifact` the `apps/beacon-desktop/artifacts/` folder as
+  `beacon-desktop-<runner>` (`if-no-files-found: error`). macOS is Apple-Silicon only, as the
+  reference notes (Electrobun publishes no macOS x64 core).
+- **`release-beacon-desktop`** — `needs: [release-please, build-beacon-desktop]`, one ubuntu
+  runner, **`permissions: contents: write`** (only this job writes to the release): checkout →
+  tooling → `download-artifact pattern: beacon-desktop-*` → `task cd:beacon-desktop-release
+  DIR=... TAG=${{ needs.release-please.outputs.tag_name }}` with `GH_TOKEN: GITHUB_TOKEN`. That
+  task checksums every platform's installer + `stable-*-update.json` into one
+  `kanna-beacon-desktop-SHA256SUMS` and `gh release upload --clobber`s them under Electrobun's
+  names (the updater builds its URLs from those names, so they are the contract). A build failure
+  on any platform must NOT block the npm publish or the daemon binaries — these are separate jobs.
+
+Task wrappers (each wraps a `scripts/*.ts`, never a second definition):
+`task build:beacon-desktop` → `scripts/build.ts` (Electrobun release build into `artifacts/`);
+`task build:beacon-desktop-icons` → `scripts/icons.ts`; `task dev:beacon-desktop` →
+`scripts/build.ts --dev --run`; `task ci:beacon-desktop-check` → `scripts/check.ts` (network + a
+display, a CI step **outside** the no-Docker/no-network gate, like the reference's
+`ci:desktop-check`); `task cd:beacon-desktop-release` → `scripts/release.ts`.
+
+`scripts/release.ts` mirrors the reference: it lists files by the `(?:stable-)?(macos|win|linux)-
+(arm64|x64)-` name pattern rather than globbing (a stray file is never attached), rejects a
+duplicate name across platforms, writes the one `sha256sum --check` file, and `--upload TAG`s.
+
+`scripts/check.ts` is the CI smoke switch (`KANNA_BEACON_DESKTOP_SMOKE=<file>`): the app opens the
+wizard, walks it to the pairing step against a throwaway local server, writes the result, and
+quits — the one automated check that the window renders and the RPC is wired, short of a real
+pairing. It needs a display, so it is the `ci:beacon-desktop-check` step, not part of `ci:verify`.
 
 ## What the user does to verify (manual, this round)
 
