@@ -428,6 +428,7 @@ export class CodexAppServerManager {
         switch (event.type) {
           case "session_token": break
           case "rate_limit": break
+          case "live": break
           case "transcript": {
             if (event.entry.kind === "assistant_text") {
               assistantText += assistantText ? `\n${event.entry.text}` : event.entry.text

@@ -2330,6 +2330,44 @@ when the transcript is not in cache. **pm2 7.0.3 silently clamps
 `max_memory_restart` at 2^31** (both `"3G"` and `"4G"` resolve to
 `2147483648`), so raising the ceiling is not available — only lowering RSS is.
 
+# Live blocks — the model's output while it is being generated (`chat.live`)
+
+The SDK emits one `assistant` message per COMPLETED content block, so without
+partial messages a long thinking phase, a long reply, or a 20 KB `Write` input
+showed nothing but "Running..." until it finished — chat `071d8b8f` sat 86 s on
+one turn and the user read it as a hung session. A main-chat Claude session now
+runs with `includePartialMessages: true`; the harness folds `stream_event`
+frames into ONE `LiveBlock` (`src/shared/live-block.ts`: text, thinking, or a
+tool call with its target and input size) and `LiveTurnIndicator` renders it in
+place of `ProcessingMessage`. ADR `adr-20261008-live-block-streaming`.
+
+- **A live block is never a transcript entry.** It rides its own `chat.live`
+  `WsEvent`, pushed straight to the chat's subscribers by `pushLiveBlock`
+  (`ws-router-broadcast.ts`). Not the chat-state broadcast (it rebuilds sidebar
+  and meta every pass) and not the `ChatOpLog` ring (512 ops — per-token ops
+  would evict real ones and force resyncs). Persisting deltas would also bloat
+  the transcript the history primer replays.
+- **`stream_event` and `system/thinking_tokens` are consumed BEFORE the
+  `session_token` yield.** The harness yields a token for every message carrying
+  `session_id` and the runner broadcasts the chat on each, so letting either
+  through is a full chat broadcast per token. Do NOT dedupe tokens instead: the
+  runner skips persisting while `cancelledResultPending > 0` and relies on the
+  next message re-yielding the token to persist it then.
+- **Thinking text needs `--thinking-display summarized`,** passed through
+  `extraArgs`. The model's default display is omitted, so thinking arrived with
+  empty text and the normalizer dropped it. The SDK's `thinking` option is not
+  used because it also forces `--thinking adaptive`.
+- **The hand-off between overlay and entry is ordered on both sides.** The
+  client clears the overlay in the same handler that applies the `chat.ops`
+  carrying the completed entry (`opsSettleLiveBlock`), so React renders both in
+  one pass. `LiveBlockHub` (`live-block-throttle.ts`) defers its own clear by one
+  100 ms interval and holds the next block until then, so a new block cannot
+  overtake the previous block's entry and get wiped by it. Sending the clear
+  immediately makes every block blink back to "Running...".
+- **Subagent sessions do not request partial messages** (`streamLiveBlocks` is
+  set only by `spawnClaudeTurn`), and frames with a non-null
+  `parent_tool_use_id` are ignored.
+
 # Compaction is the Claude Code CLI's job (KANNA_PROACTIVE_COMPACT)
 
 **Kanna's own proactive `/compact` injection is OFF by default, deliberately.**

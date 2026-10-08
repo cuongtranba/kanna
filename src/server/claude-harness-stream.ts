@@ -14,6 +14,7 @@ import {
   maxClaudeContextWindowFromModelUsage,
 } from "./claude-usage-math"
 import { ClaudeLimitDetector } from "./auto-continue/limit-detector"
+import { createLiveBlockAccumulator } from "./claude-live-block"
 
 function turnCostFromRunningTotal(runningTotalUsd: number, previousTotalUsd: number): number {
   return runningTotalUsd >= previousTotalUsd ? runningTotalUsd - previousTotalUsd : runningTotalUsd
@@ -35,8 +36,19 @@ export async function* createClaudeHarnessStream(
 
   let pendingResultUsage: ProviderUsage | undefined
   let pendingResultCost: number | undefined
+  const accumulateLiveBlock = createLiveBlockAccumulator()
 
   for await (const sdkMessage of q) {
+    if (sdkMessage?.type === "stream_event") {
+      if (sdkMessage.parent_tool_use_id == null) {
+        const block = accumulateLiveBlock(sdkMessage.event)
+        if (block) yield { type: "live", block }
+      }
+      continue
+    }
+
+    if (sdkMessage?.type === "system" && sdkMessage.subtype === "thinking_tokens") continue
+
     const sessionToken = typeof sdkMessage.session_id === "string" ? sdkMessage.session_id : null
     if (sessionToken) {
       yield { type: "session_token", sessionToken }

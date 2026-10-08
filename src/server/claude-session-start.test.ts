@@ -334,3 +334,21 @@ describe("startClaudeSession loop guard", () => {
     expect((await decisionFor("Edit"))?.permissionDecision).toBe("deny")
   })
 })
+
+describe("startClaudeSession live streaming options", () => {
+  type CapturedOptions = { options: { includePartialMessages?: boolean; extraArgs?: Record<string, string | null> } }
+
+  test("a main chat session streams partial messages and asks for summarized thinking", async () => {
+    await startClaudeSession({ ...BASE_ARGS, streamLiveBlocks: true }, makeFakeDeps())
+    const captured = capturedQueryArgs as CapturedOptions
+    expect(captured.options.includePartialMessages).toBe(true)
+    expect(captured.options.extraArgs).toEqual({ "thinking-display": "summarized" })
+  })
+
+  test("a session that does not opt in does not stream partial messages", async () => {
+    await startClaudeSession(BASE_ARGS, makeFakeDeps())
+    const captured = capturedQueryArgs as CapturedOptions
+    expect(captured.options.includePartialMessages).toBeUndefined()
+    expect(captured.options.extraArgs).toEqual({ "thinking-display": "summarized" })
+  })
+})

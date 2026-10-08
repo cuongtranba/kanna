@@ -17,6 +17,7 @@ import type { ClaudeSessionState, ActiveTurn } from "./claude-session-state"
 import { isProactiveCompactTurn } from "./claude-session-state"
 import type { PendingToolSlots } from "./pending-tool-slot"
 import type { TurnEndGuard } from "./turn-end-guard"
+import { createLiveBlockPublisher, type LiveBlockSink } from "./claude-live-publisher"
 
 const RECENT_TOOL_DESCRIPTION_LIMIT = 64
 
@@ -74,6 +75,7 @@ export interface RunClaudeSessionDeps {
   closeClaudeSession(chatId: string, session: ClaudeSessionState): void
   maybeStartNextQueuedMessage(chatId: string): Promise<boolean | void>
   turnEndGuard?: TurnEndGuard
+  onLiveBlock?: LiveBlockSink
   onBackgroundTaskLaunch?(chatId: string, taskId: string, outputPath: string | null): void
   onBackgroundTaskSettle?(chatId: string, taskId: string): void
 }
@@ -93,6 +95,15 @@ export async function runClaudeSession(
       firstEntryWatchdog = null
     }
   }
+  const markStreamAlive = () => {
+    firstEntrySeen = true
+    clearFirstEntryWatchdog()
+  }
+  const livePublisher = createLiveBlockPublisher(
+    session.chatId,
+    () => deps.claudeSessions.get(session.chatId) === session,
+    deps.onLiveBlock,
+  )
   if (isOpenRouterSession) {
     firstEntryWatchdog = setTimeout(() => {
       if (firstEntrySeen) return
@@ -160,9 +171,15 @@ export async function runClaudeSession(
           continue
         }
 
+        case "live": {
+          markStreamAlive()
+          livePublisher.show(event.block)
+          continue
+        }
+
         case "transcript": {
-          firstEntrySeen = true
-          clearFirstEntryWatchdog()
+          markStreamAlive()
+          livePublisher.settle(event.entry.kind)
           if (deps.claudeSessions.get(session.chatId) !== session) break loop
       if (
         event.entry.kind === "result" &&
@@ -404,6 +421,7 @@ export async function runClaudeSession(
     }
   } finally {
     clearFirstEntryWatchdog()
+    livePublisher.clear()
     const active = deps.activeTurns.get(session.chatId)
     const resident = deps.claudeSessions.get(session.chatId)
     const isCurrentSession = resident === session

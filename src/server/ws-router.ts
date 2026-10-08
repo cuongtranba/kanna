@@ -30,6 +30,7 @@ import type { PushManager } from "./push/push-manager"
 import type { SessionShareService } from "./session-share"
 import type { WorkflowRegistry } from "./workflow-registry"
 import type { BackgroundTaskOutputRegistry } from "./background-task-output-registry"
+import type { LiveBlockHub } from "./live-block-throttle"
 import { handleBoardCommand } from "./ws-router-boards"
 import type { StartWorkResult, StartWorkView } from "../shared/boards/start-work"
 import type { CleanupDecision, WorktreeCleanupView } from "../shared/boards/worktree-cleanup"
@@ -117,6 +118,7 @@ interface CreateWsRouterArgs {
   resolveCleanup?: (cardId: string, decision: CleanupDecision) => Promise<WorktreeCleanupOutcome>
   suggestSyncRepos?: (boardId: string) => Promise<readonly RepoSuggestion[]>
   backgroundTaskOutputRegistry?: BackgroundTaskOutputRegistry
+  liveBlocks?: LiveBlockHub
   subagentTranscriptRegistry?: SubagentTranscriptRegistry
   followedSessionRegistry?: FollowedSessionRegistry
   sessionShare?: SessionShareService
@@ -151,6 +153,7 @@ export function createWsRouter({
   resolveCleanup,
   suggestSyncRepos,
   backgroundTaskOutputRegistry,
+  liveBlocks,
   subagentTranscriptRegistry,
   followedSessionRegistry,
   sessionShare,
@@ -194,6 +197,7 @@ export function createWsRouter({
     boardRegistry,
     beaconRegistry,
     backgroundTaskOutputRegistry,
+    liveBlocks,
     envelopeBuilder,
   })
 
@@ -459,6 +463,7 @@ export function createWsRouter({
           return
         }
         await broadcast.pushSnapshots(ws, { skipPrune: true })
+        if (parsed.topic.type === "chat") broadcast.pushLatestLiveBlock(ws, parsed.id, parsed.topic.chatId)
         return
       }
 

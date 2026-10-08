@@ -159,6 +159,8 @@ c3-208:
   - src/server/project-kanna-files.adapter.ts
   - src/server/ws-router.test.ts
   - src/server/ws-router.ts
+  - src/server/live-block-throttle.ts
+  - src/server/live-block-throttle.test.ts
 c3-209:
   - src/server/process-utils.adapter.ts
   - src/server/process-utils.test.ts
@@ -199,6 +201,8 @@ c3-210:
   - src/server/subagent-orchestrator.ts
   - src/server/subagent-provider-run.test.ts
   - src/server/subagent-provider-run.ts
+  - src/server/claude-live-block.ts
+  - src/server/claude-live-publisher.ts
 c3-211:
   - src/server/codex-app-server-protocol.ts
   - src/server/codex-app-server.test.ts
@@ -361,6 +365,7 @@ c3-302:
   - src/shared/beacon-status.test.ts
   - src/shared/beacon-tools.ts
   - src/shared/beacon-tool-request.ts
+  - src/shared/live-block.ts
 c3-303:
   - src/shared/tools.test.ts
   - src/shared/tools.ts

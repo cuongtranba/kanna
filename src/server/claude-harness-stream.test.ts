@@ -460,3 +460,98 @@ describe("result entry usage + cost enrichment", () => {
     expect(resultEntry.usage?.outputTokens).toBeUndefined()
   })
 })
+
+function streamEvent(event: object, parentToolUseId: string | null = null) {
+  return {
+    type: "stream_event",
+    session_id: "sess-live",
+    parent_tool_use_id: parentToolUseId,
+    uuid: "u",
+    event,
+  }
+}
+
+function liveBlocksOf(events: HarnessEvent[]) {
+  return events.flatMap((e) => (e.type === "live" ? [e.block] : []))
+}
+
+describe("createClaudeHarnessStream live blocks", () => {
+  test("text deltas accumulate into a growing text block", async () => {
+    const events = await collect([
+      streamEvent({ type: "content_block_start", index: 0, content_block: { type: "text", text: "" } }),
+      streamEvent({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "Hel" } }),
+      streamEvent({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "lo" } }),
+    ])
+    expect(liveBlocksOf(events)).toEqual([
+      { kind: "text", text: "" },
+      { kind: "text", text: "Hel" },
+      { kind: "text", text: "Hello" },
+    ])
+  })
+
+  test("thinking deltas accumulate and signature deltas are ignored", async () => {
+    const events = await collect([
+      streamEvent({ type: "content_block_start", index: 0, content_block: { type: "thinking", thinking: "" } }),
+      streamEvent({ type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: "Let me" } }),
+      streamEvent({ type: "content_block_delta", index: 0, delta: { type: "signature_delta", signature: "sig" } }),
+      streamEvent({ type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: " think" } }),
+    ])
+    expect(liveBlocksOf(events).at(-1)).toEqual({ kind: "thinking", text: "Let me think" })
+    expect(liveBlocksOf(events)).toHaveLength(3)
+  })
+
+  test("tool input reports its size and the target once a complete value has streamed", async () => {
+    const events = await collect([
+      streamEvent({ type: "content_block_start", index: 1, content_block: { type: "tool_use", id: "t1", name: "Write", input: {} } }),
+      streamEvent({ type: "content_block_delta", index: 1, delta: { type: "input_json_delta", partial_json: "{\"file_path\": \"/src/a" } }),
+      streamEvent({ type: "content_block_delta", index: 1, delta: { type: "input_json_delta", partial_json: ".ts\", \"content\": \"x" } }),
+    ])
+    const blocks = liveBlocksOf(events)
+    expect(blocks[0]).toEqual({ kind: "tool_use", toolName: "Write", inputChars: 0 })
+    expect(blocks[1]).toEqual({ kind: "tool_use", toolName: "Write", inputChars: 21 })
+    expect(blocks[2]).toEqual({ kind: "tool_use", toolName: "Write", inputChars: 40, subject: "/src/a.ts" })
+  })
+
+  test("a block that outgrows the limit keeps its tail", async () => {
+    const events = await collect([
+      streamEvent({ type: "content_block_start", index: 0, content_block: { type: "text", text: "" } }),
+      streamEvent({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "a".repeat(40_000) } }),
+      streamEvent({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "END" } }),
+    ])
+    const last = liveBlocksOf(events).at(-1)
+    expect(last?.kind === "text" && last.text.startsWith("…") && last.text.endsWith("END")).toBe(true)
+    expect(last?.kind === "text" && last.text.length).toBeLessThan(32_100)
+  })
+
+  test("frames from a nested tool use produce no live block and never reach the transcript", async () => {
+    const events = await collect([
+      streamEvent({ type: "content_block_start", index: 0, content_block: { type: "text", text: "" } }, "toolu_parent"),
+      streamEvent({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "hidden" } }, "toolu_parent"),
+    ])
+    expect(liveBlocksOf(events)).toEqual([])
+    expect(events.some((e) => e.type === "transcript")).toBe(false)
+  })
+
+  test("block types that are not shown live are ignored", async () => {
+    const events = await collect([
+      streamEvent({ type: "content_block_start", index: 0, content_block: { type: "redacted_thinking", data: "x" } }),
+      streamEvent({ type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: "x" } }),
+    ])
+    expect(liveBlocksOf(events)).toEqual([])
+  })
+
+  test("stream_event and thinking_tokens messages yield no session_token while ordinary messages still do", async () => {
+    const events = await collect([
+      streamEvent({ type: "message_start" }),
+      ...Array.from({ length: 50 }, (_, i) => ({ type: "system", subtype: "thinking_tokens", session_id: "sess-live", uuid: `t${i}` })),
+      streamEvent({ type: "content_block_start", index: 0, content_block: { type: "text", text: "" } }),
+    ])
+    expect(events.filter((e) => e.type === "session_token")).toHaveLength(0)
+
+    const ordinary = await collect([
+      { type: "assistant", session_id: "sess-live", message: { id: "m1", role: "assistant", content: [{ type: "text", text: "hi" }] } },
+      { type: "assistant", session_id: "sess-live", message: { id: "m2", role: "assistant", content: [{ type: "text", text: "again" }] } },
+    ])
+    expect(ordinary.filter((e) => e.type === "session_token")).toHaveLength(2)
+  })
+})

@@ -37,3 +37,5 @@ code:
   - src/server/loop-prompt-parallel.ts
   - src/server/tracking-file-lock.test.ts
   - src/server/tracking-file-lock.ts
+  - src/server/claude-live-block.ts
+  - src/server/claude-live-publisher.ts

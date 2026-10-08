@@ -266,6 +266,7 @@ export async function drainOneTurn(
     switch (event.type) {
       case "session_token": break
       case "rate_limit": break
+      case "live": break
       case "transcript": {
         onEntry(event.entry)
         if (event.entry.kind === "assistant_text") {
