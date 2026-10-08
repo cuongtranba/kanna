@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { JsonValue } from "../shared/json"
-import type { ClaudeModelOptions, Subagent, TranscriptEntry } from "../shared/types"
+import type { ClaudeModelOptions, CustomModelEntry, Subagent, TranscriptEntry } from "../shared/types"
 import type { HarnessEvent, HarnessTurn, HarnessToolRequest } from "./harness-types"
 import type { StartCodexSessionArgs, CodexSessionScope } from "./codex-app-server"
 import { buildSubagentProviderRun, composeInitialPrompt, composeSubagentSystemPrompt, drainOneTurn, type BuildSubagentProviderRunArgs } from "./subagent-provider-run"
@@ -95,6 +95,37 @@ function makeArgs(over: Partial<BuildSubagentProviderRunArgs> = {}): BuildSubage
   }
 }
 
+
+const HAIKU_WITH_1M: CustomModelEntry = {
+  id: "claude-haiku-5-5",
+  label: "Claude Haiku 5.5",
+  provider: "claude",
+  contextWindowOptions: [{ id: "200k", label: "200k" }, { id: "1m", label: "1M" }],
+  createdAt: 1,
+  updatedAt: 1,
+}
+
+async function modelPassedToSession(args: BuildSubagentProviderRunArgs): Promise<string | undefined> {
+  let model: string | undefined
+  const run = buildSubagentProviderRun({
+    ...args,
+    startClaudeSession: async (sessionArgs) => {
+      model = sessionArgs.model
+      return {
+        provider: "claude" as const,
+        stream: makeHarnessTurn([]).stream,
+        interrupt: async () => {},
+        close: () => {},
+        closed: Promise.resolve(),
+        sendPrompt: async () => {},
+        setModel: async () => {},
+        setPermissionMode: async () => {},
+      }
+    },
+  })
+  await run.start(() => {}, () => {})
+  return model
+}
 
 describe("composeInitialPrompt", () => {
   const subagent = makeSubagent({ name: "reviewer" })
@@ -244,6 +275,22 @@ describe("buildSubagentProviderRun – Claude", () => {
     const run = buildSubagentProviderRun(args)
     await run.start(() => {}, () => {})
     expect(captured?.systemPromptOverride).toBe("You are alpha.\n\n## Workspace instructions\n\nAlways TDD.")
+  })
+
+  test("runs a Claude subagent at the 1M context window it is configured for", async () => {
+    const model = await modelPassedToSession(makeArgs({
+      subagent: makeSubagent({ model: "claude-haiku-5-5" }),
+      customModels: [HAIKU_WITH_1M],
+    }))
+    expect(model).toBe("claude-haiku-5-5[1m]")
+  })
+
+  test("keeps the bare model id when the model does not offer the 1M window", async () => {
+    const model = await modelPassedToSession(makeArgs({
+      subagent: makeSubagent({ model: "claude-haiku-5-5" }),
+      customModels: [{ ...HAIKU_WITH_1M, contextWindowOptions: [{ id: "200k", label: "200k" }] }],
+    }))
+    expect(model).toBe("claude-haiku-5-5")
   })
 
   test("leaves systemPromptOverride untouched when no globalPromptAppend", async () => {
