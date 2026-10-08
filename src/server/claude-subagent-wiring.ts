@@ -1,6 +1,7 @@
 
 import type { JsonValue } from "../shared/json"
 import type {
+  CustomModelEntry,
   LlmProviderSnapshot,
   McpServerConfig,
   Subagent,
@@ -58,6 +59,7 @@ export interface SubagentWiringDeps {
   buildPoolUnavailableMessage: (reservedFor: string, scopeSuffix: string) => string
   getAppSettingsSnapshot: () => {
     globalPromptAppend?: string
+    customModels?: readonly CustomModelEntry[]
   }
   readLlmProvider: () => Promise<LlmProviderSnapshot>
   subagentPendingKey: (chatId: string, runId: string, toolUseId: string) => string
@@ -178,6 +180,7 @@ export function buildSubagentProviderRunForChat(
     codexManager: deps.codexManager,
     onToolRequest,
     globalPromptAppend: deps.getAppSettingsSnapshot().globalPromptAppend,
+    customModels: deps.getAppSettingsSnapshot().customModels,
     authReady: async (provider) => {
       if (provider === "openrouter") {
         return openrouterAuthReady(await deps.readLlmProvider())

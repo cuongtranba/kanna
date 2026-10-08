@@ -3,11 +3,13 @@ import type { HarnessEvent, HarnessToolRequest, HarnessTurn } from "./harness-ty
 import type { CodexAppServerManager } from "./codex-app-server"
 import type {
   AgentProvider,
+  CustomModelEntry,
   ProviderUsage,
   ResolvedStackBinding,
   Subagent,
   TranscriptEntry,
 } from "../shared/types"
+import { normalizeClaudeContextWindow, resolveClaudeApiModelId } from "../shared/types"
 import {
   buildCodexDeveloperInstructions,
   renderInstructionSections,
@@ -64,6 +66,7 @@ export interface BuildSubagentProviderRunArgs {
   pickOauthToken: () => { token: string; baseUrl?: string } | null
   readOpenRouterKey?: () => Promise<string | null>
   projectId: string
+  customModels?: readonly CustomModelEntry[]
   globalPromptAppend?: string
   stackProjects?: ResolvedStackBinding[]
   instructions?: Omit<KannaSystemPromptOptions, "stackProjects" | "globalPromptAppend">
@@ -127,6 +130,13 @@ export function composeInitialPrompt(
   return `(no prior context — proceed based on your system prompt and the @agent/${subagent.name} mention)`
 }
 
+function claudeSubagentModelId(args: BuildSubagentProviderRunArgs): string {
+  const { model, provider, modelOptions } = args.subagent
+  if (provider !== "claude") return model
+  const requested = "contextWindow" in modelOptions ? modelOptions.contextWindow : undefined
+  return resolveClaudeApiModelId(model, normalizeClaudeContextWindow(model, requested, args.customModels))
+}
+
 async function runClaudeSubagent(opts: {
   args: BuildSubagentProviderRunArgs
   initialPrompt: string
@@ -141,7 +151,7 @@ async function runClaudeSubagent(opts: {
     projectId: args.projectId,
     localPath: args.cwd,
     additionalDirectories: args.additionalDirectories,
-    model: args.subagent.model,
+    model: claudeSubagentModelId(args),
     effort: args.subagent.modelOptions?.reasoningEffort,
     planMode: false,
     sessionToken: null,
