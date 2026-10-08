@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.63.3](https://github.com/cuongtranba/kanna/compare/v1.63.2...v1.63.3) (2026-10-08)
+
+
+### Bug Fixes
+
+* **subagents:** run Claude subagents at their configured 1M context window ([#1208](https://github.com/cuongtranba/kanna/issues/1208)) ([64528c6](https://github.com/cuongtranba/kanna/commit/64528c66ba1ad8ea122a2230c10b9c88958ea5d1))
+
 ## [1.63.2](https://github.com/cuongtranba/kanna/compare/v1.63.1...v1.63.2) (2026-10-07)
 
 
