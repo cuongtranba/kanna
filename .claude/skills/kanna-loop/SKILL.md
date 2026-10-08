@@ -24,10 +24,10 @@ CLAUDE.md; the loop simply does not use them.
 
 **Roles:**
 - **Main agent = orchestrator; stateless-in-context, stateful-in-tasks.**
-  Every subagent completion delivery /clears the main-agent Claude session
-  (wipes `session_token`, appends `context_cleared` transcript entry). The
-  next main turn is a FRESH Claude spawn that re-reads the plan with
-  `mcp__kanna__task_list`.
+  Every subagent completion delivery to an ARMED loop /clears the main-agent
+  Claude session (wipes `session_token`, appends `context_cleared` transcript
+  entry). The next main turn is a FRESH Claude spawn that re-reads the plan with
+  `mcp__kanna__task_list`. An un-armed delivery does not clear anything.
 - **Subagent = worker per iteration.** Fresh Claude spawn per delegation
   (`sessionToken: null, forkSession: false` — enforced at
   `subagent-provider-run.ts:170-171`). Subagent does one task and records its
@@ -44,8 +44,8 @@ CLAUDE.md; the loop simply does not use them.
 ends the main turn. `SubagentOrchestrator` runs the subagent through the
 existing permit pool + timeout + event-source plumbing; on terminal, its
 `onBackgroundRunComplete` hook fires `AgentCoordinator.deliverSubagentToMain`,
-which /clears the main session and emits an `auto_continue_accepted` event
-with `source: "subagent_background"`. The wake prompt is the validated static
+which /clears the main session (armed loops only) and emits an
+`auto_continue_accepted` event with `source: "subagent_background"`. The wake prompt is the validated static
 loop template PLUS a freshly-rendered `<loop-state>` block
 (`loop-wake-prompt.ts`, `composeLoopWakePrompt`) that lists the current tasks,
 their counts and recent failure notes — a free deterministic prime that
@@ -550,8 +550,15 @@ See `adr-20260830-loop-disarm-visible-resumable`.
 
 ## The un-armed delivery prompt
 
-When no loop is armed, `deliverSubagentToMain` builds the context-cleared main
-agent a short prompt naming what the last loop left behind. With the plan now in
+When no loop is armed, `deliverSubagentToMain` does NOT clear main
+(`adr-20261008-unarmed-delivery-keeps-context`): the session token and warm
+session survive, so a chat that is not running a loop keeps its conversation
+across a background run. It builds main a short prompt — the notification, a
+blank line, then the plan sentence (if any) and "Then decide the next action." — that never says the context was cleared
+and names what the last loop left behind, for the case where the next turn is
+a fresh spawn anyway (restart, idle reap). A delivery after `stop_loop` resumes
+the last orchestrator session, because `stopLoop` never clears; a user message
+after a disarm already behaves that way. With the plan now in
 the task store rather than a file, the honest pointer is `mcp__kanna__task_list`
 — the chat's tasks survive a disarm, so a post-loop review can read exactly what
 was completed and what was left. `describeLastPlan(deriveLastLoopSpec(...))`

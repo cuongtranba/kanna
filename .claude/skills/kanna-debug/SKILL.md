@@ -79,7 +79,7 @@ Pair `tool_call.tool.toolId` with `tool_result.toolId` to match a call to its re
 - **"The loop stopped waking"** → an armed loop should always hold exactly one pending wake: a running subagent, a queued message, or an active turn. Find which one is missing. Look for the last `loop_run_outcome` and whether an `auto_continue_accepted` followed it — a gap between them is a wake lost to a crash mid-delivery, which boot recovery is supposed to re-emit.
 - **"A cron job never ran / ran but nothing happened"** → a fired run should produce a `cron_run_outcome`. Runs that finish unattributed stay `running` forever, so later ticks either heal them as `orphaned` or skip them as `previous_run_active`. The tell is `turn_finished` events present with no `cron_run_outcome {ok: true}` anywhere.
 - **"My queued message vanished"** → a queued message is released when its turn is recorded, not when it is dequeued. A restart in that window is recovered at boot; a message that is simply gone with the chat idle is the case worth reporting.
-- **"It cleared context by itself"** → `context_cleared` entries are expected on every background-subagent delivery and on `/clear`. Several in a row with no delivery between them is not.
+- **"It cleared context by itself"** → `context_cleared` entries are expected on background-subagent deliveries to an armed loop and on `/clear`; an un-armed chat's delivery appends none. Several in a row with no delivery between them is not.
 
 ## Step 3 — connect to the server-side event log if needed
 

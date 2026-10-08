@@ -258,12 +258,14 @@ async function deliverSubagentToMainInner(
     const next = outcome.status === "completed"
       ? "decide the next action."
       : "decide whether to retry, try another approach, or stop."
-    prompt = `${notification}\n\nYour Claude context has been cleared.${plan} Then ${next}`
+    prompt = `${notification}\n\n${`${plan} Then ${next}`.trim()}`
   }
 
   try {
-    await clearClaudeSessionContext(deps, chatId)
-    await deps.store.appendMessage(chatId, timestamped({ kind: "context_cleared" }))
+    if (armed) {
+      await clearClaudeSessionContext(deps, chatId)
+      await deps.store.appendMessage(chatId, timestamped({ kind: "context_cleared" }))
+    }
 
     const now = Date.now()
     const scheduleId = crypto.randomUUID()
